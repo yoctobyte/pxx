@@ -91,7 +91,11 @@ const
   { `type(None)` is `<class 'NoneType'>` in CPython, and NoneType is a real type
     object there — so it needs a code even though no one writes `NoneType`. }
   PYBT_NONETYPE  = 13;
-  PYBT_LAST      = 13;
+  { a def or lambda, and a bound method: `type(f)` printed `<class 'NoneType'>`
+    while `type(f).__name__` said function, because no code carried the name }
+  PYBT_FUNCTION  = 14;
+  PYBT_METHOD    = 15;
+  PYBT_LAST      = 15;
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -167,12 +171,21 @@ type
   { pyeval's PyCallKey1, installed into PyIterCallHook: the one entry point
     that knows all four callable representations. See that variable. }
   TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
+  { ...and a ZERO-argument call of a callable VALUE, pyeval's pyvar_callv0:
+    a defaultdict's factory. }
+  TPyCall0 = function(const cb: Variant): Variant;
   { ...and its N-argument twin for `map(f, a, b, ...)`: the callable as a
     VARIANT (pyeval's pyvar_callv<n> dispatch) and one zipped tuple, spread. }
   TPyIterStarCall = function(const cb: Variant; t: Pointer): Variant;   { t: the TPyList tuple, declared below }
   { A stackless generator's step function: `function(instance): Boolean`,
     has-next. See PYITER_K_SLGEN. }
   TPyGenStep = function(inst: Pointer): Boolean;
+  { ...and a step with SIX declared parameters, called with its full seven
+    words. x86-64 passes every argument of a routine with more than six on the
+    STACK, the instance included, so the one-word call above handed such a
+    step a nil instance (segfault). The pads are never read: a cursor's
+    instance arrives with its slots already seeded. }
+  TPyGenStepWide = function(inst: Pointer; p1, p2, p3, p4, p5, p6: Pointer): Boolean;
   PInt64 = ^Int64;
   { pylib's own name for a variant pointer — pyeval declares one too, but this
     unit is compiled before it. Used to read a generator's yielded element out
@@ -279,7 +292,10 @@ type
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
-    function extend(other: TPyList): Variant;
+    function extend(other: TPyList): Variant; overload;
+    { ...and any other iterable -- a generator, range(), iter(..), a str,
+      a dict's keys: `xs.extend(g())` was "no overload of extend matches". }
+    function extend(const v: Variant): Variant; overload;
     procedure clear;
     { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
       NEW sequence. Returns Self so the statement lowering can use it as a
@@ -410,6 +426,17 @@ type
       a dict: subscript, items(), iteration and dict(c) all work already, and
       only the missing-key read changes. }
     FCounterMode: Boolean;
+    { `collections.defaultdict(factory)` is the same kind of MODE: a missing
+      key on a subscript READ calls the factory, stores the result and answers
+      it. get(), `in` and pop() are untouched, as in CPython, where only
+      __getitem__ consults __missing__. The factory is any callable value
+      (`list`, `int`, a def, a lambda), called through PyCall0Hook. }
+    FHasFactory: Boolean;
+    FDefFactory: Variant;
+    { `collections.OrderedDict`: a plain dict already keeps insertion order,
+      so the mode changes only what the value SAYS it is (type name, repr).
+      move_to_end and popitem(last) are dict methods, harmless on any dict. }
+    FOrdered: Boolean;
     { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
@@ -440,6 +467,11 @@ type
       what CPython 3.7+ does now that dicts are insertion-ordered. Raises
       KeyError on an empty dict, as CPython does. The pair is a tuple. }
     function popitem: TPyList;
+    { OrderedDict.popitem(last=True): last=False pops the FIRST pair (FIFO) }
+    function popitem(last: Boolean): TPyList; overload;
+    { OrderedDict.move_to_end(key, last=True): KeyError when key is absent }
+    function move_to_end(const k: Variant): Variant;
+    function move_to_end(const k: Variant; last: Boolean): Variant; overload;
     { Counter.most_common([n]): (element, count) pairs, highest count first. The
       pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
     function most_common: TPyList;
@@ -946,6 +978,7 @@ type
       is what guarantees they agree. }
     FGenInst: Pointer;
     FGenStep: Pointer;
+    FGenWide: Boolean;   { FGenStep is a TPyGenStepWide }
     constructor Create;
   end;
 
@@ -1021,6 +1054,27 @@ type
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
+    { The rest of CPython's deque. Each answers None where CPython's does.
+      `maxlen` bounds the deque: an append past it drops from the OPPOSITE
+      end, which is what makes `deque(maxlen=n)` the ring buffer MicroPython
+      scripts use it as (MicroPython's own deque REQUIRES maxlen). }
+    function extend(const v: Variant): Variant;
+    function extendleft(const v: Variant): Variant;
+    function rotate: Variant; overload;
+    function rotate(n: Integer): Variant; overload;
+    function remove(const v: Variant): Variant;
+    function count(const v: Variant): Integer;
+    function index(const v: Variant): Integer;
+    function reverse: Variant;
+    function copy: TPyDeque;
+    function __contains__(const v: Variant): Boolean;
+    function GetMaxLen: Variant;
+    property maxlen: Variant read GetMaxLen;
+    { the live window, front to back, as a fresh list (the caller owns it) }
+    function Window: TPyList;
+    procedure Install(l: TPyList);
+  public
+    FMaxLen: Integer;   { -1: unbounded (maxlen None) }
   end;
 
 { Python's `complex`. A CLASS rather than a new variant tag: a tag would need a
@@ -1103,11 +1157,21 @@ function repr(o: TObject): AnsiString; overload;
   feature-nilpy-starred-and-nested-unpacking }
 function pylist_mark_list(l: TPyList): TPyList;
 function pyvar_mark_list(const v: Variant): Variant;
+{ The STARRED unpack target, `a, *rest = xs`: xs[lo:hi] as a LIST whatever
+  kind xs is, minted here. Not mark_list(slice(..)): the slice is a fresh
+  argument the call site releases after the call, and mark_list hands the same
+  object back, so the target held a freed list. }
+function pylist_slice_aslist(l: TPyList; lo, hi: Integer): TPyList;
+function pyvar_slice_aslist(const v: Variant; lo, hi: Integer): Variant;
 { `a, b, *c = xs` with too FEW values raises ValueError in CPython, naming how
   many were expected. Without the check the indexed stores raise IndexError
   instead — a different exception type, so an `except ValueError` around the
   unpack does not catch it. }
 function pyunpack_check(have, need: Integer): Integer;
+{ ...and the EXACT count an unstarred unpack needs: `a, b = xs` with three
+  values raises ValueError in CPython rather than dropping the third, and with
+  one value raises ValueError rather than IndexError. }
+function pyunpack_exact(have, need: Integer; sized: Boolean): Integer;
 function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_mark_set(l: TPyList): TPyList;
 function pylist_mark_frozenset(l: TPyList): TPyList;   { ...and the frozenset stamp }
@@ -1832,11 +1896,16 @@ var
     silently yielding the unmapped element. }
   PyIterCallHook: TPyIterCall;
   PyIterStarHook: TPyIterStarCall;
+  PyCall0Hook: TPyCall0;
 
 { ---- cursors (TPyIter) -------------------------------------------------
   The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
   TPyIter's declaration for why it is two calls and not one. }
 function pyiter_of_list(l: TPyList): TPyIter;
+{ A cursor over a list the CALLER just built and drops: pyiter_of_list takes
+  its own reference, so handing it `list(b)` straight left the list at rc 2
+  with one owner. This one adopts the constructor's reference instead. }
+function PyIterAdoptList(l: TPyList): TPyIter;
 function pyiter_of_str(const s: AnsiString): TPyIter;
 { A generator expression bound to a NAME. The elements are materialised, but
   the VALUE is a cursor over them, because single consumption is the observable
@@ -1848,6 +1917,10 @@ function pyiter_gen(l: TPyList): TPyIter;
   a dict (its KEYS, as Python iterates one), bytes, or a cursor, which answers
   ITSELF because CPython's iter() is idempotent on an iterator. }
 function pyiter_v(const v: Variant): TPyIter;
+{ ...always OWNED: pyiter_v hands an ITERATOR argument back as it is,
+  borrowed, and builds a fresh cursor for everything else. `yield from`
+  stores the result in a managed local, so it needs one answer. }
+function pyiter_own_v(const v: Variant): TPyIter;
 { reversed(): a leaf cursor walking the source BACKWARDS. Its source is already
   materialised, so the only thing laziness buys here is the exhaustion rule. }
 function pyiter_rev_list(l: TPyList): TPyIter;
@@ -2830,8 +2903,15 @@ function all(const v: Variant): Boolean; overload;
   the same way for exactly that reason: its 1-argument overloads differ by type
   (list vs str), so the table would pick one of them silently.
   bug-n-collections-deque-is-missing }
-function deque: TPyDeque;
-function deque(l: TPyList): TPyDeque; overload;
+{ The arity-two form is declared FIRST: a keyword argument binds against the
+  first overload the name finds (PyParseStdlibCall's PyBindKwArgs runs before
+  the arity re-target), and `deque(maxlen=3)` must bind there. An omitted
+  Variant parameter arrives as None, which is CPython's default for both.
+  The iterable is a Variant, not a TPyList: typed TPyList, `deque(range(4))`
+  built an EMPTY deque and `deque("abc")` crashed. }
+function deque(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
+function deque: TPyDeque; overload;
+function deque(const iterable: Variant): TPyDeque; overload;
 { The same two, under a name a NilPy program cannot collide with. The QUALIFIED
   spelling `collections.deque(...)` is routed to THESE by the frontend's
   stdlib-call table, and it must be, because that table resolves its target with
@@ -2842,8 +2922,11 @@ function deque(l: TPyList): TPyDeque; overload;
   proc (`Power`) — an accident of spelling, not a guard.
   The bare `deque()` above stays shadowable, which is correct: shadowing a
   builtin by defining one is ordinary Python. }
+function pydeque_new(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
 function pydeque_new: TPyDeque; overload;
-function pydeque_new(l: TPyList): TPyDeque; overload;
+function pydeque_new(const iterable: Variant): TPyDeque; overload;
+function pydeque_repr(d: TPyDeque): AnsiString;
+function pydeque_eq(a, b: TPyDeque): Boolean;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -2851,6 +2934,22 @@ function Counter(l: TPyList): TPyDict; overload;
 function Counter(const s: AnsiString): TPyDict; overload;
 function pycounter_new: TPyDict; overload;
 function pycounter_new(const src: Variant): TPyDict; overload;
+{ `collections.defaultdict(factory[, mapping])` -- a dict in factory mode
+  (see TPyDict.FHasFactory). `defaultdict()` and `defaultdict(None)` have no
+  factory and raise KeyError like a plain dict, as CPython's do. }
+function pydefaultdict_new: TPyDict; overload;
+function pydefaultdict_new(const f: Variant): TPyDict; overload;
+function pydefaultdict_new(const f: Variant; const src: Variant): TPyDict; overload;
+{ ...and the BARE spelling, `from collections import defaultdict`, which
+  reaches a pylib proc by name exactly as `deque` and `Counter` do. }
+function defaultdict: TPyDict; overload;
+function defaultdict(const f: Variant): TPyDict; overload;
+function defaultdict(const f: Variant; const src: Variant): TPyDict; overload;
+{ `collections.OrderedDict([src])`, both spellings -- see TPyDict.FOrdered }
+function pyordereddict_new: TPyDict; overload;
+function pyordereddict_new(const src: Variant): TPyDict; overload;
+function OrderedDict: TPyDict; overload;
+function OrderedDict(const src: Variant): TPyDict; overload;
 { `reversed(x)` — a CURSOR walking the source backwards, which is what CPython
   returns (`list_reverseiterator`). It used to be the reversed COPY, on the
   grounds that NilPy's `for` was a counted-loop desugar with no iterator
@@ -3021,6 +3120,12 @@ function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
   says so plainly instead of borrowing the dynamic-call path's arity message
   (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
+{ A CLASS held as a value, as a Pointer-typed callable (`map(Point, xs)`,
+  `sorted(xs, key=Version)`): its RTTI blob is not code, so it travels as a
+  small tagged block, one per class, that PyCallKey1 recognises and constructs
+  through. pyclasscall_rtti answers the blob for such a block, else nil. }
+function pyclasscall_of(rtti: Pointer): Pointer;
+function pyclasscall_rtti(p: Pointer): Pointer;
 function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Pointer;   { ...for a parameter whose default is nil: None means "not given", not an error }
 { Python's `callable(x)`. It was simply absent (`undefined variable`), while the
   predicate it needs — PyVarIsCallable, the same "callable" this dialect
@@ -3179,6 +3284,7 @@ function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxspl
 function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
+function pystr_splitlines_n(const s: AnsiString; keepends: Boolean): TPyList;
 { str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
   right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
   the replacement between every character and at both ends
@@ -4283,6 +4389,7 @@ begin
   Result := TPyList.Create;
   if i >= 1 then Result.append(Copy(s, 1, i));
   for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+  PXXObjRelease(Pointer(parts));   { the backward scratch list, copied out }
 end;
 
 { s.rsplit(sep, maxsplit): like split(sep, maxsplit) but the splits are taken
@@ -4323,6 +4430,7 @@ begin
   parts.append(Copy(s, 1, en));
   Result := TPyList.Create;
   for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+  PXXObjRelease(Pointer(parts));   { the backward scratch list, copied out }
 end;
 
 { s.partition(sep) — a 3-tuple (before, sep, after) at the FIRST occurrence, or
@@ -4378,7 +4486,18 @@ end;
   final empty field — "a\n".splitlines() is ["a"], not ["a",""]. "" is []. That
   trailing rule is what separates it from split("\n"). }
 function pystr_splitlines(const s: AnsiString): TPyList;
-var i, n, st: Integer;
+begin
+  Result := pystr_splitlines_n(s, False);
+end;
+
+{ CPython's line boundaries, not just LF: CR LF and a lone CR, VT, FF, the
+  three separators \x1c-\x1e, and -- as UTF-8 sequences, since a str here is
+  its UTF-8 bytes -- NEL (C2 85), LINE SEPARATOR (E2 80 A8) and PARAGRAPH
+  SEPARATOR (E2 80 A9). LF alone answered ['a\r', 'b'] for CRLF text, silently,
+  which is every file written on Windows. keepends keeps each terminator,
+  CR LF as one. }
+function pystr_splitlines_n(const s: AnsiString; keepends: Boolean): TPyList;
+var i, n, st, w: Integer; c: Char;
 begin
   Result := TPyList.Create;
   n := Length(s);
@@ -4386,12 +4505,26 @@ begin
   i := 1;
   while i <= n do
   begin
-    if s[i] = Chr(10) then
+    c := s[i];
+    w := 0;
+    if c = Chr(13) then
     begin
-      Result.append(Copy(s, st, i - st));
-      st := i + 1;
-    end;
-    Inc(i);
+      if (i < n) and (s[i + 1] = Chr(10)) then w := 2 else w := 1;
+    end
+    else if (c = Chr(10)) or (c = Chr(11)) or (c = Chr(12)) or
+            (c = Chr(28)) or (c = Chr(29)) or (c = Chr(30)) then w := 1
+    else if (c = Chr($C2)) and (i < n) and (s[i + 1] = Chr($85)) then w := 2
+    else if (c = Chr($E2)) and (i + 2 <= n) and (s[i + 1] = Chr($80)) and
+            ((s[i + 2] = Chr($A8)) or (s[i + 2] = Chr($A9))) then w := 3;
+    if w > 0 then
+    begin
+      if keepends then Result.append(Copy(s, st, i + w - st))
+      else Result.append(Copy(s, st, i - st));
+      i := i + w;
+      st := i;
+    end
+    else
+      Inc(i);
   end;
   if st <= n then Result.append(Copy(s, st, n - st + 1));
 end;
@@ -4841,6 +4974,42 @@ begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
+var
+  PyClassCallMagicMarker: Integer;
+  PyClassCallCache: array of Pointer;
+  PyClassCallCount: Integer;
+
+function pyclasscall_of(rtti: Pointer): Pointer;
+var i: Integer; p: PPointer;
+begin
+  { cached per class and never freed: a program has a fixed set of classes, so
+    this is bounded, and the block may be held by any number of cursors }
+  for i := 0 to PyClassCallCount - 1 do
+    if PPointer(NativeInt(PyClassCallCache[i]) + SizeOf(Pointer))^ = rtti then
+    begin
+      Result := PyClassCallCache[i];
+      Exit;
+    end;
+  { 64 zeroed bytes: the dispatcher tests other callable kinds first, and each
+    of those reads a word at its own offset }
+  GetMem(Result, 64);
+  FillChar(Result^, 64, 0);
+  p := PPointer(Result);
+  p^ := @PyClassCallMagicMarker;
+  PPointer(NativeInt(Result) + SizeOf(Pointer))^ := rtti;
+  if PyClassCallCount >= Length(PyClassCallCache) then
+    SetLength(PyClassCallCache, PyClassCallCount * 2 + 8);
+  PyClassCallCache[PyClassCallCount] := Result;
+  Inc(PyClassCallCount);
+end;
+
+function pyclasscall_rtti(p: Pointer): Pointer;
+begin
+  Result := nil;
+  if (p <> nil) and (PPointer(p)^ = @PyClassCallMagicMarker) then
+    Result := PPointer(NativeInt(p) + SizeOf(Pointer))^;
+end;
+
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
@@ -4862,6 +5031,14 @@ begin
   if PPyVarRec(@v)^.VType = 13 then                    { VT_BTYPE }
     raise TypeError.Create(nm + ': calling ' + pybtype_name(pybtype_code(v))
       + '() through a type held as a value is not supported yet');
+  { A CLASS (VT_CLASSREF): its payload is the RTTI blob, and handing that over
+    as a code address jumped into it -- `list(map(Point, xs))` and
+    `sorted(xs, key=Version)` died with SIGSEGV (pin v452). }
+  if (PPyVarRec(@v)^.VType = 11) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    Result := pyclasscall_of(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    Exit;
+  end;
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
@@ -4883,6 +5060,11 @@ function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Point
   bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
 begin
   if what = '' then ;      { same shape as its strict twin; nothing to report }
+  if (PPyVarRec(@v)^.VType = 11) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    Result := pyclasscall_of(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    Exit;
+  end;
   Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
@@ -5698,7 +5880,10 @@ begin
   else if o is TPyDict then
   begin
     { a Counter is a dict subclass in CPython, named Counter }
-    if TPyDict(o).FCounterMode then Result := 'Counter' else Result := 'dict';
+    if TPyDict(o).FCounterMode then Result := 'Counter'
+    else if TPyDict(o).FHasFactory then Result := 'defaultdict'
+    else if TPyDict(o).FOrdered then Result := 'OrderedDict'
+    else Result := 'dict';
   end
   else if o is TPyBytes then
   begin
@@ -5711,6 +5896,7 @@ begin
   else if o is TPyIter then Result := pyiter_typename(TPyIter(o))
   else if o is TPyRange then Result := 'range'
   else if o is TPyComplex then Result := 'complex'
+  else if o is TPyDeque then Result := 'deque'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -5858,6 +6044,10 @@ begin
   else if o is TPyRange then
     { r[i] on a range held in a variant — arithmetic, not a lookup }
     Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
+  else if o is TPyDeque then
+    { a deque that came back through a tuple or a container: `d[0]` raised
+      "not subscriptable" while the typed receiver indexed it fine }
+    Result := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
   else if o is TPyBytes then
   begin
     { bytes/bytearray index -> the integer byte value. Missing this case made
@@ -6043,6 +6233,8 @@ begin
     way too. One mechanism, three shapes. }
   else if o is TPyBytes then
     TPyBytes(o).put(Integer(PPyVarRec(@key)^.Payload), Integer(pyvar_to_int(val)))
+  else if o is TPyDeque then
+    TPyDeque(o).put(Integer(PPyVarRec(@key)^.Payload), val)
   { A USER class arriving as a bare variant handle — the write side of the
     __getitem__ arm pyvar_getitem already carries. A statically-typed receiver
     dispatches __setitem__ in the frontend; this one has no static class, so a
@@ -6106,7 +6298,7 @@ end;
 
 function iter(b: TPyBytes): TPyIter; overload;
 begin
-  Result := pyiter_of_list(list(b));
+  Result := PyIterAdoptList(list(b));
 end;
 
 function iter(const s: AnsiString): TPyIter; overload;
@@ -6381,21 +6573,30 @@ begin
   l.FCap := newCap;
 end;
 
-function TPyList.append_self(const v: Variant): TPyList;
+{ The one append body. append and append_self both call it rather than one
+  calling the other: append_self hands Self back, so routing append through
+  it made every `r.append(x)` read as an escape of r (ProcParamStays), and a
+  routine building a fresh list that way read as returning a borrow. }
+procedure PyListAppendRaw(l: TPyList; const v: Variant);
 var
   src, dst: PPyVarRec;
 begin
-  PyListGrow(Self, FLen + 1);
+  PyListGrow(l, l.FLen + 1);
   src := PPyVarRec(@v);
-  dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
+  dst := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
   PyVarSlotSet(dst, src);
-  FLen := FLen + 1;
+  l.FLen := l.FLen + 1;
+end;
+
+function TPyList.append_self(const v: Variant): TPyList;
+begin
+  PyListAppendRaw(Self, v);
   Result := Self;
 end;
 
 function TPyList.append(const v: Variant): Variant;
 begin
-  Self.append_self(v);
+  PyListAppendRaw(Self, v);
   Result := pynone;
 end;
 
@@ -6416,6 +6617,29 @@ begin
     dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
     PyVarSlotSet(dst, src);
     FLen := FLen + 1;
+  end;
+end;
+
+function TPyList.extend(const v: Variant): Variant;
+var it: TPyIter; borrowed: Boolean;
+begin
+  Result := pynone;
+  { a list held in a variant takes the snapshot path above, so `xs.extend(xs)`
+    still terminates }
+  if (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyList) then
+  begin
+    Result := extend(TPyList(pyvarobj(v)));
+    Exit;
+  end;
+  { pyiter_v hands back an ITERATOR argument itself, borrowed, and builds a
+    fresh cursor for everything else }
+  borrowed := (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyIter);
+  it := pyiter_v(v);
+  try
+    while pyiter_has(it) do
+      append(pyiter_take(it));
+  finally
+    if not borrowed then PXXObjRelease(Pointer(it));
   end;
 end;
 
@@ -6454,6 +6678,7 @@ begin
     v := snap.at(i);
     if not pycontains(other, v) then Self.remove(v);
   end;
+  PXXObjRelease(Pointer(snap));
 end;
 
 function TPyList.setsymdiff(other: TPyList): Variant;
@@ -6479,6 +6704,8 @@ begin
     v := snapOther.at(i);
     if not pycontains(snapSelf, v) then Self.add(v);
   end;
+  PXXObjRelease(Pointer(snapSelf));
+  PXXObjRelease(Pointer(snapOther));
 end;
 
 function TPyList.setdiff(other: TPyList): Variant;
@@ -6495,6 +6722,7 @@ begin
     v := snapOther.at(i);
     if pycontains(Self, v) then Self.remove(v);
   end;
+  PXXObjRelease(Pointer(snapOther));
 end;
 
 function TPyList.at(i: Integer): Variant;
@@ -6821,12 +7049,16 @@ begin
 end;
 
 function TPyList.isdisjoint(other: TPyList): Boolean;
-var r: TPyList;
+var i: Integer;
 begin
-  { "no element in common" — the intersection being empty. Python accepts ANY
-    iterable here, and a list IS the set representation, so no kind check. }
-  r := pyset_and(Self, other);
-  Result := (r = nil) or (r.count = 0);
+  { "no element in common". Python accepts ANY iterable here, and a list IS
+    the set representation, so no kind check. A membership walk, not the
+    intersection: building pyset_and's list only to read its count leaked that
+    list on every call. }
+  Result := True;
+  if (Self = nil) or (other = nil) then Exit;
+  for i := 0 to other.count - 1 do
+    if pycontains(Self, other.at(i)) then begin Result := False; Exit; end;
 end;
 
 procedure TPyList.discard(const v: Variant);
@@ -7151,6 +7383,10 @@ begin
         (devdocs/dev/normalise-dont-special-case.md) found it the moment `==`
         started routing here. }
       Result := pybytes_eq(TPyBytes(pl), TPyBytes(ql))
+    else if (pl is TPyDeque) and (ql is TPyDeque) then
+      { …and two DEQUES by their live windows (maxlen is not compared,
+        as in CPython) }
+      Result := pydeque_eq(TPyDeque(pl), TPyDeque(ql))
     else
       { Neither is one of this unit's containers, so they may be USER class
         instances with an `__eq__`. Identity above already settled the equal
@@ -7375,12 +7611,21 @@ end;
 procedure PySetRequireSets(a, b: TPyList; const op: AnsiString);
 var ka, kb: AnsiString;
 begin
-  if ((a = nil) or (a.FKind = PYSEQ_SET)) and
-     ((b = nil) or (b.FKind = PYSEQ_SET)) then Exit;
+  if ((a = nil) or (a.FKind = PYSEQ_SET) or (a.FKind = PYSEQ_FROZENSET)) and
+     ((b = nil) or (b.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_FROZENSET)) then Exit;
   if a = nil then ka := 'set' else ka := PySeqKindName(a.FKind);
   if b = nil then kb := 'set' else kb := PySeqKindName(b.FKind);
   raise TypeError.Create('unsupported operand type(s) for ' + op + ': '''
     + ka + ''' and ''' + kb + '''');
+end;
+
+{ The result of a set operator has the LEFT operand's type, as in CPython:
+  `frozenset | set` is a frozenset, `set | frozenset` a set. A frozenset
+  operand was refused outright before (the require check knew only sets). }
+function PySetResultKind(a: TPyList): Integer;
+begin
+  if (a <> nil) and (a.FKind = PYSEQ_FROZENSET) then Result := PYSEQ_FROZENSET
+  else Result := PYSEQ_SET;
 end;
 
 function pyset_and(a: TPyList; b: TPyList): TPyList;
@@ -7388,7 +7633,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '&');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;      { set & set is a SET, not a list }
+  Result.FKind := PySetResultKind(a);      { set & set is a SET, not a list }
   if (a = nil) or (b = nil) then Exit;
   for i := 0 to a.count - 1 do
     if pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -7399,7 +7644,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '|');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a <> nil then
     for i := 0 to a.count - 1 do Result.add(a.at(i));
   if b <> nil then
@@ -7411,7 +7656,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '-');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a = nil then Exit;
   for i := 0 to a.count - 1 do
     if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -7422,7 +7667,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '^');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a <> nil then
     for i := 0 to a.count - 1 do
       if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -7784,8 +8029,13 @@ begin
   if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(c);
-  if (l = nil) or (l.count = 0) then Result := d
-  else Result := PyExtremeOfList(l, True);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then Result := d
+    else Result := PyExtremeOfList(l, True);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pymin_default(const c: Variant; const d: Variant): Variant;
@@ -7794,8 +8044,13 @@ begin
   if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(c);
-  if (l = nil) or (l.count = 0) then Result := d
-  else Result := PyExtremeOfList(l, False);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then Result := d
+    else Result := PyExtremeOfList(l, False);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pyid_v(const v: Variant): Int64;
@@ -7883,6 +8138,15 @@ begin
     if FCounterMode then
     begin
       Result := 0;
+      exit;
+    end;
+    { defaultdict: __missing__ is "call the factory, store, answer it" }
+    if FHasFactory then
+    begin
+      if PyCall0Hook = nil then
+        raise Exception.Create('defaultdict: the callable dispatch (pyeval) is not linked');
+      Result := PyCall0Hook(FDefFactory);
+      store(k, Result);
       exit;
     end;
     PyKeyError(k);
@@ -7981,6 +8245,11 @@ begin
   Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
   if i < 0 then PyKeyError(k);
+  { release the removed entry: the raw shift below overwrites its slots
+    without, so `del d[k]` and `d.pop(k)` leaked the key and value -- two
+    blocks per call for a list value, and the value was never freed }
+  PyVarSlotClear(PPyVarRec(NativeInt(FKeys) + i * 16));
+  PyVarSlotClear(PPyVarRec(NativeInt(FVals) + i * 16));
   for j := i to FLen - 2 do
   begin
     src := PPyVarRec(NativeInt(FKeys) + (j + 1) * 16);
@@ -7991,6 +8260,16 @@ begin
     dst := PPyVarRec(NativeInt(FVals) + j * 16);
     dst^.VType := src^.VType;
     dst^.Payload := src^.Payload;
+  end;
+  { the vacated top slot holds a raw copy of the entry that moved down; zero
+    it without a release, or the next store there (PyVarSlotSet) would
+    release a live entry }
+  if i < FLen - 1 then
+  begin
+    dst := PPyVarRec(NativeInt(FKeys) + (FLen - 1) * 16);
+    dst^.VType := 0; dst^.Payload := 0;
+    dst := PPyVarRec(NativeInt(FVals) + (FLen - 1) * 16);
+    dst^.VType := 0; dst^.Payload := 0;
   end;
   FLen := FLen - 1;
   { the tail shift renumbered every entry after the hole, so the stored slot
@@ -8021,6 +8300,13 @@ var ks, vs: TPyList; i: Integer;
 begin
   Result := TPyDict.Create;
   Result.FCounterMode := FCounterMode;
+  { d.copy() of a defaultdict is a defaultdict with the same factory }
+  if FHasFactory then
+  begin
+    Result.FHasFactory := True;
+    Result.FDefFactory := FDefFactory;
+  end;
+  Result.FOrdered := FOrdered;
   ks := keylist;
   vs := vallist;
   for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
@@ -8052,6 +8338,55 @@ begin
   Result.append(vs.at(n));
   remove(k);
   { both snapshots are read-only temporaries here -- measured 656 bytes/call }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
+end;
+
+{ ONE path that builds the tuple, for either end: a body that returns only
+  what it minted is what ClassifyProcResultFresh recognises, and that is what
+  makes a DISCARDED `d.popitem(last=False)` released. Forwarding to popitem()
+  for last=True made the result look borrowed -- two blocks per discarded
+  call, measured 2026-10-03 on an LRU loop. }
+function TPyDict.popitem(last: Boolean): TPyList;
+var ks: TPyList; k: Variant;
+begin
+  ks := keylist;
+  if ks.count = 0 then
+  begin
+    PXXObjRelease(Pointer(ks));
+    raise KeyError.Create('dictionary is empty');
+  end;
+  if last then k := ks.at(ks.count - 1) else k := ks.at(0);
+  PXXObjRelease(Pointer(ks));
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(k);
+  Result.append(fetch(k));
+  remove(k);
+end;
+
+function TPyDict.move_to_end(const k: Variant): Variant;
+begin
+  Result := move_to_end(k, True);
+end;
+
+{ Remove and re-insert: insertion order IS the storage order (FKeys), so a
+  store after a remove lands at the end. To the FRONT, the rest are re-stored
+  after it. O(n) for last=False, which CPython's linked list does in O(1); an
+  OrderedDict used as an LRU moves to the END, which is the cheap direction. }
+function TPyDict.move_to_end(const k: Variant; last: Boolean): Variant;
+var v: Variant; ks, vs: TPyList; i: Integer;
+begin
+  Result := pynone;
+  if indexof(k) < 0 then PyKeyError(k);
+  v := fetch(k);
+  remove(k);
+  if last then begin store(k, v); Exit; end;
+  ks := keylist;
+  vs := vallist;
+  for i := 0 to ks.count - 1 do remove(ks.at(i));
+  store(k, v);
+  for i := 0 to ks.count - 1 do store(ks.at(i), vs.at(i));
   PXXObjRelease(Pointer(ks));
   PXXObjRelease(Pointer(vs));
 end;
@@ -8599,8 +8934,13 @@ var i: Integer; acc: Variant; l: TPyList;
 begin
   acc := 1;
   l := pylist_v(src);
-  if l <> nil then
-    for i := 0 to l.count - 1 do acc := acc * l.at(i);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if l <> nil then
+      for i := 0 to l.count - 1 do acc := acc * l.at(i);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
   Result := acc;
 end;
 
@@ -8626,6 +8966,7 @@ begin
       else c := c + ((v - t) + sum);
       sum := t;
     end;
+  if l <> nil then PXXObjRelease(Pointer(l));   { a fresh copy, only read }
   Result := sum + c;
 end;
 
@@ -8645,6 +8986,8 @@ var i: Integer; lp, lq: TPyList; d, m, sum, c, t, v: Double;
 begin
   lp := pylist_v(p);
   lq := pylist_v(q);
+  { both fresh copies, only read: released on every path }
+  try
   if (lp = nil) or (lq = nil) then
     raise TypeError.Create('dist(): expected two sequences of numbers');
   if lp.count <> lq.count then
@@ -8668,6 +9011,10 @@ begin
     sum := t;
   end;
   Result := m * PyCxSqrt(sum + c);
+  finally
+    if lp <> nil then PXXObjRelease(Pointer(lp));
+    if lq <> nil then PXXObjRelease(Pointer(lq));
+  end;
 end;
 
 { math.perm(n, k) — ordered arrangements, n!/(n-k)!, computed as the falling
@@ -8759,9 +9106,14 @@ function pyrandom_choice(const src: Variant): Variant;
 var l: TPyList;
 begin
   l := pylist_v(src);
-  if (l = nil) or (l.count = 0) then
-    raise IndexError.Create('Cannot choose from an empty sequence');
-  Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise IndexError.Create('Cannot choose from an empty sequence');
+    Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 { Fisher-Yates, in place — `random.shuffle(xs)` returns None and mutates, which
@@ -8974,7 +9326,7 @@ begin
 end;
 
 function pynext_v(const v: Variant): Variant;
-var o: TObject; l: TPyList;
+var o: TObject; l: TPyList; r: Variant;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -8988,6 +9340,16 @@ begin
       pynext_v := pyiter_next(TPyIter(o));
       Exit;
     end;
+    { a USER iterator: one __next__, whose StopIteration is the caller's.
+      Draining it into a list (below) consumed every element to answer the
+      first. }
+    if PyUserObjHasDunder(o, '__next__') then
+    begin
+      if not PyUserObjNoArgDunder(o, '__next__', r) then
+        raise StopIteration.Create('next() on an exhausted iterator');
+      pynext_v := r;
+      Exit;
+    end;
   end;
   { a fresh copy -- released for the reason given in max(const v: Variant) }
   l := pylist_v(v);
@@ -8999,7 +9361,7 @@ begin
 end;
 
 function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
-var o: TObject; l: TPyList;
+var o: TObject; l: TPyList; r: Variant;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -9007,6 +9369,16 @@ begin
     if o is TPyIter then
     begin
       pynext_or_v := pyiter_next_or(TPyIter(o), dflt);
+      Exit;
+    end;
+    if PyUserObjHasDunder(o, '__next__') then
+    begin
+      pynext_or_v := dflt;
+      try
+        if PyUserObjNoArgDunder(o, '__next__', r) then pynext_or_v := r;
+      except
+        on E: StopIteration do pynext_or_v := dflt;
+      end;
       Exit;
     end;
   end;
@@ -9341,8 +9713,11 @@ begin
   d := TPyDict.Create;
   l := pylist_v(src);
   if l <> nil then
+  begin
     for i := 0 to l.count - 1 do
       d.store(l.at(i), pynone());
+    PXXObjRelease(Pointer(l));   { a fresh copy (pylist_v), only read }
+  end;
   Result := d;
 end;
 
@@ -9361,8 +9736,11 @@ begin
   d := TPyDict.Create;
   l := pylist_v(src);
   if l <> nil then
+  begin
     for i := 0 to l.count - 1 do
       d.store(l.at(i), v);
+    PXXObjRelease(Pointer(l));   { a fresh copy (pylist_v), only read }
+  end;
   Result := d;
 end;
 
@@ -9536,6 +9914,7 @@ constructor TPyDeque.Create;
 begin
   FBuf := TPyList.Create;
   FHead := 0;
+  FMaxLen := -1;
 end;
 
 function TPyDeque.__len__: Integer;
@@ -9552,13 +9931,20 @@ begin
   nb := TPyList.Create;
   for k := 0 to frontSlack - 1 do nb.append_self(pynone);
   for k := FHead to FBuf.FLen - 1 do nb.append_self(FBuf.at(k));
+  { The field store is a raw store: the old buffer's reference is ours to
+    drop. It leaked one list per deque on its first appendleft, and one per
+    compaction after a run of popleft. }
+  PXXObjRelease(Pointer(FBuf));
   FBuf := nb;
   FHead := frontSlack;
 end;
 
 function TPyDeque.append(const v: Variant): Variant;
+var dropped: Variant;
 begin
+  if FMaxLen = 0 then begin Result := pynone; Exit; end;
   FBuf.append_self(v);
+  if (FMaxLen > 0) and (__len__ > FMaxLen) then dropped := popleft;
   Result := pynone;
 end;
 
@@ -9572,13 +9958,14 @@ begin
   end;
   Dec(FHead);
   FBuf.put(FHead, v);
+  if (FMaxLen >= 0) and (__len__ > FMaxLen) then FBuf.pop;
   Result := pynone;
 end;
 
 function TPyDeque.popleft: Variant;
 begin
   if FHead >= FBuf.FLen then
-    raise Exception.Create('pop from an empty deque');
+    raise IndexError.Create('pop from an empty deque');
   Result := FBuf.at(FHead);
   Inc(FHead);
   { Reclaim only when the dead prefix is at least half the buffer, which is what
@@ -9590,7 +9977,7 @@ end;
 function TPyDeque.pop: Variant;
 begin
   if FHead >= FBuf.FLen then
-    raise Exception.Create('pop from an empty deque');
+    raise IndexError.Create('pop from an empty deque');
   Result := FBuf.pop;
 end;
 
@@ -9607,7 +9994,7 @@ begin
     every sequence here does. }
   if i < 0 then i := (FBuf.FLen - FHead) + i;
   if (i < 0) or (FHead + i >= FBuf.FLen) then
-    raise Exception.Create('deque index out of range');
+    raise IndexError.Create('deque index out of range');
   Result := FBuf.at(FHead + i);
 end;
 
@@ -9615,8 +10002,151 @@ procedure TPyDeque.put(i: Integer; const v: Variant);
 begin
   if i < 0 then i := (FBuf.FLen - FHead) + i;
   if (i < 0) or (FHead + i >= FBuf.FLen) then
-    raise Exception.Create('deque index out of range');
+    raise IndexError.Create('deque index out of range');
   FBuf.put(FHead + i, v);
+end;
+
+function TPyDeque.Window: TPyList;
+var k: Integer;
+begin
+  Result := TPyList.Create;
+  for k := FHead to FBuf.FLen - 1 do Result.append_self(FBuf.at(k));
+end;
+
+procedure TPyDeque.Install(l: TPyList);
+begin
+  { the old buffer's reference is ours, as in Compact; l's becomes ours }
+  PXXObjRelease(Pointer(FBuf));
+  FBuf := l;
+  FHead := 0;
+end;
+
+function TPyDeque.extend(const v: Variant): Variant;
+var src: TPyList; k: Integer;
+begin
+  { materialised first: `d.extend(d)` must read the deque as it was }
+  src := list(v);
+  for k := 0 to src.FLen - 1 do append(src.at(k));
+  PXXObjRelease(Pointer(src));
+  Result := pynone;
+end;
+
+function TPyDeque.extendleft(const v: Variant): Variant;
+var src: TPyList; k: Integer;
+begin
+  { one appendleft per item, so the items land REVERSED -- CPython's rule }
+  src := list(v);
+  for k := 0 to src.FLen - 1 do appendleft(src.at(k));
+  PXXObjRelease(Pointer(src));
+  Result := pynone;
+end;
+
+function TPyDeque.rotate: Variant;
+begin
+  Result := rotate(1);
+end;
+
+function TPyDeque.rotate(n: Integer): Variant;
+var w, r: TPyList; len, k: Integer;
+begin
+  Result := pynone;
+  len := __len__;
+  if len <= 1 then Exit;
+  n := n mod len;
+  if n < 0 then n := n + len;
+  if n = 0 then Exit;
+  { right by n: the last n items move to the front }
+  w := Window;
+  r := TPyList.Create;
+  for k := len - n to len - 1 do r.append_self(w.at(k));
+  for k := 0 to len - n - 1 do r.append_self(w.at(k));
+  PXXObjRelease(Pointer(w));
+  Install(r);
+end;
+
+function TPyDeque.remove(const v: Variant): Variant;
+var k: Integer; w: TPyList;
+begin
+  Result := pynone;
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+    begin
+      w := Window;
+      w.pop_at(k - FHead);
+      Install(w);
+      Exit;
+    end;
+  raise ValueError.Create(pyrepr_of(v) + ' is not in deque');
+end;
+
+function TPyDeque.count(const v: Variant): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+      Inc(Result);
+end;
+
+function TPyDeque.index(const v: Variant): Integer;
+var k: Integer;
+begin
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+    begin
+      Result := k - FHead;
+      Exit;
+    end;
+  Result := -1;
+  raise ValueError.Create(pyrepr_of(v) + ' is not in deque');
+end;
+
+function TPyDeque.__contains__(const v: Variant): Boolean;
+begin
+  Result := count(v) > 0;
+end;
+
+function TPyDeque.reverse: Variant;
+var w, r: TPyList; k: Integer;
+begin
+  w := Window;
+  r := TPyList.Create;
+  for k := w.FLen - 1 downto 0 do r.append_self(w.at(k));
+  PXXObjRelease(Pointer(w));
+  Install(r);
+  Result := pynone;
+end;
+
+function TPyDeque.copy: TPyDeque;
+begin
+  Result := TPyDeque.Create;
+  Result.FMaxLen := FMaxLen;
+  Result.Install(Window);
+end;
+
+function TPyDeque.GetMaxLen: Variant;
+begin
+  if FMaxLen < 0 then Result := pynone else Result := FMaxLen;
+end;
+
+function pydeque_eq(a, b: TPyDeque): Boolean;
+var wa, wb: TPyList;
+begin
+  wa := a.Window;
+  wb := b.Window;
+  Result := pylist_eq(wa, wb);
+  PXXObjRelease(Pointer(wa));
+  PXXObjRelease(Pointer(wb));
+end;
+
+function pydeque_repr(d: TPyDeque): AnsiString;
+var w: TPyList;
+begin
+  w := d.Window;
+  Result := 'deque(' + pylist_repr(w);
+  if d.FMaxLen >= 0 then Result := Result + ', maxlen=' + pystr_of(Int64(d.FMaxLen));
+  Result := Result + ')';
+  PXXObjRelease(Pointer(w));
 end;
 
 function pydeque_new: TPyDeque; overload;
@@ -9624,12 +10154,29 @@ begin
   Result := TPyDeque.Create;
 end;
 
-function pydeque_new(l: TPyList): TPyDeque; overload;
-var k: Integer;
+function pydeque_new(const iterable: Variant; const maxlen: Variant): TPyDeque; overload;
 begin
   Result := TPyDeque.Create;
-  if l = nil then Exit;
-  for k := 0 to l.FLen - 1 do Result.append(l.at(k));
+  if pyvartag(maxlen) <> 0 then
+  begin
+    if (pyvartag(maxlen) = 1) or (pyvartag(maxlen) = 2) or (pyvartag(maxlen) = 4) then
+      Result.FMaxLen := Integer(PPyVarRec(@maxlen)^.Payload)
+    else raise TypeError.Create('an integer is required');
+    if Result.FMaxLen < 0 then
+      raise ValueError.Create('maxlen must be non-negative');
+  end;
+  if pyvartag(iterable) <> 0 then Result.extend(iterable);
+end;
+
+function deque(const iterable: Variant; const maxlen: Variant): TPyDeque; overload;
+begin
+  Result := pydeque_new(iterable, maxlen);
+end;
+
+function pydeque_new(const iterable: Variant): TPyDeque; overload;
+begin
+  Result := TPyDeque.Create;
+  if pyvartag(iterable) <> 0 then Result.extend(iterable);
 end;
 
 { One implementation, two names — see the declaration. }
@@ -9638,9 +10185,9 @@ begin
   Result := pydeque_new;
 end;
 
-function deque(l: TPyList): TPyDeque; overload;
+function deque(const iterable: Variant): TPyDeque; overload;
 begin
-  Result := pydeque_new(l);
+  Result := pydeque_new(iterable);
 end;
 
 function Counter: TPyDict;
@@ -9685,6 +10232,65 @@ end;
 function pycounter_new: TPyDict;
 begin
   Result := Counter;
+end;
+
+function pydefaultdict_new: TPyDict;
+begin
+  Result := TPyDict.Create;
+end;
+
+function pydefaultdict_new(const f: Variant): TPyDict;
+begin
+  Result := TPyDict.Create;
+  if pyvartag(f) <> 0 then
+  begin
+    Result.FHasFactory := True;
+    Result.FDefFactory := f;
+  end;
+end;
+
+function pydefaultdict_new(const f: Variant; const src: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f);
+  Result.update(src);
+end;
+
+function pyordereddict_new: TPyDict;
+begin
+  Result := TPyDict.Create;
+  Result.FOrdered := True;
+end;
+
+function pyordereddict_new(const src: Variant): TPyDict;
+begin
+  { `()`: a bare own name inside its own body is the RESULT, not a call }
+  Result := pyordereddict_new();
+  Result.update(src);
+end;
+
+function OrderedDict: TPyDict;
+begin
+  Result := pyordereddict_new;
+end;
+
+function OrderedDict(const src: Variant): TPyDict;
+begin
+  Result := pyordereddict_new(src);
+end;
+
+function defaultdict: TPyDict;
+begin
+  Result := pydefaultdict_new;
+end;
+
+function defaultdict(const f: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f);
+end;
+
+function defaultdict(const f: Variant; const src: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f, src);
 end;
 
 function pycounter_new(const src: Variant): TPyDict;
@@ -10396,6 +11002,12 @@ begin
     if o is TPyList then Result := TPyList(o).count
     else if o is TPyDict then Result := TPyDict(o).count
     else if o is TPyBytes then Result := TPyBytes(o).count
+    { a RANGE or a DEQUE through a variant -- `def f(xs): len(xs)` handed
+      range(4) raised "expected an object with a length", and so did unpacking
+      one there, which measures the source first. pyvar_getitem already had
+      both arms. }
+    else if o is TPyRange then Result := pyrange_len(TPyRange(o))
+    else if o is TPyDeque then Result := TPyDeque(o).__len__
     { A user or RTL-shim class declaring `__len__`. This is the helper len()
       reaches whenever the value is a VARIANT -- an unannotated parameter, a
       field the frontend could not type -- so `len(h.values)` for an
@@ -12076,6 +12688,8 @@ begin
     walks the keys. Same one normaliser the plain max/min arms use.
     bug-nilpy-max-and-min-do-not-iterate-a-dict }
   l := pylist_v(c);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
   n := 0;
   if l <> nil then n := l.count;
   if n = 0 then
@@ -12098,6 +12712,9 @@ begin
       bestK := curK;
       Result := cur;
     end;
+  end;
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
   end;
 end;
 
@@ -14454,6 +15071,13 @@ begin
     building the object and raising it. }
   Result := e;
   if e = nil then Exit;
+  { the exception takes its OWN reference: the tuple is built in a hidden
+    NilPy local (PyMakeTupleFromArgs) which releases it at scope exit, and the
+    exception's finalizer releases argsv too -- one count, two owners, and
+    HEAP_DEBUG reported `RELEASE of a FREED object` for every multi-argument
+    exception that was dropped }
+  if t <> nil then PXXObjRetain(Pointer(t));
+  if ExceptionBase(e).argsv <> nil then PXXObjRelease(Pointer(ExceptionBase(e).argsv));
   ExceptionBase(e).argsv := t;
   { OSError's two-argument form prints as CPython's errno sentence, not as
     the tuple repr every other multi-argument exception prints. }
@@ -15600,6 +16224,7 @@ begin
   FIsGen := False;
   FGenInst := nil;
   FGenStep := nil;
+  FGenWide := False;
 end;
 
 { A stackless GENERATOR as a first-class value: wrap its heap instance and step
@@ -15619,12 +16244,35 @@ begin
   Result.FIsGen := True;
 end;
 
+{ The compiler's choice for a step it calls with all seven words on the stack
+  (TPyGenStepWide). }
+function pygen_iter_new_wide(inst: Pointer; step: Pointer): TPyIter;
+begin
+  Result := pygen_iter_new(inst, step);
+  Result.FGenWide := True;
+end;
+
+{ One step of a generator cursor, in the shape its step function takes. }
+function PyGenStepOnce(it: TPyIter): Boolean;
+begin
+  if it.FGenWide then
+    Result := TPyGenStepWide(it.FGenStep)(it.FGenInst, nil, nil, nil, nil, nil, nil)
+  else
+    Result := TPyGenStep(it.FGenStep)(it.FGenInst);
+end;
+
 function pyiter_of_list(l: TPyList): TPyIter;
 begin
   Result := TPyIter.Create;
   Result.FKind := PYITER_K_LIST;
   Result.FSrc := l;
   PXXObjRetain(Pointer(l));
+end;
+
+function PyIterAdoptList(l: TPyList): TPyIter;
+begin
+  Result := pyiter_of_list(l);
+  if l <> nil then PXXObjRelease(Pointer(l));
 end;
 
 function pyiter_of_str(const s: AnsiString): TPyIter;
@@ -15690,8 +16338,8 @@ begin
       PXXObjRelease(Pointer(dks));
       Exit;
     end;
-    if o is TPyBytes then begin Result := pyiter_of_list(list(TPyBytes(o))); Exit; end;
-    if o is TPyFile then begin Result := pyiter_of_list(TPyFile(o).readlines); Exit; end;
+    if o is TPyBytes then begin Result := PyIterAdoptList(list(TPyBytes(o))); Exit; end;
+    if o is TPyFile then begin Result := PyIterAdoptList(TPyFile(o).readlines); Exit; end;
     { a RANGE hands back a FRESH cursor every time — that is what re-iterable
       means, and it is why range is not itself a cursor }
     if o is TPyRange then begin Result := pyiter_of_range(TPyRange(o)); Exit; end;
@@ -15704,9 +16352,24 @@ begin
       Result := pyiter_of_userobj(o);
       Exit;
     end;
+    { ...and anything else pyseq_of_obj can MATERIALISE -- a deque today.
+      This chain and that one are two lists of the same kinds; a `for` over
+      a variant used to unbox through pylist_v (pyseq_of_obj) and now walks
+      this cursor, so a kind only that chain knew became "expected an
+      iterable, got object" (a deque handed back from a def). The fresh list
+      is adopted, as the bytes and file arms above adopt theirs. }
+    dks := pyseq_of_obj(o);
+    if dks <> nil then begin Result := PyIterAdoptList(dks); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'an iterable');
-  Result := pyiter_of_list(TPyList.Create);
+  Result := PyIterAdoptList(TPyList.Create);
+end;
+
+function pyiter_own_v(const v: Variant): TPyIter;
+begin
+  Result := pyiter_v(v);
+  if (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyIter) then
+    PXXObjRetain(Pointer(Result));
 end;
 
 function pyiter_enum(const v: Variant; start: Int64): TPyIter;
@@ -15868,8 +16531,15 @@ end;
   intervening take() does not advance, which is what lets it sit in a while
   CONDITION. Every source is consulted LIVE — a list that grows during the
   loop is seen, exactly as the eager index loop saw it. }
-function pyiter_has(it: TPyIter): Boolean;
-var genStep: TPyGenStep; genCur: Pointer;   { PYITER_K_SLGEN }
+{ Every kind except the four hot ones below. Split out because a Pascal
+  routine initialises and finalises EVERY managed temp it declares or mints,
+  on every call, whichever arm runs: this body's MAP, ZIP and USEROBJ arms
+  mint about 46 Variant temps, and pyiter_has paid for all of them once per
+  ELEMENT. Measured 2026-10-02 under callgrind: list(range(32)) cost ~118k
+  instructions, 2.97M variant clears over 64k steps, against CPython's under
+  a microsecond. }
+function pyiter_has_slow(it: TPyIter): Boolean;
+var genCur: Pointer;   { PYITER_K_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
     lenv, idxv: Variant;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
@@ -15894,8 +16564,7 @@ begin
       guarantees the layout of. }
     if (it.FGenInst = nil) or (it.FGenStep = nil) then
       begin it.FEnd := True; Exit; end;
-    genStep := TPyGenStep(it.FGenStep);
-    if not genStep(it.FGenInst) then begin it.FEnd := True; Exit; end;
+    if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
     genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
     if genCur = nil then begin it.FEnd := True; Exit; end;
     it.FBox.put(0, PPyVariant(genCur)^);
@@ -16197,6 +16866,51 @@ begin
   it.FEnd := True;
 end;
 
+{ The hot cursor kinds -- a list, a range, a generator -- with no managed
+  temps of their own, so a step costs what its arm does. The arms are the
+  same code as pyiter_has_slow's; everything else goes there. }
+function pyiter_has(it: TPyIter): Boolean;
+var genCur: Pointer; l: TPyList;
+begin
+  Result := False;
+  if it = nil then Exit;
+  if it.FHas then begin Result := True; Exit; end;
+  if it.FEnd then Exit;
+  if it.FKind = PYITER_K_LIST then
+  begin
+    l := it.FSrc;
+    if (l = nil) or (it.FPos >= l.count) then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, l.at(it.FPos));
+    Inc(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_K_RANGE then
+  begin
+    if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, it.FStart);
+    it.FStart := it.FStart + it.FStep;
+    Dec(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_K_SLGEN then
+  begin
+    if (it.FGenInst = nil) or (it.FGenStep = nil) then
+      begin it.FEnd := True; Exit; end;
+    if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
+    genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
+    if genCur = nil then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, PPyVariant(genCur)^);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  Result := pyiter_has_slow(it);
+end;
+
 function pyiter_take(it: TPyIter): Variant;
 begin
   Result := pynone;
@@ -16222,11 +16936,22 @@ begin
 end;
 
 function pyiter_drain(it: TPyIter): TPyList;
+var r: TPyList; done: Boolean;
 begin
-  Result := TPyList.Create;
+  r := TPyList.Create;
+  pyiter_drain := r;
   if it = nil then Exit;
-  while pyiter_has(it) do
-    Result.append(pyiter_take(it));
+  { A generator that RAISES mid-drain -- `list(g())` where g raises after its
+    first yield -- unwound past this frame with the partial list and every
+    element in it unowned: two objects per call under a caller's `except`. }
+  done := False;
+  try
+    while pyiter_has(it) do
+      r.append(pyiter_take(it));
+    done := True;
+  finally
+    if not done then PXXObjRelease(Pointer(r));
+  end;
 end;
 
 function pystar_as_list(const v: Variant): TPyList;
@@ -16855,7 +17580,21 @@ begin
     bug-nilpy-builtins-over-a-user-iterable-answer-empty }
   if (ito <> nil) and (ito is TPyIter) then
   begin
+    { `itv` holds the only reference and dies when this returns, so the cursor
+      handed to the caller needs its own. See PyUserObjNoArgMeth's contract. }
+    PXXObjRetain(Pointer(ito));
     Result := TPyIter(ito);
+    { A GENERATOR `__iter__` (__pxx_gen_iter__) seeds `self` into the
+      instance's first slot RAW -- the generator borrows it. A cursor over it
+      must therefore keep the object alive itself, or `for x in Bag(...)`
+      would free the Bag under its own running generator once the loop
+      releases its temporary. FObj is unused by the SLGEN kind and the
+      finalizer releases it. }
+    if (Result.FKind = PYITER_K_SLGEN) and (Result.FObj = nil) and (o <> nil) then
+    begin
+      Result.FObj := o;
+      PXXObjRetain(Pointer(o));
+    end;
     Exit;
   end;
   Result := TPyIter.Create;
@@ -16892,6 +17631,18 @@ begin
   PXXObjRetain(Pointer(ito));
 end;
 
+{ pyiter_of_userobj for a FRESH object the caller owns -- `for x in Cls(...)`,
+  `[v for v in Cls(...)]`. The cursor takes every reference it needs (FObj, or
+  the __iter__ result), so the construction's own reference is dropped here.
+  Nothing else held it: each loop over a fresh instance leaked the instance
+  and everything it owned (one Bag and its list per pass, measured 2026-10-02).
+  bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells }
+function pyiter_of_userobj_owned(o: TObject): TPyIter;
+begin
+  Result := pyiter_of_userobj(o);
+  if o <> nil then PXXObjRelease(Pointer(o));
+end;
+
 function pyiter_of_range(r: TPyRange): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -16912,10 +17663,10 @@ begin
     one as the other is the whole bug. }
   if b = nil then
   begin
-    pyiter_of_bytes := pyiter_of_list(TPyList.Create);
+    pyiter_of_bytes := PyIterAdoptList(TPyList.Create);
     Exit;
   end;
-  pyiter_of_bytes := pyiter_of_list(list(b));
+  pyiter_of_bytes := PyIterAdoptList(list(b));
 end;
 
 function pyrange_is(const v: Variant): Boolean;
@@ -17057,14 +17808,19 @@ begin
 end;
 
 function reversed(r: TPyRange): TPyIter; overload;
+var rr: TPyRange;
 begin
   { CPython gives a range_iterator walking backwards. Built as the equivalent
     range rather than a materialised list, so reversed(range(10 ** 9)) is
     still three fields. }
-  if pyrange_len(r) = 0 then Result := pyiter_of_range(pyrange3(0, 0, 1))
-  else Result := pyiter_of_range(pyrange3(r.FStart + (pyrange_len(r) - 1) * r.FStep,
-                                          r.FStart - r.FStep,
-                                          -r.FStep));
+  { the cursor copies the range's three fields and keeps no reference, so the
+    range built here is released once read }
+  if pyrange_len(r) = 0 then rr := pyrange3(0, 0, 1)
+  else rr := pyrange3(r.FStart + (pyrange_len(r) - 1) * r.FStep,
+                      r.FStart - r.FStep,
+                      -r.FStep);
+  Result := pyiter_of_range(rr);
+  PXXObjRelease(Pointer(rr));
 end;
 
 function sum(it: TPyIter; const start: Variant): Variant; overload;
@@ -17306,6 +18062,11 @@ begin
     if d.FKeys <> nil then FreeMem(d.FKeys);
     if d.FVals <> nil then FreeMem(d.FVals);
     if d.FHash <> nil then FreeMem(d.FHash);
+    if d.FHasFactory then
+    begin
+      PyVarSlotClear(PPyVarRec(@d.FDefFactory));
+      d.FHasFactory := False;
+    end;
     d.FKeys := nil; d.FVals := nil; d.FHash := nil;
     d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
     Exit;
@@ -17362,6 +18123,18 @@ begin
       at step exit, and teardown is exactly where this stands. }
     if it.FGenInst <> nil then
     begin
+      { CLOSE an instance that did not run to the end -- a cursor dropped
+        after next(), or a consumer that stopped early -- so the step releases
+        what its locals hold before the block goes. State -1 is the
+        compiler's SL_STATE_CLOSE (defs.inc); offsets 0 and 24 are STATE and
+        DONE, fixed by the same layout comment as CURRENT above. Only when not
+        done: after the fall-off the slots still hold the released values. }
+      if (it.FGenStep <> nil) and
+         (PInt64(Pointer(Int64(it.FGenInst) + 24))^ = 0) then
+      begin
+        PInt64(it.FGenInst)^ := -1;
+        PyGenStepOnce(it);
+      end;
       FreeMem(it.FGenInst);
       it.FGenInst := nil;
     end;
@@ -17379,6 +18152,74 @@ begin
   if rawKind <> 3 then PXXClassRunDestructor(objp);
   PXXClassFinalize(objp);
 end;
+
+{$ifdef PXX_CYCLE_GC}
+{ The cycle collector's TRAVERSE (builtinheap PXXGcCollect): the references
+  PyObjFinalize RELEASES, arm for arm, visited instead of released. Mode 0/1
+  only read; mode 2 releases each child and empties its slot, which leaves the
+  object exactly as the finalizer would and makes the later real finalize a
+  no-op over it. Arms that are NOT visited, deliberately (the safe direction --
+  a cycle through them is simply not found): a pyeval closure's captures
+  (rawKind 2; they live in pyeval's side table), a generator's persistent
+  locals (no map of which slots are managed), and TPyBytes data. }
+procedure PyGcTraverse(objp: Pointer; rawKind: NativeInt; mode: NativeInt);
+var
+  k: Integer;
+  l: TPyList;
+  d: TPyDict;
+  by: TPyBytes;
+  it: TPyIter;
+  o: TObject;
+begin
+  if objp = nil then Exit;
+  if rawKind = 2 then Exit;
+  if (rawKind <> 0) and (rawKind <> 3) then
+  begin
+    PXXGcVisitObj(@PPyBoundRec(objp)^.Code, mode);
+    PXXGcVisitObj(@PPyBoundRec(objp)^.Recv, mode);
+    Exit;
+  end;
+  o := TObject(objp);
+  if o is TPyList then
+  begin
+    l := TPyList(objp);
+    for k := 0 to l.FLen - 1 do
+      PXXGcVisitVar(Pointer(NativeInt(l.FItems) + k * 16), mode);
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    d := TPyDict(objp);
+    for k := 0 to d.FLen - 1 do
+    begin
+      PXXGcVisitVar(Pointer(NativeInt(d.FKeys) + k * 16), mode);
+      PXXGcVisitVar(Pointer(NativeInt(d.FVals) + k * 16), mode);
+    end;
+    if d.FHasFactory then PXXGcVisitVar(@d.FDefFactory, mode);
+    Exit;
+  end;
+  if o is TPyBytes then
+  begin
+    by := TPyBytes(objp);
+    PXXGcVisitObj(@by.FViewOf, mode);
+    Exit;
+  end;
+  if o is TPyIter then
+  begin
+    it := TPyIter(objp);
+    PXXGcVisitObj(@it.FSrc, mode);
+    PXXGcVisitObj(@it.FUp, mode);
+    PXXGcVisitObj(@it.FUp2, mode);
+    PXXGcVisitObj(@it.FUp3, mode);
+    PXXGcVisitObj(@it.FUp4, mode);
+    PXXGcVisitObj(@it.FBox, mode);
+    PXXGcVisitObj(@it.FObj, mode);
+    PXXGcVisitObj(@it.FKey, mode);
+    Exit;
+  end;
+  PXXGcWalkFields(objp, mode);
+end;
+{$endif}
 
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 begin
@@ -18475,8 +19316,51 @@ end;
 { The placeholder walk. Two variants rather than an open array: an open array
   of Variant is not marshalled correctly here and crashed on the second
   argument. }
+{ A format SPEC's nested fields, `{:>{w}}` / `{:{}.{}f}`: each `{n}` / `{}` in
+  the spec is replaced by that argument's text before the spec is applied.
+  argi is the automatic counter, already past the outer field -- CPython
+  numbers the outer field first. }
+function PyFormatExpandSpec(const spec: AnsiString; args: TPyList;
+                            var argi: Integer): AnsiString;
+var j, ns, idx, k: Integer; nf: AnsiString;
+begin
+  Result := '';
+  j := 1;
+  while j <= Length(spec) do
+  begin
+    if spec[j] = Chr(123) then
+    begin
+      ns := j + 1;
+      while (j <= Length(spec)) and (spec[j] <> Chr(125)) do Inc(j);
+      nf := Copy(spec, ns, j - ns);
+      idx := -1;
+      if nf <> '' then
+      begin
+        idx := 0;
+        for k := 1 to Length(nf) do
+          if (nf[k] >= '0') and (nf[k] <= '9') then
+            idx := idx * 10 + (Ord(nf[k]) - Ord('0'))
+          else
+          begin idx := -1; Break; end;
+      end;
+      if idx < 0 then
+      begin
+        idx := argi;
+        Inc(argi);
+      end;
+      if (args = nil) or (idx >= args.count) then
+        raise Exception.Create('str.format: more placeholders than arguments');
+      Result := Result + pyvar_print_of(args.at(idx));
+      Inc(j);
+      Continue;
+    end;
+    Result := Result + spec[j];
+    Inc(j);
+  end;
+end;
+
 function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
-var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
+var i, j, argi, useIdx, k, nArgs, depth: Integer; spec, fld, outS: AnsiString;
     conv: Char;
 begin
   outS := '';
@@ -18525,8 +19409,15 @@ begin
       if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
         Inc(j);
-        while (j <= Length(fmt)) and (fmt[j] <> '}') do
-        begin spec := spec + fmt[j]; Inc(j); end;
+        { brace-balanced: a spec may nest fields, `{:>{w}}` }
+        depth := 0;
+        while (j <= Length(fmt)) and ((fmt[j] <> '}') or (depth > 0)) do
+        begin
+          if fmt[j] = '{' then Inc(depth)
+          else if fmt[j] = '}' then Dec(depth);
+          spec := spec + fmt[j];
+          Inc(j);
+        end;
       end;
       { An all-digits field is an explicit index and does NOT advance the
         automatic counter — Python numbers `{}` and `{N}` independently, which
@@ -18550,11 +19441,16 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
+      if Pos('{', spec) > 0 then spec := PyFormatExpandSpec(spec, args, argi);
       { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
         payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
         the value vanished rather than looking wrong. pyvar_print_of is the same
         rendering print() uses, which is what str() means here. }
-      if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
+      { a conversion WITH a spec, `{!r:>8}`: the spec applies to the repr, as
+        CPython does it -- the conversion arm used to drop the spec }
+      if (conv = 'r') and (spec <> '') then
+        outS := outS + pyformat_of(pyvar_repr(args.at(useIdx)), spec)
+      else if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
       else if spec = '' then outS := outS + pyvar_print_of(args.at(useIdx))
       else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;
@@ -20129,7 +21025,7 @@ begin
 end;
 
 function pyseq_of_obj(o: TObject): TPyList;
-var it: TPyIter;
+var it: TPyIter; k: Integer;
 begin
   Result := nil;
   if o = nil then Exit;
@@ -20145,6 +21041,14 @@ begin
     header is the cursor loop in PyParseForIn, which never reaches this. }
   if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+  { a DEQUE yields its live window of the buffer, front to back. }
+  if o is TPyDeque then
+  begin
+    Result := TPyList.Create;
+    for k := TPyDeque(o).FHead to TPyDeque(o).FBuf.FLen - 1 do
+      Result.append_self(TPyDeque(o).FBuf.at(k));
+    Exit;
+  end;
   { a FILE yields its remaining lines -- what `for line in f` does on a name
     the frontend can see is a TPyFile. Through a VARIANT (a file handed to an
     unannotated parameter, `def count(f): for line in f`) it reached this chain
@@ -20301,11 +21205,16 @@ begin
     if PyUserObjIterable(o) then
     begin
       seq := pyseq_of_obj(o);
-      if seq <> nil then begin Result := reversed(seq); Exit; end;
+      if seq <> nil then
+      begin
+        Result := reversed(seq);      { the cursor retains it; seq is fresh }
+        PXXObjRelease(Pointer(seq));
+        Exit;
+      end;
     end;
   end;
   if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
-  Result := pyiter_of_list(TPyList.Create);
+  Result := PyIterAdoptList(TPyList.Create);
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;
@@ -20484,7 +21393,14 @@ begin
       (bug-nilpy-dict-of-a-zip-or-any-cursor-is-empty). The pair walk itself is
       dict(TPyList), which is TPyDict.update. }
     seq := pyseq_of_obj(o);
-    if seq <> nil then begin Result := dict(seq); Exit; end;
+    if seq <> nil then
+    begin
+      { every pyseq_of_obj arm builds a NEW list (checked arm by arm in
+        bug-n-a-pylib-temporary-tpylist-...), and update only reads it }
+      Result := dict(seq);
+      PXXObjRelease(Pointer(seq));
+      Exit;
+    end;
   end;
   Result := TPyDict.Create;   { None / non-mapping }
 end;
@@ -20492,8 +21408,13 @@ end;
 { dict(<cursor>) with a STATIC cursor type — the same rule one level up, so the
   call does not have to be boxed into a variant to find its meaning. }
 function dict(it: TPyIter): TPyDict; overload;
+var seq: TPyList;
 begin
-  Result := dict(pyiter_drain(it));
+  { the drained list is fresh and only read; dropping it leaked the list and
+    kept every pair alive -- dict(zip(a, b)) left 10 objects per call }
+  seq := pyiter_drain(it);
+  Result := dict(seq);
+  PXXObjRelease(Pointer(seq));
 end;
 
 { dict(pairs): each element is a (key, value) sequence. TPyDict.update(TPyList)
@@ -20647,6 +21568,13 @@ begin
   { shift the tail down over the deleted range }
   for i := hi to l.count - 1 do
     l.put(i - gap, l.at(i));
+  { the top `gap` slots now hold either a deleted element (a tail delete never
+    shifts) or a second reference to a shifted one -- put retains, it does not
+    move. Below FLen nothing revisits them, so clear them first, with the
+    finalizer's spelling; `del l[0]` on a list of lists leaked two blocks per
+    call, and a deleted object was never freed. }
+  for i := l.count - gap to l.count - 1 do
+    PyVarSlotClear(PPyVarRec(NativeInt(l.FItems) + i * 16));
   l.FLen := l.count - gap;
 end;
 
@@ -21645,8 +22573,10 @@ begin
   end;
   if seq = nil then
     raise TypeError.Create('writelines() argument must be an iterable of str');
+  { pyseq_of_obj hands back a FRESH list on every arm (a copy for a list) }
   for i := 0 to seq.count - 1 do
     Self.write(seq.at(i));
+  PXXObjRelease(Pointer(seq));
 end;
 
 procedure TPyFile.seek(pos: Int64);
@@ -21828,6 +22758,8 @@ begin
     PYBT_FROZENSET: Result := 'frozenset';
     PYBT_TYPE:      Result := 'type';
     PYBT_NONETYPE:  Result := 'NoneType';
+    PYBT_FUNCTION:  Result := 'function';
+    PYBT_METHOD:    Result := 'method';
   else
     Result := '?';
   end;
@@ -21866,7 +22798,7 @@ procedure pybtype_call1(const t: Variant; const a0: Variant; var res: Variant);
   (project_variant_fn_return_forward_nrvo_corruption). Measured, not assumed —
   as a function, `list("abc")` came back tagged int and printed empty while the
   scalar arms happened to survive. }
-var code: Int64; tmp: Variant;
+var code: Int64; tmp: Variant; l: TPyList; d, dc: TPyDict;
 begin
   code := pybtype_code(t);
   case code of
@@ -21878,9 +22810,36 @@ begin
       handed to a `var` parameter is the NRVO shape that corrupts
       (project_variant_fn_return_forward_nrvo_corruption — measured here as
       `list("abc")` printing an empty line). }
-    PYBT_LIST:      begin PyObjAsVar(pylist_v(a0), tmp); res := tmp; end;
-    PYBT_DICT:      begin PyObjAsVar(pydict_v(a0), tmp); res := tmp; end;
-    PYBT_SET:       begin PyObjAsVar(pyset_of(a0), tmp); res := tmp; end;
+    { Each of these answers a reference the caller OWNS, and PyObjAsVar takes
+      its own, so the call's is dropped once the box holds one: `f = list;
+      f("ab")` leaked the list per call (1.85 blocks, -dPXX_ALLOC_CENSUS,
+      2026-10-03), set() and dict() likewise. dict() COPIES, as CPython's
+      does: pydict_v hands back the argument's own dict, so `f = dict;
+      e = f(d)` used to alias d. }
+    PYBT_LIST:
+      begin
+        l := pylist_v(a0);
+        PyObjAsVar(l, tmp); PXXObjRelease(Pointer(l)); res := tmp;
+      end;
+    PYBT_DICT:
+      begin
+        d := pydict_v(a0);
+        dc := d.copy;
+        PXXObjRelease(Pointer(d));
+        dc.FCounterMode := False;
+        dc.FOrdered := False;
+        if dc.FHasFactory then
+        begin
+          PyVarSlotClear(PPyVarRec(@dc.FDefFactory));
+          dc.FHasFactory := False;
+        end;
+        PyObjAsVar(dc, tmp); PXXObjRelease(Pointer(dc)); res := tmp;
+      end;
+    PYBT_SET:
+      begin
+        l := pyset_of(a0);
+        PyObjAsVar(l, tmp); PXXObjRelease(Pointer(l)); res := tmp;
+      end;
   else
     { bytes / bytearray / tuple / frozenset through a NAME are not wired yet.
       Refused by name rather than silently answering something else — the same
@@ -21940,7 +22899,7 @@ begin
 end;
 
 procedure pybtype_call0(const t: Variant; var res: Variant);
-var tmp: Variant;
+var tmp: Variant; e: TPyList; d: TPyDict;
 begin
   { the empty value of the type — `list()`, `str()`, `int()`, spelled through a
     binding. Built by handing the conversion an empty value of its own shape,
@@ -21950,8 +22909,31 @@ begin
     PYBT_INT:   res := pyvar_of_int(0);
     PYBT_FLOAT: res := Double(0.0);
     PYBT_BOOL:  res := pyvar_of_bool(False);
-    PYBT_LIST:  begin PyObjAsVar(TPyList.Create, tmp); res := tmp; end;
-    PYBT_DICT:  begin PyObjAsVar(TPyDict.Create, tmp); res := tmp; end;
+    { PyObjAsVar takes its OWN reference, so the construction's is dropped
+      once the box holds one -- without that every `f = list; f()` leaked the
+      list, measured 2026-10-03 as 1.8 blocks per call through a
+      defaultdict(list) under -dPXX_ALLOC_CENSUS. }
+    PYBT_DICT:
+      begin
+        d := TPyDict.Create;
+        PyObjAsVar(d, tmp);
+        PXXObjRelease(Pointer(d));
+        res := tmp;
+      end;
+    { ...and the four that are a TPyList, three with a kind stamp --
+      `defaultdict(set)` is how grouping code is written }
+    PYBT_LIST, PYBT_SET, PYBT_TUPLE, PYBT_FROZENSET:
+      begin
+        e := TPyList.Create;
+        case pybtype_code(t) of
+          PYBT_SET:       e.FKind := PYSEQ_SET;
+          PYBT_TUPLE:     e.FKind := PYSEQ_TUPLE;
+          PYBT_FROZENSET: e.FKind := PYSEQ_FROZENSET;
+        end;
+        PyObjAsVar(e, tmp);
+        PXXObjRelease(Pointer(e));
+        res := tmp;
+      end;
   else
     raise TypeError.Create(pybtype_name(pybtype_code(t))
       + '() through a type held as a value is not supported yet');
@@ -22130,6 +23112,12 @@ type
     fixed hand-written classes and left every dataclass still comparing by
     handle. }
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
+  { ...and both again for a comparison dunder whose result NilPy types as a
+    Variant: `return isinstance(other, P) and other.v == self.v` -- the `and`
+    of two bools is typed Variant, so the def is RetKind 22 -- which is how
+    CPython's own docs spell __eq__. }
+  TPyEqVFn    = function(self: Pointer; const other: Variant): Variant;
+  TPyEqObjVFn = function(self: Pointer; other: Pointer): Variant;
   TPyHashFn  = function(self: Pointer): Int64;
   { ...and the shape an UNANNOTATED `def __hash__(self)` actually has. NilPy
     types an unannotated def's result as a Variant (RetKind 22), which is the
@@ -22208,6 +23196,7 @@ type
 function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
                              const dunder: AnsiString; var res: Boolean): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
+    vfn: TPyEqVFn; vfnObj: TPyEqObjVFn; isV: Boolean; rv: Variant;
 begin
   PyUserObjBoolDunder := False;
   { `otherObj` may legitimately be NIL: the other operand is an int, a float, a
@@ -22228,13 +23217,26 @@ begin
   mi := PyFindDunder(cls, dunder);
   if mi = nil then Exit;
   if mi^.Arity <> 2 then Exit;
-  if mi^.RetKind <> 2 then Exit;              { Boolean }
+  { Boolean, or a Variant read for its truth. Declining the Variant shape left
+    the comparison at IDENTITY: `P(1) in {P(1): 0}` was False, a dict lookup
+    with an equal key missed, and a set kept both copies, with no diagnostic. }
+  if (mi^.RetKind <> 2) and (mi^.RetKind <> 22) then Exit;
+  isV := mi^.RetKind = 22;
   if mi^.ParamKinds = nil then Exit;
   pk := PInt64(mi^.ParamKinds);
   if pk[1] = 22 then                          { `other` is a Variant }
   begin
-    fn := TPyEqFn(mi^.Code);
-    res := fn(Pointer(selfObj), otherV);
+    if isV then
+    begin
+      vfn := TPyEqVFn(mi^.Code);
+      rv := vfn(Pointer(selfObj), otherV);
+      res := pyvar_to_bool(rv);
+    end
+    else
+    begin
+      fn := TPyEqFn(mi^.Code);
+      res := fn(Pointer(selfObj), otherV);
+    end;
     PyUserObjBoolDunder := True;
     Exit;
   end;
@@ -22254,8 +23256,17 @@ begin
       caller is left with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
       instead of reading a Q as a P. }
     if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
-    fnObj := TPyEqObjFn(mi^.Code);
-    res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    if isV then
+    begin
+      vfnObj := TPyEqObjVFn(mi^.Code);
+      rv := vfnObj(Pointer(selfObj), Pointer(otherObj));
+      res := pyvar_to_bool(rv);
+    end
+    else
+    begin
+      fnObj := TPyEqObjFn(mi^.Code);
+      res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    end;
     PyUserObjBoolDunder := True;
     Exit;
   end;
@@ -22394,21 +23405,19 @@ begin
   begin
     fv := TNoArgV(mi^.Code);
     res := fv(Pointer(o));
-    { A VARIANT-returning dunder that hands back an OBJECT takes the same extra
-      reference the RetKind=6 arm below takes, and for the same reason: every
-      caller here reads the payload out with pyvarobj and keeps the raw pointer
-      AFTER its own `res` dies, so a balanced variant leaves them holding freed
-      memory. pyiter_of_userobj is the one that proved it — `def __iter__(self)
-      -> Any: return iter(xs)` returned a cursor over a list that was already
-      gone, so `list(obj)` answered [] and -dPXX_HEAP_DEBUG turned the same
-      program into a SEGV. The class-returning spelling of the identical method
-      was correct, because THIS retain is what kept its cursor alive.
+    { THE CONTRACT, both object arms: on return `res` holds the caller's ONE
+      reference and there is no other. A caller that keeps the raw pointer
+      after `res` dies takes its own retain (pyiter_of_userobj does).
 
-      Two arms of one rule where only one had been updated: the dunder's
-      declared return KIND is an implementation detail of type inference, and
-      nothing above this line should change ownership because of it.
-      bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
-    if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
+      This arm used to add an EXTRA reference for every caller, and the RetKind=6
+      arm below did too, so that a caller holding the raw pointer past `res`
+      would not be left with freed memory (`def __iter__(self) -> Any: return
+      iter(xs)` answered [] and SEGVed under -dPXX_HEAP_DEBUG). Nothing ever
+      dropped that extra reference, so it leaked: one `__iter__` result per
+      list()/sum()/iter() over a user class, one object per value a user
+      `__next__` yields, and with `return self` the instance itself. The fix
+      was moved to the one caller that kept the pointer.
+      bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call }
     PyUserObjNoArgMeth := True;
     Exit;
   end;
@@ -22416,8 +23425,18 @@ begin
   begin
     fo := TNoArgO(mi^.Code);
     ro := fo(Pointer(o));
-    if ro <> nil then PXXObjRetain(Pointer(ro));
     res := TObject(ro);
+    { A NilPy def hands back an OWNED reference (+1): a fresh object arrives
+      at rc=1, and `return self` / `return self.q` retain on the way out (see
+      the discard rule in ir.inc). `res` took its own reference above, so the
+      def's is dropped here or it is never dropped at all. A PASCAL method
+      returns a BORROWED pointer (TWaveFile.__enter__ is `Result := Self`), and
+      releasing that would free a live object. RTTI_METH_FLAG_HASSIG is set
+      from PyProcIsNilPyDef (rtti_emit.inc), so it is exactly the "a NilPy
+      def" test, and it holds for the compiler-generated __pxx_gen_iter__ too:
+      that method belongs to the main module and returns a fresh cursor. }
+    if (ro <> nil) and ((mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0) then
+      PXXObjRelease(Pointer(ro));
     PyUserObjNoArgMeth := True;
     Exit;
   end;
@@ -22882,6 +23901,38 @@ begin
   PyUserObjUnhashable := True;
 end;
 
+{ CPython renders an exception from its ARGS: repr is `Cls(<args repr>)`, so
+  `ValueError('a', 2)` and `KeyError()`; KeyError's str is the repr of its one
+  argument, or of the whole tuple when it has several. Answers False when
+  there are no args to read. GetArgs answers an OWNED reference on both of its
+  arms, so it is read once and released here -- the code this replaced called
+  it up to three times per render and released none (`repr(KeyError(k))`
+  leaked two blocks per call), and repr'd a multi-argument exception from its
+  rendered message: ValueError("('a', 2)"). }
+function PyExcArgsRender(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
+var ka: TPyList;
+begin
+  Result := False;
+  ka := Exception(o).GetArgs;
+  if ka = nil then Exit;
+  if wantRepr then
+  begin
+    if ka.count = 1 then
+      outS := TObject(o).ClassName + '(' + pyvar_repr(ka.at(0)) + ')'
+    else
+      outS := TObject(o).ClassName + pylist_repr(ka);
+    Result := True;
+  end
+  else if o is KeyError then
+  begin
+    if ka.count = 1 then outS := pyvar_repr(ka.at(0))
+    else if ka.count = 0 then outS := ''
+    else outS := pylist_repr(ka);
+    Result := True;
+  end;
+  PXXObjRelease(Pointer(ka));
+end;
+
 function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyDunderFn;
 begin
@@ -22942,10 +23993,7 @@ begin
       the single argument. A KeyError carrying zero or several arguments falls
       through to the message, as CPython's own __str__ does.
       bug-nilpy-exception-args-attribute-missing }
-    if (o is KeyError) and (Exception(o).GetArgs <> nil) and
-       (Exception(o).GetArgs.count = 1) then
-      outS := pyvar_repr(Exception(o).GetArgs.at(0))
-    else
+    if not ((o is KeyError) and PyExcArgsRender(o, False, outS)) then
       outS := ExceptionBase(o).Message;
     PyUserObjStr := True;
     Exit;
@@ -22957,14 +24005,12 @@ begin
     raised. `args` settles it: repr the ARGUMENT, whoever built the exception,
     and the two cases agree.
     bug-nilpy-exception-args-attribute-missing }
-  if (mi = nil) and wantRepr and (o is KeyError) and
-     (Exception(o).GetArgs <> nil) and (Exception(o).GetArgs.count = 1) then
+  if (mi = nil) and wantRepr and (o is Exception) and PyExcArgsRender(o, True, outS) then
   begin
-    outS := TObject(o).ClassName + '(' + pyvar_repr(Exception(o).GetArgs.at(0)) + ')';
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is ExceptionBase) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is ExceptionBase) then
   begin
     if ExceptionBase(o).Message = '' then
       outS := TObject(o).ClassName + '()'
@@ -23020,6 +24066,7 @@ begin
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     { str() and repr() agree for a complex, so both rendering paths land here }
     if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
+    if o is TPyDeque then begin Result := pydeque_repr(TPyDeque(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
@@ -23056,6 +24103,7 @@ begin
     if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
+    if o is TPyDeque then begin Result := pydeque_repr(TPyDeque(o)); Exit; end;
     { a bare print() of an instance prefers __str__, like CPython's str() }
     if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;
@@ -23085,6 +24133,38 @@ begin
   Result := l;
 end;
 
+function pylist_slice_aslist(l: TPyList; lo, hi: Integer): TPyList;
+begin
+  Result := pylist_slice(l, lo, hi);
+  if Result <> nil then Result.FKind := PYSEQ_LIST;
+end;
+
+function pyvar_slice_aslist(const v: Variant; lo, hi: Integer): Variant;
+var o: TObject; l, sl: TPyList;
+begin
+  o := nil;
+  if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
+  if (o <> nil) and (o is TPyList) then
+  begin
+    Result := pyvar_slice(v, lo, hi);
+    if pyvartag(Result) <> 7 then Exit;
+    o := TObject(pyvarobj(Result));
+    if (o <> nil) and (o is TPyList) then TPyList(o).FKind := PYSEQ_LIST;
+    Exit;
+  end;
+  { any other source -- a str, a range, a deque, a user iterable -- has its
+    elements listed first; a slice of a str is a str and a range has no slice
+    here, and the starred target is a LIST either way }
+  l := pylist_v(v);
+  sl := pylist_slice(l, lo, hi);
+  if sl <> nil then sl.FKind := PYSEQ_LIST;
+  PXXObjRelease(Pointer(l));
+  { boxed INLINE, and the box takes the slice's own reference: PyObjAsVar is
+    not declared above this point (see the note on repr(TObject)) }
+  PPyVarRec(@Result)^.VType := 7;
+  PPyVarRec(@Result)^.Payload := Int64(NativeInt(Pointer(sl)));
+end;
+
 function pyvar_mark_list(const v: Variant): Variant;
 var o: TObject;
 begin
@@ -23098,6 +24178,23 @@ function pyunpack_check(have, need: Integer): Integer;
 begin
   if have < need then
     raise ValueError.Create('not enough values to unpack (expected at least '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  Result := have;
+end;
+
+function pyunpack_exact(have, need: Integer; sized: Boolean): Integer;
+begin
+  { CPython names the count it got only for a SIZED source (a list or tuple);
+    unpacking any other iterable -- a str among them -- stops at need+1 and
+    says just what it expected }
+  if (have > need) and not sized then
+    raise ValueError.Create('too many values to unpack (expected '
+      + pystr_of(Int64(need)) + ')');
+  if have > need then
+    raise ValueError.Create('too many values to unpack (expected '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  if have < need then
+    raise ValueError.Create('not enough values to unpack (expected '
       + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
   Result := have;
 end;
@@ -23220,6 +24317,16 @@ begin
   { see dict(): keylist constructs a fresh list that nothing else releases }
   PXXObjRelease(Pointer(ks));
   Result := Result + '}';
+  { a defaultdict names its factory, as CPython's repr does:
+    `defaultdict(<class 'list'>, {1: [2]})` }
+  if d.FHasFactory then
+    Result := 'defaultdict(' + pyvar_repr(d.FDefFactory) + ', ' + Result + ')'
+  else if d.FOrdered then
+  begin
+    { CPython 3.12+: `OrderedDict({'b': 1})`, and `OrderedDict()` when empty }
+    if Result = '{}' then Result := 'OrderedDict()'
+    else Result := 'OrderedDict(' + Result + ')';
+  end;
 end;
 
 { CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
@@ -23338,6 +24445,9 @@ initialization
     initialization does not run.
     feature-nilpy-object-reclamation }
   PXXObjFinalizeHook := @PyObjFinalize;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTraverseHook := @PyGcTraverse;
+{$endif}
 
   { Seed `random` from entropy, the way CPython seeds it at `import random`.
     Unconditional rather than lazy-on-first-draw: CPython does not make it

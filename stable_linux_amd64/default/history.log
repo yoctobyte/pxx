@@ -450,3 +450,4 @@
 2026-09-28T18:54:35Z  v450  c19cc2d531e436183b321aba2a995ed54b1c834fea3120dcb07fab160d74ea01  70f62b5544d85fa0968f8b92866332b1cf557274  fix(A): the hardware-random draw asks the CPUID probe, no SIGILL without RDRAND
 2026-09-28T23:45:09Z  v451  d9b7226769cc8bb614d670a178bc8769828cce03f7430a8727b0ae7842b226d2  dcd5c7d351bfeb3d9549dff29e02d4d7aa227d9d  tstate(borg): 259cd87361b4 RED (native)
 2026-09-30T08:46:32Z  v452  7ff6198e28a13131a5092555f41ebe35b0592dbcdfb08a51115b6cd73e841ece  e736667eebaad982286b8edf212408c02a3651bd  tstate(borg): bench f964bc0cdc1e RED (0 bench rows, 550 conf)
+2026-10-08T08:57:36Z  v453  990183b73c5f212b9f276fdcfe04b5a1c4f0fd12cddaf2a8afe34d33a05cd271  3a87f68b3cad714edc9a4bd3b978080a60250a55  fix(A): two regressions from header extern variables (0a21c18151)

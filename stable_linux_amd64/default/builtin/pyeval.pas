@@ -263,6 +263,19 @@ function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
   an Int64/Double. Over-allocating is free while under-allocating would
   scribble the next heap object. }
 function pycell_new: Pointer;
+{ The same cell as a REFCOUNTED block, for a frame's `nonlocal` local: the
+  frame holds one reference through a hidden class local (released at scope
+  exit like any other) and every closure bound over it holds one more
+  (pyboundfn_bind_obj), so the cell dies with the last of them instead of
+  never. The payload stays at offset 0, so every read and write through the
+  pointer is unchanged; a marker after it lets the RAW2 finalizer recognise
+  the block, and `isvar` says whether the payload is a variant to release.
+  bug-nilpy-shared-nonlocal-frame-cell-is-never-freed }
+function pycell_new_owned(isvar: Int64): Pointer;
+{ Release a pycell_new cell held in the word at pp, and clear the word: a
+  NilPy generator's variant ARGUMENT cell, freed when the generator is done or
+  closed (SLReleaseLocalsAtDone). nil-safe, so a close after done is a no-op. }
+procedure pycell_free_at(pp: Pointer);
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
   the discarding form, so a lifted def reached through a VALUE always answered
@@ -305,6 +318,7 @@ function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
 function pyvar_callv_kw(const cb: Variant; nPos: Integer;
                        const a0, a1, a2, a3: Variant;
                        kwNames, kwVals: TPyList): Variant;
+function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList): Variant;
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 { The four-argument dispatcher. Past arity 3 the old lowering calls through the
   callee's payload as a code ADDRESS — a segfault for a lambda, whose value is
@@ -2843,6 +2857,7 @@ var
   hook, told apart by their first word. The bound-fn half is implemented below,
   next to its own type — TBoundFnObj is declared after this point. }
 procedure PyBoundFnFreeIfMine(objp: Pointer; var handled: Boolean); forward;
+procedure PyOwnedCellFreeIfMine(objp: Pointer; var handled: Boolean); forward;
 
 procedure PyEvalClosureFree(objp: Pointer);
 var c, i: Integer; wasBoundFn: Boolean;
@@ -2851,7 +2866,11 @@ begin
   wasBoundFn := False;
   PyBoundFnFreeIfMine(objp, wasBoundFn);
   if wasBoundFn then Exit;
-  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then Exit;
+  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then
+  begin
+    PyOwnedCellFreeIfMine(objp, wasBoundFn);
+    Exit;
+  end;
   c := Integer(PClosureObj(objp)^.Cidx);
   if (c < 0) or (c >= ClosureN) then Exit;
   Closures[c].Kinds := nil;
@@ -3364,6 +3383,58 @@ begin
   PPyRec(pv)^.VType := 0;
   PPyRec(pv)^.Payload := 0;
   pycell_new := Pointer(pv);
+end;
+
+procedure pycell_free_at(pp: Pointer);
+var c: Pointer;
+begin
+  if pp = nil then Exit;
+  c := PPointer(pp)^;
+  if c = nil then Exit;
+  PVariant(c)^ := 0;   { variant := int releases any payload }
+  FreeMem(c);
+  PPointer(pp)^ := nil;
+end;
+
+var
+  PyCellMagicMarker: Integer;
+
+type
+  TPyOwnedCell = record
+    Payload: array[0..1] of Int64;   { the cell itself: tag + payload, or a scalar }
+    Magic:   Pointer;                { @PyCellMagicMarker }
+    IsVar:   Int64;                  { 1 = Payload is a variant to release }
+  end;
+  PPyOwnedCell = ^TPyOwnedCell;
+
+function pycell_new_owned(isvar: Int64): Pointer;
+var c: PPyOwnedCell;
+begin
+  { the RAW2 finalize path runs through these hooks; a program may make a cell
+    without ever making a closure (a nested def called in place) }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  PyClosureFinalizeHook := @PyEvalClosureFree;
+  c := PPyOwnedCell(PXXObjAllocRaw2(SizeOf(TPyOwnedCell)));
+  c^.Payload[0] := 0;
+  c^.Payload[1] := 0;
+  c^.Magic := @PyCellMagicMarker;
+  c^.IsVar := isvar;
+  pycell_new_owned := Pointer(c);
+end;
+
+{ The cell half of the RAW2 finalize hook, asked LAST -- after the bound-fn and
+  closure checks have read their magic at offset 0 -- because a cell's offset
+  0 is its payload and only offset 16 identifies it. }
+procedure PyOwnedCellFreeIfMine(objp: Pointer; var handled: Boolean);
+var c: PPyOwnedCell;
+begin
+  handled := False;
+  if objp = nil then Exit;
+  c := PPyOwnedCell(objp);
+  if c^.Magic <> @PyCellMagicMarker then Exit;
+  handled := True;
+  if c^.IsVar <> 0 then PVariant(objp)^ := 0;   { variant := int releases any payload }
+  c^.Magic := nil;
 end;
 
 { Call code(a0, bound...). a0 is the ONE user argument — a class/object variant
@@ -5091,8 +5162,12 @@ begin
           else res := li.pop(pyvar_to_int(args.at(0)));
         end
         else if mname = 'clear' then begin li.clear; res := MakeNone; end
+        { any iterable, as the static call takes it (TPyList.extend's Variant
+          overload): an unchecked TPyList cast read a range or a cursor as a
+          list -- `ys.extend(range(2))` on a variant receiver appended nothing,
+          and a generator argument segfaulted }
         else if mname = 'extend' then
-          begin li.extend(TPyList(pyvarobj(args.at(0)))); res := MakeNone; end
+          begin li.extend(args.at(0)); res := MakeNone; end
         else
           EvalError('list method not supported: ' + mname);
         Exit;
@@ -5836,13 +5911,36 @@ function PyCallDunder(const cb: Variant; n: Integer;
   this is a receiver + an argument list and nothing else. It is reached only
   after PyFindMethCI has confirmed the method, which is what makes PyHostCall's
   missing-method Halt unreachable from here. }
-var inst: Pointer; args: TPyList;
+var inst: Pointer; args: TPyList; mi: PMethInfo; pair: Variant;
 begin
   PyCallDunder := False;
   if PPyRec(@cb)^.VType <> VT_NC_OBJECT then Exit;
   inst := Pointer(NativeInt(PPyRec(@cb)^.Payload));
   if inst = nil then Exit;
-  if PyFindMethCI(GetInstanceRTTI(inst), '__call__') = nil then Exit;
+  mi := PyFindMethCI(GetInstanceRTTI(inst), '__call__');
+  if mi = nil then Exit;
+  { A `__call__(self, *args)` COLLECTS: PyHostCall passes arguments one slot
+    each, so the collector read a loose argument as its packed tuple and the
+    program segfaulted -- `functools.lru_cache`'s wrapper reached through a
+    decorator factory's result is exactly this. The bound pair packs (the same
+    pybound_new_star the getattr bridge builds from these two words, and safe
+    for the same reason: `__call__` is always normalised to the all-variant
+    ABI, PyMethodUsedAsValue). The star index is in SIGNATURE space in the
+    Flags word, +1 so that 0 means none; the pair wants the callee's own. }
+  if ((mi^.Flags shr 8) and 255) > 0 then
+  begin
+    pair := pybound_new_star(mi^.Code, inst, mi^.RetKind <> 0,
+                             Integer((mi^.Flags shr 8) and 255) - 2);
+    case n of
+      0: res := pybound_callv0(pair);
+      1: res := pybound_callv1(pair, a0);
+      2: res := pybound_callv2(pair, a0, a1);
+    else
+      res := pybound_callv3(pair, a0, a1, a2);
+    end;
+    PyCallDunder := True;
+    Exit;
+  end;
   args := TPyList.Create;
   if n >= 1 then args.append(a0);
   if n >= 2 then args.append(a1);
@@ -6003,6 +6101,39 @@ begin
   raise TypeError.Create('a keyword argument through this kind of callable '
           + 'value is not supported yet (an interpreted closure and a class '
           + 'reached as a value still carry no parameter names)');
+end;
+
+function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList): Variant;
+{ `fn(*xs, k=v)` / `fn(*xs, **d)` through a callable VALUE: the positional
+  count is a RUN-TIME fact (the star list), so the compile-time count
+  pyvar_callv_kw takes is supplied here from the list. With no keyword in the
+  end (an empty `**{}`) the call is the plain positional one, so a callable
+  shape that carries no parameter names still works. Four positionals, the
+  width pyvar_callv_kw has; past it a named refusal rather than dropping
+  arguments. This is what `functools.partial`'s
+  `self.func(*self.args, *args, **kw)` is made of. }
+var n: Integer; a: array[0..3] of Variant; i: Integer;
+begin
+  n := args.count;
+  if n > 4 then
+    raise TypeError.Create('a call through a callable value with *unpacking '
+            + 'and keyword arguments takes at most 4 positional arguments, got '
+            + pystr_of(Int64(n)));
+  for i := 0 to 3 do
+    if i < n then a[i] := args.at(i) else a[i] := pynone;
+  if (kwNames = nil) or (kwNames.count = 0) then
+  begin
+    case n of
+      0: Result := pyvar_callv0(cb);
+      1: Result := pyvar_callv1(cb, a[0]);
+      2: Result := pyvar_callv2(cb, a[0], a[1]);
+      3: Result := pyvar_callv3(cb, a[0], a[1], a[2]);
+    else
+      Result := pyvar_callv4(cb, a[0], a[1], a[2], a[3]);
+    end;
+    Exit;
+  end;
+  Result := pyvar_callv_kw(cb, n, a[0], a[1], a[2], a[3], kwNames, kwVals);
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
@@ -6578,10 +6709,20 @@ type
       all, identified purely by elimination of the other three).
   feature-nilpy-callable-value-unified-dispatch }
 function PyCallKey1(key: Pointer; const a0: Variant): Variant;
-var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res: Variant;
+var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res, cref: Variant;
 begin
   Result := pynone;
   if key = nil then Exit;
+  { a CLASS as the callable constructs (pyvar_callable_ptr's tagged block) }
+  if pyclasscall_rtti(key) <> nil then
+  begin
+    PPyRec(@cref)^.VType := 11;
+    PPyRec(@cref)^.Payload := Int64(NativeInt(pyclasscall_rtti(key)));
+    res := pynone;
+    PyClassRefNew(cref, 1, a0, pynone, pynone, pynone, res);
+    Result := res;
+    Exit;
+  end;
   if PXXObjIsBoundPair(key) then
   begin
     { pylib's dispatcher, not a second copy of it: it reads the pair's
@@ -6648,27 +6789,51 @@ end;
   plain arms. Delegating to the TPyList routine rather than re-walking keeps the
   empty-sequence ValueError and the first-wins tie rule in ONE place. }
 function min(d: TPyDict; key: Pointer): Variant; overload;
+var kl: TPyList;
 begin
   if d = nil then raise ValueError.Create('min() iterable argument is empty');
-  Result := min(d.keylist, key);
+  kl := d.keylist;   { fresh, only read -- passed straight through it leaked }
+  try
+    Result := min(kl, key);
+  finally
+    PXXObjRelease(Pointer(kl));
+  end;
 end;
 
 function max(d: TPyDict; key: Pointer): Variant; overload;
+var kl: TPyList;
 begin
   if d = nil then raise ValueError.Create('max() iterable argument is empty');
-  Result := max(d.keylist, key);
+  kl := d.keylist;   { fresh, only read -- passed straight through it leaked }
+  try
+    Result := max(kl, key);
+  finally
+    PXXObjRelease(Pointer(kl));
+  end;
 end;
 
 { pystr_charlist, not a private byte walk: it is the one exploder, so a
   non-ASCII string cannot answer per-byte here and per-character in sorted(). }
 function min(const s: AnsiString; key: Pointer): Variant; overload;
+var cl: TPyList;
 begin
-  Result := min(pystr_charlist(s), key);
+  cl := pystr_charlist(s);   { fresh, only read }
+  try
+    Result := min(cl, key);
+  finally
+    PXXObjRelease(Pointer(cl));
+  end;
 end;
 
 function max(const s: AnsiString; key: Pointer): Variant; overload;
+var cl: TPyList;
 begin
-  Result := max(pystr_charlist(s), key);
+  cl := pystr_charlist(s);   { fresh, only read }
+  try
+    Result := max(cl, key);
+  finally
+    PXXObjRelease(Pointer(cl));
+  end;
 end;
 
 { Dispatch on the runtime tag through pylib's ONE object->sequence chain
@@ -6739,12 +6904,16 @@ end;
   (bug-nilpy-sorted-over-a-string-segfaults). Same shape as list(const s), which
   already had its own overload — this is the sibling that was missing. }
 function sorted(const s: AnsiString; key: Pointer; reverse: Boolean): TPyList; overload;
+var cl: TPyList;
 begin
   { pystr_charlist, not a private byte walk: `sorted("béa")` split the é into
     its two UTF-8 bytes and answered four elements where list() answered three.
     Same lesson as the note on pystr_charlist — one exploder, not two.
     bug-nilpy-non-ascii-string-surface-measured }
-  Result := sorted(pystr_charlist(s), key, reverse);
+  { the char list is fresh and sorted() copies out of it }
+  cl := pystr_charlist(s);
+  Result := sorted(cl, key, reverse);
+  PXXObjRelease(Pointer(cl));
 end;
 
 function sorted(const v: Variant; key: Pointer; reverse: Boolean): TPyList; overload;
@@ -7193,5 +7362,7 @@ initialization
     pymap_iter/pyfilter_iter, i.e. exactly when a map happened to be running.
     bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
   PyIterCallHook := @PyCallKey1;
+  { ...and the zero-argument call, for a defaultdict's factory }
+  PyCall0Hook := @pyvar_callv0;
 
 end.

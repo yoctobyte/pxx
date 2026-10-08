@@ -380,6 +380,15 @@ type
     Runs after rc hits 0 and before the block is freed; it releases the
     object's children recursively. nil = no finalizer (plain free). }
   TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
+{$ifdef PXX_CYCLE_GC}
+  { The cycle collector's per-type TRAVERSE, installed by pylib beside the
+    finalizer (which knows the same container layouts). It visits exactly the
+    references the finalizer RELEASES -- through PXXGcVisitObj / PXXGcVisitVar /
+    PXXGcWalkFields -- in one of three modes: 0 subtract (read-only), 1 mark
+    reachable (read-only), 2 clear (release the child and empty the slot).
+    See PXXGcCollect. }
+  TPXXGcTraverse = procedure(objp: Pointer; rawKind: NativeInt; mode: NativeInt);
+{$endif}
 
   { System.TFPCHeapStatus -- FPC 3.2.2's exact field list and order
     (rtl/inc/heaph.inc:18), because a record laid out differently is worse than
@@ -437,6 +446,26 @@ var
     are kept as a belt on any profile whose unit initialization does not run.
     feature-nilpy-object-reclamation }
   PXXObjFinalizeHook: TPXXObjFinalize;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTraverseHook: TPXXGcTraverse;
+{$endif}
+{$ifdef PXX_CYCLE_GC}
+{ -dPXX_CYCLE_GC: collect REFERENCE CYCLES, the one garbage refcounting cannot
+  free (devdocs/developer/garbage-collection-thoughts.md point 4,
+  feature-nilpy-cycle-collector). Every object block carries a 24-byte prefix
+  linking it into one tracked list; gc.collect() runs CPython's trial deletion
+  over that list. Visitors for the traverse hook, by slot shape: }
+procedure PXXGcVisitObj(slot: Pointer; mode: NativeInt);   { a word holding an object pointer }
+procedure PXXGcVisitVar(slot: Pointer; mode: NativeInt);   { a 16-byte variant slot }
+procedure PXXGcWalkFields(inst: Pointer; mode: NativeInt); { a class instance's described fields }
+{ Collect unreachable cycles now; answers how many objects were freed. }
+function PXXGcCollect: NativeInt;
+{ How many objects are tracked (live) right now. }
+function PXXGcTracked: NativeInt;
+{ gc.enable()/gc.disable(): switch the automatic runs (see PXXGcTick). }
+procedure PXXGcEnable(onOff: Boolean);
+function PXXGcEnabled: Boolean;
+{$endif}
 { System.GetFPCHeapStatus. Reports what this runtime actually knows and
   nothing more -- see the body for which fields are exact on which allocator
   profile, and why the calloc-backed profiles report no reserve rather than a
@@ -3795,11 +3824,165 @@ begin
 end;
 {$endif}
 
+{$ifdef PXX_CYCLE_GC}
+{ ---- the cycle collector (-dPXX_CYCLE_GC) ----
+
+  THE TRACKED SET is an intrusive doubly-linked list through a 24-byte PREFIX
+  in front of every object block -- [prev][next][gcrefs] -- so an object's
+  handle h has its prefix at h-48 (PXX_HDR_SIZE 24 below the handle, then 24
+  more). Linked by the three PXXObjAlloc* routines, unlinked by the one place
+  an object block is freed (PXXObjRelease at rc=0). Nothing is guessed from
+  heap bytes: there is no arena list to walk, and a freed block keeps its
+  magic word, so a heap walk could not tell live from dead.
+
+  THE ALGORITHM is CPython's trial deletion, which needs no roots:
+    1. gcrefs := rc for every tracked object;
+    2. for every object, subtract 1 from each child it holds (traverse mode 0)
+       -- what is left over is held from OUTSIDE the tracked set: a local, a
+       global, a Pascal structure;
+    3. everything with gcrefs <> 0 is reachable, and so is everything reachable
+       from it (traverse mode 1, a worklist);
+    4. the rest is garbage held only by itself: hold a reference on each, CLEAR
+       each one's children (traverse mode 2 releases them and empties the
+       slot), then drop the held references -- every count reaches zero and
+       the ordinary release path frees the block.
+
+  SAFE BY CONSTRUCTION IN ONE DIRECTION. The traverse visits exactly what the
+  finalizer releases, i.e. COUNTED references. An edge it does not see (a
+  generator's locals, a closure's side-table captures, a cell) only makes its
+  target look externally held: a cycle through it is not collected, and
+  nothing live is freed. What must never happen is visiting a reference that
+  is not counted -- that would free a live object -- which is why every arm
+  mirrors PyObjFinalize instead of guessing.
+
+  NOT IN A THREADSAFE BUILD (yet): trial deletion reads every container's
+  internals and refcounts, which another thread mutates without a lock, and
+  there is no way to stop the other threads. PXXGcCollect answers 0 there. }
+const
+  PXX_GC_PREFIX  = 24;
+  { -(2^30): never a refcount, and it fits the 32-bit machine word i386
+    stores it in -- -(2^62) truncated to 0 there, the mark never held and
+    the mode-1 worklist never drained. }
+  PXX_GC_REACHED = -1073741824;
+var
+  PXXGcHead: Int64;          { raw address of the first prefix; 0 = empty }
+  PXXGcCount: NativeInt;
+  PXXGcBusy: Boolean;
+  PXXGcWork: Int64;          { worklist buffer (handles) for mode 1 }
+  PXXGcWorkLen: NativeInt;
+{$ifdef PXX_THREADSAFE}
+  PXXGcSpin: Integer;
+{$endif}
+
+procedure PXXGcLock;
+{$ifdef PXX_THREADSAFE}
+var spins: Integer;
+{$endif}
+begin
+{$ifdef PXX_THREADSAFE}
+  spins := 0;
+  while Integer(__pxxatomic_xchg(@PXXGcSpin, 1)) <> 0 do
+    spins := spins + 1;
+{$endif}
+end;
+
+procedure PXXGcUnlock;
+begin
+{$ifdef PXX_THREADSAFE}
+  PXXGcSpin := 0;
+{$endif}
+end;
+
+{ Link a fresh block's prefix at raw; answers the block BASE (raw + prefix),
+  which is what the header code expects. }
+{ When a collection runs. Automatically, from the allocators, once the tracked
+  count reaches PXXGcNextAt; after each run the mark is set to twice what
+  SURVIVED plus a floor, so the work is amortised O(1) per allocation however
+  large the live heap grows (a run costs O(tracked), and at least as many
+  allocations as survived must happen before the next). The floor keeps a
+  small program from collecting every few allocations. gc.disable() stops the
+  automatic runs; gc.collect() runs regardless, as CPython's does.
+  The check sits BEFORE the new block is linked, so a run never sees a
+  half-built object of its own allocator; it does run in the middle of pylib
+  routines and constructors, which is exactly what PXX_GC_STRESS proves safe. }
+const
+  PXX_GC_FLOOR = 10000;
+var
+  PXXGcNextAt: NativeInt;
+  PXXGcOff: Boolean;         { gc.disable(); False (enabled) at startup }
+{$ifdef PXX_GC_STRESS}
+{ -dPXX_GC_STRESS (a TEST tool, never a shipping mode): collect every 97th
+  object allocation, so the collector runs at arbitrary points inside every
+  program -- inside pylib routines, mid-construction -- and a traverse that
+  visits an uncounted reference shows up as a crash or a wrong answer in the
+  ordinary test corpus instead of in someone's program. }
+var PXXGcStressN: NativeInt;
+{$endif}
+procedure PXXGcTick;
+begin
+{$ifdef PXX_GC_STRESS}
+  PXXGcStressN := PXXGcStressN + 1;
+  if PXXGcStressN >= 97 then
+  begin
+    PXXGcStressN := 0;
+    PXXGcCollect;
+  end;
+{$else}
+  if PXXGcOff then Exit;
+  if PXXGcNextAt = 0 then PXXGcNextAt := PXX_GC_FLOOR;
+  if PXXGcCount < PXXGcNextAt then Exit;
+  PXXGcCollect;
+  PXXGcNextAt := 2 * PXXGcCount + PXX_GC_FLOOR;
+{$endif}
+end;
+
+procedure PXXGcEnable(onOff: Boolean);
+begin
+  PXXGcOff := not onOff;
+end;
+
+function PXXGcEnabled: Boolean;
+begin
+  PXXGcEnabled := not PXXGcOff;
+end;
+
+function PXXGcLinkNew(raw: Int64): Int64;
+begin
+  PXXGcLock;
+  PMachineWord(raw)^ := 0;                     { prev }
+  PMachineWord(raw + 8)^ := PXXGcHead;          { next }
+  PMachineWord(raw + 16)^ := 0;                 { gcrefs, scratch }
+  if PXXGcHead <> 0 then PMachineWord(PXXGcHead)^ := raw;
+  PXXGcHead := raw;
+  PXXGcCount := PXXGcCount + 1;
+  PXXGcUnlock;
+  PXXGcLinkNew := raw + PXX_GC_PREFIX;
+end;
+
+procedure PXXGcUnlink(raw: Int64);
+var prv, nxt: Int64;
+begin
+  PXXGcLock;
+  prv := PMachineWord(raw)^;
+  nxt := PMachineWord(raw + 8)^;
+  if prv <> 0 then PMachineWord(prv + 8)^ := nxt else PXXGcHead := nxt;
+  if nxt <> 0 then PMachineWord(nxt)^ := prv;
+  PXXGcCount := PXXGcCount - 1;
+  PXXGcUnlock;
+end;
+
+{$endif}
+
 function PXXObjAlloc(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTick;
+  base := PXXGcLinkNew(Int64(PXXAlloc(size + PXX_HDR_SIZE + PXX_GC_PREFIX, 8)));
+{$else}
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+{$endif}
   PXXHdrInit(base);
   PMachineWord(base + PXX_HDR_RC)^ := 1;                    { refcount }
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
@@ -3813,7 +3996,12 @@ function PXXObjAllocRaw(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTick;
+  base := PXXGcLinkNew(Int64(PXXAlloc(size + PXX_HDR_SIZE + PXX_GC_PREFIX, 8)));
+{$else}
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+{$endif}
   PXXHdrInit(base);
   PMachineWord(base + PXX_HDR_RC)^ := 1;                        { refcount }
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
@@ -3843,7 +4031,12 @@ function PXXObjAllocRaw2(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTick;
+  base := PXXGcLinkNew(Int64(PXXAlloc(size + PXX_HDR_SIZE + PXX_GC_PREFIX, 8)));
+{$else}
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+{$endif}
   PXXHdrInit(base);
   PMachineWord(base + PXX_HDR_RC)^ := 1;                         { refcount }
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
@@ -3980,9 +4173,246 @@ begin
       else
         PXXObjFinalizeHook(p, 0);
     end;
+{$ifdef PXX_CYCLE_GC}
+    PXXGcUnlink(PXXHdrBase(p) - PXX_GC_PREFIX);
+    PXXFree(Pointer(PXXHdrBase(p) - PXX_GC_PREFIX));
+{$else}
     PXXFree(Pointer(PXXHdrBase(p)));
+{$endif}
   end;
 end;
+
+{$ifdef PXX_CYCLE_GC}
+function PXXGcTracked: NativeInt;
+begin
+  PXXGcTracked := PXXGcCount;
+end;
+
+{ Is c a tracked object? Under this define every block carrying one of the
+  object magics came from PXXObjAlloc*, so the magic IS membership; the
+  plausibility test keeps a code address, an int or a static block from being
+  read at all. }
+function PXXGcIsObj(c: Pointer): Boolean;
+var t: Int64;
+begin
+  PXXGcIsObj := False;
+  if c = nil then Exit;
+  if not PXXObjPlausible(c) then Exit;
+  if Int64(c) - PXX_HDR_SIZE - PXX_GC_PREFIX < HeapLow then Exit;
+  t := PMachineWord(Int64(c) - 8)^;
+  PXXGcIsObj := (t = PXX_OBJ_MAGIC) or (t = PXX_OBJ_MAGIC_RAW) or
+                (t = PXX_OBJ_MAGIC_RAW2) or (t = PXX_OBJ_MAGIC_DONE);
+end;
+
+function PXXGcRefsAt(h: Pointer): Int64;      { address of h's gcrefs word }
+begin
+  PXXGcRefsAt := Int64(h) - PXX_HDR_SIZE - PXX_GC_PREFIX + 16;
+end;
+
+function PXXGcKindOf(h: Pointer): NativeInt;  { the finalizer's rawKind }
+var t: Int64;
+begin
+  t := PMachineWord(Int64(h) - 8)^;
+  if t = PXX_OBJ_MAGIC_RAW then PXXGcKindOf := 1
+  else if t = PXX_OBJ_MAGIC_RAW2 then PXXGcKindOf := 2
+  else if t = PXX_OBJ_MAGIC_DONE then PXXGcKindOf := 3
+  else PXXGcKindOf := 0;
+end;
+
+procedure PXXGcVisitObj(slot: Pointer; mode: NativeInt);
+var c: Pointer; g: Int64;
+begin
+  if slot = nil then Exit;
+  c := Pointer(PMachineWord(slot)^);
+  if not PXXGcIsObj(c) then Exit;
+  g := PXXGcRefsAt(c);
+  if mode = 0 then
+    PMachineWord(g)^ := PMachineWord(g)^ - 1
+  else if mode = 1 then
+  begin
+    if PMachineWord(g)^ <> PXX_GC_REACHED then
+    begin
+      PMachineWord(g)^ := PXX_GC_REACHED;
+      PMachineWord(PXXGcWork + PXXGcWorkLen * 8)^ := Int64(c);
+      PXXGcWorkLen := PXXGcWorkLen + 1;
+    end;
+  end
+  else
+  begin
+    PMachineWord(slot)^ := 0;
+    PXXObjRelease(c);
+  end;
+end;
+
+procedure PXXGcVisitVar(slot: Pointer; mode: NativeInt);
+begin
+  if slot = nil then Exit;
+  if (PMachineWord(slot)^ < VT_OBJ_FIRST) or (PMachineWord(slot)^ > VT_OBJ_LAST) then Exit;
+  if mode = 2 then
+  begin
+    if PXXGcIsObj(Pointer(PMachineWord(Int64(slot) + 8)^)) then
+      PXXVarClear(slot);
+  end
+  else
+    PXXGcVisitObj(Pointer(Int64(slot) + 8), mode);
+end;
+
+{ The descriptor walk PXXRecordRelease does, with the leaf action swapped for a
+  visit: kind 5 (variant) and kind 6 (NilPy class field) are the object
+  holders, kind 3 (a nested record) recurses. Strings, dynarrays and promo
+  ints own no object a cycle can run through -- a dynarray of records holding
+  objects is the one shape skipped that could, and skipping it is the SAFE
+  direction (see the header). }
+procedure PXXGcWalkRecord(recAddr: Pointer; desc: Pointer; mode: NativeInt);
+var memberCount, i, j, offset, kind, arrayCount, typeRef: Integer;
+    memberPtr, memberSize: Int64;
+    memberAddr, itemAddr, subDesc: Pointer;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+    memberAddr := Pointer(Int64(recAddr) + offset);
+    subDesc := nil;
+    if kind = 3 then
+    begin
+      subDesc := Pointer(memberPtr + 12 + typeRef);
+      memberSize := PInt32(Int64(subDesc) + 4)^;
+    end
+    else if kind = 5 then
+      memberSize := 16
+    else
+      memberSize := SizeOf(Pointer);
+    if (kind = 3) or (kind = 5) or (kind = 6) then
+    begin
+      j := 0;
+      while j < arrayCount do
+      begin
+        itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+        if kind = 3 then PXXGcWalkRecord(itemAddr, subDesc, mode)
+        else if kind = 5 then PXXGcVisitVar(itemAddr, mode)
+        else PXXGcVisitObj(itemAddr, mode);
+        j := j + 1;
+      end;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXGcWalkFields(inst: Pointer; mode: NativeInt);
+var vmt, desc: Pointer;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PMachineWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PMachineWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+  PXXGcWalkRecord(inst, desc, mode);
+end;
+
+function PXXGcCollect: NativeInt;
+var r: Int64; h: Pointer; g, t: Int64;
+    n, i, nGarbage: NativeInt;
+begin
+  PXXGcCollect := 0;
+{$ifdef PXX_THREADSAFE}
+  Exit;                      { see the header: no stopping the other threads }
+{$endif}
+  if PXXGcTraverseHook = nil then Exit;
+  if PXXGcBusy then Exit;    { a destructor run by phase 4 calling collect() }
+  if PXXGcCount = 0 then Exit;
+  PXXGcBusy := True;
+  n := PXXGcCount;
+  PXXGcWork := Int64(PXXAlloc(n * 8 + 8, 8));
+  PXXGcWorkLen := 0;
+
+  { 1. copy the counts. A DONE object (its destructor ran, an explicit Free)
+       is never collected: it is pinned as a root. }
+  r := PXXGcHead;
+  while r <> 0 do
+  begin
+    h := Pointer(r + PXX_GC_PREFIX + PXX_HDR_SIZE);
+    t := PMachineWord(Int64(h) - 8)^;
+    if t = PXX_OBJ_MAGIC_DONE then PMachineWord(r + 16)^ := 1000000000
+    else PMachineWord(r + 16)^ := PMachineWord(PXXHdrRC(h))^;
+    r := PMachineWord(r + 8)^;
+  end;
+  { 2. subtract the internal references }
+  r := PXXGcHead;
+  while r <> 0 do
+  begin
+    h := Pointer(r + PXX_GC_PREFIX + PXX_HDR_SIZE);
+    PXXGcTraverseHook(h, PXXGcKindOf(h), 0);
+    r := PMachineWord(r + 8)^;
+  end;
+  { 3. what is still counted is held from outside: mark it and everything it
+       reaches. A NEGATIVE leftover would mean the traverse saw a reference
+       the count does not hold; it is treated as a root, never as garbage. }
+  r := PXXGcHead;
+  while r <> 0 do
+  begin
+    g := PMachineWord(r + 16)^;
+    if (g <> 0) and (g <> PXX_GC_REACHED) then
+    begin
+      PMachineWord(r + 16)^ := PXX_GC_REACHED;
+      PMachineWord(PXXGcWork + PXXGcWorkLen * 8)^ := r + PXX_GC_PREFIX + PXX_HDR_SIZE;
+      PXXGcWorkLen := PXXGcWorkLen + 1;
+    end;
+    r := PMachineWord(r + 8)^;
+  end;
+  while PXXGcWorkLen > 0 do
+  begin
+    PXXGcWorkLen := PXXGcWorkLen - 1;
+    h := Pointer(PMachineWord(PXXGcWork + PXXGcWorkLen * 8)^);
+    PXXGcTraverseHook(h, PXXGcKindOf(h), 1);
+  end;
+  { 4. the garbage: gcrefs still 0. Gathered first (the list changes under
+       the clear), each held by one reference so that no clear frees a block
+       another garbage object still points at. }
+  nGarbage := 0;
+  r := PXXGcHead;
+  while r <> 0 do
+  begin
+    if PMachineWord(r + 16)^ = 0 then
+    begin
+      h := Pointer(r + PXX_GC_PREFIX + PXX_HDR_SIZE);
+      PMachineWord(PXXGcWork + nGarbage * 8)^ := Int64(h);
+      nGarbage := nGarbage + 1;
+    end;
+    r := PMachineWord(r + 8)^;
+  end;
+  i := 0;
+  while i < nGarbage do
+  begin
+    PXXObjRetain(Pointer(PMachineWord(PXXGcWork + i * 8)^));
+    i := i + 1;
+  end;
+  i := 0;
+  while i < nGarbage do
+  begin
+    h := Pointer(PMachineWord(PXXGcWork + i * 8)^);
+    PXXGcTraverseHook(h, PXXGcKindOf(h), 2);
+    i := i + 1;
+  end;
+  i := 0;
+  while i < nGarbage do
+  begin
+    PXXObjRelease(Pointer(PMachineWord(PXXGcWork + i * 8)^));
+    i := i + 1;
+  end;
+  PXXFree(Pointer(PXXGcWork));
+  PXXGcWork := 0;
+  PXXGcBusy := False;
+  PXXGcCollect := nGarbage;
+end;
+{$endif}
 
 { NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
   The individual arms that reach a COM interface, a variant or a NilPy promo
