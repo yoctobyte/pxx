@@ -10632,6 +10632,16 @@ test-core: $(COMPILER)
 	  printf "program p;\nuses rg;\nfunction f: Integer; cdecl;\nbegin f := plainfn(g_x) + imaxabs(-3) + PtrInt(malloc(4)); end;\nbegin writeln(f); end.\n" > $$d/p.pas && \
 	  ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --system-libs --emit-obj -I$$d $$d/p.pas $$d/p.o >/dev/null && \
 	  tools/expect_same.sh proto_unnamed_param_und "$$(nm $$d/p.o | grep -E ' (imaxabs|malloc|plainfn|g_x)$$' | sed 's/^ *//' | sort)" "$$(printf 'U g_x\nU imaxabs\nU malloc\nU plainfn')"
+	# A unit's IMPLEMENTATION-section `function largest(...); external;` must
+	# not capture the same-named prototype of a header a LATER `uses` imports:
+	# the header registered no row, and the program saw only the private one
+	# ("undefined variable (largest)"; scheduler vs idf.h). Both orders compile.
+	@d=$(TESTTMP)/impl_external_vs_header26; mkdir -p $$d && \
+	  printf 'unsigned long largest(unsigned int caps);\n' > $$d/ch.h && \
+	  printf "unit cu;\ninterface\nfunction UnitLargest: LongWord;\nimplementation\nfunction largest(caps: LongWord): NativeUInt; external;\nfunction UnitLargest: LongWord;\nbegin Result := largest(4); end;\nend.\n" > $$d/cu.pas && \
+	  printf "program p;\nuses cu, ch;\nfunction Get: LongWord; cdecl;\nbegin Result := largest(4) + UnitLargest; end;\nbegin end.\n" > $$d/p.pas && \
+	  ./$(COMPILER) --emit-obj -I$$d -Fu$$d $$d/p.pas $$d/p.o >/dev/null && \
+	  tools/expect_same.sh impl_external_vs_header "$$(nm $$d/p.o | grep -E ' largest$$' | sed 's/^ *//' | sort -u)" "U largest"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

@@ -15540,10 +15540,19 @@ begin
       the bodyless pass-1 entry ("unresolved forward: crtl_2sum" the moment
       an auto-pulled crtl file had C-to-C internal calls under
       --system-libs=c). The exact string compare still excludes
-      differently-cased Pascal twins (Sqrt vs sqrt). }
+      differently-cased Pascal twins (Sqrt vs sqrt).
+      NOT A ROW PRIVATE TO ANOTHER UNIT: the walk is over every proc, so without
+      this test a unit's IMPLEMENTATION-section `function f(...); external;`
+      captured the same-named prototype of a header a later `uses` imported --
+      the header registered no row of its own, and the importer then found only
+      the private one and reported `f` as an undefined variable (scheduler's
+      heap_caps_get_largest_free_block against idf.h, museum_landkaart).
+      bug-a-a-units-private-external-hides-a-c-header-function-of-the-same-name }
     for i := 0 to ProcCount - 1 do
       if (Procs[i].Name = name) and
-         (Procs[i].ParamCount = nparams) then
+         (Procs[i].ParamCount = nparams) and
+         not (ProcDeclImpl[i] and
+              not DeclVisibleSect(ProcUnitIdx[i], True, IMPLTAB_PROC, i)) then
       begin
         sigMatch := True;
         for idx := 0 to nparams - 1 do
