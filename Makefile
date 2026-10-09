@@ -6247,6 +6247,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_dvalpkg26 | diff -u test/test_nilpy_a_def_used_as_a_value_by_a_later_module.expected -
 	./$(COMPILER) test/test_nilpy_a_nested_def_default_is_filled_before_its_captures.npy $(TESTTMP)/test_nilpy_nestdflt26
 	$(TESTTMP)/test_nilpy_nestdflt26 | diff -u test/test_nilpy_a_nested_def_default_is_filled_before_its_captures.expected -
+	./$(COMPILER) test/test_nilpy_a_self_field_unpack_target_declares_every_field.npy $(TESTTMP)/test_nilpy_selfunpk26
+	$(TESTTMP)/test_nilpy_selfunpk26 | diff -u test/test_nilpy_a_self_field_unpack_target_declares_every_field.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

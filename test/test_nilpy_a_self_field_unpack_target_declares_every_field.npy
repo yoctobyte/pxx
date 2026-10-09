@@ -1,0 +1,26 @@
+# `self.dep, self.arr = dep, arr` declares BOTH fields. Only the last target
+# was seen -- typed from the FIRST right-hand element -- so a typed read of
+# `self.dep` crashed (TSP's ferry.Flight._cruise_height).
+
+class R:
+    def __init__(self, alt: float):
+        self.alt = alt
+
+class F:
+    def __init__(self, dep: R, arr: R, n: int):
+        self.dep, self.arr = dep, arr
+        self.name, self.count = "f", n
+        (self.lo, self.hi) = n - 1, n + 1
+        print(len("ab"), n)
+
+    def h(self) -> float:
+        return self.dep.alt + 3000.0 + self.arr.alt
+
+    def swap(self) -> None:
+        self.dep, self.arr = self.arr, self.dep
+        self.count += 1
+
+f = F(R(10.0), R(20.0), 4)
+print(f.h(), f.name, f.count + 1, f.lo, f.hi)
+f.swap()
+print(f.dep.alt, f.arr.alt, f.count)

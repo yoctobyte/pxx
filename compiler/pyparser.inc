@@ -44332,6 +44332,55 @@ begin
   end;
 end;
 
+function PyFieldInUnpackTarget(j: Integer): Boolean;
+{ Is the `self.NAME` at token j one element of an unpacking TARGET list --
+  `self.dep, self.arr = dep, arr`? Everything from the statement start to it
+  and from it to a depth-0 `=` is names, dots, commas, stars and grouping, with
+  at least one comma. A call or subscript bracket (`f(self.a, k=1)`) fails. }
+var k, depth: Integer; comma: Boolean;
+begin
+  Result := False;
+  comma := False;
+  k := j - 1;
+  while k >= 0 do
+  begin
+    case Tokens[k].Kind of
+      tkComma: comma := True;
+      tkIdent, tkDot, tkStar: ;
+      tkLParen, tkLBrack:
+        if (k > 0) and (Tokens[k - 1].Kind in [tkIdent, tkRParen, tkRBrack]) then
+          Exit;
+      tkNewline, tkIndent, tkDedent, tkSemicolon: Break;
+    else
+      Exit;
+    end;
+    Dec(k);
+  end;
+  depth := 0;
+  k := j + 3;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkComma: comma := True;
+      tkIdent, tkDot, tkStar: ;
+      tkLParen, tkLBrack:
+        begin
+          if Tokens[k - 1].Kind in [tkIdent, tkRParen, tkRBrack] then Exit;
+          Inc(depth);
+        end;
+      tkRParen, tkRBrack: Dec(depth);
+      tkAssign:
+        begin
+          Result := comma and (depth <= 0);
+          Exit;
+        end;
+    else
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyFieldDeclAt(j: Integer): Integer;
 { Does a `self.NAME` at token j DECLARE a field, and if so where is its
   annotation? Returns -1 for "not a field declaration", 0 for the plain
@@ -44357,6 +44406,11 @@ begin
      (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
   begin
     if Tokens[j + 3].Kind = tkAssign then Result := 0
+    { `self.dep, self.arr = dep, arr` declares BOTH; only the last was seen,
+      so `self.dep` was no field and a typed read of it crashed (TSP's
+      ferry.Flight) }
+    else if (Tokens[j + 3].Kind = tkComma) and PyFieldInUnpackTarget(j) then
+      Result := 0
     { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
       and therefore always starts one. Without that requirement the
       colon of a compound-statement HEADER matched: `if not
@@ -46180,6 +46234,14 @@ begin
       tk := tyVariant;
       fldSig := -1;
     end;
+  end
+  else if PyFieldInUnpackTarget(j) then
+  begin
+    { an UNPACKING target: j + 4 is not this element's value (for the last
+      target it is the FIRST right-hand element), so infer nothing }
+    tk := tyVariant;
+    fldRec := REC_NONE;
+    fldSig := -1;
   end
   else
   begin
