@@ -38,3 +38,6 @@ test_nilpy_a_headers_directory_names_its_library: FAIL - it did not compile
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-10-09 — the borg watcher saw `test-nilpy#src:test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy` GREEN at 39225dde3632 (tier full) and did NOT close this: this is a repeat stub (`regression-test-nilpy-test-nilpy-an-unreferenced-header-import-needs-no-library-2`, not `regression-test-nilpy-test-nilpy-an-unreferenced-header-import-needs-no-library`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.

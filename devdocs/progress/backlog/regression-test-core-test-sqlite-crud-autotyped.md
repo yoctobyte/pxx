@@ -36,3 +36,6 @@ pascal26:1: error: undefined reference to extern variable `sqlite3_version': it 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-10-09 — the borg watcher saw `test-core#src:test/test_sqlite_crud_autotyped.pas` GREEN at 39225dde3632 (tier full) and did NOT close this: the job's class is `corpus`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
