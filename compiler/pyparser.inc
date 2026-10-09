@@ -65724,6 +65724,26 @@ begin
           where it is in scope, and appended as a by-value actual — Python reads
           a closed-over name at call time, so its value at the call site is the
           right one (feature-nilpy-nested-defs). }
+        { ...after the DECLARED parameters' own defaults. The captures are the
+          trailing parameters, so a call that leaves a defaulted parameter out
+          must fill it FIRST: appending the captures at the written count put
+          the first capture in the defaulted slot and shifted the rest, and
+          the default was then appended past the end. TSP's sts.home():
+          `make(burn_us, start: tuple = None)` called as `make(t)` read its
+          `start` as the enclosing `known` list, and every deorbit dry run
+          started from the wrong state. }
+        if (procIdx >= 0) and (PyCapCount[procIdx] > 0) then
+          while (nArgs < Procs[procIdx].ParamCount - PyCapCount[procIdx]) and
+                (nArgs < MAX_PROC_PARAMS) and
+                ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + nArgs] do
+          begin
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := DefaultArgValueNode(procIdx, nArgs);
+            if argsHead = -1 then begin argsHead := argSeq; lastArg := argSeq; end
+            else begin ASTRight[lastArg] := argSeq; lastArg := argSeq; end;
+            argTypes[nArgs] := Procs[procIdx].Params[nArgs].TypeKind;
+            Inc(nArgs);
+          end;
         if (procIdx >= 0) and (PyCapCount[procIdx] > 0) and
            (nArgs < Procs[procIdx].ParamCount) then
           for i := 0 to PyCapCount[procIdx] - 1 do

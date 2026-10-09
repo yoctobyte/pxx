@@ -43,6 +43,7 @@ AN_ARG Left DefaultArgValueNode(dualPi, k + 1)
 AN_ARG Left DefaultArgValueNode(mpi, i)
 AN_ARG Left DefaultArgValueNode(mpi, k)
 AN_ARG Left DefaultArgValueNode(mpi, nextSlot)
+AN_ARG Left DefaultArgValueNode(procIdx, nArgs)
 AN_ARG Left EParseExpr
 AN_ARG Left GenMakeIdent(gIdx, tyPointer)
 AN_ARG Left GenMakeIdent(oSym, tyInteger)

@@ -1,0 +1,35 @@
+# A nested def that CAPTURES enclosing locals and has a DEFAULTED parameter,
+# called without it. The captures are the lifted body's trailing parameters,
+# and they were appended at the written argument count -- so the first capture
+# landed in the defaulted slot. TSP's sts.home(): `make(t)` read `start` as
+# the enclosing `known` list and every deorbit dry run began from the wrong
+# state; a variant crashed with a nil reference.
+
+def home(start_t: int) -> tuple:
+    known = [(start_t, (1.0, 2.0))]
+
+    def state(t_us: int) -> tuple:
+        t0, s0 = max((k for k in known if k[0] <= t_us), key=lambda k: k[0])
+        s = (s0[0] + (t_us - t0), s0[1])
+        known.append((t_us, s))
+        return s
+
+    def make(burn_us: int, start: tuple = None) -> tuple:
+        t0 = burn_us - 300
+        return (t0, start or state(t0))
+
+    return make(1000), make(2000), make(3000, (9.0, 9.0))
+
+
+def counter(base: int):
+    seen = [base]
+
+    def add(n: int, step: int = 1, tag: str = "x") -> str:
+        seen.append(n + step)
+        return tag + str(seen[-1])
+
+    return add(1), add(1, 5), add(1, 5, "y"), len(seen)
+
+
+print(home(0))
+print(counter(10))
