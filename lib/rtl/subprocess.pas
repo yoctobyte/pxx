@@ -10,7 +10,8 @@ unit subprocess;
   THE SUBSET, stated plainly:
 
     subprocess.Popen(argv_list, stdout=, stderr=, stdin=)  -> a Popen object
-      with `.pid`, `.wait()` and `.poll()`. argv is a LIST, as in Python: the
+      with `.pid`, `.wait()`, `.poll()`, `.kill()`, `.terminate()`, and
+      `.stdin` / `.stdout` for a PIPE. argv is a LIST, as in Python: the
       program is argv[0] and the rest are its arguments. No shell is involved,
       which matches `shell=False`, CPython's default and the safe one.
     subprocess.run(argv_list)     -> waits, and returns an object with
@@ -18,10 +19,16 @@ unit subprocess;
     subprocess.call(argv_list)    -> the return code directly.
     subprocess.DEVNULL / PIPE / STDOUT — the constants, so a call that names
       them compiles and means what it says.
+    stdin=PIPE / stdout=PIPE -> `p.stdin` / `p.stdout` are file objects on the
+      parent's end of each pipe (write/flush/close, readline/read/close): a
+      program driving a child line by line. They are unbuffered, so `bufsize=`
+      is accepted and changes nothing. Without `text=True` the ends are
+      binary (bytes), as in CPython. stdin=DEVNULL is honoured.
+    cwd= on Popen and run(): the child starts in that directory.
 
-  NOT here, and refused rather than approximated: `shell=True`, capturing output
-  (`capture_output=`, `stdout=PIPE` then `.communicate()`), `check=True`'s
-  CalledProcessError, timeouts, env=, cwd=. A redirection this unit cannot
+  NOT here, and refused rather than approximated: `shell=True`, `stderr=PIPE` and
+  `stderr=STDOUT`, `capture_output=`, `.communicate()`, `check=True`'s
+  CalledProcessError, timeouts, env=. A redirection this unit cannot
   perform FAILS at the call rather than silently running the child with the
   parent's own stdout — the difference is visible on a terminal and invisible in
   a log, which is exactly the kind of thing a shim must not paper over.
@@ -47,24 +54,35 @@ type
   public
     pid: Integer;
     returncode: Integer;
-    { `Popen(argv, stdout=..., stderr=..., stdin=...)`. argv is a Python LIST.
-      A redirection other than DEVNULL (or omitted) is refused — see the unit
-      header. }
+    { the parent's ends of stdin=PIPE / stdout=PIPE; nil (None) otherwise }
+    stdin: TPyFile;
+    stdout: TPyFile;
+    { `Popen(argv, stdout=, stderr=, stdin=, text=, bufsize=, cwd=)`. argv is
+      a Python LIST. See the unit header for what is refused. }
     constructor Create(const argv: Variant; const stdout: Variant = 0;
-                       const stderr: Variant = 0; const stdin: Variant = 0);
-    { Wait for the child and return its exit status, as CPython's does. }
+                       const stderr: Variant = 0; const stdin: Variant = 0;
+                       const text: Variant = 0; const bufsize: Variant = 0;
+                       const cwd: Variant = 0);
+    { Wait for the child and return its exit status, as CPython's does: the
+      exit code, or minus the signal that ended it. }
     function wait: Integer;
     { The exit status if the child has finished, None if it is still running. }
     function poll: Variant;
+    { SIGKILL / SIGTERM to the child; reaping it is still wait()'s job }
+    procedure kill;
+    procedure terminate;
   end;
 
 { `subprocess.run(argv)` — waits. The result carries `.returncode`, which is the
   attribute callers read. }
-function run(const argv: Variant): Popen;
+function run(const argv: Variant; const cwd: Variant = 0): Popen;
 { `subprocess.call(argv)` — waits and hands back the status. }
 function call(const argv: Variant): Integer;
 
 implementation
+
+const
+  O_CLOEXEC = 524288;   { 0o2000000; see Popen.Create }
 
 { The program to exec for argv[0], found the way execvp finds it, which is what
   CPython's Popen does: a name with a '/' is used as given, and a bare name is
@@ -113,7 +131,7 @@ begin
   Result := ResolveProgram(pystr_of(l.at(0)));
 end;
 
-procedure CheckRedirect(const v: Variant; const which: AnsiString);
+procedure CheckRedirect(const v: Variant; const which: AnsiString; pipeOk: Boolean);
 begin
   { Not given, or DEVNULL: those are the two this unit can honour. "Not given"
     is None (tag 0) or the 0 the parameter defaults to — the façade convention
@@ -122,8 +140,9 @@ begin
   if pyvartag(v) = 0 then Exit;
   if pyvar_to_int(v) = 0 then Exit;
   if pyvar_to_int(v) = DEVNULL then Exit;
-  WriteLn('subprocess: ', which, '= is not supported yet (only DEVNULL or omitted); ',
-          'capturing a child''s output needs the pipe surface this shim does not have');
+  if pipeOk and (pyvar_to_int(v) = PIPE) then Exit;
+  WriteLn('subprocess: ', which, '= is not supported yet (only PIPE, DEVNULL or omitted; ',
+          'stderr takes DEVNULL or omitted)');
   Halt(1);
 end;
 
@@ -132,16 +151,53 @@ begin
   Result := (pyvartag(v) <> 0) and (pyvar_to_int(v) = DEVNULL);
 end;
 
-constructor Popen.Create(const argv: Variant; const stdout, stderr, stdin: Variant);
-var l: TPyList; i, devNull, res: Integer;
-    prog: AnsiString;
+function WantsPipe(const v: Variant): Boolean;
+begin
+  Result := (pyvartag(v) <> 0) and (pyvar_to_int(v) = PIPE);
+end;
+
+{ A file object on one end of a pipe. TPyFile's raw fd is unbuffered, which is
+  what a line-by-line conversation with a child needs: a write is in the pipe
+  when write() returns. BINARY unless text= (or universal_newlines=) asked for
+  str, as in CPython: `p.stdout.readline()` is bytes by default. }
+function PipeFile(fd: Integer; textMode: Boolean): TPyFile;
+begin
+  Result := TPyFile.Create;
+  Result.FFd := fd;
+  Result.FBinary := not textMode;
+end;
+
+{ cwd= : None / 0 / "" is "where we are". }
+function CwdOf(const cwd: Variant): AnsiString;
+begin
+  Result := '';
+  if pyvartag(cwd) <> 6 then Exit;
+  Result := pystr_of(cwd);
+end;
+
+{ The status word as CPython reports it: the exit code, or MINUS the signal
+  number for a child a signal ended (`p.kill(); p.wait()` is -9). }
+function StatusCode(status: Integer): Integer;
+begin
+  if (status and $7F) <> 0 then Result := -(status and $7F)
+  else Result := (status shr 8) and 255;
+end;
+
+constructor Popen.Create(const argv: Variant; const stdout, stderr, stdin,
+                         text, bufsize, cwd: Variant);
+var l: TPyList; i, devNull, devNullIn, res: Integer;
+    inR, inW, outR, outW: Integer;
+    pin, pout: array[0..1] of Integer;
+    prog, dir, here: AnsiString;
     argvp: array of PChar;
     holds: array of AnsiString;      { keeps each argument alive across the exec }
     envp: Pointer;
 begin
-  CheckRedirect(stdout, 'stdout');
-  CheckRedirect(stderr, 'stderr');
-  CheckRedirect(stdin, 'stdin');
+  CheckRedirect(stdout, 'stdout', True);
+  CheckRedirect(stderr, 'stderr', False);
+  CheckRedirect(stdin, 'stdin', True);
+  Self.stdin := nil;
+  Self.stdout := nil;
   prog := ArgvProgram(argv);
   l := pylist_v(argv);
   { argv[0] is the program itself, as execve wants it, then the arguments,
@@ -165,39 +221,118 @@ begin
     so /dev/null on the child's stdout is one open() away and everything else
     is inherited. ExecutePipeline is not used here: -1 asks IT to build pipes,
     and a spawned viewer's output would then go into a pipe nobody reads. }
-  devNull := -1;
-  if WantsDevNull(stdout) then devNull := PalOpen(PChar('/dev/null'), 1, 0);   { O_WRONLY }
+  { The child dup2's the read end of its stdin and the write end of its
+    stdout onto 0 and 1, and closes the other end of each. Pipes are made
+    O_CLOEXEC so a LATER child does not inherit this one's ends -- otherwise
+    the read side never sees EOF while that other child lives. }
+  devNull := -1; devNullIn := -1;
+  inR := -1; inW := -1; outR := -1; outW := -1;
+  if WantsDevNull(stdout) then
+  begin
+    devNull := PalOpen(PChar('/dev/null'), 1, 0);   { O_WRONLY }
+    outW := devNull;
+  end
+  else if WantsPipe(stdout) then
+  begin
+    if PalPipe2(pout, O_CLOEXEC) < 0 then
+    begin
+      WriteLn('subprocess: pipe() failed');
+      Halt(1);
+    end;
+    outR := pout[0]; outW := pout[1];
+  end;
+  if WantsDevNull(stdin) then
+  begin
+    devNullIn := PalOpen(PChar('/dev/null'), 0, 0);   { O_RDONLY }
+    inR := devNullIn;
+  end
+  else if WantsPipe(stdin) then
+  begin
+    if PalPipe2(pin, O_CLOEXEC) < 0 then
+    begin
+      WriteLn('subprocess: pipe() failed');
+      Halt(1);
+    end;
+    inR := pin[0]; inW := pin[1];
+  end;
   returncode := -1;
-  pid := PalVforkAndExec(PChar(prog), @argvp[0], envp, -1, -1, -1, devNull);
+  { cwd=: the PAL's spawn has no chdir in the child, so the PARENT steps into
+    the directory around the fork -- the child inherits it -- and steps back. }
+  dir := CwdOf(cwd);
+  here := '';
+  if dir <> '' then
+  begin
+    here := GetCurrentDir;
+    if PalChdir(PChar(dir)) < 0 then
+    begin
+      WriteLn('subprocess: cwd= ', dir, ': no such directory');
+      Halt(1);
+    end;
+  end;
+  pid := PalVforkAndExec(PChar(prog), @argvp[0], envp, inR, inW, outR, outW);
+  if here <> '' then res := PalChdir(PChar(here));
+  { the parent keeps only its own end of each pipe }
+  if WantsPipe(stdout) then
+  begin
+    res := PalClose(outW);
+    Self.stdout := PipeFile(outR, pyvar_to_bool(text));
+  end;
+  if WantsPipe(stdin) then
+  begin
+    res := PalClose(inR);
+    Self.stdin := PipeFile(inW, pyvar_to_bool(text));
+  end;
   if devNull >= 0 then res := PalClose(devNull);
+  if devNullIn >= 0 then res := PalClose(devNullIn);
+end;
+
+procedure Popen.kill;
+var r: Integer;
+begin
+  if (pid > 0) and (returncode = -1) then r := PalKill(pid, 9);
+end;
+
+procedure Popen.terminate;
+var r: Integer;
+begin
+  if (pid > 0) and (returncode = -1) then r := PalKill(pid, 15);
 end;
 
 function Popen.wait: Integer;
-{ wait4 with no options: block until the child ends, then report the exit code
-  the way a shell does (the status word's high byte). }
+{ wait4 with no options: block until the child ends. }
 var status: Integer;
 begin
-  if pid > 0 then
+  if (pid > 0) and (returncode = -1) then
   begin
     status := 0;
     if PalWait4(pid, @status, 0, nil) > 0 then
-      returncode := (status shr 8) and 255;
+      returncode := StatusCode(status);
   end;
   Result := returncode;
 end;
 
+{ The exit status if the child has finished, None if it is still running --
+  asked of the kernel (WNOHANG), as CPython's poll() does, rather than
+  answering from whatever wait() last recorded. }
 function Popen.poll: Variant;
+var status: Integer;
 begin
-  if returncode < 0 then Result := pynone else Result := returncode;
+  if (pid > 0) and (returncode = -1) then
+  begin
+    status := 0;
+    if PalWait4(pid, @status, 1, nil) > 0 then    { WNOHANG }
+      returncode := StatusCode(status);
+  end;
+  if returncode = -1 then Result := pynone else Result := returncode;
 end;
 
-function run(const argv: Variant): Popen;
+function run(const argv: Variant; const cwd: Variant): Popen;
 var p: Popen;
 begin
   { the three redirections passed EXPLICITLY: an omitted defaulted Variant
     parameter is bug-nilpy-omitted-variant-default-segfaults, and it bites in
     plain Pascal here too }
-  p := Popen.Create(argv, 0, 0, 0);
+  p := Popen.Create(argv, 0, 0, 0, 0, 0, cwd);
   p.wait;
   Result := p;
 end;
@@ -205,7 +340,7 @@ end;
 function call(const argv: Variant): Integer;
 var p: Popen;
 begin
-  p := Popen.Create(argv, 0, 0, 0);
+  p := Popen.Create(argv, 0, 0, 0, 0, 0, 0);
   Result := p.wait;
 end;
 

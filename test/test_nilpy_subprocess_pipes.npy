@@ -1,0 +1,39 @@
+# subprocess with pipes: stdin/stdout=PIPE, a line-by-line conversation with a
+# child, text= and bufsize= accepted, binary ends without text=, kill() and its
+# -9, poll(), and cwd= on Popen and run(). (TSP drives its tools this way.)
+import subprocess
+
+p = subprocess.Popen(["cat"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                     stderr=subprocess.DEVNULL, text=True, bufsize=1)
+p.stdin.write("hello\n")
+p.stdin.flush()
+print(p.stdout.readline().strip())
+p.stdin.write("second line\n")
+print(p.stdout.readline().strip())
+print(p.poll())
+p.kill()
+print(p.wait())
+
+b = subprocess.Popen(["cat"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                     stderr=subprocess.DEVNULL)
+b.stdin.write(b"bytes\n")
+b.stdin.flush()
+line = b.stdout.readline()
+print(line, line.strip().decode())
+b.stdin.close()
+print(b.wait())
+
+q = subprocess.Popen(["pwd"], stdout=subprocess.PIPE, cwd="/", text=True)
+print(q.stdout.readline().strip())
+q.wait()
+r = subprocess.run(["sh", "-c", "test \"$(pwd)\" = / && exit 3"], cwd="/")
+print(r.returncode)
+
+c = subprocess.Popen(["cat"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+c.stdin.write("a\nb\n")
+c.stdin.close()
+print(c.stdout.read().split())
+print(c.wait())
+
+n = subprocess.Popen(["cat"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
+print(repr(n.stdout.read()), n.wait())
