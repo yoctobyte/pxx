@@ -16581,9 +16581,19 @@ begin
           declines again. Every other target already carried it except wasm32
           and arm32; x86-64 was the outlier, exactly as it was for the
           AnsiString arm. }
+        { The AnsiString arm's inline test, for the same reason: a NilPy
+          method's exit clears EVERY variant temp it owns and most hold
+          nothing a release could touch (lekkerzeilen's TiledGrid.at: ~95 per
+          call, nearly all empty or a number). A tag below VT_STRING owns no
+          payload, so the call is skipped outright; the slot is left as it is,
+          which a second pass over the same frame (the unwind path) skips the
+          same way. Patched, not hand-counted, as above. }
+        EmitB($48); EmitB($83); EmitB($BD); EmitI32(Syms[i].Offset); EmitB(VT_STRING); { cmp qword [rbp+off], VT_STRING }
+        EmitB($72); jzPatch := CodeLen; EmitB(0);   { jb over the clear }
         { lea rax, [rbp + Offset] }
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
+        PatchRel8(jzPatch);
       end
       else if act = SXR_OBJ then
       begin
