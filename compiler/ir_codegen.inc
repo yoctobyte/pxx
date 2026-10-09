@@ -5730,8 +5730,15 @@ procedure EmitVariantClearBody(zeroSlot: Boolean);
   read, so `v := v` came back Empty. The zeroing was never wanted here — the
   copy overwrites those bytes on the next instruction.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf, pFast: Integer;
 begin
+  { Every tag below VT_STRING (empty, null, the numbers, boolean) owns nothing,
+    and they are nearly every slot this blob sees: a NilPy method's scope exit
+    clears every variant temp it has, most still empty because only one path
+    ran -- ~95 of them in lekkerzeilen's TiledGrid.at. One unsigned compare
+    sends those straight to the zeroing instead of down the whole tag chain. }
+  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING);  { cmp qword [rax], VT_STRING }
+  EmitB($0F); EmitB($82); pFast := CodeLen; EmitI32(0);  { jb fast }
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
     its decimal. Without this arm every such variant LEAKED. The block is
@@ -5781,6 +5788,7 @@ begin
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
   EmitAsmX64(['pop rax']);
+  Patch32(pFast, CodeLen - (pFast + 4));                 { fast: rax untouched }
   if zeroSlot then
     EmitAsmX64([
       'mov qword [rax], %', VT_EMPTY,
@@ -5936,10 +5944,12 @@ end;
 procedure EmitVariantRetainBody;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClearBody for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf, pFast: Integer;
 begin
   { Same managed-payload test as EmitVariantClearBody — see there, including the
-    object-tag arm and its population-tag guard. }
+    object-tag arm, its population-tag guard and the below-VT_STRING fast exit. }
+  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING);  { cmp qword [rax], VT_STRING }
+  EmitB($0F); EmitB($82); pFast := CodeLen; EmitI32(0);  { jb fast }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
   EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
   { The object tags are a RANGE (VT_OBJ_FIRST..VT_OBJ_LAST), not four equality
@@ -5980,6 +5990,7 @@ begin
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
   EmitAsmX64(['pop rax']);
+  Patch32(pFast, CodeLen - (pFast + 4));                 { fast: }
 end;
 
 { The variant clear/retain pair, emitted ONCE as callable blobs, exactly like
@@ -12713,8 +12724,12 @@ begin
           EmitVariantReleasePayload;
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($5E);                            { pop rsi }
-          EmitB($48); EmitB($C7); EmitB($C1); EmitI32(16); { mov rcx, 16 }
-          EmitB($F3); EmitB($A4);                { rep movsb }
+          { two word moves, not `mov rcx,16 / rep movsb`: the string op's
+            start-up cost is most of a 16-byte copy }
+          EmitB($48); EmitB($8B); EmitB($0E);    { mov rcx, [rsi] }
+          EmitB($48); EmitB($89); EmitB($0F);    { mov [rdi], rcx }
+          EmitB($48); EmitB($8B); EmitB($4E); EmitB($08); { mov rcx, [rsi+8] }
+          EmitB($48); EmitB($89); EmitB($4F); EmitB($08); { mov [rdi+8], rcx }
           if pAppendDone >= 0 then
             Patch32(pAppendDone, CodeLen - (pAppendDone + 4));
         end
