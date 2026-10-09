@@ -225,6 +225,9 @@ var
   { ...and, when the alias names a stackless GENERATOR, that proc (else -1):
     see PyImportAliasGenProc. }
   PyAliasNameGen: array[0..255] of Integer;
+  { ...and the proc the binding was made FROM (else -1): see
+    PyImportAliasIsSameProc. }
+  PyAliasNameSrc: array[0..255] of Integer;
   PyAliasNameCount: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
@@ -1103,6 +1106,28 @@ begin
     if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
     begin
       Result := PyAliasNameGen[i];
+      Exit;
+    end;
+end;
+
+{ Was this name bound in the unit being parsed by a PLAIN `from M import NAME`
+  whose source is the proc pi itself? Such a binding is the module-level
+  re-export var, holding exactly the function pi names, so a call through it
+  must not be turned into a dynamic call of that var: the dynamic path passed a
+  boxed Variant to a callee whose `a: tuple` / `a: list` parameter expects the
+  object, and `first(a)` read garbage (IndexError, or a segfault) -- only in a
+  MODULE, because the main program allocates no re-export var (TSP, vec.first
+  called from earth). A rename (`as`) records -1 and keeps the old rule. }
+function PyImportAliasIsSameProc(const nm: AnsiString; pi: Integer): Boolean;
+var i, ni: Integer;
+begin
+  Result := False;
+  if (nm = '') or (pi < 0) or (PyAliasNameCount = 0) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyAliasNameCount - 1 do
+    if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
+    begin
+      Result := PyAliasNameSrc[i] = pi;
       Exit;
     end;
 end;
@@ -51035,6 +51060,8 @@ begin
                   PyAliasNameId[PyAliasNameCount] := InternStr(LowerCase(impAlias));
                   PyAliasNameUnit[PyAliasNameCount] := CurrentUnitIdx;
                   PyAliasNameGen[PyAliasNameCount] := -1;
+                  PyAliasNameSrc[PyAliasNameCount] := aliasRealProc;
+                  if impAlias <> impReal then PyAliasNameSrc[PyAliasNameCount] := -1;
                   if (aliasRealProc >= 0) and ProcIsGenerator[aliasRealProc] and
                      ProcIsStackless[aliasRealProc] then
                     PyAliasNameGen[PyAliasNameCount] := aliasRealProc;
@@ -62730,6 +62757,7 @@ begin
           ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx)) or
           ((Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx) and
            PyNameIsImportAlias(name) and
+           (not PyImportAliasIsSameProc(name, procIdx)) and
            (ProcUnitIdx[procIdx] >= 0) and
            (ProcUnitIdx[procIdx] <> CurrentUnitIdx))) then
         procIdx := -1;

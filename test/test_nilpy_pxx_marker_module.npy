@@ -1,0 +1,11 @@
+# `import __pxx__` is how a program written for both CPython and pxx picks its
+# backend: CPython raises ImportError, pxx resolves lib/rtl/mimic___pxx__.py.
+try:
+    import __pxx__
+    backend = "pxx"
+except ImportError:
+    backend = "cpython"
+print(backend)
+
+import __pxx__ as marker
+print(marker.compiler)

@@ -13,3 +13,5 @@ print(e.at(2), epoch())
 print(E2(5).at(1))
 from nilpy_tsppkg.parts import Eph, ep
 print(Eph(1).at(ep() % 10))
+from nilpy_tsppkg.parts import earth
+print(earth.f1(), earth.f2(), earth.f3(), earth.f4())

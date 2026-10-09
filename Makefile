@@ -8531,6 +8531,8 @@ test-nilpy: $(COMPILER)
 	# Low(Int64) * -1, which trapped in both the variant and the typed path.
 	./$(COMPILER) test/test_nilpy_variant_numeric_fast_path.npy $(TESTTMP)/test_nilpy_varnumfast26
 	$(TESTTMP)/test_nilpy_varnumfast26 | diff -u test/test_nilpy_variant_numeric_fast_path.expected -
+	./$(COMPILER) test/test_nilpy_pxx_marker_module.npy $(TESTTMP)/test_nilpy_pxxmarker26
+	$(TESTTMP)/test_nilpy_pxxmarker26 | diff -u test/test_nilpy_pxx_marker_module.expected -
 	# Dynamic method calls take a direct path (PyDynMethFast) for the common
 	# shape and the full PyHostCall bridge otherwise; both answer as CPython.
 	# Also the negative name filter in front of the dynamic-attribute store.
