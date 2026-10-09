@@ -18180,6 +18180,7 @@
    "range": [
     "59caf859488c8fd3be06b0103dec455d55593f6b"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy tools/assert_no_leak.sh +1",
    "status": "fail"
   }
