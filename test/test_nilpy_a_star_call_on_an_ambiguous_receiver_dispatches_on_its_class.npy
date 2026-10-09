@@ -1,0 +1,19 @@
+# Two classes declare accel() with different arities, and the receiver's type
+# is only known at run time. A star call used to bind at compile time to the
+# FIRST class declaring the name, whose arity check then refused the call
+# (TSP STS-1: "Model.accel(): forwarded call got 6 arguments"). Unannotated
+# parameters are variants, which the run-time dispatch can always pass.
+
+class Model:
+    def accel(self, t, y):
+        return (t, len(y), 0.0)
+
+class ForceModel:
+    def accel(self, t, x, y, z):
+        return (t + x + y + z, 0.0, 0.0)
+
+objs = [Model(), ForceModel()]
+st = (1.0, 2.0, 3.0, 4.0)
+print(objs[1].accel(0.5, *st[:3]))
+print(objs[0].accel(0.5, *[[1, 2]]))
+print(objs[1].accel(*st))

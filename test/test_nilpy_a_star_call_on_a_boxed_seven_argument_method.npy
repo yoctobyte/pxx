@@ -1,0 +1,20 @@
+# The same ambiguous star call, in a program where a computed getattr puts
+# every method on the boxed (all-variant) ABI. The run-time bridge stopped at
+# five arguments; TSP's ForceModel.accel(t, x, y, z, vx, vy, vz) has seven.
+
+class Model:
+    def accel(self, t: float, y: list) -> tuple:
+        return (t, float(len(y)), 0.0)
+
+class ForceModel:
+    def accel(self, t: float, x: float, y: float, z: float,
+              vx: float, vy: float, vz: float) -> tuple:
+        return (t + x + y + z + vx + vy + vz, 0.0, 0.0)
+
+def peek(o, key: str):
+    return getattr(o, key)
+
+objs = [Model(), ForceModel()]
+st = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
+print(objs[1].accel(0.5, *st[:6]))
+print(objs[0].accel(0.5, *[[1, 2]]))

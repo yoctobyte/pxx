@@ -20294,6 +20294,8 @@ begin
       if (symIdx >= 0) and (symIdx < SymCount) then
         write(' [sym=', Syms[symIdx].Name, ']');
     end;
+    if (IRKind[i] = IR_CALL) and (IRA[i] >= 0) and (IRA[i] < ProcCount) then
+      write(' [proc=', Procs[IRA[i]].Name, ']');
     if IRKind[i] = IR_FIELD then
       write(' [offset=', IRIVal[i], ']');
     if IRKind[i] = IR_INDEX then

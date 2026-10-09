@@ -481,6 +481,11 @@ type
   TVFn3 = function(self: Pointer; const a, b, c: Variant): Variant;
   TVFn4 = function(self: Pointer; const a, b, c, d: Variant): Variant;
   TVFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Variant;
+  { 6..8: an all-variant (function-object ABI) method past five arguments --
+    TSP's ForceModel.accel(t, x, y, z, vx, vy, vz) reached by a star call. }
+  TVFn6 = function(self: Pointer; const a, b, c, d, e, f: Variant): Variant;
+  TVFn7 = function(self: Pointer; const a, b, c, d, e, f, g: Variant): Variant;
+  TVFn8 = function(self: Pointer; const a, b, c, d, e, f, g, h: Variant): Variant;
   { void (procedure), N Variant args. }
   TVPr0 = procedure(self: Pointer);
   TVPr1 = procedure(self: Pointer; const a: Variant);
@@ -488,6 +493,9 @@ type
   TVPr3 = procedure(self: Pointer; const a, b, c: Variant);
   TVPr4 = procedure(self: Pointer; const a, b, c, d: Variant);
   TVPr5 = procedure(self: Pointer; const a, b, c, d, e: Variant);
+  TVPr6 = procedure(self: Pointer; const a, b, c, d, e, f: Variant);
+  TVPr7 = procedure(self: Pointer; const a, b, c, d, e, f, g: Variant);
+  TVPr8 = procedure(self: Pointer; const a, b, c, d, e, f, g, h: Variant);
   { …and the shapes a NilPy `*args` constructor has: the star slot is a TPyList
     CLASS parameter (a plain pointer), never a Variant, so it cannot ride in a
     TVPr* slot. Only the star-LAST forms exist, which is all Python allows for
@@ -1021,7 +1029,7 @@ end;
   where to look, never what is true. Misses (nil) are not cached. }
 const PY_LK_SLOTS = 2048;
 type PPyLkRec = ^TPyLkRec;
-     TPyLkRec = record Cls: Pointer; Hit: Pointer; end;
+     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; end;
 var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
 
 function PyLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
@@ -1032,13 +1040,17 @@ begin
   Result := NativeInt(h and (PY_LK_SLOTS - 1));
 end;
 
-procedure PyLkPut(idx: NativeInt; cls, hit: Pointer);
+procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt);
 var r: PPyLkRec;
 begin
   if PyLkSlot[idx] <> nil then Exit;
   r := PPyLkRec(GetMem(SizeOf(TPyLkRec)));
   r^.Cls := cls;
   r^.Hit := hit;
+  { the KIND is part of the key: a method and a field hash into the SAME
+    slots, and a field descriptor read as a method's (or the reverse) is a
+    different record layout, not a miss }
+  r^.Kind := kind;
   PyLkSlot[idx] := r;
 end;
 
@@ -1049,14 +1061,14 @@ var idx: NativeInt; r: PPyLkRec;
 begin
   idx := PyLkIndex(cls, name, 0);
   r := PyLkSlot[idx];
-  if (r <> nil) and (r^.Cls = Pointer(cls)) and
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) and
      PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
   begin
     Result := PMethInfo(r^.Hit);
     Exit;
   end;
   Result := PyFindMethCISlow(cls, name);
-  if Result <> nil then PyLkPut(idx, cls, Result);
+  if Result <> nil then PyLkPut(idx, cls, Result, 0);
 end;
 
 { GetFieldPtr through the same cache (kind 1). }
@@ -1067,13 +1079,13 @@ begin
   idx := PyLkIndex(cls, name, 1);
   r := PyLkSlot[idx];
   fi := nil;
-  if (r <> nil) and (r^.Cls = Pointer(cls)) and
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 1) and
      (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
     fi := PFieldInfo(r^.Hit)
   else
   begin
     fi := GetFieldInfoByName(cls, name);
-    if fi <> nil then PyLkPut(idx, cls, fi);
+    if fi <> nil then PyLkPut(idx, cls, fi, 1);
   end;
   kind := 0;
   Result := nil;
@@ -1234,14 +1246,14 @@ var
   mi:  PMethInfo;
   fpushfn: TFpushFn; fpopfn: TFpopFn;
   n, nargs: Integer;    { n = user args (Arity - 1) }
-  a0, a1, a2, a3, a4: Variant;
+  a0, a1, a2, a3, a4, a5, a6, a7: Variant;
   pk: PInt64;
   allVariant: Boolean;
   i: Integer;
   rk: Int64;
   code: Pointer;
-  vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5;
-  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
+  vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5; vf6: TVFn6; vf7: TVFn7; vf8: TVFn8;
+  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5; vp6: TVPr6; vp7: TVPr7; vp8: TVPr8;
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2; sf3: TSFn3; sf4: TSFn4; sf5: TSFn5;
   if0: TIFn0; if1: TIFn1; if2: TIFn2; if3: TIFn3; if4: TIFn4; if5: TIFn5;
   df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4; df5: TDFn5;
@@ -1855,6 +1867,9 @@ begin
   if n >= 3 then a2 := args.at(2);
   if n >= 4 then a3 := args.at(3);
   if n >= 5 then a4 := args.at(4);
+  if n >= 6 then a5 := args.at(5);
+  if n >= 7 then a6 := args.at(6);
+  if n >= 8 then a7 := args.at(7);
   { A host method (push/define_word/…) expects 64-bit cells: coerce any bignum
     arg back to Int64 so a promo never leaks onto the Forth stack. The double-cell
     words mask to 64 bits before push; this is the defensive belt. }
@@ -1863,6 +1878,9 @@ begin
   if IsPromoV(a2) then a2 := pyvar_of_int(PyToI64(a2));
   if IsPromoV(a3) then a3 := pyvar_of_int(PyToI64(a3));
   if IsPromoV(a4) then a4 := pyvar_of_int(PyToI64(a4));
+  if IsPromoV(a5) then a5 := pyvar_of_int(PyToI64(a5));
+  if IsPromoV(a6) then a6 := pyvar_of_int(PyToI64(a6));
+  if IsPromoV(a7) then a7 := pyvar_of_int(PyToI64(a7));
   code := mi^.Code;
 
   { Variant return }
@@ -1875,6 +1893,9 @@ begin
       3: begin vf3 := TVFn3(code); res := vf3(vmobj, a0, a1, a2); end;
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
+      6: begin vf6 := TVFn6(code); res := vf6(vmobj, a0, a1, a2, a3, a4, a5); end;
+      7: begin vf7 := TVFn7(code); res := vf7(vmobj, a0, a1, a2, a3, a4, a5, a6); end;
+      8: begin vf8 := TVFn8(code); res := vf8(vmobj, a0, a1, a2, a3, a4, a5, a6, a7); end;
     else
       raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
@@ -1893,6 +1914,9 @@ begin
       3: begin vp3 := TVPr3(code); vp3(vmobj, a0, a1, a2); end;
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
+      6: begin vp6 := TVPr6(code); vp6(vmobj, a0, a1, a2, a3, a4, a5); end;
+      7: begin vp7 := TVPr7(code); vp7(vmobj, a0, a1, a2, a3, a4, a5, a6); end;
+      8: begin vp8 := TVPr8(code); vp8(vmobj, a0, a1, a2, a3, a4, a5, a6, a7); end;
     else
       raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '

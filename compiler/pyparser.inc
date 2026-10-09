@@ -19533,6 +19533,14 @@ begin
                (Tokens[j + 1].Kind <> tkString) or
                (not (Tokens[j + 2].Kind in [tkComma, tkRParen])) then
             begin
+              { SAY WHERE. One such call anywhere switches EVERY method in the
+                program to the boxed ABI -- ~4x per call, see
+                PyMethodUsedAsValue -- and nothing in the build said so: TSP
+                removed the two computed getattrs it knew of and could not
+                find what still turned it on. }
+              WriteLn('note: ', PyPyRangeFile(ri), ':', Tokens[j].Line,
+                      ': getattr/hasattr with a computed name -- every method ',
+                      'in the program takes the boxed (function-object) ABI');
               PyComputedGetattrSeen := True;
               Result := True;
               Exit;
@@ -22095,13 +22103,15 @@ const MAX_DYN_RUNGS = 4;      { the direct pydyn_meth<n> rungs stop here }
 var procIdx, argsHead, lastArg, argNode, litNode, kwLitNode, n, i: Integer;
     argExpr: array[0..MAX_DYN_ARGS - 1] of Integer;
     argKw: array[0..MAX_DYN_ARGS - 1] of AnsiString;
+    argStar: array[0..MAX_DYN_ARGS - 1] of Boolean;
     kwspec: AnsiString;
-    anyKw: Boolean;
+    anyKw, anyStar: Boolean;
     listSym, listCi: Integer;
 begin
   Expect(tkLParen, '(');
   n := 0;
   anyKw := False;
+  anyStar := False;
   while CurTok.Kind <> tkRParen do
   begin
     if n >= MAX_DYN_ARGS then
@@ -22109,6 +22119,7 @@ begin
         + 'here declares it), and that path takes at most '
         + PyIntLiteralText(MAX_DYN_ARGS) + ' arguments');
     argKw[n] := '';
+    argStar[n] := False;
     if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkAssign) then
     begin
@@ -22116,6 +22127,17 @@ begin
       anyKw := True;
       Next;      { the name }
       Next;      { the '=' }
+    end
+    { `*xs`: its ELEMENTS join the argument list at run time, so the list path
+      takes the call (below) and the operand EXTENDS where a written argument
+      appends. A keyword beside it is refused: the kwspec is one field per
+      ARGUMENT, and the star's argument count is not known here. }
+    else if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      Next;      { the '*' }
+      argStar[n] := True;
+      anyStar := True;
     end;
     ParseArgExpr;
     argExpr[n] := CurASTNode;
@@ -22123,6 +22145,9 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  if anyStar and anyKw then
+    Error('Nil Python: .' + mname + '() is dispatched at run time, and that path '
+      + 'cannot combine *unpacking with keyword arguments yet');
 
   { The kwspec is built for BOTH paths: the list form takes it too, and it is
     the same '|'-separated string, so the two paths differ in how the ARGUMENTS
@@ -22134,7 +22159,7 @@ begin
       if i > 0 then kwspec := kwspec + '|';
       kwspec := kwspec + argKw[i];
     end;
-  if n > MAX_DYN_RUNGS then
+  if (n > MAX_DYN_RUNGS) or anyStar then
   begin
     procIdx := FindProc('pydyn_methl');
     if procIdx < 0 then
@@ -22174,7 +22199,7 @@ begin
   { pydyn_methl ALWAYS takes a kwspec — an empty one for an all-positional call —
     where the rungs have a separate kw spelling. One signature, so the list path
     needs no second entry point for the keyword case. }
-  if anyKw or (n > MAX_DYN_RUNGS) then
+  if anyKw or anyStar or (n > MAX_DYN_RUNGS) then
   begin
     kwLitNode := AllocNode(AN_STR_LIT);
     ASTSOffset[kwLitNode] := StoredName(kwspec);
@@ -22187,7 +22212,7 @@ begin
     lastArg := argNode;
   end;
 
-  if n > MAX_DYN_RUNGS then
+  if (n > MAX_DYN_RUNGS) or anyStar then
   begin
     { ONE list argument, appended to in source order. The appends are hoisted —
       see the note at the top of this routine for why that timing is why the
@@ -22196,7 +22221,11 @@ begin
     if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
     listSym := PyNewContainerTemp('TPyList', 'dynargs');
     for i := 0 to n - 1 do
-      PyContainerCall1(listSym, 'TPyList', 'append', argExpr[i], -1);
+      if argStar[i] then
+        PyContainerCall1(listSym, 'TPyList', 'extend',
+                         PyStarOperandAsList(argExpr[i], listCi), -1)
+      else
+        PyContainerCall1(listSym, 'TPyList', 'append', argExpr[i], -1);
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(listSym);
     ASTRight[argNode] := -1;
@@ -22339,6 +22368,22 @@ begin
   Result := anyKw;
 end;
 
+function PyProcBridgeableByStar(pi: Integer): Boolean;
+{ Can pyeval's reflected call make this METHOD's call whatever the argument
+  count? Every explicit parameter a variant and at most eight of them -- the
+  all-variant thunk family's reach (TVFn/TVPr, 0..8). }
+var k: Integer;
+begin
+  Result := (pi >= 0) and (Procs[pi].ParamCount - 1 <= 8);
+  if not Result then Exit;
+  for k := 1 to Procs[pi].ParamCount - 1 do
+    if Procs[pi].Params[k].TypeKind <> tyVariant then
+    begin
+      Result := False;
+      Exit;
+    end;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -22370,6 +22415,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     vtTmpSym, vtAsgn, vtGuardArg, vtGuardCall, vtNotNode, vtNameArg,
     vtArg1, vtArg2, vtRaiseCall, vtIfNode, vtPairNode: Integer;
     smArmPossible, smArmBuilt: Boolean;
+    starAllUser: Boolean;     { an ambiguous star call whose candidates are all user classes }
     flArmPossible, flArmBuilt: Boolean;
     flGuardCall, flOrNode, flUnboxArg, flUnboxCall, flCall,
     flPairNode, flTern, flArg1, flArg2, flNotNode, flRaiseCall,
@@ -22870,6 +22916,43 @@ begin
           end;
       end;
       Inc(k);
+    end;
+  end;
+
+  { A STAR argument on a receiver several classes could be: the static pick is
+    the first class found, and the star's length -- which is all the arity test
+    below could go by -- is a run-time fact. STS-1 (TSP) called
+    `model.accel(t, *state[:6])` on a variant holding a ForceModel and was bound
+    at compile time to nbody.Model.accel(t, y), whose arity check then raised
+    "Model.accel(): forwarded call got 6 arguments". The receiver's own RTTI
+    answers the question at run time, so the call goes there, through the list
+    path that splices the star. Only between user classes with fixed parameters:
+    a pylib container or a collecting candidate keeps the static arms.
+
+    AND ONLY WHEN EVERY CANDIDATE TAKES VARIANTS (PyProcBridgeableByStar). The
+    run-time bridge passes any all-variant method up to eight arguments, but a
+    TYPED shape -- `accel(self, t: float, y: list)`, a double before a class --
+    is one it refuses, and that call used to work whenever the receiver was the
+    first class found. Measured on the regression test's second row: refused
+    through the bridge, correct through the static pick. So a typed candidate
+    keeps the old static behaviour, and the route only ever replaces a call
+    that the bridge can make. }
+  if (nDual > 0) and (hitCi >= 0) and (CurTok.Kind = tkLParen) and
+     PyCallHasStarArgAt(TokPos - 1) and
+     (not PyIsPylibContainerCi(hitCi)) and (ProcPyStarIdx[hitPi] < 0) and
+     (ProcPyKwIdx[hitPi] < 0) then
+  begin
+    starAllUser := PyProcBridgeableByStar(hitPi);
+    for di := 0 to nDual - 1 do
+      if (dualMmis[di] < 0) or PyIsPylibContainerCi(dualCis[di]) or
+         (not PyProcBridgeableByStar(UMthProc_[dualMmis[di]])) or
+         (ProcPyStarIdx[UMthProc_[dualMmis[di]]] >= 0) or
+         (ProcPyKwIdx[UMthProc_[dualMmis[di]]] >= 0) then
+        starAllUser := False;
+    if starAllUser then
+    begin
+      Result := PyMakeDynMethCall(baseNode, mname);
+      Exit;
     end;
   end;
 
@@ -44749,6 +44832,29 @@ begin
         lo := PasSrcRangeStart[m];
         if m + 1 < PasSrcRangeCount then hi := PasSrcRangeStart[m + 1] else hi := TokCount;
         Result := True;
+        Exit;
+      end;
+      Inc(n);
+    end;
+end;
+
+function PyPyRangeFile(idx: Integer): AnsiString;
+{ The source file of PyPyRangeAt's idx-th range, for a diagnostic. }
+var m, n: Integer;
+begin
+  Result := '<main program>';
+  n := 0;
+  if isNilPy then
+  begin
+    if idx = 0 then Exit;
+    n := 1;
+  end;
+  for m := 0 to PasSrcRangeCount - 1 do
+    if (PasSrcRangeStart[m] > 0) and PyPathIsPython(KeyStrs[PasSrcRangeId[m]]) then
+    begin
+      if n = idx then
+      begin
+        Result := KeyStrs[PasSrcRangeId[m]];
         Exit;
       end;
       Inc(n);
