@@ -411,6 +411,10 @@ var
     reads it for a BARE `self` only.
     bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
   PyInferSelfCi: Integer;
+  { The classmethod being parsed: its proc, the boxed-classref local its `cls`
+    is rebound to, and its class. Read only by PyClsMethCtorCall, and only
+    while CurProc is that proc, so a stale value is inert. }
+  PyClsMethProc, PyClsMethLocal, PyClsMethCi: Integer;
   PyClsBodyS: array[0..MAX_UCLASS-1] of Integer;
   PyClsBodyE: array[0..MAX_UCLASS-1] of Integer;
   { The extra (2nd..Nth) bases of the class currently being registered/parsed,
@@ -17317,6 +17321,74 @@ begin
     ASTTk[ternNode] := Ord(tyVariant);
     Result := ternNode;
   end;
+end;
+
+{ Does any `class X(...)` in the lexed stream name `nm` among its bases? A
+  NAME test over every module the closure lexed, so it errs towards "yes" (a
+  same-named class elsewhere counts) -- which only costs the fast path. }
+function PyClassNameIsABase(const nm: AnsiString): Boolean;
+var i, j, depth: Integer;
+begin
+  Result := False;
+  for i := 0 to TokCount - 3 do
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
+       (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      depth := 0;
+      j := i + 2;
+      while j < TokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end
+        else if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) then
+        begin
+          Result := True;
+          Exit;
+        end;
+        Inc(j);
+      end;
+    end;
+end;
+
+{ `cls(...)` inside a @classmethod of a class nothing derives from: `cls` can
+  only ever BE that class, so the call is parsed as the construction `C(...)`
+  itself -- by pointing the `cls` token at the class's name for the length of
+  one factor parse. The run-time classref path (PyClassRefNew) reflects the
+  constructor out of RTTI, which carries no defaults and stops at four
+  arguments, so a dataclass with five fields could not be built through `cls`
+  at all ("at most 4 constructor parameters"), even with four arguments
+  passed. The static construction has the class's whole signature: defaults,
+  keywords, any arity. With a subclass anywhere `cls` may be the subclass, and
+  the dynamic path stays. Reported by the TSP port (chutes.Plan.from_blueprint). }
+function PyClsMethCtorCall(node: Integer): Boolean;
+var k, savedOff, savedLen: Integer;
+    nm: AnsiString;
+begin
+  Result := False;
+  if (CurProc < 0) or (CurProc <> PyClsMethProc) or (PyClsMethLocal < 0) then Exit;
+  if (node < 0) or (ASTKind[node] <> AN_IDENT) or (ASTIVal[node] <> PyClsMethLocal) then Exit;
+  if (PyClsMethCi < 0) or (CurTok.Kind <> tkLParen) then Exit;
+  k := TokPos - 2;
+  if (k < 0) or (Tokens[k].Kind <> tkIdent) or
+     (GetTokenStr(k) <> Syms[PyClsMethLocal].Name) then Exit;
+  nm := PyRawName(UClsNOff[PyClsMethCi], UClsNLen[PyClsMethCi]);
+  if PyClassNameIsABase(nm) then Exit;
+  { the class's own name must still mean the class here }
+  if (FindSym(nm) >= 0) or (FindUClass(nm) <> PyClsMethCi) then Exit;
+  savedOff := Tokens[k].SOffset;
+  savedLen := Tokens[k].SLen;
+  Tokens[k].SOffset := UClsNOff[PyClsMethCi];
+  Tokens[k].SLen := UClsNLen[PyClsMethCi];
+  TokPos := k;
+  Next;
+  ParseFactor;
+  Tokens[k].SOffset := savedOff;
+  Tokens[k].SLen := savedLen;
+  Result := True;
 end;
 
 function PyMakeDynCall(baseNode: Integer): Integer;
@@ -48305,6 +48377,9 @@ begin
   begin
     Syms[Procs[procIdx].Params[0].SymIdx].Name := '$clsptr';
     clsLocal := AllocVar(pnames[0], tyVariant);
+    PyClsMethProc := procIdx;
+    PyClsMethLocal := clsLocal;
+    PyClsMethCi := ci;
   end;
   for i := 0 to nparams - 1 do
   begin
@@ -52571,6 +52646,7 @@ begin
   PyDefaultClsCi := -1;
   PyClsBodyCi := -1;
   PyClsEvalCi := -1;
+  PyClsMethProc := -1; PyClsMethLocal := -1; PyClsMethCi := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyPullSlgenIfGenerators;        { a module that yields needs lib/rtl/slgen }
@@ -53077,6 +53153,7 @@ begin
   PyDefaultClsCi := -1;
   PyClsBodyCi := -1;
   PyClsEvalCi := -1;
+  PyClsMethProc := -1; PyClsMethLocal := -1; PyClsMethCi := -1;
   PySkipNewlines;
   { A leading module docstring may precede the imports. RECORDED, then consumed:
     it is the value of `__doc__`, and dropping it is what made that name an

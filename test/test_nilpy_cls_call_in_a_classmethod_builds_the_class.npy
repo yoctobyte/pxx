@@ -1,0 +1,50 @@
+# `cls(...)` in a classmethod of a class nothing derives from is the class's
+# own construction: defaults, keywords, any arity (the class-VALUE path stops
+# at four constructor parameters and carries no defaults).
+from dataclasses import dataclass
+
+
+@dataclass
+class Plan:
+    part: str
+    a: float = 0.0
+    b: float = 0.0
+    c: float = 0.0
+    d: float = 0.0
+    e: int = 7
+
+    @classmethod
+    def four(cls) -> "Plan":
+        return cls("x", 1.0, 2.0, 3.0)
+
+    @classmethod
+    def keyed(cls, blueprint: dict) -> "Plan":
+        p = cls(blueprint["part"], d=blueprint["d"], e=9)
+        return p
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.__name__
+
+
+class Base:
+    def __init__(self, v):
+        self.v = v
+
+    @classmethod
+    def make(cls, v):
+        return cls(v)
+
+    def kind(self) -> str:
+        return "base"
+
+
+class Derived(Base):
+    def kind(self) -> str:
+        return "derived"
+
+
+print(Plan.four())
+print(Plan.keyed({"part": "y", "d": 4.5}))
+print(Plan.name())
+print(Base.make(1).kind(), Derived.make(2).kind(), Derived.make(3).v)

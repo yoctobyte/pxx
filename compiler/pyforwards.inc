@@ -86,6 +86,7 @@ procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyStrMethodOwnsMember(recvTk: TTypeKind; const memb: AnsiString): Boolean; forward; { does NilPy's str surface own this spelling? -- the type-helper dispatch asks (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyClsMethCtorCall(node: Integer): Boolean; forward; { Nil Python: `cls(...)` in a classmethod of a class nothing derives from (pyparser.inc) }
 function PyBoxCallableValue(node: Integer): Integer; forward; { Nil Python: box a closure/bound-fn pointer into a callable variant (pyparser.inc) }
 function PyMakeCallDunder(baseNode: Integer): Integer; forward; { Nil Python: call a class instance's __call__ (pyparser.inc) }
 function PyOwnedArg0NeedsBinding(n: Integer): Boolean; forward; { Nil Python: a receiver nothing owns (pyparser.inc) }

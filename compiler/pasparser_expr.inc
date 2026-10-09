@@ -9992,6 +9992,11 @@ begin
         not ((IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
              (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE)) do
   begin
+    if PyClsMethCtorCall(CurASTNode) then
+    begin
+      LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+      Continue;
+    end;
     CurASTNode := PyMakeDynCall(CurASTNode);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;

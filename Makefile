@@ -6231,6 +6231,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_mdflt26 | diff -u test/test_nilpy_a_method_default_that_is_not_a_literal.expected -
 	./$(COMPILER) test/test_nilpy_a_default_reaches_a_call_written_above_the_def.npy $(TESTTMP)/test_nilpy_fwddflt26
 	$(TESTTMP)/test_nilpy_fwddflt26 | diff -u test/test_nilpy_a_default_reaches_a_call_written_above_the_def.expected -
+	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
+	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
 	@# unannotated NilPy parameter is a variant and travels const-by-REF, so the
 	@# caller boxes a non-variant argument into a temp and passes its ADDRESS --
