@@ -15,7 +15,19 @@ const
   { One page. Big enough that a line-at-a-time read of an ordinary file costs
     one syscall per few dozen lines instead of one per character; small enough
     that `var f: Text` stays a reasonable local. }
+{$ifdef PXX_PLATFORM_ESP}
+  { 128 on ESP, where RAM is the scarce resource and flash is not. Every Text
+    carries its buffer INLINE, and the unit declares five of them (Input,
+    Output, ErrOutput, StdOut, StdErr): at 4096 that was 20.6 KB of .bss --
+    77% of museum_landkaart's -- on firmware that logs with esp_rom_printf
+    and never writes through them. The size is not load-bearing: every read
+    and write goes by BufSize, which SetTextBuf already sets to anything (a
+    16-byte buffer writes and reads byte-identically to 4096); a smaller one
+    only costs more write/read calls. }
+  TF_BUFSIZE = 128;
+{$else}
   TF_BUFSIZE = 4096;
+{$endif}
 
 type
   Text = record

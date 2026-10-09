@@ -1262,6 +1262,9 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_gc26 | diff -u test/test_nilpy_gc_module_micropython_style.expected -
 	@$(TESTTMP)/test_nilpy_gc26 keep | grep -q 'alloc level False' || { echo "FAIL: nilpy gc control (keep) stayed level"; exit 1; }
 	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_c3.o >/dev/null
+	# ESP Text records are small: 5 standard Text files at 4096 each were 20.6 KB
+	# of .bss on the C3 (museum_landkaart). textfile.pas TF_BUFSIZE.
+	tools/expect_same.sh esp_text_buffers_are_small "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_text_buffers_are_small.pas $(TESTTMP)/test_esp_textbuf.o 2>&1 | grep -c 'bss 160B  ')" "5"
 	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_s3.o >/dev/null
 	@for o in c3 s3; do nm $(TESTTMP)/test_nilpy_gc_$$o.o | grep -q ' U heap_caps_get_free_size' || { echo "FAIL: nilpy gc on $$o does not read IDF's heap"; exit 1; }; done
 	# `<computed string> * n` releases the computed string, one row per spelling.
