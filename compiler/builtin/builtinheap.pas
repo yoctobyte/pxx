@@ -4059,8 +4059,12 @@ var base, t: Int64;
 {$endif}
 begin
   if p = nil then Exit;
-  if not PXXObjPlausible(p) then Exit;
-  base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
+  { PXXObjPlausible and PXXHdrRC spelled out: this pair is called for every
+    container held in a variant slot, and the two calls were a measurable
+    share of lekkerzeilen's profile (~5.5%) on their own. }
+  if (HeapLow = 0) or ((Int64(p) and 7) <> 0) or (Int64(p) < HeapLow + 24) or
+     (Int64(p) >= HeapHigh) then Exit;
+  base := Int64(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { refcount slot; the spare/magic is at base+8 }
   t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) and (t <> PXX_OBJ_MAGIC_DONE) then
@@ -4124,8 +4128,12 @@ procedure PXXObjRelease(p: Pointer);
 var base, rc, t: Int64;
 begin
   if p = nil then Exit;
-  if not PXXObjPlausible(p) then Exit;
-  base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
+  { PXXObjPlausible and PXXHdrRC spelled out: this pair is called for every
+    container held in a variant slot, and the two calls were a measurable
+    share of lekkerzeilen's profile (~5.5%) on their own. }
+  if (HeapLow = 0) or ((Int64(p) and 7) <> 0) or (Int64(p) < HeapLow + 24) or
+     (Int64(p) >= HeapHigh) then Exit;
+  base := Int64(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { refcount slot; the spare/magic is at base+8 }
   t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) and (t <> PXX_OBJ_MAGIC_DONE) then

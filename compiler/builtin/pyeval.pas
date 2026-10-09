@@ -1004,10 +1004,88 @@ begin
   PyEqCI := True;
 end;
 
+{ A (class, name) -> descriptor cache for the by-name lookups a dynamic call
+  or attribute access makes on EVERY evaluation. lekkerzeilen's
+  `canopy.at(x, z)` through a variant receiver walked the class's method
+  table comparing names each call; PyFindMethCI + PyNameEqAt were ~4% of a
+  frame between them.
+
+  THREAD-SAFE BY CONSTRUCTION, without a lock: a slot holds ONE pointer to an
+  immutable record {Cls, Hit}, published with a single aligned word store, so
+  a reader sees either nil or a whole record. Records are written once and
+  never freed or reused, and a slot is only ever filled while EMPTY -- so the
+  cache is bounded (PY_LK_SLOTS records; a racing double fill leaks one) and
+  an entry never changes under a reader. A hit is still VERIFIED by name
+  against the descriptor it returns, so the slot index (which hashes the
+  name's ADDRESS, stable for a literal and arbitrary otherwise) only decides
+  where to look, never what is true. Misses (nil) are not cached. }
+const PY_LK_SLOTS = 2048;
+type PPyLkRec = ^TPyLkRec;
+     TPyLkRec = record Cls: Pointer; Hit: Pointer; end;
+var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
+
+function PyLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
+var h: NativeUInt;
+begin
+  h := (NativeUInt(cls) shr 3) * 31 + (NativeUInt(Pointer(name)) shr 3) + NativeUInt(kind) * 7;
+  h := h xor (h shr 11);
+  Result := NativeInt(h and (PY_LK_SLOTS - 1));
+end;
+
+procedure PyLkPut(idx: NativeInt; cls, hit: Pointer);
+var r: PPyLkRec;
+begin
+  if PyLkSlot[idx] <> nil then Exit;
+  r := PPyLkRec(GetMem(SizeOf(TPyLkRec)));
+  r^.Cls := cls;
+  r^.Hit := hit;
+  PyLkSlot[idx] := r;
+end;
+
+function PyFindMethCISlow(cls: PClassRTTI; const name: AnsiString): PMethInfo; forward;
+
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
+var idx: NativeInt; r: PPyLkRec;
+begin
+  idx := PyLkIndex(cls, name, 0);
+  r := PyLkSlot[idx];
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and
+     PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindMethCISlow(cls, name);
+  if Result <> nil then PyLkPut(idx, cls, Result);
+end;
+
+{ GetFieldPtr through the same cache (kind 1). }
+function PyFieldPtrCached(obj: Pointer; cls: PClassRTTI; const name: AnsiString;
+                          var kind: Int64): Pointer;
+var idx: NativeInt; r: PPyLkRec; fi: PFieldInfo;
+begin
+  idx := PyLkIndex(cls, name, 1);
+  r := PyLkSlot[idx];
+  fi := nil;
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and
+     (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
+    fi := PFieldInfo(r^.Hit)
+  else
+  begin
+    fi := GetFieldInfoByName(cls, name);
+    if fi <> nil then PyLkPut(idx, cls, fi);
+  end;
+  kind := 0;
+  Result := nil;
+  if fi = nil then Exit;
+  kind := fi^.TypeKind;
+  Result := @PUInt8(obj)[fi^.Offset];
+end;
+
+function PyFindMethCISlow(cls: PClassRTTI; const name: AnsiString): PMethInfo;
 var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindMethCI := nil;
+  PyFindMethCISlow := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -1022,7 +1100,7 @@ begin
           `mn := NamePtr^` bind is therefore unnecessary. }
         if PyNameEqAt(meths[i].NamePtr, name, True) then
         begin
-          PyFindMethCI := @meths[i];
+          PyFindMethCISlow := @meths[i];
           Exit;
         end;
     end;
@@ -1937,7 +2015,7 @@ var
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
-  p := GetFieldPtr(obj, cls, name, kind);
+  p := PyFieldPtrCached(obj, cls, name, kind);
   if p = nil then
   begin
     { A @property compiles to a METHOD, so an attribute read that misses the
@@ -2009,7 +2087,7 @@ var
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
-  p := GetFieldPtr(obj, cls, name, kind);
+  p := PyFieldPtrCached(obj, cls, name, kind);
   if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
     1: PLongInt(p)^ := pyvar_to_int(val);
