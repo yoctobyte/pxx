@@ -1,0 +1,12 @@
+# json.dumps appends into one growing buffer; it concatenated per element
+# (quadratic -- TSP's add_sampled). Every shape must still print as CPython.
+import json
+d = {"a": [1, 2.5, 3.0, None, True, False, "x\"y"], "b": {"z": [], "y": {}, "n": -7}, "c": "k"}
+print(json.dumps(d))
+print(json.dumps(d, indent=2))
+print(json.dumps(d, sort_keys=True))
+print(json.dumps([]), json.dumps({}), json.dumps("s"), json.dumps(1.5), json.dumps(None))
+big = [{"t": i, "v": [i * 0.5, i]} for i in range(20000)]
+s = json.dumps(big)
+print(len(s), s[:60], s[-40:])
+print(json.loads(s)[123])

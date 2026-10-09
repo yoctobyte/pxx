@@ -641,18 +641,6 @@ end;
 
 { ---- the Python surface ---------------------------------------------------- }
 
-function JsonPyIndentStr(indent, depth: Integer): AnsiString;
-var i: Integer; r: AnsiString;
-begin
-  r := '';
-  if indent > 0 then
-  begin
-    r := #10;
-    for i := 1 to indent * depth do r := r + ' ';
-  end;
-  JsonPyIndentStr := r;
-end;
-
 function JsonPyNumStr(d: Double): AnsiString;
 var whole: Int64;
 begin
@@ -663,83 +651,116 @@ begin
   else JsonPyNumStr := FloatToStr(d);
 end;
 
-function JsonPyDumpValue(const v: Variant; indent, depth: Integer;
-                         sortKeys: Boolean): AnsiString; forward;
+{ The dumper APPENDS into one growing buffer. It used to return a string per
+  value and concatenate (`r := r + sep + ...`), which copies the whole prefix
+  on every element: quadratic, and TSP's add_sampled spent 16% of a run (and
+  gigabytes of transient strings) in PXXStrConcat dumping one long list. }
+procedure JsonPyPut(var buf: AnsiString; var n: Integer; const s: AnsiString);
+var k, cap: Integer;
+begin
+  k := Length(s);
+  if k = 0 then exit;
+  cap := Length(buf);
+  if n + k > cap then
+  begin
+    if cap < 64 then cap := 64;
+    while n + k > cap do cap := cap * 2;
+    SetLength(buf, cap);
+  end;
+  Move(s[1], buf[n + 1], k);
+  n := n + k;
+end;
 
-function JsonPyDumpList(l: TPyList; indent, depth: Integer;
-                        sortKeys: Boolean): AnsiString;
-var i: Integer; r, sep: AnsiString;
+procedure JsonPyPutIndent(var buf: AnsiString; var n: Integer;
+                          indent, depth: Integer);
+begin
+  if indent > 0 then
+  begin
+    JsonPyPut(buf, n, #10);
+    if indent * depth > 0 then JsonPyPut(buf, n, StringOfChar(' ', indent * depth));
+  end;
+end;
+
+procedure JsonPyDumpInto(var buf: AnsiString; var n: Integer; const v: Variant;
+                         indent, depth: Integer; sortKeys: Boolean); forward;
+
+procedure JsonPyDumpList(var buf: AnsiString; var n: Integer; l: TPyList;
+                         indent, depth: Integer; sortKeys: Boolean);
+var i: Integer;
 begin
   if l.count = 0 then
   begin
-    JsonPyDumpList := '[]';
+    JsonPyPut(buf, n, '[]');
     exit;
   end;
-  r := '[';
-  sep := '';
+  JsonPyPut(buf, n, '[');
   for i := 0 to l.count - 1 do
   begin
-    r := r + sep + JsonPyIndentStr(indent, depth + 1)
-         + JsonPyDumpValue(l.at(i), indent, depth + 1, sortKeys);
     { CPython's compact form is `, ` — the space only disappears when a
       newline takes its place }
-    if indent > 0 then sep := ',' else sep := ', ';
+    if i > 0 then
+      if indent > 0 then JsonPyPut(buf, n, ',') else JsonPyPut(buf, n, ', ');
+    JsonPyPutIndent(buf, n, indent, depth + 1);
+    JsonPyDumpInto(buf, n, l.at(i), indent, depth + 1, sortKeys);
   end;
-  JsonPyDumpList := r + JsonPyIndentStr(indent, depth) + ']';
+  JsonPyPutIndent(buf, n, indent, depth);
+  JsonPyPut(buf, n, ']');
 end;
 
-function JsonPyDumpDict(d: TPyDict; indent, depth: Integer;
-                        sortKeys: Boolean): AnsiString;
+procedure JsonPyDumpDict(var buf: AnsiString; var n: Integer; d: TPyDict;
+                         indent, depth: Integer; sortKeys: Boolean);
 { No dynamic arrays here on purpose. Holding the keys in an `array of
   AnsiString` (or the values in an `array of Variant`) alongside the dict
   corrupted the heap — a JSONParse later in the SAME program then died, with
   nothing wrong at its own call site. Keys are read from the dict when needed
   and the sort permutes a fixed Integer array. }
 const MAX_SORT_KEYS = 512;
-var i, j, n, t: Integer; r, sep: AnsiString;
+var i, j, cnt, t: Integer;
     ks: TPyList;
     order: array[0..MAX_SORT_KEYS - 1] of Integer;
     doSort: Boolean;
 begin
-  n := d.count;
-  if n = 0 then
+  cnt := d.count;
+  if cnt = 0 then
   begin
-    JsonPyDumpDict := '{}';
+    JsonPyPut(buf, n, '{}');
     exit;
   end;
   ks := d.keylist;   { a fresh list, ours to release: it leaked two blocks per dumps() }
   try
-  doSort := sortKeys and (n <= MAX_SORT_KEYS);
+  doSort := sortKeys and (cnt <= MAX_SORT_KEYS);
   if doSort then
   begin
-    for i := 0 to n - 1 do order[i] := i;
-    for i := 0 to n - 2 do
-      for j := 0 to n - 2 - i do
+    for i := 0 to cnt - 1 do order[i] := i;
+    for i := 0 to cnt - 2 do
+      for j := 0 to cnt - 2 - i do
         if pystr_of(ks.at(order[j])) > pystr_of(ks.at(order[j + 1])) then
         begin
           t := order[j]; order[j] := order[j + 1]; order[j + 1] := t;
         end;
   end;
-  r := '{';
-  sep := '';
-  for i := 0 to n - 1 do
+  JsonPyPut(buf, n, '{');
+  for i := 0 to cnt - 1 do
   begin
     if doSort then j := order[i] else j := i;
+    if i > 0 then
+      if indent > 0 then JsonPyPut(buf, n, ',') else JsonPyPut(buf, n, ', ');
+    JsonPyPutIndent(buf, n, indent, depth + 1);
     { a JSON object key is always a STRING. Python allows an int key and
       str()s it on the way out, which is what pystr_of does. }
-    r := r + sep + JsonPyIndentStr(indent, depth + 1)
-         + EscapeStr(pystr_of(ks.at(j))) + ': '
-         + JsonPyDumpValue(d.fetch(ks.at(j)), indent, depth + 1, sortKeys);
-    if indent > 0 then sep := ',' else sep := ', ';
+    JsonPyPut(buf, n, EscapeStr(pystr_of(ks.at(j))));
+    JsonPyPut(buf, n, ': ');
+    JsonPyDumpInto(buf, n, d.fetch(ks.at(j)), indent, depth + 1, sortKeys);
   end;
-  JsonPyDumpDict := r + JsonPyIndentStr(indent, depth) + '}';
+  JsonPyPutIndent(buf, n, indent, depth);
+  JsonPyPut(buf, n, '}');
   finally
     PXXObjRelease(Pointer(ks));
   end;
 end;
 
-function JsonPyDumpValue(const v: Variant; indent, depth: Integer;
-                         sortKeys: Boolean): AnsiString;
+procedure JsonPyDumpInto(var buf: AnsiString; var n: Integer; const v: Variant;
+                         indent, depth: Integer; sortKeys: Boolean);
 var o: TObject;
 begin
   { The int family is more than one tag — VT_INT (1) and VT_INT64 (2) are the
@@ -747,20 +768,20 @@ begin
     this wrong is not a wrong string but an exception, since the else-branch
     below refuses what it does not recognise. }
   case pyvartag(v) of
-    0: JsonPyDumpValue := 'null';
-    4: if pyvar_to_bool(v) then JsonPyDumpValue := 'true'
-       else JsonPyDumpValue := 'false';
-    1, 2: JsonPyDumpValue := IntToStr(pyvar_to_int(v));
-    3, 5: JsonPyDumpValue := JsonPyNumStr(pyvar_to_float(v));
-    6: JsonPyDumpValue := EscapeStr(pystr_of(v));
+    0: JsonPyPut(buf, n, 'null');
+    4: if pyvar_to_bool(v) then JsonPyPut(buf, n, 'true')
+       else JsonPyPut(buf, n, 'false');
+    1, 2: JsonPyPut(buf, n, IntToStr(pyvar_to_int(v)));
+    3, 5: JsonPyPut(buf, n, JsonPyNumStr(pyvar_to_float(v)));
+    6: JsonPyPut(buf, n, EscapeStr(pystr_of(v)));
     7:
       begin
         o := TObject(pyvarobj(v));
-        if o = nil then JsonPyDumpValue := 'null'
+        if o = nil then JsonPyPut(buf, n, 'null')
         else if o is TPyList then
-          JsonPyDumpValue := JsonPyDumpList(TPyList(o), indent, depth, sortKeys)
+          JsonPyDumpList(buf, n, TPyList(o), indent, depth, sortKeys)
         else if o is TPyDict then
-          JsonPyDumpValue := JsonPyDumpDict(TPyDict(o), indent, depth, sortKeys)
+          JsonPyDumpDict(buf, n, TPyDict(o), indent, depth, sortKeys)
         else
           raise EJSONError.Create('json: object of this type is not serializable');
       end;
@@ -771,8 +792,13 @@ end;
 
 function dumps(const obj: Variant; indent: Integer;
                ensure_ascii: Boolean; sort_keys: Boolean): AnsiString;
+var buf: AnsiString; n: Integer;
 begin
-  dumps := JsonPyDumpValue(obj, indent, 0, sort_keys);
+  buf := '';
+  n := 0;
+  JsonPyDumpInto(buf, n, obj, indent, 0, sort_keys);
+  SetLength(buf, n);
+  dumps := buf;
 end;
 
 { The value tree -> the Python value world. }
