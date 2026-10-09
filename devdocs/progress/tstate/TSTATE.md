@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `59caf859488c` | 2026-10-09T15:44:35Z | RED (native) | 454.2s | `f159f2ee43df` RED |
+| borg | `59caf859488c` | 2026-10-09T16:08:34Z | RED (full) | 1398.4s | `59caf859488c` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `f159f2ee43df` on borg, 2026-10-09T15:30:54Z (13m ago).**
+**Newest full tier in the fleet: `59caf859488c` on borg, 2026-10-09T16:08:34Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `f159f2ee43df` | RED | 13m | — (newest) |
+| borg | `59caf859488c` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -31,3 +31,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@1** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected (borg): bad `39225dde3632`, last good `62fc7c1e802a`, 7 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2 (borg): bad `39225dde3632`, last good `62fc7c1e802a`, 7 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_dataclass_order.npy** — test/test_nilpy_dataclass_order.npy test/test_nilpy_dataclass_order.expected +2 (borg): bad `39225dde3632`, last good `62fc7c1e802a`, 7 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy@2** — test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy tools/assert_no_leak.sh +1 (borg): bad `59caf859488c`, last good `f159f2ee43df`, 1 commit(s) in range
