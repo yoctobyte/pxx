@@ -23,3 +23,11 @@ def f3() -> tuple:
 
 def f4() -> float:
     return first((3.0, 4.0)) + head([5.0, 6.0])
+
+
+def f5() -> float:
+    # a FUNCTION-LOCAL renaming import: `f` holds the function object, so
+    # vec.first must take the variant ABI or `f(a)` reads garbage
+    from .vec import first as f
+    a = (7.0, 8.0)
+    return f(a)

@@ -39551,7 +39551,23 @@ function PyDValKindAt(j: Integer; inImport: Boolean): Integer;
        stream, so it is deliberately NOT answered here. See PyDValDotQualifies. }
 begin
   Result := 0;
-  if inImport then Exit;
+  if inImport then
+  begin
+    { `from M import NAME as ALIAS` IS a value use of NAME: the alias is a
+      variable bound to the function object (PyFlushImportAliasesFrom), and a
+      call through it takes the variant ABI. Left out, the def kept its typed
+      ABI and `ALIAS(t)` handed a boxed variant to `a: tuple` -- IndexError
+      or a segfault (TSP's function-local `from vec import first as f`).
+      `import NAME as ALIAS` matches too -- the predicate cannot see whether
+      the statement began with `from` -- which costs only a def that shares
+      a module's name the variant ABI: slower, never wrong. }
+    if (Tokens[j].Kind = tkIdent) and (j >= 1) and
+       (j + 2 < MainProgramTokCount) and
+       (Tokens[j + 1].Kind = tkIdent) and TokenCaseEqual(j + 1, 'as') and
+       ((Tokens[j - 1].Kind in [tkComma, tkLParen, tkUses])) then
+      Result := 1;
+    Exit;
+  end;
   if Tokens[j].Kind <> tkIdent then Exit;
   if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
           ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
@@ -45722,7 +45738,7 @@ end;
 procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
                            isCtor: Boolean;
                            var tk: TTypeKind; var fldRec, fldSig: Integer);
-var rhsAt, k2: Integer; rhsName: AnsiString;
+var rhsAt, k2, dotFi: Integer; rhsName: AnsiString;
 begin
   if fldAnn > 0 then
   begin
@@ -45853,6 +45869,30 @@ begin
       tk := PyHeaderParamType(methodStart, j, rhsName);
       fldSig := PyAnnLastProcSig;
       fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+      { ...but `self.elev = runway.alt` is the parameter's ATTRIBUTE, not the
+        parameter. The fallback typed the field as runway's class, and every
+        later `f(lat, lon, self.elev)` was "no overload ... (Double, Double,
+        class)" (TSP). Follow ONE attribute through the parameter's class when
+        it declares that field; anything longer, or a member the class does
+        not (yet) declare, is a dynamic read -- a variant. }
+      if (rhsAt + 2 < k2) and (Tokens[rhsAt + 1].Kind = tkDot) and
+         (Tokens[rhsAt + 2].Kind = tkIdent) and (tk <> tyUnknown) then
+      begin
+        dotFi := -1;
+        if (tk = tyClass) and (fldRec >= REC_UCLASS_BASE) and (rhsAt + 3 = k2) then
+          dotFi := FindUField(fldRec - REC_UCLASS_BASE, GetTokenStr(rhsAt + 2));
+        if dotFi >= 0 then
+        begin
+          tk := IntToTypeKind(UFldTk[dotFi]);
+          fldRec := UFldRec_[dotFi];
+        end
+        else
+        begin
+          tk := tyVariant;
+          fldRec := REC_NONE;
+        end;
+        fldSig := -1;
+      end;
     end;
     if tk = tyUnknown then
     begin

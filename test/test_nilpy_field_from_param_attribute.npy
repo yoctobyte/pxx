@@ -1,0 +1,40 @@
+# `self.elev = runway.alt`: a field assigned a class-typed PARAMETER'S
+# ATTRIBUTE takes the attribute's type, not the parameter's class. It was
+# typed as the class, and `f(lat, lon, self.elev)` was "no overload of f
+# matches (Double, Double, class)" (TSP, a dataclass Runway).
+from dataclasses import dataclass
+
+
+@dataclass
+class Runway:
+    key: str
+    lat: float
+    spoken: str = ""
+    alt: float = 0.0
+
+
+class Inner:
+    def __init__(self, depth: int):
+        self.depth = depth
+
+
+class Outer:
+    def __init__(self, inner: Inner):
+        self.inner = inner
+
+
+def f(lat: float, lon: float, h: float) -> float:
+    return lat + lon + h
+
+
+class E:
+    def __init__(self, runway: Runway, outer: Outer) -> None:
+        lat, lon = runway.lat * 2.0, runway.lat * 3.0
+        self.elev = runway.alt
+        self.name = runway.key
+        self.deep = outer.inner.depth
+        self.x = f(lat, lon, self.elev)
+
+
+e = E(Runway("a", 1.0, alt=5.0), Outer(Inner(7)))
+print(e.x, e.elev, e.name, e.deep + 1)
