@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: 0BSD
-"""mimic_copy -- CPython's `copy.copy`, for the container cases.
+"""mimic_copy -- CPython's `copy.copy` and `copy.deepcopy`, for the container cases.
 
 Reached as `import copy`, which the NilPy import resolver maps to this file and
 announces (`note: copy -> mimic_copy (shim, subset)`). Not named `copy.py`: no
@@ -26,11 +26,14 @@ SCOPE. `html5lib/treebuilders/etree.py` does `from copy import copy` and
 applies it to an element's attribute dict. Lists, sets and the immutables are
 here because they are the same dispatch and cost a line each.
 
-DELIBERATELY ABSENT: `deepcopy`. It is not a bigger version of this -- it needs
-the memo table and the same introspection protocol to recurse through arbitrary
-objects, and a "deepcopy" that only went one level down would be a shallow copy
-under a name that promises otherwise. A caller who needs it gets a loud
-unresolved-name error.
+`deepcopy`, FOR THE SAME SUBSET. It recurses through dicts, lists, sets and
+tuples and keeps the immutables, with CPython's memo, so a container reached
+twice is copied once and shared in the copy as it was in the original, and a
+cycle terminates. Anything else RAISES, for the reason copy() does. That is
+exactly a JSON-shaped document -- TSP's blueprint editor deep-copies its doc
+for every undo step. A "deepcopy" that stopped one level down would be a
+shallow copy under a name that promises otherwise, which is why it recurses
+fully or refuses.
 """
 
 
@@ -63,3 +66,41 @@ def copy(x):
         "__reduce_ex__ introspection that NilPy does not have, and returning "
         "the object unchanged would silently share the state you asked to "
         "copy (lib/rtl/mimic_copy.py)")
+
+
+def deepcopy(x, memo=None):
+    """A deep copy of builtin containers, recursively; anything else raises."""
+    if memo is None:
+        memo = {}
+    if x is None or isinstance(x, (str, bytes, int, float, bool)):
+        return x
+    k = id(x)
+    if k in memo:
+        return memo[k]
+    if isinstance(x, dict):
+        d = {}
+        memo[k] = d
+        for key in x:
+            d[key] = deepcopy(x[key], memo)
+        return d
+    if isinstance(x, list):
+        out = []
+        memo[k] = out
+        for e in x:
+            out.append(deepcopy(e, memo))
+        return out
+    if isinstance(x, tuple):
+        t = tuple([deepcopy(e, memo) for e in x])
+        memo[k] = t
+        return t
+    if isinstance(x, set):
+        st = set(x)      # elements are hashable, so immutable here
+        memo[k] = st
+        return st
+    if isinstance(x, frozenset):
+        return x
+    raise Error(
+        "copy.deepcopy: this shim copies builtin containers only (dict, list, "
+        "tuple, set and the immutables), and got something else. Copying an "
+        "arbitrary object needs __deepcopy__ / __reduce_ex__ introspection "
+        "that NilPy does not have (lib/rtl/mimic_copy.py)")

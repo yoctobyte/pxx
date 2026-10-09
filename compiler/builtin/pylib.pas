@@ -1391,6 +1391,12 @@ function pyvar_print_of(const v: Variant): AnsiString;
   keeping it here rather than injecting a space at the call site is what makes
   `print("a", *[])` print `a` and not `a `, since an empty list adds nothing. }
 function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
+{ `print` taken as a VALUE (`log = print`, `def run(log=print)`): a collecting
+  callee, so the frontend marks its slot 0 as `*args` and every positional
+  argument of a call through the value arrives here as one tuple. Keywords
+  (sep=, end=) through the value are refused by the bridge, which has no names
+  for a Pascal routine -- loud, not approximated. }
+procedure pyprint_value(args: TPyList);
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
@@ -19029,6 +19035,136 @@ begin
                                             a4, a5, a6, a7, noNames, noVals);
 end;
 
+type
+  { Every slot as a POINTER. A `const v: Variant` parameter travels as the
+    address of the variant on every backend (measured: x86-64, i386, aarch64,
+    arm32, riscv32, xtensa call0 and windowed), and a collector's TPyList is
+    a pointer too -- so one ladder reaches a callee whose parameters MIX the
+    two, which the all-Variant ladders above cannot. }
+  TPyCbQ1 = function(p0: Pointer): Variant;
+  TPyCbQ2 = function(p0, p1: Pointer): Variant;
+  TPyCbQ3 = function(p0, p1, p2: Pointer): Variant;
+  TPyCbQ4 = function(p0, p1, p2, p3: Pointer): Variant;
+  TPyCbQ5 = function(p0, p1, p2, p3, p4: Pointer): Variant;
+  TPyCbQ6 = function(p0, p1, p2, p3, p4, p5: Pointer): Variant;
+  TPyCbQ7 = function(p0, p1, p2, p3, p4, p5, p6: Pointer): Variant;
+  TPyCbQ8 = function(p0, p1, p2, p3, p4, p5, p6, p7: Pointer): Variant;
+  TPyCbQ9 = function(p0, p1, p2, p3, p4, p5, p6, p7, p8: Pointer): Variant;
+  TPyCbQP1 = procedure(p0: Pointer);
+  TPyCbQP2 = procedure(p0, p1: Pointer);
+  TPyCbQP3 = procedure(p0, p1, p2: Pointer);
+  TPyCbQP4 = procedure(p0, p1, p2, p3: Pointer);
+  TPyCbQP5 = procedure(p0, p1, p2, p3, p4: Pointer);
+  TPyCbQP6 = procedure(p0, p1, p2, p3, p4, p5: Pointer);
+  TPyCbQP7 = procedure(p0, p1, p2, p3, p4, p5, p6: Pointer);
+  TPyCbQP8 = procedure(p0, p1, p2, p3, p4, p5, p6, p7: Pointer);
+  TPyCbQP9 = procedure(p0, p1, p2, p3, p4, p5, p6, p7, p8: Pointer);
+
+{ A dynamic call into a COLLECTING callee that carries its signature. The
+  callee's slots are numbered by DECLARATION -- fixed parameters, the `*args`
+  slot, then keyword-only ones -- while the caller's positional arguments are
+  numbered by position, and past the star the two disagree: in
+  `def p(*args, sep=" ")` slot 1 is `sep`, and the caller's second positional
+  argument is the tuple's second element. The general bridge merged them in
+  one array, so `out = p; out("a", 1)` handed 1 to `sep`, and the slots after
+  the star were never passed at all (`sep.join` on an int, or garbage). Here
+  each slot is staged on its own: fixed slots from positions, the tuple from
+  the surplus, every other slot from a keyword or the def-time default. }
+function PyBoundCallStarSig(b: PPyBoundRec; nPos: Integer;
+                            const av: array of Variant;
+                            kwNames, kwVals: TPyList): Variant;
+var sr: PPySigRec; si, n, totN, i, j, hit, m: Integer;
+    slots: array[0..7] of Variant; bnd: array[0..7] of Boolean;
+    ptr: array[0..8] of Pointer;
+    star: TPyList; kn: AnsiString; dp, code: Pointer;
+    q1: TPyCbQ1; q2: TPyCbQ2; q3: TPyCbQ3; q4: TPyCbQ4; q5: TPyCbQ5;
+    q6: TPyCbQ6; q7: TPyCbQ7; q8: TPyCbQ8; q9: TPyCbQ9;
+    r1: TPyCbQP1; r2: TPyCbQP2; r3: TPyCbQP3; r4: TPyCbQP4; r5: TPyCbQP5;
+    r6: TPyCbQP6; r7: TPyCbQP7; r8: TPyCbQP8; r9: TPyCbQP9;
+begin
+  Result := pynone;
+  sr := PPySigRec(b^.Sig);
+  si := b^.StarIdx;
+  totN := Integer(sr^.TotN);
+  { a TRAILING star is stripped from the record (EmitPySignatures), so the
+    tuple's slot is one past the recorded ones }
+  n := totN;
+  if n < si + 1 then n := si + 1;
+  if n > 8 then
+    raise TypeError.Create('a collecting callee reached as a value takes at '
+      + 'most 8 declared parameters, got ' + pystr_of(Int64(n)));
+  for i := 0 to 7 do bnd[i] := False;
+  for i := 0 to nPos - 1 do
+    if i < si then
+    begin
+      slots[i] := av[i];
+      bnd[i] := True;
+    end;
+  star := TPyList.Create;
+  for i := si to nPos - 1 do star.append(av[i]);
+  pylist_mark_tuple(star);
+  bnd[si] := True;
+  if kwNames <> nil then
+    for j := 0 to kwNames.count - 1 do
+    begin
+      kn := pystr_of(kwNames.at(j));
+      hit := PySigFindParam(b^.Sig, kn);
+      if (hit < 0) or (hit = si) or (hit >= n) then
+        raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+      if bnd[hit] then
+        raise TypeError.Create('got multiple values for argument ''' + kn + '''');
+      slots[hit] := kwVals.at(j);
+      bnd[hit] := True;
+    end;
+  dp := sr^.Dflts;
+  for i := 0 to n - 1 do
+  begin
+    if bnd[i] then Continue;
+    if (dp <> nil) and (i < totN) and
+       (PPyVarRec(NativeInt(dp) + i * 16)^.VType <> -1) then
+      slots[i] := PVariant(NativeInt(dp) + i * 16)^
+    else
+      raise TypeError.Create('missing required argument ' + pystr_of(Int64(i)));
+  end;
+  m := 0;
+  if b^.Recv <> nil then
+  begin
+    ptr[0] := b^.Recv;
+    m := 1;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    if i = si then ptr[m] := Pointer(star) else ptr[m] := @slots[i];
+    Inc(m);
+  end;
+  code := b^.Code;
+  if b^.IsFunc then
+    case m of
+      1: begin q1 := TPyCbQ1(code); Result := q1(ptr[0]); end;
+      2: begin q2 := TPyCbQ2(code); Result := q2(ptr[0], ptr[1]); end;
+      3: begin q3 := TPyCbQ3(code); Result := q3(ptr[0], ptr[1], ptr[2]); end;
+      4: begin q4 := TPyCbQ4(code); Result := q4(ptr[0], ptr[1], ptr[2], ptr[3]); end;
+      5: begin q5 := TPyCbQ5(code); Result := q5(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]); end;
+      6: begin q6 := TPyCbQ6(code); Result := q6(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]); end;
+      7: begin q7 := TPyCbQ7(code); Result := q7(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6]); end;
+      8: begin q8 := TPyCbQ8(code); Result := q8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]); end;
+      9: begin q9 := TPyCbQ9(code); Result := q9(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7], ptr[8]); end;
+    end
+  else
+    case m of
+      1: begin r1 := TPyCbQP1(code); r1(ptr[0]); end;
+      2: begin r2 := TPyCbQP2(code); r2(ptr[0], ptr[1]); end;
+      3: begin r3 := TPyCbQP3(code); r3(ptr[0], ptr[1], ptr[2]); end;
+      4: begin r4 := TPyCbQP4(code); r4(ptr[0], ptr[1], ptr[2], ptr[3]); end;
+      5: begin r5 := TPyCbQP5(code); r5(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]); end;
+      6: begin r6 := TPyCbQP6(code); r6(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]); end;
+      7: begin r7 := TPyCbQP7(code); r7(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6]); end;
+      8: begin r8 := TPyCbQP8(code); r8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]); end;
+      9: begin r9 := TPyCbQP9(code); r9(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7], ptr[8]); end;
+    end;
+  PXXObjRelease(Pointer(star));
+end;
+
 function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
                               const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
@@ -19068,6 +19204,13 @@ begin
   av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
   av[4] := a4; av[5] := a5; av[6] := a6; av[7] := a7;
   for i := nPos to MAXSLOT do av[i] := pynone;
+  { a collecting callee with a signature: slots and positions disagree past
+    the star, so it is staged on its own -- see PyBoundCallStarSig }
+  if (b^.StarIdx >= 0) and (b^.Sig <> nil) then
+  begin
+    Result := PyBoundCallStarSig(b, nPos, av, kwNames, kwVals);
+    Exit;
+  end;
   for i := 0 to MAXSLOT do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
@@ -24597,6 +24740,11 @@ begin
     if (i > 0) or leadSep then Result := Result + ' ';
     Result := Result + pyvar_print_of(l[i]);
   end;
+end;
+
+procedure pyprint_value(args: TPyList);
+begin
+  WriteLn(pyprint_star(args, False));
 end;
 
 function pylist_mark_tuple(l: TPyList): TPyList;

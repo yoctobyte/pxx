@@ -1,0 +1,13 @@
+{'name': 'sts', 'parts': {'et': [1, 2, {'m': 3.5}]}, 'staging': [(1, 2)]}
+{'name': 'sts', 'parts': {'et': [1, 2, {'m': 9.0}]}, 'staging': [(1, 2), (3, 4)]}
+[[1, 2], [1, 2]] [1]
+True 2
+b'ab\x00\x00\x00\x07\x00\x00\x00' 9
+b'ab\x00\x00' 7 (b'xyz',)
+hello 3
+
+sts: armed
+1
+a 1
+b-2
+c!

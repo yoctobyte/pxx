@@ -89,8 +89,9 @@ function perf_counter: Double;
 
 { Seconds since the epoch to a UTC struct_time. A fractional or negative time
   rounds toward minus infinity, as CPython's does, so -0.5 is 23:59:59 the
-  day before. }
-function gmtime(secs: Double): struct_time;
+  day before. The no-argument form is the current time. }
+function gmtime(secs: Double): struct_time; overload;
+function gmtime: struct_time; overload;
 
 { Seconds since the epoch to LOCAL time: the zone TZ names, else
   /etc/localtime (a TZif file, footer rule included), with tm_isdst set. No
@@ -626,6 +627,11 @@ begin
   off := TzOffsetAt(whole, dst);
   Result := gmtime(Double(whole + off));
   Result.tm_isdst := dst;
+end;
+
+function gmtime: struct_time;
+begin
+  Result := gmtime(time());
 end;
 
 function localtime: struct_time;

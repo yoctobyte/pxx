@@ -19124,6 +19124,8 @@ begin
   else if nm = 'id'    then helperNm := 'pyid_v'
   else if nm = 'ord'   then helperNm := 'pyord_v'
   else if nm = 'round' then helperNm := 'pyround1_v'
+  { variadic: PyBuiltinValueNameAhead marks the helper's slot 0 as `*args` }
+  else if nm = 'print' then helperNm := 'pyprint_value'
   else begin helperNm := ''; Result := False; end;
 end;
 
@@ -19156,6 +19158,9 @@ begin
   if PyUserShadowsProc(CurTok.SVal) then Exit;                             { a user def }
   hpi := FindProc(helperNm);
   if hpi < 0 then Exit;                  { pylib not linked -- as the call side tests }
+  { `print` collects: a call through the value packs every positional argument
+    into the one TPyList pyprint_value takes (PyBoundCallStar) }
+  if helperNm = 'pyprint_value' then ProcPyStarIdx[hpi] := 0;
   Result := True;
 end;
 
@@ -50738,7 +50743,7 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
       `__init__`, or ''; see PyRelImportMemberPackage }
     impPkg: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
-    aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi: Integer;
+    aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi, aliasUnit: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
@@ -51101,7 +51106,25 @@ begin
                     Break;
                   end;
               aliasRealProc := -1;
-              if aliasRealSym < 0 then aliasRealProc := FindProc(impReal);
+              { The EXPORTING module's own def wins over a same-named var some
+                OTHER module made. Flat FindSym answers the first `first` it
+                knows, and once a sibling module had re-exported vec's `first`
+                (its own `from .vec import first`), that was the sibling's
+                re-export VAR: this module then bound to the var, called vec's
+                typed def through it dynamically, and handed `a: tuple` a boxed
+                variant -- a segfault (TSP: every module imports from vec). }
+              if aliasRealSym >= 0 then
+              begin
+                aliasUnit := FindUnitOrAlias(impName);
+                if (aliasUnit >= 0) and (FindSymInUnit(impReal, aliasUnit) < 0) and
+                   (FindProcInUnit(impReal, aliasUnit) >= 0) then
+                begin
+                  aliasRealSym := -1;
+                  aliasRealProc := FindProcInUnit(impReal, aliasUnit);
+                end;
+              end;
+              if (aliasRealSym < 0) and (aliasRealProc < 0) then
+                aliasRealProc := FindProc(impReal);
               if (aliasRealSym >= 0) or (aliasRealProc >= 0) then
               begin
                 aliasSym := PyProgSym(impAlias);

@@ -8539,6 +8539,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_subpipes26 | diff -u test/test_nilpy_subprocess_pipes.expected -
 	./$(COMPILER) test/test_nilpy_field_from_param_attribute.npy $(TESTTMP)/test_nilpy_fldpattr26
 	$(TESTTMP)/test_nilpy_fldpattr26 | diff -u test/test_nilpy_field_from_param_attribute.expected -
+	./$(COMPILER) test/test_nilpy_tsp_batch2.npy $(TESTTMP)/test_nilpy_tspb226
+	$(TESTTMP)/test_nilpy_tspb226 | diff -u test/test_nilpy_tsp_batch2.expected -
 	# Dynamic method calls take a direct path (PyDynMethFast) for the common
 	# shape and the full PyHostCall bridge otherwise; both answer as CPython.
 	# Also the negative name filter in front of the dynamic-attribute store.

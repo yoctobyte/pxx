@@ -34,9 +34,13 @@ unit mimic_struct;
                not a literal, so a compile-time format parser in the frontend
                was never an option; this parses at run time, as CPython does.
 
-  ABSENT, and each would be a hard error rather than a wrong answer: `s`/`p`
-  (byte strings), `?` (bool), `c` (char), `n`/`N`/`P` (native-size ints),
-  `e` (half floats), `x` (pad bytes), and `iter_unpack`.
+  `s` (a byte string: the count is its LENGTH, it is ONE item, and pack pads
+  with NULs or truncates, as CPython does) and `x` (pad bytes: zeros on pack,
+  skipped on unpack, no argument) joined 2026-10-09 for That Space Program.
+
+  ABSENT, and each would be a hard error rather than a wrong answer: `p`
+  (Pascal strings), `?` (bool), `c` (char), `n`/`N`/`P` (native-size ints),
+  `e` (half floats), and `iter_unpack`.
   `pack_into` joined the module 2026-09-25, for MicroPython's umqtt.simple
   (`struct.pack_into("!H", pkt, 2, pid)`); it is still absent on Struct.
   `unpack_from` was in that list until 2026-09-19, when That Space Program's
@@ -310,7 +314,7 @@ begin
   cnt := 0;
   while NextItem(fmt, i, c, cnt) do
   begin
-    sz := ItemSize(c);
+    if (c = 's') or (c = 'x') then sz := 1 else sz := ItemSize(c);
     if sz = 0 then
       raise error.Create('bad char in struct format: ' + c);
     n := n + sz * cnt;
@@ -346,7 +350,7 @@ var i, off, cnt, sz, k, ai: Integer;
     i64: Int64;   u64: QWord;
     b8: Byte;
     outp: PS_U8;
-    res: TPyBytes;
+    res, sb: TPyBytes;
 begin
   total := calcsize(fmt);
   { A LOCAL and not the function name. `pack_list.FData` reads the result as a
@@ -361,6 +365,27 @@ begin
   cnt := 0;
   while NextItem(fmt, i, c, cnt) do
   begin
+    if c = 'x' then
+    begin
+      { pad: TPyBytes.Create zero-fills, so there is nothing to write }
+      off := off + cnt;
+      Continue;
+    end;
+    if c = 's' then
+    begin
+      { ONE argument, `cnt` bytes: shorter is NUL-padded, longer truncated }
+      if ai >= len(args) then
+        raise error.Create('pack expected more arguments than were given');
+      if pyvartag(args.at(ai)) <> 7 then
+        raise error.Create('argument for ''s'' must be a bytes object');
+      sb := TPyBytes(pyvarobj(args.at(ai)));
+      sz := sb.FLen;
+      if sz > cnt then sz := cnt;
+      if sz > 0 then Move(sb.FData^, (PByte(outp) + off)^, sz);
+      off := off + cnt;
+      Inc(ai);
+      Continue;
+    end;
     sz := ItemSize(c);
     isf := IsFloatCode(c);
     for k := 1 to cnt do
@@ -510,6 +535,7 @@ var i, off, cnt, sz, k: Integer;
     b8: Byte;
     inp: PS_U8;
     res: TPyList;
+    sb: TPyBytes;
 begin
   res := TPyList.Create;
   { A TUPLE, not a list. One representation, three Python types, and the kind is
@@ -527,6 +553,21 @@ begin
   cnt := 0;
   while NextItem(fmt, i, c, cnt) do
   begin
+    if c = 'x' then
+    begin
+      off := off + cnt;
+      Continue;
+    end;
+    if c = 's' then
+    begin
+      sb := TPyBytes.Create(cnt);
+      if cnt > 0 then Move((PByte(inp) + off)^, sb.FData^, cnt);
+      sb.FLen := cnt;
+      res.append(sb);
+      PXXObjRelease(Pointer(sb));   { the list holds it now }
+      off := off + cnt;
+      Continue;
+    end;
     sz := ItemSize(c);
     isf := IsFloatCode(c);
     for k := 1 to cnt do

@@ -1,0 +1,49 @@
+# That Space Program, batch 2: copy.deepcopy of a JSON-shaped document,
+# time.gmtime() with no argument, struct's `s` and `x` codes, `print` as a
+# value, and a collecting def (`*args` then keyword-only) called through a
+# function value.
+import copy
+import struct
+import sys
+import time
+
+doc = {"name": "sts", "parts": {"et": [1, 2, {"m": 3.5}]}, "staging": [(1, 2)]}
+undo = copy.deepcopy(doc)
+doc["parts"]["et"][2]["m"] = 9.0
+doc["staging"].append((3, 4))
+print(undo)
+print(doc)
+shared = [1]
+pair = copy.deepcopy([shared, shared])
+pair[0].append(2)
+print(pair, shared)
+
+g = time.gmtime()
+print(g.tm_year > 2000, time.gmtime(86400).tm_mday)
+
+b = struct.pack("<4sxI", b"ab", 7)
+print(b, struct.calcsize("<4sxI"))
+s, n = struct.unpack("<4sxI", b)
+print(s, n, struct.unpack("<3s", b"xyz"))
+
+out = print
+out("hello", 3)
+out()
+
+
+def arm(key: str, log: object = print) -> int:
+    log("%s: armed" % key)
+    return 1
+
+
+print(arm("sts"))
+
+
+def say(*args, sep=" ", end="\n"):
+    sys.stdout.write(sep.join([str(a) for a in args]) + end)
+
+
+f = say
+f("a", 1)
+f("b", 2, sep="-")
+f("c", end="!\n")
