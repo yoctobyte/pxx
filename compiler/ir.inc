@@ -10848,6 +10848,56 @@ begin
   Result := IRLowerAST(tern);
 end;
 
+function IRIsShortCircuitBool(n: Integer): Boolean;
+{ A logical `and`/`or` the AN_BINOP short-circuit arm would lower -- the same
+  predicate, narrowed to BOOLEAN operands so no overload or bitwise shape can
+  reach the branch form below. }
+begin
+  Result := (n >= 0) and (ASTKind[n] = AN_BINOP) and
+    ((Integer(ASTIVal[n]) = Ord(tkAnd)) or (Integer(ASTIVal[n]) = Ord(tkOr))) and
+    (IntToTypeKind(ASTTk[n]) = tyBoolean) and
+    (IntToTypeKind(ASTTk[ASTLeft[n]]) = tyBoolean) and
+    (IntToTypeKind(ASTTk[ASTRight[n]]) = tyBoolean);
+end;
+
+function IRLowerCondJump(n, falseLabel, trueLabel: Integer): Integer;
+{ Lower a CONDITION as control flow: jump to falseLabel when it is false; when
+  it is true, jump to trueLabel or (trueLabel = -1) fall through. Returns the
+  first leaf's value node, which AN_IF uses as its block head.
+
+  A short-circuit `and`/`or` used to be lowered as a VALUE first -- each level
+  stored its operand into a hidden boolean temp, reloaded it, and branched on
+  the reload -- so `if (a = 0) or (b <> 0) or (c < d) then Exit` became a chain
+  of setcc/movzx/store/load/test pairs before the one branch that mattered.
+  builtinheap's PXXObjRetain guard, the hottest four-term `or` in lekkerzeilen,
+  compiled to 40 instructions of that. Branching on each leaf directly is what
+  the value form was always equivalent to; the evaluation order and the
+  skipped right operand are unchanged. }
+var tl, nx: Integer;
+begin
+  if IRIsShortCircuitBool(n) then
+  begin
+    if Integer(ASTIVal[n]) = Ord(tkAnd) then
+    begin
+      Result := IRLowerCondJump(ASTLeft[n], falseLabel, -1);
+      IRLowerCondJump(ASTRight[n], falseLabel, trueLabel);
+    end
+    else
+    begin
+      if trueLabel = -1 then tl := IRNewLabel else tl := trueLabel;
+      nx := IRNewLabel;
+      Result := IRLowerCondJump(ASTLeft[n], nx, tl);
+      IRAppend(IR_JUMP, tl, -1, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, nx, 0);
+      IRLowerCondJump(ASTRight[n], falseLabel, tl);
+      if trueLabel = -1 then IRAppend(IR_LABEL, -1, -1, -1, tl, 0);
+    end;
+    Exit;
+  end;
+  Result := IRLowerAST(n);
+  IRAppend(IR_JUMP_IF_FALSE, falseLabel, Result, -1, 0, 0);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var foaSym, foaSave: Integer;
     left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
@@ -18547,9 +18597,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       end;
       elseLabel := IRNewLabel;
       endLabel := IRNewLabel;
-      condNode := IRLowerAST(ASTLeft[node]);
+      condNode := IRLowerCondJump(ASTLeft[node], elseLabel, -1);
       first := condNode;
-      last := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
       { FLUSH PER ARM, not at the enclosing statement boundary.
 
         A by-value record argument temp is finalized by IRFlushPostCallIntf,
@@ -18793,8 +18842,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       startLabel := IRNewLabel;
       endLabel := IRNewLabel;
       startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
-      condNode := IRLowerAST(ASTLeft[node]);
-      last := IRAppend(IR_JUMP_IF_FALSE, endLabel, condNode, -1, 0, 0);
+      condNode := IRLowerCondJump(ASTLeft[node], endLabel, -1);
       
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
