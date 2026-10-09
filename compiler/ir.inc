@@ -6425,6 +6425,30 @@ begin
       IRIVal[arcArg2] := 1;   { statement: emit for effect }
     end;
     IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyPointer));
+    { A VARIANT parameter still wants a variant: the spill returned the raw
+      object, so a Pascal `parameters: Variant` read the object's own first
+      words as a tag and a payload -- sqlite3's `execute(q, (a, b) + row)`
+      bound every column NULL, silently, while the same tuple in a variable
+      worked (the variable reaches the boxing arm below; the spill exited
+      first). Box the owning temp through the ordinary assignment, which takes
+      its own reference, so the temp's release stays balanced. }
+    if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+       (not Procs[cpi].Params[pathIdx].IsArray) then
+    begin
+      caIdent := AllocNode(AN_IDENT);
+      ASTIVal[caIdent] := tmpSym;
+      ASTTk[caIdent] := Ord(tyClass);
+      tmpAddr := AllocVar('', tyVariant);
+      caArg1 := AllocNode(AN_IDENT);
+      ASTIVal[caArg1] := tmpAddr;
+      ASTTk[caArg1] := Ord(tyVariant);
+      caSlCall := AllocNode(AN_ASSIGN);
+      ASTLeft[caSlCall] := caArg1;
+      ASTRight[caSlCall] := caIdent;
+      IRLowerAST(caSlCall);
+      Result := IRAppend(IR_LEA, tmpAddr, -1, -1, 0, Ord(tyVariant));
+      Exit;
+    end;
     Result := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(tyClass));
     Exit;
   end;

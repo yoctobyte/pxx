@@ -1,0 +1,19 @@
+# A container BUILT in argument position (`(a, b) + row`, `list(s)`) passed to
+# a Pascal `parameters: Variant` reached it as the raw object, so sqlite3
+# bound every column NULL. Rows are tuples, as in CPython.
+import sqlite3
+
+db = sqlite3.connect(":memory:")
+db.execute("CREATE TABLE kf (oid TEXT, t_us INTEGER, x REAL, y REAL, z REAL, "
+           "vx REAL, vy REAL, vz REAL)")
+q = "INSERT INTO kf VALUES (?,?,?,?,?,?,?,?)"
+s = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+db.execute(q, ("literal", 1, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+p = ("var", 2) + s
+db.execute(q, p)
+db.execute(q, ("inline", 3) + s)
+db.execute(q, ("tuplecall", 4) + tuple(s))
+db.execute(q, ["list", 5] + list(s))
+for r in db.execute("SELECT oid, t_us, x FROM kf").fetchall():
+    print(r)
+print(db.execute("SELECT count(*) FROM kf WHERE x IS NULL").fetchone())

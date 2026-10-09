@@ -384,6 +384,7 @@ AN_ASSIGN Left argIdx
 AN_ASSIGN Left argSeq
 AN_ASSIGN Left asgn
 AN_ASSIGN Left attrFld
+AN_ASSIGN Left caArg1
 AN_ASSIGN Left caIdent
 AN_ASSIGN Left chMid
 AN_ASSIGN Left derefNode
@@ -478,6 +479,7 @@ AN_ASSIGN Right argAST
 AN_ASSIGN Right atDflt
 AN_ASSIGN Right bNode
 AN_ASSIGN Right baseNode
+AN_ASSIGN Right caIdent
 AN_ASSIGN Right caRhs
 AN_ASSIGN Right callN
 AN_ASSIGN Right callNode

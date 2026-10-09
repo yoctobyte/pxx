@@ -4087,6 +4087,8 @@ test-nilpy: $(COMPILER)
 	# run would make them fire on the wrong row.
 	./$(COMPILER) test/test_nilpy_the_sqlite3_module.npy $(TESTTMP)/test_nilpy_sqlite26
 	PXX_SQLTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_sqlite26 2>&1 | diff -u test/test_nilpy_the_sqlite3_module.expected -
+	./$(COMPILER) test/test_nilpy_a_built_container_passed_to_a_variant_parameter_is_boxed.npy $(TESTTMP)/test_nilpy_varbox26
+	$(TESTTMP)/test_nilpy_varbox26 | diff -u test/test_nilpy_a_built_container_passed_to_a_variant_parameter_is_boxed.expected -
 	# `**mapping` at a call WITH A RECEIVER -- method, constructor, or a
 	# dynamically-dispatched member. `f(**d)` on a plain FUNCTION reaches a
 	# different implementation and has always worked, so THE PLAIN-FUNCTION ROWS

@@ -366,6 +366,8 @@ begin
     else
       l.append(pynone);
   end;
+  { a row is a TUPLE in CPython, and prints as one }
+  pylist_mark_tuple(l);
   { The result TAKES OVER the new list's rc=1, as json's JsonPyFromTree does.
     `Result := TObject(l)` retained it (rc=2 against the caller's one
     release), so every row a query produced was kept with its values:
