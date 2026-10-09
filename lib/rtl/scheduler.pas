@@ -461,16 +461,19 @@ const
 
 type
   TReactor = record
-    coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
-    coStk   : array[0..MAX_CO-1] of Int64;       { usable stack base -- the canary lives here }
-    coStkMap: array[0..MAX_CO-1] of Int64;       { full mmap length, 0 = GetMem'd (no guard) }
-    coStkLen: array[0..MAX_CO-1] of Int64;       { usable stack bytes above coStk }
+    { The four stack columns are pointer-width: every CoSwitch stub stores sp
+      as one machine word, and on a 32-bit target Int64 columns cost 1 KB of
+      .bss for upper halves that are always zero (museum_landkaart, ESP32-C3). }
+    coSp    : array[0..MAX_CO-1] of NativeInt;   { saved stack pointer }
+    coStk   : array[0..MAX_CO-1] of NativeInt;   { usable stack base -- the canary lives here }
+    coStkMap: array[0..MAX_CO-1] of NativeInt;   { full mmap length, 0 = GetMem'd (no guard) }
+    coStkLen: array[0..MAX_CO-1] of NativeInt;   { usable stack bytes above coStk }
     coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
     coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
     coArg   : array[0..MAX_CO-1] of Pointer;
     coCount : Integer;
     curCo   : Integer;                           { running coroutine, -1 = scheduler }
-    schedSp : Int64;                             { scheduler's own saved sp }
+    schedSp : NativeInt;                         { scheduler's own saved sp }
     gEntry  : TCoroEntry;                        { handoff to CoStart }
     gArg    : Pointer;
     epfd    : Integer;                           { epoll instance, 0 = not created }
