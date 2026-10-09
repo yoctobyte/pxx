@@ -16770,6 +16770,20 @@ begin
     slot / array of managed): zero the whole extent. }
   if TargetArch = TARGET_X86_64 then
   begin
+    { A small whole-word extent (the 16-byte variant slot above all) is plain
+      stores: `rep stosb` pays a microcoded start-up of tens of cycles for
+      16 bytes, and a NilPy method zeroes one per variant temp. Measured on a
+      variant-arithmetic method: most of its self time was these sequences. }
+    if (nBytes <= 64) and ((nBytes and 7) = 0) then
+    begin
+      q := 0;
+      while q < nBytes do
+      begin
+        EmitB($48); EmitB($C7); EmitB($85); EmitI32(frameOff + q); EmitI32(0); { mov qword [rbp+off+q], 0 }
+        q := q + 8;
+      end;
+      Exit;
+    end;
     EmitB($48); EmitB($8D); EmitB($BD); EmitI32(frameOff);   { lea rdi, [rbp+off] }
     EmitB($48); EmitB($31); EmitB($C0);                      { xor rax, rax }
     EmitB($48); EmitB($C7); EmitB($C1); EmitI32(nBytes);     { mov rcx, nBytes }

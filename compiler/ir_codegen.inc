@@ -8973,6 +8973,16 @@ begin
           begin
             EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[symIdx].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
           end
+          else if (size <= 64) and ((size and 7) = 0) then
+          begin
+            { Whole words: plain stores, as EmitZeroFrameSlot does. }
+            i := 0;
+            while i < size do
+            begin
+              EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[symIdx].Offset + i); EmitI32(0); { mov qword [rbp+off+q], 0 }
+              i := i + 8;
+            end;
+          end
           else if size > 0 then
           begin
             EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[symIdx].Offset);  { lea rdi, [rbp+off] }
@@ -10982,6 +10992,25 @@ begin
              (HeapLockedCallProcIdx1 = 0) and
              (Procs[procIdx].Name = 'PXXClassFinalizeManaged') then
             HeapLockedCallProcIdx1 := procIdx + 1;
+
+          { PXXVarClear(@slot) -> the variant-clear BLOB. IR builds this call
+            to re-prepare the hidden-destination temp of EVERY variant-returning
+            call (IRAppendCall), so it runs once per variant operation: in a
+            NilPy loop of `a + (b - a) * 0.5` that is three per line. Through
+            the Pascal routine it cost two frames (PXXVarClear, then
+            PXXVarReleasePayload) to find that a float needs nothing released;
+            the blob is the same tag-range test and zeroing in a dozen
+            instructions, and is what every inline clear site already calls.
+            Measured on a variant-arithmetic loop: ~15% of samples inclusive
+            were these two frames. }
+          if (VariantClearBlobAddr <> 0) and (Length(Procs[procIdx].Name) = 11) and
+             (Procs[procIdx].Name = 'PXXVarClear') and (IRB[node] >= 0) and
+             (IRB[IRB[node]] < 0) then
+          begin
+            IREmitNode(IRA[IRB[node]]);                 { rax = @slot }
+            EmitVariantClear;
+            Exit;
+          end;
 
           if procIdx + 1 = HeapLockedCallProcIdx1 then
           begin
