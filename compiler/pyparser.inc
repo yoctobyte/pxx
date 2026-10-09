@@ -50448,7 +50448,7 @@ end;
   see the note at the statement-level call site for why the newline matters. }
 procedure PyParseOneImport;
 var impName, impAlias, impRoot: AnsiString;
-    impLevel: Integer;
+    impLevel: Integer; impParen: Boolean;
     { the unit key and language of a quoted import; see PyConsumeQuotedModule }
     impKey, impLang: AnsiString;
 begin
@@ -50499,6 +50499,10 @@ begin
       PyRelativeLevel := impLevel;
       PyParseImportUnit(impName);
     end;
+    { `from .mod import (A as B,` / `C)`: the parenthesised, line-broken list,
+      as in the unit arm of PyParseImportRun }
+    impParen := Eat(tkLParen);
+    if impParen then PySkipNewlines;
     while CurTok.Kind = tkIdent do
     begin
       Next;
@@ -50507,7 +50511,14 @@ begin
         Next;
         if CurTok.Kind = tkIdent then Next;
       end;
+      if impParen then PySkipNewlines;
       if not Eat(tkComma) then Break;
+      if impParen then PySkipNewlines;
+    end;
+    if impParen then
+    begin
+      PySkipNewlines;
+      Expect(tkRParen, ')');
     end;
   end
   else
