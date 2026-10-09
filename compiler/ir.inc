@@ -1240,6 +1240,19 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+function IRLowerCondJump(n, falseLabel, trueLabel: Integer): Integer; forward;
+function IRIsShortCircuitBool(n: Integer): Boolean; forward;
+var
+  { A condition leaf that is an inlinable BOOLEAN call: IRLowerCondJump names
+    the call node and its labels here, and IRInlineExpand -- when it splices
+    that very node's expression body -- lowers the body as control flow
+    instead of as a value. `if PyVarSlotManaged(t) then` inlines to
+    `(t = 6) or (t = 8193)` and was materialising it exactly as the value-form
+    `or` did before IRLowerCondJump existed. Keyed on the NODE so an inlinable
+    call nested in an argument can never pick the labels up. }
+  IRCondCallNode: Integer = -1;
+  IRCondFalseLbl, IRCondTrueLbl: Integer;
+  IRCondDone: Boolean = False;
 procedure IREmitCaughtExcFree(ownTmp, clsTmp: Integer; onUnwind: Boolean); forward;   { declared further down; IRLowerCleanupToDepth needs it to free a caught exception on an early exit OUT of its handler }
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRLowerVariantAsStr(argAST: Integer): Integer; forward;
@@ -8633,8 +8646,13 @@ var item, n, clonedRoot, tsym, identNode, aval, resSym, savedRetRecId: Integer;
     rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
     boundAST: array[0..MAX_PROC_PARAMS-1] of Integer;
     ptk: TTypeKind; anyImpure, argBoxed: Boolean;
+    condNode, condF, condT: Integer;
 begin
   IRInlineExpand := -1;
+  { taken and cleared on entry, before the arguments lower: they may contain
+    inlinable calls of their own }
+  condNode := IRCondCallNode; condF := IRCondFalseLbl; condT := IRCondTrueLbl;
+  IRCondCallNode := -1;
   { Pass 1: collect args + validate count (no IR emitted yet). }
   n := 0;
   item := ASTLeft[callNode];
@@ -8770,7 +8788,14 @@ begin
   else
   begin
     clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
-    IRInlineExpand := IRLowerAST(clonedRoot);
+    if (callNode = condNode) and IRIsShortCircuitBool(clonedRoot) then
+    begin
+      { a condition leaf -- see IRCondCallNode }
+      IRInlineExpand := IRLowerCondJump(clonedRoot, condF, condT);
+      IRCondDone := True;
+    end
+    else
+      IRInlineExpand := IRLowerAST(clonedRoot);
   end;
   Dec(InliningActive);
 end;
@@ -10894,7 +10919,20 @@ begin
     end;
     Exit;
   end;
+  if ASTKind[n] = AN_CALL then
+  begin
+    IRCondCallNode := n;
+    IRCondFalseLbl := falseLabel;
+    IRCondTrueLbl := trueLabel;
+    IRCondDone := False;
+  end;
   Result := IRLowerAST(n);
+  IRCondCallNode := -1;
+  if IRCondDone then
+  begin
+    IRCondDone := False;
+    Exit;
+  end;
   IRAppend(IR_JUMP_IF_FALSE, falseLabel, Result, -1, 0, 0);
 end;
 
