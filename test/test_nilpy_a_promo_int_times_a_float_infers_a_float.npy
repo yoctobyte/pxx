@@ -1,0 +1,18 @@
+# A promotable int (an int that may pass 2^63) times a float is a float, and
+# the lowering already computes it so. The return-type inference of the def
+# below refused the pair instead ("annotate the type / too dynamic [a=28 b=19]")
+# at the def header -- TSP's render.py timeline bar, x1 promotable.
+import math
+
+def bar(w: int, big: int) -> None:
+    x0 = int(w * 0.52)
+    x1 = big - w
+    def xat(t: int) -> float:
+        f = min(1.0, t / 10)
+        if t > 3:
+            return x0 + (x1 - x0) * (1.0 - math.sqrt(1.0 - f))
+        return x0 + (x1 - x0) * math.sqrt(f)
+    print(round(xat(5), 3), round(xat(2), 3))
+
+bar(1000, 2 ** 40)
+bar(1000, 5000)

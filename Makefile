@@ -6241,6 +6241,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_starambig26 | diff -u test/test_nilpy_a_star_call_on_an_ambiguous_receiver_dispatches_on_its_class.expected -
 	./$(COMPILER) test/test_nilpy_a_star_call_on_a_boxed_seven_argument_method.npy $(TESTTMP)/test_nilpy_starbox726
 	$(TESTTMP)/test_nilpy_starbox726 | diff -u test/test_nilpy_a_star_call_on_a_boxed_seven_argument_method.expected -
+	./$(COMPILER) test/test_nilpy_a_promo_int_times_a_float_infers_a_float.npy $(TESTTMP)/test_nilpy_promofl26
+	$(TESTTMP)/test_nilpy_promofl26 | diff -u test/test_nilpy_a_promo_int_times_a_float_infers_a_float.expected -
+	cd /tmp && $(CURDIR)/$(COMPILER) $(CURDIR)/test/nilpy_dvalpkg/__main__.py $(TESTTMP)/test_nilpy_dvalpkg26
+	$(TESTTMP)/test_nilpy_dvalpkg26 | diff -u test/test_nilpy_a_def_used_as_a_value_by_a_later_module.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

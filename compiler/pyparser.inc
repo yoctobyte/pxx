@@ -550,7 +550,7 @@ var
   PyEnclUp: array[0..PY_ENCL_MAX - 1] of Integer;
   PyEnclDisagreements: Integer;   { -dPXX_ENCL_CROSSCHECK only }
 
-  { Value-use candidate table. Every position in [0, MainProgramTokCount) that
+  { Value-use candidate table. Every position in the lexed Python ranges that
     could be a value use of SOME name -- the question PyDefUsedAsValue used to
     answer by walking the whole token array once per definition, which crossed
     every imported module's tokens (measured 2026-09-22: 200.0M token visits on
@@ -558,7 +558,7 @@ var
     Rebuilt when MainProgramTokCount moves, which is once per import, never per
     def. }
   PyDValN: Integer;
-  PyDValBuilt: Integer;      { MainProgramTokCount the table was built at; -1 = never }
+  PyDValBuilt: Integer;      { TokCount the table was built at; -1 = never }
   PyDValOverflow: Boolean;   { capacity exceeded: use the scan }
   PyDValTok: array[0..PY_DVAL_MAX - 1] of Integer;   { ascending }
   PyDValKind: array[0..PY_DVAL_MAX - 1] of Byte;     { 1 = bare, 2 = dot candidate }
@@ -6227,6 +6227,24 @@ begin
     Result := tyDouble;
 end;
 
+function PyWidenArith(a, b: TTypeKind): TTypeKind;
+{ PyWiden for PyInferExprType's flat operand walk. Ternaries and comparisons
+  are split off before that walk, so two operands met there are combined by
+  ARITHMETIC, and a promotable int with a float is a float in Python -- the
+  lowering already does exactly that (`(c - b) * math.sqrt(t)` with c past
+  2^63 prints CPython's double). PyWiden's promo arm refuses the pair because
+  it is also the join for a VALUE that is one or the other, where a double
+  would drop an exact int; that refusal stays everywhere else. TSP's
+  render.py `x0 + (x1 - x0) * math.sqrt(f)` with a promo x1 was refused at the
+  def header that inferred it. }
+begin
+  if (TypeIsPromoInt(a) and TypeIsFloat(b)) or
+     (TypeIsFloat(a) and TypeIsPromoInt(b)) then
+    Result := tyDouble
+  else
+    Result := PyWiden(a, b);
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -6454,7 +6472,7 @@ begin
   end;
   { `/` is TRUE DIVISION and always yields a float, whatever its operands are —
     `7 / 2` is 2.5, not 3. This scan types an expression by WIDENING over the
-    operand tokens it recognises, and PyWiden(Int64, Int64) is Int64, so an
+    operand tokens it recognises, and PyWidenArith(Int64, Int64) is Int64, so an
     unannotated `def f(x: int): return x / 2` registered an INTEGER result over
     a body that computes a double: the caller then read the double's raw bit
     pattern as a number and printed 4612811918334230528, or (with an
@@ -6824,7 +6842,7 @@ begin
         end;
         Inc(i);
       end;
-      Result := PyWiden(Result, tyVariant);
+      Result := PyWidenArith(Result, tyVariant);
       PyInferLastCi := -1;
       Inc(i);
       Continue;
@@ -6849,7 +6867,7 @@ begin
         end;
         Inc(i);
       end;
-      Result := PyWiden(Result, tk);
+      Result := PyWidenArith(Result, tk);
       Inc(i);
       Continue;
     end;
@@ -6876,7 +6894,7 @@ begin
         end;
         Inc(i);
       end;
-      Result := PyWiden(Result, tk);
+      Result := PyWidenArith(Result, tk);
       Inc(i);
       Continue;
     end;
@@ -6942,7 +6960,7 @@ begin
           PyInferLastCi := ProcRetRecId[UMthProc_[si]] - REC_UCLASS_BASE;
         if tk = tyUnknown then tk := tyVariant;
         i := PyEndOfGroup(i + 3, endIdx);
-        Result := PyWiden(Result, tk);
+        Result := PyWidenArith(Result, tk);
         Continue;
       end;
     end;
@@ -6992,7 +7010,7 @@ begin
         if tk = tyUnknown then tk := tyVariant;
       end;
       i := i + 2;
-      Result := PyWiden(Result, tk);
+      Result := PyWidenArith(Result, tk);
       Inc(i);
       Continue;
     end;
@@ -7148,7 +7166,7 @@ begin
             end;
             Inc(i);
           end;
-          Result := PyWiden(Result, tk);
+          Result := PyWidenArith(Result, tk);
           Inc(i);
           Continue;
         end;
@@ -7166,7 +7184,7 @@ begin
            PyDottedRootIsLocal(i, startIdx) then
         begin
           i := PyEndOfGroup(i + 1, endIdx);
-          Result := PyWiden(Result, tyVariant);
+          Result := PyWidenArith(Result, tyVariant);
           Continue;
         end;
         { ...unless the name is BOUND in this def: `Box = Word(44); return
@@ -7344,7 +7362,7 @@ begin
               fldTk := tyVariant;
               PyInferLastCi := -1;
             end;
-            Result := PyWiden(Result, fldTk);
+            Result := PyWidenArith(Result, fldTk);
             i := fldAt + 1;
             Continue;
           end;
@@ -7370,7 +7388,7 @@ begin
               fldAt := fldAt + 2
             else Break;
           end;
-          Result := PyWiden(Result, tyVariant);
+          Result := PyWidenArith(Result, tyVariant);
           PyInferLastCi := -1;
           i := fldAt + 1;
           Continue;
@@ -7398,7 +7416,7 @@ begin
               end;
               Inc(i);
             end;
-            Result := PyWiden(Result, tk);
+            Result := PyWidenArith(Result, tk);
             Inc(i);
             Continue;
           end;
@@ -7458,7 +7476,7 @@ begin
                 qcTk := tyVariant;                { `math.sqrt` — a callable }
               if qcTk <> tyUnknown then
               begin
-                Result := PyWiden(Result, qcTk);
+                Result := PyWidenArith(Result, qcTk);
                 i := i + 3;
                 Continue;
               end;
@@ -7493,7 +7511,7 @@ begin
                 if qcTk = tyClass then PyInferLastCi := qcSym;
                 if qcTk <> tyUnknown then
                 begin
-                  Result := PyWiden(Result, qcTk);
+                  Result := PyWidenArith(Result, qcTk);
                   i := i + 3;
                   Continue;
                 end;
@@ -7550,7 +7568,7 @@ begin
                    not ((qcTk = tyClass) and (fci < 0)) then
                 begin
                   if qcTk = tyClass then PyInferLastCi := fci;
-                  Result := PyWiden(Result, qcTk);
+                  Result := PyWidenArith(Result, qcTk);
                   i := k2;
                   Continue;
                 end;
@@ -7585,7 +7603,7 @@ begin
             i := i + 2;
           end;
           if tk = tyClass then PyInferLastCi := fci;
-          Result := PyWiden(Result, tk);
+          Result := PyWidenArith(Result, tk);
           Continue;
         end;
         { Method form `name.upper(...)` on a string: the expression's type is
@@ -7617,7 +7635,7 @@ begin
             end;
             Inc(i);
           end;
-          Result := PyWiden(Result, tk);
+          Result := PyWidenArith(Result, tk);
           Inc(i);
           Continue;
         end;
@@ -7663,7 +7681,7 @@ begin
             end;
             Inc(i);
           end;
-          Result := PyWiden(Result, tk);
+          Result := PyWidenArith(Result, tk);
           Inc(i);
           Continue;
         end;
@@ -7696,7 +7714,7 @@ begin
             end;
             Inc(i);
           end;
-          Result := PyWiden(Result, tk);
+          Result := PyWidenArith(Result, tk);
           Inc(i);
           Continue;
         end;
@@ -7721,7 +7739,7 @@ begin
         end;
       end;
     end;
-    if tk <> tyUnknown then Result := PyWiden(Result, tk);
+    if tk <> tyUnknown then Result := PyWidenArith(Result, tk);
     Inc(i);
   end;
 end;
@@ -39758,7 +39776,12 @@ function PyDValKindAt(j: Integer; inImport: Boolean): Integer;
     1  BARE value use -- decided entirely by neighbours, final
     2  DOT candidate -- `base.nm` whose neighbours qualify. Whether `base` is a
        MODULE is a question about the import alias table, NOT about the token
-       stream, so it is deliberately NOT answered here. See PyDValDotQualifies. }
+       stream, so it is deliberately NOT answered here. See PyDValDotQualifies.
+
+  Bounded by TokCount, the same bound the callers now scan to: with
+  MainProgramTokCount here, a position past the module being parsed failed
+  its `(` test and read as a BARE use, so every def called from a later
+  module was boxed. }
 begin
   Result := 0;
   if inImport then
@@ -39772,21 +39795,21 @@ begin
       the statement began with `from` -- which costs only a def that shares
       a module's name the variant ABI: slower, never wrong. }
     if (Tokens[j].Kind = tkIdent) and (j >= 1) and
-       (j + 2 < MainProgramTokCount) and
+       (j + 2 < TokCount) and
        (Tokens[j + 1].Kind = tkIdent) and TokenCaseEqual(j + 1, 'as') and
        ((Tokens[j - 1].Kind in [tkComma, tkLParen, tkUses])) then
       Result := 1;
     Exit;
   end;
   if Tokens[j].Kind <> tkIdent then Exit;
-  if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
+  if not (((j + 1 < TokCount) and (Tokens[j + 1].Kind = tkLParen)) or
           ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
           ((j > 0) and (Tokens[j - 1].Kind = tkFunction))) then
   begin
     Result := 1;
     Exit;
   end;
-  if ((j + 1 >= MainProgramTokCount) or
+  if ((j + 1 >= TokCount) or
       (not (Tokens[j + 1].Kind in [tkLParen, tkAssign]))) and
      (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
      (Tokens[j - 2].Kind = tkIdent) then
@@ -39856,7 +39879,7 @@ begin
   r := 0;
   while PyPyRangeAt(r, lo, hi) do
   begin
-    if hi > MainProgramTokCount then hi := MainProgramTokCount;
+    if hi > TokCount then hi := TokCount;
     j := lo;
     atStmtStart := True;
     inImport := False;
@@ -39890,6 +39913,15 @@ procedure PyBuildDValTable;
   name. The per-definition question then reads this list instead of the token
   stream.
 
+  EVERY LEXED PYTHON RANGE, not [0, MainProgramTokCount). Inside an imported
+  module MainProgramTokCount is the end of THAT module, so a value use in a
+  module lexed LATER was invisible when the def was registered: TSP's vec.norm,
+  reached first through another module, kept its typed ABI while entry.py
+  passed it as `max(cols, key=norm)`, and the key bridge called it as a
+  function object -- IndexError or SIGSEGV depending on the layout. The import
+  closure is lexed before any module is parsed (PyLexImportClosure), so every
+  later use IS in the stream by then; it only had to be looked at.
+
   Rebuilt when MainProgramTokCount moves -- which is once per import, never per
   definition -- exactly as PyBuildEnclTable keys on TokCount. }
 var j, k, r, lo, hi: Integer;
@@ -39908,7 +39940,7 @@ begin
   r := 0;
   while PyPyRangeAt(r, lo, hi) and not PyDValOverflow do
   begin
-    if hi > MainProgramTokCount then hi := MainProgramTokCount;
+    if hi > TokCount then hi := TokCount;
     j := lo;
     atStmtStart := True;
     inImport := False;
@@ -39948,7 +39980,7 @@ begin
     end;
     Inc(r);
   end;
-  PyDValBuilt := MainProgramTokCount;
+  PyDValBuilt := TokCount;
 end;
 
 function PyDValLookup(const nm: AnsiString): Boolean;
@@ -40029,7 +40061,7 @@ begin
 {$IFDEF PXX_DVAL_OFF}
   r := PyDefUsedAsValueByScan(nm);
 {$ELSE}
-  if PyDValBuilt <> MainProgramTokCount then PyBuildDValTable;
+  if PyDValBuilt <> TokCount then PyBuildDValTable;
   if PyDValOverflow then r := PyDefUsedAsValueByScan(nm)
   else r := PyDValLookup(nm);
 {$ENDIF}
