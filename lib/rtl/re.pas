@@ -72,6 +72,10 @@ type
     function &end(n: Integer): Integer;        { CPython's own spelling of it }
     function &end: Integer; overload;
     function groupCount: Integer;
+    { m.groups(): every capturing group as a TUPLE, None for one that did not
+      take part -- what `"%s by %s" % m.groups()` spreads (That Space Program's
+      commentary). No `default` argument; extend on encounter. }
+    function groups: TPyList;
   end;
 
   { A compiled pattern. }
@@ -223,6 +227,17 @@ end;
 function TMatch.groupCount: Integer;
 begin
   groupCount := m.count;
+end;
+
+function TMatch.groups: TPyList;
+var i: Integer; r: TPyList;
+begin
+  r := TPyList.Create;
+  r.FKind := PYSEQ_TUPLE;
+  for i := 1 to m.count - 1 do       { m.count counts group 0 too }
+    if m.starts[i] <= 0 then r.append(pynone)
+    else r.append(ReGroup(m, subject, i));
+  groups := r;
 end;
 
 { Wrap a raw engine result, or return nil for "no match" so that Python's

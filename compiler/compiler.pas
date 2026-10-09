@@ -351,6 +351,29 @@ begin
     TargetPlatform := PLATFORM_POSIX;
 end;
 
+procedure AddMainPackageParentDir;
+{ `pkg/__main__.py` is how a package is RUN (`python3 -m pkg`), and CPython then
+  has the directory ABOVE pkg on sys.path, so `from pkg.sub.mod import X` --
+  an absolute import of the program's own package -- resolves. pxx put only the
+  main file's own directory in reach, so every absolute self-import missed and
+  surfaced far away: That Space Program's tsp/ephem/__init__.py,
+  `from tsp.ephem.spk import (SPK, ...)`, was "undefined variable (SPK)".
+  Only when the main file is named __main__ and its directory really is a
+  package (has __init__), so an ordinary script gains no search root. Appended
+  after any user -Fu, before the defaults. }
+var dir, parent: AnsiString;
+begin
+  if (CurSrcBaseName <> '__main__') then Exit;
+  dir := SourceFileDir;
+  if dir = '' then dir := './';
+  if not (PySourceExists(dir + '__init__.py') or
+          PySourceExists(dir + '__init__.npy')) then Exit;
+  parent := dir + '../';
+  NormalizePath(parent);
+  if parent = '' then parent := './';
+  AddPasUnitDir(parent);
+end;
+
 procedure AddDefaultPasUnitDirs;
 { The PAL search roots the default RTL needs (platform_backend lives under
   lib/rtl/platform/<pal>/), appended AFTER any user -Fu so an explicit override
@@ -3046,6 +3069,7 @@ begin
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
     BARE ESP targets have no RTL and are excluded; a non-bare ESP platform
     gets the esp PAL rather than this one. }
+  AddMainPackageParentDir;
   AddDefaultPasUnitDirs;
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
     own .asm frontend / inline-asm branches and for any user program) is now a

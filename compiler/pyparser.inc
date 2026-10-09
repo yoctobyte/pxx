@@ -659,6 +659,19 @@ begin
     begin
       { accepted either way }
     end
+    { `frozen=True` is ACCEPTED, with a warning, and not enforced. The refusal
+      above guarded against a class that looks immutable and is not -- but a
+      program that works on CPython never assigns to a frozen instance (that
+      raises FrozenInstanceError), so for every such program the generated
+      class answers the same. What is lost is the error for code that would
+      have failed, and value hashing (CPython hashes eq+frozen instances by
+      their fields; here identity), which is what the warning says. Refused,
+      it walled That Space Program's director.py for a property the program
+      never exercises. }
+    else if StrEqual(name, 'frozen') and (CurTok.Kind = tkTrue) then
+      Warn('Nil Python: @dataclass frozen=True is accepted but not enforced: '
+           + 'assigning a field does not raise, and instances hash by identity, '
+           + 'not by their fields')
     else if (CurTok.Kind = tkTrue) <> dflt then
       Error('Nil Python: @dataclass ' + name + '=' + given +
             ' is not supported (only the default is generated)');
@@ -15497,6 +15510,8 @@ begin
   else if dotted = 'random.choice' then Result := 'pyrandom_choice'
   else if dotted = 'random.shuffle' then Result := 'pyrandom_shuffle'
   else if dotted = 'random.sample' then Result := 'pyrandom_sample'
+  { random.Random(seed): pylib's TPyRandom, the deque route (a factory). }
+  else if dotted = 'random.Random' then Result := 'pyrandom_new'
   { math.dist is NOT here: it needs Sqrt, which lives in lib/rtl/math.pas and a
     BUILTIN unit cannot reach (the same wall math.log/math.pow hit — see their
     note above), while its arguments are pylib CONTAINERS the RTL cannot name.
@@ -50780,6 +50795,16 @@ begin
           PyStdStarRecord(impDotted);
         end
         else
+        begin
+        { `from X import (a,` / `b)`: a parenthesised list, continued across
+          lines. Without this the loop below saw '(' and ran zero times -- harmless
+          in the main program, whose flat unit scope finds the names anyway, but
+          inside a MODULE nothing was bound, so a package's `__init__` re-exported
+          none of them (TSP's tsp/ephem: `from tsp.ephem.spk import (SPK, ...)`,
+          then "undefined variable (SPK)" in every importer). Same shape as
+          PyParseRelImportNames. }
+        impParen := Eat(tkLParen);
+        if impParen then PySkipNewlines;
         while CurTok.Kind = tkIdent do
         begin
           { Record the name against the IMPORTING module (ParseUsesUnit has
@@ -50884,7 +50909,9 @@ begin
               UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(subKey));
               Inc(UnitAliasCount);
             end;
+            if impParen then PySkipNewlines;
             if not Eat(tkComma) then Break;
+            if impParen then PySkipNewlines;
             Continue;
           end;
           if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
@@ -50902,10 +50929,15 @@ begin
                (not UnitDeclaresClassExactly(impReal, FindUnitOrAlias(impName))) and
                PyUnitHasRoutineOrVarExactly(impReal, FindUnitOrAlias(impName)) then
               aliasCi := -1;
-            { An UN-aliased class needs neither arm: the registry would map the
-              name onto the name it already has, and the assignment path cannot
-              carry a class at all. }
-            if (aliasCi >= 0) and (impAlias = impReal) then
+            { An UN-aliased class needs neither arm IN THE MAIN PROGRAM: flat
+              unit scope already finds it there. Inside a MODULE it does need
+              the registry, even though the alias maps the name onto itself:
+              `uses` is not transitive, so a package's `__init__` doing
+              `from .spk import SPK` left SPK visible in the package and in no
+              importer of it -- `from tsp.ephem import SPK` was "undefined
+              variable (SPK)" (TSP). The alias row belongs to THIS unit, and
+              alias lookup is what an importer's FindUClass falls back to. }
+            if (aliasCi >= 0) and (impAlias = impReal) and (CurrentUnitIdx < 0) then
               { nothing to do }
             else if aliasCi >= 0 then
               RegisterUClassAlias(StoredName(impAlias), Length(impAlias), aliasCi)
@@ -51150,7 +51182,15 @@ begin
             PyImpNameReal[PyImpNameCount] := InternStr(impReal);
             Inc(PyImpNameCount);
           end;
+          if impParen then PySkipNewlines;
           if not Eat(tkComma) then Break;
+          if impParen then PySkipNewlines;
+        end;
+        if impParen then
+        begin
+          PySkipNewlines;
+          Expect(tkRParen, ')');
+        end;
         end;
       end;
       PySkipNewlines;
@@ -57828,7 +57868,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     rsvMapped: AnsiString;   { a reserved member's underscored spelling, probed before it is adopted }
-    qvUnit, qvPi: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
+    qvUnit, qvPi, strNode: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
     gaUnit, gaPi, gaSi: Integer; gaMemb, gaRecv: AnsiString; gaDeclared: Boolean;   { getattr/hasattr over a UNIT ALIAS — bug-n-a-module-bound-by-an-import-is-not-a-value }
     atRec, atCi, atNm: Integer; atAl: AnsiString;   { getattr(o, "<lit>") naming a plain METHOD — bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver }
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
@@ -59394,6 +59434,48 @@ begin
       if (PyNestPrefix <> '') and
          ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) then
         name := PyQualifyNested(name);
+      { `dataclasses.replace(obj, a=x, b=y)` -> pydc_set(pydc_set(
+        pydc_clone(obj), 'a', x), 'b', y). A run-time copy, because the
+        receiver's class is usually not known here: That Space Program's
+        shape.py replaces solids taken out of a dict value. See pylib's
+        pydc_clone for what it copies and how it differs from CPython. }
+      if isNilPy and CaseEqual(name, 'dataclasses') and (FindSym(name) < 0) and
+         (TokPos + 2 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+         (Tokens[TokPos + 1].Kind = tkIdent) and
+         TokenCaseEqual(TokPos + 1, 'replace') and
+         (Tokens[TokPos + 2].Kind = tkLParen) and
+         (FindProc('pydc_clone') >= 0) then
+      begin
+        Next; Next; Next;            { dataclasses . replace }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        node := GenMakeCall6(FindProc('pydc_clone'), tyVariant, CurASTNode,
+                             -1, -1, -1, -1, -1);
+        while CurTok.Kind = tkComma do
+        begin
+          Next;
+          PySkipNewlines;
+          if CurTok.Kind = tkRParen then Break;
+          if (CurTok.Kind <> tkIdent) or (TokPos >= TokCount) or
+             (Tokens[TokPos].Kind <> tkAssign) then
+            Error('Nil Python: dataclasses.replace takes the instance, then '
+                  + 'field=value keywords only');
+          qvMemb := CurTok.SVal;
+          Next; Next;                 { name = }
+          ParseExpr;
+          strNode := AllocNode(AN_STR_LIT);
+          ASTSOffset[strNode] := StoredName(qvMemb);
+          ASTSLen[strNode] := Length(qvMemb);
+          ASTTk[strNode] := Ord(tyString);
+          node := GenMakeCall6(FindProc('pydc_set'), tyVariant, node, strNode,
+                               CurASTNode, -1, -1, -1);
+        end;
+        PySkipNewlines;
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        LastExprTk := tyVariant;
+        Exit;
+      end;
       if CaseEqual(name, 'await') and CurProcIsAsync then
       begin
         { `await E` as an expression. Binds tightly (a unary/primary operand, like

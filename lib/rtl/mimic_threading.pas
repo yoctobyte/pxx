@@ -52,7 +52,7 @@ unit mimic_threading;
 
   ## What is NOT here
 
-  No `Condition`, `Semaphore`, `Barrier`, `local`, `current_thread`,
+  No `Semaphore`, `Barrier`, `local`, `current_thread`,
   `active_count`, `Timer`, or `Thread` subclassing with an `Execute`/`run`
   override. None is used by the corpus this was measured against, and each
   would be a claim with no test behind it. `Lock` IS here despite not being
@@ -108,6 +108,26 @@ type
     function acquire(blocking: Boolean = True): Boolean;
     procedure release;
     function locked: Boolean;
+  end;
+
+  { threading.Condition() -- its own lock (CPython's default is an RLock; this
+    one is a plain mutex, so a thread that re-enters `with cv:` deadlocks
+    where CPython would not). Covers what That Space Program's voice.py uses:
+    `with cv:`, `wait()`, `notify()`. wait() may wake spuriously, as CPython
+    documents, so callers loop on their predicate -- voice.py does. }
+  Condition = class
+  public
+    FM: TMutex;
+    FC: TCondVar;
+    constructor Create;
+    function acquire(blocking: Boolean = True): Boolean;
+    procedure release;
+    function __enter__: Boolean;
+    procedure __exit__(const a, b, c: Variant);
+    { timeout < 0 (the default) waits until notified. False = timed out. }
+    function wait(timeout: Double = PY_NO_TIMEOUT): Boolean;
+    procedure notify(n: Integer = 1);
+    procedure notify_all;
   end;
 
   { threading.Thread(target=, args=, daemon=, name=).
@@ -540,6 +560,63 @@ begin
     event that is now set would make the corpus's `if stop.wait(period): break`
     miss its own shutdown. }
   wait := FEv.State <> 0;
+end;
+
+{ ---- Condition ------------------------------------------------------------- }
+
+constructor Condition.Create;
+begin
+  MutexInit(FM);
+  CondInit(FC);
+end;
+
+function Condition.acquire(blocking: Boolean = True): Boolean;
+begin
+  if blocking then
+  begin
+    MutexLock(FM);
+    acquire := True;
+  end
+  else
+    acquire := MutexTryLock(FM);
+end;
+
+procedure Condition.release;
+begin
+  MutexUnlock(FM);
+end;
+
+function Condition.__enter__: Boolean;
+begin
+  MutexLock(FM);
+  __enter__ := True;
+end;
+
+procedure Condition.__exit__(const a, b, c: Variant);
+begin
+  MutexUnlock(FM);
+end;
+
+function Condition.wait(timeout: Double = PY_NO_TIMEOUT): Boolean;
+begin
+  if timeout < 0.0 then
+  begin
+    CondWait(FC, FM);
+    wait := True;
+  end
+  else
+    wait := CondWaitTimeout(FC, FM, Round(timeout * NS_PER_S));
+end;
+
+procedure Condition.notify(n: Integer = 1);
+var i: Integer;
+begin
+  for i := 1 to n do CondSignal(FC);
+end;
+
+procedure Condition.notify_all;
+begin
+  CondBroadcast(FC);
 end;
 
 { ---- Lock ------------------------------------------------------------------ }

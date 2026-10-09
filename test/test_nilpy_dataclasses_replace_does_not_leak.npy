@@ -1,0 +1,26 @@
+# dataclasses.replace(x, k=v) is pydc_set(pydc_clone(x), ...): the clone takes
+# a reference on every object field it copies and pydc_set swaps one out. Run
+# `leak N` replaces N times and keeps only the last result -- the census must
+# stay flat. `keep N` holds every result and is the positive control.
+import sys
+import dataclasses
+from dataclasses import dataclass
+
+
+@dataclass
+class Solid:
+    profile: list
+    x: float
+    name: str = "s"
+
+
+mode = sys.argv[1]
+n = int(sys.argv[2])
+a = Solid([(1.0, 2.0), (3.0, 4.0)], 1.5, "hull")
+kept = []
+t = a
+for i in range(n):
+    t = dataclasses.replace(a, name="n%d" % i, x=float(i), profile=[(1.0 * i, 2.0)])
+    if mode == "keep":
+        kept.append(t)
+print(t.name, t.x, len(kept) > 0 or mode != "keep")

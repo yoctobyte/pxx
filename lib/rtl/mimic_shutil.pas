@@ -44,7 +44,7 @@ unit mimic_shutil;
 
 interface
 
-uses pylib, sysutils, ansiterm;
+uses pylib, sysutils, ansiterm, platform;
 
 type
   { CPython returns `os.terminal_size`, a named tuple read as `.columns` and
@@ -62,8 +62,45 @@ type
 
 function get_terminal_size: terminal_size; overload;
 function get_terminal_size(fallback: TPyList): terminal_size; overload;
+{ shutil.which(cmd) -- the first executable `cmd` on PATH, or None. A cmd that
+  contains a '/' is checked as given, as CPython does. No `mode`/`path`
+  keywords: That Space Program calls it with the name alone. }
+function which(const cmd: AnsiString): Variant;
 
 implementation
+
+function IsExecFile(const path: AnsiString): Boolean;
+begin
+  { X_OK = 1. access() alone says yes to an executable DIRECTORY, which
+    CPython's which() rejects, so the file must exist as a file too. }
+  IsExecFile := FileExists(path) and (PalAccess(PChar(path), 1) = 0);
+end;
+
+function which(const cmd: AnsiString): Variant;
+var path, dir: AnsiString; i, start: Integer;
+begin
+  which := pynone;
+  if cmd = '' then Exit;
+  if Pos('/', cmd) > 0 then
+  begin
+    if IsExecFile(cmd) then which := cmd;
+    Exit;
+  end;
+  path := GetEnvironmentVariable('PATH');
+  start := 1;
+  for i := 1 to Length(path) + 1 do
+    if (i > Length(path)) or (path[i] = ':') then
+    begin
+      dir := Copy(path, start, i - start);
+      if dir = '' then dir := '.';
+      if IsExecFile(dir + '/' + cmd) then
+      begin
+        which := dir + '/' + cmd;
+        Exit;
+      end;
+      start := i + 1;
+    end;
+end;
 
 constructor terminal_size.Create(cols, rws: Integer);
 begin

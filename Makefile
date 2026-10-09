@@ -8508,6 +8508,19 @@ test-nilpy: $(COMPILER)
 	# feature-nilpy-dotted-imports-resolve-to-source-files
 	cd test/nilpy_units/pkgcorpus && $(CURDIR)/$(COMPILER) $(CURDIR)/test/test_nilpy_package_imports.npy $(TESTTMP)/test_nilpy_pkgimp26
 	$(TESTTMP)/test_nilpy_pkgimp26 | diff -u test/test_nilpy_package_imports.expected -
+	# TSP's compile walls: a parenthesised from-import re-exporting a CLASS
+	# from a subpackage, and a package's __main__.py whose absolute self-imports
+	# resolve from the package's parent (python -m). Compiled from /tmp so the
+	# cwd cannot stand in for the root the compiler must add.
+	cd /tmp && $(CURDIR)/$(COMPILER) $(CURDIR)/test/nilpy_tsppkg/__main__.py $(TESTTMP)/test_nilpy_tsppkg26
+	$(TESTTMP)/test_nilpy_tsppkg26 | diff -u test/test_nilpy_tsppkg.expected -
+	./$(COMPILER) --threadsafe test/test_nilpy_tsp_stdlib_walls.npy $(TESTTMP)/test_nilpy_tspstd26
+	$(TESTTMP)/test_nilpy_tspstd26 | diff -u test/test_nilpy_tsp_stdlib_walls.expected -
+	# dataclasses.replace stays flat; `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_dataclasses_replace_does_not_leak.npy $(TESTTMP)/test_nilpy_dcrepl26
+	tools/assert_no_leak.sh nilpy_dataclasses_replace 300 $(TESTTMP)/test_nilpy_dcrepl26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_dataclasses_replace_control 300 $(TESTTMP)/test_nilpy_dcrepl26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_dataclasses_replace control (keep) did not trip the bound"; exit 1; fi
 	# `__name__` off the CLASS -- both routes: a static class reference and a
 	# class held in a variable (VT_CLASSREF, resolved at run time).
 	./$(COMPILER) test/test_nilpy_class_dunder_name.npy $(TESTTMP)/test_nilpy_dname26

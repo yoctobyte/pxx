@@ -1031,6 +1031,27 @@ type
   lose nothing visibly. Nothing measured passes it; a caller who does gets a
   loud unknown-argument error. Also absent: rotate, extendleft, index, count,
   insert, remove, reverse — none is reached, and each would be a guess. }
+  { random.Random(seed) -- a generator with its OWN state, so seeding one
+    neither moves nor is moved by the module-level functions. Same SplitMix64
+    as those; the sequence is not CPython's (Mersenne Twister) and is not meant
+    to be, but a given seed always gives the same sequence, which is the
+    contract a seeded Random is used for (That Space Program casts a mission's
+    voices from `random.Random(mission_id)`). A str seed is hashed (FNV-1a), an
+    int seed is used as is, no seed draws from the module generator. }
+  TPyRandom = class
+  public
+    FState: Int64;
+    constructor Create;
+    function next64: Int64;
+    function seed(const a: Variant): Variant;
+    function random: Double;
+    function uniform(a, b: Double): Double;
+    function randint(a, b: Int64): Int64;
+    function randrange(n: Int64): Int64;
+    function choice(const src: Variant): Variant;
+    function shuffle(const src: Variant): Variant;
+  end;
+
   TPyDeque = class
   public
     FBuf: TPyList;
@@ -2923,6 +2944,12 @@ function deque(const iterable: Variant): TPyDeque; overload;
   The bare `deque()` above stays shadowable, which is correct: shadowing a
   builtin by defining one is ordinary Python. }
 function pydeque_new(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
+function pyrandom_new: TPyRandom; overload;
+function pyrandom_new(const a: Variant): TPyRandom; overload;
+{ dataclasses.replace(obj, a=x, b=y) is compiled as
+  pydc_set(pydc_set(pydc_clone(obj), 'a', x), 'b', y). See pydc_clone. }
+function pydc_clone(const v: Variant): Variant;
+function pydc_set(const v: Variant; const name: AnsiString; const val: Variant): Variant;
 function pydeque_new: TPyDeque; overload;
 function pydeque_new(const iterable: Variant): TPyDeque; overload;
 function pydeque_repr(d: TPyDeque): AnsiString;
@@ -10147,6 +10174,193 @@ begin
   if d.FMaxLen >= 0 then Result := Result + ', maxlen=' + pystr_of(Int64(d.FMaxLen));
   Result := Result + ')';
   PXXObjRelease(Pointer(w));
+end;
+
+{ ---- random.Random --------------------------------------------------------- }
+
+constructor TPyRandom.Create;
+begin
+  FState := PyRandNext;
+end;
+
+function TPyRandom.next64: Int64;
+var z: Int64;
+begin
+  FState := FState + Int64($9E3779B97F4A7C15);
+  z := FState;
+  z := (z xor (z shr 30)) * Int64($BF58476D1CE4E5B9);
+  z := (z xor (z shr 27)) * Int64($94D049BB133111EB);
+  Result := z xor (z shr 31);
+end;
+
+function TPyRandom.seed(const a: Variant): Variant;
+var s: AnsiString; h: Int64; i: Integer;
+begin
+  Result := pynone;
+  if pyvartag(a) = 0 then FState := PyRandNext
+  else if pyvar_is_inttag(a) then FState := pyvar_to_int(a)
+  else
+  begin
+    s := pystr_of(a);
+    h := Int64($CBF29CE484222325);
+    for i := 1 to Length(s) do
+      h := (h xor Ord(s[i])) * Int64($100000001B3);
+    FState := h;
+  end;
+end;
+
+function TPyRandom.random: Double;
+var u: Int64;
+begin
+  u := (next64 shr 11) and Int64($1FFFFFFFFFFFFF);
+  Result := u / 9007199254740992.0;
+end;
+
+function TPyRandom.uniform(a, b: Double): Double;
+begin
+  Result := a + (b - a) * random;
+end;
+
+function TPyRandom.randint(a, b: Int64): Int64;
+var w, r: Int64;
+begin
+  if b < a then
+    raise ValueError.Create('empty range for randint()');
+  w := b - a + 1;
+  if w <= 0 then begin Result := a; Exit; end;
+  r := next64;
+  if r < 0 then r := -r;
+  if r < 0 then r := 0;
+  Result := a + (r mod w);
+end;
+
+function TPyRandom.randrange(n: Int64): Int64;
+begin
+  if n <= 0 then
+    raise ValueError.Create('empty range for randrange()');
+  Result := randint(0, n - 1);
+end;
+
+function TPyRandom.choice(const src: Variant): Variant;
+var l: TPyList;
+begin
+  l := pylist_v(src);
+  try
+    if (l = nil) or (l.count = 0) then
+      raise IndexError.Create('Cannot choose from an empty sequence');
+    Result := l.at(Integer(randint(0, l.count - 1)));
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
+end;
+
+function TPyRandom.shuffle(const src: Variant): Variant;
+var i, j: Integer; tmp: Variant; o: TObject; l: TPyList;
+begin
+  Result := pynone;
+  l := nil;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if o is TPyList then l := TPyList(o);
+  end;
+  if l = nil then
+    raise TypeError.Create('object does not support item assignment');
+  for i := l.count - 1 downto 1 do
+  begin
+    j := Integer(randint(0, i));
+    tmp := l.at(i);
+    l.put(i, l.at(j));
+    l.put(j, tmp);
+  end;
+end;
+
+{ ---- dataclasses.replace ---------------------------------------------------- }
+
+function pydc_clone(const v: Variant): Variant;
+{ A shallow copy of a class instance, field by field through its RTTI: a fresh
+  instance of the same class, VMT stamped, every DECLARED field copied with the
+  reference it needs (strings and Variants by assignment, an object field
+  retained). Not a byte copy -- that would share the instance's managed slots
+  without taking references, and the second release would free them under the
+  first owner. CPython's replace() runs __init__ (and __post_init__) on the new
+  values; this copies and then assigns, which differs only for a dataclass
+  whose __post_init__ derives one field from another. That Space Program's
+  shape.py has none; its receiver comes out of a dict, so the class is not
+  known when the call is compiled, which is why this is a run-time helper and
+  not a constructor call. }
+var obj, n: Pointer; cls, curr: PClassRTTI; flds: PFieldInfo; i: Integer;
+    k: Int64; a, b: Pointer; box: Variant; found: Boolean;
+begin
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('replace() should be called on dataclass instances');
+  obj := pyvarobj(v);
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then
+    raise TypeError.Create('replace() should be called on dataclass instances');
+  n := PXXObjAlloc(cls^.InstanceSize);
+  FillChar(n^, cls^.InstanceSize, 0);
+  PPointer(n)^ := cls^.VMTPtr;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      flds := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+      begin
+        k := flds[i].TypeKind;
+        a := Pointer(NativeInt(obj) + NativeInt(flds[i].Offset));
+        b := Pointer(NativeInt(n) + NativeInt(flds[i].Offset));
+        if k = 6 then
+        begin
+          PPyFP(b)^ := PPyFP(a)^;
+          if PPyFP(a)^ <> nil then PXXObjRetain(PPyFP(a)^);
+        end
+        else
+        begin
+          box := PyBoxByKind(a, k, found);
+          if (not found) or (not PyStoreByKind(b, k, box)) then
+            raise TypeError.Create('replace(): field ' + flds[i].NamePtr^ +
+                                   ' has a kind this runtime cannot copy');
+        end;
+      end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+  Result := TObject(n);
+  PXXObjRelease(n);     { the Variant holds the one reference now }
+end;
+
+function pydc_set(const v: Variant; const name: AnsiString; const val: Variant): Variant;
+var obj, a, old: Pointer; fi: PFieldInfo;
+begin
+  obj := pyvarobj(v);
+  fi := PyFindFieldCI(GetInstanceRTTI(obj), name);
+  if fi = nil then
+    raise TypeError.Create('replace() got an unexpected keyword argument ''' + name + '''');
+  a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
+  if fi^.TypeKind = 6 then
+  begin
+    old := PPyFP(a)^;
+    PPyFP(a)^ := pyvarobj(val);
+    if PPyFP(a)^ <> nil then PXXObjRetain(PPyFP(a)^);
+    if old <> nil then PXXObjRelease(old);
+  end
+  else if not PyStoreByKind(a, fi^.TypeKind, val) then
+    raise TypeError.Create('replace(): field ' + name + ' has a kind this runtime cannot assign');
+  Result := v;
+end;
+
+function pyrandom_new: TPyRandom; overload;
+begin
+  Result := TPyRandom.Create;
+end;
+
+function pyrandom_new(const a: Variant): TPyRandom; overload;
+begin
+  Result := TPyRandom.Create;
+  Result.seed(a);
 end;
 
 function pydeque_new: TPyDeque; overload;

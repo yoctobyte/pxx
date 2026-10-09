@@ -1,0 +1,77 @@
+# Stdlib surface the TSP game reached, each a compile wall in turn:
+# random.Random (a seeded private generator), Match.groups(), frozen
+# dataclasses (accepted, not enforced), dataclasses.replace, shutil.which and
+# threading.Condition. Output matches CPython.
+import random
+import re
+import shutil
+import threading
+import dataclasses
+from dataclasses import dataclass
+
+a = random.Random("apollo-11")
+b = random.Random("apollo-11")
+print([a.choice(("f", "m")) for _ in range(8)] == [b.choice(("f", "m")) for _ in range(8)])
+g = ["a", "b", "c", "d", "e"]
+h = list(g)
+random.Random(7).shuffle(g)
+random.Random(7).shuffle(h)
+print(g == h, sorted(g) == ["a", "b", "c", "d", "e"])
+r = random.Random(3)
+u = [r.uniform(2.0, 5.0) for _ in range(100)]
+print(min(u) >= 2.0 and max(u) <= 5.0)
+k = [r.randint(1, 6) for _ in range(200)]
+print(min(k) >= 1 and max(k) <= 6)
+
+m = re.match(r"(\d+)x(\d+)(z)?", "120x45")
+print(m.groups())
+x, y, z = m.groups()
+print(x, y, z)
+m2 = re.search(r"orbit (\d+) by (\d+)", "in orbit 200 by 180 km")
+print("in orbit %s by %s" % m2.groups())
+
+
+@dataclass(frozen=True)
+class Burn:
+    dv: float
+    name: str = "tli"
+
+
+@dataclass
+class Solid:
+    profile: list
+    x: float
+    name: str = "s"
+    cap_top: bool = True
+
+
+f = Burn(3.1)
+print(f.dv, f.name)
+s = Solid([(1.0, 2.0), (3.0, 4.0)], 1.5, "hull")
+t = dataclasses.replace(s, profile=[(p - 1.0, q) for p, q in s.profile], cap_top=False)
+print(s.profile, s.cap_top, t.profile, t.x, t.name, t.cap_top)
+c = dataclasses.replace(s)
+c.name = "copy"
+print(s.name, c.name)
+
+print(shutil.which("sh") is not None)
+print(shutil.which("no-such-cmd-xyz"))
+print(shutil.which("/bin/sh"))
+
+cv = threading.Condition()
+done = []
+
+
+def worker():
+    with cv:
+        done.append(1)
+        cv.notify_all()
+
+
+th = threading.Thread(target=worker)
+with cv:
+    th.start()
+    while not done:
+        cv.wait(1.0)
+th.join()
+print("condition", done)
