@@ -1,0 +1,44 @@
+# A scalar parameter that can be None -- `x: float = None`, `Optional[float]`,
+# `int | None` -- travels as a variant, so None and 0 stay distinct and a None
+# that arrives at RUN time is accepted. The scalar mapping had only the
+# 0-sentinel: `f(0.0)` answered `x is None` -> True, and a None from
+# argparse's default or `d.get(k)` raised "expected a number" at the call (TSP).
+from typing import Optional
+
+
+def launch(name: str, inc: float = None) -> str:
+    return name + ":" + ("auto" if inc is None else "%.1f" % inc)
+
+
+def launch2(name: str, inc: Optional[float] = None) -> str:
+    return name + ":" + ("auto" if inc is None else "%.1f" % inc)
+
+
+def count(n: int | None = None) -> str:
+    return "none" if n is None else str(n + 1)
+
+
+def flag(b: bool = None) -> str:
+    return "unset" if b is None else str(b)
+
+
+class Orbit:
+    def __init__(self, alt: float = None):
+        self.alt = alt
+
+    def describe(self, inc: Optional[float] = None) -> str:
+        a = "?" if self.alt is None else "%.0f" % self.alt
+        i = "?" if inc is None else "%.1f" % inc
+        return a + "/" + i
+
+
+d = {"inc": None, "n": 0}
+print(launch("a"), launch("b", 51.6), launch("c", 0.0), launch("d", d.get("inc")))
+print(launch2("a"), launch2("b", 0.0), launch2("c", d.get("inc")))
+print(count(), count(0), count(d.get("n")), count(d.get("missing")))
+print(flag(), flag(False), flag(True))
+print(Orbit().describe(), Orbit(400.0).describe(0.0), Orbit(0.0).describe(d.get("inc")))
+total = 0.0
+for k in range(3):
+    total += float(launch("x", k * 1.5)[2:])
+print(total)

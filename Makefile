@@ -8533,6 +8533,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_varnumfast26 | diff -u test/test_nilpy_variant_numeric_fast_path.expected -
 	./$(COMPILER) test/test_nilpy_pxx_marker_module.npy $(TESTTMP)/test_nilpy_pxxmarker26
 	$(TESTTMP)/test_nilpy_pxxmarker26 | diff -u test/test_nilpy_pxx_marker_module.expected -
+	./$(COMPILER) test/test_nilpy_scalar_param_default_none.npy $(TESTTMP)/test_nilpy_scalarnone26
+	$(TESTTMP)/test_nilpy_scalarnone26 | diff -u test/test_nilpy_scalar_param_default_none.expected -
 	# Dynamic method calls take a direct path (PyDynMethFast) for the common
 	# shape and the full PyHostCall bridge otherwise; both answer as CPython.
 	# Also the negative name filter in front of the dynamic-attribute store.

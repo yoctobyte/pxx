@@ -1625,6 +1625,9 @@ var
     bare pointer, because the field-call path (PyWrapClosureFieldCall, uforth's
     `native: Callable[[VM], None]`) reads it as a code address. }
   PyAnnParamScope: Boolean;
+  { Set by the Optional[...] arm when it read a scalar, for PyAnnTypeAt's
+    parameter widening; cleared by PyAnnTypeAt. }
+  PyAnnOptionalScalar: Boolean;
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
     NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
@@ -1824,6 +1827,8 @@ begin
         `if x is not None` took the wrong branch on a valid 0 (uforth's
         _lookup_local_slot, slot 0 read as absent). }
       if PyAnnRetScope and (Result = tyInt64) then Result := tyVariant;
+      { a PARAMETER: the caller (PyAnnTypeAt) widens it; see there }
+      PyAnnOptionalScalar := Result in [tyInt64, tyDouble, tySingle, tyBoolean];
       { ...and Optional[str] is a VARIANT everywhere, parameters included. A
         NilPy str that is None is a nil AnsiString handle and an EMPTY string is
         one too (bug-nilpy-empty-str-and-none-are-the-same-value), so collapsing
@@ -2162,6 +2167,23 @@ begin
     if Result = tyString then Result := tyAnsiString;
     if PyAnnRetScope and (Result = tyInt64) then Result := tyVariant;
   end;
+  { A SCALAR PARAMETER THAT CAN BE None is a variant. `inc: float = None`,
+    `inc: Optional[float] = None` and `inc: float | None` all name a value
+    that is either a number or None, and the scalar mapping had only the
+    0-sentinel for None: `launch("b", 0.0)` answered `inc is None` -> True,
+    and a None arriving at RUN time (argparse's default, `d.get(k)`) was
+    converted at the call and raised "TypeError: expected a number, got
+    NoneType" (TSP). A variant keeps None as VT_EMPTY and 0 as 0. Every
+    parameter-annotation site comes through here with PyAnnParamScope set,
+    so the signature, the frame and a field typed from a ctor parameter
+    agree. Fields and returns keep their mapping. }
+  if PyAnnParamScope and
+     (Result in [tyInteger, tyInt64, tyDouble, tySingle, tyBoolean]) and
+     (sawNone or PyAnnOptionalScalar or
+      ((i + 1 < MainProgramTokCount) and (Tokens[i].Kind = tkAssign) and
+       (Tokens[i + 1].Kind = tkNil))) then
+    Result := tyVariant;
+  PyAnnOptionalScalar := False;
 end;
 
 function PyParseType: TTypeKind;
