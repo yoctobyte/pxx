@@ -1,0 +1,41 @@
+# A promotable-int temp minted while lowering (`low, high = 1, len(m) - 1`
+# mints a named __py_unp temp) was never zeroed: its first store cleared
+# whatever the stack held there, and a heap-looking tag left by an earlier
+# call crashed PXXPromoSubInt. dirty() leaves heap-tier promotable ints
+# where _upper's frame will sit.
+
+
+def dirty(n):
+    v0 = 2 ** (70 + n + 0)
+    v1 = 2 ** (70 + n + 1)
+    v2 = 2 ** (70 + n + 2)
+    v3 = 2 ** (70 + n + 3)
+    v4 = 2 ** (70 + n + 4)
+    v5 = 2 ** (70 + n + 5)
+    v6 = 2 ** (70 + n + 6)
+    v7 = 2 ** (70 + n + 7)
+    v8 = 2 ** (70 + n + 8)
+    v9 = 2 ** (70 + n + 9)
+    v10 = 2 ** (70 + n + 10)
+    v11 = 2 ** (70 + n + 11)
+    v12 = 2 ** (70 + n + 12)
+    v13 = 2 ** (70 + n + 13)
+    return (v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13) % 1000
+
+
+def _upper(marks, distance):
+    low, high = 1, len(marks) - 1
+    while low < high:
+        mid = (low + high) // 2
+        if marks[mid] < distance:
+            low = mid + 1
+        else:
+            high = mid
+    return low
+
+
+total = 0
+for k in range(200):
+    total += dirty(k % 7 + 1)
+    total += _upper([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 2.5 + (k % 3))
+print(total)

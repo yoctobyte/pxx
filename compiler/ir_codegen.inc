@@ -7770,6 +7770,23 @@ begin
   PatchRel8(pDone);                                        { done: }
 end;
 
+{ The SSE opcode byte for a NilPy variant arithmetic helper whose float-with-
+  float case IR_CALL inlines (addsd $58, subsd $5C, mulsd $59), or 0. The
+  augmented forms are included: for two floats `x += y` is `x + y`. Matched by
+  NAME, not by a FindProc index: pylib declares each helper twice (interface
+  and implementation), and a call site holds whichever entry it resolved. }
+function X64VarFloatArithOp(procIdx: Integer): Integer;
+var n: AnsiString;
+begin
+  Result := 0;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  if (Length(Procs[procIdx].Name) < 7) or (Length(Procs[procIdx].Name) > 10) then Exit;
+  n := Procs[procIdx].Name;
+  if (n = 'pyadd_v') or (n = 'pyaugadd_v') then Result := $58
+  else if (n = 'pysub_v') or (n = 'pyaugsub_v') then Result := $5C
+  else if n = 'pymul_v' then Result := $59;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
@@ -7780,6 +7797,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx: Integer;
     allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
+    pVarFastOp, pVarFastDone, pVarSlow1, pVarSlow2: Integer;   { X64VarFloatArithOp's inline arm }
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -11549,7 +11567,33 @@ begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
             end;
+            pVarFastOp := X64VarFloatArithOp(procIdx);
+            pVarFastDone := -1;
+            if pVarFastOp <> 0 then
+            begin
+              { NilPy variant arithmetic, float with float, INLINE: rdi = &a,
+                rsi = &b, r10 = the hidden destination. The helper's own first
+                test is exactly this one (PyVarNumFast), so the inline arm
+                gives the same answer for the same tags -- it only skips two
+                calls, which were most of the cost of `x * 0.5` on a variant
+                (lekkerzeilen's vector math is all of this shape). Any other
+                tag pair, ints included (they need the overflow test), takes
+                the call. Patched, not hand-counted. }
+              EmitB($48); EmitB($83); EmitB($3F); EmitB(3);  { cmp qword [rdi], 3 }
+              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne slow }
+              EmitB($48); EmitB($83); EmitB($3E); EmitB(3);  { cmp qword [rsi], 3 }
+              EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
+              EmitB($F2); EmitB($0F); EmitB($10); EmitB($47); EmitB($08); { movsd xmm0, [rdi+8] }
+              EmitB($F2); EmitB($0F); EmitB(pVarFastOp); EmitB($46); EmitB($08); { addsd/subsd/mulsd xmm0, [rsi+8] }
+              EmitB($49); EmitB($C7); EmitB($02); EmitI32(3);  { mov qword [r10], 3 }
+              EmitB($F2); EmitB($41); EmitB($0F); EmitB($11); EmitB($42); EmitB($08); { movsd [r10+8], xmm0 }
+              EmitB($4C); EmitB($89); EmitB($D0);            { mov rax, r10 }
+              EmitB($EB); pVarFastDone := CodeLen; EmitB(0); { jmp done }
+              PatchRel8(pVarSlow1);
+              PatchRel8(pVarSlow2);
+            end;
             EmitCallProc(procIdx);
+            if pVarFastDone >= 0 then PatchRel8(pVarFastDone);
             if (procIdx >= 0) and ProcVariadic[procIdx] then
             begin
               if nArgs > 6 then
@@ -15205,7 +15249,17 @@ begin
             songformatter's renderer took the branch that materialises one.
             16 bytes: the tag AND the payload, or the clear reads a live tag
             over a stale pointer. }
-          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, 16);
+          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, 16)
+        else if TypeIsPromoInt(Syms[iZeroTmp].TypeKind) then
+          { A PROMOTABLE INT temp is {tag, payload} exactly like a variant,
+            and its first store clears the old contents -- PXXPromoClear
+            releases a heap-tier tag's payload. A NAMED one minted while
+            lowering (`low, high = 1, len(marks) - 1` mints __py_unp_N) is
+            covered by neither the unnamed-temp pass above nor the prologue,
+            so it held stack garbage, and lekkerzeilen's `_upper` crashed in
+            PXXPromoSubInt as soon as an unrelated change in a caller left a
+            heap-looking tag on the stack under it. }
+          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, ManagedLocalZeroBytes(iZeroTmp));
       end;
     PyZeroedUpTo := SymCount;
   end;
