@@ -8527,6 +8527,19 @@ test-nilpy: $(COMPILER)
 	# Low(Int64) * -1, which trapped in both the variant and the typed path.
 	./$(COMPILER) test/test_nilpy_variant_numeric_fast_path.npy $(TESTTMP)/test_nilpy_varnumfast26
 	$(TESTTMP)/test_nilpy_varnumfast26 | diff -u test/test_nilpy_variant_numeric_fast_path.expected -
+	# Dynamic method calls take a direct path (PyDynMethFast) for the common
+	# shape and the full PyHostCall bridge otherwise; both answer as CPython.
+	# Also the negative name filter in front of the dynamic-attribute store.
+	./$(COMPILER) test/test_nilpy_dynamic_call_fast_path.npy $(TESTTMP)/test_nilpy_dynfast26
+	$(TESTTMP)/test_nilpy_dynfast26 | diff -u test/test_nilpy_dynamic_call_fast_path.expected -
+	# ...and it neither leaks nor over-releases: `keep` is the positive control,
+	# the HEAP_DEBUG build must run clean.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_dynamic_call_fast_path_does_not_leak.npy $(TESTTMP)/test_nilpy_dynfastleak26
+	tools/assert_no_leak.sh nilpy_dynamic_call_fast_path 300 $(TESTTMP)/test_nilpy_dynfastleak26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_dynamic_call_fast_path_control 300 $(TESTTMP)/test_nilpy_dynfastleak26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_dynamic_call_fast_path control (keep) did not trip the bound"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_dynamic_call_fast_path_does_not_leak.npy $(TESTTMP)/test_nilpy_dynfasthd26
+	tools/expect_same.sh nilpy_dynamic_call_fast_path_heapdebug "$$($(TESTTMP)/test_nilpy_dynfasthd26 leak 3000)" "True True"
 	# `__name__` off the CLASS -- both routes: a static class reference and a
 	# class held in a variable (VT_CLASSREF, resolved at run time).
 	./$(COMPILER) test/test_nilpy_class_dunder_name.npy $(TESTTMP)/test_nilpy_dname26

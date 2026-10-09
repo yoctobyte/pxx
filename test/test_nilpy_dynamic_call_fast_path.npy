@@ -1,0 +1,97 @@
+# A method call on a receiver whose class is not known statically takes a
+# direct path (PyDynMethFast) when the method is found at exactly its arity
+# with all-Variant parameters, and the full PyHostCall path otherwise. Both
+# must answer what CPython does. The receivers come out of a list, so every
+# call here is dynamic. Also: reads of attributes stored DYNAMICALLY (not
+# declared) go through a negative name filter (PyDynAttrNameSeen).
+
+
+class A:
+    def __init__(self, k):
+        self.k = k
+
+    def zero(self):
+        return self.k
+
+    def one(self, x):
+        return x + self.k
+
+    def two(self, x, y):
+        return x * y + self.k
+
+    def three(self, x, y, z):
+        return [x, y, z, self.k]
+
+    def four(self, a, b, c, d):
+        return a + b + c + d
+
+    def nothing(self, x):
+        self.k = x
+
+    def half(self, x) -> float:
+        return x / 2
+
+    def rebind(self, x):
+        x = x + 1000
+        return x
+
+    def deflt(self, x, y=5):
+        return x + y
+
+    def typed(self, n: int, f: float):
+        return n * f
+
+    def boom(self, x):
+        raise ValueError("boom " + str(x))
+
+    def me(self):
+        return self
+
+
+class B:
+    def __init__(self):
+        self.k = 100
+
+    def zero(self):
+        return "B.zero"
+
+    def one(self, x):
+        return "B.one " + str(x)
+
+
+objs = [A(1), B()]
+a = objs[0]
+b = objs[1]
+print(a.zero(), a.one(2), a.two(3, 4), a.three("p", 2.5, None), a.four(1, 2, 3, 4))
+print(b.zero(), b.one([1, 2]))
+print(a.nothing(7), a.k, a.half(9), a.half(3.0))
+v = 5
+print(a.rebind(v), v)
+print(a.deflt(1), a.deflt(1, 2), a.deflt(y=10, x=3))
+print(a.typed(3, 1.5))
+big = 2 ** 70
+print(a.one(big), a.two(big, 2))
+print(a.me().zero(), a.me() is a)
+try:
+    a.boom(3)
+except ValueError as e:
+    print("caught", e)
+s = 0.0
+for i in range(1000):
+    s += objs[0].two(1.5, 2.0)
+print(s)
+
+
+class C:
+    def __init__(self):
+        self.declared = 1
+
+
+c1 = C()
+c2 = C()
+holder = [c1, c2]
+setattr(c1, "extra", 42)
+print(holder[0].declared, holder[1].declared, holder[0].extra)
+print(hasattr(holder[1], "extra"), getattr(holder[1], "extra", "none"))
+setattr(c2, "extra", "two")
+print(holder[1].extra, holder[0].extra)

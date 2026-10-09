@@ -6560,10 +6560,88 @@ end;
 { The ladder, kept as wrappers over the list form above: they are a public
   interface, and nothing establishes that no program calls them. Each owns the
   list it builds. }
+{ The COMMON dynamic call, made directly. PyDynMethN used to build a TPyList
+  of the arguments (an allocation, a growth, a retain per argument), hand it to
+  PyDynMethL, which looked the method up, and on to PyHostCall, which looked it
+  up AGAIN, copied every argument into a local Variant (another retain), called,
+  and released the lot. For the shape almost every NilPy method has -- found on
+  the receiver's class, called at exactly its arity, every parameter a Variant,
+  returning a Variant, nothing or a Double -- none of that does anything: the
+  caller's own `const` Variants are what a statically typed call would pass, by
+  address, and the thunk is the same one PyHostCall picks. Measured at 18% of
+  lekkerzeilen's frame. Anything else answers False and takes the full path
+  unchanged: keywords, defaults to fill, typed parameters, a promo-int argument
+  (PyHostCall narrows those), the other return kinds, a callable field, a
+  missing method and every error message. }
+function PyDynMethFast(const recv: Variant; const name: AnsiString; nargs: Integer;
+                       const a0, a1, a2, a3: Variant; var res: Variant): Boolean;
+var obj: Pointer; cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
+    i, n: Integer; code: Pointer;
+    vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4;
+    vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
+    df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4;
+begin
+  Result := False;
+  if PPyRec(@recv)^.VType <> 7 then Exit;
+  obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
+  if obj = nil then Exit;
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then Exit;
+  mi := PyFindMethCI(cls, name);
+  if mi = nil then Exit;
+  n := Integer(mi^.Arity) - 1;
+  if n <> nargs then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk = nil then Exit;
+  for i := 1 to n do
+    if pk[i] <> TK_VARIANT then Exit;
+  if (n >= 1) and IsPromoV(a0) then Exit;
+  if (n >= 2) and IsPromoV(a1) then Exit;
+  if (n >= 3) and IsPromoV(a2) then Exit;
+  if (n >= 4) and IsPromoV(a3) then Exit;
+  rk := mi^.RetKind;
+  code := mi^.Code;
+  if rk = TK_VARIANT then
+  begin
+    case n of
+      0: begin vf0 := TVFn0(code); res := vf0(obj); end;
+      1: begin vf1 := TVFn1(code); res := vf1(obj, a0); end;
+      2: begin vf2 := TVFn2(code); res := vf2(obj, a0, a1); end;
+      3: begin vf3 := TVFn3(code); res := vf3(obj, a0, a1, a2); end;
+      4: begin vf4 := TVFn4(code); res := vf4(obj, a0, a1, a2, a3); end;
+    end;
+  end
+  else if rk = 0 then
+  begin
+    case n of
+      0: begin vp0 := TVPr0(code); vp0(obj); end;
+      1: begin vp1 := TVPr1(code); vp1(obj, a0); end;
+      2: begin vp2 := TVPr2(code); vp2(obj, a0, a1); end;
+      3: begin vp3 := TVPr3(code); vp3(obj, a0, a1, a2); end;
+      4: begin vp4 := TVPr4(code); vp4(obj, a0, a1, a2, a3); end;
+    end;
+    res := MakeNone;
+  end
+  else if rk = TK_DOUBLE then
+  begin
+    case n of
+      0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
+      1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, a0)); end;
+      2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, a0, a1)); end;
+      3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, a0, a1, a2)); end;
+      4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, a0, a1, a2, a3)); end;
+    end;
+  end
+  else
+    Exit;
+  Result := True;
+end;
+
 function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
                     nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
 var args: TPyList;
 begin
+  if (kwspec = '') and PyDynMethFast(recv, name, nargs, a0, a1, a2, a3, Result) then Exit;
   args := TPyList.Create;
   if nargs > 0 then args.append(a0);
   if nargs > 1 then args.append(a1);

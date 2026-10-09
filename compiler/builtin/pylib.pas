@@ -5131,6 +5131,15 @@ end;
 
 var
   PyDynAttrStore: TPyDict;   { lazily created; keys are "addr:name" }
+  { A NEGATIVE FILTER in front of the store: one byte per hash of every NAME
+    ever written to it. pydynattr_get_v asks the store FIRST on every read of
+    an attribute it cannot resolve statically -- a declared field on a variant
+    receiver included -- and that question built an "addr:name" key (an int to
+    string and a concatenation) and probed a dict, to answer no. A name whose
+    byte is clear has never been stored on any object, so the answer is no
+    without the key. Bytes, not bits: a racing writer stores a whole byte and
+    cannot clear another name's mark by a read-modify-write. }
+  PyDynAttrNameSeen: array[0..4095] of Byte;
 
 function PyDynAttrKey(obj: Pointer; const name: AnsiString): AnsiString;
 begin
@@ -5139,6 +5148,17 @@ end;
 
 function PyPropertySet(obj: Pointer; const name: AnsiString;
                        const val: Variant): Boolean; forward;
+
+function PyDynAttrNameSlot(const name: AnsiString): Integer;
+var n, h: Integer;
+begin
+  n := Length(name);
+  h := n * 131;
+  if n > 0 then
+    h := h + Ord(name[1]) * 31 + Ord(name[n]) * 7 + Ord(name[(n + 1) div 2]) * 17
+           + Ord(name[(n + 2) div 3]) * 3;
+  Result := h and 4095;
+end;
 
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
@@ -5164,11 +5184,13 @@ begin
     exactly today's behaviour and never a write through the wrong convention. }
   if PyPropertySet(obj, name, val) then Exit;
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
+  PyDynAttrNameSeen[PyDynAttrNameSlot(name)] := 1;   { BEFORE the store: see PyDynAttrNameSeen }
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
 
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 begin
+  if PyDynAttrNameSeen[PyDynAttrNameSlot(name)] = 0 then begin Result := False; Exit; end;
   { STORE ONLY, deliberately: pydynattr_get asks this to decide whether to
     FETCH from the store, so a wider answer here sends it to fetch a key that
     is not there. hasattr's wider question is pydynattr_hasattr below — the two

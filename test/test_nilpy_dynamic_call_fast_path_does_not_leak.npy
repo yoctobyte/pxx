@@ -1,0 +1,31 @@
+# The direct dynamic-call path (PyDynMethFast) passes the caller's Variants by
+# address with no argument list, so nothing is retained on the way in -- and
+# nothing must be released twice or kept on the way out. `leak N` makes N
+# dynamic calls taking and returning objects, keeping only the last result;
+# `keep N` holds every result and is the positive control.
+import sys
+
+
+class P:
+    def __init__(self, x):
+        self.x = x
+
+    def combine(self, other, tag):
+        return P((self.x + other.x) % 97)
+
+    def touch(self, other):
+        self.x = other.x
+
+
+mode = sys.argv[1]
+n = int(sys.argv[2])
+objs = [P(1), P(2)]
+kept = []
+r = None
+for i in range(n):
+    o = objs[i % 2]
+    r = o.combine(objs[1 - i % 2], "t" + str(i % 7))
+    o.touch(r)
+    if mode == "keep":
+        kept.append(r)
+print(r.x > 0, len(kept) == (n if mode == "keep" else 0))
