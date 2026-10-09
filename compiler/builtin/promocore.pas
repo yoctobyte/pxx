@@ -886,14 +886,14 @@ procedure PXXPromoClear(dst: Pointer);
 var sp: PPromoStr;
     w: PPromoWord;
 begin
-  if SlotTag(dst) = PROMO_TAG_HEAP then
+  if PPromoWord(dst)^ = PROMO_TAG_HEAP then
   begin
-    sp := PPromoStr(SlotPayloadAddr(dst));
+    sp := PPromoStr(Pointer(NativeInt(dst) + SizeOf(NativeInt)));
     sp^ := '';                       { managed release }
   end;
   w := PPromoWord(dst);
   w^ := PROMO_TAG_INLINE;
-  w := PPromoWord(SlotPayloadAddr(dst));
+  w := PPromoWord(Pointer(NativeInt(dst) + SizeOf(NativeInt)));
   w^ := 0;
 end;
 
@@ -962,10 +962,10 @@ begin
     FromIntSpill(dst, v);
     Exit;
   end;
-  if SlotTag(dst) <> PROMO_TAG_INLINE then PXXPromoClear(dst);
+  if PPromoWord(dst)^ <> PROMO_TAG_INLINE then PXXPromoClear(dst);
   w := PPromoWord(dst);
   w^ := PROMO_TAG_INLINE;
-  w := PPromoWord(SlotPayloadAddr(dst));
+  w := PPromoWord(Pointer(NativeInt(dst) + SizeOf(NativeInt)));
   w^ := NativeInt(v);
 end;
 
@@ -1125,17 +1125,17 @@ var sp, dp: PPromoStr;
     w: PPromoWord;
 begin
   if dst = src then Exit;
-  if SlotTag(src) = PROMO_TAG_HEAP then
+  if PPromoWord(src)^ = PROMO_TAG_HEAP then
   begin
     PXXPromoClear(dst);
     w := PPromoWord(dst);
     w^ := PROMO_TAG_HEAP;
-    sp := PPromoStr(SlotPayloadAddr(src));
-    dp := PPromoStr(SlotPayloadAddr(dst));
+    sp := PPromoStr(Pointer(NativeInt(src) + SizeOf(NativeInt)));
+    dp := PPromoStr(Pointer(NativeInt(dst) + SizeOf(NativeInt)));
     dp^ := sp^;                      { managed retain }
   end
   else
-    PXXPromoFromInt(dst, SlotInt(src));
+    PXXPromoFromInt(dst, Int64(PPromoWord(NativeInt(src) + SizeOf(NativeInt))^));
 end;
 
 { ---- the Int64 tier of a 32-bit target -----------------------------------
@@ -1255,15 +1255,15 @@ end;
 procedure PXXPromoAdd(dst, a, b: Pointer);
 var x, y, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and (PPromoWord(b)^ = PROMO_TAG_INLINE) then
   begin
-    x := SlotInt(a); y := SlotInt(b);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^); y := Int64(PPromoWord(NativeInt(b) + SizeOf(NativeInt))^);
     r := x + y;
     { signed overflow: the result's sign disagrees with both operands' }
     if ((x >= 0) = (y >= 0)) and ((r >= 0) <> (x >= 0)) then
       AddOvf(dst, x, y)
     else
-      PXXPromoFromInt(dst, r);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end;
     Exit;
   end;
   if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) and SlotToInt64(b, y) then
@@ -1396,14 +1396,14 @@ end;
 procedure PXXPromoSub(dst, a, b: Pointer);
 var x, y, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and (PPromoWord(b)^ = PROMO_TAG_INLINE) then
   begin
-    x := SlotInt(a); y := SlotInt(b);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^); y := Int64(PPromoWord(NativeInt(b) + SizeOf(NativeInt))^);
     r := x - y;
     if ((x >= 0) <> (y >= 0)) and ((r >= 0) <> (x >= 0)) then
       SubOvf(dst, x, y)
     else
-      PXXPromoFromInt(dst, r);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end;
     Exit;
   end;
   if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) and SlotToInt64(b, y) then
@@ -1431,12 +1431,12 @@ end;
 procedure PXXPromoMul(dst, a, b: Pointer);
 var x, y, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and (PPromoWord(b)^ = PROMO_TAG_INLINE) then
   begin
-    x := SlotInt(a); y := SlotInt(b);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^); y := Int64(PPromoWord(NativeInt(b) + SizeOf(NativeInt))^);
     if (x = 0) or (y = 0) then
     begin
-      PXXPromoFromInt(dst, 0);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(0) else PXXPromoFromInt(dst, 0); end;
       Exit;
     end;
     r := x * y;
@@ -1454,7 +1454,7 @@ begin
         oracle below would be the very division that traps }
       MulOvf(dst, x, y)
     else if r div y = x then
-      PXXPromoFromInt(dst, r)
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end
     else
       MulOvf(dst, x, y);
     Exit;
@@ -1480,14 +1480,14 @@ end;
 procedure PXXPromoAddInt(dst, a: Pointer; b: Int64);
 var x, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and ((SizeOf(NativeInt) >= 8) or NativeFits(b)) then
   begin
-    x := SlotInt(a);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^);
     r := x + b;
     if ((x >= 0) = (b >= 0)) and ((r >= 0) <> (x >= 0)) then
       AddIntSlow(dst, a, b)
     else
-      PXXPromoFromInt(dst, r);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end;
     Exit;
   end;
   if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) then
@@ -1510,14 +1510,14 @@ end;
 procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
 var x, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and ((SizeOf(NativeInt) >= 8) or NativeFits(b)) then
   begin
-    x := SlotInt(a);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^);
     r := x - b;
     if ((x >= 0) <> (b >= 0)) and ((r >= 0) <> (x >= 0)) then
       SubIntSlow(dst, a, b)
     else
-      PXXPromoFromInt(dst, r);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end;
     Exit;
   end;
   if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) then
@@ -1540,12 +1540,12 @@ end;
 procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 var x, r: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and ((SizeOf(NativeInt) >= 8) or NativeFits(b)) then
   begin
-    x := SlotInt(a);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^);
     if (x = 0) or (b = 0) then
     begin
-      PXXPromoFromInt(dst, 0);
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(0) else PXXPromoFromInt(dst, 0); end;
       Exit;
     end;
     r := x * b;
@@ -1554,7 +1554,7 @@ begin
       traps on, so `-2**63 * -1` through this mixed form died with SIGFPE. }
     if not ((x = -1) and (b = Low(Int64))) and not ((b = -1) and (x = Low(Int64)))
        and (r div b = x) then
-      PXXPromoFromInt(dst, r)
+      begin if (SizeOf(NativeInt) >= 8) and (PPromoWord(dst)^ = PROMO_TAG_INLINE) then PPromoWord(NativeInt(dst) + SizeOf(NativeInt))^ := NativeInt(r) else PXXPromoFromInt(dst, r); end
     else
       MulIntSlow(dst, a, b);
     Exit;
@@ -1608,9 +1608,9 @@ end;
 function PXXPromoCmp(a, b: Pointer): Integer;
 var x, y: Int64;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  if (PPromoWord(a)^ = PROMO_TAG_INLINE) and (PPromoWord(b)^ = PROMO_TAG_INLINE) then
   begin
-    x := SlotInt(a); y := SlotInt(b);
+    x := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^); y := Int64(PPromoWord(NativeInt(b) + SizeOf(NativeInt))^);
     if x < y then PXXPromoCmp := -1
     else if x > y then PXXPromoCmp := 1
     else PXXPromoCmp := 0;
@@ -2341,9 +2341,9 @@ end;
   defect this whole type exists to remove. }
 function PXXPromoToInt64(a: Pointer): Int64;
 begin
-  if SlotTag(a) <> PROMO_TAG_INLINE then
+  if PPromoWord(a)^ <> PROMO_TAG_INLINE then
     RunError(215);
-  PXXPromoToInt64 := SlotInt(a);
+  PXXPromoToInt64 := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^);
 end;
 
 { Slow path split out so the fast one never names TBig (a routine that mentions
@@ -2367,8 +2367,8 @@ end;
   PXXPromoToInt64 would trap on the intermediate. }
 function PXXPromoToInt64Wrap(a: Pointer): Int64;
 begin
-  if SlotTag(a) = PROMO_TAG_INLINE then
-    PXXPromoToInt64Wrap := SlotInt(a)
+  if PPromoWord(a)^ = PROMO_TAG_INLINE then
+    PXXPromoToInt64Wrap := Int64(PPromoWord(NativeInt(a) + SizeOf(NativeInt))^)
   else
     PXXPromoToInt64Wrap := PromoWrapHeap(a);
 end;
