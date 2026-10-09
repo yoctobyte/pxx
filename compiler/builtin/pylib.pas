@@ -3097,6 +3097,8 @@ function PyVarAsFloat(p: PPyVarRec): Double; forward;
 function PyVarText(p: PPyVarRec): AnsiString; forward;
 procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer); forward;
 function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean; forward;
+function PyVarNumFast(pa, pb, r: PPyVarRec; op: Integer): Boolean; forward;
+function PyVarCmpFast(pa, pb: PPyVarRec; out c: Integer; out nan: Boolean): Boolean; forward;
 function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
 function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
 
@@ -11261,6 +11263,7 @@ function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
   bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds }
 var o: TObject;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
   if PyVarUserAug(a, b, '__imul__', Result) then Exit;
   { BOTH integer tags: a boxed literal wears VT_INT (1) and a boxed Int64
     VT_INT64 (2), and testing only one is how the arm silently never fired. }
@@ -11289,6 +11292,7 @@ var
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
   { A USER class operand: its own __mul__, or the reflected __rmul__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -11895,6 +11899,14 @@ begin
   else if op = 2 then
     PyIntOpOverflows := ((x >= 0) and (y < 0) and (r < 0)) or
                         ((x < 0) and (y > 0) and (r >= 0))
+  { -1 is the one multiplier the division test cannot use: Low(Int64) div -1
+    overflows in the divide itself, and x86 traps it -- `-2**63 * -1` killed the
+    program with SIGFPE instead of promoting. With -1 on either side the
+    product overflows exactly when the other side is Low(Int64). }
+  else if x = -1 then
+    PyIntOpOverflows := y = Low(Int64)
+  else if y = -1 then
+    PyIntOpOverflows := x = Low(Int64)
   else
     PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
 end;
@@ -11919,11 +11931,87 @@ begin
   Result := pyfloormod_v(a, b);
 end;
 
+{ The NUMERIC fast path every variant arithmetic helper takes first: both
+  operands a plain int, bool or float. None of those tags can be a user object,
+  a container, a str or a promo-tier int, so every arm the full helpers try
+  before their numeric tail answers "not mine" for them -- but they asked
+  anyway, and PyVarUserArith builds its two dunder names from literals on every
+  call. That made `s = s + b` on two floats ~250 ns, five times CPython's
+  interpreter, and an unannotated program (lekkerzeilen: 0 of 334 constructor
+  parameters annotated) is nothing but these. The answer is the one the tail
+  gives: int op int stays an int unless it overflows (then False, and the full
+  helper promotes), any float operand makes a float. op: 1 add, 2 sub, 3 mul. }
+function PyVarNumFast(pa, pb, r: PPyVarRec; op: Integer): Boolean;
+var ta, tb, ia, ib, ir: Int64; x, y: Double;
+begin
+  Result := False;
+  ta := pa^.VType; tb := pb^.VType;
+  if (ta = 3) or (tb = 3) then
+  begin
+    if ta = 3 then x := PPyDouble(@pa^.Payload)^
+    else if (ta = 1) or (ta = 2) or (ta = 4) then x := pa^.Payload
+    else Exit;
+    if tb = 3 then y := PPyDouble(@pb^.Payload)^
+    else if (tb = 1) or (tb = 2) or (tb = 4) then y := pb^.Payload
+    else Exit;
+    if op = 1 then x := x + y
+    else if op = 2 then x := x - y
+    else x := x * y;
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := x;
+    Result := True;
+    Exit;
+  end;
+  if not (((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4))) then Exit;
+  ia := pa^.Payload; ib := pb^.Payload;
+  if op = 1 then ir := ia + ib
+  else if op = 2 then ir := ia - ib
+  else
+  begin
+    ir := ia * ib;
+  end;
+  if PyIntOpOverflows(ia, ib, ir, op) then Exit;
+  r^.VType := 2;
+  r^.Payload := ir;
+  Result := True;
+end;
+
+{ The ordering twin: -1/0/1 into c, or False to take the full path. Only a
+  SAME-KIND pair -- int with int (bool counts), float with float -- because an
+  int against a float is compared exactly by the full path and a Double
+  conversion is not exact past 2^53. A NaN answers through `nan`: no ordering
+  holds, so the caller's test is False whichever way it asks. }
+function PyVarCmpFast(pa, pb: PPyVarRec; out c: Integer; out nan: Boolean): Boolean;
+var ta, tb: Int64; x, y: Double;
+begin
+  Result := False;
+  c := 0; nan := False;
+  ta := pa^.VType; tb := pb^.VType;
+  if (ta = 3) and (tb = 3) then
+  begin
+    x := PPyDouble(@pa^.Payload)^;
+    y := PPyDouble(@pb^.Payload)^;
+    if x < y then c := -1
+    else if x > y then c := 1
+    else if x = y then c := 0
+    else nan := True;
+    Result := True;
+    Exit;
+  end;
+  if ((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4)) then
+  begin
+    if pa^.Payload < pb^.Payload then c := -1
+    else if pa^.Payload > pb^.Payload then c := 1;
+    Result := True;
+  end;
+end;
+
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
   { A USER class operand: its own __add__, or the reflected __radd__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -12033,6 +12121,7 @@ end;
 function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb: PPyVarRec; oa, ob: TObject; i: Integer;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if pa^.VType = 7 then
   begin
@@ -12119,6 +12208,7 @@ function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 2) then Exit;
   { A USER class operand: its own __sub__, or the reflected __rsub__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -12512,6 +12602,7 @@ end;
 
 function pyaugsub_v(const a: Variant; const b: Variant): Variant;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 2) then Exit;
   if PyVarUserAug(a, b, '__isub__', Result) then Exit;
   Result := pysub_v(a, b);
 end;
@@ -12526,7 +12617,10 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
+  { plain numbers skip the dunder probe (see PyVarNumFast) }
+  if ((PPyVarRec(@a)^.VType < 1) or (PPyVarRec(@a)^.VType > 4) or
+      (PPyVarRec(@b)^.VType < 1) or (PPyVarRec(@b)^.VType > 4)) then
+    if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
@@ -12575,8 +12669,9 @@ end;
   CPython compares an int with a float EXACTLY. The try declines (0) for every
   other pair, which keeps pycmp_v's answer. }
 function pylt_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc < 0); Exit; end;
   PyOrdCheck(a, b, '<');
   pc := PXXPromoVarCmpTry(@a, @b, 3);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12584,8 +12679,9 @@ begin
 end;
 
 function pyle_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc <= 0); Exit; end;
   PyOrdCheck(a, b, '<=');
   pc := PXXPromoVarCmpTry(@a, @b, 4);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12593,8 +12689,9 @@ begin
 end;
 
 function pygt_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc > 0); Exit; end;
   PyOrdCheck(a, b, '>');
   pc := PXXPromoVarCmpTry(@a, @b, 5);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12602,8 +12699,9 @@ begin
 end;
 
 function pyge_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc >= 0); Exit; end;
   PyOrdCheck(a, b, '>=');
   pc := PXXPromoVarCmpTry(@a, @b, 6);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -15079,11 +15177,104 @@ begin
   Result.append(Int64(1));
 end;
 
+{ The common case without an allocation: plain decimal text with at most 15
+  significant digits and a decimal exponent within +-22. The mantissa is then
+  an exact double, and so is 10^e (5^22 < 2^53), so ONE multiply or divide is
+  correctly rounded -- Clinger's fast path, the same answer the general parser
+  gives. pyfloat_parse built five strings per call before it reached the
+  converter (a trim Copy, a lowered copy, one concatenation per character),
+  and World.origin parses two of them per tile lookup: 4.8 us a float against
+  CPython's 0.2. Anything else -- an underscore, inf/nan, more digits, a far
+  exponent, malformed text -- answers False and takes the general path, which
+  owns every error. }
+function PyFloatParseFast(const s: AnsiString; out r: Double): Boolean;
+var i, n, sig, dexp, e: Integer; m: Int64; neg, eneg, anyDigit: Boolean;
+    p: Double; c: Char;
+begin
+  Result := False;
+  r := 0.0;
+  n := Length(s);
+  i := 1;
+  while (i <= n) and ((s[i] = ' ') or (s[i] = #9)) do Inc(i);
+  while (n >= i) and ((s[n] = ' ') or (s[n] = #9)) do Dec(n);
+  if i > n then Exit;
+  neg := False;
+  if (s[i] = '-') or (s[i] = '+') then
+  begin
+    neg := s[i] = '-';
+    Inc(i);
+  end;
+  m := 0; sig := 0; dexp := 0; anyDigit := False;
+  while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+  begin
+    anyDigit := True;
+    if (m <> 0) or (s[i] <> '0') then
+    begin
+      Inc(sig);
+      if sig > 15 then Exit;
+      m := m * 10 + (Ord(s[i]) - Ord('0'));
+    end;
+    Inc(i);
+  end;
+  if (i <= n) and (s[i] = '.') then
+  begin
+    Inc(i);
+    while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+    begin
+      anyDigit := True;
+      if (m <> 0) or (s[i] <> '0') then
+      begin
+        Inc(sig);
+        if sig > 15 then Exit;
+        m := m * 10 + (Ord(s[i]) - Ord('0'));
+      end;
+      Dec(dexp);
+      Inc(i);
+    end;
+  end;
+  if not anyDigit then Exit;
+  if (i <= n) and ((s[i] = 'e') or (s[i] = 'E')) then
+  begin
+    Inc(i);
+    eneg := False;
+    if (i <= n) and ((s[i] = '-') or (s[i] = '+')) then
+    begin
+      eneg := s[i] = '-';
+      Inc(i);
+    end;
+    if i > n then Exit;
+    e := 0;
+    while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+    begin
+      if e < 10000 then e := e * 10 + (Ord(s[i]) - Ord('0'));
+      Inc(i);
+    end;
+    if eneg then dexp := dexp - e else dexp := dexp + e;
+  end;
+  if i <= n then Exit;                       { trailing junk: general path raises }
+  if m = 0 then
+  begin
+    r := 0.0;
+    if neg then r := -r;
+    Result := True;
+    Exit;
+  end;
+  if (dexp < -22) or (dexp > 22) then Exit;
+  p := 1.0;
+  e := dexp;
+  if e < 0 then e := -e;
+  while e > 0 do begin p := p * 10.0; Dec(e); end;
+  if dexp < 0 then r := m / p else r := m * p;
+  if neg then r := -r;
+  Result := True;
+end;
+
 function pyfloat_parse(const s: AnsiString): Double;
 var i, n, digits: Integer; seenDot, seenExp: Boolean;
     body, lowbody, clean: AnsiString;
     infv: Double;
 begin
+  if PyFloatParseFast(s, Result) then Exit;
   body := s;
   i := 1; n := Length(body);
   while (i <= n) and ((body[i] = ' ') or (body[i] = #9)) do Inc(i);

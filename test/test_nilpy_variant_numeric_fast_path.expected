@@ -1,0 +1,63 @@
+int 4
+int 10
+int -21
+float -2.3333333333333335
+float 9.5
+float -4.5
+float -7.5
+float 0.35714285714285715
+int 2
+int 7
+int -1
+float 3.5
+int 9223372036854775808
+int -9223372036854775809
+int 18446744073709551614
+int 9223372036854775808
+int 9223372036854775808
+float -0.0
+float 0.0
+float 7.5
+float -7.5
+False False True True True
+False True True False
+False False False False False False
+True True True True
+True True True False
+False True True
+'155000.5' 155000.5
+'463000.25' 463000.25
+'0' 0.0
+'-0' -0.0
+'-0.0' -0.0
+'  12 ' 12.0
+'1e5' 100000.0
+'1E-5' 1e-05
+'.5' 0.5
+'5.' 5.0
+'-.25' -0.25
+'123456789012345' 123456789012345.0
+'1234567890123456' 1234567890123456.0
+'0.1' 0.1
+'0.3333333333333333' 0.3333333333333333
+'1e22' 1e+22
+'1e23' 1e+23
+'9007199254740993' 9007199254740992.0
+'1_000.5' 1000.5
+'000000000000000000123.5' 123.5
+'1.5e-22' 1.5e-22
+'2.5e-23' 2.5e-23
+'+7' 7.0
+'3.14159' 3.14159
+'-Infinity' -inf
+'inf' inf
+'' ValueError
+'abc' ValueError
+'1.e' ValueError
+'e5' ValueError
+'.' ValueError
+'1e' ValueError
+'1x' ValueError
+'--1' ValueError
+'1 2' ValueError
+9223372036854775808 9223372036854775808

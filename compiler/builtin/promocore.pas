@@ -1549,8 +1549,11 @@ begin
       Exit;
     end;
     r := x * b;
-    if (r div b = x) and not ((x = -1) and (b = Low(Int64)))
-                    and not ((b = -1) and (x = Low(Int64))) then
+    { The Low(Int64)/-1 guards go FIRST, as in PXXPromoMul: written after
+      `r div b = x` they were evaluated after the very division the hardware
+      traps on, so `-2**63 * -1` through this mixed form died with SIGFPE. }
+    if not ((x = -1) and (b = Low(Int64))) and not ((b = -1) and (x = Low(Int64)))
+       and (r div b = x) then
       PXXPromoFromInt(dst, r)
     else
       MulIntSlow(dst, a, b);

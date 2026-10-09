@@ -8521,6 +8521,12 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_dataclasses_replace 300 $(TESTTMP)/test_nilpy_dcrepl26 leak 5000
 	@if tools/assert_no_leak.sh nilpy_dataclasses_replace_control 300 $(TESTTMP)/test_nilpy_dcrepl26 keep 5000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_dataclasses_replace control (keep) did not trip the bound"; exit 1; fi
+	# Variant numeric fast paths (PyVarNumFast/PyVarCmpFast) and the
+	# allocation-free float() parse answer exactly what the full helpers do:
+	# int stays int, overflow promotes, NaN orders as nothing. Also pins
+	# Low(Int64) * -1, which trapped in both the variant and the typed path.
+	./$(COMPILER) test/test_nilpy_variant_numeric_fast_path.npy $(TESTTMP)/test_nilpy_varnumfast26
+	$(TESTTMP)/test_nilpy_varnumfast26 | diff -u test/test_nilpy_variant_numeric_fast_path.expected -
 	# `__name__` off the CLASS -- both routes: a static class reference and a
 	# class held in a variable (VT_CLASSREF, resolved at run time).
 	./$(COMPILER) test/test_nilpy_class_dunder_name.npy $(TESTTMP)/test_nilpy_dname26

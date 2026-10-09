@@ -1,0 +1,55 @@
+# The variant arithmetic and ordering helpers take a fast path when both
+# operands are a plain int, bool or float (PyVarNumFast / PyVarCmpFast), and
+# float() of a short decimal string parses without allocating
+# (PyFloatParseFast). Every row here reaches them with VARIANT operands -- the
+# values come out of a list -- and must answer exactly what CPython does:
+# int stays int, overflow still promotes, bool counts as int, any float
+# operand makes a float, NaN orders as nothing, mixed int/float ordering is
+# exact past 2**53.
+vals = [7, -3, 2.5, -0.0, True, False, 9223372036854775807, -9223372036854775808,
+        float("nan"), 9007199254740993, 9007199254740992.0, -1]
+
+
+def show(x):
+    print(type(x).__name__, x)
+
+
+a, b, c, z, t, f, big, small, nan, odd, even, m1 = vals
+show(a + b); show(a - b); show(a * b); show(a / b)
+show(a + c); show(c - a); show(c * b); show(c / a)
+show(t + t); show(t * a); show(f - t); show(t + c)
+show(big + 1); show(small - 1); show(big * 2); show(small * m1); show(m1 * small)
+show(z + z); show(z * b)
+s = 0
+for v in vals[:6]:
+    s += v
+show(s)
+s = 0.0
+for v in vals[:6]:
+    s -= v
+show(s)
+print(a < b, a <= b, a > b, a >= b, b < a)
+print(c < 2.5, c <= 2.5, c > -0.0, c >= 3.0)
+print(nan < c, nan <= c, nan > c, nan >= c, c < nan, nan < nan)
+print(t < a, f <= t, t > f, t >= 1)
+print(odd > even, odd >= even, even < odd, odd == even)
+print(z < 0.0, z <= 0.0, z >= 0.0)
+for txt in ["155000.5", "463000.25", "0", "-0", "-0.0", "  12 ", "1e5", "1E-5", ".5", "5.",
+            "-.25", "123456789012345", "1234567890123456", "0.1", "0.3333333333333333",
+            "1e22", "1e23", "9007199254740993", "1_000.5", "000000000000000000123.5",
+            "1.5e-22", "2.5e-23", "+7", "3.14159", "-Infinity", "inf"]:
+    print(repr(txt), repr(float(txt)))
+for bad in ["", "abc", "1.e", "e5", ".", "1e", "1x", "--1", "1 2"]:
+    try:
+        print(repr(bad), float(bad))
+    except ValueError:
+        print(repr(bad), "ValueError")
+
+
+# The same product through TYPED ints: the mixed promo form multiplied before
+# its -1 guard and trapped on Low(Int64) * -1 (PXXPromoMulInt).
+def mul(x: int, y: int):
+    return x * y
+
+
+print(mul(-9223372036854775807 - 1, -1), mul(-1, -9223372036854775807 - 1))
