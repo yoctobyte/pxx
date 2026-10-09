@@ -33,3 +33,31 @@ def counter(base: int):
 
 print(home(0))
 print(counter(10))
+
+
+# Two SIBLINGS with a same-named local, one bound by UNPACKING. The unpack
+# target was not recognised as the body's own local, so it became a capture,
+# and the forwarding call made both siblings share ONE slot: `make` read its
+# own `t0` back as `state`'s after calling it (TSP's deorbit planner).
+def home2(start_t: int) -> tuple:
+    known = [(start_t, 5)]
+
+    def state(t_us: int) -> int:
+        t0, s0 = known[-1]
+        known.append((t_us, s0 + 1))
+        return s0
+
+    def scan(t_us: int) -> int:
+        total = 0
+        for t0, s0 in known:
+            total += s0
+        return total
+
+    def make(burn_us: int) -> tuple:
+        t0 = burn_us - 300
+        return (state(t0), t0, scan(t0), t0)
+
+    return make(1000), make(2000)
+
+
+print(home2(0))

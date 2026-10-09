@@ -34384,7 +34384,64 @@ end;
   `nm += 1` on a name this body never bound is an UnboundLocalError in CPython,
   so it cannot legitimately mean "local" — and treating it as one here would
   silently change what today's by-value-capture-then-overwrite code does. Kept
-  narrow on purpose; widen only with a measurement. }
+  narrow on purpose; widen only with a measurement.
+
+  WIDENED, measured: an UNPACKING target binds too -- `t0, s0 = ...` and
+  `for k, v in ...` (PyInUnpackTarget). It was missed, so a sibling's
+  `t0 = ...` made this body's unpacked `t0` a capture -- and once a third
+  party forwarded it the two siblings shared ONE slot: TSP's sts.home()
+  `make` read its own `t0` back as `state`'s after calling it, and every
+  deorbit dry run started at the coast's beginning. The overwrite argument
+  above does not hold for a shared slot, which is the difference. }
+function PyInUnpackTarget(i, bodyStart, bodyEnd: Integer): Boolean;
+{ Is the identifier at token i one element of an unpacking TARGET list:
+  everything from the statement start to it, and from it to a depth-0 `=`
+  (or back to a `for`), is identifiers, commas, stars and grouping only, with
+  at least one comma? A keyword argument `f(a, b=1)` fails on the `f(` side. }
+var k, depth: Integer; comma: Boolean;
+begin
+  Result := False;
+  comma := False;
+  { backwards to the statement start (or a `for`) }
+  k := i - 1;
+  while k >= bodyStart do
+  begin
+    case Tokens[k].Kind of
+      tkComma: comma := True;
+      tkIdent, tkLParen, tkLBrack, tkStar: ;
+      tkFor:
+        begin
+          Result := comma or ((i + 1 < bodyEnd) and (Tokens[i + 1].Kind = tkComma));
+          Exit;
+        end;
+      tkNewline, tkIndent, tkDedent, tkSemicolon: Break;
+    else
+      Exit;
+    end;
+    Dec(k);
+  end;
+  { forwards to the `=` }
+  depth := 0;
+  k := i + 1;
+  while k < bodyEnd do
+  begin
+    case Tokens[k].Kind of
+      tkComma: comma := True;
+      tkIdent, tkStar: ;
+      tkLParen, tkLBrack: Inc(depth);
+      tkRParen, tkRBrack: Dec(depth);
+      tkAssign:
+        begin
+          Result := comma and (depth <= 0);
+          Exit;
+        end;
+    else
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyBodyBindsLocal(bodyStart, bodyEnd: Integer;
                           const nm: AnsiString): Boolean;
 var i: Integer;
@@ -34403,6 +34460,12 @@ begin
       end;
       { `for nm in ...` — the loop target is a binding too. }
       if (i > bodyStart) and (Tokens[i - 1].Kind = tkFor) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      { `nm, other = ...` / `for nm, other in ...` }
+      if PyInUnpackTarget(i, bodyStart, bodyEnd) then
       begin
         Result := True;
         Exit;
