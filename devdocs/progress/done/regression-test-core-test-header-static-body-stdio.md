@@ -46,3 +46,6 @@ expect_same: MISMATCH [hdrstatic_stdio26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-10-09 — auto-closed by the borg watcher: `test-core#src:test/test_header_static_body_stdio.pas` passes at 39225dde3632 (tier full); it was red at f33eeb316d43. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
