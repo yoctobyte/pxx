@@ -3060,6 +3060,11 @@ function next(it: TPyIter; const dflt: Variant): Variant; overload;
   LAYOUT, so the pointer travels and the record does not.
   bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
 function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
+{ The address of parameter i's DEFAULT value (0-based, Self excluded) in a
+  signature record, or nil when there is none -- the per-slot reading of
+  pysig_fill_defaults, for a caller that passes arguments by address instead
+  of building a list. }
+function pysig_default_slot(sig: Pointer; i: Integer): Pointer;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 { `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
@@ -18430,6 +18435,18 @@ begin
   for i := args.count to want - 1 do
     args.append(PVariant(NativeInt(dp) + i * 16)^);
   Result := True;
+end;
+
+function pysig_default_slot(sig: Pointer; i: Integer): Pointer;
+var sr: PPySigRec; p: PPyVarRec;
+begin
+  Result := nil;
+  if sig = nil then Exit;
+  sr := PPySigRec(sig);
+  if (sr^.Dflts = nil) or (i < 0) or (i >= sr^.TotN) then Exit;
+  p := PPyVarRec(NativeInt(sr^.Dflts) + i * 16);
+  if p^.VType = PYSIG_DFLT_UNSET then Exit;
+  Result := p;
 end;
 
 function pylist_cptrarray(l: TPyList): TPyBytes;

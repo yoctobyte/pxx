@@ -47,6 +47,10 @@ class A:
     def me(self):
         return self
 
+    def addto(self, x, acc=[]):
+        acc.append(x)
+        return len(acc)
+
 
 class B:
     def __init__(self):
@@ -69,6 +73,7 @@ v = 5
 print(a.rebind(v), v)
 print(a.deflt(1), a.deflt(1, 2), a.deflt(y=10, x=3))
 print(a.typed(3, 1.5))
+print(a.addto(1), a.addto(2), objs[0].addto(3, []), a.addto(4))
 big = 2 ** 70
 print(a.one(big), a.two(big, 2))
 print(a.me().zero(), a.me() is a)

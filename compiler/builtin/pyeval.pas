@@ -6576,7 +6576,7 @@ end;
 function PyDynMethFast(const recv: Variant; const name: AnsiString; nargs: Integer;
                        const a0, a1, a2, a3: Variant; var res: Variant): Boolean;
 var obj: Pointer; cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
-    i, n: Integer; code: Pointer;
+    i, n: Integer; code: Pointer; sig: Pointer; ap: array[0..3] of Pointer;
     vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4;
     vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
     df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4;
@@ -6590,50 +6590,109 @@ begin
   mi := PyFindMethCI(cls, name);
   if mi = nil then Exit;
   n := Integer(mi^.Arity) - 1;
-  if n <> nargs then Exit;
+  if (nargs > n) or (n > 4) then Exit;
   pk := PInt64(mi^.ParamKinds);
   if pk = nil then Exit;
   for i := 1 to n do
     if pk[i] <> TK_VARIANT then Exit;
-  if (n >= 1) and IsPromoV(a0) then Exit;
-  if (n >= 2) and IsPromoV(a1) then Exit;
-  if (n >= 3) and IsPromoV(a2) then Exit;
-  if (n >= 4) and IsPromoV(a3) then Exit;
+  if (nargs >= 1) and IsPromoV(a0) then Exit;
+  if (nargs >= 2) and IsPromoV(a1) then Exit;
+  if (nargs >= 3) and IsPromoV(a2) then Exit;
+  if (nargs >= 4) and IsPromoV(a3) then Exit;
+  { The arguments by ADDRESS: the caller's own for the ones it passed, the
+    signature's stored default for each trailing one it left out -- the same
+    value pysig_fill_defaults would append, and the same object CPython passes
+    (a mutable default is shared there too). `canopy.at(x, z)` against
+    `at(self, x, z, outside=None)` is the hot call this exists for. }
+  ap[0] := @a0; ap[1] := @a1; ap[2] := @a2; ap[3] := @a3;
+  if nargs < n then
+  begin
+    if (mi^.Flags and RTTI_METH_FLAG_HASSIG) = 0 then Exit;
+    sig := Pointer(NativeInt(pk[2 * (n + 1)]));
+    for i := nargs to n - 1 do
+    begin
+      ap[i] := pysig_default_slot(sig, i);
+      if ap[i] = nil then Exit;
+      if IsPromoV(PVariant(ap[i])^) then Exit;
+    end;
+  end;
   rk := mi^.RetKind;
   code := mi^.Code;
-  if rk = TK_VARIANT then
+  { All passed: the caller's own Variants, by address, as a static call
+    passes them. Only a call that left defaults out goes through ap[], whose
+    dereference the managed-arg lowering copies. }
+  if nargs = n then
   begin
-    case n of
-      0: begin vf0 := TVFn0(code); res := vf0(obj); end;
-      1: begin vf1 := TVFn1(code); res := vf1(obj, a0); end;
-      2: begin vf2 := TVFn2(code); res := vf2(obj, a0, a1); end;
-      3: begin vf3 := TVFn3(code); res := vf3(obj, a0, a1, a2); end;
-      4: begin vf4 := TVFn4(code); res := vf4(obj, a0, a1, a2, a3); end;
-    end;
-  end
-  else if rk = 0 then
-  begin
-    case n of
-      0: begin vp0 := TVPr0(code); vp0(obj); end;
-      1: begin vp1 := TVPr1(code); vp1(obj, a0); end;
-      2: begin vp2 := TVPr2(code); vp2(obj, a0, a1); end;
-      3: begin vp3 := TVPr3(code); vp3(obj, a0, a1, a2); end;
-      4: begin vp4 := TVPr4(code); vp4(obj, a0, a1, a2, a3); end;
-    end;
-    res := MakeNone;
-  end
-  else if rk = TK_DOUBLE then
-  begin
-    case n of
-      0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
-      1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, a0)); end;
-      2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, a0, a1)); end;
-      3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, a0, a1, a2)); end;
-      4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, a0, a1, a2, a3)); end;
-    end;
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin vf0 := TVFn0(code); res := vf0(obj); end;
+        1: begin vf1 := TVFn1(code); res := vf1(obj, a0); end;
+        2: begin vf2 := TVFn2(code); res := vf2(obj, a0, a1); end;
+        3: begin vf3 := TVFn3(code); res := vf3(obj, a0, a1, a2); end;
+        4: begin vf4 := TVFn4(code); res := vf4(obj, a0, a1, a2, a3); end;
+      end;
+    end
+    else if rk = 0 then
+    begin
+      case n of
+        0: begin vp0 := TVPr0(code); vp0(obj); end;
+        1: begin vp1 := TVPr1(code); vp1(obj, a0); end;
+        2: begin vp2 := TVPr2(code); vp2(obj, a0, a1); end;
+        3: begin vp3 := TVPr3(code); vp3(obj, a0, a1, a2); end;
+        4: begin vp4 := TVPr4(code); vp4(obj, a0, a1, a2, a3); end;
+      end;
+      res := MakeNone;
+    end
+    else if rk = TK_DOUBLE then
+    begin
+      case n of
+        0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
+        1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, a0)); end;
+        2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, a0, a1)); end;
+        3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, a0, a1, a2)); end;
+        4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, a0, a1, a2, a3)); end;
+      end;
+    end
+    else
+      Exit;
   end
   else
-    Exit;
+  begin
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin vf0 := TVFn0(code); res := vf0(obj); end;
+        1: begin vf1 := TVFn1(code); res := vf1(obj, PVariant(ap[0])^); end;
+        2: begin vf2 := TVFn2(code); res := vf2(obj, PVariant(ap[0])^, PVariant(ap[1])^); end;
+        3: begin vf3 := TVFn3(code); res := vf3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^); end;
+        4: begin vf4 := TVFn4(code); res := vf4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^); end;
+      end;
+    end
+    else if rk = 0 then
+    begin
+      case n of
+        0: begin vp0 := TVPr0(code); vp0(obj); end;
+        1: begin vp1 := TVPr1(code); vp1(obj, PVariant(ap[0])^); end;
+        2: begin vp2 := TVPr2(code); vp2(obj, PVariant(ap[0])^, PVariant(ap[1])^); end;
+        3: begin vp3 := TVPr3(code); vp3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^); end;
+        4: begin vp4 := TVPr4(code); vp4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^); end;
+      end;
+      res := MakeNone;
+    end
+    else if rk = TK_DOUBLE then
+    begin
+      case n of
+        0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
+        1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, PVariant(ap[0])^)); end;
+        2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, PVariant(ap[0])^, PVariant(ap[1])^)); end;
+        3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^)); end;
+        4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^)); end;
+      end;
+    end
+    else
+      Exit;
+  end;
   Result := True;
 end;
 
