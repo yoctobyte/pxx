@@ -1020,7 +1020,7 @@ begin
           managed-string deref arg via a hidden local (ir.inc,
           bug-a-nilpy-managed-deref-to-const-arg-leaks). The earlier per-site
           `mn := NamePtr^` bind is therefore unnecessary. }
-        if PyEqCI(meths[i].NamePtr^, name) then
+        if PyNameEqAt(meths[i].NamePtr, name, True) then
         begin
           PyFindMethCI := @meths[i];
           Exit;
@@ -1141,6 +1141,14 @@ begin
                 ' has no value and this call shape cannot omit a middle one');
 end;
 
+{ The receiver's class name, for PyHostCall's messages only. It used to be
+  copied into a local on every call, error or not. NamePtr can be nil, and a
+  diagnostic that crashes while reporting a problem is worse than the problem. }
+function PyHostClsName(cls: PClassRTTI): AnsiString;
+begin
+  if cls^.NamePtr <> nil then Result := cls^.NamePtr^ else Result := '<unnamed class>';
+end;
+
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
                      args: TPyList; kwNames: TPyList; var res: Variant);
 var
@@ -1248,9 +1256,6 @@ var
     the older refusal here cost a bisect to read. }
   sawDouble: Boolean;
   shapeBad: AnsiString;
-  { The receiver's class name, for the exceptions below. NamePtr can be nil, and a
-    diagnostic that crashes while reporting a problem is worse than the problem. }
-  clsName: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
   { INVARIANT, AND DELIBERATELY STILL A HALT. No RTTI means the compiler did not
@@ -1259,21 +1264,26 @@ begin
     below became raises because they report the PROGRAM's error; this one does
     not. }
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI on vm for host call ', name); Halt(1); end;
-  if cls^.NamePtr <> nil then clsName := cls^.NamePtr^ else clsName := '<unnamed class>';
   mi := PyFindMethCI(cls, name);
   { THE PROGRAM ASKED FOR A METHOD THAT IS NOT THERE, which is an AttributeError
     in CPython and was an uncatchable process exit here. Same wording as the
     attribute lookup in PyGetAttr, so the two read alike. }
   if mi = nil then
-    raise AttributeError.Create(Chr(39) + clsName + Chr(39) +
+    raise AttributeError.Create(Chr(39) + PyHostClsName(cls) + Chr(39) +
       ' object has no attribute ' + Chr(39) + name + Chr(39));
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
   { `S.init`, as CPython names the callee in a call-shape TypeError }
-  if cls^.NamePtr <> nil then
-    PyBindHostKwArgs(args, kwNames, mi, n, cls^.NamePtr^ + '.' + name)
-  else
-    PyBindHostKwArgs(args, kwNames, mi, n, name);
+  { The qualified name is only for its error messages, and building it was a
+    concatenation on EVERY dynamic call; without keywords the binder returns
+    before reading it. }
+  if kwNames <> nil then
+  begin
+    if cls^.NamePtr <> nil then
+      PyBindHostKwArgs(args, kwNames, mi, n, cls^.NamePtr^ + '.' + name)
+    else
+      PyBindHostKwArgs(args, kwNames, mi, n, name);
+  end;
   nargs := args.count;
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
@@ -1356,7 +1366,7 @@ begin
         carries a message, not a stream, and the kinds are the message. That is a
         gain and not just a translation -- the old form could be split across two
         streams, and was, until the diagnostics moved to stderr. }
-      shapeBad := 'reflected call to ' + clsName + '.' + name + ' is refused: its '
+      shapeBad := 'reflected call to ' + PyHostClsName(cls) + '.' + name + ' is refused: its '
                 + 'parameter shape is not one this bridge can pass (arity '
                 + pystr_of(Int64(n)) + '), kinds:';
       if pk <> nil then
@@ -1663,7 +1673,7 @@ begin
           else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
         end;
       else
-        raise TypeError.Create('reflected call to ' + clsName + '.' + name
+        raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
                 + ' is refused: this bridge has no thunk for a mixed shape of '
                 + pystr_of(Int64(mc)) + ' integer-class and ' + pystr_of(Int64(kc))
                 + ' double parameters');
@@ -1788,7 +1798,7 @@ begin
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1806,7 +1816,7 @@ begin
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1825,7 +1835,7 @@ begin
       4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
       5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1849,7 +1859,7 @@ begin
       4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
       5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1874,7 +1884,7 @@ begin
       4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
       5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1895,7 +1905,7 @@ begin
       4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
       5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1904,7 +1914,7 @@ begin
     Exit;
   end;
 
-  raise TypeError.Create('reflected call to ' + clsName + '.' + name
+  raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
           + ' is refused: this bridge cannot box a return value of kind '
           + pystr_of(Int64(rk)));
 end;

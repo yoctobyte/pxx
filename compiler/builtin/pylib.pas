@@ -3397,6 +3397,9 @@ function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
 
 function PyNarrowRet(v: Int64; rk: Integer): Int64;
 
+{ An RTTI NamePtr compared in place, without copying the name (see the body). }
+function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
+
 implementation
 
 { Python's whitespace set for the argument-less strip()/isspace():
@@ -5336,6 +5339,36 @@ type
   PPyFN  = ^NativeInt;
   PPyFV  = ^Variant;
 
+{ An RTTI name compared IN PLACE. `np` is the blob's NamePtr: a PString at a
+  FROZEN string -- the interned literal's 8-byte length prefix, the characters
+  after it. Spelling it `flds[i].NamePtr^` as an argument materialised a managed
+  COPY of the name for every entry scanned (PXXStrFromLit and a free, through
+  the managed-deref argument lowering), so one dynamic `g.at(...)` scanned the
+  receiver's methods twice and allocated a string per method each time.
+  ci: ASCII case folded. }
+function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
+var p: NativeInt; n, i: NativeInt; ca, cb: Integer;
+begin
+  Result := False;
+  if np = nil then Exit;
+  n := Length(name);
+  if PInt64(np)^ <> n then Exit;
+  p := NativeInt(np) + 8;
+  for i := 0 to n - 1 do
+  begin
+    ca := PByte(p + i)^;
+    cb := Ord(name[i + 1]);
+    if ca <> cb then
+    begin
+      if not ci then Exit;
+      if (ca >= 65) and (ca <= 90) then ca := ca + 32;
+      if (cb >= 65) and (cb <= 90) then cb := cb + 32;
+      if ca <> cb then Exit;
+    end;
+  end;
+  Result := True;
+end;
+
 function PyEqAttrCI(const a, b: AnsiString): Boolean;
 { Case-insensitive name compare. pyeval has the same helper, but pyeval USES
   pylib and not the reverse, so it cannot be borrowed from there. }
@@ -5366,7 +5399,7 @@ begin
     begin
       flds := curr^.FieldsPtr;
       for i := 0 to Integer(curr^.FieldCount) - 1 do
-        if PyEqAttrCI(flds[i].NamePtr^, name) then
+        if PyNameEqAt(flds[i].NamePtr, name, True) then
         begin
           PyFindFieldCI := @flds[i];
           Exit;
@@ -5390,7 +5423,7 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-        if meths[i].NamePtr^ = nm then
+        if PyNameEqAt(meths[i].NamePtr, nm, False) then
         begin
           PyFindMethByName := @meths[i];
           Exit;
