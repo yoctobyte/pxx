@@ -40467,6 +40467,79 @@ begin
   end;
 end;
 
+{ Declare the hidden global of every NON-CONSTANT default of the top-level def
+  whose `def` token is defTok, and point the shell's signature at it -- the
+  top-level twin of PyEvalMethodDefaults(.., declareOnly = True).
+
+  The real parse evaluates such a default where the def stands and only THEN
+  records its symbol, so a call lowered ABOVE the def (a function or method
+  written earlier in the file) found ProcParamDefaultSym = -1 and passed the
+  pre-pass's "was None" answer: `dt: float = DT` arrived as 0.0 and
+  `push: tuple = (1.0, 2.0)` as None, silently. Declared here, both call sites
+  read the same variant global, which the def-time store fills before any
+  call can run. Called from PyRegisterDefShells, so PyHdrName is this def's. }
+procedure PyDeclareDefDefaults(defTok, procIdx: Integer);
+var j, depth, pIdx, dStart, dSOff, dSLen, dSym, savedCurProc: Integer;
+    dIsStr: Boolean;
+    pname, gname: AnsiString;
+begin
+  if (procIdx < 0) or (PyDefaultClsName <> '') or (PyNestPrefix <> '') then Exit;
+  pIdx := 0;
+  pname := '';
+  depth := 0;
+  j := defTok + 2;   { the '(' }
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end
+    else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+    begin
+      Inc(pIdx);
+      pname := '';
+    end
+    else if (depth = 1) and (Tokens[j].Kind = tkIdent) and (pname = '') and
+            (Tokens[j - 1].Kind in [tkLParen, tkComma]) then
+      pname := GetTokenStr(j)
+    else if (depth = 1) and (Tokens[j].Kind = tkAssign) and
+            (pIdx < MAX_PROC_PARAMS) and (pIdx < Procs[procIdx].ParamCount) then
+    begin
+      Inc(j);
+      dStart := j;
+      PyParamDefaultAt(j, pname, dIsStr, dSOff, dSLen);
+      { the same lone-token test PyEvalMethodDefaults uses: "was None" is also
+        what a non-constant default reports with evaluation off }
+      if PyDefaultWasNone and (PyDefaultSym < 0) and
+         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + pIdx] and
+         (ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + pIdx] < 0) and
+         not ((Tokens[dStart].Kind = tkNil) and (dStart + 1 < TokCount) and
+              (Tokens[dStart + 1].Kind in [tkComma, tkRParen])) then
+      begin
+        gname := PyParamDefaultGlobalName(pname);
+        dSym := FindSym(gname);
+        if dSym < 0 then
+        begin
+          { tyVariant for the reason PyEvalMethodDefaults gives: the value is
+            not typed yet, and the store PyEvalParamDefault queues converts. }
+          savedCurProc := CurProc;
+          CurProc := -1;
+          dSym := AllocVar(gname, tyVariant);
+          CurProc := savedCurProc;
+          SymSyncTypeRef(dSym);
+        end;
+        ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + pIdx] := dSym;
+        ProcParamDefaultGName[procIdx * MAX_PROC_PARAMS + pIdx] := InternStr(gname);
+        ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + pIdx] := False;
+      end;
+      Continue;   { PyParamDefaultAt left j past the default }
+    end;
+    Inc(j);
+  end;
+end;
+
 procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx, savedHoist: Integer;
     isGenDef: Boolean;
@@ -40527,6 +40600,7 @@ begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
         PyApplyDefSignature(procIdx);
+        PyDeclareDefDefaults(i, procIdx);
         if isGenDef then PyMarkGeneratorProc(procIdx);
         { Record WHERE the def stands. The shell has to exist from the top of the
           module or the name is not visible at all (that was the `len` bug), but

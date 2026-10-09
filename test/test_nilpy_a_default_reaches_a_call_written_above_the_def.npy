@@ -1,0 +1,32 @@
+# A non-constant default must reach a call lowered ABOVE the def: a function
+# or method written earlier in the file used to get 0.0 / None silently.
+DT = 0.2
+
+class A:
+    def m(self) -> list:
+        return step(0)
+
+def g() -> list:
+    return step(1)
+
+def early_acc(v: int) -> int:
+    return len(acc(v))
+
+def step(t_us: int, dt: float = DT, push: tuple = (1.0, 2.0)) -> list:
+    return [t_us, dt, push]
+
+def acc(v: int, bucket: list = []) -> list:
+    bucket.append(v)
+    return bucket
+
+def named(s: str = "x" + "y", n=None) -> str:
+    return s + str(n)
+
+def call_named() -> str:
+    return named()
+
+print(step(2))
+print(g())
+print(A().m())
+print(early_acc(1), early_acc(2), len(acc(3)))
+print(call_named())
