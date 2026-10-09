@@ -1,0 +1,50 @@
+# `state, end = step(state)` into a `state: tuple` parameter stored the raw
+# variant element in the class slot (printed [] or segfaulted), and the
+# rebinding treated the borrowed parameter as owned. TSP _propagate_grid.
+
+class U:
+    def _propagate(self, t0: int, state: tuple, t1: int, data: str = None) -> tuple:
+        if t1 == t0:
+            return (state, None)
+        return (tuple(x + 1.0 for x in state), None)
+
+    def _grid(self, t0: int, state: tuple, t1: int, data: str = None) -> tuple:
+        t = t0
+        step = 10
+        while True:
+            t_next = min(t1, (t // step + 1) * step)
+            state, end = self._propagate(t, state, t_next, data)
+            if end is not None or t_next == t1:
+                return (state, end)
+            t = t_next
+
+
+u = U()
+s, end = u._grid(0, (1.0, 2.0, 3.0), 35, "")
+print(len(s), s, end)
+
+def mk(s: tuple) -> tuple:
+    return (tuple(x + 1.0 for x in s), None)
+
+def d(state: tuple) -> tuple:
+    st: tuple = (0.0,)
+    st, end = mk(state)
+    return st
+
+def e(state: tuple) -> tuple:
+    p = mk(state)
+    state, end = p
+    return state
+
+def f(state):
+    state, end = mk(state)
+    return state
+
+def g(state: tuple) -> tuple:
+    state, end = mk((5.0, 6.0))
+    return state
+
+print(d((1.0, 2.0)))
+print(e((1.0, 2.0)))
+print(f((1.0, 2.0)))
+print(g((1.0, 2.0)))

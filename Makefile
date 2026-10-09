@@ -6235,6 +6235,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_fwddflt26 | diff -u test/test_nilpy_a_default_reaches_a_call_written_above_the_def.expected -
 	./$(COMPILER) test/test_nilpy_a_named_promo_temp_minted_by_unpacking_is_zeroed.npy $(TESTTMP)/test_nilpy_promounp26
 	$(TESTTMP)/test_nilpy_promounp26 | diff -u test/test_nilpy_a_named_promo_temp_minted_by_unpacking_is_zeroed.expected -
+	./$(COMPILER) test/test_nilpy_unpacking_into_a_class_typed_parameter.npy $(TESTTMP)/test_nilpy_unpparam26
+	$(TESTTMP)/test_nilpy_unpparam26 | diff -u test/test_nilpy_unpacking_into_a_class_typed_parameter.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

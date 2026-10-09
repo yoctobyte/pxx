@@ -34038,6 +34038,43 @@ begin
   end;
 end;
 
+{ Is the identifier at token i one of the TARGETS of a tuple-unpacking
+  assignment -- `a, b = ...`, `(a, b) = ...`, `a, (b, c) = ...`? Walks back
+  to the statement's start over names, commas and parens, then forward to an
+  `=` at bracket depth zero with nothing else in between. }
+function PyIdentIsUnpackTarget(i: Integer): Boolean;
+var j, depth: Integer; sawComma: Boolean;
+begin
+  Result := False;
+  j := i - 1;
+  sawComma := False;
+  while (j >= 0) and (Tokens[j].Kind in [tkIdent, tkComma, tkLParen, tkRParen]) do
+  begin
+    if Tokens[j].Kind = tkComma then sawComma := True;
+    Dec(j);
+  end;
+  if (j >= 0) and not (Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) then Exit;
+  depth := 0;
+  j := i + 1;
+  while j < TokCount do
+  begin
+    case Tokens[j].Kind of
+      tkIdent: ;
+      tkComma: sawComma := True;
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkAssign:
+        begin
+          Result := sawComma and (depth = 0);
+          Exit;
+        end;
+    else
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
 { Does the body starting at `bodyStart` REBIND the parameter `nm` — `p = ...`
   or an augmented `p += ...`? Python's rule is that rebinding a parameter is
   local to the call; this dialect passes a variant parameter CONST-BY-REF, so
@@ -34075,6 +34112,13 @@ begin
                                     tkAtEq]) and
             (GetTokenStr(i) = nm) then
     begin
+      Result := True;
+      Exit;
+    end
+    else if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = nm) and
+            PyIdentIsUnpackTarget(i) then
+    begin
+      { `p, end = f(p)` rebinds p as surely as `p = ...` does }
       Result := True;
       Exit;
     end;
@@ -35129,6 +35173,12 @@ begin
       SymSyncTypeRef(symIdx);
     end;
     lhs := PyMakeIdent(symIdx);
+    { A CLASS-typed target (a `state: tuple` parameter, an annotated local)
+      receiving an element of the unpacked value -- a VARIANT -- needs the
+      same unbox a plain `x = v` store gets. Without it the raw 16-byte
+      variant went into the 8-byte class slot: `state, end = step(state)`
+      printed [] or segfaulted (TSP Universe._propagate_grid). }
+    valNode := PyStoreRhsToClassSlot(symIdx, valNode);
   end
   else
   begin
@@ -41435,6 +41485,21 @@ begin
         the incoming argument is an Any, and only the parameter's own type
         describes every value the slot may hold. }
       pbLocal[i] := AllocVar(PyHdrPNames[i], tyVariant);
+    end
+    else if (i < pbOwn) and (i < MAX_PROC_PARAMS) and (PyHdrPTypes[i] = tyClass) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) and
+       PyParamRebound(bodyStart, PyHdrPNames[i]) then
+    begin
+      { A CLASS-typed parameter is BORROWED from the caller, and a rebinding
+        store treats its slot as owned: `state, end = step(state)` in a loop
+        left `state` holding an object the unpack temp then released --
+        printed as [] or crashed (TSP Universe._propagate_grid). A private
+        slot is an ordinary owned local: seeded from the argument (+1),
+        released at scope exit. }
+      Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + PyHdrPNames[i];
+      pbLocal[i] := AllocVar(PyHdrPNames[i], tyClass);
+      Syms[pbLocal[i]].RecName := Syms[Procs[procIdx].Params[i].SymIdx].RecName;
+      SymSyncTypeRef(pbLocal[i]);
     end;
   end;
   if not isProc then
@@ -48390,6 +48455,16 @@ begin
     begin
       Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + pnames[i];
       pbLocal[i] := AllocVar(pnames[i], tyVariant);
+    end
+    else if (i >= 1) and (i < MAX_PROC_PARAMS) and (ptypes[i] = tyClass) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) and
+       PyParamRebound(bodyStart, pnames[i]) then
+    begin
+      { a rebound CLASS parameter gets an owned private slot -- see PyParseDef }
+      Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + pnames[i];
+      pbLocal[i] := AllocVar(pnames[i], tyClass);
+      Syms[pbLocal[i]].RecName := Syms[Procs[procIdx].Params[i].SymIdx].RecName;
+      SymSyncTypeRef(pbLocal[i]);
     end;
   end;
   if not isCtor then
