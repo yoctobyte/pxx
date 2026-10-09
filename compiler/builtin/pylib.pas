@@ -6129,13 +6129,15 @@ begin
   if tg <> 7 then
     raise TypeError.Create('object is not subscriptable');
   o := TObject(pyvarobj(v));
-  if o is TPyDict then
-    Result := TPyDict(o).fetch(key)
-  else if o is TPyList then
+  { list before dict: `xs[i]` is the common subscript, and every `is` that
+    answers no walks the class chain }
+  if o is TPyList then
   begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
   end
+  else if o is TPyDict then
+    Result := TPyDict(o).fetch(key)
   else if o is TPyRange then
     { r[i] on a range held in a variant — arithmetic, not a lookup }
     Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))

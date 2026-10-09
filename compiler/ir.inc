@@ -8009,6 +8009,19 @@ begin
     znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
     notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
     IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+    { The EXACT class first, inline: it is the common positive answer
+      (`o is TPyList` on a list), and it was a call plus a parent walk on
+      every evaluation -- pylib's variant subscript and container dispatch
+      test several classes per operation, and __pxxInheritsFrom was ~5% of
+      lekkerzeilen's frame. The call below stays for descendants. }
+    skipLbl := IRNewLabel;
+    eq := IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
+                   IRAppend(IR_CLASSREF, targetCi, -1, -1, 0, Ord(tyPointer)),
+                   Ord(tkEq), 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP_IF_FALSE, skipLbl, eq, -1, 0, 0);
+    IRAppend(IR_STORE_SYM, rvar, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyBoolean)), -1, 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP, endLbl, -1, -1, 0, 0);
+    IRAppend(IR_LABEL, -1, -1, -1, skipLbl, 0);
     cmArg1 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
                        -1, -1, 0, Ord(tyPointer));
     cmArg2 := IRAppend(IR_ARG, IRAppend(IR_CLASSREF, targetCi, -1, -1, 0, Ord(tyPointer)),
