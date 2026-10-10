@@ -7802,8 +7802,26 @@ begin
   else if n = 'pymul_v' then Result := $59;
 end;
 
+{ The ModRM byte of a memory operand based on rax -- [rax], [rax+disp8] or
+  [rax+disp32] -- with `reg` in the register field. disp = 0 is the plain
+  [rax] every load and store used before IR_LOAD_MEM and IR_STORE_MEM folded
+  an IR_FIELD offset into it. }
+procedure EmitRaxMemModRM(reg, disp: Integer);
+begin
+  if disp = 0 then
+    EmitB(Byte(reg shl 3))
+  else if (disp >= -128) and (disp <= 127) then
+  begin
+    EmitB(Byte($40 or (reg shl 3))); EmitB(Byte(disp and $FF));
+  end
+  else
+  begin
+    EmitB(Byte($80 or (reg shl 3))); EmitI32(disp);
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
-var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx: Integer;
+var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
     chrCmpPfx: Integer;     { length-prefix width of the frozen string in a Char<->String comparison }
     srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
@@ -9239,6 +9257,17 @@ begin
     IR_LOAD_MEM:
       begin
         addressNode := IRA[node];
+        { An IR_FIELD address folds into the load's displacement: `mov rax,
+          [rax+ofs]` instead of `add rax, ofs` then `mov rax, [rax]` -- one
+          instruction, and one link fewer in the address's dependency chain.
+          Every load below names [rax] with ModRM r/m = 000, so only that byte
+          changes: EmitRaxMemModRM. Not at -O0, whose bytes are the 1:1 gate. }
+        foldDisp := 0;
+        if (OptLevel >= 1) and (IRKind[addressNode] = IR_FIELD) then
+        begin
+          foldDisp := Integer(IRIVal[addressNode]);
+          addressNode := IRA[addressNode];
+        end;
         IREmitNode(addressNode);
 
         tk := IntToTypeKind(IRTk[node]);
@@ -9252,7 +9281,7 @@ begin
           (bug-single-field-element-in-aggregate). }
         if tk = tySingle then
         begin
-          EmitB($66); EmitB($0F); EmitB($6E); EmitB($00);       { movd xmm0, [rax] }
+          EmitB($66); EmitB($0F); EmitB($6E); EmitRaxMemModRM(0, foldDisp);       { movd xmm0, [rax] }
           EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0);       { cvtss2sd xmm0, xmm0 }
           EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
           Exit;
@@ -9262,38 +9291,38 @@ begin
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); { movsx rax, byte ptr [rax] }
+            EmitB($48); EmitB($0F); EmitB($BE); EmitRaxMemModRM(0, foldDisp); { movsx rax, byte ptr [rax] }
           end
           else
           begin
-            EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); { movzx rax, byte ptr [rax] }
+            EmitB($48); EmitB($0F); EmitB($B6); EmitRaxMemModRM(0, foldDisp); { movzx rax, byte ptr [rax] }
           end;
         end
         else if size = 2 then
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); { movsx rax, word ptr [rax] }
+            EmitB($48); EmitB($0F); EmitB($BF); EmitRaxMemModRM(0, foldDisp); { movsx rax, word ptr [rax] }
           end
           else
           begin
-            EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); { movzx rax, word ptr [rax] }
+            EmitB($48); EmitB($0F); EmitB($B7); EmitRaxMemModRM(0, foldDisp); { movzx rax, word ptr [rax] }
           end;
         end
         else if size = 4 then
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($63); EmitB($00); { movsxd rax, dword ptr [rax] }
+            EmitB($48); EmitB($63); EmitRaxMemModRM(0, foldDisp); { movsxd rax, dword ptr [rax] }
           end
           else
           begin
-            EmitB($8B); EmitB($00); { mov eax, dword ptr [rax] }
+            EmitB($8B); EmitRaxMemModRM(0, foldDisp); { mov eax, dword ptr [rax] }
           end;
         end
         else
         begin
-          EmitB($48); EmitB($8B); EmitB($00); { mov rax, qword ptr [rax] }
+          EmitB($48); EmitB($8B); EmitRaxMemModRM(0, foldDisp); { mov rax, qword ptr [rax] }
         end;
       end;
 
@@ -9457,6 +9486,14 @@ begin
           IREmitNode(valueNode);
           EmitB($50); { push rax -- value }
 
+          { An IR_FIELD destination folds into the store's displacement, as in
+            IR_LOAD_MEM: `mov [rax+ofs], rcx`, no `add rax, ofs`. }
+          foldDisp := 0;
+          if (OptLevel >= 1) and (IRKind[addressNode] = IR_FIELD) then
+          begin
+            foldDisp := Integer(IRIVal[addressNode]);
+            addressNode := IRA[addressNode];
+          end;
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
           IREmitNode(addressNode); { rax = address }
@@ -9498,19 +9535,19 @@ begin
 
           if size = 1 then
         begin
-          EmitB($88); EmitB($08); { mov byte ptr [rax], cl }
+          EmitB($88); EmitRaxMemModRM(1, foldDisp); { mov byte ptr [rax], cl }
         end
         else if size = 2 then
         begin
-          EmitB($66); EmitB($89); EmitB($08); { mov word ptr [rax], cx }
+          EmitB($66); EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov word ptr [rax], cx }
         end
         else if size = 4 then
         begin
-          EmitB($89); EmitB($08); { mov dword ptr [rax], ecx }
+          EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov dword ptr [rax], ecx }
         end
         else
         begin
-          EmitB($48); EmitB($89); EmitB($08); { mov qword ptr [rax], rcx }
+          EmitB($48); EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov qword ptr [rax], rcx }
         end;
         end;
       end;

@@ -24594,6 +24594,10 @@ test-core: $(COMPILER)
 	# refused and is deliberately not in this file.
 	./$(COMPILER) test/test_packed_array_field_in_a_record_and_a_class.pas $(TESTTMP)/test_pkarrfld26
 	tools/expect_same.sh test_pkarrfld26 "$$($(TESTTMP)/test_pkarrfld26)" "$$(cat test/test_packed_array_field_in_a_record_and_a_class.expected)"
+	./$(COMPILER) test/test_field_offset_folds_into_the_load_and_store.pas $(TESTTMP)/test_fldfold26
+	tools/expect_same.sh test_fldfold26 "$$($(TESTTMP)/test_fldfold26)" "$$(cat test/test_field_offset_folds_into_the_load_and_store.expected)"
+	./$(COMPILER) -O3 test/test_field_offset_folds_into_the_load_and_store.pas $(TESTTMP)/test_fldfold3_26
+	tools/expect_same.sh test_fldfold3_26 "$$($(TESTTMP)/test_fldfold3_26)" "$$(cat test/test_field_offset_folds_into_the_load_and_store.expected)"
 	# The THIRD copy of that parser: a variant branch. Merging it fixed a
 	# branch-field ALIGNMENT bug (a record-typed branch field was aligned to the
 	# pointer width, so a one-byte branch measured 8 where fpc says 1 -- and the
