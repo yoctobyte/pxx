@@ -563,6 +563,7 @@ AN_BINOP Left PyClsAttrOvrGet(node, fieldName, cvIdx)
 AN_BINOP Left PyClsAttrOvrGet(node, fieldName, fldIdx)
 AN_BINOP Left PyMakeDynAttrGet(baseNode, fname)
 AN_BINOP Left PyMakeDynAttrGet(node, fieldName)
+AN_BINOP Left PyMakeIdent(bSym)
 AN_BINOP Left PyMakeIdent(caN)
 AN_BINOP Left PyMakeIdent(iSym)
 AN_BINOP Left PyMakeIdent(rngStepSym)
@@ -627,6 +628,7 @@ AN_BINOP Right ASTLeft[node]
 AN_BINOP Right AllocNode(AN_INT_LIT)
 AN_BINOP Right CurASTNode
 AN_BINOP Right ParseSetLiteralAST
+AN_BINOP Right PyMakeIdent(aSym)
 AN_BINOP Right PyMakeIdent(cbN)
 AN_BINOP Right PyMakeIdent(nSym)
 AN_BINOP Right PyMakeIdent(rngStopSym)
@@ -841,6 +843,7 @@ AN_CLASSREF Right 0
 AN_CLASSREF Right 1
 AN_CLASS_CAST Left CurASTNode
 AN_CLASS_CAST Left unboxCall
+AN_COMMA Left AllocNode(AN_ASSIGN)
 AN_COMMA Left Result
 AN_COMMA Left arm
 AN_COMMA Left asg
@@ -871,6 +874,7 @@ AN_COMMA Right PyMakeNone
 AN_COMMA Right PyMakeTruthy(PyMakeIdent(aSym))
 AN_COMMA Right Result
 AN_COMMA Right atRecv
+AN_COMMA Right c2
 AN_COMMA Right callN
 AN_COMMA Right chMid
 AN_COMMA Right chSeq
@@ -885,6 +889,7 @@ AN_COMMA Right node
 AN_COMMA Right setInnerComma
 AN_COMMA Right sub
 AN_COMMA Right t
+AN_COMMA Right tern
 AN_COMMA Right valNode
 AN_COMPOUND_ASSIGN Left left
 AN_COMPOUND_ASSIGN Left valNode
@@ -1086,6 +1091,7 @@ AN_PAIR Left GenMakeGoto(lblIdx)
 AN_PAIR Left GenSlCloseAndFree(i, gpiN)
 AN_PAIR Left PyForceVariant(PyMakeDynAttrGet(baseNode, fname))
 AN_PAIR Left PyMakeDynAttrGet(atRecv, atName)
+AN_PAIR Left PyMakeIdent(bSym)
 AN_PAIR Left PyMakeIdent(caN)
 AN_PAIR Left PyParseFor
 AN_PAIR Left PyStarKwCount(nfoundSym)
@@ -1146,6 +1152,7 @@ AN_PAIR Right CurASTNode
 AN_PAIR Right DefaultArgValueNode(mpi, rbK)
 AN_PAIR Right DefaultArgValueNode(procIdx, k)
 AN_PAIR Right ParseSetElementAST
+AN_PAIR Right PyMakeIdent(aSym)
 AN_PAIR Right PyMakeIdent(cbN)
 AN_PAIR Right Result
 AN_PAIR Right WriteLit('false')
@@ -1249,6 +1256,7 @@ AN_SWITCH Right bodyNode
 AN_TERNARY Left CCondOf(left)
 AN_TERNARY Left bfIsCall
 AN_TERNARY Left clsCondCall
+AN_TERNARY Left cmp
 AN_TERNARY Left cnd
 AN_TERNARY Left cond
 AN_TERNARY Left condN

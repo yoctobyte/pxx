@@ -906,6 +906,7 @@ begin
   if PyExprMode then
   begin
     PyParseFactorCore;
+    PyNarrowIntMinMax;
     Exit;
   end;
   LastExprTk := tyInteger;

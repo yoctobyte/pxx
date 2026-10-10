@@ -1,0 +1,22 @@
+# min/max of two ints where one is a promotable int lower inline (first
+# extreme wins, each operand evaluated once, in order, inside its region).
+L = [1, 2, 3, 4]
+calls = []
+
+def f(v: int) -> int:
+    calls.append(v)
+    return v
+
+def g(k: int, x: float) -> int:
+    i = min(int(x), len(L) - 2)
+    j = max(k, len(L) * 2)
+    t = min(f(k + 1), f(k - 1) + 0)
+    u = max(f(3) + 0, f(3) + 0)
+    w = 0
+    if k > 100 and min(f(k), f(1) + 1) > 0:
+        w = 1
+    return i + j + t + u + w
+
+print(g(5, 7.9), calls)
+print(g(500, 0.5), calls)
+print(min(len(L) - 1, 3), max(len(L) - 1, 3), min(2 ** 64, len(L)), max(len(L) - 10, -7))

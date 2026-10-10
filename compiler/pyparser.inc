@@ -4524,6 +4524,69 @@ end;
   container and crashed (bug-nilpy-and-or-not-short-circuit). The ternary keeps
   short-circuit; class/variant-valued ternary arms are already handled (see the
   conditional-expression lowering below). }
+procedure PyNarrowIntMinMax;
+{ `min(a, b)` / `max(a, b)` over two INTS, one of them a promotable int
+  (`len(xs) - 2`, any int arithmetic): no pylib overload takes a PromoInt, so
+  the call fell to the Variant pair and the result -- and every local it
+  reached -- went Variant. TSP's entry predictor: `i = min(int(x), len(T) - 2)`
+  boxed the table index and everything computed from it. Lowered inline
+  instead, CPython's own rule (the FIRST extreme wins): `min` is
+  `b if b < a else a`, `max` is `b if b > a else a`. Both operands are bound in
+  place through an AN_COMMA, as PyMakeBoolOpValue does, so each is evaluated
+  once, in order, inside whatever conditional region encloses the call. }
+var call, arg1, arg2, a, b, pi, aSym, bSym, cmp, pair, tern, c1, c2: Integer;
+    ta, tb, rt: TTypeKind; isMax: Boolean;
+begin
+  call := CurASTNode;
+  if (call < 0) or (ASTKind[call] <> AN_CALL) then Exit;
+  pi := ASTIVal[call];
+  if (pi < 0) or (Procs[pi].RetType <> tyVariant) then Exit;
+  if CaseEqual(Procs[pi].Name, 'max') then isMax := True
+  else if CaseEqual(Procs[pi].Name, 'min') then isMax := False
+  else Exit;
+  if PyUserShadowsProc(Procs[pi].Name) then Exit;
+  arg1 := ASTLeft[call];
+  if arg1 < 0 then Exit;
+  arg2 := ASTRight[arg1];
+  if (arg2 < 0) or (ASTRight[arg2] >= 0) then Exit;
+  a := ASTLeft[arg1]; b := ASTLeft[arg2];
+  if (a < 0) or (b < 0) then Exit;
+  ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
+  if not ((ta in [tyInteger, tyInt64, tyPromoInt64]) and
+          (tb in [tyInteger, tyInt64, tyPromoInt64])) then Exit;
+  if (ta = tyPromoInt64) or (tb = tyPromoInt64) then rt := tyPromoInt64
+  else rt := tyInt64;
+  aSym := AllocVar(PyHiddenName('mma'), rt);
+  bSym := AllocVar(PyHiddenName('mmb'), rt);
+  cmp := AllocNode(AN_BINOP);
+  if isMax then ASTIVal[cmp] := Ord(tkGt) else ASTIVal[cmp] := Ord(tkLt);
+  ASTLeft[cmp] := PyMakeIdent(bSym);
+  ASTRight[cmp] := PyMakeIdent(aSym);
+  ASTTk[cmp] := Ord(tyBoolean);
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := PyMakeIdent(bSym);
+  ASTRight[pair] := PyMakeIdent(aSym);
+  tern := AllocNode(AN_TERNARY);
+  ASTLeft[tern] := cmp;
+  ASTRight[tern] := pair;
+  ASTTk[tern] := Ord(rt);
+  { (aSym := a, (bSym := b, tern)) }
+  c2 := AllocNode(AN_COMMA);
+  ASTLeft[c2] := AllocNode(AN_ASSIGN);
+  ASTLeft[ASTLeft[c2]] := PyMakeIdent(bSym);
+  ASTRight[ASTLeft[c2]] := b;
+  ASTRight[c2] := tern;
+  ASTTk[c2] := Ord(rt);
+  c1 := AllocNode(AN_COMMA);
+  ASTLeft[c1] := AllocNode(AN_ASSIGN);
+  ASTLeft[ASTLeft[c1]] := PyMakeIdent(aSym);
+  ASTRight[ASTLeft[c1]] := a;
+  ASTRight[c1] := c2;
+  ASTTk[c1] := Ord(rt);
+  CurASTNode := c1;
+  LastExprTk := rt;
+end;
+
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
     ta, tb: TTypeKind;
@@ -39929,6 +39992,171 @@ begin
   Result := PyModuleQualifier(GetTokenStr(j - 2));
 end;
 
+function PyTokenIsName(idx: Integer; const nm: AnsiString): Boolean;
+{ The token at idx IS the Python name nm -- EXACTLY, not TokenCaseEqual's
+  Pascal folding. Python names are case-sensitive, and the folded match made a
+  def "used as a value" whenever the module had a same-letters global: TSP's
+  entry.py `_air` met `_AIR = []`, the def took the boxed ABI, and every local
+  of it (and of the predictor calling it) went Variant. }
+var i, off, len: Integer;
+begin
+  Result := False;
+  len := Length(nm);
+  if (idx < 0) or (idx >= TokCount) or (Tokens[idx].SLen <> len) then Exit;
+  off := Tokens[idx].SOffset;
+  for i := 0 to len - 1 do
+    if TokChars[off + i] <> nm[i + 1] then Exit;
+  Result := True;
+end;
+
+function PyTokIsStmtTarget(k, bodyStart, bodyEnd: Integer): Boolean;
+{ Is token k a binding target of its STATEMENT -- `k = ...`, `a, k = ...`,
+  `for k in` / `for a, k in` at the statement's start? NOT a keyword argument
+  (`g(k=1)`) and NOT a comprehension variable (`[k for k in xs]`), which in
+  Python 3 binds only inside the comprehension. }
+var st, t: Integer;
+begin
+  Result := False;
+  st := k;
+  while (st > bodyStart) and not (Tokens[st - 1].Kind in
+         [tkNewline, tkIndent, tkDedent, tkSemicolon]) do Dec(st);
+  if Tokens[st].Kind = tkFor then Inc(st);
+  for t := st to k - 1 do
+    if not (Tokens[t].Kind in [tkIdent, tkComma, tkLParen, tkLBrack, tkStar]) then Exit;
+  if Tokens[st - 1].Kind = tkFor then
+  begin
+    { up to the `in` over target tokens only }
+    t := k + 1;
+    while (t < bodyEnd) and (Tokens[t].Kind in [tkIdent, tkComma, tkRParen,
+           tkRBrack, tkLParen, tkLBrack, tkStar]) and not TokenCaseEqual(t, 'in') do Inc(t);
+    Result := (t < bodyEnd) and ((Tokens[t].Kind = tkIn) or TokenCaseEqual(t, 'in'));
+    Exit;
+  end;
+  if (st = k) and (k + 1 < bodyEnd) and (Tokens[k + 1].Kind = tkAssign) then
+    Result := True
+  else
+    Result := PyInUnpackTarget(k, st, bodyEnd);
+end;
+
+function PyTokIsOwnLocal(j: Integer; const nm: AnsiString): Boolean;
+{ Is the name at token j a LOCAL of the def it sits in -- a parameter, or bound
+  in that def's own body (`nm = `, `for nm in`, an unpacking target) -- so that
+  it cannot be a value use of some def called nm? The def-as-value scan is by
+  NAME across the module, so TSP's entry.py, where three functions have a local
+  `f`, made the predictor's nested `def f` "used as a value": it took the
+  boxed ABI, its float parameters arrived as Variants, and so did everything
+  computed from them.
+
+  CONSERVATIVE, because the wrong answer here is the dangerous one (a real
+  value use missed is a typed ABI called as a function object): False for
+  module and class scope, for any `global`/`nonlocal` of the name, and for a
+  nested `def nm` in that body. Nested def/class bodies are skipped -- their
+  bindings are theirs. }
+var k, depth, indTok, hdr, bodyEnd, pdepth: Integer;
+begin
+  Result := False;
+  { the innermost enclosing block that is a def }
+  k := j - 1;
+  depth := 0;
+  hdr := -1;
+  indTok := -1;
+  while k >= 0 do
+  begin
+    if Tokens[k].Kind = tkDedent then Inc(depth)
+    else if Tokens[k].Kind = tkIndent then
+    begin
+      if depth > 0 then Dec(depth)
+      else
+      begin
+        { this block's header: the statement that ends just before it }
+        hdr := k - 1;
+        while (hdr >= 0) and (Tokens[hdr].Kind = tkNewline) do Dec(hdr);
+        while (hdr > 0) and not (Tokens[hdr - 1].Kind in
+               [tkNewline, tkIndent, tkDedent, tkSemicolon]) do Dec(hdr);
+        if hdr < 0 then Exit;
+        if Tokens[hdr].Kind = tkClass then Exit;
+        if Tokens[hdr].Kind = tkFunction then
+        begin
+          indTok := k;
+          Break;
+        end;
+        { an if/for/while/with/try block: keep walking out }
+      end;
+    end;
+    Dec(k);
+  end;
+  if indTok < 0 then Exit;                      { module scope }
+  { the body's end: the dedent matching indTok }
+  bodyEnd := indTok + 1;
+  depth := 0;
+  while bodyEnd < TokCount do
+  begin
+    if Tokens[bodyEnd].Kind = tkIndent then Inc(depth)
+    else if Tokens[bodyEnd].Kind = tkDedent then
+    begin
+      if depth = 0 then Break;
+      Dec(depth);
+    end;
+    Inc(bodyEnd);
+  end;
+  { a parameter: an identifier at paren depth 1 of the header, in a
+    parameter-name position }
+  pdepth := 0;
+  k := hdr;
+  while k < indTok do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack: Inc(pdepth);
+      tkRParen, tkRBrack: Dec(pdepth);
+      tkIdent:
+        if (pdepth = 1) and PyTokenIsName(k, nm) and (k > 0) and
+           (Tokens[k - 1].Kind in [tkLParen, tkComma, tkStar, tkPow]) then
+          Result := True;
+    end;
+    Inc(k);
+  end;
+  { the body: bindings, and the disqualifiers }
+  k := indTok + 1;
+  depth := 0;
+  while k < bodyEnd do
+  begin
+    if (Tokens[k].Kind in [tkFunction, tkClass]) and
+       ((k = 0) or (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+    begin
+      if (k + 1 < bodyEnd) and PyTokenIsName(k + 1, nm) then
+      begin
+        Result := False;                        { a nested `def nm` }
+        Exit;
+      end;
+      { skip the nested body: to its INDENT, then to the matching DEDENT }
+      while (k < bodyEnd) and (Tokens[k].Kind <> tkIndent) do Inc(k);
+      depth := 0;
+      Inc(k);
+      while k < bodyEnd do
+      begin
+        if Tokens[k].Kind = tkIndent then Inc(depth)
+        else if Tokens[k].Kind = tkDedent then
+        begin
+          if depth = 0 then Break;
+          Dec(depth);
+        end;
+        Inc(k);
+      end;
+    end
+    else if (Tokens[k].Kind = tkIdent) and
+            (TokenCaseEqual(k, 'global') or TokenCaseEqual(k, 'nonlocal')) and
+            (k + 1 < bodyEnd) and PyTokenIsName(k + 1, nm) then
+    begin
+      Result := False;
+      Exit;
+    end
+    else if (Tokens[k].Kind = tkIdent) and PyTokenIsName(k, nm) and
+            PyTokIsStmtTarget(k, indTok + 1, bodyEnd) then
+      Result := True;
+    Inc(k);
+  end;
+end;
+
 function PyDefUsedAsValueByScan(const nm: AnsiString): Boolean;
 { The original whole-stream scan, kept as the fallback and as the ORACLE the
   table is checked against under -dPXX_DVAL_CROSSCHECK. It walks [0,
@@ -39959,9 +40187,9 @@ begin
                     ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
         atStmtStart := False;
       end;
-      if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
+      if (Tokens[j].Kind = tkIdent) and PyTokenIsName(j, nm) then
         case PyDValKindAt(j, inImport) of
-          1: begin Result := True; Exit; end;
+          1: if not PyTokIsOwnLocal(j, nm) then begin Result := True; Exit; end;
           2: if PyDValDotQualifies(j, nm) then
              begin Result := True; Exit; end;
         end;
@@ -40055,9 +40283,10 @@ var m: Integer;
 begin
   Result := False;
   for m := 0 to PyDValN - 1 do
-    if TokenCaseEqual(PyDValTok[m], nm) then
+    if PyTokenIsName(PyDValTok[m], nm) then
       case PyDValKind[m] of
-        1: begin Result := True; Exit; end;
+        1: if not PyTokIsOwnLocal(PyDValTok[m], nm) then
+           begin Result := True; Exit; end;
         2: if PyDValDotQualifies(PyDValTok[m], nm) then
            begin Result := True; Exit; end;
       end;

@@ -1,0 +1,47 @@
+# The def-as-value scan matched by NAME (and case-folded): a local called
+# like a def -- a parameter, an assignment, an unpacking target, in ANOTHER
+# function -- or a global spelled with other letter case boxed the def.
+# Comprehension variables and keyword arguments are NOT locals, so their
+# defs must still work as values.
+def f(x: float) -> float:
+    return x * 2.0
+
+def k(x: float) -> float:
+    return x + 1.0
+
+def m(x: float) -> float:
+    return x - 1.0
+
+def apply(fn, v: float) -> float:
+    return fn(v)
+
+def uses_comp(xs: list) -> float:
+    ys = [f for f in xs]          # comprehension f: NOT a local of uses_comp
+    h = f                         # the def f, as a value
+    return h(3.0) + len(ys)
+
+def uses_kw(v: float) -> float:
+    d = dict(k=1)                 # keyword k: NOT a binding
+    return apply(k, v) + d["k"]
+
+def own(v: float) -> float:
+    m = v * 3.0                   # a local m: not the def
+    return m + 1.0
+
+def param(f: float) -> float:
+    return f * f                  # param f
+
+def unpacked(v: float) -> float:
+    a, f = 1.0, v
+    return a + f
+
+print(uses_comp([1, 2]), uses_kw(2.0), own(1.0), param(3.0), unpacked(4.0), f(1.0), m(5.0), apply(m, 1.0))
+
+VAL = []
+
+def val(h: float) -> float:
+    x = h / 2.0
+    return x
+
+VAL.append(1)
+print(val(3.0), VAL)

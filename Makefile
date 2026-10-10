@@ -6255,6 +6255,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_powedge26 | diff -u test/test_nilpy_pow_of_two_one_and_minus_one_keeps_every_edge.expected -
 	./$(COMPILER) test/test_nilpy_json_dumps_writes_the_float_repr.npy $(TESTTMP)/test_nilpy_jsonrepr26
 	$(TESTTMP)/test_nilpy_jsonrepr26 | diff -u test/test_nilpy_json_dumps_writes_the_float_repr.expected -
+	./$(COMPILER) test/test_nilpy_a_def_is_not_a_value_where_a_same_named_local_is.npy $(TESTTMP)/test_nilpy_dvlocal26
+	$(TESTTMP)/test_nilpy_dvlocal26 | diff -u test/test_nilpy_a_def_is_not_a_value_where_a_same_named_local_is.expected -
+	./$(COMPILER) test/test_nilpy_min_max_of_two_ints_with_a_promo_is_inline.npy $(TESTTMP)/test_nilpy_mmpromo26
+	$(TESTTMP)/test_nilpy_mmpromo26 | diff -u test/test_nilpy_min_max_of_two_ints_with_a_promo_is_inline.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
