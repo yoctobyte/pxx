@@ -1,0 +1,56 @@
+# float repr is the shortest string that reads back, the nearest of those when
+# two do -- over every power of two (the subnormals, and the asymmetric
+# rounding interval a power of two has), geometric chains across the whole
+# exponent range, and the values whose repr has a famous wrong answer.
+# A checksum per family plus every 97th repr, so one wrong digit anywhere
+# changes the output. Differential: the .expected came from CPython.
+
+
+def digest(xs: list) -> int:
+    h = 0
+    for x in xs:
+        for c in repr(x):
+            h = (h * 31 + ord(c)) % 1000000007
+        h = (h * 31 + 10) % 1000000007
+    return h
+
+
+def show(name: str, xs: list) -> None:
+    print(name, len(xs), digest(xs))
+    i = 0
+    while i < len(xs):
+        print("  ", repr(xs[i]))
+        i += 97
+
+
+pows = []
+x = 5e-324
+while x != float("inf"):
+    pows.append(x)
+    pows.append(-x)
+    x = x * 2.0
+show("powers of two", pows)
+
+chain = []
+for start in [1.1, 0.7, 3.3, 9.87654321]:
+    x = start
+    while x < 1e308:
+        chain.append(x)
+        x = x * 1.37
+    x = start
+    while x > 1e-320:
+        chain.append(x)
+        x = x / 1.61
+show("geometric", chain)
+
+steps = []
+for i in range(1, 4000):
+    steps.append(i / 1000.0)
+    steps.append(i * 0.1)
+    steps.append(1.0 / i)
+    steps.append(i * 1e15 + 0.5)
+show("steps", steps)
+
+for v in [7.120236347223045e-307, 1e23, 9007199254740993.0, 2.2250738585072014e-308,
+          1.7976931348623157e308, 0.1 + 0.2, 123456789.123, 5e-324, 1e16, 1e-05]:
+    print(repr(v))

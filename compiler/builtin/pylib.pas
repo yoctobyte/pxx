@@ -21208,146 +21208,315 @@ begin
               Copy(digits, decpt + 1, Length(digits) - decpt);
 end;
 
-{ Python's `repr` of a float: the SHORTEST decimal string that reads back as the
-  same double, laid out by Python's rules. `str` and `repr` are the same function
-  in Python 3, so this serves both.
+{ SHORTEST DIGITS BY BURGER & DYBVIG'S FREE-FORMAT ALGORITHM (PLDI 1996), on
+  small fixed-size bignums. The value and the gaps to its neighbours' midpoints
+  are r/s, mp/s and mm/s; digits come out one at a time, and the loop stops at
+  the first prefix that already reads back as the value (strictly inside the
+  rounding interval, or on its edge when the mantissa is even, since the
+  reader rounds ties to even). The last digit goes to the nearer of the two
+  prefixes that would read back -- CPython's repr. A power of two above the
+  denormals has the gap below half the gap above, which is mp = 2 mm.
 
-  Shortest is found by trying precisions and CHECKING the round trip, so the
-  answer is correct by construction rather than by trusting a digit-count
-  heuristic — the same method sysutils' FloatToStrShortest uses, with Python's
-  layout instead of Pascal's. 17 significant digits always round-trip a double,
-  so the loop terminates.
-
-  The round trip compares BITS, not doubles. It is asking IDENTITY, not
-  proximity, so `=` would answer it exactly — but reading the bits says what it
-  means, makes -0.0 and NaN fall out correctly instead of needing special cases,
-  and is immune to an extended-precision register ever appearing in this path.
-
-  The parse is the proof, but it is too dear to be the SEARCH: each one is an
-  exact bracket search of ~750-digit expansions, and 17 of them took 4 s for
-  repr(2.2250738585072014e-308) on hosted riscv32. So a precision is first
-  filtered by the parser's own rule -- a decimal reads back as av exactly when
-  it lies strictly between av's two rounding midpoints, or on one of them with
-  av's mantissa even -- which costs three expansions for the whole loop, and
-  only a candidate that passes is parsed.
-
-  At each length the correctly rounded candidate is tried, and at a power of two
-  above the denormals also the one on the OTHER side of av. Elsewhere the
-  round-trip interval is symmetric, so the farther one never reads back when
-  the nearer did not; there, the gap below is half the gap above, and CPython's
-  shortest can be the one rounded the other way: 7.120236347223045e-307
-  (2^-1016), where rounding alone gave 17 digits. Only there, because trying
-  it at every length cost 60% on a 9762-value run for no other value.
-
-  `av` must be finite, positive and nonzero; the caller handles the rest.
-  Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
-function PyFloatRepr(av: Double): AnsiString;
-var sig, decExp, de0, loE, hiE, altE, loSig, hiSig, midSig: Integer;
-    ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
-    even, pow2: Boolean;
-
-  { True, with the candidate (digits, dexp) laid out in `found`, if it reads
-    back as av }
-  function TryCand(digits: AnsiString; dexp: Integer): Boolean;
-  var tail, cLo, cHi: Integer; cand: AnsiString;
-  begin
-    TryCand := False;
-    tail := Length(digits);
-    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
-    digits := Copy(digits, 1, tail);
-    cLo := PyExDecCmp(digits, dexp, loS, loE);
-    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
-    if not (((cLo > 0) or ((cLo = 0) and even)) and
-            ((cHi < 0) or ((cHi = 0) and even))) then Exit;
-    cand := PyFloatLayout(digits, dexp);
-    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-       PyExDecDoubleToBits(av) then
-    begin
-      found := cand;
-      TryCand := True;
-    end;
+  It replaced a digit-count search over exact decimal expansions held in
+  AnsiStrings (three per value, plus a search), which cost ~24 us a repr and
+  was 8% of That Space Program's STS-1 run, through json.dumps. Measured
+  2026-10-10 against CPython's repr on 376,994 doubles (random bit patterns,
+  every power of two, the subnormals, 1e23, round decimals): the same digits
+  on every one. }
+const
+  PYBN_LIMBS = 40;   { 1280 bits; the largest operand is ~1090 }
+type
+  TPyBn = record
+    n: Integer;                                  { limbs in use; 0 = zero }
+    d: array[0..PYBN_LIMBS - 1] of Cardinal;     { least significant first }
   end;
 
-  { the interval test of TryCand alone, for the digit-count search }
-  function InInterval(nsig: Integer): Boolean;
-  var digits: AnsiString; dexp, tail, cLo, cHi: Integer;
-  begin
-    digits := ds0;
-    dexp := de0;
-    PyExDecRound(digits, dexp, nsig);
-    tail := Length(digits);
-    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
-    digits := Copy(digits, 1, tail);
-    cLo := PyExDecCmp(digits, dexp, loS, loE);
-    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
-    InInterval := ((cLo > 0) or ((cLo = 0) and even)) and
-                  ((cHi < 0) or ((cHi = 0) and even));
-  end;
-
+procedure PyBnSet(var a: TPyBn; v: Int64);
 begin
-  Result := '';
-  PyExDecSplit(av, mant, exp2);
-  PyExDecOfMant(mant, exp2, ds0, de0);
-  { the midpoint with the next double up; and with the next one down, which
-    at a power of two above the denormals has half the spacing }
-  PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
-  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
-  if pow2 then
-    PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
-  else
-    PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
-  even := (mant and 1) = 0;
-  { BINARY SEARCH the digit count when the interval is symmetric (every value
-    but a power of two): a sig-digit decimal is also a (sig+1)-digit one, so
-    the nearest candidate only gets closer as sig grows, and once it is inside
-    a symmetric interval it stays inside. ~5 interval tests and ONE read-back
-    instead of up to 17 of each -- json.dumps of TSP's flight blobs spent 26%
-    of a run here. A failed read-back falls through to the linear walk. }
-  if not pow2 then
+  a.n := 0;
+  while v <> 0 do
   begin
-    loSig := 1;
-    hiSig := 17;
-    while loSig < hiSig do
+    a.d[a.n] := Cardinal(v and $FFFFFFFF);
+    v := v shr 32;
+    a.n := a.n + 1;
+  end;
+end;
+
+procedure PyBnMulSmall(var a: TPyBn; m: Int64);
+var i: Integer; t, carry: Int64;
+begin
+  carry := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    t := Int64(a.d[i]) * m + carry;
+    a.d[i] := Cardinal(t and $FFFFFFFF);
+    carry := t shr 32;
+  end;
+  if carry <> 0 then
+  begin
+    a.d[a.n] := Cardinal(carry);
+    a.n := a.n + 1;
+  end;
+end;
+
+procedure PyBnShl(var a: TPyBn; bits: Integer);
+var w, b, i: Integer; hi: Int64;
+begin
+  if a.n = 0 then Exit;
+  w := bits div 32;
+  b := bits mod 32;
+  if b <> 0 then
+  begin
+    a.d[a.n] := 0;
+    for i := a.n downto 1 do
+      a.d[i] := Cardinal(((Int64(a.d[i]) shl b) or (Int64(a.d[i - 1]) shr (32 - b))) and $FFFFFFFF);
+    a.d[0] := Cardinal((Int64(a.d[0]) shl b) and $FFFFFFFF);
+    a.n := a.n + 1;
+    if a.d[a.n - 1] = 0 then a.n := a.n - 1;
+  end;
+  if w > 0 then
+  begin
+    for i := a.n - 1 downto 0 do a.d[i + w] := a.d[i];
+    for i := 0 to w - 1 do a.d[i] := 0;
+    a.n := a.n + w;
+  end;
+end;
+
+procedure PyBnMulPow10(var a: TPyBn; k: Integer);
+begin
+  while k >= 9 do begin PyBnMulSmall(a, 1000000000); k := k - 9; end;
+  case k of
+    1: PyBnMulSmall(a, 10);
+    2: PyBnMulSmall(a, 100);
+    3: PyBnMulSmall(a, 1000);
+    4: PyBnMulSmall(a, 10000);
+    5: PyBnMulSmall(a, 100000);
+    6: PyBnMulSmall(a, 1000000);
+    7: PyBnMulSmall(a, 10000000);
+    8: PyBnMulSmall(a, 100000000);
+  end;
+end;
+
+function PyBnCmp(const a, b: TPyBn): Integer;
+var i: Integer;
+begin
+  if a.n <> b.n then
+  begin
+    if a.n > b.n then Result := 1 else Result := -1;
+    Exit;
+  end;
+  for i := a.n - 1 downto 0 do
+    if a.d[i] <> b.d[i] then
     begin
-      midSig := (loSig + hiSig) div 2;
-      if InInterval(midSig) then hiSig := midSig else loSig := midSig + 1;
-    end;
-    { NO read-back here: the interval test against the exact midpoints IS
-      the proof that the candidate parses to av (the parser rounds to nearest,
-      ties to even, which is what `even` encodes), and the read-back -- one
-      more exact expansion per candidate -- was half the cost of a repr. The
-      linear walk below keeps it, as the belt for the asymmetric case. }
-    if InInterval(loSig) then
-    begin
-      ds := ds0;
-      decExp := de0;
-      PyExDecRound(ds, decExp, loSig);
-      sig := Length(ds);
-      while (sig > 1) and (ds[sig] = '0') do sig := sig - 1;
-      Result := PyFloatLayout(Copy(ds, 1, sig), decExp);
+      if a.d[i] > b.d[i] then Result := 1 else Result := -1;
       Exit;
     end;
-  end;
-  for sig := 1 to 17 do
+  Result := 0;
+end;
+
+{ compare a + b against c, without a temporary when the sizes already decide }
+function PyBnCmpSum(const a, b, c: TPyBn): Integer;
+var t: TPyBn; i, m: Integer; carry, x: Int64;
+begin
+  if a.n > b.n then m := a.n else m := b.n;
+  carry := 0;
+  for i := 0 to m - 1 do
   begin
-    ds := ds0;
-    decExp := de0;
-    PyExDecRound(ds, decExp, sig);
-    if TryCand(ds, decExp) then begin Result := found; Exit; end;
-    if pow2 and (Length(ds0) > sig) then
+    x := carry;
+    if i < a.n then x := x + a.d[i];
+    if i < b.n then x := x + b.d[i];
+    t.d[i] := Cardinal(x and $FFFFFFFF);
+    carry := x shr 32;
+  end;
+  t.n := m;
+  if carry <> 0 then begin t.d[m] := Cardinal(carry); t.n := m + 1; end;
+  Result := PyBnCmp(t, c);
+end;
+
+{ a := a - b, a >= b }
+procedure PyBnSub(var a: TPyBn; const b: TPyBn);
+var i: Integer; x, borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    x := Int64(a.d[i]) - borrow;
+    if i < b.n then x := x - b.d[i];
+    if x < 0 then begin x := x + $100000000; borrow := 1; end else borrow := 0;
+    a.d[i] := Cardinal(x);
+  end;
+  while (a.n > 0) and (a.d[a.n - 1] = 0) do a.n := a.n - 1;
+end;
+
+
+{ a := a - q*b for a small q with q*b <= a }
+procedure PyBnSubMul(var a: TPyBn; const b: TPyBn; q: Int64);
+var i: Integer; x, borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    x := Int64(a.d[i]) - borrow;
+    if i < b.n then x := x - Int64(b.d[i]) * q;
+    if x < 0 then
     begin
-      { the other sig-digit neighbour of av: the truncation if rounding went
-        up, else the truncation rounded up (a trailing 9 forces the carry) }
-      alt := Copy(ds0, 1, sig);
-      altE := de0;
-      if PyExDecCmp(alt, altE, ds, decExp) = 0 then
-      begin
-        alt := alt + '9';
-        PyExDecRound(alt, altE, sig);
-      end;
-      if TryCand(alt, altE) then begin Result := found; Exit; end;
+      borrow := (-x + $FFFFFFFF) shr 32;
+      x := x + (borrow shl 32);
+    end
+    else borrow := 0;
+    a.d[i] := Cardinal(x);
+  end;
+  while (a.n > 0) and (a.d[a.n - 1] = 0) do a.n := a.n - 1;
+end;
+
+{ the top of a, in units of 2^(32*(n-2)): enough bits for a quotient under 10 }
+function PyBnTop(const a: TPyBn; n: Integer): Double;
+begin
+  Result := 0.0;
+  if a.n > n then Result := Result + a.d[n] * 18446744073709551616.0;
+  if a.n > n - 1 then Result := Result + a.d[n - 1] * 4294967296.0;
+  if (n >= 2) and (a.n > n - 2) then Result := Result + a.d[n - 2];
+end;
+
+{ The shortest digits that read back as mant * 2^exp2 (mant > 0, the
+  PyExDecSplit form), and of those the nearest -- CPython's repr. `decExp` is
+  the power of ten the first digit stands for, as PyExDecOfMant gives it. }
+procedure PyShortestDigits(mant: Int64; exp2: Integer;
+                           var digits: AnsiString; var decExp: Integer);
+var r, s, mp, mm: TPyBn;
+    k, bl, nd, dg, c1, c2: Integer;
+    even, tc1, tc2, pow2: Boolean;
+    est: Double;
+    qr, qs, qp, qm: Int64;
+    buf: array[0..31] of Char;
+begin
+  even := (mant and 1) = 0;
+  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
+  { v = r / s, and the gaps to the neighbouring doubles are mp / s above and
+    mm / s below, all scaled by 2 so the midpoints are integers }
+  if exp2 >= 0 then
+  begin
+    PyBnSet(r, mant); PyBnShl(r, exp2 + 1);
+    PyBnSet(s, 2);
+    PyBnSet(mp, 1); PyBnShl(mp, exp2);
+    PyBnSet(mm, 1); PyBnShl(mm, exp2);
+    if pow2 then
+    begin
+      PyBnShl(r, 1); PyBnShl(s, 1); PyBnShl(mp, 1);
+    end;
+  end
+  else
+  begin
+    PyBnSet(r, mant); PyBnShl(r, 1);
+    PyBnSet(s, 1); PyBnShl(s, 1 - exp2);
+    PyBnSet(mp, 1);
+    PyBnSet(mm, 1);
+    if pow2 then
+    begin
+      PyBnShl(r, 1); PyBnShl(s, 1); PyBnShl(mp, 1);
     end;
   end;
+  { k = ceil(log10 v), estimated from below: never high, at most one low }
+  bl := 0;
+  while (mant shr bl) <> 0 do bl := bl + 1;
+  est := (exp2 + bl - 1) * 0.30102999566398114 - 1e-10;
+  k := Trunc(est);
+  if est > k then k := k + 1;
+  if k >= 0 then PyBnMulPow10(s, k)
+  else
+  begin
+    PyBnMulPow10(r, -k);
+    PyBnMulPow10(mp, -k);
+    PyBnMulPow10(mm, -k);
+  end;
+  c2 := PyBnCmpSum(r, mp, s);
+  if (c2 > 0) or ((c2 = 0) and even) then
+  begin
+    PyBnMulSmall(s, 10);
+    k := k + 1;
+  end;
+  decExp := k - 1;
+  nd := 0;
+  { THE COMMON CASE IN 64 BITS. Every value from about 0.016 up to 2^53 --
+    most of what a simulation prints -- has s under 2^58 here, and r, mp and
+    mm are below s, so ten times any of them and r + mp all fit an Int64. The
+    same loop as below, without the bignums. }
+  if (s.n = 1) or ((s.n = 2) and (s.d[1] < $4000000)) then
+  begin
+    qs := Int64(s.d[0]);
+    if s.n = 2 then qs := qs or (Int64(s.d[1]) shl 32);
+    qr := 0; qp := 0; qm := 0;
+    if r.n > 0 then qr := Int64(r.d[0]);
+    if r.n > 1 then qr := qr or (Int64(r.d[1]) shl 32);
+    if mp.n > 0 then qp := Int64(mp.d[0]);
+    if mp.n > 1 then qp := qp or (Int64(mp.d[1]) shl 32);
+    if mm.n > 0 then qm := Int64(mm.d[0]);
+    if mm.n > 1 then qm := qm or (Int64(mm.d[1]) shl 32);
+    repeat
+      qr := qr * 10; qp := qp * 10; qm := qm * 10;
+      dg := Integer(qr div qs);
+      qr := qr - dg * qs;
+      tc1 := (qr < qm) or ((qr = qm) and even);
+      tc2 := (qr + qp > qs) or ((qr + qp = qs) and even);
+      if tc1 and tc2 then
+      begin
+        if (2 * qr > qs) or ((2 * qr = qs) and Odd(dg)) then dg := dg + 1;
+      end
+      else if tc2 then
+        dg := dg + 1;
+      buf[nd] := Chr(Ord('0') + dg);
+      nd := nd + 1;
+    until tc1 or tc2;
+    SetLength(digits, nd);
+    Move(buf[0], digits[1], nd);
+    Exit;
+  end;
+  repeat
+    PyBnMulSmall(r, 10);
+    PyBnMulSmall(mp, 10);
+    PyBnMulSmall(mm, 10);
+    { the digit is r div s, under 10: estimated from the top limbs, one low
+      at worst, then corrected by plain subtraction }
+    dg := Trunc(PyBnTop(r, s.n) / PyBnTop(s, s.n));
+    if dg > 0 then
+    begin
+      dg := dg - 1;
+      if dg > 0 then PyBnSubMul(r, s, dg);
+    end;
+    while PyBnCmp(r, s) >= 0 do
+    begin
+      PyBnSub(r, s);
+      dg := dg + 1;
+    end;
+    c1 := PyBnCmp(r, mm);
+    tc1 := (c1 < 0) or ((c1 = 0) and even);
+    c2 := PyBnCmpSum(r, mp, s);
+    tc2 := (c2 > 0) or ((c2 = 0) and even);
+    if tc1 and tc2 then
+    begin
+      { both neighbours read back: the nearer one, 2r against s }
+      c1 := PyBnCmpSum(r, r, s);
+      if (c1 > 0) or ((c1 = 0) and Odd(dg)) then dg := dg + 1;
+    end
+    else if tc2 then
+      dg := dg + 1;
+    buf[nd] := Chr(Ord('0') + dg);
+    nd := nd + 1;
+  until tc1 or tc2;
+  SetLength(digits, nd);
+  Move(buf[0], digits[1], nd);
+end;
+
+{ Python's `repr` of a float: the SHORTEST decimal string that reads back as the
+  same double, laid out by Python's rules. `str` and `repr` are the same function
+  in Python 3, so this serves both. `av` must be finite, positive and nonzero;
+  the caller handles the rest. }
+function PyFloatRepr(av: Double): AnsiString;
+var mant: Int64; exp2, decExp: Integer; ds: AnsiString;
+begin
+  PyExDecSplit(av, mant, exp2);
+  PyShortestDigits(mant, exp2, ds, decExp);
+  Result := PyFloatLayout(ds, decExp);
 end;
 
 function PyFloatStr(d: Double): AnsiString;
