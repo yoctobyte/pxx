@@ -12119,7 +12119,31 @@ begin
     if pa^.Payload < pb^.Payload then c := -1
     else if pa^.Payload > pb^.Payload then c := 1;
     Result := True;
+    Exit;
   end;
+  { MIXED float and int -- `hk >= TABLE[i][0]` with an int column, TSP's
+    atmosphere: it fell to the general path, ~10 tag probes a compare. Exact
+    only while the int converts exactly (|i| <= 2^53); a bigger one takes the
+    general path, which compares exactly as CPython does. }
+  if (ta = 3) and ((tb = 1) or (tb = 2) or (tb = 4)) and
+     (pb^.Payload >= -9007199254740992) and (pb^.Payload <= 9007199254740992) then
+  begin
+    x := PPyDouble(@pa^.Payload)^;
+    y := pb^.Payload;
+  end
+  else if (tb = 3) and ((ta = 1) or (ta = 2) or (ta = 4)) and
+     (pa^.Payload >= -9007199254740992) and (pa^.Payload <= 9007199254740992) then
+  begin
+    x := pa^.Payload;
+    y := PPyDouble(@pb^.Payload)^;
+  end
+  else
+    Exit;
+  if x < y then c := -1
+  else if x > y then c := 1
+  else if x = y then c := 0
+  else nan := True;
+  Result := True;
 end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;

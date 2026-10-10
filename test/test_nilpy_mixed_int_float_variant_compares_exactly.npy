@@ -1,0 +1,15 @@
+# A float against an int, both in variants, takes a fast path while the int
+# converts exactly (|i| <= 2^53); bigger ints, NaN, bools, -0.0 must still
+# compare as CPython does.
+nan = float('nan')
+vals = [0, 1, -1, 2 ** 53, 2 ** 53 + 1, -(2 ** 53) - 1, 2 ** 60, True, False, 0.5, -0.0, 1e300, nan, 9007199254740993.0, 2.0 ** 63]
+xs = list(vals)
+out = []
+for a in xs:
+    for b in xs:
+        out.append((a < b, a <= b, a > b, a >= b, a == b, a != b))
+h = 0
+for t in out:
+    for v in t:
+        h = (h * 3 + (1 if v else 0)) % 1000000007
+print(len(out), h)
