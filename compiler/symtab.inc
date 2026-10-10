@@ -8528,6 +8528,13 @@ begin
   if ResidentRegOf(idx) = 0 then Exit;
   if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
   if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  { A local the scope exit RELEASES is read from its frame slot by
+    EmitManagedLocalCleanup -- machine code after the body, which never asks
+    which register holds it. With the slot dead, `for s in ...: yt =
+    list(y)` kept the live list in r15 and released the slot's stale value,
+    so the last list of every call leaked (TSP's dopri5: 16 blocks per call,
+    1.8M live at exit). Since at least beta 0.1 (v452). }
+  if SymReleasedAtScopeExit(idx) then Exit;
   ResidentSlotIsDead := True;
 end;
 

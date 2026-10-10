@@ -1,0 +1,39 @@
+# At -O3 an object local that a loop reads can live in r12..r15 (residency),
+# and the frame slot of a resident was treated as DEAD -- but scope exit
+# releases a managed local by reading that slot. `yt = list(y)` in a loop
+# kept the live list in a register, the slot stayed nil, and the last list of
+# every call leaked (TSP's dopri5: 1.8M blocks live at exit, 342 MB RSS).
+import sys
+
+def deriv(t, y):
+    return [y[1], -4.0 * y[0]]
+
+def reassign(y0):
+    for s in range(1, 3):
+        yt = list(y0)
+    return yt[0]
+
+def stored(y0):
+    ks = [None, None, None]
+    for s in range(1, 3):
+        ks[s] = deriv(0.1 * s, y0)
+    return ks[2][1]
+
+def stages(y0):
+    y = list(y0)
+    ks = [deriv(0.0, y), None, None]
+    for s in range(1, 3):
+        yt = list(y)
+        for j in range(s):
+            kj = ks[j]
+            for i in range(2):
+                yt[i] += 0.1 * kj[i]
+        ks[s] = deriv(0.1, yt)
+    ks[0] = ks[2]
+    return ks[0][0]
+
+n = int(sys.argv[1]) if len(sys.argv) > 1 else 3
+total = 0.0
+for i in range(n):
+    total += reassign([1.0, 2.0]) + stored([1.0, 0.5]) + stages([1.0, 0.0])
+print(round(total, 9))

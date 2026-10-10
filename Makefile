@@ -6333,6 +6333,9 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/relnil26 | diff -u test/test_nilpy_scope_exit_release_skips_nil.expected -
 	./$(COMPILER) test/test_nilpy_promo_to_variant_inline.npy $(TESTTMP)/promovar26
 	$(TESTTMP)/promovar26 | diff -u test/test_nilpy_promo_to_variant_inline.expected -
+	./$(COMPILER) -O3 -dPXX_ALLOC_CENSUS test/test_nilpy_o3_resident_object_local_is_released.npy $(TESTTMP)/o3resrel26
+	$(TESTTMP)/o3resrel26 2>/dev/null | diff -u test/test_nilpy_o3_resident_object_local_is_released.expected -
+	tools/assert_no_leak.sh nilpy_o3_resident_object_local_release 300 $(TESTTMP)/o3resrel26 5000
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
