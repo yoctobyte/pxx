@@ -1,0 +1,50 @@
+# A variant call passed straight to a by-reference variant parameter hands over
+# its own hidden result slot instead of a copy of it (one retain, one release
+# and a 16-byte copy less per argument). What must not move with it: arguments
+# still evaluate left to right, a raise between two arguments leaves nothing
+# half-held, and a result reused across loop trips is released each time.
+# Differential: the .expected came from CPython.
+log = []
+
+def g(tag, v):
+    log.append(tag)
+    print("eval", tag)
+    return v
+
+def h(a, b, c):
+    return [a, b, c]
+
+class Box:
+    def __init__(self, v):
+        self.v = v
+    def get(self, tag):
+        print("get", tag)
+        return self.v
+
+x = [g("a", 1.5), g("b", 2)]
+print(g("l", 3.0) * g("r", 2.0))
+print(h(g("1", 1), g("2", "s"), g("3", None)))
+b1 = Box(2.5); b2 = Box(4)
+print(b1.get("p") + b2.get("q") * b1.get("r"))
+d = {"k": 1.25}
+print(d.get("k") + d.get("z", 0.5))
+def boom(v):
+    if v > 1:
+        raise ValueError("boom")
+    return v
+for i in range(3):
+    try:
+        print(g("x", i) + boom(i))
+    except ValueError as e:
+        print("caught", e)
+print(log)
+
+
+def pair(i):
+    return [i, str(i)]
+
+
+total = 0
+for i in range(20000):
+    total += pair(i)[0] + len(pair(i)[1])
+print(total)

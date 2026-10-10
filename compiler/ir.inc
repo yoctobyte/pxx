@@ -6681,14 +6681,24 @@ begin
      (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
      ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_VIRTUAL_CALL)) then
   begin
+    { A call that returns through a hidden destination ALREADY has a slot: its
+      IR value is that temp's address, the temp owns the result, is cleared
+      before every refill and released at scope exit. Pass it as it is. Copying
+      it into a second temp (the `tmp := call` below) cost a retain, a release
+      and a 16-byte copy per argument -- every `a[i] * b[j]` on a list paid
+      it twice. Anything else (a register-returning call) still gets the slot. }
+    caIdent := IRLowerAST(argAST);
+    if (IRKind[caIdent] = IR_CALL) and (IRA[caIdent] >= 0) and
+       (IRC[caIdent] >= 0) and (IRKind[IRC[caIdent]] = IR_LEA) and
+       (Procs[IRA[caIdent]].RetType = tyVariant) and
+       ABIRetViaHiddenDestProc(IRA[caIdent]) then
+    begin
+      Result := caIdent;
+      Exit;
+    end;
     tmpSym := AllocVar('', tyVariant);
-    caIdent := AllocNode(AN_IDENT);
-    ASTIVal[caIdent] := tmpSym;
-    ASTTk[caIdent] := Ord(tyVariant);
-    caSlCall := AllocNode(AN_ASSIGN);
-    ASTLeft[caSlCall] := caIdent;
-    ASTRight[caSlCall] := argAST;
-    IRLowerAST(caSlCall);
+    IRAppend(IR_VAR_STORE, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
+             caIdent, Ord(tyVariant), 0, Ord(tyVariant));
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
     Exit;
   end;

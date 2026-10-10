@@ -1,0 +1,22 @@
+eval a
+eval b
+eval l
+eval r
+6.0
+eval 1
+eval 2
+eval 3
+[1, 's', None]
+get p
+get q
+get r
+12.5
+1.75
+eval x
+0
+eval x
+2
+eval x
+caught boom
+['a', 'b', 'l', 'r', '1', '2', '3', 'x', 'x', 'x']
+200078890
