@@ -11943,6 +11943,29 @@ begin
               EmitB($0F); EmitB($B6); EmitB($C0);                    { movzx eax, al }
               EmitB($EB); pVarFastDone := CodeLen; EmitB(0);         { jmp done }
               PatchRel8(pVarSlow1);
+              { ...and INT with INT (tags 1..2 both sides): a signed compare of
+                the payloads, as PyVarCmpFast's int arm answers. Bools, mixed
+                operands and everything else call the helper. }
+              EmitB($48); EmitB($8B); EmitB($07);            { mov rax, [rdi] }
+              EmitB($48); EmitB($FF); EmitB($C8);            { dec rax }
+              EmitB($48); EmitB($83); EmitB($F8); EmitB(1);  { cmp rax, 1 }
+              EmitB($77); pVarIntS1 := CodeLen; EmitB(0);    { ja slow }
+              EmitB($48); EmitB($8B); EmitB($06);            { mov rax, [rsi] }
+              EmitB($48); EmitB($FF); EmitB($C8);            { dec rax }
+              EmitB($48); EmitB($83); EmitB($F8); EmitB(1);  { cmp rax, 1 }
+              EmitB($77); pVarIntS2 := CodeLen; EmitB(0);    { ja slow }
+              EmitB($48); EmitB($8B); EmitB($47); EmitB($08); { mov rax, [rdi+8] }
+              EmitB($48); EmitB($3B); EmitB($46); EmitB($08); { cmp rax, [rsi+8] }
+              EmitB($0F);
+              if pVarCmpOp = $97 then EmitB($9F)          { a > b:  setg }
+              else if pVarCmpOp = $93 then EmitB($9D)     { a >= b: setge }
+              else if pVarCmpOp = -$97 then EmitB($9C)    { a < b:  setl }
+              else EmitB($9E);                            { a <= b: setle }
+              EmitB($C0);
+              EmitB($0F); EmitB($B6); EmitB($C0);            { movzx eax, al }
+              EmitB($EB); pVarIntDone := CodeLen; EmitB(0);  { jmp done }
+              PatchRel8(pVarIntS1);
+              PatchRel8(pVarIntS2);
               PatchRel8(pVarSlow2);
             end;
             EmitCallProc(procIdx);

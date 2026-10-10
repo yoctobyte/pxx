@@ -1,0 +1,14 @@
+# x86-64 emits an inline INT arm beside the float one for variant < <= > >=:
+# a signed compare of two tag-1..2 payloads. Limits, promoted ints, bools,
+# floats, NaN, strings and lists must order exactly as before.
+def c(a, b): return (a < b, a <= b, a > b, a >= b)
+M = 2 ** 63 - 1
+for a, b in [(1, 2), (2, 1), (3, 3), (-5, 4), (M, -M - 1), (-M - 1, M), (2 ** 70, 1), (1, 2 ** 70), (True, 0), (1.5, 1), (1, 1.5), (float("nan"), 1), ("a", "b"), ([1], [1, 0])]:
+    print(c(a, b))
+n = 0
+i = 0
+while i < 500:
+    if i % 7 <= 3 and i >= 10:
+        n += 1
+    i += 1
+print(n)
