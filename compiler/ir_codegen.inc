@@ -5261,6 +5261,109 @@ begin
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
 end;
 
+{ The COMMON case of an object retain or release, in front of the wrapper:
+  a live, plainly-headered object whose count does not reach zero. That is a
+  range check, a magic compare and one (lock) inc/dec -- the wrapper spent nine
+  pushes, nine pops and a call into PXXObjRetain/PXXObjRelease to do the same,
+  and the pair was ~10% of both TSP and lekkerzeilen.
+
+  The checks are PXXObjRetain's own, in its order: nil and a misaligned
+  pointer are not ours and end here, as the Pascal routine Exits; anything
+  else it would look at more closely -- outside [HeapLow+24, HeapHigh), or a
+  magic other than PXX_OBJ_MAGIC (the RAW/RAW2/DONE kinds, a poisoned block) --
+  falls into the full wrapper below, unchanged. A release that takes the count
+  to ZERO puts it back and falls through too: this thread held the last
+  reference, so nothing can touch the block in between, and the Pascal routine
+  then does the decrement, the finaliser and the free exactly as before.
+
+  Off under -dPXX_OBJTRACE and -dPXX_HEAP_DEBUG, whose instrumentation lives in
+  the Pascal routines, and when builtinheap's bounds cannot be found. }
+procedure EmitObjRefFastPath(isRelease: Boolean);
+var pDone, pDone2, pSlow1, pSlow2, pSlow3, pLive: Integer;
+begin
+  if PasDefineExists('PXX_OBJTRACE') or PasDefineExists('PXX_HEAP_DEBUG') then Exit;
+  if ObjFastN > High(ObjFastStart) then Exit;
+  ObjFastStart[ObjFastN] := CodeLen;
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pDone := CodeLen; EmitB(0);          { jz done }
+  EmitAsmX64(['test al, 7']);
+  EmitB($75); pDone2 := CodeLen; EmitB(0);         { jnz done }
+  { HeapHigh and HeapLow: placeholder offsets, see PatchObjRefFastPaths }
+  EmitAsmX64(['cmp rax, [@glob]', 0]);
+  ObjFastFixIdx[ObjFastFixN] := GlobFixCount - 1;
+  ObjFastFixIsHi[ObjFastFixN] := True;
+  Inc(ObjFastFixN);
+  EmitB($7D); pSlow1 := CodeLen; EmitB(0);         { jge slow }
+  EmitAsmX64(['lea rax, [rax-24]']);
+  EmitAsmX64(['cmp rax, [@glob]', 0]);
+  ObjFastFixIdx[ObjFastFixN] := GlobFixCount - 1;
+  ObjFastFixIsHi[ObjFastFixN] := False;
+  Inc(ObjFastFixN);
+  EmitAsmX64(['lea rax, [rax+24]']);               { lea leaves the flags }
+  EmitB($7C); pSlow2 := CodeLen; EmitB(0);         { jl slow }
+  EmitAsmX64(['cmp qword [rax-8], %', $505942F1]);  { PXX_OBJ_MAGIC }
+  EmitB($75); pSlow3 := CodeLen; EmitB(0);         { jne slow }
+  if not isRelease then
+  begin
+    if ThreadSafeMode then EmitAsmX64(['lock inc qword [rax-16]'])
+    else EmitAsmX64(['inc qword [rax-16]']);
+    PatchRel8(pDone);
+    PatchRel8(pDone2);
+    EmitB($C3);                                    { ret }
+  end
+  else
+  begin
+    if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+    else EmitAsmX64(['dec qword [rax-16]']);
+    EmitB($74); pLive := CodeLen; EmitB(0);        { jz last }
+    PatchRel8(pDone);
+    PatchRel8(pDone2);
+    EmitB($C3);                                    { ret: still live }
+    PatchRel8(pLive);
+    { the last reference: undo, and let PXXObjRelease finalise and free }
+    if ThreadSafeMode then EmitAsmX64(['lock inc qword [rax-16]'])
+    else EmitAsmX64(['inc qword [rax-16]']);
+  end;
+  PatchRel8(pSlow1);
+  PatchRel8(pSlow2);
+  PatchRel8(pSlow3);
+  ObjFastSlow[ObjFastN] := CodeLen;
+  Inc(ObjFastN);
+end;
+
+{ Fill in the HeapLow/HeapHigh references EmitObjRefFastPath left as
+  placeholders -- builtinheap is parsed after the blobs are emitted. Before DCE,
+  which renumbers GlobFix. A plain scan: by now the unit's scope is closed and
+  its implementation globals are off the hash chains. If the unit is not in the
+  program the fast paths are turned into a jump to their slow path, so the
+  placeholders are never executed. }
+procedure PatchObjRefFastPaths;
+var i, heapUnit, loIdx, hiIdx, rel: Integer;
+begin
+  if ObjFastN = 0 then Exit;
+  heapUnit := InternStr('builtinheap');
+  loIdx := -1; hiIdx := -1;
+  for i := 0 to SymCount - 1 do
+    if (Syms[i].Kind = skGlobal) and (SymUnitIdx[i] = heapUnit) then
+    begin
+      if Syms[i].Name = 'HeapLow' then loIdx := i
+      else if Syms[i].Name = 'HeapHigh' then hiIdx := i;
+    end;
+  if (loIdx >= 0) and (hiIdx >= 0) then
+  begin
+    for i := 0 to ObjFastFixN - 1 do
+      if ObjFastFixIsHi[i] then GlobFix[ObjFastFixIdx[i]].BSSoff := Syms[hiIdx].Offset
+      else GlobFix[ObjFastFixIdx[i]].BSSoff := Syms[loIdx].Offset;
+  end
+  else
+    for i := 0 to ObjFastN - 1 do
+    begin
+      rel := ObjFastSlow[i] - (ObjFastStart[i] + 2);
+      Code[ObjFastStart[i]] := $EB;                { jmp short slow }
+      Code[ObjFastStart[i] + 1] := Byte(rel and $FF);
+    end;
+end;
+
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
@@ -5400,8 +5503,10 @@ begin
     saves ALL caller-clobbered GP regs because the callee is arbitrary compiled
     Pascal (the finalizer can run container teardown). }
   ObjRetainBlobAddr := CodeLen;
+  EmitObjRefFastPath(False);
   EmitObjBlobBody('PXXObjRetain');
   ObjReleaseBlobAddr := CodeLen;
+  EmitObjRefFastPath(True);
   EmitObjBlobBody('PXXObjRelease');
 
   { The same wrapper shape over the INTERFACE pair. A boxed interface

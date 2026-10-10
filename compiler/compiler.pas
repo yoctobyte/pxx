@@ -3485,6 +3485,7 @@ begin
   { Dead-code elimination: after every emitter (RTTI included — its method
     slots are roots), before anything reads a final code offset. Off unless
     --dce; see compiler/dce.inc for what turns it off again. }
+  PatchObjRefFastPaths;   { BEFORE DceRun, which renumbers GlobFix }
   DceRun;
   { AFTER DceRun for the same reason as the vector table below, and BEFORE it
     so that nothing reads BSSSize between the two. Drops the 64 KiB bare-ESP

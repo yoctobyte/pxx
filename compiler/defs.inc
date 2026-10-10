@@ -7508,6 +7508,16 @@ var
                                    population-tag guard + finalizer hook live in the
                                    Pascal proc (feature-nilpy-object-reclamation) }
   ObjReleaseBlobAddr : Integer;  { same, over PXXObjRelease }
+  { The inline fast paths in front of those two blobs (EmitObjRefFastPath) read
+    builtinheap's HeapLow/HeapHigh, which do not exist yet when the blobs are
+    emitted: the GlobFix rows are recorded here and filled in by
+    PatchObjRefFastPaths once every unit is parsed. }
+  ObjFastFixIdx  : array[0..3] of Integer;
+  ObjFastFixIsHi : array[0..3] of Boolean;
+  ObjFastFixN    : Integer;
+  ObjFastStart   : array[0..1] of Integer;   { first byte of each fast path }
+  ObjFastSlow    : array[0..1] of Integer;   { ...and its slow-path landing }
+  ObjFastN       : Integer;
   IntfRetainBlobAddr : Integer;  { same, over PXXIntfAddRefAny  (VT_INTF_TAG payloads) }
   IntfReleaseBlobAddr: Integer;  { same, over PXXIntfReleaseAny (VT_INTF_TAG payloads) }
   { The variant clear/retain pair, out of line for the same reason the
