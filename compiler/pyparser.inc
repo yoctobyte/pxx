@@ -48613,6 +48613,12 @@ begin
         both normalise). }
       if (not fieldsOnly) and (not isCtor) and PyMethodUsedAsValue(origName) then
       begin
+        { PXXDBG=p.boxed:<name> (or :*) -- which methods took the boxed ABI.
+          A boxed method is ~4x per call and nothing else says so; the
+          coarse flag is the one cause that boxes EVERY method at once. }
+        if PxxDbgWants('p.boxed', origName) then
+          WriteLn('PXXDBG p.boxed ', origName,
+                  ' coarse-getattr=', Ord(PyModuleHasComputedGetattr));
         if mRet <> tyVariant then begin mRet := tyVariant; mRetRec := REC_NONE; end;
         for k := 1 to nparams - 1 do
           if (k <> mStarIdx) and (k <> mKwIdx) then ptypes[k] := tyVariant;
