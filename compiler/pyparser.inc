@@ -4595,11 +4595,20 @@ procedure PyNarrowIntMinMax;
   reached -- went Variant. TSP's entry predictor: `i = min(int(x), len(T) - 2)`
   boxed the table index and everything computed from it. Lowered inline
   instead, CPython's own rule (the FIRST extreme wins): `min` is
-  `b if b < a else a`, `max` is `b if b > a else a`. Both operands are bound in
+  `b if b < a else a`, `max` is `b if b > a else a`. Each operand is bound in
   place through an AN_COMMA, as PyMakeBoolOpValue does, so each is evaluated
-  once, in order, inside whatever conditional region encloses the call. }
-var call, arg1, arg2, a, b, pi, aSym, bSym, cmp, pair, tern, c1, c2: Integer;
-    ta, tb, rt: TTypeKind; isMax: Boolean;
+  once, in order, inside whatever conditional region encloses the call.
+
+  Any number of arguments, folded left the way CPython's loop walks them, and
+  all-FLOAT arguments as well as all-int: `max(cb, min(1.0, x), math.cos(y))`
+  in TSP's entry predictor took the variadic Variant `max` -- boxing three
+  doubles, a cleanup frame and a pyvar_to_float -- on every integration step.
+  The rule is CPython's for a NaN too: `nan > acc` and `acc > nan` are both
+  False, so whichever came first stays. A MIXED int/float call is left alone:
+  CPython returns the winning object as it was, int or float. }
+var call, arg, n, k, pi, accSym, bSym, cmp, pair, tern, asg, comma, res: Integer;
+    tk, rt: TTypeKind; isMax, allInt, allFloat, anyPromo: Boolean;
+    args: array[0..15] of Integer;
 begin
   call := CurASTNode;
   if (call < 0) or (ASTKind[call] <> AN_CALL) then Exit;
@@ -4609,45 +4618,74 @@ begin
   else if CaseEqual(Procs[pi].Name, 'min') then isMax := False
   else Exit;
   if PyUserShadowsProc(Procs[pi].Name) then Exit;
-  arg1 := ASTLeft[call];
-  if arg1 < 0 then Exit;
-  arg2 := ASTRight[arg1];
-  if (arg2 < 0) or (ASTRight[arg2] >= 0) then Exit;
-  a := ASTLeft[arg1]; b := ASTLeft[arg2];
-  if (a < 0) or (b < 0) then Exit;
-  ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
-  if not ((ta in [tyInteger, tyInt64, tyPromoInt64]) and
-          (tb in [tyInteger, tyInt64, tyPromoInt64])) then Exit;
-  if (ta = tyPromoInt64) or (tb = tyPromoInt64) then rt := tyPromoInt64
-  else rt := tyInt64;
-  aSym := AllocVar(PyHiddenName('mma'), rt);
+  n := 0;
+  allInt := True; allFloat := True; anyPromo := False;
+  arg := ASTLeft[call];
+  while arg >= 0 do
+  begin
+    if (n > High(args)) or (ASTLeft[arg] < 0) then Exit;
+    args[n] := ASTLeft[arg];
+    tk := IntToTypeKind(ASTTk[args[n]]);
+    if not (tk in [tyInteger, tyInt64, tyPromoInt64]) then allInt := False;
+    if tk = tyPromoInt64 then anyPromo := True;
+    if tk <> tyDouble then allFloat := False;
+    Inc(n);
+    arg := ASTRight[arg];
+  end;
+  if n < 2 then Exit;
+  if allFloat then rt := tyDouble
+  else if allInt then
+  begin
+    { the two-int case keeps the reason it was written for: a PROMO operand }
+    if (n = 2) and not anyPromo then Exit;
+    if anyPromo then rt := tyPromoInt64 else rt := tyInt64;
+  end
+  else Exit;
+  accSym := AllocVar(PyHiddenName('mma'), rt);
   bSym := AllocVar(PyHiddenName('mmb'), rt);
-  cmp := AllocNode(AN_BINOP);
-  if isMax then ASTIVal[cmp] := Ord(tkGt) else ASTIVal[cmp] := Ord(tkLt);
-  ASTLeft[cmp] := PyMakeIdent(bSym);
-  ASTRight[cmp] := PyMakeIdent(aSym);
-  ASTTk[cmp] := Ord(tyBoolean);
-  pair := AllocNode(AN_PAIR);
-  ASTLeft[pair] := PyMakeIdent(bSym);
-  ASTRight[pair] := PyMakeIdent(aSym);
-  tern := AllocNode(AN_TERNARY);
-  ASTLeft[tern] := cmp;
-  ASTRight[tern] := pair;
-  ASTTk[tern] := Ord(rt);
-  { (aSym := a, (bSym := b, tern)) }
-  c2 := AllocNode(AN_COMMA);
-  ASTLeft[c2] := AllocNode(AN_ASSIGN);
-  ASTLeft[ASTLeft[c2]] := PyMakeIdent(bSym);
-  ASTRight[ASTLeft[c2]] := b;
-  ASTRight[c2] := tern;
-  ASTTk[c2] := Ord(rt);
-  c1 := AllocNode(AN_COMMA);
-  ASTLeft[c1] := AllocNode(AN_ASSIGN);
-  ASTLeft[ASTLeft[c1]] := PyMakeIdent(aSym);
-  ASTRight[ASTLeft[c1]] := a;
-  ASTRight[c1] := c2;
-  ASTTk[c1] := Ord(rt);
-  CurASTNode := c1;
+  { (acc := a0, (b := a1, (acc := b > acc ? b : acc, ... acc))) built from the
+    tail inward }
+  res := PyMakeIdent(accSym);
+  ASTTk[res] := Ord(rt);
+  for k := n - 1 downto 1 do
+  begin
+    cmp := AllocNode(AN_BINOP);
+    if isMax then ASTIVal[cmp] := Ord(tkGt) else ASTIVal[cmp] := Ord(tkLt);
+    ASTLeft[cmp] := PyMakeIdent(bSym);
+    ASTRight[cmp] := PyMakeIdent(accSym);
+    ASTTk[cmp] := Ord(tyBoolean);
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := PyMakeIdent(bSym);
+    ASTRight[pair] := PyMakeIdent(accSym);
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := cmp;
+    ASTRight[tern] := pair;
+    ASTTk[tern] := Ord(rt);
+    asg := AllocNode(AN_ASSIGN);
+    ASTLeft[asg] := PyMakeIdent(accSym);
+    ASTRight[asg] := tern;
+    comma := AllocNode(AN_COMMA);
+    ASTLeft[comma] := asg;
+    ASTRight[comma] := res;
+    ASTTk[comma] := Ord(rt);
+    res := comma;
+    asg := AllocNode(AN_ASSIGN);
+    ASTLeft[asg] := PyMakeIdent(bSym);
+    ASTRight[asg] := args[k];
+    comma := AllocNode(AN_COMMA);
+    ASTLeft[comma] := asg;
+    ASTRight[comma] := res;
+    ASTTk[comma] := Ord(rt);
+    res := comma;
+  end;
+  asg := AllocNode(AN_ASSIGN);
+  ASTLeft[asg] := PyMakeIdent(accSym);
+  ASTRight[asg] := args[0];
+  comma := AllocNode(AN_COMMA);
+  ASTLeft[comma] := asg;
+  ASTRight[comma] := res;
+  ASTTk[comma] := Ord(rt);
+  CurASTNode := comma;
   LastExprTk := rt;
 end;
 
