@@ -6867,14 +6867,19 @@ begin
     Exit;
   end;
   if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
-  PyVarSlotClear(dst);
+  { a scalar destination owns nothing: no call to find that out }
+  if (dst^.VType < 0) or (dst^.VType > 4) then PyVarSlotClear(dst);
   dst^.VType := src^.VType;
   dst^.Payload := src^.Payload;
 end;
 
 procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
 { dst is fresh/uninitialised (a function Result, a loop temp on its first
-  pass): zero it first so the release half never frees garbage. }
+  pass): zero it first so the release half never frees garbage. With dst
+  zeroed, PyVarSlotSet's release half has nothing to do, so the object and
+  string arms are taken here directly -- every `l[i]` that reads an object
+  element (TPyList.at) came through this, and spent a second call clearing a
+  slot it had just zeroed. }
 begin
   dst^.VType := 0;
   dst^.Payload := 0;
@@ -6884,7 +6889,14 @@ begin
     dst^.Payload := src^.Payload;
     Exit;
   end;
-  PyVarSlotSet(dst, src);
+  if PyVarSlotManaged(src^.VType) then
+  begin
+    PyVarSlotSetStr(dst, src);
+    Exit;
+  end;
+  if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
 end;
 
 procedure PyListGrow(l: TPyList; need: Integer);
