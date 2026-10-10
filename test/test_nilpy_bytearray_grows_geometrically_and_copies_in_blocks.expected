@@ -1,0 +1,15 @@
+b'' b'\x03\x04\x05\x06\x07\x08' b"$%&'" b"&'" b'\x00' b'' b'\x05\x06\x07\x08\t'
+bytearray(b'cdef') bytearray bytes
+bytearray(b'abcdefgh') bytearray(b'Zdef')
+b'\x02\x03\x04' b'\x01'
+99980 0
+1000 124716 bytearray(b'\x00\x01\x02\x03\x04') bytearray(b'\xe5\xe6\xe7')
+2006 bytearray(b'xyz\x00\x01\x02') bytearray(b'\xe7xyz')
+bytearray(b'hELlo')
+bytearray(b'heeeelo') 7
+bytearray(b'elo') 3
+bytearray(b'elo!AB') b'elo!AB' 6
+b'elo!AB' bytearray(b'elo!AB\x01')
+bytearray(b'\x00Q') [0, 81]
+b'abcd\x00\x00' 6
+b'bcd'

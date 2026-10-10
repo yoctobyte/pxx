@@ -6313,6 +6313,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/iterfr26 | diff -u test/test_nilpy_range_and_generator_iteration_without_a_cleanup_frame.expected -
 	./$(COMPILER) test/test_nilpy_bytes_are_zeroed_and_terminated_by_a_block_fill.npy $(TESTTMP)/byfill26
 	$(TESTTMP)/byfill26 | diff -u test/test_nilpy_bytes_are_zeroed_and_terminated_by_a_block_fill.expected -
+	./$(COMPILER) test/test_nilpy_bytearray_grows_geometrically_and_copies_in_blocks.npy $(TESTTMP)/bygrow26
+	$(TESTTMP)/bygrow26 | diff -u test/test_nilpy_bytearray_grows_geometrically_and_copies_in_blocks.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

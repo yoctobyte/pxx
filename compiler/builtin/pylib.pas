@@ -740,6 +740,13 @@ type
     { > 0: FData is a FILE MAPPING of this many bytes (mimic_mmap), not a heap
       block, so it goes back through PyBytesUnmapHook instead of FreeMem. }
     FMapLen: Int64;
+    { Bytes FData can hold before it must move, excluding the terminator.
+      Create sets it to n and PyBytesEnsure grows it GEOMETRICALLY, so a
+      bytearray built one append at a time no longer reallocates and copies
+      itself on every byte. Trusted only when it can only UNDERESTIMATE: a
+      view and a mapping are refused before it is read, and every other site
+      that swaps FData (mimic_mmap's read arm) starts from Create(0)'s 0. }
+    FCap: Integer;
     { TWO spellings, because a SUBCLASS needs the parameterless one. `class
       BA(bytearray)` with no __init__ of its own emits a call to the base's
       no-argument Create, and TPyBytes had only Create(n) — so constructing any
@@ -13873,6 +13880,7 @@ begin
     The empty case allocates too, rather than leaving FData nil: `b""` handed
     to a `const char *` must be the empty C string, not a null pointer. }
   GetMem(FData, n + 1);
+  FCap := n;
   { Python's bytearray(n) is n ZERO bytes, not uninitialised memory -- and
     the terminator with them, in one block fill. It was a byte loop, and
     every bytes object is built here: a tile's blobs off sqlite and each
@@ -13943,25 +13951,26 @@ begin
 end;
 
 procedure PyBytesEnsure(b: TPyBytes; need: Integer);
-var np: Pointer; k: Integer; src, dst: PByte;
+var np: Pointer; newCap: Integer;
 begin
   if need <= b.FLen then Exit;
   PyBytesNoResize(b);
-  { need + 1, and a zero at [need] — same invariant as the constructor. }
-  GetMem(np, need + 1);
-  for k := 0 to need - 1 do
+  { room already: the bytes past FLen may be stale (a shrink leaves them), so
+    the new ones and the terminator at [need] are zeroed, as a fresh buffer's
+    would be }
+  if (b.FMapLen = 0) and (need <= b.FCap) then
   begin
-    dst := PByte(NativeInt(np) + k);
-    if k < b.FLen then
-    begin
-      src := PByte(NativeInt(b.FData) + k);
-      dst^ := src^;
-    end
-    else
-      dst^ := 0;
+    FillChar(PByte(NativeInt(b.FData) + b.FLen)^, need - b.FLen + 1, 0);
+    b.FLen := need;
+    Exit;
   end;
-  dst := PByte(NativeInt(np) + need);
-  dst^ := 0;
+  newCap := need;
+  if newCap < 2 * b.FLen then newCap := 2 * b.FLen;
+  if newCap < 16 then newCap := 16;
+  { newCap + 1, and zeros from FLen on -- same invariant as the constructor }
+  GetMem(np, newCap + 1);
+  if b.FLen > 0 then Move(b.FData^, np^, b.FLen);
+  FillChar(PByte(NativeInt(np) + b.FLen)^, newCap - b.FLen + 1, 0);
   { The old buffer is OWNED here: a view (the only borrowed FData) raised in
     PyBytesNoResize above, and PyObjFinalize frees a non-view's FData the same
     way. Dropping it instead leaked one buffer per growth -- per append() of a
@@ -13974,6 +13983,7 @@ begin
   else if b.FData <> nil then FreeMem(b.FData);
   b.FData := np;
   b.FLen := need;
+  b.FCap := newCap;
 end;
 
 { THE LIST/TUPLE ARM IS ITS OWN OVERLOAD NOW, and that is the fix rather than
@@ -14018,12 +14028,9 @@ begin
   if src = nil then Exit;
   base := FLen;
   PyBytesEnsure(Self, FLen + src.FLen);
-  for k := 0 to src.FLen - 1 do
-  begin
-    sp := PByte(NativeInt(src.FData) + k);
-    dp := PByte(NativeInt(FData) + base + k);
-    dp^ := sp^;
-  end;
+  { a block copy; Move is overlap-safe, so `b.extend(b)` reads what it had }
+  if src.FLen > 0 then
+    Move(src.FData^, PByte(NativeInt(FData) + base)^, src.FLen);
 end;
 
 procedure TPyBytes.append(v: Integer);
@@ -14677,7 +14684,6 @@ begin
 end;
 
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
-var k: Integer; src, dst: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   { a slice of a VIEW is a view -- no copy, which is the reason to have one }
@@ -14691,12 +14697,9 @@ begin
     travel with every operation that builds a new buffer from an old one, or it
     is lost at the first slice. bug-nilpy-bytearray-and-bytes-are-the-same-type }
   if b <> nil then Result.FIsByteArray := b.FIsByteArray;
-  for k := 0 to (hi - lo) - 1 do
-  begin
-    src := PByte(NativeInt(b.FData) + lo + k);
-    dst := PByte(NativeInt(Result.FData) + k);
-    dst^ := src^;
-  end;
+  { one block copy, not a byte loop: lekkerzeilen's tile parser slices
+    every record out of a blob this way }
+  if hi > lo then Move(PByte(NativeInt(b.FData) + lo)^, Result.FData^, hi - lo);
 end;
 
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
@@ -14734,12 +14737,8 @@ begin
       b.FLen := oldLen + delta;
     end;
   end;
-  for k := 0 to src.FLen - 1 do
-  begin
-    sp := PByte(NativeInt(src.FData) + k);
-    dp := PByte(NativeInt(b.FData) + lo + k);
-    dp^ := sp^;
-  end;
+  if src.FLen > 0 then
+    Move(src.FData^, PByte(NativeInt(b.FData) + lo)^, src.FLen);
 end;
 
 { `b[lo:hi:step] = src` — the write half of pybytes_slice_step, walking exactly
@@ -20495,12 +20494,7 @@ begin
   { bytes(x) is an immutable COPY in Python; immutability is not modelled, but
     the copy is, because uforth uses it to snapshot memory }
   Result := TPyBytes.Create(b.FLen);
-  for k := 0 to b.FLen - 1 do
-  begin
-    src := PByte(NativeInt(b.FData) + k);
-    dst := PByte(NativeInt(Result.FData) + k);
-    dst^ := src^;
-  end;
+  if b.FLen > 0 then Move(b.FData^, Result.FData^, b.FLen);
 end;
 
 { bytes([32, 33]) — from a LIST of small ints. Called from the bytes() copy
