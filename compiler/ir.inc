@@ -5791,6 +5791,69 @@ end;
   given; TPyList.add returns Self. NilPy defs never qualify: their return arm
   retains a borrow. Such a call is never spilled into an owning argument temp
   (IRLowerCallArg) -- it constructs nothing. }
+{ Does call n BOX a class instance into a variant on the way in -- a
+  CLASS-typed argument value whose parameter is a Variant? See the
+  hidden-slot arm of IRLowerCallArg, which stays off for such a call. A class
+  receiver or a class parameter is passed as the object and is not boxed. The
+  AST may carry the receiver as an extra first argument (one more argument than
+  parameters); any other mismatch (defaults, varargs) answers True, which only
+  keeps the arm off. }
+function IRCallHasClassArg(n: Integer): Boolean;
+var a, p, k, cnt, ofs: Integer;
+begin
+  Result := False;
+  p := ASTIVal[n];
+  cnt := 0;
+  a := ASTLeft[n];
+  while a >= 0 do begin Inc(cnt); a := ASTRight[a]; end;
+  if cnt = Procs[p].ParamCount + 1 then ofs := 1
+  else if cnt = Procs[p].ParamCount then ofs := 0
+  else ofs := -1;
+  a := ASTLeft[n];
+  k := 0;
+  while a >= 0 do
+  begin
+    if (ASTLeft[a] >= 0) and (IntToTypeKind(ASTTk[ASTLeft[a]]) = tyClass) then
+    begin
+      if ofs < 0 then begin Result := True; Exit; end;
+      if (k - ofs >= 0) and (Procs[p].Params[k - ofs].TypeKind = tyVariant) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    a := ASTRight[a];
+    Inc(k);
+  end;
+end;
+
+{ The CONSUMERS the hidden-slot arm of IRLowerCallArg may hand a call's own
+  result temp to: pylib routines that only READ their const Variant arguments
+  -- arithmetic, comparison, conversion, a container read, store or append
+  (which retains what it keeps). Not the dynamic-call dispatchers
+  (pyvar_callv*, pybound_*, PyCallKey1, ...): PyCallStarV's
+  `pyvar_callv1(cb, t.at(0))` released the slot's object once too often under
+  PXX_HEAP_DEBUG when it was passed through. An allow-list, so a consumer
+  added later is safe by default. }
+function IRArgSlotConsumerOK(cpi: Integer): Boolean;
+var nm: AnsiString;
+begin
+  Result := False;
+  if (cpi < 0) or (cpi >= ProcCount) then Exit;
+  nm := Procs[cpi].Name;
+  Result := (nm = 'pymul_v') or (nm = 'pyadd_v') or (nm = 'pysub_v') or
+            (nm = 'pytruediv_v') or (nm = 'pyfloordiv_v') or
+            (nm = 'pyfloormod_v') or (nm = 'pypow_v') or (nm = 'pyneg_v') or
+            (nm = 'pyabs_v') or (nm = 'pyaugadd_v') or (nm = 'pycmp_v') or
+            (nm = 'pyvar_lt') or (nm = 'pyvar_gt') or (nm = 'PyVarEq') or
+            (nm = 'pyvar_to_float') or (nm = 'pyvar_to_int') or
+            (nm = 'pyvar_to_bool') or (nm = 'pystr_of') or (nm = 'pyvar_repr') or
+            (nm = 'pyvar_getitem') or (nm = 'pyvar_setitem') or
+            (nm = 'pycontains') or (nm = 'TPyList.append') or
+            (nm = 'TPyList.put') or (nm = 'TPyDict.store') or
+            (nm = 'TPyDict.fetch');
+end;
+
 { The k-th argument VALUE of call n, or -1. }
 function IRCallArgNode(n, k: Integer): Integer;
 var a, i: Integer;
@@ -6681,14 +6744,54 @@ begin
      (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
      ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_VIRTUAL_CALL)) then
   begin
-    { NO "pass the call's own hidden result slot" shortcut here. bf8f524ebf
-      passed that temp straight through, which saved a retain, a release and a
-      copy per argument, and over-released a live object in
-      test_nilpy_getattr_computed_name (heap debugger: RETAIN of a FREED
-      object in a def doing `out[nm] = getattr(o, nm)`). Leaving out either
-      pyvar_id or TPyList.at fixed it, which points at the temp being aliased
-      rather than at one callee's ownership. Reverted until that is understood:
-      every variant call argument goes through its own temp, as below. }
+    { A call that returns through a hidden destination ALREADY has a slot: its
+      IR value is that temp's address, the temp owns the result, is cleared
+      before every refill and released at scope exit. Pass it as it is. Copying
+      it into a second temp (the `tmp := call` below) cost a retain, a release
+      and a 16-byte copy per argument -- every `a[i] * b[j]` on a list paid
+      it twice.
+
+      Decided on the AST, BEFORE anything is lowered: lowering the call to look
+      at its shape and then lowering the assignment as well would run it twice.
+
+      NARROWED after bf8f524ebf, which took every such call, over-released a
+      live object in test_nilpy_getattr_computed_name (heap debugger: RETAIN
+      of a FREED object; it was reverted in 39dc1d435c). In
+      `out[nm] = getattr(o, nm)` with `o` a class value, the inner
+      pyvar_id(o) BOXES o into a variant temp for its parameter. Under the
+      assignment lowering that box retains o; lowered here it did NOT, and the
+      temp still releases o before each refill. Why the box saw a moved
+      (owned) source here is not understood yet, so the arm stays off where it
+      could happen:
+        - an argument of CLASS type (IRCallHasClassArg) -- the box above;
+        - a PASS-THROUGH (ProcResultArgIdx <> -1), whose result may be its own
+          argument, a borrow the assignment retains (IRCallReturnsBorrowedArg);
+        - any consumer outside IRArgSlotConsumerOK's allow-list.
+      What remains -- list/dict reads and the arithmetic helpers on variants,
+      strings and numbers -- is the hot case: `a[i] * b[j]`. Checked clean under
+      PXX_HEAP_DEBUG with str keys and str elements boxed on the way in. }
+    if (ASTKind[argAST] = AN_CALL) and (ASTIVal[argAST] >= 0) and
+       (ASTIVal[argAST] < ProcCount) and
+       (Procs[ASTIVal[argAST]].RetType = tyVariant) and
+       (ProcResultArgIdx[ASTIVal[argAST]] = -1) and
+       (not IRCallHasClassArg(argAST)) and IRArgSlotConsumerOK(cpi) and
+       ABIRetViaHiddenDestProc(ASTIVal[argAST]) then
+    begin
+      caIdent := IRLowerAST(argAST);
+      if (IRKind[caIdent] = IR_CALL) and (IRA[caIdent] = ASTIVal[argAST]) and
+         (IRC[caIdent] >= 0) and (IRKind[IRC[caIdent]] = IR_LEA) then
+      begin
+        Result := caIdent;
+        Exit;
+      end;
+      { lowered to some other shape: it has run, so it can only be kept --
+        a hidden-destination call's value is its own (owned) temp }
+      tmpSym := AllocVar('', tyVariant);
+      IRAppend(IR_VAR_STORE, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
+               caIdent, Ord(tyVariant), 0, Ord(tyVariant));
+      Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
+      Exit;
+    end;
     tmpSym := AllocVar('', tyVariant);
     caIdent := AllocNode(AN_IDENT);
     ASTIVal[caIdent] := tmpSym;
