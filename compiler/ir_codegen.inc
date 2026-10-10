@@ -6158,6 +6158,24 @@ begin
   IREmitCodeCall(VariantClearBlobAddr);
 end;
 
+{ EmitVariantClear with the SCALAR case inline: a tag below 6 owns nothing,
+  so the slot is zeroed here and only a managed payload calls the blob. For
+  the hot clear sites (IR_CALL's PXXVarClear, which re-prepares the hidden
+  destination of every variant-returning call): the blob's entry test and its
+  zeroing exit were ~3% of TSP, nearly all of it on floats and ints. }
+procedure EmitVariantClearScalarInline;
+var pSlow, pDone: Integer;
+begin
+  EmitB($48); EmitB($83); EmitB($38); EmitB($06);   { cmp qword [rax], 6 }
+  EmitB($73); pSlow := CodeLen; EmitB(0);           { jae slow }
+  EmitB($48); EmitB($C7); EmitB($00); EmitI32(0);   { mov qword [rax], 0 }
+  EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(0); { mov qword [rax+8], 0 }
+  EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
+  PatchRel8(pSlow);
+  IREmitCodeCall(VariantClearBlobAddr);
+  PatchRel8(pDone);
+end;
+
 procedure EmitVariantReleasePayload;
 { rax = address of a variant slot. Releases the managed payload and leaves the
   16 slot bytes ALONE — for the variant-to-variant assignment path, whose copy
@@ -11381,7 +11399,7 @@ begin
              (IRB[IRB[node]] < 0) then
           begin
             IREmitNode(IRA[IRB[node]]);                 { rax = @slot }
-            EmitVariantClear;
+            EmitVariantClearScalarInline;
             Exit;
           end;
 
@@ -13289,7 +13307,9 @@ begin
           begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }
           EmitB($50);                            { push rax  (payload) }
           IREmitNode(IRA[node]);                 { rax = dest addr }
-          EmitVariantClear;
+          { both words are stored below, so only the old PAYLOAD needs
+            releasing -- and a scalar has none }
+          EmitVariantReleasePayload;
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($59);                            { pop rcx   (payload) }
           EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
@@ -13336,7 +13356,7 @@ begin
         begin EmitB($48); EmitB($98); end;     { cdqe }
         EmitB($50);                            { push payload }
         IREmitNode(IRA[node]);                 { rax = temp addr }
-        EmitVariantClear;
+        EmitVariantReleasePayload;             { both words are stored below }
         EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
         EmitB($59);                            { pop rcx }
         EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
