@@ -1,0 +1,26 @@
+# pyiter_has copies a list element slot to slot into the iterator's box, and
+# pyiter_take MOVES it out. Objects, strings, containers and None must all
+# come through intact, through for, iter()/next() and comprehensions.
+class P:
+    def __init__(self, n): self.n = n
+ps = [P(i) for i in range(5)]
+names = ["a", "bb", "c" + str(3)]
+mixed = [1, 2.5, "s", None, [1, 2], (3, 4), {"k": 1}, P(9)]
+def walk(xs):
+    out = []
+    for x in xs:
+        out.append(x)
+    return out
+for _ in range(3):
+    t = 0
+    for p in ps: t += p.n
+    print(t, walk(names), len(walk(mixed)), walk(mixed)[4], walk(mixed)[7].n)
+it = iter(names)
+print(next(it), next(it), list(it))
+g = iter([P(1), P(2)])
+a = next(g); b = next(g)
+print(a.n, b.n, next(g, "end"))
+v = mixed
+for e in v:
+    if isinstance(e, P): print("P", e.n)
+print([q.n for q in ps if q.n % 2], sum(x.n for x in ps))

@@ -18014,7 +18014,11 @@ begin
   begin
     l := it.FSrc;
     if (l = nil) or (it.FPos >= l.count) then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, l.at(it.FPos));
+    { slot to slot: `put(0, l.at(pos))` made a Variant temporary between
+      them, one more retain and release per element of every `for` over a
+      list of objects }
+    PyVarSlotSet(PPyVarRec(it.FBox.FItems),
+                 PPyVarRec(NativeInt(l.FItems) + it.FPos * 16));
     Inc(it.FPos);
     it.FHas := True;
     Result := True;
@@ -18046,12 +18050,21 @@ begin
 end;
 
 function pyiter_take(it: TPyIter): Variant;
+var p, r: PPyVarRec;
 begin
   Result := pynone;
   if it = nil then Exit;
   if not it.FHas then
     if not pyiter_has(it) then Exit;
-  Result := it.FBox.at(0);
+  { MOVE the prefetched value out: the box's reference becomes the result's,
+    and the box holds None until the next prefetch. Nothing else reads the
+    box. Result holds None here, a scalar, so there is nothing to release. }
+  p := PPyVarRec(it.FBox.FItems);
+  r := PPyVarRec(@Result);
+  r^.VType := p^.VType;
+  r^.Payload := p^.Payload;
+  p^.VType := 0;
+  p^.Payload := 0;
   it.FHas := False;
 end;
 
