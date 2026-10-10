@@ -1,0 +1,9 @@
+# Power's y = 2 / 1 / -1 fast path is one correctly rounded op, so every
+# edge (signed zeros, infinities, NaN, overflow) must still print as CPython.
+import math
+for x in [0.0, -0.0, 1.5, -1.5, 3.0, 1e-200, 1e200, float('inf'), float('-inf'), float('nan'), 7.123456789]:
+    for y in [2.0, 1.0, -1.0, 2]:
+        try:
+            print(x, y, x ** y, math.pow(x, y))
+        except (OverflowError, ZeroDivisionError) as e:
+            print(x, y, type(e).__name__)

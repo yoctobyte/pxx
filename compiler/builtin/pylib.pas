@@ -11639,7 +11639,13 @@ begin
   if (fbase = 0.0) and (fexp > 0.0) then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := 0.0;
+    { ...keeping a negative zero's sign for an ODD integer exponent:
+      `(-0.0) ** 1.0` is -0.0, `(-0.0) ** 2.0` is 0.0 }
+    if (Frac(fexp) = 0.0) and (fexp < 9007199254740992.0) and
+       (Frac(fexp * 0.5) <> 0.0) then
+      PPyDouble(@r^.Payload)^ := fbase
+    else
+      PPyDouble(@r^.Payload)^ := 0.0;
     Exit;
   end;
   { A NEGATIVE base with a FRACTIONAL exponent is a COMPLEX number in CPython

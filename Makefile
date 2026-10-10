@@ -6251,6 +6251,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_selfunpk26 | diff -u test/test_nilpy_a_self_field_unpack_target_declares_every_field.expected -
 	./$(COMPILER) test/test_nilpy_json_dumps_appends_into_one_buffer.npy $(TESTTMP)/test_nilpy_jsonbuf26
 	$(TESTTMP)/test_nilpy_jsonbuf26 | diff -u test/test_nilpy_json_dumps_appends_into_one_buffer.expected -
+	./$(COMPILER) test/test_nilpy_pow_of_two_one_and_minus_one_keeps_every_edge.npy $(TESTTMP)/test_nilpy_powedge26
+	$(TESTTMP)/test_nilpy_powedge26 | diff -u test/test_nilpy_pow_of_two_one_and_minus_one_keeps_every_edge.expected -
+	./$(COMPILER) test/test_nilpy_json_dumps_writes_the_float_repr.npy $(TESTTMP)/test_nilpy_jsonrepr26
+	$(TESTTMP)/test_nilpy_jsonrepr26 | diff -u test/test_nilpy_json_dumps_writes_the_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

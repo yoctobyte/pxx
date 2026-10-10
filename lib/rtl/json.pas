@@ -642,13 +642,15 @@ end;
 { ---- the Python surface ---------------------------------------------------- }
 
 function JsonPyNumStr(d: Double): AnsiString;
-var whole: Int64;
 begin
-  { an integral float prints as CPython does — 3.0, not 3. A value that came in
-    as an int never reaches here: those carry the int tag. }
-  whole := Trunc(d);
-  if d = whole then JsonPyNumStr := IntToStr(whole) + '.0'
-  else JsonPyNumStr := FloatToStr(d);
+  { CPython writes float.__repr__ -- the SHORTEST string that reads back to
+    the same double. FloatToStr gave 15 significant digits, so a stored state
+    did not round-trip (TSP's universe blobs: 0.6101212000480055 came back
+    as 0.6101212000066). JSON spells the non-finite three its own way. }
+  if d <> d then JsonPyNumStr := 'NaN'
+  else if d > 1.7976931348623157e308 then JsonPyNumStr := 'Infinity'
+  else if d < -1.7976931348623157e308 then JsonPyNumStr := '-Infinity'
+  else JsonPyNumStr := pyrepr_of(d);
 end;
 
 { The dumper APPENDS into one growing buffer. It used to return a string per

@@ -2510,6 +2510,12 @@ begin
   if base = 1.0 then begin Result := 1.0; Exit; end;         { incl. NaN exponent }
   if (base <> base) or (exponent <> exponent) then
   begin Result := base + exponent; Exit; end;                { NaN }
+  { y = 2, 1, -1: ONE correctly rounded operation IS the correctly rounded
+    pow, signed zeros and infinities included -- and `x ** 2` is the common
+    case. Through the dd kernel it cost ~1 us: 54% of TSP's entry predictor. }
+  if exponent = 2.0 then begin Result := base * base; Exit; end;
+  if exponent = 1.0 then begin Result := base; Exit; end;
+  if exponent = -1.0 then begin Result := 1.0 / base; Exit; end;
   ay := Abs(exponent);
   { integer exponent? anything >= 2^53 is necessarily an even integer }
   yint := (ay >= 9007199254740992.0) or (DdRint(exponent) = exponent);

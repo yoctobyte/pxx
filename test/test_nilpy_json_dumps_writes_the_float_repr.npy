@@ -1,0 +1,9 @@
+# json.dumps writes float.__repr__ (shortest round-trip), not 15 digits;
+# TSP's stored states did not read back bit-exact.
+import json
+x = 0.1 + 0.2
+print(json.dumps(x), json.loads(json.dumps(x)) == x)
+print(json.dumps([0.6101212000480055, 4609.4340731198845, 1e-7, 1e22, 123456789012345678.0, -0.0, 5e-324]))
+print(str(x), repr(x), x)
+print(json.dumps([float('nan'), float('inf'), -float('inf'), 3.0, -2.0, 1e16, 2.5e-5]))
+print(json.dumps({"a": 1.1, "b": [2.2, 3]}, indent=1))
