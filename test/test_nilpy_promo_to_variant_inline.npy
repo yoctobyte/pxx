@@ -1,0 +1,14 @@
+# x86-64 boxes an INLINE promo int into a scalar-holding variant at the call
+# (PXXPromoToVariant's first branch), and scope exit calls PXXPromoClear only
+# for a HEAP-tier slot. Bignums must still box and release as before.
+def f(n):
+    i = int(n)
+    big = i * 4611686018427387904
+    v = [i, big, i + 1]
+    w = {i: big}
+    j = i
+    j = j * j * j * j * j
+    return v, w[i], j, str(j), [j, i]
+
+for k in (3, -7, 12345):
+    print(f(k))

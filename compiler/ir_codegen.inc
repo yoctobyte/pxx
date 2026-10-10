@@ -7927,7 +7927,8 @@ begin
 end;
 
 { Which promotable-int helper IR_CALL inlines the INLINE-TIER case of, or 0:
-  1 AddInt, 2 SubInt, 3 MulInt, 4 FromInt, 5 Clear, 6 ToInt64Wrap. Every
+  1 AddInt, 2 SubInt, 3 MulInt, 4 FromInt, 5 Clear, 6 ToInt64Wrap,
+  7 ToVariant. Every
   NilPy `int` local is a promo slot (tag word, payload word), so `row = j * n
   + i` was three calls whose first test always answered "inline, no
   overflow". By NAME, for the reason X64VarFloatArithOp gives. }
@@ -7943,7 +7944,8 @@ begin
   else if n = 'PXXPromoMulInt' then Result := 3
   else if n = 'PXXPromoFromInt' then Result := 4
   else if n = 'PXXPromoClear' then Result := 5
-  else if n = 'PXXPromoToInt64Wrap' then Result := 6;
+  else if n = 'PXXPromoToInt64Wrap' then Result := 6
+  else if n = 'PXXPromoToVariant' then Result := 7;
 end;
 
 { The inline tier of those helpers, at the call: rdi = the first argument
@@ -7956,6 +7958,8 @@ end;
     FromInt         dst INLINE: the payload is v.
     Clear           dst not HEAP: zero both words (no string to release).
     ToInt64Wrap     a INLINE: the payload.
+    ToVariant       src INLINE and the destination VARIANT a scalar (tag
+                    below 6, nothing to release): VT_INT64 and the payload.
   -- and everything else calls. Returns the `jmp done` rel8 to patch after
   the call. }
 function EmitPromoInline(kind: Integer): Integer;
@@ -7987,6 +7991,16 @@ begin
     EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { je slow (HEAP) }
     EmitB($31); EmitB($C0);                              { xor eax, eax }
     EmitB($48); EmitB($89); EmitB($07);                  { mov [rdi], rax }
+    EmitB($48); EmitB($89); EmitB($47); EmitB($08);      { mov [rdi+8], rax }
+  end
+  else if kind = 7 then
+  begin
+    EmitB($48); EmitB($83); EmitB($3E); EmitB(0);        { cmp qword [rsi], 0 }
+    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitB($48); EmitB($83); EmitB($3F); EmitB(6);        { cmp qword [rdi], 6 }
+    EmitB($73); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jae slow }
+    EmitB($48); EmitB($8B); EmitB($46); EmitB($08);      { mov rax, [rsi+8] }
+    EmitB($48); EmitB($C7); EmitB($07); EmitI32(2);      { mov qword [rdi], VT_INT64 }
     EmitB($48); EmitB($89); EmitB($47); EmitB($08);      { mov [rdi+8], rax }
   end
   else

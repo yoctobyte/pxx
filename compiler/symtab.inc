@@ -16635,8 +16635,14 @@ begin
         procIdx := FindProc('PXXPromoClear');
         if procIdx >= 0 then
         begin
+          { only a HEAP-tier slot holds anything to release; an inline one
+            (nearly all of them) skips the call -- the slot is going out of
+            scope, and a second pass over it skips the same way }
+          EmitB($48); EmitB($83); EmitB($BD); EmitI32(Syms[i].Offset); EmitB(1); { cmp qword [rbp+off], 1 }
+          EmitB($75); jzPatch := CodeLen; EmitB(0);              { jne over }
           x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { rdi = slot addr }
           EmitCallProc(procIdx);
+          PatchRel8(jzPatch);
         end;
       end
       else if act = SXR_DYNARR then
