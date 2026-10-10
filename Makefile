@@ -6295,6 +6295,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/vgetinl26 | diff -u test/test_nilpy_variant_subscript_inline_fast_path_keeps_every_arm.expected -
 	./$(COMPILER) test/test_nilpy_list_display_and_list_index_fast_paths_keep_every_rule.npy $(TESTTMP)/lstfast26
 	$(TESTTMP)/lstfast26 | diff -u test/test_nilpy_list_display_and_list_index_fast_paths_keep_every_rule.expected -
+	./$(COMPILER) test/test_nilpy_a_def_is_not_used_as_a_value_by_a_binding_of_its_name.npy $(TESTTMP)/dvalbind26
+	$(TESTTMP)/dvalbind26 | diff -u test/test_nilpy_a_def_is_not_used_as_a_value_by_a_binding_of_its_name.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

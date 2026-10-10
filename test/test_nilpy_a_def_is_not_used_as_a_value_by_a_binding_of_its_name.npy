@@ -1,0 +1,79 @@
+# A def takes the boxed function-object ABI only when its NAME is used as a
+# value. A comprehension variable, a parameter, a `for` target or another
+# scope's own nested def of the same name binds that name; none is a use of
+# this def. Each used to box every `def f` in the program, so its float
+# parameters arrived as Variants. Every answer here must match CPython,
+# including the genuine value uses, which must still box.
+def f(v: float) -> float:
+    return v * 2.0
+
+
+def h(v: float) -> float:
+    return v + 1.0
+
+
+def k(v: float) -> float:
+    return v - 1.0
+
+
+def m(v: float) -> float:
+    return v / 4.0
+
+
+print([g(1.0) for g in [f, h]])
+print([f(x) for x in [1.0, 2.0]])
+print([f for f in [3, 4]])
+print(sorted([(f, t) for t, f in {"a": 1, "b": 2}.items()]))
+print(list(map(h, [1.0, 5.0])))
+print({k: k * 2 for k in range(3)})
+print([k(x) for x in [1.0] if k(x) > -1.0])
+print([y for m in [[1, 2], [3]] for y in m])
+print(tuple(m(x) for x in (8.0, 16.0)))
+fs = [n for n in [k, m]]
+print([q(8.0) for q in fs])
+
+
+def integrate2(fn, x: float) -> float:
+    return fn(x) + fn(x + 1.0)
+
+
+def step2(x0: float) -> float:
+    def f(x: float) -> float:
+        return x * x
+    return integrate2(f, x0)
+
+
+def predict2(v0: float) -> float:
+    def f(v: float) -> float:
+        y = v
+        return y * 3.0
+    return f(v0) + f(1.0)
+
+
+def zf(z: float) -> float:
+    return z - 0.5
+
+
+print(step2(2.0), predict2(2.0), zf(3.0))
+
+
+def sca(top: float, ks: float) -> list:
+    def y(S: float) -> float:
+        return top - S * ks
+
+    out = []
+    for s, f in ((37.0, 1.0), (40.0, 0.85)):
+        out.append(y(s) * f)
+    return out
+
+
+def g2(v: float) -> float:
+    def f(w: float) -> float:
+        q = w * 2.0
+        return q
+    return f(v)
+
+
+print(sca(1.0, 2.0), g2(3.0))
+
+print(len([1, 2, 3]), len((4, 5)), len("ab"), len({"k": 1}))

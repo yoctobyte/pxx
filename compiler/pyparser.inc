@@ -278,6 +278,10 @@ var
   PyNestOwnerSeq: Integer;
   PyForNestOwner: Integer;   { the owner of the for header parsed last }
   PyHdrName: AnsiString;
+  { The token of the def name PyParseDefHeader is reading, so the
+    used-as-a-value scan can tell a use of THIS def from a use of another def
+    of the same name nested where the use sits. See PyTokIsOwnLocal. }
+  PyHdrNameTok: Integer = -1;
   PyHdrNParams: Integer;
   PyHdrIsProc: Boolean;
   PyHdrRetType: TTypeKind;
@@ -40239,10 +40243,14 @@ begin
   st := k;
   while (st > bodyStart) and not (Tokens[st - 1].Kind in
          [tkNewline, tkIndent, tkDedent, tkSemicolon]) do Dec(st);
-  if Tokens[st].Kind = tkFor then Inc(st);
+  { NilPy lexes `for` as an IDENTIFIER, so both tests take either spelling:
+    with tkFor alone no `for` target was ever recognised here. }
+  if (Tokens[st].Kind = tkFor) or
+     ((Tokens[st].Kind = tkIdent) and TokenCaseEqual(st, 'for')) then Inc(st);
   for t := st to k - 1 do
     if not (Tokens[t].Kind in [tkIdent, tkComma, tkLParen, tkLBrack, tkStar]) then Exit;
-  if Tokens[st - 1].Kind = tkFor then
+  if (Tokens[st - 1].Kind = tkFor) or
+     ((Tokens[st - 1].Kind = tkIdent) and TokenCaseEqual(st - 1, 'for')) then
   begin
     { up to the `in` over target tokens only }
     t := k + 1;
@@ -40255,6 +40263,118 @@ begin
     Result := True
   else
     Result := PyInUnpackTarget(k, st, bodyEnd);
+end;
+
+{ Is token j a parameter NAME in a `def` header -- `def rk4_step(f, t, y)`?
+  That binds the name; it is not a use of some def called f, and counting it
+  as one made every `def f` in a program that imported TSP's integrate.py
+  take the boxed ABI. Only the name position: a default value (`g=f`) or an
+  annotation is still a use. }
+function PyTokIsParamDecl(j: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  if (j < 1) or not (Tokens[j - 1].Kind in [tkLParen, tkComma, tkStar, tkPow]) then Exit;
+  { walk left to the statement start, tracking the bracket depth }
+  k := j - 1;
+  depth := 0;
+  while k >= 0 do
+  begin
+    case Tokens[k].Kind of
+      tkRParen, tkRBrack, tkEnd: Inc(depth);
+      tkLParen, tkLBrack, tkBegin: Dec(depth);
+      tkNewline, tkIndent, tkDedent, tkSemicolon: Break;
+    end;
+    Dec(k);
+  end;
+  Inc(k);
+  { `def name (` with j at depth 1 of that parenthesis }
+  Result := (k + 2 < j) and (Tokens[k].Kind = tkFunction) and
+            (Tokens[k + 2].Kind = tkLParen) and (depth = -1);
+end;
+
+{ Is the name at token j a comprehension's OWN variable -- inside a
+  `[... for nm in ...]` (or a generator, set or dict comprehension) whose
+  `for` clause binds nm? Python 3 gives a comprehension its own scope, so the
+  name there is never a def of that name used as a value. TSP's parts.py
+  builds `tuple((float(t), float(f)) for t, f in ...)`, and that one `f` made
+  every `def f` in the program "used as a value": predict's nested `def f`
+  took the boxed ABI, its float parameters arrived as Variants, and its whole
+  body ran on the variant helpers.
+
+  The FIRST clause's iterable is the exception: Python evaluates it in the
+  enclosing scope, so `[x for f in f]` still reads the outer f there. Walks
+  out bracket by bracket, so `float(f)` inside the element finds the
+  comprehension around it. }
+function PyTokIsCompVar(j: Integer; const nm: AnsiString): Boolean;
+var open, close, k, depth, firstIn, firstEnd, tgt: Integer;
+    bound: Boolean;
+begin
+  Result := False;
+  open := j;
+  while True do
+  begin
+    { the innermost bracket still open at `open` }
+    k := open - 1;
+    depth := 0;
+    while k >= 0 do
+    begin
+      case Tokens[k].Kind of
+        tkRParen, tkRBrack, tkEnd: Inc(depth);
+        tkLParen, tkLBrack, tkBegin:
+          if depth = 0 then Break else Dec(depth);
+        tkNewline, tkIndent, tkDedent, tkSemicolon:
+          if depth = 0 then Exit;
+      end;
+      Dec(k);
+    end;
+    if k < 0 then Exit;
+    open := k;
+    { its matching close, and the depth-0 comprehension clauses between }
+    close := open + 1;
+    depth := 0;
+    bound := False;
+    firstIn := -1;
+    firstEnd := -1;
+    while close < TokCount do
+    begin
+      case Tokens[close].Kind of
+        tkLParen, tkLBrack, tkBegin: Inc(depth);
+        tkRParen, tkRBrack, tkEnd:
+          if depth = 0 then Break else Dec(depth);
+        tkNewline, tkIndent, tkDedent, tkSemicolon:
+          if depth = 0 then Exit;
+        tkFor, tkIdent, tkIf:
+          if (depth = 0) and ((Tokens[close].Kind = tkFor) or
+             ((Tokens[close].Kind = tkIdent) and TokenCaseEqual(close, 'for'))) then
+          begin
+            if (firstIn >= 0) and (firstEnd < 0) then firstEnd := close;
+            tgt := close + 1;
+            while (tgt < TokCount) and (Tokens[tgt].Kind <> tkIn) and
+                  not (Tokens[tgt].Kind in [tkNewline, tkSemicolon]) do
+            begin
+              if (Tokens[tgt].Kind = tkIdent) and PyTokenIsName(tgt, nm) then
+                bound := True;
+              Inc(tgt);
+            end;
+            if firstIn < 0 then firstIn := tgt;
+          end;
+      end;
+      { a later `if` clause ends the first iterable too }
+      if (depth = 0) and (firstIn >= 0) and (firstEnd < 0) and (close > firstIn) and
+         ((Tokens[close].Kind = tkIf) or
+          ((Tokens[close].Kind = tkIdent) and TokenCaseEqual(close, 'if'))) then
+        firstEnd := close;
+      Inc(close);
+    end;
+    if close >= TokCount then Exit;
+    if bound then
+    begin
+      if firstEnd < 0 then firstEnd := close;
+      Result := not ((j > firstIn) and (j < firstEnd));
+      Exit;
+    end;
+  end;
 end;
 
 function PyTokIsOwnLocal(j: Integer; const nm: AnsiString): Boolean;
@@ -40273,7 +40393,8 @@ function PyTokIsOwnLocal(j: Integer; const nm: AnsiString): Boolean;
   bindings are theirs. }
 var k, depth, indTok, hdr, bodyEnd, pdepth: Integer;
 begin
-  Result := False;
+  Result := PyTokIsCompVar(j, nm) or PyTokIsParamDecl(j);
+  if Result then Exit;
   { the innermost enclosing block that is a def }
   k := j - 1;
   depth := 0;
@@ -40344,7 +40465,12 @@ begin
     begin
       if (k + 1 < bodyEnd) and PyTokenIsName(k + 1, nm) then
       begin
-        Result := False;                        { a nested `def nm` }
+        { A nested `def nm`: the use names THAT def. It is a value use of the
+          def being asked about only when that def is this one. ascent's
+          `rk4_step(f, ...)` passes step's own nested f, and by name alone it
+          made predict's nested `def f` in entry.py take the boxed ABI too. }
+        Result := (Tokens[k].Kind = tkFunction) and (PyHdrNameTok >= 0) and
+                  (k + 1 <> PyHdrNameTok);
         Exit;
       end;
       { skip the nested body: to its INDENT, then to the matching DEDENT }
@@ -40605,6 +40731,7 @@ begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected function name');
   PyHdrName := CurTok.SVal;
+  PyHdrNameTok := TokPos - 1;
   Next;
   Expect(tkLParen, '(');
   PyHdrNParams := 0;

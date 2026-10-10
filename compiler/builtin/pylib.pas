@@ -11511,7 +11511,7 @@ begin
   end;
 end;
 
-function pylen_v(const v: Variant): Int64;
+function pylen_v_slow(const v: Variant): Int64;
 var
   p: PPyVarRec;
   o: TObject;
@@ -11562,6 +11562,27 @@ begin
     Result := 0;
   end;
 end;
+
+{ len(<variant>)'s commonest answer, a list's length, without the cleanup
+  frame pylen_v_slow needs for its `__len__` result: a setjmp on every
+  `len(xs)` of a module-level or unannotated list. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylen_v(const v: Variant): Int64;
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 7 then
+  begin
+    o := TObject(Pointer(p^.Payload));
+    if (o <> nil) and (o is TPyList) then
+    begin
+      Result := TPyList(o).FLen;
+      Exit;
+    end;
+  end;
+  Result := pylen_v_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
 { The AUGMENTED product, `xs *= n`, where the target reads as a VARIANT — an
