@@ -12605,13 +12605,25 @@ begin
   end;
   if not (((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4))) then Exit;
   ia := pa^.Payload; ib := pb^.Payload;
-  if op = 1 then ir := ia + ib
-  else if op = 2 then ir := ia - ib
+  { add and subtract test overflow by sign inline -- the result's sign
+    differs from both addends', or from the minuend's when the operands'
+    signs differ -- which is PyIntOpOverflows' own answer for those two ops
+    without a call per operation; multiply still asks it }
+  if op = 1 then
+  begin
+    ir := ia + ib;
+    if ((ia xor ir) and (ib xor ir)) < 0 then Exit;
+  end
+  else if op = 2 then
+  begin
+    ir := ia - ib;
+    if ((ia xor ib) and (ia xor ir)) < 0 then Exit;
+  end
   else
   begin
     ir := ia * ib;
+    if PyIntOpOverflows(ia, ib, ir, op) then Exit;
   end;
-  if PyIntOpOverflows(ia, ib, ir, op) then Exit;
   r^.VType := 2;
   r^.Payload := ir;
   Result := True;

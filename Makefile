@@ -6319,6 +6319,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/bytrj26 | diff -u test/test_nilpy_bytes_translate_join_and_array_frombytes_in_blocks.expected -
 	./$(COMPILER) test/test_nilpy_attribute_cache_matches_a_literal_name_by_its_address.npy $(TESTTMP)/attrh26
 	$(TESTTMP)/attrh26 | diff -u test/test_nilpy_attribute_cache_matches_a_literal_name_by_its_address.expected -
+	./$(COMPILER) test/test_nilpy_variant_int_add_and_sub_overflow_by_sign.npy $(TESTTMP)/ovsign26
+	$(TESTTMP)/ovsign26 | diff -u test/test_nilpy_variant_int_add_and_sub_overflow_by_sign.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
