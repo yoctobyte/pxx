@@ -1,0 +1,44 @@
+# x86-64 inlines the INLINE-TIER case of PXXPromoAddInt/SubInt/MulInt, FromInt,
+# Clear and ToInt64Wrap at the call. Every overflow (Low(Int64) * -1, the
+# 3037000500 square, +/-1 past either limit) must still spill to a bignum,
+# and a bignum must still demote and clear as before.
+def f(n, k):
+    a = n + k
+    b = a - 3
+    c = b * k
+    return c
+
+def g(n):
+    i = int(n)
+    j = i * 4 + 1
+    t = 0
+    for q in range(5):
+        t = t + j - q
+        t = t * 1
+    return t
+
+big = 9223372036854775807
+print(f(1, 2), f(big, 1), f(-big - 1, -1), f(big, 2), f(-big, 3))
+print(g(7.9), g(-3.2))
+x = big
+x = x + 1
+print(x, x - 1, x * x)
+y = -big - 1
+y = y - 1
+print(y)
+z = 3
+for i in range(70):
+    z = z * 2
+print(z)
+w = z
+w = w - z + 5
+print(w, w * -1, (-big - 1) * -1, (-big - 1) * 1, (-big - 1) * 0, 0 * (-big - 1))
+m = -big - 1
+print(m * -1, m * 1, m * 2, (m + 1) * -1)
+lst = [k * 3 - 2 for k in range(6)]
+print(lst, sum(lst))
+def h(a):
+    r = a
+    r = r * a
+    return r
+print(h(3037000499), h(3037000500), h(-3037000500))

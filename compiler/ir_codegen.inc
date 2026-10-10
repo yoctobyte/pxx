@@ -7908,6 +7908,79 @@ begin
   else if n = 'pytruediv_v' then Result := $5E;   { divsd; a zero divisor takes the call }
 end;
 
+{ Which promotable-int helper IR_CALL inlines the INLINE-TIER case of, or 0:
+  1 AddInt, 2 SubInt, 3 MulInt, 4 FromInt, 5 Clear, 6 ToInt64Wrap. Every
+  NilPy `int` local is a promo slot (tag word, payload word), so `row = j * n
+  + i` was three calls whose first test always answered "inline, no
+  overflow". By NAME, for the reason X64VarFloatArithOp gives. }
+function X64PromoInlineKind(procIdx: Integer): Integer;
+var n: AnsiString;
+begin
+  Result := 0;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  if (Length(Procs[procIdx].Name) < 12) or (Length(Procs[procIdx].Name) > 19) then Exit;
+  n := Procs[procIdx].Name;
+  if n = 'PXXPromoAddInt' then Result := 1
+  else if n = 'PXXPromoSubInt' then Result := 2
+  else if n = 'PXXPromoMulInt' then Result := 3
+  else if n = 'PXXPromoFromInt' then Result := 4
+  else if n = 'PXXPromoClear' then Result := 5
+  else if n = 'PXXPromoToInt64Wrap' then Result := 6;
+end;
+
+{ The inline tier of those helpers, at the call: rdi = the first argument
+  (dst, or the operand for ToInt64Wrap), rsi = the second, rdx = the third.
+  Each arm is the helper's own first branch on a 64-bit target --
+    Add/Sub/MulInt  a and dst both INLINE (tag 0): payload op b, and the CPU's
+                    overflow flag is the helper's overflow test (MulInt's
+                    `r div b = x` and its Low(Int64) * -1 guards included);
+                    an overflow spills to a bignum, so it calls.
+    FromInt         dst INLINE: the payload is v.
+    Clear           dst not HEAP: zero both words (no string to release).
+    ToInt64Wrap     a INLINE: the payload.
+  -- and everything else calls. Returns the `jmp done` rel8 to patch after
+  the call. }
+function EmitPromoInline(kind: Integer): Integer;
+var slow: array[0..3] of Integer; ns, k: Integer;
+begin
+  ns := 0;
+  if kind <= 3 then
+  begin
+    EmitB($48); EmitB($83); EmitB($3E); EmitB(0);        { cmp qword [rsi], 0 }
+    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitB($48); EmitB($83); EmitB($3F); EmitB(0);        { cmp qword [rdi], 0 }
+    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitB($48); EmitB($8B); EmitB($46); EmitB($08);      { mov rax, [rsi+8] }
+    if kind = 1 then begin EmitB($48); EmitB($01); EmitB($D0); end            { add rax, rdx }
+    else if kind = 2 then begin EmitB($48); EmitB($29); EmitB($D0); end       { sub rax, rdx }
+    else begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C2); end;           { imul rax, rdx }
+    EmitB($70); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jo slow }
+    EmitB($48); EmitB($89); EmitB($47); EmitB($08);      { mov [rdi+8], rax }
+  end
+  else if kind = 4 then
+  begin
+    EmitB($48); EmitB($83); EmitB($3F); EmitB(0);        { cmp qword [rdi], 0 }
+    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitB($48); EmitB($89); EmitB($77); EmitB($08);      { mov [rdi+8], rsi }
+  end
+  else if kind = 5 then
+  begin
+    EmitB($48); EmitB($83); EmitB($3F); EmitB(1);        { cmp qword [rdi], 1 }
+    EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { je slow (HEAP) }
+    EmitB($31); EmitB($C0);                              { xor eax, eax }
+    EmitB($48); EmitB($89); EmitB($07);                  { mov [rdi], rax }
+    EmitB($48); EmitB($89); EmitB($47); EmitB($08);      { mov [rdi+8], rax }
+  end
+  else
+  begin
+    EmitB($48); EmitB($83); EmitB($3F); EmitB(0);        { cmp qword [rdi], 0 }
+    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitB($48); EmitB($8B); EmitB($47); EmitB($08);      { mov rax, [rdi+8] }
+  end;
+  EmitB($EB); Result := CodeLen; EmitB(0);               { jmp done }
+  for k := 0 to ns - 1 do PatchRel8(slow[k]);
+end;
+
 { pyvar_getitem's own fast path, inline at the call: rdi = &v, rsi = &key,
   r10 = the hidden destination. Taken only when the receiver is EXACTLY a
   TPyList (its VMT, so no subclass), the key is int-tagged (1, 2) and in
@@ -11920,6 +11993,8 @@ begin
               pVarFastDone := EmitVarGetItemInline;
             if pVarFastDone < 0 then
               pVarFastDone := EmitListAtInline(procIdx);
+            if (pVarFastDone < 0) and (X64PromoInlineKind(procIdx) > 0) then
+              pVarFastDone := EmitPromoInline(X64PromoInlineKind(procIdx));
             pVarCmpOp := X64VarFloatCmpOp(procIdx);
             if pVarCmpOp <> 0 then
             begin
