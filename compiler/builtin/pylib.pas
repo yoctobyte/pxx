@@ -19300,7 +19300,11 @@ var PyFinKindCache: array[0..255] of NativeUInt;
 function PyFinKind(o: TObject): Integer;
 var rt, e: NativeUInt; h: Integer;
 begin
-  rt := NativeUInt(GetInstanceRTTI(Pointer(o)));
+  { GetInstanceRTTI's two loads, inline: the call was most of this routine's
+    cost on the cache-hit path every freed instance takes }
+  rt := 0;
+  if (o <> nil) and (PPointer(o)^ <> nil) then
+    rt := NativeUInt(PPointer(PtrUInt(PPointer(o)^) - 8)^);
   h := Integer((rt shr 4) and 255);
   e := PyFinKindCache[h];
   if (rt <> 0) and ((rt and 7) = 0) and ((e and not NativeUInt(7)) = rt) then

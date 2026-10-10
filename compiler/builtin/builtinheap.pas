@@ -1768,14 +1768,28 @@ begin
       end
       else if size <= ALLOC_INLINE_ZERO_MAX then
       begin
-        i := 0;
-        while i < size do
+        { Four 8-byte stores per turn, by a moving address and a count down:
+          the one-word loop with an index re-added per store was ~11
+          instructions a word, and every reused instance (a 56-byte Vec3)
+          paid it. `size` is a multiple of 8 (rounded above), so PInt64
+          stores tile it exactly on 32-bit targets too. }
+        i := size;
+        while i >= 32 do
         begin
-          PMachineWord(cur + i)^ := 0;
-          i := i + SizeOf(NativeInt);        { PMachineWord writes one machine word: 8 on
-                                               64-bit, 4 on 32-bit — must match the
-                                               step or half the span is skipped }
+          PInt64(cur)^ := 0;
+          PInt64(cur + 8)^ := 0;
+          PInt64(cur + 16)^ := 0;
+          PInt64(cur + 24)^ := 0;
+          cur := cur + 32;
+          i := i - 32;
         end;
+        while i > 0 do
+        begin
+          PInt64(cur)^ := 0;
+          cur := cur + 8;
+          i := i - 8;
+        end;
+        cur := cur - size;
       end
       else PXXMemZero(Pointer(cur), size);
       Result := Pointer(cur);
