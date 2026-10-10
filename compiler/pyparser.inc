@@ -2180,9 +2180,12 @@ begin
     NoneType" (TSP). A variant keeps None as VT_EMPTY and 0 as 0. Every
     parameter-annotation site comes through here with PyAnnParamScope set,
     so the signature, the frame and a field typed from a ctor parameter
-    agree. Fields and returns keep their mapping. }
+    agree. Fields and returns keep their mapping.
+    `str` too: a bare `ref: str = None` mapped to an AnsiString where None and
+    '' are one value, so `ref is None` held for "" and a None reached sqlite as
+    '' rather than NULL (TSP's add_event, 2026-10-10). }
   if PyAnnParamScope and
-     (Result in [tyInteger, tyInt64, tyDouble, tySingle, tyBoolean]) and
+     (Result in [tyInteger, tyInt64, tyDouble, tySingle, tyBoolean, tyAnsiString]) and
      (sawNone or PyAnnOptionalScalar or
       ((i + 1 < MainProgramTokCount) and (Tokens[i].Kind = tkAssign) and
        (Tokens[i + 1].Kind = tkNil))) then

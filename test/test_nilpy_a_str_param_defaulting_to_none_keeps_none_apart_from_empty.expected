@@ -1,0 +1,9 @@
+True None False
+False '' True
+False 'ab' False
+len 2 AB ab!
+x x: x:t
+True None False
+a (no ref)
+b ref=''
+c ref='m1'

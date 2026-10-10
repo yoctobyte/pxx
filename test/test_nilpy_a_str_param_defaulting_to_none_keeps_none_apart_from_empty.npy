@@ -1,0 +1,34 @@
+# A parameter annotated `str` with a None default is Optional[str], as the
+# numeric annotations already were: None and "" are two values. It used to be
+# an AnsiString where both were the same, so `ref is None` held for "" and a
+# None reached sqlite as '' (TSP's Universe.add_event).
+# Differential: the .expected came from CPython.
+def f(ref: str = None) -> None:
+    print(ref is None, repr(ref), ref == "")
+    if ref:
+        print("len", len(ref), ref.upper(), ref + "!")
+
+def g(name: str, tag: str = None) -> str:
+    if tag is None:
+        return name
+    return name + ":" + tag
+
+f()
+f("")
+f("ab")
+print(g("x"), g("x", ""), g("x", "t"))
+s = None
+f(s)
+
+
+class Log:
+    def add(self, text: str, ref: str = None) -> str:
+        if ref is None:
+            return text + " (no ref)"
+        return text + " ref=" + repr(ref)
+
+
+lg = Log()
+print(lg.add("a"))
+print(lg.add("b", ""))
+print(lg.add("c", "m1"))

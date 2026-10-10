@@ -6265,6 +6265,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_mixcmp26 | diff -u test/test_nilpy_mixed_int_float_variant_compares_exactly.expected -
 	./$(COMPILER) test/test_nilpy_mmap_maps_the_file_privately.npy $(TESTTMP)/test_nilpy_mmappriv26
 	$(TESTTMP)/test_nilpy_mmappriv26 | diff -u test/test_nilpy_mmap_maps_the_file_privately.expected -
+	./$(COMPILER) test/test_nilpy_a_str_param_defaulting_to_none_keeps_none_apart_from_empty.npy $(TESTTMP)/test_nilpy_strnone26
+	$(TESTTMP)/test_nilpy_strnone26 | diff -u test/test_nilpy_a_str_param_defaulting_to_none_keeps_none_apart_from_empty.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
