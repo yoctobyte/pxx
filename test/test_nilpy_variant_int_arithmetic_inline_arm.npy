@@ -1,0 +1,25 @@
+# x86-64 emits an inline INT arm beside the float one for variant + - *:
+# tags 1..2 both sides, the CPU overflow flag decides promotion. Ints near
+# both limits, Low*-1, bools, floats, strings and lists must answer as before.
+def f(a, b): return a + b, a - b, a * b, a / b if b else None
+for a, b in [(3, 4), (-7, 2), (2 ** 40, 2 ** 30), (2 ** 62, 4), (-2 ** 63, -1), (True, 2), (1.5, 2), (2, 0.25), (2.5, 0.5), ("a", "b"), ([1], [2])]:
+    try:
+        print(f(a, b))
+    except TypeError as e:
+        print("TypeError")
+x = 0
+for i in range(1000):
+    x = x + i * 3 - 1
+print(x, type(x).__name__)
+def add(a, b): return a + b
+def sub(a, b): return a - b
+def mul(a, b): return a * b
+M = 2 ** 63 - 1
+m = -2 ** 63
+vals = [0, 1, -1, 2, -2, M, m, M - 1, m + 1, 2 ** 62, -2 ** 62, 12345, -98765]
+out = []
+for x in vals:
+    for y in vals:
+        out.append((add(x, y), sub(x, y), mul(x, y)))
+print(len(out), sum(a + b + c for a, b, c in out) % 1000003)
+print(add(M, 1), sub(m, 1), add(m, -1), sub(M, -1), add(M, m), sub(0, m), add(2.5, 1), sub(1, 0.5), add(True, 1))

@@ -8049,6 +8049,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
     pVarFastOp, pVarFastDone, pVarSlow1, pVarSlow2, pVarSlow3, pVarCmpOp: Integer;   { X64VarFloatArithOp's and X64VarFloatCmpOp's inline arms }
+    pVarIntDone, pVarIntS1, pVarIntS2, pVarIntS3: Integer;   { ...and the int arm beside the float one }
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -11850,7 +11851,7 @@ begin
                 tag pair, ints included (they need the overflow test), takes
                 the call. Patched, not hand-counted. }
               EmitB($48); EmitB($83); EmitB($3F); EmitB(3);  { cmp qword [rdi], 3 }
-              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne slow }
+              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne int arm (or slow) }
               EmitB($48); EmitB($83); EmitB($3E); EmitB(3);  { cmp qword [rsi], 3 }
               EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
               pVarSlow3 := -1;
@@ -11869,9 +11870,51 @@ begin
               EmitB($4C); EmitB($89); EmitB($D0);            { mov rax, r10 }
               EmitB($EB); pVarFastDone := CodeLen; EmitB(0); { jmp done }
               PatchRel8(pVarSlow1);
+              { ...and INT with INT for `+ - *`: both tags 1..2 (VT_INT,
+                VT_INT64), the op with the CPU's own overflow flag -- which is
+                PyVarNumFast's overflow answer for all three, Low(Int64) * -1
+                included -- and a VT_INT64 result, as the helper writes. An
+                overflow (it promotes), a bool or any other tag takes the
+                call. True division of ints is a float and always calls. }
+              pVarIntDone := -1;
+              pVarIntS3 := -1;
+              if pVarFastOp <> $5E then
+              begin
+                EmitB($48); EmitB($8B); EmitB($07);            { mov rax, [rdi] }
+                EmitB($48); EmitB($FF); EmitB($C8);            { dec rax }
+                EmitB($48); EmitB($83); EmitB($F8); EmitB(1);  { cmp rax, 1 }
+                EmitB($77); pVarIntS1 := CodeLen; EmitB(0);    { ja slow }
+                EmitB($48); EmitB($8B); EmitB($06);            { mov rax, [rsi] }
+                EmitB($48); EmitB($FF); EmitB($C8);            { dec rax }
+                EmitB($48); EmitB($83); EmitB($F8); EmitB(1);  { cmp rax, 1 }
+                EmitB($77); pVarIntS2 := CodeLen; EmitB(0);    { ja slow }
+                EmitB($48); EmitB($8B); EmitB($47); EmitB($08); { mov rax, [rdi+8] }
+                if pVarFastOp = $58 then
+                begin
+                  EmitB($48); EmitB($03); EmitB($46); EmitB($08);          { add rax, [rsi+8] }
+                end
+                else if pVarFastOp = $5C then
+                begin
+                  EmitB($48); EmitB($2B); EmitB($46); EmitB($08);          { sub rax, [rsi+8] }
+                end
+                else
+                begin
+                  EmitB($48); EmitB($0F); EmitB($AF); EmitB($46); EmitB($08); { imul rax, [rsi+8] }
+                end;
+                EmitB($70); pVarIntS3 := CodeLen; EmitB(0);    { jo slow }
+                EmitB($49); EmitB($C7); EmitB($02); EmitI32(2); { mov qword [r10], 2 }
+                EmitB($49); EmitB($89); EmitB($42); EmitB($08); { mov [r10+8], rax }
+                EmitB($4C); EmitB($89); EmitB($D0);            { mov rax, r10 }
+                EmitB($EB); pVarIntDone := CodeLen; EmitB(0);  { jmp done }
+                PatchRel8(pVarIntS1);
+                PatchRel8(pVarIntS2);
+                PatchRel8(pVarIntS3);
+              end;
               PatchRel8(pVarSlow2);
               if pVarSlow3 >= 0 then PatchRel8(pVarSlow3);
-            end;
+            end
+            else
+              pVarIntDone := -1;
             if (Length(Procs[procIdx].Name) = 13) and (Procs[procIdx].Name = 'pyvar_getitem') and
                ABIRetViaHiddenDestProc(procIdx) and (Procs[procIdx].ParamCount = 2) then
               pVarFastDone := EmitVarGetItemInline;
@@ -11904,6 +11947,7 @@ begin
             end;
             EmitCallProc(procIdx);
             if pVarFastDone >= 0 then PatchRel8(pVarFastDone);
+            if pVarIntDone >= 0 then PatchRel8(pVarIntDone);
             if (procIdx >= 0) and ProcVariadic[procIdx] then
             begin
               if nArgs > 6 then
