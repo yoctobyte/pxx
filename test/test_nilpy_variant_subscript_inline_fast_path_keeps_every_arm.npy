@@ -1,0 +1,22 @@
+# x86-64 inlines pyvar_getitem's list-with-int-key case at the call; every
+# other receiver, key, index and element kind must answer as the helper does.
+class P:
+    def __init__(self, v):
+        self.v = v
+def get(xs, i):
+    return xs[i]
+data = [[1, 2.5, None, True], (3, -4.0), "str", {"k": 1, 0: "z"}, [P(7), [8, 9]], b"ab"]
+out = []
+for xs in data:
+    for i in [0, 1, -1, 2, 5, True, 1.0, "k"]:
+        try:
+            r = get(xs, i)
+            out.append(r.v if isinstance(r, P) else r)
+        except (IndexError, TypeError, KeyError) as e:
+            out.append(type(e).__name__)
+print(out)
+acc = 0.0
+t = (1.5, 2.5, 3)
+for k in range(1000):
+    acc = acc + get(t, k % 3)
+print(acc, get([[1, 2], [3]], 1), get(get([[1, 2], [3]], 0), 1))

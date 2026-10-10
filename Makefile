@@ -6291,6 +6291,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/strkeyeq26 | diff -u test/test_nilpy_str_keys_compare_by_content_on_the_fast_path.expected -
 	./$(COMPILER) test/test_nilpy_a_float_sequence_read_raises_as_the_method_did.npy $(TESTTMP)/fseqraise26
 	$(TESTTMP)/fseqraise26 | diff -u test/test_nilpy_a_float_sequence_read_raises_as_the_method_did.expected -
+	./$(COMPILER) test/test_nilpy_variant_subscript_inline_fast_path_keeps_every_arm.npy $(TESTTMP)/vgetinl26
+	$(TESTTMP)/vgetinl26 | diff -u test/test_nilpy_variant_subscript_inline_fast_path_keeps_every_arm.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
