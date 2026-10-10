@@ -5253,7 +5253,9 @@ begin
   EmitAsmX64(['mov rdi, rax']);
   procIdx := FindProc(procName);
   if procIdx < 0 then Error('compiler error: ' + procName + ' not registered before EmitAnsiStringRuntime');
+  ObjBlobBodyEmitting := True;                     { EmitCallProc: call it directly }
   EmitCallProc(procIdx);
+  ObjBlobBodyEmitting := False;
   EmitB($41); EmitB($5B);   { pop r11 }
   EmitB($41); EmitB($5A);   { pop r10 }
   EmitB($41); EmitB($59);   { pop r9 }
@@ -5270,8 +5272,7 @@ end;
   The checks are PXXObjRetain's own, in its order: nil and a misaligned
   pointer are not ours and end here, as the Pascal routine Exits; anything
   else it would look at more closely -- outside [HeapLow+24, HeapHigh), or a
-  magic other than PXX_OBJ_MAGIC (the RAW/RAW2/DONE kinds, a poisoned block) --
-  falls into the full wrapper below, unchanged. A release that takes the count
+  magic that is none of the four (a poisoned block) -- falls into the full wrapper below, unchanged. A release that takes the count
   to ZERO puts it back and falls through too: this thread held the last
   reference, so nothing can touch the block in between, and the Pascal routine
   then does the decrement, the finaliser and the free exactly as before.
@@ -5279,7 +5280,7 @@ end;
   Off under -dPXX_OBJTRACE and -dPXX_HEAP_DEBUG, whose instrumentation lives in
   the Pascal routines, and when builtinheap's bounds cannot be found. }
 procedure EmitObjRefFastPath(isRelease: Boolean);
-var pDone, pDone2, pSlow1, pSlow2, pSlow3, pLive: Integer;
+var pDone, pDone2, pSlow1, pSlow2, pSlow3, pLive, pHit1, pHit2, pHit3: Integer;
 begin
   if PasDefineExists('PXX_OBJTRACE') or PasDefineExists('PXX_HEAP_DEBUG') then Exit;
   if ObjFastN > High(ObjFastStart) then Exit;
@@ -5301,8 +5302,22 @@ begin
   Inc(ObjFastFixN);
   EmitAsmX64(['lea rax, [rax+24]']);               { lea leaves the flags }
   EmitB($7C); pSlow2 := CodeLen; EmitB(0);         { jl slow }
+  { All four magics: PXXObjRetain increments each of them the same way, and a
+    release that does not reach zero is the same decrement. RAW/RAW2/DONE
+    differ only in what PXXObjRelease's finaliser does at zero, which stays on
+    the slow path. Measured on lekkerzeilen, where the slow path was the hottest
+    stub bucket. }
   EmitAsmX64(['cmp qword [rax-8], %', $505942F1]);  { PXX_OBJ_MAGIC }
+  EmitB($74); pHit1 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['cmp qword [rax-8], %', $505942F9]);  { PXX_OBJ_MAGIC_RAW }
+  EmitB($74); pHit2 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['cmp qword [rax-8], %', $505942E1]);  { PXX_OBJ_MAGIC_RAW2 }
+  EmitB($74); pHit3 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['cmp qword [rax-8], %', $505942D1]);  { PXX_OBJ_MAGIC_DONE }
   EmitB($75); pSlow3 := CodeLen; EmitB(0);         { jne slow }
+  PatchRel8(pHit1);
+  PatchRel8(pHit2);
+  PatchRel8(pHit3);
   if not isRelease then
   begin
     if ThreadSafeMode then EmitAsmX64(['lock inc qword [rax-16]'])
@@ -12075,20 +12090,7 @@ begin
               PatchRel8(pVarIntS2);
               PatchRel8(pVarSlow2);
             end;
-            if (ObjRetainBlobAddr > 0) and (ObjReleaseBlobAddr > 0) and
-               (Length(Procs[procIdx].Name) = 13) and
-               ((Procs[procIdx].Name = 'PXXObjRetain') or (Procs[procIdx].Name = 'PXXObjRelease')) then
-            begin
-              { Through the reg-preserving blob (rax = instance), whose inline
-                fast path is PXXObjRetain's/PXXObjRelease's own common case --
-                the call sites the IR emits, and pylib's own (PyVarSlotInit's
-                retain was ~1.5% of TSP) reached the Pascal routine directly. }
-              EmitB($48); EmitB($89); EmitB($F8);                { mov rax, rdi }
-              if Procs[procIdx].Name = 'PXXObjRetain' then IREmitCodeCall(ObjRetainBlobAddr)
-              else IREmitCodeCall(ObjReleaseBlobAddr);
-            end
-            else
-              EmitCallProc(procIdx);
+            EmitCallProc(procIdx);   { PXXObjRetain/Release: EmitCallProc routes them through the blob }
             if pVarFastDone >= 0 then PatchRel8(pVarFastDone);
             if pVarIntDone >= 0 then PatchRel8(pVarIntDone);
             if (procIdx >= 0) and ProcVariadic[procIdx] then

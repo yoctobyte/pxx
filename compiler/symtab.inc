@@ -19140,6 +19140,24 @@ end;
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo, litPos, anchorPc: Integer;
 begin
+  { x86-64: a call to PXXObjRetain/PXXObjRelease goes through the
+    reg-preserving blob (rax = instance), whose inline fast path is the Pascal
+    routine's own common case. Here and not in IR_CALL alone: pylib at the
+    default level is not lowered through IR_CALL's general path, so
+    PyVarSlotInit's retain (TPyList.at, TPyDict.get) still reached the Pascal
+    routine on lekkerzeilen. EmitObjBlobBody's own call is the slow path and
+    must stay direct. The length pre-check said `= 13` until 2026-10-10, which
+    is 'PXXObjRelease' only: the retain was never rerouted at all. }
+  if (TargetArch = TARGET_X86_64) and (not ObjBlobBodyEmitting) and
+     (ObjRetainBlobAddr > 0) and (ObjReleaseBlobAddr > 0) and
+     (Length(Procs[procIdx].Name) >= 12) and (Length(Procs[procIdx].Name) <= 13) and
+     ((Procs[procIdx].Name = 'PXXObjRetain') or (Procs[procIdx].Name = 'PXXObjRelease')) then
+  begin
+    EmitB($48); EmitB($89); EmitB($F8);                { mov rax, rdi }
+    if Procs[procIdx].Name = 'PXXObjRetain' then IREmitCodeCall(ObjRetainBlobAddr)
+    else IREmitCodeCall(ObjReleaseBlobAddr);
+    Exit;
+  end;
   if ProcExternal[procIdx] then
   begin
     extIdx := RegisterExternal(procIdx);
