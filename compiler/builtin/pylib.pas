@@ -6111,6 +6111,26 @@ begin
     pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
     the same predicate written in two places, and only one of them grew the
     string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  { FAST PATH, the numeric-loop subscript: a list held in a variant, an int
+    key in range. No tag helper calls, no at()/PyListFix round trip. }
+  if (PPyVarRec(@v)^.VType = 7) and (PPyVarRec(@key)^.VType >= 1) and
+     (PPyVarRec(@key)^.VType <= 2) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    if o is TPyList then
+    begin
+      ki := PPyVarRec(@key)^.Payload;
+      if ki < 0 then ki := ki + TPyList(o).FLen;
+      if (ki >= 0) and (ki < TPyList(o).FLen) then
+      begin
+        { Set, not Init: like the `Result :=` below, the hidden destination
+          is a valid slot whose old value is released }
+        PyVarSlotSet(PPyVarRec(@Result),
+                     PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16));
+        Exit;
+      end;
+    end;
+  end;
   nilo := nil;                       { the dispatcher's unused `other` operand }
   tg := pyvartag(v);
   if (tg = 6) or (tg = 5) then
