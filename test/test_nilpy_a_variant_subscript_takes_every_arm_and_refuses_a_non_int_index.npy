@@ -1,0 +1,37 @@
+# Subscript of a value held in a VARIANT, every arm: the list fast path (int key
+# in range, negative, out of range) and each slow-path arm behind it -- str,
+# dict, range, deque, bytes, bytearray, a user __getitem__, and the TypeError.
+# The slow arms live in their own procedure so the fast path carries none of
+# their temporaries. Differential: the .expected came from CPython.
+from collections import deque
+
+
+class Grid:
+    def __init__(self):
+        self.cells = {"a": 1}
+
+    def __getitem__(self, k):
+        return "cell:" + str(k)
+
+
+def pick(xs, k):
+    return xs[k]
+
+
+vals = [[10, 20, 30], "héllo", {"x": 1.5, 2: "two"}, range(5, 50, 5),
+        deque([7, 8, 9]), b"\x01\x02\xff", bytearray(b"az"), Grid(), (4.5, "t")]
+for v in vals:
+    for k in [0, 1, -1, 2, "x"]:
+        try:
+            print(type(v).__name__, repr(k), repr(pick(v, k)))
+        except (IndexError, KeyError, TypeError) as e:
+            print(type(v).__name__, repr(k), type(e).__name__)
+try:
+    pick(42, 0)
+except TypeError:
+    print("int not subscriptable")
+total = 0
+rows = [[i, i * 2] for i in range(1000)]
+for r in rows:
+    total += pick(r, 0) + pick(r, -1)
+print(total)

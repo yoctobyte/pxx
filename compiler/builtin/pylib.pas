@@ -6107,8 +6107,15 @@ function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Vari
 function PyUserSetitemCall(selfObj: TObject; const k: Variant;
                            const val: Variant): Boolean; forward;
 
-function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+{ Everything but pyvar_getitem's fast path, as a PROCEDURE writing through
+  `res`: its managed temporaries (about fifteen, zeroed on entry and cleared on
+  exit, plus the cleanup frame they need) were paid on EVERY subscript while
+  they lived in pyvar_getitem itself, though only these arms use them.
+  Measured 2026-10-10: the prologue and epilogue were most of the 21% that
+  pyvar_getitem took of a table-lookup loop. }
+procedure pyvar_getitem_slow(const v: Variant; const key: Variant; var res: Variant);
 var o: TObject; ki: Int64; tg: Int64; uv: Variant; nilo: TObject;
+    kt: Int64; keyIsInt: Boolean;
 begin
   { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
     variant holding a STRING had its character data dereferenced as an object
@@ -6120,6 +6127,79 @@ begin
     pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
     the same predicate written in two places, and only one of them grew the
     string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  nilo := nil;                       { the dispatcher's unused `other` operand }
+  tg := pyvartag(v);
+  { A SEQUENCE takes an integer index (a bool and a promoted int are integers
+    too); any other key is CPython's TypeError. The arms below read the key's
+    payload as an int unconditionally, so `xs["x"]` indexed by the string's
+    address and answered IndexError. A dict, or a user __getitem__, takes any
+    key and is not asked. }
+  kt := PPyVarRec(@key)^.VType;
+  keyIsInt := (kt = 1) or (kt = 2) or (kt = 4) or (kt = 8193);
+  if (tg = 6) or (tg = 5) then
+  begin
+    if not keyIsInt then
+      raise TypeError.Create('string indices must be integers, not '''
+        + pytype_name_v(key) + '''');
+    ki := PPyVarRec(@key)^.Payload;
+    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
+      raise IndexError out of range, but pystr_at returns a Char — the
+      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
+      one byte of a multi-byte character and printed as mojibake. The typed
+      `s: str` path has used pystr_charat since text strings landed; this was
+      the variant arm of the same question left behind.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    res := pystr_charat(pystr_of(v), ki);
+    Exit;
+  end;
+  if tg <> 7 then
+    raise TypeError.Create('object is not subscriptable');
+  o := TObject(pyvarobj(v));
+  { list before dict: `xs[i]` is the common subscript, and every `is` that
+    answers no walks the class chain }
+  if (not keyIsInt) and ((o is TPyList) or (o is TPyRange) or
+     (o is TPyDeque) or (o is TPyBytes)) then
+    raise TypeError.Create(pytype_name_v(v) + ' indices must be integers or slices, not '
+      + pytype_name_v(key));
+  if o is TPyList then
+  begin
+    ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
+    res := TPyList(o).at(ki);
+  end
+  else if o is TPyDict then
+    res := TPyDict(o).fetch(key)
+  else if o is TPyRange then
+    { r[i] on a range held in a variant — arithmetic, not a lookup }
+    res := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
+  else if o is TPyDeque then
+    { a deque that came back through a tuple or a container: `d[0]` raised
+      "not subscriptable" while the typed receiver indexed it fine }
+    res := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
+  else if o is TPyBytes then
+  begin
+    { bytes/bytearray index -> the integer byte value. Missing this case made
+      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
+      raise 'not subscriptable' even though len(x) worked. }
+    ki := PPyVarRec(@key)^.Payload;
+    if ki < 0 then ki := ki + TPyBytes(o).count;
+    res := pyvar_of_int(TPyBytes(o).at(ki));
+  end
+  { A USER class arriving as a bare variant handle. A statically-typed receiver
+    dispatches __getitem__ in the frontend; this one has no static class, so
+    `xs[0][3]` over a list of objects raised "not subscriptable" for a class
+    that plainly declares the member. The arity-2 dispatcher already covers
+    every RetKind the frontend emits, and a class without __getitem__ answers
+    False and keeps the TypeError.
+    bug-nilpy-a-chained-subscript-does-not-see-getitem }
+  else if PyUserArithCall1(o, nilo, key, '__getitem__', uv) then
+    res := uv
+  else
+    raise TypeError.Create('object is not subscriptable');
+end;
+
+function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+var o: TObject; ki: Int64;
+begin
   { FAST PATH, the numeric-loop subscript: a list held in a variant, an int
     key in range. No tag helper calls, no at()/PyListFix round trip. }
   if (PPyVarRec(@v)^.VType = 7) and (PPyVarRec(@key)^.VType >= 1) and
@@ -6132,68 +6212,15 @@ begin
       if ki < 0 then ki := ki + TPyList(o).FLen;
       if (ki >= 0) and (ki < TPyList(o).FLen) then
       begin
-        { Set, not Init: like the `Result :=` below, the hidden destination
-          is a valid slot whose old value is released }
+        { Set, not Init: the hidden destination is a valid slot whose old
+          value is released }
         PyVarSlotSet(PPyVarRec(@Result),
                      PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16));
         Exit;
       end;
     end;
   end;
-  nilo := nil;                       { the dispatcher's unused `other` operand }
-  tg := pyvartag(v);
-  if (tg = 6) or (tg = 5) then
-  begin
-    ki := PPyVarRec(@key)^.Payload;
-    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
-      raise IndexError out of range, but pystr_at returns a Char — the
-      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
-      one byte of a multi-byte character and printed as mojibake. The typed
-      `s: str` path has used pystr_charat since text strings landed; this was
-      the variant arm of the same question left behind.
-      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
-    Result := pystr_charat(pystr_of(v), ki);
-    Exit;
-  end;
-  if tg <> 7 then
-    raise TypeError.Create('object is not subscriptable');
-  o := TObject(pyvarobj(v));
-  { list before dict: `xs[i]` is the common subscript, and every `is` that
-    answers no walks the class chain }
-  if o is TPyList then
-  begin
-    ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
-    Result := TPyList(o).at(ki);
-  end
-  else if o is TPyDict then
-    Result := TPyDict(o).fetch(key)
-  else if o is TPyRange then
-    { r[i] on a range held in a variant — arithmetic, not a lookup }
-    Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
-  else if o is TPyDeque then
-    { a deque that came back through a tuple or a container: `d[0]` raised
-      "not subscriptable" while the typed receiver indexed it fine }
-    Result := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
-  else if o is TPyBytes then
-  begin
-    { bytes/bytearray index -> the integer byte value. Missing this case made
-      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
-      raise 'not subscriptable' even though len(x) worked. }
-    ki := PPyVarRec(@key)^.Payload;
-    if ki < 0 then ki := ki + TPyBytes(o).count;
-    Result := pyvar_of_int(TPyBytes(o).at(ki));
-  end
-  { A USER class arriving as a bare variant handle. A statically-typed receiver
-    dispatches __getitem__ in the frontend; this one has no static class, so
-    `xs[0][3]` over a list of objects raised "not subscriptable" for a class
-    that plainly declares the member. The arity-2 dispatcher already covers
-    every RetKind the frontend emits, and a class without __getitem__ answers
-    False and keeps the TypeError.
-    bug-nilpy-a-chained-subscript-does-not-see-getitem }
-  else if PyUserArithCall1(o, nilo, key, '__getitem__', uv) then
-    Result := uv
-  else
-    raise TypeError.Create('object is not subscriptable');
+  pyvar_getitem_slow(v, key, Result);
 end;
 
 { `del v[k]` where v is a VARIANT — the runtime twin of pyvar_getitem, and for
