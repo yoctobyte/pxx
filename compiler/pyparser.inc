@@ -40451,8 +40451,9 @@ function PyTokIsOwnLocal(j: Integer; const nm: AnsiString): Boolean;
   module and class scope, for any `global`/`nonlocal` of the name, and for a
   nested `def nm` in that body. Nested def/class bodies are skipped -- their
   bindings are theirs. }
-var k, depth, indTok, hdr, bodyEnd, pdepth: Integer;
+var k, depth, indTok, hdr, bodyEnd, pdepth: Integer; otherDef: Boolean;
 begin
+  otherDef := False;
   { `with open(p) as f`, `except E as f`, `import m as f`: an `as` target
     binds the name. TSP's settings.py opened a file `as f`, and that boxed
     every `def f` in the program. }
@@ -40529,13 +40530,22 @@ begin
     begin
       if (k + 1 < bodyEnd) and PyTokenIsName(k + 1, nm) then
       begin
-        { A nested `def nm`: the use names THAT def. It is a value use of the
-          def being asked about only when that def is this one. ascent's
-          `rk4_step(f, ...)` passes step's own nested f, and by name alone it
-          made predict's nested `def f` in entry.py take the boxed ABI too. }
-        Result := (Tokens[k].Kind = tkFunction) and (PyHdrNameTok >= 0) and
-                  (k + 1 <> PyHdrNameTok);
-        Exit;
+        { A nested `def nm`: the use names a def of THIS scope. It is a value
+          use of the def being asked about when that def is one of them.
+          ascent's `rk4_step(f, ...)` passes step's own nested f, and by name
+          alone it made predict's nested `def f` in entry.py take the boxed
+          ABI too. ALL of them, not the first: `def w` twice in one scope
+          (test_nilpy_nested_def_redefined_in_one_scope's captures()) found
+          the first, answered "another def" while the second was the one
+          asked about, left the second on the typed ABI -- and `second = w`
+          then boxed it as a function object: SIGSEGV. }
+        if (Tokens[k].Kind <> tkFunction) or (PyHdrNameTok < 0) or
+           (k + 1 = PyHdrNameTok) then
+        begin
+          Result := False;
+          Exit;
+        end;
+        otherDef := True;
       end;
       { skip the nested body: to its INDENT, then to the matching DEDENT }
       while (k < bodyEnd) and (Tokens[k].Kind <> tkIndent) do Inc(k);
@@ -40570,6 +40580,7 @@ begin
                           argument's name, which binds nothing here }
     Inc(k);
   end;
+  if otherDef then Result := True;   { only another def of this scope by that name }
 end;
 
 function PyDefUsedAsValueByScan(const nm: AnsiString): Boolean;
