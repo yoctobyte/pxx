@@ -1,0 +1,42 @@
+# x86-64 scope exit releases an object local through the release blob, and
+# skips it when nil: an early return (the cached branch below, n % 3 == 0)
+# leaves most locals nil, and the rest must still be released exactly once.
+import sys
+
+class P:
+    def __init__(self, v):
+        self.v = v
+        self.nxt = None
+
+_cache = {}
+
+def build(n):
+    if n in _cache:
+        return _cache[n]
+    a = P(n)
+    b = P(n + 1)
+    a.nxt = b
+    c = P(0)
+    if n % 3 == 0:
+        return a.v + b.v
+    d = P(c.v + a.v)
+    return d.v
+
+def chain(k):
+    head = None
+    for i in range(k):
+        p = P(i)
+        p.nxt = head
+        head = p
+    s = 0
+    while head is not None:
+        s += head.v
+        head = head.nxt
+    return s
+
+n = 200
+t = 0
+for i in range(n):
+    t += build(i) + chain(5)
+    _cache[1] = 7
+print(t)

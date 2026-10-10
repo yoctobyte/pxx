@@ -16602,7 +16602,21 @@ begin
           slice 4). The Pascal callee carries the nil check and population-tag
           guard, so a Pascal-created instance held here is left alone. }
         procIdx := FindProc('PXXObjRelease');
-        if procIdx >= 0 then
+        if ObjReleaseBlobAddr > 0 then
+        begin
+          { Through the release BLOB (rax = instance), whose inline fast path
+            is the common live-object decrement, and not at all for nil: an
+            exit releases every object local the body declares, and the early
+            return of a guard like `if _engines: return` reaches it with
+            nearly all of them still nil. The direct call spent a frame on
+            each to find that out (TSP: _load ~600 instructions per call). }
+          x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);  { rax = instance }
+          EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
+          EmitB($74); jzPatch := CodeLen; EmitB(0);              { jz over }
+          IREmitCodeCall(ObjReleaseBlobAddr);
+          PatchRel8(jzPatch);
+        end
+        else if procIdx >= 0 then
         begin
           x64_mov_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { rdi = instance }
           EmitCallProc(procIdx);

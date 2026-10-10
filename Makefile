@@ -6329,6 +6329,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/boxkind26 | diff -u test/test_nilpy_variant_subscript_box_kind.expected -
 	./$(COMPILER) test/test_nilpy_promo_int_inline_tier.npy $(TESTTMP)/promoinl26
 	$(TESTTMP)/promoinl26 | diff -u test/test_nilpy_promo_int_inline_tier.expected -
+	./$(COMPILER) test/test_nilpy_scope_exit_release_skips_nil.npy $(TESTTMP)/relnil26
+	$(TESTTMP)/relnil26 | diff -u test/test_nilpy_scope_exit_release_skips_nil.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
