@@ -6285,6 +6285,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/ordfast26 | diff -u test/test_nilpy_ordering_fast_path_keeps_every_rule.expected -
 	./$(COMPILER) test/test_nilpy_nary_min_max_over_floats_lowers_inline.npy $(TESTTMP)/nminmax26
 	$(TESTTMP)/nminmax26 | diff -u test/test_nilpy_nary_min_max_over_floats_lowers_inline.expected -
+	./$(COMPILER) test/test_nilpy_variant_float_compare_and_divide_inline.npy $(TESTTMP)/vfcmpdiv26
+	$(TESTTMP)/vfcmpdiv26 | diff -u test/test_nilpy_variant_float_compare_and_divide_inline.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

@@ -7900,11 +7900,30 @@ var n: AnsiString;
 begin
   Result := 0;
   if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
-  if (Length(Procs[procIdx].Name) < 7) or (Length(Procs[procIdx].Name) > 10) then Exit;
+  if (Length(Procs[procIdx].Name) < 7) or (Length(Procs[procIdx].Name) > 11) then Exit;
   n := Procs[procIdx].Name;
   if (n = 'pyadd_v') or (n = 'pyaugadd_v') then Result := $58
   else if (n = 'pysub_v') or (n = 'pyaugsub_v') then Result := $5C
-  else if n = 'pymul_v' then Result := $59;
+  else if n = 'pymul_v' then Result := $59
+  else if n = 'pytruediv_v' then Result := $5E;   { divsd; a zero divisor takes the call }
+end;
+
+{ The four variant ORDERING helpers, float with float, inline: the SETcc
+  second byte, negative when the operands are compared the other way round.
+  Every form tests "bigger than" (seta / setae) with the larger side as the
+  destination, because an UNORDERED compare sets CF: `a < b` is `b > a`, and
+  with a NaN either way both answer False, as Python's do. }
+function X64VarFloatCmpOp(procIdx: Integer): Integer;
+var n: AnsiString;
+begin
+  Result := 0;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  if Length(Procs[procIdx].Name) <> 6 then Exit;
+  n := Procs[procIdx].Name;
+  if n = 'pygt_v' then Result := $97            { a > b:  seta  }
+  else if n = 'pyge_v' then Result := $93       { a >= b: setae }
+  else if n = 'pylt_v' then Result := -$97      { b > a }
+  else if n = 'pyle_v' then Result := -$93;     { b >= a }
 end;
 
 { The ModRM byte of a memory operand based on rax -- [rax], [rax+disp8] or
@@ -7935,7 +7954,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
     allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
-    pVarFastOp, pVarFastDone, pVarSlow1, pVarSlow2: Integer;   { X64VarFloatArithOp's inline arm }
+    pVarFastOp, pVarFastDone, pVarSlow1, pVarSlow2, pVarSlow3, pVarCmpOp: Integer;   { X64VarFloatArithOp's and X64VarFloatCmpOp's inline arms }
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -11740,12 +11759,47 @@ begin
               EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne slow }
               EmitB($48); EmitB($83); EmitB($3E); EmitB(3);  { cmp qword [rsi], 3 }
               EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
+              pVarSlow3 := -1;
+              if pVarFastOp = $5E then
+              begin
+                { true division: a zero (or NaN) divisor takes the call, which
+                  raises ZeroDivisionError / answers as it always did }
+                EmitB($66); EmitB($0F); EmitB($57); EmitB($C9);          { xorpd xmm1, xmm1 }
+                EmitB($66); EmitB($0F); EmitB($2E); EmitB($4E); EmitB($08); { ucomisd xmm1, [rsi+8] }
+                EmitB($74); pVarSlow3 := CodeLen; EmitB(0);               { je slow (also unordered) }
+              end;
               EmitB($F2); EmitB($0F); EmitB($10); EmitB($47); EmitB($08); { movsd xmm0, [rdi+8] }
-              EmitB($F2); EmitB($0F); EmitB(pVarFastOp); EmitB($46); EmitB($08); { addsd/subsd/mulsd xmm0, [rsi+8] }
+              EmitB($F2); EmitB($0F); EmitB(pVarFastOp); EmitB($46); EmitB($08); { addsd/subsd/mulsd/divsd xmm0, [rsi+8] }
               EmitB($49); EmitB($C7); EmitB($02); EmitI32(3);  { mov qword [r10], 3 }
               EmitB($F2); EmitB($41); EmitB($0F); EmitB($11); EmitB($42); EmitB($08); { movsd [r10+8], xmm0 }
               EmitB($4C); EmitB($89); EmitB($D0);            { mov rax, r10 }
               EmitB($EB); pVarFastDone := CodeLen; EmitB(0); { jmp done }
+              PatchRel8(pVarSlow1);
+              PatchRel8(pVarSlow2);
+              if pVarSlow3 >= 0 then PatchRel8(pVarSlow3);
+            end;
+            pVarCmpOp := X64VarFloatCmpOp(procIdx);
+            if pVarCmpOp <> 0 then
+            begin
+              { ...and the ordering helpers the same way: rdi = &a, rsi = &b,
+                a Boolean back in eax. PyVarCmpFast's float arm, inline. }
+              EmitB($48); EmitB($83); EmitB($3F); EmitB(3);  { cmp qword [rdi], 3 }
+              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne slow }
+              EmitB($48); EmitB($83); EmitB($3E); EmitB(3);  { cmp qword [rsi], 3 }
+              EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
+              if pVarCmpOp > 0 then
+              begin
+                EmitB($F2); EmitB($0F); EmitB($10); EmitB($47); EmitB($08); { movsd xmm0, [rdi+8] }
+                EmitB($66); EmitB($0F); EmitB($2E); EmitB($46); EmitB($08); { ucomisd xmm0, [rsi+8] }
+              end
+              else
+              begin
+                EmitB($F2); EmitB($0F); EmitB($10); EmitB($46); EmitB($08); { movsd xmm0, [rsi+8] }
+                EmitB($66); EmitB($0F); EmitB($2E); EmitB($47); EmitB($08); { ucomisd xmm0, [rdi+8] }
+              end;
+              EmitB($0F); EmitB(Byte(Abs(pVarCmpOp))); EmitB($C0);   { seta/setae al }
+              EmitB($0F); EmitB($B6); EmitB($C0);                    { movzx eax, al }
+              EmitB($EB); pVarFastDone := CodeLen; EmitB(0);         { jmp done }
               PatchRel8(pVarSlow1);
               PatchRel8(pVarSlow2);
             end;

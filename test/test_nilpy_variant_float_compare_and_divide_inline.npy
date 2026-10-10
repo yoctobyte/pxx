@@ -1,0 +1,30 @@
+# Variant float/float true division and the four ordering operators are
+# inlined on x86-64; a zero or NaN divisor, a NaN operand, ints, mixed
+# int/float and strings must answer exactly as the helpers do.
+nan = float("nan")
+vals = [1.5, -2.0, 0.0, -0.0, nan, float("inf"), 3, True, "a"]
+def show(xs):
+    out = []
+    for a in xs:
+        for b in xs:
+            sa = isinstance(a, str)
+            sb = isinstance(b, str)
+            if sa != sb:
+                continue
+            out.append((a < b, a <= b, a > b, a >= b))
+    return out
+r = show(vals)
+print(sum(1 for t in r if t[0]), sum(1 for t in r if t[1]), sum(1 for t in r if t[2]), sum(1 for t in r if t[3]), len(r))
+def dv(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return "zde"
+print([dv(a, b) for a, b in [(1.0, 4.0), (3.0, 0.0), (3.0, -0.0), (1.0, nan), (7.5, 2.5), (1, 4), (2.0, 4), (5, 0.5), (0.0, 0)]])
+x = [0.5, 2.0]
+s = 0.0
+for i in range(10):
+    s = s + x[0] / x[1]
+    if x[0] < x[1] and not (x[1] <= x[0]):
+        s = s - 0.125
+print(s)
