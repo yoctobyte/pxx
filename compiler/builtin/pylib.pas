@@ -6201,7 +6201,7 @@ end;
   managed value is held, so the frame could never release anything. }
 {$IMPLICITEXCEPTIONS OFF}
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
-var o: TObject; ki: Int64;
+var o: TObject; ki: Int64; src, dst: PPyVarRec;
 begin
   { FAST PATH, the numeric-loop subscript: a list held in a variant, an int
     key in range. No tag helper calls, no at()/PyListFix round trip. }
@@ -6217,8 +6217,18 @@ begin
       begin
         { Set, not Init: the hidden destination is a valid slot whose old
           value is released }
-        PyVarSlotSet(PPyVarRec(@Result),
-                     PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16));
+        src := PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16);
+        dst := PPyVarRec(@Result);
+        { PyVarSlotSet's own first arm, inline: a scalar into a scalar slot
+          holds nothing to retain or release }
+        if (src^.VType >= 0) and (src^.VType <= 4) and
+           (dst^.VType >= 0) and (dst^.VType <= 4) then
+        begin
+          dst^.VType := src^.VType;
+          dst^.Payload := src^.Payload;
+        end
+        else
+          PyVarSlotSet(dst, src);
         Exit;
       end;
     end;
@@ -6908,6 +6918,13 @@ begin
   if (i < 0) or (i >= FLen) then i := PyListFix(Self, i);
   src := PPyVarRec(NativeInt(FItems) + i * 16);
   dst := PPyVarRec(@Result);
+  { PyVarSlotInit's scalar arm, inline: the commonest read in vector code }
+  if (src^.VType >= 0) and (src^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   PyVarSlotInit(dst, src);
 end;
 {$IMPLICITEXCEPTIONS ON}
