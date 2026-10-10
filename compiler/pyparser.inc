@@ -56791,14 +56791,25 @@ begin
               element is converted once here, and the arithmetic around it stays
               in doubles instead of running every operator through the variant
               helpers. The annotation is trusted as `x: float` is: an int
-              element reads as its float value. Integer index only. }
+              element reads as its float value. Integer index only.
+              pylist_getf does the read in one call. }
             if (mci = FindUClass('TPyList')) and (methName = 'at') and
                PyFSeqParamNode(node) and (margIdx >= 0) and
                (ASTLeft[margIdx] >= 0) and
                IsIntTypeKind(IntToTypeKind(ASTTk[ASTLeft[margIdx]])) then
             begin
-              ASTTk[mcallNode] := Ord(tyVariant);
-              node := PyCallProc1('pyvar_to_float', mcallNode);
+              { the receiver and index arguments as built, retargeted at
+                pylist_getf: the element as a Double, no Variant temp }
+              if (ASTKind[mcallNode] = AN_CALL) and (FindProc('pylist_getf') >= 0) then
+              begin
+                ASTIVal[mcallNode] := FindProc('pylist_getf');
+                node := mcallNode;
+              end
+              else
+              begin
+                ASTTk[mcallNode] := Ord(tyVariant);
+                node := PyCallProc1('pyvar_to_float', mcallNode);
+              end;
               tk := tyDouble; recName := REC_NONE;
               ASTTk[node] := Ord(tyDouble);
               continue;

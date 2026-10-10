@@ -1,0 +1,15 @@
+# pylist_getf, the direct Double read of a float-sequence parameter, raises
+# IndexError and TypeError as at() + pyvar_to_float did, and converts ints.
+def dot(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    return a[0] * b[0] + a[1] * b[1]
+def last(a: list[float]) -> float:
+    return a[-1] + a[-2]
+try:
+    print(dot((1.0,), (1.0, 2.0)))
+except IndexError as e:
+    print("IndexError", e)
+try:
+    print(dot(("x", 1.0), (1.0, 2.0)))
+except TypeError as e:
+    print("TypeError")
+print(last([1.0, 2.5, 4]), dot((True, 2), (3, 0.5)))

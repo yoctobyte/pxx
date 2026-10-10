@@ -2352,6 +2352,7 @@ function pyaugpow_v(const a: Variant; const b: Variant): Variant;
   already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
+function pylist_getf(l: TPyList; i: Integer): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
 { Python's `a or b` / `a and b` as VALUES: `or` yields a if truthy else b; `and`
@@ -6927,6 +6928,27 @@ begin
   end;
   PyVarSlotInit(dst, src);
 end;
+
+{ `k[i]` on a parameter annotated as a float sequence (`tuple[float, ...]`,
+  `list[float]`, ...): the element as a Double, with no Variant temporary in
+  between. It was `pyvar_to_float(k.at(i))` -- a call, a temp, a second call
+  and the temp's clear, on every read of TSP's vector math. Same answers: an
+  index out of range raises through PyListFix as at() does, a non-float
+  element converts (or raises TypeError) through pyvar_to_float, and a None
+  receiver stops at PXXNilRef as the method call's own check did. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylist_getf(l: TPyList; i: Integer): Double;
+var p: PPyVarRec;
+begin
+  if l = nil then PXXNilRef;
+  if (i < 0) or (i >= l.FLen) then i := PyListFix(l, i);
+  p := PPyVarRec(NativeInt(l.FItems) + i * 16);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^
+  else
+    Result := pyvar_to_float(PVariant(p)^);
+end;
+{$IMPLICITEXCEPTIONS ON}
 {$IMPLICITEXCEPTIONS ON}
 
 procedure TPyList.put(i: Integer; const v: Variant);
