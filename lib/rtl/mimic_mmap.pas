@@ -1,7 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit mimic_mmap;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
-{ Python's `mmap` module — the READ-ONLY subset, as a private snapshot.
+{ Python's `mmap` module — the READ-ONLY subset, as a private mapping.
 
   `import mmap` resolves here through the NilPy import resolver's `mimic_`
   fallback. The subset is what That Space Program's SPK ephemeris reader
@@ -10,16 +10,24 @@ unit mimic_mmap;
       buf = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
       len(buf); bytes(buf[a:b]); struct.unpack_from(fmt, buf, off); buf.close()
 
-  ## A SNAPSHOT, NOT A VIEW — and why that is the same answer for this subset
+  ## A PRIVATE MAPPING, AND A SNAPSHOT WHERE THERE IS NONE
 
-  The file's bytes are READ into memory at construction instead of mapped: the
-  PAL has anonymous mappings only, on every target, and a file mapping would be
-  a new PAL entry on each backend for a program that only reads. For
-  ACCESS_READ and ACCESS_COPY the two are indistinguishable to a program that
-  does not change the file underneath its own mapping: READ cannot write
-  through, and COPY is by definition a private copy. What a snapshot costs is
-  residency (the whole length is read up front, where a mapping pages in on
-  demand) — measured by nobody yet, and a 32 MB ephemeris is the size in play.
+  Where the PAL can map a file (PalMmapFile: posix), the bytes are a
+  MAP_PRIVATE copy-on-write mapping, read/write so NilPy's laxity about
+  writing into a TPyBytes stays a private write rather than a fault. Where it
+  cannot (esp, wasi), or where the length is a whole number of pages, the file
+  is READ into the heap instead. For ACCESS_READ and ACCESS_COPY the two are
+  indistinguishable to a program that does not change the file underneath its
+  own mapping: READ cannot write through, and COPY is a private copy.
+
+  The page rule is the trailing NUL every TPyBytes carries (see TPyBytes.
+  Create): a mapping whose length is not a page multiple ends in the kernel's
+  zero-filled tail of its last page, so FData[length] is 0 for free. A
+  page-multiple length has no such byte to give.
+
+  What the snapshot cost was measured 2026-10-10: That Space Program's terrain
+  maps a 466 MB DEM (tsp/terrain) and touches a sliver of it, and reading it
+  whole made the process 621 MB resident against CPython's 60 MB.
 
   ACCESS_WRITE and ACCESS_DEFAULT are REFUSED, not approximated: both are
   shared, write-through mappings in CPython, and a snapshot would take the
@@ -61,11 +69,17 @@ type
 
 implementation
 
+procedure MmapUnmap(p: Pointer; len: Int64);
+begin
+  PalMunmap(p, len);
+end;
+
 constructor mmap.Create(fileno: Int64; length: Int64; access: Integer = ACCESS_DEFAULT);
 var info: TPalFileStat;
     size, got, r, pos: Int64;
     chunk: Integer;
     p: PByte;
+    m: Pointer;
 begin
   inherited Create(0);
   closed := False;
@@ -89,8 +103,21 @@ begin
     raise OverflowError.Create('mmap: a mapping over 2 GiB does not fit a bytes object here');
 
   { the inherited Create(0) set up the finaliser hook and a one-byte buffer;
-    replace the buffer with one of the right size, NUL-terminated as every
-    TPyBytes is }
+    replace it with the mapping, or with a buffer of the right size,
+    NUL-terminated as every TPyBytes is }
+  if (length and 4095) <> 0 then
+  begin
+    m := PalMmapFile(Integer(fileno), length, 3 { PROT_READ|PROT_WRITE });
+    if m <> nil then
+    begin
+      PyBytesUnmapHook := @MmapUnmap;
+      FreeMem(FData);
+      FData := m;
+      FMapLen := length;
+      FLen := Integer(length);
+      Exit;
+    end;
+  end;
   FreeMem(FData);
   GetMem(FData, length + 1);
   FLen := Integer(length);
@@ -119,9 +146,15 @@ var p: PByte;
 begin
   if closed then Exit;
   closed := True;
-  { give the memory back now (a closed 32 MB map should not wait for the last
+  { give the memory back now (a closed 466 MB map should not wait for the last
     reference to go), and leave a valid empty buffer for the finaliser to free }
-  FreeMem(FData);
+  if FMapLen > 0 then
+  begin
+    PalMunmap(FData, FMapLen);
+    FMapLen := 0;
+  end
+  else
+    FreeMem(FData);
   GetMem(FData, 1);
   p := PByte(FData);
   p^ := 0;

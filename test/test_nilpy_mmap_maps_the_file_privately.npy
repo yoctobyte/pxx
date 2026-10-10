@@ -1,0 +1,45 @@
+# mmap.mmap is a real MAP_PRIVATE mapping where the length leaves a partial
+# last page (the kernel's zero tail is the NUL every bytes object carries), and
+# a heap read where it is a whole number of pages. Both arms must read the same
+# bytes, an ACCESS_COPY write must stay private, and a map dropped without
+# close() must be released (unmapped, not FreeMem'd) by its finaliser.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+# The probe path follows test_nilpy_mmap_read_only_and_struct_unpack_from.npy.
+import mmap
+import os
+import sys
+
+P = (os.environ.get("TESTMGR_TMP")
+     or os.environ.get("TESTTMP")
+     or "/tmp") + "/pxx_test_mmap_private_" + os.path.basename(sys.argv[0]) + ".bin"
+
+
+def check(n: int):
+    with open(P, "wb") as w:
+        w.write(bytes([(i * 7) & 255 for i in range(n)]))
+    f = open(P, "rb")
+    m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_COPY)
+    total = 0
+    for i in range(0, len(m), 97):
+        total += m[i]
+    print(n, len(m), total, m[n - 1], bytes(m[n - 3:n]))
+    m[0] = 255
+    print(m[0], bytes(m[0:2]))
+    m.close()
+    f.close()
+    with open(P, "rb") as g:
+        print(g.read(2))
+
+
+check(5000)   # mapped
+check(4096)   # a whole page: read into the heap
+check(1)
+
+# dropped without close(): the finaliser releases it
+for k in range(50):
+    f = open(P, "rb")
+    m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+    k2 = m[0]
+    f.close()
+print("dropped", k2)
+os.remove(P)
