@@ -7441,7 +7441,7 @@ begin
   Result := PyUserArithCall1(pa, PyVarUserObj(PPyVarRec(@b)), b, idunder, res);
 end;
 
-function PyVarEq(p, q: PPyVarRec): Boolean;
+function PyVarEq_slow(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
   la, lb: Int64;
@@ -7604,6 +7604,24 @@ begin
   else
     Result := p^.Payload = q^.Payload;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, PyVarEq_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- PyVarEq was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function PyVarEq(p, q: PPyVarRec): Boolean;
+begin
+  { the int-family pair, exactly as the full routine answers it (no callable
+    is int-tagged, so its callable test above that arm cannot apply) }
+  if ((p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+    Result := p^.Payload = q^.Payload
+  else
+    Result := PyVarEq_slow(p, q);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { A `TRY` for `==` / `!=` on two variant SLOTS, taken by address and answering
   in PXXPromoVarCmpTry's exact protocol: **0 = not handled**, 1 = False,
@@ -8400,6 +8418,9 @@ begin
   PyVarSlotInit(dst, src);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: nothing here can raise while a managed value
+  is held (a TPyDict.get setjmp per call was among lekkerzeilen's commonest). }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyDict.get(const k: Variant; const d: Variant): Variant; overload;
 var
   i: Integer;
@@ -8413,6 +8434,7 @@ begin
     src := PPyVarRec(NativeInt(FVals) + i * 16);
   PyVarSlotInit(dst, src);
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function TPyDict.remove(const k: Variant): Variant;
 var
@@ -11168,7 +11190,7 @@ begin
                          + cls + '''');
 end;
 
-function pyvar_to_int(const v: Variant): Int64;
+function pyvar_to_int_slow(const v: Variant): Int64;
 var
   p: PPyVarRec;
   ds: AnsiString;
@@ -11217,6 +11239,23 @@ begin
     Result := 0;
   end;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_to_int_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_to_int was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_to_int(const v: Variant): Int64;
+var t: Int64;
+begin
+  t := PPyVarRec(@v)^.VType;
+  if (t = 1) or (t = 2) or (t = 4) then
+    Result := PPyVarRec(@v)^.Payload
+  else
+    Result := pyvar_to_int_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { pyvar_to_float's TypeError, out of line. The 'a number' argument is a
   managed string temp, and holding one gave pyvar_to_float an implicit cleanup
@@ -11289,7 +11328,7 @@ begin
   end;
 end;
 
-function pyvar_to_bool(const v: Variant): Boolean;
+function pyvar_to_bool_slow(const v: Variant): Boolean;
 var
   p: PPyVarRec;
   o: TObject;
@@ -11333,6 +11372,25 @@ begin
   else
     Result := p^.Payload <> 0;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_to_bool_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_to_bool was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_to_bool(const v: Variant): Boolean;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^ <> 0.0
+  else if p^.VType = 0 then
+    Result := False
+  else
+    Result := pyvar_to_bool_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyvar_to_char(const v: Variant): Char;
 var
@@ -11467,7 +11525,7 @@ begin
   Result := pymul_v(a, b);
 end;
 
-function pymul_v(const a: Variant; const b: Variant): Variant;
+function pymul_v_slow(const a: Variant; const b: Variant): Variant;
 { `v * n`. A STRING payload repeats, a numeric one multiplies -- the whole
   reason this cannot be decided when lowering. Either operand order. }
 var
@@ -11558,6 +11616,19 @@ begin
     r^.Payload := ir;
   end;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pymul_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pymul_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pymul_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
+  Result := pymul_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { Self-contained double-precision ln/exp, used ONLY by pypow_v's fractional-
   exponent path (`2 ** 0.5`). Deliberately hand-rolled rather than `uses Math`:
@@ -11999,7 +12070,7 @@ end;
   parity sweep 2026-09-16; `copysign`, `1/x` and `atan2` all read that sign). A
   double's sign bit is flipped; every other tag keeps the subtraction, whose
   dispatch already raises for a non-number. }
-function pyvar_neg(const v: Variant): Variant;
+function pyvar_neg_slow(const v: Variant): Variant;
 var p, r: PPyVarRec;
 begin
   p := PPyVarRec(@v);
@@ -12017,6 +12088,27 @@ begin
     raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_neg_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_neg was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_neg(const v: Variant): Variant;
+var p, r: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+  begin
+    r := PPyVarRec(@Result);
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := -PPyDouble(@p^.Payload)^;
+    Exit;
+  end;
+  Result := pyvar_neg_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
 { NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
   managed value is held, so the frame could never release anything. }
 {$IMPLICITEXCEPTIONS OFF}
@@ -12029,10 +12121,14 @@ begin
 end;
 {$IMPLICITEXCEPTIONS ON}
 
+{ NO IMPLICIT CLEANUP FRAME: nothing here can raise while a managed value
+  is held (a pyvar_id setjmp per call was among lekkerzeilen's commonest). }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_id(const v: Variant): Variant;
 begin
   Result := v;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyint_v(const v: Variant): Variant;
 var p: PPyVarRec; pr: array[0..1] of NativeInt;
@@ -12230,7 +12326,7 @@ begin
   Result := True;
 end;
 
-function pyadd_v(const a: Variant; const b: Variant): Variant;
+function pyadd_v_slow(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
@@ -12330,6 +12426,19 @@ begin
     r^.Payload := ir;
   end;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyadd_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyadd_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyadd_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
+  Result := pyadd_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { `l += y` where `l`'s STATIC type is a variant (an unannotated parameter, an
   element pulled out of a list/dict, ...) — the compile-time PyNodeListCi
@@ -12900,7 +13009,7 @@ end;
   `x >= nan` are both False, where pycmp_v's 0 ("equal") made them True; and
   CPython compares an int with a float EXACTLY. The try declines (0) for every
   other pair, which keeps pycmp_v's answer. }
-function pylt_v(const a: Variant; const b: Variant): Boolean;
+function pylt_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc < 0); Exit; end;
@@ -12910,7 +13019,25 @@ begin
   Result := pycmp_v(a, b) < 0;
 end;
 
-function pyle_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pylt_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pylt_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylt_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc < 0);
+    Exit;
+  end;
+  Result := pylt_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pyle_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc <= 0); Exit; end;
@@ -12920,7 +13047,25 @@ begin
   Result := pycmp_v(a, b) <= 0;
 end;
 
-function pygt_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyle_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyle_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyle_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc <= 0);
+    Exit;
+  end;
+  Result := pyle_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pygt_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc > 0); Exit; end;
@@ -12930,7 +13075,25 @@ begin
   Result := pycmp_v(a, b) > 0;
 end;
 
-function pyge_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pygt_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pygt_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pygt_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc > 0);
+    Exit;
+  end;
+  Result := pygt_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pyge_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc >= 0); Exit; end;
@@ -12939,6 +13102,24 @@ begin
   if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) >= 0;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyge_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyge_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyge_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc >= 0);
+    Exit;
+  end;
+  Result := pyge_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec; ca, ra, cb, rb: Pointer; isca, iscb: Boolean;
@@ -15243,13 +15424,30 @@ begin
   Result := r;
 end;
 
-function pyfloat_any(const v: Variant): Double;
+function pyfloat_any_slow(const v: Variant): Double;
 var t: Int64;
 begin
   t := pyvartag(v);
-  if (t = 5) or (t = 6) then pyfloat_any := pyfloat_parse(pystr_of(v))
-  else pyfloat_any := pyvar_to_float(v);
+  if (t = 5) or (t = 6) then Result := pyfloat_parse(pystr_of(v))
+  else Result := pyvar_to_float(v);
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyfloat_any_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyfloat_any was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyfloat_any(const v: Variant): Double;
+var t: Int64;
+begin
+  t := PPyVarRec(@v)^.VType;
+  if (t = 1) or (t = 2) or (t = 3) or (t = 4) then
+    Result := pyvar_to_float(v)
+  else
+    Result := pyfloat_any_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyfloat_ofint(v: Int64): Double;
 begin
