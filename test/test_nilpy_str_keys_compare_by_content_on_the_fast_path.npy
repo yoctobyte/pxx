@@ -1,0 +1,6 @@
+# PyVarEq answers a str pair without its full routine: equal content in
+# distinct strings, the empty string, prefixes and case all as CPython.
+d = {"alpha": 1, "beta": 2, "": 3, "gamma" * 3: 4}
+k = "".join(["al", "pha"])
+print(d[k], d.get("beta"), d.get(""), d.get("gammagammagamma"), d.get("gamm"), "x" in d, k in d)
+print(["a", "b", "ab"].index("a" + "b"), ("ab" == "a" + "b"), [s == "beta" for s in ["beta", "betA", "bet"]])

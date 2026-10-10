@@ -7612,14 +7612,32 @@ end;
   lekkerzeilen's commonest frame owners. }
 {$IMPLICITEXCEPTIONS OFF}
 function PyVarEq(p, q: PPyVarRec): Boolean;
+var a, b: PChar; la, k: Int64;
 begin
   { the int-family pair, exactly as the full routine answers it (no callable
     is int-tagged, so its callable test above that arm cannot apply) }
   if ((p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
      ((q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
-    Result := p^.Payload = q^.Payload
-  else
-    Result := PyVarEq_slow(p, q);
+  begin
+    Result := p^.Payload = q^.Payload;
+    Exit;
+  end;
+  { ...and the str pair, the full routine's last arm (nothing above it applies
+    to two strs): a dict with str keys -- TSP's -- compares here per probe }
+  if (p^.VType = 6) and (q^.VType = 6) then
+  begin
+    a := PChar(p^.Payload);
+    b := PChar(q^.Payload);
+    Result := a = b;                     { one handle, or both nil }
+    if Result or (a = nil) or (b = nil) then Exit;
+    la := PInt64(NativeInt(p^.Payload) - 8)^;
+    if la <> PInt64(NativeInt(q^.Payload) - 8)^ then Exit;
+    for k := 0 to la - 1 do
+      if a[k] <> b[k] then Exit;
+    Result := True;
+    Exit;
+  end;
+  Result := PyVarEq_slow(p, q);
 end;
 {$IMPLICITEXCEPTIONS ON}
 
