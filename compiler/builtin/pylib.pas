@@ -6690,32 +6690,21 @@ end;
 
 procedure PyListGrow(l: TPyList; need: Integer);
 var
-  newCap, k: Integer;
+  newCap: Integer;
   newItems: Pointer;
-  src, dst: PPyVarRec;
 begin
   if need <= l.FCap then Exit;
   newCap := l.FCap * 2;
   if newCap < 8 then newCap := 8;
   if newCap < need then newCap := need;
   GetMem(newItems, newCap * 16);
-  for k := 0 to l.FLen - 1 do
-  begin
-    src := PPyVarRec(NativeInt(l.FItems) + k * 16);
-    dst := PPyVarRec(NativeInt(newItems) + k * 16);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
-  end;
-  { the old block is unreachable the moment FItems moves — nothing else ever
-    holds it, so it is freed here rather than leaked on every growth }
+  { the slots MOVE, with their references: a block copy, no retain/release }
+  if l.FLen > 0 then Move(l.FItems^, newItems^, l.FLen * 16);
   { slots past FLen are fresh GetMem garbage; zero them so the ARC release in
     PyVarSlotSet never frees a wild pointer }
-  for k := l.FLen to newCap - 1 do
-  begin
-    dst := PPyVarRec(NativeInt(newItems) + k * 16);
-    dst^.VType := 0;
-    dst^.Payload := 0;
-  end;
+  FillChar(PByte(NativeInt(newItems) + l.FLen * 16)^, (newCap - l.FLen) * 16, 0);
+  { the old block is unreachable the moment FItems moves — nothing else ever
+    holds it, so it is freed here rather than leaked on every growth }
   if l.FItems <> nil then FreeMem(l.FItems);
   l.FItems := newItems;
   l.FCap := newCap;
