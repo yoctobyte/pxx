@@ -285,7 +285,14 @@ var
   PyHdrPNames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
   PyHdrPTypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
   PyHdrPCis: array[0..MAX_PROC_PARAMS - 1] of Integer;
-  PyHdrPSigs: array[0..MAX_PROC_PARAMS - 1] of Integer;   { Callable signature per parameter, or -1 }
+  PyHdrPSigs: array[0..MAX_PROC_PARAMS - 1] of Integer;
+  { The parameter was annotated as a sequence of FLOATS -- `list[float]`,
+    `tuple[float, ...]`, `tuple[float, float, float]`. See PyFloatSeqRead. }
+  PyHdrPElemF: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+  { Per parameter SYMBOL bound from such an annotation: which proc and name it
+    was bound for, so a recycled symbol index can never inherit the mark. }
+  PyFSeqProc: array of Integer;
+  PyFSeqName: array of AnsiString;   { Callable signature per parameter, or -1 }
   PyHdrDefHas: array[0..MAX_PROC_PARAMS - 1] of Boolean;
   PyHdrDefIsStr: array[0..MAX_PROC_PARAMS - 1] of Boolean;
   PyHdrDefIsNone: array[0..MAX_PROC_PARAMS - 1] of Boolean;
@@ -1564,6 +1571,10 @@ end;
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
   PyAnnLastCi: Integer;   { class index when PyAnnTypeAt returned tyClass }
+  { tyDouble when the last container annotation read was list/tuple of FLOAT
+    elements only (`list[float]`, `tuple[float, ...]`, `tuple[float, float]`),
+    else tyUnknown. Set by the list and tuple arms of PyAnnTypeTermAt. }
+  PyAnnLastElemTk: TTypeKind;
   { Signature proc index when PyAnnTypeAt saw a `Callable[[...], R]` — the same
     `$proctype` shape a Pascal procedural type registers, so an indirect call
     through the value marshals through the machinery that already exists
@@ -1758,6 +1769,30 @@ end;
 
 { ONE annotation term. PyAnnTypeAt below layers PEP 604 unions (`int | None`)
   over this, so every caller gets union support for free. }
+{ Is the bracketed argument list starting at Tokens[i] (the '[') made of
+  `float` only -- `[float]`, `[float, float, float]`, `[float, ...]`? Nested
+  brackets or any other name answer False. }
+function PyAnnBracketAllFloat(i: Integer): Boolean;
+var nFloat: Integer;
+begin
+  Result := False;
+  if (i >= MainProgramTokCount) or (Tokens[i].Kind <> tkLBrack) then Exit;
+  Inc(i);
+  nFloat := 0;
+  while (i < MainProgramTokCount) and (Tokens[i].Kind <> tkRBrack) do
+  begin
+    if Tokens[i].Kind = tkIdent then
+    begin
+      if not CaseEqual(GetTokenStr(i), 'float') then Exit;
+      Inc(nFloat);
+    end
+    else if Tokens[i].Kind = tkLBrack then Exit
+    else if (Tokens[i].Kind <> tkComma) and (Tokens[i].Kind <> tkDot) then Exit;
+    Inc(i);
+  end;
+  Result := nFloat > 0;
+end;
+
 function PyAnnTypeTermAt(var i: Integer): TTypeKind;
 var lo: AnsiString; depth: Integer;
     sigN, sigPi: Integer; sigIsFunc: Boolean; sigRet: TTypeKind;
@@ -2006,6 +2041,7 @@ begin
   if lo = 'list' then
   begin
     Inc(i);
+    if PyAnnBracketAllFloat(i) then PyAnnLastElemTk := tyDouble;
     if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
     begin
       depth := 1; Inc(i);
@@ -2078,6 +2114,7 @@ begin
       annotation the compiler then erases — songformatter's key_analysis.py died
       on `tuple[str, float]` after passing everything else. }
     Inc(i);
+    if PyAnnBracketAllFloat(i) then PyAnnLastElemTk := tyDouble;
     if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
     begin
       depth := 1; Inc(i);
@@ -2142,6 +2179,7 @@ end;
 function PyAnnTypeAt(var i: Integer): TTypeKind;
 var termT: TTypeKind; before, ci, sig: Integer; sawNone, first: Boolean;
 begin
+  PyAnnLastElemTk := tyUnknown;
   Result := tyUnknown;
   ci := -1;
   sig := -1;
@@ -29544,6 +29582,32 @@ end;
   Four spellings and a type-dispatch deleted; see
   devdocs/dev/normalise-dont-special-case.md. }
 
+{ Parameter `sym` of proc `pi` was annotated as a sequence of floats. }
+procedure PyFSeqMark(sym, pi: Integer);
+begin
+  if sym >= Length(PyFSeqProc) then
+  begin
+    SetLength(PyFSeqProc, sym + 256);
+    SetLength(PyFSeqName, sym + 256);
+  end;
+  PyFSeqProc[sym] := pi + 1;           { 0 = unmarked }
+  PyFSeqName[sym] := Syms[sym].Name;
+end;
+
+{ Is `node` a read of a parameter of the CURRENT def that was annotated as a
+  float sequence? Only a parameter still bound under its own name: a rebound
+  one is copied into a fresh local, which is never marked. }
+function PyFSeqParamNode(node: Integer): Boolean;
+var sym: Integer;
+begin
+  Result := False;
+  if (node < 0) or (ASTKind[node] <> AN_IDENT) then Exit;
+  sym := Integer(ASTIVal[node]);
+  if (sym < 0) or (sym >= Length(PyFSeqProc)) or (CurProc < 0) then Exit;
+  Result := (PyFSeqProc[sym] = CurProc + 1) and (Syms[sym].Kind = skParam) and
+            (PyFSeqName[sym] = Syms[sym].Name);
+end;
+
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer;
 var pi, a: Integer;
 begin
@@ -34902,6 +34966,7 @@ begin
       else
         PyHdrPCis[PyHdrNParams] := -1;
       PyHdrDefHas[PyHdrNParams] := False;
+      PyHdrPElemF[PyHdrNParams] := False;
       Inc(PyHdrNParams);
     end;
     procIdx := RegisterProc(qname, not PyHdrIsProc, PyHdrRetType, PyHdrNParams,
@@ -40543,6 +40608,7 @@ begin
       PyHdrPCis[PyHdrNParams] := -1;
       if PyHdrPTypes[PyHdrNParams] = tyClass then PyHdrPCis[PyHdrNParams] := PyPSLastCi;
       PyHdrPSigs[PyHdrNParams] := -1;
+      PyHdrPElemF[PyHdrNParams] := False;
     end
     else
     begin
@@ -40554,6 +40620,8 @@ begin
       PyAnnParamScope := False;
       PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
       PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
+      PyHdrPElemF[PyHdrNParams] := (PyHdrPTypes[PyHdrNParams] = tyClass) and
+                                   (PyAnnLastElemTk = tyDouble);
       if PyHdrPTypes[PyHdrNParams] = tyUnknown then
       begin
         PyWarnUnreadAnnotation('parameter ' + PyHdrPNames[PyHdrNParams], Tokens[annIdx].Line);
@@ -40964,6 +41032,7 @@ begin
     PyHdrPTypes[i]     := PyHdrPTypes[i - 1];
     PyHdrPCis[i]       := PyHdrPCis[i - 1];
     PyHdrPSigs[i]      := PyHdrPSigs[i - 1];
+    PyHdrPElemF[i]     := PyHdrPElemF[i - 1];
     PyHdrDefHas[i]     := PyHdrDefHas[i - 1];
     PyHdrDefIsStr[i]   := PyHdrDefIsStr[i - 1];
     PyHdrDefIsNone[i]  := PyHdrDefIsNone[i - 1];
@@ -40981,6 +41050,7 @@ begin
   PyHdrPTypes[0]     := tyPointer;
   PyHdrPCis[0]       := -1;
   PyHdrPSigs[0]      := -1;
+  PyHdrPElemF[0]     := False;
   PyHdrDefHas[0]     := False;
   PyHdrDefIsStr[0]   := False;
   PyHdrDefIsNone[0]  := False;
@@ -41942,6 +42012,12 @@ begin
       at a CALL SITE must become the routine's address rather than a call — both
       need the signature on the symbol (feature-nilpy-function-values). }
     if PyHdrPSigs[i] >= 0 then SymProcSig[idx] := PyHdrPSigs[i];
+    { A body that REBINDS the parameter may store anything there (`a = (5, 6)`
+      reads 5, not 5.0): only a parameter left bound to the argument keeps the
+      float-sequence read. }
+    if (i < pbOwn) and PyHdrPElemF[i] and
+       not PyParamRebound(bodyStart, PyHdrPNames[i]) then
+      PyFSeqMark(idx, procIdx);
     SymSyncTypeRef(idx);
   end;
   { A variant parameter this body REBINDS gets a private slot, and the name in
@@ -42835,6 +42911,66 @@ begin
   PySkipNestedSuite := k;
 end;
 
+function PyRetExprIsFloatParamArith(defTok, s, e: Integer): Boolean;
+{ Is the expression [s, e) plain ARITHMETIC (+ - * / // % ** only, no
+  comparison, conditional or boolean operator outside call or subscript
+  brackets) that reads, as an operand, a parameter of the def at defTok ANNOTATED float? Python
+  makes such a result a float whatever the other operands are. The token walk
+  joined the parameter with an int literal and answered Int64:
+  `def f(x: float): return x * 2` printed the double's raw bits
+  (4617315517961601024 for f(2.5)). Grouping parentheses are looked through
+  (`(x - n) * 3`); a name inside a call or a subscript is not an operand
+  (`int(x) * 2` is an int). `depth` counts only the call and subscript
+  brackets; `grp` counts the grouping parens open inside none of them. }
+var k, hdrEnd, depth, grp: Integer; nm: AnsiString; sawF: Boolean;
+begin
+  Result := False;
+  hdrEnd := PyFindSuiteIndent(defTok, TokCount);
+  if hdrEnd < 0 then Exit;
+  depth := 0;
+  grp := 0;
+  sawF := False;
+  for k := s to e - 1 do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack:
+        if (depth = 0) and (Tokens[k].Kind = tkLParen) and
+           ((k = s) or not (Tokens[k - 1].Kind in [tkIdent, tkRParen, tkRBrack,
+                                                   tkString])) then
+          Inc(grp)
+        else
+          Inc(depth);
+      tkRParen, tkRBrack:
+        if depth > 0 then Dec(depth)
+        else if grp > 0 then Dec(grp)
+        else Exit;
+    else
+      if depth = 0 then
+      begin
+        if Tokens[k].Kind = tkIdent then
+        begin
+          nm := GetTokenStr(k);
+          if (nm = 'if') or (nm = 'else') or (nm = 'and') or (nm = 'or') or
+             (nm = 'not') or (nm = 'in') or (nm = 'is') or (nm = 'lambda') or
+             (nm = 'for') then Exit;
+          if (Tokens[k - 1].Kind <> tkDot) and (k + 1 < e) and
+             ((Tokens[k + 1].Kind = tkLParen) or (Tokens[k + 1].Kind = tkLBrack) or
+              (Tokens[k + 1].Kind = tkDot)) then Continue;
+          if (Tokens[k - 1].Kind <> tkDot) and
+             PyHeaderHasParam(defTok, hdrEnd, nm) and
+             (PyHeaderParamType(defTok, hdrEnd, nm) = tyDouble) then
+            sawF := True;
+        end
+        else if not (Tokens[k].Kind in [tkPlus, tkMinus, tkStar, tkSlash,
+                                         tkDiv, tkMod, tkDot, tkInteger,
+                                         tkFloat, tkPow]) then
+          Exit;
+      end;
+    end;
+  end;
+  Result := sawF;
+end;
+
 function PyRetExprHasUntypedParam(defTok, s, e: Integer): Boolean;
 { Does the expression [s, e) read a BARE parameter of the def at defTok whose
   type nobody knows -- not annotated, not agreed by its call sites? `self`
@@ -43044,6 +43180,9 @@ begin
         test_nilpy_unhashable_eq_without_hash, on the tier), and a str result
         over a bare operand (`return "x" + name`) is a str in every CPython
         run that does not raise. }
+      if PyIsMachineIntTk(cur) and (cur <> tyBoolean) and
+         PyRetExprIsFloatParamArith(methodStart, j + 1, e) then
+        cur := tyDouble;
       if ((cur = tyDouble) or PyIsMachineIntTk(cur)) and (cur <> tyBoolean) and
          PyRetExprHasUntypedParam(methodStart, j + 1, e) then
       begin
@@ -56593,6 +56732,23 @@ begin
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
             ASTRight[mselfArg] := margIdx;
+            { `k[i]` on a parameter annotated `tuple[float, ...]`,
+              `tuple[float, float, float]` or `list[float]` reads a FLOAT: the
+              element is converted once here, and the arithmetic around it stays
+              in doubles instead of running every operator through the variant
+              helpers. The annotation is trusted as `x: float` is: an int
+              element reads as its float value. Integer index only. }
+            if (mci = FindUClass('TPyList')) and (methName = 'at') and
+               PyFSeqParamNode(node) and (margIdx >= 0) and
+               (ASTLeft[margIdx] >= 0) and
+               IsIntTypeKind(IntToTypeKind(ASTTk[ASTLeft[margIdx]])) then
+            begin
+              ASTTk[mcallNode] := Ord(tyVariant);
+              node := PyCallProc1('pyvar_to_float', mcallNode);
+              tk := tyDouble; recName := REC_NONE;
+              ASTTk[node] := Ord(tyDouble);
+              continue;
+            end;
             node := mcallNode;
             tk := IntToTypeKind(UPropTk[pri]); recName := UPropRec[pri];
             ASTTk[node] := StrValTk(tk);

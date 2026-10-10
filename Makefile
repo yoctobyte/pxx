@@ -6277,6 +6277,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_frameless26 | diff -u test/test_nilpy_frameless_pylib_routines_still_raise_and_a_str_index_is_typeerror.expected -
 	./$(COMPILER) test/test_nilpy_a_float_annotation_pins_the_local_and_a_bare_one_declares_it.npy $(TESTTMP)/test_nilpy_floatpin26
 	$(TESTTMP)/test_nilpy_floatpin26 | diff -u test/test_nilpy_a_float_annotation_pins_the_local_and_a_bare_one_declares_it.expected -
+	./$(COMPILER) test/test_nilpy_arithmetic_on_a_float_parameter_returns_a_float.npy $(TESTTMP)/fltparamret26
+	$(TESTTMP)/fltparamret26 | diff -u test/test_nilpy_arithmetic_on_a_float_parameter_returns_a_float.expected -
+	./$(COMPILER) test/test_nilpy_a_float_sequence_parameter_reads_its_elements_as_floats.npy $(TESTTMP)/fseqread26
+	$(TESTTMP)/fseqread26 | diff -u test/test_nilpy_a_float_sequence_parameter_reads_its_elements_as_floats.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

@@ -1,0 +1,27 @@
+# `k[i]` on a parameter annotated `tuple[float, float, float]`,
+# `tuple[float, ...]` or `list[float]` reads a float, so the arithmetic
+# around it runs on doubles instead of the variant helpers (tsp's vec.cross,
+# dot, norm). A parameter the body rebinds, a slice, and a mixed annotation
+# keep the dynamic read.
+def cross(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple:
+    return (a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
+def dot(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+def tot(xs: list[float]) -> float:
+    s = 0.0
+    for i in range(len(xs)):
+        s += xs[i]
+    return s + xs[-1]
+def rebound(a: tuple[float, float]):
+    a = (5, 6)
+    return a[0]
+def mixed(t: tuple[str, float]):
+    return t[0] + "!"
+def sl(a: tuple[float, ...]):
+    return a[1:]
+print(cross((1.0, 2.0, 3.0), (4.0, 5.0, 6.0)))
+print(dot((1.0, 2.0, 3.0), (4.0, 5.0, 6.0)), dot([1.5, 2.5, 3.0], (1.5, 2.0, 3.0)))
+print(tot([1.5, 2.5, 3.0]), tot([0.25]))
+print(rebound((1.0, 2.0)), mixed(("ab", 1.0)), sl((1.0, 2.0, 3.0)))
