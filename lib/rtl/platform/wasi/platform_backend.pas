@@ -124,6 +124,7 @@ function PalBackendMmapAnon(len: Int64): Pointer;
 function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
 function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
+function PalBackendMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
@@ -1163,6 +1164,12 @@ end;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ no file mappings here; the caller falls back to reading the file }
+function PalBackendMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
+begin
+  Result := nil;
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;

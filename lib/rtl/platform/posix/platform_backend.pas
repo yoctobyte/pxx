@@ -92,6 +92,7 @@ function PalBackendMmapAnon(len: Int64): Pointer;
 function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
 function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
+function PalBackendMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
 function PalBackendIgnoreSignal(sig: Integer): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
@@ -1446,6 +1447,15 @@ end;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_munmap, Int64(addr), len, 0, 0, 0, 0));
+end;
+
+function PalBackendMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
+var r: Int64;
+begin
+  { mmap(NULL, len, prot, MAP_PRIVATE, fd, 0); a raw syscall fails as -errno }
+  r := __pxxrawsyscall(SYS_mmap, 0, len, prot, 2, fd, 0);
+  if (r < 0) and (r > -4096) then Result := nil
+  else Result := Pointer(r);
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;

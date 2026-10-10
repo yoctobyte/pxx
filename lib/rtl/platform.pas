@@ -223,6 +223,10 @@ function PalMmapAnon(len: Int64): Pointer;
 function PalMmapAnonProt(len: Int64; prot: Integer): Pointer;
 function PalMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalMunmap(addr: Pointer; len: Int64): Integer;
+{ A PRIVATE (copy-on-write) mapping of an open file's first `len` bytes, or nil
+  where the target has none (esp, wasi) or the kernel refuses. A write lands in
+  this process's copy and never reaches the file. }
+function PalMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
 
 function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -761,6 +765,11 @@ end;
 function PalMunmap(addr: Pointer; len: Int64): Integer;
 begin
   Result := PalBackendMunmap(addr, len);
+end;
+
+function PalMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
+begin
+  Result := PalBackendMmapFile(fd, len, prot);
 end;
 
 function PalSocket(domain, kind, proto: Integer): Integer;

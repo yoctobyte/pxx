@@ -737,6 +737,9 @@ type
       is-retained-by-the-caller), so its export never came back and a correct
       program's later resize raised. Add the guard when that leak is fixed. }
     FViewOf: TObject;
+    { > 0: FData is a FILE MAPPING of this many bytes (mimic_mmap), not a heap
+      block, so it goes back through PyBytesUnmapHook instead of FreeMem. }
+    FMapLen: Int64;
     { TWO spellings, because a SUBCLASS needs the parameterless one. `class
       BA(bytearray)` with no __init__ of its own emits a call to the base's
       no-argument Create, and TPyBytes had only Create(n) — so constructing any
@@ -2821,6 +2824,12 @@ type
   TPyPowFn = function(b, e: Double): Double;
 var
   PyPowHook: TPyPowFn;
+type
+  { munmap for a TPyBytes whose FData is a file mapping (FMapLen > 0). pylib
+    cannot reach the PAL, so mimic_mmap installs it, the PyPowHook way. }
+  TPyUnmapFn = procedure(p: Pointer; len: Int64);
+var
+  PyBytesUnmapHook: TPyUnmapFn;
 function pymath_modf(x: Double): TPyList;
 { math.frexp / math.isqrt / math.isfinite — the three of the ticket's four
   "exact operations, no rounding question" that were still missing (ldexp
@@ -13376,7 +13385,12 @@ begin
     PyBytesNoResize above, and PyObjFinalize frees a non-view's FData the same
     way. Dropping it instead leaked one buffer per growth -- per append() of a
     byte, and per variant `bytes + bytes` (pyadd_v pre-sizes, then extends). }
-  if b.FData <> nil then FreeMem(b.FData);
+  if b.FMapLen > 0 then
+  begin
+    PyBytesUnmapHook(b.FData, b.FMapLen);
+    b.FMapLen := 0;
+  end
+  else if b.FData <> nil then FreeMem(b.FData);
   b.FData := np;
   b.FLen := need;
 end;
@@ -18650,7 +18664,12 @@ begin
       by.FData := nil; by.FLen := 0;
       Exit;
     end;
-    if by.FData <> nil then FreeMem(by.FData);
+    if by.FMapLen > 0 then
+    begin
+      PyBytesUnmapHook(by.FData, by.FMapLen);
+      by.FMapLen := 0;
+    end
+    else if by.FData <> nil then FreeMem(by.FData);
     by.FData := nil; by.FLen := 0;
     Exit;
   end;
