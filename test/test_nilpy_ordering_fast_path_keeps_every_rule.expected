@@ -1,0 +1,5 @@
+[('a', 0), ('a', 1), ('b', 2)] 2.5 1 1180591620717411303424
+1.0 x [b'ab', b'cd'] nan 1.0
+[1, 4, 5] [-2, 1.5, 3] 9223372036854775809 -1.5
+TypeError '<' not supported between instances of 'NoneType' and 'int'
+TypeError '<' not supported between instances of 'str' and 'int'

@@ -8700,14 +8700,43 @@ end;
 { `a < b`, as CPython's sort/min actually spell it. Delegates to the `>`
   primitive with the operands swapped — but checks orderability FIRST, so the
   refusal names the operator and the operand order the source wrote. }
+function PyVarGtFull(const a: Variant; const b: Variant): Boolean; forward;
+function PyVarLtFull(const a: Variant; const b: Variant): Boolean; forward;
+
+{ NO IMPLICIT CLEANUP FRAME on the two entry points: the same-kind numeric pair
+  (PyVarCmpFast) answers with nothing managed in hand, and everything else goes
+  to PyVarGtFull, whose Variant locals and operator-string temps used to cost
+  min/max/sorted a setjmp on every compare (TSP: pyvar_gt was among the
+  hottest frame owners). }
 function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
 begin
-  PyOrdCheck(a, b, '<');
-  pyvar_lt := pyvar_gt(b, a);
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc < 0);
+    Exit;
+  end;
+  Result := PyVarLtFull(a, b);
 end;
 
-
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc > 0);
+    Exit;
+  end;
+  Result := PyVarGtFull(a, b);
+end;
+
+function PyVarLtFull(const a: Variant; const b: Variant): Boolean;
+begin
+  PyOrdCheck(a, b, '<');
+  Result := PyVarGtFull(b, a);
+end;
+
+function PyVarGtFull(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
     la, lb, k, n: Int64;
     ea, eb: Variant;
@@ -8743,11 +8772,11 @@ begin
         eb := TPyList(ob).at(k);
         if not PyVarEq(PPyVarRec(@ea), PPyVarRec(@eb)) then
         begin
-          pyvar_gt := pyvar_gt(ea, eb);
+          Result := pyvar_gt(ea, eb);
           Exit;
         end;
       end;
-      pyvar_gt := la > lb;
+      Result := la > lb;
       Exit;
     end;
     { ...and two BYTES, by the same lexicographic rule, on UNSIGNED byte values.
@@ -8770,10 +8799,10 @@ begin
       for k := 0 to n - 1 do
         if TPyBytes(oa).at(k) <> TPyBytes(ob).at(k) then
         begin
-          pyvar_gt := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
+          Result := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
           Exit;
         end;
-      pyvar_gt := la > lb;
+      Result := la > lb;
       Exit;
     end;
     { Two USER objects: their own __gt__, or the reflected __lt__. Without this
@@ -8786,7 +8815,7 @@ begin
       bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
     if PyUserObjGt(oa, ob, b, pg2) then
     begin
-      pyvar_gt := pg2;
+      Result := pg2;
       Exit;
     end;
   end;
@@ -8804,7 +8833,7 @@ begin
     begin
       if PyUserObjBoolDunder(oa, nil, b, '__gt__', pg2) then
       begin
-        pyvar_gt := pg2;
+        Result := pg2;
         Exit;
       end;
     end
@@ -8813,14 +8842,14 @@ begin
       ob := PyVarUserObj(pb);
       if PyUserObjBoolDunder(ob, nil, a, '__lt__', pg2) then
       begin
-        pyvar_gt := pg2;
+        Result := pg2;
         Exit;
       end;
     end;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
-    pyvar_gt := PyVarText(pa) > PyVarText(pb);
+    Result := PyVarText(pa) > PyVarText(pb);
     Exit;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) or ((pb^.VType = 6) or (pb^.VType = 5)) then
@@ -8831,17 +8860,17 @@ begin
     bignum or an int beyond 2^53 compares exactly, and a NaN is unordered
     (`max(2.0**70, 2**70 + 1)` answered the float). Declines for the rest. }
   pg := PXXPromoVarCmpTry(@a, @b, 5);
-  if pg <> 0 then begin pyvar_gt := pg = 2; Exit; end;
+  if pg <> 0 then begin Result := pg = 2; Exit; end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
-    pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
+    Result := pyvar_to_float(a) > pyvar_to_float(b)
   else
   begin
     { arbitrary precision stays exact — see pycmp_v. This is the SORT path, so
       without it sorted([2**65, 2**64, 5]) came back in the order it was given:
       every element narrowed to the same wrapped value and no swap ever fired. }
     pg := PXXPromoVarCmpTry(@a, @b, 5);        { 5 = greater-than }
-    if pg <> 0 then pyvar_gt := (pg = 2)
-    else pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+    if pg <> 0 then Result := (pg = 2)
+    else Result := pyvar_to_int(a) > pyvar_to_int(b);
   end;
 end;
 
@@ -11189,6 +11218,15 @@ begin
   end;
 end;
 
+{ pyvar_to_float's TypeError, out of line. The 'a number' argument is a
+  managed string temp, and holding one gave pyvar_to_float an implicit cleanup
+  frame -- a setjmp on EVERY call, for an arm that runs only to raise. TSP
+  spent ~2% of its run in those setjmps. }
+procedure PyToFloatTypeError(t: Int64);
+begin
+  PyTypeError(t, 'a number');
+end;
+
 function pyvar_to_float(const v: Variant): Double;
 var
   p: PPyVarRec;
@@ -11216,7 +11254,7 @@ begin
   end
   else
   begin
-    PyTypeError(p^.VType, 'a number');
+    PyToFloatTypeError(p^.VType);
     Result := 0.0;
   end;
 end;

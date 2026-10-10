@@ -1,0 +1,17 @@
+# pyvar_gt/pyvar_lt (min, max, sorted) answer a same-kind numeric pair with no
+# cleanup frame and send everything else down the full path: sequences, bytes,
+# str, NaN, big ints, mixed int/float, and the TypeErrors.
+nan = float("nan")
+print(sorted([("b", 2), ("a", 1), ("a", 0)]), min(3, 2.5), max(1, True), max(2**70, 3))
+print(min([3.5, 1.0, 2.0]), max(["x", "ab"]), sorted([b"cd", b"ab"]), max(nan, 1.0), min(1.0, nan))
+xs = [5, 1, 4]
+xs.sort()
+print(xs, sorted([1.5, -2, 3]), max(2**63, 2**63 + 1), min(-1, -1.5))
+try:
+    min(3, None)
+except TypeError as e:
+    print("TypeError", e)
+try:
+    print(sorted([1, "a"]))
+except TypeError as e:
+    print("TypeError", e)
