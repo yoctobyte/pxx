@@ -42,7 +42,7 @@ begin
   {$extendedsyntax}{$externalsym}{$fputype}{$goto}{$hints}{$hppemit}
   {$hugecode}{$hugepointerarithmeticnormalization}
   {$hugepointercomparisonnormalization}{$imagebase}{$implicitbuild}
-  {$implicitexceptions}{$include}{$includepath}{$inline}{$legacyifend}
+  {$include}{$includepath}{$inline}{$legacyifend}
   {$libexport}{$librarypath}{$link}{$linkframework}{$linklib}
   {$localsymbols}{$macro}{$maxfpuregisters}{$maxstacksize}{$memory}
   {$minfpconstprec}{$minstacksize}{$mmx}{$modeswitch}{$namespace}
