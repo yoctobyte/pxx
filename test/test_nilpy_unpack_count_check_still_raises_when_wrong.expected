@@ -1,0 +1,11 @@
+1 2
+3.5 x
+3
+7
+ValueError too many values to unpack (expected 2, got 3)
+ValueError not enough values to unpack (expected 2, got 1)
+ok a b
+ValueError not enough values to unpack (expected 2, got 1)
+ValueError not enough values to unpack (expected 2, got 0)
+1 [2, 3]
+ValueError not enough values to unpack (expected at least 2, got 1)

@@ -576,6 +576,7 @@ AN_BINOP Left PyMakeIdent(iSym)
 AN_BINOP Left PyMakeIdent(rngStepSym)
 AN_BINOP Left PyMakeIdent(sym)
 AN_BINOP Left PyMakeIdent(symIdx)
+AN_BINOP Left PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi)
 AN_BINOP Left PyMakeTruthy(left)
 AN_BINOP Left PyMakeVariantGetItem(node, indexNode)
 AN_BINOP Left Result
@@ -694,6 +695,7 @@ AN_BINOP Right strideLit
 AN_BINOP Right tagLit
 AN_BINOP Right tl
 AN_BINOP Right unpElem
+AN_BINOP Right unpHi
 AN_BINOP Right valNode
 AN_BINOP Right vlaSzLit
 AN_BINOP Right zero
@@ -1000,12 +1002,14 @@ AN_IF Left notNode
 AN_IF Left ptCond
 AN_IF Left smGuardCall
 AN_IF Left smNotNode
+AN_IF Left unpIdx
 AN_IF Left vtNotNode
 AN_IF Right elsePair
 AN_IF Right node
 AN_IF Right pair
 AN_IF Right pairN
 AN_IF Right pairNode
+AN_IF Right unpElem
 AN_INCDEC Left CurASTNode
 AN_INCDEC Left lv
 AN_INDEX Left ASTLeft[node]

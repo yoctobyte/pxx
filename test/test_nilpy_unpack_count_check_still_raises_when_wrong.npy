@@ -1,0 +1,23 @@
+# The exact-count check of `a, b = seq` is now called only when the length is
+# wrong (it does nothing else). Right counts unpack, wrong ones still raise
+# ValueError with CPython's message, and a starred target keeps its own check.
+def pair(): return (1, 2)
+a, b = pair()
+print(a, b)
+v = [3.5, "x"]
+c, d = v
+print(c, d)
+for x, y in [(1, 2), (3, 4)]:
+    print(x + y)
+for bad in ([1, 2, 3], [1], "ab", (9,), []):
+    try:
+        p, q = bad
+        print("ok", p, q)
+    except ValueError as e:
+        print("ValueError", e)
+h, *t = [1, 2, 3]
+print(h, t)
+try:
+    h, i, *t = [1]
+except ValueError as e:
+    print("ValueError", e)

@@ -6303,6 +6303,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/fdisp26 | diff -u test/test_nilpy_float_display_elements_keep_every_value_and_kind.expected -
 	./$(COMPILER) test/test_nilpy_list_iteration_hands_each_element_over_once.npy $(TESTTMP)/itmove26
 	$(TESTTMP)/itmove26 | diff -u test/test_nilpy_list_iteration_hands_each_element_over_once.expected -
+	./$(COMPILER) test/test_nilpy_unpack_count_check_still_raises_when_wrong.npy $(TESTTMP)/unpchk26
+	$(TESTTMP)/unpchk26 | diff -u test/test_nilpy_unpack_count_check_still_raises_when_wrong.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

@@ -35940,6 +35940,23 @@ begin
       ASTIVal[node] := unpCnt;
       ASTLeft[node] := unpElem;
       ASTTk[node] := Ord(tyInteger);
+      { ...called only when the count is WRONG: it does nothing but raise, and
+        every `x, y = pair` paid a call to learn that. The length is a read of
+        the temp, so building it twice evaluates nothing twice that matters. }
+      unpHi := AllocNode(AN_INT_LIT);
+      ASTIVal[unpHi] := nTargets;
+      ASTTk[unpHi] := Ord(tyInteger);
+      unpIdx := AllocNode(AN_BINOP);
+      ASTIVal[unpIdx] := Ord(tkNeq);
+      ASTLeft[unpIdx] := PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi);
+      ASTRight[unpIdx] := unpHi;
+      ASTTk[unpIdx] := Ord(tyBoolean);
+      unpElem := AllocNode(AN_PAIR);
+      ASTLeft[unpElem] := node;
+      ASTRight[unpElem] := -1;
+      node := AllocNode(AN_IF);
+      ASTLeft[node] := unpIdx;
+      ASTRight[node] := unpElem;
       seq := PySeqAppend(seq, node);
     end;
     if starAt >= 0 then
