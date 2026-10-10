@@ -1,0 +1,58 @@
+# A variant-held receiver's subscript and dunder dispatch now classify it with
+# ONE class-chain walk (PyBoxKind) instead of up to five `is` tests. Every box,
+# a user __getitem__, its subclass, a flattened MI base, and the wrong-key
+# TypeErrors must answer as before.
+from collections import deque
+
+class G:
+    def __init__(self, n):
+        self.n = n
+    def __getitem__(self, k):
+        return self.n * 10 + k
+
+class H(G):
+    pass
+
+class K:
+    def __getitem__(self, k):
+        return 600 + k
+
+class M1:
+    def hello(self):
+        return "m1"
+
+class MI(M1, K):
+    pass
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+    def __mul__(self, o: 'V'):
+        return V(self.n * o.n)
+
+def first(x, k):
+    return x[k]
+
+def show(x, k):
+    try:
+        print(first(x, k))
+    except TypeError as e:
+        print("TypeError", e)
+    except IndexError as e:
+        print("IndexError", e)
+    except KeyError as e:
+        print("KeyError", e)
+
+vals = [[1, 2, 3], {"a": 1, 0: "z"}, range(5, 9), deque([7, 8, 9]),
+        bytearray(b"pq"), G(4), H(5), MI(), (4, 5), "hey"]
+for v in vals:
+    show(v, 0)
+    show(v, -1)
+show([1], "a")
+show({"a": 1}, "a")
+show({"a": 1}, "b")
+show(range(3), "a")
+show(bytearray(b"pq"), "a")
+xs = [V(3), V(4)]
+print((xs[0] * xs[1]).n, MI().hello())

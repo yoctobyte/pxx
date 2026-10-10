@@ -6289,6 +6289,41 @@ begin
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
+{ Which of the five subscriptable boxes `o` is, from ONE walk of its class
+  chain: 1 list, 2 dict, 3 range, 4 deque, 5 bytes, 0 none of them (a user
+  object). The callers asked `o is TPyList`, `o is TPyDict`, ... in turn, and
+  every `is` that answers no walks the chain to the root, so a user object --
+  the case that reaches __getitem__ -- paid up to five full walks before its
+  dunder was looked up (3% of lekkerzeilen in __pxxInheritsFrom). The five are
+  unrelated TObject descendants, so the first of them met going up IS the
+  answer. A class with FLATTENED bases (NilPy MI) can reach one through a
+  side branch the parent walk does not see; that rare shape asks `is`. }
+function PyBoxKind(o: TObject): Integer;
+var cur: Pointer;
+begin
+  Result := 0;
+  if o = nil then Exit;
+  cur := PPointer(PtrUInt(PPointer(o)^) - 8)^;
+  while cur <> nil do
+  begin
+    if cur = Pointer(TPyList) then begin Result := 1; Exit; end;
+    if cur = Pointer(TPyDict) then begin Result := 2; Exit; end;
+    if cur = Pointer(TPyRange) then begin Result := 3; Exit; end;
+    if cur = Pointer(TPyDeque) then begin Result := 4; Exit; end;
+    if cur = Pointer(TPyBytes) then begin Result := 5; Exit; end;
+    if (PInt64(PtrUInt(cur) + 112)^ and $FFFFFF) <> 0 then
+    begin
+      if o is TPyList then Result := 1
+      else if o is TPyDict then Result := 2
+      else if o is TPyRange then Result := 3
+      else if o is TPyDeque then Result := 4
+      else if o is TPyBytes then Result := 5;
+      Exit;
+    end;
+    cur := PPointer(PtrUInt(cur) + 8)^;
+  end;
+end;
+
 { Forward: the arity-2 dunder dispatcher, declared far below. A variant-held
   user object needs it HERE, where the receiver has no static class. }
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
@@ -6308,7 +6343,7 @@ function PyUserSetitemCall(selfObj: TObject; const k: Variant;
   pyvar_getitem took of a table-lookup loop. }
 procedure pyvar_getitem_slow(const v: Variant; const key: Variant; var res: Variant);
 var o: TObject; ki: Int64; tg: Int64; uv: Variant; nilo: TObject;
-    kt: Int64; keyIsInt: Boolean;
+    kt: Int64; keyIsInt: Boolean; bk: Integer;
 begin
   { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
     variant holding a STRING had its character data dereferenced as an object
@@ -6348,27 +6383,25 @@ begin
   if tg <> 7 then
     raise TypeError.Create('object is not subscriptable');
   o := TObject(pyvarobj(v));
-  { list before dict: `xs[i]` is the common subscript, and every `is` that
-    answers no walks the class chain }
-  if (not keyIsInt) and ((o is TPyList) or (o is TPyRange) or
-     (o is TPyDeque) or (o is TPyBytes)) then
+  bk := PyBoxKind(o);
+  if (not keyIsInt) and ((bk = 1) or (bk >= 3)) then
     raise TypeError.Create(pytype_name_v(v) + ' indices must be integers or slices, not '
       + pytype_name_v(key));
-  if o is TPyList then
+  if bk = 1 then
   begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     res := TPyList(o).at(ki);
   end
-  else if o is TPyDict then
+  else if bk = 2 then
     res := TPyDict(o).fetch(key)
-  else if o is TPyRange then
+  else if bk = 3 then
     { r[i] on a range held in a variant — arithmetic, not a lookup }
     res := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
-  else if o is TPyDeque then
+  else if bk = 4 then
     { a deque that came back through a tuple or a container: `d[0]` raised
       "not subscriptable" while the typed receiver indexed it fine }
     res := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
-  else if o is TPyBytes then
+  else if bk = 5 then
   begin
     { bytes/bytearray index -> the integer byte value. Missing this case made
       `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
@@ -7656,7 +7689,7 @@ begin
   if p^.VType <> 7 then Exit;
   if p^.Payload = 0 then Exit;
   o := TObject(Pointer(NativeInt(p^.Payload)));
-  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  if PyBoxKind(o) in [1, 2, 5] then Exit;
   Result := o;
 end;
 
@@ -24858,7 +24891,7 @@ begin
   if selfObj = nil then Exit;
   { this unit's own containers have their own value rules and must not come here
     (PyRecIsPylibOwnClass's runtime equivalent) }
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   if otherObj <> nil then
     if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
@@ -25145,7 +25178,7 @@ var cls: PClassRTTI; mi: PMethInfo; fn: TPyObjDunderFn; fnObj: TPyObjDunderObjFn
 begin
   PyUserObjObjDunder := False;
   if (selfObj = nil) or (otherObj = nil) then Exit;
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   mi := PyFindDunder(cls, dunder);
@@ -25195,7 +25228,7 @@ begin
   if selfObj = nil then Exit;
   { this unit's own containers have their own store rules and must not come
     here — pyvar_setitem tests them first, and this is the belt to that brace }
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   mi := PyFindDunder(cls, '__setitem__');
@@ -25237,7 +25270,7 @@ begin
     error 219 (bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219).
     The parameter stays for the reflected call sites' symmetry. }
   if selfObj = nil then Exit;
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   PyUserArithCall1 := PyUserArithCallMeth(selfObj, PyFindDunder(cls, dunder), otherV, res);

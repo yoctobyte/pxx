@@ -1,0 +1,26 @@
+1
+3
+z
+KeyError -1
+5
+8
+7
+9
+112
+113
+40
+39
+50
+49
+600
+599
+4
+5
+h
+y
+TypeError list indices must be integers or slices, not str
+1
+KeyError 'b'
+TypeError range indices must be integers or slices, not str
+TypeError bytearray indices must be integers or slices, not str
+12 m1
