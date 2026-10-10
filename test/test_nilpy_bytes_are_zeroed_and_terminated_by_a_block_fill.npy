@@ -1,0 +1,11 @@
+# TPyBytes.Create zeroes the payload AND its NUL terminator with one block
+# fill instead of a byte loop. bytearray(n) must still be n zero bytes, and
+# every builder over it (slice, concat, translate, pack) must read the same.
+b = bytearray(10)
+print(b, len(b), bytes(3), bytes(0), bytearray(0))
+x = b"hello world" * 3
+print(x[2:9], x[::4], x[-5:], x[100:], bytes(x[3:3]))
+b[3] = 7
+print(b, bytes([1, 2, 3]) + b"\x00z", b"ab".translate(bytes(range(256))))
+import struct
+print(struct.pack("<I", 7), len(bytearray(1000)), sum(bytearray(1000)))

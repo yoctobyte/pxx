@@ -13847,7 +13847,6 @@ begin
 end;
 
 constructor TPyBytes.Create(n: Integer);
-var k: Integer; p: PByte;
 begin
   PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
@@ -13874,14 +13873,12 @@ begin
     The empty case allocates too, rather than leaving FData nil: `b""` handed
     to a `const char *` must be the empty C string, not a null pointer. }
   GetMem(FData, n + 1);
-  { Python's bytearray(n) is n ZERO bytes, not uninitialised memory }
-  for k := 0 to n - 1 do
-  begin
-    p := PByte(NativeInt(FData) + k);
-    p^ := 0;
-  end;
-  p := PByte(NativeInt(FData) + n);
-  p^ := 0;
+  { Python's bytearray(n) is n ZERO bytes, not uninitialised memory -- and
+    the terminator with them, in one block fill. It was a byte loop, and
+    every bytes object is built here: a tile's blobs off sqlite and each
+    slice of them made lekkerzeilen's loader spend more time zeroing than
+    reading. }
+  FillChar(FData^, n + 1, 0);
 end;
 
 function TPyBytes.count: Integer;
