@@ -6197,6 +6197,9 @@ begin
     raise TypeError.Create('object is not subscriptable');
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
 var o: TObject; ki: Int64;
 begin
@@ -6222,6 +6225,7 @@ begin
   end;
   pyvar_getitem_slow(v, key, Result);
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { `del v[k]` where v is a VARIANT — the runtime twin of pyvar_getitem, and for
   the same reason: an unannotated dict/list PARAMETER is a variant, so a helper
@@ -6758,11 +6762,15 @@ begin
   Result := Self;
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyList.append(const v: Variant): Variant;
 begin
   PyListAppendRaw(Self, v);
   Result := pynone;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function TPyList.extend(other: TPyList): Variant;
 var
@@ -6889,6 +6897,10 @@ begin
   PXXObjRelease(Pointer(snapOther));
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the one raise (PyListFix's IndexError) comes before
+  Result holds anything, so the frame -- a setjmp and a chain link on every
+  element read -- could never release a thing. }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
@@ -6898,6 +6910,7 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 procedure TPyList.put(i: Integer; const v: Variant);
 var
@@ -11930,6 +11943,9 @@ begin
   else Result := '';
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_of_int(v: Int64): Variant;
 var r: PPyVarRec;
 begin
@@ -11937,6 +11953,7 @@ begin
   r^.VType := 2;
   r^.Payload := v;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { `-v` on a variant. The IR rewrites unary minus on a variant to `0 - v`, which
   is right for every tag but a double holding ZERO: 0 - 0.0 is +0.0 where CPython
@@ -11962,6 +11979,9 @@ begin
     raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_of_bool(b: Boolean): Variant;
 var r: PPyVarRec;
 begin
@@ -11969,6 +11989,7 @@ begin
   r^.VType := 4;
   if b then r^.Payload := 1 else r^.Payload := 0;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyvar_id(const v: Variant): Variant;
 begin
@@ -12369,6 +12390,9 @@ begin
                          pytype_name_v(b) + Chr(39));
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
@@ -12408,6 +12432,7 @@ begin
     r^.Payload := ir;
   end;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pymod_v(const a: Variant; const b: Variant): Variant;
 begin
@@ -12772,6 +12797,9 @@ begin
   Result := pysub_v(a, b);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
@@ -12800,6 +12828,7 @@ begin
   r^.VType := 3;
   PPyDouble(@r^.Payload)^ := da / db;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { The four ORDERING operators on a variant operand. Each checks orderability
   first, in the operand order the source wrote and naming its own operator, so
@@ -22060,6 +22089,9 @@ begin
   Result := (l <> nil) and (l.count > 0);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pynone: Variant;
 var p: PPyVarRec;
 begin
@@ -22067,6 +22099,7 @@ begin
   p^.VType := 0;      { VT_EMPTY }
   p^.Payload := 0;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 var pad: Char; i, need: Integer;

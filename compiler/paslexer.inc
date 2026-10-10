@@ -342,6 +342,7 @@ begin
   DirBaseHMinus := HMinusVal;
   DirBaseScopedEnums := ScopedEnumsVal;
   DirBaseQChecks := QChecksVal;
+  DirBaseImplicitExcOff := ImplicitExcOffVal;
   DirBaseAssertions := AssertionsVal;
   DirBaseRChecks := RChecksVal;
   DirBaseNChecks := NChecksVal;
@@ -361,6 +362,7 @@ begin
   HMinusVal := DirBaseHMinus;
   ScopedEnumsVal := DirBaseScopedEnums;
   QChecksVal := DirBaseQChecks;
+  ImplicitExcOffVal := DirBaseImplicitExcOff;
   AssertionsVal := DirBaseAssertions;
   RChecksVal := DirBaseRChecks;
   NChecksVal := DirBaseNChecks;
@@ -470,6 +472,7 @@ begin
   ProbeSaveHMinus := HMinusVal;
   ProbeSaveScopedEnums := ScopedEnumsVal;
   ProbeSaveQChecks := QChecksVal;
+  ProbeSaveImplicitExcOff := ImplicitExcOffVal;
   ProbeSaveAssertions := AssertionsVal;
   ProbeSaveRChecks := RChecksVal;
   ProbeSaveNChecks := NChecksVal;
@@ -504,6 +507,7 @@ begin
   HMinusVal := ProbeSaveHMinus;
   ScopedEnumsVal := ProbeSaveScopedEnums;
   QChecksVal := ProbeSaveQChecks;
+  ImplicitExcOffVal := ProbeSaveImplicitExcOff;
   AssertionsVal := ProbeSaveAssertions;
   RChecksVal := ProbeSaveRChecks;
   NChecksVal := ProbeSaveNChecks;
@@ -965,6 +969,7 @@ begin
   HMinusVal := False;   { {$H+}: pxx's bare `string` is already the managed one }
   ScopedEnumsVal := False;
   QChecksVal := False;
+  ImplicitExcOffVal := False;
   { ON by default -- see AssertionsVal in defs.inc for why this deliberately is
     not FPC's default. {$ASSERTIONS OFF} turns it off per region.
     NoAssertionsFlag is read rather than assumed False because THIS RUNS BEFORE
@@ -3307,7 +3312,7 @@ const
     ' excessprecision extendedsyntax externalsym fputype goto hints hppemit ' +
     ' hugecode hugepointerarithmeticnormalization ' +
     ' hugepointercomparisonnormalization ' +
-    ' imagebase implicitbuild implicitexceptions includepath inline legacyifend ' +
+    ' imagebase implicitbuild includepath inline legacyifend ' +
     ' libexport librarypath link linkframework linklib localsymbols ' +
     ' macro maxfpuregisters maxstacksize memory minfpconstprec minstacksize ' +
     ' mmx modeswitch ' +
@@ -3693,6 +3698,12 @@ begin
         StrictShiftWidth := False; StrictVariantChar := False;
       end
       else ErrorAt(SrcLine, 'strict_fpc requires on or off');
+    end
+    else if CaseEqual(command, 'implicitexceptions') then
+    begin
+      if CaseEqual(name, 'on') then ImplicitExcOffVal := False
+      else if CaseEqual(name, 'off') then ImplicitExcOffVal := True
+      else ErrorAt(SrcLine, 'implicitexceptions requires on or off');
     end
     else if CaseEqual(command, 'overflowchecks') then
     begin
@@ -5016,6 +5027,8 @@ begin
     TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
     TokNChecks[TokCount] := Byte(NChecksVal);
+    if ImplicitExcOffVal then
+      TokNChecks[TokCount] := TokNChecks[TokCount] or TOKN_IMPLEXC_OFF;
     TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);

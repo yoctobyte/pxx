@@ -1,0 +1,58 @@
+# pylib's hot leaf routines (pysub_v, pytruediv_v, pyvar_getitem, TPyList.at,
+# TPyList.append, pynone, pyvar_of_int) are built under {$IMPLICITEXCEPTIONS OFF}:
+# no cleanup frame. An exception raised in or through them must still reach the
+# handler, and a str or float index on a typed list is TypeError, not IndexError.
+class Q:
+    def __init__(self, v):
+        self.v = v
+
+def churn(n):
+    caught = 0
+    xs = [1, "two", Q(3)]
+    for i in range(n):
+        a = xs[i % 3]
+        b = xs[(i + 1) % 3]
+        try:
+            c = a - b
+        except TypeError:
+            caught += 1
+        try:
+            d = a / 0
+        except (TypeError, ZeroDivisionError):
+            caught += 1
+        try:
+            e = xs[i % 7]
+        except IndexError:
+            caught += 1
+        try:
+            f = xs["k"]
+        except TypeError:
+            caught += 1
+        ys = []
+        ys.append(str(i))
+        ys.append(Q(i))
+    return caught
+
+print(churn(1000))
+xs = [1, 2, 3]
+try:
+    g = xs["k"]
+except TypeError as e:
+    print("str:", e)
+ys = [1.5, 2.5]
+k = 1.0
+try:
+    print(ys[k])
+except TypeError as e:
+    print("float:", e)
+r = range(4)
+try:
+    print(r["a"])
+except TypeError as e:
+    print("range:", e)
+try:
+    g = xs[7]
+except TypeError:
+    print("wrong")
+except IndexError:
+    print("idx caught")

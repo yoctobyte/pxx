@@ -7447,7 +7447,7 @@ begin
   if (TokPos > 0) and (TokPos <= TokCount) then
     StmtIChecks := TokIChecks[TokPos - 1];
   if (TokPos > 0) and (TokPos <= TokCount) then
-    StmtNChecks := Integer(TokNChecks[TokPos - 1]);
+    StmtNChecks := Integer(TokNChecks[TokPos - 1] and TOKN_NILCHK_MASK);
   { A GLOBAL user routine named Read/Write/Readln/Writeln, called unqualified as
     a STATEMENT. Rewritten to tkIdent here, before the dispatch, so it lands in
     the ordinary tkIdent call arm -- exactly what ParseFactorCore does for the

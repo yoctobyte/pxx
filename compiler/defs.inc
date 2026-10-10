@@ -3096,6 +3096,13 @@ const
   NILCHK_DEFAULT = 0;
   NILCHK_ON      = 1;
   NILCHK_OFF     = 2;
+  { The HIGH BIT of a TokNChecks byte is {$IMPLICITEXCEPTIONS OFF} at that
+    token. Carried in the nil-check byte so that every copy the token arrays
+    already make (shift, nest, template, spec) carries it too -- a parallel
+    array would need adding at all of them. Readers of the nil-check state
+    mask it off with TOKN_NILCHK_MASK. }
+  TOKN_IMPLEXC_OFF = $80;
+  TOKN_NILCHK_MASK = $03;
 
   MAX_TEMPLATES = 128;
   MAX_TEMPLATE_PARAMS = 6;   { was 4 -- MEASURED insufficient: rtl-generics'
@@ -7140,6 +7147,12 @@ var
     feature-p-h-minus-makes-a-bare-string-a-shortstring }
   HMinusVal : Boolean;
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
+  { {$IMPLICITEXCEPTIONS OFF}: a routine whose body starts under it gets no
+    implicit cleanup frame for its managed locals -- FPC's meaning. If it is
+    unwound past while a managed local holds a reference, that reference
+    LEAKS; so it is for hot leaf routines that cannot raise once one does
+    (pylib's TPyList.at). Default off = frames as always. }
+  ImplicitExcOffVal, DirBaseImplicitExcOff, ProbeSaveImplicitExcOff: Boolean;
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
   AssertionsVal : Boolean;   { current {$C±} / {$ASSERTIONS} lexer state. DEFAULT ON, which is NOT FPC's default: FPC compiles Assert out unless -Sa, and flipping ours to match would turn every existing pxx assertion into dead code silently. -Sa is accepted and is a no-op for that reason (feature-p-assertions-directive-and-position). }
   RChecksVal : Boolean;      { current {$R±} / {$RANGECHECKS} lexer state (default off) }

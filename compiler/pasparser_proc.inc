@@ -1382,7 +1382,7 @@ var
   implNoSelf: Boolean;   { the `static` directive, read off the declaration }
   isClassCtorImpl, isClassDtorImpl: Boolean;   { `class constructor`/`class destructor` IMPLEMENTATION header -- see where they are set }
   isUntyped : Boolean;
-  needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
+  needsProcCleanupFrame, savedProcCleanupFrameActive, noImplicitFrame: Boolean;
   isAsmFunc: Boolean;
   preScanBody: Boolean;
   isGenerator, isStackless, isAsync: Boolean;
@@ -3805,8 +3805,13 @@ begin
     leaked on every other target, silently — an unwind leak prints nothing.
     The sequence itself is each backend's own IR_EXC_ENTER, lifted into
     ir_codegen.inc; xtensa is the one target still without it. }
+  { {$IMPLICITEXCEPTIONS OFF} at the body's first token: no implicit frame,
+    early or late -- see ImplicitExcOffVal. }
+  noImplicitFrame := (TokPos > 0) and (TokPos <= TokCount) and
+                     ((TokNChecks[TokPos - 1] and TOKN_IMPLEXC_OFF) <> 0);
   needsProcCleanupFrame := TargetHasProcCleanupFrame and ExceptionUsed and
-                           (not isAsmFunc) and ProcHasManagedLocalCleanup(procIdx, -1);
+                           (not isAsmFunc) and (not noImplicitFrame) and
+                           ProcHasManagedLocalCleanup(procIdx, -1);
   if needsProcCleanupFrame then
   begin
     EmitProcCleanupFrameEnterForTarget(cleanupJnePatch);
@@ -3939,7 +3944,7 @@ begin
       through that frame to give a pad to yet.
       bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad }
     if (not needsProcCleanupFrame) and TargetHasProcCleanupFrame and
-       ExceptionUsed and (not isAsmFunc) then
+       ExceptionUsed and (not isAsmFunc) and (not noImplicitFrame) then
       ProcCleanupFrameWanted := True;
     ProcCleanupFrameLateArmed := False;
     CompileAST(genStepAST);
@@ -4045,7 +4050,7 @@ begin
       used to say a generator's frame "the prologue decision already covers"
       and that was measured false on 2026-09-04; see the arm above. }
     if (not needsProcCleanupFrame) and TargetHasProcCleanupFrame and
-       ExceptionUsed and (not isAsmFunc) then
+       ExceptionUsed and (not isAsmFunc) and (not noImplicitFrame) then
       ProcCleanupFrameWanted := True;
     ProcCleanupFrameLateArmed := False;
     CompileAST(inlineBodyNode);

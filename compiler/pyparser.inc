@@ -14155,15 +14155,25 @@ end;
 
   Returns the raising call, or -1 when this is not the case. }
 function PyIndexNotIntKind(kind: AnsiString; idxNode: Integer): Integer;
-var ci, procIdx, a0, a1, lit: Integer;
+var ci, procIdx, a0, a1, lit: Integer; tname: AnsiString; tk: TTypeKind;
 begin
   PyIndexNotIntKind := -1;
   if (idxNode < 0) or (kind = '') then Exit;
-  if IntToTypeKind(ASTTk[idxNode]) <> tyClass then Exit;
-  if ResolveNodeRec(idxNode) < REC_UCLASS_BASE then Exit;
-  if PyRecIsPylibOwnClass(ResolveNodeRec(idxNode)) then Exit;
-  ci := ResolveNodeRec(idxNode) - REC_UCLASS_BASE;
-  if FindUMeth(ci, '__index__') >= 0 then Exit;    { it has one — coerce, do not raise }
+  tk := IntToTypeKind(ASTTk[idxNode]);
+  { A STATICALLY str or float key is the same TypeError. The getter takes an
+    Int64, so the key was converted on the way in: `xs["k"]` indexed by the
+    string's handle and raised IndexError, which `except TypeError` let through. }
+  if PyIsStrBaseTk(tk) then tname := 'str'
+  else if (tk = tyDouble) or (tk = tySingle) then tname := 'float'
+  else
+  begin
+    if tk <> tyClass then Exit;
+    if ResolveNodeRec(idxNode) < REC_UCLASS_BASE then Exit;
+    if PyRecIsPylibOwnClass(ResolveNodeRec(idxNode)) then Exit;
+    ci := ResolveNodeRec(idxNode) - REC_UCLASS_BASE;
+    if FindUMeth(ci, '__index__') >= 0 then Exit;    { it has one — coerce, do not raise }
+    tname := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  end;
   procIdx := FindProc('PyIndexTypeError');
   if procIdx < 0 then Exit;
   a0 := AllocNode(AN_ARG);
@@ -14173,8 +14183,8 @@ begin
   ASTLeft[a0] := lit;
   a1 := AllocNode(AN_ARG);
   lit := AllocNode(AN_STR_LIT);
-  ASTSOffset[lit] := StoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
-  ASTSLen[lit] := UClsNLen[ci];
+  ASTSOffset[lit] := StoredName(tname);
+  ASTSLen[lit] := Length(tname);
   ASTTk[lit] := Ord(tyString);
   ASTLeft[a1] := lit; ASTRight[a1] := -1;
   ASTRight[a0] := a1;

@@ -1,0 +1,5 @@
+3571
+str: list indices must be integers or slices, not str
+float: list indices must be integers or slices, not float
+range: range indices must be integers or slices, not str
+idx caught

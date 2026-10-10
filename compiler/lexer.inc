@@ -957,6 +957,8 @@ begin
     TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
     TokNChecks[TokCount] := Byte(NChecksVal);
+    if ImplicitExcOffVal then
+      TokNChecks[TokCount] := TokNChecks[TokCount] or TOKN_IMPLEXC_OFF;
     TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
