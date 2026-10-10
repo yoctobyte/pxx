@@ -6586,6 +6586,13 @@ end;
 
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
+  { the SCALAR tags (none/int/int64/float/bool) own nothing: no test chain }
+  if (dst^.VType >= 0) and (dst^.VType <= 4) then
+  begin
+    dst^.VType := 0;
+    dst^.Payload := 0;
+    Exit;
+  end;
   if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := ''
   else if PyVarSlotIsObj(dst^.VType) then PXXObjRelease(Pointer(NativeInt(dst^.Payload)));
   dst^.VType := 0;
@@ -6617,6 +6624,15 @@ procedure PyVarSlotSet(dst: PPyVarRec; src: PPyVarRec);
   releases, so slot := itself and aliasing slots are safe. }
 begin
   if dst = src then Exit;
+  { scalar over scalar -- a float list element into a float temp, the
+    numeric-loop case: nothing to retain, nothing to release }
+  if (src^.VType >= 0) and (src^.VType <= 4) and
+     (dst^.VType >= 0) and (dst^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   if PyVarSlotManaged(src^.VType) then
   begin
     PyVarSlotSetStr(dst, src);
@@ -6634,6 +6650,12 @@ procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
 begin
   dst^.VType := 0;
   dst^.Payload := 0;
+  if (src^.VType >= 0) and (src^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   PyVarSlotSet(dst, src);
 end;
 
@@ -6826,7 +6848,7 @@ function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
 begin
-  i := PyListFix(Self, i);
+  if (i < 0) or (i >= FLen) then i := PyListFix(Self, i);
   src := PPyVarRec(NativeInt(FItems) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
