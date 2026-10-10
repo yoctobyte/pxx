@@ -50,6 +50,13 @@ type
       converges. Once True it is never cleared.
       bug-nilpy-local-reassigned-across-classes-keeps-one-static-class }
     Poly: Boolean;
+    { A `name: float` ANNOTATION fixes the local's type: later bindings do not
+      widen it, they convert into it. Without this `a: float = 0.0` then
+      `a, b = pair` joined float with the tuple element's variant and the
+      whole function ran on variant arithmetic -- the annotation, which costs
+      nothing on CPython, bought nothing here. Float only: a float slot can
+      take any number a correct program stores there. See PyPinLocalType. }
+    Pinned: Boolean;
   end;
 
 const
@@ -4995,6 +5002,7 @@ begin
     if rec >= REC_UCLASS_BASE then PyLocals[PyLocalCount].RecCi := rec - REC_UCLASS_BASE
     else PyLocals[PyLocalCount].RecCi := -1;
     PyLocals[PyLocalCount].Poly := False;
+    PyLocals[PyLocalCount].Pinned := False;
     Inc(PyLocalCount);
     PyTypingChanged := True;
     Exit;
@@ -5030,6 +5038,7 @@ begin
     An integer-only accumulator is untouched: PyWidenBinding's redirect requires
     exactly one FLOAT side, so `x = x + 1` in a loop with no float in sight keeps
     the promo width it exists for. }
+  if PyLocals[ci].Pinned then Exit;   { annotated: the binding converts }
   PyInferName := PyLocals[ci].Name;
   w := PyWidenBinding(PyLocals[ci].TypeKind, tk);
   PyInferName := '';
@@ -5066,6 +5075,28 @@ begin
       PyLocals[ci].TypeKind := tyVariant;
       PyTypingChanged := True;
     end;
+  end;
+end;
+
+{ `name: float` -- fix the local's type at float for every later round; see
+  TPyLocalConstraint.Pinned. Trial parse only, like PyNoteLocalType. }
+procedure PyPinLocalType(const name: AnsiString; tk: TTypeKind);
+var ci: Integer;
+begin
+  if tk <> tyDouble then Exit;
+  ci := PyFindConstraint(name);
+  if ci < 0 then
+  begin
+    PyNoteLocalType(name, tk, REC_NONE);
+    ci := PyFindConstraint(name);
+    if ci < 0 then Exit;
+  end;
+  if (not PyLocals[ci].Pinned) or (PyLocals[ci].TypeKind <> tk) then
+  begin
+    PyLocals[ci].Pinned := True;
+    PyLocals[ci].TypeKind := tk;
+    PyLocals[ci].RecCi := -1;
+    PyTypingChanged := True;
   end;
 end;
 
@@ -37750,6 +37781,30 @@ begin
     tk := PyAnnTypeAt(annIdx);
     ci := PyAnnLastCi;
     annSig := PyAnnLastProcSig;
+    { A BARE `name: T` -- a declaration with no value, valid Python. It
+      reached no arm below (each wants the '=') and the parse died on the
+      colon as `undefined variable`. It binds nothing; here it allocates the
+      local at the annotated type, so `a: float` ahead of `a, b = pair` types
+      the unpack targets (see TPyLocalConstraint.Pinned). Only for a type the
+      reader recognised, so a keyword-like name before a ':' is never taken. }
+    if (tk <> tyUnknown) and (annIdx < TokCount) and
+       (Tokens[annIdx].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon]) then
+    begin
+      name := CurTok.SVal;
+      if PyTypingPass then PyPinLocalType(name, tk);
+      symIdx := PyAssignTargetSym(name);
+      if symIdx < 0 then
+      begin
+        if tk = tyString then tk := tyAnsiString;
+        symIdx := AllocVar(name, tk);
+        if (tk = tyClass) and (ci >= 0) then
+          Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
+        SymSyncTypeRef(symIdx);
+      end;
+      TokPos := annIdx;
+      Next;                      { CurTok = the statement end }
+      Exit;
+    end;
     if (tk = tyUnknown) and (annIdx < TokCount) and
        (Tokens[annIdx].Kind = tkAssign) then
     begin
@@ -37795,6 +37850,7 @@ begin
         rhsNode := PyBoxCallableValue(CurASTNode);
       end;
       CurASTNode := rhsNode;
+      if PyTypingPass then PyPinLocalType(name, tk);
       symIdx := PyAssignTargetSym(name);
       if symIdx < 0 then
       begin
@@ -38229,6 +38285,7 @@ begin
         else
           PyLocals[PyLocalCount].RecCi := -1;
         PyLocals[PyLocalCount].Poly := False;
+        PyLocals[PyLocalCount].Pinned := False;
         Inc(PyLocalCount);
         changed := True;
       end
@@ -38237,6 +38294,7 @@ begin
         PyInferName := PyLocals[si].Name;
         w := PyWidenBinding(PyLocals[si].TypeKind, tk);
         PyInferName := '';
+        if PyLocals[si].Pinned then w := PyLocals[si].TypeKind;
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;
@@ -39234,6 +39292,7 @@ begin
             PyNoteLocalType(GetTokenStr(i), tk, REC_UCLASS_BASE + PyAnnLastCi)
           else
             PyNoteLocalType(GetTokenStr(i), tk, REC_NONE);
+          PyPinLocalType(GetTokenStr(i), tk);
           { …and put it in THIS round's scratch scope too. Noting it only
             records it for the NEXT round's seeding loop, so a later statement
             in the SAME round that trial-parses an expression mentioning the
@@ -39712,6 +39771,7 @@ begin
         else
           PyLocals[PyLocalCount].RecCi := -1;
         PyLocals[PyLocalCount].Poly := False;
+        PyLocals[PyLocalCount].Pinned := False;
         Inc(PyLocalCount);
         changed := True;
       end
@@ -39720,6 +39780,7 @@ begin
         PyInferName := PyLocals[si].Name;
         w := PyWidenBinding(PyLocals[si].TypeKind, tk);
         PyInferName := '';
+        if PyLocals[si].Pinned then w := PyLocals[si].TypeKind;
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;

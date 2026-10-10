@@ -6275,6 +6275,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_vsubarms26 | diff -u test/test_nilpy_a_variant_subscript_takes_every_arm_and_refuses_a_non_int_index.expected -
 	./$(COMPILER) test/test_nilpy_frameless_pylib_routines_still_raise_and_a_str_index_is_typeerror.npy $(TESTTMP)/test_nilpy_frameless26
 	$(TESTTMP)/test_nilpy_frameless26 | diff -u test/test_nilpy_frameless_pylib_routines_still_raise_and_a_str_index_is_typeerror.expected -
+	./$(COMPILER) test/test_nilpy_a_float_annotation_pins_the_local_and_a_bare_one_declares_it.npy $(TESTTMP)/test_nilpy_floatpin26
+	$(TESTTMP)/test_nilpy_floatpin26 | diff -u test/test_nilpy_a_float_annotation_pins_the_local_and_a_bare_one_declares_it.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

@@ -1,0 +1,48 @@
+# `a: float` (bare or with a value) fixes the local at float: tuple-unpack,
+# for-targets and plain stores CONVERT into it instead of widening it to a
+# variant. A bare `name: T` is a declaration and must compile.
+def g(x: float, pair: tuple) -> float:
+    a: float = 0.0
+    b: float = 0.0
+    a, b = pair
+    u = x * a + b
+    return u
+def h(x: float, pair: tuple) -> float:
+    a: float
+    b: float
+    a, b = pair
+    return x * a + b
+def m(k: tuple) -> float:
+    s: float = 0.0
+    for v in k:
+        s = s + v
+    t: float
+    t = k[0]
+    return s * t
+def strs(p: tuple) -> str:
+    name: str
+    name = p[0]
+    return name + "!"
+total: float
+total = 0.0
+for q in [(1.0, 2.0), (3, 4)]:
+    total += h(2.0, q)
+print(g(1.5, (2.0, 3.0)), g(1.5, (2, 3)))
+print(h(1.5, (2.0, 3.0)), h(1.5, (2, 3)))
+print(m((1.0, 2.0, 3.0)), m((1, 2)))
+print(strs(("ab", 1)))
+print(total)
+def fp(pairs: list) -> float:
+    a: float
+    b: float
+    s = 0.0
+    for a, b in pairs:
+        s += a * b
+    return s
+def gp(k: tuple) -> float:
+    v: float
+    s = 0.0
+    for v in k:
+        s += v * 2.0
+    return s
+print(fp([(1.0, 2.0), (3, 4)]), gp((1.0, 2, 3.5)))
