@@ -737,6 +737,9 @@ type
       is-retained-by-the-caller), so its export never came back and a correct
       program's later resize raised. Add the guard when that leak is fixed. }
     FViewOf: TObject;
+    { > 0: FData is a FILE MAPPING of this many bytes (mimic_mmap), not a heap
+      block, so it goes back through PyBytesUnmapHook instead of FreeMem. }
+    FMapLen: Int64;
     { TWO spellings, because a SUBCLASS needs the parameterless one. `class
       BA(bytearray)` with no __init__ of its own emits a call to the base's
       no-argument Create, and TPyBytes had only Create(n) — so constructing any
@@ -1031,6 +1034,27 @@ type
   lose nothing visibly. Nothing measured passes it; a caller who does gets a
   loud unknown-argument error. Also absent: rotate, extendleft, index, count,
   insert, remove, reverse — none is reached, and each would be a guess. }
+  { random.Random(seed) -- a generator with its OWN state, so seeding one
+    neither moves nor is moved by the module-level functions. Same SplitMix64
+    as those; the sequence is not CPython's (Mersenne Twister) and is not meant
+    to be, but a given seed always gives the same sequence, which is the
+    contract a seeded Random is used for (That Space Program casts a mission's
+    voices from `random.Random(mission_id)`). A str seed is hashed (FNV-1a), an
+    int seed is used as is, no seed draws from the module generator. }
+  TPyRandom = class
+  public
+    FState: Int64;
+    constructor Create;
+    function next64: Int64;
+    function seed(const a: Variant): Variant;
+    function random: Double;
+    function uniform(a, b: Double): Double;
+    function randint(a, b: Int64): Int64;
+    function randrange(n: Int64): Int64;
+    function choice(const src: Variant): Variant;
+    function shuffle(const src: Variant): Variant;
+  end;
+
   TPyDeque = class
   public
     FBuf: TPyList;
@@ -1370,6 +1394,12 @@ function pyvar_print_of(const v: Variant): AnsiString;
   keeping it here rather than injecting a space at the call site is what makes
   `print("a", *[])` print `a` and not `a `, since an empty list adds nothing. }
 function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
+{ `print` taken as a VALUE (`log = print`, `def run(log=print)`): a collecting
+  callee, so the frontend marks its slot 0 as `*args` and every positional
+  argument of a call through the value arrives here as one tuple. Keywords
+  (sep=, end=) through the value are refused by the bridge, which has no names
+  for a Pascal routine -- loud, not approximated. }
+procedure pyprint_value(args: TPyList);
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
@@ -2794,6 +2824,12 @@ type
   TPyPowFn = function(b, e: Double): Double;
 var
   PyPowHook: TPyPowFn;
+type
+  { munmap for a TPyBytes whose FData is a file mapping (FMapLen > 0). pylib
+    cannot reach the PAL, so mimic_mmap installs it, the PyPowHook way. }
+  TPyUnmapFn = procedure(p: Pointer; len: Int64);
+var
+  PyBytesUnmapHook: TPyUnmapFn;
 function pymath_modf(x: Double): TPyList;
 { math.frexp / math.isqrt / math.isfinite — the three of the ticket's four
   "exact operations, no rounding question" that were still missing (ldexp
@@ -2923,6 +2959,12 @@ function deque(const iterable: Variant): TPyDeque; overload;
   The bare `deque()` above stays shadowable, which is correct: shadowing a
   builtin by defining one is ordinary Python. }
 function pydeque_new(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
+function pyrandom_new: TPyRandom; overload;
+function pyrandom_new(const a: Variant): TPyRandom; overload;
+{ dataclasses.replace(obj, a=x, b=y) is compiled as
+  pydc_set(pydc_set(pydc_clone(obj), 'a', x), 'b', y). See pydc_clone. }
+function pydc_clone(const v: Variant): Variant;
+function pydc_set(const v: Variant; const name: AnsiString; const val: Variant): Variant;
 function pydeque_new: TPyDeque; overload;
 function pydeque_new(const iterable: Variant): TPyDeque; overload;
 function pydeque_repr(d: TPyDeque): AnsiString;
@@ -3033,6 +3075,11 @@ function next(it: TPyIter; const dflt: Variant): Variant; overload;
   LAYOUT, so the pointer travels and the record does not.
   bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
 function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
+{ The address of parameter i's DEFAULT value (0-based, Self excluded) in a
+  signature record, or nil when there is none -- the per-slot reading of
+  pysig_fill_defaults, for a caller that passes arguments by address instead
+  of building a list. }
+function pysig_default_slot(sig: Pointer; i: Integer): Pointer;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 { `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
@@ -3070,6 +3117,8 @@ function PyVarAsFloat(p: PPyVarRec): Double; forward;
 function PyVarText(p: PPyVarRec): AnsiString; forward;
 procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer); forward;
 function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean; forward;
+function PyVarNumFast(pa, pb, r: PPyVarRec; op: Integer): Boolean; forward;
+function PyVarCmpFast(pa, pb: PPyVarRec; out c: Integer; out nan: Boolean): Boolean; forward;
 function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
 function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
 
@@ -3367,6 +3416,9 @@ function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
                          var kind: Int64): Pointer;
 
 function PyNarrowRet(v: Int64; rk: Integer): Int64;
+
+{ An RTTI NamePtr compared in place, without copying the name (see the body). }
+function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
 
 implementation
 
@@ -5099,6 +5151,15 @@ end;
 
 var
   PyDynAttrStore: TPyDict;   { lazily created; keys are "addr:name" }
+  { A NEGATIVE FILTER in front of the store: one byte per hash of every NAME
+    ever written to it. pydynattr_get_v asks the store FIRST on every read of
+    an attribute it cannot resolve statically -- a declared field on a variant
+    receiver included -- and that question built an "addr:name" key (an int to
+    string and a concatenation) and probed a dict, to answer no. A name whose
+    byte is clear has never been stored on any object, so the answer is no
+    without the key. Bytes, not bits: a racing writer stores a whole byte and
+    cannot clear another name's mark by a read-modify-write. }
+  PyDynAttrNameSeen: array[0..4095] of Byte;
 
 function PyDynAttrKey(obj: Pointer; const name: AnsiString): AnsiString;
 begin
@@ -5107,6 +5168,17 @@ end;
 
 function PyPropertySet(obj: Pointer; const name: AnsiString;
                        const val: Variant): Boolean; forward;
+
+function PyDynAttrNameSlot(const name: AnsiString): Integer;
+var n, h: Integer;
+begin
+  n := Length(name);
+  h := n * 131;
+  if n > 0 then
+    h := h + Ord(name[1]) * 31 + Ord(name[n]) * 7 + Ord(name[(n + 1) div 2]) * 17
+           + Ord(name[(n + 2) div 3]) * 3;
+  Result := h and 4095;
+end;
 
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
@@ -5132,11 +5204,13 @@ begin
     exactly today's behaviour and never a write through the wrong convention. }
   if PyPropertySet(obj, name, val) then Exit;
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
+  PyDynAttrNameSeen[PyDynAttrNameSlot(name)] := 1;   { BEFORE the store: see PyDynAttrNameSeen }
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
 
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 begin
+  if PyDynAttrNameSeen[PyDynAttrNameSlot(name)] = 0 then begin Result := False; Exit; end;
   { STORE ONLY, deliberately: pydynattr_get asks this to decide whether to
     FETCH from the store, so a wider answer here sends it to fetch a key that
     is not there. hasattr's wider question is pydynattr_hasattr below — the two
@@ -5307,6 +5381,36 @@ type
   PPyFN  = ^NativeInt;
   PPyFV  = ^Variant;
 
+{ An RTTI name compared IN PLACE. `np` is the blob's NamePtr: a PString at a
+  FROZEN string -- the interned literal's 8-byte length prefix, the characters
+  after it. Spelling it `flds[i].NamePtr^` as an argument materialised a managed
+  COPY of the name for every entry scanned (PXXStrFromLit and a free, through
+  the managed-deref argument lowering), so one dynamic `g.at(...)` scanned the
+  receiver's methods twice and allocated a string per method each time.
+  ci: ASCII case folded. }
+function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
+var p: NativeInt; n, i: NativeInt; ca, cb: Integer;
+begin
+  Result := False;
+  if np = nil then Exit;
+  n := Length(name);
+  if PInt64(np)^ <> n then Exit;
+  p := NativeInt(np) + 8;
+  for i := 0 to n - 1 do
+  begin
+    ca := PByte(p + i)^;
+    cb := Ord(name[i + 1]);
+    if ca <> cb then
+    begin
+      if not ci then Exit;
+      if (ca >= 65) and (ca <= 90) then ca := ca + 32;
+      if (cb >= 65) and (cb <= 90) then cb := cb + 32;
+      if ca <> cb then Exit;
+    end;
+  end;
+  Result := True;
+end;
+
 function PyEqAttrCI(const a, b: AnsiString): Boolean;
 { Case-insensitive name compare. pyeval has the same helper, but pyeval USES
   pylib and not the reverse, so it cannot be borrowed from there. }
@@ -5337,7 +5441,7 @@ begin
     begin
       flds := curr^.FieldsPtr;
       for i := 0 to Integer(curr^.FieldCount) - 1 do
-        if PyEqAttrCI(flds[i].NamePtr^, name) then
+        if PyNameEqAt(flds[i].NamePtr, name, True) then
         begin
           PyFindFieldCI := @flds[i];
           Exit;
@@ -5361,7 +5465,7 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-        if meths[i].NamePtr^ = nm then
+        if PyNameEqAt(meths[i].NamePtr, nm, False) then
         begin
           PyFindMethByName := @meths[i];
           Exit;
@@ -6016,6 +6120,26 @@ begin
     pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
     the same predicate written in two places, and only one of them grew the
     string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  { FAST PATH, the numeric-loop subscript: a list held in a variant, an int
+    key in range. No tag helper calls, no at()/PyListFix round trip. }
+  if (PPyVarRec(@v)^.VType = 7) and (PPyVarRec(@key)^.VType >= 1) and
+     (PPyVarRec(@key)^.VType <= 2) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    if o is TPyList then
+    begin
+      ki := PPyVarRec(@key)^.Payload;
+      if ki < 0 then ki := ki + TPyList(o).FLen;
+      if (ki >= 0) and (ki < TPyList(o).FLen) then
+      begin
+        { Set, not Init: like the `Result :=` below, the hidden destination
+          is a valid slot whose old value is released }
+        PyVarSlotSet(PPyVarRec(@Result),
+                     PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16));
+        Exit;
+      end;
+    end;
+  end;
   nilo := nil;                       { the dispatcher's unused `other` operand }
   tg := pyvartag(v);
   if (tg = 6) or (tg = 5) then
@@ -6034,13 +6158,15 @@ begin
   if tg <> 7 then
     raise TypeError.Create('object is not subscriptable');
   o := TObject(pyvarobj(v));
-  if o is TPyDict then
-    Result := TPyDict(o).fetch(key)
-  else if o is TPyList then
+  { list before dict: `xs[i]` is the common subscript, and every `is` that
+    answers no walks the class chain }
+  if o is TPyList then
   begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
   end
+  else if o is TPyDict then
+    Result := TPyDict(o).fetch(key)
   else if o is TPyRange then
     { r[i] on a range held in a variant — arithmetic, not a lookup }
     Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
@@ -6489,6 +6615,13 @@ end;
 
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
+  { the SCALAR tags (none/int/int64/float/bool) own nothing: no test chain }
+  if (dst^.VType >= 0) and (dst^.VType <= 4) then
+  begin
+    dst^.VType := 0;
+    dst^.Payload := 0;
+    Exit;
+  end;
   if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := ''
   else if PyVarSlotIsObj(dst^.VType) then PXXObjRelease(Pointer(NativeInt(dst^.Payload)));
   dst^.VType := 0;
@@ -6520,6 +6653,15 @@ procedure PyVarSlotSet(dst: PPyVarRec; src: PPyVarRec);
   releases, so slot := itself and aliasing slots are safe. }
 begin
   if dst = src then Exit;
+  { scalar over scalar -- a float list element into a float temp, the
+    numeric-loop case: nothing to retain, nothing to release }
+  if (src^.VType >= 0) and (src^.VType <= 4) and
+     (dst^.VType >= 0) and (dst^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   if PyVarSlotManaged(src^.VType) then
   begin
     PyVarSlotSetStr(dst, src);
@@ -6537,6 +6679,12 @@ procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
 begin
   dst^.VType := 0;
   dst^.Payload := 0;
+  if (src^.VType >= 0) and (src^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   PyVarSlotSet(dst, src);
 end;
 
@@ -6729,7 +6877,7 @@ function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
 begin
-  i := PyListFix(Self, i);
+  if (i < 0) or (i >= FLen) then i := PyListFix(Self, i);
   src := PPyVarRec(NativeInt(FItems) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
@@ -10149,6 +10297,193 @@ begin
   PXXObjRelease(Pointer(w));
 end;
 
+{ ---- random.Random --------------------------------------------------------- }
+
+constructor TPyRandom.Create;
+begin
+  FState := PyRandNext;
+end;
+
+function TPyRandom.next64: Int64;
+var z: Int64;
+begin
+  FState := FState + Int64($9E3779B97F4A7C15);
+  z := FState;
+  z := (z xor (z shr 30)) * Int64($BF58476D1CE4E5B9);
+  z := (z xor (z shr 27)) * Int64($94D049BB133111EB);
+  Result := z xor (z shr 31);
+end;
+
+function TPyRandom.seed(const a: Variant): Variant;
+var s: AnsiString; h: Int64; i: Integer;
+begin
+  Result := pynone;
+  if pyvartag(a) = 0 then FState := PyRandNext
+  else if pyvar_is_inttag(a) then FState := pyvar_to_int(a)
+  else
+  begin
+    s := pystr_of(a);
+    h := Int64($CBF29CE484222325);
+    for i := 1 to Length(s) do
+      h := (h xor Ord(s[i])) * Int64($100000001B3);
+    FState := h;
+  end;
+end;
+
+function TPyRandom.random: Double;
+var u: Int64;
+begin
+  u := (next64 shr 11) and Int64($1FFFFFFFFFFFFF);
+  Result := u / 9007199254740992.0;
+end;
+
+function TPyRandom.uniform(a, b: Double): Double;
+begin
+  Result := a + (b - a) * random;
+end;
+
+function TPyRandom.randint(a, b: Int64): Int64;
+var w, r: Int64;
+begin
+  if b < a then
+    raise ValueError.Create('empty range for randint()');
+  w := b - a + 1;
+  if w <= 0 then begin Result := a; Exit; end;
+  r := next64;
+  if r < 0 then r := -r;
+  if r < 0 then r := 0;
+  Result := a + (r mod w);
+end;
+
+function TPyRandom.randrange(n: Int64): Int64;
+begin
+  if n <= 0 then
+    raise ValueError.Create('empty range for randrange()');
+  Result := randint(0, n - 1);
+end;
+
+function TPyRandom.choice(const src: Variant): Variant;
+var l: TPyList;
+begin
+  l := pylist_v(src);
+  try
+    if (l = nil) or (l.count = 0) then
+      raise IndexError.Create('Cannot choose from an empty sequence');
+    Result := l.at(Integer(randint(0, l.count - 1)));
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
+end;
+
+function TPyRandom.shuffle(const src: Variant): Variant;
+var i, j: Integer; tmp: Variant; o: TObject; l: TPyList;
+begin
+  Result := pynone;
+  l := nil;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if o is TPyList then l := TPyList(o);
+  end;
+  if l = nil then
+    raise TypeError.Create('object does not support item assignment');
+  for i := l.count - 1 downto 1 do
+  begin
+    j := Integer(randint(0, i));
+    tmp := l.at(i);
+    l.put(i, l.at(j));
+    l.put(j, tmp);
+  end;
+end;
+
+{ ---- dataclasses.replace ---------------------------------------------------- }
+
+function pydc_clone(const v: Variant): Variant;
+{ A shallow copy of a class instance, field by field through its RTTI: a fresh
+  instance of the same class, VMT stamped, every DECLARED field copied with the
+  reference it needs (strings and Variants by assignment, an object field
+  retained). Not a byte copy -- that would share the instance's managed slots
+  without taking references, and the second release would free them under the
+  first owner. CPython's replace() runs __init__ (and __post_init__) on the new
+  values; this copies and then assigns, which differs only for a dataclass
+  whose __post_init__ derives one field from another. That Space Program's
+  shape.py has none; its receiver comes out of a dict, so the class is not
+  known when the call is compiled, which is why this is a run-time helper and
+  not a constructor call. }
+var obj, n: Pointer; cls, curr: PClassRTTI; flds: PFieldInfo; i: Integer;
+    k: Int64; a, b: Pointer; box: Variant; found: Boolean;
+begin
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('replace() should be called on dataclass instances');
+  obj := pyvarobj(v);
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then
+    raise TypeError.Create('replace() should be called on dataclass instances');
+  n := PXXObjAlloc(cls^.InstanceSize);
+  FillChar(n^, cls^.InstanceSize, 0);
+  PPointer(n)^ := cls^.VMTPtr;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      flds := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+      begin
+        k := flds[i].TypeKind;
+        a := Pointer(NativeInt(obj) + NativeInt(flds[i].Offset));
+        b := Pointer(NativeInt(n) + NativeInt(flds[i].Offset));
+        if k = 6 then
+        begin
+          PPyFP(b)^ := PPyFP(a)^;
+          if PPyFP(a)^ <> nil then PXXObjRetain(PPyFP(a)^);
+        end
+        else
+        begin
+          box := PyBoxByKind(a, k, found);
+          if (not found) or (not PyStoreByKind(b, k, box)) then
+            raise TypeError.Create('replace(): field ' + flds[i].NamePtr^ +
+                                   ' has a kind this runtime cannot copy');
+        end;
+      end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+  Result := TObject(n);
+  PXXObjRelease(n);     { the Variant holds the one reference now }
+end;
+
+function pydc_set(const v: Variant; const name: AnsiString; const val: Variant): Variant;
+var obj, a, old: Pointer; fi: PFieldInfo;
+begin
+  obj := pyvarobj(v);
+  fi := PyFindFieldCI(GetInstanceRTTI(obj), name);
+  if fi = nil then
+    raise TypeError.Create('replace() got an unexpected keyword argument ''' + name + '''');
+  a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
+  if fi^.TypeKind = 6 then
+  begin
+    old := PPyFP(a)^;
+    PPyFP(a)^ := pyvarobj(val);
+    if PPyFP(a)^ <> nil then PXXObjRetain(PPyFP(a)^);
+    if old <> nil then PXXObjRelease(old);
+  end
+  else if not PyStoreByKind(a, fi^.TypeKind, val) then
+    raise TypeError.Create('replace(): field ' + name + ' has a kind this runtime cannot assign');
+  Result := v;
+end;
+
+function pyrandom_new: TPyRandom; overload;
+begin
+  Result := TPyRandom.Create;
+end;
+
+function pyrandom_new(const a: Variant): TPyRandom; overload;
+begin
+  Result := TPyRandom.Create;
+  Result.seed(a);
+end;
+
 function pydeque_new: TPyDeque; overload;
 begin
   Result := TPyDeque.Create;
@@ -11047,6 +11382,7 @@ function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
   bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds }
 var o: TObject;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
   if PyVarUserAug(a, b, '__imul__', Result) then Exit;
   { BOTH integer tags: a boxed literal wears VT_INT (1) and a boxed Int64
     VT_INT64 (2), and testing only one is how the arm silently never fired. }
@@ -11075,6 +11411,7 @@ var
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
   { A USER class operand: its own __mul__, or the reflected __rmul__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -11353,7 +11690,13 @@ begin
   if (fbase = 0.0) and (fexp > 0.0) then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := 0.0;
+    { ...keeping a negative zero's sign for an ODD integer exponent:
+      `(-0.0) ** 1.0` is -0.0, `(-0.0) ** 2.0` is 0.0 }
+    if (Frac(fexp) = 0.0) and (fexp < 9007199254740992.0) and
+       (Frac(fexp * 0.5) <> 0.0) then
+      PPyDouble(@r^.Payload)^ := fbase
+    else
+      PPyDouble(@r^.Payload)^ := 0.0;
     Exit;
   end;
   { A NEGATIVE base with a FRACTIONAL exponent is a COMPLEX number in CPython
@@ -11681,6 +12024,14 @@ begin
   else if op = 2 then
     PyIntOpOverflows := ((x >= 0) and (y < 0) and (r < 0)) or
                         ((x < 0) and (y > 0) and (r >= 0))
+  { -1 is the one multiplier the division test cannot use: Low(Int64) div -1
+    overflows in the divide itself, and x86 traps it -- `-2**63 * -1` killed the
+    program with SIGFPE instead of promoting. With -1 on either side the
+    product overflows exactly when the other side is Low(Int64). }
+  else if x = -1 then
+    PyIntOpOverflows := y = Low(Int64)
+  else if y = -1 then
+    PyIntOpOverflows := x = Low(Int64)
   else
     PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
 end;
@@ -11705,11 +12056,111 @@ begin
   Result := pyfloormod_v(a, b);
 end;
 
+{ The NUMERIC fast path every variant arithmetic helper takes first: both
+  operands a plain int, bool or float. None of those tags can be a user object,
+  a container, a str or a promo-tier int, so every arm the full helpers try
+  before their numeric tail answers "not mine" for them -- but they asked
+  anyway, and PyVarUserArith builds its two dunder names from literals on every
+  call. That made `s = s + b` on two floats ~250 ns, five times CPython's
+  interpreter, and an unannotated program (lekkerzeilen: 0 of 334 constructor
+  parameters annotated) is nothing but these. The answer is the one the tail
+  gives: int op int stays an int unless it overflows (then False, and the full
+  helper promotes), any float operand makes a float. op: 1 add, 2 sub, 3 mul. }
+function PyVarNumFast(pa, pb, r: PPyVarRec; op: Integer): Boolean;
+var ta, tb, ia, ib, ir: Int64; x, y: Double;
+begin
+  Result := False;
+  ta := pa^.VType; tb := pb^.VType;
+  if (ta = 3) or (tb = 3) then
+  begin
+    if ta = 3 then x := PPyDouble(@pa^.Payload)^
+    else if (ta = 1) or (ta = 2) or (ta = 4) then x := pa^.Payload
+    else Exit;
+    if tb = 3 then y := PPyDouble(@pb^.Payload)^
+    else if (tb = 1) or (tb = 2) or (tb = 4) then y := pb^.Payload
+    else Exit;
+    if op = 1 then x := x + y
+    else if op = 2 then x := x - y
+    else x := x * y;
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := x;
+    Result := True;
+    Exit;
+  end;
+  if not (((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4))) then Exit;
+  ia := pa^.Payload; ib := pb^.Payload;
+  if op = 1 then ir := ia + ib
+  else if op = 2 then ir := ia - ib
+  else
+  begin
+    ir := ia * ib;
+  end;
+  if PyIntOpOverflows(ia, ib, ir, op) then Exit;
+  r^.VType := 2;
+  r^.Payload := ir;
+  Result := True;
+end;
+
+{ The ordering twin: -1/0/1 into c, or False to take the full path. Only a
+  SAME-KIND pair -- int with int (bool counts), float with float -- because an
+  int against a float is compared exactly by the full path and a Double
+  conversion is not exact past 2^53. A NaN answers through `nan`: no ordering
+  holds, so the caller's test is False whichever way it asks. }
+function PyVarCmpFast(pa, pb: PPyVarRec; out c: Integer; out nan: Boolean): Boolean;
+var ta, tb: Int64; x, y: Double;
+begin
+  Result := False;
+  c := 0; nan := False;
+  ta := pa^.VType; tb := pb^.VType;
+  if (ta = 3) and (tb = 3) then
+  begin
+    x := PPyDouble(@pa^.Payload)^;
+    y := PPyDouble(@pb^.Payload)^;
+    if x < y then c := -1
+    else if x > y then c := 1
+    else if x = y then c := 0
+    else nan := True;
+    Result := True;
+    Exit;
+  end;
+  if ((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4)) then
+  begin
+    if pa^.Payload < pb^.Payload then c := -1
+    else if pa^.Payload > pb^.Payload then c := 1;
+    Result := True;
+    Exit;
+  end;
+  { MIXED float and int -- `hk >= TABLE[i][0]` with an int column, TSP's
+    atmosphere: it fell to the general path, ~10 tag probes a compare. Exact
+    only while the int converts exactly (|i| <= 2^53); a bigger one takes the
+    general path, which compares exactly as CPython does. }
+  if (ta = 3) and ((tb = 1) or (tb = 2) or (tb = 4)) and
+     (pb^.Payload >= -9007199254740992) and (pb^.Payload <= 9007199254740992) then
+  begin
+    x := PPyDouble(@pa^.Payload)^;
+    y := pb^.Payload;
+  end
+  else if (tb = 3) and ((ta = 1) or (ta = 2) or (ta = 4)) and
+     (pa^.Payload >= -9007199254740992) and (pa^.Payload <= 9007199254740992) then
+  begin
+    x := pa^.Payload;
+    y := PPyDouble(@pb^.Payload)^;
+  end
+  else
+    Exit;
+  if x < y then c := -1
+  else if x > y then c := 1
+  else if x = y then c := 0
+  else nan := True;
+  Result := True;
+end;
+
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
   { A USER class operand: its own __add__, or the reflected __radd__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -11819,6 +12270,7 @@ end;
 function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb: PPyVarRec; oa, ob: TObject; i: Integer;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if pa^.VType = 7 then
   begin
@@ -11905,6 +12357,7 @@ function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 2) then Exit;
   { A USER class operand: its own __sub__, or the reflected __rsub__. The
     compile-time dispatch in the parser keys on a STATIC class, which a variant
     operand does not have, so without this the operands fell through to the
@@ -12298,6 +12751,7 @@ end;
 
 function pyaugsub_v(const a: Variant; const b: Variant): Variant;
 begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 2) then Exit;
   if PyVarUserAug(a, b, '__isub__', Result) then Exit;
   Result := pysub_v(a, b);
 end;
@@ -12312,7 +12766,10 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
+  { plain numbers skip the dunder probe (see PyVarNumFast) }
+  if ((PPyVarRec(@a)^.VType < 1) or (PPyVarRec(@a)^.VType > 4) or
+      (PPyVarRec(@b)^.VType < 1) or (PPyVarRec(@b)^.VType > 4)) then
+    if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
@@ -12361,8 +12818,9 @@ end;
   CPython compares an int with a float EXACTLY. The try declines (0) for every
   other pair, which keeps pycmp_v's answer. }
 function pylt_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc < 0); Exit; end;
   PyOrdCheck(a, b, '<');
   pc := PXXPromoVarCmpTry(@a, @b, 3);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12370,8 +12828,9 @@ begin
 end;
 
 function pyle_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc <= 0); Exit; end;
   PyOrdCheck(a, b, '<=');
   pc := PXXPromoVarCmpTry(@a, @b, 4);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12379,8 +12838,9 @@ begin
 end;
 
 function pygt_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc > 0); Exit; end;
   PyOrdCheck(a, b, '>');
   pc := PXXPromoVarCmpTry(@a, @b, 5);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12388,8 +12848,9 @@ begin
 end;
 
 function pyge_v(const a: Variant; const b: Variant): Boolean;
-var pc: Integer;
+var pc, fc: Integer; fn: Boolean;
 begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc >= 0); Exit; end;
   PyOrdCheck(a, b, '>=');
   pc := PXXPromoVarCmpTry(@a, @b, 6);
   if pc <> 0 then begin Result := pc = 2; Exit; end;
@@ -12924,7 +13385,12 @@ begin
     PyBytesNoResize above, and PyObjFinalize frees a non-view's FData the same
     way. Dropping it instead leaked one buffer per growth -- per append() of a
     byte, and per variant `bytes + bytes` (pyadd_v pre-sizes, then extends). }
-  if b.FData <> nil then FreeMem(b.FData);
+  if b.FMapLen > 0 then
+  begin
+    PyBytesUnmapHook(b.FData, b.FMapLen);
+    b.FMapLen := 0;
+  end
+  else if b.FData <> nil then FreeMem(b.FData);
   b.FData := np;
   b.FLen := need;
 end;
@@ -14094,7 +14560,8 @@ procedure PyExDecOfMant(mant: Int64; exp2: Integer;
                       var ds: AnsiString; var decExp: Integer);
 var
   buf: PyTExDecBuf;
-  n, i, k, fracDigits: Integer;
+  n, i, k, fracDigits, fracPad: Integer;
+  v: Int64;
   lp: AnsiString;
 begin
   n := 0;
@@ -14121,13 +14588,23 @@ begin
   end;
   while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
   { top limb unpadded (that is what drops the leading zeros), the rest padded
-    to the full nine so limb boundaries do not swallow interior zeros }
-  ds := StrInt(buf[n - 1], 0);
-  for i := n - 2 downto 0 do
+    to the full nine so limb boundaries do not swallow interior zeros.
+    Written into ONE preallocated string: the per-limb StrInt and `ds + lp`
+    concatenation was most of the cost of every float repr and every
+    correctly-rounded parse (TSP's json.dumps). }
+  lp := StrInt(buf[n - 1], 0);
+  SetLength(ds, Length(lp) + 9 * (n - 1));
+  for i := 1 to Length(lp) do ds[i] := lp[i];
+  k := Length(lp) + 9 * (n - 1);
+  for i := 0 to n - 2 do
   begin
-    lp := StrInt(buf[i], 0);
-    while Length(lp) < 9 do lp := '0' + lp;
-    ds := ds + lp;
+    v := buf[i];
+    for fracPad := 1 to 9 do
+    begin
+      ds[k] := Chr(Ord('0') + (v mod 10));
+      v := v div 10;
+      k := k - 1;
+    end;
   end;
   decExp := Length(ds) - 1 - fracDigits;
 end;
@@ -14865,11 +15342,104 @@ begin
   Result.append(Int64(1));
 end;
 
+{ The common case without an allocation: plain decimal text with at most 15
+  significant digits and a decimal exponent within +-22. The mantissa is then
+  an exact double, and so is 10^e (5^22 < 2^53), so ONE multiply or divide is
+  correctly rounded -- Clinger's fast path, the same answer the general parser
+  gives. pyfloat_parse built five strings per call before it reached the
+  converter (a trim Copy, a lowered copy, one concatenation per character),
+  and World.origin parses two of them per tile lookup: 4.8 us a float against
+  CPython's 0.2. Anything else -- an underscore, inf/nan, more digits, a far
+  exponent, malformed text -- answers False and takes the general path, which
+  owns every error. }
+function PyFloatParseFast(const s: AnsiString; out r: Double): Boolean;
+var i, n, sig, dexp, e: Integer; m: Int64; neg, eneg, anyDigit: Boolean;
+    p: Double; c: Char;
+begin
+  Result := False;
+  r := 0.0;
+  n := Length(s);
+  i := 1;
+  while (i <= n) and ((s[i] = ' ') or (s[i] = #9)) do Inc(i);
+  while (n >= i) and ((s[n] = ' ') or (s[n] = #9)) do Dec(n);
+  if i > n then Exit;
+  neg := False;
+  if (s[i] = '-') or (s[i] = '+') then
+  begin
+    neg := s[i] = '-';
+    Inc(i);
+  end;
+  m := 0; sig := 0; dexp := 0; anyDigit := False;
+  while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+  begin
+    anyDigit := True;
+    if (m <> 0) or (s[i] <> '0') then
+    begin
+      Inc(sig);
+      if sig > 15 then Exit;
+      m := m * 10 + (Ord(s[i]) - Ord('0'));
+    end;
+    Inc(i);
+  end;
+  if (i <= n) and (s[i] = '.') then
+  begin
+    Inc(i);
+    while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+    begin
+      anyDigit := True;
+      if (m <> 0) or (s[i] <> '0') then
+      begin
+        Inc(sig);
+        if sig > 15 then Exit;
+        m := m * 10 + (Ord(s[i]) - Ord('0'));
+      end;
+      Dec(dexp);
+      Inc(i);
+    end;
+  end;
+  if not anyDigit then Exit;
+  if (i <= n) and ((s[i] = 'e') or (s[i] = 'E')) then
+  begin
+    Inc(i);
+    eneg := False;
+    if (i <= n) and ((s[i] = '-') or (s[i] = '+')) then
+    begin
+      eneg := s[i] = '-';
+      Inc(i);
+    end;
+    if i > n then Exit;
+    e := 0;
+    while (i <= n) and (s[i] >= '0') and (s[i] <= '9') do
+    begin
+      if e < 10000 then e := e * 10 + (Ord(s[i]) - Ord('0'));
+      Inc(i);
+    end;
+    if eneg then dexp := dexp - e else dexp := dexp + e;
+  end;
+  if i <= n then Exit;                       { trailing junk: general path raises }
+  if m = 0 then
+  begin
+    r := 0.0;
+    if neg then r := -r;
+    Result := True;
+    Exit;
+  end;
+  if (dexp < -22) or (dexp > 22) then Exit;
+  p := 1.0;
+  e := dexp;
+  if e < 0 then e := -e;
+  while e > 0 do begin p := p * 10.0; Dec(e); end;
+  if dexp < 0 then r := m / p else r := m * p;
+  if neg then r := -r;
+  Result := True;
+end;
+
 function pyfloat_parse(const s: AnsiString): Double;
 var i, n, digits: Integer; seenDot, seenExp: Boolean;
     body, lowbody, clean: AnsiString;
     infv: Double;
 begin
+  if PyFloatParseFast(s, Result) then Exit;
   body := s;
   i := 1; n := Length(body);
   while (i <= n) and ((body[i] = ' ') or (body[i] = #9)) do Inc(i);
@@ -17972,6 +18542,18 @@ begin
   Result := True;
 end;
 
+function pysig_default_slot(sig: Pointer; i: Integer): Pointer;
+var sr: PPySigRec; p: PPyVarRec;
+begin
+  Result := nil;
+  if sig = nil then Exit;
+  sr := PPySigRec(sig);
+  if (sr^.Dflts = nil) or (i < 0) or (i >= sr^.TotN) then Exit;
+  p := PPyVarRec(NativeInt(sr^.Dflts) + i * 16);
+  if p^.VType = PYSIG_DFLT_UNSET then Exit;
+  Result := p;
+end;
+
 function pylist_cptrarray(l: TPyList): TPyBytes;
 { Declared beside pyvar_cbuf; the body is HERE because it needs PPointer, which
   is declared a few lines above and nowhere earlier. }
@@ -18082,7 +18664,12 @@ begin
       by.FData := nil; by.FLen := 0;
       Exit;
     end;
-    if by.FData <> nil then FreeMem(by.FData);
+    if by.FMapLen > 0 then
+    begin
+      PyBytesUnmapHook(by.FData, by.FMapLen);
+      by.FMapLen := 0;
+    end
+    else if by.FData <> nil then FreeMem(by.FData);
     by.FData := nil; by.FLen := 0;
     Exit;
   end;
@@ -18552,6 +19139,136 @@ begin
                                             a4, a5, a6, a7, noNames, noVals);
 end;
 
+type
+  { Every slot as a POINTER. A `const v: Variant` parameter travels as the
+    address of the variant on every backend (measured: x86-64, i386, aarch64,
+    arm32, riscv32, xtensa call0 and windowed), and a collector's TPyList is
+    a pointer too -- so one ladder reaches a callee whose parameters MIX the
+    two, which the all-Variant ladders above cannot. }
+  TPyCbQ1 = function(p0: Pointer): Variant;
+  TPyCbQ2 = function(p0, p1: Pointer): Variant;
+  TPyCbQ3 = function(p0, p1, p2: Pointer): Variant;
+  TPyCbQ4 = function(p0, p1, p2, p3: Pointer): Variant;
+  TPyCbQ5 = function(p0, p1, p2, p3, p4: Pointer): Variant;
+  TPyCbQ6 = function(p0, p1, p2, p3, p4, p5: Pointer): Variant;
+  TPyCbQ7 = function(p0, p1, p2, p3, p4, p5, p6: Pointer): Variant;
+  TPyCbQ8 = function(p0, p1, p2, p3, p4, p5, p6, p7: Pointer): Variant;
+  TPyCbQ9 = function(p0, p1, p2, p3, p4, p5, p6, p7, p8: Pointer): Variant;
+  TPyCbQP1 = procedure(p0: Pointer);
+  TPyCbQP2 = procedure(p0, p1: Pointer);
+  TPyCbQP3 = procedure(p0, p1, p2: Pointer);
+  TPyCbQP4 = procedure(p0, p1, p2, p3: Pointer);
+  TPyCbQP5 = procedure(p0, p1, p2, p3, p4: Pointer);
+  TPyCbQP6 = procedure(p0, p1, p2, p3, p4, p5: Pointer);
+  TPyCbQP7 = procedure(p0, p1, p2, p3, p4, p5, p6: Pointer);
+  TPyCbQP8 = procedure(p0, p1, p2, p3, p4, p5, p6, p7: Pointer);
+  TPyCbQP9 = procedure(p0, p1, p2, p3, p4, p5, p6, p7, p8: Pointer);
+
+{ A dynamic call into a COLLECTING callee that carries its signature. The
+  callee's slots are numbered by DECLARATION -- fixed parameters, the `*args`
+  slot, then keyword-only ones -- while the caller's positional arguments are
+  numbered by position, and past the star the two disagree: in
+  `def p(*args, sep=" ")` slot 1 is `sep`, and the caller's second positional
+  argument is the tuple's second element. The general bridge merged them in
+  one array, so `out = p; out("a", 1)` handed 1 to `sep`, and the slots after
+  the star were never passed at all (`sep.join` on an int, or garbage). Here
+  each slot is staged on its own: fixed slots from positions, the tuple from
+  the surplus, every other slot from a keyword or the def-time default. }
+function PyBoundCallStarSig(b: PPyBoundRec; nPos: Integer;
+                            const av: array of Variant;
+                            kwNames, kwVals: TPyList): Variant;
+var sr: PPySigRec; si, n, totN, i, j, hit, m: Integer;
+    slots: array[0..7] of Variant; bnd: array[0..7] of Boolean;
+    ptr: array[0..8] of Pointer;
+    star: TPyList; kn: AnsiString; dp, code: Pointer;
+    q1: TPyCbQ1; q2: TPyCbQ2; q3: TPyCbQ3; q4: TPyCbQ4; q5: TPyCbQ5;
+    q6: TPyCbQ6; q7: TPyCbQ7; q8: TPyCbQ8; q9: TPyCbQ9;
+    r1: TPyCbQP1; r2: TPyCbQP2; r3: TPyCbQP3; r4: TPyCbQP4; r5: TPyCbQP5;
+    r6: TPyCbQP6; r7: TPyCbQP7; r8: TPyCbQP8; r9: TPyCbQP9;
+begin
+  Result := pynone;
+  sr := PPySigRec(b^.Sig);
+  si := b^.StarIdx;
+  totN := Integer(sr^.TotN);
+  { a TRAILING star is stripped from the record (EmitPySignatures), so the
+    tuple's slot is one past the recorded ones }
+  n := totN;
+  if n < si + 1 then n := si + 1;
+  if n > 8 then
+    raise TypeError.Create('a collecting callee reached as a value takes at '
+      + 'most 8 declared parameters, got ' + pystr_of(Int64(n)));
+  for i := 0 to 7 do bnd[i] := False;
+  for i := 0 to nPos - 1 do
+    if i < si then
+    begin
+      slots[i] := av[i];
+      bnd[i] := True;
+    end;
+  star := TPyList.Create;
+  for i := si to nPos - 1 do star.append(av[i]);
+  pylist_mark_tuple(star);
+  bnd[si] := True;
+  if kwNames <> nil then
+    for j := 0 to kwNames.count - 1 do
+    begin
+      kn := pystr_of(kwNames.at(j));
+      hit := PySigFindParam(b^.Sig, kn);
+      if (hit < 0) or (hit = si) or (hit >= n) then
+        raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+      if bnd[hit] then
+        raise TypeError.Create('got multiple values for argument ''' + kn + '''');
+      slots[hit] := kwVals.at(j);
+      bnd[hit] := True;
+    end;
+  dp := sr^.Dflts;
+  for i := 0 to n - 1 do
+  begin
+    if bnd[i] then Continue;
+    if (dp <> nil) and (i < totN) and
+       (PPyVarRec(NativeInt(dp) + i * 16)^.VType <> -1) then
+      slots[i] := PVariant(NativeInt(dp) + i * 16)^
+    else
+      raise TypeError.Create('missing required argument ' + pystr_of(Int64(i)));
+  end;
+  m := 0;
+  if b^.Recv <> nil then
+  begin
+    ptr[0] := b^.Recv;
+    m := 1;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    if i = si then ptr[m] := Pointer(star) else ptr[m] := @slots[i];
+    Inc(m);
+  end;
+  code := b^.Code;
+  if b^.IsFunc then
+    case m of
+      1: begin q1 := TPyCbQ1(code); Result := q1(ptr[0]); end;
+      2: begin q2 := TPyCbQ2(code); Result := q2(ptr[0], ptr[1]); end;
+      3: begin q3 := TPyCbQ3(code); Result := q3(ptr[0], ptr[1], ptr[2]); end;
+      4: begin q4 := TPyCbQ4(code); Result := q4(ptr[0], ptr[1], ptr[2], ptr[3]); end;
+      5: begin q5 := TPyCbQ5(code); Result := q5(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]); end;
+      6: begin q6 := TPyCbQ6(code); Result := q6(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]); end;
+      7: begin q7 := TPyCbQ7(code); Result := q7(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6]); end;
+      8: begin q8 := TPyCbQ8(code); Result := q8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]); end;
+      9: begin q9 := TPyCbQ9(code); Result := q9(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7], ptr[8]); end;
+    end
+  else
+    case m of
+      1: begin r1 := TPyCbQP1(code); r1(ptr[0]); end;
+      2: begin r2 := TPyCbQP2(code); r2(ptr[0], ptr[1]); end;
+      3: begin r3 := TPyCbQP3(code); r3(ptr[0], ptr[1], ptr[2]); end;
+      4: begin r4 := TPyCbQP4(code); r4(ptr[0], ptr[1], ptr[2], ptr[3]); end;
+      5: begin r5 := TPyCbQP5(code); r5(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4]); end;
+      6: begin r6 := TPyCbQP6(code); r6(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]); end;
+      7: begin r7 := TPyCbQP7(code); r7(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6]); end;
+      8: begin r8 := TPyCbQP8(code); r8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]); end;
+      9: begin r9 := TPyCbQP9(code); r9(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7], ptr[8]); end;
+    end;
+  PXXObjRelease(Pointer(star));
+end;
+
 function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
                               const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
@@ -18591,6 +19308,13 @@ begin
   av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
   av[4] := a4; av[5] := a5; av[6] := a6; av[7] := a7;
   for i := nPos to MAXSLOT do av[i] := pynone;
+  { a collecting callee with a signature: slots and positions disagree past
+    the star, so it is staged on its own -- see PyBoundCallStarSig }
+  if (b^.StarIdx >= 0) and (b^.Sig <> nil) then
+  begin
+    Result := PyBoundCallStarSig(b, nPos, av, kwNames, kwVals);
+    Exit;
+  end;
   for i := 0 to MAXSLOT do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
@@ -20518,7 +21242,7 @@ end;
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, decExp, de0, loE, hiE, altE: Integer;
+var sig, decExp, de0, loE, hiE, altE, loSig, hiSig, midSig: Integer;
     ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
     even, pow2: Boolean;
 
@@ -20544,6 +21268,22 @@ var sig, decExp, de0, loE, hiE, altE: Integer;
     end;
   end;
 
+  { the interval test of TryCand alone, for the digit-count search }
+  function InInterval(nsig: Integer): Boolean;
+  var digits: AnsiString; dexp, tail, cLo, cHi: Integer;
+  begin
+    digits := ds0;
+    dexp := de0;
+    PyExDecRound(digits, dexp, nsig);
+    tail := Length(digits);
+    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
+    digits := Copy(digits, 1, tail);
+    cLo := PyExDecCmp(digits, dexp, loS, loE);
+    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
+    InInterval := ((cLo > 0) or ((cLo = 0) and even)) and
+                  ((cHi < 0) or ((cHi = 0) and even));
+  end;
+
 begin
   Result := '';
   PyExDecSplit(av, mant, exp2);
@@ -20557,6 +21297,37 @@ begin
   else
     PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
   even := (mant and 1) = 0;
+  { BINARY SEARCH the digit count when the interval is symmetric (every value
+    but a power of two): a sig-digit decimal is also a (sig+1)-digit one, so
+    the nearest candidate only gets closer as sig grows, and once it is inside
+    a symmetric interval it stays inside. ~5 interval tests and ONE read-back
+    instead of up to 17 of each -- json.dumps of TSP's flight blobs spent 26%
+    of a run here. A failed read-back falls through to the linear walk. }
+  if not pow2 then
+  begin
+    loSig := 1;
+    hiSig := 17;
+    while loSig < hiSig do
+    begin
+      midSig := (loSig + hiSig) div 2;
+      if InInterval(midSig) then hiSig := midSig else loSig := midSig + 1;
+    end;
+    { NO read-back here: the interval test against the exact midpoints IS
+      the proof that the candidate parses to av (the parser rounds to nearest,
+      ties to even, which is what `even` encodes), and the read-back -- one
+      more exact expansion per candidate -- was half the cost of a repr. The
+      linear walk below keeps it, as the belt for the asymmetric case. }
+    if InInterval(loSig) then
+    begin
+      ds := ds0;
+      decExp := de0;
+      PyExDecRound(ds, decExp, loSig);
+      sig := Length(ds);
+      while (sig > 1) and (ds[sig] = '0') do sig := sig - 1;
+      Result := PyFloatLayout(Copy(ds, 1, sig), decExp);
+      Exit;
+    end;
+  end;
   for sig := 1 to 17 do
   begin
     ds := ds0;
@@ -24120,6 +24891,11 @@ begin
     if (i > 0) or leadSep then Result := Result + ' ';
     Result := Result + pyvar_print_of(l[i]);
   end;
+end;
+
+procedure pyprint_value(args: TPyList);
+begin
+  WriteLn(pyprint_star(args, False));
 end;
 
 function pylist_mark_tuple(l: TPyList): TPyList;

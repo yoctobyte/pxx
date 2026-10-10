@@ -481,6 +481,11 @@ type
   TVFn3 = function(self: Pointer; const a, b, c: Variant): Variant;
   TVFn4 = function(self: Pointer; const a, b, c, d: Variant): Variant;
   TVFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Variant;
+  { 6..8: an all-variant (function-object ABI) method past five arguments --
+    TSP's ForceModel.accel(t, x, y, z, vx, vy, vz) reached by a star call. }
+  TVFn6 = function(self: Pointer; const a, b, c, d, e, f: Variant): Variant;
+  TVFn7 = function(self: Pointer; const a, b, c, d, e, f, g: Variant): Variant;
+  TVFn8 = function(self: Pointer; const a, b, c, d, e, f, g, h: Variant): Variant;
   { void (procedure), N Variant args. }
   TVPr0 = procedure(self: Pointer);
   TVPr1 = procedure(self: Pointer; const a: Variant);
@@ -488,6 +493,9 @@ type
   TVPr3 = procedure(self: Pointer; const a, b, c: Variant);
   TVPr4 = procedure(self: Pointer; const a, b, c, d: Variant);
   TVPr5 = procedure(self: Pointer; const a, b, c, d, e: Variant);
+  TVPr6 = procedure(self: Pointer; const a, b, c, d, e, f: Variant);
+  TVPr7 = procedure(self: Pointer; const a, b, c, d, e, f, g: Variant);
+  TVPr8 = procedure(self: Pointer; const a, b, c, d, e, f, g, h: Variant);
   { …and the shapes a NilPy `*args` constructor has: the star slot is a TPyList
     CLASS parameter (a plain pointer), never a Variant, so it cannot ride in a
     TVPr* slot. Only the star-LAST forms exist, which is all Python allows for
@@ -1004,10 +1012,92 @@ begin
   PyEqCI := True;
 end;
 
+{ A (class, name) -> descriptor cache for the by-name lookups a dynamic call
+  or attribute access makes on EVERY evaluation. lekkerzeilen's
+  `canopy.at(x, z)` through a variant receiver walked the class's method
+  table comparing names each call; PyFindMethCI + PyNameEqAt were ~4% of a
+  frame between them.
+
+  THREAD-SAFE BY CONSTRUCTION, without a lock: a slot holds ONE pointer to an
+  immutable record {Cls, Hit}, published with a single aligned word store, so
+  a reader sees either nil or a whole record. Records are written once and
+  never freed or reused, and a slot is only ever filled while EMPTY -- so the
+  cache is bounded (PY_LK_SLOTS records; a racing double fill leaks one) and
+  an entry never changes under a reader. A hit is still VERIFIED by name
+  against the descriptor it returns, so the slot index (which hashes the
+  name's ADDRESS, stable for a literal and arbitrary otherwise) only decides
+  where to look, never what is true. Misses (nil) are not cached. }
+const PY_LK_SLOTS = 2048;
+type PPyLkRec = ^TPyLkRec;
+     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; end;
+var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
+
+function PyLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
+var h: NativeUInt;
+begin
+  h := (NativeUInt(cls) shr 3) * 31 + (NativeUInt(Pointer(name)) shr 3) + NativeUInt(kind) * 7;
+  h := h xor (h shr 11);
+  Result := NativeInt(h and (PY_LK_SLOTS - 1));
+end;
+
+procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt);
+var r: PPyLkRec;
+begin
+  if PyLkSlot[idx] <> nil then Exit;
+  r := PPyLkRec(GetMem(SizeOf(TPyLkRec)));
+  r^.Cls := cls;
+  r^.Hit := hit;
+  { the KIND is part of the key: a method and a field hash into the SAME
+    slots, and a field descriptor read as a method's (or the reverse) is a
+    different record layout, not a miss }
+  r^.Kind := kind;
+  PyLkSlot[idx] := r;
+end;
+
+function PyFindMethCISlow(cls: PClassRTTI; const name: AnsiString): PMethInfo; forward;
+
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
+var idx: NativeInt; r: PPyLkRec;
+begin
+  idx := PyLkIndex(cls, name, 0);
+  r := PyLkSlot[idx];
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) and
+     PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindMethCISlow(cls, name);
+  if Result <> nil then PyLkPut(idx, cls, Result, 0);
+end;
+
+{ GetFieldPtr through the same cache (kind 1). }
+function PyFieldPtrCached(obj: Pointer; cls: PClassRTTI; const name: AnsiString;
+                          var kind: Int64): Pointer;
+var idx: NativeInt; r: PPyLkRec; fi: PFieldInfo;
+begin
+  idx := PyLkIndex(cls, name, 1);
+  r := PyLkSlot[idx];
+  fi := nil;
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 1) and
+     (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
+    fi := PFieldInfo(r^.Hit)
+  else
+  begin
+    fi := GetFieldInfoByName(cls, name);
+    if fi <> nil then PyLkPut(idx, cls, fi, 1);
+  end;
+  kind := 0;
+  Result := nil;
+  if fi = nil then Exit;
+  kind := fi^.TypeKind;
+  Result := @PUInt8(obj)[fi^.Offset];
+end;
+
+function PyFindMethCISlow(cls: PClassRTTI; const name: AnsiString): PMethInfo;
 var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindMethCI := nil;
+  PyFindMethCISlow := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -1020,9 +1110,9 @@ begin
           managed-string deref arg via a hidden local (ir.inc,
           bug-a-nilpy-managed-deref-to-const-arg-leaks). The earlier per-site
           `mn := NamePtr^` bind is therefore unnecessary. }
-        if PyEqCI(meths[i].NamePtr^, name) then
+        if PyNameEqAt(meths[i].NamePtr, name, True) then
         begin
-          PyFindMethCI := @meths[i];
+          PyFindMethCISlow := @meths[i];
           Exit;
         end;
     end;
@@ -1141,6 +1231,14 @@ begin
                 ' has no value and this call shape cannot omit a middle one');
 end;
 
+{ The receiver's class name, for PyHostCall's messages only. It used to be
+  copied into a local on every call, error or not. NamePtr can be nil, and a
+  diagnostic that crashes while reporting a problem is worse than the problem. }
+function PyHostClsName(cls: PClassRTTI): AnsiString;
+begin
+  if cls^.NamePtr <> nil then Result := cls^.NamePtr^ else Result := '<unnamed class>';
+end;
+
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
                      args: TPyList; kwNames: TPyList; var res: Variant);
 var
@@ -1148,14 +1246,14 @@ var
   mi:  PMethInfo;
   fpushfn: TFpushFn; fpopfn: TFpopFn;
   n, nargs: Integer;    { n = user args (Arity - 1) }
-  a0, a1, a2, a3, a4: Variant;
+  a0, a1, a2, a3, a4, a5, a6, a7: Variant;
   pk: PInt64;
   allVariant: Boolean;
   i: Integer;
   rk: Int64;
   code: Pointer;
-  vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5;
-  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
+  vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5; vf6: TVFn6; vf7: TVFn7; vf8: TVFn8;
+  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5; vp6: TVPr6; vp7: TVPr7; vp8: TVPr8;
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2; sf3: TSFn3; sf4: TSFn4; sf5: TSFn5;
   if0: TIFn0; if1: TIFn1; if2: TIFn2; if3: TIFn3; if4: TIFn4; if5: TIFn5;
   df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4; df5: TDFn5;
@@ -1248,9 +1346,6 @@ var
     the older refusal here cost a bisect to read. }
   sawDouble: Boolean;
   shapeBad: AnsiString;
-  { The receiver's class name, for the exceptions below. NamePtr can be nil, and a
-    diagnostic that crashes while reporting a problem is worse than the problem. }
-  clsName: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
   { INVARIANT, AND DELIBERATELY STILL A HALT. No RTTI means the compiler did not
@@ -1259,21 +1354,26 @@ begin
     below became raises because they report the PROGRAM's error; this one does
     not. }
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI on vm for host call ', name); Halt(1); end;
-  if cls^.NamePtr <> nil then clsName := cls^.NamePtr^ else clsName := '<unnamed class>';
   mi := PyFindMethCI(cls, name);
   { THE PROGRAM ASKED FOR A METHOD THAT IS NOT THERE, which is an AttributeError
     in CPython and was an uncatchable process exit here. Same wording as the
     attribute lookup in PyGetAttr, so the two read alike. }
   if mi = nil then
-    raise AttributeError.Create(Chr(39) + clsName + Chr(39) +
+    raise AttributeError.Create(Chr(39) + PyHostClsName(cls) + Chr(39) +
       ' object has no attribute ' + Chr(39) + name + Chr(39));
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
   { `S.init`, as CPython names the callee in a call-shape TypeError }
-  if cls^.NamePtr <> nil then
-    PyBindHostKwArgs(args, kwNames, mi, n, cls^.NamePtr^ + '.' + name)
-  else
-    PyBindHostKwArgs(args, kwNames, mi, n, name);
+  { The qualified name is only for its error messages, and building it was a
+    concatenation on EVERY dynamic call; without keywords the binder returns
+    before reading it. }
+  if kwNames <> nil then
+  begin
+    if cls^.NamePtr <> nil then
+      PyBindHostKwArgs(args, kwNames, mi, n, cls^.NamePtr^ + '.' + name)
+    else
+      PyBindHostKwArgs(args, kwNames, mi, n, name);
+  end;
   nargs := args.count;
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
@@ -1356,7 +1456,7 @@ begin
         carries a message, not a stream, and the kinds are the message. That is a
         gain and not just a translation -- the old form could be split across two
         streams, and was, until the diagnostics moved to stderr. }
-      shapeBad := 'reflected call to ' + clsName + '.' + name + ' is refused: its '
+      shapeBad := 'reflected call to ' + PyHostClsName(cls) + '.' + name + ' is refused: its '
                 + 'parameter shape is not one this bridge can pass (arity '
                 + pystr_of(Int64(n)) + '), kinds:';
       if pk <> nil then
@@ -1663,7 +1763,7 @@ begin
           else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
         end;
       else
-        raise TypeError.Create('reflected call to ' + clsName + '.' + name
+        raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
                 + ' is refused: this bridge has no thunk for a mixed shape of '
                 + pystr_of(Int64(mc)) + ' integer-class and ' + pystr_of(Int64(kc))
                 + ' double parameters');
@@ -1767,6 +1867,9 @@ begin
   if n >= 3 then a2 := args.at(2);
   if n >= 4 then a3 := args.at(3);
   if n >= 5 then a4 := args.at(4);
+  if n >= 6 then a5 := args.at(5);
+  if n >= 7 then a6 := args.at(6);
+  if n >= 8 then a7 := args.at(7);
   { A host method (push/define_word/…) expects 64-bit cells: coerce any bignum
     arg back to Int64 so a promo never leaks onto the Forth stack. The double-cell
     words mask to 64 bits before push; this is the defensive belt. }
@@ -1775,6 +1878,9 @@ begin
   if IsPromoV(a2) then a2 := pyvar_of_int(PyToI64(a2));
   if IsPromoV(a3) then a3 := pyvar_of_int(PyToI64(a3));
   if IsPromoV(a4) then a4 := pyvar_of_int(PyToI64(a4));
+  if IsPromoV(a5) then a5 := pyvar_of_int(PyToI64(a5));
+  if IsPromoV(a6) then a6 := pyvar_of_int(PyToI64(a6));
+  if IsPromoV(a7) then a7 := pyvar_of_int(PyToI64(a7));
   code := mi^.Code;
 
   { Variant return }
@@ -1787,8 +1893,11 @@ begin
       3: begin vf3 := TVFn3(code); res := vf3(vmobj, a0, a1, a2); end;
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
+      6: begin vf6 := TVFn6(code); res := vf6(vmobj, a0, a1, a2, a3, a4, a5); end;
+      7: begin vf7 := TVFn7(code); res := vf7(vmobj, a0, a1, a2, a3, a4, a5, a6); end;
+      8: begin vf8 := TVFn8(code); res := vf8(vmobj, a0, a1, a2, a3, a4, a5, a6, a7); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1805,8 +1914,11 @@ begin
       3: begin vp3 := TVPr3(code); vp3(vmobj, a0, a1, a2); end;
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
+      6: begin vp6 := TVPr6(code); vp6(vmobj, a0, a1, a2, a3, a4, a5); end;
+      7: begin vp7 := TVPr7(code); vp7(vmobj, a0, a1, a2, a3, a4, a5, a6); end;
+      8: begin vp8 := TVPr8(code); vp8(vmobj, a0, a1, a2, a3, a4, a5, a6, a7); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1825,7 +1937,7 @@ begin
       4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
       5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1849,7 +1961,7 @@ begin
       4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
       5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1874,7 +1986,7 @@ begin
       4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
       5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1895,7 +2007,7 @@ begin
       4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
       5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+      raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
               + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
               + 'bridge has thunks for');
     end;
@@ -1904,7 +2016,7 @@ begin
     Exit;
   end;
 
-  raise TypeError.Create('reflected call to ' + clsName + '.' + name
+  raise TypeError.Create('reflected call to ' + PyHostClsName(cls) + '.' + name
           + ' is refused: this bridge cannot box a return value of kind '
           + pystr_of(Int64(rk)));
 end;
@@ -1927,7 +2039,7 @@ var
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
-  p := GetFieldPtr(obj, cls, name, kind);
+  p := PyFieldPtrCached(obj, cls, name, kind);
   if p = nil then
   begin
     { A @property compiles to a METHOD, so an attribute read that misses the
@@ -1999,7 +2111,7 @@ var
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
-  p := GetFieldPtr(obj, cls, name, kind);
+  p := PyFieldPtrCached(obj, cls, name, kind);
   if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
     1: PLongInt(p)^ := pyvar_to_int(val);
@@ -6550,10 +6662,147 @@ end;
 { The ladder, kept as wrappers over the list form above: they are a public
   interface, and nothing establishes that no program calls them. Each owns the
   list it builds. }
+{ The COMMON dynamic call, made directly. PyDynMethN used to build a TPyList
+  of the arguments (an allocation, a growth, a retain per argument), hand it to
+  PyDynMethL, which looked the method up, and on to PyHostCall, which looked it
+  up AGAIN, copied every argument into a local Variant (another retain), called,
+  and released the lot. For the shape almost every NilPy method has -- found on
+  the receiver's class, called at exactly its arity, every parameter a Variant,
+  returning a Variant, nothing or a Double -- none of that does anything: the
+  caller's own `const` Variants are what a statically typed call would pass, by
+  address, and the thunk is the same one PyHostCall picks. Measured at 18% of
+  lekkerzeilen's frame. Anything else answers False and takes the full path
+  unchanged: keywords, defaults to fill, typed parameters, a promo-int argument
+  (PyHostCall narrows those), the other return kinds, a callable field, a
+  missing method and every error message. }
+function PyDynMethFast(const recv: Variant; const name: AnsiString; nargs: Integer;
+                       const a0, a1, a2, a3: Variant; var res: Variant): Boolean;
+var obj: Pointer; cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
+    i, n: Integer; code: Pointer; sig: Pointer; ap: array[0..3] of Pointer;
+    vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4;
+    vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
+    df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4;
+begin
+  Result := False;
+  if PPyRec(@recv)^.VType <> 7 then Exit;
+  obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
+  if obj = nil then Exit;
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then Exit;
+  mi := PyFindMethCI(cls, name);
+  if mi = nil then Exit;
+  n := Integer(mi^.Arity) - 1;
+  if (nargs > n) or (n > 4) then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk = nil then Exit;
+  for i := 1 to n do
+    if pk[i] <> TK_VARIANT then Exit;
+  if (nargs >= 1) and IsPromoV(a0) then Exit;
+  if (nargs >= 2) and IsPromoV(a1) then Exit;
+  if (nargs >= 3) and IsPromoV(a2) then Exit;
+  if (nargs >= 4) and IsPromoV(a3) then Exit;
+  { The arguments by ADDRESS: the caller's own for the ones it passed, the
+    signature's stored default for each trailing one it left out -- the same
+    value pysig_fill_defaults would append, and the same object CPython passes
+    (a mutable default is shared there too). `canopy.at(x, z)` against
+    `at(self, x, z, outside=None)` is the hot call this exists for. }
+  ap[0] := @a0; ap[1] := @a1; ap[2] := @a2; ap[3] := @a3;
+  if nargs < n then
+  begin
+    if (mi^.Flags and RTTI_METH_FLAG_HASSIG) = 0 then Exit;
+    sig := Pointer(NativeInt(pk[2 * (n + 1)]));
+    for i := nargs to n - 1 do
+    begin
+      ap[i] := pysig_default_slot(sig, i);
+      if ap[i] = nil then Exit;
+      if IsPromoV(PVariant(ap[i])^) then Exit;
+    end;
+  end;
+  rk := mi^.RetKind;
+  code := mi^.Code;
+  { All passed: the caller's own Variants, by address, as a static call
+    passes them. Only a call that left defaults out goes through ap[], whose
+    dereference the managed-arg lowering copies. }
+  if nargs = n then
+  begin
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin vf0 := TVFn0(code); res := vf0(obj); end;
+        1: begin vf1 := TVFn1(code); res := vf1(obj, a0); end;
+        2: begin vf2 := TVFn2(code); res := vf2(obj, a0, a1); end;
+        3: begin vf3 := TVFn3(code); res := vf3(obj, a0, a1, a2); end;
+        4: begin vf4 := TVFn4(code); res := vf4(obj, a0, a1, a2, a3); end;
+      end;
+    end
+    else if rk = 0 then
+    begin
+      case n of
+        0: begin vp0 := TVPr0(code); vp0(obj); end;
+        1: begin vp1 := TVPr1(code); vp1(obj, a0); end;
+        2: begin vp2 := TVPr2(code); vp2(obj, a0, a1); end;
+        3: begin vp3 := TVPr3(code); vp3(obj, a0, a1, a2); end;
+        4: begin vp4 := TVPr4(code); vp4(obj, a0, a1, a2, a3); end;
+      end;
+      res := MakeNone;
+    end
+    else if rk = TK_DOUBLE then
+    begin
+      case n of
+        0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
+        1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, a0)); end;
+        2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, a0, a1)); end;
+        3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, a0, a1, a2)); end;
+        4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, a0, a1, a2, a3)); end;
+      end;
+    end
+    else
+      Exit;
+  end
+  else
+  begin
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin vf0 := TVFn0(code); res := vf0(obj); end;
+        1: begin vf1 := TVFn1(code); res := vf1(obj, PVariant(ap[0])^); end;
+        2: begin vf2 := TVFn2(code); res := vf2(obj, PVariant(ap[0])^, PVariant(ap[1])^); end;
+        3: begin vf3 := TVFn3(code); res := vf3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^); end;
+        4: begin vf4 := TVFn4(code); res := vf4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^); end;
+      end;
+    end
+    else if rk = 0 then
+    begin
+      case n of
+        0: begin vp0 := TVPr0(code); vp0(obj); end;
+        1: begin vp1 := TVPr1(code); vp1(obj, PVariant(ap[0])^); end;
+        2: begin vp2 := TVPr2(code); vp2(obj, PVariant(ap[0])^, PVariant(ap[1])^); end;
+        3: begin vp3 := TVPr3(code); vp3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^); end;
+        4: begin vp4 := TVPr4(code); vp4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^); end;
+      end;
+      res := MakeNone;
+    end
+    else if rk = TK_DOUBLE then
+    begin
+      case n of
+        0: begin df0 := TDFn0(code); res := MakeFloat(df0(obj)); end;
+        1: begin df1 := TDFn1(code); res := MakeFloat(df1(obj, PVariant(ap[0])^)); end;
+        2: begin df2 := TDFn2(code); res := MakeFloat(df2(obj, PVariant(ap[0])^, PVariant(ap[1])^)); end;
+        3: begin df3 := TDFn3(code); res := MakeFloat(df3(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^)); end;
+        4: begin df4 := TDFn4(code); res := MakeFloat(df4(obj, PVariant(ap[0])^, PVariant(ap[1])^, PVariant(ap[2])^, PVariant(ap[3])^)); end;
+      end;
+    end
+    else
+      Exit;
+  end;
+  Result := True;
+end;
+
 function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
                     nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
 var args: TPyList;
 begin
+  if (kwspec = '') and PyDynMethFast(recv, name, nargs, a0, a1, a2, a3, Result) then Exit;
   args := TPyList.Create;
   if nargs > 0 then args.append(a0);
   if nargs > 1 then args.append(a1);
