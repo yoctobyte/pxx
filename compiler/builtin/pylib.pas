@@ -2354,6 +2354,7 @@ function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
 function pylist_getf(l: TPyList; i: Integer): Double;
 procedure pylist_reserve(l: TPyList; n: Integer);
+procedure pylist_pushf(l: TPyList; d: Double);
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
 { Python's `a or b` / `a and b` as VALUES: `or` yields a if truthy else b; `and`
@@ -6923,6 +6924,26 @@ begin
   l.FItems := newItems;
   l.FCap := n;
 end;
+
+{ A list DISPLAY element whose static type is float: `(a[0] / n, a[1] / n,
+  a[2] / n)` stores the double straight into the next slot. append_self took
+  it boxed -- the double converted into a Variant temporary, then the general
+  slot copy, then the temporary's clear -- on every element of every vector
+  TSP's math builds. A slot past FLen is zeroed by the growth paths, so it
+  holds nothing to release; a non-scalar there is cleared anyway, as the
+  general path would. }
+{$IMPLICITEXCEPTIONS OFF}
+procedure pylist_pushf(l: TPyList; d: Double);
+var p: PPyVarRec;
+begin
+  if l.FLen >= l.FCap then PyListGrow(l, l.FLen + 1);
+  p := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
+  if (p^.VType < 0) or (p^.VType > 4) then PyVarSlotClear(p);
+  p^.VType := 3;
+  PPyDouble(@p^.Payload)^ := d;
+  l.FLen := l.FLen + 1;
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { The one append body. append and append_self both call it rather than one
   calling the other: append_self hands Self back, so routing append through

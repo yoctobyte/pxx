@@ -26148,6 +26148,14 @@ begin
     callNode := AllocNode(AN_CALL);
     ASTIVal[callNode] := mpi;
     ASTTk[callNode] := Ord(tyClass);
+    { A float element is stored unboxed -- see pylib's pylist_pushf. A set
+      display still goes through add_self, which must compare. }
+    if (not dedup) and (ASTTk[CurASTNode] = Ord(tyDouble)) and
+       (FindProc('pylist_pushf') >= 0) then
+    begin
+      ASTIVal[callNode] := FindProc('pylist_pushf');
+      ASTTk[callNode] := Ord(tyUnknown);
+    end;
     ASTLeft[callNode] := selfArg;
     PyHoistStmt(callNode);
     Inc(nElem);

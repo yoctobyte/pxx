@@ -1,0 +1,29 @@
+# A display element whose static type is float is stored unboxed (pylist_pushf).
+# Mixed displays, tuples, sets, growth past the display and reuse after pop
+# must all read back exactly as CPython's do.
+def unit(a: tuple[float, ...]) -> tuple:
+    n = (a[0]*a[0] + a[1]*a[1] + a[2]*a[2]) ** 0.5
+    if n == 0.0:
+        return (0.0, 0.0, 0.0)
+    return (a[0] / n, a[1] / n, a[2] / n)
+
+x = 1.5
+v = [x, x * 2, 3, "s", None, x]
+print(v, len(v))
+v.append(7.25)
+print(v)
+print(unit((3.0, 0.0, 4.0)), unit((0.0, 0.0, 0.0)))
+t = (x, -x)
+print(t, type(t).__name__, t[1] + 1)
+s = {x, x, 2.5}
+print(len(s))
+w = [x, x]
+w.pop()
+w.append(9.0)
+w += [1.0, 2.0]
+print(w, sum(w))
+big = [x, x, x, x, x, x, x, x, x, x]
+big.append(0.5)
+print(len(big), big[-1], big[9])
+m = [1, 2.5, x / 3]
+print(m, [type(e).__name__ for e in m])
