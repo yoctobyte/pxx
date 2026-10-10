@@ -40393,7 +40393,11 @@ function PyTokIsOwnLocal(j: Integer; const nm: AnsiString): Boolean;
   bindings are theirs. }
 var k, depth, indTok, hdr, bodyEnd, pdepth: Integer;
 begin
-  Result := PyTokIsCompVar(j, nm) or PyTokIsParamDecl(j);
+  { `with open(p) as f`, `except E as f`, `import m as f`: an `as` target
+    binds the name. TSP's settings.py opened a file `as f`, and that boxed
+    every `def f` in the program. }
+  Result := PyTokIsCompVar(j, nm) or PyTokIsParamDecl(j) or
+            ((j > 0) and (Tokens[j - 1].Kind = tkIdent) and TokenCaseEqual(j - 1, 'as'));
   if Result then Exit;
   { the innermost enclosing block that is a def }
   k := j - 1;
@@ -40496,8 +40500,9 @@ begin
       Exit;
     end
     else if (Tokens[k].Kind = tkIdent) and PyTokenIsName(k, nm) and
-            PyTokIsStmtTarget(k, indTok + 1, bodyEnd) then
-      Result := True;
+            (PyTokIsStmtTarget(k, indTok + 1, bodyEnd) or
+             ((Tokens[k - 1].Kind = tkIdent) and TokenCaseEqual(k - 1, 'as'))) then
+      Result := True;   { ...or an `as` target: `with open(p) as f` }
     Inc(k);
   end;
 end;
@@ -40619,6 +40624,19 @@ begin
   PyDValBuilt := TokCount;
 end;
 
+{ PXXDBG=n.dvalhit -- which token made a def "used as a value", i.e. why it
+  took the boxed ABI. Four kinds of binding were found counted as uses one
+  at a time by hand-patching exactly this print in. }
+procedure PyDbgDValHit(const nm: AnsiString; j: Integer);
+var i: Integer;
+begin
+  if not PxxDbgEnabled('n.dvalhit') then Exit;
+  Write('PXXDBG n.dvalhit ', nm, ' line=', Tokens[j].Line, ' :');
+  for i := j - 6 to j + 4 do
+    if (i >= 0) and (i < TokCount) then Write(' ', GetTokenStr(i));
+  WriteLn;
+end;
+
 function PyDValLookup(const nm: AnsiString): Boolean;
 { Ascending token order, same as the scan -- so the FIRST qualifying position
   is the same one the scan would have found. For a Boolean result that does not
@@ -40631,9 +40649,9 @@ begin
     if PyTokenIsName(PyDValTok[m], nm) then
       case PyDValKind[m] of
         1: if not PyTokIsOwnLocal(PyDValTok[m], nm) then
-           begin Result := True; Exit; end;
+           begin Result := True; PyDbgDValHit(nm, PyDValTok[m]); Exit; end;
         2: if PyDValDotQualifies(PyDValTok[m], nm) then
-           begin Result := True; Exit; end;
+           begin Result := True; PyDbgDValHit(nm, PyDValTok[m]); Exit; end;
       end;
 end;
 

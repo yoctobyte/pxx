@@ -77,3 +77,22 @@ def g2(v: float) -> float:
 print(sca(1.0, 2.0), g2(3.0))
 
 print(len([1, 2, 3]), len((4, 5)), len("ab"), len({"k": 1}))
+
+
+# `as` targets bind too: `with ... as fa`, `except ... as fa`, and the uses of
+# that local in the same body.
+def fa(v: float) -> float:
+    return v * 2.0
+
+
+def ga() -> str:
+    try:
+        with open("/nonexistent/x") as fa:
+            for line in fa:
+                return line
+            return fa.read()
+    except OSError as fa:
+        return type(fa).__name__
+
+
+print(fa(2.0), ga())
