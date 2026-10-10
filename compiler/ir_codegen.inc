@@ -6031,6 +6031,21 @@ begin
   EmitB($C3);                                     { ret }
 end;
 
+{ `cmp qword [rax], 6 / jb` over the blob call: a SCALAR
+  variant (tag below 6 -- empty, int, float, bool) has no payload to retain or
+  release, and that is the blobs' own first test. Taken at the call site it
+  costs 6 bytes and saves a call and a return on every scalar; NOT for the
+  clear blob, which zeroes the slot whatever the tag. Measured 2026-10-10: the
+  retain and release blobs were ~4.5% of That Space Program's STS-1 run. }
+procedure EmitVariantBlobCallUnlessScalar(blobAddr: Integer);
+var p: Integer;
+begin
+  EmitB($48); EmitB($83); EmitB($38); EmitB($06);   { cmp qword [rax], 6 }
+  EmitB($72); p := CodeLen; EmitB(0);               { jb past the call }
+  IREmitCodeCall(blobAddr);
+  PatchRel8(p);
+end;
+
 procedure EmitVariantClear;
 { rax = address of a 16-byte variant slot. Preserves rax; clobbers rcx and
   flags, exactly as the inline body did. }
@@ -6044,13 +6059,13 @@ procedure EmitVariantReleasePayload;
   overwrites them immediately. Preserves rax; clobbers rcx and flags.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
 begin
-  IREmitCodeCall(VariantRelPayloadBlobAddr);
+  EmitVariantBlobCallUnlessScalar(VariantRelPayloadBlobAddr);
 end;
 
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Preserves rax; clobbers rcx and flags. }
 begin
-  IREmitCodeCall(VariantRetainBlobAddr);
+  EmitVariantBlobCallUnlessScalar(VariantRetainBlobAddr);
 end;
 
 procedure EmitAnsiStrFromInlineStringTk(srcTk: TTypeKind);
