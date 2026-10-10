@@ -117,6 +117,20 @@ begin
     mandate on the others }
   CheckUlp(ArcSin(0.5), 0.5235987755982989, 2, 'asin-0.5');
   CheckUlp(ArcCos(0.5), 1.0471975511965979, 2, 'acos-0.5');
+  { one row per arm of the fdlibm asin/acos kernels: |x| < 0.5, 0.5..0.975,
+    above 0.975, and acos's negative half (pi - 2*(s+w)) }
+  CheckUlp(ArcSin(0.1), 0.1001674211615598, 2, 'asin-0.1');
+  CheckUlp(ArcCos(0.1), 1.4706289056333368, 2, 'acos-0.1');
+  CheckUlp(ArcSin(0.7), 0.775397496610753, 2, 'asin-0.7');
+  CheckUlp(ArcCos(0.7), 0.7953988301841436, 2, 'acos-0.7');
+  CheckUlp(ArcSin(0.99), 1.4292568534704693, 2, 'asin-0.99');
+  CheckUlp(ArcCos(0.99), 0.1415394733244273, 2, 'acos-0.99');
+  CheckUlp(ArcSin(-0.7), -0.775397496610753, 2, 'asin--0.7');
+  CheckUlp(ArcCos(-0.7), 2.3461938234056494, 2, 'acos--0.7');
+  CheckUlp(ArcSin(-0.99), -1.4292568534704693, 2, 'asin--0.99');
+  CheckUlp(ArcCos(-0.99), 3.000053180265366, 2, 'acos--0.99');
+  CheckUlp(ArcSin(0.999999), 1.5693821131146521, 2, 'asin-0.999999');
+  CheckUlp(ArcCos(0.999999), 0.0014142136802445852, 2, 'acos-0.999999');
   CheckUlp(ArcTan(2.0), 1.1071487177940904, 2, 'atan-2');
   CheckUlp(ArcTan2(0.5, 1.0), 0.4636476090008061, 2, 'atan2');
   CheckUlp(Sqrt(2.0), 1.4142135623730951, 0, 'sqrt-2-exact');

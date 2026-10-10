@@ -1765,6 +1765,91 @@ begin
   if x < 0.0 then Result := -Result;
 end;
 
+{ The fdlibm asin/acos kernels (e_asin.c, e_acos.c), the default arm's answer
+  to the double-double identity below -- the role FastAtanD plays for ArcTan.
+  fdlibm states < 1 ulp; test/lib_math_fast_tolerance.pas asks for 2.
+
+  Measured 2026-10-10: That Space Program's STS-1 run spent 6.5% of its time
+  in ArcSin/ArcCos through DdAtan (geodetic latitude, attitude slews). The
+  exact arm stays under -dPXX_FLOAT_EXACT.
+
+  R(t) = p(t)/q(t) is the rational approximation of (asin(sqrt t) - sqrt t) /
+  (t sqrt t) shared by both. Negative coefficients are written as negated
+  positives, as in FastAtanD. }
+function FastAsAcR(t: Double): Double;
+var p, q: Double;
+begin
+  p := t * (DdBits($3FC5555555555555) + t * (-DdBits($3FD4D61203EB6F7D) +
+       t * (DdBits($3FC9C1550E884455) + t * (-DdBits($3FA48228B5688F3B) +
+       t * (DdBits($3F49EFE07501B288) + t * DdBits($3F023DE10DFDF709))))));
+  q := 1.0 + t * (-DdBits($40033A271C8A2D4B) + t * (DdBits($40002AE59C598AC8) +
+       t * (-DdBits($3FE6066C1B8D0159) + t * DdBits($3FB3B8C5B12E9282))));
+  Result := p / q;
+end;
+
+{ the high 32 bits kept, the low 32 zeroed: fdlibm's SET_LOW_WORD(w, 0), which
+  makes w*w exact so the correction c below is too }
+function HiWordOnly(x: Double): Double;
+var b: Int64;
+begin
+  b := PSqrtInt64(@x)^ and not Int64($FFFFFFFF);
+  Result := DdBits(b);
+end;
+
+{ 0 < x < 1 }
+function FastAsinD(x: Double): Double;
+var t, w, s, c, r, p, q, pio2hi, pio2lo, pio4hi: Double;
+begin
+  pio2hi := DdBits($3FF921FB54442D18);
+  pio2lo := DdBits($3C91A62633145C07);
+  pio4hi := DdBits($3FE921FB54442D18);
+  if x < 0.5 then
+  begin
+    if x < 7.450580596923828e-09 then begin Result := x; Exit; end;  { 2^-27 }
+    Result := x + x * FastAsAcR(x * x);
+    Exit;
+  end;
+  t := (1.0 - x) * 0.5;
+  r := FastAsAcR(t);
+  s := Sqrt(t);
+  if PSqrtInt64(@x)^ >= $3FEF333300000000 then          { x >= ~0.975 }
+    Result := pio2hi - (2.0 * (s + s * r) - pio2lo)
+  else
+  begin
+    w := HiWordOnly(s);
+    c := (t - w * w) / (s + w);
+    p := 2.0 * s * r - (pio2lo - 2.0 * c);
+    q := pio4hi - 2.0 * w;
+    Result := pio4hi - (p - q);
+  end;
+end;
+
+{ -1 < x < 1, x <> 0 }
+function FastAcosD(x: Double): Double;
+var z, s, w, df, c, pio2hi, pio2lo: Double;
+begin
+  pio2hi := DdBits($3FF921FB54442D18);
+  pio2lo := DdBits($3C91A62633145C07);
+  if Abs(x) < 0.5 then
+    Result := pio2hi - (x - (pio2lo - x * FastAsAcR(x * x)))
+  else if x < 0.0 then
+  begin
+    z := (1.0 + x) * 0.5;
+    s := Sqrt(z);
+    w := FastAsAcR(z) * s - pio2lo;
+    Result := DdBits($400921FB54442D18) - 2.0 * (s + w);
+  end
+  else
+  begin
+    z := (1.0 - x) * 0.5;
+    s := Sqrt(z);
+    df := HiWordOnly(s);
+    c := (z - df * df) / (s + df);
+    w := FastAsAcR(z) * s + c;
+    Result := 2.0 * (df + w);
+  end;
+end;
+
 { asin/acos through the SAME identity as before — asin(x) = atan(x/sqrt(1-x^2))
   — but evaluated in double-double, which is the whole difference. The old
   plain-double form lost bits twice, in `1 - x*x` and again in the division,
@@ -1793,6 +1878,7 @@ begin
     Exit;
   end;
   if x = 0.0 then begin Result := x; Exit; end;                    { keeps -0 }
+{$ifdef PXX_FLOAT_EXACT}
   if ax <= 0.5 then
     p := DdAddD(DdMulD(Dd2Prod(ax, ax), -1.0), 1.0)                { 1 - x^2 }
   else
@@ -1801,6 +1887,9 @@ begin
   t.Hi := ax; t.Lo := 0.0;
   w := DdAtan(DdDiv(t, sq));
   Result := w.Hi + w.Lo;
+{$else}
+  Result := FastAsinD(ax);
+{$endif}
   if x < 0.0 then Result := -Result;
 end;
 
@@ -1813,6 +1902,7 @@ begin
   if x = 1.0 then begin Result := 0.0; Exit; end;
   if x = -1.0 then begin w := DdPi; Result := w.Hi + w.Lo; Exit; end;
   if x = 0.0 then begin w := DdPio2; Result := w.Hi + w.Lo; Exit; end;
+{$ifdef PXX_FLOAT_EXACT}
   if ax <= 0.5 then
     p := DdAddD(DdMulD(Dd2Prod(ax, ax), -1.0), 1.0)
   else
@@ -1821,6 +1911,9 @@ begin
   w := DdAtan(DdDiv(sq, Dd2Sum(ax, 0.0)));
   if x < 0.0 then w := DdAdd(DdPi, DdMulD(w, -1.0));
   Result := w.Hi + w.Lo;
+{$else}
+  Result := FastAcosD(x);
+{$endif}
 end;
 
 { True for a NEGATIVE-signed double, INCLUDING -0.0 — which `x < 0.0` is not,
