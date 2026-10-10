@@ -1,0 +1,31 @@
+# bytes.translate by raw pointer, bytes.join by block copies, and the array
+# shim zero-filling new elements in one block. Values, kinds and the
+# ValueError on a bad table must read as before.
+tbl = bytes((i * 7 + 3) & 255 for i in range(256))
+src = bytes(range(256)) * 3 + b"xyz"
+t = src.translate(tbl)
+print(len(t), t[:8], t[-3:], sum(t))
+print(b"hello".translate(None), bytearray(b"ab").translate(tbl), type(bytearray(b"ab").translate(tbl)).__name__)
+print(b"".translate(tbl), b", ".join([b"a", b"bc", b"", b"def"]), b"".join([b"x", b"y"]), b"-".join([]))
+print(bytearray(b"::").join([b"1", bytearray(b"2")]), b"ab".join([b"q"]))
+try:
+    b"x".translate(b"short")
+except ValueError as e:
+    print("ValueError")
+from array import array
+a = array("f")
+a.frombytes(bytes(range(8)))
+print(len(a), a.tobytes())
+b = array("h", [1, -2, 3])
+b.frombytes(bytes(6))
+b.frombytes(b"\x05\x00")
+print(len(b), b[0], b[3], b[-1], list(b))
+c = array("d", bytes(16))
+print(list(c))
+d = array("B", b"\x01\x02")
+d.frombytes(b"\x03")
+print(list(d), d.tobytes())
+e = array("i")
+for k in range(50):
+    e.frombytes(bytes([k, 0, 0, 0]))
+print(len(e), e[49], sum(list(e)))

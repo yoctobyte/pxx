@@ -208,7 +208,7 @@ begin
 end;
 
 procedure array_.SetCount(n: Integer);
-var need, k: Integer; p: PA_U8; nd: Pointer;
+var need: Integer; nd: Pointer;
 begin
   if n < 0 then n := 0;
   need := n * itemsize;
@@ -226,13 +226,11 @@ begin
     end;
     FData := nd;
   end;
-  { New elements are ZERO, as CPython's are when a buffer is sized from bytes. }
+  { New elements are ZERO, as CPython's are when a buffer is sized from bytes
+    -- one block fill (a byte loop here was most of loading a terrain grid,
+    whose bytes frombytes then copies straight over) }
   if n > FLen then
-    for k := FLen * itemsize to n * itemsize - 1 do
-    begin
-      p := PA_U8(NativeInt(FData) + k);
-      p^ := 0;
-    end;
+    FillChar(PA_U8(NativeInt(FData) + FLen * itemsize)^, (n - FLen) * itemsize, 0);
   FLen := n;
 end;
 

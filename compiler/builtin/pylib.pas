@@ -23793,13 +23793,22 @@ begin
   end;
   total := total + FLen * (parts.count - 1);
   Result := PyBytesLike(Self, total);
+  { block copies into the buffer sized above: the separator and each part
+    were copied one checked byte at a time (write_png joins its chunks) }
   w := 0;
   for i := 0 to parts.count - 1 do
   begin
-    if i > 0 then
-      for k := 0 to FLen - 1 do begin PyBytesSet(Result, w, at(k)); Inc(w); end;
+    if (i > 0) and (FLen > 0) then
+    begin
+      Move(FData^, PByte(NativeInt(Result.FData) + w)^, FLen);
+      w := w + FLen;
+    end;
     part := TPyBytes(TObject(pyvarobj(parts.at(i))));
-    for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
+    if part.FLen > 0 then
+    begin
+      Move(part.FData^, PByte(NativeInt(Result.FData) + w)^, part.FLen);
+      w := w + part.FLen;
+    end;
   end;
 end;
 
@@ -23814,20 +23823,27 @@ begin
 end;
 
 function TPyBytes.translate(table: TPyBytes): TPyBytes;
-var i: Integer;
+var i: Integer; src, dst, tb: PByte;
 begin
   { CPython accepts None for "no mapping" (the delete-only form); a table of
     any length other than 256 is a ValueError. }
   if table = nil then
   begin
     Result := PyBytesLike(Self, FLen);
-    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
+    if FLen > 0 then Move(FData^, Result.FData^, FLen);
     Exit;
   end;
   if table.FLen <> 256 then
     raise ValueError.Create('translation table must be 256 characters long');
   Result := PyBytesLike(Self, FLen);
-  for i := 0 to FLen - 1 do PyBytesSet(Result, i, table.at(at(i)));
+  { by raw pointer: every index is in range by construction (a byte indexes
+    a 256-entry table), and at()/PyBytesSet checked each one per byte --
+    lekkerzeilen's _cover_pixels translates whole images }
+  src := PByte(FData);
+  dst := PByte(Result.FData);
+  tb := PByte(table.FData);
+  for i := 0 to FLen - 1 do
+    PByte(NativeInt(dst) + i)^ := PByte(NativeInt(tb) + PByte(NativeInt(src) + i)^)^;
 end;
 
 { The is* predicates are all FALSE on an empty bytes in CPython — "at least one

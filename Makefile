@@ -6315,6 +6315,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/byfill26 | diff -u test/test_nilpy_bytes_are_zeroed_and_terminated_by_a_block_fill.expected -
 	./$(COMPILER) test/test_nilpy_bytearray_grows_geometrically_and_copies_in_blocks.npy $(TESTTMP)/bygrow26
 	$(TESTTMP)/bygrow26 | diff -u test/test_nilpy_bytearray_grows_geometrically_and_copies_in_blocks.expected -
+	./$(COMPILER) test/test_nilpy_bytes_translate_join_and_array_frombytes_in_blocks.npy $(TESTTMP)/bytrj26
+	$(TESTTMP)/bytrj26 | diff -u test/test_nilpy_bytes_translate_join_and_array_frombytes_in_blocks.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

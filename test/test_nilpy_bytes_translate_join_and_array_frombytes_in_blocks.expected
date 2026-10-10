@@ -1,0 +1,10 @@
+771 b'\x03\n\x11\x18\x1f&-4' b'KRY' 98166
+b'hello' bytearray(b'\xaa\xb1') bytearray
+b'' b'a, bc, , def' b'xy' b''
+bytearray(b'1::2') b'q'
+ValueError
+2 b'\x00\x01\x02\x03\x04\x05\x06\x07'
+7 1 0 5 [1, -2, 3, 0, 0, 0, 5]
+[0.0, 0.0]
+[1, 2, 3] b'\x01\x02\x03'
+50 49 1225
