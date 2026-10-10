@@ -1,0 +1,15 @@
+# The attribute cache accepts an immortal literal name by its address and
+# compares the bytes otherwise. A literal, a built name and a joined name
+# for the same attribute must find the same thing; absent ones stay absent.
+class A:
+    def __init__(self): self.alpha = 1; self.beta = 2
+    def go(self): return "go"
+    def __getitem__(self, k): return k * 2
+def dyn(o, nm): return getattr(o, nm)
+objs = [A(), A()]
+for o in objs:
+    print(dyn(o, "alpha"), dyn(o, "al" + "pha"), dyn(o, "beta"), getattr(o, "go")(), o[3])
+    nm = "".join(["b", "eta"])
+    print(getattr(o, nm), hasattr(o, "gamma"), hasattr(o, "ga" + "mma"))
+def v(x): return x[5]
+print(v(objs[0]), v([0, 1, 2, 3, 4, 5]))

@@ -5458,7 +5458,8 @@ end;
 const PY_ATTRLK_SLOTS = 8192;
       PY_ATTRLK_PROBE = 4;   { slots tried from the hashed one, on lookup and fill }
 type PPyAttrLkRec = ^TPyAttrLkRec;
-     TPyAttrLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer; end;
+     TPyAttrLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer;
+                           NameH: Pointer; end;
 var PyAttrLkSlot: array[0..PY_ATTRLK_SLOTS - 1] of PPyAttrLkRec;
 
 function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
@@ -5492,6 +5493,22 @@ begin
   Result := NativeInt(h and (PY_ATTRLK_SLOTS - 1));
 end;
 
+{ The name's own handle when it is an IMMORTAL pooled literal, else nil.
+  A literal's block is static -- it never moves and is never freed -- so the
+  same handle is the same name forever, and PyAttrLkFind can accept it on
+  the address alone instead of comparing the bytes: nearly every dynamic
+  lookup (`canopy.contains(...)`, a `__getitem__` dunder) passes a literal.
+  The refcount floor (builtinheap's PXX_STATIC_RC_FLOOR, $40000000) is read
+  at HALF: an unguarded decrement can leave a static block just under the
+  floor, and no heap string ever holds half a billion references. }
+function PyAttrLkStaticH(const name: AnsiString): Pointer;
+begin
+  Result := nil;
+  if Pointer(name) = nil then Exit;
+  if PInt64(NativeInt(Pointer(name)) - 16)^ >= $20000000 then
+    Result := Pointer(name);
+end;
+
 procedure PyAttrLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt;
                       const name: AnsiString);
 var r: PPyAttrLkRec; n: NativeInt; np: Pointer;
@@ -5506,6 +5523,7 @@ begin
   r^.Hit := hit;
   r^.Kind := kind;   { a field and a method hash into the same slots }
   r^.NameP := np;
+  r^.NameH := PyAttrLkStaticH(name);
   PyAttrLkSlot[idx] := r;
 end;
 
@@ -5528,10 +5546,20 @@ begin
       free := (idx + k) and (PY_ATTRLK_SLOTS - 1);
       Exit;              { slots fill in probe order, so nothing lies past a gap }
     end;
-    if (r^.Cls = cls) and (r^.Kind = kind) and PyNameEqAt(r^.NameP, name, ci) then
+    if (r^.Cls = cls) and (r^.Kind = kind) then
     begin
-      Result := r;
-      Exit;
+      { the same immortal literal: no byte compare (see PyAttrLkStaticH) }
+      if (r^.NameH <> nil) and (r^.NameH = Pointer(name)) then
+      begin
+        Result := r;
+        Exit;
+      end;
+      if PyNameEqAt(r^.NameP, name, ci) then
+      begin
+        if r^.NameH = nil then r^.NameH := PyAttrLkStaticH(name);
+        Result := r;
+        Exit;
+      end;
     end;
   end;
 end;
