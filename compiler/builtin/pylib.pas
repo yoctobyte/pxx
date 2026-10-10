@@ -14480,7 +14480,8 @@ procedure PyExDecOfMant(mant: Int64; exp2: Integer;
                       var ds: AnsiString; var decExp: Integer);
 var
   buf: PyTExDecBuf;
-  n, i, k, fracDigits: Integer;
+  n, i, k, fracDigits, fracPad: Integer;
+  v: Int64;
   lp: AnsiString;
 begin
   n := 0;
@@ -14507,13 +14508,23 @@ begin
   end;
   while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
   { top limb unpadded (that is what drops the leading zeros), the rest padded
-    to the full nine so limb boundaries do not swallow interior zeros }
-  ds := StrInt(buf[n - 1], 0);
-  for i := n - 2 downto 0 do
+    to the full nine so limb boundaries do not swallow interior zeros.
+    Written into ONE preallocated string: the per-limb StrInt and `ds + lp`
+    concatenation was most of the cost of every float repr and every
+    correctly-rounded parse (TSP's json.dumps). }
+  lp := StrInt(buf[n - 1], 0);
+  SetLength(ds, Length(lp) + 9 * (n - 1));
+  for i := 1 to Length(lp) do ds[i] := lp[i];
+  k := Length(lp) + 9 * (n - 1);
+  for i := 0 to n - 2 do
   begin
-    lp := StrInt(buf[i], 0);
-    while Length(lp) < 9 do lp := '0' + lp;
-    ds := ds + lp;
+    v := buf[i];
+    for fracPad := 1 to 9 do
+    begin
+      ds[k] := Chr(Ord('0') + (v mod 10));
+      v := v div 10;
+      k := k - 1;
+    end;
   end;
   decExp := Length(ds) - 1 - fracDigits;
 end;
@@ -21146,7 +21157,7 @@ end;
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, decExp, de0, loE, hiE, altE: Integer;
+var sig, decExp, de0, loE, hiE, altE, loSig, hiSig, midSig: Integer;
     ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
     even, pow2: Boolean;
 
@@ -21172,6 +21183,22 @@ var sig, decExp, de0, loE, hiE, altE: Integer;
     end;
   end;
 
+  { the interval test of TryCand alone, for the digit-count search }
+  function InInterval(nsig: Integer): Boolean;
+  var digits: AnsiString; dexp, tail, cLo, cHi: Integer;
+  begin
+    digits := ds0;
+    dexp := de0;
+    PyExDecRound(digits, dexp, nsig);
+    tail := Length(digits);
+    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
+    digits := Copy(digits, 1, tail);
+    cLo := PyExDecCmp(digits, dexp, loS, loE);
+    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
+    InInterval := ((cLo > 0) or ((cLo = 0) and even)) and
+                  ((cHi < 0) or ((cHi = 0) and even));
+  end;
+
 begin
   Result := '';
   PyExDecSplit(av, mant, exp2);
@@ -21185,6 +21212,37 @@ begin
   else
     PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
   even := (mant and 1) = 0;
+  { BINARY SEARCH the digit count when the interval is symmetric (every value
+    but a power of two): a sig-digit decimal is also a (sig+1)-digit one, so
+    the nearest candidate only gets closer as sig grows, and once it is inside
+    a symmetric interval it stays inside. ~5 interval tests and ONE read-back
+    instead of up to 17 of each -- json.dumps of TSP's flight blobs spent 26%
+    of a run here. A failed read-back falls through to the linear walk. }
+  if not pow2 then
+  begin
+    loSig := 1;
+    hiSig := 17;
+    while loSig < hiSig do
+    begin
+      midSig := (loSig + hiSig) div 2;
+      if InInterval(midSig) then hiSig := midSig else loSig := midSig + 1;
+    end;
+    { NO read-back here: the interval test against the exact midpoints IS
+      the proof that the candidate parses to av (the parser rounds to nearest,
+      ties to even, which is what `even` encodes), and the read-back -- one
+      more exact expansion per candidate -- was half the cost of a repr. The
+      linear walk below keeps it, as the belt for the asymmetric case. }
+    if InInterval(loSig) then
+    begin
+      ds := ds0;
+      decExp := de0;
+      PyExDecRound(ds, decExp, loSig);
+      sig := Length(ds);
+      while (sig > 1) and (ds[sig] = '0') do sig := sig - 1;
+      Result := PyFloatLayout(Copy(ds, 1, sig), decExp);
+      Exit;
+    end;
+  end;
   for sig := 1 to 17 do
   begin
     ds := ds0;
