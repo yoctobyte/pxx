@@ -1,0 +1,17 @@
+# PyVarHashKey reads a str and a promotable int's digits raw, and raises an
+# unhashable key out of line, so no lookup builds a cleanup frame. Every key
+# kind must still land in its bucket, and K (__eq__ without __hash__) refuse.
+big = 10 ** 30
+d = {big: "big", 2 ** 64: "two64", "s": 1, 5: "five", (1, 2): "t", 2.0: "two"}
+print(d[10 ** 30], d[2 ** 64], d["s"], d[5], d[(1, 2)], d[2], 10 ** 30 in d, 10 ** 31 in d)
+print(hash(10 ** 30) == hash(10 ** 30), hash("ab") == hash("a" + "b"))
+s = set([big, 10 ** 30, 3])
+print(len(s))
+class K:
+    def __init__(self, v): self.v = v
+    def __eq__(self, o): return self.v == o.v
+try:
+    e = {K(1): 1}
+    print("no raise")
+except TypeError as ex:
+    print("TypeError")

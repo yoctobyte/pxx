@@ -1,0 +1,14 @@
+2.0794415416798357 3.0 3.0 3.0 64.0 3.5
+log0 ValueError
+log-1 ValueError
+sqrt-1 ValueError
+acos2 ValueError
+asin-1.5 ValueError
+log10_0 ValueError
+log2-3 ValueError
+exp1000 OverflowError
+zpow ZeroDivisionError
+div ZeroDivisionError
+sq 2.0
+sq 0.0
+sq ValueError

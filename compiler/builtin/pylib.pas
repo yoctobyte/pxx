@@ -8295,6 +8295,14 @@ begin
   Result := h;
 end;
 
+{ The unhashable-key raise of PyVarHashKey, out of line: its message is
+  built from managed strings, which gave every hash an implicit cleanup
+  frame (a setjmp per dict lookup). }
+procedure PyRaiseUnhashable(o: TObject);
+begin
+  raise TypeError.Create('unhashable type: ''' + o.ClassName + '''');
+end;
+
 function PyVarHashKey(p: PPyVarRec): NativeUInt;
 { Hash CONSISTENT WITH PyVarEq (equal keys MUST hash equal):
   - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
@@ -8308,7 +8316,7 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
     identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer; dv: Double;
+var h: NativeUInt; ol: TObject; k: Integer; dv: Double;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
@@ -8325,13 +8333,11 @@ begin
     else
       h := NativeUInt(p^.Payload);
   end
-  else if p^.VType = 8193 then
+  else if (p^.VType = 6) or (p^.VType = 8193) then
   begin
-    sp := PPyAnsiString(@p^.Payload);
-    h := PyStrBytesHash(PChar(sp^), Length(sp^));
-  end
-  else if p^.VType = 6 then
-  begin
+    { the promotable int's digits are a string handle exactly like a str's,
+      read raw here: going through the AnsiString gave this routine a
+      managed temporary and so a cleanup frame on every dict lookup }
     if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
     else h := PyStrBytesHash(PChar(p^.Payload),
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
@@ -8350,8 +8356,7 @@ begin
       its hash changes, so the entry silently vanishes from the dict. It is the
       trap CPython itself backed away from.
       bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry }
-    raise TypeError.Create('unhashable type: ''' +
-      TObject(Pointer(NativeInt(p^.Payload))).ClassName + '''')
+    PyRaiseUnhashable(TObject(Pointer(NativeInt(p^.Payload))))
   else if (p^.VType = 7) and (p^.Payload <> 0) and
           PyUserObjHash(TObject(Pointer(NativeInt(p^.Payload))), h) then
   begin
@@ -9187,6 +9192,33 @@ begin
   Result := Trunc(x);
 end;
 
+{ The raises of the math helpers, out of line. A `raise X.Create('...')`
+  holds its message as a managed string temporary, which gave the routine
+  around it an implicit cleanup frame -- a setjmp on EVERY call of
+  math.log, a domain check or `**`, to free a string only the error path
+  makes. Same reason as PyRaiseZeroDivF. }
+procedure PyRaiseMathDomain;
+begin
+  raise ValueError.Create('math domain error');
+end;
+
+procedure PyRaiseMathRange;
+begin
+  raise OverflowError.Create('math range error');
+end;
+
+procedure PyRaisePowComplex;
+begin
+  raise ValueError.Create(
+    'a negative number raised to a fractional power is complex, '
+    + 'which NilPy does not have');
+end;
+
+procedure PyRaisePowZeroNeg;
+begin
+  raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+end;
+
 { math.modf(x) -> (fractional, integral), BOTH floats and both carrying x's
   sign, which is CPython's contract — modf(-2.5) is (-0.5, -2.0), not
   (0.5, -2.0). A tuple, so it belongs here rather than in the RTL. }
@@ -9200,7 +9232,7 @@ end;
 function pymath_dom_nonneg(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
   {$endif}
   pymath_dom_nonneg := x;
 end;
@@ -9209,8 +9241,8 @@ end;
 function pymath_dom_pos(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if x < 0.0 then raise ValueError.Create('math domain error');
-  if x = 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
+  if x = 0.0 then PyRaiseMathDomain;
   {$endif}
   pymath_dom_pos := x;
 end;
@@ -9219,7 +9251,7 @@ end;
 function pymath_dom_unit(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if (x < -1.0) or (x > 1.0) then raise ValueError.Create('math domain error');
+  if (x < -1.0) or (x > 1.0) then PyRaiseMathDomain;
   {$endif}
   pymath_dom_unit := x;
 end;
@@ -9239,16 +9271,11 @@ end;
 function pypow_dom(b: Double; e: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if (b < 0.0) and (e - Int(e) <> 0.0) then
-    raise ValueError.Create(
-      'a negative number raised to a fractional power is complex, '
-      + 'which NilPy does not have');
+  if (b < 0.0) and (e - Int(e) <> 0.0) then PyRaisePowComplex;
   { `0.0 ** -1` is a ZeroDivisionError in CPython, not an infinity — and the
     RTL's Power answers IEEE's +inf. pypow_v raises it on the dynamic path, so
     without this line the two spellings of one expression disagreed. }
-  if (b = 0.0) and (e < 0.0) then
-    raise ZeroDivisionError.Create(
-      '0.0 cannot be raised to a negative power');
+  if (b = 0.0) and (e < 0.0) then PyRaisePowZeroNeg;
   {$endif}
   pypow_dom := b;
 end;
@@ -9260,9 +9287,9 @@ begin
   if b < 0.0 then
   begin
     t := e - Int(e);
-    if t <> 0.0 then raise ValueError.Create('math domain error');
+    if t <> 0.0 then PyRaiseMathDomain;
   end;
-  if (b = 0.0) and (e < 0.0) then raise ValueError.Create('math domain error');
+  if (b = 0.0) and (e < 0.0) then PyRaiseMathDomain;
   {$endif}
   t := 0.0;
   pymath_dom_pow := b;
@@ -9304,7 +9331,7 @@ end;
 function pymath_range(v: Double; a: Double; b: Double): Double;
 begin
   if pyfloat_range_overflowed(v, a, b) then
-    raise OverflowError.Create('math range error');
+    PyRaiseMathRange;
   pymath_range := v;
 end;
 
@@ -11942,7 +11969,7 @@ begin
   if x < 0.0 then begin Result := (x - x) / (x - x); Exit; end;
   {$else}
   if x <= 0.0 then
-    raise ValueError.Create('math domain error');
+    PyRaiseMathDomain;
   {$endif}
   e := 0; m := x;
   while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
@@ -13565,13 +13592,23 @@ end;
   on a math error (owner, 2026-09-24). `/` answers IEEE inf/nan; `//` and `%`
   on ints answer 0, as Pascal/C div and mod do there; float `//` is IEEE.
   feature-a-esp-math-errors-keep-the-device-running }
+{ The raise of pytruediv_f, out of line: its message is a managed string
+  temporary, and holding one gave every float `/` an implicit cleanup frame
+  -- a setjmp per division -- to free a string only the error path makes. }
+procedure PyRaiseZeroDivF;
+begin
+  raise ZeroDivisionError.Create('division by zero');
+end;
+
+{$IMPLICITEXCEPTIONS OFF}
 function pytruediv_f(a: Double; b: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if b = 0 then raise ZeroDivisionError.Create('division by zero');
+  if b = 0 then PyRaiseZeroDivF;
   {$endif}
   pytruediv_f := a / b;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 var q, r: Int64;
@@ -18459,7 +18496,7 @@ end;
 function PyCxSqrt(x: Double): Double;
 var e, i: Integer; m, r: Double;
 begin
-  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
   if x = 0.0 then begin Result := 0.0; Exit; end;
   { x = m * 4^e with m in [1,4), so sqrt(x) = sqrt(m) * 2^e and the scaling
     back is exact — powers of two never round. }

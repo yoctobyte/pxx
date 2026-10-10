@@ -1,0 +1,26 @@
+# The math helpers' raises moved out of line (PyRaiseMathDomain and friends)
+# so the hot routines carry no cleanup frame. Every error path must still
+# raise the same exception type, and the good paths answer as before.
+# Types only: CPython's messages changed across versions.
+import math
+print(math.log(8.0), math.sqrt(9.0), math.log10(1000.0), math.log2(8.0), (-8.0) ** 2, 7 / 2)
+def tryit(name, f, x):
+    try:
+        print(name, f(x))
+    except (ValueError, ZeroDivisionError, OverflowError) as e:
+        print(name, type(e).__name__)
+tryit("log0", lambda x: math.log(x), 0.0)
+tryit("log-1", lambda x: math.log(x), -1.0)
+tryit("sqrt-1", lambda x: math.sqrt(x), -1.0)
+tryit("acos2", lambda x: math.acos(x), 2.0)
+tryit("asin-1.5", lambda x: math.asin(x), -1.5)
+tryit("log10_0", lambda x: math.log10(x), 0.0)
+tryit("log2-3", lambda x: math.log2(x), -3.0)
+tryit("exp1000", lambda x: math.exp(x), 1000.0)
+def zpow(x: float) -> float: return (0.0 * x) ** -1.0
+def div(x: float) -> float: return 1.0 / (x - x)
+tryit("zpow", zpow, 2.0)
+tryit("div", div, 2.0)
+def sq(x: float) -> float: return math.sqrt(x)
+for v in (4.0, 0.0, -2.0):
+    tryit("sq", sq, v)

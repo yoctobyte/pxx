@@ -11047,6 +11047,20 @@ begin
   IRAppend(IR_JUMP_IF_FALSE, falseLabel, Result, -1, 0, 0);
 end;
 
+
+{ A divisor that is a nonzero numeric LITERAL -- `h / 1000.0`, `d / 2` -- can
+  never raise ZeroDivisionError, so NilPy's `/` there needs no pytruediv_f
+  call and lowers as the plain float division it then is. }
+function IRIsNonZeroNumLit(n: Integer): Boolean;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] = AN_FLOAT_LIT then
+    Result := (ASTIVal[n] and $7FFFFFFFFFFFFFFF) <> 0
+  else if ASTKind[n] = AN_INT_LIT then
+    Result := (ASTIVal[n] <> 0) and IsIntTypeKind(IntToTypeKind(ASTTk[n]));
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var foaSym, foaSave: Integer;
     left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
@@ -14667,6 +14681,7 @@ begin
         rvalue is a frame SLOT ADDRESS (project_promotable_int_stages123), so
         handing one to a Double parameter would pass the address as a number. }
       if PyNodeIsUser(node) and (Integer(ASTIVal[node]) = Ord(tkSlash)) and
+         (not IRIsNonZeroNumLit(ASTRight[node])) and
          TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTLeft[node]])) and
          TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTRight[node]])) and
          (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]]))) and
