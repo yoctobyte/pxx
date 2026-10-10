@@ -18675,6 +18675,36 @@ begin
   else Result := pyvar_cbuf(v);
 end;
 
+{ Which arm of PyObjFinalize a class takes: 0 a user class (or anything
+  else), 1 TPyList, 2 TPyDict, 3 TPyBytes, 4 TPyIter. The four `is` tests
+  each walked the whole parent chain, and a user object -- most of what
+  lekkerzeilen finalises -- failed all four: __pxxInheritsFrom was 2.6% of
+  its profile, 239 of 777 samples from here. Cached per class RTTI, the kind
+  packed into the low three bits of the RTTI address in ONE aligned word, so a
+  racing reader sees an old entry or a new one, never half of each; an entry
+  for another class, or an empty one, is a miss and the `is` chain answers. }
+var PyFinKindCache: array[0..255] of NativeUInt;
+
+function PyFinKind(o: TObject): Integer;
+var rt, e: NativeUInt; h: Integer;
+begin
+  rt := NativeUInt(GetInstanceRTTI(Pointer(o)));
+  h := Integer((rt shr 4) and 255);
+  e := PyFinKindCache[h];
+  if (rt <> 0) and ((rt and 7) = 0) and ((e and not NativeUInt(7)) = rt) then
+  begin
+    Result := Integer(e and 7);
+    Exit;
+  end;
+  if o is TPyList then Result := 1
+  else if o is TPyDict then Result := 2
+  else if o is TPyBytes then Result := 3
+  else if o is TPyIter then Result := 4
+  else Result := 0;
+  if (rt <> 0) and ((rt and 7) = 0) then
+    PyFinKindCache[h] := rt or NativeUInt(Result);
+end;
+
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
   k: Integer;
@@ -18683,6 +18713,7 @@ var
   by: TPyBytes;
   it: TPyIter;
   o: TObject;
+  fk: Integer;
 begin
   if objp = nil then Exit;
   if rawKind = 2 then
@@ -18707,7 +18738,8 @@ begin
     Exit;
   end;
   o := TObject(objp);
-  if o is TPyList then
+  fk := PyFinKind(o);
+  if fk = 1 then
   begin
     l := TPyList(objp);
     for k := 0 to l.FLen - 1 do
@@ -18716,7 +18748,7 @@ begin
     l.FItems := nil; l.FLen := 0; l.FCap := 0;
     Exit;
   end;
-  if o is TPyDict then
+  if fk = 2 then
   begin
     d := TPyDict(objp);
     for k := 0 to d.FLen - 1 do
@@ -18736,7 +18768,7 @@ begin
     d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
     Exit;
   end;
-  if o is TPyBytes then
+  if fk = 3 then
   begin
     by := TPyBytes(objp);
     if by.FViewOf <> nil then
@@ -18762,7 +18794,7 @@ begin
     (`for v in map(f, [1, 2, 3])` has nothing else holding that list). The
     stored callable is released too: a lifted lambda / bound pair is a
     refcounted block, and PXXObjRelease no-ops on a plain code address. }
-  if o is TPyIter then
+  if fk = 4 then
   begin
     it := TPyIter(objp);
     PXXObjRelease(Pointer(it.FSrc));
