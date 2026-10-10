@@ -40265,6 +40265,41 @@ begin
     Result := PyInUnpackTarget(k, st, bodyEnd);
 end;
 
+{ Is the name at token j BOUND here rather than read, in any scope -- a
+  dataclass field or class attribute (`density: float`, `y: float = 0.0`), an
+  assignment target or keyword-argument name (`nm = ...`, `nm += ...`,
+  `g(altitude=...)`),
+  or a lambda parameter (`lambda s: ...`)? Each was counted as a use of a def
+  of that name, and each boxed it: TSP's hot `density` and `altitude` took
+  the function-object ABI because a dataclass declared a field so named.
+  A dict KEY (`{nm: v}`) is a real use, so the annotation arm wants the
+  statement's first token. }
+function PyTokIsBindingSpot(j: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if j + 1 >= TokCount then Exit;
+  { `nm = ...`, and `nm += ...`, which also makes nm local to its def }
+  if Tokens[j + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq,
+                            tkModEq, tkTrueDivEq, tkAmpEq, tkPipeEq, tkXorEq,
+                            tkShlEq, tkShrEq, tkPowEq] then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (Tokens[j + 1].Kind = tkColon) and
+     ((j = 0) or (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  { a lambda's parameter list: back over `a, b,` to the keyword }
+  k := j - 1;
+  while (k >= 0) and ((Tokens[k].Kind = tkComma) or
+        ((Tokens[k].Kind = tkIdent) and not TokenCaseEqual(k, 'lambda'))) do Dec(k);
+  Result := (k >= 0) and (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'lambda');
+end;
+
 { Is token j a parameter NAME in a `def` header -- `def rk4_step(f, t, y)`?
   That binds the name; it is not a use of some def called f, and counting it
   as one made every `def f` in a program that imported TSP's integrate.py
@@ -40396,7 +40431,7 @@ begin
   { `with open(p) as f`, `except E as f`, `import m as f`: an `as` target
     binds the name. TSP's settings.py opened a file `as f`, and that boxed
     every `def f` in the program. }
-  Result := PyTokIsCompVar(j, nm) or PyTokIsParamDecl(j) or
+  Result := PyTokIsCompVar(j, nm) or PyTokIsParamDecl(j) or PyTokIsBindingSpot(j) or
             ((j > 0) and (Tokens[j - 1].Kind = tkIdent) and TokenCaseEqual(j - 1, 'as'));
   if Result then Exit;
   { the innermost enclosing block that is a def }
@@ -40501,8 +40536,13 @@ begin
     end
     else if (Tokens[k].Kind = tkIdent) and PyTokenIsName(k, nm) and
             (PyTokIsStmtTarget(k, indTok + 1, bodyEnd) or
-             ((Tokens[k - 1].Kind = tkIdent) and TokenCaseEqual(k - 1, 'as'))) then
-      Result := True;   { ...or an `as` target: `with open(p) as f` }
+             ((Tokens[k - 1].Kind = tkIdent) and TokenCaseEqual(k - 1, 'as')) or
+             ((Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+              PyTokIsBindingSpot(k))) then
+      Result := True;   { ...or an `as` target (`with open(p) as f`), or an
+                          annotated or augmented one at the statement's start
+                          (`y: float = 0.0`, `y += py`) -- never a keyword
+                          argument's name, which binds nothing here }
     Inc(k);
   end;
 end;

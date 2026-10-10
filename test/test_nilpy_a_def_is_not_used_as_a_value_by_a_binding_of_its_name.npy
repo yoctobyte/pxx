@@ -96,3 +96,36 @@ def ga() -> str:
 
 
 print(fa(2.0), ga())
+
+
+# A dataclass field, a keyword-argument name, a lambda parameter, and an
+# annotated or augmented local, each spelled like a def, bind that name.
+# `key=dens` is a genuine value use and still boxes.
+from dataclasses import dataclass
+
+
+def dens(h: float) -> float:
+    return 1.2 - h * 0.1
+
+
+def alt(x: float) -> float:
+    return x + 0.5
+
+
+@dataclass
+class Probe:
+    dens: float
+    alt: float = 0.0
+
+
+def survey(n: int) -> float:
+    yy: float = 0.0
+    for i in range(n):
+        yy += dens(float(i))
+    return yy
+
+
+p = Probe(dens=dens(1.0), alt=alt(2.0))
+show = lambda alt: alt * 2
+print(p.dens, p.alt, survey(3), show(4))
+print(sorted([3.0, 1.0, 2.0], key=dens))
