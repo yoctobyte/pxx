@@ -1,0 +1,20 @@
+# pyiter_has writes a range value and a generator value straight into the
+# box slot and pyiter_take writes None into its fresh result directly, so
+# neither builds a cleanup frame. Every kind must still iterate as before.
+def gen(n):
+    for i in range(n):
+        yield "g" + str(i)
+def walk(it):
+    return [x for x in it]
+r = range(3, 20, 4)
+print(walk(r), list(range(5)), sum(range(10 ** 6)), [i * 2 for i in range(-3, 3)])
+print(walk(gen(3)), list(gen(2)))
+it = iter(range(2))
+print(next(it), next(it), next(it, "done"))
+g = gen(2)
+print(next(g), next(g), next(g, None))
+tot = 0
+for a in range(3):
+    for b in [a, str(a), [a]]:
+        tot += len(str(b))
+print(tot, max(range(7)), sorted(range(3), reverse=True))

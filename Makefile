@@ -6309,6 +6309,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/matherr26 | diff -u test/test_nilpy_math_error_paths_raise_from_out_of_line_helpers.expected -
 	./$(COMPILER) test/test_nilpy_dict_keys_hash_the_same_without_a_cleanup_frame.npy $(TESTTMP)/hashkey26
 	$(TESTTMP)/hashkey26 | diff -u test/test_nilpy_dict_keys_hash_the_same_without_a_cleanup_frame.expected -
+	./$(COMPILER) test/test_nilpy_range_and_generator_iteration_without_a_cleanup_frame.npy $(TESTTMP)/iterfr26
+	$(TESTTMP)/iterfr26 | diff -u test/test_nilpy_range_and_generator_iteration_without_a_cleanup_frame.expected -
 	./$(COMPILER) test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.npy $(TESTTMP)/test_nilpy_clsctor26
 	$(TESTTMP)/test_nilpy_clsctor26 | diff -u test/test_nilpy_cls_call_in_a_classmethod_builds_the_class.expected -
 	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An

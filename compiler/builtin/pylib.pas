@@ -18040,8 +18040,12 @@ end;
 { The hot cursor kinds -- a list, a range, a generator -- with no managed
   temps of their own, so a step costs what its arm does. The arms are the
   same code as pyiter_has_slow's; everything else goes there. }
+{ NO IMPLICIT CLEANUP FRAME: every arm writes the box slot directly. The
+  range arm's `put(0, it.FStart)` boxed the Int64 into a Variant temporary,
+  which gave this routine a setjmp per step of every `for`. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyiter_has(it: TPyIter): Boolean;
-var genCur: Pointer; l: TPyList;
+var genCur: Pointer; l: TPyList; p: PPyVarRec;
 begin
   Result := False;
   if it = nil then Exit;
@@ -18064,7 +18068,10 @@ begin
   if it.FKind = PYITER_K_RANGE then
   begin
     if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, it.FStart);
+    p := PPyVarRec(it.FBox.FItems);
+    if (p^.VType < 0) or (p^.VType > 4) then PyVarSlotClear(p);
+    p^.VType := 2;                       { VT_INT64, as an Int64 boxes }
+    p^.Payload := it.FStart;
     it.FStart := it.FStart + it.FStep;
     Dec(it.FPos);
     it.FHas := True;
@@ -18078,7 +18085,7 @@ begin
     if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
     genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
     if genCur = nil then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, PPyVariant(genCur)^);
+    PyVarSlotSet(PPyVarRec(it.FBox.FItems), PPyVarRec(genCur));
     it.FHas := True;
     Result := True;
     Exit;
@@ -18086,10 +18093,15 @@ begin
   Result := pyiter_has_slow(it);
 end;
 
+{ Result is a fresh slot (see PyVarSlotInit), so None is written into it
+  directly: `Result := pynone` was a call and a Variant assignment, and the
+  cleanup frame that came with it. }
 function pyiter_take(it: TPyIter): Variant;
 var p, r: PPyVarRec;
 begin
-  Result := pynone;
+  r := PPyVarRec(@Result);
+  r^.VType := 0;
+  r^.Payload := 0;
   if it = nil then Exit;
   if not it.FHas then
     if not pyiter_has(it) then Exit;
@@ -18097,13 +18109,13 @@ begin
     and the box holds None until the next prefetch. Nothing else reads the
     box. Result holds None here, a scalar, so there is nothing to release. }
   p := PPyVarRec(it.FBox.FItems);
-  r := PPyVarRec(@Result);
   r^.VType := p^.VType;
   r^.Payload := p^.Payload;
   p^.VType := 0;
   p^.Payload := 0;
   it.FHas := False;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyiter_next(it: TPyIter): Variant;
 begin
