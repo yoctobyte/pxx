@@ -55937,7 +55937,13 @@ begin
       end
       else
       begin
-        ci := FindUClass(fieldName);
+        { `m.Counter.k`: the class m declares, not whichever `Counter` the flat
+          lookup ranks first -- a module the importer also imported that did
+          `from other import Counter` registers an alias row that outranks it. }
+        ci := -1;
+        if (PyQualNameTok = prevTok) and (PyQualNameUnit >= 0) then
+          ci := FindUClassInUnit(fieldName, PyQualNameUnit);
+        if ci < 0 then ci := FindUClass(fieldName);
         if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual MEMBER field=', fieldName, ' flat=', ci);
         { …case-SENSITIVELY under NilPy. FindUClass is Pascal-style
           case-insensitive, so a lowercase `f` matched `class F` and became a
@@ -62602,6 +62608,10 @@ begin
         Exit;
       end;
       qUnit := ConsumeUnitQualifier(name);
+      if qUnit >= 0 then
+      begin
+        PyQualNameTok := TokPos - 1; PyQualNameUnit := qUnit;
+      end;
       { A qualified member whose name Pascal RESERVES: `tk.END` is what every
         tkinter application writes, and a library cannot declare a constant
         called END, so it declares END_ and the name is mapped here. The same
