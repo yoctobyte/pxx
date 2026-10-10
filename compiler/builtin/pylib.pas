@@ -6298,12 +6298,36 @@ end;
   unrelated TObject descendants, so the first of them met going up IS the
   answer. A class with FLATTENED bases (NilPy MI) can reach one through a
   side branch the parent walk does not see; that rare shape asks `is`. }
+var PyBoxKindCache: array[0..255] of NativeUInt;
+
+function PyBoxKindWalk(o: TObject; cur: Pointer): Integer; forward;
+
 function PyBoxKind(o: TObject): Integer;
-var cur: Pointer;
+{ ...memoised per class the way PyFinKind is: an entry is the RTTI pointer
+  (8-aligned) or'ed with the answer, so one word store publishes it whole and
+  a stale or colliding entry simply misses. A user object -- the answer 0 --
+  walked its whole chain on every arithmetic dunder (1.2% of lekkerzeilen). }
+var cur, rt0: Pointer; e: NativeUInt; h: Integer;
 begin
   Result := 0;
   if o = nil then Exit;
   cur := PPointer(PtrUInt(PPointer(o)^) - 8)^;
+  rt0 := cur;
+  h := Integer((NativeUInt(rt0) shr 4) and 255);
+  e := PyBoxKindCache[h];
+  if (rt0 <> nil) and ((e and not NativeUInt(7)) = NativeUInt(rt0)) then
+  begin
+    Result := Integer(e and 7);
+    Exit;
+  end;
+  Result := PyBoxKindWalk(o, cur);
+  if (NativeUInt(rt0) and 7) = 0 then
+    PyBoxKindCache[h] := NativeUInt(rt0) or NativeUInt(Result);
+end;
+
+function PyBoxKindWalk(o: TObject; cur: Pointer): Integer;
+begin
+  Result := 0;
   while cur <> nil do
   begin
     if cur = Pointer(TPyList) then begin Result := 1; Exit; end;
