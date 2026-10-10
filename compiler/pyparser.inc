@@ -26027,6 +26027,7 @@ procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean);
   construction path skipped it (bug-nilpy-set-literal-does-not-deduplicate). }
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
     tmpSym, asgn, starExt: Integer;
+    resHint, nElem: Integer;   { pylist_reserve's count, patched after the loop }
 begin
   Expect(opener, '[');
   ci := FindUClass('TPyList');
@@ -26058,6 +26059,29 @@ begin
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
   PyNoteStmtTemp(tmpSym);
+  { Size the block for the display's elements up front -- see
+    pylist_reserve. The count is a placeholder until the loop below has seen
+    them all; a `*xs` element adds nothing to it, so it is a lower bound and
+    extend grows past it as usual. A one-element display stays on the
+    ordinary 8-slot growth: `path = [start]` is how an accumulator starts. }
+  resHint := -1;
+  nElem := 0;
+  if (CurTok.Kind <> closer) and (FindProc('pylist_reserve') >= 0) then
+  begin
+    resHint := AllocNode(AN_INT_LIT);
+    ASTIVal[resHint] := 0;
+    ASTTk[resHint] := Ord(tyInteger);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := resHint;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := argNode;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pylist_reserve');
+    ASTTk[callNode] := Ord(tyUnknown);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+  end;
   if dedup then
   begin
     mmi := FindUMeth(ci, 'add_self');
@@ -26122,8 +26146,10 @@ begin
     ASTTk[callNode] := Ord(tyClass);
     ASTLeft[callNode] := selfArg;
     PyHoistStmt(callNode);
+    Inc(nElem);
     if not Eat(tkComma) then break;
   end;
+  if (resHint >= 0) and (nElem >= 2) then ASTIVal[resHint] := nElem;
   Expect(closer, ']/}');
   { A parenthesised display is a TUPLE and a braced one is a SET; both are the
     same TPyList as a list here, so the only thing that can tell the three apart

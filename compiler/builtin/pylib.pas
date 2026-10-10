@@ -2353,6 +2353,7 @@ function pyaugpow_v(const a: Variant; const b: Variant): Variant;
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
 function pylist_getf(l: TPyList; i: Integer): Double;
+procedure pylist_reserve(l: TPyList; n: Integer);
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
 { Python's `a or b` / `a and b` as VALUES: `or` yields a if truthy else b; `and`
@@ -6752,6 +6753,22 @@ begin
   l.FCap := newCap;
 end;
 
+{ A list DISPLAY of n elements sizes its block once, exactly: `[x, y, z]`
+  was an 8-slot block (128 bytes allocated and zeroed) grown on the first
+  append, for a vector that holds three. The compiler emits this ahead of
+  the element appends; a later append past n grows as usual. }
+procedure pylist_reserve(l: TPyList; n: Integer);
+var newItems: Pointer;
+begin
+  if (l = nil) or (n <= l.FCap) then Exit;
+  GetMem(newItems, n * 16);
+  if l.FLen > 0 then Move(l.FItems^, newItems^, l.FLen * 16);
+  FillChar(PByte(NativeInt(newItems) + l.FLen * 16)^, (n - l.FLen) * 16, 0);
+  if l.FItems <> nil then FreeMem(l.FItems);
+  l.FItems := newItems;
+  l.FCap := n;
+end;
+
 { The one append body. append and append_self both call it rather than one
   calling the other: append_self hands Self back, so routing append through
   it made every `r.append(x)` read as an escape of r (ProcParamStays), and a
@@ -6760,7 +6777,7 @@ procedure PyListAppendRaw(l: TPyList; const v: Variant);
 var
   src, dst: PPyVarRec;
 begin
-  PyListGrow(l, l.FLen + 1);
+  if l.FLen >= l.FCap then PyListGrow(l, l.FLen + 1);
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
   PyVarSlotSet(dst, src);

@@ -234,6 +234,7 @@ AN_ARG Left rbVal
 AN_ARG Left rcSelf
 AN_ARG Left recv
 AN_ARG Left recvNode
+AN_ARG Left resHint
 AN_ARG Left rhs
 AN_ARG Left rhsNode
 AN_ARG Left right
@@ -278,6 +279,7 @@ AN_ARG Right a1
 AN_ARG Right a2
 AN_ARG Right a3
 AN_ARG Right aArg
+AN_ARG Right argNode
 AN_ARG Right argSeq
 AN_ARG Right argsHead
 AN_ARG Right asrtA1

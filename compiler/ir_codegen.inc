@@ -7961,6 +7961,47 @@ begin
   for k := 0 to ns - 1 do PatchRel8(slow[k]);
 end;
 
+{ TPyList.at(i) -- what `xs[i]` on a list-typed name lowers to -- inline at
+  the call: rdi = Self, esi = i, r10 = the Result slot. An in-range index to
+  a scalar element (tag <= 4) copies the 16 bytes exactly as the method's own
+  first arm does; a nil Self, an index needing PyListFix (negative or out of
+  range) or an element holding a reference calls the method. No class check:
+  `at` is static, so a subclass instance runs this same body anyway.
+  Returns the done-jump's rel8 position, or -1 when nothing was emitted. }
+function EmitListAtInline(procIdx: Integer): Integer;
+var ci, fLen, fItems: Integer; slow: array[0..3] of Integer; ns, k: Integer;
+begin
+  Result := -1;
+  if (procIdx < 0) or (Length(Procs[procIdx].Name) <> 10) or
+     (Procs[procIdx].Name <> 'TPyList.at') then Exit;
+  if (not ABIRetViaHiddenDestProc(procIdx)) or (Procs[procIdx].ParamCount <> 2) then Exit;
+  ci := FindUClass('TPyList');
+  if ci < 0 then Exit;
+  fLen := FindUField(ci, 'FLen');
+  fItems := FindUField(ci, 'FItems');
+  if (fLen < 0) or (fItems < 0) then Exit;
+  if (UFldOff_[fLen] < 0) or (UFldOff_[fLen] > 127) or
+     (UFldOff_[fItems] < 0) or (UFldOff_[fItems] > 127) then Exit;
+  ns := 0;
+  EmitB($48); EmitB($85); EmitB($FF);                          { test rdi, rdi }
+  EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jz slow }
+  EmitB($48); EmitB($63); EmitB($C6);                          { movsxd rax, esi }
+  EmitB($48); EmitB($63); EmitB($57); EmitB(Byte(UFldOff_[fLen]));   { movsxd rdx, dword [rdi+FLen] }
+  EmitB($48); EmitB($39); EmitB($D0);                          { cmp rax, rdx }
+  EmitB($73); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jae slow (negative too) }
+  EmitB($48); EmitB($C1); EmitB($E0); EmitB(4);                { shl rax, 4 }
+  EmitB($48); EmitB($03); EmitB($47); EmitB(Byte(UFldOff_[fItems])); { add rax, [rdi+FItems] }
+  EmitB($48); EmitB($83); EmitB($38); EmitB(4);                { cmp qword [rax], 4 }
+  EmitB($77); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { ja slow: element holds a reference }
+  EmitB($48); EmitB($8B); EmitB($10);                          { mov rdx, [rax] }
+  EmitB($49); EmitB($89); EmitB($12);                          { mov [r10], rdx }
+  EmitB($48); EmitB($8B); EmitB($50); EmitB($08);              { mov rdx, [rax+8] }
+  EmitB($49); EmitB($89); EmitB($52); EmitB($08);              { mov [r10+8], rdx }
+  EmitB($4C); EmitB($89); EmitB($D0);                          { mov rax, r10 }
+  EmitB($EB); Result := CodeLen; EmitB(0);                     { jmp done }
+  for k := 0 to ns - 1 do PatchRel8(slow[k]);
+end;
+
 { The four variant ORDERING helpers, float with float, inline: the SETcc
   second byte, negative when the operands are compared the other way round.
   Every form tests "bigger than" (seta / setae) with the larger side as the
@@ -11834,6 +11875,8 @@ begin
             if (Length(Procs[procIdx].Name) = 13) and (Procs[procIdx].Name = 'pyvar_getitem') and
                ABIRetViaHiddenDestProc(procIdx) and (Procs[procIdx].ParamCount = 2) then
               pVarFastDone := EmitVarGetItemInline;
+            if pVarFastDone < 0 then
+              pVarFastDone := EmitListAtInline(procIdx);
             pVarCmpOp := X64VarFloatCmpOp(procIdx);
             if pVarCmpOp <> 0 then
             begin

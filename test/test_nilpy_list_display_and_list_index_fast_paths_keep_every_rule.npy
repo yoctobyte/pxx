@@ -1,0 +1,45 @@
+# A list display of n >= 2 elements reserves its block once (pylist_reserve),
+# and x86-64 inlines TPyList.at's in-range scalar read at the call. Every
+# other shape -- growth past the display, star elements, sets, negative or
+# out-of-range index, reference elements -- must answer as before.
+def f(a, b):
+    v = [a, b, a + b]
+    v.append(9)
+    w = [a]
+    for i in range(20):
+        w.append(i)
+    t = (a, b)
+    s = {a, b, a}
+    z = [*v, 1, 2]
+    e = []
+    e.append(1)
+    return v, w, t, s, z, e, len(v), len(w), len(z)
+for k in range(3):
+    print(f(k, 2.5))
+print([[i, i * 2] for i in range(3)])
+class L(list):
+    pass
+
+def f(xs: list, i: int):
+    return xs[i]
+
+def g(xs: list):
+    t = 0.0
+    for i in range(len(xs)):
+        t += xs[i] if isinstance(xs[i], float) else 0.0
+    return t
+
+xs = [1, 2.5, "s", None, True, [1, 2], (3,), {"a": 1}, 7]
+for i in range(-len(xs), len(xs)):
+    print(i, f(xs, i))
+for i in (len(xs), -len(xs) - 1, 100):
+    try:
+        print(f(xs, i))
+    except IndexError as e:
+        print("IndexError", e)
+print(g([1.5, 2, 3.25]))
+ys: list = [0.5, 1.5]
+k = 0
+while k < 2:
+    print(ys[k], ys[-1 - k])
+    k += 1
