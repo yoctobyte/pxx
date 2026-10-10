@@ -2530,6 +2530,22 @@ begin
     Result := PyWiden(a, b);
 end;
 
+function PyWidenValue(a, b: TTypeKind): TTypeKind;
+{ PyWiden for a VALUE that is one operand OR the other -- a conditional
+  expression's arms, PyJoinInferTk. A promotable int against a float is the one
+  pair PyWiden refuses, because a double would drop an exact int past 2^53; a
+  variant loses nothing (VT_PROMO_INT64 carries the int), which is
+  PyWidenBinding's reasoning for a rebound name. TSP app.py
+  `timeline_bottom(sc) + 3 * sc if ... else m` was refused once arithmetic on a
+  float-annotated parameter started returning float. }
+begin
+  if (TypeIsPromoInt(a) and TypeIsFloat(b)) or
+     (TypeIsFloat(a) and TypeIsPromoInt(b)) then
+    Result := tyVariant
+  else
+    Result := PyWiden(a, b);
+end;
+
 procedure PyInitVariantLocals(scopeBase: Integer);
 var i: Integer;
 begin
@@ -4881,8 +4897,8 @@ begin
         (or forcing a string when EITHER arm was one) stringified the numeric
         arm, so `[0, 'x', 2]` came out as `['0', 'x', '2']` — a plausible wrong
         value. bug-nilpy-ternary-comprehension-element-stringified. }
-      ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]),
-                                 IntToTypeKind(ASTTk[elseNode])));
+      ASTTk[node] := Ord(PyWidenValue(IntToTypeKind(ASTTk[left]),
+                                      IntToTypeKind(ASTTk[elseNode])));
     left := node;
   end;
   CurASTNode := left;
@@ -5974,7 +5990,7 @@ begin
   end;
   if ta <> tb then
   begin
-    Result := PyWiden(ta, tb);
+    Result := PyWidenValue(ta, tb);
     ciOut := -1;
   end;
 end;

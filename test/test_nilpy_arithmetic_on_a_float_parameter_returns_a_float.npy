@@ -23,3 +23,13 @@ print(a(2.5), e(2.5), k(2.5, 1), m(5.0), p(3.0))
 print(f(2.5), g(3, 1.0), h(2.0))
 r = a(2.5)
 print(r + 1)
+# A conditional whose arms are that float and a PROMOTABLE int (`6 * f(w)`) is a
+# variant, not a refusal: each arm survives as itself (TSP app.py).
+def hs(w: int) -> int:
+    return 2 if w > 10 else 1
+def pick(w: int, x: float, flag: bool):
+    m = 6 * hs(w)
+    below = a(x) + 3 * x if flag else m
+    print(below, max(below, 3))
+pick(20, 2.5, True)
+pick(20, 2.5, False)
