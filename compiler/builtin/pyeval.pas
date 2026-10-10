@@ -1025,25 +1025,33 @@ end;
   cache is bounded (PY_LK_SLOTS records; a racing double fill leaks one) and
   an entry never changes under a reader. A hit is still VERIFIED by name
   against the descriptor it returns, so the slot index (which hashes the
-  name's ADDRESS, stable for a literal and arbitrary otherwise) only decides
-  where to look, never what is true. Misses (nil) are not cached. }
+  name's CONTENT -- see PyAttrLkIndex in pylib) only decides where to look,
+  never what is true. A method MISS is cached too, with the record's own
+  copy of the name to verify against (NameP); a field miss is not. }
 const PY_LK_SLOTS = 2048;
 type PPyLkRec = ^TPyLkRec;
-     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; end;
+     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer; end;
 var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
 
 function PyLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
-var h: NativeUInt;
 begin
-  h := (NativeUInt(cls) shr 3) * 31 + (NativeUInt(Pointer(name)) shr 3) + NativeUInt(kind) * 7;
-  h := h xor (h shr 11);
-  Result := NativeInt(h and (PY_LK_SLOTS - 1));
+  Result := PyAttrLkIndex(cls, name, kind) and (PY_LK_SLOTS - 1);
 end;
 
-procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt);
-var r: PPyLkRec;
+procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt;
+                  const name: AnsiString);
+var r: PPyLkRec; n: NativeInt; np: Pointer;
 begin
   if PyLkSlot[idx] <> nil then Exit;
+  np := nil;
+  if hit = nil then
+  begin
+    { a cached MISS verifies against its own copy of the name }
+    n := Length(name);
+    np := GetMem(8 + n);
+    PInt64(np)^ := n;
+    if n > 0 then Move(Pointer(name)^, PByte(NativeInt(np) + 8)^, n);
+  end;
   r := PPyLkRec(GetMem(SizeOf(TPyLkRec)));
   r^.Cls := cls;
   r^.Hit := hit;
@@ -1051,6 +1059,7 @@ begin
     slots, and a field descriptor read as a method's (or the reverse) is a
     different record layout, not a miss }
   r^.Kind := kind;
+  r^.NameP := np;
   PyLkSlot[idx] := r;
 end;
 
@@ -1061,14 +1070,20 @@ var idx: NativeInt; r: PPyLkRec;
 begin
   idx := PyLkIndex(cls, name, 0);
   r := PyLkSlot[idx];
-  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) and
-     PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) then
   begin
-    Result := PMethInfo(r^.Hit);
-    Exit;
+    if r^.Hit = nil then
+    begin
+      if PyNameEqAt(r^.NameP, name, True) then begin Result := nil; Exit; end;
+    end
+    else if PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+    begin
+      Result := PMethInfo(r^.Hit);
+      Exit;
+    end;
   end;
   Result := PyFindMethCISlow(cls, name);
-  if Result <> nil then PyLkPut(idx, cls, Result, 0);
+  PyLkPut(idx, cls, Result, 0, name);
 end;
 
 { GetFieldPtr through the same cache (kind 1). }
@@ -1080,12 +1095,12 @@ begin
   r := PyLkSlot[idx];
   fi := nil;
   if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 1) and
-     (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
+     (r^.Hit <> nil) and (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
     fi := PFieldInfo(r^.Hit)
   else
   begin
     fi := GetFieldInfoByName(cls, name);
-    if fi <> nil then PyLkPut(idx, cls, fi, 1);
+    if fi <> nil then PyLkPut(idx, cls, fi, 1, name);
   end;
   kind := 0;
   Result := nil;

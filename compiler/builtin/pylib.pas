@@ -3421,6 +3421,7 @@ function PyNarrowRet(v: Int64; rk: Integer): Int64;
 
 { An RTTI NamePtr compared in place, without copying the name (see the body). }
 function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
+function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
 
 implementation
 
@@ -5266,6 +5267,9 @@ type
   TPyPropSetS = function(recv: Pointer; const v: AnsiString): Variant;
   TPyPropSetB = function(recv: Pointer; v: Boolean): Variant;
 
+function PyFindPropAccessor(cls: PClassRTTI; const name: AnsiString;
+                            setter: Boolean): PMethInfo; forward;
+
 function PyPropertyGet(obj: Pointer; const name: AnsiString;
                        var found: Boolean): Variant;
 { The getter is CALLED, because a property has no storage of its own — its
@@ -5282,7 +5286,7 @@ begin
   found := False;
   Result := pynone;
   if obj = nil then Exit;
-  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_get_' + name);
+  mi := PyFindPropAccessor(GetInstanceRTTI(obj), name, False);
   if (mi = nil) or (mi^.Code = nil) then Exit;
   case mi^.RetKind of
     22: begin fv := TPyPropV(mi^.Code); Result := fv(obj); found := True; end;
@@ -5325,7 +5329,7 @@ var mi: PMethInfo; pk: PInt64; ignored: Variant;
 begin
   Result := False;
   if obj = nil then Exit;
-  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_set_' + name);
+  mi := PyFindPropAccessor(GetInstanceRTTI(obj), name, True);
   if (mi = nil) or (mi^.Code = nil) then Exit;
   { Arity counts Self, so a one-value setter is 2. Anything else is not the
     accessor shape this knows how to call -- decline rather than guess at a
@@ -5430,12 +5434,163 @@ begin
   PyEqAttrCI := True;
 end;
 
+{ A (class, name) -> descriptor cache for the two by-name walks below, which
+  a dynamic attribute read or method call makes on EVERY evaluation: in
+  lekkerzeilen PyNameEqAt under PyFindFieldCI and PyFindMethByName was ~1.7%
+  of a frame. Same construction as pyeval's PyLkSlot (pylib cannot use that
+  one, pyeval uses pylib): a slot is filled once, while empty, with an
+  immutable record published by one aligned store, so readers need no lock;
+  a hit is re-verified by name against the descriptor it returns, so the
+  slot index only decides where to look. A MISS is cached too (Hit = nil):
+  a dunder or `__prop_get_x` the class does not declare, and a field read
+  that falls through to a method, were the walks that repeated most. The
+  record keeps its own copy of the name, in the RTTI's length-prefixed
+  layout, so PyNameEqAt verifies a miss exactly as it does a hit. Safe
+  because a class's RTTI never changes after compilation. }
+const PY_ATTRLK_SLOTS = 8192;
+      PY_ATTRLK_PROBE = 4;   { slots tried from the hashed one, on lookup and fill }
+type PPyAttrLkRec = ^TPyAttrLkRec;
+     TPyAttrLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer; end;
+var PyAttrLkSlot: array[0..PY_ATTRLK_SLOTS - 1] of PPyAttrLkRec;
+
+function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
+{ Hashes the name's CONTENT, not its address: some callers build the name
+  per call (`'__prop_get_' + name`), and an address hash would fill a fresh
+  slot on every such call. O(1): the length and the first and last eight
+  bytes, case-folded with `or $20` so the case-insensitive field walk keys
+  "Foo" and "foo" alike (folding punctuation too only costs a collision). }
+var h, q1, q2: NativeUInt; n, i: Integer; p: PByte;
+begin
+  n := Length(name);
+  p := PByte(Pointer(name));
+  q1 := 0;
+  q2 := 0;
+  if n >= 8 then
+  begin
+    q1 := NativeUInt(PInt64(p)^);
+    q2 := NativeUInt(PInt64(@p[n - 8])^);
+  end
+  else
+    for i := 0 to n - 1 do
+      q1 := (q1 shl 8) or p[i];
+  q1 := q1 or NativeUInt($2020202020202020);
+  q2 := q2 or NativeUInt($2020202020202020);
+  h := (NativeUInt(cls) shr 3) * NativeUInt($9E3779B97F4A7C15);
+  h := h xor (q1 * NativeUInt($C2B2AE3D27D4EB4F));
+  h := h xor ((q2 xor NativeUInt(n) xor (NativeUInt(kind) shl 56)) * NativeUInt($165667B19E3779F9));
+  h := h xor (h shr 29);
+  h := h * NativeUInt($94D049BB133111EB);
+  h := h xor (h shr 32);
+  Result := NativeInt(h and (PY_ATTRLK_SLOTS - 1));
+end;
+
+procedure PyAttrLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt;
+                      const name: AnsiString);
+var r: PPyAttrLkRec; n: NativeInt; np: Pointer;
+begin
+  if PyAttrLkSlot[idx] <> nil then Exit;
+  n := Length(name);
+  np := GetMem(8 + n);
+  PInt64(np)^ := n;
+  if n > 0 then Move(Pointer(name)^, PByte(NativeInt(np) + 8)^, n);
+  r := PPyAttrLkRec(GetMem(SizeOf(TPyAttrLkRec)));
+  r^.Cls := cls;
+  r^.Hit := hit;
+  r^.Kind := kind;   { a field and a method hash into the same slots }
+  r^.NameP := np;
+  PyAttrLkSlot[idx] := r;
+end;
+
+{ The record for (cls, name, kind) among the PY_ATTRLK_PROBE slots from the
+  hashed one, or nil; `free` is the first EMPTY slot met on the way (-1 when
+  none), which is where a miss gets filled. The name is verified against the
+  record's own copy, case-folded for the field walk (ci). }
+function PyAttrLkFind(cls: Pointer; const name: AnsiString; kind: NativeInt;
+                      ci: Boolean; var free: NativeInt): PPyAttrLkRec;
+var idx, k: NativeInt; r: PPyAttrLkRec;
+begin
+  Result := nil;
+  free := -1;
+  idx := PyAttrLkIndex(cls, name, kind);
+  for k := 0 to PY_ATTRLK_PROBE - 1 do
+  begin
+    r := PyAttrLkSlot[(idx + k) and (PY_ATTRLK_SLOTS - 1)];
+    if r = nil then
+    begin
+      free := (idx + k) and (PY_ATTRLK_SLOTS - 1);
+      Exit;              { slots fill in probe order, so nothing lies past a gap }
+    end;
+    if (r^.Cls = cls) and (r^.Kind = kind) and PyNameEqAt(r^.NameP, name, ci) then
+    begin
+      Result := r;
+      Exit;
+    end;
+  end;
+end;
+
+function PyFindFieldCIScan(cls: PClassRTTI; const name: AnsiString): PFieldInfo; forward;
+function PyFindMethByNameScan(cls: PClassRTTI; const nm: AnsiString): PMethInfo; forward;
+
 function PyFindFieldCI(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
+var idx: NativeInt; r: PPyAttrLkRec;
+begin
+  r := PyAttrLkFind(cls, name, 0, True, idx);
+  if r <> nil then
+  begin
+    Result := PFieldInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindFieldCIScan(cls, name);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, 0, name);
+end;
+
+function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+var idx: NativeInt; r: PPyAttrLkRec;
+begin
+  r := PyAttrLkFind(cls, nm, 1, False, idx);
+  if r <> nil then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindMethByNameScan(cls, nm);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, 1, nm);
+end;
+
+{ A property's getter or setter, `__prop_get_<name>` / `__prop_set_<name>`,
+  cached under the PLAIN attribute name (kinds 2 and 3), so a dynamic
+  attribute read no longer builds the prefixed name -- a string allocation
+  and a cleanup frame -- on every evaluation just to learn there is no
+  property. The build lives in PyFindPropAccessorSlow, off the hit path. }
+function PyFindPropAccessorSlow(cls: PClassRTTI; const name: AnsiString;
+                                setter: Boolean): PMethInfo;
+begin
+  if setter then Result := PyFindMethByNameScan(cls, '__prop_set_' + name)
+  else Result := PyFindMethByNameScan(cls, '__prop_get_' + name);
+end;
+
+function PyFindPropAccessor(cls: PClassRTTI; const name: AnsiString;
+                            setter: Boolean): PMethInfo;
+var idx, kind: NativeInt; r: PPyAttrLkRec;
+begin
+  kind := 2;
+  if setter then kind := 3;
+  r := PyAttrLkFind(cls, name, kind, False, idx);
+  if r <> nil then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindPropAccessorSlow(cls, name, setter);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, kind, name);
+end;
+
+function PyFindFieldCIScan(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
 { The DECLARED field of that name, anywhere up the class hierarchy. Mirrors
   pyeval's PyFindMethCI, which walks the same blob for methods. }
 var curr: PClassRTTI; flds: PFieldInfo; i: Integer;
 begin
-  PyFindFieldCI := nil;
+  PyFindFieldCIScan := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -5445,7 +5600,7 @@ begin
       for i := 0 to Integer(curr^.FieldCount) - 1 do
         if PyNameEqAt(flds[i].NamePtr, name, True) then
         begin
-          PyFindFieldCI := @flds[i];
+          PyFindFieldCIScan := @flds[i];
           Exit;
         end;
     end;
@@ -5453,13 +5608,13 @@ begin
   end;
 end;
 
-function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+function PyFindMethByNameScan(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
 { The method of that name, anywhere up the class hierarchy — the method twin of
   PyFindFieldCI above. Case-SENSITIVE, as Python is. PyFindDunder further down
   is this same walk and now calls it. }
 var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindMethByName := nil;
+  PyFindMethByNameScan := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -5469,7 +5624,7 @@ begin
       for i := 0 to Integer(curr^.MethCount) - 1 do
         if PyNameEqAt(meths[i].NamePtr, nm, False) then
         begin
-          PyFindMethByName := @meths[i];
+          PyFindMethByNameScan := @meths[i];
           Exit;
         end;
     end;

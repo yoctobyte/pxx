@@ -1,0 +1,39 @@
+# Dynamic field, method, dunder and property lookups go through a (class,
+# name) cache that also remembers misses. Every answer -- present, absent,
+# a property, a setter, __eq__ -- must be what the walk gives, repeatedly.
+class P:
+    def __init__(self):
+        self._x = 1.5
+        self.plain = 7
+
+    @property
+    def x(self):
+        return self._x * 2
+
+    @x.setter
+    def x(self, v):
+        self._x = v
+
+    def __eq__(self, other):
+        return isinstance(other, P) and other._x == self._x
+
+
+class Q:
+    def __init__(self):
+        self.y = 3
+        self.Name = "q"
+
+
+def get(o, n):
+    return getattr(o, n)
+
+
+objs = [P(), Q(), P()]
+for i in range(3):
+    for o in objs:
+        print(type(o).__name__, hasattr(o, "x"), hasattr(o, "y"), hasattr(o, "plain"),
+              getattr(o, "x", None), getattr(o, "y", "-"), getattr(o, "zz", "none"))
+objs[0].x = 4.0
+print(objs[0].x, get(objs[0], "x"), objs[0] == objs[2], objs[0] == objs[0])
+setattr(objs[2], "x", 4.0)
+print(objs[0] == objs[2], get(objs[1], "Name"))
