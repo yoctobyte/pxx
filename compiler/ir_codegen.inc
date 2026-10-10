@@ -12043,7 +12043,20 @@ begin
               PatchRel8(pVarIntS2);
               PatchRel8(pVarSlow2);
             end;
-            EmitCallProc(procIdx);
+            if (ObjRetainBlobAddr > 0) and (ObjReleaseBlobAddr > 0) and
+               (Length(Procs[procIdx].Name) = 13) and
+               ((Procs[procIdx].Name = 'PXXObjRetain') or (Procs[procIdx].Name = 'PXXObjRelease')) then
+            begin
+              { Through the reg-preserving blob (rax = instance), whose inline
+                fast path is PXXObjRetain's/PXXObjRelease's own common case --
+                the call sites the IR emits, and pylib's own (PyVarSlotInit's
+                retain was ~1.5% of TSP) reached the Pascal routine directly. }
+              EmitB($48); EmitB($89); EmitB($F8);                { mov rax, rdi }
+              if Procs[procIdx].Name = 'PXXObjRetain' then IREmitCodeCall(ObjRetainBlobAddr)
+              else IREmitCodeCall(ObjReleaseBlobAddr);
+            end
+            else
+              EmitCallProc(procIdx);
             if pVarFastDone >= 0 then PatchRel8(pVarFastDone);
             if pVarIntDone >= 0 then PatchRel8(pVarIntDone);
             if (procIdx >= 0) and ProcVariadic[procIdx] then
