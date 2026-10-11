@@ -30,6 +30,6 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@1** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2 (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_dataclass_order.npy** — test/test_nilpy_dataclass_order.npy test/test_nilpy_dataclass_order.expected +2 (borg): bad `39225dde3632`, last good `3a87f68b3cad`, 4 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_dataclass_order.npy** — test/test_nilpy_dataclass_order.npy test/test_nilpy_dataclass_order.expected +2 (borg): bad `ae615953df78`, last good `3a87f68b3cad`, 2 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy@2** — test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy tools/assert_no_leak.sh +1 (borg): bad `59caf859488c`, last good `f159f2ee43df`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_gc_module_micropython_style.py@3** — test/test_nilpy_gc_module_micropython_style.py (borg): bad `759c3fe03246`, last good `unknown`, 0 commit(s) in range
