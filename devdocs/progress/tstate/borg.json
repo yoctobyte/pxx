@@ -18139,7 +18139,7 @@
    "bad": "39225dde36328946c03caed301e220c9962173a8",
    "bad_untestable": false,
    "first_seen": false,
-   "good": "62fc7c1e802a126b623b3219bbaf6020750733e9",
+   "good": "3a87f68b3cad714edc9a4bd3b978080a60250a55",
    "job": "test-nilpy#src:test/test_nilpy_dataclass_order.npy",
    "name": "test-nilpy#437",
    "never_passed": false,
@@ -18148,9 +18148,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "930d67d54a674d873d91019a8abf3a5cb989706b",
-    "68350d04656ba44cd4b02c50450d2ad0b91adf4c",
-    "3a87f68b3cad714edc9a4bd3b978080a60250a55",
     "394f96b08e3cbd502df06836a0b5a5de1905ec97",
     "ae615953df7844ba845bf71ece0db6d252888ccc",
     "9f5174bdf945b154bc3b2eed385d5b1eae9b6994",
