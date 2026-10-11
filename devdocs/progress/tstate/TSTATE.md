@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `759c3fe03246` on borg, 2026-10-11T11:21:48Z (56m ago).**
+**Newest full tier in the fleet: `759c3fe03246` on borg, 2026-10-11T11:21:48Z (58m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `759c3fe03246` | RED | 56m | — (newest) |
+| borg | `759c3fe03246` | RED | 58m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -29,7 +29,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@1** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2 (borg): bad `ae615953df78`, last good `3a87f68b3cad`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2 (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_dataclass_order.npy** — test/test_nilpy_dataclass_order.npy test/test_nilpy_dataclass_order.expected +2 (borg): bad `39225dde3632`, last good `62fc7c1e802a`, 7 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy@2** — test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy tools/assert_no_leak.sh +1 (borg): bad `59caf859488c`, last good `f159f2ee43df`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_gc_module_micropython_style.py@3** — test/test_nilpy_gc_module_micropython_style.py (borg): bad `759c3fe03246`, last good `unknown`, 0 commit(s) in range
