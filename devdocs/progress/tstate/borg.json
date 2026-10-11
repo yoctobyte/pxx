@@ -18117,7 +18117,7 @@
    "status": "fail"
   },
   {
-   "bad": "39225dde36328946c03caed301e220c9962173a8",
+   "bad": "ae615953df7844ba845bf71ece0db6d252888ccc",
    "bad_untestable": false,
    "first_seen": false,
    "good": "3a87f68b3cad714edc9a4bd3b978080a60250a55",
@@ -18130,9 +18130,7 @@
    "pin_built": false,
    "range": [
     "394f96b08e3cbd502df06836a0b5a5de1905ec97",
-    "ae615953df7844ba845bf71ece0db6d252888ccc",
-    "9f5174bdf945b154bc3b2eed385d5b1eae9b6994",
-    "39225dde36328946c03caed301e220c9962173a8"
+    "ae615953df7844ba845bf71ece0db6d252888ccc"
    ],
    "range_non_causal": false,
    "src": "test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2",
