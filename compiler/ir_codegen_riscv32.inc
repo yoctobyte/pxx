@@ -1250,6 +1250,89 @@ begin
   end;
 end;
 
+function Rv32CodeWord(pos: Integer): Int64;
+{ the emitted instruction word at pos, unsigned }
+begin
+  Result := Int64(Code[pos]) or (Int64(Code[pos + 1]) shl 8) or
+            (Int64(Code[pos + 2]) shl 16) or (Int64(Code[pos + 3]) shl 24);
+end;
+
+function Rv32RetractArgPushes(w: Integer): Boolean;
+{ Undo the last argument's push when it is the last thing emitted: the final
+  w pairs must read exactly `addi sp,sp,-4 / sw a<j>,0(sp)` for j = 0..w-1,
+  i.e. word j of the value pushed from a<j>, which is how every one- and
+  two-word argument arm ends. Anything else (a set or a by-value aggregate
+  pushed from t1, a padding word, three or more words) is left alone. On
+  success the bytes are dropped and word j is still live in a<j>.
+
+  Safe to drop because the pairs carry no fixup -- they are register and sp
+  arithmetic only -- and nothing records a code offset inside them. }
+var j, pos: Integer;
+begin
+  Result := False;
+  if (w < 1) or (w > 2) or (CodeLen < 8 * w) then Exit;
+  pos := CodeLen - 8 * w;
+  for j := 0 to w - 1 do
+  begin
+    if Rv32CodeWord(pos + 8 * j) <> $FFC10113 then Exit;                     { addi sp,sp,-4 }
+    if Rv32CodeWord(pos + 8 * j + 4) <> ((Int64(reg_a0 + j) shl 20) or $12023) then Exit;  { sw a<j>,0(sp) }
+  end;
+  CodeLen := pos;
+  Result := True;
+end;
+
+function Rv32LeafArgOk(procIdx, paramIdx, argNode: Integer): Boolean;
+{ The argument at IR_ARG argNode is one plain word whose value is a constant
+  or an off(s0) local, bound to a declared by-value parameter that the
+  generic arm of the direct call would push unchanged -- no float, 64-bit,
+  set, record, string or variant on either side, so no arm above the generic
+  one would claim it and no conversion inside it would apply. }
+var v: Integer; atk, vtk, ptk: TTypeKind;
+  function PlainWord(tk: TTypeKind): Boolean;
+  begin
+    Result := not (IsFloatRISCV32(tk) or Is64BitRISCV32(tk) or (tk = tySet) or
+                   (tk = tyRecord) or (tk = tyAnsiString) or (tk = tyVariant) or
+                   (tk = tyChar) or TypeIsFrozenString(tk));
+  end;
+begin
+  Result := False;
+  if (procIdx < 0) or (paramIdx >= Procs[procIdx].ParamCount) then Exit;
+  if Procs[procIdx].Params[paramIdx].IsRef or Procs[procIdx].Params[paramIdx].IsArray then Exit;
+  ptk := Procs[procIdx].Params[paramIdx].TypeKind;
+  v := IRA[argNode];
+  atk := IntToTypeKind(IRTk[argNode]);
+  vtk := IntToTypeKind(IRTk[v]);
+  if not (PlainWord(ptk) and PlainWord(atk) and PlainWord(vtk)) then Exit;
+  if IRKind[v] = IR_CONST_INT then Result := True
+  else if IRKind[v] = IR_LOAD_SYM then
+    Result := LeafLoadSymFoldsRISCV32(IRA[v]) and PlainWord(Syms[IRA[v]].TypeKind);
+end;
+
+function Rv32TrailingLeafArgs(procIdx, paramIdx, argNode: Integer): Integer;
+{ How many arguments from argNode to the end of the list, when every one of
+  them is Rv32LeafArgOk; 0 otherwise. }
+var n: Integer;
+begin
+  Result := 0;
+  n := 0;
+  while argNode <> -1 do
+  begin
+    if not Rv32LeafArgOk(procIdx, paramIdx + n, argNode) then Exit;
+    Inc(n);
+    argNode := IRB[argNode];
+  end;
+  Result := n;
+end;
+
+procedure Rv32EmitLeafArg(rd, v: Integer);
+{ a Rv32LeafArgOk value straight into rd }
+begin
+  if IRKind[v] = IR_CONST_INT then
+    EmitLoadImmRISCV32(rd, Low32(IRIVal[v]))
+  else
+    EmitLoadVarToRegRISCV32(rd, IRA[v]);
+end;
+
 procedure EmitCallArgWordsRISCV32(procIdx, paramIdx, argNode: Integer; var nWords: Integer);
 { Emit one call argument and push its words, advancing the running WORD count.
   Shared by the direct, indirect and virtual call paths — each of them used to
@@ -1733,6 +1816,8 @@ var
   memFrozenTk: TTypeKind;   { frozen kind of a store-through-a-pointer DESTINATION }
   sgn, savedLVW: Boolean;
   vaRecRV, vaBytes, vaAlign, vaWords, vaK: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
+  lastArgWords, keptWords: Integer;  { direct call: words before the last argument, and the words left on the stack }
+  leafArg, leafI, leafN: Integer;   { direct call: the trailing constant/local arguments loaded straight into a-registers }
   vaByVal: Boolean;
   sVal: AnsiString;
 begin
@@ -3544,8 +3629,20 @@ begin
         argNode := IRB[node];
         nArgs := 0;     { word count }
         i := 0;         { argument index }
+        lastArgWords := 0;
+        leafArg := -1;
         while argNode <> -1 do
         begin
+          { the rest of the list is constants and off(s0) locals: they cannot
+            change anything, so they wait and load directly into their a-registers }
+          leafN := Rv32TrailingLeafArgs(procIdx, i, argNode);
+          if (leafN > 0) and (nArgs + leafN <= 8) then
+          begin
+            leafArg := argNode;
+            leafI := i;
+            Break;
+          end;
+          lastArgWords := nArgs;
           if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              IsFloatRISCV32(Procs[procIdx].Params[i].TypeKind) and
@@ -3774,17 +3871,38 @@ begin
           Exit;
         end;
 
-        for i := 0 to nArgs - 1 do
-          rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+        { The LAST argument's words are still in a0(:a1) when its push ends,
+          so when the push is the final thing emitted it is retracted and the
+          value moved to its argument register; only the earlier words are
+          reloaded from the stack. }
+        keptWords := nArgs;
+        if Rv32RetractArgPushes(nArgs - lastArgWords) then
+        begin
+          keptWords := lastArgWords;
+          for i := nArgs - 1 downto keptWords do
+            if reg_a0 + i <> reg_a0 + (i - keptWords) then
+              rv32_addi(reg_a0 + i, reg_a0 + (i - keptWords), 0);
+        end;
+        for i := 0 to keptWords - 1 do
+          rv32_lw(reg_a0 + i, reg_sp, (keptWords - 1 - i) * 4);
 
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
            ABIRetViaHiddenDestProc(procIdx) then
         begin
-          rv32_lw(reg_t1, reg_sp, nArgs * 4);          { hidden dest (pushed deepest) }
-          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);  { free args + hidden dest }
+          rv32_lw(reg_t1, reg_sp, keptWords * 4);          { hidden dest (pushed deepest) }
+          rv32_addi(reg_sp, reg_sp, (keptWords + 1) * 4);  { free args + hidden dest }
         end
-        else if nArgs > 0 then
-          rv32_addi(reg_sp, reg_sp, nArgs * 4);
+        else if keptWords > 0 then
+          rv32_addi(reg_sp, reg_sp, keptWords * 4);
+
+        argNode := leafArg;
+        j := nArgs;
+        while argNode <> -1 do
+        begin
+          Rv32EmitLeafArg(reg_a0 + j, IRA[argNode]);
+          Inc(j);
+          argNode := IRB[argNode];
+        end;
 
         EmitCallProc(procIdx);
       end;
