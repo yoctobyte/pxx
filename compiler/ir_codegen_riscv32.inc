@@ -877,6 +877,12 @@ begin
   Patch32(pSkip, EncodeRISCVBEQ(reg_t3, reg_zero, CodeLen - pSkip));
 end;
 
+function Rv32IsZeroConst(node: Integer): Boolean;
+begin
+  Result := (IRKind[node] = IR_CONST_INT) and (IRIVal[node] = 0) and
+            not IsFloatRISCV32(IntToTypeKind(IRTk[node]));
+end;
+
 function IRLeafWritesOnlyA0A1RISCV32(node: Integer): Boolean;
 { IREmitNodeRISCV32 / EmitNode64RISCV32 of this node writes a0/a1 and nothing
   else: an integer constant, or a by-value frame local reached as off(s0)
@@ -3005,14 +3011,13 @@ begin
         else if op = Ord(tkShr) then rv32_sra(reg_a0, reg_a0, reg_a1)  { C signed >> (bug-c-signed-arith-shift-right) }
         else if op = Ord(tkEq) then
         begin
-          rv32_sub(reg_a0, reg_a0, reg_a1);
-          rv32_sltu(reg_a0, reg_zero, reg_a0);
-          rv32_xori(reg_a0, reg_a0, 1);
+          if not Rv32IsZeroConst(right) then rv32_sub(reg_a0, reg_a0, reg_a1);
+          rv32_sltiu(reg_a0, reg_a0, 1);          { seqz }
         end
         else if op = Ord(tkNeq) then
         begin
-          rv32_sub(reg_a0, reg_a0, reg_a1);
-          rv32_sltu(reg_a0, reg_zero, reg_a0);
+          if not Rv32IsZeroConst(right) then rv32_sub(reg_a0, reg_a0, reg_a1);
+          rv32_sltu(reg_a0, reg_zero, reg_a0);    { snez }
         end
         else if (op = Ord(tkLt)) or (op = Ord(tkGt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGe)) then
@@ -5018,6 +5023,71 @@ begin
     Result := 8;
 end;
 
+function Rv32PlainCmp32(node: Integer): Boolean;
+{ An IR_BINOP that IREmitNodeRISCV32 would send down its GENERIC 32-bit arm as
+  =, <>, <, <=, > or >=: the same exclusions that arm's predecessors test --
+  string and frozen-string operands, float by value kind, any 64-bit side --
+  plus variants. Its result is only a 0/1 the jump would test again. }
+var op: Integer; lt, rt: TTypeKind;
+begin
+  Result := False;
+  if IRKind[node] <> IR_BINOP then Exit;
+  op := IRC[node];
+  if not ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+          (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) then Exit;
+  lt := IntToTypeKind(IRTk[IRA[node]]);
+  rt := IntToTypeKind(IRTk[IRB[node]]);
+  if (lt = tyAnsiString) or (rt = tyAnsiString) or
+     TypeIsFrozenString(lt) or TypeIsFrozenString(rt) or
+     (lt = tyVariant) or (rt = tyVariant) then Exit;
+  if IsFloatRISCV32(IntToTypeKind(IRTk[node])) or
+     IsFloatRISCV32(IRValueKind(IRA[node])) or
+     IsFloatRISCV32(IRValueKind(IRB[node])) then Exit;
+  if Is64BitRISCV32(IntToTypeKind(IRTk[node])) or Is64BitRISCV32(lt) or
+     Is64BitRISCV32(rt) then Exit;
+  Result := True;
+end;
+
+procedure Rv32EmitCmpBranch(node, lblId: Integer);
+{ left -> a0, right -> a1 (or x0 for a literal 0), then ONE branch over the
+  jump slot that follows, taken when the comparison is TRUE -- the slot is the
+  false edge. Operands as the generic binop arm evaluates them. }
+var left, right, op, rs2, skip: Integer; sgn: Boolean;
+begin
+  left := IRA[node]; right := IRB[node]; op := IRC[node];
+  IREmitNodeRISCV32(left);
+  rs2 := reg_a1;
+  if Rv32IsZeroConst(right) then
+    rs2 := reg_zero
+  else if (IRKind[right] = IR_CONST_INT) and
+          (IntToTypeKind(IRTk[right]) <> tySingle) then
+    EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[right]))
+  else if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
+    EmitLoadVarToRegRISCV32(reg_a1, IRA[right])
+  else
+  begin
+    rv32_addi(reg_sp, reg_sp, -4);
+    rv32_sw(reg_a0, reg_sp, 0);
+    IREmitNodeRISCV32(right);
+    rv32_addi(reg_a1, reg_a0, 0);
+    rv32_lw(reg_a0, reg_sp, 0);
+    rv32_addi(reg_sp, reg_sp, 4);
+  end;
+  sgn := not TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+  skip := 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4);
+  if op = Ord(tkEq) then rv32_beq(reg_a0, rs2, skip)
+  else if op = Ord(tkNeq) then rv32_bne(reg_a0, rs2, skip)
+  else if op = Ord(tkLt) then
+    begin if sgn then rv32_blt(reg_a0, rs2, skip) else rv32_bltu(reg_a0, rs2, skip); end
+  else if op = Ord(tkGe) then
+    begin if sgn then rv32_bge(reg_a0, rs2, skip) else rv32_bgeu(reg_a0, rs2, skip); end
+  else if op = Ord(tkGt) then          { a > b  <=>  b < a }
+    begin if sgn then rv32_blt(rs2, reg_a0, skip) else rv32_bltu(rs2, reg_a0, skip); end
+  else                                 { tkLe: a <= b  <=>  b >= a }
+    begin if sgn then rv32_bge(rs2, reg_a0, skip) else rv32_bgeu(rs2, reg_a0, skip); end;
+end;
+
+
 procedure EmitRv32JumpToLabel(lblId: Integer; var fixCount: Integer);
 var rvHi, rvLo: Integer;
 begin
@@ -5175,6 +5245,13 @@ begin
             MakeMove) silently TRUNCATED the offset — branches landed inside
             unrelated code (chess perft counted 164). jal reaches +-1MB. }
           lblId := IRA[i];
+          if Rv32PlainCmp32(IRB[i]) then
+          begin
+            { compare-and-branch: skip the jump slot when the condition holds }
+            Rv32EmitCmpBranch(IRB[i], lblId);
+            EmitRv32JumpToLabel(lblId, LabelFixupCount);
+            continue;
+          end;
           IREmitNodeRISCV32(IRB[i]);
           { A 64-bit condition is a1:a0, so branching on a0 alone ignores the HIGH
             half and a nonzero value whose low word is zero tested as FALSE

@@ -161,16 +161,8 @@ begin
     Error('EmitAsmRv32: jump target out of range (+-1MB)');
 end;
 
-function EncodeRISCVBranch(funct3, rs1, rs2, offset: Integer): Integer;
-var
-  i12, i11, i10_5, i4_1: Integer;
-begin
-  i12   := (offset shr 12) and 1;
-  i11   := (offset shr 11) and 1;
-  i10_5 := (offset shr 5) and $3F;
-  i4_1  := (offset shr 1) and $F;
-  Result := (i12 shl 31) or (i10_5 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or (i4_1 shl 8) or (i11 shl 7) or $63;
-end;
+{ EncodeRISCVBranch lives in rv32enc.inc (included earlier), shared with the
+  IR backend's compare-and-branch. }
 
 
 procedure AsmTextLineRv32(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
