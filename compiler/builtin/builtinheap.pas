@@ -1496,8 +1496,17 @@ procedure esp_system_abort(details: PChar); external;
 const
   MALLOC_CAP_DEFAULT = $1000;   { esp_heap_caps.h: (1<<12), what calloc uses }
 
+{ No size header on this profile. The native allocator stores the block size
+  in 8 bytes below the payload; the IDF heap already records it, and
+  heap_caps_get_allocated_size reads it back, so the header was RAM paid twice
+  -- 8 bytes on every live pxx block (owner 2026-10-12: RAM outranks flash on
+  ESP). The block comes back 8-aligned from heap_caps_aligned_calloc, so the
+  payload IS the block. Only this unit ever read the header (HeapDecLive and
+  PXXRealloc's copy length); both arms below ask the heap instead. }
+function heap_caps_get_allocated_size(p: Pointer): NativeUInt; external;
+
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
-var p: Int64;
+var p: Int64; blk: NativeInt;
 begin
   { `(size + 7) and not 7`, not `((size + 7) div 8) * 8`: `div` by a literal is
     strength-reduced only at -O3, so at the -O2 DEFAULT every one of these
@@ -1510,23 +1519,34 @@ begin
     both pxx and FPC. }
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));
-  p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size + 8),
+  p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size),
                                       MALLOC_CAP_DEFAULT));   { zeroed: keeps the contract }
   if p = 0 then
     esp_system_abort('pxx: out of memory (ESP-IDF heap exhausted)');
-  PMachineWord(p)^ := size;                             { 8-byte size header }
-  Result := Pointer(p + 8);                      { payload }
-  if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
-  if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
-  HeapLiveBytes := HeapLiveBytes + size;
+  Result := Pointer(p);
+  { The envelope's low end sits 8 below the real block. PXXObjPlausible asks
+    for HeapLow + 24 -- the size header plus the 16-byte object header -- and
+    with no size header the lowest object's handle is block + 16. Without the
+    -8 that one object would fail the test and its retain/release would be
+    no-ops, the 2026-09-24 leak again. }
+  if (HeapLow = 0) or (p - 8 < HeapLow) then HeapLow := p - 8;
+  if p + size > HeapHigh then HeapHigh := p + size;
+  { The heap's own block size, the same figure PXXFree subtracts, so both
+    sides of HeapLiveBytes are one quantity. }
+  blk := NativeInt(heap_caps_get_allocated_size(Pointer(p)));
+  { calloc zeroes only what was asked for, and PXXRealloc copies the whole
+    block, so slack beyond `size` would carry garbage into the grown block
+    where growth code (SetLength) expects zeros. }
+  if blk > size then PXXMemZero(Pointer(p + size), blk - size);
+  HeapLiveBytes := HeapLiveBytes + blk;
   if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 end;
 
 procedure PXXFree(p: Pointer);
 begin
   if p = nil then Exit;
-  HeapDecLive(Int64(p));
-  free(Pointer(Int64(p) - 8));
+  HeapLiveBytes := HeapLiveBytes - NativeInt(heap_caps_get_allocated_size(p));
+  free(p);
 end;
 
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
@@ -1535,7 +1555,8 @@ begin
   np := PXXAlloc(newSize, align);
   if p <> nil then
   begin
-    oldSize := NativeInt(PMachineWord(Pointer(Int64(p) - 8))^);
+    { At least the size asked for; the tail beyond it is calloc-zeroed. }
+    oldSize := NativeInt(heap_caps_get_allocated_size(p));
     if oldSize > newSize then oldSize := newSize;
     PXXMemMove(np, p, oldSize);
     PXXFree(p);
