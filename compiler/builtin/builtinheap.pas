@@ -2481,7 +2481,16 @@ end;
 function PXXStrAllocSize(h: Pointer): Int64;
 begin
   if h = nil then PXXStrAllocSize := 0
+{$ifdef PXX_ESP_IDF}
+  { No size word on the IDF profile (see its PXXAlloc): the heap holds the
+    block size. Missing this reader was a heap corruption on real C3 silicon
+    (rv32-f, 2026-10-13): an in-place append trusted the TLSF header word as
+    its capacity and wrote string bytes over the next block's metadata. The
+    caller must only ask for an APPENDABLE block, i.e. a real heap block. }
+  else PXXStrAllocSize := Int64(heap_caps_get_allocated_size(Pointer(Int64(h) - PXX_HDR_SIZE)));
+{$else}
   else PXXStrAllocSize := PMachineWord(Int64(h) - PXX_HDR_SIZE - 8)^;
+{$endif}
 end;
 
 { The ASCII answer for the RESULT of an append, given what the destination
@@ -2611,7 +2620,7 @@ end;
 
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 var
-  h, oldLen, newLen, rc, cap, need, want, base, d, s2, i: Int64;
+  h, oldLen, newLen, rc, need, want, base, d, s2, i: Int64;
   orAll, oldMeta: Int64;
   newH: Pointer;
 begin
@@ -2627,14 +2636,16 @@ begin
   rc := PMachineWord(h - 16)^;
   newLen := oldLen + lenB;
   need := PXX_HDR_SIZE + newLen + 1;          { +1 = nul terminator }
-  cap := PXXStrAllocSize(Pointer(h));
   oldMeta := PXXHdrMeta(Pointer(h));
   orAll := 0;
 
   { IN PLACE: sole owner, this code allocated the block's spare capacity (so
-    the size word below it means what we think), and that capacity is enough. }
+    the size word below it means what we think), and that capacity is enough.
+    The capacity is read LAST, only for an APPENDABLE block: a static literal
+    has no allocator size at all, and on the IDF profile asking the heap about
+    one is asking about a .rodata address. }
   if (rc <= 1) and ((oldMeta and PXX_FLAG_APPENDABLE) <> 0) and
-     (cap >= need) then
+     (PXXStrAllocSize(Pointer(h)) >= need) then
   begin
     d := h + oldLen;
     orAll := PXXBlockCopy(d, Int64(srcB), lenB);

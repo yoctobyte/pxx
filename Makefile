@@ -40532,6 +40532,18 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_tca.oracle $(TESTTMP)/test_esp_tca.$$chip; then echo "$$chip typed const array in .data ok (== x86-64 oracle)"; \
 	  else echo "$$chip typed const array in .data MISMATCH"; exit 1; fi; \
 	done
+	@# IN-PLACE STRING APPEND ON THE IDF HEAP READS THE BLOCK'S REAL CAPACITY
+	@# (rv32-f, 2026-10-13): with pxx's size word gone, PXXStrAllocSize asks
+	@# heap_caps_get_allocated_size. Reading the old word took the TLSF header
+	@# as capacity and Copy()/append wrote over the next block -- Store access
+	@# fault on real C3 silicon and here. Compared with the x86-64 oracle.
+	@./$(COMPILER) test/test_esp_idf_str_append_grow.pas $(TESTTMP)/test_esp_sag_oracle >/dev/null && $(TESTTMP)/test_esp_sag_oracle > $(TESTTMP)/test_esp_sag.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_idf_str_append_grow.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_sag.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_sag.oracle $(TESTTMP)/test_esp_sag.$$chip; then echo "$$chip string append on the IDF heap ok (== x86-64 oracle)"; \
+	  else echo "$$chip string append on the IDF heap MISMATCH"; exit 1; fi; \
+	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
 	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED
 	@# 2026-09-24). A fixed .expected, not the x86-64 oracle: desktop halts with
