@@ -3247,7 +3247,10 @@ begin
     if CodePosToIramOff(GlobFix[i].CodePos) < 0 then
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
-      if impK >= 0 then
+      if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
+        writeRela32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5), 1,
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
+      else if impK >= 0 then
         writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
       else
         writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
@@ -3277,7 +3280,10 @@ begin
     if mapped >= 0 then
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
-      if impK >= 0 then
+      if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
+        writeRela32(f, mapped, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5), 1,
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
+      else if impK >= 0 then
         writeRela32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
       else
         writeRela32(f, mapped, 4, 1, GlobFix[i].BSSoff);
@@ -3537,11 +3543,20 @@ begin
                 ObjDataOff(Fixups[i].DataOff));
   for i := 0 to GlobFixCount-1 do
   begin
-    impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
-    if impK >= 0 then
-      writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+    { A data-resident global (a typed const array baked into .data, see
+      TryBakeConstArrayIntoData) carries a BIASED offset and relocates
+      against .data/.rodata, not .bss. }
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      writeRela32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 2, 4), 1,
+                  ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
     else
-      writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+    begin
+      impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
+      if impK >= 0 then
+        writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+      else
+        writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+    end;
   end;
   for i := 0 to DynCallCount-1 do
     writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);

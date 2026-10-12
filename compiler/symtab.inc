@@ -7234,14 +7234,19 @@ function TryBakeConstArrayIntoData(symIdx, firstPI, bssBefore, bssAfterAlloc: In
   the existing startup-store path. Rejecting is always correct; promoting
   something unbakeable would be silent wrong data.
 
-  Refused for object/shared output: those writers emit RELOCATIONS against a
-  section symbol rather than patching an absolute address, so a data-resident
-  global needs a different section index there. Not done yet, and refusing is
-  what keeps that honest. }
+  Refused for object/shared output EXCEPT riscv32 and xtensa objects:
+  those writers emit RELOCATIONS against a section symbol rather than
+  patching an absolute address, so a data-resident global needs the .data
+  section index there. writeELF32Rel and writeELF32RelIram -- the ESP-IDF
+  object writers -- have that arm since 2026-10-12, measured on a C3 where
+  a 114-entry errno byte table cost 7.7 KB of startup stores under
+  --emit-obj. The x86-64/aarch64/i386/arm32 object writers carry an arm too
+  but no test has run one, so they stay refused until one does. }
 var k, n, esz, base, b: Integer; v: Int64; elemTk: TTypeKind;
 begin
   Result := False;
-  if EmitObjMode or EmitSharedMode then Exit;
+  if EmitSharedMode then Exit;
+  if EmitObjMode and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then Exit;
   if (symIdx < 0) or not Syms[symIdx].IsArray then Exit;
   if Syms[symIdx].Kind <> skGlobal then Exit;
   n := Syms[symIdx].ArrLen;

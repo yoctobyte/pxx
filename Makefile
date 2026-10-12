@@ -33488,6 +33488,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/method_pointer_size "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	@# NEWLIB ERRNO AS A TABLE: the byte table must map every errno exactly as the
+	@# case statement it replaced (kept in the test as the oracle), on riscv32.
+	./$(COMPILER) --target=riscv32 test/test_newlib_errno_table.pas $(TESTTMP)/test_rv32_errtab
+	tools/expect_same.sh riscv32/newlib_errno_table "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_errtab)" "$$(cat test/test_newlib_errno_table.expected)"
 	@# FOUR-BYTE JAL SLOTS ON --platform=esp (Rv32ShortSlots, symtab.inc). A forward
 	@# call sized before its target existed must REFUSE, naming the flag, when the
 	@# target lands past +-1 MiB -- never truncate. The NilPy esp fixture lays out
@@ -40516,6 +40520,17 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_idf_writeln_end.oracle $(TESTTMP)/test_esp_idf_writeln_end.$$chip; then \
 	    echo "$$chip WriteLn + task end ok (== x86-64 oracle, one boot)"; \
 	  else echo "$$chip WriteLn + task end MISMATCH"; exit 1; fi; \
+	done
+	@# A TYPED CONST ARRAY UNDER --emit-obj IS .data, NOT STARTUP STORES (riscv32 and
+	@# xtensa object writers, 2026-10-12): every width read back and one element
+	@# written, against the x86-64 oracle. A wrong section or addend in the new
+	@# .text -> .data relocation reads garbage here.
+	@./$(COMPILER) test/test_esp_typed_const_array_in_obj.pas $(TESTTMP)/test_esp_tca_oracle >/dev/null && $(TESTTMP)/test_esp_tca_oracle > $(TESTTMP)/test_esp_tca.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_typed_const_array_in_obj.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_tca.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_tca.oracle $(TESTTMP)/test_esp_tca.$$chip; then echo "$$chip typed const array in .data ok (== x86-64 oracle)"; \
+	  else echo "$$chip typed const array in .data MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
 	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED
