@@ -5019,6 +5019,8 @@ begin
   if (LabelPositions[lblId] <> -1) and
      Riscv32JalReaches(slotPos, LabelPositions[lblId]) then
     Result := 4
+  else if (LabelPositions[lblId] = -1) and Rv32ShortSlots then
+    Result := 4
   else
     Result := 8;
 end;
@@ -5114,7 +5116,8 @@ begin
   LabelFixupTarget[fixCount] := lblId;
   Inc(fixCount);
   EmitI32(EncodeRISCVJAL(reg_zero, 0));
-  EmitI32($00000013);                            { addi x0, x0, 0 }
+  if not Rv32ShortSlots then
+    EmitI32($00000013);                          { addi x0, x0, 0 }
 end;
 
 procedure PatchRv32LinkSlot(pos, targetOffset, linkReg: Integer);
@@ -5417,7 +5420,12 @@ begin
 
     { Read the instruction word to check opcode }
     { RISC-V jal has opcode 0x6F, beq has opcode 0x63 }
-    if (Code[pos] = $6F) then
+    if (Code[pos] = $6F) and Rv32ShortSlots then
+    begin
+      Rv32ShortReachOrDie(pos, targetOffset, 'forward jump');
+      Patch32(pos, EncodeRISCVJAL(reg_zero, targetOffset - pos));
+    end
+    else if (Code[pos] = $6F) then
       PatchRv32JumpSlot(pos, targetOffset)
     else if (Code[pos] = $63) then
       Patch32(pos, EncodeRISCVBEQ(reg_a0, reg_zero, targetOffset - pos))

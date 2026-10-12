@@ -200,6 +200,10 @@ const
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
+  { CallFixAnchor value for a riscv32 site that is the eight-byte auipc+jalr
+    pair while the target is in short-slot mode (Rv32ShortSlots): a backward
+    call too far for one jal. -1 stays "no anchor"; offsets are >= 0. }
+  CALLFIX_RV32_PAIR = -2;
   { Growth bases for the two relocation tables that scale with EMITTED CODE
     rather than with source size -- CallFix (every internal direct call) and
     CodeRef (every reference to a runtime stub). Both are dynamic and doubled
@@ -6651,6 +6655,15 @@ var
     path is byte-identical, because the cost is paid by every program including
     the ones that fit. See bug-a-xtensa-cannot-widen-a-forward-call-... }
   XtensaLongCalls : Boolean;
+  { --rv32-long-calls: keep the eight-byte auipc+jalr form at every FORWARD
+    jump and every internal call on --platform=esp. Without it those sites are
+    one four-byte JAL (+-1 MiB), and a site whose target turns out to be
+    farther is a compile ERROR naming this flag -- never a truncated offset.
+    Hosted riscv32 always uses the long form; see Rv32ShortSlots. }
+  Rv32LongCalls : Boolean;
+  { --rv32-short-calls: the four-byte form on --platform=esp for a NilPy
+    program too, whose default is the pair (see Rv32ShortSlots). }
+  Rv32ShortCalls : Boolean;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the

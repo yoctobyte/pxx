@@ -18964,6 +18964,36 @@ begin
   Result := (d >= -1048576) and (d <= 1048574);
 end;
 
+function Rv32ShortSlots: Boolean;
+{ Forward jumps and internal calls are ONE jal (+-1 MiB) instead of the
+  auipc+jalr pair that reaches anywhere. On --platform=esp only: an ESP image
+  and every body in it are far inside 1 MiB, so the pair's second word was
+  pure cost -- a nop in every forward jump slot and half of every call. Hosted
+  riscv32 keeps the pair, because the compiler built for riscv32 has single
+  bodies over 1 MiB. A BACKWARD call whose target is out of reach takes the
+  pair anyway (its target is known when it is emitted; CALLFIX_RV32_PAIR marks
+  the site so the fixup re-aims the right shape). A FORWARD site was sized
+  before its target existed, so one that cannot reach is a compile error
+  naming --rv32-long-calls, never a wrong offset.
+
+  NOT FOR NILPY BY DEFAULT: a NilPy program carries pylib, and before DCE the
+  esp nilpy math fixture lays out 2.4 MB of code -- a forward call from 116,800
+  to 2,408,360 cannot be a jal. The xtensa builds of the same examples pass
+  --xtensa-long-calls for the same reason. --rv32-short-calls opts a NilPy
+  program in; --rv32-long-calls opts anything out. Measured 2026-10-12. }
+begin
+  Result := (TargetArch = TARGET_RISCV32) and (TargetPlatform = PLATFORM_ESP) and
+            not Rv32LongCalls and (Rv32ShortCalls or not IsNilPyFrontend);
+end;
+
+procedure Rv32ShortReachOrDie(pos, target: Integer; const what: AnsiString);
+begin
+  if not Riscv32JalReaches(pos, target) then
+    Error('target riscv32 --platform=esp: a ' + what + ' at code offset ' +
+          AIntToStr(pos) + ' cannot reach ' + AIntToStr(target) +
+          ' with a four-byte jal (+-1 MiB). Rebuild with --rv32-long-calls');
+end;
+
 procedure EmitRiscv32CallToCode(linkReg, target: Integer);
 { RECORDED, AND ALWAYS TWO WORDS. Both halves are 2026-09-18 and both are about
   DCE, which until then could not run on this target and so made the old
@@ -19397,6 +19427,24 @@ begin
       binary like cross lua (1.75MB code) places callees beyond JAL's reach, so a
       truncated offset jumped to garbage. reg_t0 is a caller-saved scratch. }
     RecordInternalCall(procIdx);
+    if Rv32ShortSlots then
+    begin
+      { one jal; ApplyCallFixups re-aims it in place }
+      if (Procs[procIdx].BodyAddr >= 0) and
+         not Riscv32JalReaches(CodeLen, Procs[procIdx].BodyAddr) then
+      begin
+        { backward and out of reach: the pair, marked so the fixup keeps it }
+        CallFixAnchor[CallFixCount - 1] := CALLFIX_RV32_PAIR;
+        RISCVPcrelSplit(Procs[procIdx].BodyAddr - CodeLen, rvHi, rvLo);
+        rv32_auipc(reg_t0, rvHi);
+        rv32_jalr(reg_ra, reg_t0, rvLo);
+      end
+      else if Procs[procIdx].BodyAddr >= 0 then
+        EmitI32(EncodeRISCVJAL(reg_ra, Procs[procIdx].BodyAddr - CodeLen))
+      else
+        EmitI32($00000013);                     { addi x0, x0, 0 -- patched later }
+      Exit;
+    end;
     if Procs[procIdx].BodyAddr >= 0 then
     begin
       RISCVPcrelSplit(Procs[procIdx].BodyAddr - CodeLen, rvHi, rvLo);
@@ -19488,6 +19536,12 @@ begin
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else
         Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt));
+    end
+    else if Rv32ShortSlots and (CallFixAnchor[i] <> CALLFIX_RV32_PAIR) then
+    begin
+      { the single jal EmitCallProc emits on --platform=esp }
+      Rv32ShortReachOrDie(CallFix[i].CodePos, tgt, 'call');
+      Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, tgt - CallFix[i].CodePos));
     end
     else if TargetArch = TARGET_RISCV32 then
     begin

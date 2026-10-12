@@ -1451,6 +1451,8 @@ begin
   XtensaSoftDivide := False;
   XtensaSoftMulHigh := False;
   XtensaLongCalls := False;
+  Rv32LongCalls := False;
+  Rv32ShortCalls := False;
   XtensaHasFpu := False;
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
@@ -1839,6 +1841,18 @@ begin
         capability, not a part: the emulator is the only thing it is true of.
         A verdict produced under it must name it. }
       XtensaSoftMulHigh := True;
+      Inc(i);
+    end
+    else if option = '--rv32-long-calls' then
+    begin
+      { the eight-byte forward jump and internal call on --platform=esp; see
+        Rv32ShortSlots (rv32enc.inc) }
+      Rv32LongCalls := True;
+      Inc(i);
+    end
+    else if option = '--rv32-short-calls' then
+    begin
+      Rv32ShortCalls := True;
       Inc(i);
     end
     else if option = '--xtensa-long-calls' then

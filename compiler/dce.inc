@@ -1713,7 +1713,7 @@ begin
         invisible until the day it is not, and whoever lifts the xtensa gate
         should not have to find this underneath the work they came to do. }
       if CallFixAnchor[i] < 0 then
-        CallFixAnchor[j] := -1
+        CallFixAnchor[j] := CallFixAnchor[i]    { -1, or a marker such as CALLFIX_RV32_PAIR }
       else
         CallFixAnchor[j] := DceNewOff(CallFixAnchor[i]);
       Inc(j);

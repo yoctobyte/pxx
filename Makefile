@@ -33488,6 +33488,14 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/method_pointer_size "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	@# FOUR-BYTE JAL SLOTS ON --platform=esp (Rv32ShortSlots, symtab.inc). A forward
+	@# call sized before its target existed must REFUSE, naming the flag, when the
+	@# target lands past +-1 MiB -- never truncate. The NilPy esp fixture lays out
+	@# 2.4 MB before DCE, so forcing it short has to fail with exactly that message;
+	@# and its default (long, NilPy) has to build.
+	@./$(COMPILER) --target=riscv32 --platform=esp --no-signals --rv32-short-calls -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_esp_math_errors_keep_running.npy $(TESTTMP)/test_rv32_shortcalls_refuse.o > $(TESTTMP)/test_rv32_shortcalls_refuse.log 2>&1; \
+	  tools/expect_same.sh riscv32/short_calls_refuse_far_forward "$$(grep -c 'cannot reach .* with a four-byte jal (+-1 MiB). Rebuild with --rv32-long-calls' $(TESTTMP)/test_rv32_shortcalls_refuse.log)" "1"
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_esp_math_errors_keep_running.npy $(TESTTMP)/test_rv32_shortcalls_nilpy_default.o >/dev/null
 
 
 # ---------------------------------------------------------------------------
