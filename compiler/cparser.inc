@@ -16231,8 +16231,7 @@ begin
         (32 bytes, 4-byte slots). va_arg walks that reg area (size 32, seeded in
         fp_offset) then the overflow. Overflow points at the first caller stack
         word [s0+8] (used only when the total exceeds 8 words). }
-      EmitLoadImmRISCV32(reg_t0, Syms[vaSaveSym].Offset);
-      rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_save }
+      EmitFrameAddrRISCV32(reg_t0, Syms[vaSaveSym].Offset);                  { t0 = &__va_save }
       rv32_sw(reg_a0, reg_t0, 0);
       rv32_sw(reg_a0 + 1, reg_t0, 4);
       rv32_sw(reg_a0 + 2, reg_t0, 8);
@@ -16249,10 +16248,8 @@ begin
         reversal used to be variadic-only, which is why va_arg was right here
         while ordinary calls were not. Was s0+8 — off by 8, so the
         first stack-passed variadic arg read a saved-frame word (garbage). }
-      EmitLoadImmRISCV32(reg_t1, 16);
-      rv32_add(reg_t1, reg_s0, reg_t1);                  { t1 = s0+16 (first stack word) }
-      EmitLoadImmRISCV32(reg_t0, Syms[vaOverflowSym].Offset);
-      rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_overflow }
+      EmitFrameAddrRISCV32(reg_t1, 16);                  { t1 = s0+16 (first stack word) }
+      EmitFrameAddrRISCV32(reg_t0, Syms[vaOverflowSym].Offset);                  { t0 = &__va_overflow }
       rv32_sw(reg_t1, reg_t0, 0);                        { *__va_overflow = s0+16 }
     end;
     TARGET_I386:
@@ -16580,8 +16577,7 @@ begin
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSlotWordSize(idx);
-      EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
-      rv32_add(reg_t0, reg_s0, reg_t0);   { t0 = &slot }
+      EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);   { t0 = &slot }
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then

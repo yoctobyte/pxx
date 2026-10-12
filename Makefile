@@ -33176,10 +33176,13 @@ test-riscv32: $(COMPILER)
 	# out of exactly the padding the shipping configuration no longer emits --
 	# it would pass while measuring a layout no real riscv32 program has. At
 	# 6000 the image is 1,387,624 B, 32% clear of the wall on LIVE code.
+	# RAISED TO 9000 on 2026-10-12: the off(s0) fold and the leaf-operand binop
+	# cut the body to ~157 B per iteration, and 6000 gave 943,608 B -- under the
+	# wall. 9000 puts it back at ~1.41 MB, the same clearance.
 	@awk 'BEGIN{print "program bigbody;"; print "var n: Integer;"; \
 	  print "procedure Big(x: Integer);"; print "var i: Integer;"; \
 	  print "begin"; print "  i := 0;"; \
-	  for(k=0;k<6000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
+	  for(k=0;k<9000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
 	  print "  n := i;"; print "end;"; print "begin"; print "  Big(7);"; \
 	  print "  Writeln(\"n=\", n);"; print "end."}' | tr '"' "'" > $(TESTTMP)/rv32_bigbody.pas
 	./$(COMPILER) --target=riscv32 $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody | tee $(TESTTMP)/rv32_bigbody.log
@@ -33232,7 +33235,7 @@ test-riscv32: $(COMPILER)
 	@sz=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody.log); \
 	  bs=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody_base.log); \
 	  test -n "$$sz" && test -n "$$bs" && test $$(($$sz - $$bs)) -gt 1048576 || \
-	  { echo "rv32_bigbody: body=$$(($$sz - $$bs))B (image $$sz - empty-Big baseline $$bs) does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~228 B of body per iteration at the default -O2); do NOT add --no-dce, and do NOT assert on the image, see the note above"; exit 1; }
+	  { echo "rv32_bigbody: body=$$(($$sz - $$bs))B (image $$sz - empty-Big baseline $$bs) does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~157 B of body per iteration at the default -O2 since 2026-10-12); do NOT add --no-dce, and do NOT assert on the image, see the note above"; exit 1; }
 	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
 	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
 	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL

@@ -25,6 +25,25 @@ begin
   end;
 end;
 
+function FitsImm12RISCV32(v: Integer): Boolean;
+begin
+  Result := (v >= -2048) and (v <= 2047);
+end;
+
+procedure EmitFrameAddrRISCV32(rd: Integer; off: Integer);
+{ rd = s0 + off. One addi when the offset fits addi's signed 12 bits, which is
+  every slot in a frame under 2 KiB; the li+add pair it replaces cost two
+  instructions on every local access, ~13% of a measured ESP32-C3 image. }
+begin
+  if FitsImm12RISCV32(off) then
+    rv32_addi(rd, reg_s0, off)
+  else
+  begin
+    EmitLoadImmRISCV32(rd, off);
+    rv32_add(rd, reg_s0, rd);
+  end;
+end;
+
 procedure EmitLoadDataRefRISCV32(rd: Integer; dataOff: Integer);
 begin
   { Load 32-bit literal at PC-relative offset }
@@ -215,28 +234,69 @@ begin
   end;
 end;
 
-procedure EmitSizedLoadRISCV32(rd, rs: Integer; sz: Integer; sgn: Boolean);
+procedure EmitSizedLoadAtRISCV32(rd, rs, off: Integer; sz: Integer; sgn: Boolean);
+{ off must fit the signed 12-bit field; callers check with FitsImm12RISCV32 }
 begin
   if sz = 1 then
   begin
-    if sgn then rv32_lb(rd, rs, 0) else rv32_lbu(rd, rs, 0);
+    if sgn then rv32_lb(rd, rs, off) else rv32_lbu(rd, rs, off);
   end
   else if sz = 2 then
   begin
-    if sgn then rv32_lh(rd, rs, 0) else rv32_lhu(rd, rs, 0);
+    if sgn then rv32_lh(rd, rs, off) else rv32_lhu(rd, rs, off);
   end
   else
-    rv32_lw(rd, rs, 0);
+    rv32_lw(rd, rs, off);
+end;
+
+procedure EmitSizedStoreAtRISCV32(rs2, rs1, off: Integer; sz: Integer);
+begin
+  if sz = 1 then
+    rv32_sb(rs2, rs1, off)
+  else if sz = 2 then
+    rv32_sh(rs2, rs1, off)
+  else
+    rv32_sw(rs2, rs1, off);
+end;
+
+procedure EmitSizedLoadRISCV32(rd, rs: Integer; sz: Integer; sgn: Boolean);
+begin
+  EmitSizedLoadAtRISCV32(rd, rs, 0, sz, sgn);
 end;
 
 procedure EmitSizedStoreRISCV32(rs2, rs1: Integer; sz: Integer);
 begin
-  if sz = 1 then
-    rv32_sb(rs2, rs1, 0)
-  else if sz = 2 then
-    rv32_sh(rs2, rs1, 0)
-  else
-    rv32_sw(rs2, rs1, 0);
+  EmitSizedStoreAtRISCV32(rs2, rs1, 0, sz);
+end;
+
+function Is64BitRISCV32(tk: TTypeKind): Boolean; forward;
+
+function LeafLoadSymFoldsRISCV32(idx: Integer): Boolean;
+{ An IR_LOAD_SYM that takes EmitLoadVarRISCV32's one-instruction off(s0) path:
+  a by-value frame local of at most one word. Its load writes the destination
+  register and nothing else -- no t0, no stack -- which is what lets a binop
+  skip spilling its left operand around it. Mirrors IR_LOAD_SYM's dispatch. }
+var tk: TTypeKind;
+begin
+  Result := False;
+  if (idx < 0) or (Syms[idx].Kind = skGlobal) then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  tk := Syms[idx].TypeKind;
+  if (tk = tyVariant) or Is64BitRISCV32(tk) then Exit;
+  if (tk = tyRecord) and not Syms[idx].IsArray and
+     (RecSize(Syms[idx].RecName) > 4) and (RecSize(Syms[idx].RecName) <= 8) then Exit;
+  Result := FitsImm12RISCV32(Syms[idx].Offset);
+end;
+
+procedure EmitLoadVarToRegRISCV32(rd, idx: Integer);
+{ EmitLoadVarRISCV32's off(s0) arm into any register; only for a symbol
+  LeafLoadSymFoldsRISCV32 accepts. }
+var tk: TTypeKind; sz: Integer;
+begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSlotSize(tk);
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then sz := TARGET_PTR_SIZE;
+  EmitSizedLoadAtRISCV32(rd, reg_s0, Syms[idx].Offset, sz, TypeSigned(tk));
 end;
 
 procedure EmitLoadVarRISCV32(idx: Integer);
@@ -261,9 +321,22 @@ begin
   end
   else
   begin
-    { Local variable offset relative to frame pointer s0 }
-    EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
-    rv32_add(reg_t0, reg_s0, reg_t0);
+    { Local variable offset relative to frame pointer s0. A slot within reach
+      of the 12-bit field is addressed as off(s0) directly: one instruction
+      for a plain local, two for a var param (load the pointer, then through
+      it), against three and four through a materialised address. }
+    if FitsImm12RISCV32(Syms[idx].Offset) then
+    begin
+      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      begin
+        rv32_lw(reg_t0, reg_s0, Syms[idx].Offset);
+        EmitSizedLoadRISCV32(reg_a0, reg_t0, sz, sgn);
+      end
+      else
+        EmitSizedLoadAtRISCV32(reg_a0, reg_s0, Syms[idx].Offset, sz, sgn);
+      Exit;
+    end;
+    EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
       rv32_lw(reg_t0, reg_t0, 0);
     EmitSizedLoadRISCV32(reg_a0, reg_t0, sz, sgn);
@@ -291,8 +364,19 @@ begin
   end
   else
   begin
-    EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
-    rv32_add(reg_t0, reg_s0, reg_t0);
+    { the same off(s0) fold as EmitLoadVarRISCV32 }
+    if FitsImm12RISCV32(Syms[idx].Offset) then
+    begin
+      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      begin
+        rv32_lw(reg_t0, reg_s0, Syms[idx].Offset);
+        EmitSizedStoreRISCV32(reg_a0, reg_t0, sz);
+      end
+      else
+        EmitSizedStoreAtRISCV32(reg_a0, reg_s0, Syms[idx].Offset, sz);
+      Exit;
+    end;
+    EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
       rv32_lw(reg_t0, reg_t0, 0);
     EmitSizedStoreRISCV32(reg_a0, reg_t0, sz);
@@ -454,8 +538,7 @@ begin
     EmitLoadGlobAddrRISCV32(rd, Syms[si].Offset)
   else
   begin
-    EmitLoadImmRISCV32(rd, Syms[si].Offset);
-    rv32_add(rd, reg_s0, rd);
+    EmitFrameAddrRISCV32(rd, Syms[si].Offset);
   end;
 end;
 
@@ -580,15 +663,29 @@ begin
     EmitLoadGlobAddrRISCV32(rd, Syms[idx].Offset)
   else
   begin
-    EmitLoadImmRISCV32(rd, Syms[idx].Offset);
-    rv32_add(rd, reg_s0, rd);
+    EmitFrameAddrRISCV32(rd, Syms[idx].Offset);
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
       rv32_lw(rd, rd, 0);
   end;
 end;
 
+function FrameSlot64FoldsRISCV32(idx: Integer): Boolean;
+{ A by-value local whose two words both sit within off(s0) reach. }
+begin
+  Result := (Syms[idx].Kind <> skGlobal) and
+            not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+            FitsImm12RISCV32(Syms[idx].Offset) and
+            FitsImm12RISCV32(Syms[idx].Offset + 4);
+end;
+
 procedure EmitLoadVar64RISCV32(idx: Integer);
 begin
+  if FrameSlot64FoldsRISCV32(idx) then
+  begin
+    rv32_lw(reg_a0, reg_s0, Syms[idx].Offset);
+    rv32_lw(reg_a1, reg_s0, Syms[idx].Offset + 4);
+    Exit;
+  end;
   EmitSlotAddr64RISCV32(reg_t0, idx);
   rv32_lw(reg_a0, reg_t0, 0);   { lo }
   rv32_lw(reg_a1, reg_t0, 4);   { hi }
@@ -596,6 +693,12 @@ end;
 
 procedure EmitStoreVar64RISCV32(idx: Integer);
 begin
+  if FrameSlot64FoldsRISCV32(idx) then
+  begin
+    rv32_sw(reg_a0, reg_s0, Syms[idx].Offset);
+    rv32_sw(reg_a1, reg_s0, Syms[idx].Offset + 4);
+    Exit;
+  end;
   EmitSlotAddr64RISCV32(reg_t0, idx);  { value in a0:a1; addr in t0 }
   rv32_sw(reg_a0, reg_t0, 0);   { lo }
   rv32_sw(reg_a1, reg_t0, 4);   { hi }
@@ -774,19 +877,54 @@ begin
   Patch32(pSkip, EncodeRISCVBEQ(reg_t3, reg_zero, CodeLen - pSkip));
 end;
 
+function IRLeafWritesOnlyA0A1RISCV32(node: Integer): Boolean;
+{ IREmitNodeRISCV32 / EmitNode64RISCV32 of this node writes a0/a1 and nothing
+  else: an integer constant, or a by-value frame local reached as off(s0)
+  (one word, or both words of a 64-bit slot). Anything else may use t0..t6 or
+  the stack, so a caller holding a value in a temp must spill around it. }
+var si: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  if IRKind[node] = IR_CONST_INT then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if IRKind[node] <> IR_LOAD_SYM then Exit;
+  si := IRA[node];
+  if LeafLoadSymFoldsRISCV32(si) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  tk := Syms[si].TypeKind;
+  Result := Is64BitRISCV32(tk) and FrameSlot64FoldsRISCV32(si);
+end;
+
 procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
   qchk, qchkUns: Boolean);
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
 begin
   EmitNode64RISCV32(left);
-  rv32_addi(reg_sp, reg_sp, -8);
-  rv32_sw(reg_a0, reg_sp, 0);
-  rv32_sw(reg_a1, reg_sp, 4);
-  EmitNode64RISCV32(right);             { right -> a0:a1 }
-  rv32_lw(reg_t0, reg_sp, 0);           { left.lo (dividend.lo) }
-  rv32_lw(reg_t1, reg_sp, 4);           { left.hi }
-  rv32_addi(reg_sp, reg_sp, 8);
+  if IRLeafWritesOnlyA0A1RISCV32(right) then
+  begin
+    { right cannot touch t0:t1, so left waits there instead of on the stack:
+      two moves against six instructions of push and pop }
+    rv32_addi(reg_t0, reg_a0, 0);
+    rv32_addi(reg_t1, reg_a1, 0);
+    EmitNode64RISCV32(right);
+  end
+  else
+  begin
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0);
+    rv32_sw(reg_a1, reg_sp, 4);
+    EmitNode64RISCV32(right);             { right -> a0:a1 }
+    rv32_lw(reg_t0, reg_sp, 0);           { left.lo (dividend.lo) }
+    rv32_lw(reg_t1, reg_sp, 4);           { left.hi }
+    rv32_addi(reg_sp, reg_sp, 8);
+  end;
 
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
@@ -1687,8 +1825,7 @@ begin
           Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
               + 'IREmitMachineCodeRISCV32''s body-entry scan did not see this node');
         rv32_sub(reg_sp, reg_sp, reg_a0);     { sp -= size }
-        EmitLoadImmRISCV32(reg_t0, RV32AllocaBaseOff);
-        rv32_add(reg_t0, reg_s0, reg_t0);     { t0 = &base }
+        EmitFrameAddrRISCV32(reg_t0, RV32AllocaBaseOff);     { t0 = &base }
         rv32_lw(reg_t1, reg_t0, 0);           { t1 = old base }
         rv32_sub(reg_t1, reg_t1, reg_a0);     { t1 = new base }
         rv32_sw(reg_t1, reg_t0, 0);
@@ -2679,14 +2816,29 @@ begin
           rv32_beq(reg_a1, reg_zero, 8);        { high = 0 -> keep the value }
           rv32_addi(reg_a0, reg_zero, 256);     { else saturate out of range }
         end;
-        rv32_addi(reg_sp, reg_sp, -4);
-        rv32_sw(reg_a0, reg_sp, 0);
+        { right straight into a1 when it is a constant or an off(s0) local:
+          neither can disturb a0, so left needs no spill }
+        if (IRKind[right] = IR_CONST_INT) and
+           not Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
+        begin
+          if IntToTypeKind(IRTk[right]) = tySingle then
+            EmitLoadImmRISCV32(reg_a1, DoubleBitsToSingleBits(IRIVal[right]))
+          else
+            EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[right]));
+        end
+        else if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
+          EmitLoadVarToRegRISCV32(reg_a1, IRA[right])
+        else
+        begin
+          rv32_addi(reg_sp, reg_sp, -4);
+          rv32_sw(reg_a0, reg_sp, 0);
 
-        IREmitNodeRISCV32(right);
-        rv32_addi(reg_a1, reg_a0, 0);
+          IREmitNodeRISCV32(right);
+          rv32_addi(reg_a1, reg_a0, 0);
 
-        rv32_lw(reg_a0, reg_sp, 0);
-        rv32_addi(reg_sp, reg_sp, 4);
+          rv32_lw(reg_a0, reg_sp, 0);
+          rv32_addi(reg_sp, reg_sp, 4);
+        end;
 
         if op = Ord(tkPlus) then
         begin
@@ -2918,8 +3070,7 @@ begin
             si := IRA[left];
             if (Syms[si].Kind = skParam) and Syms[si].IsRef then
             begin
-              EmitLoadImmRISCV32(reg_a0, Syms[si].Offset);
-              rv32_add(reg_a0, reg_s0, reg_a0);
+              EmitFrameAddrRISCV32(reg_a0, Syms[si].Offset);
               rv32_lw(reg_a0, reg_a0, 0);      { a0 = caller slot addr }
             end
             else
@@ -4876,8 +5027,7 @@ begin
     begin
       FrameSize := AlignTo(FrameSize + 4, 4);
       RV32AllocaBaseOff := -FrameSize;
-      EmitLoadImmRISCV32(reg_t0, RV32AllocaBaseOff);
-      rv32_add(reg_t0, reg_s0, reg_t0);
+      EmitFrameAddrRISCV32(reg_t0, RV32AllocaBaseOff);
       rv32_sw(reg_sp, reg_t0, 0);
     end;
 

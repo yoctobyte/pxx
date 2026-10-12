@@ -116,6 +116,7 @@ procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadDataRefRISCV32(rd, dataOff: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
+procedure EmitFrameAddrRISCV32(rd: Integer; off: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 { The xtensa twin of EmitSlotAddrRISCV32 four lines up, and it is here for the
   same reason: the dynamic-array epilogue arm below calls it, and PXX prescans
@@ -16788,8 +16789,7 @@ begin
     end
     else if TargetArch = TARGET_RISCV32 then
     begin
-      EmitLoadImmRISCV32(reg_t0, frameOff);
-      rv32_add(reg_t0, reg_s0, reg_t0);
+      EmitFrameAddrRISCV32(reg_t0, frameOff);
       rv32_sw(reg_zero, reg_t0, 0);
     end
     else
@@ -16863,8 +16863,7 @@ begin
     end
     else
     begin
-      EmitLoadImmRISCV32(reg_t0, frameOff);
-      rv32_add(reg_t0, reg_s0, reg_t0);
+      EmitFrameAddrRISCV32(reg_t0, frameOff);
       q := 0;
       while q < nBytes do
       begin
@@ -16900,8 +16899,7 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
-    EmitLoadImmRISCV32(reg_t0, frameOff);
-    rv32_add(reg_a0, reg_s0, reg_t0);            { a0 = dest }
+    EmitFrameAddrRISCV32(reg_a0, frameOff);      { a0 = dest }
     EmitLoadImmRISCV32(reg_a1, nBytes);          { a1 = count }
     EmitCallProc(helperPi);
   end
@@ -16956,8 +16954,7 @@ begin
   begin
     { riscv32 carries the hidden destination in t1 (no dedicated indirect-result
       reg); stash it before the param-copy loop clobbers t1. }
-    EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
-    rv32_add(reg_t0, reg_s0, reg_t0);
+    EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);
     rv32_sw(reg_t1, reg_t0, 0);
   end
   else if TargetArch = TARGET_XTENSA then

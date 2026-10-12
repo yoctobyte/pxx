@@ -2891,8 +2891,7 @@ begin
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSlotWordSize(idx);
-      EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
-      rv32_add(reg_t0, reg_s0, reg_t0);
+      EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);
       if (Syms[idx].TypeKind = tySet) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
