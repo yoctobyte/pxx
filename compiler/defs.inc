@@ -4578,6 +4578,10 @@ var
     routine is live. Owner 2026-10-12: RAM outranks flash on ESP. }
   RttiRoCandStart, RttiRoCandEnd : array of Integer;
   RttiRoCandCount : Integer;
+  { Ranges a writer step wants added to the RO list, ascending and outside
+    every existing range; RoMergeAdded folds them in (elfwriter.inc). }
+  RoAddS, RoAddE : array of Integer;
+  RoAddCount : Integer;
   { Set when an output write stored fewer bytes than it was asked to (OutWrote,
     util.inc). A full disk does that silently -- syswrite returns the short
     count and nothing else happens -- so RequireOutputArtefact reads this. }

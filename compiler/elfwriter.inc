@@ -2944,6 +2944,60 @@ begin
     if ObjDataIsRo(MethodFixups[i].DataPos) = wantRo then Inc(Result);
 end;
 
+{ Fold RoAddS/RoAddE[0..RoAddCount) -- ascending, outside every existing
+  range -- into the RO list. The existing blocks keep their ends, derived as
+  ObjRoKeepIramLiteralsWritable derives them (a block ends at the next start
+  inside its range, or at the range's end); the list is rebuilt in ascending
+  order with the new ranges interleaved by start. }
+procedure RoMergeAdded;
+var i, k, r, n: Integer;
+    entS, entE: array of Integer;
+begin
+  if RoAddCount = 0 then Exit;
+  n := RoEntryCount;
+  SetLength(entS, n + 1);
+  SetLength(entE, n + 1);
+  r := 0;
+  for k := 0 to n - 1 do
+  begin
+    while RoRangeEnd[r] <= RoEntryStart[k] do Inc(r);
+    entS[k] := RoEntryStart[k];
+    if (k + 1 < n) and (RoEntryStart[k + 1] < RoRangeEnd[r]) then
+      entE[k] := RoEntryStart[k + 1]
+    else
+      entE[k] := RoRangeEnd[r];
+  end;
+  RoRangeCount := 0;
+  RoEntryCount := 0;
+  i := 0; k := 0;
+  while (i < n) or (k < RoAddCount) do
+  begin
+    if (k >= RoAddCount) or ((i < n) and (entS[i] < RoAddS[k])) then
+    begin
+      RoRangeAdd(entS[i], entE[i]);
+      Inc(i);
+    end
+    else
+    begin
+      RoRangeAdd(RoAddS[k], RoAddE[k]);
+      Inc(k);
+    end;
+  end;
+  RoAddCount := 0;
+end;
+
+procedure RoAddPush(a, b: Integer);
+begin
+  if RoAddCount >= Length(RoAddS) then
+  begin
+    SetLength(RoAddS, 2 * RoAddCount + 16);
+    SetLength(RoAddE, 2 * RoAddCount + 16);
+  end;
+  RoAddS[RoAddCount] := a;
+  RoAddE[RoAddCount] := b;
+  Inc(RoAddCount);
+end;
+
 { Class RTTI to .rodata in an ESP object, when nothing can read it with the
   flash cache off. RoRttiWanted keeps it writable on --emit-obj because an
   ISR calling a virtual method reads the VMT through an instance -- no fixup
@@ -2958,9 +3012,8 @@ end;
   iterated until nothing changes. The merged list is rebuilt in ascending
   order, existing blocks and candidates interleaved by start. }
 procedure ObjRoAdoptRttiCandidates;
-var i, k, r, n, a, b: Integer;
+var i, k, a, b: Integer;
     keep: array of Boolean;
-    entS, entE: array of Integer;
     changed, roP, roT: Boolean;
 
   function CandAt(x: Integer): Integer;
@@ -3016,39 +3069,10 @@ begin
     end;
   until not changed;
 
-  { The existing blocks with their ends, derived as ObjRoKeepIramLiteralsWritable
-    derives them: a block ends at the next start inside its range, or at the
-    range's end. }
-  n := RoEntryCount;
-  SetLength(entS, n + RttiRoCandCount);
-  SetLength(entE, n + RttiRoCandCount);
-  r := 0;
-  for k := 0 to n - 1 do
-  begin
-    while RoRangeEnd[r] <= RoEntryStart[k] do Inc(r);
-    entS[k] := RoEntryStart[k];
-    if (k + 1 < n) and (RoEntryStart[k + 1] < RoRangeEnd[r]) then
-      entE[k] := RoEntryStart[k + 1]
-    else
-      entE[k] := RoRangeEnd[r];
-  end;
-  RoRangeCount := 0;
-  RoEntryCount := 0;
-  i := 0; k := 0;
-  while (i < n) or (k < RttiRoCandCount) do
-  begin
-    if (k < RttiRoCandCount) and (not keep[k]) then begin Inc(k); Continue; end;
-    if (k >= RttiRoCandCount) or ((i < n) and (entS[i] < RttiRoCandStart[k])) then
-    begin
-      RoRangeAdd(entS[i], entE[i]);
-      Inc(i);
-    end
-    else
-    begin
-      RoRangeAdd(RttiRoCandStart[k], RttiRoCandEnd[k]);
-      Inc(k);
-    end;
-  end;
+  RoAddCount := 0;
+  for k := 0 to RttiRoCandCount - 1 do
+    if keep[k] then RoAddPush(RttiRoCandStart[k], RttiRoCandEnd[k]);
+  RoMergeAdded;
 end;
 
 { A literal an `iram;` routine references directly stays in .data.
@@ -3109,10 +3133,13 @@ end;
   sections is decided by the linker, and no 32-bit word written here could
   hold it. Permutes Data[] into file order LAST, after those patches, which
   are at old positions. }
+procedure ObjRoAdoptDeadTypedConsts; forward;   { body after ObjDataIsExport }
+
 procedure ObjRoPrepare;
 var i, p, t: Integer;
 begin
   ObjRoAdoptRttiCandidates;
+  ObjRoAdoptDeadTypedConsts;
   ObjRoKeepIramLiteralsWritable;
   RoLayoutPrepare(True, 0);
   if not RoSplitActive then Exit;
@@ -4472,6 +4499,88 @@ begin
   ObjDataIsExport := ObjDataIsCandidate(i) and (not SymCStaticLink[i]) and
                      (not SymObjDataExternOnly[i]) and
                      not (SymObjRuntimeCopy[i] and ObjRuntimeIsPrivate);
+end;
+
+{ A typed const that DCE left unreferenced goes to .rodata. Baking
+  (TryBakeConstArrayIntoData) puts a literal array in .data -- SRAM on
+  ESP-IDF -- and keeps it writable because {$J+} lets a program assign it.
+  Once DCE has removed every routine that names it (IPIO2, the 480-byte trig
+  reduction table, in a program that does no trig), nothing can read or
+  write it, and flash holds it for free.
+
+  Live is any reference into [start, end): a surviving code reference
+  (GlobFix, Fixups), a data word pointing into it or stored in it
+  (DataPtrFix), or a self-relative word at either end (DataRelFix). These tables are read AFTER
+  DceRun compacted them, which is what makes "dead" mean unreachable rather
+  than merely unwritten. Exported and imported names are never candidates:
+  code outside this object can reach them. Called from ObjRoPrepare. }
+procedure ObjRoAdoptDeadTypedConsts;
+var k, i, j, d, e, t: Integer;
+    live: Boolean;
+
+  { Half-open. An address equal to `e` is the NEXT object's start far more
+    often than this one's end -- a pointer stored right after TableB in the
+    fixture aimed there -- and a real one-past-the-end reference comes with a
+    reference to the start, which keeps the table anyway. }
+  function DeadConstRefIn(x: Integer): Boolean;
+  begin
+    Result := (x >= d) and (x < e);
+  end;
+
+begin
+  if NoRoData then Exit;
+  RoAddCount := 0;
+  for k := 0 to SymCount - 1 do
+    if (Syms[k].Kind = skGlobal) and SymOffIsData(Syms[k].Offset) and
+       (SymAllocSize[k] > 0) and (not ObjDataIsExport(k)) and
+       (not ObjDataIsImport(k)) then
+    begin
+      d := SymOffDataPart(Syms[k].Offset);
+      e := d + SymAllocSize[k];
+      live := False;
+      i := 0;
+      while (not live) and (i < GlobFixCount) do
+      begin
+        if SymOffIsData(GlobFix[i].BSSoff) and DeadConstRefIn(SymOffDataPart(GlobFix[i].BSSoff)) then
+          live := True;
+        Inc(i);
+      end;
+      i := 0;
+      while (not live) and (i < FixCount) do
+      begin
+        if DeadConstRefIn(Fixups[i].DataOff) then live := True;
+        Inc(i);
+      end;
+      i := 0;
+      while (not live) and (i < DataPtrFixCount) do
+      begin
+        if DeadConstRefIn(DataPtrFix[i].TargetOff) or DeadConstRefIn(DataPtrFix[i].DataPos) then live := True;
+        Inc(i);
+      end;
+      i := 0;
+      while (not live) and (i < DataRelFixCount) do
+      begin
+        if DeadConstRefIn(DataRelFixPos[i]) or DeadConstRefIn(DataRelFixTarget[i]) then live := True;
+        Inc(i);
+      end;
+      if not live then RoAddPush(d, e);
+    end;
+  { ascending by start, as RoMergeAdded needs }
+  for i := 1 to RoAddCount - 1 do
+  begin
+    j := i;
+    while (j > 0) and (RoAddS[j - 1] > RoAddS[j]) do
+    begin
+      t := RoAddS[j]; RoAddS[j] := RoAddS[j - 1]; RoAddS[j - 1] := t;
+      t := RoAddE[j]; RoAddE[j] := RoAddE[j - 1]; RoAddE[j - 1] := t;
+      Dec(j);
+    end;
+  end;
+  if PxxDbgEnabled('a.datamap') then
+    for i := 0 to RoAddCount - 1 do
+      WriteLn('PXXDBG a.datamap   dead typed const to .rodata: ', RoAddE[i] - RoAddS[i],
+              'B @', RoAddS[i]);
+  RoMergeAdded;
 end;
 
 function ObjDataIsReferenced(i: Integer): Boolean;

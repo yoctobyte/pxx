@@ -39072,6 +39072,18 @@ test-emit-obj: $(COMPILER)
 	  [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-emit-obj: the $$t object WITH an iram routine differs under --no-ro-rtti -- VMTs or class RTTI went to flash"; echo "$$a"; echo "$$b"; exit 1; }; \
 	  echo "test-emit-obj: $$t class RTTI .data $$drw -> $$d B without iram; unchanged with an iram routine"; \
 	 done
+	# A TYPED CONST THAT DCE LEFT UNREFERENCED goes to .rodata (flash), one a
+	# live routine reads stays in .data (ObjRoAdoptDeadTypedConsts). TableB (800
+	# B) is read only by UseB, live only under -dUSE_B, so .data must be at
+	# least 800 B larger with the define. -O2 because that is what runs DCE.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_dead_typed_const.pas $(TESTTMP)/espdtc_$$t.o >/dev/null && \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp -dUSE_B test/esp_obj_dead_typed_const.pas $(TESTTMP)/espdtc_use_$$t.o >/dev/null || { echo "test-emit-obj: the $$t dead typed const fixture FAILED to build"; exit 1; }; \
+	  sz() { readelf -SW $$1 | sed 's/^ *\[ *[0-9]*\] *//' | awk '$$1==".data" {print $$5}' | sed 's|^|0x|' | xargs printf '%d'; }; \
+	  d=$$(sz $(TESTTMP)/espdtc_$$t.o); u=$$(sz $(TESTTMP)/espdtc_use_$$t.o); \
+	  [ -n "$$d" ] && [ -n "$$u" ] && [ $$((u - d)) -ge 800 ] || { echo "test-emit-obj: $$t .data is $$d B with TableB dead and $$u B with it live -- the dead table did not leave .data"; exit 1; }; \
+	  echo "test-emit-obj: $$t dead typed const leaves .data ($$u -> $$d B)"; \
+	 done
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	for t in riscv32 xtensa; do \
@@ -40564,6 +40576,16 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_esp_rtti_in_rodata.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rtro.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_rtro.oracle $(TESTTMP)/test_esp_rtro.$$chip; then echo "$$chip class RTTI in .rodata ok (== x86-64 oracle)"; \
 	  else echo "$$chip class RTTI in .rodata MISMATCH"; exit 1; fi; \
+	done
+	@# DEAD TYPED CONSTS GO TO FLASH, LIVE ONES STAY WRITABLE (2026-10-13): the
+	@# live tables are assigned, passed as var and Inc'd after the dead one moved
+	@# to .rodata. -O2 so DCE runs and the verdict is the one a real build gets.
+	@./$(COMPILER) test/test_esp_dead_typed_const.pas $(TESTTMP)/test_esp_dtc_oracle >/dev/null && $(TESTTMP)/test_esp_dtc_oracle > $(TESTTMP)/test_esp_dtc.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_dead_typed_const.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_dtc.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_dtc.oracle $(TESTTMP)/test_esp_dtc.$$chip; then echo "$$chip dead typed const in .rodata, live ones writable ok (== x86-64 oracle)"; \
+	  else echo "$$chip dead typed const MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
 	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED
