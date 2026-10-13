@@ -59,42 +59,66 @@ begin
   Result := pos + ((((old - pos) mod RO_RESIDUE) + RO_RESIDUE) mod RO_RESIDUE);
 end;
 
-procedure RoPieceAdd(old: Integer; isRo: Boolean);
+procedure RoPieceAddEx(old: Integer; isRo, drop: Boolean);
 begin
   if RoPieceCount + 1 >= Length(RoPieceOld) then
   begin
     SetLength(RoPieceOld, 2 * RoPieceCount + 16);
     SetLength(RoPieceNew, 2 * RoPieceCount + 16);
     SetLength(RoPieceIsRo, 2 * RoPieceCount + 16);
+    SetLength(RoPieceDrop, 2 * RoPieceCount + 16);
   end;
   RoPieceOld[RoPieceCount] := old;
   RoPieceIsRo[RoPieceCount] := isRo;
+  RoPieceDrop[RoPieceCount] := drop;
   Inc(RoPieceCount);
+end;
+
+procedure RoPieceAdd(old: Integer; isRo: Boolean);
+begin
+  RoPieceAddEx(old, isRo, False);
 end;
 
 { Decide the split and lay it out. Must run AFTER the last append to Data[]
   (PrepareDynamicData appends) and BEFORE anything resolves a data address. }
 procedure RoLayoutPrepare(wanted: Boolean; page: Integer);
-var i, cur, pos, len: Integer;
+var i, cur, pos, len, d, a: Integer;
 begin
   RoSplitActive := False;
   RoPieceCount := 0;
   if (not wanted) or NoRoData or (RoRangeCount = 0) then Exit;
   cur := 0;
+  d := 0;
   for i := 0 to RoRangeCount - 1 do
   begin
     if RoRangeEnd[i] > DataLen then
       ErrorNoPos('internal: a read-only data range runs past DataLen');
     if RoRangeStart[i] > cur then RoPieceAdd(cur, False);
-    RoPieceAdd(RoRangeStart[i], True);
+    { the dropped literals inside this range cut it into RO pieces and
+      zero-length dropped ones }
+    a := RoRangeStart[i];
+    while (d < RoDropCount) and (RoDropS[d] < RoRangeEnd[i]) do
+    begin
+      if (RoDropS[d] < a) or (RoDropE[d] > RoRangeEnd[i]) then
+        ErrorNoPos('internal: a dropped string literal is not inside one read-only range');
+      if RoDropS[d] > a then RoPieceAdd(a, True);
+      RoPieceAddEx(RoDropS[d], True, True);
+      a := RoDropE[d];
+      Inc(d);
+    end;
+    if a < RoRangeEnd[i] then RoPieceAdd(a, True);
     cur := RoRangeEnd[i];
   end;
+  if d < RoDropCount then
+    ErrorNoPos('internal: a dropped string literal lies outside every read-only range');
   if cur < DataLen then RoPieceAdd(cur, False);
   RoPieceOld[RoPieceCount] := DataLen;   { sentinel: the end of the last piece }
 
   pos := 0;
   for i := 0 to RoPieceCount - 1 do
-    if RoPieceIsRo[i] then
+    if RoPieceDrop[i] then
+      RoPieceNew[i] := pos                 { takes no room; never addressed }
+    else if RoPieceIsRo[i] then
     begin
       pos := RoResidueUp(pos, RoPieceOld[i]);
       RoPieceNew[i] := pos;
@@ -141,6 +165,9 @@ begin
     ErrorNoPos('internal: data offset ' + AIntToStr(o) + ' outside the data image');
   if o = DataLen then begin Result := RwFileEnd + RwVaShift; Exit; end;
   k := RoPieceOf(o);
+  if RoPieceDrop[k] then
+    ErrorNoPos('internal: data offset ' + AIntToStr(o) +
+               ' is inside a dropped string literal -- a reference ObjRoDropDeadStrings did not see');
   Result := RoPieceNew[k] + (o - RoPieceOld[k]);
 end;
 
@@ -219,6 +246,7 @@ begin
   SetLength(img, RwFileEnd + 16);
   for i := 0 to RwFileEnd + 15 do img[i] := 0;
   for i := 0 to RoPieceCount - 1 do
+  if not RoPieceDrop[i] then
   begin
     dst := RoPieceNew[i];
     if not RoPieceIsRo[i] then dst := dst - RwVaShift;
@@ -3160,12 +3188,96 @@ end;
   are at old positions. }
 procedure ObjRoAdoptDeadTypedConsts; forward;   { body after ObjDataIsExport }
 
+{ An unreferenced string literal takes no room in an ESP object.
+  InternStr writes every literal into Data[] the moment it is parsed, and
+  nothing ever took one out: the literals of a routine the DCE dropped, and
+  every `external name 'x'` (the name goes into the symbol table, never into
+  the image), were all carried into .rodata -- flash on ESP.
+
+  Live is any reference into the literal's whole entry [EntryStart, EntryEnd)
+  -- the same four tables, read after DceRun compacted them, that
+  ObjRoAdoptDeadTypedConsts trusts: a code reference (Fixups, GlobFix), a data
+  word pointing into it or stored in it (DataPtrFix), a self-relative word at
+  either end (DataRelFix). Anything else that addressed one in a relocatable
+  object would need a relocation, and every relocation goes through
+  ObjDataOff -> DataRemap, which refuses an offset inside a dropped piece. So
+  a reference this misses is a compile-time internal error, not a wrong
+  address.
+
+  Only a literal wholly inside one read-only range is dropped (one kept
+  writable for an IRAM routine is referenced anyway). riscv32/xtensa
+  --emit-obj --platform=esp, the same gate as the DCE's class-slot and
+  kind-arm cuts. PXXDBG=a.datamap prints the total. }
+procedure ObjRoDropDeadStrings;
+var hit: array of Boolean;
+    i, r, a, e, x, n, bytes: Integer;
+    live: Boolean;
+
+  procedure MarkRef(o: Integer);
+  begin
+    if (o >= 0) and (o < DataLen) then hit[o] := True;
+  end;
+
+begin
+  RoDropCount := 0;
+  if NoRoData or (not EmitObjMode) or (TargetPlatform <> PLATFORM_ESP) or
+     not ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then Exit;
+  SetLength(hit, DataLen + 1);
+  for i := 0 to DataLen do hit[i] := False;
+  for i := 0 to FixCount - 1 do MarkRef(Fixups[i].DataOff);
+  for i := 0 to GlobFixCount - 1 do
+    if SymOffIsData(GlobFix[i].BSSoff) then MarkRef(SymOffDataPart(GlobFix[i].BSSoff));
+  for i := 0 to DataPtrFixCount - 1 do
+  begin
+    MarkRef(DataPtrFix[i].TargetOff);
+    MarkRef(DataPtrFix[i].DataPos);
+  end;
+  for i := 0 to DataRelFixCount - 1 do
+  begin
+    MarkRef(DataRelFixPos[i]);
+    MarkRef(DataRelFixTarget[i]);
+  end;
+  for i := 0 to MethodFixCount - 1 do MarkRef(MethodFixups[i].DataPos);
+
+  n := 0; bytes := 0;
+  r := 0;
+  for i := 0 to StrCount - 1 do
+  begin
+    a := Strs[i].EntryStart;
+    e := Strs[i].EntryEnd;
+    while (r < RoRangeCount) and (RoRangeEnd[r] <= a) do Inc(r);
+    if r >= RoRangeCount then Break;
+    if (RoRangeStart[r] > a) or (RoRangeEnd[r] < e) then Continue;
+    live := False;
+    x := a;
+    while (not live) and (x < e) do
+    begin
+      if hit[x] then live := True;
+      Inc(x);
+    end;
+    if live then Continue;
+    if RoDropCount >= Length(RoDropS) then
+    begin
+      SetLength(RoDropS, 2 * RoDropCount + 64);
+      SetLength(RoDropE, 2 * RoDropCount + 64);
+    end;
+    RoDropS[RoDropCount] := a;
+    RoDropE[RoDropCount] := e;
+    Inc(RoDropCount);
+    Inc(n);
+    bytes := bytes + (e - a);
+  end;
+  if PxxDbgEnabled('a.datamap') then
+    WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
+end;
+
 procedure ObjRoPrepare;
 var i, p, t: Integer;
 begin
   ObjRoAdoptRttiCandidates;
   ObjRoAdoptDeadTypedConsts;
   ObjRoKeepIramLiteralsWritable;
+  ObjRoDropDeadStrings;
   RoLayoutPrepare(True, 0);
   if not RoSplitActive then Exit;
   for i := 0 to DataRelFixCount-1 do

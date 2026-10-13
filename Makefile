@@ -39138,6 +39138,19 @@ test-emit-obj: $(COMPILER)
 	  [ "$$u" = 4 ] || { echo "test-emit-obj: $$t object that USES variants and interfaces lost a walk arm ($$u of 4 symbols)"; exit 1; }; \
 	  echo "test-emit-obj: $$t managed-walk arms are cut without their kind (0 vs 4 symbols)"; \
 	 done
+	# An unreferenced string literal takes no room (ObjRoDropDeadStrings): the
+	# dead routine's literals and the unused external's name are absent from
+	# .rodata, the five live ones are there, and --no-ro-data (no drop) keeps
+	# the three dead ones as the control.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_dead_literals_take_no_room.pas $(TESTTMP)/espdlit_$$t.o >/dev/null && \
+	  ./$(COMPILER) -O2 --no-ro-data -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_dead_literals_take_no_room.pas $(TESTTMP)/espdlit_ctl_$$t.o >/dev/null || { echo "test-emit-obj: the $$t dead-literal fixture FAILED to build"; exit 1; }; \
+	  d=$$(readelf -p .rodata $(TESTTMP)/espdlit_$$t.o | grep -c DEADLIT_); \
+	  l=$$(readelf -p .rodata $(TESTTMP)/espdlit_$$t.o | grep -c 'in-const\|shared-literal\|live-'); \
+	  c=$$(readelf -p .data $(TESTTMP)/espdlit_ctl_$$t.o | grep -c DEADLIT_); \
+	  [ "$$d" = 0 ] && [ "$$l" = 5 ] && [ "$$c" = 3 ] || { echo "test-emit-obj: $$t dead literals: $$d in .rodata (want 0), live $$l (want 5), control $$c (want 3)"; exit 1; }; \
+	  echo "test-emit-obj: $$t unreferenced string literals take no room (0 of 3 kept, 5 live)"; \
+	 done
 	# RV32C is the --platform=esp default on riscv32: the object says so in
 	# e_flags (EF_RISCV_RVC, which the IDF linker merges with gcc's own RVC
 	# objects), --no-rv32-rvc turns it off, and the compressed .text is smaller.
@@ -40675,6 +40688,15 @@ test-esp-idf: $(COMPILER)
 	    if diff -u $(TESTTMP)/test_esp_karm.oracle $(TESTTMP)/test_esp_karm.$$chip; then echo "$$chip kind arms $${d:-strings-only} ok (== x86-64 oracle)"; \
 	    else echo "$$chip kind arms $${d:-strings-only} MISMATCH"; exit 1; fi; \
 	  done; \
+	done
+	@# DEAD LITERALS TAKE NO ROOM (2026-10-13): the live literals, one reached
+	@# only through a typed-const array, still print byte for byte.
+	@./$(COMPILER) test/esp_obj_dead_literals_take_no_room.pas $(TESTTMP)/test_esp_dlit_oracle >/dev/null && $(TESTTMP)/test_esp_dlit_oracle > $(TESTTMP)/test_esp_dlit.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=40 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/esp_obj_dead_literals_take_no_room.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_dlit.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_dlit.oracle $(TESTTMP)/test_esp_dlit.$$chip; then echo "$$chip dead literals dropped, live ones intact ok (== x86-64 oracle)"; \
+	  else echo "$$chip dead literals MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod

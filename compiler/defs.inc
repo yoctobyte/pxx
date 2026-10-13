@@ -2748,6 +2748,8 @@ type
     Text   : AnsiString;
     Offset : Integer;
     Len    : Integer;
+    { the whole Data[] entry, size word to padding: [EntryStart, EntryEnd) }
+    EntryStart, EntryEnd : Integer;
   end;
 
   TFixup = record
@@ -4612,6 +4614,13 @@ var
   RoSplitActive : Boolean;
   RoPieceOld, RoPieceNew : array of Integer;
   RoPieceIsRo : array of Boolean;
+  { A dropped piece is an unreferenced string literal in an ESP object
+    (ObjRoDropDeadStrings): zero bytes in the image, and an internal error
+    if any data offset inside it is ever remapped. RoDropS/E[0..RoDropCount)
+    are those literals, ascending, each inside one RO range. }
+  RoPieceDrop : array of Boolean;
+  RoDropS, RoDropE : array of Integer;
+  RoDropCount : Integer;
   RoPieceCount : Integer;
   RoImageLen   : Integer;  { R segment length, from dataBase }
   RwFileStart  : Integer;  { first RW byte's FILE offset from the data start }
