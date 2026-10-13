@@ -263,6 +263,8 @@ begin
   else if CaseEqual(mnem, 'mulhu') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_mulhu(r0, r1, r2); end
   else if CaseEqual(mnem, 'div') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_div(r0, r1, r2); end
   else if CaseEqual(mnem, 'rem') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_rem(r0, r1, r2); end
+  else if CaseEqual(mnem, 'divu') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_divu(r0, r1, r2); end
+  else if CaseEqual(mnem, 'remu') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_remu(r0, r1, r2); end
 
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmRv32RegOp(op1); imm := Integer(AsmRv32Int(op2, holes, holeCur)); AsmRv32CheckImm12(imm); rv32_addi(r0, r1, imm); end
   else if CaseEqual(mnem, 'xori') then begin r1 := AsmRv32RegOp(op1); imm := Integer(AsmRv32Int(op2, holes, holeCur)); AsmRv32CheckImm12(imm); rv32_xori(r0, r1, imm); end

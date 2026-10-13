@@ -32398,6 +32398,11 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/entry-s0-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32o0)" "$$($(TESTTMP)/test_rves0_x64)"
 	tools/expect_same.sh riscv32/entry-s0-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rves0_x64)"
 	tools/assert_no_leak.sh riscv32_entry_s0 8 tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32c
+	# INT64 DIVIDE: every sign combination and the 32-bit boundaries through
+	# the inline long division (linux has no IDF helper), against x86-64.
+	./$(COMPILER) test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_rvdiv64_x64
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_rvdiv64_rv32
+	tools/expect_same.sh riscv32/int64-divide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvdiv64_rv32)" "$$($(TESTTMP)/test_rvdiv64_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40763,15 +40768,28 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_rves0.oracle $(TESTTMP)/test_esp_rves0.$$chip; then echo "$$chip entry stores through s0 ok (== x86-64 oracle)"; \
 	  else echo "$$chip entry stores through s0 MISMATCH"; exit 1; fi; \
 	done
+	@# INT64 DIVIDE WITHOUT LIBGCC (2026-10-13): on IDF an Int64/QWord div/mod
+	@# calls builtinheap's PXXUDivMod64/PXXIDivMod64, never __divdi3 & co. The
+	@# object must not name them, and every sign/width row must match x86-64.
+	@./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -O2 -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_esp_rvdiv64.o >/dev/null
+	@if readelf -sW $(TESTTMP)/test_esp_rvdiv64.o | grep -E ' UND +__(u?div|u?mod)di3' ; then echo "riscv32 IDF object names libgcc's divide"; exit 1; \
+	  else echo "riscv32 IDF object names no libgcc divide ok"; fi
+	@./$(COMPILER) test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_esp_rvdiv64_oracle >/dev/null && $(TESTTMP)/test_esp_rvdiv64_oracle > $(TESTTMP)/test_esp_rvdiv64.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_int64_divide_without_libgcc.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvdiv64.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rvdiv64.oracle $(TESTTMP)/test_esp_rvdiv64.$$chip; then echo "$$chip Int64 divide ok (== x86-64 oracle)"; \
+	  else echo "$$chip Int64 divide MISMATCH"; exit 1; fi; \
+	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod
-	@# is a libgcc call on IDF. The rows that must NOT narrow -- a 64-bit
+	@# is a call to pxx's own helper on IDF (never libgcc). The rows that must NOT narrow -- a 64-bit
 	@# dividend, LongWord div Integer -- are in the program. S3 is the control.
 	@./$(COMPILER) test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_esp_low32_oracle >/dev/null && $(TESTTMP)/test_esp_low32_oracle > $(TESTTMP)/test_esp_low32.oracle
 	@for chip in esp32c3 esp32s3; do \
 	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
 	    tools/esp_run.sh --chip $$chip test/test_rv32_low32_narrowing_keeps_64bit_answers.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_low32.$$chip || true; \
-	  if diff -u $(TESTTMP)/test_esp_low32.oracle $(TESTTMP)/test_esp_low32.$$chip; then echo "$$chip 32-bit narrowing and libgcc Int64 divide ok (== x86-64 oracle)"; \
+	  if diff -u $(TESTTMP)/test_esp_low32.oracle $(TESTTMP)/test_esp_low32.$$chip; then echo "$$chip 32-bit narrowing and Int64 divide ok (== x86-64 oracle)"; \
 	  else echo "$$chip 32-bit narrowing MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the

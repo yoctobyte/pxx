@@ -93,7 +93,7 @@ function StrUDigits(n: QWord; neg: Boolean; width: Integer): AnsiString;
   fresh allocation and a copy each time, ~250 us for ten digits on an
   ESP32-C3 -- and were two full copies of that loop. Once the value fits 32
   bits the loop runs in LongWord, which a 32-bit target divides in one
-  instruction instead of two libgcc calls per digit. }
+  instruction instead of two 64-bit divide calls per digit. }
 var buf: array[0..23] of Char; p, len, pad: Integer; n32: LongWord; q: PChar;
 begin
   p := 24;

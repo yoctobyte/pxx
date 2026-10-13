@@ -2855,15 +2855,94 @@ function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; c
 function PXXIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
 function PXXIdfGetchar: Integer; cdecl; external name 'getchar';
 
-{ libgcc's 64-bit divide, which every IDF image links. The riscv32 codegen
-  calls these by name for an Int64 div/mod instead of inlining its own
-  ~55-instruction long division at each site (IREmitNodeRISCV32's 64-bit
-  pair path); its zero check still runs first, so a zero divisor never
-  reaches them. }
-function PXXIdfDivDi3(a, b: Int64): Int64; cdecl; external name '__divdi3';
-function PXXIdfModDi3(a, b: Int64): Int64; cdecl; external name '__moddi3';
-function PXXIdfUDivDi3(a, b: Int64): Int64; cdecl; external name '__udivdi3';
-function PXXIdfUModDi3(a, b: Int64): Int64; cdecl; external name '__umoddi3';
+{ pxx's own 64-bit divide for riscv32 on IDF, one out-of-line copy of each,
+  called by name by the codegen for an Int64/QWord div or mod instead of
+  inlining its ~55-instruction long division at every site (IREmitNodeRISCV32's
+  64-bit pair path). NOT libgcc's __divdi3 family, which every IDF image
+  happens to link: pxx does not depend on libgcc (owner ruling 2026-10-13).
+  The codegen's zero check runs first, so b <> 0 here, and the arguments come
+  in the word order the codegen already sets up: a in a0:a1, b in a2:a3,
+  wantMod in a4 (one routine per signedness, so no wrapper per operator).
+  Both operands fitting 32 bits -- the common case -- is one divu/remu; the
+  rest is the codegen's own restoring long division in inline asm (~20
+  instructions a bit; the same loop written in Pascal took ~150, because
+  every 64-bit shift and compare goes through the frame), so nothing in
+  here reaches back into a 64-bit divide. riscv32 only: no other target's
+  codegen calls these. }
+{$ifdef CPU_RISCV32}
+function PXXUDivMod64(a, b: QWord; wantMod: Boolean): QWord;
+var alo, ahi, blo, bhi, rlo, rhi: LongWord;
+begin
+  alo := LongWord(a); ahi := LongWord(a shr 32);
+  blo := LongWord(b); bhi := LongWord(b shr 32);
+  { ALL the dividing is in asm. A Pascal `LongWord(a) div LongWord(b)` here
+    would be typed 64-bit and call this routine again -- on IDF it recursed
+    until the task watchdog fired. Both operands within 32 bits: one
+    divu/remu. Otherwise the codegen's inline core (EmitUDivMod64RISCV32):
+    the dividend t0:t1 doubles as the quotient, the remainder builds in
+    t2:t3. }
+  asm
+    lw t0, alo
+    lw t1, ahi
+    lw a0, blo
+    lw a1, bhi
+    or t5, t1, a1
+    bne t5, zero, udm_long
+    remu t2, t0, a0
+    divu t0, t0, a0
+    addi t3, zero, 0
+    j udm_done
+  udm_long:
+    addi t2, zero, 0
+    addi t3, zero, 0
+    addi t4, zero, 64
+  udm_loop:
+    srli t5, t0, 31
+    add t0, t0, t0
+    srli t6, t1, 31
+    add t1, t1, t1
+    or t1, t1, t5
+    srli t5, t2, 31
+    add t2, t2, t2
+    or t2, t2, t6
+    add t3, t3, t3
+    or t3, t3, t5
+    bltu t3, a1, udm_nosub
+    bne t3, a1, udm_sub
+    bltu t2, a0, udm_nosub
+  udm_sub:
+    sltu t5, t2, a0
+    sub t2, t2, a0
+    sub t3, t3, a1
+    sub t3, t3, t5
+    ori t0, t0, 1
+  udm_nosub:
+    addi t4, t4, -1
+    bne t4, zero, udm_loop
+  udm_done:
+    sw t0, alo
+    sw t1, ahi
+    sw t2, rlo
+    sw t3, rhi
+  end;
+  if wantMod then Result := (QWord(rhi) shl 32) or rlo
+  else Result := (QWord(ahi) shl 32) or alo;
+end;
+
+{ Signed: divide the magnitudes; the quotient is negative when the signs
+  differ, the remainder takes the dividend's sign (Pascal truncates toward
+  zero). Low(Int64) has no positive counterpart, but its QWord negation is
+  the right magnitude, 2^63. }
+function PXXIDivMod64(a, b: Int64; wantMod: Boolean): Int64;
+var ua, ub: QWord; neg: Boolean;
+begin
+  if a < 0 then ua := QWord(0) - QWord(a) else ua := QWord(a);
+  if b < 0 then ub := QWord(0) - QWord(b) else ub := QWord(b);
+  Result := Int64(PXXUDivMod64(ua, ub, wantMod));
+  if wantMod then neg := a < 0 else neg := (a < 0) <> (b < 0);
+  if neg then Result := -Result;
+end;
+{$endif}
 
 { fd 0/1/2 ARE NOT POSIX FDS UNDER IDF. esp_libc's picolibc_init opens the
   console and stores WHATEVER fd open() returned in its stdin/stdout streams,

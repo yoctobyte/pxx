@@ -931,19 +931,14 @@ begin
   Patch32(pSkip, EncodeRISCVBNE(testReg, reg_zero, CodeLen - pSkip));
 end;
 
-{ The libgcc 64-bit divide builtinheap.pas declares on the IDF profile
-  (PXX_IDF_STDIO), or -1 where it is absent -- linux, bare -- and the inline
-  cores below run instead. }
-function Rv32LibgccDivProc(signedOp, wantMod: Boolean): Integer;
+{ pxx's own out-of-line 64-bit divide, which builtinheap.pas defines on the
+  IDF profile (PXX_IDF_STDIO), or -1 where it is absent -- linux, bare -- and
+  the inline cores below run instead. Never libgcc's __divdi3 family: pxx
+  does not depend on libgcc. }
+function Rv32DivHelperProc(signedOp: Boolean): Integer;
 begin
-  if signedOp then
-  begin
-    if wantMod then Result := FindProc('PXXIdfModDi3') else Result := FindProc('PXXIdfDivDi3');
-  end
-  else
-  begin
-    if wantMod then Result := FindProc('PXXIdfUModDi3') else Result := FindProc('PXXIdfUDivDi3');
-  end;
+  if signedOp then Result := FindProc('PXXIDivMod64')
+  else Result := FindProc('PXXUDivMod64');
 end;
 
 procedure EmitUDivMod64RISCV32(wantMod: Boolean);
@@ -1113,16 +1108,19 @@ begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     { dividend in t0:t1, divisor in a0:a1 }
-    procIdx := Rv32LibgccDivProc(signedOp, op = Ord(tkMod));
+    procIdx := Rv32DivHelperProc(signedOp);
     if procIdx >= 0 then
     begin
-      { IDF links libgcc: one call instead of the inline long division.
-        Same zero rule as the inline cores, then the C argument order. }
+      { one call to the shared helper instead of the inline long division.
+        Same zero rule as the inline cores, then a in a0:a1, b in a2:a3,
+        wantMod in a4. }
       EmitDivZeroCheckRV32(False);
       rv32_addi(reg_a2, reg_a0, 0);
       rv32_addi(reg_a3, reg_a1, 0);
       rv32_addi(reg_a0, reg_t0, 0);
       rv32_addi(reg_a1, reg_t1, 0);
+      if op = Ord(tkMod) then rv32_addi(reg_a4, reg_zero, 1)
+      else rv32_addi(reg_a4, reg_zero, 0);
       EmitCallProc(procIdx);              { a0:a1 = result }
     end
     else if signedOp then EmitIDivMod64RISCV32(op = Ord(tkMod))
