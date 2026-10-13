@@ -1084,9 +1084,15 @@ var
   HeapMappedBytes : Int64;   { arena bytes mapped, native profile only (0 elsewhere: a
                                calloc-backed profile does not own the reserve and must
                                not invent a figure for it) }
+{$ifndef PXX_ESP_IDF}
+  { The native allocator's free lists. Not on the IDF profile, whose PXXAlloc
+    and PXXFree are heap_caps calls: there these were 520 bytes of SRAM that
+    nothing read, and DCE drops code, not globals (owner 2026-10-12: RAM
+    outranks flash on ESP). }
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$endif}
 {$ifdef PXX_ALLOC_CENSUS}
   { ---- allocation census (-dPXX_ALLOC_CENSUS) ------------------------------
     How much does this program allocate, and of what size? This runtime could
