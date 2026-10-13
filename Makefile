@@ -32365,6 +32365,21 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_low32_rv32o2
 	tools/expect_same.sh riscv32/low32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_low32_rv32)" "$$($(TESTTMP)/test_low32_x64)"
 	tools/expect_same.sh riscv32/low32-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_low32_rv32o2)" "$$($(TESTTMP)/test_low32_x64)"
+	# STR OF AN INTEGER: StrInt/StrQWord build the digits in a stack buffer with a
+	# LongWord tail loop; every 31/32-bit boundary and both type ends are checked
+	# against literals in the program, so x86-64 and riscv32 must both print bad=0.
+	./$(COMPILER) test/test_strint_digits_and_width.pas $(TESTTMP)/test_strint_x64
+	./$(COMPILER) --target=riscv32 -O2 test/test_strint_digits_and_width.pas $(TESTTMP)/test_strint_rv32
+	tools/expect_same.sh x86-64/strint "$$($(TESTTMP)/test_strint_x64 | tail -1)" "bad=0"
+	tools/expect_same.sh riscv32/strint "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_strint_rv32)" "$$($(TESTTMP)/test_strint_x64)"
+	# CONCAT CHAINS APPEND IN PLACE: `a + b + c` allocates its innermost `+` with
+	# room and appends the rest (PXXStrConcatRoom + PXXStrAppend) on riscv32.
+	# Every operand kind against x86-64 at -O0 and -O2, and no leak.
+	./$(COMPILER) test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_x64
+	./$(COMPILER) --target=riscv32 test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_rv32
+	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_rv32c
+	tools/expect_same.sh riscv32/concat-chain "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cchain_rv32)" "$$($(TESTTMP)/test_cchain_x64)"
+	tools/assert_no_leak.sh riscv32_concat_chain 8 tools/run_target.sh riscv32 $(TESTTMP)/test_cchain_rv32c
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40697,6 +40712,22 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/esp_obj_dead_literals_take_no_room.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_dlit.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_dlit.oracle $(TESTTMP)/test_esp_dlit.$$chip; then echo "$$chip dead literals dropped, live ones intact ok (== x86-64 oracle)"; \
 	  else echo "$$chip dead literals MISMATCH"; exit 1; fi; \
+	done
+	@# STR OF AN INTEGER (2026-10-13): StrInt's buffer + LongWord tail, on chip.
+	@./$(COMPILER) test/test_strint_digits_and_width.pas $(TESTTMP)/test_esp_strint_oracle >/dev/null && $(TESTTMP)/test_esp_strint_oracle > $(TESTTMP)/test_esp_strint.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_strint_digits_and_width.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_strint.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_strint.oracle $(TESTTMP)/test_esp_strint.$$chip; then echo "$$chip Str of integers ok (== x86-64 oracle)"; \
+	  else echo "$$chip Str of integers MISMATCH"; exit 1; fi; \
+	done
+	@# CONCAT CHAINS (2026-10-13): riscv32 appends a chain's later terms in place.
+	@./$(COMPILER) test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_esp_cchain_oracle >/dev/null && $(TESTTMP)/test_esp_cchain_oracle > $(TESTTMP)/test_esp_cchain.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_str_concat_chain_appends_in_place.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_cchain.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_cchain.oracle $(TESTTMP)/test_esp_cchain.$$chip; then echo "$$chip string concat chains ok (== x86-64 oracle)"; \
+	  else echo "$$chip string concat chains MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod

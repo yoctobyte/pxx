@@ -148,6 +148,7 @@ function PXXStrAsciiCached(p: Pointer): Int64;
 procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
 procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+function PXXStrConcatRoom(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 { ---- UTF-16 (WideString/UnicodeString) ----
   Storage is 2-byte code units and the header length is their BYTE count, which
   is what lets concat/compare/copy stay the byte-level routines above. The
@@ -2767,6 +2768,34 @@ begin
   orAll := orAll or PXXBlockCopy(d + lenA, Int64(srcB), lenB);
   PByte(d + total)^ := 0;       { nul terminator }
   PXXHdrSetMeta(base, PXXStrMeta(orAll));
+  Result := Pointer(d);
+end;
+
+function PXXStrConcatRoom(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+{ PXXStrConcat for the innermost `+` of a chain (`a + b + c ...`): the block
+  is allocated with double the room and stamped APPENDABLE, exactly as
+  PXXStrAppend's grow branch does, so the PXXStrAppend calls the codegen emits
+  for the remaining terms land in place instead of copying the whole left side
+  again per term. The result is an ordinary managed string; the room is only
+  ever used by an append that owns it (rc = 1). }
+var
+  total, need, base, d, orAll: Int64;
+begin
+  total := lenA + lenB;
+  if total <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  need := PXX_HDR_SIZE + total + 1;           { +1 = nul terminator }
+  base := Int64(PXXAlloc(need * 2, 8));   { zeroed: the 32-bit header high halves }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;
+  PMachineWord(base + PXX_HDR_LEN)^ := total;
+  d := base + PXX_HDR_SIZE;
+  orAll := PXXBlockCopy(d, Int64(srcA), lenA);
+  orAll := orAll or PXXBlockCopy(d + lenA, Int64(srcB), lenB);
+  PByte(d + total)^ := 0;
+  PXXHdrSetMeta(base, PXXStrMeta(orAll) or PXX_FLAG_APPENDABLE);
   Result := Pointer(d);
 end;
 

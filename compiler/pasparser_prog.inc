@@ -78,6 +78,7 @@ begin
   dummyNames[2] := 'srcB';    dummyTypes[2] := tyPointer;
   dummyNames[3] := 'lenB';    dummyTypes[3] := tyNativeInt;
   i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
+  i := RegisterProc('PXXStrConcatRoom', True, tyPointer, 4, dummyNames, dummyTypes);
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
   dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
@@ -1745,6 +1746,7 @@ begin
   dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
   dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
   i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
+  i := RegisterProc('PXXStrConcatRoom', True, tyPointer, 4, dummyNames, dummyTypes);
 
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;

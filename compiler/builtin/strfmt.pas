@@ -86,68 +86,62 @@ begin
   else StrBool := StrStrW('FALSE', width);
 end;
 
-function StrInt(v: Int64; width: Integer): AnsiString;
-var
-  neg: Boolean;
-  digits: string;
-  n: Int64;
-  d: Integer;
+function StrUDigits(n: QWord; neg: Boolean; width: Integer): AnsiString;
+{ The magnitude n in decimal, '-' first when neg, right-justified to `width`.
+  Digits go right to left into a stack buffer and the string is allocated
+  ONCE. StrInt and StrQWord used to prepend a one-char string per digit -- a
+  fresh allocation and a copy each time, ~250 us for ten digits on an
+  ESP32-C3 -- and were two full copies of that loop. Once the value fits 32
+  bits the loop runs in LongWord, which a 32-bit target divides in one
+  instruction instead of two libgcc calls per digit. }
+var buf: array[0..23] of Char; p, len, pad: Integer; n32: LongWord; q: PChar;
 begin
-  digits := '';
-  if v = 0 then
-    digits := '0'
-  else
+  p := 24;
+  while n > $FFFFFFFF do
   begin
-    neg := v < 0;
-    n := v;
-    if neg then
-    begin
-      { Low(Int64) has no positive counterpart (-n wraps to itself and the
-        digit loop then produced just "-"): peel the last digit in the
-        NEGATIVE domain first — Pascal div/mod truncate toward zero, so
-        n mod 10 is in -9..0 and n div 10 moves toward zero. }
-      d := -(n mod 10);
-      digits := Chr(Ord('0') + d);
-      n := -(n div 10);
-    end;
-    while n > 0 do
-    begin
-      d := n mod 10;
-      digits := Chr(Ord('0') + d) + digits;
-      n := n div 10;
-    end;
-    if neg then digits := '-' + digits;
+    Dec(p); buf[p] := Chr(Ord('0') + Integer(n mod 10));
+    n := n div 10;
   end;
-  Result := digits;
-  while Length(Result) < width do
-    Result := ' ' + Result;
+  n32 := LongWord(n);
+  repeat
+    Dec(p); buf[p] := Chr(Ord('0') + Integer(n32 mod 10));
+    n32 := n32 div 10;
+  until n32 = 0;
+  if neg then
+  begin
+    Dec(p); buf[p] := '-';
+  end;
+  len := 24 - p;
+  pad := 0;
+  if width > len then pad := width - len;
+  SetLength(Result, pad + len);
+  q := PChar(Pointer(Result));
+  while pad > 0 do
+  begin
+    q^ := ' '; Inc(q); Dec(pad);
+  end;
+  while p < 24 do
+  begin
+    q^ := buf[p]; Inc(q); Inc(p);
+  end;
+end;
+
+function StrInt(v: Int64; width: Integer): AnsiString;
+{ Low(Int64) has no positive counterpart, but its magnitude is a QWord:
+  0 - QWord(v) wraps to exactly 2^63. }
+begin
+  if v < 0 then
+    Result := StrUDigits(QWord(0) - QWord(v), True, width)
+  else
+    Result := StrUDigits(QWord(v), False, width);
 end;
 
 function StrQWord(v: QWord; width: Integer): AnsiString;
 { StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
   (write(Text, q) routes here; the console writeln path has its own unsigned
   emitter). }
-var
-  digits: string;
-  n: QWord;
-  d: Integer;
 begin
-  digits := '';
-  if v = 0 then
-    digits := '0'
-  else
-  begin
-    n := v;
-    while n > 0 do
-    begin
-      d := Integer(n mod 10);
-      digits := Chr(Ord('0') + d) + digits;
-      n := n div 10;
-    end;
-  end;
-  Result := digits;
-  while Length(Result) < width do
-    Result := ' ' + Result;
+  Result := StrUDigits(v, False, width);
 end;
 
 end.
