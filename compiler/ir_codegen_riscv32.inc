@@ -1079,11 +1079,80 @@ begin
   Result := Is64BitRISCV32(tk) and FrameSlot64FoldsRISCV32(si);
 end;
 
+type TRv32SlowBranches = array[0..3] of record at, r1, r2: Integer; end;
+
+procedure EmitDiv64FastPathRISCV32(right: Integer; wantMod, signedOp: Boolean;
+  var slowAt: TRv32SlowBranches; var nSlow: Integer; var pDone: Integer);
+{ A 64-bit div/mod whose operands both fit 32 bits -- nearly every one in
+  practice (IntToStr's digit loop, seconds-per-day splits) -- is one
+  div/divu or rem/remu, inline. Pre: dividend t0:t1, divisor a0:a1, already
+  through the zero check, so the divisor is not zero. Post: the result in
+  a0:a1 and a jump to .done (pDone, patched by the caller), or a fall into
+  the slow path with t0:t1 / a0:a1 untouched. Signed fits means the high word
+  is the low word's sign; a divisor of -1 also goes slow, because
+  Low(LongInt) div -1 overflows 32 bits. A constant divisor in range needs
+  no test at run time. Before this, every such divide called the out-of-line
+  helper: ~10% slower CSV output on the thermostat brain than libgcc's
+  __divdi3, which has the same shortcut. }
+var dv: Int64; divisorKnown: Boolean; i: Integer;
+
+  procedure SlowIfNe(r1, r2: Integer);
+  begin
+    slowAt[nSlow].at := CodeLen;
+    slowAt[nSlow].r1 := r1;
+    slowAt[nSlow].r2 := r2;
+    rv32_bne(r1, r2, 0);
+    Inc(nSlow);
+  end;
+
+begin
+  divisorKnown := False;
+  if IRKind[right] = IR_CONST_INT then
+  begin
+    dv := IRIVal[right];
+    if signedOp then divisorKnown := (dv >= 1) and (dv <= High(LongInt))
+    else divisorKnown := (dv >= 1) and (dv <= High(LongWord));
+  end;
+  if signedOp then
+  begin
+    rv32_srai(reg_t5, reg_t0, 31);
+    SlowIfNe(reg_t5, reg_t1);
+    if not divisorKnown then
+    begin
+      rv32_srai(reg_t5, reg_a0, 31);
+      SlowIfNe(reg_t5, reg_a1);
+      rv32_addi(reg_t5, reg_a0, 1);
+      rv32_sltiu(reg_t5, reg_t5, 1);       { 1 iff the divisor is -1 }
+      SlowIfNe(reg_t5, reg_zero);
+    end;
+    if wantMod then rv32_rem(reg_a0, reg_t0, reg_a0)
+    else rv32_div(reg_a0, reg_t0, reg_a0);
+    rv32_srai(reg_a1, reg_a0, 31);
+  end
+  else
+  begin
+    if divisorKnown then SlowIfNe(reg_t1, reg_zero)
+    else
+    begin
+      rv32_or(reg_t5, reg_t1, reg_a1);
+      SlowIfNe(reg_t5, reg_zero);
+    end;
+    if wantMod then rv32_remu(reg_a0, reg_t0, reg_a0)
+    else rv32_divu(reg_a0, reg_t0, reg_a0);
+    rv32_addi(reg_a1, reg_zero, 0);
+  end;
+  pDone := CodeLen;
+  rv32_jal(reg_zero, 0);                   { -> .done (patched by the caller) }
+  for i := 0 to nSlow - 1 do
+    Patch32(slowAt[i].at, EncodeRISCVBNE(slowAt[i].r1, slowAt[i].r2,
+      CodeLen - slowAt[i].at));
+end;
+
 procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
   qchk, qchkUns: Boolean);
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
-var procIdx: Integer;
+var procIdx, nSlow, pDone: Integer; slowAt: TRv32SlowBranches;
 begin
   EmitNode64RISCV32(left);
   if IRLeafWritesOnlyA0A1RISCV32(right) then
@@ -1108,13 +1177,14 @@ begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     { dividend in t0:t1, divisor in a0:a1 }
+    EmitDivZeroCheckRV32(False);
+    nSlow := 0;
+    EmitDiv64FastPathRISCV32(right, op = Ord(tkMod), signedOp, slowAt, nSlow, pDone);
     procIdx := Rv32DivHelperProc(signedOp);
     if procIdx >= 0 then
     begin
-      { one call to the shared helper instead of the inline long division.
-        Same zero rule as the inline cores, then a in a0:a1, b in a2:a3,
-        wantMod in a4. }
-      EmitDivZeroCheckRV32(False);
+      { one call to the shared helper instead of the inline long division:
+        a in a0:a1, b in a2:a3, wantMod in a4. }
       rv32_addi(reg_a2, reg_a0, 0);
       rv32_addi(reg_a3, reg_a1, 0);
       rv32_addi(reg_a0, reg_t0, 0);
@@ -1125,6 +1195,7 @@ begin
     end
     else if signedOp then EmitIDivMod64RISCV32(op = Ord(tkMod))
     else EmitUDivMod64RISCV32(op = Ord(tkMod));
+    Patch32(pDone, EncodeRISCVJAL(reg_zero, CodeLen - pDone));
   end
   else if op = Ord(tkPlus) then
   begin
