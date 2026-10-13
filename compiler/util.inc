@@ -461,6 +461,14 @@ end;
 procedure RttiRoMark(s, e: Integer);
 begin
   if e <= s then Exit;
+  if RttiAllCount >= Length(RttiAllS) then
+  begin
+    SetLength(RttiAllS, 2 * RttiAllCount + 64);
+    SetLength(RttiAllE, 2 * RttiAllCount + 64);
+  end;
+  RttiAllS[RttiAllCount] := s;
+  RttiAllE[RttiAllCount] := e;
+  Inc(RttiAllCount);
   if RoRttiWanted then
     RoRangeAdd(s, e)
   else if RoRtti and EmitObjMode and (not NoRoData) then

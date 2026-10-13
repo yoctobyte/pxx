@@ -4578,6 +4578,16 @@ var
     routine is live. Owner 2026-10-12: RAM outranks flash on ESP. }
   RttiRoCandStart, RttiRoCandEnd : array of Integer;
   RttiRoCandCount : Integer;
+  { EVERY range RttiRoMark saw (VMTs, class headers, prop/meth/field arrays,
+    parameter blobs), whatever the RO decision. The DCE reads it: a pointer
+    from inside RTTI to a class is metadata, not a reference that can bring
+    an instance into being (DceClassDataReached). }
+  RttiAllS, RttiAllE : array of Integer;
+  RttiAllCount : Integer;
+  { The Data[] spans EmitRTTI and EmitTypeInfoHeaders wrote (-1 = none).
+    The first is metadata; the second is what TypeInfo(X) in code names, and
+    the DCE counts a live reference to it as a reference to a class. }
+  RttiSpanS, RttiSpanE, TiSpanS, TiSpanE : Integer;
   { Ranges a writer step wants added to the RO list, ascending and outside
     every existing range; RoMergeAdded folds them in (elfwriter.inc). }
   RoAddS, RoAddE : array of Integer;

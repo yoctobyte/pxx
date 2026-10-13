@@ -1050,6 +1050,136 @@ begin
                 AIntToStr(liveB));
 end;
 
+{ --- CLASS SLOTS ARE ROOTS ONLY WHILE A CLASS CAN EXIST --------------------
+  A VMT / IMT / RTTI method slot is a root because a virtual call can reach it
+  from anywhere -- but only through an INSTANCE or a class reference, and
+  either one starts with code (or a data pointer) naming the class's tables:
+  a constructor call loads the VMT, `is`/`as`/`on E: X` compare against it, an
+  interface assignment captures an IMT, TypeInfo names the RTTI header. A
+  program that never does any of those still carried every slot of every RTL
+  class as a root: TInterfacedObject's _Release alone pinned ~11 KB of
+  interface and finalizer runtime in a class-free ESP firmware.
+
+  So DceRun marks once with the class slots withheld, and asks this whether
+  anything LIVE names class data. If so the slots go back in and the pass is
+  repeated (liveness only grows, so that is the old answer exactly). The
+  sources checked are every code->data reference (Fixups, GlobFix into the
+  data part) whose owning body is live or that sits outside every body, and
+  every data->data pointer (DataPtrFix, DataRelFix) from outside the class
+  tables into them. NilPy ProcSig slots (MFK_PYSIG) are never withheld.
+
+  Gated to the ESP object targets, where those tables are the complete list of
+  ways code reaches data; elsewhere the slots stay unconditional roots. }
+var
+  DceWithholdClassSlots: Boolean;
+  DceClsS, DceClsE: array of Integer;
+  DceClsCount: Integer;
+
+procedure DceClsAdd(a, b: Integer);
+begin
+  if b <= a then Exit;
+  if DceClsCount >= Length(DceClsS) then
+  begin
+    SetLength(DceClsS, 2 * DceClsCount + 64);
+    SetLength(DceClsE, 2 * DceClsCount + 64);
+  end;
+  DceClsS[DceClsCount] := a;
+  DceClsE[DceClsCount] := b;
+  Inc(DceClsCount);
+end;
+
+function DceInClassData(x: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to DceClsCount - 1 do
+    if (x >= DceClsS[k]) and (x < DceClsE[k]) then begin Result := True; Exit; end;
+end;
+
+function DceInRtti(x: Integer): Boolean;
+var k: Integer;
+begin
+  Result := True;
+  if (x >= RttiSpanS) and (x < RttiSpanE) then Exit;
+  if (x >= TiSpanS) and (x < TiSpanE) then Exit;
+  Result := False;
+  for k := 0 to RttiAllCount - 1 do
+    if (x >= RttiAllS[k]) and (x < RttiAllE[k]) then begin Result := True; Exit; end;
+end;
+
+function DceClassSlotsWithholdable: Boolean;
+begin
+  Result := EmitObjMode and (TargetPlatform = PLATFORM_ESP) and
+            ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA));
+end;
+
+{ PXXDBG=a.dceclass: the first reference that keeps the class slots rooted }
+procedure DceClassWhy(const kind: AnsiString; at, owner, target: Integer);
+var k: Integer;
+begin
+  if not PxxDbgEnabled('a.dceclass') then Exit;
+  WriteLn('PXXDBG a.dceclass   registry @', RTTIRegistryOff, ' x', RTTIRegistryCount);
+  for k := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[k]) and
+       (((UClsVMTOffset[k] >= 0) and (target >= UClsVMTOffset[k] - 16) and (target < UClsVMTOffset[k] + 8 * (UClsVirtCount[k] + 1))) or
+        ((UClsRTTIOff[k] >= 0) and (target >= UClsRTTIOff[k]) and (target < UClsRTTIOff[k] + RTTI_CLS_SIZE))) then
+      WriteLn('PXXDBG a.dceclass   class ', k, ' vmt@', UClsVMTOffset[k], ' rtti@', UClsRTTIOff[k], ' layout@', UClsLayoutOff[k]);
+  for k := 0 to DceClsCount - 1 do
+    if (target >= DceClsS[k]) and (target < DceClsE[k]) then
+      WriteLn('PXXDBG a.dceclass   in class range [', DceClsS[k], ',', DceClsE[k], ')');
+  if owner >= 0 then
+    WriteLn('PXXDBG a.dceclass   slots kept: ', kind, ' ref @', at, ' in ', Procs[owner].Name, ' -> data ', target)
+  else
+    WriteLn('PXXDBG a.dceclass   slots kept: ', kind, ' ref @', at, ' (no owning body) -> data ', target);
+end;
+
+function DceClassDataReached: Boolean;
+var i, k, n, owner: Integer;
+begin
+  Result := True;
+  DceClsCount := 0;
+  for k := 0 to UClsCount - 1 do
+  begin
+    { a RECORD's RTTI is how a managed record is finalized; it makes no
+      instance of any class }
+    if UClsIsRecord[k] then Continue;
+    if UClsVMTOffset[k] >= 0 then
+    begin
+      n := UClsVirtCount[k];
+      if n < 1 then n := 1;
+      DceClsAdd(UClsVMTOffset[k] - 16, UClsVMTOffset[k] + 8 * n);   { layout/RTTI backlinks + slots }
+    end;
+    if UClsRTTIOff[k] >= 0 then DceClsAdd(UClsRTTIOff[k], UClsRTTIOff[k] + RTTI_CLS_SIZE);
+  end;
+  for k := 0 to IMTCount - 1 do
+    DceClsAdd(IMTOff[k], IMTOff[k] + 8 * UClsMCount[IMTIntf[k]] + 8);
+  DceClsAdd(TiSpanS, TiSpanE);   { TypeInfo(X): counted, whatever X is }
+  for i := 0 to FixCount - 1 do
+    { a negative DataOff is a sentinel (the class registry, TypeInfo, the
+      resource table, NilPy signatures) resolved at write time: counted as a
+      class reference without asking which }
+    if (Fixups[i].DataOff < 0) or DceInClassData(Fixups[i].DataOff) then
+    begin
+      owner := DceOwnerOf(Fixups[i].CodePos);
+      if (owner < 0) or DceLive[owner] then begin DceClassWhy('code', Fixups[i].CodePos, owner, Fixups[i].DataOff); Exit; end;
+    end;
+  for i := 0 to GlobFixCount - 1 do
+    if SymOffIsData(GlobFix[i].BSSoff) and DceInClassData(SymOffDataPart(GlobFix[i].BSSoff)) then
+    begin
+      owner := DceOwnerOf(GlobFix[i].CodePos);
+      if (owner < 0) or DceLive[owner] then begin DceClassWhy('glob', GlobFix[i].CodePos, owner, SymOffDataPart(GlobFix[i].BSSoff)); Exit; end;
+    end;
+  for i := 0 to DataPtrFixCount - 1 do
+    if DceInClassData(DataPtrFix[i].TargetOff) and not DceInClassData(DataPtrFix[i].DataPos) and
+       not DceInRtti(DataPtrFix[i].DataPos) then
+    begin DceClassWhy('dataptr', DataPtrFix[i].DataPos, -1, DataPtrFix[i].TargetOff); Exit; end;
+  for i := 0 to DataRelFixCount - 1 do
+    if DceInClassData(DataRelFixTarget[i]) and not DceInClassData(DataRelFixPos[i]) and
+       not DceInRtti(DataRelFixPos[i]) then
+    begin DceClassWhy('datarel', DataRelFixPos[i], -1, DataRelFixTarget[i]); Exit; end;
+  Result := False;
+end;
+
 procedure DceMarkAll(suppressVmt: Boolean);
 { Install the roots and run the reachability fixpoint. Leaves the answer in
   DceLive/DceWhy/DceVia and touches NOTHING that is emitted.
@@ -1102,7 +1232,9 @@ begin
       NOT what a subtree sum would say -- a body reachable both from a slot and
       from somewhere else is in the subtree and costs nothing. }
     DceWhyNow := DCE_WHY_VMT;   {STAGE2}
-    if suppressVmt and (DceCostFilter <> '') and
+    if DceWithholdClassSlots and (MethodFixups[i].Kind <> MFK_PYSIG) then
+      { no live code names any class: see DceClassDataReached }
+    else if suppressVmt and (DceCostFilter <> '') and
        (Pos(LowerCase(DceCostFilter),
             LowerCase(Procs[MethodFixups[i].ProcIdx].Name)) > 0) then
       { withheld for this measurement pass }
@@ -1436,7 +1568,13 @@ begin
       Inc(slot);
     end;
   end;
+  DceWithholdClassSlots := DceClassSlotsWithholdable;
   DceMarkAll(False);
+  if DceWithholdClassSlots and DceClassDataReached then
+  begin
+    DceWithholdClassSlots := False;
+    DceMarkAll(False);
+  end;
 
   { Marking is complete and DceLive is now authoritative -- set here rather
     than at the end of the procedure, because everything below only REMOVES
@@ -1639,6 +1777,22 @@ begin
     end;
     Inc(i);
   end;
+
+  { a class slot whose method was dropped (DceWithholdClassSlots) stays 0 --
+    nil -- in every writer: its fixup goes, the slot is never dispatched }
+  j := 0;
+  i := 0;
+  if not DceClassSlotsWithholdable then j := MethodFixCount;
+  while (i < MethodFixCount) and DceClassSlotsWithholdable do
+  begin
+    if Procs[MethodFixups[i].ProcIdx].BodyAddr >= 0 then
+    begin
+      MethodFixups[j] := MethodFixups[i];
+      Inc(j);
+    end;
+    Inc(i);
+  end;
+  MethodFixCount := j;
 
   j := 0;
   i := 0;

@@ -39113,6 +39113,19 @@ test-emit-obj: $(COMPILER)
 	  [ -n "$$d" ] && [ -n "$$u" ] && [ $$((u - d)) -ge 800 ] || { echo "test-emit-obj: $$t .data is $$d B with TableB dead and $$u B with it live -- the dead table did not leave .data"; exit 1; }; \
 	  echo "test-emit-obj: $$t dead typed const leaves .data ($$u -> $$d B)"; \
 	 done
+	# CLASS SLOTS NEED A CLASS (2026-10-13): VMT/IMT/RTTI method slots are DCE
+	# roots only while live code can name a class (DceClassDataReached). A
+	# program with only a managed record must lose TInterfacedObject._Release
+	# and PXXTIOGetInterface; one that uses an interface must keep both.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_class_slots_need_a_class.pas $(TESTTMP)/espcls_$$t.o >/dev/null && \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp -dUSE_CLASS test/esp_obj_class_slots_need_a_class.pas $(TESTTMP)/espcls_use_$$t.o >/dev/null || { echo "test-emit-obj: the $$t class-slot fixture FAILED to build"; exit 1; }; \
+	  n=$$(nm $(TESTTMP)/espcls_$$t.o | grep -c 'TInterfacedObject._Release\|PXXTIOGetInterface'); \
+	  u=$$(nm $(TESTTMP)/espcls_use_$$t.o | grep -c 'TInterfacedObject._Release\|PXXTIOGetInterface'); \
+	  [ "$$n" = 0 ] || { echo "test-emit-obj: $$t class-free object still carries the interface runtime ($$n symbols)"; exit 1; }; \
+	  [ "$$u" = 2 ] || { echo "test-emit-obj: $$t object that USES an interface lost its runtime ($$u of 2 symbols)"; exit 1; }; \
+	  echo "test-emit-obj: $$t class slots are roots only when a class is named (0 vs 2 symbols)"; \
+	 done
 	# RV32C is the --platform=esp default on riscv32: the object says so in
 	# e_flags (EF_RISCV_RVC, which the IDF linker merges with gcc's own RVC
 	# objects), --no-rv32-rvc turns it off, and the compressed .text is smaller.
@@ -40627,6 +40640,17 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_esp_dead_typed_const.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_dtc.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_dtc.oracle $(TESTTMP)/test_esp_dtc.$$chip; then echo "$$chip dead typed const in .rodata, live ones writable ok (== x86-64 oracle)"; \
 	  else echo "$$chip dead typed const MISMATCH"; exit 1; fi; \
+	done
+	@# CLASS SLOTS NEED A CLASS (2026-10-13): the class-free variant runs with
+	@# the dropped slots, the -dUSE_CLASS one dispatches through an interface.
+	@for d in "" -dUSE_CLASS; do \
+	  ./$(COMPILER) $$d test/esp_obj_class_slots_need_a_class.pas $(TESTTMP)/test_esp_cls_oracle >/dev/null && $(TESTTMP)/test_esp_cls_oracle > $(TESTTMP)/test_esp_cls.oracle; \
+	  for chip in esp32c3 esp32s3; do \
+	    ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals $$d -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	      tools/esp_run.sh --chip $$chip test/esp_obj_class_slots_need_a_class.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_cls.$$chip || true; \
+	    if diff -u $(TESTTMP)/test_esp_cls.oracle $(TESTTMP)/test_esp_cls.$$chip; then echo "$$chip class slots $${d:-class-free} ok (== x86-64 oracle)"; \
+	    else echo "$$chip class slots $${d:-class-free} MISMATCH"; exit 1; fi; \
+	  done; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod

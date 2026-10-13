@@ -3456,14 +3456,19 @@ begin
 
   { NilPy included: isinstance() resolves class identity through the same
     RTTI backlink chain (__pxxInheritsFrom) the Pascal `is` operator uses. }
+  RttiSpanS := -1; RttiSpanE := -1; TiSpanS := -1; TiSpanE := -1;
   if IsPascalFrontend or isNilPy then
   begin
+    RttiSpanS := DataLen;
     EmitRTTI;
+    RttiSpanE := DataLen;
     ReportRTTIWeight;
     { After EmitRTTI so it shares the same static-data region and the same
       MethodFixups pass that patches code addresses into data. }
     EmitPySignatures;
+    TiSpanS := DataLen;
     EmitTypeInfoHeaders;
+    TiSpanE := DataLen;
     if DumpRTTI then DumpRTTITables;
     EmitResources;
   end;
