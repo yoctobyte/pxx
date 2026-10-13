@@ -7,7 +7,8 @@ Prints one line:  home=<section> flags=<A|AW|AX..> refs=<section>,<section>...
   home  - the SHF_ALLOC PROGBITS section holding MARKER's bytes
   refs  - every SHF_ALLOC PROGBITS section containing MARKER's address as a
           little-endian 32-bit word at any offset (a code literal slot, a
-          pointer in a table)
+          pointer in a table), or -- riscv32 objects since 2026-10-13 -- built
+          by a `lui rd, %hi; addi rd, rd, %lo` pair (R_RISCV_HI20/LO12_I)
 
 Exit 1 when MARKER is absent, occurs twice (the answer would be a guess), or
 nothing points at it -- a literal with no reference proves nothing about the
@@ -37,6 +38,25 @@ def sections(img):
     return out
 
 
+def hilo_builds(body, va):
+    """Does a riscv `lui rd, hi` + `addi rd, rd, lo` pair in body make va?
+    Every 2-byte offset: linked code beside ours may be compressed."""
+    for i in range(0, len(body) - 7, 2):
+        w, = struct.unpack_from('<I', body, i)
+        if w & 0x7f != 0x37:
+            continue
+        rd = (w >> 7) & 31
+        w2, = struct.unpack_from('<I', body, i + 4)
+        if w2 & 0x707f != 0x13 or (w2 >> 7) & 31 != rd or (w2 >> 15) & 31 != rd:
+            continue
+        lo = w2 >> 20
+        if lo & 0x800:
+            lo -= 0x1000
+        if ((w & 0xfffff000) + lo) & 0xffffffff == va:
+            return True
+    return False
+
+
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
@@ -58,8 +78,9 @@ def main():
     word = struct.pack('<I', va)
     refs = []
     for name, _, _, addr, off, size in secs:
-        if img[off:off + size].find(word) >= 0:   # any offset: a riscv literal
-            refs.append(name)                     # can sit after a 2-byte insn
+        body = img[off:off + size]
+        if body.find(word) >= 0 or hilo_builds(body, va):   # any offset: a riscv
+            refs.append(name)                     # literal can sit after a 2-byte insn
     fl = 'A' + ('W' if flags & 1 else '') + ('X' if flags & 4 else '')
     print('home=%s flags=%s refs=%s' % (home, fl, ','.join(refs) or '-'))
     sys.exit(0 if refs else 1)

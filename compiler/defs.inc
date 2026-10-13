@@ -4714,6 +4714,10 @@ var
     absolute fixup, so it is inert unless GlobFix/FixupPCRel is also set. }
   FixupPicDelta : array of Integer;   { grown with Fixups itself, never alone }
   GlobFixPicDelta : array of Integer;
+  { riscv32 --emit-obj: the fixup is a `lui rd; addi rd, rd` PAIR at CodePos,
+    relocated R_RISCV_HI20 + R_RISCV_LO12_I, not a 32-bit literal word
+    (RvHiLoRefs). Grown and moved with Fixups / GlobFix, never alone. }
+  FixupHiLo, GlobFixHiLo : array of Boolean;
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;
 
@@ -5674,6 +5678,10 @@ var
   ExternalCount  : Integer;
   DynCallCodePos : array[0..MAX_CALLFIX-1] of Integer;
   DynCallExtIdx  : array[0..MAX_CALLFIX-1] of Integer;
+  { riscv32 --emit-obj: the site is `auipc t0; jalr ra, t0` relocated as one
+    R_RISCV_CALL_PLT, not a literal word (RvHiLoRefs). Moved with the two
+    arrays above. }
+  DynCallIsCall  : array[0..MAX_CALLFIX-1] of Boolean;
   { i386 --emit-obj: this call site was rewritten to reach its GOT slot through a
     PC anchor, so its relocation is R_386_PC32 and its addend carries the
     distance past the anchor. Parallel to FixupPCRel/FixupPicDelta; see

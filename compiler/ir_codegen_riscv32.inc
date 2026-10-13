@@ -44,8 +44,28 @@ begin
   end;
 end;
 
+{ The placeholder EmitDataRef/EmitGlobRef just wrote becomes the lui; the
+  fixup keeps its CodePos and is flagged as a pair. }
+procedure RvHiLoFinish(rd: Integer);
+var w: Cardinal;
+begin
+  w := (Cardinal(rd and 31) shl 7) or $37;            { lui rd, 0 }
+  Code[CodeLen - 4] := Byte(w and $FF);
+  Code[CodeLen - 3] := Byte((w shr 8) and $FF);
+  Code[CodeLen - 2] := Byte((w shr 16) and $FF);
+  Code[CodeLen - 1] := Byte((w shr 24) and $FF);
+  rv32_addi(rd, rd, 0);
+end;
+
 procedure EmitLoadDataRefRISCV32(rd: Integer; dataOff: Integer);
 begin
+  if RvHiLoRefs then
+  begin
+    EmitDataRef(dataOff);
+    FixupHiLo[FixCount - 1] := True;
+    RvHiLoFinish(rd);
+    Exit;
+  end;
   { Load 32-bit literal at PC-relative offset }
   rv32_auipc(rd, 0);
   rv32_jal(reg_zero, 8);
@@ -57,6 +77,13 @@ procedure EmitLoadGlobAddrRISCV32(rd: Integer; bssOff: Integer);
 { Same inline-literal trick, but the 32-bit slot is a BSS absolute address
   patched by the ELF writer. }
 begin
+  if RvHiLoRefs then
+  begin
+    EmitGlobRef(bssOff);
+    GlobFixHiLo[GlobFixCount - 1] := True;
+    RvHiLoFinish(rd);
+    Exit;
+  end;
   rv32_auipc(rd, 0);
   rv32_jal(reg_zero, 8);
   EmitGlobRef(bssOff);

@@ -3487,6 +3487,7 @@ begin
       begin
         Fixups[j]        := Fixups[j + 1];
         FixupPCRel[j]    := FixupPCRel[j + 1];
+        FixupHiLo[j]     := FixupHiLo[j + 1];
         FixupPicDelta[j] := FixupPicDelta[j + 1];
       end;
       Dec(FixCount);

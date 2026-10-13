@@ -488,6 +488,17 @@ end;
   answered `error: fixup overflow`, which is how this family was found at all:
   by pushing an input past the string-table cap that had just been lifted, and
   reading whatever stopped it next. feature-dynamic-compiler-tables }
+{ An object for the linker: an address is `lui rd, %hi(x); addi rd, rd,
+  %lo(x)` -- 8 bytes, relocated R_RISCV_HI20 + R_RISCV_LO12_I -- where the
+  inline-literal form below is 16 (auipc, jal over, the word, lw). The ESP
+  images are linked at fixed addresses, so absolute hi/lo is what gcc emits
+  there too (-mcmodel=medlow). Only an object: the ET_EXEC writers patch a
+  32-bit word at the fixup's CodePos and know no other shape. }
+function RvHiLoRefs: Boolean;
+begin
+  Result := EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_RISCV32);
+end;
+
 procedure FixupEnsure;
 begin
   if FixCount < FixCap then Exit;
@@ -495,6 +506,7 @@ begin
   SetLength(Fixups, FixCap);
   SetLength(FixupPCRel, FixCap);
   SetLength(FixupPicDelta, FixCap);
+  SetLength(FixupHiLo, FixCap);
 end;
 
 { ---- SEMANTIC IDENTITY: the accessors ------------------------------------

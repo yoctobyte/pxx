@@ -738,6 +738,18 @@ procedure writeRela32(var f: File; offset, symIdx, rtype, addend: Integer);
 begin
   writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
 end;
+{ An address reference in code: one R_*_32 on a literal word, or on riscv32 a
+  lui/addi pair (FixupHiLo/GlobFixHiLo) as R_RISCV_HI20 + R_RISCV_LO12_I. }
+procedure writeRelaRef32(var f: File; offset, symIdx, addend: Integer; hiLo: Boolean);
+begin
+  if hiLo then
+  begin
+    writeRela32(f, offset, symIdx, 26, addend);
+    writeRela32(f, offset + 4, symIdx, 27, addend);
+  end
+  else
+    writeRela32(f, offset, symIdx, 1, addend);
+end;
 { Elf32_Rel (8 bytes) -- no addend field: the addend lives IN the section bytes
   being relocated. That is not a style choice, it is the i386 psABI: gcc, clang
   and tcc all emit `.rel.text` for -m32, and the SHT_RELA form xtensa and
@@ -914,6 +926,17 @@ end;
 procedure writeRela32(f: Integer; offset, symIdx, rtype, addend: Integer);
 begin
   writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
+end;
+{ See the FPC twin above. }
+procedure writeRelaRef32(f: Integer; offset, symIdx, addend: Integer; hiLo: Boolean);
+begin
+  if hiLo then
+  begin
+    writeRela32(f, offset, symIdx, 26, addend);
+    writeRela32(f, offset + 4, symIdx, 27, addend);
+  end
+  else
+    writeRela32(f, offset, symIdx, 1, addend);
 end;
 { Elf32_Rel (8 bytes) -- addend in the section bytes; see the FPC twin above. }
 procedure writeRel32(f: Integer; offset, symIdx, rtype: Integer);
@@ -3194,6 +3217,13 @@ begin
   else ObjExtBind := $10;
 end;
 
+{ R_RISCV_CALL_PLT for an `auipc; jalr` external call (DynCallIsCall), else
+  the 32-bit word relocation (R_RISCV_32 / R_XTENSA_32, both type 1). }
+function DynCallRelType(i: Integer): Integer;
+begin
+  if DynCallIsCall[i] then Result := 19 else Result := 1;
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -3242,9 +3272,17 @@ begin
   { Partition relocation counts by which text section their CodePos lands in. }
   relaTextCount := 0; relaIramCount := 0;
   for i := 0 to FixCount-1 do
+  begin
     if CodePosToIramOff(Fixups[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+    if FixupHiLo[i] then    { the LO12_I half }
+      if CodePosToIramOff(Fixups[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  end;
   for i := 0 to GlobFixCount-1 do
+  begin
     if CodePosToIramOff(GlobFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+    if GlobFixHiLo[i] then
+      if CodePosToIramOff(GlobFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  end;
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
   for i := 0 to IramCallFixCount-1 do
@@ -3376,23 +3414,23 @@ begin
     Section syms: 3 = .data, 4 = .bss, 5 = .rodata. }
   for i := 0 to FixCount-1 do
     if CodePosToIramOff(Fixups[i].CodePos) < 0 then
-      writeRela32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 3, 5), 1,
-                  ObjDataOff(Fixups[i].DataOff));
+      writeRelaRef32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 3, 5),
+                  ObjDataOff(Fixups[i].DataOff), FixupHiLo[i]);
   for i := 0 to GlobFixCount-1 do
     if CodePosToIramOff(GlobFix[i].CodePos) < 0 then
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-        writeRela32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5), 1,
-                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
+        writeRelaRef32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i])
       else if impK >= 0 then
-        writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+        writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i])
       else
-        writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
+        writeRelaRef32(f, GlobFix[i].CodePos, 4, GlobFix[i].BSSoff, GlobFixHiLo[i]);
     end;
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) < 0 then
-      writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
+      writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], DynCallRelType(i), 0);
   for i := 0 to IramCallFixCount-1 do
     if CodePosToIramOff(IramCallFix[i].CodePos) < 0 then
       writeRela32(f, IramCallFix[i].CodePos, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
@@ -3406,8 +3444,8 @@ begin
   begin
     mapped := CodePosToIramOff(Fixups[i].CodePos);
     if mapped >= 0 then
-      writeRela32(f, mapped, ObjDataSym(Fixups[i].DataOff, 3, 5), 1,
-                  ObjDataOff(Fixups[i].DataOff));
+      writeRelaRef32(f, mapped, ObjDataSym(Fixups[i].DataOff, 3, 5),
+                  ObjDataOff(Fixups[i].DataOff), FixupHiLo[i]);
   end;
   for i := 0 to GlobFixCount-1 do
   begin
@@ -3416,18 +3454,18 @@ begin
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-        writeRela32(f, mapped, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5), 1,
-                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
+        writeRelaRef32(f, mapped, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i])
       else if impK >= 0 then
-        writeRela32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+        writeRelaRef32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i])
       else
-        writeRela32(f, mapped, 4, 1, GlobFix[i].BSSoff);
+        writeRelaRef32(f, mapped, 4, GlobFix[i].BSSoff, GlobFixHiLo[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
   begin
     mapped := CodePosToIramOff(DynCallCodePos[i]);
-    if mapped >= 0 then writeRela32(f, mapped, extSym0 + DynCallExtIdx[i], 1, 0);
+    if mapped >= 0 then writeRela32(f, mapped, extSym0 + DynCallExtIdx[i], DynCallRelType(i), 0);
   end;
   for i := 0 to IramCallFixCount-1 do
   begin
@@ -3578,6 +3616,8 @@ begin
                     appMainOff, firstGlobal, extSym0);
   numSyms := extSym0 + ExternalCount + ObjEspImportCount;
   relaTextCount := FixCount + GlobFixCount + DynCallCount;
+  for i := 0 to FixCount-1 do if FixupHiLo[i] then Inc(relaTextCount);         { LO12_I halves }
+  for i := 0 to GlobFixCount-1 do if GlobFixHiLo[i] then Inc(relaTextCount);
   relaDataCount := ObjDataRelocCount(False);
   relaRoCount := ObjDataRelocCount(True);
   if RoSplitActive then
@@ -3674,27 +3714,27 @@ begin
   { .rela.text: literal slots -> .data / .rodata / .bss / undefined externals.
     Symbol indices: 1 = .text section sym, 2 = .data, 3 = .bss, 4 = .rodata. }
   for i := 0 to FixCount-1 do
-    writeRela32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 2, 4), 1,
-                ObjDataOff(Fixups[i].DataOff));
+    writeRelaRef32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 2, 4),
+                ObjDataOff(Fixups[i].DataOff), FixupHiLo[i]);
   for i := 0 to GlobFixCount-1 do
   begin
     { A data-resident global (a typed const array baked into .data, see
       TryBakeConstArrayIntoData) carries a BIASED offset and relocates
       against .data/.rodata, not .bss. }
     if SymOffIsData(GlobFix[i].BSSoff) then
-      writeRela32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 2, 4), 1,
-                  ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)))
+      writeRelaRef32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 2, 4),
+                  ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i])
     else
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if impK >= 0 then
-        writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+        writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i])
       else
-        writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+        writeRelaRef32(f, GlobFix[i].CodePos, 3, GlobFix[i].BSSoff, GlobFixHiLo[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
-    writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
+    writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], DynCallRelType(i), 0);
 
   { .rela.data: data->data pointers and data->code method slots. Slots are 8
     bytes wide (layout shared with 64-bit targets); the reloc patches the low

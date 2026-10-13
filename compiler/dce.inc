@@ -1640,6 +1640,7 @@ begin
         the record without them hands every surviving site the flags of whoever
         used to sit at its new index -- see the block comment above GlobFix. }
       FixupPCRel[j] := FixupPCRel[i];
+      FixupHiLo[j] := FixupHiLo[i];
       FixupPicDelta[j] := FixupPicDelta[i];
       Inc(j);
     end;
@@ -1676,6 +1677,7 @@ begin
         answer away afterwards. Anything added parallel to these tables has to
         be added here too. }
       GlobFixPCRel[j] := GlobFixPCRel[i];
+      GlobFixHiLo[j] := GlobFixHiLo[i];
       GlobFixTrail[j] := GlobFixTrail[i];
       GlobFixPicDelta[j] := GlobFixPicDelta[i];
       Inc(j);
@@ -1804,6 +1806,7 @@ begin
     if not DceIsRemoved(DynCallCodePos[i]) then
     begin
       DynCallCodePos[j] := DceNewOff(DynCallCodePos[i]);
+      DynCallIsCall[j] := DynCallIsCall[i];
       DynCallExtIdx[j] := DynCallExtIdx[i];
       { SAME OMISSION AS ProcAddrFix BELOW, found by grepping for the sibling
         rather than by a failing test -- defs.inc states outright that

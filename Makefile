@@ -39051,7 +39051,7 @@ test-emit-obj: $(COMPILER)
 	@for t in riscv32 xtensa; do \
 	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_rodata.pas $(TESTTMP)/esprod_$$t.o >/dev/null || { echo "test-emit-obj: the $$t .rodata fixture FAILED to build"; exit 1; }; \
 	  readelf -SW $(TESTTMP)/esprod_$$t.o | grep -qE '\] \.rodata +PROGBITS +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +A ' || { echo "test-emit-obj: the $$t object has no .rodata section with flags A (allocated, not writable)"; readelf -SW $(TESTTMP)/esprod_$$t.o; exit 1; }; \
-	  readelf -rW $(TESTTMP)/esprod_$$t.o | grep -qE 'R_(RISCV|XTENSA)_32 +[0-9a-f]+ +\.rodata \+' || { echo "test-emit-obj: no relocation in the $$t object names .rodata -- the literals moved and nothing points at them"; exit 1; }; \
+	  readelf -rW $(TESTTMP)/esprod_$$t.o | grep -qE 'R_(RISCV_HI20|RISCV_32|XTENSA_32) +[0-9a-f]+ +\.rodata \+' || { echo "test-emit-obj: no relocation in the $$t object names .rodata -- the literals moved and nothing points at them"; exit 1; }; \
 	 done; echo "test-emit-obj: an ESP object carries its string literals in a read-only .rodata (riscv32, xtensa)"
 	# ...and its VMTs and class RTTI too, UNLESS the program has an iram or
 	# interrupt routine: on ESP-IDF .rodata is flash, and an ISR reads a VMT
@@ -39135,7 +39135,7 @@ test-emit-obj: $(COMPILER)
 	    || { echo "test-emit-obj: an imported variable was refused for a $$t ESP object"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }; \
 	  readelf -sW $(TESTTMP)/espx_imp_$$t.o | grep -q 'GLOBAL DEFAULT  *UND Shared$$' \
 	    || { echo "test-emit-obj: $$t: no UND symbol for the imported variable"; exit 1; }; \
-	  readelf -rW $(TESTTMP)/espx_imp_$$t.o | grep -q '_32 .* Shared + 0' \
+	  readelf -rW $(TESTTMP)/espx_imp_$$t.o | grep -qE '(_32|_HI20) .* Shared \+ 0' \
 	    || { echo "test-emit-obj: $$t: the reference does not relocate against the import (it would read this object's .bss)"; readelf -rW $(TESTTMP)/espx_imp_$$t.o | head -5; exit 1; }; \
 	done
 	# 4b-nonies. THE ADDRESS OF AN EXTERNAL ROUTINE, on every target that has an

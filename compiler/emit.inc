@@ -1077,6 +1077,7 @@ begin
   FixupEnsure;
   FixupPCRel[FixCount] := False;
   FixupPicDelta[FixCount] := 0;
+  FixupHiLo[FixCount] := False;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
      (TargetArch = TARGET_WASM32) then
@@ -1166,11 +1167,13 @@ begin
     SetLength(GlobFixPCRel, gfN);
     SetLength(GlobFixTrail, gfN);
     SetLength(GlobFixPicDelta, gfN);
+    SetLength(GlobFixHiLo, gfN);
     GlobFixCapacity := gfN;
   end;
   GlobFixPCRel[GlobFixCount] := False;
   GlobFixTrail[GlobFixCount] := 0;
   GlobFixPicDelta[GlobFixCount] := 0;
+  GlobFixHiLo[GlobFixCount] := False;
   { x86-64: rewrite the absolute [disp32] memory operand just emitted into the
     rip-relative form, so .text carries R_X86_64_PC32 and an object can be
     linked into a PIE (feature-a-x86-64-object-output-is-position-dependent).

@@ -19228,10 +19228,23 @@ begin
     if TargetArch = TARGET_RISCV32 then
     begin
       if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+      if RvHiLoRefs then
+      begin
+        { An object: `auipc t0; jalr ra, t0` and one R_RISCV_CALL_PLT -- the
+          linker fills both halves. 8 bytes where the literal form is 20. }
+        DynCallCodePos[DynCallCount] := CodeLen;
+        DynCallExtIdx[DynCallCount] := extIdx;
+        DynCallIsCall[DynCallCount] := True;
+        Inc(DynCallCount);
+        rv32_auipc(reg_t0, 0);
+        rv32_jalr(reg_ra, reg_t0, 0);
+        Exit;
+      end;
       rv32_auipc(reg_t0, 0);
       rv32_jal(reg_zero, 8);
       DynCallCodePos[DynCallCount] := CodeLen;
       DynCallExtIdx[DynCallCount] := extIdx;
+      DynCallIsCall[DynCallCount] := False;
       Inc(DynCallCount);
       EmitI32(0);
       rv32_lw(reg_t0, reg_t0, 8);
