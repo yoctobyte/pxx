@@ -741,9 +741,6 @@ end;
   reaches exactly the node emitted next and nothing below it. }
 var
   Rv32Low32Demand: Boolean;
-  { A string concat whose result the next `+` will append to: allocate it with
-    room (PXXStrConcatRoom). Read and cleared like Rv32Low32Demand. }
-  Rv32ConcatRoom: Boolean;
 
 { A managed-string `+` node: its value is a fresh handle this code owns. }
 function Rv32IsStrConcat(n: Integer): Boolean;
@@ -2036,13 +2033,12 @@ var
   vaByVal: Boolean;
   sVal: AnsiString;
   low32Dem: Boolean;   { the consumer keeps only a0 (Rv32Low32Demand) }
-  concatRoom: Boolean; { the next `+` appends to this concat (Rv32ConcatRoom) }
+  chain: array of Integer;  { a flattened `a + b + c ...` (Rv32IsStrConcat) }
+  ci, ck: Integer;
   narrow: Integer;     { Rv32NarrowBinop, when low32Dem }
 begin
   low32Dem := Rv32Low32Demand;
   Rv32Low32Demand := False;
-  concatRoom := Rv32ConcatRoom;
-  Rv32ConcatRoom := False;
   narrow := 0;
   { A write to StdErr: point the runtime writers at fd 2 for this ONE node
     (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
@@ -2969,31 +2965,58 @@ begin
 
         if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = Ord(tkPlus)) then
         begin
-          { A CHAIN: `a + b + c` is ((a + b) + c), and the inner `+` already
-            produced a fresh handle nobody else holds. Concatenating onto it
-            again copied the whole left side once per term -- 570 us for
-            `x := 'abc' + x + ',' + 'def'` with a 700-byte x on a C3. So the
-            innermost `+` allocates with room (PXXStrConcatRoom: double the
-            size, APPENDABLE) and every later term is PXXStrAppend into that
-            temporary, in place while the room lasts. [sp]=rhs, [sp+4]=the
-            temporary's slot. }
+          { A CHAIN: `a + b + c` is ((a + b) + c), and concatenating pairwise
+            copied the whole left side once per term -- 570 us for
+            `x := 'abc' + x + ',' + 'def'` with a 700-byte x on a C3. So a chain
+            is flattened (at most 64 terms; a longer left side is one term that
+            is itself a chain), every term is evaluated left to right and kept
+            on the stack, and PXXStrConcatN sums the lengths and copies each
+            term once into an exact-size block. Exact, not with room: a result
+            stored in a long-lived string would otherwise keep the spare
+            capacity for its whole life (measured ~800 B of retained heap on
+            the remote-thermostat brain).
+            Stack after the terms: term j at [sp + 8k + 4(k-1-j)], below them
+            k (len, src) pairs, pair j at [sp + 8j]. }
           if Rv32IsStrConcat(left) then
           begin
-            Rv32ConcatRoom := True;
-            IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-            IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-            EmitStrOperandRISCV32(IRStrTkOf(right), 0, reg_a2, reg_a1);  { lenB, srcB }
-            rv32_addi(reg_a0, reg_sp, 4);                                 { the temporary's slot }
-            procIdx := FindProc('PXXStrAppend');
-            if procIdx < 0 then Error('compiler error: PXXStrAppend not found');
-            EmitCallProc(procIdx);
-            if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
+            ck := 2;                                 { node's right term + the leftmost }
+            ci := left;
+            while Rv32IsStrConcat(ci) and (ck < 64) do begin Inc(ck); ci := IRA[ci]; end;
+            SetLength(chain, ck);
+            chain[0] := ci;
+            ci := node;
+            for ck := Length(chain) - 1 downto 1 do
             begin
-              rv32_lw(reg_a0, reg_sp, 0);
-              procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
+              chain[ck] := IRB[ci];
+              ci := IRA[ci];
             end;
-            rv32_lw(reg_a0, reg_sp, 4);
-            rv32_addi(reg_sp, reg_sp, 8);
+            ck := Length(chain);
+            for ci := 0 to ck - 1 do
+            begin
+              IREmitNodeRISCV32(chain[ci]);
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            end;
+            rv32_addi(reg_sp, reg_sp, -8 * ck);
+            for ci := 0 to ck - 1 do
+            begin
+              EmitStrOperandRISCV32(IRStrTkOf(chain[ci]), 8 * ck + 4 * (ck - 1 - ci), reg_t1, reg_t2);
+              rv32_sw(reg_t1, reg_sp, 8 * ci);
+              rv32_sw(reg_t2, reg_sp, 8 * ci + 4);
+            end;
+            rv32_addi(reg_a0, reg_sp, 0);
+            rv32_addi(reg_a1, reg_zero, ck);
+            procIdx := FindProc('PXXStrConcatN');
+            if procIdx < 0 then Error('compiler error: PXXStrConcatN not found');
+            EmitCallProc(procIdx);
+            rv32_sw(reg_a0, reg_sp, 0);              { the result, over pair 0 }
+            for ci := 0 to ck - 1 do
+              if (IntToTypeKind(IRTk[chain[ci]]) = tyAnsiString) and IRNodeOwnsManagedStr(chain[ci]) then
+              begin
+                rv32_lw(reg_a0, reg_sp, 8 * ck + 4 * (ck - 1 - ci));
+                procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
+              end;
+            rv32_lw(reg_a0, reg_sp, 0);
+            rv32_addi(reg_sp, reg_sp, 12 * ck);
             Exit;
           end;
           { Managed-string concat -> PXXStrConcat(lenA, srcA, srcB, lenB). Each
@@ -3006,8 +3029,7 @@ begin
           EmitStrOperandRISCV32(IRStrTkOf(left),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t2, 0);    { a2 = srcB }
           rv32_addi(reg_a3, reg_t1, 0);    { a3 = lenB }
-          if concatRoom then procIdx := FindProc('PXXStrConcatRoom')
-          else procIdx := FindProc('PXXStrConcat');
+          procIdx := FindProc('PXXStrConcat');
           if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
           EmitCallProc(procIdx);                { a0 = result handle }
           { release fresh tyAnsiString BINOP operands (nested concat temporaries) }

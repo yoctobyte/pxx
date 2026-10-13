@@ -148,7 +148,7 @@ function PXXStrAsciiCached(p: Pointer): Int64;
 procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
 procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
-function PXXStrConcatRoom(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+function PXXStrConcatN(pairs: Pointer; count: NativeInt): Pointer;
 { ---- UTF-16 (WideString/UnicodeString) ----
   Storage is 2-byte code units and the header length is their BYTE count, which
   is what lets concat/compare/copy stay the byte-level routines above. The
@@ -2771,32 +2771,44 @@ begin
   Result := Pointer(d);
 end;
 
-function PXXStrConcatRoom(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
-{ PXXStrConcat for the innermost `+` of a chain (`a + b + c ...`): the block
-  is allocated with double the room and stamped APPENDABLE, exactly as
-  PXXStrAppend's grow branch does, so the PXXStrAppend calls the codegen emits
-  for the remaining terms land in place instead of copying the whole left side
-  again per term. The result is an ordinary managed string; the room is only
-  ever used by an append that owns it (rc = 1). }
+function PXXStrConcatN(pairs: Pointer; count: NativeInt): Pointer;
+{ A whole `a + b + c ...` chain in one allocation (the riscv32 codegen
+  flattens it): `pairs` is count (len, src) word pairs, each term already
+  decomposed the way PXXStrConcat's operands are. The block is exact-size --
+  the same allocation and header as PXXStrConcat -- so a result stored in a
+  long-lived string holds no spare capacity. }
 var
-  total, need, base, d, orAll: Int64;
+  total, base, d, orAll, n, pp, pe: Int64;
 begin
-  total := lenA + lenB;
+  total := 0;
+  pp := Int64(pairs);
+  pe := pp + count * 2 * SizeOf(Pointer);
+  while pp < pe do
+  begin
+    total := total + PMachineWord(pp)^;
+    pp := pp + 2 * SizeOf(Pointer);
+  end;
   if total <= 0 then
   begin
     Result := nil;
     Exit;
   end;
-  need := PXX_HDR_SIZE + total + 1;           { +1 = nul terminator }
-  base := Int64(PXXAlloc(need * 2, 8));   { zeroed: the 32-bit header high halves }
+  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { zeroed: header high halves, padding }
   PMachineWord(base + PXX_HDR_RC)^ := 1;
   PMachineWord(base + PXX_HDR_LEN)^ := total;
   d := base + PXX_HDR_SIZE;
-  orAll := PXXBlockCopy(d, Int64(srcA), lenA);
-  orAll := orAll or PXXBlockCopy(d + lenA, Int64(srcB), lenB);
-  PByte(d + total)^ := 0;
-  PXXHdrSetMeta(base, PXXStrMeta(orAll) or PXX_FLAG_APPENDABLE);
-  Result := Pointer(d);
+  orAll := 0;
+  pp := Int64(pairs);
+  while pp < pe do
+  begin
+    n := PMachineWord(pp)^;
+    orAll := orAll or PXXBlockCopy(d, PMachineWord(pp + SizeOf(Pointer))^, n);
+    d := d + n;
+    pp := pp + 2 * SizeOf(Pointer);
+  end;
+  { the nul terminator is the zeroed byte at d }
+  PXXHdrSetMeta(base, PXXStrMeta(orAll));
+  Result := Pointer(base + PXX_HDR_SIZE);
 end;
 
 { ---- UTF-16 string runtime (feature-unicodestring-model) ----

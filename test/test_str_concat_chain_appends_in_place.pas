@@ -1,7 +1,7 @@
 program test_str_concat_chain_appends_in_place;
-{ On riscv32 a chain `a + b + c ...` allocates its innermost `+` with room
-  (PXXStrConcatRoom) and appends each later term into that temporary
-  (PXXStrAppend) instead of concatenating the whole left side again per term.
+{ On riscv32 a chain `a + b + c ...` is flattened and built by one
+  PXXStrConcatN call into an exact-size block, instead of concatenating the
+  whole left side again per term.
   Every operand kind a term can be -- a managed string, a literal, a Char, a
   short string, an empty or unset string, a call result, the target itself --
   must give the same bytes as x86-64, and nothing may leak (run under
@@ -58,5 +58,8 @@ begin
   { a chain as an argument and inside a comparison }
   if ('p' + x + 'q') = ('p' + x + 'q') then writeln('eq ok');
   writeln(Length('[' + Tag(5) + ']' + c + ss));
+  { more terms than one flattened call takes (64): the rest is a nested chain }
+  y := ss + '1' + '2' + c + '4' + '5' + ss + '7' + '8' + c + '0' + '1' + ss + '3' + '4' + c + '6' + '7' + ss + '9' + '0' + c + '2' + '3' + ss + '5' + '6' + c + '8' + '9' + ss + '1' + '2' + c + '4' + '5' + ss + '7' + '8' + c + '0' + '1' + ss + '3' + '4' + c + '6' + '7' + ss + '9' + '0' + c + '2' + '3' + ss + '5' + '6' + c + '8' + '9' + ss + '1' + '2' + c + '4' + '5' + ss + '7' + '8' + c;
+  writeln(Length(y), ' ', y);
   writeln('done');
 end.

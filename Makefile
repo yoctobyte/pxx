@@ -32372,9 +32372,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_strint_digits_and_width.pas $(TESTTMP)/test_strint_rv32
 	tools/expect_same.sh x86-64/strint "$$($(TESTTMP)/test_strint_x64 | tail -1)" "bad=0"
 	tools/expect_same.sh riscv32/strint "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_strint_rv32)" "$$($(TESTTMP)/test_strint_x64)"
-	# CONCAT CHAINS APPEND IN PLACE: `a + b + c` allocates its innermost `+` with
-	# room and appends the rest (PXXStrConcatRoom + PXXStrAppend) on riscv32.
-	# Every operand kind against x86-64 at -O0 and -O2, and no leak.
+	# CONCAT CHAINS: riscv32 flattens `a + b + c ...` into one exact-size
+	# PXXStrConcatN call. Every operand kind, and a chain longer than one call
+	# takes, against x86-64; and no leak.
 	./$(COMPILER) test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_x64
 	./$(COMPILER) --target=riscv32 test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_rv32
 	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_rv32c
@@ -40721,7 +40721,7 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_strint.oracle $(TESTTMP)/test_esp_strint.$$chip; then echo "$$chip Str of integers ok (== x86-64 oracle)"; \
 	  else echo "$$chip Str of integers MISMATCH"; exit 1; fi; \
 	done
-	@# CONCAT CHAINS (2026-10-13): riscv32 appends a chain's later terms in place.
+	@# CONCAT CHAINS (2026-10-13): riscv32 builds a chain in one exact-size call.
 	@./$(COMPILER) test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_esp_cchain_oracle >/dev/null && $(TESTTMP)/test_esp_cchain_oracle > $(TESTTMP)/test_esp_cchain.oracle
 	@for chip in esp32c3 esp32s3; do \
 	  ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
