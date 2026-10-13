@@ -18272,12 +18272,25 @@ begin
     if ExternalCount >= MAX_EXTERNAL then Error('external function overflow');
     extIdx := ExternalCount;
     ExternalProc[extIdx] := procIdx;
-    ExternalGotOff[extIdx] := DataLen;
-    DataEnsure(8);
-    for i := 0 to 7 do
+    { NO GOT SLOT IN AN ESP OBJECT. writeELF32Rel / writeELF32RelIram relocate
+      every external call against the external's own symbol (R_*_32 on the
+      call's literal word, see their DynCall loops) and never read
+      ExternalGotOff, so the slot was 8 bytes of zeroed, writable .data -- SRAM
+      on ESP-IDF -- per imported function, referenced by nothing (82 in the
+      remote_thermostat brain, 656 B). -1 rather than a plausible offset so a
+      future reader on this route computes an obviously wrong address. }
+    if EmitObjMode and (not EmitSharedMode) and
+       ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
+      ExternalGotOff[extIdx] := -1
+    else
     begin
-      Data[DataLen] := 0;
-      Inc(DataLen);
+      ExternalGotOff[extIdx] := DataLen;
+      DataEnsure(8);
+      for i := 0 to 7 do
+      begin
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
     end;
     Inc(ExternalCount);
   end;

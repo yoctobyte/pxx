@@ -23,8 +23,14 @@ const
     and never writes through them. The size is not load-bearing: every read
     and write goes by BufSize, which SetTextBuf already sets to anything (a
     16-byte buffer writes and reads byte-identically to 4096); a smaller one
-    only costs more write/read calls. }
-  TF_BUFSIZE = 128;
+    only costs more read calls.
+
+    32, not 128, since 2026-10-13: writes never touch the buffer (TextWrite
+    goes straight to PalWrite), and the five standard files are unbuffered, so
+    they read one byte at a time into it. Only a Reset file on a seekable
+    handle reads ahead, and SetTextBuf gives that one a bigger buffer when it
+    matters. 5 x 96 B = 480 B of .bss back on every ESP program. }
+  TF_BUFSIZE = 32;
 {$else}
   TF_BUFSIZE = 4096;
 {$endif}

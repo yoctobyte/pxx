@@ -3852,9 +3852,12 @@ begin
       SUM OF SIZES IS A LOWER BOUND ON WHAT REMOVING A ROW WOULD SAVE -- the
       same point a.impwaste makes for imports: a slot is aligned, so dropping
       one also frees the padding after it. Do not read a row as a saving. }
+    { A typed const baked into .data (SymOffIsData) keeps its SymAllocSize but
+      no BSS: TryBakeConstArrayIntoData gave the reservation back. Counting it
+      here listed IPIO2's 480 B as .bss when it was .data. }
     dmNamed := 0;
     for dmI := 0 to SymCount - 1 do
-      if (Syms[dmI].Kind = skGlobal) and (SymAllocSize[dmI] > 0) then
+      if (Syms[dmI].Kind = skGlobal) and (not SymOffIsData(Syms[dmI].Offset)) and (SymAllocSize[dmI] > 0) then
         dmNamed := dmNamed + SymAllocSize[dmI];
     WriteLn('PXXDBG a.datamap bss=', BSSSize, 'B  named globals ', dmNamed,
             'B  unattributed ', BSSSize - dmNamed,
@@ -3867,7 +3870,7 @@ begin
     begin
       dmBest := -1; dmBestSz := 0;
       for dmI := 0 to SymCount - 1 do
-        if (Syms[dmI].Kind = skGlobal) and (SymAllocSize[dmI] > dmBestSz) then
+        if (Syms[dmI].Kind = skGlobal) and (not SymOffIsData(Syms[dmI].Offset)) and (SymAllocSize[dmI] > dmBestSz) then
         begin
           { skip the ones already printed }
           dmK := 0;
@@ -3882,6 +3885,12 @@ begin
       WriteLn('PXXDBG a.datamap   bss ', dmBestSz, 'B  ', Syms[dmBest].Name);
       Inc(dmRank);
     end;
+    { The typed consts baked into .data, in declaration order with their .data
+      offset: on ESP these are SRAM too, and the rows above no longer show them. }
+    for dmI := 0 to SymCount - 1 do
+      if (Syms[dmI].Kind = skGlobal) and SymOffIsData(Syms[dmI].Offset) and (SymAllocSize[dmI] > 0) then
+        WriteLn('PXXDBG a.datamap   data ', SymAllocSize[dmI], 'B  ', Syms[dmI].Name,
+                ' @', SymOffDataPart(Syms[dmI].Offset));
   end;
   writeln('ok: ',outFile,'  [code=',emittedCode,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,'  codeseg=',CodeLen,'B]');
