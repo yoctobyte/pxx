@@ -4416,6 +4416,10 @@ begin
     ManagedElemKind := 3
   else
     ManagedElemKind := 0;
+  { Every element kind a walk can be handed was answered here, so an arm for a
+    kind never answered cannot run (DceCutDeadKindArms). Asked-but-unused
+    answers count too, which only keeps more. }
+  ElemKindSeen[Result] := True;
 end;
 
 function ManagedElemRef(elemTk, elemRec: Integer): Integer;

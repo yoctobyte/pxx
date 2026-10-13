@@ -1437,6 +1437,75 @@ begin
   until not progressed;
 end;
 
+procedure DceCutCalls(const fromName, toName: AnsiString; seen: Boolean; const why: AnsiString; nop: Integer);
+{ Re-aim the calls to toName made from inside fromName ('' = from anywhere)
+  at nop, unless `seen` says the arm holding them can be selected. }
+var i, src, tgt, n: Integer;
+begin
+  if seen then Exit;
+  tgt := FindProc(toName);
+  if tgt < 0 then Exit;
+  src := -1;
+  if fromName <> '' then
+  begin
+    src := FindProc(fromName);
+    if (src < 0) or (Procs[src].BodyAddr < 0) then Exit;
+  end;
+  n := 0;
+  for i := 0 to CallFixCount - 1 do
+    if (CallFix[i].ProcIdx = tgt) and
+       ((src < 0) or (DceOwnerOf(CallFix[i].CodePos) = src)) then
+    begin
+      CallFix[i].ProcIdx := nop;
+      Inc(n);
+    end;
+  if n > 0 then
+  begin
+    if fromName = '' then
+      DceReportLine('cut: ' + AIntToStr(n) + ' calls to ' + toName + ' -- ' + why)
+    else
+      DceReportLine('cut: ' + fromName + ' -> ' + toName + ' (' + AIntToStr(n) + ') -- ' + why);
+  end;
+end;
+
+procedure DceCutDeadKindArms;
+{ A DISPATCH ARM NO DESCRIPTOR CAN SELECT IS A CALL THAT NEVER RUNS.
+  PXXRecordRelease and PXXRecordRetain walk a layout descriptor and switch on
+  each member's kind; the kind is DATA, so to this pass every arm's call is an
+  unconditional edge. The variant arm (kind 5, PXXVarClear/PXXVarRetain) and
+  the NilPy object arm (kind 6, PXXObjRelease) hold the variant runtime, the
+  NilPy object runtime and through them most of the interface runtime -- about
+  6 KB of riscv32 .text in a program that has no variant, no NilPy object and
+  no interface member anywhere. PXXRecordRetainIntf/ReleaseIntf do nothing at
+  all without a kind-4 member, so every call to them goes.
+
+  Every member kind is written by the two descriptor writers in rtti_emit.inc,
+  which record it in DescKindSeen; no descriptor is built at run time. The cut
+  call sites are re-aimed at PXXDceNoCall, an empty runtime procedure, BEFORE
+  the marking, so the edges the fixpoint sees are the ones the image keeps.
+  A call to the same targets from anywhere else still roots them.
+
+  Gated with the class slots (DceClassSlotsWithholdable): the reasoning is not
+  target-specific, but this is where it was measured. }
+var nop: Integer;
+begin
+  if not DceClassSlotsWithholdable then Exit;
+  nop := FindProc('PXXDceNoCall');
+  if (nop < 0) or (Procs[nop].BodyAddr < 0) then Exit;
+  DceCutCalls('PXXRecordRelease', 'PXXObjRelease', DescKindSeen[6], 'no member descriptor has kind 6', nop);
+  DceCutCalls('PXXRecordRelease', 'PXXVarClear', DescKindSeen[5], 'no member descriptor has kind 5', nop);
+  DceCutCalls('PXXRecordRetain', 'PXXVarRetain', DescKindSeen[5], 'no member descriptor has kind 5', nop);
+  DceCutCalls('', 'PXXRecordReleaseIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
+  DceCutCalls('', 'PXXRecordRetainIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
+  { the container element walks: baseKind comes only from ManagedElemKind }
+  DceCutCalls('PXXDynArrayReleaseDepth', 'PXXVarClear', ElemKindSeen[6], 'no element kind 6', nop);
+  DceCutCalls('PXXDynArrayReleaseDepth', 'PXXIntfRelease', ElemKindSeen[4], 'no element kind 4', nop);
+  DceCutCalls('PXXArrayReleaseImmediate', 'PXXVarClear', ElemKindSeen[6], 'no element kind 6', nop);
+  DceCutCalls('PXXArrayReleaseImmediate', 'PXXIntfRelease', ElemKindSeen[4], 'no element kind 4', nop);
+  DceCutCalls('PXXDynArrayRetainImmediate', 'PXXVarRetain', ElemKindSeen[6], 'no element kind 6', nop);
+  DceCutCalls('PXXDynArrayRetainImmediate', 'PXXIntfAddRef', ElemKindSeen[4], 'no element kind 4', nop);
+end;
+
 procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
     why: AnsiString; src, dst: Integer; progressed: Boolean;
@@ -1535,6 +1604,8 @@ begin
     they are the only place the pass allocates anything big. }
   SetLength(DceCallOwner, CallFixCount + 1);
   SetLength(DceEdgeTo, CallFixCount + 1);
+
+  DceCutDeadKindArms;
 
   { --- roots and reachability, once or twice -------------------------------
     The suppressed pass FIRST and the real pass LAST, because the ranges phase

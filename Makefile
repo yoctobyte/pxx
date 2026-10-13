@@ -39126,6 +39126,18 @@ test-emit-obj: $(COMPILER)
 	  [ "$$u" = 2 ] || { echo "test-emit-obj: $$t object that USES an interface lost its runtime ($$u of 2 symbols)"; exit 1; }; \
 	  echo "test-emit-obj: $$t class slots are roots only when a class is named (0 vs 2 symbols)"; \
 	 done
+	# A managed-value walk's call for a kind no descriptor or element type has is
+	# cut (DceCutDeadKindArms): strings only -> no PXXObjRelease, PXXVarClear,
+	# PXXIntfRelease or PXXRecordReleaseIntf; -dALL uses all four.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_kind_arms_need_their_kind.pas $(TESTTMP)/espkarm_$$t.o >/dev/null && \
+	  ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=$$t --platform=esp -dALL test/esp_obj_kind_arms_need_their_kind.pas $(TESTTMP)/espkarm_all_$$t.o >/dev/null || { echo "test-emit-obj: the $$t kind-arm fixture FAILED to build"; exit 1; }; \
+	  n=$$(nm $(TESTTMP)/espkarm_$$t.o | grep -cE ' t (PXXObjRelease|PXXVarClear|PXXIntfRelease|PXXRecordReleaseIntf)$$'); \
+	  u=$$(nm $(TESTTMP)/espkarm_all_$$t.o | grep -cE ' t (PXXObjRelease|PXXVarClear|PXXIntfRelease|PXXRecordReleaseIntf)$$'); \
+	  [ "$$n" = 0 ] || { echo "test-emit-obj: $$t strings-only object still carries the variant/interface walk arms ($$n symbols)"; exit 1; }; \
+	  [ "$$u" = 4 ] || { echo "test-emit-obj: $$t object that USES variants and interfaces lost a walk arm ($$u of 4 symbols)"; exit 1; }; \
+	  echo "test-emit-obj: $$t managed-walk arms are cut without their kind (0 vs 4 symbols)"; \
+	 done
 	# RV32C is the --platform=esp default on riscv32: the object says so in
 	# e_flags (EF_RISCV_RVC, which the IDF linker merges with gcc's own RVC
 	# objects), --no-rv32-rvc turns it off, and the compressed .text is smaller.
@@ -40650,6 +40662,18 @@ test-esp-idf: $(COMPILER)
 	      tools/esp_run.sh --chip $$chip test/esp_obj_class_slots_need_a_class.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_cls.$$chip || true; \
 	    if diff -u $(TESTTMP)/test_esp_cls.oracle $(TESTTMP)/test_esp_cls.$$chip; then echo "$$chip class slots $${d:-class-free} ok (== x86-64 oracle)"; \
 	    else echo "$$chip class slots $${d:-class-free} MISMATCH"; exit 1; fi; \
+	  done; \
+	done
+	@# KIND ARMS NEED THEIR KIND (2026-10-13): the plain variant runs with the
+	@# variant/interface arms of the managed-value walks cut; -dALL releases a
+	@# Variant and an interface held in records and arrays (Destroy order).
+	@for d in "" -dALL; do \
+	  ./$(COMPILER) $$d test/esp_obj_kind_arms_need_their_kind.pas $(TESTTMP)/test_esp_karm_oracle >/dev/null && $(TESTTMP)/test_esp_karm_oracle > $(TESTTMP)/test_esp_karm.oracle; \
+	  for chip in esp32c3 esp32s3; do \
+	    ESP_RUN_TIMEOUT=40 ESP_PXXFLAGS="-O2 --no-signals $$d -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	      tools/esp_run.sh --chip $$chip test/esp_obj_kind_arms_need_their_kind.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_karm.$$chip || true; \
+	    if diff -u $(TESTTMP)/test_esp_karm.oracle $(TESTTMP)/test_esp_karm.$$chip; then echo "$$chip kind arms $${d:-strings-only} ok (== x86-64 oracle)"; \
+	    else echo "$$chip kind arms $${d:-strings-only} MISMATCH"; exit 1; fi; \
 	  done; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs

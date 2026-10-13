@@ -2029,6 +2029,7 @@ begin
           else
             mKind := 3;
           PatchDataI32(mHdr + 4, mKind);
+          DescKindSeen[mKind] := True;   { DceCutDeadKindArms }
 
           if UFldIsArray[fi] then
           begin
@@ -2184,6 +2185,7 @@ begin
             else
               mKind := 3;
             PatchDataI32(mHdr + 4, mKind);
+            DescKindSeen[mKind] := True;   { DceCutDeadKindArms }
 
             if UFldIsArray[fi] then
             begin

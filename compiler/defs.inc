@@ -4588,6 +4588,13 @@ var
     The first is metadata; the second is what TypeInfo(X) in code names, and
     the DCE counts a live reference to it as a reference to a class. }
   RttiSpanS, RttiSpanE, TiSpanS, TiSpanE : Integer;
+  { DescKindSeen[k]: some record or class descriptor carries a member of
+    kind k (1 string .. 7 promo). A dispatch arm for a kind no descriptor
+    carries cannot run, and the DCE cuts its calls (DceCutDeadKindArms). }
+  DescKindSeen : array[0..7] of Boolean;
+  { ElemKindSeen[k]: ManagedElemKind answered k for some element type -- the
+    baseKind every container element walk switches on (0 .. 6). }
+  ElemKindSeen : array[0..7] of Boolean;
   { Ranges a writer step wants added to the RO list, ascending and outside
     every existing range; RoMergeAdded folds them in (elfwriter.inc). }
   RoAddS, RoAddE : array of Integer;

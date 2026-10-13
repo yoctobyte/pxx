@@ -5554,6 +5554,8 @@ var
   subDesc: Pointer;
   memberSize: Int64;
 begin
+{ ESP: a no-op walk; see PXXRecordReleaseIntf. }
+{$ifndef PXX_ESP}
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
   memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
@@ -5586,6 +5588,7 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+{$endif}
 end;
 
 procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
@@ -5601,6 +5604,10 @@ var
   subDesc: Pointer;
   memberSize: Int64;
 begin
+{ A bare ESP build (PXX_ESP) has no COM interfaces -- the kind-4 arm is
+  compiled out below -- so the whole walk is a no-op there. (On IDF it is
+  real; the DCE drops its calls when no descriptor has a kind-4 member.) }
+{$ifndef PXX_ESP}
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
   memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
@@ -5633,6 +5640,15 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+{$endif}
+end;
+
+procedure PXXDceNoCall(p: Pointer);
+{ The target the DCE re-aims a call at when the dispatch arm holding it can
+  never be selected (DceCutDeadKindArms, dce.inc): PXXRecordRelease's kind-6
+  call to PXXObjRelease, in a program whose descriptors carry no kind 6. Never
+  reached; it exists so that the call site keeps a valid target. }
+begin
 end;
 
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
