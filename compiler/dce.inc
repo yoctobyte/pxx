@@ -90,6 +90,18 @@ begin
   Result := ProcBodyEnd[p];
   if (Result <= Procs[p].BodyAddr) or (Result > DceLimit[slot]) then
     Result := Procs[p].BodyAddr;
+  { riscv32 RVC: removing a body must move what follows by a multiple of 4, or
+    the inline literal words behind it lose their alignment. A body that ends
+    2 mod 4 owns the c.nop SetProcBodyAddrHere put after it; with anything
+    else there its extent is unknown. }
+  if (TargetArch = TARGET_RISCV32) and RvcOn and ((Result mod 4) <> 0) then
+  begin
+    if (Result + 2 <= DceLimit[slot]) and (Result + 2 <= CodeLen) and
+       (Code[Result] = $01) and (Code[Result + 1] = $00) then
+      Result := Result + 2
+    else
+      Result := Procs[p].BodyAddr;
+  end;
 end;
 
 function DceOwnerOf(pos: Integer): Integer;

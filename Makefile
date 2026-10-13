@@ -32356,6 +32356,24 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
+	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
+	# and without compressed instructions must print the same thing under qemu,
+	# and the compressed build must actually be smaller. The programs are the
+	# shapes compression can break: inline literal words (must stay 4-aligned),
+	# exception landing pads and their fixed-size skips, inline asm (held at 4
+	# bytes per line), atomics' retry loops (constant backward branches), signal
+	# trampolines, and the DCE moving bodies under -O2.
+	@for p in test_cross_exception test_cross_float test_cross_string test_cross_dynarray \
+	          test_asm_rv32 test_riscv32_hosted_atomics test_signal_handler_callback_b336 \
+	          test_i386_loops test_int64_counter_crosses_2pow32_on_32bit test_inline_expand; do \
+	  ./$(COMPILER) --target=riscv32 -O2 --no-rv32-rvc test/$$p.pas $(TESTTMP)/rvc4_$$p >/dev/null && \
+	  ./$(COMPILER) --target=riscv32 -O2 --rv32-rvc test/$$p.pas $(TESTTMP)/rvc_$$p >/dev/null || { echo "test-riscv32: rvc $$p FAILED to build"; exit 1; }; \
+	  a=$$(tools/run_target.sh riscv32 $(TESTTMP)/rvc4_$$p 2>&1; echo "rc=$$?"); \
+	  b=$$(tools/run_target.sh riscv32 $(TESTTMP)/rvc_$$p 2>&1; echo "rc=$$?"); \
+	  test "$$a" = "$$b" || { echo "test-riscv32: rvc $$p prints differently with compressed instructions"; echo "$$a" > $(TESTTMP)/rvc4_$$p.out; echo "$$b" > $(TESTTMP)/rvc_$$p.out; diff $(TESTTMP)/rvc4_$$p.out $(TESTTMP)/rvc_$$p.out | head -20; exit 1; }; \
+	  s4=$$(stat -c %s $(TESTTMP)/rvc4_$$p); sc=$$(stat -c %s $(TESTTMP)/rvc_$$p); \
+	  test "$$sc" -lt "$$s4" || { echo "test-riscv32: rvc $$p is not smaller ($$sc vs $$s4)"; exit 1; }; \
+	done; echo "test-riscv32: --rv32-rvc builds print the same as 4-byte builds and are smaller (10 programs)"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
 	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
@@ -39084,6 +39102,17 @@ test-emit-obj: $(COMPILER)
 	  [ -n "$$d" ] && [ -n "$$u" ] && [ $$((u - d)) -ge 800 ] || { echo "test-emit-obj: $$t .data is $$d B with TableB dead and $$u B with it live -- the dead table did not leave .data"; exit 1; }; \
 	  echo "test-emit-obj: $$t dead typed const leaves .data ($$u -> $$d B)"; \
 	 done
+	# RV32C is the --platform=esp default on riscv32: the object says so in
+	# e_flags (EF_RISCV_RVC, which the IDF linker merges with gcc's own RVC
+	# objects), --no-rv32-rvc turns it off, and the compressed .text is smaller.
+	@./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=riscv32 --platform=esp test/esp_obj_class_vmt.pas $(TESTTMP)/esprvc.o >/dev/null && \
+	 ./$(COMPILER) -O2 -Fulib/rtl --emit-obj --target=riscv32 --platform=esp --no-rv32-rvc test/esp_obj_class_vmt.pas $(TESTTMP)/esprvc4.o >/dev/null || { echo "test-emit-obj: the rvc fixture FAILED to build"; exit 1; }; \
+	 readelf -h $(TESTTMP)/esprvc.o | grep -q 'Flags:.*RVC' || { echo "test-emit-obj: an ESP riscv32 object does not declare EF_RISCV_RVC"; exit 1; }; \
+	 ! readelf -h $(TESTTMP)/esprvc4.o | grep -q 'Flags:.*RVC' || { echo "test-emit-obj: --no-rv32-rvc still declares EF_RISCV_RVC"; exit 1; }; \
+	 tx() { readelf -SW $$1 | sed 's/^ *\[ *[0-9]*\] *//' | awk '$$1==".text" {print $$5}' | sed 's|^|0x|' | xargs printf '%d'; }; \
+	 c=$$(tx $(TESTTMP)/esprvc.o); f=$$(tx $(TESTTMP)/esprvc4.o); \
+	 [ -n "$$c" ] && [ -n "$$f" ] && [ $$((c * 100)) -le $$((f * 85)) ] || { echo "test-emit-obj: riscv32 RVC .text $$c B is not at least 15% under the 4-byte $$f B"; exit 1; }; \
+	 echo "test-emit-obj: riscv32 ESP objects are RVC by default (.text $$f -> $$c B)"
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	for t in riscv32 xtensa; do \
@@ -39948,8 +39977,9 @@ test-emit-obj: $(COMPILER)
 	@# ...and the exported app_main at .text+0 IS an entry that calls main. The
 	@# writer pins app_main at offset 0, where C used to put whatever routine
 	@# came first, so IDF ran unrelated code and main never executed. The stub's
-	@# first word is `addi sp,sp,-32` (0xfe010113); pinned has a C helper there.
-	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); so,=struct.unpack_from("<I",d,32); n,=struct.unpack_from("<H",d,48); si,=struct.unpack_from("<H",d,50); sh=lambda i: struct.unpack_from("<10I",d,so+40*i); st=sh(si)[4]; nm=lambda h: d[st+h[0]:d.index(b"\0",st+h[0])]; t=[sh(i) for i in range(n) if nm(sh(i))==b".text"][0]; w,=struct.unpack_from("<I",d,t[4]); sys.exit(0 if w==0xfe010113 else "app_main at .text+0 is not the C entry stub: %#x" % w)' $(TESTTMP)/c_crtl_rvesp.o
+	@# first instruction is `addi sp,sp,-32` (0xfe010113), or its RV32C form
+	@# c.addi16sp (0x1101) on --platform=esp; pinned has a C helper there.
+	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); so,=struct.unpack_from("<I",d,32); n,=struct.unpack_from("<H",d,48); si,=struct.unpack_from("<H",d,50); sh=lambda i: struct.unpack_from("<10I",d,so+40*i); st=sh(si)[4]; nm=lambda h: d[st+h[0]:d.index(b"\0",st+h[0])]; t=[sh(i) for i in range(n) if nm(sh(i))==b".text"][0]; w,=struct.unpack_from("<I",d,t[4]); sys.exit(0 if w==0xfe010113 or (w & 0xffff)==0x1101 else "app_main at .text+0 is not the C entry stub: %#x" % w)' $(TESTTMP)/c_crtl_rvesp.o
 	@# WINDOWED XTENSA, the ABI IDF runs on the esp32s3: a C variadic DEFINITION
 	@# builds (the prologue refused it outright until 2026-09-24, and crtl's own
 	@# printf is one, so no C reached the s3 at all -- pinned v416 still refuses

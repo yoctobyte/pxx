@@ -14752,7 +14752,24 @@ procedure SetProcBodyAddrHere(procIdx: Integer);
 begin
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop;
+  { riscv32 with RVC: bodies are 4-aligned too, so the DCE compaction moves
+    each by a multiple of 4 and an inline literal word stays aligned. }
+  if (TargetArch = TARGET_RISCV32) and RvcOn and ((CodeLen mod 4) <> 0) then
+    EmitC16($0001);   { c.nop }
   Procs[procIdx].BodyAddr := CodeLen;
+end;
+
+{ The other half: a body's recorded END. On riscv32 with RVC a body may end
+  2 mod 4, and the DCE compaction must move what follows by a multiple of 4
+  (inline literal words behind it stay aligned), so the end is padded with a
+  c.nop -- a real no-op, harmless wherever it lands -- unless a counted skip
+  is still open, where DceBodyEnd falls back to treating the extent as
+  unknown. }
+procedure SetProcBodyEndHere(procIdx: Integer);
+begin
+  if (TargetArch = TARGET_RISCV32) and ((CodeLen mod 4) <> 0) and RvcMay then
+    EmitC16($0001);   { c.nop }
+  ProcBodyEnd[procIdx] := CodeLen;
 end;
 
 { The __pxx_run_finalizers shell every exit path calls (main-body fall-off and
@@ -18508,6 +18525,7 @@ begin
       DynCall pass patches the 4-byte literal to the resolved fn address. Here we
       just load it into a0 instead of calling it — lets sqlite's unix VFS build
       its aSyscall[] table of open/close/fstat/... pointers. }
+    RvAlignLiteral;
     rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
     rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
     DynCallCodePos[DynCallCount] := CodeLen;
@@ -19240,6 +19258,7 @@ begin
         rv32_jalr(reg_ra, reg_t0, 0);
         Exit;
       end;
+      RvAlignLiteral;
       rv32_auipc(reg_t0, 0);
       rv32_jal(reg_zero, 8);
       DynCallCodePos[DynCallCount] := CodeLen;
@@ -19304,6 +19323,7 @@ begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');
       if TargetArch = TARGET_RISCV32 then
       begin
+        RvAlignLiteral;
         rv32_auipc(reg_t0, 0);
         rv32_jal(reg_zero, 8);
         IramCallFix[IramCallFixCount].CodePos := CodeLen;

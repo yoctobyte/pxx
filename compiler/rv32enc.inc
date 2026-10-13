@@ -59,18 +59,114 @@ begin
           + 'the low bit, jumping into the middle of an instruction');
 end;
 
+{ --- RV32C: the compressed forms ---------------------------------------------
+  --rv32-rvc turns RvcOn on (the default on --platform=esp; --no-rv32-rvc off). The rv32_* wrappers below then emit the 16-bit
+  form of an ALU/load/store instruction when one exists (about half the
+  instructions this backend writes have one). Branches, jal, auipc and
+  every jalr but `ret` stay 32-bit: they are the words other code patches,
+  relocates or measures, so their size must be fixed when they are emitted.
+
+  Two holds keep compression away from code whose SIZE something else has
+  already counted:
+    RvcHoldUntil  -- a branch or jal with a constant forward offset (a skip
+                    over N bytes, or a loop's exit) holds every instruction
+                    until the code reaches its target. Set by the branch
+                    wrappers themselves, so no call site has to know.
+    RvcHoldDepth  -- >0 while a caller emits words that are patched or
+                    relocated later (the prologue's frame reserve, a hi/lo
+                    pair) or written by a user (inline asm).
+  RvInsn* is a ring of the last instructions the wrappers emitted (start,
+  length), so a peephole that reads code backwards can tell where an
+  instruction starts -- with mixed lengths the bytes alone cannot. }
+var
+  RvcOn: Boolean;
+  RvcOptRequested: Boolean;   { --rv32-rvc / the esp default; RvcOn once the target is riscv32 }
+  RvcOptExplicit: Boolean;    { --rv32-rvc or --no-rv32-rvc was given }
+  RvcHoldUntil, RvcHoldDepth: Integer;
+  RvInsnStart, RvInsnLen: array[0..7] of Integer;
+  RvInsnCount: Integer;
+  RvLastAuipcEnd: Integer;   { CodeLen just after the last rv32_auipc }
+
+function RvcMay: Boolean;
+begin
+  Result := RvcOn and (RvcHoldDepth = 0) and (CodeLen >= RvcHoldUntil);
+end;
+
+procedure RvNoteInsn(len: Integer);
+begin
+  RvInsnStart[RvInsnCount and 7] := CodeLen;
+  RvInsnLen[RvInsnCount and 7] := len;
+  Inc(RvInsnCount);
+end;
+
+{ The k-th most recent wrapper-emitted instruction (0 = last), or False when
+  the ring does not reach back that far or something emitted after it
+  without going through a wrapper (its end would not be the next start). }
+function RvRecentInsn(k: Integer; var start, len: Integer): Boolean;
+var i, e: Integer;
+begin
+  Result := False;
+  if (k < 0) or (k >= 8) or (k >= RvInsnCount) then Exit;
+  e := CodeLen;
+  for i := 0 to k do
+  begin
+    start := RvInsnStart[(RvInsnCount - 1 - i) and 7];
+    len := RvInsnLen[(RvInsnCount - 1 - i) and 7];
+    if start + len <> e then Exit;
+    e := start;
+  end;
+  Result := True;
+end;
+
+{ After a peephole drops bytes: forget instructions at or past the new end. }
+procedure RvForgetFrom(pos: Integer);
+begin
+  while (RvInsnCount > 0) and (RvInsnStart[(RvInsnCount - 1) and 7] >= pos) do
+    Dec(RvInsnCount);
+end;
+
+procedure EmitC16(h: Integer);
+begin
+  RvNoteInsn(2);
+  EmitB(Byte(h and $FF));
+  EmitB(Byte((h shr 8) and $FF));
+end;
+
+{ A constant forward branch/jal offset: no compression until its target. }
+procedure RvcHoldSkip(offset: Integer);
+begin
+  if RvcOn and (offset > 0) and (CodeLen + offset > RvcHoldUntil) then
+    RvcHoldUntil := CodeLen + offset;
+end;
+
+{ Before `auipc rd,0; jal x0,8; .word; lw rd,8(rd)`: the word must be
+  4-aligned for the lw (the C3 does not do misaligned loads), so the auipc
+  must be. Pads with c.nop. Inside a counted skip the pad would move code
+  someone measured, so that is an internal error instead. }
+procedure RvAlignLiteral;
+begin
+  if not RvcOn then Exit;
+  if (CodeLen mod 4) = 0 then Exit;
+  if CodeLen < RvcHoldUntil then
+    Error('internal: riscv32 --rv32-rvc: an inline literal is misaligned inside a counted skip');
+  EmitC16($0001);   { c.nop }
+end;
+
 procedure EmitRType(funct7, rs2, rs1, funct3, rd, opcode: Integer);
 begin
+  RvNoteInsn(4);
   EmitI32((funct7 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or (rd shl 7) or opcode);
 end;
 
 procedure EmitIType(imm, rs1, funct3, rd, opcode: Integer);
 begin
+  RvNoteInsn(4);
   EmitI32(((imm and $FFF) shl 20) or (rs1 shl 15) or (funct3 shl 12) or (rd shl 7) or opcode);
 end;
 
 procedure EmitSType(imm, rs2, rs1, funct3, opcode: Integer);
 begin
+  RvNoteInsn(4);
   EmitI32(((imm and $FE0) shl 20) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or ((imm and $1F) shl 7) or opcode);
 end;
 
@@ -83,11 +179,13 @@ begin
   i11   := (imm shr 11) and 1;
   i10_5 := (imm shr 5) and $3F;
   i4_1  := (imm shr 1) and $F;
+  RvNoteInsn(4);
   EmitI32((i12 shl 31) or (i10_5 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or (i4_1 shl 8) or (i11 shl 7) or opcode);
 end;
 
 procedure EmitUType(imm, rd, opcode: Integer);
 begin
+  RvNoteInsn(4);
   EmitI32((imm and $FFFFF000) or (rd shl 7) or opcode);
 end;
 
@@ -100,6 +198,7 @@ begin
   i19_12 := (imm shr 12) and $FF;
   i11    := (imm shr 11) and 1;
   i10_1  := (imm shr 1) and $3FF;
+  RvNoteInsn(4);
   EmitI32((i20 shl 31) or (i10_1 shl 21) or (i11 shl 20) or (i19_12 shl 12) or (rd shl 7) or opcode);
 end;
 
@@ -183,6 +282,7 @@ end;
     csrw   mtvec, t0         = 0x30529073 }
 procedure rv32_csr(rd, csr, rs1, funct3: Integer);
 begin
+  RvNoteInsn(4);
   EmitI32(((csr and $FFF) shl 20) or ((rs1 and $1F) shl 15)
           or ((funct3 and 7) shl 12) or ((rd and $1F) shl 7) or $73);
 end;
@@ -211,24 +311,148 @@ begin
   rv32_csrrw(0, CSR_MSTATUS, rs1);
 end;
 
-procedure rv32_add(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 0, rd, $33); end;
-procedure rv32_sub(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 0, rd, $33); end;
-procedure rv32_addi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $13); end;
-procedure rv32_lui(rd, imm: Integer);       begin EmitUType(imm, rd, $37); end;
-procedure rv32_auipc(rd, imm20: Integer);   begin EmitUType(imm20, rd, $17); end;
+procedure rv32_add(rd, rs1, rs2: Integer);
+begin
+  if RvcMay and (rd <> 0) then
+  begin
+    if (rs1 = 0) and (rs2 <> 0) then begin EmitC16($8002 or (rd shl 7) or (rs2 shl 2)); Exit; end;   { c.mv }
+    if (rs2 = 0) and (rs1 <> 0) then begin EmitC16($8002 or (rd shl 7) or (rs1 shl 2)); Exit; end;
+    if (rd = rs1) and (rs2 <> 0) then begin EmitC16($9002 or (rd shl 7) or (rs2 shl 2)); Exit; end;  { c.add }
+    if (rd = rs2) and (rs1 <> 0) then begin EmitC16($9002 or (rd shl 7) or (rs1 shl 2)); Exit; end;
+  end;
+  EmitRType(0, rs2, rs1, 0, rd, $33);
+end;
+{ c.sub/c.xor/c.or/c.and: rd = rs1, both in x8..x15. }
+function RvcTryCA(rd, rs1, rs2, f2: Integer; commutes: Boolean): Boolean;
+begin
+  Result := False;
+  if not RvcMay then Exit;
+  if (rd < 8) or (rd > 15) then Exit;
+  if (rd <> rs1) and commutes and (rd = rs2) then begin rs2 := rs1; rs1 := rd; end;
+  if (rd <> rs1) or (rs2 < 8) or (rs2 > 15) then Exit;
+  EmitC16($8C01 or ((rd - 8) shl 7) or (f2 shl 5) or ((rs2 - 8) shl 2));
+  Result := True;
+end;
+
+procedure rv32_sub(rd, rs1, rs2: Integer);
+begin
+  if RvcTryCA(rd, rs1, rs2, 0, False) then Exit;
+  EmitRType($20, rs2, rs1, 0, rd, $33);
+end;
+procedure rv32_addi(rd, rs1, imm: Integer);
+begin
+  if RvcMay and (rd <> 0) then
+  begin
+    if (rs1 = 0) and (imm >= -32) and (imm < 32) then                                 { c.li }
+    begin EmitC16($4001 or (((imm shr 5) and 1) shl 12) or (rd shl 7) or ((imm and $1F) shl 2)); Exit; end;
+    if (rd = rs1) and (imm <> 0) and (imm >= -32) and (imm < 32) then                 { c.addi }
+    begin EmitC16($0001 or (((imm shr 5) and 1) shl 12) or (rd shl 7) or ((imm and $1F) shl 2)); Exit; end;
+    if (rd = 2) and (rs1 = 2) and (imm <> 0) and ((imm and 15) = 0) and
+       (imm >= -512) and (imm < 512) then                                              { c.addi16sp }
+    begin
+      EmitC16($6101 or (((imm shr 9) and 1) shl 12) or (((imm shr 4) and 1) shl 6) or
+              (((imm shr 6) and 1) shl 5) or (((imm shr 7) and 3) shl 3) or (((imm shr 5) and 1) shl 2));
+      Exit;
+    end;
+    if (imm = 0) and (rs1 <> 0) and (rd <> rs1) then                                  { c.mv }
+    begin EmitC16($8002 or (rd shl 7) or (rs1 shl 2)); Exit; end;
+    if (rs1 = 2) and (rd >= 8) and (rd <= 15) and (imm > 0) and ((imm and 3) = 0) and
+       (imm < 1024) then                                                               { c.addi4spn }
+    begin
+      EmitC16((((imm shr 4) and 3) shl 11) or (((imm shr 6) and 15) shl 7) or
+              (((imm shr 2) and 1) shl 6) or (((imm shr 3) and 1) shl 5) or ((rd - 8) shl 2));
+      Exit;
+    end;
+  end;
+  EmitIType(imm, rs1, 0, rd, $13);
+end;
+procedure rv32_lui(rd, imm: Integer);
+var v: Integer;
+begin
+  { imm is the value with its low 12 bits clear; c.lui carries bits 17:12 }
+  v := imm div 4096;
+  if RvcMay and (rd <> 0) and (rd <> 2) and ((imm and $FFF) = 0) and (v <> 0) and
+     (v >= -32) and (v < 32) then
+  begin
+    EmitC16($6001 or (((v shr 5) and 1) shl 12) or (rd shl 7) or ((v and $1F) shl 2));
+    Exit;
+  end;
+  EmitUType(imm, rd, $37);
+end;
+procedure rv32_auipc(rd, imm20: Integer);   begin EmitUType(imm20, rd, $17); RvLastAuipcEnd := CodeLen; end;
 procedure rv32_lb(rd, rs1, imm: Integer);   begin EmitIType(imm, rs1, 0, rd, $03); end;
 procedure rv32_lh(rd, rs1, imm: Integer);   begin EmitIType(imm, rs1, 1, rd, $03); end;
 procedure rv32_lbu(rd, rs1, imm: Integer);  begin EmitIType(imm, rs1, 4, rd, $03); end;
 procedure rv32_lhu(rd, rs1, imm: Integer);  begin EmitIType(imm, rs1, 5, rd, $03); end;
-procedure rv32_lw(rd, rs1, imm: Integer);   begin EmitIType(imm, rs1, 2, rd, $03); end;
+procedure rv32_lw(rd, rs1, imm: Integer);
+begin
+  if RvcMay and (rd <> 0) and (imm >= 0) and ((imm and 3) = 0) then
+  begin
+    if (rs1 = 2) and (imm < 256) then                                                 { c.lwsp }
+    begin
+      EmitC16($4002 or (((imm shr 5) and 1) shl 12) or (rd shl 7) or
+              (((imm shr 2) and 7) shl 4) or (((imm shr 6) and 3) shl 2));
+      Exit;
+    end;
+    if (rs1 >= 8) and (rs1 <= 15) and (rd >= 8) and (rd <= 15) and (imm < 128) then   { c.lw }
+    begin
+      EmitC16($4000 or (((imm shr 3) and 7) shl 10) or ((rs1 - 8) shl 7) or
+              (((imm shr 2) and 1) shl 6) or (((imm shr 6) and 1) shl 5) or ((rd - 8) shl 2));
+      Exit;
+    end;
+  end;
+  EmitIType(imm, rs1, 2, rd, $03);
+end;
 procedure rv32_sb(rs2, rs1, imm: Integer);  begin EmitSType(imm, rs2, rs1, 0, $23); end;
 procedure rv32_sh(rs2, rs1, imm: Integer);  begin EmitSType(imm, rs2, rs1, 1, $23); end;
-procedure rv32_sw(rs2, rs1, imm: Integer);  begin EmitSType(imm, rs2, rs1, 2, $23); end;
+procedure rv32_sw(rs2, rs1, imm: Integer);
+begin
+  if RvcMay and (imm >= 0) and ((imm and 3) = 0) then
+  begin
+    if (rs1 = 2) and (imm < 256) then                                                 { c.swsp }
+    begin
+      EmitC16($C002 or (((imm shr 2) and 15) shl 9) or (((imm shr 6) and 3) shl 7) or (rs2 shl 2));
+      Exit;
+    end;
+    if (rs1 >= 8) and (rs1 <= 15) and (rs2 >= 8) and (rs2 <= 15) and (imm < 128) then { c.sw }
+    begin
+      EmitC16($C000 or (((imm shr 3) and 7) shl 10) or ((rs1 - 8) shl 7) or
+              (((imm shr 2) and 1) shl 6) or (((imm shr 6) and 1) shl 5) or ((rs2 - 8) shl 2));
+      Exit;
+    end;
+  end;
+  EmitSType(imm, rs2, rs1, 2, $23);
+end;
 procedure rv32_xori(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 4, rd, $13); end;
 procedure rv32_ori(rd, rs1, imm: Integer);  begin EmitIType(imm, rs1, 6, rd, $13); end;
-procedure rv32_andi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 7, rd, $13); end;
-procedure rv32_jal(rd, offset: Integer);    begin EmitJType(offset, rd, $6F); end;
-procedure rv32_jalr(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $67); end;
+procedure rv32_andi(rd, rs1, imm: Integer);
+begin
+  if RvcMay and (rd = rs1) and (rd >= 8) and (rd <= 15) and (imm >= -32) and (imm < 32) then
+  begin
+    EmitC16($8801 or (((imm shr 5) and 1) shl 12) or ((rd - 8) shl 7) or ((imm and $1F) shl 2));
+    Exit;
+  end;
+  EmitIType(imm, rs1, 7, rd, $13);
+end;
+procedure rv32_jal(rd, offset: Integer);
+begin
+  RvcHoldSkip(offset);
+  { `jal x0, 8` steps over an inline literal word, which must be 4-aligned. }
+  if RvcOn and (rd = 0) and (offset = 8) and (RvLastAuipcEnd = CodeLen) and ((CodeLen mod 4) <> 0) then
+    Error('internal: riscv32 --rv32-rvc: inline literal after a misaligned jal (no RvAlignLiteral before its auipc)');
+  EmitJType(offset, rd, $6F);
+end;
+procedure rv32_jalr(rd, rs1, imm: Integer);
+begin
+  { only `ret`: every other jalr may be the second word of an auipc pair
+    that is patched or relocated as a unit }
+  if RvcMay and (rd = 0) and (rs1 = reg_ra) and (imm = 0) then
+  begin
+    EmitC16($8082);   { c.jr ra }
+    Exit;
+  end;
+  EmitIType(imm, rs1, 0, rd, $67);
+end;
 
 { ---- the A extension: AMO, LR and SC -------------------------------------
   R-type on opcode $2F with funct3 = 010 (word width), and funct7 carries the
@@ -257,9 +481,9 @@ procedure rv32_div(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 4, rd, 
 procedure rv32_divu(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 5, rd, $33); end;
 procedure rv32_rem(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 6, rd, $33); end;
 procedure rv32_remu(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 7, rd, $33); end;
-procedure rv32_and(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 7, rd, $33); end;
-procedure rv32_or(rd, rs1, rs2: Integer);   begin EmitRType(0, rs2, rs1, 6, rd, $33); end;
-procedure rv32_xor(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 4, rd, $33); end;
+procedure rv32_and(rd, rs1, rs2: Integer);  begin if RvcTryCA(rd, rs1, rs2, 3, True) then Exit; EmitRType(0, rs2, rs1, 7, rd, $33); end;
+procedure rv32_or(rd, rs1, rs2: Integer);   begin if RvcTryCA(rd, rs1, rs2, 2, True) then Exit; EmitRType(0, rs2, rs1, 6, rd, $33); end;
+procedure rv32_xor(rd, rs1, rs2: Integer);  begin if RvcTryCA(rd, rs1, rs2, 1, True) then Exit; EmitRType(0, rs2, rs1, 4, rd, $33); end;
 procedure rv32_sll(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 1, rd, $33); end;
 procedure rv32_srl(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 5, rd, $33); end;
 procedure rv32_sra(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 5, rd, $33); end;
@@ -267,9 +491,24 @@ procedure rv32_slt(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 2, rd, 
 procedure rv32_sltu(rd, rs1, rs2: Integer); begin EmitRType(0, rs2, rs1, 3, rd, $33); end;
 procedure rv32_slti(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 2, rd, $13); end;
 procedure rv32_sltiu(rd, rs1, imm: Integer);begin EmitIType(imm, rs1, 3, rd, $13); end;
-procedure rv32_slli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 1, rd, $13); end;
-procedure rv32_srli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 5, rd, $13); end;
-procedure rv32_srai(rd, rs1, sh: Integer);  begin EmitIType((sh and $1F) or $400, rs1, 5, rd, $13); end;
+procedure rv32_slli(rd, rs1, sh: Integer);
+begin
+  if RvcMay and (rd = rs1) and (rd <> 0) and ((sh and $1F) <> 0) then
+  begin EmitC16($0002 or (rd shl 7) or ((sh and $1F) shl 2)); Exit; end;     { c.slli }
+  EmitIType(sh and $1F, rs1, 1, rd, $13);
+end;
+procedure rv32_srli(rd, rs1, sh: Integer);
+begin
+  if RvcMay and (rd = rs1) and (rd >= 8) and (rd <= 15) and ((sh and $1F) <> 0) then
+  begin EmitC16($8001 or ((rd - 8) shl 7) or ((sh and $1F) shl 2)); Exit; end;     { c.srli }
+  EmitIType(sh and $1F, rs1, 5, rd, $13);
+end;
+procedure rv32_srai(rd, rs1, sh: Integer);
+begin
+  if RvcMay and (rd = rs1) and (rd >= 8) and (rd <= 15) and ((sh and $1F) <> 0) then
+  begin EmitC16($8401 or ((rd - 8) shl 7) or ((sh and $1F) shl 2)); Exit; end;     { c.srai }
+  EmitIType((sh and $1F) or $400, rs1, 5, rd, $13);
+end;
 
 function EncodeRISCVBEQ(rs1, rs2, offset: Integer): Integer;
 var i12, i11, i10_5, i4_1: Integer;
@@ -284,6 +523,9 @@ end;
 
 procedure rv32_beq(rs1, rs2, offset: Integer);
 begin
+  RvcHoldSkip(offset);
+  RvcHoldSkip(offset);
+  RvNoteInsn(4);
   EmitI32(EncodeRISCVBEQ(rs1, rs2, offset));
 end;
 
@@ -303,6 +545,9 @@ end;
 
 procedure rv32_bne(rs1, rs2, offset: Integer);
 begin
+  RvcHoldSkip(offset);
+  RvcHoldSkip(offset);
+  RvNoteInsn(4);
   EmitI32(EncodeRISCVBNE(rs1, rs2, offset));
 end;
 
@@ -320,18 +565,20 @@ begin
             (funct3 shl 12) or (i4_1 shl 8) or (i11 shl 7) or $63;
 end;
 
-procedure rv32_blt(rs1, rs2, offset: Integer);  begin EmitI32(EncodeRISCVBranch(4, rs1, rs2, offset)); end;
-procedure rv32_bge(rs1, rs2, offset: Integer);  begin EmitI32(EncodeRISCVBranch(5, rs1, rs2, offset)); end;
-procedure rv32_bltu(rs1, rs2, offset: Integer); begin EmitI32(EncodeRISCVBranch(6, rs1, rs2, offset)); end;
-procedure rv32_bgeu(rs1, rs2, offset: Integer); begin EmitI32(EncodeRISCVBranch(7, rs1, rs2, offset)); end;
+procedure rv32_blt(rs1, rs2, offset: Integer);  begin RvcHoldSkip(offset); RvNoteInsn(4); EmitI32(EncodeRISCVBranch(4, rs1, rs2, offset)); end;
+procedure rv32_bge(rs1, rs2, offset: Integer);  begin RvcHoldSkip(offset); RvNoteInsn(4); EmitI32(EncodeRISCVBranch(5, rs1, rs2, offset)); end;
+procedure rv32_bltu(rs1, rs2, offset: Integer); begin RvcHoldSkip(offset); RvNoteInsn(4); EmitI32(EncodeRISCVBranch(6, rs1, rs2, offset)); end;
+procedure rv32_bgeu(rs1, rs2, offset: Integer); begin RvcHoldSkip(offset); RvNoteInsn(4); EmitI32(EncodeRISCVBranch(7, rs1, rs2, offset)); end;
 
 procedure rv32_nop;
 begin
+  RvNoteInsn(4);
   EmitI32($00000013);
 end;
 
 procedure rv32_mret;   { return from machine-mode trap (restores PC from mepc) }
 begin
+  RvNoteInsn(4);
   EmitI32($30200073);
 end;
 

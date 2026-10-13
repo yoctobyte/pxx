@@ -3864,6 +3864,7 @@ begin
       ParamCount/ParamStr, like the other hosted targets. }
     if not EspBareBoot then
     begin
+      RvAlignLiteral;
       rv32_auipc(reg_t1, 0);
       rv32_jal(reg_zero, 8);
       EmitGlobRef(BSS_INITIAL_RSP);

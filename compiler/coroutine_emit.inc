@@ -151,6 +151,7 @@ begin
     rv32_addi(reg_sp, reg_sp, -16);
     rv32_sw(reg_s0, reg_sp, 4);
     rv32_sw(reg_ra, reg_sp, 8);
+    RvAlignLiteral;
     rv32_auipc(reg_t0, 0);                { &BSS_EXC_TOP }
     rv32_jal(reg_zero, 8);
     EmitGlobRef(BSS_EXC_TOP);

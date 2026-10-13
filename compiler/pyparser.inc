@@ -41959,7 +41959,7 @@ begin
   CompileAST(seqNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+    SetProcBodyEndHere(procIdx);   { DWARF -g — see PyParseDef's note }
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
@@ -42497,7 +42497,7 @@ begin
     defined", so the frontend where the hard bugs live was the one frontend you
     could not debug. ProcBodyEnd must be taken here, after the epilogue, and
     the locals snapshot before the scope is rolled back. }
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
@@ -49635,7 +49635,7 @@ begin
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   ProcExceptionCleanupFrameActive := savedCleanupActive;
   PatchProcPrologue(patchPos, FrameSize);
-    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+    SetProcBodyEndHere(procIdx);   { DWARF -g — see PyParseDef's note }
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
@@ -49825,7 +49825,7 @@ begin
   CompileAST(seqHead);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+    SetProcBodyEndHere(procIdx);   { DWARF -g — see PyParseDef's note }
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
@@ -49937,7 +49937,7 @@ begin
   CompileAST(seq);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   SymRollbackTo(savedSC);
   FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
@@ -50030,7 +50030,7 @@ begin
   CompileAST(retNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
@@ -50131,7 +50131,7 @@ begin
   CompileAST(retNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
@@ -50209,7 +50209,7 @@ begin
   CompileAST(PyPrependResultZero(procIdx, retNode));
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
@@ -53938,7 +53938,7 @@ begin
     names are GLOBALS (Python module scope), recorded as CU-level variable DIEs
     exactly like a Pascal program's globals. Main module only: an imported .py
     lexes past DbgMainTokEnd, and the Tier 1 line table describes one file. }
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   { NOT DbgMainBodyStart/End: those drive a SECOND, anonymous program-body
     subprogram in DbgEmitSubprograms, which would overlap this proc's DIE on

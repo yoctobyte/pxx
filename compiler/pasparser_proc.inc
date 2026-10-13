@@ -4106,7 +4106,7 @@ begin
   ProcCleanupFrameLatePatch := savedCleanupFrameLatePatch;
 
   { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
 
   { A `class constructor` RUNS -- once, automatically -- and this is where it is
     wired to something. It joins InitProcs[], the list a unit's `initialization`

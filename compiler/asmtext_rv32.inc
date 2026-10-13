@@ -318,6 +318,7 @@ begin
     if CaseEqual(op1, '@data') then
     begin
       imm := Integer(holes[holeCur]); Inc(holeCur);
+      RvAlignLiteral;
       rv32_auipc(r0, 0);
       rv32_jal(0, 8);
       EmitDataRef(imm);
@@ -326,6 +327,7 @@ begin
     else if CaseEqual(op1, '@glob') then
     begin
       imm := Integer(holes[holeCur]); Inc(holeCur);
+      RvAlignLiteral;
       rv32_auipc(r0, 0);
       rv32_jal(0, 8);
       EmitGlobRef(imm);
@@ -441,7 +443,7 @@ begin
       Exit;
     end;
     { Not a label: fall through to ordinary handling }
-    AsmTextLineRv32(line, holes, nHoles);
+    Inc(RvcHoldDepth); AsmTextLineRv32(line, holes, nHoles); Dec(RvcHoldDepth);
     Exit;
   end;
 
@@ -487,12 +489,12 @@ begin
       Exit;
     end;
     { Not a label: fall through to ordinary handling }
-    AsmTextLineRv32(line, holes, nHoles);
+    Inc(RvcHoldDepth); AsmTextLineRv32(line, holes, nHoles); Dec(RvcHoldDepth);
     Exit;
   end;
 
   { ordinary instruction }
-  AsmTextLineRv32(line, holes, nHoles);
+  Inc(RvcHoldDepth); AsmTextLineRv32(line, holes, nHoles); Dec(RvcHoldDepth);
 end;
 
 { resolve forward jumps/branches now that all labels are placed }

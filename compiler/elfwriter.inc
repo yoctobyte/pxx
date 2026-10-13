@@ -3226,6 +3226,13 @@ begin
   if DynCallIsCall[i] then Result := 19 else Result := 1;
 end;
 
+{ EF_RISCV_RVC when the object holds compressed instructions (--rv32-rvc);
+  0 otherwise and on every other machine. }
+function Rv32ObjEFlags: Cardinal;
+begin
+  if (TargetArch = TARGET_RISCV32) and RvcOn then Result := 1 else Result := 0;
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -3333,7 +3340,7 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,1);writeU16(f,machine);writeU32(f,1);
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);
-  writeU32(f,0);
+  writeU32(f,Rv32ObjEFlags);
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
   writeU16(f,40);writeU16(f,shnum);writeU16(f,10);
 
@@ -3658,7 +3665,7 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,1);writeU16(f,machine);writeU32(f,1);      { ET_REL }
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
-  writeU32(f,0);                                        { e_flags }
+  writeU32(f,Rv32ObjEFlags);                            { e_flags }
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
   writeU16(f,40);writeU16(f,shnum);writeU16(f,8); { shentsize, shnum, shstrndx }
 

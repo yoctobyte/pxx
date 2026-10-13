@@ -72,6 +72,7 @@ begin
     Exit;
   end;
   { Load 32-bit literal at PC-relative offset }
+  RvAlignLiteral;
   rv32_auipc(rd, 0);
   rv32_jal(reg_zero, 8);
   EmitDataRef(dataOff);
@@ -89,6 +90,7 @@ begin
     RvHiLoFinish(rd);
     Exit;
   end;
+  RvAlignLiteral;
   rv32_auipc(rd, 0);
   rv32_jal(reg_zero, 8);
   EmitGlobRef(bssOff);
@@ -297,19 +299,23 @@ end;
   %hi(x) is wrong when the +4 carries into bit 12. }
 procedure RvGlobLoadHiLo(rd, bssOff, sz: Integer; sgn: Boolean);
 begin
+  Inc(RvcHoldDepth);   { the access carries the LO12 relocation: 4 bytes }
   EmitGlobRef(bssOff);
   GlobFixHiLo[GlobFixCount - 1] := True;
   RvLuiOverPlaceholder(reg_t0);
   EmitSizedLoadAtRISCV32(rd, reg_t0, 0, sz, sgn);
+  Dec(RvcHoldDepth);
 end;
 
 procedure RvGlobStoreHiLo(rs, bssOff, sz: Integer);
 begin
+  Inc(RvcHoldDepth);   { the access carries the LO12 relocation: 4 bytes }
   EmitGlobRef(bssOff);
   GlobFixHiLo[GlobFixCount - 1] := True;
   GlobFixLoStore[GlobFixCount - 1] := True;
   RvLuiOverPlaceholder(reg_t0);
   EmitSizedStoreAtRISCV32(rs, reg_t0, 0, sz);
+  Dec(RvcHoldDepth);
 end;
 
 
@@ -1337,10 +1343,40 @@ function Rv32RetractArgPushes(w: Integer): Boolean;
 
   Safe to drop because the pairs carry no fixup -- they are register and sp
   arithmetic only -- and nothing records a code offset inside them. }
-var j, pos: Integer;
+var j, pos, st, ln, h: Integer;
 begin
   Result := False;
-  if (w < 1) or (w > 2) or (CodeLen < 8 * w) then Exit;
+  if (w < 1) or (w > 2) then Exit;
+  if RvcOn then
+  begin
+    { --rv32-rvc: either pair member may be the 16-bit form, so the bytes
+      alone cannot say where an instruction starts; the encoder's ring of
+      recent instructions does. }
+    pos := CodeLen;
+    for j := w - 1 downto 0 do
+    begin
+      if not RvRecentInsn(2 * (w - 1 - j), st, ln) then Exit;                { sw a<j>,0(sp) }
+      if ln = 2 then
+      begin
+        h := Code[st] or (Code[st + 1] shl 8);
+        if h <> $C02A + 4 * j then Exit;                                         { c.swsp a<j>,0 }
+      end
+      else if Rv32CodeWord(st) <> ((Int64(reg_a0 + j) shl 20) or $12023) then Exit;
+      if not RvRecentInsn(2 * (w - 1 - j) + 1, st, ln) then Exit;            { addi sp,sp,-4 }
+      if ln = 2 then
+      begin
+        h := Code[st] or (Code[st + 1] shl 8);
+        if h <> $1171 then Exit;                                                 { c.addi sp,-4 }
+      end
+      else if Rv32CodeWord(st) <> $FFC10113 then Exit;
+      pos := st;
+    end;
+    CodeLen := pos;
+    RvForgetFrom(pos);
+    Result := True;
+    Exit;
+  end;
+  if CodeLen < 8 * w then Exit;
   pos := CodeLen - 8 * w;
   for j := 0 to w - 1 do
   begin
@@ -1864,6 +1900,7 @@ procedure EmitProcAddrLiteralRISCV32(procIdx: Integer);
   a proc address is materialised on riscv32 must be unable to fix half of it. }
 begin
   if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+  RvAlignLiteral;
   rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
   rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
   ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;

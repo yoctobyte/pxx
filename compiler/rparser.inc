@@ -5455,7 +5455,7 @@ begin
       `break <fn>` in gdb answered "Function not defined" — the same total
       absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
       epilogue; the locals snapshot before the scope is rolled back. }
-    ProcBodyEnd[procIdx] := CodeLen;
+    SetProcBodyEndHere(procIdx);
     ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
     if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
     SymRollbackTo(savedSC);
@@ -5616,7 +5616,7 @@ begin
     `break <fn>` in gdb answered "Function not defined" — the same total
     absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
     epilogue; the locals snapshot before the scope is rolled back. }
-  ProcBodyEnd[procIdx] := CodeLen;
+  SetProcBodyEndHere(procIdx);
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);

@@ -491,6 +491,7 @@ begin
     rv32_addi(reg_a0, reg_zero, 1);
     rv32_jalr(reg_zero, reg_t0, 0);                             { resume at try, a0=1 }
 
+    RvAlignLiteral;
     ExcRaiseAddr := CodeLen;
     { raise site: `jal ra` put it in ra }
     rv32_auipc(reg_t1, 0);                                      { &EXC_ADDR literal }
@@ -498,6 +499,7 @@ begin
     EmitGlobRef(BSS_EXC_ADDR);
     rv32_lw(reg_t1, reg_t1, 8);
     rv32_sw(reg_ra, reg_t1, 0);                                 { [EXC_ADDR] := ra }
+    RvAlignLiteral;
     rv32_auipc(reg_t1, 0);                                      { &EXC_TOP literal }
     rv32_jal(reg_zero, 8);
     EmitGlobRef(BSS_EXC_TOP);
@@ -513,6 +515,7 @@ begin
     begin
       si := InternStr('Unhandled exception');
       rv32_addi(reg_a0, reg_zero, 2);                           { stderr }
+      RvAlignLiteral;
       rv32_auipc(reg_a1, 0);
       rv32_jal(reg_zero, 8);
       EmitDataRef(Strs[si].Offset + 8);
@@ -521,6 +524,7 @@ begin
       rv32_addi(reg_a7, reg_zero, 64);                          { write }
       EmitI32($00000073);
       rv32_addi(reg_a0, reg_zero, 2);
+      RvAlignLiteral;
       rv32_auipc(reg_a1, 0);
       rv32_jal(reg_zero, 8);
       EmitDataRef(NEWLINE_OFFSET);

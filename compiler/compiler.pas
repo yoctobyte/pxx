@@ -1850,6 +1850,18 @@ begin
       Rv32LongCalls := True;
       Inc(i);
     end
+    else if option = '--rv32-rvc' then
+    begin
+      { RV32C compressed instructions on riscv32; see RvcOn (rv32enc.inc).
+        The default on --platform=esp (the C3 is RV32IMC), opt-in elsewhere. }
+      RvcOptRequested := True; RvcOptExplicit := True;
+      Inc(i);
+    end
+    else if option = '--no-rv32-rvc' then
+    begin
+      RvcOptRequested := False; RvcOptExplicit := True;
+      Inc(i);
+    end
     else if option = '--rv32-short-calls' then
     begin
       Rv32ShortCalls := True;
@@ -2594,6 +2606,9 @@ begin
     --platform=esp` differed by 56 bytes on a C hello for this reason alone. }
   if (TargetPlatform = PLATFORM_ESP) and (not CompactClassesExplicit) then
     CompactClasses := True;
+  { --rv32-rvc: only meaningful once the target is settled }
+  if not RvcOptExplicit then RvcOptRequested := TargetPlatform = PLATFORM_ESP;
+  RvcOn := RvcOptRequested and (TargetArch = TARGET_RISCV32);
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   { AFTER PasApplyTargetDefines and after the target is settled: the compiler
