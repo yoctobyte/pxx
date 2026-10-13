@@ -423,6 +423,8 @@ begin
       block has one shape rather than two; the FLAG, not the size, is what says
       whether the word means anything. }
     DataPutZeros(arity * 8 * 2 + 8);
+    RttiRoMark(paramOff, DataLen);
+    Inc(DataMapRttiArr, arity * 8 * 2 + 8);   { a.datamap }
     for p := 0 to arity - 1 do
       PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
     for p := 0 to arity - 1 do
@@ -1027,7 +1029,7 @@ begin
       begin
         UClsRTTIOff[ci] := DataLen;
         DataPutZeros(RTTI_CLS_SIZE);
-        if RoRttiWanted then RoRangeAdd(UClsRTTIOff[ci], DataLen);
+        RttiRoMark(UClsRTTIOff[ci], DataLen);
         { a.datamap — OUTSIDE the RoRttiWanted guard on purpose: on --emit-obj
           that guard is false and the census would report zero for the
           structure it exists to price. }
@@ -1122,6 +1124,7 @@ begin
       begin
         firstOff := DataLen;
         DataPutZeros(propCount * RTTI_PROP_SIZE);
+        RttiRoMark(firstOff, DataLen);   { before EmitPropInfo interns names: ranges ascend }
         Inc(DataMapRttiArr, propCount * RTTI_PROP_SIZE);   { a.datamap }
         k := 0;
         for i := 0 to cnt - 1 do
@@ -1145,6 +1148,8 @@ begin
       begin
         firstOff := DataLen;
         DataPutZeros(methCount * RTTI_METH_SIZE);
+        RttiRoMark(firstOff, DataLen);
+        Inc(DataMapRttiArr, methCount * RTTI_METH_SIZE);   { a.datamap }
         for i := 0 to cnt - 1 do
           EmitMethInfo(base + i, firstOff + i * RTTI_METH_SIZE);
       end;
@@ -1163,6 +1168,8 @@ begin
       begin
         firstOff := DataLen;
         DataPutZeros(fieldCount * RTTI_FIELD_SIZE);
+        RttiRoMark(firstOff, DataLen);
+        Inc(DataMapRttiArr, fieldCount * RTTI_FIELD_SIZE);   { a.datamap }
         for i := 0 to cnt - 1 do
           EmitFieldInfo(base + i, firstOff + i * RTTI_FIELD_SIZE);
       end;

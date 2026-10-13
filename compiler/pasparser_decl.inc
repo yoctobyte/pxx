@@ -9469,7 +9469,7 @@ begin
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
-        if RoRttiWanted then RoRangeAdd(vmtStart, DataLen);
+        RttiRoMark(vmtStart, DataLen);
         Inc(DataMapVmt, DataLen - vmtStart);   { a.datamap -- outside the guard; see rtti_emit.inc }
         { Fill every VMT slot from the effective method (own override or an
           inherited one). The per-override fixup loop only covers subclasses

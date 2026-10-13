@@ -454,6 +454,28 @@ begin
   Inc(RoEntryCount);
 end;
 
+{ Data[s..e) is class RTTI -- a header, a VMT, or a prop/meth/field array --
+  and is never written at run time. Read-only now where RoRttiWanted says so;
+  on an ESP object, a candidate for ObjRoAdoptRttiCandidates to decide once
+  the whole program is known (see RttiRoCandStart). }
+procedure RttiRoMark(s, e: Integer);
+begin
+  if e <= s then Exit;
+  if RoRttiWanted then
+    RoRangeAdd(s, e)
+  else if RoRtti and EmitObjMode and (not NoRoData) then
+  begin
+    if RttiRoCandCount >= Length(RttiRoCandStart) then
+    begin
+      SetLength(RttiRoCandStart, 2 * RttiRoCandCount + 64);
+      SetLength(RttiRoCandEnd, 2 * RttiRoCandCount + 64);
+    end;
+    RttiRoCandStart[RttiRoCandCount] := s;
+    RttiRoCandEnd[RttiRoCandCount] := e;
+    Inc(RttiRoCandCount);
+  end;
+end;
+
 { The relocation table and its TWO PARALLEL COLUMNS grow as one. FixupPCRel and
   FixupPicDelta are indexed by the same fixup number as Fixups, so a grow that
   moved one and not the others is the identical defect to a compaction that

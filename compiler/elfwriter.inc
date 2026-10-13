@@ -2944,6 +2944,113 @@ begin
     if ObjDataIsRo(MethodFixups[i].DataPos) = wantRo then Inc(Result);
 end;
 
+{ Class RTTI to .rodata in an ESP object, when nothing can read it with the
+  flash cache off. RoRttiWanted keeps it writable on --emit-obj because an
+  ISR calling a virtual method reads the VMT through an instance -- no fixup
+  for ObjRoKeepIramLiteralsWritable to see. But that needs an `iram;` (or
+  `interrupt;`) routine: without one, every pxx routine is itself in flash and
+  already needs the cache, so a VMT beside it costs nothing new. Then the
+  recorded candidates (RttiRoMark) join the RO ranges -- about 2 KB of SRAM in
+  a program that only has the RTL's built-in classes.
+
+  A self-relative word (AddDataRelFix) must not span the two sections, so a
+  candidate tied by one to data that stays writable stays writable too,
+  iterated until nothing changes. The merged list is rebuilt in ascending
+  order, existing blocks and candidates interleaved by start. }
+procedure ObjRoAdoptRttiCandidates;
+var i, k, r, n, a, b: Integer;
+    keep: array of Boolean;
+    entS, entE: array of Integer;
+    changed, roP, roT: Boolean;
+
+  function CandAt(x: Integer): Integer;
+  var l, h, m: Integer;
+  begin
+    Result := -1;
+    l := 0; h := RttiRoCandCount - 1;
+    while l <= h do
+    begin
+      m := (l + h) div 2;
+      if x < RttiRoCandStart[m] then h := m - 1
+      else if x >= RttiRoCandEnd[m] then l := m + 1
+      else begin Result := m; Exit; end;
+    end;
+  end;
+
+  function BaseRoAt(x: Integer): Boolean;
+  var l, h, m: Integer;
+  begin
+    Result := False;
+    l := 0; h := RoRangeCount - 1;
+    while l <= h do
+    begin
+      m := (l + h) div 2;
+      if x < RoRangeStart[m] then h := m - 1
+      else if x >= RoRangeEnd[m] then l := m + 1
+      else begin Result := True; Exit; end;
+    end;
+  end;
+
+begin
+  if NoRoData or (RttiRoCandCount = 0) then Exit;
+  for i := 0 to ProcCount - 1 do
+    if (Procs[i].BodyAddr >= 0) and
+       (((i < Length(ProcIram)) and ProcIram[i]) or
+        ((i < Length(ProcIsInterrupt)) and ProcIsInterrupt[i])) then Exit;
+
+  SetLength(keep, RttiRoCandCount);
+  for k := 0 to RttiRoCandCount - 1 do keep[k] := True;
+  repeat
+    changed := False;
+    for i := 0 to DataRelFixCount - 1 do
+    begin
+      a := CandAt(DataRelFixPos[i]);
+      b := CandAt(DataRelFixTarget[i]);
+      roP := BaseRoAt(DataRelFixPos[i]) or ((a >= 0) and keep[a]);
+      roT := BaseRoAt(DataRelFixTarget[i]) or ((b >= 0) and keep[b]);
+      if roP <> roT then
+      begin
+        if (a >= 0) and keep[a] then begin keep[a] := False; changed := True; end;
+        if (b >= 0) and keep[b] then begin keep[b] := False; changed := True; end;
+      end;
+    end;
+  until not changed;
+
+  { The existing blocks with their ends, derived as ObjRoKeepIramLiteralsWritable
+    derives them: a block ends at the next start inside its range, or at the
+    range's end. }
+  n := RoEntryCount;
+  SetLength(entS, n + RttiRoCandCount);
+  SetLength(entE, n + RttiRoCandCount);
+  r := 0;
+  for k := 0 to n - 1 do
+  begin
+    while RoRangeEnd[r] <= RoEntryStart[k] do Inc(r);
+    entS[k] := RoEntryStart[k];
+    if (k + 1 < n) and (RoEntryStart[k + 1] < RoRangeEnd[r]) then
+      entE[k] := RoEntryStart[k + 1]
+    else
+      entE[k] := RoRangeEnd[r];
+  end;
+  RoRangeCount := 0;
+  RoEntryCount := 0;
+  i := 0; k := 0;
+  while (i < n) or (k < RttiRoCandCount) do
+  begin
+    if (k < RttiRoCandCount) and (not keep[k]) then begin Inc(k); Continue; end;
+    if (k >= RttiRoCandCount) or ((i < n) and (entS[i] < RttiRoCandStart[k])) then
+    begin
+      RoRangeAdd(entS[i], entE[i]);
+      Inc(i);
+    end
+    else
+    begin
+      RoRangeAdd(RttiRoCandStart[k], RttiRoCandEnd[k]);
+      Inc(k);
+    end;
+  end;
+end;
+
 { A literal an `iram;` routine references directly stays in .data.
   `iram;` exists for code that runs while the flash cache is OFF -- an ISR
   registered IRAM-safe runs during flash writes -- and IDF's linker script puts
@@ -3005,6 +3112,7 @@ end;
 procedure ObjRoPrepare;
 var i, p, t: Integer;
 begin
+  ObjRoAdoptRttiCandidates;
   ObjRoKeepIramLiteralsWritable;
   RoLayoutPrepare(True, 0);
   if not RoSplitActive then Exit;

@@ -4569,6 +4569,15 @@ var
     (ObjRoKeepIramLiteralsWritable). }
   RoEntryStart : array of Integer;
   RoEntryCount : Integer;
+  { CLASS RTTI THAT AN ESP OBJECT MAY STILL MOVE TO .rodata. On --emit-obj
+    RoRttiWanted is false while the program is parsed, because whether any
+    `iram;`/`interrupt;` routine exists (and might read a VMT with the flash
+    cache off) is only known once it all has been. So the headers, VMTs and
+    prop/meth/field arrays are recorded here instead, ascending as laid down,
+    and ObjRoAdoptRttiCandidates adds them to the RO ranges when no such
+    routine is live. Owner 2026-10-12: RAM outranks flash on ESP. }
+  RttiRoCandStart, RttiRoCandEnd : array of Integer;
+  RttiRoCandCount : Integer;
   { Set when an output write stored fewer bytes than it was asked to (OutWrote,
     util.inc). A full disk does that silently -- syswrite returns the short
     count and nothing else happens -- so RequireOutputArtefact reads this. }

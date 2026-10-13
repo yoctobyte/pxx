@@ -39052,17 +39052,25 @@ test-emit-obj: $(COMPILER)
 	  readelf -SW $(TESTTMP)/esprod_$$t.o | grep -qE '\] \.rodata +PROGBITS +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +A ' || { echo "test-emit-obj: the $$t object has no .rodata section with flags A (allocated, not writable)"; readelf -SW $(TESTTMP)/esprod_$$t.o; exit 1; }; \
 	  readelf -rW $(TESTTMP)/esprod_$$t.o | grep -qE 'R_(RISCV|XTENSA)_32 +[0-9a-f]+ +\.rodata \+' || { echo "test-emit-obj: no relocation in the $$t object names .rodata -- the literals moved and nothing points at them"; exit 1; }; \
 	 done; echo "test-emit-obj: an ESP object carries its string literals in a read-only .rodata (riscv32, xtensa)"
-	# ...but NOT its VMTs or class RTTI, which hosted executables make read-only
-	# by default: on ESP-IDF .rodata is flash, and an ISR reads a VMT through an
-	# instance with the flash cache off. So the section table must be identical
-	# with and without --no-ro-rtti. If the gate were lost, .rodata would grow by
-	# the VMT and RTTI bytes (0x400 for this fixture on x86-64) and differ.
+	# ...and its VMTs and class RTTI too, UNLESS the program has an iram or
+	# interrupt routine: on ESP-IDF .rodata is flash, and an ISR reads a VMT
+	# through an instance with the flash cache off (ObjRoAdoptRttiCandidates).
+	# Without one, .data must be SMALLER than under --no-ro-rtti (the RTTI left
+	# SRAM); with one (esp_obj_class_vmt_iram.pas) the section tables must be
+	# identical, which is the half that keeps an ISR off flash.
 	@for t in riscv32 xtensa; do \
-	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_class_vmt.pas $(TESTTMP)/espvmt_$$t.o >/dev/null && \
-	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp --no-ro-rtti test/esp_obj_class_vmt.pas $(TESTTMP)/espvmt_rw_$$t.o >/dev/null || { echo "test-emit-obj: the $$t class-VMT fixture FAILED to build"; exit 1; }; \
-	  a=$$(readelf -SW $(TESTTMP)/espvmt_$$t.o | grep -E '\] \.(ro)?data '); b=$$(readelf -SW $(TESTTMP)/espvmt_rw_$$t.o | grep -E '\] \.(ro)?data '); \
-	  [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-emit-obj: the $$t object's .data/.rodata differ with --no-ro-rtti -- VMTs or class RTTI went to flash"; echo "$$a"; echo "$$b"; exit 1; }; \
-	 done; echo "test-emit-obj: an ESP object keeps its VMTs and class RTTI in writable .data (riscv32, xtensa)"
+	  for src in test/esp_obj_class_vmt.pas test/esp_obj_class_vmt_iram.pas; do \
+	    f=$$(basename $$src .pas); \
+	    ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp $$src $(TESTTMP)/espvmt_$${t}_$$f.o >/dev/null && \
+	    ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp --no-ro-rtti $$src $(TESTTMP)/espvmt_rw_$${t}_$$f.o >/dev/null || { echo "test-emit-obj: the $$t $$f fixture FAILED to build"; exit 1; }; \
+	  done; \
+	  sz() { readelf -SW $$1 | sed 's/^ *\[ *[0-9]*\] *//' | awk -v n=$$2 '$$1==n {print $$5}' | sed 's|^|0x|' | xargs printf '%d'; }; \
+	  d=$$(sz $(TESTTMP)/espvmt_$${t}_esp_obj_class_vmt.o .data); drw=$$(sz $(TESTTMP)/espvmt_rw_$${t}_esp_obj_class_vmt.o .data); \
+	  [ -n "$$d" ] && [ -n "$$drw" ] && [ "$$d" -lt "$$drw" ] || { echo "test-emit-obj: the $$t object without iram keeps its class RTTI in .data ($$d B, $$drw B with --no-ro-rtti) -- it should be in flash .rodata"; exit 1; }; \
+	  a=$$(readelf -SW $(TESTTMP)/espvmt_$${t}_esp_obj_class_vmt_iram.o | grep -E '\] \.(ro)?data '); b=$$(readelf -SW $(TESTTMP)/espvmt_rw_$${t}_esp_obj_class_vmt_iram.o | grep -E '\] \.(ro)?data '); \
+	  [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-emit-obj: the $$t object WITH an iram routine differs under --no-ro-rtti -- VMTs or class RTTI went to flash"; echo "$$a"; echo "$$b"; exit 1; }; \
+	  echo "test-emit-obj: $$t class RTTI .data $$drw -> $$d B without iram; unchanged with an iram routine"; \
+	 done
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	for t in riscv32 xtensa; do \
@@ -40543,6 +40551,18 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_esp_idf_str_append_grow.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_sag.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_sag.oracle $(TESTTMP)/test_esp_sag.$$chip; then echo "$$chip string append on the IDF heap ok (== x86-64 oracle)"; \
 	  else echo "$$chip string append on the IDF heap MISMATCH"; exit 1; fi; \
+	done
+	@# CLASS RTTI IN FLASH (2026-10-13): an ESP object with no iram or interrupt
+	@# routine puts VMTs, class headers and the method/field/param arrays in
+	@# .rodata. This program reads all of it at run time -- virtual calls,
+	@# ClassName/ClassParent, is/as, an interface through TInterfacedObject -- so
+	@# a wrong section, addend or relocation shows as a wrong line or a fault.
+	@./$(COMPILER) test/test_esp_rtti_in_rodata.pas $(TESTTMP)/test_esp_rtro_oracle >/dev/null && $(TESTTMP)/test_esp_rtro_oracle > $(TESTTMP)/test_esp_rtro.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_rtti_in_rodata.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rtro.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rtro.oracle $(TESTTMP)/test_esp_rtro.$$chip; then echo "$$chip class RTTI in .rodata ok (== x86-64 oracle)"; \
+	  else echo "$$chip class RTTI in .rodata MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
 	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED
