@@ -752,7 +752,7 @@ end;
 function Rv32Exact32(n: Integer; uns: Boolean): Boolean;
 { Node n's value is reproduced by sign- (uns = False) or zero- (uns = True)
   extending its 32-bit register: a constant in range, or a value whose type is
-  an integer of at most 4 bytes. }
+  an integer, character or boolean of at most 4 bytes. }
 var tk: TTypeKind; v: Int64;
 begin
   Result := False;
@@ -764,6 +764,21 @@ begin
     v := IRIVal[n];
     if uns then Result := (v >= 0) and (v <= $FFFFFFFF)
     else Result := (v >= -2147483648) and (v <= 2147483647);
+    Exit;
+  end;
+  { Char, Boolean and their wide/C kinds are unsigned and at most 4 bytes,
+    and a load zero-extends them (lbu/lhu/lw) -- the 64-bit compare path pairs
+    them with a zero high word. TypeIsMachineInt leaves them out for overload
+    ranking, which is not this question; most of the compares this arm exists
+    for are `s[i] = ' '`. }
+  if tk in [tyChar, tyBoolean, tyBool8, tyWideChar] then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if tk = tyUCS4Char then
+  begin
+    Result := uns;
     Exit;
   end;
   if not TypeIsMachineInt(tk) then Exit;
@@ -2036,6 +2051,7 @@ var
   chain: array of Integer;  { a flattened `a + b + c ...` (Rv32IsStrConcat) }
   ci, ck: Integer;
   narrow: Integer;     { Rv32NarrowBinop, when low32Dem }
+  cmp32: Integer;      { 1/2 = a signed/unsigned compare done in 32 bits (Rv32Exact32) }
 begin
   low32Dem := Rv32Low32Demand;
   Rv32Low32Demand := False;
@@ -3183,7 +3199,25 @@ begin
           Exit;
         end;
 
-        if (narrow = 0) and (op <> Ord(tkIn)) and
+        { A COMPARISON of two values that are 32-bit by type (or constants in
+          range) has the same answer in 32 bits as in 64, provided both are
+          extended the same way: signed both, or unsigned both. Integer
+          arithmetic is typed Int64, so `i < n - 1` stays 64-bit -- n - 1 is
+          not 32-bit by type -- but `i < n`, `c = 0`, `w <> v` do not need the
+          ~10-instruction pair compare. The signedness is decided HERE, not by
+          the 32-bit arm's TypeCompareUnsigned, which would call a LongWord
+          against an Int64-typed constant signed. }
+        cmp32 := 0;
+        if (narrow = 0) and
+           ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+            (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe))) and
+           not IsFloatRISCV32(IRValueKind(left)) and not IsFloatRISCV32(IRValueKind(right)) then
+        begin
+          if Rv32Exact32(left, False) and Rv32Exact32(right, False) then cmp32 := 1
+          else if Rv32Exact32(left, True) and Rv32Exact32(right, True) then cmp32 := 2;
+        end;
+
+        if (narrow = 0) and (cmp32 = 0) and (op <> Ord(tkIn)) and
            (Is64BitRISCV32(IntToTypeKind(IRTk[node])) or
             Is64BitRISCV32(IntToTypeKind(IRTk[left])) or
             Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
@@ -3212,7 +3246,7 @@ begin
         { right straight into a1 when it is a constant or an off(s0) local:
           neither can disturb a0, so left needs no spill }
         if (IRKind[right] = IR_CONST_INT) and
-           ((narrow = 1) or not Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
+           ((narrow = 1) or (cmp32 <> 0) or not Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
         begin
           if IntToTypeKind(IRTk[right]) = tySingle then
             EmitLoadImmRISCV32(reg_a1, DoubleBitsToSingleBits(IRIVal[right]))
@@ -3329,6 +3363,8 @@ begin
             slt — was hardcoded signed, so an inline `LongWord > 0` / C
             `(a-10u) > 0` compared signed. }
           sgn := not TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+          if cmp32 = 1 then sgn := True
+          else if cmp32 = 2 then sgn := False;
           if op = Ord(tkLt) then
           begin
             if sgn then rv32_slt(reg_a0, reg_a0, reg_a1)

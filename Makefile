@@ -32380,6 +32380,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_str_concat_chain_appends_in_place.pas $(TESTTMP)/test_cchain_rv32c
 	tools/expect_same.sh riscv32/concat-chain "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cchain_rv32)" "$$($(TESTTMP)/test_cchain_x64)"
 	tools/assert_no_leak.sh riscv32_concat_chain 8 tools/run_target.sh riscv32 $(TESTTMP)/test_cchain_rv32c
+	# COMPARES IN 32 BITS: riscv32 compares two 32-bit-by-type values (or
+	# constants in range) without the 64-bit pair compare, signed or unsigned
+	# by the operands' extension. LongWord >= 2^31, negative constants, Char,
+	# Boolean, mixed signedness and `i < n - 1` at Low(Integer), against x86-64.
+	./$(COMPILER) test/test_rv32_compare_in_32_bits.pas $(TESTTMP)/test_rvcmp32_x64
+	./$(COMPILER) --target=riscv32 -O0 test/test_rv32_compare_in_32_bits.pas $(TESTTMP)/test_rvcmp32_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_compare_in_32_bits.pas $(TESTTMP)/test_rvcmp32_rv32o2
+	tools/expect_same.sh riscv32/cmp32-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcmp32_rv32o0)" "$$($(TESTTMP)/test_rvcmp32_x64)"
+	tools/expect_same.sh riscv32/cmp32-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcmp32_rv32o2)" "$$($(TESTTMP)/test_rvcmp32_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40728,6 +40737,14 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_str_concat_chain_appends_in_place.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_cchain.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_cchain.oracle $(TESTTMP)/test_esp_cchain.$$chip; then echo "$$chip string concat chains ok (== x86-64 oracle)"; \
 	  else echo "$$chip string concat chains MISMATCH"; exit 1; fi; \
+	done
+	@# COMPARES IN 32 BITS (2026-10-13): signed/unsigned/char/mixed rows on chip.
+	@./$(COMPILER) test/test_rv32_compare_in_32_bits.pas $(TESTTMP)/test_esp_rvcmp32_oracle >/dev/null && $(TESTTMP)/test_esp_rvcmp32_oracle > $(TESTTMP)/test_esp_rvcmp32.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_compare_in_32_bits.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvcmp32.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rvcmp32.oracle $(TESTTMP)/test_esp_rvcmp32.$$chip; then echo "$$chip compares in 32 bits ok (== x86-64 oracle)"; \
+	  else echo "$$chip compares in 32 bits MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod
