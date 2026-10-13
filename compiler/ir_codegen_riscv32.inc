@@ -720,6 +720,76 @@ begin
   Result := (tk = tySingle) or (tk = tyDouble);
 end;
 
+{ --- Low-32 demand -----------------------------------------------------------
+  Pascal integer arithmetic is typed at 64 bits (Integer + Integer is an Int64
+  node; decide-shift-operator-promotion-width), so on this 32-bit backend a
+  plain `z := z + 1` over Integers ran the a0:a1 pair path: sign-extend both
+  operands, add with carry, keep the low word at the store. The language rule
+  stays. What changes is that a consumer which keeps only the LOW 32 bits -- a
+  store to a 4-byte-or-narrower integer -- says so, and the binop under it then
+  takes the 32-bit arm when that gives the same low word:
+    + - * and or xor  always (the low word of the result depends only on the
+                      low words of the operands), and the demand passes down
+                      to their operands for the same reason;
+    div mod           only when both operands are 32-bit by TYPE and agree on
+                      signedness -- the 64-bit quotient of two sign-extended
+                      (or two zero-extended) words is then exactly the 32-bit
+                      one, INT_MIN div -1 included once truncated. `LongWord
+                      div Integer` divides signed in Int64 and stays there.
+  Never under {$Q+} (IRIVal = 1): its check reads the high word.
+  Rv32Low32Demand is read and cleared at the top of IREmitNodeRISCV32, so it
+  reaches exactly the node emitted next and nothing below it. }
+var
+  Rv32Low32Demand: Boolean;
+
+function Rv32Exact32(n: Integer; uns: Boolean): Boolean;
+{ Node n's value is reproduced by sign- (uns = False) or zero- (uns = True)
+  extending its 32-bit register: a constant in range, or a value whose type is
+  an integer of at most 4 bytes. }
+var tk: TTypeKind; v: Int64;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  tk := IRValueKind(n);
+  if IRKind[n] = IR_CONST_INT then
+  begin
+    if IsFloatRISCV32(tk) or IsFloatRISCV32(IntToTypeKind(IRTk[n])) then Exit;
+    v := IRIVal[n];
+    if uns then Result := (v >= 0) and (v <= $FFFFFFFF)
+    else Result := (v >= -2147483648) and (v <= 2147483647);
+    Exit;
+  end;
+  if not TypeIsMachineInt(tk) then Exit;
+  if TypeSlotSize(tk) > 4 then Exit;
+  if uns then Result := not TypeSigned(tk)
+  else Result := TypeSigned(tk) or (TypeSlotSize(tk) < 4);
+end;
+
+function Rv32NarrowBinop(node: Integer): Integer;
+{ 0 = keep the 64-bit path; 1 = the generic 32-bit arm (+ - * and or xor);
+  2 = 32-bit signed div/mod; 3 = 32-bit unsigned div/mod. }
+var op: Integer; tk, lk, rk: TTypeKind;
+begin
+  Result := 0;
+  if IRIVal[node] = 1 then Exit;
+  tk := IntToTypeKind(IRTk[node]);
+  if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
+  lk := IRValueKind(IRA[node]);
+  rk := IRValueKind(IRB[node]);
+  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
+          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
+  if IsFloatRISCV32(lk) or IsFloatRISCV32(rk) then Exit;
+  op := IRC[node];
+  if (op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+     (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor)) then
+    Result := 1
+  else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    if Rv32Exact32(IRA[node], False) and Rv32Exact32(IRB[node], False) then Result := 2
+    else if Rv32Exact32(IRA[node], True) and Rv32Exact32(IRB[node], True) then Result := 3;
+  end;
+end;
+
 procedure EmitLoadConst64RISCV32(v: Int64);
 begin
   EmitLoadImmRISCV32(reg_a0, Integer(v and $FFFFFFFF));
@@ -837,6 +907,21 @@ begin
   rv32_bne(testReg, reg_zero, 0);          { -> .ok (patched below) }
   EmitCallProc(dzProc);
   Patch32(pSkip, EncodeRISCVBNE(testReg, reg_zero, CodeLen - pSkip));
+end;
+
+{ The libgcc 64-bit divide builtinheap.pas declares on the IDF profile
+  (PXX_IDF_STDIO), or -1 where it is absent -- linux, bare -- and the inline
+  cores below run instead. }
+function Rv32LibgccDivProc(signedOp, wantMod: Boolean): Integer;
+begin
+  if signedOp then
+  begin
+    if wantMod then Result := FindProc('PXXIdfModDi3') else Result := FindProc('PXXIdfDivDi3');
+  end
+  else
+  begin
+    if wantMod then Result := FindProc('PXXIdfUModDi3') else Result := FindProc('PXXIdfUDivDi3');
+  end;
 end;
 
 procedure EmitUDivMod64RISCV32(wantMod: Boolean);
@@ -981,6 +1066,7 @@ procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
   qchk, qchkUns: Boolean);
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
+var procIdx: Integer;
 begin
   EmitNode64RISCV32(left);
   if IRLeafWritesOnlyA0A1RISCV32(right) then
@@ -1005,7 +1091,19 @@ begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     { dividend in t0:t1, divisor in a0:a1 }
-    if signedOp then EmitIDivMod64RISCV32(op = Ord(tkMod))
+    procIdx := Rv32LibgccDivProc(signedOp, op = Ord(tkMod));
+    if procIdx >= 0 then
+    begin
+      { IDF links libgcc: one call instead of the inline long division.
+        Same zero rule as the inline cores, then the C argument order. }
+      EmitDivZeroCheckRV32(False);
+      rv32_addi(reg_a2, reg_a0, 0);
+      rv32_addi(reg_a3, reg_a1, 0);
+      rv32_addi(reg_a0, reg_t0, 0);
+      rv32_addi(reg_a1, reg_t1, 0);
+      EmitCallProc(procIdx);              { a0:a1 = result }
+    end
+    else if signedOp then EmitIDivMod64RISCV32(op = Ord(tkMod))
     else EmitUDivMod64RISCV32(op = Ord(tkMod));
   end
   else if op = Ord(tkPlus) then
@@ -1927,7 +2025,12 @@ var
   leafArg, leafI, leafN: Integer;   { direct call: the trailing constant/local arguments loaded straight into a-registers }
   vaByVal: Boolean;
   sVal: AnsiString;
+  low32Dem: Boolean;   { the consumer keeps only a0 (Rv32Low32Demand) }
+  narrow: Integer;     { Rv32NarrowBinop, when low32Dem }
 begin
+  low32Dem := Rv32Low32Demand;
+  Rv32Low32Demand := False;
+  narrow := 0;
   { A write to StdErr: point the runtime writers at fd 2 for this ONE node
     (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
     the node as usual, then restore both. A stdout write never gets here, so its
@@ -2281,6 +2384,10 @@ begin
         end
         else
         begin
+          { a store to an integer of at most 4 bytes keeps only a0 }
+          Rv32Low32Demand := TypeIsMachineInt(Syms[IRA[node]].TypeKind) and
+                             (not Syms[IRA[node]].IsArray) and
+                             (TypeSlotSize(Syms[IRA[node]].TypeKind) <= 4);
           IREmitNodeRISCV32(IRB[node]);
           { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at this
             store — Pascal Q+ arithmetic is widened to Int64 by the frontend,
@@ -2983,7 +3090,37 @@ begin
           failed to COMPILE on all four 32-bit backends. Handled below instead,
           where the element is narrowed safely first.
           bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
-        if (op <> Ord(tkIn)) and
+        if low32Dem then narrow := Rv32NarrowBinop(node);
+        if narrow >= 2 then
+        begin
+          { 32-bit div/mod of two 32-bit operands (see Rv32NarrowBinop) }
+          IREmitNodeRISCV32(left);
+          if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
+            EmitLoadVarToRegRISCV32(reg_a1, IRA[right])
+          else if IRKind[right] = IR_CONST_INT then
+            EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[right]))
+          else
+          begin
+            rv32_addi(reg_sp, reg_sp, -4);
+            rv32_sw(reg_a0, reg_sp, 0);
+            IREmitNodeRISCV32(right);
+            rv32_addi(reg_a1, reg_a0, 0);
+            rv32_lw(reg_a0, reg_sp, 0);
+            rv32_addi(reg_sp, reg_sp, 4);
+          end;
+          EmitDivZeroCheckRV32(True);
+          if op = Ord(tkDiv) then
+          begin
+            if narrow = 3 then rv32_divu(reg_a0, reg_a0, reg_a1) else rv32_div(reg_a0, reg_a0, reg_a1);
+          end
+          else
+          begin
+            if narrow = 3 then rv32_remu(reg_a0, reg_a0, reg_a1) else rv32_rem(reg_a0, reg_a0, reg_a1);
+          end;
+          Exit;
+        end;
+
+        if (narrow = 0) and (op <> Ord(tkIn)) and
            (Is64BitRISCV32(IntToTypeKind(IRTk[node])) or
             Is64BitRISCV32(IntToTypeKind(IRTk[left])) or
             Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
@@ -2998,6 +3135,7 @@ begin
         if (op = Ord(tkPlus)) and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
           Error('target riscv32: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
+        Rv32Low32Demand := narrow = 1;
         IREmitNodeRISCV32(left);
         { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
           word -- $FFFFFFFF for a negative included -- is out of range. Saturate
@@ -3011,7 +3149,7 @@ begin
         { right straight into a1 when it is a constant or an off(s0) local:
           neither can disturb a0, so left needs no spill }
         if (IRKind[right] = IR_CONST_INT) and
-           not Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
+           ((narrow = 1) or not Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
         begin
           if IntToTypeKind(IRTk[right]) = tySingle then
             EmitLoadImmRISCV32(reg_a1, DoubleBitsToSingleBits(IRIVal[right]))
@@ -3025,6 +3163,7 @@ begin
           rv32_addi(reg_sp, reg_sp, -4);
           rv32_sw(reg_a0, reg_sp, 0);
 
+          Rv32Low32Demand := narrow = 1;
           IREmitNodeRISCV32(right);
           rv32_addi(reg_a1, reg_a0, 0);
 

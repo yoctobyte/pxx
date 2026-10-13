@@ -32356,6 +32356,15 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
+	# LOW-32 NARROWING: Integer arithmetic is typed Int64; riscv32 computes it in
+	# 32 bits only where the stored low word is the same, and div/mod only when
+	# both operands are 32-bit by type with one signedness. -O0 and -O2 against
+	# the x86-64 oracle, including the rows that must stay 64-bit.
+	./$(COMPILER) test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_low32_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_low32_rv32
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_low32_rv32o2
+	tools/expect_same.sh riscv32/low32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_low32_rv32)" "$$($(TESTTMP)/test_low32_x64)"
+	tools/expect_same.sh riscv32/low32-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_low32_rv32o2)" "$$($(TESTTMP)/test_low32_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -33198,10 +33207,12 @@ test-riscv32: $(COMPILER)
 	# RAISED TO 9000 on 2026-10-12: the off(s0) fold and the leaf-operand binop
 	# cut the body to ~157 B per iteration, and 6000 gave 943,608 B -- under the
 	# wall. 9000 puts it back at ~1.41 MB, the same clearance.
+	# RAISED TO 11000 on 2026-10-13: 32-bit arithmetic where only the low word
+	# is stored cut it to ~114 B per iteration (9000 gave 1,027,596 B).
 	@awk 'BEGIN{print "program bigbody;"; print "var n: Integer;"; \
 	  print "procedure Big(x: Integer);"; print "var i: Integer;"; \
 	  print "begin"; print "  i := 0;"; \
-	  for(k=0;k<9000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
+	  for(k=0;k<11000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
 	  print "  n := i;"; print "end;"; print "begin"; print "  Big(7);"; \
 	  print "  Writeln(\"n=\", n);"; print "end."}' | tr '"' "'" > $(TESTTMP)/rv32_bigbody.pas
 	./$(COMPILER) --target=riscv32 $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody | tee $(TESTTMP)/rv32_bigbody.log
@@ -33254,7 +33265,7 @@ test-riscv32: $(COMPILER)
 	@sz=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody.log); \
 	  bs=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody_base.log); \
 	  test -n "$$sz" && test -n "$$bs" && test $$(($$sz - $$bs)) -gt 1048576 || \
-	  { echo "rv32_bigbody: body=$$(($$sz - $$bs))B (image $$sz - empty-Big baseline $$bs) does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~157 B of body per iteration at the default -O2 since 2026-10-12); do NOT add --no-dce, and do NOT assert on the image, see the note above"; exit 1; }
+	  { echo "rv32_bigbody: body=$$(($$sz - $$bs))B (image $$sz - empty-Big baseline $$bs) does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~114 B of body per iteration at the default -O2 since 2026-10-13); do NOT add --no-dce, and do NOT assert on the image, see the note above"; exit 1; }
 	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
 	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
 	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
@@ -40616,6 +40627,17 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_esp_dead_typed_const.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_dtc.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_dtc.oracle $(TESTTMP)/test_esp_dtc.$$chip; then echo "$$chip dead typed const in .rodata, live ones writable ok (== x86-64 oracle)"; \
 	  else echo "$$chip dead typed const MISMATCH"; exit 1; fi; \
+	done
+	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
+	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod
+	@# is a libgcc call on IDF. The rows that must NOT narrow -- a 64-bit
+	@# dividend, LongWord div Integer -- are in the program. S3 is the control.
+	@./$(COMPILER) test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_esp_low32_oracle >/dev/null && $(TESTTMP)/test_esp_low32_oracle > $(TESTTMP)/test_esp_low32.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_low32_narrowing_keeps_64bit_answers.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_low32.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_low32.oracle $(TESTTMP)/test_esp_low32.$$chip; then echo "$$chip 32-bit narrowing and libgcc Int64 divide ok (== x86-64 oracle)"; \
+	  else echo "$$chip 32-bit narrowing MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
 	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED

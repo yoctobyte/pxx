@@ -2814,6 +2814,16 @@ function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; c
 function PXXIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
 function PXXIdfGetchar: Integer; cdecl; external name 'getchar';
 
+{ libgcc's 64-bit divide, which every IDF image links. The riscv32 codegen
+  calls these by name for an Int64 div/mod instead of inlining its own
+  ~55-instruction long division at each site (IREmitNodeRISCV32's 64-bit
+  pair path); its zero check still runs first, so a zero divisor never
+  reaches them. }
+function PXXIdfDivDi3(a, b: Int64): Int64; cdecl; external name '__divdi3';
+function PXXIdfModDi3(a, b: Int64): Int64; cdecl; external name '__moddi3';
+function PXXIdfUDivDi3(a, b: Int64): Int64; cdecl; external name '__udivdi3';
+function PXXIdfUModDi3(a, b: Int64): Int64; cdecl; external name '__umoddi3';
+
 { fd 0/1/2 ARE NOT POSIX FDS UNDER IDF. esp_libc's picolibc_init opens the
   console and stores WHATEVER fd open() returned in its stdin/stdout streams,
   so `write(1, ...)` finds no VFS entry and answers EBADF -- measured
