@@ -32389,6 +32389,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_compare_in_32_bits.pas $(TESTTMP)/test_rvcmp32_rv32o2
 	tools/expect_same.sh riscv32/cmp32-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcmp32_rv32o0)" "$$($(TESTTMP)/test_rvcmp32_x64)"
 	tools/expect_same.sh riscv32/cmp32-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcmp32_rv32o2)" "$$($(TESTTMP)/test_rvcmp32_x64)"
+	# ENTRY STORES THROUGH s0: parameter spills and managed-local zeroing
+	# address a near slot as off(s0), a far one through t0. Every spill shape
+	# and locals past 2 KB of frame, against x86-64; and no leak.
+	./$(COMPILER) test/test_rv32_entry_stores_through_s0.pas $(TESTTMP)/test_rves0_x64
+	./$(COMPILER) --target=riscv32 -O0 test/test_rv32_entry_stores_through_s0.pas $(TESTTMP)/test_rves0_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_rv32_entry_stores_through_s0.pas $(TESTTMP)/test_rves0_rv32c
+	tools/expect_same.sh riscv32/entry-s0-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32o0)" "$$($(TESTTMP)/test_rves0_x64)"
+	tools/expect_same.sh riscv32/entry-s0-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rves0_x64)"
+	tools/assert_no_leak.sh riscv32_entry_s0 8 tools/run_target.sh riscv32 $(TESTTMP)/test_rves0_rv32c
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40745,6 +40754,14 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_rv32_compare_in_32_bits.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvcmp32.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_rvcmp32.oracle $(TESTTMP)/test_esp_rvcmp32.$$chip; then echo "$$chip compares in 32 bits ok (== x86-64 oracle)"; \
 	  else echo "$$chip compares in 32 bits MISMATCH"; exit 1; fi; \
+	done
+	@# ENTRY STORES THROUGH s0 (2026-10-13): spills and far locals on chip.
+	@./$(COMPILER) test/test_rv32_entry_stores_through_s0.pas $(TESTTMP)/test_esp_rves0_oracle >/dev/null && $(TESTTMP)/test_esp_rves0_oracle > $(TESTTMP)/test_esp_rves0.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_entry_stores_through_s0.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rves0.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rves0.oracle $(TESTTMP)/test_esp_rves0.$$chip; then echo "$$chip entry stores through s0 ok (== x86-64 oracle)"; \
+	  else echo "$$chip entry stores through s0 MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod

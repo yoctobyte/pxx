@@ -2189,7 +2189,7 @@ procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);
   argument printed False on the C3; xtensa's s32i on the odd slot SIGBUSed).
   The same walkers used to store ONE word into a 16-byte promo temp too,
   leaving its payload as stack garbage. }
-var k, off: Integer;
+var k, off, rvBase: Integer;
 begin
   if nbytes <= 0 then Exit;
   off := Syms[symIdx].Offset;
@@ -2226,14 +2226,24 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
-    EmitSlotAddrRISCV32(reg_t0, symIdx);
+    { A frame slot whose every byte is within s0's 12-bit reach is stored
+      through s0 directly; only a far slot (or a global) takes its address
+      into t0 first. One addi per local, at every function entry. }
+    rvBase := reg_s0;
+    off := Syms[symIdx].Offset;
+    if (Syms[symIdx].Kind = skGlobal) or (off < -2048) or (off + nbytes > 2047) then
+    begin
+      EmitSlotAddrRISCV32(reg_t0, symIdx);
+      rvBase := reg_t0;
+      off := 0;
+    end;
     for k := 0 to (nbytes div 4) - 1 do
-      rv32_sw(reg_zero, reg_t0, k * 4);
+      rv32_sw(reg_zero, rvBase, off + k * 4);
     k := (nbytes div 4) * 4;
     if (nbytes mod 4) >= 2 then
-      begin rv32_sh(reg_zero, reg_t0, k); k := k + 2; end;
+      begin rv32_sh(reg_zero, rvBase, off + k); k := k + 2; end;
     if (nbytes mod 2) = 1 then
-      rv32_sb(reg_zero, reg_t0, k);
+      rv32_sb(reg_zero, rvBase, off + k);
   end
   else if TargetArch = TARGET_XTENSA then
   begin
@@ -2296,6 +2306,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
   local parr/pbyref/ptypes arrays were replaced by the equivalent
   Procs[procIdx].Params[] fields, which the driver mirrors them into. }
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
+    rvBase, rvOff: Integer;  { the riscv32 arm's spill base: s0 + slot, or t0 = slot }
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
     a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
     a64Ind, a64Agg: Boolean;             { ...a pointer to a caller copy / its own bytes }
@@ -2891,7 +2902,16 @@ begin
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSlotWordSize(idx);
-      EmitFrameAddrRISCV32(reg_t0, Syms[idx].Offset);
+      { through s0 directly when the whole slot (a by-value set is the
+        widest, 32 bytes) is within its 12-bit reach; t0 only for a far one }
+      rvBase := reg_s0;
+      rvOff := Syms[idx].Offset;
+      if (rvOff < -2048) or (rvOff + 32 > 2047) then
+      begin
+        EmitFrameAddrRISCV32(reg_t0, rvOff);
+        rvBase := reg_t0;
+        rvOff := 0;
+      end;
       if (Syms[idx].TypeKind = tySet) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
@@ -2901,11 +2921,11 @@ begin
         for sz := 0 to 7 do
         begin
           if pw + sz < 8 then
-            rv32_sw(reg_a0 + pw + sz, reg_t0, sz * 4)
+            rv32_sw(reg_a0 + pw + sz, rvBase, rvOff + sz * 4)
           else
           begin
             rv32_lw(reg_t1, reg_s0, 16 + ((pw + sz) - 8) * 4);
-            rv32_sw(reg_t1, reg_t0, sz * 4);
+            rv32_sw(reg_t1, rvBase, rvOff + sz * 4);
           end;
         end;
         Inc(pw, 8);
@@ -2921,18 +2941,18 @@ begin
           (RecSize(Syms[idx].RecName) > 4) and (RecSize(Syms[idx].RecName) <= 8)) then
       begin
         if pw < 8 then
-          rv32_sw(reg_a0 + pw, reg_t0, 0)                       { lo (word pw) }
+          rv32_sw(reg_a0 + pw, rvBase, rvOff)                       { lo (word pw) }
         else
         begin
           rv32_lw(reg_t1, reg_s0, 16 + (pw - 8) * 4);
-          rv32_sw(reg_t1, reg_t0, 0);
+          rv32_sw(reg_t1, rvBase, rvOff);
         end;
         if pw + 1 < 8 then
-          rv32_sw(reg_a0 + pw + 1, reg_t0, 4)                   { hi (word pw+1) }
+          rv32_sw(reg_a0 + pw + 1, rvBase, rvOff + 4)                   { hi (word pw+1) }
         else
         begin
           rv32_lw(reg_t1, reg_s0, 16 + ((pw + 1) - 8) * 4);
-          rv32_sw(reg_t1, reg_t0, 4);
+          rv32_sw(reg_t1, rvBase, rvOff + 4);
         end;
         Inc(pw, 2);
       end
@@ -2940,16 +2960,16 @@ begin
       begin
         if pw < 8 then
         begin
-          if sz = 1 then rv32_sb(reg_a0 + pw, reg_t0, 0)
-          else if sz = 2 then rv32_sh(reg_a0 + pw, reg_t0, 0)
-          else rv32_sw(reg_a0 + pw, reg_t0, 0);
+          if sz = 1 then rv32_sb(reg_a0 + pw, rvBase, rvOff)
+          else if sz = 2 then rv32_sh(reg_a0 + pw, rvBase, rvOff)
+          else rv32_sw(reg_a0 + pw, rvBase, rvOff);
         end
         else
         begin
           rv32_lw(reg_t1, reg_s0, 16 + (pw - 8) * 4);
-          if sz = 1 then rv32_sb(reg_t1, reg_t0, 0)
-          else if sz = 2 then rv32_sh(reg_t1, reg_t0, 0)
-          else rv32_sw(reg_t1, reg_t0, 0);
+          if sz = 1 then rv32_sb(reg_t1, rvBase, rvOff)
+          else if sz = 2 then rv32_sh(reg_t1, rvBase, rvOff)
+          else rv32_sw(reg_t1, rvBase, rvOff);
         end;
         Inc(pw, 1);
       end;
