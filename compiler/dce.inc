@@ -1678,6 +1678,7 @@ begin
         be added here too. }
       GlobFixPCRel[j] := GlobFixPCRel[i];
       GlobFixHiLo[j] := GlobFixHiLo[i];
+      GlobFixLoStore[j] := GlobFixLoStore[i];
       GlobFixTrail[j] := GlobFixTrail[i];
       GlobFixPicDelta[j] := GlobFixPicDelta[i];
       Inc(j);

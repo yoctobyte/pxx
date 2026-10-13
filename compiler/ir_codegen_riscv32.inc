@@ -46,7 +46,7 @@ end;
 
 { The placeholder EmitDataRef/EmitGlobRef just wrote becomes the lui; the
   fixup keeps its CodePos and is flagged as a pair. }
-procedure RvHiLoFinish(rd: Integer);
+procedure RvLuiOverPlaceholder(rd: Integer);
 var w: Cardinal;
 begin
   w := (Cardinal(rd and 31) shl 7) or $37;            { lui rd, 0 }
@@ -54,6 +54,11 @@ begin
   Code[CodeLen - 3] := Byte((w shr 8) and $FF);
   Code[CodeLen - 2] := Byte((w shr 16) and $FF);
   Code[CodeLen - 1] := Byte((w shr 24) and $FF);
+end;
+
+procedure RvHiLoFinish(rd: Integer);
+begin
+  RvLuiOverPlaceholder(rd);
   rv32_addi(rd, rd, 0);
 end;
 
@@ -286,6 +291,28 @@ begin
     rv32_sw(rs2, rs1, off);
 end;
 
+{ A global of at most one word, loaded or stored with %lo folded into the
+  access: `lui t0, %hi(x); lw a0, %lo(x)(t0)` -- 8 bytes where the address
+  pair plus the access is 12. Not for two-word values: %lo(x+4) under
+  %hi(x) is wrong when the +4 carries into bit 12. }
+procedure RvGlobLoadHiLo(rd, bssOff, sz: Integer; sgn: Boolean);
+begin
+  EmitGlobRef(bssOff);
+  GlobFixHiLo[GlobFixCount - 1] := True;
+  RvLuiOverPlaceholder(reg_t0);
+  EmitSizedLoadAtRISCV32(rd, reg_t0, 0, sz, sgn);
+end;
+
+procedure RvGlobStoreHiLo(rs, bssOff, sz: Integer);
+begin
+  EmitGlobRef(bssOff);
+  GlobFixHiLo[GlobFixCount - 1] := True;
+  GlobFixLoStore[GlobFixCount - 1] := True;
+  RvLuiOverPlaceholder(reg_t0);
+  EmitSizedStoreAtRISCV32(rs, reg_t0, 0, sz);
+end;
+
+
 procedure EmitSizedLoadRISCV32(rd, rs: Integer; sz: Integer; sgn: Boolean);
 begin
   EmitSizedLoadAtRISCV32(rd, rs, 0, sz, sgn);
@@ -343,8 +370,13 @@ begin
 
   if Syms[idx].Kind = skGlobal then
   begin
-    EmitLoadGlobAddrRISCV32(reg_t0, Syms[idx].Offset);
-    EmitSizedLoadRISCV32(reg_a0, reg_t0, sz, sgn);
+    if RvHiLoRefs and (sz <= 4) then
+      RvGlobLoadHiLo(reg_a0, Syms[idx].Offset, sz, sgn)
+    else
+    begin
+      EmitLoadGlobAddrRISCV32(reg_t0, Syms[idx].Offset);
+      EmitSizedLoadRISCV32(reg_a0, reg_t0, sz, sgn);
+    end;
   end
   else
   begin
@@ -386,8 +418,13 @@ begin
 
   if Syms[idx].Kind = skGlobal then
   begin
-    EmitLoadGlobAddrRISCV32(reg_t0, Syms[idx].Offset);
-    EmitSizedStoreRISCV32(reg_a0, reg_t0, sz);
+    if RvHiLoRefs and (sz <= 4) then
+      RvGlobStoreHiLo(reg_a0, Syms[idx].Offset, sz)
+    else
+    begin
+      EmitLoadGlobAddrRISCV32(reg_t0, Syms[idx].Offset);
+      EmitSizedStoreRISCV32(reg_a0, reg_t0, sz);
+    end;
   end
   else
   begin

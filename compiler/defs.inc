@@ -4718,6 +4718,9 @@ var
     relocated R_RISCV_HI20 + R_RISCV_LO12_I, not a 32-bit literal word
     (RvHiLoRefs). Grown and moved with Fixups / GlobFix, never alone. }
   FixupHiLo, GlobFixHiLo : array of Boolean;
+  { ...and the low half is a STORE's S-type immediate (R_RISCV_LO12_S), not an
+    addi/load I-type one: `lui t0, %hi; sw a0, %lo(t0)`. Only with GlobFixHiLo. }
+  GlobFixLoStore : array of Boolean;
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;
 

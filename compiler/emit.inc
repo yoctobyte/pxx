@@ -1168,12 +1168,14 @@ begin
     SetLength(GlobFixTrail, gfN);
     SetLength(GlobFixPicDelta, gfN);
     SetLength(GlobFixHiLo, gfN);
+    SetLength(GlobFixLoStore, gfN);
     GlobFixCapacity := gfN;
   end;
   GlobFixPCRel[GlobFixCount] := False;
   GlobFixTrail[GlobFixCount] := 0;
   GlobFixPicDelta[GlobFixCount] := 0;
   GlobFixHiLo[GlobFixCount] := False;
+  GlobFixLoStore[GlobFixCount] := False;
   { x86-64: rewrite the absolute [disp32] memory operand just emitted into the
     rip-relative form, so .text carries R_X86_64_PC32 and an object can be
     linked into a PIE (feature-a-x86-64-object-output-is-position-dependent).
