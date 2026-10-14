@@ -2555,9 +2555,19 @@ begin
               copy of another handle must IncRef. }
             if not IRNodeOwnsManagedStr(valNode) then
             begin
-              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0); { save handle }
-              procIdx := FindProc('PXXStrIncRef'); EmitCallProc(procIdx);          { a0 = p }
-              rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { restore handle }
+              if (IRKind[valNode] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[valNode]) then
+              begin
+                { the IncRef cannot change the local, so read it again rather
+                  than keep the handle on the stack across the call }
+                procIdx := FindProc('PXXStrIncRef'); EmitCallProc(procIdx);
+                EmitLoadVarToRegRISCV32(reg_a0, IRA[valNode]);
+              end
+              else
+              begin
+                rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0); { save handle }
+                procIdx := FindProc('PXXStrIncRef'); EmitCallProc(procIdx);          { a0 = p }
+                rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { restore handle }
+              end;
             end;
           end;
           { Publish: store new, DecRef old. New already holds its own +1, so
@@ -2590,11 +2600,13 @@ begin
           end
           else
           begin
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
-            EmitLoadVarRISCV32(si);                                      { a0 = old handle }
+            { a global, or a local past imm12: the same order through the slot
+              address in t0, which nothing between here and the call touches }
+            EmitSlotAddrRISCV32(reg_t0, si);
+            rv32_lw(reg_a1, reg_t0, 0);                                  { a1 = old }
+            rv32_sw(reg_a0, reg_t0, 0);                                  { [slot] := new }
+            rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-            rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
-            EmitStoreVarRISCV32(si);                                     { slot := new }
           end;
           Exit;
         end;

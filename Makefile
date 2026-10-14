@@ -32443,6 +32443,15 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/string-var-args-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32o0)" "$$($(TESTTMP)/test_rvsva_x64)"
 	tools/expect_same.sh riscv32/string-var-args-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvsva_x64)"
 	tools/assert_no_leak.sh riscv32_string_var_args 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32c
+	# STRING STORE TO A GLOBAL OR FAR LOCAL (2026-10-14): store first, release
+	# the old after, through the slot address in t0 (g := g at refcount 1
+	# included); a copy of a plain local re-reads it after the IncRef.
+	./$(COMPILER) test/test_rv32_string_store_to_global_and_far_local.pas $(TESTTMP)/test_rvsg_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_string_store_to_global_and_far_local.pas $(TESTTMP)/test_rvsg_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_rv32_string_store_to_global_and_far_local.pas $(TESTTMP)/test_rvsg_rv32c
+	tools/expect_same.sh riscv32/string-store-global-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32o0)" "$$($(TESTTMP)/test_rvsg_x64)"
+	tools/expect_same.sh riscv32/string-store-global-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvsg_x64)"
+	tools/assert_no_leak.sh riscv32_string_store_global 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32c
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
