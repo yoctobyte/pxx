@@ -184,6 +184,7 @@ procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
 function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+procedure PXXStrAssign(p: Pointer; slot: Pointer);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
   The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
@@ -3891,7 +3892,8 @@ begin
 {$endif}
   { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
     they must move together, because suppressing one direction only is what
-    would let a static block's count drift. }
+    would let a static block's count drift. PXXStrAssign carries a copy of
+    this release; it moves with them too. }
   if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_THREADSAFE}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
@@ -3902,6 +3904,39 @@ begin
   { NOT Pointer(rcAddr): the refcount no longer sits at the block base — see
     the header note. This was one address before the kind word and is two now. }
   if rc = 0 then PXXFree(Pointer(PXXHdrBase(p)));
+end;
+
+{ slot^ := p, then release the handle the slot held. p already carries its
+  own +1, so the store-first order is safe for p = old. riscv32's string
+  assignment calls this with the slot address instead of emitting the
+  load/store/move before a PXXStrDecRef call at every site. It is
+  PXXStrPublish with the arguments the other way round: the new handle is
+  already in the first argument register at the call.
+  The release is PXXStrDecRef's own body, so an assignment stays one call;
+  it must move together with PXXStrDecRef. Under PXX_HEAP_DEBUG it calls
+  PXXStrDecRef instead, which keeps the quarantine checks in one place. }
+procedure PXXStrAssign(p: Pointer; slot: Pointer);
+var oldp: Pointer;
+{$ifndef PXX_HEAP_DEBUG}
+    rcAddr, rc: Int64;
+{$endif}
+begin
+  oldp := Pointer(PMachineWord(slot)^);
+  PMachineWord(slot)^ := NativeInt(p);
+{$ifdef PXX_HEAP_DEBUG}
+  PXXStrDecRef(oldp);
+{$else}
+  if oldp = nil then Exit;
+  rcAddr := PXXHdrRC(oldp);
+  if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
+{$ifdef PXX_THREADSAFE}
+  rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;
+{$else}
+  rc := PMachineWord(rcAddr)^ - 1;
+  PMachineWord(rcAddr)^ := rc;
+{$endif}
+  if rc = 0 then PXXFree(Pointer(PXXHdrBase(oldp)));
+{$endif}
 end;
 
 { NilPy object-reclamation primitives. An instance allocated here lives at

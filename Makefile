@@ -32497,6 +32497,13 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_op_constant.pas $(TESTTMP)/test_rvkc_rv32o2
 	tools/expect_same.sh riscv32/int64-op-const-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkc_rv32o0)" "$$($(TESTTMP)/test_rvkc_x64)"
 	tools/expect_same.sh riscv32/int64-op-const-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkc_rv32o2)" "$$($(TESTTMP)/test_rvkc_x64)"
+	# STRING STORE PUBLISHES THROUGH THE SLOT (2026-10-14): one helper call
+	# with the slot address (PXXStrAssign); local, far local, var/out param, global, s := s.
+	./$(COMPILER) test/test_rv32_string_store_publishes_through_the_slot.pas $(TESTTMP)/test_rvsp_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_string_store_publishes_through_the_slot.pas $(TESTTMP)/test_rvsp_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_string_store_publishes_through_the_slot.pas $(TESTTMP)/test_rvsp_rv32o2
+	tools/expect_same.sh riscv32/string-store-publish-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsp_rv32o0)" "$$($(TESTTMP)/test_rvsp_x64)"
+	tools/expect_same.sh riscv32/string-store-publish-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsp_rv32o2)" "$$($(TESTTMP)/test_rvsp_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the

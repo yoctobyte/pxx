@@ -2812,7 +2812,18 @@ begin
             Neither arm needs the new handle after the call, so it is not kept
             on the stack -- the frame-local arm is lw/sw/mv/call, where the
             release-first order took seven instructions. }
-          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          procIdx := FindProc('PXXStrAssign');
+          if procIdx >= 0 then
+          begin
+            { one call with the slot address: two instructions a site where
+              the inline load/store/move/call took four or more }
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              Rv32LoadSlotWord(reg_a1, si)                               { a1 = caller slot addr }
+            else
+              EmitSlotAddrRISCV32(reg_a1, si);                           { a1 = &slot }
+            EmitCallProc(procIdx);
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             if FitsImm12RISCV32(Syms[si].Offset) then
               rv32_lw(reg_t0, reg_s0, Syms[si].Offset)                   { t0 = caller slot addr }
