@@ -32475,22 +32475,31 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_field_offsets_ride_in_the_access.pas $(TESTTMP)/test_rvfo_rv32o2
 	tools/expect_same.sh riscv32/field-offsets-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfo_rv32o0)" "$$($(TESTTMP)/test_rvfo_x64)"
 	tools/expect_same.sh riscv32/field-offsets-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfo_rv32o2)" "$$($(TESTTMP)/test_rvfo_x64)"
+	# INT64 +/- A CONSTANT IN PLACE (2026-10-14): addi + sltiu carry + add, no
+	# move to t0:t1; carries and borrows across the word, imm12 bounds.
+	./$(COMPILER) test/test_rv32_int64_plus_minus_constant_in_place.pas $(TESTTMP)/test_rvpm_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_int64_plus_minus_constant_in_place.pas $(TESTTMP)/test_rvpm_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_plus_minus_constant_in_place.pas $(TESTTMP)/test_rvpm_rv32o2
+	tools/expect_same.sh riscv32/int64-plus-minus-const-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpm_rv32o0)" "$$($(TESTTMP)/test_rvpm_x64)"
+	tools/expect_same.sh riscv32/int64-plus-minus-const-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpm_rv32o2)" "$$($(TESTTMP)/test_rvpm_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
 	# shapes compression can break: inline literal words (must stay 4-aligned),
 	# exception landing pads and their fixed-size skips, inline asm (held at 4
 	# bytes per line), atomics' retry loops (constant backward branches), signal
-	# trampolines, and the DCE moving bodies under -O2.
+	# trampolines, and the DCE moving bodies under -O2. Sizes are the compiler's
+	# code= figure, not the file: the code segment rounds to a 4 KB page, so a
+	# small program's two builds can land on the same file size.
 	@for p in test_cross_exception test_cross_float test_cross_string test_cross_dynarray \
 	          test_asm_rv32 test_riscv32_hosted_atomics test_signal_handler_callback_b336 \
 	          test_i386_loops test_int64_counter_crosses_2pow32_on_32bit test_inline_expand; do \
-	  ./$(COMPILER) --target=riscv32 -O2 --no-rv32-rvc test/$$p.pas $(TESTTMP)/rvc4_$$p >/dev/null && \
-	  ./$(COMPILER) --target=riscv32 -O2 --rv32-rvc test/$$p.pas $(TESTTMP)/rvc_$$p >/dev/null || { echo "test-riscv32: rvc $$p FAILED to build"; exit 1; }; \
+	  o4=$$(./$(COMPILER) --target=riscv32 -O2 --no-rv32-rvc test/$$p.pas $(TESTTMP)/rvc4_$$p) && \
+	  oc=$$(./$(COMPILER) --target=riscv32 -O2 --rv32-rvc test/$$p.pas $(TESTTMP)/rvc_$$p) || { echo "test-riscv32: rvc $$p FAILED to build"; exit 1; }; \
 	  a=$$(tools/run_target.sh riscv32 $(TESTTMP)/rvc4_$$p 2>&1; echo "rc=$$?"); \
 	  b=$$(tools/run_target.sh riscv32 $(TESTTMP)/rvc_$$p 2>&1; echo "rc=$$?"); \
 	  test "$$a" = "$$b" || { echo "test-riscv32: rvc $$p prints differently with compressed instructions"; echo "$$a" > $(TESTTMP)/rvc4_$$p.out; echo "$$b" > $(TESTTMP)/rvc_$$p.out; diff $(TESTTMP)/rvc4_$$p.out $(TESTTMP)/rvc_$$p.out | head -20; exit 1; }; \
-	  s4=$$(stat -c %s $(TESTTMP)/rvc4_$$p); sc=$$(stat -c %s $(TESTTMP)/rvc_$$p); \
+	  s4=$$(echo "$$o4" | sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p'); sc=$$(echo "$$oc" | sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p'); \
 	  test "$$sc" -lt "$$s4" || { echo "test-riscv32: rvc $$p is not smaller ($$sc vs $$s4)"; exit 1; }; \
 	done; echo "test-riscv32: --rv32-rvc builds print the same as 4-byte builds and are smaller (10 programs)"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's

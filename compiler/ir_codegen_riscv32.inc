@@ -1228,8 +1228,37 @@ procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
   qchk, qchkUns: Boolean);
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
-var procIdx, nSlow, pDone: Integer; slowAt: TRv32SlowBranches;
+var procIdx, nSlow, pDone: Integer; slowAt: TRv32SlowBranches; k: Int64;
+    rtk: TTypeKind;
 begin
+  { left +/- a constant that fits addi's 12 bits, unchecked: done in place.
+    The low word adds the sign-extended immediate; its carry out is
+    (result <u addend), and sltiu sign-extends the same immediate to exactly
+    that addend, for a negative one too. The high word adds the carry, and
+    the immediate's own high word (-1) when it is negative. }
+  if not qchk and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))) and
+     Rv32ConstIntValue(right, k) then
+  begin
+    rtk := IntToTypeKind(IRTk[right]);
+    if not Is64BitRISCV32(rtk) then
+    begin
+      if TypeSigned(rtk) then k := Low32(k)
+      else k := Int64(Low32(k)) and $FFFFFFFF;
+    end;
+    if op = Ord(tkMinus) then k := -k;
+    if (k >= -2048) and (k <= 2047) then
+    begin
+      EmitNode64RISCV32(left);
+      if k <> 0 then
+      begin
+        rv32_addi(reg_a0, reg_a0, Integer(k));
+        rv32_sltiu(reg_t3, reg_a0, Integer(k));    { carry out of the low word }
+        rv32_add(reg_a1, reg_a1, reg_t3);
+        if k < 0 then rv32_addi(reg_a1, reg_a1, -1);
+      end;
+      Exit;
+    end;
+  end;
   EmitNode64RISCV32(left);
   if IRLeafWritesOnlyA0A1RISCV32(right) then
   begin
