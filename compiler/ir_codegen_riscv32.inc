@@ -789,7 +789,10 @@ begin
     Result := True;
     Exit;
   end;
-  if tk = tyUCS4Char then
+  { A pointer or class reference is one word, and the 64-bit path pairs it
+    with a zero high word too: `p = nil` was the ~10-instruction pair compare
+    (83 sites on the thermostat, most of them the RTL's nil tests). }
+  if (tk = tyUCS4Char) or (tk = tyPointer) or (tk = tyClass) then
   begin
     Result := uns;
     Exit;
@@ -1229,22 +1232,67 @@ procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
 var procIdx, nSlow, pDone: Integer; slowAt: TRv32SlowBranches; k: Int64;
-    rtk: TTypeKind;
-begin
-  { left +/- a constant that fits addi's 12 bits, unchecked: done in place.
-    The low word adds the sign-extended immediate; its carry out is
-    (result <u addend), and sltiu sign-extends the same immediate to exactly
-    that addend, for a negative one too. The high word adds the carry, and
-    the immediate's own high word (-1) when it is negative. }
-  if not qchk and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))) and
-     Rv32ConstIntValue(right, k) then
+    rtk: TTypeKind; kc: Boolean; klo, khi: Integer;
+
+  procedure WordOp(r: Integer; c: Integer);
+  { r := r op c, one word of an and/or/xor with a constant; nothing when c
+    is op's identity, a constant when it is op's absorbing value. }
   begin
+    if op = Ord(tkAnd) then
+    begin
+      if c = -1 then Exit;
+      if c = 0 then rv32_addi(r, reg_zero, 0)
+      else if FitsImm12RISCV32(c) then rv32_andi(r, r, c)
+      else begin EmitLoadImmRISCV32(reg_t3, c); rv32_and(r, r, reg_t3); end;
+    end
+    else if op = Ord(tkOr) then
+    begin
+      if c = 0 then Exit;
+      if c = -1 then rv32_addi(r, reg_zero, -1)
+      else if FitsImm12RISCV32(c) then rv32_ori(r, r, c)
+      else begin EmitLoadImmRISCV32(reg_t3, c); rv32_or(r, r, reg_t3); end;
+    end
+    else
+    begin
+      if c = 0 then Exit;
+      if FitsImm12RISCV32(c) then rv32_xori(r, r, c)
+      else begin EmitLoadImmRISCV32(reg_t3, c); rv32_xor(r, r, reg_t3); end;
+    end;
+  end;
+
+  procedure WordDiff(dst, r: Integer; c: Integer);
+  { dst := r xor c, zero iff the word equals c; dst is r itself when c = 0 }
+  begin
+    if c = 0 then begin if dst <> r then rv32_addi(dst, r, 0); end
+    else if FitsImm12RISCV32(c) then rv32_xori(dst, r, c)
+    else begin EmitLoadImmRISCV32(dst, c); rv32_xor(dst, r, dst); end;
+  end;
+
+begin
+  { A constant right operand, unchecked, as the 64-bit value
+    EmitNode64RISCV32 would leave in a0:a1 for it: a narrower constant is
+    widened by its own type's signedness. }
+  kc := False;
+  if not qchk and Rv32ConstIntValue(right, k) then
+  begin
+    kc := True;
     rtk := IntToTypeKind(IRTk[right]);
     if not Is64BitRISCV32(rtk) then
     begin
       if TypeSigned(rtk) then k := Low32(k)
       else k := Int64(Low32(k)) and $FFFFFFFF;
     end;
+    klo := Low32(k);
+    khi := Low32(k shr 32);
+  end;
+
+  { left +/- a constant that fits addi's 12 bits: done in place.
+    The low word adds the sign-extended immediate; its carry out is
+    (result <u addend), and sltiu sign-extends the same immediate to exactly
+    that addend, for a negative one too. The high word adds the carry, and
+    the immediate's own high word (-1) when it is negative. }
+  if kc and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))) then
+  begin
     if op = Ord(tkMinus) then k := -k;
     if (k >= -2048) and (k <= 2047) then
     begin
@@ -1258,7 +1306,61 @@ begin
       end;
       Exit;
     end;
+    if op = Ord(tkMinus) then kc := False;     { not commutative: general path }
   end;
+
+  { left and/or/xor a constant: word by word in place; `and $FFFF...` is
+    nothing at all, a zero high mask one li. }
+  if kc and ((op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor))) then
+  begin
+    EmitNode64RISCV32(left);
+    WordOp(reg_a0, klo);
+    WordOp(reg_a1, khi);
+    Exit;
+  end;
+
+  { left = / <> a constant: each word's difference, or-ed, tested for zero.
+    `x = 0` is or + seqz. }
+  if kc and ((op = Ord(tkEq)) or (op = Ord(tkNeq))) then
+  begin
+    EmitNode64RISCV32(left);
+    if k = 0 then rv32_or(reg_t3, reg_a0, reg_a1)
+    else
+    begin
+      WordDiff(reg_t3, reg_a0, klo);
+      WordDiff(reg_t4, reg_a1, khi);
+      rv32_or(reg_t3, reg_t3, reg_t4);
+    end;
+    if op = Ord(tkEq) then rv32_sltiu(reg_a0, reg_t3, 1)
+    else rv32_sltu(reg_a0, reg_zero, reg_t3);
+    Exit;
+  end;
+
+  { signed left < 0 / >= 0 is the sign bit }
+  if kc and (k = 0) and signedOp and ((op = Ord(tkLt)) or (op = Ord(tkGe))) then
+  begin
+    EmitNode64RISCV32(left);
+    rv32_srli(reg_a0, reg_a1, 31);
+    if op = Ord(tkGe) then rv32_xori(reg_a0, reg_a0, 1);
+    Exit;
+  end;
+
+  { Any other constant right operand of a commutative op, or of a compare
+    (mirrored): the constant loads straight into t0:t1 as the LEFT operand
+    and the value stays in a0:a1 -- no move of left, no push. }
+  if kc and ((op = Ord(tkPlus)) or (op = Ord(tkStar)) or
+     (op = Ord(tkLt)) or (op = Ord(tkGe)) or (op = Ord(tkGt)) or (op = Ord(tkLe))) then
+  begin
+    EmitNode64RISCV32(left);
+    EmitLoadImmRISCV32(reg_t0, klo);
+    EmitLoadImmRISCV32(reg_t1, khi);
+    if op = Ord(tkLt) then op := Ord(tkGt)
+    else if op = Ord(tkGt) then op := Ord(tkLt)
+    else if op = Ord(tkLe) then op := Ord(tkGe)
+    else if op = Ord(tkGe) then op := Ord(tkLe);
+  end
+  else
+  begin
   EmitNode64RISCV32(left);
   if IRLeafWritesOnlyA0A1RISCV32(right) then
   begin
@@ -1277,6 +1379,7 @@ begin
     rv32_lw(reg_t0, reg_sp, 0);           { left.lo (dividend.lo) }
     rv32_lw(reg_t1, reg_sp, 4);           { left.hi }
     rv32_addi(reg_sp, reg_sp, 8);
+  end;
   end;
 
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then

@@ -32482,6 +32482,21 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_plus_minus_constant_in_place.pas $(TESTTMP)/test_rvpm_rv32o2
 	tools/expect_same.sh riscv32/int64-plus-minus-const-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpm_rv32o0)" "$$($(TESTTMP)/test_rvpm_x64)"
 	tools/expect_same.sh riscv32/int64-plus-minus-const-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpm_rv32o2)" "$$($(TESTTMP)/test_rvpm_x64)"
+	# POINTER COMPARES ARE ONE WORD (2026-10-14): p = nil, class refs, and
+	# unsigned ordering of addresses at and above 2^31, without the pair compare.
+	./$(COMPILER) test/test_rv32_pointer_compare_is_one_word.pas $(TESTTMP)/test_rvpc_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_pointer_compare_is_one_word.pas $(TESTTMP)/test_rvpc_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_pointer_compare_is_one_word.pas $(TESTTMP)/test_rvpc_rv32o2
+	tools/expect_same.sh riscv32/pointer-compare-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpc_rv32o0)" "$$($(TESTTMP)/test_rvpc_x64)"
+	tools/expect_same.sh riscv32/pointer-compare-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpc_rv32o2)" "$$($(TESTTMP)/test_rvpc_x64)"
+	# INT64 OP A CONSTANT (2026-10-14): and/or/xor word by word in place, = <>
+	# per-word difference, signed < 0 the sign bit, + * and ordered compares with
+	# the constant loaded as the left operand (mirrored). 32-bit constants widen.
+	./$(COMPILER) test/test_rv32_int64_op_constant.pas $(TESTTMP)/test_rvkc_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_int64_op_constant.pas $(TESTTMP)/test_rvkc_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_op_constant.pas $(TESTTMP)/test_rvkc_rv32o2
+	tools/expect_same.sh riscv32/int64-op-const-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkc_rv32o0)" "$$($(TESTTMP)/test_rvkc_x64)"
+	tools/expect_same.sh riscv32/int64-op-const-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkc_rv32o2)" "$$($(TESTTMP)/test_rvkc_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
