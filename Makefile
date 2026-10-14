@@ -32412,6 +32412,17 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_rvptr32_rv32
 	tools/expect_same.sh riscv32/ptr-math-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvptr32_rv32o0)" "$$($(TESTTMP)/test_rvptr32_x64)"
 	tools/expect_same.sh riscv32/ptr-math-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvptr32_rv32)" "$$($(TESTTMP)/test_rvptr32_x64)"
+	# LEAF OPERANDS SKIP THE SPILL (2026-10-14): string store-then-release into
+	# locals and var params (s := s included), string calls with nothing to
+	# release, constant / local array indexes (odd bounds, sizes 3 and 12,
+	# offsets past imm12), constant / local values stored through memory, and
+	# an address that calls something keeping pxx's value-first order.
+	./$(COMPILER) test/test_rv32_leaf_operands_skip_the_spill.pas $(TESTTMP)/test_rvleaf_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_leaf_operands_skip_the_spill.pas $(TESTTMP)/test_rvleaf_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_rv32_leaf_operands_skip_the_spill.pas $(TESTTMP)/test_rvleaf_rv32c
+	tools/expect_same.sh riscv32/leaf-operands-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32o0)" "$$($(TESTTMP)/test_rvleaf_x64)"
+	tools/expect_same.sh riscv32/leaf-operands-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvleaf_x64)"
+	tools/assert_no_leak.sh riscv32_leaf_operands 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32c
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40798,6 +40809,14 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_rv32_pointer_math_through_int64_is_32_bit.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvptr32.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_rvptr32.oracle $(TESTTMP)/test_esp_rvptr32.$$chip; then echo "$$chip pointer math through Int64 ok (== x86-64 oracle)"; \
 	  else echo "$$chip pointer math through Int64 MISMATCH"; exit 1; fi; \
+	done
+	@# LEAF OPERANDS SKIP THE SPILL (2026-10-14), on the IDF profile.
+	@./$(COMPILER) test/test_rv32_leaf_operands_skip_the_spill.pas $(TESTTMP)/test_esp_rvleaf_oracle >/dev/null && $(TESTTMP)/test_esp_rvleaf_oracle > $(TESTTMP)/test_esp_rvleaf.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_leaf_operands_skip_the_spill.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvleaf.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rvleaf.oracle $(TESTTMP)/test_esp_rvleaf.$$chip; then echo "$$chip leaf operands ok (== x86-64 oracle)"; \
+	  else echo "$$chip leaf operands MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod

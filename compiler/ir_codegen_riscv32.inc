@@ -2127,6 +2127,77 @@ begin
   rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = literal }
 end;
 
+function Rv32AddrRunsNothing(n, depth: Integer): Boolean;
+{ Evaluating address node n only loads and computes: no call, so no frame
+  local can change while it runs. A WHITELIST -- an unknown kind answers
+  False -- unlike IRAddrMayCall, whose unknown kinds answer "no call". A
+  string binop is a call, and so is a string index in write position (copy
+  on write, IRIndexNeedsStrCOW). }
+begin
+  Result := False;
+  if (n < 0) or (n >= IRCount) or (depth > 12) then Exit;
+  case IRKind[n] of
+    IR_CONST_INT, IR_LEA, IR_SLOTADDR, IR_LOAD_SYM, IR_FRAME:
+      Result := True;
+    IR_LOAD_MEM, IR_NEG, IR_NOT, IR_FIELD:
+      Result := Rv32AddrRunsNothing(IRA[n], depth + 1);
+    IR_INDEX:
+      Result := not IRIndexNeedsStrCOW(IRA[n], Integer(IRIVal[n])) and
+                Rv32AddrRunsNothing(IRA[n], depth + 1) and
+                Rv32AddrRunsNothing(IRB[n], depth + 1);
+    IR_BINOP:
+      Result := TypeIsMachineInt(IntToTypeKind(IRTk[n])) and
+                (IRC[n] <> Ord(tkDiv)) and (IRC[n] <> Ord(tkMod)) and
+                Rv32AddrRunsNothing(IRA[n], depth + 1) and
+                Rv32AddrRunsNothing(IRB[n], depth + 1);
+  end;
+end;
+
+procedure EmitScaleIndexRISCV32(r, elemSize: Integer);
+{ r := r * elemSize for an array index: a shift for 2/4/8 (one slli, where it
+  was li + sll), a multiply through t0 otherwise. r may be a0 or a1; t0 is the
+  only other register written. }
+begin
+  if elemSize = 8 then rv32_slli(r, r, 3)
+  else if elemSize = 4 then rv32_slli(r, r, 2)
+  else if elemSize = 2 then rv32_slli(r, r, 1)
+  else if elemSize <> 1 then
+  begin
+    EmitLoadImmRISCV32(reg_t0, elemSize);
+    rv32_mul(r, r, reg_t0);
+  end;
+end;
+
+procedure EmitReleaseStrOperandsRISCV32(left, right: Integer);
+{ After a two-operand string call (concat, =, ordered compare) whose operands
+  sit at [sp]=rhs, [sp+4]=lhs: release each operand that is a fresh managed
+  temporary, keeping the call's result in a0, then drop both slots. Most
+  operands are plain variables, and then a0 is never touched: the push and
+  pop of the result around no release at all were 4 instructions for nothing,
+  at every such call. }
+var procIdx: Integer; relL, relR: Boolean;
+begin
+  relL := (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left);
+  relR := (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right);
+  if relL or relR then
+  begin
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result; [sp+4]=rhs,[sp+8]=lhs }
+    procIdx := FindProc('PXXStrDecRef');
+    if relL then
+    begin
+      rv32_lw(reg_a0, reg_sp, 8);
+      EmitCallProc(procIdx);
+    end;
+    if relR then
+    begin
+      rv32_lw(reg_a0, reg_sp, 4);
+      EmitCallProc(procIdx);
+    end;
+    rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
+  end;
+  rv32_addi(reg_sp, reg_sp, 8);                                 { drop rhs, lhs }
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -2150,6 +2221,7 @@ var
   narrow: Integer;     { Rv32NarrowBinop, when low32Dem }
   cmp32: Integer;      { 1/2 = a signed/unsigned compare done in 32 bits (Rv32Exact32) }
   imm: Integer;        { a `+`/`-` constant folded into one addi }
+  leafVal: Boolean;    { STORE_MEM: the value loads straight into a1 }
 begin
   low32Dem := Rv32Low32Demand;
   Rv32Low32Demand := False;
@@ -2446,17 +2518,33 @@ begin
               rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { restore handle }
             end;
           end;
-          { Publish: store new, DecRef old. }
+          { Publish: store new, DecRef old. New already holds its own +1, so
+            storing it BEFORE the release is safe even when new = old (the
+            count cannot reach zero), and a string release runs no user code.
+            Neither arm needs the new handle after the call, so it is not kept
+            on the stack -- the frame-local arm is lw/sw/mv/call, where the
+            release-first order took seven instructions. }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
-            rv32_lw(reg_t0, reg_s0, Syms[si].Offset);                    { t0 = caller slot addr }
+            if FitsImm12RISCV32(Syms[si].Offset) then
+              rv32_lw(reg_t0, reg_s0, Syms[si].Offset)                   { t0 = caller slot addr }
+            else
+            begin
+              EmitLoadImmRISCV32(reg_t0, Syms[si].Offset);
+              rv32_add(reg_t0, reg_s0, reg_t0);
+              rv32_lw(reg_t0, reg_t0, 0);
+            end;
             rv32_lw(reg_a1, reg_t0, 0);                                  { a1 = old }
-            rv32_lw(reg_a0, reg_sp, 0);                                  { a0 = new }
             rv32_sw(reg_a0, reg_t0, 0);                                  { [slot] := new }
             rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-            rv32_addi(reg_sp, reg_sp, 4);
+          end
+          else if LeafLoadSymFoldsRISCV32(si) then
+          begin
+            EmitLoadVarToRegRISCV32(reg_a1, si);                         { a1 = old }
+            EmitStoreVarRISCV32(si);                                     { slot := new, one sw }
+            rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end
           else
           begin
@@ -2690,6 +2778,32 @@ begin
           else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
             rv32_lw(reg_a0, reg_a0, 0);            { slot -> handle }
         end;
+        { A constant index is a byte offset known now, and a frame-local index
+          loads straight into a1 (its load touches nothing else): neither needs
+          the base spilled around it. Only a computed index does. }
+        if IRKind[right] = IR_CONST_INT then
+        begin
+          imm := Low32((Int64(Low32(IRIVal[right])) - lo) * elemSize);
+          if FitsImm12RISCV32(imm) then
+          begin
+            if imm <> 0 then rv32_addi(reg_a0, reg_a0, imm);
+          end
+          else
+          begin
+            EmitLoadImmRISCV32(reg_a1, imm);
+            rv32_add(reg_a0, reg_a0, reg_a1);
+          end;
+          Exit;
+        end;
+        if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
+        begin
+          EmitLoadVarToRegRISCV32(reg_a1, IRA[right]);
+          if lo <> 0 then
+            rv32_addi(reg_a1, reg_a1, -lo);
+          EmitScaleIndexRISCV32(reg_a1, elemSize);
+          rv32_add(reg_a0, reg_a0, reg_a1);
+          Exit;
+        end;
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
@@ -2703,27 +2817,7 @@ begin
         InLValueWrite := savedLVW;
         if lo <> 0 then
           rv32_addi(reg_a0, reg_a0, -lo);
-
-        if elemSize = 8 then
-        begin
-          rv32_addi(reg_a1, reg_zero, 3);
-          rv32_sll(reg_a0, reg_a0, reg_a1);
-        end
-        else if elemSize = 4 then
-        begin
-          rv32_addi(reg_a1, reg_zero, 2);
-          rv32_sll(reg_a0, reg_a0, reg_a1);
-        end
-        else if elemSize = 2 then
-        begin
-          rv32_addi(reg_a1, reg_zero, 1);
-          rv32_sll(reg_a0, reg_a0, reg_a1);
-        end
-        else if elemSize <> 1 then
-        begin
-          EmitLoadImmRISCV32(reg_a1, elemSize);
-          rv32_mul(reg_a0, reg_a0, reg_a1);
-        end;
+        EmitScaleIndexRISCV32(reg_a0, elemSize);
 
         rv32_lw(reg_a1, reg_sp, 0);
         rv32_addi(reg_sp, reg_sp, 4);
@@ -3052,16 +3146,41 @@ begin
           Exit;
         end;
 
-        EmitLow32RISCV32(IRB[node]);
-        rv32_addi(reg_sp, reg_sp, -4);
-        rv32_sw(reg_a0, reg_sp, 0);
+        valNode := IRB[node];
+        if IRKind[valNode] = IR_CONST_INT then
+          leafVal := not IsFloatRISCV32(IntToTypeKind(IRTk[valNode]))
+        else
+          leafVal := (IRKind[valNode] = IR_LOAD_SYM) and
+                     LeafLoadSymFoldsRISCV32(IRA[valNode]) and
+                     (Rv32Exact32(valNode, False) or Rv32Exact32(valNode, True)) and
+                     Rv32AddrRunsNothing(IRA[node], 0);
+        if leafVal then
+        begin
+          { The value is a constant, or an integer frame local the address
+            cannot change (nothing in it runs): compute the address first and
+            load the value straight into a1, with no spill around it. }
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          EmitLow32RISCV32(IRA[node]);
+          InLValueWrite := savedLVW;
+          if IRKind[valNode] = IR_CONST_INT then
+            EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[valNode]))
+          else
+            EmitLoadVarToRegRISCV32(reg_a1, IRA[valNode]);
+        end
+        else
+        begin
+          EmitLow32RISCV32(valNode);
+          rv32_addi(reg_sp, reg_sp, -4);
+          rv32_sw(reg_a0, reg_sp, 0);
 
-        savedLVW := InLValueWrite;
-        InLValueWrite := True;
-        EmitLow32RISCV32(IRA[node]);
-        InLValueWrite := savedLVW;
-        rv32_lw(reg_a1, reg_sp, 0);
-        rv32_addi(reg_sp, reg_sp, 4);
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          EmitLow32RISCV32(IRA[node]);
+          InLValueWrite := savedLVW;
+          rv32_lw(reg_a1, reg_sp, 0);
+          rv32_addi(reg_sp, reg_sp, 4);
+        end;
 
         if sz = 1 then
           rv32_sb(reg_a1, reg_a0, 0)
@@ -3147,19 +3266,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
           EmitCallProc(procIdx);                { a0 = result handle }
           { release fresh tyAnsiString BINOP operands (nested concat temporaries) }
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result; [sp+4]=rhs,[sp+8]=lhs }
-          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 8);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 4);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
-          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          EmitReleaseStrOperandsRISCV32(left, right);  { and drop rhs, lhs }
           Exit;
         end;
 
@@ -3181,19 +3288,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrEq not found');
           EmitCallProc(procIdx);                { a0 = 1/0 }
           { release fresh operand temporaries }
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
-          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 8);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 4);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
-          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          EmitReleaseStrOperandsRISCV32(left, right);  { and drop rhs, lhs }
           if op = Ord(tkNeq) then rv32_xori(reg_a0, reg_a0, 1);
           Exit;
         end;
@@ -3220,19 +3315,7 @@ begin
           procIdx := FindProc('PXXStrCmp3');
           if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
           EmitCallProc(procIdx);                { a0 = -1/0/1 }
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
-          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 8);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
-          begin
-            rv32_lw(reg_a0, reg_sp, 4);
-            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
-          end;
-          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
-          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          EmitReleaseStrOperandsRISCV32(left, right);  { and drop rhs, lhs }
           { -1/0/1 -> 0/1, the same tail the soft-float compare uses }
           if op = Ord(tkLt) then rv32_slti(reg_a0, reg_a0, 0)
           else if op = Ord(tkLe) then rv32_slti(reg_a0, reg_a0, 1)
