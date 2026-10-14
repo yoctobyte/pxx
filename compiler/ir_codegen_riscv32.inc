@@ -5719,46 +5719,6 @@ begin
   Result := True;
 end;
 
-procedure Rv32EmitCmpBranch(node, lblId: Integer);
-{ left -> a0, right -> a1 (or x0 for a literal 0), then ONE branch over the
-  jump slot that follows, taken when the comparison is TRUE -- the slot is the
-  false edge. Operands as the generic binop arm evaluates them. }
-var left, right, op, rs2, skip: Integer; sgn: Boolean;
-begin
-  left := IRA[node]; right := IRB[node]; op := IRC[node];
-  IREmitNodeRISCV32(left);
-  rs2 := reg_a1;
-  if Rv32IsZeroConst(right) then
-    rs2 := reg_zero
-  else if (IRKind[right] = IR_CONST_INT) and
-          (IntToTypeKind(IRTk[right]) <> tySingle) then
-    EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[right]))
-  else if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
-    EmitLoadVarToRegRISCV32(reg_a1, IRA[right])
-  else
-  begin
-    rv32_addi(reg_sp, reg_sp, -4);
-    rv32_sw(reg_a0, reg_sp, 0);
-    IREmitNodeRISCV32(right);
-    rv32_addi(reg_a1, reg_a0, 0);
-    rv32_lw(reg_a0, reg_sp, 0);
-    rv32_addi(reg_sp, reg_sp, 4);
-  end;
-  sgn := not TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
-  skip := 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4);
-  if op = Ord(tkEq) then rv32_beq(reg_a0, rs2, skip)
-  else if op = Ord(tkNeq) then rv32_bne(reg_a0, rs2, skip)
-  else if op = Ord(tkLt) then
-    begin if sgn then rv32_blt(reg_a0, rs2, skip) else rv32_bltu(reg_a0, rs2, skip); end
-  else if op = Ord(tkGe) then
-    begin if sgn then rv32_bge(reg_a0, rs2, skip) else rv32_bgeu(reg_a0, rs2, skip); end
-  else if op = Ord(tkGt) then          { a > b  <=>  b < a }
-    begin if sgn then rv32_blt(rs2, reg_a0, skip) else rv32_bltu(rs2, reg_a0, skip); end
-  else                                 { tkLe: a <= b  <=>  b >= a }
-    begin if sgn then rv32_bge(rs2, reg_a0, skip) else rv32_bgeu(rs2, reg_a0, skip); end;
-end;
-
-
 procedure EmitRv32JumpToLabel(lblId: Integer; var fixCount: Integer);
 var rvHi, rvLo: Integer;
 begin
@@ -5821,8 +5781,149 @@ begin
   PatchRv32LinkSlot(pos, targetOffset, reg_zero);
 end;
 
+{ A conditional jump to a label is ONE B-type branch, not a skip branch over a
+  jump slot. A B-type branch reaches only +-4 KiB, and a forward label's
+  distance is unknown when the branch is written, so a forward one is recorded
+  as pending and checked at every statement boundary (Rv32BranchIsland):
+  once it has waited RV32_ISLAND_AGE bytes for its label it is re-aimed at a
+  veneer `j label` in an island the code jumps over. A label is reached at a
+  statement boundary too, so a pending branch only ever spans one statement
+  past that age; a single statement over ~3 KiB still fails loudly in
+  EncodeRISCVBranch's range check rather than truncating. }
+const
+  RV32_ISLAND_AGE = 1024;
+  RV32_MAX_PENDING_BR = 1024;
+var
+  Rv32PendBr: array[0..RV32_MAX_PENDING_BR - 1] of Integer;   { LabelFixup index }
+  Rv32PendBrCount: Integer;
+
+function Rv32CodeWord(pos: Integer): Integer;
+begin
+  Result := Code[pos] or (Code[pos + 1] shl 8) or (Code[pos + 2] shl 16) or
+            (Integer(Code[pos + 3]) shl 24);
+end;
+
+procedure Rv32BranchToLabel(funct3, rs1, rs2, lblId: Integer; var fixCount: Integer);
+{ Jump to lblId when (rs1 funct3 rs2) holds: beq=0 bne=1 blt=4 bge=5 bltu=6
+  bgeu=7; funct3 xor 1 is the opposite test. }
+var off: Integer;
+begin
+  if LabelPositions[lblId] <> -1 then
+  begin
+    off := LabelPositions[lblId] - CodeLen;
+    if off >= -4096 then
+    begin
+      RvNoteInsn(4);
+      EmitI32(EncodeRISCVBranch(funct3, rs1, rs2, off));
+      Exit;
+    end;
+  end
+  else if (Rv32PendBrCount < RV32_MAX_PENDING_BR) and (fixCount < MAX_IR) then
+  begin
+    Rv32PendBr[Rv32PendBrCount] := fixCount;
+    Inc(Rv32PendBrCount);
+    LabelFixupPos[fixCount] := CodeLen;
+    LabelFixupTarget[fixCount] := lblId;
+    Inc(fixCount);
+    RvNoteInsn(4);
+    EmitI32(EncodeRISCVBranch(funct3, rs1, rs2, 0));
+    Exit;
+  end;
+  { out of reach, or the pending list is full: skip over a jump slot }
+  RvcHoldSkip(4 + Rv32JumpSlotBytes(lblId, CodeLen + 4));
+  RvNoteInsn(4);
+  EmitI32(EncodeRISCVBranch(funct3 xor 1, rs1, rs2, 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4)));
+  EmitRv32JumpToLabel(lblId, fixCount);
+end;
+
+procedure Rv32BranchIsland(var fixCount: Integer);
+{ At a statement boundary: drop pending branches whose label is placed, and if
+  the oldest still waiting is RV32_ISLAND_AGE bytes back, give every one older
+  than half that a veneer in an island the straight-line code jumps over. }
+var k, n, f, oldest, over, w, veneer, base: Integer;
+begin
+  n := 0; oldest := CodeLen;
+  for k := 0 to Rv32PendBrCount - 1 do
+  begin
+    f := Rv32PendBr[k];
+    if LabelPositions[LabelFixupTarget[f]] = -1 then
+    begin
+      Rv32PendBr[n] := f; Inc(n);
+      if LabelFixupPos[f] < oldest then oldest := LabelFixupPos[f];
+    end;
+  end;
+  Rv32PendBrCount := n;
+  if (n = 0) or (CodeLen - oldest < RV32_ISLAND_AGE) then Exit;
+  if (RvcHoldDepth > 0) or (CodeLen < RvcHoldUntil) then Exit;
+  base := CodeLen;
+  over := 4;
+  for k := 0 to n - 1 do
+    if base - LabelFixupPos[Rv32PendBr[k]] >= RV32_ISLAND_AGE div 2 then
+      over := over + Rv32JumpSlotBytes(LabelFixupTarget[Rv32PendBr[k]], CodeLen);
+  EmitI32(EncodeRISCVJAL(reg_zero, over));
+  n := 0;
+  for k := 0 to Rv32PendBrCount - 1 do
+  begin
+    f := Rv32PendBr[k];
+    if base - LabelFixupPos[f] >= RV32_ISLAND_AGE div 2 then
+    begin
+      veneer := CodeLen;
+      EmitRv32JumpToLabel(LabelFixupTarget[f], fixCount);
+      w := Rv32CodeWord(LabelFixupPos[f]);
+      Patch32(LabelFixupPos[f], EncodeRISCVBranch((w shr 12) and 7, (w shr 15) and 31,
+        (w shr 20) and 31, veneer - LabelFixupPos[f]));
+      LabelFixupTarget[f] := -1;                  { resolved: the veneer is }
+    end
+    else
+    begin
+      Rv32PendBr[n] := f; Inc(n);
+    end;
+  end;
+  Rv32PendBrCount := n;
+end;
+
+procedure Rv32EmitCmpBranch(node, lblId: Integer; var fixCount: Integer);
+{ left -> a0, right -> a1 (or x0 for a literal 0), then ONE branch to the
+  label, taken when the comparison is FALSE (Rv32BranchToLabel). Operands as
+  the generic binop arm evaluates them. }
+var left, right, op, rs2, f3: Integer; sgn: Boolean;
+begin
+  left := IRA[node]; right := IRB[node]; op := IRC[node];
+  IREmitNodeRISCV32(left);
+  rs2 := reg_a1;
+  if Rv32IsZeroConst(right) then
+    rs2 := reg_zero
+  else if (IRKind[right] = IR_CONST_INT) and
+          (IntToTypeKind(IRTk[right]) <> tySingle) then
+    EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[right]))
+  else if (IRKind[right] = IR_LOAD_SYM) and LeafLoadSymFoldsRISCV32(IRA[right]) then
+    EmitLoadVarToRegRISCV32(reg_a1, IRA[right])
+  else
+  begin
+    rv32_addi(reg_sp, reg_sp, -4);
+    rv32_sw(reg_a0, reg_sp, 0);
+    IREmitNodeRISCV32(right);
+    rv32_addi(reg_a1, reg_a0, 0);
+    rv32_lw(reg_a0, reg_sp, 0);
+    rv32_addi(reg_sp, reg_sp, 4);
+  end;
+  sgn := not TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+  { the funct3 of the FAILING test: eq -> bne, lt -> bge, ...; gt and le
+    swap the operands (a > b fails when b >= a, a <= b fails when b < a) }
+  if op = Ord(tkEq) then f3 := 1
+  else if op = Ord(tkNeq) then f3 := 0
+  else if (op = Ord(tkLt)) or (op = Ord(tkLe)) then f3 := 5
+  else f3 := 4;                        { tkGe, tkGt }
+  if not sgn and (f3 >= 4) then f3 := f3 + 2;
+  if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
+    Rv32BranchToLabel(f3 xor 1, rs2, reg_a0, lblId, fixCount)
+  else
+    Rv32BranchToLabel(f3, reg_a0, rs2, lblId, fixCount);
+end;
+
+
 procedure IREmitMachineCodeRISCV32;
-var i, lblId, pos, targetOffset, f, si, procIdx, sz: Integer;
+var i, lblId, pos, targetOffset, f, si, procIdx, sz, w: Integer;
     rvHi, rvLo: Integer;
     LabelFixupCount: Integer;
 begin
@@ -5874,6 +5975,7 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
   LabelAddrFixCount := 0;
+  Rv32PendBrCount := 0;
 
   { Carve this body's alloca base slot and record where the expression stack
     starts. One word, only when the body actually contains an IR_ALLOCA, so a
@@ -5893,6 +5995,8 @@ begin
 
   for i := 0 to IRCount - 1 do
   begin
+    if Rv32PendBrCount > 0 then
+      Rv32BranchIsland(LabelFixupCount);
     case IRKind[i] of
       IR_LABEL:
         begin
@@ -5919,9 +6023,8 @@ begin
           lblId := IRA[i];
           if Rv32PlainCmp32(IRB[i]) then
           begin
-            { compare-and-branch: skip the jump slot when the condition holds }
-            Rv32EmitCmpBranch(IRB[i], lblId);
-            EmitRv32JumpToLabel(lblId, LabelFixupCount);
+            { compare-and-branch: to the label when the condition fails }
+            Rv32EmitCmpBranch(IRB[i], lblId, LabelFixupCount);
             continue;
           end;
           IREmitNodeRISCV32(IRB[i]);
@@ -5931,8 +6034,7 @@ begin
             is dead after the branch. }
           if Is64BitRISCV32(IntToTypeKind(IRTk[IRB[i]])) then
             rv32_or(reg_a0, reg_a0, reg_a1);
-          rv32_bne(reg_a0, reg_zero, 4 + Rv32JumpSlotBytes(lblId, CodeLen + 4));
-          EmitRv32JumpToLabel(lblId, LabelFixupCount);
+          Rv32BranchToLabel(0, reg_a0, reg_zero, lblId, LabelFixupCount);   { beq }
         end;
 
       IR_EXC_ENTER:
@@ -6083,6 +6185,7 @@ begin
   for f := 0 to LabelFixupCount - 1 do
   begin
     lblId := LabelFixupTarget[f];
+    if lblId = -1 then continue;           { a branch an island re-aimed }
     pos := LabelFixupPos[f];
     targetOffset := LabelPositions[lblId];
     if targetOffset = -1 then Error('Unresolved forward jump in RISC-V IR codegen');
@@ -6096,8 +6199,13 @@ begin
     end
     else if (Code[pos] = $6F) then
       PatchRv32JumpSlot(pos, targetOffset)
-    else if (Code[pos] = $63) then
-      Patch32(pos, EncodeRISCVBEQ(reg_a0, reg_zero, targetOffset - pos))
+    else if (Code[pos] and $7F) = $63 then
+    begin
+      { Rv32BranchToLabel's forward branch: same test and registers, aimed }
+      w := Rv32CodeWord(pos);
+      Patch32(pos, EncodeRISCVBranch((w shr 12) and 7, (w shr 15) and 31,
+        (w shr 20) and 31, targetOffset - pos));
+    end
     else
       Error('target riscv32: invalid instruction at label fixup');
   end;

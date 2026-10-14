@@ -32460,6 +32460,14 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_constant_arithmetic_folds.pas $(TESTTMP)/test_rvcf_rv32o2
 	tools/expect_same.sh riscv32/constant-folds-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcf_rv32o0)" "$$($(TESTTMP)/test_rvcf_x64)"
 	tools/expect_same.sh riscv32/constant-folds-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcf_rv32o2)" "$$($(TESTTMP)/test_rvcf_x64)"
+	# BRANCH ISLANDS (2026-10-14): a conditional jump is one branch straight to
+	# its label; a forward one still waiting after ~1 KiB is re-aimed at a veneer
+	# in an island the code jumps over. Blocks past 4 KiB, both directions.
+	./$(COMPILER) test/test_rv32_branch_islands.pas $(TESTTMP)/test_rvbi_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_branch_islands.pas $(TESTTMP)/test_rvbi_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_branch_islands.pas $(TESTTMP)/test_rvbi_rv32o2
+	tools/expect_same.sh riscv32/branch-islands-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvbi_rv32o0)" "$$($(TESTTMP)/test_rvbi_x64)"
+	tools/expect_same.sh riscv32/branch-islands-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvbi_rv32o2)" "$$($(TESTTMP)/test_rvbi_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40739,6 +40747,13 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_sag.oracle $(TESTTMP)/test_esp_sag.$$chip; then echo "$$chip string append on the IDF heap ok (== x86-64 oracle)"; \
 	  else echo "$$chip string append on the IDF heap MISMATCH"; exit 1; fi; \
 	done
+	@# BRANCH ISLANDS ON THE C3 (2026-10-14): the esp build's veneers are one
+	@# jal each (short slots), which hosted riscv32 never emits. -O2.
+	@./$(COMPILER) test/test_rv32_branch_islands.pas $(TESTTMP)/test_esp_rvbi_oracle >/dev/null && $(TESTTMP)/test_esp_rvbi_oracle > $(TESTTMP)/test_esp_rvbi.oracle
+	@ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	  tools/esp_run.sh --chip esp32c3 test/test_rv32_branch_islands.pas 2>/dev/null | grep -v 'main_task' | tr -d '\r' > $(TESTTMP)/test_esp_rvbi.c3 || true; \
+	if diff -u $(TESTTMP)/test_esp_rvbi.oracle $(TESTTMP)/test_esp_rvbi.c3; then echo "esp32c3 branch islands ok (== x86-64 oracle)"; \
+	else echo "esp32c3 branch islands MISMATCH"; exit 1; fi
 	@# CLASS RTTI IN FLASH (2026-10-13): an ESP object with no iram or interrupt
 	@# routine puts VMTs, class headers and the method/field/param arrays in
 	@# .rodata. This program reads all of it at run time -- virtual calls,
