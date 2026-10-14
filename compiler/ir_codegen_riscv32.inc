@@ -910,6 +910,17 @@ begin
   end;
 end;
 
+function Rv32DivisorIsNonzeroConst(right: Integer; wide: Boolean): Boolean;
+{ A divisor that is an integer constant other than zero needs no zero check:
+  `x div 10`, `a mod 100`. The 32-bit forms divide by its low word (a1), the
+  64-bit form by the whole value (a0:a1). }
+begin
+  Result := False;
+  if IRKind[right] <> IR_CONST_INT then Exit;
+  if wide then Result := IRIVal[right] <> 0
+  else Result := Low32(IRIVal[right]) <> 0;
+end;
+
 procedure EmitDivZeroCheckRV32(divisorInA1Only: Boolean);
 { Pre-divide zero check, riscv32 leg. The 32-bit form tests a1 (the divisor);
   the 64-bit form ORs a0:a1 into t6, which is the software long-division core's
@@ -1205,7 +1216,7 @@ begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     { dividend in t0:t1, divisor in a0:a1 }
-    EmitDivZeroCheckRV32(False);
+    if not Rv32DivisorIsNonzeroConst(right, True) then EmitDivZeroCheckRV32(False);
     nSlow := 0;
     EmitDiv64FastPathRISCV32(right, op = Ord(tkMod), signedOp, slowAt, nSlow, pDone);
     procIdx := Rv32DivHelperProc(signedOp);
@@ -3368,7 +3379,7 @@ begin
             rv32_lw(reg_a0, reg_sp, 0);
             rv32_addi(reg_sp, reg_sp, 4);
           end;
-          EmitDivZeroCheckRV32(True);
+          if not Rv32DivisorIsNonzeroConst(right, False) then EmitDivZeroCheckRV32(True);
           if op = Ord(tkDiv) then
           begin
             if narrow = 3 then rv32_divu(reg_a0, reg_a0, reg_a1) else rv32_div(reg_a0, reg_a0, reg_a1);
@@ -3530,14 +3541,14 @@ begin
         end
         else if op = Ord(tkDiv) then
         begin
-          EmitDivZeroCheckRV32(True);
+          if not Rv32DivisorIsNonzeroConst(right, False) then EmitDivZeroCheckRV32(True);
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> divu }
           if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_divu(reg_a0, reg_a0, reg_a1)
           else rv32_div(reg_a0, reg_a0, reg_a1);
         end
         else if op = Ord(tkMod) then
         begin
-          EmitDivZeroCheckRV32(True);
+          if not Rv32DivisorIsNonzeroConst(right, False) then EmitDivZeroCheckRV32(True);
           if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_remu(reg_a0, reg_a0, reg_a1)
           else rv32_rem(reg_a0, reg_a0, reg_a1);
         end

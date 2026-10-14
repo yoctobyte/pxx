@@ -32423,6 +32423,16 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/leaf-operands-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32o0)" "$$($(TESTTMP)/test_rvleaf_x64)"
 	tools/expect_same.sh riscv32/leaf-operands-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvleaf_x64)"
 	tools/assert_no_leak.sh riscv32_leaf_operands 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvleaf_rv32c
+	# CONSTANT DIVISOR SKIPS THE ZERO CHECK (2026-10-14): div/mod by a nonzero
+	# constant, 32-bit (signed, unsigned, narrowed) and 64-bit (a constant whose
+	# low word is zero included); a run-time zero divisor still raises.
+	./$(COMPILER) test/test_rv32_constant_divisor_skips_the_zero_check.pas $(TESTTMP)/test_rvcdiv_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_constant_divisor_skips_the_zero_check.pas $(TESTTMP)/test_rvcdiv_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_constant_divisor_skips_the_zero_check.pas $(TESTTMP)/test_rvcdiv_rv32o2
+	tools/expect_same.sh riscv32/constant-divisor-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcdiv_rv32o0)" "$$($(TESTTMP)/test_rvcdiv_x64)"
+	tools/expect_same.sh riscv32/constant-divisor-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcdiv_rv32o2)" "$$($(TESTTMP)/test_rvcdiv_x64)"
+	./$(COMPILER) --target=riscv32 -O2 -Fulib/rtl test/test_div_by_zero_raises_on_every_target.pas $(TESTTMP)/test_rvdz_rv32o2
+	tools/expect_same.sh riscv32/div-by-zero-raises-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvdz_rv32o2 | tail -1)" "ALL OK"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
