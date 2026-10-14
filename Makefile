@@ -32433,6 +32433,16 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/constant-divisor-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcdiv_rv32o2)" "$$($(TESTTMP)/test_rvcdiv_x64)"
 	./$(COMPILER) --target=riscv32 -O2 -Fulib/rtl test/test_div_by_zero_raises_on_every_target.pas $(TESTTMP)/test_rvdz_rv32o2
 	tools/expect_same.sh riscv32/div-by-zero-raises-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvdz_rv32o2 | tail -1)" "ALL OK"
+	# STRING AND VAR ARGS LOAD IN PLACE (2026-10-14): trailing call arguments
+	# that are a local's string handle (by-value / const string parameter) or a
+	# local's address (var / out parameter) load straight into their a-register,
+	# after a first argument that calls something; 500-pass churn under the census.
+	./$(COMPILER) test/test_rv32_string_and_var_args_load_in_place.pas $(TESTTMP)/test_rvsva_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_string_and_var_args_load_in_place.pas $(TESTTMP)/test_rvsva_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 -dPXX_ALLOC_CENSUS test/test_rv32_string_and_var_args_load_in_place.pas $(TESTTMP)/test_rvsva_rv32c
+	tools/expect_same.sh riscv32/string-var-args-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32o0)" "$$($(TESTTMP)/test_rvsva_x64)"
+	tools/expect_same.sh riscv32/string-var-args-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvsva_x64)"
+	tools/assert_no_leak.sh riscv32_string_var_args 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvsva_rv32c
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the

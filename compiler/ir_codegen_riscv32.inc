@@ -1616,12 +1616,20 @@ begin
 end;
 
 function Rv32LeafArgOk(procIdx, paramIdx, argNode: Integer): Boolean;
-{ The argument at IR_ARG argNode is one plain word whose value is a constant
-  or an off(s0) local, bound to a declared by-value parameter that the
-  generic arm of the direct call would push unchanged -- no float, 64-bit,
-  set, record, string or variant on either side, so no arm above the generic
-  one would claim it and no conversion inside it would apply. }
-var v: Integer; atk, vtk, ptk: TTypeKind;
+{ The argument at IR_ARG argNode is one word that the generic arm of the
+  direct call would push unchanged, and whose value one instruction off s0
+  (or an li) produces without touching any other register:
+  - a constant or an off(s0) local bound to a plain by-value word parameter
+    -- no float, 64-bit, set, record, string or variant on either side, so no
+    arm above the generic one would claim it and no conversion inside it
+    would apply;
+  - a frame local's AnsiString handle bound to a by-value or const AnsiString
+    parameter: the generic arm pushes the handle exactly as loaded (only a
+    char or frozen-string argument is converted there);
+  - the address of a frame local bound to a var/out parameter, when IR_LEA
+    yields that address itself (not an array, a string, a variant, or a
+    parameter slot that holds a pointer). }
+var v, si: Integer; atk, vtk, ptk: TTypeKind;
   function PlainWord(tk: TTypeKind): Boolean;
   begin
     Result := not (IsFloatRISCV32(tk) or Is64BitRISCV32(tk) or (tk = tySet) or
@@ -1631,11 +1639,32 @@ var v: Integer; atk, vtk, ptk: TTypeKind;
 begin
   Result := False;
   if (procIdx < 0) or (paramIdx >= Procs[procIdx].ParamCount) then Exit;
-  if Procs[procIdx].Params[paramIdx].IsRef or Procs[procIdx].Params[paramIdx].IsArray then Exit;
-  ptk := Procs[procIdx].Params[paramIdx].TypeKind;
+  if Procs[procIdx].Params[paramIdx].IsArray then Exit;
   v := IRA[argNode];
+  if Procs[procIdx].Params[paramIdx].IsRef then
+  begin
+    if IRKind[v] <> IR_LEA then Exit;
+    si := IRA[v];
+    if not ((Syms[si].Kind = skLocal) or
+            ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Exit;
+    if Syms[si].IsArray or (Syms[si].TypeKind = tyAnsiString) or
+       (Syms[si].TypeKind = tyVariant) or TypeIsFrozenString(Syms[si].TypeKind) then Exit;
+    if ABIParamSlotHoldsValueAddr(si) then Exit;
+    Result := FitsImm12RISCV32(Syms[si].Offset);
+    Exit;
+  end;
+  ptk := Procs[procIdx].Params[paramIdx].TypeKind;
   atk := IntToTypeKind(IRTk[argNode]);
   vtk := IntToTypeKind(IRTk[v]);
+  if ptk = tyAnsiString then
+  begin
+    if ProcExternal[procIdx] or (atk <> tyAnsiString) or (vtk <> tyAnsiString) then Exit;
+    if IRKind[v] <> IR_LOAD_SYM then Exit;
+    si := IRA[v];
+    Result := LeafLoadSymFoldsRISCV32(si) and (Syms[si].TypeKind = tyAnsiString) and
+      not Syms[si].IsArray;
+    Exit;
+  end;
   if not (PlainWord(ptk) and PlainWord(atk) and PlainWord(vtk)) then Exit;
   if IRKind[v] = IR_CONST_INT then Result := True
   else if IRKind[v] = IR_LOAD_SYM then
@@ -1663,6 +1692,8 @@ procedure Rv32EmitLeafArg(rd, v: Integer);
 begin
   if IRKind[v] = IR_CONST_INT then
     EmitLoadImmRISCV32(rd, Low32(IRIVal[v]))
+  else if IRKind[v] = IR_LEA then
+    EmitFrameAddrRISCV32(rd, Syms[IRA[v]].Offset)
   else
     EmitLoadVarToRegRISCV32(rd, IRA[v]);
 end;
