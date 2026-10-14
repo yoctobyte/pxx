@@ -32525,6 +32525,13 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_rvow_rv32o2
 	tools/expect_same.sh riscv32/one-word-cast-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvow_rv32o0)" "$$($(TESTTMP)/test_rvow_x64)"
 	tools/expect_same.sh riscv32/one-word-cast-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvow_rv32o2)" "$$($(TESTTMP)/test_rvow_x64)"
+	# THE PURE LAST ARGUMENT GOES FIRST (2026-10-14): leaves then one last word
+	# that only loads and computes: it fills its register first, no leaf push.
+	./$(COMPILER) test/test_rv32_pure_last_arg_goes_first.pas $(TESTTMP)/test_rvpl_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_pure_last_arg_goes_first.pas $(TESTTMP)/test_rvpl_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_pure_last_arg_goes_first.pas $(TESTTMP)/test_rvpl_rv32o2
+	tools/expect_same.sh riscv32/pure-last-arg-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpl_rv32o0)" "$$($(TESTTMP)/test_rvpl_x64)"
+	tools/expect_same.sh riscv32/pure-last-arg-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvpl_rv32o2)" "$$($(TESTTMP)/test_rvpl_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the

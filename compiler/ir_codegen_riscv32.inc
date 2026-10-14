@@ -898,6 +898,7 @@ begin
 end;
 
 function Rv32ConstIntValue(n: Integer; var v: Int64): Boolean; forward;
+function Rv32AddrRunsNothing(n, depth: Integer): Boolean; forward;
 
 procedure Rv32LoadSlotWord(rd, si: Integer);
 { rd = the word in the variable's slot: one lw off(s0) for a frame slot in
@@ -2025,6 +2026,33 @@ begin
   Result := n;
 end;
 
+function Rv32PureLastWordArg(procIdx, paramIdx, argNode: Integer): Boolean;
+{ The LAST argument, one plain word (the shapes Rv32LeafArgOk's PlainWord
+  admits, by value) whose evaluation only loads and computes
+  (Rv32AddrRunsNothing). The leaf arguments before it are frame locals and
+  constants it cannot change, so it may be evaluated first, straight into its
+  own register, and the leaves loaded after -- where they were pushed and
+  popped around it. }
+var v: Integer; ptk, atk, vtk: TTypeKind;
+  function PlainWord(tk: TTypeKind): Boolean;
+  begin
+    Result := not (IsFloatRISCV32(tk) or Is64BitRISCV32(tk) or (tk = tySet) or
+                   (tk = tyRecord) or (tk = tyAnsiString) or (tk = tyVariant) or
+                   (tk = tyChar) or TypeIsFrozenString(tk));
+  end;
+begin
+  Result := False;
+  if (argNode < 0) or (IRB[argNode] <> -1) then Exit;
+  if (procIdx < 0) or (paramIdx >= Procs[procIdx].ParamCount) then Exit;
+  if Procs[procIdx].Params[paramIdx].IsArray or Procs[procIdx].Params[paramIdx].IsRef then Exit;
+  v := IRA[argNode];
+  ptk := Procs[procIdx].Params[paramIdx].TypeKind;
+  atk := IntToTypeKind(IRTk[argNode]);
+  vtk := IntToTypeKind(IRTk[v]);
+  if not (PlainWord(ptk) and PlainWord(atk) and PlainWord(vtk)) then Exit;
+  Result := Rv32AddrRunsNothing(v, 0);
+end;
+
 procedure Rv32EmitLeafArg(rd, v: Integer);
 { a Rv32LeafArgOk value straight into rd }
 var cv: Int64;
@@ -2596,6 +2624,7 @@ var
   vaRecRV, vaBytes, vaAlign, vaWords, vaK: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
   lastArgWords, keptWords: Integer;  { direct call: words before the last argument, and the words left on the stack }
   leafArg, leafI, leafN: Integer;   { direct call: the trailing constant/local arguments loaded straight into a-registers }
+  leafStop: Integer;                 { the pure last argument emitted before them, or -1 }
   vaByVal: Boolean;
   sVal: AnsiString;
   low32Dem: Boolean;   { the consumer keeps only a0 (Rv32Low32Demand) }
@@ -4632,6 +4661,7 @@ begin
         i := 0;         { argument index }
         lastArgWords := 0;
         leafArg := -1;
+        leafStop := -1;
         while argNode <> -1 do
         begin
           { the rest of the list is constants and off(s0) locals: they cannot
@@ -4641,6 +4671,26 @@ begin
           begin
             leafArg := argNode;
             leafI := i;
+            Break;
+          end;
+          { leaves followed by one last word that only loads and computes
+            (`F(n, p^.len)`): that one first, into its register, then the
+            leaves -- no push and pop of each leaf around it }
+          leafN := 0;
+          j := argNode;
+          while (j <> -1) and Rv32LeafArgOk(procIdx, i + leafN, j) do
+          begin
+            Inc(leafN);
+            j := IRB[j];
+          end;
+          if (leafN > 0) and (nArgs + leafN + 1 <= 8) and
+             Rv32PureLastWordArg(procIdx, i + leafN, j) then
+          begin
+            IREmitNodeRISCV32(IRA[j]);
+            rv32_addi(reg_a0 + nArgs + leafN, reg_a0, 0);
+            leafArg := argNode;
+            leafI := i;
+            leafStop := j;
             Break;
           end;
           lastArgWords := nArgs;
@@ -4898,7 +4948,7 @@ begin
 
         argNode := leafArg;
         j := nArgs;
-        while argNode <> -1 do
+        while (argNode <> -1) and (argNode <> leafStop) do
         begin
           Rv32EmitLeafArg(reg_a0 + j, IRA[argNode]);
           Inc(j);
