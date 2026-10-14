@@ -726,7 +726,9 @@ end;
   plain `z := z + 1` over Integers ran the a0:a1 pair path: sign-extend both
   operands, add with carry, keep the low word at the store. The language rule
   stays. What changes is that a consumer which keeps only the LOW 32 bits -- a
-  store to a 4-byte-or-narrower integer -- says so, and the binop under it then
+  store to a 4-byte-or-narrower integer, or (EmitLow32RISCV32) an address, a
+  field or index base, an index, a value stored through memory into at most 4
+  bytes -- says so, and the binop under it then
   takes the 32-bit arm when that gives the same low word:
     + - * and or xor  always (the low word of the result depends only on the
                       low words of the operands), and the demand passes down
@@ -741,6 +743,17 @@ end;
   reaches exactly the node emitted next and nothing below it. }
 var
   Rv32Low32Demand: Boolean;
+
+{ Emit a node whose consumer keeps only a0: an address (load/store target,
+  field or index base), an array index, or a value stored into at most 4
+  bytes. Pointer arithmetic written through Int64 -- `PByte(Int64(p) + k)^`,
+  all over the RTL's heap and string code -- is then one add instead of the
+  ~7-instruction pair add and its zero-extension. }
+procedure EmitLow32RISCV32(node: Integer);
+begin
+  Rv32Low32Demand := True;
+  IREmitNodeRISCV32(node);
+end;
 
 { A managed-string `+` node: its value is a fresh handle this code owns. }
 function Rv32IsStrConcat(n: Integer): Boolean;
@@ -787,6 +800,14 @@ begin
   else Result := TypeSigned(tk) or (TypeSlotSize(tk) < 4);
 end;
 
+function Rv32WordOperand(n: Integer; k: TTypeKind): Boolean;
+{ n's low word is computed by the 32-bit arm: an integer, a pointer or class
+  reference, or a constant. }
+begin
+  Result := TypeIsMachineInt(k) or (k = tyPointer) or (k = tyClass) or
+            (IRKind[n] = IR_CONST_INT);
+end;
+
 function Rv32NarrowBinop(node: Integer): Integer;
 { 0 = keep the 64-bit path; 1 = the generic 32-bit arm (+ - * and or xor);
   2 = 32-bit signed div/mod; 3 = 32-bit unsigned div/mod. }
@@ -798,14 +819,21 @@ begin
   if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
   lk := IRValueKind(IRA[node]);
   rk := IRValueKind(IRB[node]);
-  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
-          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
   if IsFloatRISCV32(lk) or IsFloatRISCV32(rk) then Exit;
   op := IRC[node];
   if (op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
      (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor)) then
-    Result := 1
-  else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    { a pointer or class operand is one word as well: `Int64(p) + k` is how
+      the RTL spells pointer arithmetic, and its low word is p's low word plus
+      k's, whatever the high words }
+    if Rv32WordOperand(IRA[node], lk) and Rv32WordOperand(IRB[node], rk) then
+      Result := 1;
+    Exit;
+  end;
+  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
+          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     if Rv32Exact32(IRA[node], False) and Rv32Exact32(IRB[node], False) then Result := 2
     else if Rv32Exact32(IRA[node], True) and Rv32Exact32(IRB[node], True) then Result := 3;
@@ -2121,6 +2149,7 @@ var
   ci, ck: Integer;
   narrow: Integer;     { Rv32NarrowBinop, when low32Dem }
   cmp32: Integer;      { 1/2 = a signed/unsigned compare done in 32 bits (Rv32Exact32) }
+  imm: Integer;        { a `+`/`-` constant folded into one addi }
 begin
   low32Dem := Rv32Low32Demand;
   Rv32Low32Demand := False;
@@ -2618,7 +2647,7 @@ begin
 
     IR_FIELD:
       begin
-        IREmitNodeRISCV32(IRA[node]);
+        EmitLow32RISCV32(IRA[node]);
         if Integer(IRIVal[node]) <> 0 then
         begin
           EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));
@@ -2633,7 +2662,7 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
 
-        IREmitNodeRISCV32(left);              { base: handle (read) / slot addr (write) }
+        EmitLow32RISCV32(left);              { base: handle (read) / slot addr (write) }
         { Managed-string index: read position already has the handle (IR_LEA
           loaded it); write position holds the slot address -> clone-if-shared
           via PXXStrUnique to get a writable handle (COW). }
@@ -2670,7 +2699,7 @@ begin
           wild. Same reset x86-64 has always done (b355). }
         savedLVW := InLValueWrite;
         InLValueWrite := False;
-        IREmitNodeRISCV32(right);
+        EmitLow32RISCV32(right);
         InLValueWrite := savedLVW;
         if lo <> 0 then
           rv32_addi(reg_a0, reg_a0, -lo);
@@ -2703,7 +2732,7 @@ begin
 
     IR_LOAD_MEM:
       begin
-        IREmitNodeRISCV32(IRA[node]);
+        EmitLow32RISCV32(IRA[node]);
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
@@ -2774,7 +2803,7 @@ begin
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);
         end;
         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push new }
-        IREmitNodeRISCV32(IRA[node]);         { a0 = slot address }
+        EmitLow32RISCV32(IRA[node]);         { a0 = slot address }
         rv32_addi(reg_a2, reg_a0, 0);   { mv a2, a0 }              { a2 = slot }
         rv32_lw(reg_a0, reg_a2, 0);           { a0 = old handle }
         rv32_lw(reg_a1, reg_sp, 0);           { a1 = new }
@@ -2813,7 +2842,7 @@ begin
           rv32_sw(reg_a0, reg_sp, 0);                { spill source }
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeRISCV32(IRA[node]);              { a0 = dest addr }
+          EmitLow32RISCV32(IRA[node]);              { a0 = dest addr }
           InLValueWrite := savedLVW;
           rv32_lw(reg_t2, reg_sp, 0);                { t2 = src }
           rv32_addi(reg_sp, reg_sp, 4);
@@ -2866,7 +2895,7 @@ begin
             rv32_sw(reg_a1, reg_sp, 4);
             savedLVW := InLValueWrite;
             InLValueWrite := True;
-            IREmitNodeRISCV32(IRA[node]);
+            EmitLow32RISCV32(IRA[node]);
             InLValueWrite := savedLVW;
             rv32_lw(reg_a1, reg_sp, 0);
             rv32_lw(reg_t1, reg_sp, 4);
@@ -2880,7 +2909,7 @@ begin
             rv32_sw(reg_a0, reg_sp, 0);
             savedLVW := InLValueWrite;
             InLValueWrite := True;
-            IREmitNodeRISCV32(IRA[node]);
+            EmitLow32RISCV32(IRA[node]);
             InLValueWrite := savedLVW;
             rv32_lw(reg_a1, reg_sp, 0);
             rv32_addi(reg_sp, reg_sp, 4);
@@ -2899,7 +2928,7 @@ begin
           rv32_sw(reg_a1, reg_sp, 4);
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeRISCV32(IRA[node]);              { a0 = dest addr }
+          EmitLow32RISCV32(IRA[node]);              { a0 = dest addr }
           InLValueWrite := savedLVW;
           rv32_lw(reg_a1, reg_sp, 0);
           rv32_lw(reg_t1, reg_sp, 4);
@@ -2922,7 +2951,7 @@ begin
           rv32_sw(reg_a0, reg_sp, 0);
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeRISCV32(IRA[node]);
+          EmitLow32RISCV32(IRA[node]);
           InLValueWrite := savedLVW;
           rv32_lw(reg_a1, reg_sp, 0);
           rv32_addi(reg_sp, reg_sp, 4);
@@ -3009,7 +3038,7 @@ begin
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeRISCV32(IRA[node]);                                { a0 = slot address }
+          EmitLow32RISCV32(IRA[node]);                                { a0 = slot address }
           InLValueWrite := savedLVW;
           rv32_addi(reg_t0, reg_a0, 0);                                { t0 = slot addr }
           rv32_lw(reg_a1, reg_t0, 0);                                  { a1 = old handle }
@@ -3023,13 +3052,13 @@ begin
           Exit;
         end;
 
-        IREmitNodeRISCV32(IRB[node]);
+        EmitLow32RISCV32(IRB[node]);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
         savedLVW := InLValueWrite;
         InLValueWrite := True;
-        IREmitNodeRISCV32(IRA[node]);
+        EmitLow32RISCV32(IRA[node]);
         InLValueWrite := savedLVW;
         rv32_lw(reg_a1, reg_sp, 0);
         rv32_addi(reg_sp, reg_sp, 4);
@@ -3311,6 +3340,26 @@ begin
         begin
           rv32_beq(reg_a1, reg_zero, 8);        { high = 0 -> keep the value }
           rv32_addi(reg_a0, reg_zero, 256);     { else saturate out of range }
+        end;
+        { `+`/`-` of a small constant is one addi, and of 0 nothing at all --
+          `Int64(p)` reaches here as p + 0 and `Int64(p) - 8` as a sub.
+          Integer and pointer results only, never under {$Q+}. }
+        if ((op = Ord(tkPlus)) or (op = Ord(tkMinus))) and
+           (IRKind[right] = IR_CONST_INT) and (IRIVal[node] <> 1) and
+           ((narrow = 1) or
+            ((cmp32 = 0) and
+             (TypeIsMachineInt(IntToTypeKind(IRTk[node])) or
+              (IntToTypeKind(IRTk[node]) = tyPointer)) and
+             not Is64BitRISCV32(IntToTypeKind(IRTk[node])) and
+             not Is64BitRISCV32(IntToTypeKind(IRTk[right])))) then
+        begin
+          imm := Integer(Low32(IRIVal[right]));
+          if op = Ord(tkMinus) then imm := -imm;
+          if (imm >= -2048) and (imm <= 2047) then
+          begin
+            if imm <> 0 then rv32_addi(reg_a0, reg_a0, imm);
+            Exit;
+          end;
         end;
         { right straight into a1 when it is a constant or an off(s0) local:
           neither can disturb a0, so left needs no spill }

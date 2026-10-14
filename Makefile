@@ -32403,6 +32403,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_rvdiv64_x64
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_int64_divide_without_libgcc.pas $(TESTTMP)/test_rvdiv64_rv32
 	tools/expect_same.sh riscv32/int64-divide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvdiv64_rv32)" "$$($(TESTTMP)/test_rvdiv64_x64)"
+	# POINTER MATH THROUGH INT64 (2026-10-14): an address, field/index base,
+	# index or <=4-byte stored value demands only the low word, so the RTL's
+	# `PByte(Int64(p) + k)^` is one add (an addi for a 12-bit constant), not a
+	# pair. Offsets around +-2048, both optimisation levels, against x86-64.
+	./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_rvptr32_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_rvptr32_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_rvptr32_rv32
+	tools/expect_same.sh riscv32/ptr-math-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvptr32_rv32o0)" "$$($(TESTTMP)/test_rvptr32_x64)"
+	tools/expect_same.sh riscv32/ptr-math-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvptr32_rv32)" "$$($(TESTTMP)/test_rvptr32_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
@@ -40780,6 +40789,15 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$chip test/test_rv32_int64_divide_without_libgcc.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvdiv64.$$chip || true; \
 	  if diff -u $(TESTTMP)/test_esp_rvdiv64.oracle $(TESTTMP)/test_esp_rvdiv64.$$chip; then echo "$$chip Int64 divide ok (== x86-64 oracle)"; \
 	  else echo "$$chip Int64 divide MISMATCH"; exit 1; fi; \
+	done
+	@# POINTER MATH THROUGH INT64 (2026-10-14): the low-word demand at addresses
+	@# and narrow stores, on the IDF profile, against x86-64.
+	@./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_esp_rvptr32_oracle >/dev/null && $(TESTTMP)/test_esp_rvptr32_oracle > $(TESTTMP)/test_esp_rvptr32.oracle
+	@for chip in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_rv32_pointer_math_through_int64_is_32_bit.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvptr32.$$chip || true; \
+	  if diff -u $(TESTTMP)/test_esp_rvptr32.oracle $(TESTTMP)/test_esp_rvptr32.$$chip; then echo "$$chip pointer math through Int64 ok (== x86-64 oracle)"; \
+	  else echo "$$chip pointer math through Int64 MISMATCH"; exit 1; fi; \
 	done
 	@# INTEGER ARITHMETIC STAYS 64-BIT IN MEANING (2026-10-13): riscv32 now runs
 	@# a binop in 32 bits when only the low word is stored, and an Int64 div/mod
