@@ -894,16 +894,53 @@ begin
   rv32_sw(reg_a1, reg_t0, 4);   { hi }
 end;
 
+function Rv32ConstIntValue(n: Integer; var v: Int64): Boolean; forward;
+
+procedure Rv32LoadSlotWord(rd, si: Integer);
+{ rd = the word in the variable's slot: one lw off(s0) for a frame slot in
+  reach, else the slot address and a load through it. }
+begin
+  if (Syms[si].Kind <> skGlobal) and FitsImm12RISCV32(Syms[si].Offset) then
+    rv32_lw(rd, reg_s0, Syms[si].Offset)
+  else
+  begin
+    EmitSlotAddrRISCV32(rd, si);
+    rv32_lw(rd, rd, 0);
+  end;
+end;
+
+procedure Rv32EmitAddrOff(addr: Integer; var off: Integer);
+{ a0 + off = the address node `addr` computes. A record field at a constant
+  offset leaves the offset for the load/store to carry (both words of a
+  64-bit access stay in imm12), instead of adding it into a0. }
+begin
+  off := 0;
+  if (IRKind[addr] = IR_FIELD) and FitsImm12RISCV32(Integer(IRIVal[addr])) and
+     FitsImm12RISCV32(Integer(IRIVal[addr]) + 4) then
+  begin
+    EmitLow32RISCV32(IRA[addr]);
+    off := Integer(IRIVal[addr]);
+  end
+  else
+    EmitLow32RISCV32(addr);
+end;
+
 procedure EmitNode64RISCV32(node: Integer);
 { Emit node; guarantee its full 64-bit value sits in a0:a1, widening a 32-bit
-  source (sign-extend signed, zero-extend unsigned) into a1. }
-var ntk: TTypeKind;
+  source (sign-extend signed, zero-extend unsigned) into a1. A constant's
+  high word is known, so it is loaded (c.li) rather than computed (srai). }
+var ntk: TTypeKind; v: Int64;
 begin
   IREmitNodeRISCV32(node);
   ntk := IntToTypeKind(IRTk[node]);
   if not Is64BitRISCV32(ntk) then
   begin
-    if TypeSigned(ntk) then
+    if TypeSigned(ntk) and Rv32ConstIntValue(node, v) then
+    begin
+      if Low32(v) < 0 then EmitLoadImmRISCV32(reg_a1, -1)
+      else EmitLoadImmRISCV32(reg_a1, 0);
+    end
+    else if TypeSigned(ntk) then
       rv32_srai(reg_a1, reg_a0, 31)
     else
       rv32_addi(reg_a1, reg_zero, 0);
@@ -2782,7 +2819,9 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        EmitSlotAddrRISCV32(reg_a0, si);
+        { Every arm below that reads the slot's word does it through
+          Rv32LoadSlotWord (one lw off(s0) for a frame slot); the address
+          itself is only formed when nothing is loaded from it. }
         { Slot holds a heap data pointer (handle) loaded in read/index position:
           a local dynamic array, or an open-array value param (caller passed the
           handle). SetLength keeps the slot address by computing it directly.
@@ -2796,7 +2835,7 @@ begin
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
         begin
-          rv32_lw(reg_a0, reg_a0, 0);
+          Rv32LoadSlotWord(reg_a0, si);
         { BY-REF (var/out) DYNAMIC-ARRAY PARAM: the frame slot holds
           &caller_slot, so the load above lands on the CALLER'S SLOT and not on
           the data pointer. One more deref. arm32 has carried both loads since
@@ -2833,7 +2872,7 @@ begin
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite and
                 not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
-          rv32_lw(reg_a0, reg_a0, 0)
+          Rv32LoadSlotWord(reg_a0, si)
         { Scalar var/out param: the slot holds the forwarded caller address, so
           its lvalue address is [slot], not &slot. Without this deref, taking the
           address of a var param (e.g. forwarding `var op` into another routine's
@@ -2848,7 +2887,9 @@ begin
           on the parameter slot itself — silently lost for 32-bit elements,
           wild for 64-bit ones (bug-riscv32-p256field-coredump). }
         else if ABIParamSlotHoldsValueAddr(si) then
-          rv32_lw(reg_a0, reg_a0, 0);
+          Rv32LoadSlotWord(reg_a0, si)
+        else
+          EmitSlotAddrRISCV32(reg_a0, si);
       end;
 
     IR_SLOTADDR:
@@ -2857,7 +2898,12 @@ begin
     IR_FIELD:
       begin
         EmitLow32RISCV32(IRA[node]);
-        if Integer(IRIVal[node]) <> 0 then
+        if FitsImm12RISCV32(Integer(IRIVal[node])) then
+        begin
+          if Integer(IRIVal[node]) <> 0 then
+            rv32_addi(reg_a0, reg_a0, Integer(IRIVal[node]));
+        end
+        else
         begin
           EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));
           rv32_add(reg_a0, reg_a0, reg_a1);
@@ -2947,24 +2993,24 @@ begin
 
     IR_LOAD_MEM:
       begin
-        EmitLow32RISCV32(IRA[node]);
+        Rv32EmitAddrOff(IRA[node], imm);       { a0 + imm = the address }
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
-          if sgn then rv32_lb(reg_a0, reg_a0, 0) else rv32_lbu(reg_a0, reg_a0, 0);
+          if sgn then rv32_lb(reg_a0, reg_a0, imm) else rv32_lbu(reg_a0, reg_a0, imm);
         end
         else if sz = 2 then
         begin
-          if sgn then rv32_lh(reg_a0, reg_a0, 0) else rv32_lhu(reg_a0, reg_a0, 0);
+          if sgn then rv32_lh(reg_a0, reg_a0, imm) else rv32_lhu(reg_a0, reg_a0, imm);
         end
         else if (sz = 8) and Is64BitRISCV32(tk) then
         begin
           { 64-bit load through memory (Int64/Double array element / field):
             two words into a0:a1. Was a single lw — the high word was stale. }
-          rv32_lw(reg_a1, reg_a0, 4);
-          rv32_lw(reg_a0, reg_a0, 0);
+          rv32_lw(reg_a1, reg_a0, imm + 4);
+          rv32_lw(reg_a0, reg_a0, imm);
         end
         else if tk = tyRecord then
         begin
@@ -2975,11 +3021,11 @@ begin
             so a bignum operator chain (`a * b + a`) handed `+` a TBigInt
             whose dynarray handle word was stale garbage
             (bug-riscv32-byval-record-param-one-word). }
-          rv32_lw(reg_a1, reg_a0, 4);
-          rv32_lw(reg_a0, reg_a0, 0);
+          rv32_lw(reg_a1, reg_a0, imm + 4);
+          rv32_lw(reg_a0, reg_a0, imm);
         end
         else
-          rv32_lw(reg_a0, reg_a0, 0);
+          rv32_lw(reg_a0, reg_a0, imm);
       end;
 
     IR_STORE_DYN:
@@ -3143,13 +3189,13 @@ begin
           rv32_sw(reg_a1, reg_sp, 4);
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          EmitLow32RISCV32(IRA[node]);              { a0 = dest addr }
+          Rv32EmitAddrOff(IRA[node], imm);          { a0 + imm = dest addr }
           InLValueWrite := savedLVW;
           rv32_lw(reg_a1, reg_sp, 0);
           rv32_lw(reg_t1, reg_sp, 4);
           rv32_addi(reg_sp, reg_sp, 8);
-          rv32_sw(reg_a1, reg_a0, 0);
-          rv32_sw(reg_t1, reg_a0, 4);
+          rv32_sw(reg_a1, reg_a0, imm);
+          rv32_sw(reg_t1, reg_a0, imm + 4);
           Exit;
         end;
         { C double->int: a float RHS into an integer field/element evaluates the
@@ -3270,6 +3316,8 @@ begin
         valNode := IRB[node];
         if IRKind[valNode] = IR_CONST_INT then
           leafVal := not IsFloatRISCV32(IntToTypeKind(IRTk[valNode]))
+        else if Rv32ConstIntValue(valNode, fv) then
+          leafVal := True
         else
           leafVal := (IRKind[valNode] = IR_LOAD_SYM) and
                      LeafLoadSymFoldsRISCV32(IRA[valNode]) and
@@ -3282,10 +3330,12 @@ begin
             load the value straight into a1, with no spill around it. }
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          EmitLow32RISCV32(IRA[node]);
+          Rv32EmitAddrOff(IRA[node], imm);
           InLValueWrite := savedLVW;
           if IRKind[valNode] = IR_CONST_INT then
             EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[valNode]))
+          else if IRKind[valNode] = IR_BINOP then
+            EmitLoadImmRISCV32(reg_a1, Low32(fv))
           else
             EmitLoadVarToRegRISCV32(reg_a1, IRA[valNode]);
         end
@@ -3297,18 +3347,18 @@ begin
 
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          EmitLow32RISCV32(IRA[node]);
+          Rv32EmitAddrOff(IRA[node], imm);
           InLValueWrite := savedLVW;
           rv32_lw(reg_a1, reg_sp, 0);
           rv32_addi(reg_sp, reg_sp, 4);
         end;
 
         if sz = 1 then
-          rv32_sb(reg_a1, reg_a0, 0)
+          rv32_sb(reg_a1, reg_a0, imm)
         else if sz = 2 then
-          rv32_sh(reg_a1, reg_a0, 0)
+          rv32_sh(reg_a1, reg_a0, imm)
         else
-          rv32_sw(reg_a1, reg_a0, 0);
+          rv32_sw(reg_a1, reg_a0, imm);
       end;
 
     IR_BINOP:

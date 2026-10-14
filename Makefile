@@ -32468,6 +32468,13 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_branch_islands.pas $(TESTTMP)/test_rvbi_rv32o2
 	tools/expect_same.sh riscv32/branch-islands-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvbi_rv32o0)" "$$($(TESTTMP)/test_rvbi_x64)"
 	tools/expect_same.sh riscv32/branch-islands-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvbi_rv32o2)" "$$($(TESTTMP)/test_rvbi_x64)"
+	# FIELD OFFSETS RIDE IN THE ACCESS (2026-10-14): lw/sw a field at its offset,
+	# a var param's slot word in one lw off(s0); every width, offsets past imm12.
+	./$(COMPILER) test/test_rv32_field_offsets_ride_in_the_access.pas $(TESTTMP)/test_rvfo_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_field_offsets_ride_in_the_access.pas $(TESTTMP)/test_rvfo_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_field_offsets_ride_in_the_access.pas $(TESTTMP)/test_rvfo_rv32o2
+	tools/expect_same.sh riscv32/field-offsets-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfo_rv32o0)" "$$($(TESTTMP)/test_rvfo_x64)"
+	tools/expect_same.sh riscv32/field-offsets-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfo_rv32o2)" "$$($(TESTTMP)/test_rvfo_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
