@@ -912,6 +912,62 @@ begin
   end;
 end;
 
+function Rv32FrameAddrBase(addr: Integer; var off: Integer): Boolean;
+{ The address node is a frame slot's own address (IR_LEA as Rv32LeafArgOk
+  takes it for a var argument), or a pointer/integer frame local's value,
+  optionally plus a constant (unchecked +) or a constant field offset: one
+  instruction off s0, with the constant left in off for the access. Its
+  emission (Rv32EmitFrameAddrBase) writes rd and nothing else. }
+var si: Integer; tk: TTypeKind; k: Int64;
+begin
+  Result := False;
+  off := 0;
+  if (IRKind[addr] = IR_FIELD) then
+  begin
+    off := Integer(IRIVal[addr]);
+    addr := IRA[addr];
+  end
+  else if (IRKind[addr] = IR_BINOP) and (IRC[addr] = Ord(tkPlus)) and
+          (IRIVal[addr] = 0) and Rv32ConstIntValue(IRB[addr], k) then
+  begin
+    if (k < -2048) or (k > 2047) then Exit;
+    off := Integer(k);
+    addr := IRA[addr];
+  end;
+  if not FitsImm12RISCV32(off) then Exit;
+  if IRKind[addr] = IR_LEA then
+  begin
+    si := IRA[addr];
+    if not ((Syms[si].Kind = skLocal) or
+            ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Exit;
+    if Syms[si].IsArray or (Syms[si].TypeKind = tyAnsiString) or
+       (Syms[si].TypeKind = tyVariant) or TypeIsFrozenString(Syms[si].TypeKind) then Exit;
+    if ABIParamSlotHoldsValueAddr(si) then Exit;
+    Result := FitsImm12RISCV32(Syms[si].Offset);
+  end
+  else if IRKind[addr] = IR_LOAD_SYM then
+  begin
+    si := IRA[addr];
+    if (si < 0) or (Syms[si].Kind = skGlobal) or Syms[si].IsArray then Exit;
+    if (Syms[si].Kind = skParam) and Syms[si].IsRef then Exit;
+    tk := Syms[si].TypeKind;
+    { the low word is the address: a pointer, or an integer of 4 or 8 bytes }
+    if not ((tk = tyPointer) or (tk = tyClass) or
+            ((tk <> tyDouble) and TypeIsMachineInt(tk) and (TypeSlotSize(tk) >= 4))) then Exit;
+    Result := FitsImm12RISCV32(Syms[si].Offset);
+  end;
+end;
+
+procedure Rv32EmitFrameAddrBase(rd, addr: Integer);
+{ rd = the base Rv32FrameAddrBase accepted (the constant is the caller's) }
+begin
+  if (IRKind[addr] = IR_FIELD) or (IRKind[addr] = IR_BINOP) then addr := IRA[addr];
+  if IRKind[addr] = IR_LEA then
+    EmitFrameAddrRISCV32(rd, Syms[IRA[addr]].Offset)
+  else
+    rv32_lw(rd, reg_s0, Syms[IRA[addr]].Offset);
+end;
+
 procedure Rv32EmitAddrOff(addr: Integer; var off: Integer);
 { a0 + off = the address node `addr` computes. A record field at a constant
   offset leaves the offset for the load/store to carry (both words of a
@@ -1784,6 +1840,33 @@ begin
   Result := True;
 end;
 
+function Rv32SameLow32(n: Integer): Integer;
+{ A node whose low 32 bits already ARE n's value, or -1: n is
+  `(x xor 2^31) - 2^31` (a sign-extension from 32 bits, which is how a cast to
+  a 32-bit signed type arrives) or `x and $FFFFFFFF`, over any number of
+  either. On a 32-bit register both are the value itself, and a cast like
+  `NativeInt(7)` cost five instructions on a constant the fold refused, since
+  the xor's intermediate overflows the type. }
+var l, r: Integer;
+  function IsK(c: Integer; k: Int64): Boolean;
+  begin
+    Result := (IRKind[c] = IR_CONST_INT) and (IRIVal[c] = k);
+  end;
+begin
+  Result := -1;
+  while (n >= 0) and (IRKind[n] = IR_BINOP) and (IRIVal[n] = 0) do
+  begin
+    l := IRA[n]; r := IRB[n];
+    if (IRC[n] = Ord(tkMinus)) and IsK(r, 2147483648) and (IRKind[l] = IR_BINOP) and
+       (IRIVal[l] = 0) and (IRC[l] = Ord(tkXor)) and IsK(IRB[l], 2147483648) then
+      n := IRA[l]
+    else if (IRC[n] = Ord(tkAnd)) and (IsK(r, 4294967295) or IsK(r, -1)) then
+      n := l
+    else Break;
+    Result := n;
+  end;
+end;
+
 function Rv32ConstIntValue(n: Integer; var v: Int64): Boolean;
 { The value of an integer constant, or of a + - * and or xor over two of them
   (nested), when it is exactly representable in the node's own type -- so the
@@ -1809,6 +1892,28 @@ begin
     Result := (tk <> tyUInt64) or (v >= 0);
     Exit;
   end;
+  if (IRKind[n] = IR_NOT) or (IRKind[n] = IR_NEG) then
+  begin
+    { `not 7` in `(n + 7) and not 7`: bitwise not / negation of an integer
+      constant. A result outside the node's type (not of an unsigned
+      constant) fails the range check below and is left to run. }
+    if not Rv32ConstIntValue(IRA[n], a) then Exit;
+    if IRKind[n] = IR_NOT then r := not a
+    else
+    begin
+      if (a >= BIG) or (a <= -BIG) then Exit;
+      r := -a;
+    end;
+  end
+  else if (TypeSlotSize(tk) = 4) and (Rv32SameLow32(n) >= 0) then
+  begin
+    { a sign-extension or mask from 32 bits of a constant: its low word }
+    if not Rv32ConstIntValue(Rv32SameLow32(n), a) then Exit;
+    if TypeSigned(tk) then r := Low32(a)
+    else r := Int64(Low32(a)) and $FFFFFFFF;
+  end
+  else
+  begin
   if IRKind[n] <> IR_BINOP then Exit;
   if IRIVal[n] <> 0 then Exit;
   op := IRC[n];
@@ -1829,6 +1934,7 @@ begin
   else if op = Ord(tkAnd) then r := a and b
   else if op = Ord(tkOr) then r := a or b
   else r := a xor b;
+  end;
   case Ord(tk) of
     7:  if (r < -128) or (r > 127) then Exit;
     8:  if (r < 0) or (r > 255) then Exit;
@@ -3477,10 +3583,22 @@ begin
           InLValueWrite := savedLVW;
           if IRKind[valNode] = IR_CONST_INT then
             EmitLoadImmRISCV32(reg_a1, Low32(IRIVal[valNode]))
-          else if IRKind[valNode] = IR_BINOP then
-            EmitLoadImmRISCV32(reg_a1, Low32(fv))
+          else if IRKind[valNode] <> IR_LOAD_SYM then
+            EmitLoadImmRISCV32(reg_a1, Low32(fv))          { folded: binop, not, neg, cast }
           else
             EmitLoadVarToRegRISCV32(reg_a1, IRA[valNode]);
+        end
+        else if Rv32FrameAddrBase(IRA[node], imm) then
+        begin
+          { the address is one load or addi off s0 (plus a constant): the
+            value stays in a0 and the address goes to a1 after it, in the
+            same order as below, with no spill }
+          EmitLow32RISCV32(valNode);
+          Rv32EmitFrameAddrBase(reg_a1, IRA[node]);
+          if sz = 1 then rv32_sb(reg_a0, reg_a1, imm)
+          else if sz = 2 then rv32_sh(reg_a0, reg_a1, imm)
+          else rv32_sw(reg_a0, reg_a1, imm);
+          Exit;
         end
         else
         begin
@@ -3515,6 +3633,15 @@ begin
           EmitLoadImmRISCV32(reg_a0, Low32(fv));
           if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
             EmitLoadImmRISCV32(reg_a1, Low32(fv shr 32));
+          Exit;
+        end;
+
+        { a 32-bit result that is its operand's own low word (a cast to a
+          32-bit type, a mask with $FFFFFFFF): just the operand }
+        if (TypeSlotSize(IntToTypeKind(IRTk[node])) = 4) and
+           TypeIsMachineInt(IntToTypeKind(IRTk[node])) and (Rv32SameLow32(node) >= 0) then
+        begin
+          EmitLow32RISCV32(Rv32SameLow32(node));
           Exit;
         end;
 

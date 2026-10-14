@@ -32504,6 +32504,20 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_string_store_publishes_through_the_slot.pas $(TESTTMP)/test_rvsp_rv32o2
 	tools/expect_same.sh riscv32/string-store-publish-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsp_rv32o0)" "$$($(TESTTMP)/test_rvsp_x64)"
 	tools/expect_same.sh riscv32/string-store-publish-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsp_rv32o2)" "$$($(TESTTMP)/test_rvsp_x64)"
+	# STORE THROUGH A FRAME ADDRESS (2026-10-14): the address (a local's own, or a
+	# pointer/integer local plus a constant) loads into a1 after the value, no push.
+	./$(COMPILER) test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_rvfa_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_rvfa_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_rvfa_rv32o2
+	tools/expect_same.sh riscv32/store-frame-addr-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfa_rv32o0)" "$$($(TESTTMP)/test_rvfa_x64)"
+	tools/expect_same.sh riscv32/store-frame-addr-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvfa_rv32o2)" "$$($(TESTTMP)/test_rvfa_x64)"
+	# A CAST TO 32 BITS IS THE LOW WORD (2026-10-14): (x xor 2^31) - 2^31 and
+	# x and $$FFFFFFFF at 32 bits emit x; not/neg/casts of constants fold.
+	./$(COMPILER) test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_rvlw_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_rvlw_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_rvlw_rv32o2
+	tools/expect_same.sh riscv32/cast-low-word-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvlw_rv32o0)" "$$($(TESTTMP)/test_rvlw_x64)"
+	tools/expect_same.sh riscv32/cast-low-word-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvlw_rv32o2)" "$$($(TESTTMP)/test_rvlw_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
