@@ -16759,13 +16759,25 @@ begin
             outgrows a B-type immediate is a compile-time REFUSAL rather than
             a truncated offset landing inside unrelated code -- which is the
             failure IR_JUMP_IF_FALSE's own comment records (chess perft counted
-            164 before it stopped using a lone beq for a long span). }
-          jzPatch := CodeLen; EmitI32(0);          { beq a0, x0, past the call }
+            164 before it stopped using a lone beq for a long span).
+
+            NOT ON ESP (2026-10-14). The 0.16% above was a bare image; the IDF
+            thermostat app has 467 of these sites, 1,868 B of .text (1.7%), and
+            PXXStrDecRef tests nil itself. Measured under qemu without the
+            test: the CSV-row bench executed the same instruction count, and
+            QueryParam executed +0.016%. On ESP, flash outranks those cycles. }
+          if TargetPlatform = PLATFORM_ESP then
+            jzPatch := -1
+          else
+          begin
+            jzPatch := CodeLen; EmitI32(0);        { beq a0, x0, past the call }
+          end;
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           EmitCallProc(procIdx);
-          Patch32(jzPatch,
-                  EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - jzPatch));
+          if jzPatch >= 0 then
+            Patch32(jzPatch,
+                    EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - jzPatch));
         end
         else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
