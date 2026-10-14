@@ -6724,6 +6724,10 @@ var
     every body, so a proc's epilogue ends in one jal to it. See
     EmitRv32LeaveStub. }
   Rv32LeaveStubAt : Integer;
+  { Per symbol: this scope exit already released it through
+    PXXStrDecRefMask (Rv32ReleaseStringLocalsMasked), so the per-local
+    PXXStrDecRef arm skips it. Rewritten at every scope exit. }
+  Rv32MaskReleased : array of Boolean;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the

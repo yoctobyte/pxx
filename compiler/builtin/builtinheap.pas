@@ -185,6 +185,7 @@ function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 procedure PXXStrAssign(p: Pointer; slot: Pointer);
+procedure PXXStrDecRefMask(top: Pointer; mask: LongWord);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
   The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
@@ -3916,6 +3917,23 @@ begin
   { NOT Pointer(rcAddr): the refcount no longer sits at the block base — see
     the header note. This was one address before the kind word and is two now. }
   if rc = 0 then PXXFree(Pointer(PXXHdrBase(p)));
+end;
+
+{ Release the string handles in up to 32 machine-word slots at once: bit i
+  of mask names the slot at top - i * SizeOf(Pointer). riscv32 on ESP releases
+  a proc's string locals at scope exit with one call to this per 32-slot
+  window instead of a load and a PXXStrDecRef call per local -- size over
+  speed, so a few loop turns per return replace eight bytes per local. }
+procedure PXXStrDecRefMask(top: Pointer; mask: LongWord);
+var a: NativeInt;
+begin
+  a := NativeInt(top);
+  while mask <> 0 do
+  begin
+    if (mask and 1) <> 0 then PXXStrDecRef(Pointer(PMachineWord(a)^));
+    mask := mask shr 1;
+    a := a - SizeOf(Pointer);
+  end;
 end;
 
 { slot^ := p, then release the handle the slot held. p already carries its

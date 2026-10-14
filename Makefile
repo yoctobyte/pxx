@@ -40934,6 +40934,19 @@ test-esp-idf: $(COMPILER)
 	  tools/esp_run.sh --chip esp32c3 test/test_rv32_procs_share_one_epilogue.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvse.esp32c3 || true; \
 	if diff -u $(TESTTMP)/test_esp_rvse.oracle $(TESTTMP)/test_esp_rvse.esp32c3; then echo "esp32c3 shared epilogue ok (== x86-64 oracle)"; \
 	else echo "esp32c3 shared epilogue MISMATCH"; exit 1; fi
+	@# STRING LOCALS RELEASED BY MASK (2026-10-14): on --platform=esp a proc's
+	@# string locals are released a 32-slot window at a time by one
+	@# PXXStrDecRefMask call. The object must call it, and every local must
+	@# still be released exactly once -- the test prints a shared handle's
+	@# refcount around each call, so a missed or doubled release is a MISMATCH.
+	@./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -O2 -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp test/test_rv32_string_locals_release_by_mask.pas $(TESTTMP)/test_esp_rvsm.o >/dev/null
+	@if readelf -rW $(TESTTMP)/test_esp_rvsm.o | grep -q 'PXXStrDecRefMask' || readelf -sW $(TESTTMP)/test_esp_rvsm.o | grep -q 'PXXStrDecRefMask'; then echo "riscv32 IDF object releases string locals by mask ok"; \
+	  else echo "riscv32 IDF object never names PXXStrDecRefMask"; exit 1; fi
+	@./$(COMPILER) test/test_rv32_string_locals_release_by_mask.pas $(TESTTMP)/test_esp_rvsm_oracle >/dev/null && $(TESTTMP)/test_esp_rvsm_oracle > $(TESTTMP)/test_esp_rvsm.oracle
+	@ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	  tools/esp_run.sh --chip esp32c3 test/test_rv32_string_locals_release_by_mask.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvsm.esp32c3 || true; \
+	if diff -u $(TESTTMP)/test_esp_rvsm.oracle $(TESTTMP)/test_esp_rvsm.esp32c3; then echo "esp32c3 string locals released by mask ok (== x86-64 oracle)"; \
+	else echo "esp32c3 string locals released by mask MISMATCH"; exit 1; fi
 	@# POINTER MATH THROUGH INT64 (2026-10-14): the low-word demand at addresses
 	@# and narrow stores, on the IDF profile, against x86-64.
 	@./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_esp_rvptr32_oracle >/dev/null && $(TESTTMP)/test_esp_rvptr32_oracle > $(TESTTMP)/test_esp_rvptr32.oracle

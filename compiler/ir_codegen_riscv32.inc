@@ -6126,6 +6126,83 @@ begin
     EmitI32($00000013);                          { addi x0, x0, 0 }
 end;
 
+procedure Rv32ReleaseStringLocalsMasked(retSymIdx: Integer);
+{ ONE CALL PER 32-SLOT WINDOW OF STRING LOCALS at scope exit, on ESP. The
+  per-local release is `lw a0,off(s0); jal PXXStrDecRef`, eight bytes, and a
+  proc with many string temps has dozens of them in a row (the thermostat has
+  runs of 45 to 53). Here the plain frame-slot string locals are grouped from
+  the highest offset down, each window of 32 words becomes
+  `addi a0,s0,top; li a1,mask; jal PXXStrDecRefMask`, and the per-local arm in
+  EmitManagedLocalCleanupForTarget skips every symbol marked in
+  Rv32MaskReleased. A window is taken only when that is shorter than its
+  per-local releases, so a lone local, or two far apart, stay as they were.
+
+  Only what EmitLoadVarRISCV32 loads as `lw a0,off(s0)`: a local or by-value
+  parameter within the 12-bit offset reach. A var parameter is a pointer to
+  the slot, and a far slot needs an address first. Releases are independent,
+  so doing these before the other kinds changes no result. }
+var i, j, n, top, off, cost, a1, a2, a3, procIdx: Integer;
+    mask: Int64;
+    offs: array of Integer;
+    slotSym: array of Integer;
+    used: array of Boolean;
+begin
+  if Length(Rv32MaskReleased) < SymCount then SetLength(Rv32MaskReleased, SymCount + 64);
+  for i := 0 to SymCount - 1 do Rv32MaskReleased[i] := False;
+  if (TargetPlatform <> PLATFORM_ESP) or (CurProc < 0) then Exit;
+  procIdx := FindProc('PXXStrDecRefMask');
+  if procIdx < 0 then Exit;
+  n := 0;
+  SetLength(offs, SymCount - Procs[CurProc].ScopeBase + 1);
+  SetLength(slotSym, SymCount - Procs[CurProc].ScopeBase + 1);
+  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+    if (not SymSkipScopeExitRelease(i)) and SymReleasedAtScopeExit(i) and (i <> retSymIdx)
+       and (ScopeExitReleaseAction(i, a1, a2, a3) = SXR_STR)
+       and (Syms[i].Kind <> skGlobal)
+       and not ((Syms[i].Kind = skParam) and Syms[i].IsRef)
+       and FitsImm12RISCV32(Syms[i].Offset) and ((Syms[i].Offset and 3) = 0) then
+    begin
+      offs[n] := Syms[i].Offset; slotSym[n] := i; Inc(n);
+    end;
+  if n < 2 then Exit;
+  SetLength(used, n);
+  for i := 0 to n - 1 do used[i] := False;
+  while True do
+  begin
+    { the highest offset left is the window's top }
+    top := 0; j := -1;
+    for i := 0 to n - 1 do
+      if (not used[i]) and ((j < 0) or (offs[i] > top)) then begin top := offs[i]; j := i; end;
+    if j < 0 then Break;
+    mask := 0; cost := 0;
+    for i := 0 to n - 1 do
+      if (not used[i]) and (top - offs[i] < 128) then
+      begin
+        mask := mask or (Int64(1) shl ((top - offs[i]) div 4));
+        { what this local costs released on its own: c.lw reaches 0..124 }
+        if (offs[i] >= 0) and (offs[i] <= 124) then cost := cost + 6 else cost := cost + 8;
+      end;
+    if mask >= $80000000 then mask := mask - $100000000;
+    { the masked call: addi (4) + li (2, 4 or 8) + jal (4) }
+    if (mask >= -32) and (mask <= 31) then off := 10
+    else if (mask >= -2048) and (mask <= 2047) then off := 12
+    else off := 16;
+    if off < cost then
+    begin
+      rv32_addi(reg_a0, reg_s0, top);
+      EmitLoadImmRISCV32(reg_a1, Int32(mask));
+      EmitCallProc(procIdx);
+      for i := 0 to n - 1 do
+        if (not used[i]) and (top - offs[i] < 128) then
+        begin
+          used[i] := True; Rv32MaskReleased[slotSym[i]] := True;
+        end;
+    end
+    else
+      used[j] := True;      { the top stays a per-local release; try below it }
+  end;
+end;
+
 procedure EmitRv32LeaveStub;
 { THE SHARED EPILOGUE TAIL. Every riscv32 proc returns through the same five
   instructions, `mv sp,s0; lw s0,8(sp); lw ra,12(sp); addi sp,16; ret`, ten

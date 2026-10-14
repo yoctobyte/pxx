@@ -16700,7 +16700,9 @@ begin
 
     { Release local managed strings before returning (ARC scope-exit DecRef).
       Must precede the result load: each DecRef call clobbers a0. The returned
-      Result handle is skipped (ownership transfers to the caller). }
+      Result handle is skipped (ownership transfers to the caller). On ESP the
+      plain frame-slot strings go first, a window at a time. }
+    Rv32ReleaseStringLocalsMasked(retSymIdx);
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
@@ -16745,7 +16747,7 @@ begin
           EmitCallProc(procIdx);
         end
         else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
-                (act = SXR_STR) then
+                (act = SXR_STR) and not Rv32MaskReleased[i] then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
           { Inline nil test, ungated, at the release call site. Like aarch64's
