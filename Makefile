@@ -32518,6 +32518,13 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_rvlw_rv32o2
 	tools/expect_same.sh riscv32/cast-low-word-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvlw_rv32o0)" "$$($(TESTTMP)/test_rvlw_x64)"
 	tools/expect_same.sh riscv32/cast-low-word-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvlw_rv32o2)" "$$($(TESTTMP)/test_rvlw_x64)"
+	# A ONE-WORD CAST KEEPS THE LOW WORD (2026-10-14): Chr/Integer/LongWord/Char/
+	# Boolean of an integer expression evaluate it for a0 only, truncating right.
+	./$(COMPILER) test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_rvow_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_rvow_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_rvow_rv32o2
+	tools/expect_same.sh riscv32/one-word-cast-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvow_rv32o0)" "$$($(TESTTMP)/test_rvow_x64)"
+	tools/expect_same.sh riscv32/one-word-cast-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvow_rv32o2)" "$$($(TESTTMP)/test_rvow_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the

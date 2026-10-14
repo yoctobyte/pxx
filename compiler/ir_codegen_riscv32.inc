@@ -4325,7 +4325,14 @@ begin
              (procIdx = -Ord(tkString_T)) then
           begin
             argNode := IRB[node];
-            IREmitNodeRISCV32(IRA[argNode]);
+            { a result of at most one word keeps only the argument's low word:
+              `Chr(Ord('0') + d)` adds in 32 bits instead of 64 }
+            if (TypeSlotSize(IntToTypeKind(IRTk[node])) <= 4) and
+               (TypeIsMachineInt(IntToTypeKind(IRTk[node])) or
+                (IntToTypeKind(IRTk[node]) in [tyChar, tyBoolean, tyBool8, tyWideChar])) then
+              EmitLow32RISCV32(IRA[argNode])
+            else
+              IREmitNodeRISCV32(IRA[argNode]);
             Exit;
           end;
           if (procIdx = -203) or (procIdx = -204) then
