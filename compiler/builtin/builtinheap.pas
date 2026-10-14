@@ -910,7 +910,7 @@ end;
   PXXFree for one. Distinct from the refcount address at [p-16], which is a
   different slot now — conflating them is the mistake this change can make
   silently, so both have names. }
-function PXXHdrBase(p: Pointer): Int64;
+function PXXHdrBase(p: Pointer): NativeInt;
 {$ifdef PXX_HEAP_DEBUG}
 var hdrKind: Int64;
 {$endif}
@@ -931,12 +931,12 @@ begin
     if hdrKind > PXX_KIND_MAX then Halt(204);
   end;
 {$endif}
-  PXXHdrBase := Int64(p) - PXX_HDR_SIZE;
+  PXXHdrBase := NativeInt(p) - PXX_HDR_SIZE;
 end;
 
-function PXXHdrRC(p: Pointer): Int64;
+function PXXHdrRC(p: Pointer): NativeInt;
 begin
-  PXXHdrRC := Int64(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { = p - 16, unchanged }
+  PXXHdrRC := NativeInt(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { = p - 16, unchanged }
 end;
 
 const
@@ -2591,8 +2591,12 @@ function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
   callers pass Int64 addresses), but a loop counted, compared and OR-ed in Int64
   on a 32-bit target pays a register pair and a carry for every step of a copy
   whose every address and length fits a word -- measured on i386 in the
-  commit that introduced this comment. }
-var dd, ss, nn, i, w, acc: NativeInt;
+  commit that introduced this comment.
+  The loop bound is a machine-word limit, not `i + w <= nn`: integer + is
+  typed Int64, so that test was a 64-bit add and compare per word on a 32-bit
+  target (riscv32: ~25 instructions of a ~40-instruction iteration). Each
+  word is read once into v, stored and OR-ed from there. }
+var dd, ss, nn, i, w, lim, v, acc: NativeInt;
 begin
   dd := NativeInt(d);
   ss := NativeInt(s);
@@ -2601,17 +2605,22 @@ begin
   i := 0;
   w := SizeOf(NativeInt);
   if PXXWordCopyOk(d, s, n) then
-    while i + w <= nn do
+  begin
+    lim := nn - w;
+    while i <= lim do
     begin
-      PMachineWord(dd + i)^ := PMachineWord(ss + i)^;
-      acc := acc or PMachineWord(ss + i)^;
+      v := PMachineWord(ss + i)^;
+      PMachineWord(dd + i)^ := v;
+      acc := acc or v;
       i := i + w;
     end;
+  end;
   if (Int64(acc) and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
   while i < nn do
   begin
-    PByte(dd + i)^ := PByte(ss + i)^;
-    acc := acc or PByte(ss + i)^;
+    v := PByte(ss + i)^;
+    PByte(dd + i)^ := v;
+    acc := acc or v;
     i := i + 1;
   end;
   if (acc and $80) <> 0 then PXXBlockCopy := $80 else PXXBlockCopy := 0;
@@ -2735,8 +2744,10 @@ end;
   for an empty result. Called from the AnsiStrConcatAddr shim under the heap
   lock. Raw pointers only. }
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+{ Machine-word locals: lengths and addresses, for the reason PXXBlockCopy's
+  header gives. }
 var
-  total, base, d, s, i, orAll, b: Int64;
+  total, base, d, s, i, orAll, b: NativeInt;
 begin
   total := lenA + lenB;
   if total <= 0 then
@@ -2777,9 +2788,10 @@ function PXXStrConcatN(pairs: Pointer; count: NativeInt): Pointer;
   flattens it): `pairs` is count (len, src) word pairs, each term already
   decomposed the way PXXStrConcat's operands are. The block is exact-size --
   the same allocation and header as PXXStrConcat -- so a result stored in a
-  long-lived string holds no spare capacity. }
+  long-lived string holds no spare capacity. Machine-word locals, for the
+  reason PXXBlockCopy's header gives. }
 var
-  total, base, d, orAll, n, pp, pe: Int64;
+  total, base, d, orAll, n, pp, pe: NativeInt;
 begin
   total := 0;
   pp := Int64(pairs);
@@ -3808,7 +3820,7 @@ end;
   (the ThreadSafeMode target check); that condition is the authority and this
   comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
-var rcAddr: Int64;
+var rcAddr: NativeInt;
 {$ifdef PXX_THREADSAFE}
     tsIgnore: Int64;
 {$endif}
@@ -3862,7 +3874,7 @@ begin
 end;
 
 procedure PXXStrDecRef(p: Pointer);
-var rcAddr, rc: Int64;
+var rcAddr, rc: NativeInt;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
@@ -3918,7 +3930,7 @@ end;
 procedure PXXStrAssign(p: Pointer; slot: Pointer);
 var oldp: Pointer;
 {$ifndef PXX_HEAP_DEBUG}
-    rcAddr, rc: Int64;
+    rcAddr, rc: NativeInt;
 {$endif}
 begin
   oldp := Pointer(PMachineWord(slot)^);
@@ -6042,7 +6054,7 @@ end;
 { Zero n bytes at dst. }
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
 { Machine-word locals, for the reason PXXBlockCopy's header gives. }
-var d, i, w: NativeInt;
+var d, i, w, lim: NativeInt;
 {$ifdef CPUX86_64}
     bmR: Int64;
 {$endif}
@@ -6065,13 +6077,17 @@ begin
 {$endif}
   i := 0;
   w := SizeOf(NativeInt);
-  { same alignment rule as PXXBlockCopy, with no source to agree with }
+  { same alignment rule as PXXBlockCopy, with no source to agree with, and
+    the same machine-word limit in place of an Int64 `i + w <= n` }
   if (n >= w) and ((d and (w - 1)) = 0) then
-    while i + w <= n do
+  begin
+    lim := n - w;
+    while i <= lim do
     begin
       PMachineWord(d + i)^ := 0;
       i := i + w;
     end;
+  end;
   while i < n do
   begin
     PByte(d + i)^ := 0;
