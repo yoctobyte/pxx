@@ -40947,6 +40947,22 @@ test-esp-idf: $(COMPILER)
 	  tools/esp_run.sh --chip esp32c3 test/test_rv32_string_locals_release_by_mask.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvsm.esp32c3 || true; \
 	if diff -u $(TESTTMP)/test_esp_rvsm.oracle $(TESTTMP)/test_esp_rvsm.esp32c3; then echo "esp32c3 string locals released by mask ok (== x86-64 oracle)"; \
 	else echo "esp32c3 string locals released by mask MISMATCH"; exit 1; fi
+	@# ONE-WORD FRAME ADJUST (2026-10-14): on --platform=esp the prologue
+	@# reserves one word, marked `addi sp,sp,1` (bytes 13 01 11 00), patched to
+	@# `addi sp,sp,-N` or to a `j` to a thunk (`sub sp,sp,t0`, bytes 33 01 51
+	@# 40) for a frame past 2048. No marker may survive unpatched, the test's
+	@# large frames must have thunks, and the program matches x86-64 on the C3.
+	@./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -O2 -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp test/test_rv32_frame_adjust_is_one_word.pas $(TESTTMP)/test_esp_rvfw.o >/dev/null
+	@hex=$$(readelf -x .text $(TESTTMP)/test_esp_rvfw.o | awk '$$1 ~ /^0x/ {for(i=2;i<=5;i++) s=s $$i} END{print s}'); \
+	  mk=$$(printf '%s' "$$hex" | awk '{n=0; for(i=1;i<=length($$0);i+=4) if(substr($$0,i,8)=="13011100") n++; print n}'); \
+	  th=$$(printf '%s' "$$hex" | awk '{n=0; for(i=1;i<=length($$0);i+=4) if(substr($$0,i,8)=="33015140") n++; print n}'); \
+	  if [ "$$mk" -eq 0 ] && [ "$$th" -ge 1 ]; then echo "riscv32 IDF frame adjust is one word ok ($$th thunks, no marker left)"; \
+	  else echo "riscv32 IDF frame adjust: $$mk unpatched addi sp,sp,1 (want 0), $$th thunks (want >= 1)"; exit 1; fi
+	@./$(COMPILER) test/test_rv32_frame_adjust_is_one_word.pas $(TESTTMP)/test_esp_rvfw_oracle >/dev/null && $(TESTTMP)/test_esp_rvfw_oracle > $(TESTTMP)/test_esp_rvfw.oracle
+	@ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	  tools/esp_run.sh --chip esp32c3 test/test_rv32_frame_adjust_is_one_word.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvfw.esp32c3 || true; \
+	if diff -u $(TESTTMP)/test_esp_rvfw.oracle $(TESTTMP)/test_esp_rvfw.esp32c3; then echo "esp32c3 one-word frame adjust ok (== x86-64 oracle)"; \
+	else echo "esp32c3 one-word frame adjust MISMATCH"; exit 1; fi
 	@# POINTER MATH THROUGH INT64 (2026-10-14): the low-word demand at addresses
 	@# and narrow stores, on the IDF profile, against x86-64.
 	@./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_esp_rvptr32_oracle >/dev/null && $(TESTTMP)/test_esp_rvptr32_oracle > $(TESTTMP)/test_esp_rvptr32.oracle

@@ -149,6 +149,7 @@ procedure EmitProcCleanupLandingPadForTarget(landPatch: Integer); forward;
 function SymSkipScopeExitRelease(i: Integer): Boolean; forward;
 function SymOwnedValueParam(i: Integer): Boolean; forward;
 function SymReleasedAtScopeExit(i: Integer): Boolean; forward;
+function Rv32ShortSlots: Boolean; forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
@@ -15996,6 +15997,19 @@ begin
     rv32_sw(reg_s0, reg_sp, 8);
     rv32_addi(reg_s0, reg_sp, 0);
     Result := CodeLen;
+    { ONE WORD on ESP short slots, marked `addi sp,sp,1` (an odd adjust no frame
+      ever takes) so PatchProcPrologue can tell the forms apart. A frame that
+      fits +/-2048 patches it to `addi sp,sp,-frame`; a larger one patches it
+      to a `j` to a thunk placed after the body, which adjusts sp and jumps
+      back. Measured on the thermostat: 227 prologues carried two nops each.
+      iram and interrupt procs keep the three words: a thunk past the body's
+      end is not part of the bytes that move into IRAM. }
+    if Rv32ShortSlots and
+       not ((CurProc >= 0) and (ProcIsInterrupt[CurProc] or ProcIram[CurProc])) then
+    begin
+      EmitI32(EncodeRISCVAddi(reg_sp, reg_sp, 1));
+      Exit;
+    end;
     { Reserve THREE words for the frame adjustment (patched in PatchProcPrologue):
       a single `addi sp,sp,-frame` only reaches +/-2048, so a larger frame needs
       `lui t0,hi; addi t0,t0,lo; sub sp,sp,t0`. Small frames patch addi + 2 nops.
@@ -16012,7 +16026,7 @@ begin
 end;
 
 procedure PatchProcPrologue(patchPos, size: Integer);
-var aligned, a64imm, rvLo, rvHi: Integer;
+var aligned, a64imm, rvLo, rvHi, thunkAt, p: Integer;
 begin
   { End of this routine's body: release its i386 callee-saved slot entry. This
     is the true per-routine terminator -- the epilogue is not, because an early
@@ -16082,7 +16096,48 @@ begin
       overwrote this function's locals (bug-riscv32-large-frame-addi-truncate).
       Small frames: `addi sp,sp,-aligned` + 2 nops. Large: build the size in t0
       (lui+addi) and `sub sp,sp,t0` — three words, matching the reservation. }
-    if aligned <= 2047 then
+    if (Code[patchPos] = $13) and (Code[patchPos + 1] = $01) and
+       (Code[patchPos + 2] = $11) and (Code[patchPos + 3] = $00) then
+    begin
+      { the one-word form, `addi sp,sp,1` = $00110113 (EmitProcPrologue,
+        ESP short slots) }
+      if aligned <= 2047 then
+        Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned))
+      else
+      begin
+        { out of line: `j thunk` here, and the thunk jumps back. t0 is
+          scratch at entry. Within one body plus a thunk, so a jal reaches
+          unless the body alone is past 1 MiB. }
+        if CodeLen - patchPos > 1048000 then
+          Error('target riscv32 --platform=esp: a frame adjust at code offset ' +
+                AIntToStr(patchPos) + ' cannot reach its thunk with a four-byte jal ' +
+                '(+-1 MiB). Rebuild with --rv32-long-calls');
+        rvLo := aligned and $FFF;
+        if (rvLo and $800) <> 0 then rvLo := rvLo - $1000;
+        rvHi := aligned - rvLo;
+        thunkAt := CodeLen;
+        Patch32(patchPos, EncodeRISCVJAL(reg_zero, thunkAt - patchPos));
+        EmitI32(EncodeRISCVLui(reg_t0, rvHi));
+        EmitI32(EncodeRISCVAddi(reg_t0, reg_t0, rvLo));
+        EmitI32(EncodeRISCVSub(reg_sp, reg_sp, reg_t0));
+        EmitI32(EncodeRISCVJAL(reg_zero, (patchPos + 4) - CodeLen));
+        { THE THUNK IS PART OF THE BODY. Its two jumps are recorded nowhere,
+          which is right only while body and thunk move as one unit under
+          DCE -- and DCE moves [BodyAddr, ProcBodyEnd). The Pascal driver
+          records the end BEFORE patching the prologue, so the end it
+          recorded is exactly where the thunk starts: move it past the
+          thunk. Outside the body, the thunk survived as an orphan when the
+          body was dead, and its jump back went stale. The other drivers
+          record the end after this, so the thunk is already inside. }
+        for p := ProcCount - 1 downto 0 do
+          if (Procs[p].BodyAddr <= patchPos) and (ProcBodyEnd[p] = thunkAt) then
+          begin
+            ProcBodyEnd[p] := CodeLen;
+            Break;
+          end;
+      end;
+    end
+    else if aligned <= 2047 then
     begin
       Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned));
       Patch32(patchPos + 4, EncodeRISCVAddi(0, 0, 0));   { nop }
