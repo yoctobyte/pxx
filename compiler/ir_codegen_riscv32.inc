@@ -1615,6 +1615,64 @@ begin
   Result := True;
 end;
 
+function Rv32ConstIntValue(n: Integer; var v: Int64): Boolean;
+{ The value of an integer constant, or of a + - * and or xor over two of them
+  (nested), when it is exactly representable in the node's own type -- so the
+  fold cannot change a value the code computes today, whatever width a
+  consumer reads it at. A result that would wrap, an overflow-checked op
+  ({$Q+}), and every other operator are left to run.
+
+  Named constants make these: `8 or PXX_ALLOC_NOZERO`, `SECS * 1000 * 1000`.
+  On riscv32 a 64-bit one costs a dozen instructions through t0:t1, and the
+  IDF runtime is written in Int64 throughout. }
+const
+  BIG = Int64(1) shl 62;
+  HALF = Int64(1) shl 31;
+var a, b, r: Int64; op: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  tk := IntToTypeKind(IRTk[n]);
+  if not (Ord(tk) in [1, 7..16]) then Exit;
+  if IRKind[n] = IR_CONST_INT then
+  begin
+    v := IRIVal[n];
+    Result := (tk <> tyUInt64) or (v >= 0);
+    Exit;
+  end;
+  if IRKind[n] <> IR_BINOP then Exit;
+  if IRIVal[n] <> 0 then Exit;
+  op := IRC[n];
+  if not ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+          (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor))) then Exit;
+  if not Rv32ConstIntValue(IRA[n], a) then Exit;
+  if not Rv32ConstIntValue(IRB[n], b) then Exit;
+  if (op = Ord(tkPlus)) or (op = Ord(tkMinus)) then
+  begin
+    if (a >= BIG) or (a <= -BIG) or (b >= BIG) or (b <= -BIG) then Exit;
+    if op = Ord(tkPlus) then r := a + b else r := a - b;
+  end
+  else if op = Ord(tkStar) then
+  begin
+    if (a >= HALF) or (a <= -HALF) or (b >= HALF) or (b <= -HALF) then Exit;
+    r := a * b;
+  end
+  else if op = Ord(tkAnd) then r := a and b
+  else if op = Ord(tkOr) then r := a or b
+  else r := a xor b;
+  case Ord(tk) of
+    7:  if (r < -128) or (r > 127) then Exit;
+    8:  if (r < 0) or (r > 255) then Exit;
+    9:  if (r < -32768) or (r > 32767) then Exit;
+    10: if (r < 0) or (r > 65535) then Exit;
+    1, 11, 15: if (r < -HALF) or (r >= HALF) then Exit;
+    12, 16: if (r < 0) or (r >= 2 * HALF) then Exit;
+    14: if r < 0 then Exit;
+  end;
+  v := r;
+  Result := True;
+end;
+
 function Rv32LeafArgOk(procIdx, paramIdx, argNode: Integer): Boolean;
 { The argument at IR_ARG argNode is one word that the generic arm of the
   direct call would push unchanged, and whose value one instruction off s0
@@ -1629,7 +1687,7 @@ function Rv32LeafArgOk(procIdx, paramIdx, argNode: Integer): Boolean;
   - the address of a frame local bound to a var/out parameter, when IR_LEA
     yields that address itself (not an array, a string, a variant, or a
     parameter slot that holds a pointer). }
-var v, si: Integer; atk, vtk, ptk: TTypeKind;
+var v, si: Integer; atk, vtk, ptk: TTypeKind; cv: Int64;
   function PlainWord(tk: TTypeKind): Boolean;
   begin
     Result := not (IsFloatRISCV32(tk) or Is64BitRISCV32(tk) or (tk = tySet) or
@@ -1665,7 +1723,12 @@ begin
       not Syms[si].IsArray;
     Exit;
   end;
-  if not (PlainWord(ptk) and PlainWord(atk) and PlainWord(vtk)) then Exit;
+  if not PlainWord(ptk) then Exit;
+  { a constant, or constants folded, is its low word whatever its own width
+    or its wrapper's: the arm is chosen by the PARAMETER's type, and the
+    generic one pushes a0 -- the low word -- after emitting it }
+  if Rv32ConstIntValue(v, cv) then begin Result := True; Exit; end;
+  if not (PlainWord(atk) and PlainWord(vtk)) then Exit;
   if IRKind[v] = IR_CONST_INT then Result := True
   else if IRKind[v] = IR_LOAD_SYM then
     Result := LeafLoadSymFoldsRISCV32(IRA[v]) and PlainWord(Syms[IRA[v]].TypeKind);
@@ -1689,8 +1752,11 @@ end;
 
 procedure Rv32EmitLeafArg(rd, v: Integer);
 { a Rv32LeafArgOk value straight into rd }
+var cv: Int64;
 begin
-  if IRKind[v] = IR_CONST_INT then
+  if Rv32ConstIntValue(v, cv) then
+    EmitLoadImmRISCV32(rd, Low32(cv))
+  else if IRKind[v] = IR_CONST_INT then           { Boolean, pointer: not folded kinds }
     EmitLoadImmRISCV32(rd, Low32(IRIVal[v]))
   else if IRKind[v] = IR_LEA then
     EmitFrameAddrRISCV32(rd, Syms[IRA[v]].Offset)
@@ -2264,6 +2330,7 @@ var
   cmp32: Integer;      { 1/2 = a signed/unsigned compare done in 32 bits (Rv32Exact32) }
   imm: Integer;        { a `+`/`-` constant folded into one addi }
   leafVal: Boolean;    { STORE_MEM: the value loads straight into a1 }
+  fv: Int64;           { a binop of constants, folded (Rv32ConstIntValue) }
 begin
   low32Dem := Rv32Low32Demand;
   Rv32Low32Demand := False;
@@ -3249,6 +3316,14 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IRC[node];
+
+        if Rv32ConstIntValue(node, fv) then
+        begin
+          EmitLoadImmRISCV32(reg_a0, Low32(fv));
+          if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
+            EmitLoadImmRISCV32(reg_a1, Low32(fv shr 32));
+          Exit;
+        end;
 
         if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = Ord(tkPlus)) then
         begin

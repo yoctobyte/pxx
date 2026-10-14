@@ -32452,6 +32452,14 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/string-store-global-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32o0)" "$$($(TESTTMP)/test_rvsg_x64)"
 	tools/expect_same.sh riscv32/string-store-global-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32c 2>/dev/null)" "$$($(TESTTMP)/test_rvsg_x64)"
 	tools/assert_no_leak.sh riscv32_string_store_global 16 tools/run_target.sh riscv32 $(TESTTMP)/test_rvsg_rv32c
+	# CONSTANT ARITHMETIC FOLDS (2026-10-14): + - * and or xor of constants
+	# folded when the result fits its type, wrapping ones left to run, and a
+	# folded constant passed as a leaf call argument.
+	./$(COMPILER) test/test_rv32_constant_arithmetic_folds.pas $(TESTTMP)/test_rvcf_x64
+	./$(COMPILER) --target=riscv32 test/test_rv32_constant_arithmetic_folds.pas $(TESTTMP)/test_rvcf_rv32o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_constant_arithmetic_folds.pas $(TESTTMP)/test_rvcf_rv32o2
+	tools/expect_same.sh riscv32/constant-folds-O0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcf_rv32o0)" "$$($(TESTTMP)/test_rvcf_x64)"
+	tools/expect_same.sh riscv32/constant-folds-O2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvcf_rv32o2)" "$$($(TESTTMP)/test_rvcf_x64)"
 	# RV32C (--rv32-rvc, the default on --platform=esp). The same program with
 	# and without compressed instructions must print the same thing under qemu,
 	# and the compressed build must actually be smaller. The programs are the
