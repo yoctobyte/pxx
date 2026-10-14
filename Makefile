@@ -40919,6 +40919,21 @@ test-esp-idf: $(COMPILER)
 	  if diff -u $(TESTTMP)/test_esp_rvdiv64.oracle $(TESTTMP)/test_esp_rvdiv64.$$chip; then echo "$$chip Int64 divide ok (== x86-64 oracle)"; \
 	  else echo "$$chip Int64 divide MISMATCH"; exit 1; fi; \
 	done
+	@# ONE SHARED EPILOGUE (2026-10-14): on --platform=esp every riscv32 proc
+	@# ends in a jal to one shared `mv sp,s0; lw s0; lw ra; addi sp,16; ret`
+	@# tail. The object's .text holds a handful of c.jr ra (bytes 82 80), not
+	@# one per proc (245 before); the iram routine keeps its own. And the
+	@# program, whose returns take every shape, matches x86-64 on the C3.
+	@./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -O2 -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp test/test_rv32_procs_share_one_epilogue.pas $(TESTTMP)/test_esp_rvse.o >/dev/null
+	@n=$$(readelf -x .text $(TESTTMP)/test_esp_rvse.o | awk '$$1 ~ /^0x/ {for(i=2;i<=5;i++) s=s $$i} END{n=0; for(i=1;i<=length(s);i+=4) if(substr(s,i,4)=="8280") n++; print n}'); \
+	  m=$$(readelf -x .iram1.text $(TESTTMP)/test_esp_rvse.o | awk '$$1 ~ /^0x/ {for(i=2;i<=5;i++) s=s $$i} END{n=0; for(i=1;i<=length(s);i+=4) if(substr(s,i,4)=="8280") n++; print n}'); \
+	  if [ "$$n" -le 10 ] && [ "$$m" -ge 1 ]; then echo "riscv32 IDF procs share one epilogue ok ($$n ret in .text, $$m in .iram1.text)"; \
+	  else echo "riscv32 IDF shared epilogue: $$n c.jr ra in .text (want <= 10), $$m in .iram1.text (want >= 1)"; exit 1; fi
+	@./$(COMPILER) test/test_rv32_procs_share_one_epilogue.pas $(TESTTMP)/test_esp_rvse_oracle >/dev/null && $(TESTTMP)/test_esp_rvse_oracle > $(TESTTMP)/test_esp_rvse.oracle
+	@ESP_RUN_TIMEOUT=30 ESP_PXXFLAGS="-O2 --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	  tools/esp_run.sh --chip esp32c3 test/test_rv32_procs_share_one_epilogue.pas 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/test_esp_rvse.esp32c3 || true; \
+	if diff -u $(TESTTMP)/test_esp_rvse.oracle $(TESTTMP)/test_esp_rvse.esp32c3; then echo "esp32c3 shared epilogue ok (== x86-64 oracle)"; \
+	else echo "esp32c3 shared epilogue MISMATCH"; exit 1; fi
 	@# POINTER MATH THROUGH INT64 (2026-10-14): the low-word demand at addresses
 	@# and narrow stores, on the IDF profile, against x86-64.
 	@./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_esp_rvptr32_oracle >/dev/null && $(TESTTMP)/test_esp_rvptr32_oracle > $(TESTTMP)/test_esp_rvptr32.oracle

@@ -1453,6 +1453,7 @@ begin
   XtensaLongCalls := False;
   Rv32LongCalls := False;
   Rv32ShortCalls := False;
+  Rv32LeaveStubAt := 0;
   XtensaHasFpu := False;
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;

@@ -223,6 +223,11 @@ const
                                  chosen by the callee's own return instruction
                                  (RET vs RETW) and not by the ABI, which is why
                                  it cannot be recomputed at patch time }
+  CODEREF_ANCHOR_RV32_JAL = -5; { riscv32: ONE four-byte jal, not the two-word
+                                 slot. Sound because its target already exists
+                                 when the site is written, so the site knows
+                                 the jal reaches, and DCE only removes bytes:
+                                 the distance never grows afterwards }
   { Distinct non-proc code targets (runtime stubs + the entry jump) one image
     can hold. Around 50 today; the pass refuses to run rather than truncate. }
   MAX_DCE_STUBS = 4096;
@@ -6714,6 +6719,11 @@ var
   { --rv32-short-calls: the four-byte form on --platform=esp for a NilPy
     program too, whose default is the pair (see Rv32ShortSlots). }
   Rv32ShortCalls : Boolean;
+  { Code offset + 1 of the shared riscv32 epilogue tail (0 = none emitted):
+    `mv sp,s0; lw s0,8(sp); lw ra,12(sp); addi sp,16; ret`, once, ahead of
+    every body, so a proc's epilogue ends in one jal to it. See
+    EmitRv32LeaveStub. }
+  Rv32LeaveStubAt : Integer;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the

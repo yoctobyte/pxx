@@ -1681,6 +1681,7 @@ procedure EmitProgramRuntimeStubsForTarget;
 begin
   EmitSignalRuntimeForTarget;
   EmitIoLockStubsForTarget;
+  EmitRv32LeaveStub;
 end;
 
 function SourceMentionsKeyword(const kw: AnsiString): Boolean;
@@ -4001,7 +4002,12 @@ begin
             + 'CODEREF_ANCHOR_J for a short j.');
   end
   else if TargetArch = TARGET_RISCV32 then
-    PatchRv32LinkSlot(pos, target, linkReg)
+  begin
+    if anchor = CODEREF_ANCHOR_RV32_JAL then
+      Patch32(pos, EncodeRISCVJAL(linkReg, target - pos))   { one word: EmitRv32LeaveStub }
+    else
+      PatchRv32LinkSlot(pos, target, linkReg);
+  end
   else if anchor >= 0 then
     { x86-64/i386 ANCHORED slot: not a rel32 in a call/jmp but the imm32 of an
       `add reg, delta` following the call/pop trick, so the displacement is

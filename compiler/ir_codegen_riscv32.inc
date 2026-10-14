@@ -6126,6 +6126,35 @@ begin
     EmitI32($00000013);                          { addi x0, x0, 0 }
 end;
 
+procedure EmitRv32LeaveStub;
+{ THE SHARED EPILOGUE TAIL. Every riscv32 proc returns through the same five
+  instructions, `mv sp,s0; lw s0,8(sp); lw ra,12(sp); addi sp,16; ret`, ten
+  bytes with RVC. Emitted once here, ahead of every body, a proc's epilogue
+  ends in one four-byte `jal x0` to it instead: measured on the thermostat,
+  385 tails, about 2.3 KB of flash for one more executed jump per return.
+
+  ESP SHORT SLOTS ONLY (Rv32ShortSlots), because the site is ONE jal: the
+  two-word slot hosted riscv32 needs to stay re-aimable would save two bytes
+  of the ten. The site is recorded as a CodeRef with CODEREF_ANCHOR_RV32_JAL,
+  so DCE re-aims it when it moves the body, and the stub, which no proc owns,
+  is a stub target that no pass removes.
+
+  NOT under --function-sections: there each body is a section of its own and
+  the linker may move or drop it, and a jal into another section needs a
+  relocation this slot does not carry. Interrupt and iram procs keep their own
+  tail (EmitProcEpilog): an ISR restores the trap frame and ends in mret, and
+  an iram body must not jump into flash. }
+begin
+  if (TargetArch <> TARGET_RISCV32) or not Rv32ShortSlots or FunctionSections then Exit;
+  if Rv32LeaveStubAt > 0 then Exit;
+  Rv32LeaveStubAt := CodeLen + 1;
+  rv32_addi(reg_sp, reg_s0, 0);
+  rv32_lw(reg_s0, reg_sp, 8);
+  rv32_lw(reg_ra, reg_sp, 12);
+  rv32_addi(reg_sp, reg_sp, 16);
+  rv32_jalr(reg_zero, reg_ra, 0);
+end;
+
 procedure PatchRv32LinkSlot(pos, targetOffset, linkReg: Integer);
 { The TWO-WORD branch slot, re-aimed, writing its return address into `linkReg`
   -- reg_zero for a jump, reg_ra for a call. Both forms are exactly two words so

@@ -17747,6 +17747,18 @@ begin
           EmitLoadVarRISCV32(retSymIdx);
       end;
     end;
+    { the shared tail, EmitRv32LeaveStub: one jal instead of ten bytes, when
+      the jal reaches it (+-1 MiB; a body laid out past that, as in a NilPy
+      image before DCE, keeps its own tail -- spelled out here rather than
+      Riscv32JalReaches, which FPC has not seen yet) }
+    if (Rv32LeaveStubAt > 0) and (CurProc >= 0) and not ProcIsInterrupt[CurProc]
+       and not ProcIram[CurProc]
+       and ((Rv32LeaveStubAt - 1) - CodeLen >= -1048576) then
+    begin
+      RecordCodeRefFull(CodeLen, Rv32LeaveStubAt - 1, 0, CODEREF_ANCHOR_RV32_JAL);
+      rv32_jal(reg_zero, (Rv32LeaveStubAt - 1) - CodeLen);
+      Exit;
+    end;
     rv32_addi(reg_sp, reg_s0, 0);
     rv32_lw(reg_s0, reg_sp, 8);
     rv32_lw(reg_ra, reg_sp, 12);
