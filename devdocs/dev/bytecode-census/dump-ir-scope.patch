@@ -1,0 +1,13 @@
+--- /home/neo/frank-user/compiler/ir.inc	2026-10-10 16:19:31.947167349 +0200
++++ compiler/ir.inc	2026-10-15 19:50:59.398610640 +0200
+@@ -20456,8 +20456,9 @@
+     begin
+       symIdx := IRA[i];
+       if (symIdx >= 0) and (symIdx < SymCount) then
+-        write(' [sym=', Syms[symIdx].Name, ']');
++        write(' [sym=', Syms[symIdx].Name, ' k=', Ord(Syms[symIdx].Kind), ']');
+     end;
++    write(' f=', IRFile[i], ' l=', IRLine[i]);
+     if (IRKind[i] = IR_CALL) and (IRA[i] >= 0) and (IRA[i] < ProcCount) then
+       write(' [proc=', Procs[IRA[i]].Name, ']');
+     if IRKind[i] = IR_FIELD then

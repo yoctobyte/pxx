@@ -112,6 +112,14 @@ that.
 memory-mapped. The VM's own working RAM is the number to measure before
 committing to a design.
 
+## Follow-up: the instruction format
+
+The same day, the discussion went on to the VM's instruction format: a register
+VM with 16-bit units, 32 registers and 64 opcodes. A census of three apps (two
+Pascal, one NilPy) backs those choices. Proposal, evidence and the rejected
+alternatives: [bytecode-vm-format-proposal.md](bytecode-vm-format-proposal.md).
+Experiment 1 below is done there.
+
 ## Cheapest next experiments, when the budget allows
 
 1. Dump the thermostat's IR and estimate its size as a naive fat bytecode. That
