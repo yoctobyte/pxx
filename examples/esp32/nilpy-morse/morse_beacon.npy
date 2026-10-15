@@ -1,0 +1,213 @@
+# Morse beacon: keys messages out over I2C to a PCF8574 I/O expander
+# (bit 0 = LED, bit 1 = buzzer), MicroPython style. Built, never run; see README.md.
+import time
+from machine import Pin, I2C
+
+PCF_ADDR = 0x20
+LED = 0x01
+BUZZ = 0x02
+
+MORSE = {
+    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+    'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+    'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+    'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---',
+    '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+    '8': '---..', '9': '----.', '.': '.-.-.-', ',': '--..--', '?': '..--..',
+    '/': '-..-.', '=': '-...-',
+}
+
+
+class Expander:
+    def __init__(self, i2c, addr):
+        self.i2c = i2c
+        self.addr = addr
+        self.state = 0
+        self.errors = 0
+        self.writes = 0
+
+    def write(self):
+        try:
+            self.i2c.writeto(self.addr, bytes((self.state ^ 0xFF,)))
+            self.writes += 1
+        except OSError as e:
+            self.errors += 1
+            if self.errors % 10 == 1:
+                print("i2c error", e.errno, "count", self.errors)
+
+    def set_bits(self, mask, on):
+        if on:
+            self.state = self.state | mask
+        else:
+            self.state = self.state & (~mask & 0xFF)
+        self.write()
+
+
+class Keyer:
+    def __init__(self, out, wpm, use_buzzer):
+        self.out = out
+        self.use_buzzer = use_buzzer
+        self.set_speed(wpm)
+        self.sent_chars = 0
+        self.sent_elements = 0
+        self.on_ms = 0
+
+    def set_speed(self, wpm):
+        if wpm < 5:
+            wpm = 5
+        if wpm > 40:
+            wpm = 40
+        self.wpm = wpm
+        self.unit = 1200 // wpm
+
+    def key(self, on):
+        mask = LED
+        if self.use_buzzer:
+            mask = mask | BUZZ
+        self.out.set_bits(mask, on)
+
+    def element(self, sym):
+        n = 1
+        if sym == '-':
+            n = 3
+        self.key(True)
+        time.sleep_ms(n * self.unit)
+        self.key(False)
+        self.on_ms += n * self.unit
+        self.sent_elements += 1
+        time.sleep_ms(self.unit)
+
+    def send_char(self, ch):
+        code = MORSE.get(ch.upper(), '')
+        if code == '':
+            return False
+        for sym in code:
+            self.element(sym)
+        time.sleep_ms(2 * self.unit)
+        self.sent_chars += 1
+        return True
+
+    def send_text(self, text):
+        skipped = 0
+        words = text.split(' ')
+        for i in range(len(words)):
+            for ch in words[i]:
+                if not self.send_char(ch):
+                    skipped += 1
+            if i < len(words) - 1:
+                time.sleep_ms(4 * self.unit)
+        return skipped
+
+
+def parse_config(lines):
+    cfg = {'wpm': 15, 'buzzer': 1, 'repeat': 3, 'call': 'PXX'}
+    for line in lines:
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+        parts = line.split('=')
+        if len(parts) != 2:
+            print("bad config line:", line)
+            continue
+        key = parts[0].strip().lower()
+        val = parts[1].strip()
+        if key == 'call':
+            cfg['call'] = val.upper()
+        elif key in cfg:
+            cfg[key] = int(val)
+        else:
+            print("unknown key", key)
+    return cfg
+
+
+def duration_units(text):
+    total = 0
+    for ch in text.upper():
+        if ch == ' ':
+            total += 4
+            continue
+        code = MORSE.get(ch, '')
+        for sym in code:
+            if sym == '-':
+                total += 4
+            else:
+                total += 2
+        total += 2
+    return total
+
+
+class Queue:
+    def __init__(self, size):
+        self.items = []
+        self.size = size
+        self.dropped = 0
+
+    def put(self, msg):
+        if len(self.items) >= self.size:
+            self.items.pop(0)
+            self.dropped += 1
+        self.items.append(msg)
+
+    def get(self):
+        if len(self.items) == 0:
+            return None
+        return self.items.pop(0)
+
+
+def beacon_text(cfg, seq, temp_c):
+    return "VVV DE " + cfg['call'] + " NR " + str(seq) + " T " + str(temp_c) + " AR"
+
+
+def fake_temp(seq):
+    return 18 + (seq * 7) % 9
+
+
+def report(keyer, out, q, started):
+    up = time.ticks_diff(time.ticks_ms(), started) // 1000
+    duty = 0
+    if up > 0:
+        duty = keyer.on_ms // (up * 10)
+    print("up", up, "s chars", keyer.sent_chars, "elems", keyer.sent_elements,
+          "duty%", duty, "i2c ok", out.writes, "err", out.errors,
+          "queued", len(q.items), "dropped", q.dropped)
+
+
+def main():
+    cfg = parse_config([
+        "# beacon settings",
+        "wpm = 18",
+        "call = pa3pxx",
+        "buzzer=0",
+        "repeat = 2",
+        "bogus line",
+    ])
+    i2c = I2C(0, scl=Pin(9), sda=Pin(8), freq=100000)
+    found = i2c.scan()
+    if PCF_ADDR not in found:
+        print("no PCF8574 at", hex(PCF_ADDR), "found", found)
+    out = Expander(i2c, PCF_ADDR)
+    keyer = Keyer(out, cfg['wpm'], cfg['buzzer'] != 0)
+    q = Queue(4)
+    started = time.ticks_ms()
+    seq = 0
+    while seq < cfg['repeat']:
+        seq += 1
+        msg = beacon_text(cfg, seq, fake_temp(seq))
+        q.put(msg)
+        if seq % 2 == 0:
+            q.put("QRL?")
+        while True:
+            m = q.get()
+            if m is None:
+                break
+            units = duration_units(m)
+            print("sending", m, "est", units * keyer.unit, "ms")
+            bad = keyer.send_text(m)
+            if bad > 0:
+                print("skipped", bad, "chars")
+        report(keyer, out, q, started)
+        keyer.set_speed(keyer.wpm + 2)
+
+
+main()
