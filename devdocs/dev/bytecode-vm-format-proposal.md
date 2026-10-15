@@ -260,6 +260,36 @@ about 2,000 of the 6,902 instructions need a second unit. That gives about 18
 KB, about 4× smaller than native. The census script should get a per-instruction
 "fits one unit" check before this number is quoted anywhere.
 
+### 4.1 Sweep: unit widths from 4 to 64 bits
+
+![Estimated bytecode size vs unit width](bytecode-census/unit-width-sweep.png)
+
+`bytecode-census/sweep.py` takes each instruction's real operands (register
+numbers from its procedure's peak, immediate widths, branch offsets, and
+literal, global and call indices). For each unit width W from 4 to 64 bits, it
+tries every register-field width r, with opcode bits o = W - 2r. An instruction
+takes one unit when its opcode is among the 2^o - 1 most frequent, its
+registers fit in r bits, and its payload fits in the leftover operand bits.
+Otherwise it takes an escape unit plus a wide form (8-bit opcode, 8 bits per
+register, the payload at full width) in ceil(bits / W) more units.
+
+| Width | Thermostat | landkaart | Morse |
+|---|---|---|---|
+| Minimum | 13 bits: 23.3 KiB | 15 bits: 16.6 KiB | 14 bits: 12.9 KiB |
+| **16 bits** | 25.6 KiB (+10%) | 16.7 KiB (+1%) | 13.6 KiB (+5%) |
+| 8 bits | 30.2 KiB | 20.3 KiB | 17.3 KiB |
+| 32 bits | 33.9 KiB | 22.8 KiB | 17.4 KiB |
+| Native rv32 (app procedures) | 72.9 KiB | 48.7 KiB | 71.0 KiB |
+
+The minimum lies between 13 and 15 bits for all three apps. 16 bits is the
+nearest width that byte-addressed flash can fetch directly, and costs only 1–10%
+over the minimum. Above about 24 bits nearly everything fits one unit, so size
+grows linearly with the width. Below 12 bits, too much spills into long forms.
+At 16 bits the best split is r = 5, o = 6 for all three apps, which is the
+proposal's layout. The sweep counts more instructions than section 2
+(argument moves are included), so its totals are not directly comparable with
+the 4-byte column there.
+
 ## 5. Caveats
 
 - **The cost model is rough.** Each IR node gets a fixed cost. Local loads and
@@ -288,7 +318,8 @@ The tooling is in [`bytecode-census/`](bytecode-census/):
 2. **Dump an app** with the app's own flags plus `--dump-ir -O2`, writing
    stdout to a file. For example, the thermostat:
    `pxxdump --dump-ir --target=riscv32 --platform=esp --no-signals -O2 --max-stack-frame=16384 --emit-obj -Fusrc -Fisrc -Fu$RTL -Fu$RTL/platform/esp src/thermo_esp.pas out.o > ir.txt`
-3. **Run** `census.py ir.txt SRC_DIR out.o [NAME,NAME,...]`.
+3. **Run** `census.py ir.txt SRC_DIR out.o [NAME,NAME,...]`, and `sweep.py` with the
+   same arguments for the unit-width sweep (section 4.1).
 
 ## 7. Open questions
 
