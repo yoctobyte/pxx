@@ -599,8 +599,9 @@ procedure XtensaLoadArgRegsWindowed(argBase, nArgs: Integer);
   in and out of ESP-IDF agree. a8 is scratch: an indirect/virtual site only
   loads the callee address into it afterwards.
 
-  PAST XT_MAX_ARG_WORDS the reserved outgoing area (XT_OUTARG_REGION) cannot
-  hold the overflow, and growing it would grow EVERY windowed frame, which the
+  PAST what the body's reserved outgoing area (XtOutargRegion: none in a
+  procedure, XT_OUTARG_REGION in the main body) holds, the overflow has no
+  home, and reserving one would grow EVERY windowed frame, which the
   3584-byte IDF task stacks cannot afford. So this one call lowers sp by the
   overflow's size (MOVSP -- the only legal way to move a1 here) and writes the
   words at the new sp+0.. . Nothing is spilled between here and the call, so
@@ -613,7 +614,9 @@ procedure XtensaLoadArgRegsWindowed(argBase, nArgs: Integer);
 var k, extra, maxOff: Integer;
 begin
   XtCallSpExtra := 0;
-  if nArgs > XT_MAX_ARG_WORDS then
+  if nArgs - 6 > XtCallOverflowMax then
+    XtCallOverflowMax := nArgs - 6;
+  if nArgs > 6 + XtOutargRegion div 4 then
   begin
     extra := (((nArgs - 6) * 4 + 15) div 16) * 16;
     maxOff := extra + argBase + (nArgs - 1) * 4;
@@ -5033,6 +5036,7 @@ begin
           XtensaPopA3; xtensa_mov(reg_xtensa_a6, reg_xtensa_a3);   { val / delta }
           XtensaPopA3; xtensa_mov(reg_xtensa_a5, reg_xtensa_a3);   { addr }
           { retry: }
+          XtensaWideBegin;   { the bne below counts four 3-byte instructions }
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a5, 0);            { old }
           xtensa_wsr_scompare1(reg_xtensa_a2);
           if IRIVal[node] = ATOMIC_ADD then
@@ -5041,6 +5045,7 @@ begin
             xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);
           xtensa_s32c1i(reg_xtensa_a4, reg_xtensa_a5, 0);
           xtensa_bne(reg_xtensa_a4, reg_xtensa_a2, -12);           { lost the race }
+          XtensaWideEnd;
         end;
         xtensa_memw;
         { the intrinsic is typed Int64 (a2:a3) — sign-extend the 32-bit old
@@ -6116,6 +6121,7 @@ begin
   IramCallFixCount := saveIramFix;
   XtSpillDepth := saveSpillDepth;
   XtSpillMax := saveSpillMax;
+  XtCallOverflowMax := 0;
 
   { Nil-init hidden owning locals synthesised during IR lowering (see the
     riscv32/x86-64 walkers) — the epilogue's scope-exit DecRef would otherwise
@@ -6417,6 +6423,21 @@ begin
           AIntToStr(XT_MAX_RELAX_PASSES) + ' passes. A forward jump still '
           + 'cannot reach its label with the long form reserved, which should '
           + 'not be possible -- the long form reaches +-2 GB');
+  { A windowed procedure whose widest call overflows the outgoing area it
+    reserved emits again with an area that holds it, so sp stays constant
+    (see XtOutargRegion for why the sp-drop path is not good enough). Only
+    when nothing sits on the expression stack at body start, so no earlier
+    slot can shift. One extra pass at most: the IR, and so the widest call,
+    is the same every pass. }
+  if (XtensaABI = XTENSA_ABI_WINDOWED) and (CurProc >= 0) and
+     (XtCallOverflowMax * 4 > XtOutargRegion) and
+     (saveSpillDepth = XtOutargRegion) then
+  begin
+    XtOutargRegion := XtCallOverflowMax * 4;
+    saveSpillDepth := XtOutargRegion;
+    if saveSpillMax < XtOutargRegion then saveSpillMax := XtOutargRegion;
+    needRetry := True;
+  end;
   until not needRetry;
 
   { CurProc is -1 for the program's MAIN body, which is exactly the body a

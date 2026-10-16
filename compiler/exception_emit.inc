@@ -574,6 +574,7 @@ begin
     xtensa_l32r(reg_xtensa_a3, $FFFF);
     xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, 0);               { top frame }
     xtensa_movi(reg_xtensa_a4, 0);
+    XtensaWideBegin;   { the beq counts a 3-byte addi and the j }
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);                { no handler -> park }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, EXC_JMP_OFFSET_XT);
     { RECORDED, AND THE SHAPE DELIBERATELY NOT CHANGED -- the Call0 twin of the
@@ -586,6 +587,7 @@ begin
       CODEREF_ANCHOR_J re-encodes it in place, so recording costs no bytes. }
     RecordCodeRefFull(CodeLen, ExcLongJmpAddr, 0, CODEREF_ANCHOR_J);
     xtensa_j(ExcLongJmpAddr - CodeLen);
+    XtensaWideEnd;
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_XTENSA then
@@ -644,6 +646,7 @@ begin
       EmitXtensaCall8ToCode for the same reason -- a helper that MIGHT widen to
       the long form would make the distance a guess. Both targets are inside
       this blob, so the direct form always reaches. }
+    XtensaWideBegin;   { the beq counts fixed 3-byte instructions }
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { count = 0: -> retw }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
@@ -656,6 +659,7 @@ begin
       because the helper did both. }
     RecordCodeRefFull(CodeLen, ExcSpillAddr, 0, CODEREF_ANCHOR_CALL8);
     xtensa_call8(ExcSpillAddr - CodeLen);
+    XtensaWideEnd;
     xtensa_retw;
 
     while (CodeLen mod 4) <> 0 do xtensa_nop;

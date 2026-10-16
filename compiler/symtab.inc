@@ -15827,11 +15827,13 @@ begin
         frame pointer moves to a7, outside call8's outgoing window. The
         patchable addi lowers sp once to reserve locals + the constant-sp
         expression-stack region; sp then stays fixed for the whole body so the
-        window spill area at [sp-16] never desyncs. The reserved region starts
-        with XT_OUTARG_REGION bytes of OUTGOING argument space at sp+0 (the
-        ABI's home for argument words 6..), so the expression stack begins
-        above it. }
-      XtSpillDepth := XT_OUTARG_REGION;
+        window spill area at [sp-16] never desyncs. A procedure starts with no
+        OUTGOING argument space at sp+0 (the ABI's home for argument words
+        6..), so the expression stack starts at sp+0, inside l32i.n/s32i.n's
+        reach; a body whose calls need the space emits again with it (the
+        relaxation loop in ir_codegen_xtensa.inc, see XtOutargRegion). }
+      XtOutargRegion := 0;
+      XtSpillDepth := XtOutargRegion;
       XtSpillMax := XtSpillDepth;
       XtExcSlotOwner := -2;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
@@ -16044,7 +16046,7 @@ begin
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin
     { Reserve the locals plus what this routine's expression/argument stack
-      actually reached (XtSpillMax already includes XT_OUTARG_REGION, its
+      actually reached (XtSpillMax already includes XtOutargRegion, its
       starting value) — not the worst case. ESP-IDF hands tasks 3584-byte
       stacks, so a fixed 256-byte floor per frame cost ~11 levels of recursion:
       printing one Int64 digit by digit is 19 deep and died with LoadProhibited

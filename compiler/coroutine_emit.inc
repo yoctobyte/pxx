@@ -262,11 +262,13 @@ begin
       exception runtime, and a coroutine does not imply one. a2 = depth. }
     xtensa_entry(reg_xtensa_sp, 32);
     xtensa_movi(reg_xtensa_a3, 0);
+    XtensaWideBegin;   { the beq counts fixed 3-byte instructions }
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { depth 0: -> retw }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
     RecordCodeRefFull(CodeLen, coSpill, 0, CODEREF_ANCHOR_CALL8);
     xtensa_call8(coSpill - CodeLen);
+    XtensaWideEnd;
     xtensa_retw;
 
     while (CodeLen mod 4) <> 0 do xtensa_nop;
@@ -287,9 +289,11 @@ begin
     xtensa_s32i(reg_xtensa_a5, reg_xtensa_a4, 0);      { BSS_EXC_TOP = its chain }
     xtensa_l32i(reg_xtensa_a0, reg_xtensa_a6, 4);
     xtensa_movi(reg_xtensa_a7, 0);
+    XtensaWideBegin;   { the beq counts a 3-byte mov }
     xtensa_beq(reg_xtensa_a0, reg_xtensa_a7, 8);       { never ran: -> fresh }
     xtensa_mov(reg_xtensa_sp, reg_xtensa_a6);          { a1 LAST, as in longjmp }
     xtensa_retw;
+    XtensaWideEnd;
     { fresh: the offset counts from the beq itself -- beq 3 + mov 3 + retw.n 2 }
     xtensa_l32i(reg_xtensa_a8, reg_xtensa_a6, 8);      { the entry routine }
     xtensa_addi(reg_xtensa_a9, reg_xtensa_a6, -44);

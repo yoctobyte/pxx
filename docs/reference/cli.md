@@ -219,6 +219,7 @@ effect where one exists.
 | `--werror` / `-Werror` | Promote any warning to a fatal error. |
 | `--xtensa-soft-divide` / `--xtensa-cpu=lx6` | Route div/mod through software helpers (ESP32 classic LX6, no hardware divide). |
 | `--xtensa-long-calls` | Reserve the long call form at every forward call, so a callee more than 512 KiB ahead is reachable. Off by default; the Nil Python example builds for the Xtensa chips pass it. |
+| `--xtensa-no-density` | Emit only 3-byte instructions. By default the commonest instructions (`movi`, `l32i`, `s32i`, `mov`, `addi`, `add`) use their 2-byte density form when the operands fit, which every ESP32 Xtensa core supports. For size comparisons and for ruling density out when chasing a miscompile. |
 | `--xtensa-soft-mulhigh` | Replace the 32-bit multiply-high instruction with a software routine, for QEMU's Xtensa cores, which lack it. |
 
 `--experimental-ir-codegen` is accepted as a deprecated no-op (IR is the only

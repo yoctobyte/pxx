@@ -1451,6 +1451,8 @@ begin
   XtensaSoftDivide := False;
   XtensaSoftMulHigh := False;
   XtensaLongCalls := False;
+  XtensaNoDensity := False;
+  XtensaWideDepth := 0;
   Rv32LongCalls := False;
   Rv32ShortCalls := False;
   Rv32LeaveStubAt := 0;
@@ -1877,6 +1879,13 @@ begin
         CALL0's range. This is the answer the forward-call error names.
         bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build }
       XtensaLongCalls := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-no-density' then
+    begin
+      { 3-byte instructions only: no movi.n/l32i.n/s32i.n/mov.n/addi.n/add.n.
+        For A/B size measurements and for ruling density out of a miscompile. }
+      XtensaNoDensity := True;
       Inc(i);
     end
     else if option = '--xtensa-fpu' then

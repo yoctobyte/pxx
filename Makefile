@@ -34344,6 +34344,16 @@ test-wasm32: $(COMPILER)
 	tools/assert_no_leak.sh wasm32/const_by_ref_argument 20 tools/run_target.sh wasm32 $(TESTTMP)/constrefarg_wasm32
 	@echo "wasm32: 57 rows green (46 default + 7 shortstring + 4 leak; 0 excluded)"
 test-xtensa: $(COMPILER)
+	# DENSITY FORMS: movi.n/addi.n/l32i.n/s32i.n/mov.n/add.n on both sides of
+	# every narrow boundary, procedure spills from sp+0, calls of 7..30 words on
+	# the sp-drop path, and the hand-counted atomic and exception sequences.
+	# Call0 and windowed, plus --xtensa-no-density; all must print what x64 does.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_density_forms.pas $(TESTTMP)/test_xtdensity_c0
+	tools/expect_same.sh xtensa/density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_c0)" "$$(cat test/test_xtensa_density_forms.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_density_forms.pas $(TESTTMP)/test_xtdensity_w
+	tools/expect_same.sh xtensa-windowed/density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_w)" "$$(cat test/test_xtensa_density_forms.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-no-density test/test_xtensa_density_forms.pas $(TESTTMP)/test_xtdensity_wnd
+	tools/expect_same.sh xtensa-windowed/no-density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_wnd)" "$$(cat test/test_xtensa_density_forms.expected)"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
 	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
@@ -35499,9 +35509,12 @@ test-xtensa: $(COMPILER)
 	# of the artifact -- `code=` cannot answer this, it is page-quantised, and a
 	# shell cannot count a byte pattern containing NUL. The two ABIs use
 	# different scratch pairs (a9/a10 Call0, a8/a9 windowed), hence two patterns:
-	# `add a9,a9,a10 ; jx a9` and `add a8,a8,a9 ; jx a8`. Exactly one each.
-	tools/count_bytes.py $(TESTTMP)/xt_backjump   a09980a00900 --expect 1
-	tools/count_bytes.py $(TESTTMP)/xt_backjump_w 908880a00800 --expect 1
+	# `add.n a9,a9,a10 ; jx a9` and `add.n a8,a8,a9 ; jx a8` -- the add takes
+	# its 2-byte density form since 2026-10-16 (was a09980 / 908880, 3-byte
+	# `add`; the anchor is read from CodeLen, so the narrowing is safe). Exactly
+	# one each.
+	tools/count_bytes.py $(TESTTMP)/xt_backjump   aa99a00900 --expect 1
+	tools/count_bytes.py $(TESTTMP)/xt_backjump_w 9a88a00800 --expect 1
 	tools/expect_same.sh xtensa/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump)" "$$($(TESTTMP)/xt_backjump_x64)"
 	tools/expect_same.sh xtensa-windowed/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump_w)" "$$($(TESTTMP)/xt_backjump_x64)"
 	# A FORWARD JUMP PAST J'S +-128 KiB, both ABIs -- the other half of the row

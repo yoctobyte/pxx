@@ -6710,6 +6710,16 @@ var
     path is byte-identical, because the cost is paid by every program including
     the ones that fit. See bug-a-xtensa-cannot-widen-a-forward-call-... }
   XtensaLongCalls : Boolean;
+  { --xtensa-no-density: emit only 3-byte instructions. By default the six
+    commonest instructions (movi, l32i, s32i, mov, addi, add) take their 2-byte
+    density-option form when the operands fit; every ESP32 xtensa core (LX6,
+    LX7) has the option. The switch exists for A/B size measurements and to
+    rule density out when chasing a miscompile. }
+  XtensaNoDensity : Boolean;
+  { Nesting depth of XtensaWideBegin/XtensaWideEnd: while > 0 every
+    instruction is emitted in its 3-byte form. For hand-written sequences that
+    branch by a fixed byte count over the instructions in between. }
+  XtensaWideDepth : Integer;
   { --rv32-long-calls: keep the eight-byte auipc+jalr form at every FORWARD
     jump and every internal call on --platform=esp. Without it those sites are
     one four-byte JAL (+-1 MiB), and a site whose target turns out to be
@@ -6760,6 +6770,25 @@ var
     argument words than XT_OUTARG_REGION holds; 0 for every ordinary call.
     XtensaCallDoneWindowed restores it after the call. }
   XtCallSpExtra : Integer;
+  { Bytes of outgoing-argument space reserved at sp+0 of the windowed body
+    being emitted; the expression stack starts right above it. A procedure
+    reserves exactly what its widest call needs (XtCallOverflowMax, found by
+    one emission pass and applied on the next), which for most is nothing, so
+    their spill slots start at sp+0, inside the 0..60 reach of
+    l32i.n/s32i.n. The main body's entry stub is never patched and keeps
+    XT_OUTARG_REGION.
+
+    NOT the sp-drop path instead: lowering sp around a call is unsafe when the
+    callee raises. While sp is low, a window overflow spills the CALLER's
+    a0-a3 below the lowered sp; longjmp restores sp with a plain move, so the
+    next underflow reads them from below the original sp and restores a
+    garbage frame pointer. Measured 2026-10-16: a NilPy sort key that raises
+    (test_nilpy_sort_is_stable_and_n_log_n, windowed) segfaulted in
+    pybound_pair_call_kw. }
+  XtOutargRegion : Integer;
+  { Overflow argument words (past six) of the widest windowed call emitted in
+    the current pass of the body. }
+  XtCallOverflowMax : Integer;
   { IR_ALLOCA on xtensa (feature-a-port-alloca-to-xtensa). WINDOWED places each
     alloca's block just above the reserved expression/argument region, at
     new sp + XtSpillMax -- and XtSpillMax is final only after the body, so every

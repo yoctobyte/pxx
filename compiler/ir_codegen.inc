@@ -3751,7 +3751,8 @@ begin
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 8);
       xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 12);
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
-      XtSpillDepth := XT_OUTARG_REGION;
+      XtOutargRegion := XT_OUTARG_REGION;
+      XtSpillDepth := XtOutargRegion;
       XtSpillMax := XtSpillDepth;
       XtExcSlotOwner := -2;
     end;

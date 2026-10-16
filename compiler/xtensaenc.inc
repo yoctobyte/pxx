@@ -90,10 +90,39 @@ begin
   Result := (((imm div 256) and $FF) shl 16) or ((($D shl 4) or s) shl 8) or ((t shl 4) or 2);
 end;
 
+function XtensaNarrowOK: Boolean;
+{ True when an encoder may pick the 2-byte density form (ADDI.N, ADD.N, MOV.N,
+  MOVI.N, L32I.N, S32I.N; byte layouts checked against xtensa-esp32s3-elf-as).
+  Code that branches by a fixed byte count over the instructions in between
+  must emit them inside XtensaWideBegin/XtensaWideEnd, or record the target's
+  CodeLen instead of counting. Positions everywhere else (label fixups, CALLn,
+  L32R, alignment by 3-byte NOPs) do not depend on instruction sizes. }
+begin
+  Result := (not XtensaNoDensity) and (XtensaWideDepth = 0);
+end;
+
+procedure XtensaWideBegin;
+begin
+  Inc(XtensaWideDepth);
+end;
+
+procedure XtensaWideEnd;
+begin
+  Dec(XtensaWideDepth);
+end;
+
 procedure xtensa_addi(t, s, imm: Integer);
 var
   val: Integer;
 begin
+  if XtensaNarrowOK and ((imm = -1) or ((imm >= 1) and (imm <= 15))) then
+  begin
+    { ADDI.N: op0 = B, the t field holds the immediate, and 0 encodes -1
+      (`imm and $F` would turn -1 into +15). }
+    if imm = -1 then EmitB($B) else EmitB((imm shl 4) or $B);
+    EmitB((t shl 4) or s);
+    Exit;
+  end;
   val := EncodeXtensaAddi(t, s, imm);
   EmitB(val and $FF);
   EmitB((val shr 8) and $FF);
@@ -113,6 +142,13 @@ end;
 procedure xtensa_s32i(t, s, offset: Integer);
 begin
   XtensaCheckWordOffset(offset, 's32i');
+  if XtensaNarrowOK and (offset <= 60) then
+  begin
+    { S32I.N: op0 = 9, imm4 = offset/4 (0..60 bytes). }
+    EmitB((t shl 4) or 9);
+    EmitB(((offset div 4) shl 4) or s);
+    Exit;
+  end;
   EmitB((t shl 4) or 2);
   EmitB((6 shl 4) or s);
   EmitB((offset div 4) and $FF);
@@ -121,6 +157,13 @@ end;
 procedure xtensa_l32i(t, s, offset: Integer);
 begin
   XtensaCheckWordOffset(offset, 'l32i');
+  if XtensaNarrowOK and (offset <= 60) then
+  begin
+    { L32I.N: op0 = 8, imm4 = offset/4 (0..60 bytes). }
+    EmitB((t shl 4) or 8);
+    EmitB(((offset div 4) shl 4) or s);
+    Exit;
+  end;
   EmitB((t shl 4) or 2);
   EmitB((2 shl 4) or s);
   EmitB((offset div 4) and $FF);
@@ -273,6 +316,13 @@ end;
 
 procedure xtensa_or(r, s, t: Integer);
 begin
+  if (s = t) and XtensaNarrowOK then
+  begin
+    { `or r, s, s` is a move: MOV.N, op0 = D, destination in the t field. }
+    EmitB((r shl 4) or $D);
+    EmitB(s);
+    Exit;
+  end;
   EmitB((t shl 4) or 0);
   EmitB((r shl 4) or s);
   EmitB((2 shl 4) or 0);
@@ -280,6 +330,13 @@ end;
 
 procedure xtensa_add(r, s, t: Integer);
 begin
+  if XtensaNarrowOK then
+  begin
+    { ADD.N: op0 = A. }
+    EmitB((t shl 4) or $A);
+    EmitB((r shl 4) or s);
+    Exit;
+  end;
   EmitB((t shl 4) or 0);
   EmitB((r shl 4) or s);
   EmitB((8 shl 4) or 0);
@@ -401,6 +458,13 @@ end;
 procedure xtensa_movi(t, imm12: Integer);
 { MOVI at, imm12 — RRI8 with r=$A; imm12 signed -2048..2047. }
 begin
+  if XtensaNarrowOK and (imm12 >= -32) and (imm12 <= 95) then
+  begin
+    { MOVI.N: op0 = C, imm7 (-32..95 as seven bits) split [6:4] | [3:0]. }
+    EmitB((((imm12 and $7F) shr 4) shl 4) or $C);
+    EmitB(((imm12 and $F) shl 4) or t);
+    Exit;
+  end;
   EmitB((t shl 4) or 2);
   EmitB(($A shl 4) or ((imm12 shr 8) and $F));
   EmitB(imm12 and $FF);
