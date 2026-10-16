@@ -191,7 +191,10 @@ procedure EmitFrameAddrXtensa(rd: Integer; off: Integer);
 var fp: Integer;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
-    fp := reg_xtensa_a7
+  begin
+    fp := reg_xtensa_a7;
+    off := off + XT_FP_BIAS;
+  end
   else
     fp := reg_xtensa_a15;
   if (off >= -128) and (off <= 127) then
@@ -201,6 +204,61 @@ begin
     EmitLoadConstXtensa(rd, off);
     xtensa_add(rd, fp, rd);
   end;
+end;
+
+function XtFrameDirect(off, sz: Integer; var adj: Integer): Boolean;
+{ True when a frame slot at symbol offset `off` can be loaded or stored as
+  [a7 + adj] in one instruction (windowed only: a7 is biased by XT_FP_BIAS).
+  sz = 8 checks both words. The 8- and 16-bit encoders do not range-check,
+  so the reach is checked here. }
+var lim: Integer;
+begin
+  Result := False;
+  if XtensaABI <> XTENSA_ABI_WINDOWED then Exit;
+  adj := off + XT_FP_BIAS;
+  if adj < 0 then Exit;
+  case sz of
+    1: lim := 255;
+    2: lim := 510;
+    4: lim := 1020;
+    8: lim := 1016;
+  else
+    Exit;
+  end;
+  if adj > lim then Exit;
+  if (sz >= 2) and ((adj mod (sz - (sz div 8) * 4)) <> 0) then Exit;
+  Result := True;
+end;
+
+procedure EmitSizedLoadOffXtensa(rd, rs, off: Integer; sz: Integer; sgn: Boolean);
+{ rd := [rs + off]; off already checked by XtFrameDirect. rd must not be a9. }
+begin
+  if sz = 1 then
+  begin
+    xtensa_l8ui(rd, rs, off);
+    if sgn then
+    begin
+      xtensa_movi(reg_xtensa_a9, 128);
+      xtensa_xor(rd, rd, reg_xtensa_a9);
+      xtensa_sub(rd, rd, reg_xtensa_a9);
+    end;
+  end
+  else if sz = 2 then
+  begin
+    if sgn then xtensa_l16si(rd, rs, off) else xtensa_l16ui(rd, rs, off);
+  end
+  else
+    xtensa_l32i(rd, rs, off);
+end;
+
+procedure EmitSizedStoreOffXtensa(rt, rs, off: Integer; sz: Integer);
+begin
+  if sz = 1 then
+    xtensa_s8i(rt, rs, off)
+  else if sz = 2 then
+    xtensa_s16i(rt, rs, off)
+  else
+    xtensa_s32i(rt, rs, off);
 end;
 
 procedure EmitSizedLoadXtensa(rd, rs: Integer; sz: Integer; sgn: Boolean);
@@ -336,7 +394,7 @@ begin
 end;
 
 procedure EmitLoadVarXtensa(idx: Integer);
-var tk: TTypeKind; sz: Integer; sgn: Boolean;
+var tk: TTypeKind; sz, adj: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSlotSize(tk);
@@ -355,6 +413,15 @@ begin
     EmitLoadGlobAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
     EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
   end
+  else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
+          XtFrameDirect(Syms[idx].Offset, 4, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a7, adj);
+    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+  end
+  else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+          XtFrameDirect(Syms[idx].Offset, sz, adj) then
+    EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a7, adj, sz, sgn)
   else
   begin
     EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
@@ -365,7 +432,7 @@ begin
 end;
 
 procedure EmitStoreVarXtensa(idx: Integer);
-var tk: TTypeKind; sz: Integer;
+var tk: TTypeKind; sz, adj: Integer;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSlotSize(tk);
@@ -383,6 +450,15 @@ begin
     EmitLoadGlobAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
     EmitSizedStoreXtensa(reg_xtensa_a2, reg_xtensa_a8, sz);
   end
+  else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
+          XtFrameDirect(Syms[idx].Offset, 4, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a7, adj);
+    EmitSizedStoreXtensa(reg_xtensa_a2, reg_xtensa_a8, sz);
+  end
+  else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+          XtFrameDirect(Syms[idx].Offset, sz, adj) then
+    EmitSizedStoreOffXtensa(reg_xtensa_a2, reg_xtensa_a7, adj, sz)
   else
   begin
     EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
@@ -1140,14 +1216,32 @@ begin
 end;
 
 procedure EmitLoadVar64Xtensa(idx: Integer);
+var adj: Integer;
 begin
+  if (Syms[idx].Kind <> skGlobal) and
+     not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+     XtFrameDirect(Syms[idx].Offset, 8, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_a7, adj);       { lo }
+    xtensa_l32i(reg_xtensa_a3, reg_xtensa_a7, adj + 4);   { hi }
+    Exit;
+  end;
   EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);
   xtensa_l32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { lo }
   xtensa_l32i(reg_xtensa_a3, reg_xtensa_a8, 4);   { hi }
 end;
 
 procedure EmitStoreVar64Xtensa(idx: Integer);
+var adj: Integer;
 begin
+  if (Syms[idx].Kind <> skGlobal) and
+     not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+     XtFrameDirect(Syms[idx].Offset, 8, adj) then
+  begin
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_a7, adj);       { lo }
+    xtensa_s32i(reg_xtensa_a3, reg_xtensa_a7, adj + 4);   { hi }
+    Exit;
+  end;
   EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);       { value in a2:a3; addr in a8 }
   xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { lo }
   xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 4);   { hi }

@@ -8329,7 +8329,7 @@ begin
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
-    xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
+    xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -XT_FP_BIAS);   { see XT_FP_BIAS }
 
   { Optional local var/const/type sections (rare in init, but harmless). }
   while CurTok.Kind in [tkVar, tkConst, tkType] do
@@ -8412,7 +8412,7 @@ begin
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
-    xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
+    xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -XT_FP_BIAS);   { see XT_FP_BIAS }
 
   { if __pxx_fini_done = 0 then begin
       __pxx_fini_done := 1; __fini_<N-1>; ...; __fini_<0> end }

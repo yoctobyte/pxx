@@ -34345,8 +34345,9 @@ test-wasm32: $(COMPILER)
 	@echo "wasm32: 57 rows green (46 default + 7 shortstring + 4 leak; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# DENSITY FORMS: movi.n/addi.n/l32i.n/s32i.n/mov.n/add.n on both sides of
-	# every narrow boundary, procedure spills from sp+0, calls of 7..30 words on
-	# the sp-drop path, and the hand-counted atomic and exception sequences.
+	# every narrow boundary, procedure spills from sp+0, calls of 7..30 words
+	# (each procedure reserves the outgoing area its widest call needs; sp never
+	# moves), and the hand-counted atomic and exception sequences.
 	# Call0 and windowed, plus --xtensa-no-density; all must print what x64 does.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_density_forms.pas $(TESTTMP)/test_xtdensity_c0
 	tools/expect_same.sh xtensa/density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_c0)" "$$(cat test/test_xtensa_density_forms.expected)"
@@ -34354,6 +34355,13 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_w)" "$$(cat test/test_xtensa_density_forms.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-no-density test/test_xtensa_density_forms.pas $(TESTTMP)/test_xtdensity_wnd
 	tools/expect_same.sh xtensa-windowed/no-density "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtdensity_wnd)" "$$(cat test/test_xtensa_density_forms.expected)"
+	# INIT-SECTION LOCALS: initialization/finalization bodies have their own
+	# prologue, which must set the windowed frame pointer biased (XT_FP_BIAS)
+	# like every other body. Call0 has no bias; it rides along as the control.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_init_locals.pas $(TESTTMP)/test_xtinitloc_w
+	tools/expect_same.sh xtensa-windowed/init-locals "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtinitloc_w)" "$$(cat test/test_xtensa_init_locals.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_init_locals.pas $(TESTTMP)/test_xtinitloc_c0
+	tools/expect_same.sh xtensa/init-locals "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtinitloc_c0)" "$$(cat test/test_xtensa_init_locals.expected)"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
 	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.

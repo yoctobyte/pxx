@@ -2451,6 +2451,13 @@ const
     just above it and was shrunk by the same amount so the total stays 256. }
   XT_OUTARG_REGION = 64;
   XT_MAX_ARG_WORDS = 6 + XT_OUTARG_REGION div 4;
+  { The windowed frame pointer a7 sits this many bytes BELOW the frame base
+    the symbol offsets are measured from. Locals live at negative offsets, and
+    l32i/s32i take only non-negative ones, so an unbiased a7 needed
+    `addi a8, a7, off` before every access. Biased, the nearest 64 bytes of
+    locals are one l32i.n/s32i.n from a7, and the rest up to 1020 one l32i.
+    a15 (the bootstrap frame base the parameter spill uses) stays unbiased. }
+  XT_FP_BIAS = 64;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
   { ESP32 bare-metal SRAM map (--esp-profile=bare). On ESP32-C3 the internal
     SRAM is mapped twice: instruction bus (IRAM) at 0x4037C000 and data bus
