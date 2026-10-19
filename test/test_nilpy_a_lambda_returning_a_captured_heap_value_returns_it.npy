@@ -37,8 +37,14 @@ def passes(n, held):
         t += k().v
         y = f()
         f()
+        # a fresh object per pass, through a lambda, DROPPED in the leak arm
+        # and kept in the control: without it the leak arm allocated nothing
+        # (borrowed names only), the census saw 49 allocations and
+        # assert_no_leak refused the row as vacuous, which stopped test-nilpy
+        # at this row from 2026-10-02 on
+        w = (lambda: [i])()
         if held is not None:
-            held.append([i])
+            held.append(w)
     print(t, len(loc), po.v)
 
 if len(sys.argv) < 2:

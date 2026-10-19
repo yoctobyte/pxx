@@ -38257,8 +38257,11 @@ test-uforth: $(COMPILER)
 	  printf 'S" prelimtest.fth" INCLUDED\nS" tester.fr" INCLUDED\nS" utilities.fth" INCLUDED\nS" errorreport.fth" INCLUDED\nS" %s" INCLUDED\n' "$$f" > "$(UFORTH_SRC)/tests/$$drv"; \
 	  printf '"tests/%s" INCLUDE\nBYE\n' "$$drv" > "$$wd/in.txt"; \
 	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 & pp=$$!; \
+	  : "filetest.fth creates and deletes fatest1.txt in the SHARED tree, so the"; \
+	  : "two runs raced on it (OPEN-FILE ior, THROW -13, 2026-10-19): serialise it"; \
+	  if [ "$$f" = "filetest.fth" ]; then if wait $$pp; then prc=0; else prc=$$?; fi; pp=; fi; \
 	  ( cd "$(UFORTH_SRC)" && timeout 900 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 & cp=$$!; \
-	  if wait $$pp; then prc=0; else prc=$$?; fi; \
+	  if [ -n "$$pp" ]; then if wait $$pp; then prc=0; else prc=$$?; fi; fi; \
 	  if wait $$cp; then crc=0; else crc=$$?; fi; \
 	  rm -f "$(UFORTH_SRC)/tests/$$drv"; \
 	  if [ "$$prc" = "124" ] || [ "$$crc" = "124" ]; then \
