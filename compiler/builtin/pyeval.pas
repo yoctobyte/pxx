@@ -1149,7 +1149,8 @@ end;
   with, or '' if it was positional. CPython's rule: positionals fill left to
   right, then each keyword goes to its own parameter.
 
-  A GAP — a keyword targeting parameter 3 while 2 has no value — is refused
+  A GAP — a keyword targeting parameter 3 while 2 has no value — is filled
+  from the callee's signature defaults when it has them, and otherwise refused
   loudly rather than guessed. The marshaller below can only express omitted
   TRAILING params (it tests `(i-1) >= nargs` against a dense list), so a gap has
   no representation; inventing a filler would put this straight back into the
@@ -1160,6 +1161,7 @@ var i, p, cnt, arity, tgt, nextPos, maxIdx: Integer;
     anyKw: Boolean;
     nm: AnsiString;
     pk: PInt64;
+    sig: Pointer;
     src: TPyList;
     seen: array[0..31] of Boolean;
 begin
@@ -1173,6 +1175,11 @@ begin
   pk := PInt64(mi^.ParamKinds);
   if (pk = nil) or (n <= 0) or (n > 31) then Exit;
   arity := Integer(mi^.Arity);
+  { the signature record, when the method has one: the source of defaults for a
+    slot a keyword skips (nil leaves pysig_default_slot answering nil) }
+  sig := nil;
+  if (mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0 then
+    sig := Pointer(NativeInt(pk[2 * (n + 1)]));
 
   for p := 0 to n - 1 do seen[p] := False;
   src := TPyList.Create;
@@ -1225,7 +1232,14 @@ begin
       wants slot 1 while slot 0 has no value. Caught HERE rather than by the
       completeness check below, because reaching that check would mean writing
       out of range first. }
-    if tgt >= cnt then
+    { The gap is closed from the CALLEE's own defaults when its signature
+      record has them: the list grows to the keyword's slot, and the check
+      below fills every slot nobody wrote. `.n(*xs, forced=9)` on a run-time
+      dispatched call reaches here whenever a defaulted parameter sits between
+      the star's last value and the keyword. }
+    while (tgt >= args.count) and (pysig_default_slot(sig, args.count) <> nil) do
+      args.append(PVariant(pysig_default_slot(sig, args.count))^);
+    if tgt >= args.count then
     begin
       src.Free;
       EvalError('cannot bind ' + nm + '= in a call to ' + mname +
@@ -1238,7 +1252,14 @@ begin
   end;
   src.Free;
 
-  { every slot up to the highest one used must actually have a value }
+  { every slot up to the highest one used must have a value: its own, or the
+    callee's default }
+  for p := 0 to maxIdx do
+    if (not seen[p]) and (pysig_default_slot(sig, p) <> nil) then
+    begin
+      args.put(p, PVariant(pysig_default_slot(sig, p))^);
+      seen[p] := True;
+    end;
   for p := 0 to maxIdx do
     if not seen[p] then
       EvalError('cannot bind keyword args to ' + mname +
@@ -6525,7 +6546,7 @@ var
   cls: PClassRTTI;
   kwNames: TPyList;
   res, cb: Variant;
-  i, cut, nargs: Integer;
+  i, cut, nargs, first: Integer;
   rest: AnsiString;
 begin
   Result := pynone;
@@ -6582,7 +6603,20 @@ begin
     begin
       kwNames := TPyList.Create;
       rest := kwspec;
-      for i := 0 to nargs - 1 do
+      { '>' = the fields name the LAST arguments only: a call that also has a
+        *unpack, whose length the frontend could not know. Pad the front with
+        positional slots now that the list is built. }
+      first := 0;
+      if rest[1] = '>' then
+      begin
+        rest := Copy(rest, 2, Length(rest) - 1);
+        first := nargs - 1;
+        for i := 1 to Length(rest) do
+          if rest[i] = '|' then Dec(first);
+        if first < 0 then first := 0;
+        for i := 0 to first - 1 do kwNames.append('');
+      end;
+      for i := first to nargs - 1 do
       begin
         cut := Pos('|', rest);
         if cut > 0 then

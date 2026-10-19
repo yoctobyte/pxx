@@ -22353,7 +22353,7 @@ var procIdx, argsHead, lastArg, argNode, litNode, kwLitNode, n, i: Integer;
     argStar: array[0..MAX_DYN_ARGS - 1] of Boolean;
     kwspec: AnsiString;
     anyKw, anyStar: Boolean;
-    listSym, listCi: Integer;
+    listSym, listCi, kwFirst: Integer;
 begin
   Expect(tkLParen, '(');
   n := 0;
@@ -22377,8 +22377,9 @@ begin
     end
     { `*xs`: its ELEMENTS join the argument list at run time, so the list path
       takes the call (below) and the operand EXTENDS where a written argument
-      appends. A keyword beside it is refused: the kwspec is one field per
-      ARGUMENT, and the star's argument count is not known here. }
+      appends. The kwspec is one field per ARGUMENT and the star's argument
+      count is not known here, so a keyword beside it must come last (see
+      after the loop). }
     else if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
             (Tokens[TokPos].Kind <> tkStar) then
     begin
@@ -22392,15 +22393,37 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  { A keyword beside a star: the star's argument count is only known at run
+    time, so the kwspec cannot name every slot. When the keywords are a
+    TRAILING run (`.n(*xs, forced=9)`, the only shape seen) the kwspec names
+    just that run, marked '>', and pydyn_methl right-aligns it once the list is
+    built. Any other mix still refuses. }
+  kwFirst := n;
   if anyStar and anyKw then
-    Error('Nil Python: .' + mname + '() is dispatched at run time, and that path '
-      + 'cannot combine *unpacking with keyword arguments yet');
+  begin
+    kwFirst := 0;
+    while argKw[kwFirst] = '' do Inc(kwFirst);
+    for i := kwFirst to n - 1 do
+      if argKw[i] = '' then
+        Error('Nil Python: .' + mname + '() is dispatched at run time, and that '
+          + 'path takes keyword arguments beside *unpacking only after every '
+          + 'positional one');
+  end;
 
   { The kwspec is built for BOTH paths: the list form takes it too, and it is
     the same '|'-separated string, so the two paths differ in how the ARGUMENTS
     travel and in nothing else. }
   kwspec := '';
-  if anyKw then
+  if anyStar and anyKw then
+  begin
+    kwspec := '>';
+    for i := kwFirst to n - 1 do
+    begin
+      if i > kwFirst then kwspec := kwspec + '|';
+      kwspec := kwspec + argKw[i];
+    end;
+  end
+  else if anyKw then
     for i := 0 to n - 1 do
     begin
       if i > 0 then kwspec := kwspec + '|';
@@ -41477,9 +41500,15 @@ end;
   pre-pass's "was None" answer: `dt: float = DT` arrived as 0.0 and
   `push: tuple = (1.0, 2.0)` as None, silently. Declared here, both call sites
   read the same variant global, which the def-time store fills before any
-  call can run. Called from PyRegisterDefShells, so PyHdrName is this def's. }
-procedure PyDeclareDefDefaults(defTok, procIdx: Integer);
-var j, depth, pIdx, dStart, dSOff, dSLen, dSym, savedCurProc: Integer;
+  call can run. Called from PyRegisterDefShells, so PyHdrName is this def's.
+
+  slotBase is where the SOURCE's first parameter sits in the Proc: 1 for a
+  generator, whose ABI puts the instance in slot 0 (PyApplyGeneratorABI), and 0
+  otherwise. Without it every default of a generator was written one slot
+  early, so `def g(n, xs=None, d=acc)` read acc for xs
+  (bug-nilpy-a-generator-default-lands-one-slot-early). }
+procedure PyDeclareDefDefaults(defTok, procIdx, slotBase: Integer);
+var j, depth, pIdx, dStart, dSOff, dSLen, dSym, savedCurProc, slot: Integer;
     dIsStr: Boolean;
     pname, gname: AnsiString;
 begin
@@ -41505,16 +41534,18 @@ begin
             (Tokens[j - 1].Kind in [tkLParen, tkComma]) then
       pname := GetTokenStr(j)
     else if (depth = 1) and (Tokens[j].Kind = tkAssign) and
-            (pIdx < MAX_PROC_PARAMS) and (pIdx < Procs[procIdx].ParamCount) then
+            (pIdx + slotBase < MAX_PROC_PARAMS) and
+            (pIdx + slotBase < Procs[procIdx].ParamCount) then
     begin
       Inc(j);
       dStart := j;
       PyParamDefaultAt(j, pname, dIsStr, dSOff, dSLen);
+      slot := procIdx * MAX_PROC_PARAMS + pIdx + slotBase;
       { the same lone-token test PyEvalMethodDefaults uses: "was None" is also
         what a non-constant default reports with evaluation off }
       if PyDefaultWasNone and (PyDefaultSym < 0) and
-         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + pIdx] and
-         (ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + pIdx] < 0) and
+         ProcParamHasDefault[slot] and
+         (ProcParamDefaultSym[slot] < 0) and
          not ((Tokens[dStart].Kind = tkNil) and (dStart + 1 < TokCount) and
               (Tokens[dStart + 1].Kind in [tkComma, tkRParen])) then
       begin
@@ -41530,9 +41561,9 @@ begin
           CurProc := savedCurProc;
           SymSyncTypeRef(dSym);
         end;
-        ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + pIdx] := dSym;
-        ProcParamDefaultGName[procIdx * MAX_PROC_PARAMS + pIdx] := InternStr(gname);
-        ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + pIdx] := False;
+        ProcParamDefaultSym[slot] := dSym;
+        ProcParamDefaultGName[slot] := InternStr(gname);
+        ProcParamDefaultIsNone[slot] := False;
       end;
       Continue;   { PyParamDefaultAt left j past the default }
     end;
@@ -41600,7 +41631,8 @@ begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
         PyApplyDefSignature(procIdx);
-        PyDeclareDefDefaults(i, procIdx);
+        if isGenDef then PyDeclareDefDefaults(i, procIdx, 1)
+        else PyDeclareDefDefaults(i, procIdx, 0);
         if isGenDef then PyMarkGeneratorProc(procIdx);
         { Record WHERE the def stands. The shell has to exist from the top of the
           module or the name is not visible at all (that was the `len` bug), but

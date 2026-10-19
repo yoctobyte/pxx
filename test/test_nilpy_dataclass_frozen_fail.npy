@@ -1,6 +1,7 @@
-# `@dataclass(frozen=True)` must be REFUSED, not ignored: an ignored frozen=True
-# hands back a class that looks immutable and is not, which is worse than
-# today's loud failure. bug-nilpy-dataclass-keyword-arguments-do-not-parse
+# `@dataclass(frozen=True)` was refused here until ae615953df (10-09), which
+# accepted it with a warning for the TSP port: a program that runs on CPython
+# never assigns to a frozen instance. The row now checks that the warning is
+# given, since the class is not actually frozen.
 from dataclasses import dataclass
 
 

@@ -11,4 +11,8 @@ print(c.b)
 c.set(42)
 print(int(c.a))
 c.a = None
-print(int(c.a))
+print(c.a)
+try:
+    print(int(c.a))
+except TypeError:
+    print("TypeError")   # CPython: int(None) raises; it used to print 0 here

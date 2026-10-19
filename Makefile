@@ -929,6 +929,11 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.npy $(TESTTMP)/test_nilpy_gendflt26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_gendflt26_i386 | diff -u test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.expected -; \
 	else echo "=== test_nilpy_gendflt: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A GENERATOR'S NON-CONSTANT DEFAULT LANDS IN ITS OWN SLOT: the def-shell
+	# pre-declaration ignored the generator ABI's slot-0 shift, so
+	# `def g(a, b=None, c=None, d=acc)` read acc for c (regressed in 9346fa34f9).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_default_lands_in_its_own_slot.npy $(TESTTMP)/test_nilpy_genslot_hd26
+	$(TESTTMP)/test_nilpy_genslot_hd26 | diff -u test/test_nilpy_a_generator_default_lands_in_its_own_slot.expected -
 	# A GENERATOR'S VARIANT ARGUMENT CELL IS FREED when the generator is done or
 	# closed (pin v452, every argument spelled out: 64113 live after 5000 passes).
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generators_variant_argument_cell_is_freed.npy $(TESTTMP)/test_nilpy_gencell_hd26
@@ -1266,7 +1271,7 @@ test-nilpy: $(COMPILER)
 	# of .bss on the C3 (museum_landkaart). textfile.pas TF_BUFSIZE: 32 since
 	# 2026-10-13, a 64-byte record (was 128 / 160).
 	tools/expect_same.sh esp_text_buffers_are_small "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_text_buffers_are_small.pas $(TESTTMP)/test_esp_textbuf.o 2>&1 | grep -c 'bss 64B  ')" "5"
-	tools/expect_same.sh esp_reactor_is_pointer_width "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_reactor_is_pointer_width.pas $(TESTTMP)/test_esp_reactor.o 2>&1 | grep ' reactors$$' | grep -o '[0-9]*B')" "2920B"
+	tools/expect_same.sh esp_reactor_is_pointer_width "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_reactor_is_pointer_width.pas $(TESTTMP)/test_esp_reactor.o 2>&1 | grep ' reactors$$' | grep -o '[0-9][0-9]*B')" "2920B"
 	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_s3.o >/dev/null
 	@for o in c3 s3; do nm $(TESTTMP)/test_nilpy_gc_$$o.o | grep -q ' U heap_caps_get_free_size' || { echo "FAIL: nilpy gc on $$o does not read IDF's heap"; exit 1; }; done
 	# `<computed string> * n` releases the computed string, one row per spelling.
@@ -2784,6 +2789,8 @@ test-nilpy: $(COMPILER)
 	# $(COMPILER), not $(PXX_STABLE): the pin refuses this fixture outright.
 	./$(COMPILER) -Futest test/test_nilpy_a_keyword_argument_after_a_star_unpack.npy $(TESTTMP)/test_nilpy_kwafterstar
 	$(TESTTMP)/test_nilpy_kwafterstar | diff -u test/test_nilpy_a_keyword_argument_after_a_star_unpack.expected -
+	./$(COMPILER) test/test_nilpy_a_dynamic_star_call_takes_trailing_keywords.npy $(TESTTMP)/test_nilpy_dynstarkw26
+	$(TESTTMP)/test_nilpy_dynstarkw26 | diff -u test/test_nilpy_a_dynamic_star_call_takes_trailing_keywords.expected -
 	# Extended-slice assignment, `x[lo:hi:step] = src`. The .expected IS python3's
 	# output -- the load-bearing property is that the assign writes EXACTLY the
 	# positions the matching READ selects, which only an oracle can check.
@@ -3638,8 +3645,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_dcargs26 | diff -u test/test_nilpy_dataclass_decorator_args.expected -
 	./$(COMPILER) test/test_nilpy_dataclass_order.npy $(TESTTMP)/test_nilpy_dcorder26
 	$(TESTTMP)/test_nilpy_dcorder26 | diff -u test/test_nilpy_dataclass_order.expected -
-	! ./$(COMPILER) test/test_nilpy_dataclass_frozen_fail.npy $(TESTTMP)/test_nilpy_dcfrozen26 > $(TESTTMP)/test_nilpy_dcfrozen.log 2>&1
-	grep -q "frozen=True is not supported" $(TESTTMP)/test_nilpy_dcfrozen.log
+	./$(COMPILER) test/test_nilpy_dataclass_frozen_fail.npy $(TESTTMP)/test_nilpy_dcfrozen26 > $(TESTTMP)/test_nilpy_dcfrozen.log 2>&1
+	grep -q "frozen=True is accepted but not enforced" $(TESTTMP)/test_nilpy_dcfrozen.log
 	! ./$(COMPILER) test/test_nilpy_dataclass_unknown_option_fail.npy $(TESTTMP)/test_nilpy_dcunk26 > $(TESTTMP)/test_nilpy_dcunk.log 2>&1
 	grep -q "no option named 'sorted'" $(TESTTMP)/test_nilpy_dcunk.log
 	./$(COMPILER) test/test_nilpy_account_program.npy $(TESTTMP)/test_nilpy_acctprog26
@@ -8047,7 +8054,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_method_nested_def.npy $(TESTTMP)/test_nilpy_method_nested_def26
 	tools/expect_same.sh test_nilpy_method_nested_def26 "$$($(TESTTMP)/test_nilpy_method_nested_def26)" "$$(printf '%b' '23\n23')"
 	./$(COMPILER) test/test_nilpy_optional_int_none.npy $(TESTTMP)/test_nilpy_optional_int_none26
-	tools/expect_same.sh test_nilpy_optional_int_none26 "$$($(TESTTMP)/test_nilpy_optional_int_none26)" "$$(printf '%b' '7\n42\n0')"
+	tools/expect_same.sh test_nilpy_optional_int_none26 "$$($(TESTTMP)/test_nilpy_optional_int_none26)" "$$(printf '%b' '7\n42\nNone\nTypeError')"
 	./$(COMPILER) test/test_nilpy_variant_in.npy $(TESTTMP)/test_nilpy_variant_in26
 	tools/expect_same.sh test_nilpy_variant_in26 "$$($(TESTTMP)/test_nilpy_variant_in26)" "$$(printf '%b' '2 in list\n5 not in list\nk in dict')"
 	./$(COMPILER) test/test_nilpy_is_none_typed.npy $(TESTTMP)/test_nilpy_is_none_typed26

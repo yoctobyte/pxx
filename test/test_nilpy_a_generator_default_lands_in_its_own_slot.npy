@@ -1,0 +1,30 @@
+# A generator's non-constant default must land in ITS parameter's slot. The
+# generator ABI puts the instance in slot 0 and shifts every parameter up by
+# one; the def-shell pass that pre-declares non-constant defaults (9346fa34f9)
+# indexed by source position, so each default was written one slot early:
+# `def g(a, b=None, c=None, d=acc)` read acc for c. A call to a generator
+# written ABOVE its def is a separate open bug
+# (bug-nilpy-a-generator-called-above-its-def-crashes) and is not exercised
+# here. Every line is CPython's output.
+acc = [9]
+SCALE = 3
+
+
+def g(a, b=None, c=None, d=acc, e=None):
+    yield str(b) + "|" + str(c) + "|" + str(d) + "|" + str(e)
+
+
+def f(a, b=None, c=None, d=acc, e=None):
+    return str(b) + "|" + str(c) + "|" + str(d) + "|" + str(e)
+
+
+def gen(n, xs=None, k=SCALE, d=acc):
+    i = 0
+    while i < n:
+        yield (i * k, xs, len(d))
+        i += 1
+
+
+print(list(g(1)), f(1))
+print(list(g(1, 2, 3, [4], 5)))
+print(list(gen(2, "x", 10, [1, 2])))

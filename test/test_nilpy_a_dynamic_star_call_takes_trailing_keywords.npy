@@ -1,0 +1,22 @@
+# A run-time dispatched method call (two classes declare .n) with a *unpack
+# AND keyword arguments. The star's length is only known at run time, so the
+# keywords travel as a right-aligned run and pydyn_methl pads the front once
+# the list is built. Every expected value is odd: a dropped keyword reads 0.
+
+class A:
+    def n(self, a, b, c=30, x=0, y=0):
+        print("A", a, b, c, x, y)
+
+class B:
+    def n(self, a, b, c=30, x=0, y=0):
+        print("B", a, b, c, x, y)
+
+def pick(flag):
+    return A() if flag else B()
+
+xs = [1, 2]
+pick(True).n(*xs, x=9)
+pick(False).n(*xs, y=7, x=5)              # two keywords, out of order
+pick(True).n(1, *[2], x=3)                # a written positional before the star
+pick(False).n(*[1, 2, 3], y=11)           # the star fills the defaulted slot too
+pick(True).n(*[], a=1, b=3, y=5)          # an empty star
