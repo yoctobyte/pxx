@@ -1770,6 +1770,7 @@ procedure pyos_raise_oserror(err: Int64);
   text MicroPython prints, where the file calls print glibc's sentence. }
 procedure pyos_raise_errno(e: Int64; const strerr: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
+function pyos_access(const path: AnsiString; mode: Int64): Boolean;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 { os.replace(src, dst) — rename that OVERWRITES an existing destination.
   On POSIX that is rename(2) exactly, which is why this is one line and not a
@@ -12556,6 +12557,13 @@ begin
     PXXPromoToVariant(@Result, @pr);   { same shape as pyabs_v's promo arm }
     PXXPromoClear(@pr);
   end
+  else if p^.VType = 0 then
+    { VT_EMPTY is None. pyvar_to_int reads it as 0 on purpose (the
+      Optional[int] sentinel), but that is a coercion, and int() is a call the
+      program wrote: `int(read(path))` on a missing file answered 0 and the
+      program's `except TypeError` never ran (sysdash read a root-only RAPL
+      counter as 0 J; bug-nilpy-int-of-none-returns-zero). }
+    raise TypeError.Create('int() argument must be a string, a bytes-like object or a real number, not ''NoneType''')
   else
     Result := pyvar_of_int(pyvar_to_int(v));
 end;
@@ -17193,6 +17201,17 @@ begin
   e := err;
   if e < 0 then e := -e;
   pyos_raise_for(e, '[Errno ' + StrInt(e, 0) + '] ' + pyos_errno_text(e));
+end;
+
+{ os.access(path, mode). F_OK is 0, R_OK 4, W_OK 2, X_OK 1, as in CPython and
+  POSIX. A missing path or a refused mode is False, never an error. }
+function pyos_access(const path: AnsiString; mode: Int64): Boolean;
+var cs: AnsiString;
+begin
+  Result := False;
+  if Length(path) = 0 then Exit;
+  cs := path + #0;
+  Result := PyPalAccessMode(@cs[1], mode);
 end;
 
 function pyos_remove(const path: AnsiString): Integer;

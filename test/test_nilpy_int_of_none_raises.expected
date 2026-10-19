@@ -1,0 +1,6 @@
+variant TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+return TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+literal TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+dict.get TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+None 12 None None
+float TypeError

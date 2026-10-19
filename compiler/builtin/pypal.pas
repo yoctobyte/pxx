@@ -73,6 +73,7 @@ function PyPalMkdir(path: Pointer; mode: Int64): Int64;
 function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
 function PyPalStat(path, statbuf: Pointer): Int64;
 function PyPalAccessOk(path: Pointer): Boolean;
+function PyPalAccessMode(path: Pointer; mode: Int64): Boolean;
 { isatty(3) is ioctl(fd, TCGETS, &termios) and nothing else -- 0 on a terminal,
   -ENOTTY otherwise -- which is exactly what glibc does. A BOOLEAN, because the
   only question anyone asks is the one CPython's sys.stdout.isatty() answers,
@@ -812,6 +813,24 @@ begin
   else if NR_FACCESSAT >= 0 then
     r := PyPalSys(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
   PyPalAccessOk := r = 0;
+end;
+
+{ os.access(path, mode): the same two syscalls with the caller's R_OK/W_OK/X_OK
+  bits. ESP-IDF's VFS has no access() and FAT keeps no permission bits, so there
+  any mode asks only whether the path exists -- the answer FAT would give. }
+function PyPalAccessMode(path: Pointer; mode: Int64): Boolean;
+var r: Int64;
+begin
+{$ifdef PXX_ESP_IDF}
+  PyPalAccessMode := PyPalAccessOk(path);
+  Exit;
+{$endif}
+  r := -1;
+  if NR_ACCESS >= 0 then
+    r := PyPalSys(NR_ACCESS, Int64(path), mode, 0, 0, 0, 0)
+  else if NR_FACCESSAT >= 0 then
+    r := PyPalSys(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), mode, 0, 0, 0);
+  PyPalAccessMode := r = 0;
 end;
 
 function PyPalIsatty(fd: Int64): Boolean;

@@ -1,0 +1,78 @@
+# subprocess.run(capture_output=, text=, timeout=, check=), stderr=PIPE/STDOUT,
+# communicate(), and FileNotFoundError for a missing program. sysdash's
+# nvidia-smi probe is the shape: run(..., capture_output=True, text=True,
+# timeout=5) inside `except (OSError, subprocess.SubprocessError)`. Every line
+# is CPython's output.
+import subprocess
+
+r = subprocess.run(["sh", "-c", "echo out; echo err >&2; exit 3"],
+                   capture_output=True, text=True)
+print("text:", repr(r.stdout), repr(r.stderr), r.returncode, r.args)
+r = subprocess.run(["sh", "-c", "printf 'a\\r\\nb\\rc'"], capture_output=True)
+print("bytes:", repr(r.stdout), repr(r.stderr))
+r = subprocess.run(["sh", "-c", "printf 'a\\r\\nb\\rc'"], capture_output=True, text=True)
+print("newlines:", repr(r.stdout))
+r = subprocess.run(["sh", "-c", "echo one; echo two >&2"], stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT, text=True)
+print("merged:", repr(r.stdout), r.stderr)
+r = subprocess.run(["sh", "-c", "echo hidden >&2; echo shown"], stdout=subprocess.PIPE,
+                   stderr=subprocess.DEVNULL, text=True)
+print("devnull:", repr(r.stdout))
+r = subprocess.run(["true"])
+print("plain:", r.returncode, r.stdout, r.stderr)
+
+# a child that fills stderr past a pipe buffer while we also read stdout
+r = subprocess.run(["sh", "-c", "head -c 200000 /dev/zero >&2; echo done"],
+                   capture_output=True)
+print("big:", len(r.stderr), r.stdout)
+
+try:
+    subprocess.run(["sleep", "5"], timeout=0.3)
+except subprocess.TimeoutExpired as e:
+    print("timeout:", e)
+try:
+    subprocess.run(["sh", "-c", "echo partial; sleep 5"], capture_output=True,
+                   text=True, timeout=1)
+except subprocess.TimeoutExpired as e:
+    print("timeout partial:", repr(e.output), e.timeout)
+try:
+    subprocess.run(["sleep", "5"], timeout=1)
+except subprocess.SubprocessError as e:
+    print("as SubprocessError:", type(e).__name__)
+
+try:
+    subprocess.run(["sh", "-c", "exit 4"], check=True)
+except subprocess.CalledProcessError as e:
+    print("check:", e.returncode, e)
+r = subprocess.run(["sh", "-c", "exit 0"], check=True)
+print("check ok:", r.returncode)
+
+try:
+    subprocess.run(["no-such-program-pxx"], capture_output=True, text=True)
+except FileNotFoundError as e:
+    print("missing:", e)
+try:
+    subprocess.run(["/no/such/prog"])
+except OSError as e:
+    print("missing path:", type(e).__name__, e)
+
+p = subprocess.Popen(["sh", "-c", "echo po; echo pe >&2"], stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE, text=True)
+out, err = p.communicate()
+print("communicate:", repr(out), repr(err), p.returncode)
+p = subprocess.Popen(["sleep", "5"], stdout=subprocess.PIPE)
+try:
+    p.communicate(timeout=0.3)
+except subprocess.TimeoutExpired:
+    print("communicate timeout, still running:", p.poll())
+    p.kill()
+    print("killed:", p.wait())
+
+# sysdash's own probe, with a tool that answers CSV
+try:
+    res = subprocess.run(["sh", "-c", "echo '41.5, 3, 7'"], capture_output=True,
+                         text=True, timeout=5)
+    val = res.stdout.strip().split("\n")[0].split(",")
+    print("probe:", float(val[0]), float(val[1]), float(val[2]))
+except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+    print("probe failed")

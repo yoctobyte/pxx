@@ -1,0 +1,53 @@
+# glob.glob / iglob / escape / has_magic over a tree this test builds: *, ?,
+# [seq], [!seq], ranges, hidden names, a magic DIRECTORY segment (sysdash's
+# cpu[0-9]*/cpufreq/... shape), a literal path, and ** with recursive=True.
+# Results are sorted because glob's order is the directory's, as in CPython.
+# Every line is CPython's output.
+import glob
+import os
+
+root = "/tmp/pxx_test_nilpy_glob_tree"
+paths = ["cpu0/cpufreq/cur", "cpu1/cpufreq/cur", "cpu12/cpufreq/cur",
+         "cpufreq/cur", "cpuidle/x", "hwmon0/temp1_label", "hwmon0/temp1_input",
+         "hwmon0/temp2_label", "hwmon1/name", ".hidden/x", "a.txt", "b.txt",
+         "c.log", "deep/er/est/f.txt"]
+
+def rm_tree(d):
+    for n in os.listdir(d):
+        p = os.path.join(d, n)
+        if os.path.isdir(p):
+            rm_tree(p)
+        else:
+            os.remove(p)
+    os.rmdir(d)
+
+if os.path.isdir(root):
+    rm_tree(root)
+for p in paths:
+    full = os.path.join(root, p)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "w") as f:
+        f.write("1")
+
+def show(pat, recursive=False):
+    got = sorted(glob.glob(os.path.join(root, pat), recursive=recursive))
+    print(pat, [g[len(root) + 1:] for g in got])
+
+show("cpu[0-9]*/cpufreq/cur")
+show("cpu*")
+show("hwmon*/temp*_label")
+show("?.txt")
+show("[!a].*")
+show("[a-b].txt")
+show("*")
+show(".*")
+show("a.txt")
+show("nope.txt")
+show("nope/*")
+show("**", True)
+show("**/*.txt", True)
+show("deep/**/", True)
+print(sorted(glob.iglob(os.path.join(root, "*.log"))) == [os.path.join(root, "c.log")])
+print(glob.escape("a[b]*?.txt"), glob.has_magic("x*"), glob.has_magic("plain"))
+rm_tree(root)
+print(os.path.isdir(root))

@@ -1198,14 +1198,18 @@ var
     of them would otherwise need the second shape too. Getting one of them wrong
     is silent: the scan finds a different region and the def is typed from it.
 
-    Restricted to `def` and `class`. `if c: break` and `while n < 3: n += 1`
-    already work through PyParseSuite's own inline branch, and routing them
-    through a synthetic block instead would change paths that are not broken.
+    Restricted to `def`, `class`, `try`, `except` and `finally`. The try
+    parser reads its clauses as `: NEWLINE INDENT` with no inline branch, and
+    so does the `except ... as e` binder scan, so `except OSError: pass` was a
+    parse error (bug-nilpy-one-line-except-body-does-not-parse). `if c: break`
+    and `while n < 3: n += 1` already work through PyParseSuite's own inline
+    branch, and routing them through a synthetic block instead would change
+    paths that are not broken.
 
     The IndentStack is deliberately untouched: the INDENT/DEDENT pair is emitted
     and closed within one physical line, so the next line's real indentation is
     measured against exactly the stack it would have seen. }
-  lineIsDefClass: Boolean;   { this logical line opened with `def` or `class` }
+  lineIsDefClass: Boolean;   { this logical line opened with `def`, `class`, `try`, `except` or `finally` }
   lineSawColon: Boolean;     { ...and its depth-0 `:` has been passed }
   inlineSuite: Boolean;      { ...and an INDENT was synthesised, so a DEDENT is owed }
   peekP: Integer;
@@ -1420,7 +1424,8 @@ begin
         { the FIRST token of the logical line decides whether an inline suite is
           possible at all — `x = {1: 2}` must not be mistaken for a header }
         if (parenDepth = 0) and (not lineSawColon) and
-           ((k = tkFunction) or (k = tkClass)) and
+           ((k = tkFunction) or (k = tkClass) or
+            (k = tkTry) or (k = tkExcept) or (k = tkFinally)) and
            ((TokCount = streamBase) or
             (Tokens[TokCount - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
           lineIsDefClass := True;

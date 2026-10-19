@@ -163,6 +163,7 @@ function PalBackendDup2(oldFd, newFd: Integer): Integer;
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function PalBackendKill(pid, sig: Integer): Integer;
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+function PalBackendVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
 
 implementation
 
@@ -1371,6 +1372,11 @@ begin
 end;
 
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

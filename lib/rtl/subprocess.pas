@@ -9,40 +9,40 @@ unit subprocess;
 
   THE SUBSET, stated plainly:
 
-    subprocess.Popen(argv_list, stdout=, stderr=, stdin=)  -> a Popen object
-      with `.pid`, `.wait()`, `.poll()`, `.kill()`, `.terminate()`, and
-      `.stdin` / `.stdout` for a PIPE. argv is a LIST, as in Python: the
-      program is argv[0] and the rest are its arguments. No shell is involved,
-      which matches `shell=False`, CPython's default and the safe one.
-    subprocess.run(argv_list)     -> waits, and returns an object with
-      `.returncode`.
+    subprocess.Popen(argv_list, stdout=, stderr=, stdin=, text=, cwd=)  -> a
+      Popen object with `.pid`, `.args`, `.wait()`, `.poll()`, `.kill()`,
+      `.terminate()`, `.communicate(timeout=)`, and `.stdin` / `.stdout` /
+      `.stderr` for a PIPE. argv is a LIST, as in Python: the program is
+      argv[0] and the rest are its arguments. No shell is involved, which
+      matches `shell=False`, CPython's default and the safe one. A program
+      that is not found raises FileNotFoundError, as CPython's Popen does.
+    subprocess.run(argv_list, capture_output=, stdout=, stderr=, stdin=, text=,
+      timeout=, check=, cwd=) -> waits, and returns a CompletedProcess with
+      `.args`, `.returncode`, `.stdout`, `.stderr` and `.check_returncode()`.
+      timeout= kills the child (SIGKILL) and raises TimeoutExpired, as CPython
+      does; check=True raises CalledProcessError on a non-zero exit.
     subprocess.call(argv_list)    -> the return code directly.
-    subprocess.DEVNULL / PIPE / STDOUT — the constants, so a call that names
-      them compiles and means what it says.
-    stdin=PIPE / stdout=PIPE -> `p.stdin` / `p.stdout` are file objects on the
-      parent's end of each pipe (write/flush/close, readline/read/close): a
-      program driving a child line by line. They are unbuffered, so `bufsize=`
-      is accepted and changes nothing. Without `text=True` the ends are
-      binary (bytes), as in CPython. stdin=DEVNULL is honoured.
-    cwd= on Popen and run(): the child starts in that directory.
+    subprocess.DEVNULL / PIPE / STDOUT — the constants. stdout= takes PIPE or
+      DEVNULL; stderr= takes PIPE, DEVNULL or STDOUT; stdin= takes PIPE or
+      DEVNULL.
+    stdin=PIPE / stdout=PIPE / stderr=PIPE -> file objects on the parent's end
+      of each pipe (write/flush/close, readline/read/close): a program driving
+      a child line by line. They are unbuffered, so `bufsize=` is accepted and
+      changes nothing. Without `text=True` (or universal_newlines=True) they
+      are binary (bytes), as in CPython; with it, captured output has its
+      line endings translated to \n, as CPython's text mode does.
+    SubprocessError, TimeoutExpired, CalledProcessError: CPython's hierarchy.
 
-  NOT here, and refused rather than approximated: `shell=True`, `stderr=PIPE` and
-  `stderr=STDOUT`, `capture_output=`, `.communicate()`, `check=True`'s
-  CalledProcessError, timeouts, env=. A redirection this unit cannot
-  perform FAILS at the call rather than silently running the child with the
-  parent's own stdout — the difference is visible on a terminal and invisible in
-  a log, which is exactly the kind of thing a shim must not paper over.
-
-  `stdout=DEVNULL` is honoured for real: the child is exec'd with /dev/null on
-  its stdout. `stderr=DEVNULL` is ACCEPTED AND NOT HONOURED — the PAL's
-  fork/exec entry wires stdin and stdout only, so the child's stderr is
-  inherited. That is a visible, documented gap rather than a silent one (a
-  viewer's chatter reaches the terminal); redirecting it needs a stderr fd in
-  PalVforkAndExec, filed as feature-pal-spawn-stderr-redirect. }
+  NOT here, and refused rather than approximated: `shell=True`, env=, input=,
+  wait(timeout=). A redirection this unit cannot perform FAILS at the call
+  rather than silently running the child with the parent's own stdout -- the
+  difference is visible on a terminal and invisible in a log, which is exactly
+  the kind of thing a shim must not paper over. POSIX only: the ESP and wasi
+  PALs have no process spawn. }
 
 interface
 
-uses pylib, sysutils, platform;
+uses sysutils, platform, pylib;
 
 const
   PIPE    = -1;
@@ -50,19 +50,56 @@ const
   DEVNULL = -3;
 
 type
+  { CPython's hierarchy: SubprocessError(Exception), TimeoutExpired and
+    CalledProcessError under it. Declared HERE, in the unit the program
+    imports: NilPy registers the classes of that unit, and a class in a unit it
+    merely uses is not found by `except subprocess.TimeoutExpired:` (measured).
+    That is also why pylib comes LAST in the uses clause above: with sysutils
+    last, a bare `Exception` is sysutils' class and str(e) renders as an object
+    address instead of the message (mimic_sqlite3.pas, note 1). }
+  SubprocessError = class(Exception) end;
+
+  { run(timeout=) / communicate(timeout=) ran out of time. str(e) is CPython's
+    sentence: "Command '[...]' timed out after 5 seconds". }
+  TimeoutExpired = class(SubprocessError)
+  public
+    cmd: Variant;
+    timeout: Variant;
+    output: Variant;     { what was captured before the deadline, or None }
+    stdout: Variant;     { the same value as output, as in CPython }
+    stderr: Variant;
+  end;
+
+  { run(check=True) on a non-zero exit, and check_returncode().
+    str(e): "Command '[...]' returned non-zero exit status 3." }
+  CalledProcessError = class(SubprocessError)
+  public
+    returncode: Integer;
+    cmd: Variant;
+    output: Variant;
+    stdout: Variant;
+    stderr: Variant;
+  end;
+
   Popen = class
   public
     pid: Integer;
     returncode: Integer;
-    { the parent's ends of stdin=PIPE / stdout=PIPE; nil (None) otherwise }
+    args: Variant;
+    { the parent's ends of stdin=PIPE / stdout=PIPE / stderr=PIPE; nil (None)
+      otherwise }
     stdin: TPyFile;
     stdout: TPyFile;
-    { `Popen(argv, stdout=, stderr=, stdin=, text=, bufsize=, cwd=)`. argv is
-      a Python LIST. See the unit header for what is refused. }
+    stderr: TPyFile;
+    FText: Boolean;
+    { `Popen(argv, stdout=, stderr=, stdin=, text=, bufsize=, cwd=,
+      universal_newlines=)`. argv is a Python LIST. See the unit header for
+      what is refused. }
     constructor Create(const argv: Variant; const stdout: Variant = 0;
                        const stderr: Variant = 0; const stdin: Variant = 0;
                        const text: Variant = 0; const bufsize: Variant = 0;
-                       const cwd: Variant = 0);
+                       const cwd: Variant = 0;
+                       const universal_newlines: Variant = 0);
     { Wait for the child and return its exit status, as CPython's does: the
       exit code, or minus the signal that ended it. }
     function wait: Integer;
@@ -71,11 +108,33 @@ type
     { SIGKILL / SIGTERM to the child; reaping it is still wait()'s job }
     procedure kill;
     procedure terminate;
+    { Read stdout and stderr (whichever are pipes) to their end, then wait for
+      the child: (out, err), each None where that stream is not a pipe. Both
+      pipes are drained TOGETHER, so a child that fills one while we read the
+      other cannot deadlock. timeout= raises TimeoutExpired and leaves the child
+      running, as CPython does; run() is the call that kills it. }
+    function communicate(const timeout: Variant = 0): TPyList;
   end;
 
-{ `subprocess.run(argv)` — waits. The result carries `.returncode`, which is the
-  attribute callers read. }
-function run(const argv: Variant; const cwd: Variant = 0): Popen;
+  CompletedProcess = class
+  public
+    args: Variant;
+    returncode: Integer;
+    stdout: Variant;
+    stderr: Variant;
+    { CalledProcessError if returncode is not 0 }
+    procedure check_returncode;
+  end;
+
+{ `subprocess.run(argv, ...)` — waits, and hands back a CompletedProcess. cwd
+  stays the second parameter because it was the only one before; CPython takes
+  all of these by keyword. }
+function run(const argv: Variant; const cwd: Variant = 0;
+             const capture_output: Variant = 0; const stdout: Variant = 0;
+             const stderr: Variant = 0; const stdin: Variant = 0;
+             const text: Variant = 0; const timeout: Variant = 0;
+             const check: Variant = 0;
+             const universal_newlines: Variant = 0): CompletedProcess;
 { `subprocess.call(argv)` — waits and hands back the status. }
 function call(const argv: Variant): Integer;
 
@@ -83,21 +142,48 @@ implementation
 
 const
   O_CLOEXEC = 524288;   { 0o2000000; see Popen.Create }
+  { STDOUT under a second name: Pascal is case-insensitive, so inside a routine
+    with a `stdout` PARAMETER the bare constant is that parameter -- Popen.Create
+    compared stderr against the caller's stdout argument and stderr=STDOUT
+    silently merged nothing. }
+  STDOUT_REDIRECT = STDOUT;
+  POLLIN  = 1;
+  POLLERR = 8;
+  POLLHUP = 16;
+
+type
+  TPollFd = record
+    fd: LongInt;
+    events: SmallInt;
+    revents: SmallInt;
+  end;
 
 { The program to exec for argv[0], found the way execvp finds it, which is what
   CPython's Popen does: a name with a '/' is used as given, and a bare name is
   looked up in each PATH directory in order, the first executable one winning
   (an empty PATH entry is the current directory). With PATH unset the search
-  list is glibc's default, /bin:/usr/bin. When nothing matches, the bare name is
-  returned unchanged and the exec fails in the child as it did before (status
-  127). Without this, `subprocess.run(["sh", "-c", "exit 3"])` answered 127:
-  the exec below is execve, which never searches PATH. }
+  list is glibc's default, /bin:/usr/bin. Without this,
+  `subprocess.run(["sh", "-c", "exit 3"])` answered 127: the exec below is
+  execve, which never searches PATH.
+
+  Nothing found raises FileNotFoundError in the PARENT, before the fork, which
+  is where CPython raises it ("[Errno 2] No such file or directory: 'x'"). It
+  used to exec the bare name anyway and answer 127 from the child, so
+  `except OSError` around a missing tool never ran (sysdash's nvidia-smi probe
+  on a box without the tool). A path that exists but is not executable raises
+  PermissionError, as CPython does. }
 function ResolveProgram(const prog: AnsiString): AnsiString;
 var path, dir, cand: AnsiString;
     i, start: Integer;
 begin
   Result := prog;
-  if (prog = '') or (Pos('/', prog) > 0) then Exit;
+  if prog = '' then pyos_raise_ioerror(2, prog, '');
+  if Pos('/', prog) > 0 then
+  begin
+    if PalAccess(PChar(prog), 0) <> 0 then pyos_raise_ioerror(2, prog, '');   { F_OK }
+    if PalAccess(PChar(prog), 1) <> 0 then pyos_raise_ioerror(13, prog, '');  { X_OK }
+    Exit;
+  end;
   path := GetEnvironmentVariable('PATH');
   if path = '' then path := '/bin:/usr/bin';
   start := 1;
@@ -114,6 +200,7 @@ begin
         Exit;
       end;
     end;
+  pyos_raise_ioerror(2, prog, '');
 end;
 
 { argv[0] is the program; the rest are its arguments, which is Python's shape
@@ -124,36 +211,37 @@ var l: TPyList;
 begin
   l := pylist_v(argv);
   if l.count < 1 then
-  begin
-    WriteLn('subprocess: the argument list is empty');
-    Halt(1);
-  end;
+    raise IndexError.Create('subprocess: the argument list is empty');
   Result := ResolveProgram(pystr_of(l.at(0)));
 end;
 
-procedure CheckRedirect(const v: Variant; const which: AnsiString; pipeOk: Boolean);
+{ Not given is None (tag 0) or the 0 the parameter defaults to -- the facade
+  convention across lib/pcl and lib/rtl, and 0 is not a file descriptor any
+  caller means here. }
+function Given(const v: Variant): Boolean;
 begin
-  { Not given, or DEVNULL: those are the two this unit can honour. "Not given"
-    is None (tag 0) or the 0 the parameter defaults to — the façade convention
-    across lib/pcl and lib/rtl, and 0 is not a file descriptor any caller means
-    here. Anything else would need the pipe surface this shim does not have. }
-  if pyvartag(v) = 0 then Exit;
-  if pyvar_to_int(v) = 0 then Exit;
+  Result := (pyvartag(v) <> 0) and (pyvar_to_int(v) <> 0);
+end;
+
+procedure CheckRedirect(const v: Variant; const which: AnsiString; stdoutOk: Boolean);
+begin
+  if not Given(v) then Exit;
   if pyvar_to_int(v) = DEVNULL then Exit;
-  if pipeOk and (pyvar_to_int(v) = PIPE) then Exit;
-  WriteLn('subprocess: ', which, '= is not supported yet (only PIPE, DEVNULL or omitted; ',
-          'stderr takes DEVNULL or omitted)');
-  Halt(1);
+  if pyvar_to_int(v) = PIPE then Exit;
+  if stdoutOk and (pyvar_to_int(v) = STDOUT_REDIRECT) then Exit;
+  raise ValueError.Create('subprocess: ' + which + '= takes PIPE, DEVNULL' +
+                          ' (or STDOUT, for stderr) or nothing; a file object' +
+                          ' or descriptor is not supported yet');
 end;
 
 function WantsDevNull(const v: Variant): Boolean;
 begin
-  Result := (pyvartag(v) <> 0) and (pyvar_to_int(v) = DEVNULL);
+  Result := Given(v) and (pyvar_to_int(v) = DEVNULL);
 end;
 
 function WantsPipe(const v: Variant): Boolean;
 begin
-  Result := (pyvartag(v) <> 0) and (pyvar_to_int(v) = PIPE);
+  Result := Given(v) and (pyvar_to_int(v) = PIPE);
 end;
 
 { A file object on one end of a pipe. TPyFile's raw fd is unbuffered, which is
@@ -183,21 +271,30 @@ begin
   else Result := (status shr 8) and 255;
 end;
 
+function MakePipe(var r, w: Integer): Boolean;
+var pp: array[0..1] of Integer;
+begin
+  Result := PalPipe2(pp, O_CLOEXEC) >= 0;
+  if Result then begin r := pp[0]; w := pp[1]; end;
+end;
+
 constructor Popen.Create(const argv: Variant; const stdout, stderr, stdin,
-                         text, bufsize, cwd: Variant);
-var l: TPyList; i, devNull, devNullIn, res: Integer;
-    inR, inW, outR, outW: Integer;
-    pin, pout: array[0..1] of Integer;
+                         text, bufsize, cwd, universal_newlines: Variant);
+var l: TPyList; i, devNull, devNullIn, devNullErr, res: Integer;
+    inR, inW, outR, outW, errR, errW: Integer;
     prog, dir, here: AnsiString;
     argvp: array of PChar;
     holds: array of AnsiString;      { keeps each argument alive across the exec }
     envp: Pointer;
 begin
-  CheckRedirect(stdout, 'stdout', True);
-  CheckRedirect(stderr, 'stderr', False);
-  CheckRedirect(stdin, 'stdin', True);
+  CheckRedirect(stdout, 'stdout', False);
+  CheckRedirect(stderr, 'stderr', True);
+  CheckRedirect(stdin, 'stdin', False);
   Self.stdin := nil;
   Self.stdout := nil;
+  Self.stderr := nil;
+  Self.args := argv;
+  FText := pyvar_to_bool(text) or pyvar_to_bool(universal_newlines);
   prog := ArgvProgram(argv);
   l := pylist_v(argv);
   { argv[0] is the program itself, as execve wants it, then the arguments,
@@ -213,20 +310,14 @@ begin
   { The child inherits OUR environment — built in the parent, before vfork, so
     the first-use read of /proc/self/environ does not happen in the child. It
     used to be a hard-coded empty envp, which handed every subprocess `env -i`:
-    the child ran with no PATH, HOME or LANG of its own. (Finding argv[0]
-    itself is not the environment's job -- execve never searches PATH -- and
-    ArgvProgram does that lookup in the parent.) }
+    the child ran with no PATH, HOME or LANG of its own. }
   envp := EnvironmentBlock;
-  { PalVforkAndExec dup2's the fds it is given and skips the ones that are -1,
-    so /dev/null on the child's stdout is one open() away and everything else
-    is inherited. ExecutePipeline is not used here: -1 asks IT to build pipes,
-    and a spawned viewer's output would then go into a pipe nobody reads. }
-  { The child dup2's the read end of its stdin and the write end of its
-    stdout onto 0 and 1, and closes the other end of each. Pipes are made
-    O_CLOEXEC so a LATER child does not inherit this one's ends -- otherwise
-    the read side never sees EOF while that other child lives. }
-  devNull := -1; devNullIn := -1;
-  inR := -1; inW := -1; outR := -1; outW := -1;
+  { PalVforkAndExec3 dup2's the fds it is given onto 0, 1 and 2 and skips the
+    ones that are -1, which are inherited. Pipes are made O_CLOEXEC so a LATER
+    child does not inherit this one's ends -- otherwise the read side never
+    sees EOF while that other child lives. }
+  devNull := -1; devNullIn := -1; devNullErr := -1;
+  inR := -1; inW := -1; outR := -1; outW := -1; errR := -1; errW := -1;
   if WantsDevNull(stdout) then
   begin
     devNull := PalOpen(PChar('/dev/null'), 1, 0);   { O_WRONLY }
@@ -234,13 +325,19 @@ begin
   end
   else if WantsPipe(stdout) then
   begin
-    if PalPipe2(pout, O_CLOEXEC) < 0 then
-    begin
-      WriteLn('subprocess: pipe() failed');
-      Halt(1);
-    end;
-    outR := pout[0]; outW := pout[1];
+    if not MakePipe(outR, outW) then pyos_raise_oserror(24);
   end;
+  if WantsDevNull(stderr) then
+  begin
+    devNullErr := PalOpen(PChar('/dev/null'), 1, 0);
+    errW := devNullErr;
+  end
+  else if WantsPipe(stderr) then
+  begin
+    if not MakePipe(errR, errW) then pyos_raise_oserror(24);
+  end
+  else if Given(stderr) and (pyvar_to_int(stderr) = STDOUT_REDIRECT) then
+    errW := -2;                                     { fd 2 := the child's fd 1 }
   if WantsDevNull(stdin) then
   begin
     devNullIn := PalOpen(PChar('/dev/null'), 0, 0);   { O_RDONLY }
@@ -248,12 +345,7 @@ begin
   end
   else if WantsPipe(stdin) then
   begin
-    if PalPipe2(pin, O_CLOEXEC) < 0 then
-    begin
-      WriteLn('subprocess: pipe() failed');
-      Halt(1);
-    end;
-    inR := pin[0]; inW := pin[1];
+    if not MakePipe(inR, inW) then pyos_raise_oserror(24);
   end;
   returncode := -1;
   { cwd=: the PAL's spawn has no chdir in the child, so the PARENT steps into
@@ -263,27 +355,30 @@ begin
   if dir <> '' then
   begin
     here := GetCurrentDir;
-    if PalChdir(PChar(dir)) < 0 then
-    begin
-      WriteLn('subprocess: cwd= ', dir, ': no such directory');
-      Halt(1);
-    end;
+    if PalChdir(PChar(dir)) < 0 then pyos_raise_ioerror(2, dir, '');
   end;
-  pid := PalVforkAndExec(PChar(prog), @argvp[0], envp, inR, inW, outR, outW);
+  pid := PalVforkAndExec3(PChar(prog), @argvp[0], envp, inR, inW, outR, outW, errR, errW);
   if here <> '' then res := PalChdir(PChar(here));
   { the parent keeps only its own end of each pipe }
   if WantsPipe(stdout) then
   begin
     res := PalClose(outW);
-    Self.stdout := PipeFile(outR, pyvar_to_bool(text));
+    Self.stdout := PipeFile(outR, FText);
+  end;
+  if WantsPipe(stderr) then
+  begin
+    res := PalClose(errW);
+    Self.stderr := PipeFile(errR, FText);
   end;
   if WantsPipe(stdin) then
   begin
     res := PalClose(inR);
-    Self.stdin := PipeFile(inW, pyvar_to_bool(text));
+    Self.stdin := PipeFile(inW, FText);
   end;
   if devNull >= 0 then res := PalClose(devNull);
+  if devNullErr >= 0 then res := PalClose(devNullErr);
   if devNullIn >= 0 then res := PalClose(devNullIn);
+  if pid < 0 then pyos_raise_oserror(-pid);
 end;
 
 procedure Popen.kill;
@@ -326,21 +421,227 @@ begin
   if returncode = -1 then Result := pynone else Result := returncode;
 end;
 
-function run(const argv: Variant; const cwd: Variant): Popen;
-var p: Popen;
+{ CPython's text mode reads with universal newlines: \r\n and a lone \r both
+  arrive as \n. }
+function TranslateNewlines(const s: AnsiString): AnsiString;
+var i, n: Integer;
 begin
-  { the three redirections passed EXPLICITLY: an omitted defaulted Variant
-    parameter is bug-nilpy-omitted-variant-default-segfaults, and it bites in
-    plain Pascal here too }
-  p := Popen.Create(argv, 0, 0, 0, 0, 0, cwd);
-  p.wait;
-  Result := p;
+  if Pos(#13, s) = 0 then begin Result := s; Exit; end;
+  SetLength(Result, Length(s));
+  n := 0;
+  i := 1;
+  while i <= Length(s) do
+  begin
+    Inc(n);
+    if s[i] = #13 then
+    begin
+      Result[n] := #10;
+      if (i < Length(s)) and (s[i + 1] = #10) then Inc(i);
+    end
+    else
+      Result[n] := s[i];
+    Inc(i);
+  end;
+  SetLength(Result, n);
+end;
+
+{ A captured stream as Python sees it: str in text mode, bytes otherwise. }
+function Captured(const s: AnsiString; textMode: Boolean): Variant;
+begin
+  if textMode then Result := TranslateNewlines(s)
+  else Result := bytes(s);
+end;
+
+{ The deadline for a timeout= value, as PalMonotonicMillis; -1 for none. }
+function DeadlineOf(const timeout: Variant): Int64;
+begin
+  Result := -1;
+  if pyvartag(timeout) = 0 then Exit;
+  Result := PalMonotonicMillis + Round(pyvar_to_float(timeout) * 1000.0);
+end;
+
+{ Milliseconds left before the deadline, for a poll(): -1 waits forever. }
+function MillisLeft(deadline: Int64): Integer;
+var left: Int64;
+begin
+  if deadline < 0 then begin Result := -1; Exit; end;
+  left := deadline - PalMonotonicMillis;
+  if left < 0 then left := 0;
+  if left > 1000000000 then left := 1000000000;
+  Result := Integer(left);
+end;
+
+{ The captured output rides on the exception as BYTES even under text=True:
+  CPython documents that, because a deadline can cut a multi-byte character in
+  half. }
+procedure RaiseTimeout(const cmd, timeout: Variant; const outS, errS: AnsiString;
+                       outPiped, errPiped: Boolean);
+var e: TimeoutExpired;
+begin
+  e := TimeoutExpired.Create('Command ''' + pyvar_repr(cmd) + ''' timed out after ' +
+                             pystr_of(timeout) + ' seconds');
+  e.cmd := cmd;
+  e.timeout := timeout;
+  if outPiped then e.output := bytes(outS) else e.output := pynone;
+  e.stdout := e.output;
+  if errPiped then e.stderr := bytes(errS) else e.stderr := pynone;
+  raise e;
+end;
+
+{ Drain whichever of stdout/stderr are pipes until both reach EOF or the
+  deadline passes. Both are polled as ONE set, which is what keeps a child
+  that writes a lot to stderr from blocking while we wait on stdout. Answers
+  False on the deadline. }
+function Drain(p: Popen; deadline: Int64; var outS, errS: AnsiString): Boolean;
+var fds: array[0..1] of TPollFd;
+    which: array[0..1] of Integer;   { 0 = stdout, 1 = stderr }
+    buf: array[0..16383] of Byte;
+    nf, k, r, old: Integer;
+    n: Int64;
+    f: TPyFile;
+begin
+  Result := True;
+  while True do
+  begin
+    nf := 0;
+    if (p.stdout <> nil) and (p.stdout.FFd >= 0) then
+    begin
+      fds[nf].fd := p.stdout.FFd; fds[nf].events := POLLIN; fds[nf].revents := 0;
+      which[nf] := 0; Inc(nf);
+    end;
+    if (p.stderr <> nil) and (p.stderr.FFd >= 0) then
+    begin
+      fds[nf].fd := p.stderr.FFd; fds[nf].events := POLLIN; fds[nf].revents := 0;
+      which[nf] := 1; Inc(nf);
+    end;
+    if nf = 0 then Exit;
+    r := PalPollSet(@fds[0], nf, MillisLeft(deadline));
+    if r = -4 then Continue;                      { EINTR }
+    if r = 0 then begin Result := False; Exit; end;
+    if r < 0 then pyos_raise_oserror(-r);
+    for k := 0 to nf - 1 do
+      if (fds[k].revents and (POLLIN or POLLHUP or POLLERR)) <> 0 then
+      begin
+        if which[k] = 0 then f := p.stdout else f := p.stderr;
+        n := PalRead(fds[k].fd, @buf[0], SizeOf(buf));
+        if n = -4 then Continue;                  { EINTR }
+        if n <= 0 then
+          f.close                                 { EOF: FFd goes to -1 }
+        else if which[k] = 0 then
+        begin
+          old := Length(outS);
+          SetLength(outS, old + Integer(n));
+          Move(buf[0], outS[old + 1], n);
+        end
+        else
+        begin
+          old := Length(errS);
+          SetLength(errS, old + Integer(n));
+          Move(buf[0], errS[old + 1], n);
+        end;
+      end;
+  end;
+end;
+
+{ Reap the child by the deadline: WNOHANG polls 10 ms apart, since there is
+  no wait-with-timeout syscall. Without a deadline, a plain blocking wait. }
+function ReapBy(p: Popen; deadline: Int64): Boolean;
+var r: Integer;
+begin
+  Result := True;
+  if deadline < 0 then begin p.wait; Exit; end;
+  while pyvartag(p.poll) = 0 do
+  begin
+    if MillisLeft(deadline) <= 0 then begin Result := False; Exit; end;
+    r := PalNanosleep(0, 10000000);
+  end;
+end;
+
+function Popen.communicate(const timeout: Variant): TPyList;
+var outS, errS: AnsiString; deadline: Int64; l: TPyList; v: Variant; res: Integer;
+begin
+  outS := ''; errS := '';
+  deadline := DeadlineOf(timeout);
+  if stdin <> nil then stdin.close;   { no input=: the child sees EOF at once }
+  if not Drain(Self, deadline, outS, errS) then
+    RaiseTimeout(args, timeout, outS, errS, stdout <> nil, stderr <> nil);
+  if not ReapBy(Self, deadline) then
+    RaiseTimeout(args, timeout, outS, errS, stdout <> nil, stderr <> nil);
+  l := TPyList.Create;
+  if stdout <> nil then v := Captured(outS, FText) else v := pynone;
+  l.append(v);
+  if stderr <> nil then v := Captured(errS, FText) else v := pynone;
+  l.append(v);
+  Result := pylist_mark_tuple(l);
+end;
+
+procedure RaiseCalled(code: Integer; const cmd, outV, errV: Variant);
+var e: CalledProcessError;
+begin
+  if code < 0 then
+    e := CalledProcessError.Create('Command ''' + pyvar_repr(cmd) + ''' died with signal ' +
+                                   IntToStr(-code) + '.')
+  else
+    e := CalledProcessError.Create('Command ''' + pyvar_repr(cmd) +
+                                   ''' returned non-zero exit status ' + IntToStr(code) + '.');
+  e.returncode := code;
+  e.cmd := cmd;
+  e.output := outV;
+  e.stdout := outV;
+  e.stderr := errV;
+  raise e;
+end;
+
+procedure CompletedProcess.check_returncode;
+begin
+  if returncode <> 0 then RaiseCalled(returncode, args, stdout, stderr);
+end;
+
+function run(const argv: Variant; const cwd: Variant;
+             const capture_output: Variant; const stdout: Variant;
+             const stderr: Variant; const stdin: Variant;
+             const text: Variant; const timeout: Variant;
+             const check: Variant;
+             const universal_newlines: Variant): CompletedProcess;
+var p: Popen; o, e: Variant; cp: CompletedProcess;
+    outS, errS: AnsiString; deadline: Int64; res: Integer;
+begin
+  o := stdout; e := stderr;
+  if pyvar_to_bool(capture_output) then
+  begin
+    if Given(stdout) or Given(stderr) then
+      raise ValueError.Create('stdout and stderr arguments may not be used with capture_output.');
+    o := PIPE; e := PIPE;
+  end;
+  { every parameter passed EXPLICITLY: an omitted defaulted Variant parameter
+    is bug-nilpy-omitted-variant-default-segfaults, and it bites in plain
+    Pascal here too }
+  p := Popen.Create(argv, o, e, stdin, text, 0, cwd, universal_newlines);
+  deadline := DeadlineOf(timeout);
+  outS := ''; errS := '';
+  if p.stdin <> nil then p.stdin.close;
+  if (not Drain(p, deadline, outS, errS)) or (not ReapBy(p, deadline)) then
+  begin
+    { CPython's run(): kill the child, reap it, then raise }
+    p.kill;
+    p.wait;
+    if p.stdout <> nil then p.stdout.close;
+    if p.stderr <> nil then p.stderr.close;
+    RaiseTimeout(argv, timeout, outS, errS, p.stdout <> nil, p.stderr <> nil);
+  end;
+  cp := CompletedProcess.Create;
+  cp.args := argv;
+  cp.returncode := p.returncode;
+  if p.stdout <> nil then cp.stdout := Captured(outS, p.FText) else cp.stdout := pynone;
+  if p.stderr <> nil then cp.stderr := Captured(errS, p.FText) else cp.stderr := pynone;
+  if pyvar_to_bool(check) then cp.check_returncode;
+  Result := cp;
 end;
 
 function call(const argv: Variant): Integer;
 var p: Popen;
 begin
-  p := Popen.Create(argv, 0, 0, 0, 0, 0, 0);
+  p := Popen.Create(argv, 0, 0, 0, 0, 0, 0, 0);
   Result := p.wait;
 end;
 

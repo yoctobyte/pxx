@@ -1,0 +1,17 @@
+cpu[0-9]*/cpufreq/cur ['cpu0/cpufreq/cur', 'cpu1/cpufreq/cur', 'cpu12/cpufreq/cur']
+cpu* ['cpu0', 'cpu1', 'cpu12', 'cpufreq', 'cpuidle']
+hwmon*/temp*_label ['hwmon0/temp1_label', 'hwmon0/temp2_label']
+?.txt ['a.txt', 'b.txt']
+[!a].* ['b.txt', 'c.log']
+[a-b].txt ['a.txt', 'b.txt']
+* ['a.txt', 'b.txt', 'c.log', 'cpu0', 'cpu1', 'cpu12', 'cpufreq', 'cpuidle', 'deep', 'hwmon0', 'hwmon1']
+.* ['.hidden']
+a.txt ['a.txt']
+nope.txt []
+nope/* []
+** ['', 'a.txt', 'b.txt', 'c.log', 'cpu0', 'cpu0/cpufreq', 'cpu0/cpufreq/cur', 'cpu1', 'cpu1/cpufreq', 'cpu1/cpufreq/cur', 'cpu12', 'cpu12/cpufreq', 'cpu12/cpufreq/cur', 'cpufreq', 'cpufreq/cur', 'cpuidle', 'cpuidle/x', 'deep', 'deep/er', 'deep/er/est', 'deep/er/est/f.txt', 'hwmon0', 'hwmon0/temp1_input', 'hwmon0/temp1_label', 'hwmon0/temp2_label', 'hwmon1', 'hwmon1/name']
+**/*.txt ['a.txt', 'b.txt', 'deep/er/est/f.txt']
+deep/**/ ['deep/', 'deep/er/', 'deep/er/est/']
+True
+a[[]b][*][?].txt True False
+False

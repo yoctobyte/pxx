@@ -360,6 +360,10 @@ function PalDup2(oldFd, newFd: Integer): Integer;
 function PalWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function PalKill(pid, sig: Integer): Integer;
 function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+{ PalVforkAndExec with the child's stderr too: stderrWriteFd goes onto fd 2
+  (its read end, if not -1, is closed in the child); -2 means stderr=STDOUT,
+  fd 2 a copy of the child's fd 1; -1 inherits. Unsupported off POSIX. }
+function PalVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
 
 implementation
 
@@ -1005,6 +1009,12 @@ end;
 function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
 begin
   Result := PalBackendVforkAndExec(path, argv, envp, stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd);
+end;
+
+function PalVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
+begin
+  Result := PalBackendVforkAndExec3(path, argv, envp, stdinReadFd, stdinWriteFd,
+                                    stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd);
 end;
 
 end.

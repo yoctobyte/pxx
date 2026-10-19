@@ -140,6 +140,7 @@ function PalBackendDup2(oldFd, newFd: Integer): Integer;
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function PalBackendKill(pid, sig: Integer): Integer;
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+function PalBackendVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
 
 implementation
 
@@ -2124,7 +2125,7 @@ begin
   Result := Integer(__pxxrawsyscall(SYS_kill, pid, sig, 0, 0, 0, 0));
 end;
 
-function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+function PalBackendVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd, stderrReadFd, stderrWriteFd: Integer): Integer;
 var
   pid: Integer;
   res: Integer;
@@ -2163,6 +2164,28 @@ begin
       res := Integer(__pxxrawsyscall(SYS_close, stdoutWriteFd, 0, 0, 0, 0, 0));
     end;
 
+    { stderr: a pipe's write end onto fd 2, or -2 for stderr=STDOUT, which
+      dup's fd 1 as it now stands (so it follows a stdout pipe above). }
+    if stderrWriteFd = -2 then
+    begin
+{$ifdef PAL_GENERIC_SYSCALLS}
+      res := Integer(__pxxrawsyscall(SYS_dup3, 1, 2, 0, 0, 0, 0));
+{$else}
+      res := Integer(__pxxrawsyscall(SYS_dup2, 1, 2, 0, 0, 0, 0));
+{$endif}
+    end
+    else if stderrWriteFd <> -1 then
+    begin
+{$ifdef PAL_GENERIC_SYSCALLS}
+      res := Integer(__pxxrawsyscall(SYS_dup3, stderrWriteFd, 2, 0, 0, 0, 0));
+{$else}
+      res := Integer(__pxxrawsyscall(SYS_dup2, stderrWriteFd, 2, 0, 0, 0, 0));
+{$endif}
+      if stderrReadFd <> -1 then
+        res := Integer(__pxxrawsyscall(SYS_close, stderrReadFd, 0, 0, 0, 0, 0));
+      res := Integer(__pxxrawsyscall(SYS_close, stderrWriteFd, 0, 0, 0, 0, 0));
+    end;
+
     res := Integer(__pxxrawsyscall(SYS_execve, Int64(path), Int64(argv), Int64(envp), 0, 0, 0));
 
     { If execve fails, exit. Through the per-arch SYS_exit constant, never a
@@ -2178,6 +2201,12 @@ begin
   end;
 
   Result := pid;
+end;
+
+function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PalBackendVforkAndExec3(path, argv, envp, stdinReadFd, stdinWriteFd,
+                                    stdoutReadFd, stdoutWriteFd, -1, -1);
 end;
 
 end.

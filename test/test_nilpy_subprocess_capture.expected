@@ -1,0 +1,18 @@
+text: 'out\n' 'err\n' 3 ['sh', '-c', 'echo out; echo err >&2; exit 3']
+bytes: b'a\r\nb\rc' b''
+newlines: 'a\nb\nc'
+merged: 'one\ntwo\n' None
+devnull: 'shown\n'
+plain: 0 None None
+big: 200000 b'done\n'
+timeout: Command '['sleep', '5']' timed out after 0.3 seconds
+timeout partial: b'partial\n' 1
+as SubprocessError: TimeoutExpired
+check: 4 Command '['sh', '-c', 'exit 4']' returned non-zero exit status 4.
+check ok: 0
+missing: [Errno 2] No such file or directory: 'no-such-program-pxx'
+missing path: FileNotFoundError [Errno 2] No such file or directory: '/no/such/prog'
+communicate: 'po\n' 'pe\n' 0
+communicate timeout, still running: None
+killed: -9
+probe: 41.5 3.0 7.0

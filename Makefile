@@ -5741,6 +5741,23 @@ test-nilpy: $(COMPILER)
 	# before, `run(["sh", ...])` answered 127. The .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_subprocess_finds_its_program_on_path.npy $(TESTTMP)/test_nilpy_subprocpath26
 	$(TESTTMP)/test_nilpy_subprocpath26 | diff -u test/test_nilpy_subprocess_finds_its_program_on_path.expected -
+	# subprocess.run(capture_output=, text=, timeout=, check=), stderr=PIPE /
+	# STDOUT / DEVNULL, communicate(timeout=), FileNotFoundError for a missing
+	# program (sysdash's nvidia-smi probe). The .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_subprocess_capture.npy $(TESTTMP)/test_nilpy_subproccapture26
+	$(TESTTMP)/test_nilpy_subproccapture26 | diff -u test/test_nilpy_subprocess_capture.expected -
+	# int(None) raises TypeError by every route; it answered 0.
+	./$(COMPILER) test/test_nilpy_int_of_none_raises.npy $(TESTTMP)/test_nilpy_intofnone26
+	$(TESTTMP)/test_nilpy_intofnone26 | diff -u test/test_nilpy_int_of_none_raises.expected -
+	# one-line try / except / finally bodies (`except OSError: pass`)
+	./$(COMPILER) test/test_nilpy_one_line_except_body.npy $(TESTTMP)/test_nilpy_onelineexcept26
+	$(TESTTMP)/test_nilpy_onelineexcept26 | diff -u test/test_nilpy_one_line_except_body.expected -
+	# os.pathsep, os.access + F_OK/R_OK/W_OK/X_OK, socket.gethostname()
+	./$(COMPILER) test/test_nilpy_os_access_pathsep_gethostname.npy $(TESTTMP)/test_nilpy_osaccesshost26
+	$(TESTTMP)/test_nilpy_osaccesshost26 | diff -u test/test_nilpy_os_access_pathsep_gethostname.expected -
+	# glob (lib/rtl/mimic_glob.py) over a tree the test builds and removes
+	./$(COMPILER) test/test_nilpy_glob_module.npy $(TESTTMP)/test_nilpy_globmod26
+	$(TESTTMP)/test_nilpy_globmod26 | diff -u test/test_nilpy_glob_module.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -

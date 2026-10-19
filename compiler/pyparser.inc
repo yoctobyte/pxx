@@ -15308,7 +15308,12 @@ begin
                 with `undefined variable (os)`, a message about the MODULE,
                 which is what makes this family expensive to diagnose.
                 Measured in tuxspaceprogram (surface.py). }
-              (nm = 'pardir') or (nm = 'curdir') or (nm = 'extsep');
+              (nm = 'pardir') or (nm = 'curdir') or (nm = 'extsep') or
+              { os.pathsep and os.access's mode bits: PATH searches write
+                `os.environ["PATH"].split(os.pathsep)` and then
+                `os.access(p, os.X_OK)`. Measured in sysdash (backend.py). }
+              (nm = 'pathsep') or (nm = 'f_ok') or (nm = 'r_ok') or
+              (nm = 'w_ok') or (nm = 'x_ok');
 end;
 
 function PyIsSysStreamAhead: Boolean;
@@ -15409,15 +15414,20 @@ begin
     LastExprTk := IntToTypeKind(ASTTk[Result]);
     Exit;
   end;
-  if (base = 'os') and ((nm = 'sep') or (nm = 'linesep')) then
+  if (base = 'os') and ((nm = 'sep') or (nm = 'linesep') or (nm = 'pathsep')) then
   begin
-    { os.sep / os.linesep. Constants, like sys.platform above and with the same
-      caveat: these follow the HOST today and must follow the TARGET once pxx
-      emits for Windows, where they are '\\' and #13#10. }
+    { os.sep / os.linesep / os.pathsep. Constants, like sys.platform above and
+      with the same caveat: these follow the HOST today and must follow the
+      TARGET once pxx emits for Windows, where they are '\\', #13#10 and ';'. }
     Result := AllocNode(AN_STR_LIT);
     if nm = 'sep' then
     begin
       ASTSOffset[Result] := StoredName('/');
+      ASTSLen[Result] := 1;
+    end
+    else if nm = 'pathsep' then
+    begin
+      ASTSOffset[Result] := StoredName(':');
       ASTSLen[Result] := 1;
     end
     else
@@ -15464,6 +15474,21 @@ begin
       recorded on all three so a Windows target cannot fix one and miss two. }
     Result := PyMakeNone;
     LastExprTk := IntToTypeKind(ASTTk[Result]);
+    Exit;
+  end;
+  if (base = 'os') and
+     ((nm = 'f_ok') or (nm = 'r_ok') or (nm = 'w_ok') or (nm = 'x_ok')) then
+  begin
+    { os.access's mode bits, the POSIX values (unistd.h), which CPython uses on
+      every platform. }
+    Result := AllocNode(AN_INT_LIT);
+    if nm = 'r_ok' then ASTIVal[Result] := 4
+    else if nm = 'w_ok' then ASTIVal[Result] := 2
+    else if nm = 'x_ok' then ASTIVal[Result] := 1
+    else ASTIVal[Result] := 0;
+    ASTTk[Result] := Ord(tyInteger);
+    ASTRight[Result] := -1;
+    LastExprTk := tyInteger;
     Exit;
   end;
   if (base = 'os') and
@@ -15658,6 +15683,7 @@ begin
   else if dotted = 'os.environ.get' then Result := 'pyos_environ_get'
   else if dotted = 'os.getenv' then Result := 'pyos_getenv'
   else if dotted = 'os.remove' then Result := 'pyos_remove'
+  else if dotted = 'os.access' then Result := 'pyos_access'
   else if dotted = 'os.startfile' then Result := 'pyos_startfile'
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'

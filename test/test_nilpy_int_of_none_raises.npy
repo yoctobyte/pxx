@@ -1,0 +1,29 @@
+# int(None) raises TypeError, as in CPython, by every route a None reaches it:
+# a variant parameter, a function's None return, the literal, a missing
+# dict.get. It answered 0, so sysdash's `int(read(path))` read a root-only RAPL
+# counter as 0 J and its `except TypeError` never ran. float(None) already
+# raised. Every line is CPython's output.
+def ident(x):
+    return x
+
+def nothing():
+    return None
+
+def read_int(s):
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+v = ident(None)
+for label, thunk in (("variant", lambda: int(v)), ("return", lambda: int(nothing())),
+                     ("literal", lambda: int(None)), ("dict.get", lambda: int({}.get("k")))):
+    try:
+        print(label, thunk())
+    except TypeError as e:
+        print(label, "TypeError:", e)
+print(read_int(None), read_int("12"), read_int(""), read_int("x"))
+try:
+    float(None)
+except TypeError:
+    print("float TypeError")

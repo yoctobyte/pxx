@@ -123,6 +123,11 @@ type
 function getaddrinfo(const host: AnsiString; port: Integer; family: Integer = 0;
   type_: Integer = 0; proto: Integer = 0; flags: Integer = 0): TPyList;
 
+{ gethostname() -> the kernel's node name, uname(2)'s second field, as CPython's
+  reads it. An ESP has no uname, and MicroPython's socket has no gethostname,
+  so it raises OSError there rather than inventing a name. }
+function gethostname: AnsiString;
+
 { Raise what CPython raises for the -errno `rc` (below); exported for the ssl
   unit, whose socket errors must read exactly as a plain socket's do. }
 procedure SocketFail(const what: AnsiString; rc: Int64);
@@ -195,6 +200,23 @@ begin
     4: raise InterruptedError.Create(msg);
   end;
   raise OSError.Create(msg);
+end;
+
+function gethostname: AnsiString;
+var
+  buf: array[0..6 * 65 - 1] of Byte;   { struct utsname: six 65-byte fields }
+  i: Integer;
+begin
+  FillChar(buf[0], SizeOf(buf), 0);
+  if PalUname(@buf[0]) < 0 then
+    raise OSError.Create('gethostname: no uname on this target');
+  Result := '';
+  i := 65;                             { nodename is the second field }
+  while (i < 130) and (buf[i] <> 0) do
+  begin
+    Result := Result + Chr(buf[i]);
+    Inc(i);
+  end;
 end;
 
 procedure SocketFail(const what: AnsiString; rc: Int64);

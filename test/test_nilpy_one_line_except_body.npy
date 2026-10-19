@@ -1,0 +1,29 @@
+# A one-line body on try / except / finally: `except OSError: pass`. It was a
+# parse error ("expected 'newline' before 'pass'"), while a one-line if, def or
+# class body already worked. Every line is CPython's output.
+def a(p):
+    try: return int(p)
+    except ValueError: return -1
+
+def b(p):
+    try:
+        return int(p)
+    except (TypeError, ValueError) as e: return -2
+    finally: print("fin", p)
+
+def c():
+    try:
+        x = {1: 2}
+        return x[3]
+    except KeyError: pass
+    return 9
+
+print(a("4"), a("x"), b("5"), b(None), c())
+try: print("ok")
+except OSError: pass
+try:
+    open("/nonexistent/q")
+except OSError as e: print("caught", type(e).__name__)
+d = {1: 2}
+try: print(d[1])
+except KeyError: print("no")

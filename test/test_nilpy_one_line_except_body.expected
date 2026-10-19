@@ -1,0 +1,6 @@
+fin 5
+fin None
+4 -1 5 -2 9
+ok
+caught FileNotFoundError
+2

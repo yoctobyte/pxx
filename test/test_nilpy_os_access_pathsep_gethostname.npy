@@ -1,0 +1,15 @@
+# os.pathsep, os.access with F_OK/R_OK/W_OK/X_OK, and socket.gethostname():
+# the PATH search `any(os.access(os.path.join(d, prog), os.X_OK) for d in
+# os.environ["PATH"].split(os.pathsep))` and a host label, both from sysdash.
+# All three were `undefined variable`. Every line is CPython's output.
+import os
+import socket
+
+print(repr(os.pathsep), os.F_OK, os.R_OK, os.W_OK, os.X_OK)
+print(os.access("/bin/sh", os.X_OK), os.access("/bin/sh", os.F_OK),
+      os.access("/etc/passwd", os.R_OK), os.access("/etc/passwd", os.X_OK),
+      os.access("/no/such/path", os.F_OK), os.access("/tmp", os.W_OK | os.X_OK))
+print(any(os.access(os.path.join(d, "sh"), os.X_OK)
+          for d in os.environ.get("PATH", "").split(os.pathsep)))
+with open("/proc/sys/kernel/hostname") as f:
+    print(socket.gethostname() == f.read().strip(), len(socket.gethostname()) > 0)
