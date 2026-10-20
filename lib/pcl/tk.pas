@@ -21,6 +21,10 @@ function TkInit: Boolean;
 { Why the last TkInit failed: Tcl's own message ("no display name and no
   $DISPLAY environment variable"), or '' after a success. }
 function TkInitError: AnsiString;
+{ `tk.Tk(className="vloot")`: the application class (WM_CLASS, the X
+  resource class), given before TkInit. Tk derives it from Tcl's argv0, so
+  that is what is set, exactly as CPython's _tkinter does. }
+procedure TkSetClassName(const cls: AnsiString);
 
 { Run a Tcl/Tk command string; return the interpreter's result string. }
 function TkEval(const cmd: AnsiString): AnsiString;
@@ -130,16 +134,31 @@ var
   gInterp: PTclInterp = nil;
   gInitError: AnsiString = '';
 
+var gClassName: AnsiString;
+
+procedure TkSetClassName(const cls: AnsiString);
+begin
+  gClassName := cls;
+end;
+
 function TkInit: Boolean;
+var a0: AnsiString;
 begin
   { Tk_Init needs the interpreter to know where the tk script library lives;
     Tcl_FindExecutable primes the internal path search. A non-nil dummy is fine. }
   Tcl_FindExecutable('pxx-tk');
   gInterp := Tcl_CreateInterp;
   gInitError := '';
-  Result := (gInterp <> nil)
-        and (Tcl_Init(gInterp) = TCL_OK)
-        and (Tk_Init(gInterp) = TCL_OK);
+  Result := (gInterp <> nil) and (Tcl_Init(gInterp) = TCL_OK);
+  if Result and (gClassName <> '') then
+  begin
+    { the first letter lower-cased, as CPython does: Tk capitalises it back
+      for the class and uses the rest as the application name }
+    a0 := gClassName;
+    if (a0[1] >= 'A') and (a0[1] <= 'Z') then a0[1] := Chr(Ord(a0[1]) + 32);
+    Tcl_Eval(gInterp, PAnsiChar('set argv0 {' + a0 + '}'));
+  end;
+  Result := Result and (Tk_Init(gInterp) = TCL_OK);
   if Result then Exit;
   { Tcl's result holds the reason. The interpreter is dropped, so a later
     TkEval answers '' instead of running widget commands Tk never defined. }

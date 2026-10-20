@@ -1,0 +1,30 @@
+# A parameter with a float default that a caller hands None through a variable
+# (a metrics table where the auto-scaled rows have no fixed top). The site
+# cannot be typed, so the default used to anchor a float claim and the None
+# raised "expected a number, got NoneType". The class tests `top is None`, which
+# is the author saying it may be None: no claim. The .expected is python3's.
+
+
+class Graph:
+    def __init__(self, height, top=100.0, label=None):
+        self.height = height
+        self.top = top
+        self.label = label
+
+    def scale(self, peak):
+        top = self.top
+        if top is None:
+            top = peak * 1.25
+        return "%d:%.1f" % (self.height, top)
+
+
+METRICS = [("cpu", 100.0), ("net", None), ("disk", None)]
+
+
+def build(height, top):
+    return Graph(height, top)
+
+
+for name, top in METRICS:
+    print(name, build(60, top).scale(8.0))
+print(Graph(10).scale(1.0))

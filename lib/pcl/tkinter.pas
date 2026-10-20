@@ -111,14 +111,18 @@ type
                    const padx: Variant = 0; const pady: Variant = 0;
                    ipadx: Integer = -1; ipady: Integer = -1);
     procedure grid_columnconfigure(index: Integer = 0; weight: Integer = -1;
-                                   minsize: Integer = -1; pad: Integer = -1);
+                                   minsize: Integer = -1; pad: Integer = -1;
+                                   const uniform: AnsiString = '');
     procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1;
-                                minsize: Integer = -1; pad: Integer = -1);
+                                minsize: Integer = -1; pad: Integer = -1;
+                                const uniform: AnsiString = '');
     { tkinter's other spelling of the same two calls }
     procedure columnconfigure(index: Integer = 0; weight: Integer = -1;
-                              minsize: Integer = -1; pad: Integer = -1);
+                              minsize: Integer = -1; pad: Integer = -1;
+                              const uniform: AnsiString = '');
     procedure rowconfigure(index: Integer = 0; weight: Integer = -1;
-                           minsize: Integer = -1; pad: Integer = -1);
+                           minsize: Integer = -1; pad: Integer = -1;
+                           const uniform: AnsiString = '');
 
     { common configuration. Two spellings on purpose: Python writes
       `w.configure(state="disabled")`, i.e. OPTIONS BY NAME, and NilPy binds
@@ -192,6 +196,17 @@ type
       destroyed -- how a modal dialog returns its answer. No argument waits for
       this widget itself. }
     procedure wait_window(window: Widget = nil);
+    { `side.pack_propagate(False)`: keep the size the widget was GIVEN rather
+      than shrinking to its children -- how a fixed-width side bar is made }
+    procedure pack_propagate(flag: Boolean);
+    procedure grid_propagate(flag: Boolean);
+    { take the widget out of its manager without destroying it; pack() again
+      brings it back }
+    procedure pack_forget;
+    procedure grid_forget;
+    { `root.iconphoto(True, img)`: the window icon; True applies it to every
+      toplevel created later as well }
+    procedure iconphoto(asDefault: Boolean; const image: Variant);
     { a synthetic event, `w.event_generate("<<Refresh>>")` or a click with
       x=/y= -- how one part of an application pokes another through Tk }
     procedure event_generate(const sequence: AnsiString; x: Integer = -1;
@@ -205,6 +220,11 @@ type
     procedure protocol(const name: AnsiString; const callback: Variant);
     function winfo_width: Integer;
     function winfo_height: Integer;
+    { the widget's Tk class (`Frame`, `Label`; the root's is the className=
+      it was created with) and whether it is on screen now -- 1 or 0, as
+      CPython's }
+    function winfo_class: AnsiString;
+    function winfo_ismapped: Integer;
     { Python hands back a LIST OF WIDGETS, and applications call methods on the
       elements (`for w in frame.winfo_children(): w.destroy()`). Returning the
       raw Tcl string made those elements strings. }
@@ -273,7 +293,13 @@ type
                        { a ttk style name, `ttk.Frame(style="Card.TFrame")` }
                        const style: AnsiString = '';
                        const bg: AnsiString = '';
-                       const cursor: AnsiString = '');
+                       const cursor: AnsiString = '';
+                       { the focus-ring border classic frames draw, used
+                         as a 1-pixel card outline (Vloot's cards) }
+                       const highlightbackground: AnsiString = '';
+                       const highlightcolor: AnsiString = '';
+                       borderwidth: Integer = -1;
+                       const relief: AnsiString = '');
   end;
 
   { ttk's PanedWindow — songformatter's editor is a horizontal split. Written
@@ -399,7 +425,10 @@ type
   PhotoImage = class
   public
     name: AnsiString;         { the Tcl image name }
-    constructor Create(const data: Variant; const file: AnsiString = '');
+    { `PhotoImage(width=16, height=16)`: a blank image of that size, which an
+      application then paints or hands to iconphoto }
+    constructor Create(const data: Variant = 0; const file: AnsiString = '';
+                       width: Integer = -1; height: Integer = -1);
     function width: Integer;
     function height: Integer;
   end;
@@ -563,7 +592,14 @@ type
                        { a ttk style name, `ttk.Label(style="Header.TLabel")` }
                        const style: AnsiString = '';
                        const bg: AnsiString = ''; const fg: AnsiString = '';
-                       const cursor: AnsiString = '');
+                       const cursor: AnsiString = '';
+                       { classic-label layout: multi-line alignment, inner
+                         padding, the width at which text wraps (pixels) }
+                       const justify: AnsiString = '';
+                       padx: Integer = -1; pady: Integer = -1;
+                       wraplength: Integer = -1; width: Integer = -1;
+                       borderwidth: Integer = -1;
+                       const relief: AnsiString = '');
     procedure set_text(const value: AnsiString);
   end;
 
@@ -571,7 +607,10 @@ type
   public
     { `textvariable=` takes the VARIABLE OBJECT, like Checkbutton's `variable=` }
     constructor Create(master: Widget; const textvariable: Variant = 0;
-                       width: Integer = -1);
+                       width: Integer = -1; const font: Variant = 0;
+                       const background: AnsiString = '';
+                       const foreground: AnsiString = '';
+                       const bg: AnsiString = ''; const fg: AnsiString = '');
     function get: AnsiString;
     procedure insert(index: Integer; const value: AnsiString);
   end;
@@ -669,7 +708,9 @@ type
     the class exists so the application's own spelling compiles. }
   Tk = class(Widget)
   public
-    constructor Create;
+    { className= names the application class (WM_CLASS), as CPython's;
+      only the first Tk() can set it, since Tk starts once }
+    constructor Create(const className: AnsiString = '');
   end;
 
   { `ttk.Style()`: the theme and the named styles ttk widgets take with
@@ -1090,28 +1131,32 @@ begin
          TkiOptInt('ipadx', ipadx) + TkiOptInt('ipady', ipady));
 end;
 
-procedure Widget.grid_columnconfigure(index, weight, minsize, pad: Integer);
+procedure Widget.grid_columnconfigure(index, weight, minsize, pad: Integer;
+                                      const uniform: AnsiString);
 begin
   TkEval('grid columnconfigure ' + path + ' ' + TkiIntStr(index) +
          TkiOptInt('weight', weight) + TkiOptInt('minsize', minsize) +
-         TkiOptInt('pad', pad));
+         TkiOptInt('pad', pad) + TkiOptStr('uniform', uniform));
 end;
 
-procedure Widget.grid_rowconfigure(index, weight, minsize, pad: Integer);
+procedure Widget.grid_rowconfigure(index, weight, minsize, pad: Integer;
+                                   const uniform: AnsiString);
 begin
   TkEval('grid rowconfigure ' + path + ' ' + TkiIntStr(index) +
          TkiOptInt('weight', weight) + TkiOptInt('minsize', minsize) +
-         TkiOptInt('pad', pad));
+         TkiOptInt('pad', pad) + TkiOptStr('uniform', uniform));
 end;
 
-procedure Widget.columnconfigure(index, weight, minsize, pad: Integer);
+procedure Widget.columnconfigure(index, weight, minsize, pad: Integer;
+                                 const uniform: AnsiString);
 begin
-  grid_columnconfigure(index, weight, minsize, pad);
+  grid_columnconfigure(index, weight, minsize, pad, uniform);
 end;
 
-procedure Widget.rowconfigure(index, weight, minsize, pad: Integer);
+procedure Widget.rowconfigure(index, weight, minsize, pad: Integer;
+                              const uniform: AnsiString);
 begin
-  grid_rowconfigure(index, weight, minsize, pad);
+  grid_rowconfigure(index, weight, minsize, pad, uniform);
 end;
 
 procedure Widget.config(const state: AnsiString; const scrollregion: Variant;
@@ -1552,6 +1597,16 @@ begin
   TkEval('bind ' + path + ' ' + sequence + ' {' + script + '}');
 end;
 
+function Widget.winfo_class: AnsiString;
+begin
+  winfo_class := TkEval('winfo class ' + path);
+end;
+
+function Widget.winfo_ismapped: Integer;
+begin
+  winfo_ismapped := TkiStrInt(TkEval('winfo ismapped ' + path));
+end;
+
 function Widget.winfo_width: Integer;
 begin
   winfo_width := TkiStrInt(TkEval('winfo width ' + path));
@@ -1668,7 +1723,9 @@ end;
 constructor Frame.Create(master: Widget; highlightthickness: Integer;
                         const background: AnsiString; width: Integer;
                         height: Integer; const padding: Variant;
-                        const style, bg, cursor: AnsiString);
+                        const style, bg, cursor: AnsiString;
+                        const highlightbackground, highlightcolor: AnsiString;
+                        borderwidth: Integer; const relief: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
@@ -1687,26 +1744,33 @@ begin
   else
     TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
            TkiOptStr('background', TkiEither(background, bg)) + TkiOptInt('width', width) +
-           TkiOptInt('height', height) + TkiOptStr('cursor', cursor));
+           TkiOptInt('height', height) + TkiOptStr('cursor', cursor) +
+           TkiOptStr('highlightbackground', highlightbackground) +
+           TkiOptStr('highlightcolor', highlightcolor) +
+           TkiOptInt('borderwidth', borderwidth) + TkiOptStr('relief', relief));
 end;
 
 { ---- PhotoImage ---------------------------------------------------------- }
 
-constructor PhotoImage.Create(const data: Variant; const file: AnsiString);
-var payload: AnsiString;
+constructor PhotoImage.Create(const data: Variant; const file: AnsiString;
+                              width, height: Integer);
+var payload, size: AnsiString;
 begin
   TkiEnsureStarted;
   Inc(gTkWidgetSeq);
   name := 'pxximg' + TkiIntStr(gTkWidgetSeq);
+  size := TkiOptInt('width', width) + TkiOptInt('height', height);
   if file <> '' then
-    TkEval('image create photo ' + name + ' -file {' + file + '}')
+    TkEval('image create photo ' + name + ' -file {' + file + '}' + size)
   else
   begin
-    payload := pystr_of(data);
+    { a str or bytes payload; the default 0 means none }
+    payload := '';
+    if pyvartag(data) in [5, 6] then payload := pystr_of(data);
     if payload = '' then
-      TkEval('image create photo ' + name)
+      TkEval('image create photo ' + name + size)
     else
-      TkEval('image create photo ' + name + ' -data {' + payload + '}');
+      TkEval('image create photo ' + name + ' -data {' + payload + '}' + size);
   end;
 end;
 
@@ -2325,7 +2389,9 @@ constructor Label.Create(master: Widget; const text, anchor: AnsiString;
                         const font: Variant; const textvariable: Variant;
                         const foreground, background: AnsiString;
                         const padding: Variant;
-                        const style, bg, fg, cursor: AnsiString);
+                        const style, bg, fg, cursor, justify: AnsiString;
+                        padx, pady, wraplength, width, borderwidth: Integer;
+                        const relief: AnsiString);
 var vn, fgc, bgc: AnsiString;
 begin
   fgc := TkiEither(foreground, fg);
@@ -2341,12 +2407,18 @@ begin
            TkiOptStr('anchor', anchor) + TkiOptFont(font) +
            TkiOptStr('textvariable', vn) + TkiOptStr('foreground', fgc) +
            TkiOptStr('background', bgc) + TkiOptPadding(padding) +
-           TkiOptStr('style', style) + TkiOptStr('cursor', cursor))
+           TkiOptStr('style', style) + TkiOptStr('cursor', cursor) +
+           TkiOptStr('justify', justify) + TkiOptInt('wraplength', wraplength) +
+           TkiOptInt('width', width))
   else
     TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
            TkiOptFont(font) + TkiOptStr('textvariable', vn) +
            TkiOptStr('foreground', fgc) +
-           TkiOptStr('background', bgc) + TkiOptStr('cursor', cursor));
+           TkiOptStr('background', bgc) + TkiOptStr('cursor', cursor) +
+           TkiOptStr('justify', justify) + TkiOptInt('padx', padx) +
+           TkiOptInt('pady', pady) + TkiOptInt('wraplength', wraplength) +
+           TkiOptInt('width', width) + TkiOptInt('borderwidth', borderwidth) +
+           TkiOptStr('relief', relief));
 end;
 
 procedure Label.set_text(const value: AnsiString);
@@ -2355,13 +2427,16 @@ begin
 end;
 
 constructor Entry.Create(master: Widget; const textvariable: Variant;
-                        width: Integer);
+                        width: Integer; const font: Variant;
+                        const background, foreground, bg, fg: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'entry';
   TkEval('entry ' + path + TkiOptStr('textvariable', TkiVarName(textvariable)) +
-         TkiOptInt('width', width));
+         TkiOptInt('width', width) + TkiOptFont(font) +
+         TkiOptStr('background', TkiEither(background, bg)) +
+         TkiOptStr('foreground', TkiEither(foreground, fg)));
 end;
 
 function Entry.get: AnsiString;
@@ -2628,8 +2703,9 @@ begin
   if o <> '' then TkEval('ttk::style configure ' + style + o);
 end;
 
-constructor Tk.Create;
+constructor Tk.Create(const className: AnsiString);
 begin
+  if className <> '' then TkSetClassName(className);
   TkiEnsureStarted;
   path := '.';
   kind := 'toplevel';
@@ -2672,6 +2748,37 @@ procedure Widget.resizable(width, height: Boolean);
 begin
   TkEval('wm resizable ' + path + ' ' + TkiIntStr(Ord(width)) + ' ' +
          TkiIntStr(Ord(height)));
+end;
+
+procedure Widget.pack_propagate(flag: Boolean);
+begin
+  TkEval('pack propagate ' + path + ' ' + TkiIntStr(Ord(flag)));
+end;
+
+procedure Widget.grid_propagate(flag: Boolean);
+begin
+  TkEval('grid propagate ' + path + ' ' + TkiIntStr(Ord(flag)));
+end;
+
+procedure Widget.pack_forget;
+begin
+  TkEval('pack forget ' + path);
+end;
+
+procedure Widget.grid_forget;
+begin
+  TkEval('grid forget ' + path);
+end;
+
+procedure Widget.iconphoto(asDefault: Boolean; const image: Variant);
+{ image is a Variant only because PhotoImage is declared after Widget }
+var img: PhotoImage;
+begin
+  if pyvartag(image) <> 7 then Exit;
+  if not (TObject(pyvarobj(image)) is PhotoImage) then Exit;
+  img := PhotoImage(pyvarobj(image));
+  if asDefault then TkEval('wm iconphoto ' + path + ' -default ' + img.name)
+  else TkEval('wm iconphoto ' + path + ' ' + img.name);
 end;
 
 procedure Widget.wait_window(window: Widget);

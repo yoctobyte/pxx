@@ -1,0 +1,78 @@
+# What Vloot's GUI needs from tkinter on top of the canvas graphs: the
+# application class (Tk(className=)), card frames with a highlight border,
+# wrapped and justified labels, entries with their own font and colours,
+# uniform grid columns, frames that keep their size (pack_propagate), rows
+# taken out and put back (pack_forget/grid_forget), a window icon, and a group
+# of widgets that acts as one button -- each bound with a LAMBDA through a
+# loop variable whose type nobody declared.
+# The .expected is python3's, run under Xvfb.
+import tkinter as tk
+
+root = tk.Tk(className="vloot")
+print(root.winfo_class())
+
+card = tk.Frame(root, background="#ffffff", highlightthickness=1,
+                highlightbackground="#d0d0d0", highlightcolor="#d0d0d0",
+                borderwidth=0, relief="flat")
+card.pack(fill="x")
+print(card.cget("highlightbackground"), card.cget("relief"))
+
+note = tk.Label(card, text="a long line that wraps", justify="left", wraplength=120,
+                padx=6, pady=2, width=20, borderwidth=1, relief="solid")
+note.pack()
+print(note.cget("justify"), str(note.cget("wraplength")), str(note.cget("padx")))
+
+entry = tk.Entry(card, font=("DejaVu Sans", 10), background="#fafafa", foreground="#222222")
+entry.pack()
+print(entry.cget("background"), entry.cget("foreground"))
+
+grid = tk.Frame(root, width=200, height=40)
+grid.pack_propagate(False)
+grid.grid_propagate(False)
+grid.pack()
+grid.grid_columnconfigure(0, weight=1, uniform="col")
+grid.columnconfigure(1, weight=1, uniform="col")
+a = tk.Label(grid, text="a")
+b = tk.Label(grid, text="b")
+a.grid(row=0, column=0)
+b.grid(row=0, column=1)
+root.update()
+print(grid.winfo_width(), grid.winfo_height())
+
+note.pack_forget()
+b.grid_forget()
+root.update()
+print(note.winfo_ismapped(), b.winfo_ismapped(), a.winfo_ismapped())
+
+icon = tk.PhotoImage(width=4, height=4)
+root.iconphoto(True, icon)
+print(icon.width(), icon.height())
+
+clicks = []
+
+
+def clickable(widgets, command, normal_bg, hover_bg="#eeeeee"):
+    def paint(colour):
+        for w in widgets:
+            w.configure(background=colour)
+    for w in widgets:
+        w.bind("<Button-1>", lambda e: command())
+        w.bind("<Enter>", lambda e: paint(hover_bg))
+        w.bind("<Leave>", lambda e: paint(normal_bg))
+        w.configure(cursor="hand2")
+
+
+row = tk.Frame(root, background="#ffffff")
+row.pack(fill="x")
+title = tk.Label(row, text="plexus", background="#ffffff")
+title.pack()
+clickable([row, title], lambda: clicks.append("plexus"), "#ffffff")
+root.update()
+title.event_generate("<Enter>")
+print(row.cget("background"), title.cget("background"))
+title.event_generate("<Leave>")
+print(row.cget("background"))
+title.event_generate("<Button-1>", x=2, y=2)
+root.update()
+print(clicks)
+root.destroy()

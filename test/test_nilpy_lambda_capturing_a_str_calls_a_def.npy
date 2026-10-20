@@ -1,0 +1,81 @@
+# A lambda that captures a str of its enclosing def is COMPILED (lifted), and
+# so it can call the program's own defs. It used to fall back to the pyeval
+# closure, which knows no user def: Vloot's hover rows answered
+# "pyeval: unknown call: paint()" on every <Enter>. The str rides a variant
+# slot the closure owns, so it outlives the frame that made it.
+# The .expected is python3's.
+
+
+def run(cb, arg):
+    return cb(arg)
+
+
+def paint(colour):
+    return "paint " + colour
+
+
+def clickable(widgets, normal_bg, hover_bg="#eeeeee"):
+    def tint(colour):
+        return [w + ":" + colour for w in widgets]
+    out = []
+    for w in widgets:
+        out.append(run(lambda e: tint(hover_bg), 0))
+        out.append(run(lambda e: paint(normal_bg), 0))
+    return out
+
+
+print(clickable(["row", "title"], "#ffffff"))
+
+
+def handlers(prefix):
+    sep = "-"
+    return [lambda x: prefix + sep + x,
+            lambda x: prefix.upper() + x.lower(),
+            lambda x: f"{prefix}[{x}]",
+            lambda x: x == prefix,
+            lambda x: len(prefix) + len(x)]
+
+
+hs = handlers("cpu")
+print([h("Load") for h in hs])
+print(hs[3]("cpu"))
+
+
+def labels(names, unit):
+    return [lambda n=n: n + " " + unit for n in names]
+
+
+print([f() for f in labels(["a", "b"], "MB")])
+
+
+# Kept PAST the call that made it: the list argument is a temporary, freed
+# when hover_rows returns, so the lambda must hold its own reference to it.
+# paint's `for w` is paint's own local -- not a capture of hover_rows' `w`,
+# which made the lambda forward one argument short.
+def hover_rows(widgets, hover_bg="#eeeeee"):
+    def paint(colour):
+        out = []
+        for w in widgets:
+            out.append(w + "=" + colour)
+        return out
+    handlers = []
+    for w in widgets:
+        handlers.append(lambda e: paint(hover_bg))
+    return handlers
+
+
+later = hover_rows(["row", "title"])
+print([h(None) for h in later])
+
+
+def pairs_total(items):
+    def total():
+        n = 0
+        for k, v in items:
+            n += v
+        return n
+    k = "outer"
+    return lambda: (total(), k)
+
+
+print(pairs_total([("a", 1), ("b", 2)])())

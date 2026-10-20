@@ -99,11 +99,11 @@ The module has these names. Each widget takes the options listed in
 
 | Area | Names |
 | --- | --- |
-| Windows | `Tk`, `Toplevel` (`transient`, `grab_set`, `grab_release`); on both, `geometry`, `minsize`, `maxsize`, `resizable` and `wait_window` (a modal dialog) |
+| Windows | `Tk` (with `className=`, the window class), `Toplevel` (`transient`, `grab_set`, `grab_release`); on both, `geometry`, `minsize`, `maxsize`, `resizable`, `iconphoto` and `wait_window` (a modal dialog) |
 | Widgets | `Frame`, `Label`, `Entry`, `Button`, `Checkbutton`, `Text`, `Canvas`, `Scrollbar`, `Menu`, `Separator`, `PanedWindow`, `Notebook`, `PhotoImage` |
 | Variables | `StringVar`, `BooleanVar` (`get`, `set`, `trace_add`) |
-| Layout | `pack` (with `anchor=`), `grid`, `grid_columnconfigure`/`columnconfigure`, `grid_rowconfigure`/`rowconfigure` |
-| Every widget | `configure`/`config` (with `cursor=`), `cget`, `bind`, `bind_all`, `unbind_all`, `event_generate` (with `x=`, `y=`), `after`, `after_idle`, `after_cancel`, `winfo_children`, `winfo_width`, `winfo_height`, `focus_set`, `destroy`, `update`, `mainloop`, `quit`, the clipboard calls |
+| Layout | `pack` (with `anchor=`), `grid`, `grid_columnconfigure`/`columnconfigure`, `grid_rowconfigure`/`rowconfigure` (with `uniform=`), `pack_forget`, `grid_forget`, `pack_propagate`, `grid_propagate` |
+| Every widget | `configure`/`config` (with `cursor=`), `cget`, `bind`, `bind_all`, `unbind_all`, `event_generate` (with `x=`, `y=`), `after`, `after_idle`, `after_cancel`, `winfo_children`, `winfo_width`, `winfo_height`, `winfo_class`, `winfo_ismapped`, `focus_set`, `destroy`, `update`, `mainloop`, `quit`, the clipboard calls |
 | `Text` | `insert`, `delete`, `get`, `index`, `see`, `mark_set`, `tag_add`, `tag_configure`, scrolling |
 | `Canvas` | `create_text`, `create_line`, `create_polygon`, `create_rectangle`, `create_oval`, `create_image`, `create_window`, each with `tags=`; coordinates as four numbers, a flat list or a list of `(x, y)` pairs; `coords`, `itemconfigure`/`itemconfig`, `itemcget`, `find_all`, `find_withtag`, `tag_raise`, `tag_lower`, `bbox`, `delete` (by id or tag), scrolling with `yview_moveto` |
 | Dialogs | `from tkinter import messagebox`: `showinfo`, `showwarning`, `showerror`, `askyesno`, `askokcancel`, `askyesnocancel`. `from tkinter import filedialog`: `askopenfilename`, `asksaveasfilename`, `askdirectory` |
@@ -133,7 +133,11 @@ the usual `except tk.TclError:` fallback to a text interface works.
 checked on 2026-10-20 with the compiler built from master (not yet in a pin).
 So was `examples/tk/canvas_items_dialog_and_events.npy`: a live graph moved with
 `coords()`, a scrolling side bar of clickable tiles, `Style.map`, font
-measuring and a modal dialog closed through `wait_window`.
+measuring and a modal dialog closed through `wait_window`. And so was
+`examples/tk/sidebar_cards_and_hover_rows.npy`: card frames with a highlight
+border, wrapped labels, uniform grid columns, rows taken out with
+`pack_forget`, a window icon, and a group of widgets bound with lambdas in a
+loop to act as one hover button.
 
 `coords(item, x0, y0, ...)` takes at most four numbers. For a longer polyline
 pass the list, `coords(item, pts)`, which CPython takes too.

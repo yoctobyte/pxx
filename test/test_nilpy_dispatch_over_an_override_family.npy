@@ -1,0 +1,131 @@
+# A call through an untyped receiver whose class family overrides the method
+# many times (Vloot's `self.page.update()` over a Page with nine overriding
+# views) is ONE candidate: the base and its overrides share a slot. The scan
+# counted every sibling override as an unrelated class, ran out of runtime-
+# dispatch slots and refused the program. An UNRELATED class declaring the
+# name first (Vloot: tkinter's Widget.update) is what made each sibling a slot
+# of its own. The .expected is python3's.
+
+
+class Clock:
+    def update(self):
+        return "tick"
+
+
+class Page:
+    def __init__(self, name):
+        self.name = name
+
+    def update(self):
+        return "page " + self.name
+
+
+class View0(Page):
+    def update(self):
+        return "view0 " + self.name
+
+
+class View1(Page):
+    def update(self):
+        return "view1 " + self.name
+
+
+class View2(Page):
+    def update(self):
+        return "view2 " + self.name
+
+
+class View3(Page):
+    def update(self):
+        return "view3 " + self.name
+
+
+class View4(Page):
+    def update(self):
+        return "view4 " + self.name
+
+
+class View5(Page):
+    def update(self):
+        return "view5 " + self.name
+
+
+class View6(Page):
+    def update(self):
+        return "view6 " + self.name
+
+
+class View7(Page):
+    def update(self):
+        return "view7 " + self.name
+
+
+class View8(Page):
+    def update(self):
+        return "view8 " + self.name
+
+
+class View9(Page):
+    def update(self):
+        return "view9 " + self.name
+
+
+class View10(Page):
+    def update(self):
+        return "view10 " + self.name
+
+
+class View11(Page):
+    def update(self):
+        return "view11 " + self.name
+
+
+class View12(Page):
+    def update(self):
+        return "view12 " + self.name
+
+
+class View13(Page):
+    def update(self):
+        return "view13 " + self.name
+
+
+class View14(Page):
+    def update(self):
+        return "view14 " + self.name
+
+
+class View15(Page):
+    def update(self):
+        return "view15 " + self.name
+
+
+class View16(Page):
+    def update(self):
+        return "view16 " + self.name
+
+
+class View17(Page):
+    def update(self):
+        return "view17 " + self.name
+
+
+class App:
+    def __init__(self):
+        self.page = None
+
+    def show(self, page):
+        self.page = page
+        return self.page.update()
+
+
+app = App()
+print(app.show(Page("home")))
+print(app.show(Clock()))
+print(app.show(View0("v")))
+print(app.show(View5("v")))
+print(app.show(View10("v")))
+print(app.show(View15("v")))
+d = {"a": 1}
+d.update({"b": 2})
+print(sorted(d.items()))

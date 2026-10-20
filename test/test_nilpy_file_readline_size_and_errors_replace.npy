@@ -1,0 +1,45 @@
+# f.readline(size) bounds a line read (Vloot's ssh stream reader), and
+# open(..., errors="replace") decodes invalid UTF-8 to U+FFFD the way CPython's
+# decoder does: one U+FFFD per maximal valid prefix, surrogates and overlongs
+# refused by their second byte. bytes.decode follows the same rules.
+# The .expected is python3's.
+import os
+import tempfile
+
+d = tempfile.mkdtemp()
+p = os.path.join(d, "bad.txt")
+with open(p, "wb") as f:
+    f.write(b"ok \xff bad \xe2\x82 cut\nline2 caf\xc3\xa9\n")
+
+with open(p, errors="replace") as f:
+    print(repr(f.read()))
+with open(p, encoding="utf-8", errors="replace") as f:
+    print([repr(line) for line in f])
+with open(p, "r", errors="replace") as f:
+    print(repr(f.readline()), repr(f.readline()))
+f = open(p, errors="replace")
+print(repr(f.readlines()))
+f.close()
+
+q = os.path.join(d, "lines.txt")
+with open(q, "w") as f:
+    f.write("hello world\nsecond\n\nlast")
+with open(q) as f:
+    print(repr(f.readline(5)), repr(f.readline(100)), repr(f.readline(-1)))
+    print(repr(f.readline(0)), repr(f.readline()), repr(f.readline()), repr(f.readline()))
+with open(q, "rb") as f:
+    print(f.readline(3), f.readline())
+os.remove(p)
+os.remove(q)
+os.rmdir(d)
+
+cases = [b"ok", b"\xff", b"\xe2\x82 ", b"\xe2\x82", b"caf\xc3\xa9", b"\xc0\x80",
+         b"\xed\xa0\x80", b"\xf4\x90\x80\x80", b"\xf0\x9f\x98\x80", b"\xe0\x80\x80",
+         b"\x80\x80", b"a\xf0\x9fz", b"\xf5"]
+for c in cases:
+    print(repr(c.decode("utf-8", "replace")), repr(c.decode("utf-8", "ignore")))
+    try:
+        c.decode("utf-8")
+        print("strict ok")
+    except UnicodeDecodeError:
+        print("strict raises")

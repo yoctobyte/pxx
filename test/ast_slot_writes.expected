@@ -221,6 +221,7 @@ AN_ARG Left node
 AN_ARG Left objNode
 AN_ARG Left op
 AN_ARG Left opNode
+AN_ARG Left openNode
 AN_ARG Left operand
 AN_ARG Left opnMode
 AN_ARG Left padNode

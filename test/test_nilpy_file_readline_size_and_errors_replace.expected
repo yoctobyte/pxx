@@ -1,0 +1,33 @@
+'ok � bad � cut\nline2 café\n'
+["'ok � bad � cut\\n'", "'line2 café\\n'"]
+'ok � bad � cut\n' 'line2 café\n'
+['ok � bad � cut\n', 'line2 café\n']
+'hello' ' world\n' 'second\n'
+'' '\n' 'last' ''
+b'hel' b'lo world\n'
+'ok' 'ok'
+strict ok
+'�' ''
+strict raises
+'� ' ' '
+strict raises
+'�' ''
+strict raises
+'café' 'café'
+strict ok
+'��' ''
+strict raises
+'���' ''
+strict raises
+'����' ''
+strict raises
+'😀' '😀'
+strict ok
+'���' ''
+strict raises
+'��' ''
+strict raises
+'a�z' 'az'
+strict raises
+'�' ''
+strict raises

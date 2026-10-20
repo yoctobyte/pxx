@@ -873,6 +873,12 @@ type
     FFd: Int64;
     { CPython's `f.closed`. A plain field: set once by close() }
     closed: Boolean;
+    { open(..., errors="replace"): text reads swap each invalid UTF-8
+      sequence for U+FFFD, as CPython's decoder does, instead of handing the
+      raw bytes through. Set by pyfile_errors_replace. }
+    FReplace: Boolean;
+    { a text read's string, with FReplace applied }
+    function TextOf(const raw: AnsiString): AnsiString;
     { WHICH of the two string types this file's reads yield — the one fact that
       decides it, held once instead of hard-coded four times.
 
@@ -899,7 +905,12 @@ type
       its trailing newline, exactly as TPyList's version yielded them so that
       joining reproduces the file byte for byte. }
     function readlines: TPyList;
-    function readline: Variant;
+    function readline: Variant; overload;
+    { `f.readline(size)`: at most `size` bytes, stopping after a newline as the
+      plain form does -- how a reader bounds a line from a peer it does not
+      trust (Vloot's ssh stream reader). A negative size is no limit, as in
+      CPython. }
+    function readline(size: Int64): Variant; overload;
     { ValueError on a closed file, as CPython raises -- not an EBADF read of
       nothing, or worse, of an fd number something else has reopened since }
     procedure CheckOpen;
@@ -2577,6 +2588,7 @@ function pybytes_cmp(a, b: TPyBytes): Int64;
   (PyOpenCheckTextArg), judged when the call RUNS: open reads bytes and never
   decodes, so a value that would need a decode is refused, not ignored. }
 function pyopen_text_arg_check(const role: AnsiString; const v: Variant): Int64;
+function pyfile_errors_replace(f: TPyFile): TPyFile;
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -14201,7 +14213,7 @@ begin
 end;
 
 function TPyBytes.decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
-var code, eh, k, n, seqLen: Integer; p: PByte; cp, lead, trail: Int64;
+var code, eh, k, n, seqLen: Integer; p: PByte; cp, lead, trail, lo, hi: Int64;
     bswap: Boolean;
 
   function ByteAt(idx: Integer): Int64;
@@ -14254,32 +14266,50 @@ begin
       but it must be VALIDATED now, because strict decode is exactly what
       encoding-sniffing code relies on to reject a wrong guess. Substituting
       U+FFFD unconditionally, as this used to, made every guess look right. }
+    { CPython's rules exactly: the lead byte fixes the length AND the range
+      of the second byte (which is what rejects overlong forms, surrogates
+      and code points past U+10FFFF), and a broken sequence becomes ONE
+      U+FFFD for its longest valid prefix -- `b'\xe2\x82 '` is '\ufffd ',
+      not two of them. }
     k := 0;
     while k < FLen do
     begin
       cp := ByteAt(k);
-      if cp < $80 then seqLen := 0
-      else if (cp and $E0) = $C0 then begin seqLen := 1; cp := cp and $1F; end
-      else if (cp and $F0) = $E0 then begin seqLen := 2; cp := cp and $0F; end
-      else if (cp and $F8) = $F0 then begin seqLen := 3; cp := cp and $07; end
-      else seqLen := -1;
-      if (seqLen < 0) or (k + seqLen >= FLen) then
+      if cp < $80 then
       begin
-        BadInput('utf-8', k);
+        PyCpToUtf8(Result, cp);
         Inc(k);
-        if eh = 2 then Continue;
-        PyCpToUtf8(Result, $FFFD);
         Continue;
       end;
-      for n := 1 to seqLen do
+      lo := $80; hi := $BF;
+      if (cp >= $C2) and (cp <= $DF) then begin seqLen := 1; cp := cp and $1F; end
+      else if (cp >= $E0) and (cp <= $EF) then
       begin
-        if (ByteAt(k + n) and $C0) <> $80 then begin seqLen := -1; Break; end;
-        cp := (cp shl 6) or (ByteAt(k + n) and $3F);
-      end;
-      if seqLen < 0 then
+        seqLen := 2;
+        if cp = $E0 then lo := $A0 else if cp = $ED then hi := $9F;
+        cp := cp and $0F;
+      end
+      else if (cp >= $F0) and (cp <= $F4) then
+      begin
+        seqLen := 3;
+        if cp = $F0 then lo := $90 else if cp = $F4 then hi := $8F;
+        cp := cp and $07;
+      end
+      else seqLen := -1;
+      n := 1;
+      if seqLen > 0 then
+        while n <= seqLen do
+        begin
+          if k + n >= FLen then Break;
+          if (n > 1) and ((ByteAt(k + n) < $80) or (ByteAt(k + n) > $BF)) then Break;
+          if (n = 1) and ((ByteAt(k + n) < lo) or (ByteAt(k + n) > hi)) then Break;
+          cp := (cp shl 6) or (ByteAt(k + n) and $3F);
+          Inc(n);
+        end;
+      if (seqLen < 0) or (n <= seqLen) then
       begin
         BadInput('utf-8', k);
-        Inc(k);
+        k := k + n;                      { the lead plus its valid prefix }
         if eh = 2 then Continue;
         PyCpToUtf8(Result, $FFFD);
         Continue;
@@ -24165,6 +24195,13 @@ begin
                             + 'open reads bytes and never decodes');
 end;
 
+function pyfile_errors_replace(f: TPyFile): TPyFile;
+{ `open(..., errors="replace")`: the frontend wraps the open in this }
+begin
+  if f <> nil then f.FReplace := True;
+  Result := f;
+end;
+
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend, wantExcl: Boolean;
 begin
@@ -24235,7 +24272,7 @@ begin
   end;
   s := '';
   for i := 0 to Integer(got) - 1 do s := s + Chr(PByte(NativeInt(r.FData) + i)^);
-  Result := s;
+  Result := TextOf(s);
 end;
 
 { Read to EOF from the current position. Chunked rather than byte-at-a-time
@@ -24276,7 +24313,7 @@ begin
   s := Self.readall;
   if not FBinary then
   begin
-    Result := s;
+    Result := TextOf(s);
     Exit;
   end;
   b := TPyBytes.Create(Length(s));
@@ -24293,6 +24330,7 @@ var content, line: AnsiString; i, n, k: Integer; lb: TPyBytes;
 begin
   Result := TPyList.Create;
   content := Self.readall;
+  if not FBinary then content := TextOf(content);   { U+FFFD has no newline byte }
   { each line KEEPS its trailing newline -- Python's file iteration yields them
     that way, and a final unterminated line is still a line }
   i := 1; n := Length(content); line := '';
@@ -24329,22 +24367,29 @@ begin
 end;
 
 function TPyFile.readline: Variant;
+begin
+  Result := readline(-1);
+end;
+
+function TPyFile.readline(size: Int64): Variant;
 { TEXT mode yields a str here too — it answered bytes, so `f.readline()` on a
   text file printed b'one\n'. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
-var r: TPyBytes; got: Int64; ch: Byte; s: AnsiString;
+var r: TPyBytes; got, n: Int64; ch: Byte; s: AnsiString;
 begin
   CheckOpen;
   { one byte at a time — line reads are rare and short in the corpus }
   r := TPyBytes.Create(0);
   s := '';
-  while True do
+  n := 0;
+  while (size < 0) or (n < size) do
   begin
     got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
     if FBinary then r.append(ch) else s := s + Chr(ch);
+    Inc(n);
     if ch = 10 then Break;
   end;
-  if FBinary then Result := r else Result := s;
+  if FBinary then Result := r else Result := TextOf(s);
 end;
 
 function TPyFile.write(b: TPyBytes): Int64;
@@ -24441,6 +24486,16 @@ begin
   r := PyPalClose(FFd);
   FFd := -1;
   if r < 0 then pyos_raise_oserror(r);
+end;
+
+function TPyFile.TextOf(const raw: AnsiString): AnsiString;
+var b: TPyBytes; i: Integer;
+begin
+  if not FReplace then begin Result := raw; Exit; end;
+  b := TPyBytes.Create(Length(raw));
+  for i := 1 to Length(raw) do PByte(NativeInt(b.FData) + i - 1)^ := Ord(raw[i]);
+  b.FLen := Length(raw);
+  Result := b.decode('utf-8', 'replace');
 end;
 
 procedure TPyFile.CheckOpen;

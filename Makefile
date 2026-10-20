@@ -1678,10 +1678,12 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/tk/style_and_short_options.npy $(TESTTMP)/test_nilpy_tkstyle26
 	./$(COMPILER) examples/tk/no_display_raises_tclerror.npy $(TESTTMP)/test_nilpy_tknodisp26
 	./$(COMPILER) examples/tk/canvas_items_dialog_and_events.npy $(TESTTMP)/test_nilpy_tkcide26
+	./$(COMPILER) examples/tk/sidebar_cards_and_hover_rows.npy $(TESTTMP)/test_nilpy_tksbar26
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkstyle26 | diff -u examples/tk/style_and_short_options.expected - || exit 1; \
 	  env -u DISPLAY -u WAYLAND_DISPLAY $(TESTTMP)/test_nilpy_tknodisp26 | diff -u examples/tk/no_display_raises_tclerror.expected - || exit 1; \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkcide26 2>&1 | diff -u examples/tk/canvas_items_dialog_and_events.expected - || exit 1; \
+	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tksbar26 2>&1 | diff -u examples/tk/sidebar_cards_and_hover_rows.expected - || exit 1; \
 	else echo "  tk: no xvfb-run, skipping the style and no-display RUNs (compiled only)"; fi
 	# An event callback's Event and the widgets winfo_children() returns are
 	# released (both were boxed with an extra retain: pin v451 leaves ~2,400
@@ -2827,6 +2829,25 @@ test-nilpy: $(COMPILER)
 	# carried no signature: rc 139). python3's output.
 	./$(COMPILER) test/test_nilpy_getattr_method_value_fills_its_defaults.npy $(TESTTMP)/test_nilpy_gadflt26
 	$(TESTTMP)/test_nilpy_gadflt26 | diff -u test/test_nilpy_getattr_method_value_fills_its_defaults.expected -
+	# f.readline(size) and open(errors="replace") / bytes.decode("replace")
+	# with CPython's U+FFFD rules. python3's output.
+	./$(COMPILER) test/test_nilpy_file_readline_size_and_errors_replace.npy $(TESTTMP)/test_nilpy_rlrep26
+	$(TESTTMP)/test_nilpy_rlrep26 | diff -u test/test_nilpy_file_readline_size_and_errors_replace.expected -
+	# nested unpack targets with attribute leaves (`(self.a, self.b), x = ...`)
+	./$(COMPILER) test/test_nilpy_nested_unpack_into_attributes.npy $(TESTTMP)/test_nilpy_nunpk26
+	$(TESTTMP)/test_nilpy_nunpk26 | diff -u test/test_nilpy_nested_unpack_into_attributes.expected -
+	# a variant .update() over an 18-override family behind an unrelated class:
+	# one candidate, not 19 (the pin refuses it: too many candidate classes)
+	./$(COMPILER) test/test_nilpy_dispatch_over_an_override_family.npy $(TESTTMP)/test_nilpy_dispfam26
+	$(TESTTMP)/test_nilpy_dispfam26 | diff -u test/test_nilpy_dispatch_over_an_override_family.expected -
+	# a float-default parameter handed None through a variable, in a class that
+	# tests `is None`: no float claim (the pin raises TypeError)
+	./$(COMPILER) test/test_nilpy_float_default_handed_none_through_a_variable.npy $(TESTTMP)/test_nilpy_fdnone26
+	$(TESTTMP)/test_nilpy_fdnone26 | diff -u test/test_nilpy_float_default_handed_none_through_a_variable.expected -
+	# a lambda capturing a str calls a def, outlives its frame with a list
+	# capture, and a nested def's own `for` variable is not a capture
+	./$(COMPILER) test/test_nilpy_lambda_capturing_a_str_calls_a_def.npy $(TESTTMP)/test_nilpy_lamstr26
+	$(TESTTMP)/test_nilpy_lamstr26 | diff -u test/test_nilpy_lambda_capturing_a_str_calls_a_def.expected -
 	./$(COMPILER) test/test_nilpy_with_open_closes_the_file.npy $(TESTTMP)/test_nilpy_withopen26
 	$(TESTTMP)/test_nilpy_withopen26 | diff -u test/test_nilpy_with_open_closes_the_file.expected -
 	./$(COMPILER) test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname26

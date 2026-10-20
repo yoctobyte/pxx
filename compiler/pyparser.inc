@@ -273,6 +273,10 @@ var
   PyNestRecOwner, PyNestRecSlot, PyNestRecParent, PyNestRecIdx,
     PyNestRecSym: array[0..PY_NEST_RECS] of Integer;
   PyNestRecName: array[0..PY_NEST_RECS] of AnsiString;
+  { an ATTRIBUTE leaf of an assignment group, `(o.x, o.y), z = ...`: the
+    leaf binds its hidden Name and then stores it into Obj.Fld. '' for a
+    plain name (and always in a loop target). }
+  PyNestRecObj, PyNestRecFld: array[0..PY_NEST_RECS] of AnsiString;
   PyNestRecIsGroup, PyNestRecDead: array[0..PY_NEST_RECS] of Boolean;
   PyNestRecCount: Integer;
   PyNestOwnerSeq: Integer;
@@ -865,6 +869,8 @@ function PyIsSiteIntTk(tk: TTypeKind): Boolean; forward; { defined ~32900 lines
   (regression-fpc-seed-drift-b1976-stale). }
 function PyParseFor: Integer; forward;
 function PyParseForTargetSlot(slot: Integer): AnsiString; forward; { Nil Python: one entry of a for target list; a `(p, q)` group becomes a hidden name }
+function PyMakeAttrStore(baseNode: Integer; const fld: AnsiString;
+                         valNode: Integer): Integer; forward;
 function PySkipTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(a, b)` group in an unpack target list, or -1 }
 function PySkipOneTupleTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(n,)` ONE-element tuple target, or -1 }
 function PyParenTargetListAssign(i: Integer): Integer; forward; { Nil Python: `(a, o.w,) =` -- a WHOLE target list in parentheses; the `=`'s index, or -1 }
@@ -12459,7 +12465,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
     lamRecs: array[0..MAX_PROC_PARAMS-1] of Integer;
-    newPi, bindPi, varBindPi, dblBindPi: Integer;
+    newPi, bindPi, varBindPi, dblBindPi, objBindPi: Integer;
     lamManagedCap: Boolean;   { a capture the lifter cannot take -> do not lift }
     lamStarIdx, starPend, starCi, starPi: Integer;   { `lambda *a:` }
     sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
@@ -12590,6 +12596,7 @@ begin
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
   dblBindPi := FindProc('pyboundfn_bind_dbl');
+  objBindPi := FindProc('pyboundfn_bind_obj');
   { …up to THREE own parameters, not one. The old gate was `nParams <= 1`
     because the bridge was assumed to pass a single argument — but
     pyboundfn_callvn takes a0/a1/a2 and places `NOwn` of them before the bound
@@ -12712,8 +12719,25 @@ begin
             Refuse the lift instead: the pyeval closure captures by VALUE and
             handles this shape correctly, so falling back is both correct and
             the behaviour these lambdas had before.
-            bug-nilpy-lifted-lambda-cannot-capture-a-managed-string }
-          lamManagedCap := True;
+            bug-nilpy-lifted-lambda-cannot-capture-a-managed-string
+            ...but the pyeval closure cannot CALL a def of the program:
+            `lambda e: paint(normal_bg)` over a str parameter answered
+            "pyeval: unknown call: paint()" on every event (Vloot's hover
+            rows). So the string rides a VARIANT slot instead --
+            pyboundfn_bind_var copies it into a slot the bound object owns, so
+            nothing is borrowed, and the lifted proc declares the parameter a
+            variant, which holds a str with the same meaning.
+            bug-nilpy-a-lambda-capturing-a-str-cannot-call-a-def }
+          if (varBindPi < 0) or (lamN >= PY_MAX_CAPS) then
+          begin
+            lamManagedCap := True;
+            Continue;
+          end;
+          lamNames[lamN] := nm;
+          lamTypes[lamN] := tyVariant;
+          lamSyms[lamN] := capSym;
+          lamRecs[lamN] := REC_NONE;
+          Inc(lamN);
           Continue;
         end;
         if lamN >= PY_MAX_CAPS then Break;
@@ -12910,6 +12934,12 @@ begin
         node := AllocNode(AN_CALL);
         if lamTypes[j] = tyVariant then ASTIVal[node] := varBindPi
         else if (lamTypes[j] = tyDouble) and (dblBindPi >= 0) then ASTIVal[node] := dblBindPi
+        { an OBJECT capture takes its own reference, as a nested def's does
+          (PyNestedDefClosureValue): the lambda outlives the call that made
+          it, and `clickable([row, title], ...)` freed its list on return --
+          the hover handler then walked a freed list (rc 139).
+          bug-nilpy-a-lambda-object-capture-dangles-after-return }
+        else if (lamTypes[j] = tyClass) and (objBindPi >= 0) then ASTIVal[node] := objBindPi
         else ASTIVal[node] := bindPi;
         ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
       end;
@@ -20522,6 +20552,15 @@ begin
     else if (Procs[pIdx].Params[j].TypeKind = tyClass) and
             (tk <> Ord(tyClass)) and (tk <> Ord(tyVariant)) and
             (tk <> Ord(tyPointer)) and (tk <> Ord(tyUnknown)) then
+      Dec(Result)
+    { ...and the mirror: a STRING parameter handed a callable (a lambda is
+      tyPointer, a bound pair) or an object. `w.bind("<Leave>", lambda e: ...)`
+      on a variant receiver tied bind(seq, script: AnsiString) against
+      bind(seq, callback: Variant) at 0 each, the first DECLARED won, and the
+      lambda's pointer was concatenated into a Tcl script (segfault in
+      PXXStrConcat). bug-nilpy-variant-bind-with-a-lambda-picks-the-string-overload }
+    else if (Procs[pIdx].Params[j].TypeKind = tyAnsiString) and
+            ((tk = Ord(tyPointer)) or (tk = Ord(tyClass))) then
       Dec(Result);
     an := ASTRight[an];
     Inc(j);
@@ -22987,6 +23026,17 @@ begin
       bug-nilpy-set-update-method-is-not-mapped }
     mmi := FindUMeth(ci, PyMethNameFor(ci, mname));
     if mmi < 0 then Continue;
+    { AN OVERRIDE FAMILY IS ONE CANDIDATE. When the parent answers to the name
+      too, the parent is (or leads to) the candidate: it is visited in its own
+      turn, and a call through its VMT slot reaches this class's override --
+      the same reasoning as the ancestor branch below. Without this skip the
+      scan saw every SIBLING override as an unrelated class: Vloot's
+      `self.page.update()` over a Page with nine overriding subclasses (plus
+      dict, set and Tk's Widget) ran out of runtime-dispatch slots and was
+      refused. }
+    if (UClsParent[ci] >= 0) and
+       (FindUMeth(UClsParent[ci], PyMethNameFor(UClsParent[ci], mname)) >= 0) then
+      Continue;
     mpi := UMthProc_[mmi];
     if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
     else if mpi <> hitPi then
@@ -31014,6 +31064,8 @@ begin
   PyNestRecIdx[Result] := idx;
   PyNestRecName[Result] := nm;
   PyNestRecIsGroup[Result] := isGroup;
+  PyNestRecObj[Result] := '';
+  PyNestRecFld[Result] := '';
   PyNestRecDead[Result] := False;
   PyNestRecSym[Result] := -1;
   Inc(PyNestRecCount);
@@ -31046,8 +31098,27 @@ begin
     begin
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a name inside the nested ' + what + ' target');
-      PyNestAdd(owner, slot, rec, n, CurTok.SVal, False);
-      Next;
+      { `(self.enc, self.enc_value), (...) = ...` -- an attribute leaf in an
+        ASSIGNMENT group, the shape the outer list already takes. It binds a
+        hidden name like any leaf and PyNestEmit stores that into the field.
+        A loop target stays names-only, as CPython's for allows attributes
+        but nothing here has needed one. }
+      if (not isLoop) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+         (TokPos + 2 < TokCount) and
+         (Tokens[TokPos + 2].Kind in [tkComma, tkRParen]) then
+      begin
+        child := PyNestAdd(owner, slot, rec, n, PyHiddenName('natt'), False);
+        PyNestRecObj[child] := CurTok.SVal;
+        Next; Next;                      { the object and the '.' }
+        PyNestRecFld[child] := CurTok.SVal;
+        Next;
+      end
+      else
+      begin
+        PyNestAdd(owner, slot, rec, n, CurTok.SVal, False);
+        Next;
+      end;
     end;
     Inc(n);
     if not Eat(tkComma) then Break;
@@ -31094,7 +31165,7 @@ begin
     end;
     host := PyNestRecSym[PyNestRecParent[r]];
     if host < 0 then Continue;
-    if PyNestRecIsGroup[r] then
+    if PyNestRecIsGroup[r] or (PyNestRecFld[r] <> '') then
       sym := AllocVar(PyNestRecName[r], tyVariant)
     else
     begin
@@ -31110,6 +31181,15 @@ begin
     ASTLeft[node] := PyMakeIdent(sym);
     ASTRight[node] := PyPairItem(PyMakeIdent(host), PyNestRecIdx[r]);
     Result := PySeqAppend(Result, node);
+    if PyNestRecFld[r] <> '' then
+    begin
+      host := PyProgSym(PyNestRecObj[r]);
+      if host < 0 then
+        Error('Nil Python: ' + PyNestRecObj[r] + ' is not defined, so '
+              + PyNestRecObj[r] + '.' + PyNestRecFld[r] + ' cannot be assigned');
+      Result := PySeqAppend(Result,
+        PyMakeAttrStore(PyMakeIdent(host), PyNestRecFld[r], PyMakeIdent(sym)));
+    end;
   end;
 end;
 
@@ -34785,6 +34865,18 @@ end;
   `make` read its own `t0` back as `state`'s after calling it, and every
   deorbit dry run started at the coast's beginning. The overwrite argument
   above does not hold for a shared slot, which is the difference. }
+{ Is token k a Python `for`? It lexes as a plain tkIdent (PyParseFor asks
+  PyIsIdent('for')), so a scan of an UNPARSED body that tests tkFor alone never
+  sees one: a nested def's own `for w in widgets:` read as a capture of the
+  enclosing `w`, and a lambda that forwarded the def's captures came one
+  argument short (Vloot's hover rows: rc 139 on <Enter>). tkFor is kept for a
+  token stream that does carry it. bug-nilpy-a-nested-def-loop-variable-is-captured }
+function PyTokIsFor(k: Integer): Boolean;
+begin
+  Result := (Tokens[k].Kind = tkFor) or
+            ((Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'for'));
+end;
+
 function PyInUnpackTarget(i, bodyStart, bodyEnd: Integer): Boolean;
 { Is the identifier at token i one element of an unpacking TARGET list:
   everything from the statement start to it, and from it to a depth-0 `=`
@@ -34798,6 +34890,11 @@ begin
   k := i - 1;
   while k >= bodyStart do
   begin
+    if PyTokIsFor(k) then
+    begin
+      Result := comma or ((i + 1 < bodyEnd) and (Tokens[i + 1].Kind = tkComma));
+      Exit;
+    end;
     case Tokens[k].Kind of
       tkComma: comma := True;
       tkIdent, tkLParen, tkLBrack, tkStar: ;
@@ -34851,7 +34948,7 @@ begin
         Exit;
       end;
       { `for nm in ...` — the loop target is a binding too. }
-      if (i > bodyStart) and (Tokens[i - 1].Kind = tkFor) then
+      if (i > bodyStart) and PyTokIsFor(i - 1) then
       begin
         Result := True;
         Exit;
@@ -36298,7 +36395,14 @@ begin
       i := PySkipTargetGroup(i);
       if i < 0 then Exit;
     end
-    else if Tokens[i].Kind = tkIdent then Inc(i)
+    else if Tokens[i].Kind = tkIdent then
+    begin
+      Inc(i);
+      { an attribute leaf, `(o.x, o.y)` -- PyParseNestGroupInto takes one
+        level in an assignment group }
+      if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+         (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+    end
     else Exit;
     Inc(n);
     if (i < TokCount) and (Tokens[i].Kind = tkComma) then begin Inc(i); Continue; end;
@@ -46562,6 +46666,33 @@ begin
     end;
 end;
 
+{ Does the range [lo, hi) test the name `nm` against None -- `nm is None`,
+  `nm is not None`, `nm == None`, `nm != None`, with or without a receiver
+  (`self.nm is None`)? The author's own word that the value may be None: a
+  scalar claim on a parameter of that name would meet the None as a TypeError
+  (pyvar_to_float), so PyParamTypeFromSites gives up instead. Token-only and
+  by NAME, so it vetoes more than it must and never less; a veto only leaves
+  the parameter a variant, which is always the right VALUE. }
+function PyNameTestedAgainstNone(lo, hi: Integer; const nm: AnsiString): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if lo < 0 then Exit;
+  if hi > TokCount then hi := TokCount;
+  for k := lo to hi - 3 do
+    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) then
+    begin
+      if (Tokens[k + 1].Kind in [tkEq, tkNeq]) and (Tokens[k + 2].Kind = tkNil) then
+        begin Result := True; Exit; end;
+      if (Tokens[k + 1].Kind = tkIdent) and (GetTokenStr(k + 1) = 'is') then
+      begin
+        if Tokens[k + 2].Kind = tkNil then begin Result := True; Exit; end;
+        if (k + 3 < hi) and (Tokens[k + 2].Kind = tkIdent) and
+           (GetTokenStr(k + 2) = 'not') and (Tokens[k + 3].Kind = tkNil) then begin Result := True; Exit; end;
+      end;
+    end;
+end;
+
 function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
                               mode: Integer; const clsName: AnsiString): TTypeKind;
 { A BARE parameter of the def at defTok: what type do its CALL SITES pass?
@@ -46630,7 +46761,7 @@ var i, k, e, pos, cur, depth, nSites, argIdx, argS, argE, dfltS, dfltE: Integer;
     hdrN, hdrPosN, nPos, nKw, selfOff, rIdx, j2: Integer;
     hdrStar, hdrKw, hdrOverflow, ours, known, dbg: Boolean;
     siteEncl, ownCls, recvCls, agreedCls, siteCls, clsNote: AnsiString;
-    dfltNone: Boolean; psCi, savedSelfCi: Integer;
+    dfltNone: Boolean; psCi, savedSelfCi, psCls: Integer;
 begin
   Result := tyUnknown;
   PyPSLastCi := -1;
@@ -47094,7 +47225,32 @@ begin
       end;
     end
     else
+    begin
       Result := PyLocalScalarTypeFrom(defTok, PyInferBodyLo, PyInferBodyHi, pname, agreed);
+      { THE DEFAULT ANCHORS, UNLESS THE PROGRAM SAYS NONE. An untypeable site
+        leaves a default-anchored claim standing (above), and that is a bet
+        that the site passes the default's type. Vloot's
+        `Graph(parent, h, colours, top=100.0)` is handed `top` from a metrics
+        table where it is None for the auto-scaled graphs, and its draw() asks
+        `if top is None:` -- the float claim raised "expected a number, got
+        NoneType" at construction. A None test of the name in the class (or
+        the def, for a plain function) is the author saying so; give up.
+        bug-nilpy-a-float-default-parameter-handed-none-through-a-variable }
+      if Result <> tyUnknown then
+      begin
+        psCls := -1;
+        if ownCls <> '' then psCls := PyClassDeclTok(ownCls);
+        if psCls >= 0 then
+        begin
+          if PyNameTestedAgainstNone(psCls, PySkipNestedSuite(psCls), pname) then
+            Result := tyUnknown;
+        end
+        else if PyNameTestedAgainstNone(PyInferBodyLo, PyInferBodyHi, pname) then
+          Result := tyUnknown;
+        if (Result = tyUnknown) and dbg then
+          WriteLn('PXXDBG n.psites ', siteName, '.', pname, ' tested against None -> no claim');
+      end;
+    end;
   end;
   PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
   PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
@@ -59290,6 +59446,8 @@ end;
   name. Before this the argument was not reached at all: the builtin took the
   second argument as the mode, so `open(p, encoding="ascii")` died on
   "undefined variable (encoding)". CurTok is the argument's first token. }
+var PyOpenErrorsReplace: Boolean;
+
 function PyOpenCheckTextArg(const role: AnsiString): Boolean;
 var v, f: AnsiString; i: Integer; c: Char; ok: Boolean;
 begin
@@ -59313,7 +59471,16 @@ begin
               (f = 'us-ascii') or (f = 'latin-1') or (f = 'latin1') or
               (f = 'iso-8859-1')
       else if role = 'errors' then
-        ok := f = 'strict'
+      begin
+        ok := f = 'strict';
+        { "replace" is HONOURED, not dropped: the open is wrapped in
+          pyfile_errors_replace and its text reads decode with U+FFFD }
+        if f = 'replace' then
+        begin
+          ok := True;
+          PyOpenErrorsReplace := True;
+        end;
+      end
       else
         ok := v = '';                          { newline='' reads bytes through }
       if ok then Exit;
@@ -59326,13 +59493,33 @@ begin
       Error('Nil Python: open(..., ' + role + '=''' + f + ''') is not supported: '
             + 'open reads bytes and never decodes, so it would return a wrong '
             + 'string rather than fail (accepted: encoding utf-8/ascii/latin-1, '
-            + 'errors strict, newline empty or None)');
+            + 'errors strict or replace, newline empty or None)');
     end;
   end;
   { not a literal -- `open(p, encoding=encoding)` with a parameter
     (logging.FileHandler). Judged when the call RUNS instead, against the same
     set, by pyopen_text_arg_check; the caller builds that. }
   Result := False;
+end;
+
+{ `open(..., errors="replace")` -> pyfile_errors_replace(<the open call>), so
+  the file's text reads decode invalid UTF-8 to U+FFFD (TPyFile.TextOf). Any
+  other open is handed back untouched. }
+function PyOpenWrapReplace(openNode: Integer): Integer;
+var node, arg: Integer;
+begin
+  Result := openNode;
+  if not PyOpenErrorsReplace then Exit;
+  PyOpenErrorsReplace := False;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := FindProc('pyfile_errors_replace');
+  if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyfile_errors_replace) not loaded');
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := REC_UCLASS_BASE + FindUClass('TPyFile');
+  arg := AllocNode(AN_ARG);
+  ASTLeft[arg] := openNode;
+  ASTLeft[node] := arg;
+  Result := node;
 end;
 
 { A Pascal `array of T` call result is a raw heap handle to NilPy -- nothing
@@ -62363,6 +62550,7 @@ begin
         atRecv := CurASTNode;
         opnMode := -1;
         opnPos := 1;                     { the path was positional 0 }
+        PyOpenErrorsReplace := False;
         while CurTok.Kind = tkComma do
         begin
           Next;
@@ -62440,7 +62628,7 @@ begin
           ASTTk[atRecv] := Ord(tyClass);
           ASTLeft[atRecv] := node;
           ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyFile');   { .write/.seek resolve }
-          CurASTNode := atRecv;
+          CurASTNode := PyOpenWrapReplace(atRecv);
           LastExprTk := tyClass;
           Exit;
         end;
@@ -62452,7 +62640,7 @@ begin
         ASTRight[node] := REC_UCLASS_BASE + FindUClass('TPyFile');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
         ASTLeft[node] := argSeq;
-        CurASTNode := node;
+        CurASTNode := PyOpenWrapReplace(node);
         LastExprTk := tyClass;
         Exit;
       end

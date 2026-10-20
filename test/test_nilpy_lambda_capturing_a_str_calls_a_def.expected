@@ -1,0 +1,6 @@
+[['row:#eeeeee', 'title:#eeeeee'], 'paint #ffffff', ['row:#eeeeee', 'title:#eeeeee'], 'paint #ffffff']
+['cpu-Load', 'CPUload', 'cpu[Load]', False, 7]
+True
+['a MB', 'b MB']
+[['row=#eeeeee', 'title=#eeeeee'], ['row=#eeeeee', 'title=#eeeeee']]
+(3, 'outer')
