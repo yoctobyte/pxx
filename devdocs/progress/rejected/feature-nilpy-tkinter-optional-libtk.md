@@ -1,6 +1,8 @@
 ---
 track: N
 prio: 30
+status: rejected
+summary: "REJECTED 2026-10-20 by the owner: one binary that falls back from GUI to console is the wrong requirement. Build two programs, console-only (static) and Tk, and keep libtk a plain link-time dependency."
 type: feature
 ---
 
@@ -21,3 +23,11 @@ loading shared libraries: libtk8.6.so.0: cannot open shared object file". via
 has libtcl8.6 but not libtk8.6. A headless or lightly equipped fleet box
 therefore can't run the full-app binary in any mode. Raised to prio 30 because
 this is what makes one binary run everywhere.
+
+**Rejected 2026-10-20 (owner):** auto-fallback to the console is a bad
+requirement. Build two applications, a console-only one (static) and a Tk one.
+Remote boxes only need the console, and only the workstation needs the GUI. A
+link-time libtk is how pxx is meant to work, so nothing changes here. The
+cheapest form of this ticket, if it ever comes back, is to replace the two
+libtk externals (Tk_Init, Tk_MainLoop) with `package require Tk` through
+Tcl_Eval, so that Tcl loads libtk itself. That needs no dlopen wrappers.
