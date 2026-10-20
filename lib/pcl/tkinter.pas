@@ -41,7 +41,7 @@ interface
   argument the app already writes would push the edit into the app — exactly what
   the compile-as-is mission forbids. Pascal-only PCL users who never touch this
   unit never link it. }
-uses tk, pylib, pyeval;
+uses tk, pylib, pyeval, mimic_tkinter_font;
 
 { Tk's option WORDS, which tkinter exposes as module constants and applications
   write as `tk.BOTH` / `tk.LEFT`. They are the literal Tcl strings.
@@ -149,7 +149,9 @@ type
                           change after creation through here too }
                         const foreground: AnsiString = '';
                         const bg: AnsiString = ''; const fg: AnsiString = '';
-                        const font: Variant = 0);
+                        const font: Variant = 0;
+                        { `cursor="hand2"`: the pointer over this widget }
+                        const cursor: AnsiString = '');
     { `w.config(...)` — tkinter's own short spelling of configure, and what a
       real application writes about as often as the long one. }
     procedure config(const state: AnsiString = ''; const scrollregion: Variant = 0;
@@ -163,7 +165,7 @@ type
                      const postcommand: Variant = 0;
                      const foreground: AnsiString = '';
                      const bg: AnsiString = ''; const fg: AnsiString = '';
-                     const font: Variant = 0);
+                     const font: Variant = 0; const cursor: AnsiString = '');
     { the raw form, for an option this façade has not named yet }
     procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
@@ -173,6 +175,27 @@ type
       the existing binding instead of replacing it, exactly as tkinter's does. }
     procedure bind(const sequence: AnsiString; const callback: Variant;
                    const add: AnsiString = ''); overload;
+    { a binding on the `all` tag: every widget in the application, which is how
+      a mouse wheel is caught wherever the pointer is. event.widget is None
+      there (the binding belongs to no one widget). }
+    procedure bind_all(const sequence: AnsiString; const callback: Variant;
+                       const add: AnsiString = '');
+    procedure unbind_all(const sequence: AnsiString);
+    { `wm` commands, written on the root (`root.geometry("1000x700")`) as on a
+      Toplevel. Here on Widget so both spell them; Tk refuses them on anything
+      that is not a toplevel, as CPython's would not compile them at all. }
+    procedure geometry(const spec: AnsiString);
+    procedure minsize(width, height: Integer);
+    procedure maxsize(width, height: Integer);
+    procedure resizable(width, height: Boolean);
+    { `root.wait_window(dialog)`: run the event loop until that window is
+      destroyed -- how a modal dialog returns its answer. No argument waits for
+      this widget itself. }
+    procedure wait_window(window: Widget = nil);
+    { a synthetic event, `w.event_generate("<<Refresh>>")` or a click with
+      x=/y= -- how one part of an application pokes another through Tk }
+    procedure event_generate(const sequence: AnsiString; x: Integer = -1;
+                             y: Integer = -1; const when: AnsiString = '');
     { the toplevel window this widget lives in, and its title bar — an editor
       shows the open document's name there }
     function winfo_toplevel: Widget;
@@ -249,7 +272,8 @@ type
                        height: Integer = -1; const padding: Variant = 0;
                        { a ttk style name, `ttk.Frame(style="Card.TFrame")` }
                        const style: AnsiString = '';
-                       const bg: AnsiString = '');
+                       const bg: AnsiString = '';
+                       const cursor: AnsiString = '');
   end;
 
   { ttk's PanedWindow — songformatter's editor is a horizontal split. Written
@@ -351,7 +375,6 @@ type
     { Tk's own index arithmetic, resolved to a concrete `line.char` — the
       caller records where a run STARTED before inserting it. }
     function index(const idx: AnsiString): AnsiString;
-    procedure event_generate(const sequence: AnsiString);
     { scroll an index into view, and move a MARK (`insert` is the caret) —
       what "paste, then put the caret at the top" is made of }
     procedure see(const idx: AnsiString);
@@ -365,6 +388,7 @@ type
       half of the pair. Found porting tkhtmlview. }
     procedure yview(const args: AnsiString);
     procedure yview_scroll(n: Integer; const what: AnsiString);
+    procedure yview_moveto(fraction: Double);
     procedure xview(const args: AnsiString);
   end;
 
@@ -405,20 +429,55 @@ type
     { font is a Variant: apps pass either a name or the (family, size, style)
       tuple _map_font-style helpers build. An AnsiString parameter took the
       tuple's object word as a string pointer and SEGFAULTED. }
+    { `tags=` on every create_*: a tag string or a tuple of them -- what
+      `delete("graph")` and `itemconfig("dot", ...)` later name. }
     function create_text(x, y: Double; const text: AnsiString;
                          const anchor: AnsiString = ''; const fill: AnsiString = '';
-                         const font: Variant = 0): Integer;
-    function create_line(x1, y1, x2, y2: Double;
+                         const font: Variant = 0; const tags: Variant = 0): Integer;
+    { The coordinates are Variants because Python writes them three ways:
+      four numbers, one flat list `[x0, y0, x1, y1, ...]`, or a list of
+      (x, y) pairs. A sequence in x1 is the whole coordinate list and y1..y2
+      are then ignored -- a graph's polyline is the list form. }
+    function create_line(const x1: Variant; const y1: Variant = 0;
+                         const x2: Variant = 0; const y2: Variant = 0;
                          const fill: AnsiString = '';
-                         width: Double = -1): Integer;
-    function create_rectangle(x1, y1, x2, y2: Double;
+                         width: Double = -1; const tags: Variant = 0;
+                         const smooth: Variant = 0;
+                         const capstyle: AnsiString = '';
+                         const joinstyle: AnsiString = ''): Integer;
+    { a filled area -- the shaded region under a history graph }
+    function create_polygon(const x1: Variant; const y1: Variant = 0;
+                            const x2: Variant = 0; const y2: Variant = 0;
+                            const fill: AnsiString = '';
+                            const outline: AnsiString = '';
+                            width: Double = -1; const tags: Variant = 0;
+                            const smooth: Variant = 0): Integer;
+    function create_rectangle(const x1: Variant; const y1: Variant = 0;
+                              const x2: Variant = 0; const y2: Variant = 0;
                               const outline: AnsiString = '';
                               const fill: AnsiString = '';
-                              width: Double = -1): Integer;
-    function create_oval(x1, y1, x2, y2: Double;
+                              width: Double = -1; const tags: Variant = 0): Integer;
+    function create_oval(const x1: Variant; const y1: Variant = 0;
+                         const x2: Variant = 0; const y2: Variant = 0;
                          const outline: AnsiString = '';
                          const fill: AnsiString = '';
-                         width: Double = -1): Integer;
+                         width: Double = -1; const tags: Variant = 0): Integer;
+    { `coords(item)` answers the item's coordinates as floats; with more it
+      MOVES the item -- a live graph updates its line this way instead of
+      deleting and redrawing. The list form `coords(item, pts)` is the one for
+      a polyline of any length (a star-unpacked `*pts` needs as many slots as
+      points, which a fixed signature cannot have). }
+    function coords(const item: Variant): TPyList; overload;
+    function coords(const item, x1: Variant; const y1: Variant = 0;
+                    const x2: Variant = 0; const y2: Variant = 0): TPyList; overload;
+    function itemcget(const item: Variant; const option: AnsiString): AnsiString;
+    { item IDs, as CPython's tuple of ints (a list here) }
+    function find_all: TPyList;
+    function find_withtag(const tagOrId: Variant): TPyList;
+    procedure tag_raise(const tagOrId: Variant);
+    procedure tag_lower(const tagOrId: Variant);
+    procedure yview_moveto(fraction: Double);
+    procedure xview_moveto(fraction: Double);
     function create_image(x, y: Double; image: PhotoImage;
                           const anchor: AnsiString = ''): Integer;
     { the raw form, mirroring configure_raw: an option this façade has not
@@ -427,10 +486,21 @@ type
       statically chosen overload. }
     procedure itemconfigure_raw(const item: Variant; const opts: AnsiString);
     { the Python spelling: options BY NAME, like Widget.configure }
-    procedure itemconfigure(const item: Variant; width: Integer = -1;
+    procedure itemconfigure(const item: Variant; width: Double = -1;
                             height: Integer = -1; const state: AnsiString = '';
                             const fill: AnsiString = '';
-                            const text: AnsiString = '');
+                            const text: AnsiString = '';
+                            const outline: AnsiString = '';
+                            const font: Variant = 0;
+                            const anchor: AnsiString = '');
+    { CPython's short name for itemconfigure }
+    procedure itemconfig(const item: Variant; width: Double = -1;
+                         height: Integer = -1; const state: AnsiString = '';
+                         const fill: AnsiString = '';
+                         const text: AnsiString = '';
+                         const outline: AnsiString = '';
+                         const font: Variant = 0;
+                         const anchor: AnsiString = '');
     procedure delete_all;
     { tkinter's own spelling: `canvas.delete("all")` / `canvas.delete(item_id)`.
       Only delete_all existed, so the standard call fell through to a dynamic
@@ -492,7 +562,8 @@ type
                        const padding: Variant = 0;
                        { a ttk style name, `ttk.Label(style="Header.TLabel")` }
                        const style: AnsiString = '';
-                       const bg: AnsiString = ''; const fg: AnsiString = '');
+                       const bg: AnsiString = ''; const fg: AnsiString = '';
+                       const cursor: AnsiString = '');
     procedure set_text(const value: AnsiString);
   end;
 
@@ -550,7 +621,8 @@ type
     width: Integer;
     height: Integer;
     keysym: AnsiString;
-    widget: AnsiString;
+    { the Widget the binding was made on, as in CPython; None for bind_all }
+    widget: Variant;
     constructor Create;
   end;
 
@@ -586,7 +658,6 @@ type
   public
     constructor Create(master: Widget = nil; const background: AnsiString = '';
                        const bg: AnsiString = '');
-    procedure geometry(const spec: AnsiString);
     { `transient(parent)` / `grab_set()` are what a modal dialog writes. }
     procedure transient(parent: Widget);
     procedure grab_set;
@@ -625,6 +696,20 @@ type
                         const lightcolor: AnsiString = '';
                         const darkcolor: AnsiString = '';
                         const bg: AnsiString = ''; const fg: AnsiString = '');
+    { `style.map("Tile.TFrame", background=[("active", "#333"),
+      ("selected", "#444")])`: per-STATE values, which is how a themed
+      widget changes colour on hover or selection without the application
+      reconfiguring it. Each pair is (state..., value); a compound state like
+      ("!disabled", "active", value) is every element but the last. }
+    procedure map(const style: AnsiString;
+                  const background: Variant = 0;
+                  const foreground: Variant = 0;
+                  const relief: Variant = 0;
+                  const bordercolor: Variant = 0;
+                  const lightcolor: Variant = 0;
+                  const darkcolor: Variant = 0;
+                  const fieldbackground: Variant = 0;
+                  const bg: Variant = 0; const fg: Variant = 0);
   end;
 
 { The Text class under a name that does NOT collide with the RTL's `Text`
@@ -946,7 +1031,7 @@ end;
   takes either in the same position, so the façade must too. }
 function TkiItemSpec(const item: Variant): AnsiString;
 begin
-  if pyvartag(item) = 6 then Result := pystr_of(item)
+  if (pyvartag(item) = 5) or (pyvartag(item) = 6) then Result := pystr_of(item)
   else Result := TkiIntStr(Integer(pyvar_to_int(item)));
 end;
 
@@ -1035,11 +1120,11 @@ procedure Widget.config(const state: AnsiString; const scrollregion: Variant;
                         width, height: Integer; menu: Widget;
                         const postcommand: Variant;
                         const foreground, bg, fg: AnsiString;
-                        const font: Variant);
+                        const font: Variant; const cursor: AnsiString);
 begin
   configure(state, scrollregion, yscrollcommand, xscrollcommand,
             text, background, width, height, postcommand,
-            foreground, bg, fg, font);
+            foreground, bg, fg, font, cursor);
   { the menu bar is `wm`-level on the root and an ordinary option elsewhere;
     Tcl takes the same spelling for both }
   if menu <> nil then TkEval(path + ' configure -menu ' + menu.path);
@@ -1064,7 +1149,7 @@ procedure Widget.configure(const state: AnsiString; const scrollregion: Variant;
                            width, height: Integer;
                            const postcommand: Variant;
                            const foreground, bg, fg: AnsiString;
-                           const font: Variant);
+                           const font: Variant; const cursor: AnsiString);
 var o: AnsiString; cbIdx: Integer;
 begin
   { only when the caller actually passed one: registering the DEFAULT (0) burnt
@@ -1080,7 +1165,8 @@ begin
      + TkiOptStr('text', text)
      + TkiOptStr('background', TkiEither(background, bg))
      + TkiOptStr('foreground', TkiEither(foreground, fg)) + TkiOptFont(font)
-     + TkiOptInt('width', width) + TkiOptInt('height', height);
+     + TkiOptInt('width', width) + TkiOptInt('height', height)
+     + TkiOptStr('cursor', cursor);
   if o <> '' then TkEval(path + ' configure' + o);
 end;
 
@@ -1119,6 +1205,10 @@ var
     own sets. They arrive as strings, which is what Tcl has — a handler wanting
     numbers converts, exactly as under CPython's tkinter. }
   gTkCbRaw: array[0..TKI_MAX_CALLBACKS - 1] of Boolean;
+  { the widget a `bind` was made on, for event.widget: Tk's %W names a PATH and
+    the application expects the object (`e.widget.configure(bg=...)`). None
+    for a binding that is not one widget's (bind_all, a -command). }
+  gTkCbW: array[0..TKI_MAX_CALLBACKS - 1] of Variant;
   gTkCbFree: array[0..TKI_MAX_CALLBACKS - 1] of Integer;
   gTkCbFreeCount: Integer;
   gTkCbCount: Integer;
@@ -1212,7 +1302,7 @@ begin
   ev.width := TkiCbArgInt(argc, argv, 6);
   ev.height := TkiCbArgInt(argc, argv, 7);
   ev.keysym := TkCmdArg(argc, argv, 8);
-  ev.widget := TkCmdArg(argc, argv, 9);
+  ev.widget := gTkCbW[idx];
   PPyVarRec(@evv)^.VType := 7;              { VT_OBJECT }
   PPyVarRec(@evv)^.Payload := Int64(NativeInt(Pointer(ev)));
   { evv owns Create's reference and its finalization releases it; a retain
@@ -1262,6 +1352,7 @@ begin
   gTkCbOnce[TkiRegisterCallbackEx] := once;
   gTkCbAfterId[TkiRegisterCallbackEx] := '';
   gTkCbRaw[TkiRegisterCallbackEx] := False;
+  gTkCbW[TkiRegisterCallbackEx] := pynone;
 end;
 
 function TkiRegisterCallback(const cb: Variant): Integer;
@@ -1287,6 +1378,7 @@ begin
   gTkCbOnce[idx] := False;
   gTkCbAfterId[idx] := '';
   gTkCb[idx] := pynone;
+  gTkCbW[idx] := pynone;
   if gTkCbFreeCount < TKI_MAX_CALLBACKS then
   begin
     gTkCbFree[gTkCbFreeCount] := idx;
@@ -1401,7 +1493,7 @@ end;
 constructor Event.Create;
 begin
   x := -1; y := -1; delta := -1; num := -1; width := -1; height := -1;
-  keysym := ''; widget := '';
+  keysym := ''; widget := pynone;
 end;
 
 procedure Widget.bind(const sequence: AnsiString; const callback: Variant;
@@ -1410,8 +1502,25 @@ var idx: Integer; op: AnsiString;
 begin
   idx := TkiRegisterCallback(callback);
   if idx < 0 then Exit;
+  gTkCbW[idx] := Self;          { event.widget; the slot's Variant holds a reference }
   if add = '' then op := '' else op := '+';
   TkEval('bind ' + path + ' ' + sequence + ' {' + op + TkiCbScript(idx) + '}');
+end;
+
+procedure Widget.bind_all(const sequence: AnsiString; const callback: Variant;
+                          const add: AnsiString);
+var idx: Integer; op: AnsiString;
+begin
+  idx := TkiRegisterCallback(callback);
+  if idx < 0 then Exit;
+  if add = '' then op := '' else op := '+';
+  TkEval('bind all ' + sequence + ' {' + op + TkiCbScript(idx) + '}');
+end;
+
+procedure Widget.unbind_all(const sequence: AnsiString);
+begin
+  TkiEnsureStarted;
+  TkEval('bind all ' + sequence + ' {}');
 end;
 
 function Widget.winfo_toplevel: Widget;
@@ -1559,7 +1668,7 @@ end;
 constructor Frame.Create(master: Widget; highlightthickness: Integer;
                         const background: AnsiString; width: Integer;
                         height: Integer; const padding: Variant;
-                        const style, bg: AnsiString);
+                        const style, bg, cursor: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
@@ -1573,11 +1682,12 @@ begin
   if (pyvartag(padding) <> 0) or (style <> '') then
     TkEval('ttk::frame ' + path + TkiOptPadding(padding) +
            TkiOptStr('style', style) +
-           TkiOptInt('width', width) + TkiOptInt('height', height))
+           TkiOptInt('width', width) + TkiOptInt('height', height) +
+           TkiOptStr('cursor', cursor))
   else
     TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
            TkiOptStr('background', TkiEither(background, bg)) + TkiOptInt('width', width) +
-           TkiOptInt('height', height));
+           TkiOptInt('height', height) + TkiOptStr('cursor', cursor));
 end;
 
 { ---- PhotoImage ---------------------------------------------------------- }
@@ -1753,9 +1863,15 @@ begin
   TkEval(path + ' mark set ' + markName + ' ' + idx);
 end;
 
-procedure Text.event_generate(const sequence: AnsiString);
+procedure Widget.event_generate(const sequence: AnsiString; x, y: Integer;
+                                const when: AnsiString);
+var o: AnsiString;
 begin
-  TkEval('event generate ' + path + ' ' + sequence);
+  o := '';
+  if x <> -1 then o := o + ' -x ' + TkiIntStr(x);
+  if y <> -1 then o := o + ' -y ' + TkiIntStr(y);
+  o := o + TkiOptStr('when', when);
+  TkEval('event generate ' + path + ' ' + sequence + o);
 end;
 
 procedure Text.yview(const args: AnsiString);
@@ -1822,43 +1938,189 @@ begin
     create_window := create_window(x, y, window.path, anchor);
 end;
 
+function TkiCoordWords(const v: Variant): AnsiString;
+{ One coordinate value as Tcl words: a number, or a sequence of numbers and/or
+  (x, y) pairs, flattened -- the three shapes Python's canvas takes. }
+var l: TPyList; i: Integer; w: AnsiString;
+begin
+  Result := '';
+  if pyvartag(v) = 7 then
+  begin
+    l := TPyList(pyvarobj(v));
+    if l = nil then Exit;
+    for i := 0 to l.count - 1 do
+    begin
+      w := TkiCoordWords(l.at(i));
+      if w = '' then Continue;
+      if Result <> '' then Result := Result + ' ';
+      Result := Result + w;
+    end;
+  end
+  else
+    Result := TkiNumStr(pyvar_to_float(v));
+end;
+
+function TkiCoords4(const x1, y1, x2, y2: Variant): AnsiString;
+begin
+  if pyvartag(x1) = 7 then Result := TkiCoordWords(x1)
+  else Result := TkiCoordWords(x1) + ' ' + TkiCoordWords(y1) + ' ' +
+                 TkiCoordWords(x2) + ' ' + TkiCoordWords(y2);
+end;
+
+function TkiOptTags(const tags: Variant): AnsiString;
+{ `tags="graph"` or `tags=("graph", "cpu")` -> ` -tags {{graph} {cpu}}` }
+var l: TPyList; i: Integer; body: AnsiString;
+begin
+  Result := '';
+  case pyvartag(tags) of
+    5, 6: Result := ' -tags {' + pystr_of(tags) + '}';
+    7:
+      begin
+        l := TPyList(pyvarobj(tags));
+        if l = nil then Exit;
+        body := '';
+        for i := 0 to l.count - 1 do
+        begin
+          if i > 0 then body := body + ' ';
+          body := body + '{' + pystr_of(l.at(i)) + '}';
+        end;
+        Result := ' -tags {' + body + '}';
+      end;
+  end;
+end;
+
+function TkiOptBool(const name: AnsiString; const v: Variant): AnsiString;
+begin
+  if (pyvartag(v) = 0) or (pyvar_to_int(v) = 0) then Result := ''
+  else Result := ' -' + name + ' 1';
+end;
+
+function TkiIdList(const raw: AnsiString): TPyList;
+var one: AnsiString; i: Integer;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;     { CPython's find_* answer a tuple }
+  one := '';
+  for i := 1 to Length(raw) + 1 do
+    if (i > Length(raw)) or (raw[i] = ' ') then
+    begin
+      if one <> '' then Result.append(TkiStrInt(one));
+      one := '';
+    end
+    else one := one + raw[i];
+end;
+
 function Canvas.create_text(x, y: Double; const text, anchor, fill: AnsiString;
-                            const font: Variant): Integer;
+                            const font, tags: Variant): Integer;
 begin
   create_text := TkiStrInt(TkEval(path + ' create text ' + TkiNumStr(x) + ' ' +
                  TkiNumStr(y) + ' -text {' + text + '}' +
                  TkiOptStr('anchor', anchor) + TkiOptStr('fill', fill) +
-                 TkiOptFont(font)));
+                 TkiOptFont(font) + TkiOptTags(tags)));
 end;
 
-function Canvas.create_line(x1, y1, x2, y2: Double;
-                            const fill: AnsiString; width: Double): Integer;
+function Canvas.create_line(const x1, y1, x2, y2: Variant;
+                            const fill: AnsiString; width: Double;
+                            const tags, smooth: Variant;
+                            const capstyle, joinstyle: AnsiString): Integer;
 begin
-  create_line := TkiStrInt(TkEval(path + ' create line ' + TkiNumStr(x1) + ' ' +
-                 TkiNumStr(y1) + ' ' + TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
-                 TkiOptStr('fill', fill) + TkiOptNum('width', width)));
+  create_line := TkiStrInt(TkEval(path + ' create line ' +
+                 TkiCoords4(x1, y1, x2, y2) +
+                 TkiOptStr('fill', fill) + TkiOptNum('width', width) +
+                 TkiOptTags(tags) + TkiOptBool('smooth', smooth) +
+                 TkiOptStr('capstyle', capstyle) + TkiOptStr('joinstyle', joinstyle)));
 end;
 
-function Canvas.create_rectangle(x1, y1, x2, y2: Double;
+function Canvas.create_polygon(const x1, y1, x2, y2: Variant;
+                               const fill, outline: AnsiString; width: Double;
+                               const tags, smooth: Variant): Integer;
+begin
+  create_polygon := TkiStrInt(TkEval(path + ' create polygon ' +
+                    TkiCoords4(x1, y1, x2, y2) +
+                    TkiOptStr('fill', fill) + TkiOptStr('outline', outline) +
+                    TkiOptNum('width', width) + TkiOptTags(tags) +
+                    TkiOptBool('smooth', smooth)));
+end;
+
+function Canvas.create_rectangle(const x1, y1, x2, y2: Variant;
                                  const outline, fill: AnsiString;
-                                 width: Double): Integer;
+                                 width: Double; const tags: Variant): Integer;
 begin
   create_rectangle := TkiStrInt(TkEval(path + ' create rectangle ' +
-                      TkiNumStr(x1) + ' ' + TkiNumStr(y1) + ' ' +
-                      TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
+                      TkiCoords4(x1, y1, x2, y2) +
                       TkiOptStr('outline', outline) + TkiOptStr('fill', fill) +
-                      TkiOptNum('width', width)));
+                      TkiOptNum('width', width) + TkiOptTags(tags)));
 end;
 
-function Canvas.create_oval(x1, y1, x2, y2: Double;
+function Canvas.create_oval(const x1, y1, x2, y2: Variant;
                             const outline, fill: AnsiString;
-                            width: Double): Integer;
+                            width: Double; const tags: Variant): Integer;
 begin
   create_oval := TkiStrInt(TkEval(path + ' create oval ' +
-                 TkiNumStr(x1) + ' ' + TkiNumStr(y1) + ' ' +
-                 TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
+                 TkiCoords4(x1, y1, x2, y2) +
                  TkiOptStr('outline', outline) + TkiOptStr('fill', fill) +
-                 TkiOptNum('width', width)));
+                 TkiOptNum('width', width) + TkiOptTags(tags)));
+end;
+
+function Canvas.coords(const item: Variant): TPyList;
+var raw, one: AnsiString; i: Integer;
+begin
+  raw := TkEval(path + ' coords ' + TkiItemSpec(item));
+  Result := TPyList.Create;
+  one := '';
+  for i := 1 to Length(raw) + 1 do
+    if (i > Length(raw)) or (raw[i] = ' ') then
+    begin
+      if one <> '' then Result.append(pyfloat_parse(one));
+      one := '';
+    end
+    else one := one + raw[i];
+end;
+
+function Canvas.coords(const item, x1, y1, x2, y2: Variant): TPyList;
+begin
+  TkEval(path + ' coords ' + TkiItemSpec(item) + ' ' + TkiCoords4(x1, y1, x2, y2));
+  Result := TPyList.Create;
+end;
+
+function Canvas.itemcget(const item: Variant; const option: AnsiString): AnsiString;
+begin
+  itemcget := TkEval(path + ' itemcget ' + TkiItemSpec(item) + ' -' + option);
+end;
+
+function Canvas.find_all: TPyList;
+begin
+  find_all := TkiIdList(TkEval(path + ' find all'));
+end;
+
+function Canvas.find_withtag(const tagOrId: Variant): TPyList;
+begin
+  find_withtag := TkiIdList(TkEval(path + ' find withtag ' + TkiItemSpec(tagOrId)));
+end;
+
+procedure Canvas.tag_raise(const tagOrId: Variant);
+begin
+  TkEval(path + ' raise ' + TkiItemSpec(tagOrId));
+end;
+
+procedure Canvas.tag_lower(const tagOrId: Variant);
+begin
+  TkEval(path + ' lower ' + TkiItemSpec(tagOrId));
+end;
+
+procedure Canvas.yview_moveto(fraction: Double);
+begin
+  TkEval(path + ' yview moveto ' + TkiNumStr(fraction));
+end;
+
+procedure Canvas.xview_moveto(fraction: Double);
+begin
+  TkEval(path + ' xview moveto ' + TkiNumStr(fraction));
+end;
+
+procedure Text.yview_moveto(fraction: Double);
+begin
+  TkEval(path + ' yview moveto ' + TkiNumStr(fraction));
 end;
 
 { An image item takes the PhotoImage's Tk NAME, not a path — the photo must
@@ -1875,12 +2137,25 @@ begin
                   TkiOptStr('anchor', anchor)));
 end;
 
-procedure Canvas.itemconfigure(const item: Variant; width, height: Integer;
-                               const state, fill, text: AnsiString);
+procedure Canvas.itemconfigure(const item: Variant; width: Double;
+                               height: Integer;
+                               const state, fill, text, outline: AnsiString;
+                               const font: Variant; const anchor: AnsiString);
+var o: AnsiString;
 begin
-  itemconfigure_raw(item, TkiOptInt('width', width) + TkiOptInt('height', height) +
-                TkiOptStr('state', state) + TkiOptStr('fill', fill) +
-                TkiOptStr('text', text));
+  o := TkiOptNum('width', width) + TkiOptInt('height', height) +
+       TkiOptStr('state', state) + TkiOptStr('fill', fill) +
+       TkiOptStr('outline', outline) + TkiOptFont(font) +
+       TkiOptStr('anchor', anchor) + TkiOptStr('text', text);
+  if o <> '' then itemconfigure_raw(item, o);
+end;
+
+procedure Canvas.itemconfig(const item: Variant; width: Double;
+                            height: Integer;
+                            const state, fill, text, outline: AnsiString;
+                            const font: Variant; const anchor: AnsiString);
+begin
+  itemconfigure(item, width, height, state, fill, text, outline, font, anchor);
 end;
 
 procedure Canvas.itemconfigure_raw(const item: Variant; const opts: AnsiString);
@@ -2035,36 +2310,22 @@ begin
 end;
 
 function TkiOptFont(const f: Variant): AnsiString;
-{ A font option: absent, a NAME, or the (family, size, style) tuple. Tk spells
-  the tuple as a braced list, `-font {TkDefaultFont 10 bold}`. }
-var l: TPyList; i: Integer; body: AnsiString; el: Variant;
+{ A font option: absent, a NAME, the (family, size, style) tuple, or a
+  tkinter.font.Font. Tk spells the tuple as a braced list,
+  `-font {{DejaVu Sans} 10 bold}` -- each name braced so a family with a space
+  stays one word (see TkFontSpecOf). }
+var spec: AnsiString;
 begin
   Result := '';
-  case pyvartag(f) of
-    0: Exit;
-    7:
-      begin
-        l := TPyList(pyvarobj(f));
-        if (l = nil) or (l.count = 0) then Exit;
-        body := '';
-        for i := 0 to l.count - 1 do
-        begin
-          if i > 0 then body := body + ' ';
-          el := l.at(i);
-          if (pyvartag(el) = 5) or (pyvartag(el) = 6) then body := body + VariantToStr(el)
-          else body := body + TkiIntStr(pyvar_to_int(el));
-        end;
-        Result := ' -font {' + body + '}';
-      end;
-    5, 6: Result := ' -font {' + VariantToStr(f) + '}';
-  end;
+  spec := TkFontSpecOf(f);
+  if spec <> '' then Result := ' -font {' + spec + '}';
 end;
 
 constructor Label.Create(master: Widget; const text, anchor: AnsiString;
                         const font: Variant; const textvariable: Variant;
                         const foreground, background: AnsiString;
                         const padding: Variant;
-                        const style, bg, fg: AnsiString);
+                        const style, bg, fg, cursor: AnsiString);
 var vn, fgc, bgc: AnsiString;
 begin
   fgc := TkiEither(foreground, fg);
@@ -2080,12 +2341,12 @@ begin
            TkiOptStr('anchor', anchor) + TkiOptFont(font) +
            TkiOptStr('textvariable', vn) + TkiOptStr('foreground', fgc) +
            TkiOptStr('background', bgc) + TkiOptPadding(padding) +
-           TkiOptStr('style', style))
+           TkiOptStr('style', style) + TkiOptStr('cursor', cursor))
   else
     TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
            TkiOptFont(font) + TkiOptStr('textvariable', vn) +
            TkiOptStr('foreground', fgc) +
-           TkiOptStr('background', bgc));
+           TkiOptStr('background', bgc) + TkiOptStr('cursor', cursor));
 end;
 
 procedure Label.set_text(const value: AnsiString);
@@ -2287,6 +2548,51 @@ begin
   end;
 end;
 
+function TkiOptStateMap(const name: AnsiString; const v: Variant): AnsiString;
+var l, pair: TPyList; i, k: Integer; states, body: AnsiString;
+begin
+  Result := '';
+  if pyvartag(v) <> 7 then Exit;
+  l := TPyList(pyvarobj(v));
+  if l = nil then Exit;
+  body := '';
+  for i := 0 to l.count - 1 do
+  begin
+    if pyvartag(l.at(i)) <> 7 then Continue;
+    pair := TPyList(pyvarobj(l.at(i)));
+    if (pair = nil) or (pair.count < 2) then Continue;
+    states := '';
+    for k := 0 to pair.count - 2 do
+    begin
+      if k > 0 then states := states + ' ';
+      states := states + pystr_of(pair.at(k));
+    end;
+    if body <> '' then body := body + ' ';
+    body := body + '{' + states + '} {' + pystr_of(pair.at(pair.count - 1)) + '}';
+  end;
+  if body <> '' then Result := ' -' + name + ' {' + body + '}';
+end;
+
+function TkiVarEither(const long, short: Variant): Variant;
+begin
+  if pyvartag(long) = 7 then Result := long else Result := short;
+end;
+
+procedure Style.map(const style: AnsiString; const background, foreground,
+                    relief, bordercolor, lightcolor, darkcolor,
+                    fieldbackground, bg, fg: Variant);
+var o: AnsiString;
+begin
+  o := TkiOptStateMap('background', TkiVarEither(background, bg)) +
+       TkiOptStateMap('foreground', TkiVarEither(foreground, fg)) +
+       TkiOptStateMap('relief', relief) +
+       TkiOptStateMap('bordercolor', bordercolor) +
+       TkiOptStateMap('lightcolor', lightcolor) +
+       TkiOptStateMap('darkcolor', darkcolor) +
+       TkiOptStateMap('fieldbackground', fieldbackground);
+  if o <> '' then TkEval('ttk::style map ' + style + o);
+end;
+
 function Style.theme_names: TPyList;
 var l: TPyList; names, w: AnsiString; i: Integer;
 begin
@@ -2347,9 +2653,31 @@ begin
   TkEval('toplevel ' + path + TkiOptStr('background', TkiEither(background, bg)));
 end;
 
-procedure Toplevel.geometry(const spec: AnsiString);
+procedure Widget.geometry(const spec: AnsiString);
 begin
-  TkEval(path + ' geometry ' + spec);
+  TkEval('wm geometry ' + path + ' ' + spec);
+end;
+
+procedure Widget.minsize(width, height: Integer);
+begin
+  TkEval('wm minsize ' + path + ' ' + TkiIntStr(width) + ' ' + TkiIntStr(height));
+end;
+
+procedure Widget.maxsize(width, height: Integer);
+begin
+  TkEval('wm maxsize ' + path + ' ' + TkiIntStr(width) + ' ' + TkiIntStr(height));
+end;
+
+procedure Widget.resizable(width, height: Boolean);
+begin
+  TkEval('wm resizable ' + path + ' ' + TkiIntStr(Ord(width)) + ' ' +
+         TkiIntStr(Ord(height)));
+end;
+
+procedure Widget.wait_window(window: Widget);
+begin
+  if window = nil then window := Self;
+  TkEval('tkwait window ' + window.path);
 end;
 
 procedure Toplevel.transient(parent: Widget);

@@ -1677,9 +1677,11 @@ test-nilpy: $(COMPILER)
 	# Both .expected are python3's.
 	./$(COMPILER) examples/tk/style_and_short_options.npy $(TESTTMP)/test_nilpy_tkstyle26
 	./$(COMPILER) examples/tk/no_display_raises_tclerror.npy $(TESTTMP)/test_nilpy_tknodisp26
+	./$(COMPILER) examples/tk/canvas_items_dialog_and_events.npy $(TESTTMP)/test_nilpy_tkcide26
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkstyle26 | diff -u examples/tk/style_and_short_options.expected - || exit 1; \
 	  env -u DISPLAY -u WAYLAND_DISPLAY $(TESTTMP)/test_nilpy_tknodisp26 | diff -u examples/tk/no_display_raises_tclerror.expected - || exit 1; \
+	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkcide26 2>&1 | diff -u examples/tk/canvas_items_dialog_and_events.expected - || exit 1; \
 	else echo "  tk: no xvfb-run, skipping the style and no-display RUNs (compiled only)"; fi
 	# An event callback's Event and the widgets winfo_children() returns are
 	# released (both were boxed with an extra retain: pin v451 leaves ~2,400
@@ -2813,6 +2815,14 @@ test-nilpy: $(COMPILER)
 	# its last reference: each leaked one fd before (fd counts against python3's).
 	# And an uncaught exception names class + message on aarch64 too, run under
 	# qemu where it is installed.
+	# os.stat's st_uid/st_gid/st_ino/st_nlink/st_mtime and os.getpid/getuid/getgid,
+	# as relations python3 also holds (values differ per machine), then aarch64.
+	./$(COMPILER) test/test_nilpy_os_stat_owner_and_ids.npy $(TESTTMP)/test_nilpy_osstat26
+	$(TESTTMP)/test_nilpy_osstat26 | diff -u test/test_nilpy_os_stat_owner_and_ids.expected -
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_nilpy_os_stat_owner_and_ids.npy $(TESTTMP)/test_nilpy_osstat_a64 >/dev/null || exit 1; \
+	  tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_osstat_a64 | diff -u test/test_nilpy_os_stat_owner_and_ids.expected - || exit 1; \
+	else echo "=== test_nilpy_os_stat_owner_and_ids: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
 	./$(COMPILER) test/test_nilpy_with_open_closes_the_file.npy $(TESTTMP)/test_nilpy_withopen26
 	$(TESTTMP)/test_nilpy_withopen26 | diff -u test/test_nilpy_with_open_closes_the_file.expected -
 	./$(COMPILER) test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname26

@@ -1,0 +1,102 @@
+# What a GNOME-Resources-style monitor's GUI needs from tkinter (Vloot):
+# canvas items as a live graph (polygon + polyline from flat or pair lists,
+# moved with coords(), tagged, recoloured with itemconfig), a scrolling side
+# bar, clicks that hand back the widget, a modal dialog with wait_window,
+# ttk.Style.map, tkinter.font measuring, and root.geometry/minsize.
+# The .expected is python3's, run under Xvfb.
+import tkinter as tk
+import tkinter.font as tkfont
+from tkinter import ttk
+
+root = tk.Tk()
+root.geometry("400x300")
+root.minsize(300, 200)
+root.columnconfigure(1, weight=1)
+root.rowconfigure(0, weight=1)
+
+# -- a graph: filled area + line, updated in place
+c = tk.Canvas(root, width=200, height=100, bg="#1e1e1e", cursor="hand2")
+c.grid(row=0, column=1, sticky="nsew")
+pts = [0, 100, 50, 40, 100, 70, 150, 20, 200, 100]
+area = c.create_polygon(pts, fill="#334", outline="", tags=("graph", "area"))
+line = c.create_line(pts[2:-2], fill="#6af", width=2, tags="graph")
+dot = c.create_oval(1, 1, 9, 9, fill="green", outline="", tags="dot")
+label = c.create_text(4, 4, text="CPU", anchor="nw", fill="white", font=("DejaVu Sans", 9, "bold"))
+print(c.coords(line))
+c.coords(line, [(0, 50), (100, 60), (200, 10)])
+print(c.coords(line))
+c.coords(dot, 2, 2, 8, 8)
+print(c.coords(dot))
+c.itemconfig("graph", fill="#f80")
+c.itemconfig(label, text="CPU 42%")
+print(c.itemcget(line, "fill"), c.itemcget(label, "text"))
+print(c.find_withtag("graph"), c.find_withtag("area"))
+c.tag_raise("dot")
+c.delete("graph")
+print(c.find_all())
+
+# -- a scrolling side bar of tiles
+side = tk.Canvas(root, width=120, highlightthickness=0)
+sb = ttk.Scrollbar(root, orient="vertical", command=side.yview)
+side.configure(yscrollcommand=sb.set)
+inner = tk.Frame(side, bg="#222")
+side.create_window((0, 0), window=inner, anchor="nw")
+tiles = []
+picked = []
+
+
+def pick(e):
+    picked.append(tiles.index(e.widget))
+    for t in tiles:
+        t.configure(background="#222")
+    e.widget.configure(background="#446")
+
+
+for name in ["Processor", "Memory", "GPU", "Disk", "Network"]:
+    t = tk.Label(inner, text=name, bg="#222", fg="white", cursor="hand2")
+    t.pack(fill="x")
+    t.bind("<Button-1>", pick)
+    tiles.append(t)
+wheel = []
+side.bind_all("<MouseWheel>", lambda e: wheel.append(e.widget))
+root.update_idletasks()
+side.configure(scrollregion=side.bbox("all"))
+side.yview_moveto(0)
+side.grid(row=0, column=0, sticky="ns")
+root.update()
+tiles[2].event_generate("<Button-1>", x=3, y=3)
+tiles[0].event_generate("<Button-1>")
+root.update()
+print(picked, tiles[0].cget("background"), tiles[2].cget("background"))
+
+# -- ttk state maps and fonts
+s = ttk.Style()
+s.configure("Tile.TFrame", background="#222")
+s.map("Tile.TFrame", background=[("active", "#333"), ("!disabled", "selected", "#444")])
+f = tkfont.Font(family="DejaVu Sans", size=11, weight="bold")
+print(f.measure("Processor") > f.measure("CPU") > 0, f.metrics("linespace") > 0)
+ttk.Label(inner, text="x", font=f).pack()
+
+# -- a modal dialog
+answer = tk.StringVar(value="")
+d = tk.Toplevel(root)
+d.transient(root)
+e = ttk.Entry(d, textvariable=answer)
+e.pack()
+e.focus_set()
+
+
+def ok(event=None):
+    print("added", e.get())
+    d.destroy()
+
+
+ttk.Button(d, text="Add", command=ok).pack()
+d.bind("<Return>", ok)
+e.insert(0, "via")
+d.grab_set()
+d.after(100, ok)
+root.wait_window(d)
+print("dialog closed")
+root.after(50, root.destroy)
+root.mainloop()

@@ -1,0 +1,15 @@
+# os.stat's owner/group/inode/link/mtime fields and os.getpid/getuid/geteuid/
+# getgid, os.path.getmtime. Values differ per machine, so every line is a
+# relation CPython also holds true. Vloot reads a process's owner as
+# os.stat("/proc/<pid>").st_uid.
+import os
+
+me = os.stat("/proc/self")
+print(me.st_uid == os.getuid(), me.st_gid == os.getgid())
+print(os.getuid() == os.geteuid(), os.getpid() > 1)
+init = os.stat("/proc/1")
+print(init.st_uid, init.st_gid)
+h = os.stat("/etc/passwd")
+print(h.st_uid, h.st_mode & 0o777 == 0o644, h.st_nlink >= 1, h.st_ino > 0)
+print(int(h.st_mtime) == h.st_mtime_ns // 1000000000)
+print(abs(os.path.getmtime("/etc/passwd") - h.st_mtime) < 1e-6)

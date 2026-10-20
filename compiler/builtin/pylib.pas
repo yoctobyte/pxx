@@ -211,6 +211,13 @@ type
   public
     st_mode: Int64;
     st_size: Int64;
+    st_uid: Int64;
+    st_gid: Int64;
+    st_ino: Int64;
+    st_nlink: Int64;
+    { seconds as a float, and the exact nanoseconds, as CPython has both }
+    st_mtime: Double;
+    st_mtime_ns: Int64;
     constructor Create;
   end;
 
@@ -1717,6 +1724,11 @@ function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'
 { os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
   for a missing path rather than answering 0. }
 function pyos_path_getsize(const p: AnsiString): Int64;
+function pyos_path_getmtime(const p: AnsiString): Double;
+function pyos_getpid: Int64;
+function pyos_getuid: Int64;
+function pyos_geteuid: Int64;
+function pyos_getgid: Int64;
 { os.path.expanduser — a leading '~' becomes $HOME. Any other shape (including
   '~user') is returned unchanged, which is also what CPython does when it cannot
   resolve the user. }
@@ -16718,6 +16730,33 @@ begin
   Result := stx.st_size;
 end;
 
+function pyos_path_getmtime(const p: AnsiString): Double;
+var stx: TPyStat;
+begin
+  stx := pyos_stat(p);
+  Result := stx.st_mtime;
+end;
+
+function pyos_getpid: Int64;
+begin
+  Result := PyPalGetId(0);
+end;
+
+function pyos_getuid: Int64;
+begin
+  Result := PyPalGetId(1);
+end;
+
+function pyos_geteuid: Int64;
+begin
+  Result := PyPalGetId(2);
+end;
+
+function pyos_getgid: Int64;
+begin
+  Result := PyPalGetId(3);
+end;
+
 function pyos_path_expanduser(const p: AnsiString): AnsiString;
 var home: Variant; hs: AnsiString;
 begin
@@ -17332,7 +17371,7 @@ begin
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
-var cs: AnsiString; r, mode, size: Int64;
+var cs: AnsiString; r: Int64; st: TPyPalStat;
 begin
   { Real stat on every Linux target (plain stat on x86-64, statx elsewhere --
     see PyPalStatModeSize) and on ESP-IDF (uforth FILE-STATUS: a missing file
@@ -17343,11 +17382,17 @@ begin
     os.path.getsize existed. }
   Result := TPyStat.Create;
   cs := path + #0;
-  r := PyPalStatModeSize(@cs[1], mode, size);
+  r := PyPalStatFull(@cs[1], st);
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
-  Result.st_mode := mode;
-  Result.st_size := size;
+  Result.st_mode := st.mode;
+  Result.st_size := st.size;
+  Result.st_uid := st.uid;
+  Result.st_gid := st.gid;
+  Result.st_ino := st.ino;
+  Result.st_nlink := st.nlink;
+  Result.st_mtime_ns := st.mtimeNs;
+  Result.st_mtime := st.mtimeNs / 1000000000.0;
 end;
 
 function pystdin_readline: AnsiString;

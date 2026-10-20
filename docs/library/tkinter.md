@@ -99,25 +99,28 @@ The module has these names. Each widget takes the options listed in
 
 | Area | Names |
 | --- | --- |
-| Windows | `Tk`, `Toplevel` (`geometry`, `transient`, `grab_set`, `grab_release`) |
+| Windows | `Tk`, `Toplevel` (`transient`, `grab_set`, `grab_release`); on both, `geometry`, `minsize`, `maxsize`, `resizable` and `wait_window` (a modal dialog) |
 | Widgets | `Frame`, `Label`, `Entry`, `Button`, `Checkbutton`, `Text`, `Canvas`, `Scrollbar`, `Menu`, `Separator`, `PanedWindow`, `Notebook`, `PhotoImage` |
 | Variables | `StringVar`, `BooleanVar` (`get`, `set`, `trace_add`) |
 | Layout | `pack` (with `anchor=`), `grid`, `grid_columnconfigure`/`columnconfigure`, `grid_rowconfigure`/`rowconfigure` |
-| Every widget | `configure`/`config`, `cget`, `bind`, `after`, `after_idle`, `after_cancel`, `winfo_children`, `winfo_width`, `winfo_height`, `focus_set`, `destroy`, `update`, `mainloop`, `quit`, the clipboard calls |
+| Every widget | `configure`/`config` (with `cursor=`), `cget`, `bind`, `bind_all`, `unbind_all`, `event_generate` (with `x=`, `y=`), `after`, `after_idle`, `after_cancel`, `winfo_children`, `winfo_width`, `winfo_height`, `focus_set`, `destroy`, `update`, `mainloop`, `quit`, the clipboard calls |
 | `Text` | `insert`, `delete`, `get`, `index`, `see`, `mark_set`, `tag_add`, `tag_configure`, scrolling |
-| `Canvas` | `create_text`, `create_line`, `create_rectangle`, `create_oval`, `create_image`, `create_window`, `itemconfigure`, `bbox`, `delete`, scrolling |
+| `Canvas` | `create_text`, `create_line`, `create_polygon`, `create_rectangle`, `create_oval`, `create_image`, `create_window`, each with `tags=`; coordinates as four numbers, a flat list or a list of `(x, y)` pairs; `coords`, `itemconfigure`/`itemconfig`, `itemcget`, `find_all`, `find_withtag`, `tag_raise`, `tag_lower`, `bbox`, `delete` (by id or tag), scrolling with `yview_moveto` |
 | Dialogs | `from tkinter import messagebox`: `showinfo`, `showwarning`, `showerror`, `askyesno`, `askokcancel`, `askyesnocancel`. `from tkinter import filedialog`: `askopenfilename`, `asksaveasfilename`, `askdirectory` |
-| ttk | `from tkinter import ttk`: `ttk.Frame` (with `padding=`), `ttk.Label`, `ttk.Entry`, `ttk.Button`, `ttk.Checkbutton`, `ttk.Notebook`, `ttk.PanedWindow`, `ttk.Separator`, `ttk.Scrollbar`. `ttk.Style()` with `theme_use`, `theme_names` and `configure(name, background=, foreground=, font=, relief=, padding=, ...)`, and `style=` on `ttk.Frame` and `ttk.Label` |
+| ttk | `from tkinter import ttk`: `ttk.Frame` (with `padding=`), `ttk.Label`, `ttk.Entry`, `ttk.Button`, `ttk.Checkbutton`, `ttk.Notebook`, `ttk.PanedWindow`, `ttk.Separator`, `ttk.Scrollbar`. `ttk.Style()` with `theme_use`, `theme_names`, `configure(name, background=, foreground=, font=, relief=, padding=, ...)` and `map(name, background=[(state, value), ...], ...)`, and `style=` on `ttk.Frame` and `ttk.Label` |
 | Option names | the short `bg=` and `fg=` wherever `background=` and `foreground=` are taken (`Frame`, `Label`, `Canvas`, `Toplevel`, `configure`/`config`) |
 | Constants | `tk.END`, `tk.BOTH`, `tk.LEFT`, `tk.RIGHT`, `tk.TOP`, `tk.BOTTOM`, `tk.HORIZONTAL`, `tk.VERTICAL`, `tk.WORD`, `tk.CENTER`, `tk.NW`, `tk.NE`, `tk.SW`, `tk.SE`, `tk.DISABLED`, `tk.NORMAL` (the same strings as CPython's); the error class `tk.TclError` |
 
-`tkinter.font` is a shim with the font calls PXX needed, and
+`tkinter.font.Font(family=, size=, weight=, slant=)` or `Font(font=spec)` has
+`measure`, `metrics` and `actual`, and a `Font` can be passed as any widget's
+`font=`. It is a shim, and
 `from tkhtmlview import HTMLLabel, HTMLScrolledText` renders HTML into a Tk
 text widget (see [Nil Python: Shims](../targets/nil-python.md#shims-standing-in-for-a-python-package)).
 
 A command or binding can be a plain function, a bound method or a lambda. A
 bound function receives an event object with tkinter's field names, such as
-`event.width` for `<Configure>`, and a `yscrollcommand` function receives
+`event.width` for `<Configure>` and `event.widget`, the widget the binding was
+made on (None for `bind_all`), and a `yscrollcommand` function receives
 Tk's two fractions as strings, as in CPython. `examples/tk/callbacks.npy`
 shows each of these, and it printed its `.expected` output with v451.
 
@@ -128,6 +131,12 @@ the usual `except tk.TclError:` fallback to a text interface works.
 `examples/tk/style_and_short_options.npy` and
 `examples/tk/no_display_raises_tclerror.npy` match CPython's output; both were
 checked on 2026-10-20 with the compiler built from master (not yet in a pin).
+So was `examples/tk/canvas_items_dialog_and_events.npy`: a live graph moved with
+`coords()`, a scrolling side bar of clickable tiles, `Style.map`, font
+measuring and a modal dialog closed through `wait_window`.
+
+`coords(item, x0, y0, ...)` takes at most four numbers. For a longer polyline
+pass the list, `coords(item, pts)`, which CPython takes too.
 
 ## Limits
 

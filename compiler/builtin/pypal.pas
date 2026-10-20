@@ -116,6 +116,18 @@ function PyPalHasGetdents: Boolean;
   than decoding a struct stat itself, so a new target is one arm here. }
 function PyPalStatModeSize(path: Pointer; var mode: Int64; var size: Int64): Int64;
 
+{ The rest of os.stat's common fields, from the same one syscall: owner,
+  group, inode, link count and mtime in nanoseconds since the epoch. ESP's VFS
+  has no owners; uid/gid/ino/nlink answer 0 there and mtime what IDF gives. }
+type TPyPalStat = record
+  mode, size, uid, gid, ino, nlink, mtimeNs: Int64;
+end;
+function PyPalStatFull(path: Pointer; var st: TPyPalStat): Int64;
+
+{ os.getpid/getuid/geteuid/getgid: which = 0..3 in that order. 0 where the
+  target has no process or users (ESP, wasm32). }
+function PyPalGetId(which: Integer): Int64;
+
 
 implementation
 
@@ -384,6 +396,10 @@ const
   NR_CLOCK_GETTIME = 228;
   NR_GETDENTS64 = 217;
   NR_STATX     = 332;
+  NR_GETPID    = 39;
+  NR_GETUID    = 102;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = 107;
+  NR_GETGID    = 104;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPUAARCH64}
@@ -407,6 +423,10 @@ const
   NR_CLOCK_GETTIME = 113;
   NR_GETDENTS64 = 61;
   NR_STATX     = 291;
+  NR_GETPID    = 172;
+  NR_GETUID    = 174;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = 175;
+  NR_GETGID    = 176;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_I386}
@@ -430,6 +450,10 @@ const
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 220;
   NR_STATX     = 383;
+  NR_GETPID    = 20;
+  NR_GETUID    = 199;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = 201;
+  NR_GETGID    = 200;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -453,6 +477,10 @@ const
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 217;
   NR_STATX     = 397;
+  NR_GETPID    = 20;
+  NR_GETUID    = 199;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = 201;
+  NR_GETGID    = 200;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -490,6 +518,10 @@ const
   NR_CLOCK_GETTIME = -1;
   NR_GETDENTS64 = -1;
   NR_STATX     = -1;
+  NR_GETPID    = -1;
+  NR_GETUID    = -1;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = -1;
+  NR_GETGID    = -1;
   PYPAL_HAVE   = False;
 {$endif}{$endif}{$endif}{$endif}{$endif}
 
@@ -514,6 +546,10 @@ const
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 61;
   NR_STATX     = 291;
+  NR_GETPID    = 172;
+  NR_GETUID    = 174;   { the 32-bit-id forms on i386/arm32 }
+  NR_GETEUID   = 175;
+  NR_GETGID    = 176;
   PYPAL_HAVE   = True;
 {$endif}
 
@@ -906,54 +942,92 @@ begin
   PyPalGetdents := PyPalSys(NR_GETDENTS64, fd, Int64(buf), n, 0, 0, 0);
 end;
 
-function PyPalStatModeSize(path: Pointer; var mode: Int64; var size: Int64): Int64;
+function PyPalStatFull(path: Pointer; var st: TPyPalStat): Int64;
 var buf: array[0..143] of Byte; r: Int64;
     sx: array[0..255] of Byte;
 {$ifdef PXX_ESP_IDF}
     p: AnsiString;
 {$endif}
 begin
-  mode := 0;
-  size := 0;
+  st.mode := 0; st.size := 0; st.uid := 0; st.gid := 0;
+  st.ino := 0; st.nlink := 0; st.mtimeNs := 0;
   FillChar(buf[0], SizeOf(buf), 0);
 {$ifdef PXX_ESP_IDF}
   p := EspPath(path);
   if p = ESP_FS_PREFIX + #0 then
   begin
     { FAT's VFS cannot stat its own mount point; the root is a directory }
-    if EspOpendir(@p[1]) = nil then begin PyPalStatModeSize := EspFail; Exit; end;
-    mode := $4000 or $1FF;
-    PyPalStatModeSize := 0;
+    if EspOpendir(@p[1]) = nil then begin PyPalStatFull := EspFail; Exit; end;
+    st.mode := $4000 or $1FF;
+    PyPalStatFull := 0;
     Exit;
   end;
   r := EspStat(@p[1], @buf[0]);
-  if r < 0 then begin PyPalStatModeSize := EspFail; Exit; end;
-  mode := PLongWord(@buf[4])^;
-  size := PLongWord(@buf[16])^;
-  PyPalStatModeSize := 0;
+  if r < 0 then begin PyPalStatFull := EspFail; Exit; end;
+  st.mode := PLongWord(@buf[4])^;
+  st.size := PLongWord(@buf[16])^;
+  PyPalStatFull := 0;
 {$else}
 {$ifdef CPUX86_64}
+  { struct stat: ino 8, nlink 16 (u64), mode 24 / uid 28 / gid 32 (u32),
+    size 48, mtime 88 (sec) + 96 (nsec) }
   r := PyPalStat(path, @buf[0]);
-  if r < 0 then begin PyPalStatModeSize := r; Exit; end;
-  mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
-  size := PInt64(@buf[48])^;
-  PyPalStatModeSize := 0;
+  if r < 0 then begin PyPalStatFull := r; Exit; end;
+  st.ino := PInt64(@buf[8])^;
+  st.nlink := PInt64(@buf[16])^;
+  st.mode := PLongWord(@buf[24])^;
+  st.uid := PLongWord(@buf[28])^;
+  st.gid := PLongWord(@buf[32])^;
+  st.size := PInt64(@buf[48])^;
+  st.mtimeNs := PInt64(@buf[88])^ * 1000000000 + PInt64(@buf[96])^;
+  PyPalStatFull := 0;
 {$else}
   { statx, because its struct is the SAME on every Linux architecture, where
     stat/fstatat's differs per arch and per word size. Without it every target
     but x86-64 answered ENOSYS, which pyos_stat turns into a zeroed result:
     os.stat of a missing file raised nothing and os.path.getsize was 0 for
     every file, on i386, arm32, aarch64 and riscv32 alike (frankd-a3's riscv32
-    sweep). Mask STATX_BASIC_STATS; stx_mode is a u16 at 28, stx_size a u64 at
-    40. The buffer is the struct's full 256 bytes: the kernel writes it all. }
-  if NR_STATX < 0 then begin PyPalStatModeSize := -38; Exit; end;
+    sweep). Mask STATX_BASIC_STATS. Layout: nlink u32 16, uid u32 20, gid u32
+    24, mode u16 28, ino u64 32, size u64 40, mtime 112 (i64 sec, u32 nsec).
+    The buffer is the struct's full 256 bytes: the kernel writes it all. }
+  if NR_STATX < 0 then begin PyPalStatFull := -38; Exit; end;
   r := PyPalSys(NR_STATX, PYPAL_AT_FDCWD, Int64(path), 0, $7FF, Int64(@sx[0]), 0);
-  if r < 0 then begin PyPalStatModeSize := r; Exit; end;
-  mode := PWord(@sx[28])^;
-  size := PInt64(@sx[40])^;
-  PyPalStatModeSize := 0;
+  if r < 0 then begin PyPalStatFull := r; Exit; end;
+  st.nlink := PLongWord(@sx[16])^;
+  st.uid := PLongWord(@sx[20])^;
+  st.gid := PLongWord(@sx[24])^;
+  st.mode := PWord(@sx[28])^;
+  st.ino := PInt64(@sx[32])^;
+  st.size := PInt64(@sx[40])^;
+  st.mtimeNs := PInt64(@sx[112])^ * 1000000000 + PLongWord(@sx[120])^;
+  PyPalStatFull := 0;
 {$endif}
 {$endif}
+end;
+
+function PyPalGetId(which: Integer): Int64;
+var nr: Int64;
+begin
+  PyPalGetId := 0;
+{$ifdef PXX_ESP_IDF}
+  Exit;
+{$endif}
+  case which of
+    0: nr := NR_GETPID;
+    1: nr := NR_GETUID;
+    2: nr := NR_GETEUID;
+  else nr := NR_GETGID;
+  end;
+  if nr < 0 then Exit;
+  PyPalGetId := PyPalSys(nr, 0, 0, 0, 0, 0, 0);
+end;
+
+function PyPalStatModeSize(path: Pointer; var mode: Int64; var size: Int64): Int64;
+var st: TPyPalStat;
+begin
+  PyPalStatModeSize := PyPalStatFull(path, st);
+  mode := st.mode;
+  size := st.size;
 end;
 
 function PyPalHasGetdents: Boolean;
