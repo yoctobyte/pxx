@@ -1,0 +1,3 @@
+module name: nilpy_dunder_name_mod
+main name: __main__
+before

@@ -74,6 +74,9 @@ function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
 function PyPalStat(path, statbuf: Pointer): Int64;
 function PyPalAccessOk(path: Pointer): Boolean;
 function PyPalAccessMode(path: Pointer; mode: Int64): Boolean;
+{ dup3(oldfd, newfd, 0): newfd becomes a copy of oldfd. False where the
+  target has no number, or on failure. }
+function PyPalDup3(oldfd, newfd: Int64): Boolean;
 { isatty(3) is ioctl(fd, TCGETS, &termios) and nothing else -- 0 on a terminal,
   -ENOTTY otherwise -- which is exactly what glibc does. A BOOLEAN, because the
   only question anyone asks is the one CPython's sys.stdout.isatty() answers,
@@ -375,6 +378,7 @@ const
   NR_STAT      = 4;     { stat (x86-64 has the plain form) }
   NR_ACCESS    = 21;    { access }
   NR_FACCESSAT = -1;     { not needed: plain access exists }
+  NR_DUP3      = 292;    { dup3 }
   NR_PPOLL     = 271;
   NR_READLINKAT= 267;
   NR_CLOCK_GETTIME = 228;
@@ -397,6 +401,7 @@ const
   NR_STAT      = -1;     { no plain stat; fstatat only }
   NR_ACCESS    = -1;     { no plain access }
   NR_FACCESSAT = 48;
+  NR_DUP3      = 24;    { dup3 }
   NR_PPOLL     = 73;
   NR_READLINKAT= 78;
   NR_CLOCK_GETTIME = 113;
@@ -419,6 +424,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
+  NR_DUP3      = 330;    { dup3 }
   NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 305;
   NR_CLOCK_GETTIME = 403;
@@ -441,6 +447,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
+  NR_DUP3      = 358;    { dup3 }
   NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 332;
   NR_CLOCK_GETTIME = 403;
@@ -477,6 +484,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = -1;
   NR_FACCESSAT = -1;
+  NR_DUP3      = -1;
   NR_PPOLL     = -1;
   NR_READLINKAT= -1;
   NR_CLOCK_GETTIME = -1;
@@ -500,6 +508,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = -1;
   NR_FACCESSAT = 48;
+  NR_DUP3      = 24;    { dup3 }
   NR_PPOLL     = 414;   { ppoll_time64 — see the timespec note above }
   NR_READLINKAT= 78;
   NR_CLOCK_GETTIME = 403;
@@ -831,6 +840,16 @@ begin
   else if NR_FACCESSAT >= 0 then
     r := PyPalSys(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), mode, 0, 0, 0);
   PyPalAccessMode := r = 0;
+end;
+
+function PyPalDup3(oldfd, newfd: Int64): Boolean;
+begin
+  PyPalDup3 := False;
+{$ifdef PXX_ESP_IDF}
+  Exit;      { the console is not a VFS fd under IDF }
+{$endif}
+  if NR_DUP3 < 0 then Exit;
+  PyPalDup3 := PyPalSys(NR_DUP3, oldfd, newfd, 0, 0, 0, 0) = newfd;
 end;
 
 function PyPalIsatty(fd: Int64): Boolean;

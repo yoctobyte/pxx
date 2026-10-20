@@ -102,7 +102,7 @@ type
       number, or absent. }
     procedure pack(const side: AnsiString = ''; const fill: AnsiString = '';
                    const expand: Variant = 0; const padx: Variant = 0;
-                   const pady: Variant = 0);
+                   const pady: Variant = 0; const anchor: AnsiString = '');
     { padx/pady are VARIANT: tkinter takes either a number or a (left, right)
       pair, and applications write both. See TkiOptPad. }
     procedure grid(row: Integer = -1; column: Integer = -1;
@@ -114,6 +114,11 @@ type
                                    minsize: Integer = -1; pad: Integer = -1);
     procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1;
                                 minsize: Integer = -1; pad: Integer = -1);
+    { tkinter's other spelling of the same two calls }
+    procedure columnconfigure(index: Integer = 0; weight: Integer = -1;
+                              minsize: Integer = -1; pad: Integer = -1);
+    procedure rowconfigure(index: Integer = 0; weight: Integer = -1;
+                           minsize: Integer = -1; pad: Integer = -1);
 
     { common configuration. Two spellings on purpose: Python writes
       `w.configure(state="disabled")`, i.e. OPTIONS BY NAME, and NilPy binds
@@ -138,7 +143,13 @@ type
                           `m.configure(postcommand=fn)` runs fn just before the
                           menu posts — how an application greys entries out at
                           the last moment. }
-                        const postcommand: Variant = 0);
+                        const postcommand: Variant = 0;
+                        { `bg=`/`fg=` are tkinter's short names for
+                          background/foreground; a label's colours and font
+                          change after creation through here too }
+                        const foreground: AnsiString = '';
+                        const bg: AnsiString = ''; const fg: AnsiString = '';
+                        const font: Variant = 0);
     { `w.config(...)` — tkinter's own short spelling of configure, and what a
       real application writes about as often as the long one. }
     procedure config(const state: AnsiString = ''; const scrollregion: Variant = 0;
@@ -149,7 +160,10 @@ type
                      { `root.config(menu=menubar)` — how a window's menu bar is
                        attached, and the only option here that takes a WIDGET. }
                      menu: Widget = nil;
-                     const postcommand: Variant = 0);
+                     const postcommand: Variant = 0;
+                     const foreground: AnsiString = '';
+                     const bg: AnsiString = ''; const fg: AnsiString = '';
+                     const font: Variant = 0);
     { the raw form, for an option this façade has not named yet }
     procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
@@ -232,7 +246,10 @@ type
       `ttk.Frame(root, padding=(8, 6))`. }
     constructor Create(master: Widget; highlightthickness: Integer = -1;
                        const background: AnsiString = ''; width: Integer = -1;
-                       height: Integer = -1; const padding: Variant = 0);
+                       height: Integer = -1; const padding: Variant = 0;
+                       { a ttk style name, `ttk.Frame(style="Card.TFrame")` }
+                       const style: AnsiString = '';
+                       const bg: AnsiString = '');
   end;
 
   { ttk's PanedWindow — songformatter's editor is a horizontal split. Written
@@ -374,7 +391,8 @@ type
                        const xscrollcommand: Variant = 0;
                        const scrollregion: AnsiString = '';
                        const cursor: AnsiString = '';
-                       borderwidth: Integer = -1);
+                       borderwidth: Integer = -1;
+                       const bg: AnsiString = '');
     function create_window(x, y: Integer; const window: AnsiString;
                            const anchor: AnsiString): Integer;
     { the Python spellings: a tuple coordinate and/or a widget as the window.
@@ -471,7 +489,10 @@ type
                        const textvariable: Variant = 0;
                        const foreground: AnsiString = '';
                        const background: AnsiString = '';
-                       const padding: Variant = 0);
+                       const padding: Variant = 0;
+                       { a ttk style name, `ttk.Label(style="Header.TLabel")` }
+                       const style: AnsiString = '';
+                       const bg: AnsiString = ''; const fg: AnsiString = '');
     procedure set_text(const value: AnsiString);
   end;
 
@@ -563,7 +584,8 @@ type
     (title, geometry) and the same widget operations as any other container. }
   Toplevel = class(Widget)
   public
-    constructor Create(master: Widget = nil; const background: AnsiString = '');
+    constructor Create(master: Widget = nil; const background: AnsiString = '';
+                       const bg: AnsiString = '');
     procedure geometry(const spec: AnsiString);
     { `transient(parent)` / `grab_set()` are what a modal dialog writes. }
     procedure transient(parent: Widget);
@@ -577,6 +599,32 @@ type
   Tk = class(Widget)
   public
     constructor Create;
+  end;
+
+  { `ttk.Style()`: the theme and the named styles ttk widgets take with
+    `style=`. One `ttk::style` command per call, as CPython's does. Options
+    are the ones a themed application sets; `ttk::style configure` takes them
+    for any style name, so an option a given element ignores is harmless. }
+  Style = class
+  public
+    constructor Create;
+    { `style.theme_use('clam')`; with no name it answers the current theme }
+    function theme_use(const themename: AnsiString = ''): AnsiString;
+    function theme_names: TPyList;
+    procedure configure(const style: AnsiString;
+                        const background: AnsiString = '';
+                        const foreground: AnsiString = '';
+                        const font: Variant = 0;
+                        const relief: AnsiString = '';
+                        const padding: Variant = 0;
+                        borderwidth: Integer = -1;
+                        const anchor: AnsiString = '';
+                        const fieldbackground: AnsiString = '';
+                        const troughcolor: AnsiString = '';
+                        const bordercolor: AnsiString = '';
+                        const lightcolor: AnsiString = '';
+                        const darkcolor: AnsiString = '';
+                        const bg: AnsiString = ''; const fg: AnsiString = '');
   end;
 
 { The Text class under a name that does NOT collide with the RTL's `Text`
@@ -724,7 +772,11 @@ procedure TkiEnsureStarted;
 begin
   if not gTkStarted then
   begin
-    TkInit;
+    { CPython's tk.Tk() raises TclError when Tk cannot start (no display), and
+      an application's console fallback is an `except tk.TclError` around it.
+      Not started, so a later Tk() tries again, as CPython's does. }
+    if not TkInit then
+      raise TclError.Create(TkInitError);
     gTkStarted := True;
     { the callback command must exist from the moment the interpreter does: a
       binding created later names `pxxcb`, and any event that reaches Tcl before
@@ -736,6 +788,13 @@ end;
 { Append ` -name value` only when the caller supplied the option. The sentinel
   for "not given" is '' for strings and -1 for the integer options Tk defaults
   itself. }
+{ The long option name wins when both spellings are given (`background=` and
+  `bg=` are one Tk option). }
+function TkiEither(const long, short: AnsiString): AnsiString;
+begin
+  if long <> '' then Result := long else Result := short;
+end;
+
 function TkiOptStr(const name, value: AnsiString): AnsiString;
 { A MULTI-WORD value must be braced: Tcl splits on spaces, so
   `-scrollregion 0 0 500 1026` reached Tk as the option value `0` plus three
@@ -900,12 +959,12 @@ begin
 end;
 
 procedure Widget.pack(const side: AnsiString; const fill: AnsiString;
-                     const expand, padx, pady: Variant);
+                     const expand, padx, pady: Variant; const anchor: AnsiString);
 var opts: AnsiString;
 begin
   opts := TkiOptStr('side', side) + TkiOptStr('fill', fill) +
           TkiOptVar('expand', expand) + TkiOptPad('padx', padx) +
-          TkiOptPad('pady', pady);
+          TkiOptPad('pady', pady) + TkiOptStr('anchor', anchor);
   TkEval('pack ' + path + opts);
 end;
 
@@ -960,14 +1019,27 @@ begin
          TkiOptInt('pad', pad));
 end;
 
+procedure Widget.columnconfigure(index, weight, minsize, pad: Integer);
+begin
+  grid_columnconfigure(index, weight, minsize, pad);
+end;
+
+procedure Widget.rowconfigure(index, weight, minsize, pad: Integer);
+begin
+  grid_rowconfigure(index, weight, minsize, pad);
+end;
+
 procedure Widget.config(const state: AnsiString; const scrollregion: Variant;
                         const yscrollcommand, xscrollcommand: Variant;
                         const text, background: AnsiString;
                         width, height: Integer; menu: Widget;
-                        const postcommand: Variant);
+                        const postcommand: Variant;
+                        const foreground, bg, fg: AnsiString;
+                        const font: Variant);
 begin
   configure(state, scrollregion, yscrollcommand, xscrollcommand,
-            text, background, width, height, postcommand);
+            text, background, width, height, postcommand,
+            foreground, bg, fg, font);
   { the menu bar is `wm`-level on the root and an ordinary option elsewhere;
     Tcl takes the same spelling for both }
   if menu <> nil then TkEval(path + ' configure -menu ' + menu.path);
@@ -990,7 +1062,9 @@ procedure Widget.configure(const state: AnsiString; const scrollregion: Variant;
                            const yscrollcommand, xscrollcommand: Variant;
                            const text, background: AnsiString;
                            width, height: Integer;
-                           const postcommand: Variant);
+                           const postcommand: Variant;
+                           const foreground, bg, fg: AnsiString;
+                           const font: Variant);
 var o: AnsiString; cbIdx: Integer;
 begin
   { only when the caller actually passed one: registering the DEFAULT (0) burnt
@@ -1003,7 +1077,9 @@ begin
   o := TkiOptStr('state', state) + TkiOptRegion('scrollregion', scrollregion)
      + TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set')
      + TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set')
-     + TkiOptStr('text', text) + TkiOptStr('background', background)
+     + TkiOptStr('text', text)
+     + TkiOptStr('background', TkiEither(background, bg))
+     + TkiOptStr('foreground', TkiEither(foreground, fg)) + TkiOptFont(font)
      + TkiOptInt('width', width) + TkiOptInt('height', height);
   if o <> '' then TkEval(path + ' configure' + o);
 end;
@@ -1482,7 +1558,8 @@ end;
 
 constructor Frame.Create(master: Widget; highlightthickness: Integer;
                         const background: AnsiString; width: Integer;
-                        height: Integer; const padding: Variant);
+                        height: Integer; const padding: Variant;
+                        const style, bg: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
@@ -1491,12 +1568,15 @@ begin
     that asks for one IS a ttk::frame — which is what the application wrote
     (`ttk.Frame(root, padding=(8, 6))`). Without padding the classic widget is
     kept, so every frame that already worked is byte-identical. }
-  if pyvartag(padding) <> 0 then
+  { A STYLE is ttk-only too, and it is how a ttk frame gets a colour (ttk has
+    no -background; CPython's ttk.Frame refuses one). }
+  if (pyvartag(padding) <> 0) or (style <> '') then
     TkEval('ttk::frame ' + path + TkiOptPadding(padding) +
+           TkiOptStr('style', style) +
            TkiOptInt('width', width) + TkiOptInt('height', height))
   else
     TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
-           TkiOptStr('background', background) + TkiOptInt('width', width) +
+           TkiOptStr('background', TkiEither(background, bg)) + TkiOptInt('width', width) +
            TkiOptInt('height', height));
 end;
 
@@ -1700,13 +1780,13 @@ constructor Canvas.Create(master: Widget; highlightthickness: Integer;
                          height: Integer;
                          const yscrollcommand, xscrollcommand: Variant;
                          const scrollregion, cursor: AnsiString;
-                         borderwidth: Integer);
+                         borderwidth: Integer; const bg: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'canvas';
   TkEval('canvas ' + path + TkiOptInt('highlightthickness', highlightthickness) +
-         TkiOptStr('background', background) + TkiOptInt('width', width) +
+         TkiOptStr('background', TkiEither(background, bg)) + TkiOptInt('width', width) +
          TkiOptInt('height', height) +
          TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set') +
          TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set') +
@@ -1983,25 +2063,29 @@ end;
 constructor Label.Create(master: Widget; const text, anchor: AnsiString;
                         const font: Variant; const textvariable: Variant;
                         const foreground, background: AnsiString;
-                        const padding: Variant);
-var vn: AnsiString;
+                        const padding: Variant;
+                        const style, bg, fg: AnsiString);
+var vn, fgc, bgc: AnsiString;
 begin
+  fgc := TkiEither(foreground, fg);
+  bgc := TkiEither(background, bg);
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'label';
   vn := TkiVarName(textvariable);
   { ttk options (padding) and a ttk look go with ttk::label; the classic label
     is kept otherwise so existing callers emit the same command as before }
-  if pyvartag(padding) <> 0 then
+  if (pyvartag(padding) <> 0) or (style <> '') then
     TkEval('ttk::label ' + path + ' -text {' + text + '}' +
            TkiOptStr('anchor', anchor) + TkiOptFont(font) +
-           TkiOptStr('textvariable', vn) + TkiOptStr('foreground', foreground) +
-           TkiOptStr('background', background) + TkiOptPadding(padding))
+           TkiOptStr('textvariable', vn) + TkiOptStr('foreground', fgc) +
+           TkiOptStr('background', bgc) + TkiOptPadding(padding) +
+           TkiOptStr('style', style))
   else
     TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
            TkiOptFont(font) + TkiOptStr('textvariable', vn) +
-           TkiOptStr('foreground', foreground) +
-           TkiOptStr('background', background));
+           TkiOptStr('foreground', fgc) +
+           TkiOptStr('background', bgc));
 end;
 
 procedure Label.set_text(const value: AnsiString);
@@ -2185,6 +2269,59 @@ end;
 
 { ---- root --------------------------------------------------------------- }
 
+{ ---- ttk.Style ------------------------------------------------------------- }
+
+constructor Style.Create;
+begin
+  TkiEnsureStarted;
+end;
+
+function Style.theme_use(const themename: AnsiString): AnsiString;
+begin
+  if themename = '' then
+    Result := TkEval('ttk::style theme use')
+  else
+  begin
+    TkEval('ttk::style theme use ' + themename);
+    Result := '';
+  end;
+end;
+
+function Style.theme_names: TPyList;
+var l: TPyList; names, w: AnsiString; i: Integer;
+begin
+  l := TPyList.Create;
+  names := TkEval('ttk::style theme names') + ' ';
+  w := '';
+  for i := 1 to Length(names) do
+    if names[i] = ' ' then
+    begin
+      if w <> '' then l.append(w);
+      w := '';
+    end
+    else
+      w := w + names[i];
+  Result := l;
+end;
+
+procedure Style.configure(const style, background, foreground: AnsiString;
+                          const font: Variant; const relief: AnsiString;
+                          const padding: Variant; borderwidth: Integer;
+                          const anchor, fieldbackground, troughcolor,
+                          bordercolor, lightcolor, darkcolor, bg, fg: AnsiString);
+var o: AnsiString;
+begin
+  o := TkiOptStr('background', TkiEither(background, bg)) +
+       TkiOptStr('foreground', TkiEither(foreground, fg)) + TkiOptFont(font) +
+       TkiOptStr('relief', relief) + TkiOptPadding(padding) +
+       TkiOptInt('borderwidth', borderwidth) + TkiOptStr('anchor', anchor) +
+       TkiOptStr('fieldbackground', fieldbackground) +
+       TkiOptStr('troughcolor', troughcolor) +
+       TkiOptStr('bordercolor', bordercolor) +
+       TkiOptStr('lightcolor', lightcolor) + TkiOptStr('darkcolor', darkcolor);
+  if o <> '' then TkEval('ttk::style configure ' + style + o);
+end;
+
 constructor Tk.Create;
 begin
   TkiEnsureStarted;
@@ -2202,12 +2339,12 @@ begin
   Tk_ := w;
 end;
 
-constructor Toplevel.Create(master: Widget; const background: AnsiString);
+constructor Toplevel.Create(master: Widget; const background, bg: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'toplevel';
-  TkEval('toplevel ' + path + TkiOptStr('background', background));
+  TkEval('toplevel ' + path + TkiOptStr('background', TkiEither(background, bg)));
 end;
 
 procedure Toplevel.geometry(const spec: AnsiString);

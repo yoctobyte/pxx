@@ -1671,6 +1671,16 @@ test-nilpy: $(COMPILER)
 	  done; \
 	  echo "  tk: facade, field-class identity and callbacks ran under Xvfb"; \
 	else echo "  tk: no xvfb-run, skipping the facade RUN (compiled only)"; fi
+	# Vloot's GUI surface (ttk.Style, style=, bg=/fg=, pack anchor=,
+	# columnconfigure, a Canvas subclass forwarding **kwargs, after(ms,
+	# root.destroy)) under Xvfb, and tk.Tk() raising TclError with no display.
+	# Both .expected are python3's.
+	./$(COMPILER) examples/tk/style_and_short_options.npy $(TESTTMP)/test_nilpy_tkstyle26
+	./$(COMPILER) examples/tk/no_display_raises_tclerror.npy $(TESTTMP)/test_nilpy_tknodisp26
+	@if command -v xvfb-run >/dev/null 2>&1; then \
+	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkstyle26 | diff -u examples/tk/style_and_short_options.expected - || exit 1; \
+	  env -u DISPLAY -u WAYLAND_DISPLAY $(TESTTMP)/test_nilpy_tknodisp26 | diff -u examples/tk/no_display_raises_tclerror.expected - || exit 1; \
+	else echo "  tk: no xvfb-run, skipping the style and no-display RUNs (compiled only)"; fi
 	# An event callback's Event and the widgets winfo_children() returns are
 	# released (both were boxed with an extra retain: pin v451 leaves ~2,400
 	# live here). `keep` is the positive control and must trip the bound.
@@ -2242,6 +2252,8 @@ test-nilpy: $(COMPILER)
 	# argparse: one process per case, since an argparse error or --help EXITS
 	./$(COMPILER) test/test_nilpy_argparse_tsp_surface.npy $(TESTTMP)/test_nilpy_argparse26
 	while IFS= read -r c; do echo "== $$c"; $(TESTTMP)/test_nilpy_argparse26 $$c 2>&1; echo "rc=$$?"; done < test/test_nilpy_argparse_tsp_surface.cases | diff -u test/test_nilpy_argparse_tsp_surface.expected -
+	./$(COMPILER) test/test_nilpy_argparse_mutually_exclusive_group.npy $(TESTTMP)/test_nilpy_apmutex26
+	while IFS= read -r c; do echo "== $$c"; COLUMNS=80 $(TESTTMP)/test_nilpy_apmutex26 $$c 2>&1; echo "rc=$$?"; done < test/test_nilpy_argparse_mutually_exclusive_group.cases | diff -u test/test_nilpy_argparse_mutually_exclusive_group.expected -
 	./$(COMPILER) -Futest test/test_nilpy_relative_import_of_an_init_member.npy $(TESTTMP)/test_nilpy_relmember26
 	$(TESTTMP)/test_nilpy_relmember26 | diff -u test/test_nilpy_relative_import_of_an_init_member.expected -
 	./$(COMPILER) test/test_nilpy_subscript_index_is_a_full_expression.npy $(TESTTMP)/test_nilpy_subfull26
@@ -2791,6 +2803,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_kwafterstar | diff -u test/test_nilpy_a_keyword_argument_after_a_star_unpack.expected -
 	./$(COMPILER) test/test_nilpy_a_dynamic_star_call_takes_trailing_keywords.npy $(TESTTMP)/test_nilpy_dynstarkw26
 	$(TESTTMP)/test_nilpy_dynstarkw26 | diff -u test/test_nilpy_a_dynamic_star_call_takes_trailing_keywords.expected -
+	./$(COMPILER) test/test_nilpy_super_init_forwards_kwargs.npy $(TESTTMP)/test_nilpy_superkw26
+	$(TESTTMP)/test_nilpy_superkw26 | diff -u test/test_nilpy_super_init_forwards_kwargs.expected -
+	./$(COMPILER) -Futest test/test_nilpy_double_star_into_a_pascal_method_with_a_string_default.npy $(TESTTMP)/test_nilpy_dstarpas26
+	tools/expect_same.sh test_nilpy_dstarpas26 "$$($(TESTTMP)/test_nilpy_dstarpas26)" "$$(printf '%b' 'K -1 [dflt] -1\nK -1 [dflt] 3\nK 5 [hi] -1\nm [] 7 [t]\nm [] 7 [x]\nm [a] 1 [b]')"
+	./$(COMPILER) test/test_nilpy_dunder_name_and_stdout_none.npy $(TESTTMP)/test_nilpy_dunname26
+	$(TESTTMP)/test_nilpy_dunname26 | diff -u test/test_nilpy_dunder_name_and_stdout_none.expected -
 	# Extended-slice assignment, `x[lo:hi:step] = src`. The .expected IS python3's
 	# output -- the load-bearing property is that the assign writes EXACTLY the
 	# positions the matching READ selects, which only an oracle can check.

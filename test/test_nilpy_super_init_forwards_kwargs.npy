@@ -1,0 +1,28 @@
+# `super().__init__(parent, height=h, **kwargs)`: a subclass handing the
+# options it does not know on to its base. The loop that parses super()'s
+# arguments answered "expected expression" at the `**`. A keyword before the
+# `**`, the `**` alone, an empty mapping, and a key the base rejects.
+class Base:
+    def __init__(self, parent, height=0, width=-1, bg="", relief="flat"):
+        print("Base", parent, height, width, bg, relief)
+
+
+class Sub(Base):
+    def __init__(self, parent, height=20, **kwargs):
+        super().__init__(parent, height=height, bg="x", **kwargs)
+
+
+class Plain(Base):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+
+
+Sub("p")
+Sub("p", width=300)
+Sub("p", relief="sunken", width=7, height=3)
+Plain("q")
+Plain("q", width=1, bg="y")
+try:
+    Plain("q", nosuch=1)
+except TypeError as e:
+    print("TypeError")

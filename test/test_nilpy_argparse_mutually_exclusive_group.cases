@@ -1,0 +1,9 @@
+--json
+--console --json
+--gui -n 3 --text
+--console --gui --json
+--console
+--json --text
+--text --json
+--gui --console --text
+-h

@@ -1,0 +1,51 @@
+# What Vloot's GUI uses: ttk.Style (theme_use, configure) and `style=` on
+# ttk.Frame/ttk.Label, the short `bg=`/`fg=` options, pack(anchor=),
+# columnconfigure/rowconfigure, a tk.Canvas subclass forwarding `**kwargs`
+# through super().__init__, and `after(ms, root.destroy)` (a method VALUE of
+# the Pascal-reserved name). Run under Xvfb; the .expected is python3's.
+import tkinter as tk
+from tkinter import ttk
+
+
+class Bar(tk.Canvas):
+    def __init__(self, parent, height=20, bg="#2d2d2d", fill="#00adb5", **kwargs):
+        super().__init__(parent, height=height, bg=bg, highlightthickness=0, **kwargs)
+        self.fill_color = fill
+
+
+root = tk.Tk()
+root.configure(bg="#222831")
+style = ttk.Style()
+style.theme_use("clam")
+print("theme:", style.theme_use())
+style.configure("Card.TFrame", background="#393e46", relief="flat")
+style.configure("Head.TLabel", background="#393e46", foreground="#eeeeee",
+                font=("Inter", 14, "bold"))
+card = ttk.Frame(root, style="Card.TFrame", padding="15")
+card.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+root.columnconfigure(0, weight=1)
+root.rowconfigure(0, weight=1)
+head = ttk.Label(card, text="HEAD", style="Head.TLabel")
+head.pack(anchor="w", pady=(0, 10))
+bar = Bar(card, width=300, fill="#ff5722")
+bar.pack(fill="x")
+plain = Bar(card)
+note = tk.Label(root, text="plain", bg="#101010", fg="#fafafa")
+note.grid(row=1, column=0)
+
+
+def check():
+    print("card style:", card.cget("style"))
+    print("head style:", head.cget("style"))
+    print("bar:", bar.cget("width"), bar.cget("height"), bar.cget("background"), bar.fill_color)
+    print("plain bar:", plain.cget("height"), plain.cget("background"))
+    print("note:", note.cget("background"), note.cget("foreground"))
+    print("root bg:", root.cget("background"))
+    head.config(text="NEW", foreground="#00adb5")
+    print("head:", head.cget("text"), head.cget("foreground"))
+    root.after(50, root.destroy)
+
+
+root.after(200, check)
+root.mainloop()
+print("closed")

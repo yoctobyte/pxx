@@ -1898,6 +1898,12 @@ function pystderr_write(const s: AnsiString): Integer;
   does. sys.stdin stays its fd: select() and `for line in sys.stdin` read it
   as one. bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time }
 function pysys_stream(fd: Int64): TPyFile;
+{ `sys.stdout = None` / `sys.stderr = None`. CPython's print() then writes
+  nothing. NilPy's print is an inline write(2) on the fd, so the fd itself is
+  pointed at /dev/null: the same visible effect, while `sys.stdout` still reads
+  as the stream object rather than None. console-style code writes this after
+  a BrokenPipeError so the exit-time flush stays quiet. }
+procedure pysys_stream_to_none(fd: Int64);
 { sys.stdout.flush() / sys.stderr.flush().
 
   FUNCTIONS returning None, not procedures, and that was not the first cut:
@@ -17382,6 +17388,17 @@ begin
   end;
   PXXObjRetain(Pointer(f));
   Result := f;
+end;
+
+procedure pysys_stream_to_none(fd: Int64);
+var path: AnsiString; nul: Int64;
+begin
+  if (fd < 1) or (fd > 2) then Exit;
+  path := '/dev/null' + #0;
+  nul := PyPalOpen(@path[1], 1, 0);      { O_WRONLY }
+  if nul < 0 then Exit;
+  PyPalDup3(nul, fd);
+  PyPalClose(nul);
 end;
 
 function pystdout_write(const s: AnsiString): Integer;

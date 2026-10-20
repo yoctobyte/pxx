@@ -18,6 +18,9 @@ uses strings;   { StrPas: NUL-terminated PChar -> AnsiString (copies to the NUL)
 
 { Create the Tcl interpreter and initialise Tcl + Tk. True on success. }
 function TkInit: Boolean;
+{ Why the last TkInit failed: Tcl's own message ("no display name and no
+  $DISPLAY environment variable"), or '' after a success. }
+function TkInitError: AnsiString;
 
 { Run a Tcl/Tk command string; return the interpreter's result string. }
 function TkEval(const cmd: AnsiString): AnsiString;
@@ -125,6 +128,7 @@ const
 
 var
   gInterp: PTclInterp = nil;
+  gInitError: AnsiString = '';
 
 function TkInit: Boolean;
 begin
@@ -132,9 +136,24 @@ begin
     Tcl_FindExecutable primes the internal path search. A non-nil dummy is fine. }
   Tcl_FindExecutable('pxx-tk');
   gInterp := Tcl_CreateInterp;
+  gInitError := '';
   Result := (gInterp <> nil)
         and (Tcl_Init(gInterp) = TCL_OK)
         and (Tk_Init(gInterp) = TCL_OK);
+  if Result then Exit;
+  { Tcl's result holds the reason. The interpreter is dropped, so a later
+    TkEval answers '' instead of running widget commands Tk never defined. }
+  if gInterp <> nil then
+    gInitError := StrPas(PChar(Tcl_GetStringResult(gInterp)))
+  else
+    gInitError := 'cannot create a Tcl interpreter';
+  if gInitError = '' then gInitError := 'Tk could not start';
+  gInterp := nil;
+end;
+
+function TkInitError: AnsiString;
+begin
+  Result := gInitError;
 end;
 
 function TkEval(const cmd: AnsiString): AnsiString;

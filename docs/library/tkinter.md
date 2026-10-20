@@ -102,12 +102,13 @@ The module has these names. Each widget takes the options listed in
 | Windows | `Tk`, `Toplevel` (`geometry`, `transient`, `grab_set`, `grab_release`) |
 | Widgets | `Frame`, `Label`, `Entry`, `Button`, `Checkbutton`, `Text`, `Canvas`, `Scrollbar`, `Menu`, `Separator`, `PanedWindow`, `Notebook`, `PhotoImage` |
 | Variables | `StringVar`, `BooleanVar` (`get`, `set`, `trace_add`) |
-| Layout | `pack`, `grid`, `grid_columnconfigure`, `grid_rowconfigure` |
+| Layout | `pack` (with `anchor=`), `grid`, `grid_columnconfigure`/`columnconfigure`, `grid_rowconfigure`/`rowconfigure` |
 | Every widget | `configure`/`config`, `cget`, `bind`, `after`, `after_idle`, `after_cancel`, `winfo_children`, `winfo_width`, `winfo_height`, `focus_set`, `destroy`, `update`, `mainloop`, `quit`, the clipboard calls |
 | `Text` | `insert`, `delete`, `get`, `index`, `see`, `mark_set`, `tag_add`, `tag_configure`, scrolling |
 | `Canvas` | `create_text`, `create_line`, `create_rectangle`, `create_oval`, `create_image`, `create_window`, `itemconfigure`, `bbox`, `delete`, scrolling |
 | Dialogs | `from tkinter import messagebox`: `showinfo`, `showwarning`, `showerror`, `askyesno`, `askokcancel`, `askyesnocancel`. `from tkinter import filedialog`: `askopenfilename`, `asksaveasfilename`, `askdirectory` |
-| ttk | `from tkinter import ttk`: `ttk.Frame` (with `padding=`), `ttk.Label`, `ttk.Entry`, `ttk.Button`, `ttk.Checkbutton`, `ttk.Notebook`, `ttk.PanedWindow`, `ttk.Separator`, `ttk.Scrollbar` |
+| ttk | `from tkinter import ttk`: `ttk.Frame` (with `padding=`), `ttk.Label`, `ttk.Entry`, `ttk.Button`, `ttk.Checkbutton`, `ttk.Notebook`, `ttk.PanedWindow`, `ttk.Separator`, `ttk.Scrollbar`. `ttk.Style()` with `theme_use`, `theme_names` and `configure(name, background=, foreground=, font=, relief=, padding=, ...)`, and `style=` on `ttk.Frame` and `ttk.Label` |
+| Option names | the short `bg=` and `fg=` wherever `background=` and `foreground=` are taken (`Frame`, `Label`, `Canvas`, `Toplevel`, `configure`/`config`) |
 | Constants | `tk.END`, `tk.BOTH`, `tk.LEFT`, `tk.RIGHT`, `tk.TOP`, `tk.BOTTOM`, `tk.HORIZONTAL`, `tk.VERTICAL`, `tk.WORD`, `tk.CENTER`, `tk.NW`, `tk.NE`, `tk.SW`, `tk.SE`, `tk.DISABLED`, `tk.NORMAL` (the same strings as CPython's); the error class `tk.TclError` |
 
 `tkinter.font` is a shim with the font calls PXX needed, and
@@ -119,6 +120,14 @@ bound function receives an event object with tkinter's field names, such as
 `event.width` for `<Configure>`, and a `yscrollcommand` function receives
 Tk's two fractions as strings, as in CPython. `examples/tk/callbacks.npy`
 shows each of these, and it printed its `.expected` output with v451.
+
+A class can extend a widget and pass options on with
+`super().__init__(parent, height=h, **kwargs)`. When Tk cannot start, for
+example with no display, `tk.Tk()` raises `tk.TclError` with Tk's reason, so
+the usual `except tk.TclError:` fallback to a text interface works.
+`examples/tk/style_and_short_options.npy` and
+`examples/tk/no_display_raises_tclerror.npy` match CPython's output; both were
+checked on 2026-10-20 with the compiler built from master (not yet in a pin).
 
 ## Limits
 
@@ -135,7 +144,10 @@ Measured with pin v451 on 2026-09-29, each with a one-line program:
 - **Write `from tkinter import messagebox`,** not `import tkinter.messagebox`.
   The dotted form is refused ("no unit named tkinter_messagebox").
 - **Only Linux x86-64 has been run.** Tk is a system library, so a program
-  needs `libtk8.6` wherever it runs.
+  needs `libtk8.6` wherever it runs. The binary names `libtcl8.6` and
+  `libtk8.6` as required libraries, so without them it does not start at all:
+  an `except ImportError` around `import tkinter` cannot catch their absence.
+  aarch64 cross-compiles the same way but has not been run.
 - **Memory:** with v451, every event delivered to a bound function leaked its
   event object, and each `winfo_children()` call leaked each child it
   returned. A program that handled 300 `<Configure>` events (the census build

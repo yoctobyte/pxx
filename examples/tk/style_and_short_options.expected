@@ -1,0 +1,9 @@
+theme: clam
+card style: Card.TFrame
+head style: Head.TLabel
+bar: 300 20 #2d2d2d #ff5722
+plain bar: 20 #2d2d2d
+note: #101010 #fafafa
+root bg: #222831
+head: NEW #00adb5
+closed

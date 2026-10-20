@@ -1,0 +1,16 @@
+# argparse's add_mutually_exclusive_group: an optional group, a required one,
+# the conflict error, the missing-member error, and the `[a | b]` / `(a | b)`
+# usage. Vloot's entry point is the call site. Each case is one run (an error
+# exits), and the .expected is python3's.
+import argparse
+
+p = argparse.ArgumentParser(prog="vloot", description="Small system monitor.")
+mode = p.add_mutually_exclusive_group()
+mode.add_argument("--console", action="store_true", help="run in the terminal")
+mode.add_argument("--gui", action="store_true", help="require the GUI")
+p.add_argument("-n", type=int, default=1, help="samples")
+fmt = p.add_mutually_exclusive_group(required=True)
+fmt.add_argument("--json", action="store_true")
+fmt.add_argument("--text", action="store_true")
+ns = p.parse_args()
+print(ns.console, ns.gui, ns.n, ns.json, ns.text)

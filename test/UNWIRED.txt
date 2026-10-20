@@ -176,3 +176,4 @@ test/nilpy_destructor_box.pas  helper unit imported (via -Futest) by test_nilpy_
 
 # --- templates: the runner fills placeholders into a copy OUTSIDE the checkout ---
 test/esp_board_c3_https_census.npy  a TEMPLATE, not a program: `N = @N@`, `sta.connect("@SSID@", "@WIFIPASS@")`, the relay's host and port and two CA PEMs are filled into a copy outside the checkout (recipe in its header), so the unfilled file is refused at its first placeholder (`undefined variable (N)`, measured on riscv32 and xtensa 2026-09-27); the network name and password must never be written into a tracked file, which rules out a filled build row here. Its plain-HTTP twin test/esp_board_c3_joins_s3.npy is a build row
+test/nilpy_kwfwd_unit.pas  helper unit imported by test_nilpy_double_star_into_a_pascal_method_with_a_string_default.npy

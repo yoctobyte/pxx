@@ -1,0 +1,11 @@
+# With no display, tk.Tk() raises TclError carrying Tk's own reason, as
+# CPython's does; an application's console fallback is an `except
+# tk.TclError` around it. pxx ignored Tk's failed start and handed back a root.
+# Run with DISPLAY unset; the .expected is python3's.
+import tkinter as tk
+
+try:
+    root = tk.Tk()
+    print("got a root")
+except tk.TclError as e:
+    print("TclError:", e)

@@ -14,11 +14,12 @@ argparse, and it grows when a new caller needs more:
                  default=, choices=, nargs=None|"?"|"*"|"+", dest=, help=,
                  metavar=, required=)
     add_subparsers(dest=, required=).add_parser(name, help=, description=)
+    add_mutually_exclusive_group(required=).add_argument(...)
     set_defaults(**kw)       parse_args(argv=None)       error(msg)
     print_help() / format_help() / print_usage() / format_usage()
 
 ABSENT, AND LOUD RATHER THAN APPROXIMATED: every other `action` (append,
-count, store_const, version, ...), mutually exclusive groups, argument groups,
+count, store_const, version, ...), argument groups,
 parents=, fromfile_prefix_chars, parse_known_args, intermixed parsing. An
 unsupported `action` raises ValueError at add_argument, so it is found on the
 first run instead of parsing to a wrong namespace.
@@ -164,6 +165,7 @@ class _Action:
         self.parsers = {}           # kind == "parsers": name -> ArgumentParser
         self.parser_names = []      # in the order they were added
         self.choice_help = []       # (name, help) for each add_parser(help=)
+        self.group = None           # its _MutuallyExclusiveGroup, if any
 
     def name(self):
         # CPython's _get_action_name
@@ -208,6 +210,25 @@ class _SubParsersAction:
         return parser
 
 
+class _MutuallyExclusiveGroup:
+    """add_mutually_exclusive_group(): its arguments live on the parser, and
+    the group only adds the conflict check, the required check and the
+    `[a | b]` usage form."""
+
+    def __init__(self, parser, required):
+        self._parser = parser
+        self.required = required
+        self._group_actions = []
+
+    def add_argument(self, *names, **kwargs):
+        action = self._parser.add_argument(*names, **kwargs)
+        if action.required:
+            raise ValueError("mutually exclusive arguments must be optional")
+        action.group = self
+        self._group_actions.append(action)
+        return action
+
+
 class ArgumentParser:
     def __init__(self, prog=None, usage=None, description=None, epilog=None,
                  formatter_class=None, add_help=True, **kwargs):
@@ -222,6 +243,7 @@ class ArgumentParser:
         self._option_actions = {}
         self._defaults = {}
         self._subparsers = None
+        self._mutex_groups = []
         self._has_negative_number_optionals = False
         if add_help:
             self._add_action(_Action(["-h", "--help"], SUPPRESS, 0, SUPPRESS,
@@ -296,6 +318,11 @@ class ArgumentParser:
                          required, kwargs.get("help", None),
                          kwargs.get("metavar", None), kind)
         return self._add_action(action)
+
+    def add_mutually_exclusive_group(self, required=False):
+        group = _MutuallyExclusiveGroup(self, required)
+        self._mutex_groups.append(group)
+        return group
 
     def add_subparsers(self, **kwargs):
         if self._subparsers is not None:
@@ -496,18 +523,37 @@ class ArgumentParser:
         return ", ".join(action.option_strings) + " " + \
             self._format_args(action, action.dest.upper())
 
+    def _option_usage(self, a):
+        if a.nargs == 0:
+            return a.option_strings[0]
+        return a.option_strings[0] + " " + self._format_args(a, a.dest.upper())
+
     def _usage_parts(self):
         opt_parts = []
         pos_parts = []
+        done_groups = []
         for a in self._actions:
             if a.help == SUPPRESS:
                 continue
+            if a.option_strings and a.group is not None:
+                # CPython: the whole group at its first member, `[a | b]`,
+                # or `(a | b)` when one of them is required
+                if a.group in done_groups:
+                    continue
+                done_groups.append(a.group)
+                members = []
+                for m in a.group._group_actions:
+                    if m.help != SUPPRESS:
+                        members.append(self._option_usage(m))
+                part = " | ".join(members)
+                if not a.group.required:
+                    part = "[" + part + "]"
+                elif len(members) > 1:
+                    part = "(" + part + ")"
+                opt_parts.append(part)
+                continue
             if a.option_strings:
-                if a.nargs == 0:
-                    part = a.option_strings[0]
-                else:
-                    part = a.option_strings[0] + " " + \
-                        self._format_args(a, a.dest.upper())
+                part = self._option_usage(a)
                 if not a.required:
                     part = "[" + part + "]"
                 opt_parts.append(part)
@@ -774,6 +820,7 @@ class _Parse:
         self.ns = namespace
         self.extras = extras
         self.seen = []
+        self.seen_non_default = []
         self.positionals = []
         for a in parser._actions:
             if not a.option_strings:
@@ -803,6 +850,20 @@ class _Parse:
         self.seen.append(action)
         values = self.p._get_values(action, argument_strings)
         kind = action.kind
+        # CPython's mutually-exclusive check: only a NON-DEFAULT value counts
+        if kind == "store_true":
+            non_default = action.default is not True
+        elif kind == "store_false":
+            non_default = action.default is not False
+        else:
+            non_default = values is not action.default
+        if non_default:
+            if action.group is not None:
+                for other in action.group._group_actions:
+                    if other is not action and other in self.seen_non_default:
+                        raise ArgumentError(action.name(), "not allowed with argument " +
+                                            other.name())
+            self.seen_non_default.append(action)
         if kind == "help":
             self.p.print_help()
             sys.exit(0)
@@ -946,6 +1007,20 @@ class _Parse:
         if required:
             raise ArgumentError(None, "the following arguments are required: " +
                                 ", ".join(required))
+        for group in self.p._mutex_groups:
+            if not group.required:
+                continue
+            hit = False
+            for a in group._group_actions:
+                if a in self.seen_non_default:
+                    hit = True
+            if not hit:
+                names = []
+                for a in group._group_actions:
+                    if a.help != SUPPRESS:
+                        names.append(a.name())
+                raise ArgumentError(None, "one of the arguments " + " ".join(names) +
+                                    " is required")
 
 
 def _nargs_error(nargs):

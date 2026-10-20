@@ -1,0 +1,6 @@
+Base p 20 -1 x flat
+Base p 20 300 x flat
+Base p 3 7 x sunken
+Base q 0 -1  flat
+Base q 0 1 y flat
+TypeError

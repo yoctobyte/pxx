@@ -1,0 +1,18 @@
+# __name__ is "__main__" only in the main program; an imported module sees its
+# own name, so its `if __name__ == "__main__":` block stays out (it used to run
+# on import). And `sys.stdout = None` silences later prints, as CPython's does;
+# stderr is untouched. The .expected is python3's stdout.
+import sys
+import nilpy_dunder_name_mod
+
+print("main name:", __name__)
+
+
+def quiet():
+    print("before")
+    sys.stdout.flush()
+    sys.stdout = None
+    print("after: must not appear")
+
+
+quiet()

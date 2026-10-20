@@ -1,0 +1,42 @@
+== --json
+False False 1 True False
+rc=0
+== --console --json
+True False 1 True False
+rc=0
+== --gui -n 3 --text
+False True 3 False True
+rc=0
+== --console --gui --json
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+vloot: error: argument --gui: not allowed with argument --console
+rc=2
+== --console
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+vloot: error: one of the arguments --json --text is required
+rc=2
+== --json --text
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+vloot: error: argument --text: not allowed with argument --json
+rc=2
+== --text --json
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+vloot: error: argument --json: not allowed with argument --text
+rc=2
+== --gui --console --text
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+vloot: error: argument --console: not allowed with argument --gui
+rc=2
+== -h
+usage: vloot [-h] [--console | --gui] [-n N] (--json | --text)
+
+Small system monitor.
+
+options:
+  -h, --help  show this help message and exit
+  --console   run in the terminal
+  --gui       require the GUI
+  -n N        samples
+  --json
+  --text
+rc=0

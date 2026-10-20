@@ -21070,6 +21070,19 @@ begin
     Result := DefaultArgValueNode(procIdx, slot);
 end;
 
+{ A parameter's default as the value of a star/`**` slot (a variant local).
+  A STRING LITERAL default is retagged with the plain literal kind a written
+  Python string has before it is boxed. DefaultArgValueNode tags it with the
+  PARAMETER's kind, and a Pascal routine's `const s: AnsiString = ''` makes
+  that the managed kind -- right for a direct argument, but boxed into a
+  variant it crashed in the variant runtime, so a Pascal method called with
+  `**d` (a tk.Canvas subclass forwarding `**kwargs`) died before the call. }
+function PyStarSlotDefault(node: Integer): Integer;
+begin
+  if ASTKind[node] = AN_STR_LIT then ASTTk[node] := Ord(tyString);
+  Result := PyForceVariant(node);
+end;
+
 procedure PyStarFillFromMapping(procIdx, firstSlot, dictSym: Integer;
                                 var headArg, lastArg: Integer);
 var dcCi, listSym, asgn, total, required, wanted, lo, k: Integer;
@@ -21176,8 +21189,8 @@ begin
     begin
       dfltAsgn := AllocNode(AN_ASSIGN);
       ASTLeft[dfltAsgn] := PyMakeIdent(slotSym);
-      ASTRight[dfltAsgn] := PyForceVariant(PyParamSlotDefaultNode(procIdx, dcCi,
-                                                                  firstSlot + k));
+      ASTRight[dfltAsgn] := PyStarSlotDefault(PyParamSlotDefaultNode(procIdx, dcCi,
+                                                                     firstSlot + k));
       PyHoistStmt(dfltAsgn);
     end;
     elemNode := AllocNode(AN_ARG);
@@ -21582,8 +21595,8 @@ begin
     begin
       dfltAsgn := AllocNode(AN_ASSIGN);
       ASTLeft[dfltAsgn] := PyMakeIdent(slotSym);
-      ASTRight[dfltAsgn] := PyForceVariant(DefaultArgValueNode(procIdx,
-                                                               firstSlot + k));
+      ASTRight[dfltAsgn] := PyStarSlotDefault(DefaultArgValueNode(procIdx,
+                                                                  firstSlot + k));
       PyHoistStmt(dfltAsgn);
     end;
     elemNode := AllocNode(AN_ARG);
@@ -26884,6 +26897,30 @@ begin
       k := 1;
       while CurTok.Kind <> tkRParen do
       begin
+        { `super().__init__(parent, height=h, **kwargs)` -- a subclass handing
+          its extra options on to the base (a tk.Canvas subclass does this).
+          From the first keyword, when a `**` is coming, the tail folds into
+          one mapping and fills the base's slots by name, defaults included,
+          exactly as at an ordinary method call (PyParseKwTailIntoMapping);
+          the positional prefix keeps its slots. This loop used to reach
+          PyParseBoolExpr on the '*' and answer "expected expression". }
+        if (ProcPyStarIdx[mpi] < 0) and
+           (((CurTok.Kind = tkStar) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkStar)) or
+            ((CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkAssign))) and PyDStarAheadInArgs then
+        begin
+          j := PyNewContainerTemp('TPyDict', 'superkw');
+          PyParseKwTailIntoMapping(j, Procs[mpi].Name);
+          PyStarFillFromMapping(mpi, k, j, selfArg, lastArg);
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := mpi;
+          ASTTk[node] := Ord(Procs[mpi].RetType);
+          ASTLeft[node] := selfArg;
+          Result := node;
+          Exit;
+        end;
         kwIdx := PyKwArgIndex(mpi, 1);
         PyParseBoolExpr;
         argNode := AllocNode(AN_ARG);
@@ -36909,6 +36946,35 @@ begin
   end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseLoopMaybeElse(True); Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
+  { `sys.stdout = None` / `sys.stderr = None`: the stream is silenced (see
+    pysys_stream_to_none). Only the None value: sys.stdout is a call-built
+    stream, not a slot, so any other value is still a compile error rather
+    than a redirect that half works. Written after a BrokenPipeError. }
+  if (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) < 0) and
+     (PyUnitAliasRootName(CurTok.SVal) = 'sys') and (TokPos + 3 < TokCount) and
+     (Tokens[TokPos].Kind = tkDot) and
+     ((GetTokenStr(TokPos + 1) = 'stdout') or (GetTokenStr(TokPos + 1) = 'stderr')) and
+     (Tokens[TokPos + 2].Kind = tkAssign) and (Tokens[TokPos + 3].Kind = tkNil) then
+  begin
+    Next;                                       { sys }
+    Next;                                       { . }
+    if CurTok.SVal = 'stderr' then asrtA1 := 2 else asrtA1 := 1;
+    Next;                                       { stdout / stderr }
+    Next;                                       { = }
+    Next;                                       { None }
+    asrtProc := FindProc('pysys_stream_to_none');
+    if asrtProc < 0 then Error('Nil Python: pylib (pysys_stream_to_none) not loaded');
+    asrtCond := AllocNode(AN_INT_LIT);
+    ASTIVal[asrtCond] := asrtA1;
+    ASTTk[asrtCond] := Ord(tyInteger);
+    ASTRight[asrtCond] := -1;
+    asrtA0 := AllocNode(AN_ARG); ASTLeft[asrtA0] := asrtCond; ASTRight[asrtA0] := -1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := asrtProc;
+    ASTLeft[Result] := asrtA0;
+    ASTTk[Result] := Ord(tyUnknown);
+    Exit;
+  end;
   { `yield E` — Nil Python generator. No lexer token: `yield` arrives as an
     ordinary identifier and is recognised here, at statement position, the same
     way `pass` is. The def containing it was already marked a stackless
@@ -57609,6 +57675,21 @@ begin
         trailing underscore (`set_`, `destroy_`), and `cfg.set(section, key,
         value)` (configparser's own spelling) must reach it. Any argument list,
         unlike the view methods above, so this guard is only "a call follows". }
+      { ...and the METHOD VALUE of either, with no call: `root.after(ms,
+        root.destroy)` hands the bound method over, and the read looked for a
+        `destroy` attribute and raised AttributeError at run time. }
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkLParen)) then
+      begin
+        if CaseEqual(fieldName, 'destroy') and
+           (FindUMeth(recName - REC_UCLASS_BASE, 'destroy_') >= 0) then
+          fieldName := 'destroy_'
+        else if (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
+                (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) and
+                (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
+                (FindUMeth(recName - REC_UCLASS_BASE, fieldName + '_') >= 0) then
+          fieldName := fieldName + '_';
+      end;
       if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -59298,8 +59379,31 @@ begin
     end;
 end;
 
+{ The dotted name an imported module answers to `__name__` with, from the
+  path PyDunderFileRel made relative (`pkg/sub/mod.py` -> `pkg.sub.mod`, a
+  package's `__init__.py` -> the package). A lib/rtl shim answers with the
+  module it stands in for (`mimic_glob` -> `glob`). Falls back to the unit's
+  own name when no path was recorded. }
+function PyModuleNameOfUnit: AnsiString;
+var i: Integer;
+begin
+  Result := CurUnitPyRel;
+  if (Length(Result) > 3) and (Copy(Result, Length(Result) - 2, 3) = '.py') then
+    Result := Copy(Result, 1, Length(Result) - 3)
+  else if Length(Result) = 0 then
+    Result := LowerCase(Strs[CurrentUnitIdx].Text);
+  for i := 1 to Length(Result) do
+    if Result[i] = '/' then Result[i] := '.';
+  if Result = '__init__' then Result := LowerCase(Strs[CurrentUnitIdx].Text)
+  else if (Length(Result) > 9) and (Copy(Result, Length(Result) - 8, 9) = '.__init__') then
+    Result := Copy(Result, 1, Length(Result) - 9);
+  if (Length(Result) > 6) and (Copy(Result, 1, 6) = 'mimic_') then
+    Result := Copy(Result, 7, Length(Result) - 6);
+end;
+
 procedure PyParseFactorCore;
-var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+var modName: AnsiString;   { __name__ of an imported module }
+    lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     qcSegs, qcUnitIdx, qcI: Integer;         { the qualified-construction arm }
     clsScopeSym: Integer;   { a class attribute visible in a method's DEFAULT }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
@@ -60945,10 +61049,14 @@ begin
       end;
       if (name = '__name__') then
       begin
-        { compiled as the main program, so __name__ is always "__main__". }
+        { "__main__" in the main program; in an IMPORTED module its dotted
+          name, so the module's own `if __name__ == "__main__":` block stays
+          out of the program that imports it (it used to run on import). }
         Next;
         node := AllocNode(AN_STR_LIT);
-        ASTSOffset[node] := StoredName('__main__'); ASTSLen[node] := 8;
+        modName := '__main__';
+        if CurrentUnitIdx >= 0 then modName := PyModuleNameOfUnit;
+        ASTSOffset[node] := StoredName(modName); ASTSLen[node] := Length(modName);
         ASTTk[node] := Ord(tyString);
         CurASTNode := node; LastExprTk := tyString;
         Exit;

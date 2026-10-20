@@ -1,0 +1,12 @@
+# `**d` into a PASCAL method or constructor whose string parameter has a
+# default. The slot's default was boxed with the parameter's managed string
+# kind and crashed in the variant runtime before the call -- a tk.Canvas
+# subclass forwarding `**kwargs` into Canvas.Create died this way.
+import 'nilpy_kwfwd_unit.pas' as u
+
+k = u.K(**{})
+k = u.K(**{"b": 3})
+k = u.K(**{"s": "hi", "a": 5})
+k.m(**{})
+k.m(**{"t": "x"})
+k.m(**{"s": "a", "n": 1, "t": "b"})
