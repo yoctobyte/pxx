@@ -5980,7 +5980,7 @@ function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
-    gaRes: Variant;
+    gaRes: Variant; sigp: Pointer;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -6076,9 +6076,21 @@ begin
       begin
         { the star index rides the meth Flags word in SIGNATURE space (Self at
           0); the bridge wants it in the callee's OWN space, hence the -1 on
-          top of the +1 the encoding adds to keep 0 meaning "none". }
-        Result := pybound_new_star(mi^.Code, obj, mi^.RetKind <> 0,
-                    Integer((mi^.Flags shr 8) and 255) - 2);
+          top of the +1 the encoding adds to keep 0 meaning "none".
+          The method's PYSIG record goes on the pair too: without it a call
+          that omits a defaulted parameter -- `getattr(c, "f")(1.0)` against
+          `def f(self, x, limit=50)` -- entered the two-parameter body through
+          a one-argument call and read garbage for `limit` (rc 139). It is the
+          extra word after the kinds and names (RTTI_METH_FLAG_HASSIG, bit 1),
+          the record pyeval's reflected call reads, in the callee's own space
+          as the bridge expects. `m = c.f` got its record at compile time.
+          bug-nilpy-getattr-method-value-loses-its-defaults }
+        sigp := nil;
+        if ((mi^.Flags and 2) <> 0) and (mi^.ParamKinds <> nil) then
+          sigp := Pointer(NativeInt(PInt64(NativeInt(mi^.ParamKinds) +
+                    2 * mi^.Arity * 8)^));
+        Result := pybound_new_sig(mi^.Code, obj, mi^.RetKind <> 0,
+                    Integer((mi^.Flags shr 8) and 255) - 2, sigp);
         Exit;
       end;
     end;

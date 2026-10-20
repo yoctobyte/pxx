@@ -2823,6 +2823,10 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_nilpy_os_stat_owner_and_ids.npy $(TESTTMP)/test_nilpy_osstat_a64 >/dev/null || exit 1; \
 	  tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_osstat_a64 | diff -u test/test_nilpy_os_stat_owner_and_ids.expected - || exit 1; \
 	else echo "=== test_nilpy_os_stat_owner_and_ids: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
+	# a method fetched with getattr() fills its own defaults when called (the pair
+	# carried no signature: rc 139). python3's output.
+	./$(COMPILER) test/test_nilpy_getattr_method_value_fills_its_defaults.npy $(TESTTMP)/test_nilpy_gadflt26
+	$(TESTTMP)/test_nilpy_gadflt26 | diff -u test/test_nilpy_getattr_method_value_fills_its_defaults.expected -
 	./$(COMPILER) test/test_nilpy_with_open_closes_the_file.npy $(TESTTMP)/test_nilpy_withopen26
 	$(TESTTMP)/test_nilpy_withopen26 | diff -u test/test_nilpy_with_open_closes_the_file.expected -
 	./$(COMPILER) test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname26

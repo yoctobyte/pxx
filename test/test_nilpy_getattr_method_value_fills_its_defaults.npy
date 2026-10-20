@@ -1,0 +1,23 @@
+# A method reached through getattr() is called with its defaulted parameters
+# omitted. The pair getattr built carried no signature, so the body read
+# garbage for `limit` and the program died with rc 139.
+# bug-nilpy-getattr-method-value-loses-its-defaults
+class C:
+    def f(self, x, limit=50):
+        return x + limit
+
+    def k(self, n, s="ab", sep="-"):
+        return sep.join([s] * n)
+
+
+c = C()
+print("direct", c.f(1.0))
+print("getattr", getattr(c, "f")(1.0))
+g = getattr(c, "f")
+print("held", g(2.0), g(2.0, 1))
+m = c.f
+print("bound method var", m(1.0))
+print("str default", getattr(c, "k")(2))
+print("keyword", getattr(c, "k")(3, sep="+"))
+for name in ["f", "k"]:
+    print(name, getattr(c, name)(1))
