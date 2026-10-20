@@ -456,6 +456,81 @@ begin
       EmitI32($D2800002 + (Strs[si].Len shl 5));                { movz x2, #len }
       EmitI32($D4000001);                                       { svc #0 }
 
+      { The detail line, `: <ClassName>: <Message>`, the x86-64 block's
+        sequence instruction for instruction (see its note for the layouts and
+        why every read is range-guarded). Only x86-64 printed it, so an
+        uncaught OSError on a real aarch64 box said just "Unhandled exception"
+        -- Vloot's EMFILE on via took instrumentation to name.
+        x19 = the object, x20 = its class RTTI blob, x9 = 65536. A Linux
+        syscall preserves everything but x0, so x9/x19/x20 survive the writes. }
+      siColon := InternStr(': ');
+      EmitI32($18000041);                                       { ldr w1, [pc+8] }
+      EmitI32($14000002);                                       { b [pc+8] }
+      EmitGlobRef(BSS_EXC_OBJ);
+      EmitI32($F9400033);                                       { ldr x19, [x1] }
+      EmitI32($D2800014);                                       { movz x20, #0 }
+      EmitI32($D2A00029);                                       { movz x9, #1, lsl #16 }
+      EmitI32($EB09027F);                                       { cmp x19, x9 }
+      jo1 := CodeLen; EmitI32($54000003);                       { b.lo objbad }
+      EmitI32($F940026A);                                       { ldr x10, [x19] }
+      jo2 := CodeLen; EmitI32($B400000A);                       { cbz x10, objbad }
+      EmitI32($F85F8154);                                       { ldur x20, [x10, #-8] }
+      Patch32(jo1, $54000003 or ((((CodeLen - jo1) div 4) and $7ffff) shl 5));
+      Patch32(jo2, $B400000A or ((((CodeLen - jo2) div 4) and $7ffff) shl 5));
+
+      jc1 := CodeLen; EmitI32($B4000014);                       { cbz x20, noclass }
+      EmitI32($F9400281);                                       { ldr x1, [x20] }
+      jc2 := CodeLen; EmitI32($B4000001);                       { cbz x1, noclass }
+      EmitI32($F9400022);                                       { ldr x2, [x1] }
+      EmitI32($F100005F);                                       { cmp x2, #0 }
+      jc3 := CodeLen; EmitI32($5400000D);                       { b.le noclass }
+      EmitI32($F104005F);                                       { cmp x2, #256 }
+      jc4 := CodeLen; EmitI32($54000002);                       { b.hs noclass }
+      EmitI32($D2800808);                                       { movz x8, #64 }
+      EmitI32($D2800040);                                       { movz x0, #2 }
+      EmitI32($58000041);                                       { ldr x1, [pc+8] }
+      EmitI32($14000003);                                       { b [pc+12] }
+      EmitDataRef(Strs[siColon].Offset + 8);
+      EmitI32($D2800002 + (Strs[siColon].Len shl 5));           { movz x2, #len }
+      EmitI32($D4000001);                                       { svc #0 }
+      EmitI32($F9400281);                                       { ldr x1, [x20] }
+      EmitI32($F9400022);                                       { ldr x2, [x1] }
+      EmitI32($91002021);                                       { add x1, x1, #8 }
+      EmitI32($D2800808);                                       { movz x8, #64 }
+      EmitI32($D2800040);                                       { movz x0, #2 }
+      EmitI32($D4000001);                                       { svc #0 }
+      Patch32(jc1, $B4000014 or ((((CodeLen - jc1) div 4) and $7ffff) shl 5));
+      Patch32(jc2, $B4000001 or ((((CodeLen - jc2) div 4) and $7ffff) shl 5));
+      Patch32(jc3, $5400000D or ((((CodeLen - jc3) div 4) and $7ffff) shl 5));
+      Patch32(jc4, $54000002 or ((((CodeLen - jc4) div 4) and $7ffff) shl 5));
+
+      EmitI32($EB09027F);                                       { cmp x19, x9 }
+      jm1 := CodeLen; EmitI32($54000003);                       { b.lo nomsg }
+      EmitI32($F9400661);                                       { ldr x1, [x19, #8] }
+      EmitI32($EB09003F);                                       { cmp x1, x9 }
+      jm2 := CodeLen; EmitI32($54000003);                       { b.lo nomsg }
+      EmitI32($F85F8022);                                       { ldur x2, [x1, #-8] }
+      EmitI32($F100005F);                                       { cmp x2, #0 }
+      jm3 := CodeLen; EmitI32($5400000D);                       { b.le nomsg }
+      EmitI32($F140045F);                                       { cmp x2, #4096 }
+      jm4 := CodeLen; EmitI32($54000002);                       { b.hs nomsg }
+      EmitI32($D2800808);                                       { movz x8, #64 }
+      EmitI32($D2800040);                                       { movz x0, #2 }
+      EmitI32($58000041);                                       { ldr x1, [pc+8] }
+      EmitI32($14000003);                                       { b [pc+12] }
+      EmitDataRef(Strs[siColon].Offset + 8);
+      EmitI32($D2800002 + (Strs[siColon].Len shl 5));           { movz x2, #len }
+      EmitI32($D4000001);                                       { svc #0 }
+      EmitI32($F9400661);                                       { ldr x1, [x19, #8] }
+      EmitI32($F85F8022);                                       { ldur x2, [x1, #-8] }
+      EmitI32($D2800808);                                       { movz x8, #64 }
+      EmitI32($D2800040);                                       { movz x0, #2 }
+      EmitI32($D4000001);                                       { svc #0 }
+      Patch32(jm1, $54000003 or ((((CodeLen - jm1) div 4) and $7ffff) shl 5));
+      Patch32(jm2, $54000003 or ((((CodeLen - jm2) div 4) and $7ffff) shl 5));
+      Patch32(jm3, $5400000D or ((((CodeLen - jm3) div 4) and $7ffff) shl 5));
+      Patch32(jm4, $54000002 or ((((CodeLen - jm4) div 4) and $7ffff) shl 5));
+
       EmitI32($D2800808);                                       { movz x8, #64 }
       EmitI32($D2800040);                                       { movz x0, #2 }
       EmitI32($58000041);                                       { ldr x1, [pc+8] }

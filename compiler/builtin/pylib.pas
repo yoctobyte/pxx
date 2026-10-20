@@ -864,6 +864,8 @@ type
   TPyFile = class
   public
     FFd: Int64;
+    { CPython's `f.closed`. A plain field: set once by close() }
+    closed: Boolean;
     { WHICH of the two string types this file's reads yield — the one fact that
       decides it, held once instead of hard-coded four times.
 
@@ -891,6 +893,9 @@ type
       joining reproduces the file byte for byte. }
     function readlines: TPyList;
     function readline: Variant;
+    { ValueError on a closed file, as CPython raises -- not an EBADF read of
+      nothing, or worse, of an fd number something else has reopened since }
+    procedure CheckOpen;
     function write(b: TPyBytes): Int64; overload;
     { Python's TEXT-mode write takes a str, and that is how every ordinary
       program spells it. Without this overload `f.write("hello")` resolved to
@@ -19348,7 +19353,7 @@ begin
 end;
 
 { Which arm of PyObjFinalize a class takes: 0 a user class (or anything
-  else), 1 TPyList, 2 TPyDict, 3 TPyBytes, 4 TPyIter. The four `is` tests
+  else), 1 TPyList, 2 TPyDict, 3 TPyBytes, 4 TPyIter, 5 TPyFile. The four `is` tests
   each walked the whole parent chain, and a user object -- most of what
   lekkerzeilen finalises -- failed all four: __pxxInheritsFrom was 2.6% of
   its profile, 239 of 777 samples from here. Cached per class RTTI, the kind
@@ -19376,6 +19381,7 @@ begin
   else if o is TPyDict then Result := 2
   else if o is TPyBytes then Result := 3
   else if o is TPyIter then Result := 4
+  else if o is TPyFile then Result := 5
   else Result := 0;
   if (rt <> 0) and ((rt and 7) = 0) then
     PyFinKindCache[h] := rt or NativeUInt(Result);
@@ -19462,6 +19468,16 @@ begin
     end
     else if by.FData <> nil then FreeMem(by.FData);
     by.FData := nil; by.FLen := 0;
+    Exit;
+  end;
+  { a file nobody closed is closed when its last reference goes, as CPython's
+    refcount does it -- `open(p).read()` leaked one fd per call. Never 0..2:
+    a TPyFile over a standard stream does not own it.
+    bug-nilpy-with-open-never-closes-the-file }
+  if fk = 5 then
+  begin
+    if TPyFile(objp).FFd > 2 then PyPalClose(TPyFile(objp).FFd);
+    TPyFile(objp).FFd := -1;
     Exit;
   end;
   { a CURSOR owns its source, its upstream(s) and its prefetch box — every one
@@ -24149,6 +24165,7 @@ function TPyFile.read(u: Int64): Variant;
   bug-nilpy-text-mode-read-n-returns-bytes-not-str }
 var r: TPyBytes; got: Int64; s: AnsiString; i: Integer;
 begin
+  CheckOpen;
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
   got := PyPalRead(FFd, r.FData, u);
@@ -24172,6 +24189,7 @@ function TPyFile.readall: AnsiString;
 var buf: array[0..8191] of Char; got: Int64; res: AnsiString;
     rlen, rcap, i: Integer;
 begin
+  CheckOpen;
   res := ''; rlen := 0; rcap := 0;
   while True do
   begin
@@ -24258,6 +24276,7 @@ function TPyFile.readline: Variant;
   text file printed b'one\n'. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
 var r: TPyBytes; got: Int64; ch: Byte; s: AnsiString;
 begin
+  CheckOpen;
   { one byte at a time — line reads are rare and short in the corpus }
   r := TPyBytes.Create(0);
   s := '';
@@ -24273,6 +24292,7 @@ end;
 
 function TPyFile.write(b: TPyBytes): Int64;
 begin
+  CheckOpen;
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, b.FData, b.FLen);
   { a failed write RAISES in CPython (`[Errno 28] No space left on device`);
@@ -24282,6 +24302,7 @@ end;
 
 function TPyFile.write(const s: AnsiString): Int64;
 begin
+  CheckOpen;
   { our strings are byte strings, so a text write is the bytes of s -- no
     encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
   if Length(s) = 0 then begin Result := 0; Exit; end;
@@ -24358,10 +24379,16 @@ var r: Int64;
 begin
   { closing twice is a no-op in CPython; a close that FAILS raises there (on
     ESP it is where a buffered write meets a full partition) }
+  closed := True;
   if FFd < 0 then Exit;
   r := PyPalClose(FFd);
   FFd := -1;
   if r < 0 then pyos_raise_oserror(r);
+end;
+
+procedure TPyFile.CheckOpen;
+begin
+  if closed then raise ValueError.Create('I/O operation on closed file.');
 end;
 
 function TPyFile.fileno: Int64;

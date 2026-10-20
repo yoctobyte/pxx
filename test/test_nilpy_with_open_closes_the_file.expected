@@ -1,0 +1,10 @@
+return inside: 0
+assign, return after: 0
+for-loop inside: 0
+exception inside: 0
+open().read(): 0
+rebound: 0
+(True, True, True)
+False
+True
+ValueError: I/O operation on closed file.

@@ -29296,7 +29296,7 @@ end;
 function PyParseWithTail: Integer;
 var exprNode, node, seq, symIdx, cmCi, cmSym, entNode, exitNode, bodyNode: Integer;
     hSave: Integer;
-    varName: AnsiString; usesProtocol: Boolean;
+    varName: AnsiString; usesProtocol: Boolean; closeCi: Integer;
 begin
   { FOLD the manager expression's own hoisted setup INTO it, the same way a
     short-circuit operand does. Every other statement header is fine without
@@ -29450,6 +29450,31 @@ begin
     Exit;
   end;
 
+  { A pylib object with a close() -- open()'s TPyFile above all -- is closed when
+    the block exits, which is what its CPython __exit__ does. This path used to
+    only bind `as`, on the grounds that pyopen read the file eagerly; TPyFile
+    holds a live fd now, so every `with open(...)` leaked one and a collector
+    reading /proc each second died with EMFILE on its second sample.
+    bug-nilpy-with-open-never-closes-the-file }
+  closeCi := -1;
+  if (IntToTypeKind(ASTTk[exprNode]) = tyClass) and
+     (ResolveNodeRec(exprNode) >= REC_UCLASS_BASE) and
+     PyRecIsPylibOwnClass(ResolveNodeRec(exprNode)) and
+     (FindUMeth(ResolveNodeRec(exprNode) - REC_UCLASS_BASE, 'close') >= 0) then
+    closeCi := ResolveNodeRec(exprNode) - REC_UCLASS_BASE;
+  if closeCi >= 0 then
+  begin
+    { the SAME object is closed even if the body rebinds the `as` name }
+    cmSym := AllocVar(PyHiddenName('cm'), tyClass);
+    Syms[cmSym].RecName := REC_UCLASS_BASE + closeCi;
+    SymSyncTypeRef(cmSym);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(cmSym);
+    ASTRight[node] := exprNode;
+    seq := PySeqAppend(seq, node);
+    exprNode := PyMakeIdent(cmSym);
+  end;
+
   if PyIsIdent('as') then
   begin
     Next;
@@ -29468,19 +29493,32 @@ begin
     ASTRight[node] := exprNode;
     seq := PySeqAppend(seq, node);
   end
-  else
+  else if closeCi < 0 then
     seq := PySeqAppend(seq, exprNode);   { evaluate for effect }
   if CurTok.Kind = tkComma then
   begin
     Next;
-    seq := PySeqAppend(seq, PyParseWithTail());   { parens — see the note above }
+    bodyNode := PyParseWithTail();       { parens — see the note above }
   end
   else
   begin
     Expect(tkColon, ':');
-    seq := PySeqAppend(seq, PyParseSuite);
+    bodyNode := PyParseSuite;
   end;
   PyStmtAteBlock := True;                 { consumed our own body block }
+  if closeCi >= 0 then
+  begin
+    exitNode := PyCallMeth1(closeCi, 'close', PyMakeIdent(cmSym), -1);
+    if exitNode >= 0 then
+    begin
+      { a STATEMENT seq as the finally body, as for __exit__ above }
+      node := AllocNode(AN_TRY_FINALLY);
+      ASTLeft[node] := bodyNode;
+      ASTRight[node] := PySeqAppend(-1, exitNode);
+      bodyNode := node;
+    end;
+  end;
+  seq := PySeqAppend(seq, bodyNode);
   Result := seq;
 end;
 

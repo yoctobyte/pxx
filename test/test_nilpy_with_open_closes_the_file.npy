@@ -1,0 +1,75 @@
+# `with open(...)` closes the file when the block exits -- by falling off, by
+# return, by exception -- and a file nobody closed is closed when its last
+# reference goes. Each of these leaked one fd per call (Vloot's collector hit
+# EMFILE on its second sample). bug-nilpy-with-open-never-closes-the-file
+import os
+
+
+def fds():
+    return len(os.listdir("/proc/self/fd"))
+
+
+def ret_inside(p):
+    with open(p) as f:
+        return f.read()
+
+
+def assign_then_return(p):
+    with open(p) as f:
+        t = f.read()
+    return t
+
+
+def loop_inside(p):
+    n = 0
+    with open(p) as f:
+        for line in f:
+            n += 1
+    return n
+
+
+def raise_inside(p):
+    try:
+        with open(p) as f:
+            raise ValueError("x")
+    except ValueError:
+        return 0
+
+
+def dropped(p):
+    return open(p).read()
+
+
+def rebound(p):
+    f = open(p)
+    f.read()
+    f = None
+    return 0
+
+
+def two_managers(p):
+    with open(p) as a, open(p) as b:
+        same = a.read() == b.read()
+    return same, a.closed, b.closed
+
+
+def main():
+    p = "/proc/self/stat"
+    for name, fn in [("return inside", ret_inside), ("assign, return after", assign_then_return),
+                     ("for-loop inside", loop_inside), ("exception inside", raise_inside),
+                     ("open().read()", dropped), ("rebound", rebound)]:
+        before = fds()
+        for i in range(200):
+            fn(p)
+        print(name + ": " + str(fds() - before))
+    print(two_managers(p))
+    with open(p) as f:
+        print(f.closed)
+    print(f.closed)
+    try:
+        f.read()
+    except ValueError as e:
+        print("ValueError:", e)
+
+
+main()

@@ -2809,6 +2809,18 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_dstarpas26 "$$($(TESTTMP)/test_nilpy_dstarpas26)" "$$(printf '%b' 'K -1 [dflt] -1\nK -1 [dflt] 3\nK 5 [hi] -1\nm [] 7 [t]\nm [] 7 [x]\nm [a] 1 [b]')"
 	./$(COMPILER) test/test_nilpy_dunder_name_and_stdout_none.npy $(TESTTMP)/test_nilpy_dunname26
 	$(TESTTMP)/test_nilpy_dunname26 | diff -u test/test_nilpy_dunder_name_and_stdout_none.expected -
+	# `with open(...)` closes on every exit path and a dropped file closes with
+	# its last reference: each leaked one fd before (fd counts against python3's).
+	# And an uncaught exception names class + message on aarch64 too, run under
+	# qemu where it is installed.
+	./$(COMPILER) test/test_nilpy_with_open_closes_the_file.npy $(TESTTMP)/test_nilpy_withopen26
+	$(TESTTMP)/test_nilpy_withopen26 | diff -u test/test_nilpy_with_open_closes_the_file.expected -
+	./$(COMPILER) test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname26
+	tools/expect_same.sh test_nilpy_unhname26 "$$($(TESTTMP)/test_nilpy_unhname26 2>&1; echo "rc=$$?")" "$$(printf 'Unhandled exception: OSError: [Errno 24] Too many open files\nrc=217')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname_a64 >/dev/null || exit 1; \
+	  tools/expect_same.sh aarch64/test_nilpy_unhname_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_unhname_a64 2>&1; echo "rc=$$?")" "$$(printf 'Unhandled exception: OSError: [Errno 24] Too many open files\nrc=217')" || exit 1; \
+	else echo "=== test_nilpy_unhandled_names_the_exception: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
 	# Extended-slice assignment, `x[lo:hi:step] = src`. The .expected IS python3's
 	# output -- the load-bearing property is that the assign writes EXACTLY the
 	# positions the matching READ selects, which only an oracle can check.

@@ -1,0 +1,7 @@
+# An uncaught exception names its class and message on every 64-bit Linux
+# target, not just x86-64: aarch64 said only "Unhandled exception".
+def sample():
+    raise OSError(24, "Too many open files")
+
+
+sample()
