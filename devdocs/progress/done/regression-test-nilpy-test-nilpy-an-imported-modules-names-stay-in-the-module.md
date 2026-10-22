@@ -42,4 +42,4 @@ ok: /tmp/testmgr-scratch-203328/test_nilpy_modstay26  [code=539686B  data=110480
 takes it from the repro line.*
 
 ## Log
-- 2026-10-22 — the borg watcher saw `test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2` GREEN at dad80823541c (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+- 2026-10-22 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@1` passes at dad80823541c (tier full); it was red at ae615953df78. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.

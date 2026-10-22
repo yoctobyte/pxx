@@ -34,3 +34,6 @@ ok: /tmp/testmgr-scratch-203328/test_nilpy_dcorder26  [code=555744B  data=114456
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-10-22 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_dataclass_order.npy` passes at dad80823541c (tier full); it was red at ae615953df78. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
