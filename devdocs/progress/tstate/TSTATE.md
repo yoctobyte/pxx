@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `759c3fe03246` | 2026-10-11T11:57:44Z | GREEN (opt) | 784.4s | `759c3fe03246` RED |
+| borg | `dad80823541c` | 2026-10-22T11:41:20Z | RED (full) | 1389.4s | `dad80823541c` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `759c3fe03246` on borg, 2026-10-11T11:21:48Z (1h ago).**
+**Newest full tier in the fleet: `dad80823541c` on borg, 2026-10-22T11:41:20Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `759c3fe03246` | RED | 1h | — (newest) |
+| borg | `dad80823541c` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -23,13 +23,10 @@ Reading a staler host's map for a cross-target job answers a question about an O
 
 | host | toolchain | fp |
 |------|-----------|-----|
-| borg | kernel=7.0.0-31-generic gcc=13.3.0 qemu=8.2.2(6 of 6) espqemu-riscv32=9.2.2 espqemu-xtensa=9.2.2 git=2.43.0 wasmtime=48.0.1 | `892e942692d7` |
+| borg | kernel=7.0.0-34-generic gcc=13.3.0 qemu=8.2.2(6 of 6) espqemu-riscv32=9.2.2 espqemu-xtensa=9.2.2 git=2.43.0 wasmtime=48.0.1 | `f9890698094f` |
 
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
 
 ## Open regressions
-- **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@1** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy@2** — test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy tools/expect_same.sh +2 (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_dataclass_order.npy** — test/test_nilpy_dataclass_order.npy test/test_nilpy_dataclass_order.expected +2 (borg): bad `ae615953df78`, last good `394f96b08e3c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy@2** — test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy tools/assert_no_leak.sh +1 (borg): bad `59caf859488c`, last good `f159f2ee43df`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_gc_module_micropython_style.py@3** — test/test_nilpy_gc_module_micropython_style.py (borg): bad `759c3fe03246`, last good `unknown`, 0 commit(s) in range
+- **tools-devtest#00** (borg): bad `dad80823541c`, last good `759c3fe03246`, 144 commit(s) in range
