@@ -1,0 +1,23 @@
+# bug-n-a-python-override-of-a-pascal-virtual-widens-the-compiled-base
+#
+# An UNANNOTATED override of configparser.pas's virtual optionxform infers a
+# variant result, and the override block "joined" variant with the base's
+# AnsiString by widening the BASE to a variant. That is sound for a Python
+# base, whose body is not compiled yet; configparser.pas is compiled Pascal
+# that calls through the slot expecting a string. The first has_option of the
+# subclass segfaulted (songformatter). test_nilpy_configparser.npy annotates
+# `s: str -> str`, which is why it never saw this. CPython is the oracle.
+import configparser
+
+
+class CP(configparser.ConfigParser):
+    def optionxform(self, optionstr):
+        return optionstr
+
+
+cfg = CP()
+cfg.add_section("Render")
+print(cfg.has_option("Render", "Font"))
+cfg.set("Render", "Font", "Mono")
+print(cfg.get("Render", "Font"), cfg.has_option("Render", "Font"))
+print(cfg.has_option("Render", "font"))

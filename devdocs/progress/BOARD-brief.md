@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:17 blocked:9 backlog:50 backlog-umbrella:14 backlog-core:166 backlog-nilpy:173 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4121 rejected:89`
+`working:34 unfinished:17 blocked:9 backlog:60 backlog-umbrella:14 backlog-core:166 backlog-nilpy:177 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:2 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4172 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 565, ranked
+## Ready — top 30 of 581, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -109,4 +109,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [N]` bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 
-_535 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_551 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

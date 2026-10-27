@@ -372,6 +372,13 @@ type
     procedure add_cascade(const label: AnsiString; menu: Widget = nil);
     { `post(x_root, y_root)` places the popup at a SCREEN coordinate }
     procedure post(x, y: Integer);
+    { `tk_popup(x_root, y_root)` — Tk's own popup helper: posts the menu and
+      grabs the pointer, so a click elsewhere dismisses it. }
+    procedure tk_popup(x, y: Integer);
+    { `entryconfigure(index, state=...)` — `index` may be an entry's LABEL,
+      which Tk matches as a pattern; that is the spelling apps use. }
+    procedure entryconfigure(const index: Variant; const label: AnsiString = '';
+                             const state: AnsiString = '');
   end;
 
   { A multi-line text widget. The subset is what an editor needs: put text in,
@@ -1856,6 +1863,18 @@ end;
 procedure Menu.post(x, y: Integer);
 begin
   TkEval(path + ' post ' + TkiIntStr(x) + ' ' + TkiIntStr(y));
+end;
+
+procedure Menu.entryconfigure(const index: Variant; const label: AnsiString;
+                              const state: AnsiString);
+begin
+  TkEval(path + ' entryconfigure {' + AnsiString(index) + '}' +
+         TkiOptStr('label', label) + TkiOptStr('state', state));
+end;
+
+procedure Menu.tk_popup(x, y: Integer);
+begin
+  TkEval('tk_popup ' + path + ' ' + TkiIntStr(x) + ' ' + TkiIntStr(y));
 end;
 
 { ---- Text ---------------------------------------------------------------- }

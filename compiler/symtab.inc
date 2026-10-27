@@ -1834,6 +1834,21 @@ end;
   so this reached any program using `classes` with an IUnknown-typed value; it
   is the whole of test-fpjson, whose suite runner failed to compile so 0 of 203
   tests ran. bug-p-a-unit-redeclaring-a-builtin-interface-alias-types-it-as-a-record }
+function UClsAliasVisibleHere(k: Integer): Boolean;
+{ May the scope being compiled see class-alias ROW `k`? The uses rule the class
+  rows already obey, which the alias rows skipped. A NilPy module's
+  `from tkinter import Text` registers `Text` as an alias row OWNED BY THAT
+  MODULE, and with no visibility test it was a candidate everywhere: an RTL unit
+  compiled later (configparser.pas, `var f: Text`) bound its file record to
+  tkinter's widget and failed with "no overload of Assign matches (class,
+  AnsiString)". The importers the alias exists for (`from m import Text`) name
+  `m`, so they still see it.
+  bug-a-a-modules-from-import-alias-leaks-into-units-compiled-after-it }
+begin
+  UClsAliasVisibleHere := (UClsAliasUnitIdx[k] = CurrentUnitIdx) or
+    DeclVisibleSect(UClsAliasUnitIdx[k], False, IMPLTAB_NONE, -1);
+end;
+
 function FindUClassAliasRow(const lo: AnsiString; nonRecordOnly: Boolean): Integer;
 var i, bestRank, r: Integer;
 
@@ -1841,6 +1856,7 @@ var i, bestRank, r: Integer;
   begin
     Candidate := UNameMatch(UClsAliasNOff[k], UClsAliasNLen[k], lo) and
                  ClassOwnerVisibleHere(UClsAliasOwnerCi[k]) and
+                 UClsAliasVisibleHere(k) and
                  ((not nonRecordOnly) or
                   ((UClsAliasCi[k] >= 0) and (not UClsIsRecord[UClsAliasCi[k]])));
   end;
@@ -2138,7 +2154,8 @@ begin
   begin
     if (UClsAliasCi[i] >= 0) and
        UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) and
-       ClassOwnerVisibleHere(UClsAliasOwnerCi[i]) then
+       ClassOwnerVisibleHere(UClsAliasOwnerCi[i]) and
+       UClsAliasVisibleHere(i) then
     begin
       r := UsesRankOf(CurrentUnitIdx, UClsAliasUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then

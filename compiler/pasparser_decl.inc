@@ -3919,6 +3919,23 @@ begin
     isFloat := True;
     Next;
   end
+  { A REAL PARAMETER'S DEFAULT IS A REAL, whatever the literal looks like. The
+    stored value is read back at the call as IEEE bits (DefaultArgValueNode's
+    float arm), but `w: Double = -1` took the ORDINAL path below: the integer
+    -1 went out as an INT_LIT whose all-ones bits a Double reads as NaN, and
+    `= -1.5` did not parse at all (ConstEval has no real factor). tkinter.pas's
+    `width: Double = -1` "unset" sentinel therefore failed its own `d < 0`
+    test, Tk got `-width nan` and drew every create_rectangle outline at width
+    0 -- invisible (songformatter). ConstEvalF takes integers, reals, unary
+    minus and named real consts alike. A set or string literal keeps its own
+    arm, so `= []` and the string-on-a-real refusal below are untouched.
+    bug-p-a-negative-default-on-a-real-parameter-is-nan }
+  else if TypeIsFloat(paramTk) and (CurTok.Kind <> tkLBrack) and
+          (CurTok.Kind <> tkString) then
+  begin
+    val := ExDecDoubleToBits(ConstEvalF);
+    isFloat := True;
+  end
   else if (CurTok.Kind = tkLBrack) or
           ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
   begin

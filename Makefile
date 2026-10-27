@@ -1632,6 +1632,13 @@ test-nilpy: $(COMPILER)
 	# the frontend. Compiled, not run (X display), same as the facade above.
 	# bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
 	./$(COMPILER) examples/tk/uses_tkinter_and_configparser.pas $(TESTTMP)/test_tk_cfgparser26
+	# ...and the NilPy twin through a MODULE's `from tkinter import Text`, whose
+	# class-alias row leaked into configparser.pas compiled after it. Compiled,
+	# not run. bug-a-a-modules-from-import-alias-leaks-into-units-compiled-after-it
+	./$(COMPILER) examples/tk/module_from_import_text_then_configparser.npy $(TESTTMP)/test_nilpy_tkalias26
+	# tk.X / tk.Y reach the X_ / Y_ constants (compiled, not run)
+	# bug-n-tk-x-and-tk-y-are-unreachable-because-the-library-spells-them-x_-y_
+	./$(COMPILER) examples/tk/tk_x_and_y_constants.npy $(TESTTMP)/test_nilpy_tkxy26
 	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
 	# it resolve statically and take keyword arguments (same X-display caveat)
 	./$(COMPILER) examples/tk/field_class_identity.npy $(TESTTMP)/test_nilpy_fldcls26
@@ -1969,6 +1976,16 @@ test-nilpy: $(COMPILER)
 	@# option. This row crosses both old caps; the old unit fails it (IndexError).
 	./$(COMPILER) test/test_nilpy_configparser_grows_past_the_old_caps.npy $(TESTTMP)/test_nilpy_cfgcap26
 	$(TESTTMP)/test_nilpy_cfgcap26 | diff -u test/test_nilpy_configparser_grows_past_the_old_caps.expected -
+	@# an UNANNOTATED override of configparser.pas's virtual optionxform adopts
+	@# the Pascal signature instead of widening the compiled base (it segfaulted)
+	@# bug-n-a-python-override-of-a-pascal-virtual-widens-the-compiled-base
+	./$(COMPILER) test/test_nilpy_an_unannotated_override_of_a_pascal_virtual.npy $(TESTTMP)/test_nilpy_ovrpasv26
+	$(TESTTMP)/test_nilpy_ovrpasv26 | diff -u test/test_nilpy_an_unannotated_override_of_a_pascal_virtual.expected -
+	@# a name the module does not serve makes a guarded from-import MISS, so the
+	@# except ImportError branch runs as in CPython
+	@# bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback
+	./$(COMPILER) test/test_nilpy_a_partial_module_import_raises_importerror_in_a_guard.npy $(TESTTMP)/test_nilpy_partimp26
+	$(TESTTMP)/test_nilpy_partimp26 | diff -u test/test_nilpy_a_partial_module_import_raises_importerror_in_a_guard.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy $(TESTTMP)/test_nilpy_subbase26
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
@@ -2655,6 +2672,11 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 	./$(COMPILER) test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.npy $(TESTTMP)/test_nilpy_dynsig26
 	$(TESTTMP)/test_nilpy_dynsig26 | diff -u test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.expected -
+	# ...and its KEYWORDS bind against that arm's own parameter names: two
+	# classes agreeing on name and arity need not agree on order.
+	# bug-n-keywords-on-a-dynamic-receiver-bind-by-the-first-candidates-parameter-order
+	./$(COMPILER) test/test_nilpy_keywords_bind_per_runtime_arm.npy $(TESTTMP)/test_nilpy_kwarms26
+	$(TESTTMP)/test_nilpy_kwarms26 | diff -u test/test_nilpy_keywords_bind_per_runtime_arm.expected -
 	# An attribute that does not exist must RAISE whatever the receiver is.
 	# The scalar arm: `i.foo` on an int used to answer the int itself, on a str
 	# the string HANDLE as an integer, on a float 0, and `None.foo = 1` silently
@@ -11944,6 +11966,11 @@ test-core: $(COMPILER)
 	# method defaults must not shift onto the previous slot (bug-pascal-method-default-param-self-shift)
 	./$(COMPILER) test/test_method_default_param_b246.pas $(TESTTMP)/test_method_default_param_b24626
 	tools/expect_same.sh test_method_default_param_b24626 "$$($(TESTTMP)/test_method_default_param_b24626)" "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"
+	# a REAL parameter's default is a real however it is spelled (-1, 3, -1.5,
+	# C * 2): `w: Double = -1` arrived as NaN. Output is fpc 3.2.2's.
+	# bug-p-a-negative-default-on-a-real-parameter-is-nan
+	./$(COMPILER) test/test_real_param_default_is_a_real.pas $(TESTTMP)/test_realdflt26
+	tools/expect_same.sh test_realdflt26 "$$($(TESTTMP)/test_realdflt26)" "$$(printf -- '-1.00 -1.50 3.00 -2.00 5.00\nTRUE 7.00\n-1.00 4.00')"
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas $(TESTTMP)/test_class_overload_directive_b24726
 	tools/expect_same.sh test_class_overload_directive_b24726 "$$($(TESTTMP)/test_class_overload_directive_b24726)" "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"

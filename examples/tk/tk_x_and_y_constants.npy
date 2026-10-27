@@ -1,0 +1,15 @@
+# bug-n-tk-x-and-tk-y-are-unreachable-because-the-library-spells-them-x_-y_
+#
+# tkinter.pas cannot declare `X` beside its `x` spellings (Pascal folds case),
+# so it declares X_ and Y_, and `fill=tk.X` was "no member X came of the
+# qualifier tk". The qualified lookup now takes the underscored constant when
+# the unit declares nothing called X. Compiled, not run: X display.
+import tkinter as tk
+
+root = tk.Tk()
+f = tk.Frame(root)
+f.pack(fill=tk.X)
+g = tk.Frame(root)
+g.pack(fill=tk.Y, expand=True)
+print(tk.X, tk.Y, tk.BOTH)
+root.destroy()

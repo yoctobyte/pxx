@@ -1,0 +1,13 @@
+# bug-a-a-modules-from-import-alias-leaks-into-units-compiled-after-it
+#
+# `from tkinter import Text` inside a MODULE registers `Text` as a class-alias
+# row owned by that module, and alias rows were ranked with no visibility
+# test. configparser.pas, compiled later through another module, then bound
+# its `var f: Text` file record to the widget and refused to build: "no
+# overload of Assign matches (class, AnsiString)" (songformatter). The same
+# import in the MAIN program registers no row, so the shape needs a package.
+# Compiled, not run: tkinter needs an X display.
+from tk_aliasleak import f, g
+
+print(f())
+print(g())

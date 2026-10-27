@@ -1,0 +1,11 @@
+# bug-n-keywords-on-a-dynamic-receiver-bind-by-the-first-candidates-parameter-order
+#
+# `o.r(5, b=7)` on a receiver that may be either of two classes was bound ONCE,
+# against the first candidate's parameter order, and every runtime arm reused
+# that positional chain. A and C agree on the method's name and arity and not
+# on its order, so C received b's value in its `a` slot. songformatter's
+# preview drew `c.rect(..., stroke=1, fill=0)` through a backend declaring
+# rect(..., fill, stroke): the page border filled black. CPython is the oracle.
+from nilpy_kwarms import run
+
+run()

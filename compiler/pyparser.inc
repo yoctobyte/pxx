@@ -22737,6 +22737,12 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     dynFbBuilt: Boolean;      { ...and was it actually built — the arms outside
                                 it must then type the chain as the variant it is }
     argExprs: array[0..15] of Integer;
+    { the call AS WRITTEN, before the keyword bind reorders it for the static
+      pick: each runtime arm re-binds these against its OWN parameter names }
+    wrPosN, wrKwN, wk, wrArgExpr: Integer;
+    wrPosExpr, wrKwExpr: array[0..15] of Integer;
+    wrKwName: array[0..15] of AnsiString;
+    wrOk, wrHit: Boolean;
     smTmpSym, smAsgn, smGuardArg, smGuardCall, smNotNode, smNameArg,
     smArg1, smArg2, smRaiseCall, smIfNode, smPairNode: Integer;
     vtTmpSym, vtAsgn, vtGuardArg, vtGuardCall, vtNotNode, vtNameArg,
@@ -23764,6 +23770,7 @@ begin
   i := 0;
   anyKw := False;
   kwSpread := False;
+  wrPosN := 0; wrKwN := 0; wrOk := True;
   while CurTok.Kind <> tkRParen do
   begin
     { Keyword arguments here too — `detector.to_text(verbose=True)` on a
@@ -23853,11 +23860,26 @@ begin
     ASTIVal[argNode] := kwIdx;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;
+    if (kwIdx = 0) and (wrKwN = 0) and (wrPosN <= High(wrPosExpr)) then
+    begin
+      wrPosExpr[wrPosN] := CurASTNode; Inc(wrPosN);
+    end
+    else if (kwIdx > 0) and (wrKwN <= High(wrKwExpr)) then
+    begin
+      wrKwExpr[wrKwN] := CurASTNode;
+      wrKwName[wrKwN] := Procs[hitPi].Params[kwIdx - 1].Name;
+      Inc(wrKwN);
+    end
+    else wrOk := False;
     Inc(i);
     if CurTok.Kind = tkComma then Next
     else Break;
   end;
   Expect(tkRParen, ')');
+  { only a plain run of positionals then keywords, every one recorded above,
+    can be re-bound per arm; anything else keeps the shared chain }
+  if wrOk and ((wrPosN + wrKwN <> i) or (ProcPyStarIdx[hitPi] >= 0) or
+     (ProcPyKwIdx[hitPi] >= 0) or kwSpread) then wrOk := False;
   { `*args` / `**kwargs` on a METHOD: pack the surplus arguments before the
     keyword bind, exactly as the top-level call path does. Self occupies slot 0
     of the parameter list, so the counter is passed INCLUDING it and the
@@ -24264,6 +24286,49 @@ begin
       dself := AllocNode(AN_ARG);
       ASTLeft[dself] := dcast;
       lastArg := dself;
+      if anyKw and wrOk and (wrKwN > 0) then
+      begin
+        { KEYWORDS BIND AGAINST THIS ARM'S OWN NAMES. The shared chain is in the
+          STATIC pick's parameter order, and two classes agreeing on a method's
+          name and arity do not agree on its order: songformatter's
+          `c.rect(x, y, w, h, stroke=1, fill=0)` was bound against the reportlab
+          shim's rect(..., stroke, fill) and then passed by position into a
+          user backend's rect(..., fill, stroke) -- the page border filled black.
+          A written keyword this candidate does not declare, or a required
+          parameter nobody wrote, drops the arm, as an uncompletable one does.
+          bug-n-keywords-on-a-dynamic-receiver-bind-by-the-first-candidates-parameter-order }
+        wrHit := True;
+        for wk := 0 to wrKwN - 1 do
+          if not PyProcParamNamedFrom(dualPi, wrKwName[wk], wrPosN + 1) then wrHit := False;
+        for k := 1 to Procs[dualPi].ParamCount - 1 do
+          if wrHit then
+          begin
+            if k <= wrPosN then
+              wrArgExpr := wrPosExpr[k - 1]
+            else
+            begin
+              wrArgExpr := -1;
+              for wk := 0 to wrKwN - 1 do
+                if ParamNameEq(dualPi, Procs[dualPi].Params[k].Name, wrKwName[wk]) then
+                  wrArgExpr := wrKwExpr[wk];
+              if (wrArgExpr < 0) and (k < MAX_PROC_PARAMS) and
+                 ProcParamHasDefault[dualPi * MAX_PROC_PARAMS + k] then
+                wrArgExpr := DefaultArgValueNode(dualPi, k);
+            end;
+            if wrArgExpr < 0 then
+              wrHit := False
+            else
+            begin
+              argNode := AllocNode(AN_ARG);
+              ASTLeft[argNode] := wrArgExpr;
+              ASTRight[lastArg] := argNode;
+              lastArg := argNode;
+            end;
+          end;
+        if not wrHit then Continue;
+      end
+      else
+      begin
       for k := 0 to i - 1 do
       begin
         argNode := AllocNode(AN_ARG);
@@ -24277,6 +24342,7 @@ begin
         ASTLeft[argNode] := DefaultArgValueNode(dualPi, k + 1);
         ASTRight[lastArg] := argNode;
         lastArg := argNode;
+      end;
       end;
       if UMthVirSlot[mmi] >= 0 then
       begin
@@ -48875,7 +48941,18 @@ begin
               there; a str result from a method is rejected outright further
               down. bug-nilpy-an-override-returning-a-different-type-than-the-
               base-reads-float-bits }
+            { ...and only a PYTHON base can be widened at all. A base declared
+              in a Pascal unit (configparser.pas's virtual optionxform) is
+              compiled code whose own body calls through the slot expecting its
+              declared types; widening the row there re-typed the slot under
+              it, and has_option read a Variant as an AnsiString -- a segfault
+              in the first method call of any subclass overriding it in a
+              MODULE. The Pascal signature is the contract: adopt it.
+              bug-n-a-python-override-of-a-pascal-virtual-widens-the-compiled-base }
             if (mRet <> Procs[ovPi].RetType) and
+               (UnitIsPyModule(UClsUnitIdx[UClsParent[ci]]) or
+                (UClsUnitIdx[UClsParent[ci]] < 0) or
+                PyRecIsPylibOwnClass(REC_UCLASS_BASE + UClsParent[ci])) and
                PyOverrideRetJoinsToVariant(mRet, Procs[ovPi].RetType) then
             begin
               { ...and the join may only widen the BASE while its body is not
@@ -52286,6 +52363,32 @@ begin
     Result := pkgName + '_' + sub;
 end;
 
+{ Does unit `u` serve `nm` at all -- as a class, class alias, routine, symbol,
+  constant or type, or as a SUBMODULE of a package? Case-folded, as every table
+  below matches, so it can only answer "yes" more often than Python would,
+  never less: it is asked to decide that a name is MISSING. -1 (no unit) and
+  an unknown answer both say yes. See the soft from-import arm below. }
+function PyUnitServesName(const pkgName, nm: AnsiString; u: Integer): Boolean;
+var i: Integer; lo, nm2: AnsiString;
+begin
+  PyUnitServesName := True;
+  if u < 0 then Exit;
+  if (FindUClassInUnit(nm, u) >= 0) or (FindProcInUnit(nm, u) >= 0) or
+     (FindSymInUnit(nm, u) >= 0) or (FindStrConstIn(nm, u) >= 0) then Exit;
+  nm2 := nm;
+  lo := ULower(nm2);
+  for i := 0 to UClsAliasCount - 1 do
+    if (UClsAliasUnitIdx[i] = u) and UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then Exit;
+  for i := 0 to AliasCount - 1 do
+    if (AliasUnitIdx[i] = u) and UNameMatch(AliasNOff[i], AliasNLen[i], lo) then Exit;
+  for i := 0 to EnumTypeCount - 1 do
+    if (EnumTypeUnitIdx[i] = u) and UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) then Exit;
+  for i := 0 to SetConstCount - 1 do
+    if (SetConstUnitIdx[i] = u) and CaseEqual(SetConstName[i], nm) then Exit;
+  if PyPackageSubmoduleKey(pkgName, nm) <> '' then Exit;
+  PyUnitServesName := False;
+end;
+
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     rsvImp: AnsiString; rsvUnit: Integer;   { a member Pascal reserves -- see the arm }
@@ -52485,6 +52588,21 @@ begin
               Next;
             end;
           end;
+          { A PARTIAL SHIM IS A MISS, inside a `try: ... except ImportError:`.
+            CPython raises ImportError for a name the module does not have, and
+            the optional-dependency idiom is built on it:
+              try: from PIL import Image, ImageDraw
+              except ImportError: HAVE_PIL = False
+            Once lib/rtl/pil.pas served `Image` alone, the module resolved, the
+            handler was skipped, and the build died at the first ImageDraw use
+            as "an import that bound nothing" (songformatter). A shim landing
+            must not break every app that guards on it, so a name the unit does
+            not serve makes this run miss, exactly as a missing module does.
+            Soft runs only: outside a guard the old use-site diagnostic stands.
+            bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback }
+          if SoftUnitResolve and (not SoftUnitMissed) and
+             (not PyUnitServesName(impName, impReal, FindUnitOrAlias(impName))) then
+            SoftUnitMissed := True;
           { `from mod import NAME as ALIAS`. Unit scope is flat, so NAME itself
             is already in scope after ParseUsesUnit — but ALIAS is a second
             spelling that has to resolve to the same thing, and there is no
@@ -63297,7 +63415,23 @@ begin
            ((FindSymInUnit(rsvMapped, qUnit) >= 0) or
             (FindProcInUnit(rsvMapped, qUnit) >= 0) or
             (FindUClassInUnit(rsvMapped, qUnit) >= 0)) then
-          name := rsvMapped;
+          name := rsvMapped
+        { ...and a name that is not reserved but still cannot be declared as
+          written: Pascal folds case, so tkinter cannot have `X` beside the `x`
+          spellings it uses, and declares the string constants X_ and Y_. The
+          fixed list cannot take X (it would rename `m.x` on every user
+          module), so the UNIT is asked instead, by the same plain-first rule:
+          nothing called `name`, and an underscored constant (a one-character
+          'x' is a CHAR constant, which lives in the symbol table). `fill=tk.X`
+          was "no member X came of the qualifier tk" (songformatter).
+          bug-n-tk-x-and-tk-y-are-unreachable-because-the-library-spells-them-x_-y_ }
+        else if (rsvMapped = name) and (FindStrConstIn(name, qUnit) < 0) and
+           (FindSymInUnit(name, qUnit) < 0) and
+           (FindProcInUnit(name, qUnit) < 0) and
+           (FindUClassInUnit(name, qUnit) < 0) and
+           ((FindStrConstIn(name + '_', qUnit) >= 0) or
+            (FindSymInUnit(name + '_', qUnit) >= 0)) then
+          name := name + '_';
       end;
       prevTok := TokPos - 1;
       { A QUALIFIED `inherited` is a member name, not the construct: `m.inherited(3)`

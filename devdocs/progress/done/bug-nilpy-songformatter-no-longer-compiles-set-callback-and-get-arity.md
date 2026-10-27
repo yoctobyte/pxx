@@ -4,7 +4,7 @@ type: bug
 track: N
 blocked-by: []
 prio: 60
-status: backlog
+status: done
 ---
 
 # songformatter stopped compiling — `set_` callback member, and `get()` arity
@@ -212,3 +212,14 @@ Either the `set_`/`get()` walls were fixed since 2026-08-09, or they sit
 *behind* the PIL one and the compile never reaches them. A first-failure report
 cannot separate those. Whoever takes this should re-verify the two named
 symptoms before working them.
+
+## Closed 2026-10-27
+
+The songformatter session rebuilt the app on origin/master ef2bc473ec: the
+`set_` and `get()` errors no longer occur. The gaps it hit next are filed as
+their own tickets (bug-a-a-modules-from-import-alias-leaks-into-units-compiled-after-it,
+bug-n-keywords-on-a-dynamic-receiver-bind-by-the-first-candidates-parameter-order,
+bug-n-a-python-override-of-a-pascal-virtual-widens-the-compiled-base,
+bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback,
+bug-n-tk-x-and-tk-y-are-unreachable-because-the-library-spells-them-x_-y_,
+bug-n-a-variant-argument-picks-the-class-overload-without-a-tag-test).

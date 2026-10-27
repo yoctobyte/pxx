@@ -1,0 +1,30 @@
+# bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback
+#
+# `try: from M import a, b / except ImportError:` is how optional dependencies
+# are written, and CPython raises ImportError for a name M does not have. pxx
+# decided the branch on the MODULE alone, so once a shim served some of the
+# names (lib/rtl/pil.pas serves Image, not ImageDraw) the handler was skipped
+# and the build died at the first use of the missing name (songformatter's
+# HAVE_PIL guard). A name the unit does not serve now makes the guard miss.
+# CPython is the oracle.
+try:
+    from configparser import ConfigParser, NoSuchNameHere
+    HAVE_ALL = True
+except ImportError:
+    HAVE_ALL = False
+
+try:
+    from configparser import ConfigParser
+    HAVE_ONE = True
+except ImportError:
+    HAVE_ONE = False
+
+
+def use():
+    if HAVE_ALL:
+        return NoSuchNameHere()
+    return None
+
+
+print(HAVE_ALL, HAVE_ONE)
+print(use())

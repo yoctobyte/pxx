@@ -271,6 +271,7 @@ AN_ARG Left wCastNode
 AN_ARG Left wIdentNode
 AN_ARG Left wNode
 AN_ARG Left withNode
+AN_ARG Left wrArgExpr
 AN_ARG Left xNode
 AN_ARG Left zeroNode
 AN_ARG Right -1

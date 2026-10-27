@@ -8,10 +8,11 @@ unit mimic_reportlab_pdfbase_pdfmetrics;
 
 interface
 
-uses mimic_reportlab_pdfbase;
+uses pylib, mimic_reportlab_pdfbase;
 
 function stringWidth(const text: AnsiString; const fontName: AnsiString;
                      fontSize: Double): Double;
+function getRegisteredFontNames: TPyList;
 
 implementation
 
@@ -19,6 +20,11 @@ function stringWidth(const text: AnsiString; const fontName: AnsiString;
                      fontSize: Double): Double;
 begin
   stringWidth := mimic_reportlab_pdfbase.stringWidth(text, fontName, fontSize);
+end;
+
+function getRegisteredFontNames: TPyList;
+begin
+  getRegisteredFontNames := mimic_reportlab_pdfbase.getRegisteredFontNames;
 end;
 
 end.
