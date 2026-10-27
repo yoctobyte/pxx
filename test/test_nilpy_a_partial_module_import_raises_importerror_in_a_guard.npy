@@ -6,7 +6,10 @@
 # names (lib/rtl/pil.pas serves Image, not ImageDraw) the handler was skipped
 # and the build died at the first use of the missing name (songformatter's
 # HAVE_PIL guard). A name the unit does not serve now makes the guard miss.
-# CPython is the oracle.
+# ...and a missed statement binds NONE of its names, as in CPython: binding the
+# served ConfigParser anyway made the dead `if HAVE_ALL:` code below type-check
+# against the shim, and `.no_such_method()` refused to compile (songformatter's
+# `Image.open(p).filter(...)` against TPILImage). CPython is the oracle.
 try:
     from configparser import ConfigParser, NoSuchNameHere
     HAVE_ALL = True
@@ -14,7 +17,7 @@ except ImportError:
     HAVE_ALL = False
 
 try:
-    from configparser import ConfigParser
+    from json import loads
     HAVE_ONE = True
 except ImportError:
     HAVE_ONE = False
@@ -22,6 +25,7 @@ except ImportError:
 
 def use():
     if HAVE_ALL:
+        ConfigParser().no_such_method(NoSuchNameHere.X)
         return NoSuchNameHere()
     return None
 

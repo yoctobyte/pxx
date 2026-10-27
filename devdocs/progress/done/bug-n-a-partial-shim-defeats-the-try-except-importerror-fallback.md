@@ -26,3 +26,19 @@ unchanged. This matches CPython, which raises ImportError for the missing name.
 
 Test: test/test_nilpy_a_partial_module_import_raises_importerror_in_a_guard.npy
 (configparser plus a name it lacks, CPython oracle). Pin v452 fails to compile it.
+
+## Follow-up, same day: a missed statement binds NOTHING
+
+The first cut asked per name, inside the binding loop. Names ahead of the
+missing one were therefore already bound to the shim, so the handler ran AND
+the code behind `if HAVE_PIL:` was still type-checked against it.
+`Image.open(p).filter(ImageFilter.GaussianBlur(2))` refused to compile with
+"TPILImage has no method filter" (songformatter, on bce4b11f0f). Now:
+
+- the whole name list is checked off the token stream BEFORE any name is bound;
+- on a miss, this scope's `uses` edges from the pull are cut (and the
+  visibility memo invalidated), because flat unit scope otherwise still
+  answers a plain class row such as `ConfigParser` through the edge.
+
+The test's dead code now calls a method the shim class lacks. Without the
+edge cut it fails to compile.

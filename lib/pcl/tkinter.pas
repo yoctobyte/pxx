@@ -262,6 +262,12 @@ type
     procedure lower;                      { Python's name; PXX parses it contextually }
     procedure deiconify;
     procedure iconify;
+    { `withdraw()` unmaps the window entirely (no taskbar entry, unlike
+      iconify) -- the hidden-root idiom for a dialog-only app; deiconify()
+      brings it back }
+    procedure withdraw;
+    { `state()`: 'normal', 'iconic', 'withdrawn' (Tk's `wm state`) }
+    function state: AnsiString;
     { the X selection, as tkinter exposes it on every widget }
     function clipboard_get: AnsiString;
     procedure clipboard_clear;
@@ -1517,6 +1523,16 @@ end;
 procedure Widget.deiconify;
 begin
   TkEval('wm deiconify ' + path);
+end;
+
+procedure Widget.withdraw;
+begin
+  TkEval('wm withdraw ' + path);
+end;
+
+function Widget.state: AnsiString;
+begin
+  state := TkEval('wm state ' + path);
 end;
 
 procedure Widget.iconify;

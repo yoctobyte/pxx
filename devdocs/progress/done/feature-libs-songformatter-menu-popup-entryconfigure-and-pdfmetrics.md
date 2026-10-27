@@ -15,3 +15,5 @@ written there and applied as is:
 - tkinter Menu.tk_popup(x, y): Tk's own popup helper.
 - tkinter Menu.entryconfigure(index, label=, state=): the index may be an entry
   LABEL, which is how the app calls it (`menu.entryconfigure("Save", state=...)`).
+- Widget.withdraw() and Widget.state() (`wm withdraw` / `wm state`), for the
+  hidden-root idiom `tk.Tk().withdraw()`. Checked against CPython under Xvfb.

@@ -52413,6 +52413,7 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aliasStmtTok: Integer;      { THIS from-import statement's token index --
                                   the stamp the scan below matches on }
     runMissed: Boolean;         { did ANY import in this run miss? see below }
+    pmK, pmU, pmEdge: Integer;  { the partial-shim scan over the name list }
     savedArmDead: Boolean;      { SoftArmDead is restored on the way out, so a
                                   module pulled by a LIVE import may run its own
                                   guarded blocks without inheriting ours }
@@ -52543,6 +52544,7 @@ begin
           shim — `from configparser import ConfigParser`. An unknown module still
           fails, with the unit resolver's own "unit source not found: X". }
         PyRelativeLevel := impLevel;
+        pmEdge := UsesEdgeCount;
         PyParseImportUnit(impName);
         { The queue is PER-RUN and this loop is PER-STATEMENT, so entries have
           to say WHICH statement queued them. This statement's token index is
@@ -52568,6 +52570,65 @@ begin
           none of them (TSP's tsp/ephem: `from tsp.ephem.spk import (SPK, ...)`,
           then "undefined variable (SPK)" in every importer). Same shape as
           PyParseRelImportNames. }
+        { A PARTIAL SHIM IS A MISS, inside a `try: ... except ImportError:`.
+          CPython raises ImportError for a name the module does not have, and
+          the optional-dependency idiom is built on it:
+            try: from PIL import Image, ImageDraw
+            except ImportError: HAVE_PIL = False
+          Once lib/rtl/pil.pas served `Image` alone, the module resolved, the
+          handler was skipped, and the build died at the first ImageDraw use
+          as "an import that bound nothing" (songformatter). A name the unit
+          does not serve makes this run miss, exactly as a missing module does.
+
+          THE WHOLE NAME LIST IS ASKED BEFORE ANY NAME IS BOUND. A failed
+          `from X import a, b` binds NOTHING in CPython. Asked per name, the
+          served names ahead of the missing one were already bound to the
+          shim, so the handler ran AND the code behind `if HAVE_PIL:` was
+          still type-checked against it -- `Image.open(p).filter(...)` refused
+          to compile against TPILImage. Read off the token stream, the same
+          shape the loop below consumes: an optional '(', `name [as alias]`,
+          commas and line breaks.
+          Soft runs only: outside a guard the old use-site diagnostic stands.
+          bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback }
+        if SoftUnitResolve and (not SoftUnitMissed) and (CurTok.Kind <> tkStar) then
+        begin
+          pmK := TokPos - 1;
+          pmU := FindUnitOrAlias(impName);
+          if Tokens[pmK].Kind = tkLParen then Inc(pmK);
+          while pmK < TokCount do
+          begin
+            while (pmK < TokCount) and ((Tokens[pmK].Kind = tkNewline) or
+                  (Tokens[pmK].Kind = tkIndent) or (Tokens[pmK].Kind = tkDedent)) do
+              Inc(pmK);
+            if (pmK >= TokCount) or (Tokens[pmK].Kind <> tkIdent) then Break;
+            if not PyUnitServesName(impName, GetTokenStr(pmK), pmU) then
+            begin
+              SoftUnitMissed := True;
+              Break;
+            end;
+            Inc(pmK);
+            if (pmK < TokCount) and (Tokens[pmK].Kind = tkIdent) and
+               (GetTokenStr(pmK) = 'as') then
+              Inc(pmK, 2);
+            if (pmK >= TokCount) or (Tokens[pmK].Kind <> tkComma) then Break;
+            Inc(pmK);
+          end;
+        end;
+        { ...and the UNIT stops being visible from here. The pull above recorded
+          this scope's `uses` edge, and flat unit scope answers every served
+          name through it, so `ConfigParser` (a class row, not an alias) still
+          resolved after the miss. Only THIS scope's edges from this pull are
+          cut -- the unit's own clauses, recorded while it compiled, keep it
+          working for whoever else imports it -- and the visibility memo is
+          invalidated, since it is keyed on the edge COUNT. }
+        if SoftUnitResolve and SoftUnitMissed then
+        begin
+          for pmK := pmEdge to UsesEdgeCount - 1 do
+            if UsesEdgeFrom[pmK] = CurrentUnitIdx then
+              UsesEdgeTo[pmK] := -2;
+          VisCacheUnit := -3;
+          VisCacheEdges := -1;
+        end;
         impParen := Eat(tkLParen);
         if impParen then PySkipNewlines;
         while CurTok.Kind = tkIdent do
@@ -52588,21 +52649,6 @@ begin
               Next;
             end;
           end;
-          { A PARTIAL SHIM IS A MISS, inside a `try: ... except ImportError:`.
-            CPython raises ImportError for a name the module does not have, and
-            the optional-dependency idiom is built on it:
-              try: from PIL import Image, ImageDraw
-              except ImportError: HAVE_PIL = False
-            Once lib/rtl/pil.pas served `Image` alone, the module resolved, the
-            handler was skipped, and the build died at the first ImageDraw use
-            as "an import that bound nothing" (songformatter). A shim landing
-            must not break every app that guards on it, so a name the unit does
-            not serve makes this run miss, exactly as a missing module does.
-            Soft runs only: outside a guard the old use-site diagnostic stands.
-            bug-n-a-partial-shim-defeats-the-try-except-importerror-fallback }
-          if SoftUnitResolve and (not SoftUnitMissed) and
-             (not PyUnitServesName(impName, impReal, FindUnitOrAlias(impName))) then
-            SoftUnitMissed := True;
           { `from mod import NAME as ALIAS`. Unit scope is flat, so NAME itself
             is already in scope after ParseUsesUnit — but ALIAS is a second
             spelling that has to resolve to the same thing, and there is no
