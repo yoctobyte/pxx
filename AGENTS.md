@@ -43,6 +43,29 @@ its name, the binary's sha256, and the source commit it was built from.
 "converged after N round(s)" means it rebuilt and reproduced itself. "verified"
 means nothing was rebuilt.
 
+## Which compiler an app builds with: latest
+
+On plexus, pxx lives in ~/pxx (origin = githome:pxx.git; a push also goes to
+GitHub). Apps build with that tree's compiler, never the pin:
+
+    PXX_HOME_DIR="${PXX_HOME_DIR:-$HOME/pxx}"
+    PXX="${PXX:-$("$PXX_HOME_DIR/tools/pxx_latest.sh")}"   # rebuilds compiler/pascal26 if stale
+    RTL="$PXX_HOME_DIR/lib/rtl"                            # same tree as the compiler, always
+
+- latest is the default. A program that breaks on latest is a pxx bug or
+  regression: fix it, do not pin around it.
+- The pin is the self-host seed and the "proven to compile itself" anchor. It
+  is pxx's own business; apps do not read stable_linux_amd64/.
+- Never take the compiler from one tree and lib/ from another.
+- An old compiler is not worth keeping: check out that day's source and run
+  `make bootstrap`. Freeze one (~/pxx-frozen) only while A/B testing a
+  regression, or when a session asks for a fixed compiler for a measurement.
+  Say which one in the result.
+- Print the compiler's sha256 with every build result, so a number can be
+  tied to a binary.
+- While an agent is mid-change in ~/pxx, latest moves under you. Sessions
+  tell each other ("rebuild now, fix X landed"; "hold, compiler is broken").
+
 ## Test
 
     tools/gate.sh quick   # the fixedpoint plus a quick tier. Run it before every push.

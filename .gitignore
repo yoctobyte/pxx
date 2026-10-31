@@ -115,3 +115,4 @@ compiler/.pxx-under-test-*
 # five of them (41 MB) into 45bcf8ce5 on 2026-09-22.
 compiler/pascal26_*
 compiler/p26_*
+compiler/.pxx_latest.lock
