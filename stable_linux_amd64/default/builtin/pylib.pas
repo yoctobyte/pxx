@@ -211,6 +211,13 @@ type
   public
     st_mode: Int64;
     st_size: Int64;
+    st_uid: Int64;
+    st_gid: Int64;
+    st_ino: Int64;
+    st_nlink: Int64;
+    { seconds as a float, and the exact nanoseconds, as CPython has both }
+    st_mtime: Double;
+    st_mtime_ns: Int64;
     constructor Create;
   end;
 
@@ -740,6 +747,13 @@ type
     { > 0: FData is a FILE MAPPING of this many bytes (mimic_mmap), not a heap
       block, so it goes back through PyBytesUnmapHook instead of FreeMem. }
     FMapLen: Int64;
+    { Bytes FData can hold before it must move, excluding the terminator.
+      Create sets it to n and PyBytesEnsure grows it GEOMETRICALLY, so a
+      bytearray built one append at a time no longer reallocates and copies
+      itself on every byte. Trusted only when it can only UNDERESTIMATE: a
+      view and a mapping are refused before it is read, and every other site
+      that swaps FData (mimic_mmap's read arm) starts from Create(0)'s 0. }
+    FCap: Integer;
     { TWO spellings, because a SUBCLASS needs the parameterless one. `class
       BA(bytearray)` with no __init__ of its own emits a call to the base's
       no-argument Create, and TPyBytes had only Create(n) — so constructing any
@@ -857,6 +871,14 @@ type
   TPyFile = class
   public
     FFd: Int64;
+    { CPython's `f.closed`. A plain field: set once by close() }
+    closed: Boolean;
+    { open(..., errors="replace"): text reads swap each invalid UTF-8
+      sequence for U+FFFD, as CPython's decoder does, instead of handing the
+      raw bytes through. Set by pyfile_errors_replace. }
+    FReplace: Boolean;
+    { a text read's string, with FReplace applied }
+    function TextOf(const raw: AnsiString): AnsiString;
     { WHICH of the two string types this file's reads yield — the one fact that
       decides it, held once instead of hard-coded four times.
 
@@ -883,7 +905,15 @@ type
       its trailing newline, exactly as TPyList's version yielded them so that
       joining reproduces the file byte for byte. }
     function readlines: TPyList;
-    function readline: Variant;
+    function readline: Variant; overload;
+    { `f.readline(size)`: at most `size` bytes, stopping after a newline as the
+      plain form does -- how a reader bounds a line from a peer it does not
+      trust (Vloot's ssh stream reader). A negative size is no limit, as in
+      CPython. }
+    function readline(size: Int64): Variant; overload;
+    { ValueError on a closed file, as CPython raises -- not an EBADF read of
+      nothing, or worse, of an fd number something else has reopened since }
+    procedure CheckOpen;
     function write(b: TPyBytes): Int64; overload;
     { Python's TEXT-mode write takes a str, and that is how every ordinary
       program spells it. Without this overload `f.write("hello")` resolved to
@@ -1705,6 +1735,11 @@ function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'
 { os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
   for a missing path rather than answering 0. }
 function pyos_path_getsize(const p: AnsiString): Int64;
+function pyos_path_getmtime(const p: AnsiString): Double;
+function pyos_getpid: Int64;
+function pyos_getuid: Int64;
+function pyos_geteuid: Int64;
+function pyos_getgid: Int64;
 { os.path.expanduser — a leading '~' becomes $HOME. Any other shape (including
   '~user') is returned unchanged, which is also what CPython does when it cannot
   resolve the user. }
@@ -1763,6 +1798,7 @@ procedure pyos_raise_oserror(err: Int64);
   text MicroPython prints, where the file calls print glibc's sentence. }
 procedure pyos_raise_errno(e: Int64; const strerr: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
+function pyos_access(const path: AnsiString; mode: Int64): Boolean;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 { os.replace(src, dst) — rename that OVERWRITES an existing destination.
   On POSIX that is rename(2) exactly, which is why this is one line and not a
@@ -1890,6 +1926,12 @@ function pystderr_write(const s: AnsiString): Integer;
   does. sys.stdin stays its fd: select() and `for line in sys.stdin` read it
   as one. bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time }
 function pysys_stream(fd: Int64): TPyFile;
+{ `sys.stdout = None` / `sys.stderr = None`. CPython's print() then writes
+  nothing. NilPy's print is an inline write(2) on the fd, so the fd itself is
+  pointed at /dev/null: the same visible effect, while `sys.stdout` still reads
+  as the stream object rather than None. console-style code writes this after
+  a BrokenPipeError so the exit-time flush stays quiet. }
+procedure pysys_stream_to_none(fd: Int64);
 { sys.stdout.flush() / sys.stderr.flush().
 
   FUNCTIONS returning None, not procedures, and that was not the first cut:
@@ -2352,6 +2394,9 @@ function pyaugpow_v(const a: Variant; const b: Variant): Variant;
   already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
+function pylist_getf(l: TPyList; i: Integer): Double;
+procedure pylist_reserve(l: TPyList; n: Integer);
+procedure pylist_pushf(l: TPyList; d: Double);
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
 { Python's `a or b` / `a and b` as VALUES: `or` yields a if truthy else b; `and`
@@ -2543,6 +2588,7 @@ function pybytes_cmp(a, b: TPyBytes): Int64;
   (PyOpenCheckTextArg), judged when the call RUNS: open reads bytes and never
   decodes, so a value that would need a decode is refused, not ignored. }
 function pyopen_text_arg_check(const role: AnsiString; const v: Variant): Int64;
+function pyfile_errors_replace(f: TPyFile): TPyFile;
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -3419,6 +3465,7 @@ function PyNarrowRet(v: Int64; rk: Integer): Int64;
 
 { An RTTI NamePtr compared in place, without copying the name (see the body). }
 function PyNameEqAt(np: Pointer; const name: AnsiString; ci: Boolean): Boolean;
+function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
 
 implementation
 
@@ -5264,6 +5311,9 @@ type
   TPyPropSetS = function(recv: Pointer; const v: AnsiString): Variant;
   TPyPropSetB = function(recv: Pointer; v: Boolean): Variant;
 
+function PyFindPropAccessor(cls: PClassRTTI; const name: AnsiString;
+                            setter: Boolean): PMethInfo; forward;
+
 function PyPropertyGet(obj: Pointer; const name: AnsiString;
                        var found: Boolean): Variant;
 { The getter is CALLED, because a property has no storage of its own — its
@@ -5280,7 +5330,7 @@ begin
   found := False;
   Result := pynone;
   if obj = nil then Exit;
-  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_get_' + name);
+  mi := PyFindPropAccessor(GetInstanceRTTI(obj), name, False);
   if (mi = nil) or (mi^.Code = nil) then Exit;
   case mi^.RetKind of
     22: begin fv := TPyPropV(mi^.Code); Result := fv(obj); found := True; end;
@@ -5323,7 +5373,7 @@ var mi: PMethInfo; pk: PInt64; ignored: Variant;
 begin
   Result := False;
   if obj = nil then Exit;
-  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_set_' + name);
+  mi := PyFindPropAccessor(GetInstanceRTTI(obj), name, True);
   if (mi = nil) or (mi^.Code = nil) then Exit;
   { Arity counts Self, so a one-value setter is 2. Anything else is not the
     accessor shape this knows how to call -- decline rather than guess at a
@@ -5428,12 +5478,191 @@ begin
   PyEqAttrCI := True;
 end;
 
+{ A (class, name) -> descriptor cache for the two by-name walks below, which
+  a dynamic attribute read or method call makes on EVERY evaluation: in
+  lekkerzeilen PyNameEqAt under PyFindFieldCI and PyFindMethByName was ~1.7%
+  of a frame. Same construction as pyeval's PyLkSlot (pylib cannot use that
+  one, pyeval uses pylib): a slot is filled once, while empty, with an
+  immutable record published by one aligned store, so readers need no lock;
+  a hit is re-verified by name against the descriptor it returns, so the
+  slot index only decides where to look. A MISS is cached too (Hit = nil):
+  a dunder or `__prop_get_x` the class does not declare, and a field read
+  that falls through to a method, were the walks that repeated most. The
+  record keeps its own copy of the name, in the RTTI's length-prefixed
+  layout, so PyNameEqAt verifies a miss exactly as it does a hit. Safe
+  because a class's RTTI never changes after compilation. }
+const PY_ATTRLK_SLOTS = 8192;
+      PY_ATTRLK_PROBE = 4;   { slots tried from the hashed one, on lookup and fill }
+type PPyAttrLkRec = ^TPyAttrLkRec;
+     TPyAttrLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer;
+                           NameH: Pointer; end;
+var PyAttrLkSlot: array[0..PY_ATTRLK_SLOTS - 1] of PPyAttrLkRec;
+
+function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
+{ Hashes the name's CONTENT, not its address: some callers build the name
+  per call (`'__prop_get_' + name`), and an address hash would fill a fresh
+  slot on every such call. O(1): the length and the first and last eight
+  bytes, case-folded with `or $20` so the case-insensitive field walk keys
+  "Foo" and "foo" alike (folding punctuation too only costs a collision). }
+var h, q1, q2: NativeUInt; n, i: Integer; p: PByte;
+begin
+  n := Length(name);
+  p := PByte(Pointer(name));
+  q1 := 0;
+  q2 := 0;
+  if n >= 8 then
+  begin
+    q1 := NativeUInt(PInt64(p)^);
+    q2 := NativeUInt(PInt64(@p[n - 8])^);
+  end
+  else
+    for i := 0 to n - 1 do
+      q1 := (q1 shl 8) or p[i];
+  q1 := q1 or NativeUInt($2020202020202020);
+  q2 := q2 or NativeUInt($2020202020202020);
+  h := (NativeUInt(cls) shr 3) * NativeUInt($9E3779B97F4A7C15);
+  h := h xor (q1 * NativeUInt($C2B2AE3D27D4EB4F));
+  h := h xor ((q2 xor NativeUInt(n) xor (NativeUInt(kind) shl 56)) * NativeUInt($165667B19E3779F9));
+  h := h xor (h shr 29);
+  h := h * NativeUInt($94D049BB133111EB);
+  h := h xor (h shr 32);
+  Result := NativeInt(h and (PY_ATTRLK_SLOTS - 1));
+end;
+
+{ The name's own handle when it is an IMMORTAL pooled literal, else nil.
+  A literal's block is static -- it never moves and is never freed -- so the
+  same handle is the same name forever, and PyAttrLkFind can accept it on
+  the address alone instead of comparing the bytes: nearly every dynamic
+  lookup (`canopy.contains(...)`, a `__getitem__` dunder) passes a literal.
+  The refcount floor (builtinheap's PXX_STATIC_RC_FLOOR, $40000000) is read
+  at HALF: an unguarded decrement can leave a static block just under the
+  floor, and no heap string ever holds half a billion references. }
+function PyAttrLkStaticH(const name: AnsiString): Pointer;
+begin
+  Result := nil;
+  if Pointer(name) = nil then Exit;
+  if PInt64(NativeInt(Pointer(name)) - 16)^ >= $20000000 then
+    Result := Pointer(name);
+end;
+
+procedure PyAttrLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt;
+                      const name: AnsiString);
+var r: PPyAttrLkRec; n: NativeInt; np: Pointer;
+begin
+  if PyAttrLkSlot[idx] <> nil then Exit;
+  n := Length(name);
+  np := GetMem(8 + n);
+  PInt64(np)^ := n;
+  if n > 0 then Move(Pointer(name)^, PByte(NativeInt(np) + 8)^, n);
+  r := PPyAttrLkRec(GetMem(SizeOf(TPyAttrLkRec)));
+  r^.Cls := cls;
+  r^.Hit := hit;
+  r^.Kind := kind;   { a field and a method hash into the same slots }
+  r^.NameP := np;
+  r^.NameH := PyAttrLkStaticH(name);
+  PyAttrLkSlot[idx] := r;
+end;
+
+{ The record for (cls, name, kind) among the PY_ATTRLK_PROBE slots from the
+  hashed one, or nil; `free` is the first EMPTY slot met on the way (-1 when
+  none), which is where a miss gets filled. The name is verified against the
+  record's own copy, case-folded for the field walk (ci). }
+function PyAttrLkFind(cls: Pointer; const name: AnsiString; kind: NativeInt;
+                      ci: Boolean; var free: NativeInt): PPyAttrLkRec;
+var idx, k: NativeInt; r: PPyAttrLkRec;
+begin
+  Result := nil;
+  free := -1;
+  idx := PyAttrLkIndex(cls, name, kind);
+  for k := 0 to PY_ATTRLK_PROBE - 1 do
+  begin
+    r := PyAttrLkSlot[(idx + k) and (PY_ATTRLK_SLOTS - 1)];
+    if r = nil then
+    begin
+      free := (idx + k) and (PY_ATTRLK_SLOTS - 1);
+      Exit;              { slots fill in probe order, so nothing lies past a gap }
+    end;
+    if (r^.Cls = cls) and (r^.Kind = kind) then
+    begin
+      { the same immortal literal: no byte compare (see PyAttrLkStaticH) }
+      if (r^.NameH <> nil) and (r^.NameH = Pointer(name)) then
+      begin
+        Result := r;
+        Exit;
+      end;
+      if PyNameEqAt(r^.NameP, name, ci) then
+      begin
+        if r^.NameH = nil then r^.NameH := PyAttrLkStaticH(name);
+        Result := r;
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+function PyFindFieldCIScan(cls: PClassRTTI; const name: AnsiString): PFieldInfo; forward;
+function PyFindMethByNameScan(cls: PClassRTTI; const nm: AnsiString): PMethInfo; forward;
+
 function PyFindFieldCI(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
+var idx: NativeInt; r: PPyAttrLkRec;
+begin
+  r := PyAttrLkFind(cls, name, 0, True, idx);
+  if r <> nil then
+  begin
+    Result := PFieldInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindFieldCIScan(cls, name);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, 0, name);
+end;
+
+function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+var idx: NativeInt; r: PPyAttrLkRec;
+begin
+  r := PyAttrLkFind(cls, nm, 1, False, idx);
+  if r <> nil then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindMethByNameScan(cls, nm);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, 1, nm);
+end;
+
+{ A property's getter or setter, `__prop_get_<name>` / `__prop_set_<name>`,
+  cached under the PLAIN attribute name (kinds 2 and 3), so a dynamic
+  attribute read no longer builds the prefixed name -- a string allocation
+  and a cleanup frame -- on every evaluation just to learn there is no
+  property. The build lives in PyFindPropAccessorSlow, off the hit path. }
+function PyFindPropAccessorSlow(cls: PClassRTTI; const name: AnsiString;
+                                setter: Boolean): PMethInfo;
+begin
+  if setter then Result := PyFindMethByNameScan(cls, '__prop_set_' + name)
+  else Result := PyFindMethByNameScan(cls, '__prop_get_' + name);
+end;
+
+function PyFindPropAccessor(cls: PClassRTTI; const name: AnsiString;
+                            setter: Boolean): PMethInfo;
+var idx, kind: NativeInt; r: PPyAttrLkRec;
+begin
+  kind := 2;
+  if setter then kind := 3;
+  r := PyAttrLkFind(cls, name, kind, False, idx);
+  if r <> nil then
+  begin
+    Result := PMethInfo(r^.Hit);
+    Exit;
+  end;
+  Result := PyFindPropAccessorSlow(cls, name, setter);
+  if idx >= 0 then PyAttrLkPut(idx, cls, Result, kind, name);
+end;
+
+function PyFindFieldCIScan(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
 { The DECLARED field of that name, anywhere up the class hierarchy. Mirrors
   pyeval's PyFindMethCI, which walks the same blob for methods. }
 var curr: PClassRTTI; flds: PFieldInfo; i: Integer;
 begin
-  PyFindFieldCI := nil;
+  PyFindFieldCIScan := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -5443,7 +5672,7 @@ begin
       for i := 0 to Integer(curr^.FieldCount) - 1 do
         if PyNameEqAt(flds[i].NamePtr, name, True) then
         begin
-          PyFindFieldCI := @flds[i];
+          PyFindFieldCIScan := @flds[i];
           Exit;
         end;
     end;
@@ -5451,13 +5680,13 @@ begin
   end;
 end;
 
-function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+function PyFindMethByNameScan(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
 { The method of that name, anywhere up the class hierarchy — the method twin of
   PyFindFieldCI above. Case-SENSITIVE, as Python is. PyFindDunder further down
   is this same walk and now calls it. }
 var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindMethByName := nil;
+  PyFindMethByNameScan := nil;
   curr := cls;
   while curr <> nil do
   begin
@@ -5467,7 +5696,7 @@ begin
       for i := 0 to Integer(curr^.MethCount) - 1 do
         if PyNameEqAt(meths[i].NamePtr, nm, False) then
         begin
-          PyFindMethByName := @meths[i];
+          PyFindMethByNameScan := @meths[i];
           Exit;
         end;
     end;
@@ -5763,7 +5992,7 @@ function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
-    gaRes: Variant;
+    gaRes: Variant; sigp: Pointer;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -5859,9 +6088,21 @@ begin
       begin
         { the star index rides the meth Flags word in SIGNATURE space (Self at
           0); the bridge wants it in the callee's OWN space, hence the -1 on
-          top of the +1 the encoding adds to keep 0 meaning "none". }
-        Result := pybound_new_star(mi^.Code, obj, mi^.RetKind <> 0,
-                    Integer((mi^.Flags shr 8) and 255) - 2);
+          top of the +1 the encoding adds to keep 0 meaning "none".
+          The method's PYSIG record goes on the pair too: without it a call
+          that omits a defaulted parameter -- `getattr(c, "f")(1.0)` against
+          `def f(self, x, limit=50)` -- entered the two-parameter body through
+          a one-argument call and read garbage for `limit` (rc 139). It is the
+          extra word after the kinds and names (RTTI_METH_FLAG_HASSIG, bit 1),
+          the record pyeval's reflected call reads, in the callee's own space
+          as the bridge expects. `m = c.f` got its record at compile time.
+          bug-nilpy-getattr-method-value-loses-its-defaults }
+        sigp := nil;
+        if ((mi^.Flags and 2) <> 0) and (mi^.ParamKinds <> nil) then
+          sigp := Pointer(NativeInt(PInt64(NativeInt(mi^.ParamKinds) +
+                    2 * mi^.Arity * 8)^));
+        Result := pybound_new_sig(mi^.Code, obj, mi^.RetKind <> 0,
+                    Integer((mi^.Flags shr 8) and 255) - 2, sigp);
         Exit;
       end;
     end;
@@ -6096,6 +6337,65 @@ begin
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
+{ Which of the five subscriptable boxes `o` is, from ONE walk of its class
+  chain: 1 list, 2 dict, 3 range, 4 deque, 5 bytes, 0 none of them (a user
+  object). The callers asked `o is TPyList`, `o is TPyDict`, ... in turn, and
+  every `is` that answers no walks the chain to the root, so a user object --
+  the case that reaches __getitem__ -- paid up to five full walks before its
+  dunder was looked up (3% of lekkerzeilen in __pxxInheritsFrom). The five are
+  unrelated TObject descendants, so the first of them met going up IS the
+  answer. A class with FLATTENED bases (NilPy MI) can reach one through a
+  side branch the parent walk does not see; that rare shape asks `is`. }
+var PyBoxKindCache: array[0..255] of NativeUInt;
+
+function PyBoxKindWalk(o: TObject; cur: Pointer): Integer; forward;
+
+function PyBoxKind(o: TObject): Integer;
+{ ...memoised per class the way PyFinKind is: an entry is the RTTI pointer
+  (8-aligned) or'ed with the answer, so one word store publishes it whole and
+  a stale or colliding entry simply misses. A user object -- the answer 0 --
+  walked its whole chain on every arithmetic dunder (1.2% of lekkerzeilen). }
+var cur, rt0: Pointer; e: NativeUInt; h: Integer;
+begin
+  Result := 0;
+  if o = nil then Exit;
+  cur := PPointer(PtrUInt(PPointer(o)^) - 8)^;
+  rt0 := cur;
+  h := Integer((NativeUInt(rt0) shr 4) and 255);
+  e := PyBoxKindCache[h];
+  if (rt0 <> nil) and ((e and not NativeUInt(7)) = NativeUInt(rt0)) then
+  begin
+    Result := Integer(e and 7);
+    Exit;
+  end;
+  Result := PyBoxKindWalk(o, cur);
+  if (NativeUInt(rt0) and 7) = 0 then
+    PyBoxKindCache[h] := NativeUInt(rt0) or NativeUInt(Result);
+end;
+
+function PyBoxKindWalk(o: TObject; cur: Pointer): Integer;
+begin
+  Result := 0;
+  while cur <> nil do
+  begin
+    if cur = Pointer(TPyList) then begin Result := 1; Exit; end;
+    if cur = Pointer(TPyDict) then begin Result := 2; Exit; end;
+    if cur = Pointer(TPyRange) then begin Result := 3; Exit; end;
+    if cur = Pointer(TPyDeque) then begin Result := 4; Exit; end;
+    if cur = Pointer(TPyBytes) then begin Result := 5; Exit; end;
+    if (PInt64(PtrUInt(cur) + 112)^ and $FFFFFF) <> 0 then
+    begin
+      if o is TPyList then Result := 1
+      else if o is TPyDict then Result := 2
+      else if o is TPyRange then Result := 3
+      else if o is TPyDeque then Result := 4
+      else if o is TPyBytes then Result := 5;
+      Exit;
+    end;
+    cur := PPointer(PtrUInt(cur) + 8)^;
+  end;
+end;
+
 { Forward: the arity-2 dunder dispatcher, declared far below. A variant-held
   user object needs it HERE, where the receiver has no static class. }
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
@@ -6107,8 +6407,15 @@ function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Vari
 function PyUserSetitemCall(selfObj: TObject; const k: Variant;
                            const val: Variant): Boolean; forward;
 
-function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+{ Everything but pyvar_getitem's fast path, as a PROCEDURE writing through
+  `res`: its managed temporaries (about fifteen, zeroed on entry and cleared on
+  exit, plus the cleanup frame they need) were paid on EVERY subscript while
+  they lived in pyvar_getitem itself, though only these arms use them.
+  Measured 2026-10-10: the prologue and epilogue were most of the 21% that
+  pyvar_getitem took of a table-lookup loop. }
+procedure pyvar_getitem_slow(const v: Variant; const key: Variant; var res: Variant);
 var o: TObject; ki: Int64; tg: Int64; uv: Variant; nilo: TObject;
+    kt: Int64; keyIsInt: Boolean; bk: Integer;
 begin
   { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
     variant holding a STRING had its character data dereferenced as an object
@@ -6120,6 +6427,80 @@ begin
     pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
     the same predicate written in two places, and only one of them grew the
     string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  nilo := nil;                       { the dispatcher's unused `other` operand }
+  tg := pyvartag(v);
+  { A SEQUENCE takes an integer index (a bool and a promoted int are integers
+    too); any other key is CPython's TypeError. The arms below read the key's
+    payload as an int unconditionally, so `xs["x"]` indexed by the string's
+    address and answered IndexError. A dict, or a user __getitem__, takes any
+    key and is not asked. }
+  kt := PPyVarRec(@key)^.VType;
+  keyIsInt := (kt = 1) or (kt = 2) or (kt = 4) or (kt = 8193);
+  if (tg = 6) or (tg = 5) then
+  begin
+    if not keyIsInt then
+      raise TypeError.Create('string indices must be integers, not '''
+        + pytype_name_v(key) + '''');
+    ki := PPyVarRec(@key)^.Payload;
+    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
+      raise IndexError out of range, but pystr_at returns a Char — the
+      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
+      one byte of a multi-byte character and printed as mojibake. The typed
+      `s: str` path has used pystr_charat since text strings landed; this was
+      the variant arm of the same question left behind.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    res := pystr_charat(pystr_of(v), ki);
+    Exit;
+  end;
+  if tg <> 7 then
+    raise TypeError.Create('object is not subscriptable');
+  o := TObject(pyvarobj(v));
+  bk := PyBoxKind(o);
+  if (not keyIsInt) and ((bk = 1) or (bk >= 3)) then
+    raise TypeError.Create(pytype_name_v(v) + ' indices must be integers or slices, not '
+      + pytype_name_v(key));
+  if bk = 1 then
+  begin
+    ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
+    res := TPyList(o).at(ki);
+  end
+  else if bk = 2 then
+    res := TPyDict(o).fetch(key)
+  else if bk = 3 then
+    { r[i] on a range held in a variant — arithmetic, not a lookup }
+    res := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
+  else if bk = 4 then
+    { a deque that came back through a tuple or a container: `d[0]` raised
+      "not subscriptable" while the typed receiver indexed it fine }
+    res := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
+  else if bk = 5 then
+  begin
+    { bytes/bytearray index -> the integer byte value. Missing this case made
+      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
+      raise 'not subscriptable' even though len(x) worked. }
+    ki := PPyVarRec(@key)^.Payload;
+    if ki < 0 then ki := ki + TPyBytes(o).count;
+    res := pyvar_of_int(TPyBytes(o).at(ki));
+  end
+  { A USER class arriving as a bare variant handle. A statically-typed receiver
+    dispatches __getitem__ in the frontend; this one has no static class, so
+    `xs[0][3]` over a list of objects raised "not subscriptable" for a class
+    that plainly declares the member. The arity-2 dispatcher already covers
+    every RetKind the frontend emits, and a class without __getitem__ answers
+    False and keeps the TypeError.
+    bug-nilpy-a-chained-subscript-does-not-see-getitem }
+  else if PyUserArithCall1(o, nilo, key, '__getitem__', uv) then
+    res := uv
+  else
+    raise TypeError.Create('object is not subscriptable');
+end;
+
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+var o: TObject; ki: Int64; src, dst: PPyVarRec;
+begin
   { FAST PATH, the numeric-loop subscript: a list held in a variant, an int
     key in range. No tag helper calls, no at()/PyListFix round trip. }
   if (PPyVarRec(@v)^.VType = 7) and (PPyVarRec(@key)^.VType >= 1) and
@@ -6132,69 +6513,27 @@ begin
       if ki < 0 then ki := ki + TPyList(o).FLen;
       if (ki >= 0) and (ki < TPyList(o).FLen) then
       begin
-        { Set, not Init: like the `Result :=` below, the hidden destination
-          is a valid slot whose old value is released }
-        PyVarSlotSet(PPyVarRec(@Result),
-                     PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16));
+        { Set, not Init: the hidden destination is a valid slot whose old
+          value is released }
+        src := PPyVarRec(NativeInt(TPyList(o).FItems) + ki * 16);
+        dst := PPyVarRec(@Result);
+        { PyVarSlotSet's own first arm, inline: a scalar into a scalar slot
+          holds nothing to retain or release }
+        if (src^.VType >= 0) and (src^.VType <= 4) and
+           (dst^.VType >= 0) and (dst^.VType <= 4) then
+        begin
+          dst^.VType := src^.VType;
+          dst^.Payload := src^.Payload;
+        end
+        else
+          PyVarSlotSet(dst, src);
         Exit;
       end;
     end;
   end;
-  nilo := nil;                       { the dispatcher's unused `other` operand }
-  tg := pyvartag(v);
-  if (tg = 6) or (tg = 5) then
-  begin
-    ki := PPyVarRec(@key)^.Payload;
-    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
-      raise IndexError out of range, but pystr_at returns a Char — the
-      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
-      one byte of a multi-byte character and printed as mojibake. The typed
-      `s: str` path has used pystr_charat since text strings landed; this was
-      the variant arm of the same question left behind.
-      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
-    Result := pystr_charat(pystr_of(v), ki);
-    Exit;
-  end;
-  if tg <> 7 then
-    raise TypeError.Create('object is not subscriptable');
-  o := TObject(pyvarobj(v));
-  { list before dict: `xs[i]` is the common subscript, and every `is` that
-    answers no walks the class chain }
-  if o is TPyList then
-  begin
-    ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
-    Result := TPyList(o).at(ki);
-  end
-  else if o is TPyDict then
-    Result := TPyDict(o).fetch(key)
-  else if o is TPyRange then
-    { r[i] on a range held in a variant — arithmetic, not a lookup }
-    Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
-  else if o is TPyDeque then
-    { a deque that came back through a tuple or a container: `d[0]` raised
-      "not subscriptable" while the typed receiver indexed it fine }
-    Result := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
-  else if o is TPyBytes then
-  begin
-    { bytes/bytearray index -> the integer byte value. Missing this case made
-      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
-      raise 'not subscriptable' even though len(x) worked. }
-    ki := PPyVarRec(@key)^.Payload;
-    if ki < 0 then ki := ki + TPyBytes(o).count;
-    Result := pyvar_of_int(TPyBytes(o).at(ki));
-  end
-  { A USER class arriving as a bare variant handle. A statically-typed receiver
-    dispatches __getitem__ in the frontend; this one has no static class, so
-    `xs[0][3]` over a list of objects raised "not subscriptable" for a class
-    that plainly declares the member. The arity-2 dispatcher already covers
-    every RetKind the frontend emits, and a class without __getitem__ answers
-    False and keeps the TypeError.
-    bug-nilpy-a-chained-subscript-does-not-see-getitem }
-  else if PyUserArithCall1(o, nilo, key, '__getitem__', uv) then
-    Result := uv
-  else
-    raise TypeError.Create('object is not subscriptable');
+  pyvar_getitem_slow(v, key, Result);
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { `del v[k]` where v is a VARIANT — the runtime twin of pyvar_getitem, and for
   the same reason: an unannotated dict/list PARAMETER is a variant, so a helper
@@ -6668,14 +7007,19 @@ begin
     Exit;
   end;
   if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
-  PyVarSlotClear(dst);
+  { a scalar destination owns nothing: no call to find that out }
+  if (dst^.VType < 0) or (dst^.VType > 4) then PyVarSlotClear(dst);
   dst^.VType := src^.VType;
   dst^.Payload := src^.Payload;
 end;
 
 procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
 { dst is fresh/uninitialised (a function Result, a loop temp on its first
-  pass): zero it first so the release half never frees garbage. }
+  pass): zero it first so the release half never frees garbage. With dst
+  zeroed, PyVarSlotSet's release half has nothing to do, so the object and
+  string arms are taken here directly -- every `l[i]` that reads an object
+  element (TPyList.at) came through this, and spent a second call clearing a
+  slot it had just zeroed. }
 begin
   dst^.VType := 0;
   dst^.Payload := 0;
@@ -6685,41 +7029,73 @@ begin
     dst^.Payload := src^.Payload;
     Exit;
   end;
-  PyVarSlotSet(dst, src);
+  if PyVarSlotManaged(src^.VType) then
+  begin
+    PyVarSlotSetStr(dst, src);
+    Exit;
+  end;
+  if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
 end;
 
 procedure PyListGrow(l: TPyList; need: Integer);
 var
-  newCap, k: Integer;
+  newCap: Integer;
   newItems: Pointer;
-  src, dst: PPyVarRec;
 begin
   if need <= l.FCap then Exit;
   newCap := l.FCap * 2;
   if newCap < 8 then newCap := 8;
   if newCap < need then newCap := need;
   GetMem(newItems, newCap * 16);
-  for k := 0 to l.FLen - 1 do
-  begin
-    src := PPyVarRec(NativeInt(l.FItems) + k * 16);
-    dst := PPyVarRec(NativeInt(newItems) + k * 16);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
-  end;
-  { the old block is unreachable the moment FItems moves — nothing else ever
-    holds it, so it is freed here rather than leaked on every growth }
+  { the slots MOVE, with their references: a block copy, no retain/release }
+  if l.FLen > 0 then Move(l.FItems^, newItems^, l.FLen * 16);
   { slots past FLen are fresh GetMem garbage; zero them so the ARC release in
     PyVarSlotSet never frees a wild pointer }
-  for k := l.FLen to newCap - 1 do
-  begin
-    dst := PPyVarRec(NativeInt(newItems) + k * 16);
-    dst^.VType := 0;
-    dst^.Payload := 0;
-  end;
+  FillChar(PByte(NativeInt(newItems) + l.FLen * 16)^, (newCap - l.FLen) * 16, 0);
+  { the old block is unreachable the moment FItems moves — nothing else ever
+    holds it, so it is freed here rather than leaked on every growth }
   if l.FItems <> nil then FreeMem(l.FItems);
   l.FItems := newItems;
   l.FCap := newCap;
 end;
+
+{ A list DISPLAY of n elements sizes its block once, exactly: `[x, y, z]`
+  was an 8-slot block (128 bytes allocated and zeroed) grown on the first
+  append, for a vector that holds three. The compiler emits this ahead of
+  the element appends; a later append past n grows as usual. }
+procedure pylist_reserve(l: TPyList; n: Integer);
+var newItems: Pointer;
+begin
+  if (l = nil) or (n <= l.FCap) then Exit;
+  GetMem(newItems, n * 16);
+  if l.FLen > 0 then Move(l.FItems^, newItems^, l.FLen * 16);
+  FillChar(PByte(NativeInt(newItems) + l.FLen * 16)^, (n - l.FLen) * 16, 0);
+  if l.FItems <> nil then FreeMem(l.FItems);
+  l.FItems := newItems;
+  l.FCap := n;
+end;
+
+{ A list DISPLAY element whose static type is float: `(a[0] / n, a[1] / n,
+  a[2] / n)` stores the double straight into the next slot. append_self took
+  it boxed -- the double converted into a Variant temporary, then the general
+  slot copy, then the temporary's clear -- on every element of every vector
+  TSP's math builds. A slot past FLen is zeroed by the growth paths, so it
+  holds nothing to release; a non-scalar there is cleared anyway, as the
+  general path would. }
+{$IMPLICITEXCEPTIONS OFF}
+procedure pylist_pushf(l: TPyList; d: Double);
+var p: PPyVarRec;
+begin
+  if l.FLen >= l.FCap then PyListGrow(l, l.FLen + 1);
+  p := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
+  if (p^.VType < 0) or (p^.VType > 4) then PyVarSlotClear(p);
+  p^.VType := 3;
+  PPyDouble(@p^.Payload)^ := d;
+  l.FLen := l.FLen + 1;
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { The one append body. append and append_self both call it rather than one
   calling the other: append_self hands Self back, so routing append through
@@ -6729,7 +7105,7 @@ procedure PyListAppendRaw(l: TPyList; const v: Variant);
 var
   src, dst: PPyVarRec;
 begin
-  PyListGrow(l, l.FLen + 1);
+  if l.FLen >= l.FCap then PyListGrow(l, l.FLen + 1);
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
   PyVarSlotSet(dst, src);
@@ -6742,11 +7118,15 @@ begin
   Result := Self;
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyList.append(const v: Variant): Variant;
 begin
   PyListAppendRaw(Self, v);
   Result := pynone;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function TPyList.extend(other: TPyList): Variant;
 var
@@ -6873,6 +7253,10 @@ begin
   PXXObjRelease(Pointer(snapOther));
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the one raise (PyListFix's IndexError) comes before
+  Result holds anything, so the frame -- a setjmp and a chain link on every
+  element read -- could never release a thing. }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
@@ -6880,8 +7264,37 @@ begin
   if (i < 0) or (i >= FLen) then i := PyListFix(Self, i);
   src := PPyVarRec(NativeInt(FItems) + i * 16);
   dst := PPyVarRec(@Result);
+  { PyVarSlotInit's scalar arm, inline: the commonest read in vector code }
+  if (src^.VType >= 0) and (src^.VType <= 4) then
+  begin
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Exit;
+  end;
   PyVarSlotInit(dst, src);
 end;
+
+{ `k[i]` on a parameter annotated as a float sequence (`tuple[float, ...]`,
+  `list[float]`, ...): the element as a Double, with no Variant temporary in
+  between. It was `pyvar_to_float(k.at(i))` -- a call, a temp, a second call
+  and the temp's clear, on every read of TSP's vector math. Same answers: an
+  index out of range raises through PyListFix as at() does, a non-float
+  element converts (or raises TypeError) through pyvar_to_float, and a None
+  receiver stops at PXXNilRef as the method call's own check did. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylist_getf(l: TPyList; i: Integer): Double;
+var p: PPyVarRec;
+begin
+  if l = nil then PXXNilRef;
+  if (i < 0) or (i >= l.FLen) then i := PyListFix(l, i);
+  p := PPyVarRec(NativeInt(l.FItems) + i * 16);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^
+  else
+    Result := pyvar_to_float(PVariant(p)^);
+end;
+{$IMPLICITEXCEPTIONS ON}
+{$IMPLICITEXCEPTIONS ON}
 
 procedure TPyList.put(i: Integer; const v: Variant);
 var
@@ -7348,7 +7761,7 @@ begin
   if p^.VType <> 7 then Exit;
   if p^.Payload = 0 then Exit;
   o := TObject(Pointer(NativeInt(p^.Payload)));
-  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  if PyBoxKind(o) in [1, 2, 5] then Exit;
   Result := o;
 end;
 
@@ -7412,7 +7825,7 @@ begin
   Result := PyUserArithCall1(pa, PyVarUserObj(PPyVarRec(@b)), b, idunder, res);
 end;
 
-function PyVarEq(p, q: PPyVarRec): Boolean;
+function PyVarEq_slow(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
   la, lb: Int64;
@@ -7575,6 +7988,42 @@ begin
   else
     Result := p^.Payload = q^.Payload;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, PyVarEq_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- PyVarEq was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function PyVarEq(p, q: PPyVarRec): Boolean;
+var a, b: PChar; la, k: Int64;
+begin
+  { the int-family pair, exactly as the full routine answers it (no callable
+    is int-tagged, so its callable test above that arm cannot apply) }
+  if ((p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+  begin
+    Result := p^.Payload = q^.Payload;
+    Exit;
+  end;
+  { ...and the str pair, the full routine's last arm (nothing above it applies
+    to two strs): a dict with str keys -- TSP's -- compares here per probe }
+  if (p^.VType = 6) and (q^.VType = 6) then
+  begin
+    a := PChar(p^.Payload);
+    b := PChar(q^.Payload);
+    Result := a = b;                     { one handle, or both nil }
+    if Result or (a = nil) or (b = nil) then Exit;
+    la := PInt64(NativeInt(p^.Payload) - 8)^;
+    if la <> PInt64(NativeInt(q^.Payload) - 8)^ then Exit;
+    for k := 0 to la - 1 do
+      if a[k] <> b[k] then Exit;
+    Result := True;
+    Exit;
+  end;
+  Result := PyVarEq_slow(p, q);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 { A `TRY` for `==` / `!=` on two variant SLOTS, taken by address and answering
   in PXXPromoVarCmpTry's exact protocol: **0 = not handled**, 1 = False,
@@ -7986,6 +8435,14 @@ begin
   Result := h;
 end;
 
+{ The unhashable-key raise of PyVarHashKey, out of line: its message is
+  built from managed strings, which gave every hash an implicit cleanup
+  frame (a setjmp per dict lookup). }
+procedure PyRaiseUnhashable(o: TObject);
+begin
+  raise TypeError.Create('unhashable type: ''' + o.ClassName + '''');
+end;
+
 function PyVarHashKey(p: PPyVarRec): NativeUInt;
 { Hash CONSISTENT WITH PyVarEq (equal keys MUST hash equal):
   - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
@@ -7999,7 +8456,7 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
     identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer; dv: Double;
+var h: NativeUInt; ol: TObject; k: Integer; dv: Double;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
@@ -8016,13 +8473,11 @@ begin
     else
       h := NativeUInt(p^.Payload);
   end
-  else if p^.VType = 8193 then
+  else if (p^.VType = 6) or (p^.VType = 8193) then
   begin
-    sp := PPyAnsiString(@p^.Payload);
-    h := PyStrBytesHash(PChar(sp^), Length(sp^));
-  end
-  else if p^.VType = 6 then
-  begin
+    { the promotable int's digits are a string handle exactly like a str's,
+      read raw here: going through the AnsiString gave this routine a
+      managed temporary and so a cleanup frame on every dict lookup }
     if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
     else h := PyStrBytesHash(PChar(p^.Payload),
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
@@ -8041,8 +8496,7 @@ begin
       its hash changes, so the entry silently vanishes from the dict. It is the
       trap CPython itself backed away from.
       bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry }
-    raise TypeError.Create('unhashable type: ''' +
-      TObject(Pointer(NativeInt(p^.Payload))).ClassName + '''')
+    PyRaiseUnhashable(TObject(Pointer(NativeInt(p^.Payload))))
   else if (p^.VType = 7) and (p^.Payload <> 0) and
           PyUserObjHash(TObject(Pointer(NativeInt(p^.Payload))), h) then
   begin
@@ -8371,6 +8825,9 @@ begin
   PyVarSlotInit(dst, src);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: nothing here can raise while a managed value
+  is held (a TPyDict.get setjmp per call was among lekkerzeilen's commonest). }
+{$IMPLICITEXCEPTIONS OFF}
 function TPyDict.get(const k: Variant; const d: Variant): Variant; overload;
 var
   i: Integer;
@@ -8384,6 +8841,7 @@ begin
     src := PPyVarRec(NativeInt(FVals) + i * 16);
   PyVarSlotInit(dst, src);
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function TPyDict.remove(const k: Variant): Variant;
 var
@@ -8671,14 +9129,43 @@ end;
 { `a < b`, as CPython's sort/min actually spell it. Delegates to the `>`
   primitive with the operands swapped — but checks orderability FIRST, so the
   refusal names the operator and the operand order the source wrote. }
+function PyVarGtFull(const a: Variant; const b: Variant): Boolean; forward;
+function PyVarLtFull(const a: Variant; const b: Variant): Boolean; forward;
+
+{ NO IMPLICIT CLEANUP FRAME on the two entry points: the same-kind numeric pair
+  (PyVarCmpFast) answers with nothing managed in hand, and everything else goes
+  to PyVarGtFull, whose Variant locals and operator-string temps used to cost
+  min/max/sorted a setjmp on every compare (TSP: pyvar_gt was among the
+  hottest frame owners). }
 function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
 begin
-  PyOrdCheck(a, b, '<');
-  pyvar_lt := pyvar_gt(b, a);
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc < 0);
+    Exit;
+  end;
+  Result := PyVarLtFull(a, b);
 end;
 
-
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc > 0);
+    Exit;
+  end;
+  Result := PyVarGtFull(a, b);
+end;
+
+function PyVarLtFull(const a: Variant; const b: Variant): Boolean;
+begin
+  PyOrdCheck(a, b, '<');
+  Result := PyVarGtFull(b, a);
+end;
+
+function PyVarGtFull(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
     la, lb, k, n: Int64;
     ea, eb: Variant;
@@ -8714,11 +9201,11 @@ begin
         eb := TPyList(ob).at(k);
         if not PyVarEq(PPyVarRec(@ea), PPyVarRec(@eb)) then
         begin
-          pyvar_gt := pyvar_gt(ea, eb);
+          Result := pyvar_gt(ea, eb);
           Exit;
         end;
       end;
-      pyvar_gt := la > lb;
+      Result := la > lb;
       Exit;
     end;
     { ...and two BYTES, by the same lexicographic rule, on UNSIGNED byte values.
@@ -8741,10 +9228,10 @@ begin
       for k := 0 to n - 1 do
         if TPyBytes(oa).at(k) <> TPyBytes(ob).at(k) then
         begin
-          pyvar_gt := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
+          Result := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
           Exit;
         end;
-      pyvar_gt := la > lb;
+      Result := la > lb;
       Exit;
     end;
     { Two USER objects: their own __gt__, or the reflected __lt__. Without this
@@ -8757,7 +9244,7 @@ begin
       bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
     if PyUserObjGt(oa, ob, b, pg2) then
     begin
-      pyvar_gt := pg2;
+      Result := pg2;
       Exit;
     end;
   end;
@@ -8775,7 +9262,7 @@ begin
     begin
       if PyUserObjBoolDunder(oa, nil, b, '__gt__', pg2) then
       begin
-        pyvar_gt := pg2;
+        Result := pg2;
         Exit;
       end;
     end
@@ -8784,14 +9271,14 @@ begin
       ob := PyVarUserObj(pb);
       if PyUserObjBoolDunder(ob, nil, a, '__lt__', pg2) then
       begin
-        pyvar_gt := pg2;
+        Result := pg2;
         Exit;
       end;
     end;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
-    pyvar_gt := PyVarText(pa) > PyVarText(pb);
+    Result := PyVarText(pa) > PyVarText(pb);
     Exit;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) or ((pb^.VType = 6) or (pb^.VType = 5)) then
@@ -8802,17 +9289,17 @@ begin
     bignum or an int beyond 2^53 compares exactly, and a NaN is unordered
     (`max(2.0**70, 2**70 + 1)` answered the float). Declines for the rest. }
   pg := PXXPromoVarCmpTry(@a, @b, 5);
-  if pg <> 0 then begin pyvar_gt := pg = 2; Exit; end;
+  if pg <> 0 then begin Result := pg = 2; Exit; end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
-    pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
+    Result := pyvar_to_float(a) > pyvar_to_float(b)
   else
   begin
     { arbitrary precision stays exact — see pycmp_v. This is the SORT path, so
       without it sorted([2**65, 2**64, 5]) came back in the order it was given:
       every element narrowed to the same wrapped value and no swap ever fired. }
     pg := PXXPromoVarCmpTry(@a, @b, 5);        { 5 = greater-than }
-    if pg <> 0 then pyvar_gt := (pg = 2)
-    else pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+    if pg <> 0 then Result := (pg = 2)
+    else Result := pyvar_to_int(a) > pyvar_to_int(b);
   end;
 end;
 
@@ -8845,6 +9332,33 @@ begin
   Result := Trunc(x);
 end;
 
+{ The raises of the math helpers, out of line. A `raise X.Create('...')`
+  holds its message as a managed string temporary, which gave the routine
+  around it an implicit cleanup frame -- a setjmp on EVERY call of
+  math.log, a domain check or `**`, to free a string only the error path
+  makes. Same reason as PyRaiseZeroDivF. }
+procedure PyRaiseMathDomain;
+begin
+  raise ValueError.Create('math domain error');
+end;
+
+procedure PyRaiseMathRange;
+begin
+  raise OverflowError.Create('math range error');
+end;
+
+procedure PyRaisePowComplex;
+begin
+  raise ValueError.Create(
+    'a negative number raised to a fractional power is complex, '
+    + 'which NilPy does not have');
+end;
+
+procedure PyRaisePowZeroNeg;
+begin
+  raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+end;
+
 { math.modf(x) -> (fractional, integral), BOTH floats and both carrying x's
   sign, which is CPython's contract — modf(-2.5) is (-0.5, -2.0), not
   (0.5, -2.0). A tuple, so it belongs here rather than in the RTL. }
@@ -8858,7 +9372,7 @@ end;
 function pymath_dom_nonneg(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
   {$endif}
   pymath_dom_nonneg := x;
 end;
@@ -8867,8 +9381,8 @@ end;
 function pymath_dom_pos(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if x < 0.0 then raise ValueError.Create('math domain error');
-  if x = 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
+  if x = 0.0 then PyRaiseMathDomain;
   {$endif}
   pymath_dom_pos := x;
 end;
@@ -8877,7 +9391,7 @@ end;
 function pymath_dom_unit(x: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if (x < -1.0) or (x > 1.0) then raise ValueError.Create('math domain error');
+  if (x < -1.0) or (x > 1.0) then PyRaiseMathDomain;
   {$endif}
   pymath_dom_unit := x;
 end;
@@ -8897,16 +9411,11 @@ end;
 function pypow_dom(b: Double; e: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if (b < 0.0) and (e - Int(e) <> 0.0) then
-    raise ValueError.Create(
-      'a negative number raised to a fractional power is complex, '
-      + 'which NilPy does not have');
+  if (b < 0.0) and (e - Int(e) <> 0.0) then PyRaisePowComplex;
   { `0.0 ** -1` is a ZeroDivisionError in CPython, not an infinity — and the
     RTL's Power answers IEEE's +inf. pypow_v raises it on the dynamic path, so
     without this line the two spellings of one expression disagreed. }
-  if (b = 0.0) and (e < 0.0) then
-    raise ZeroDivisionError.Create(
-      '0.0 cannot be raised to a negative power');
+  if (b = 0.0) and (e < 0.0) then PyRaisePowZeroNeg;
   {$endif}
   pypow_dom := b;
 end;
@@ -8918,9 +9427,9 @@ begin
   if b < 0.0 then
   begin
     t := e - Int(e);
-    if t <> 0.0 then raise ValueError.Create('math domain error');
+    if t <> 0.0 then PyRaiseMathDomain;
   end;
-  if (b = 0.0) and (e < 0.0) then raise ValueError.Create('math domain error');
+  if (b = 0.0) and (e < 0.0) then PyRaiseMathDomain;
   {$endif}
   t := 0.0;
   pymath_dom_pow := b;
@@ -8962,7 +9471,7 @@ end;
 function pymath_range(v: Double; a: Double; b: Double): Double;
 begin
   if pyfloat_range_overflowed(v, a, b) then
-    raise OverflowError.Create('math range error');
+    PyRaiseMathRange;
   pymath_range := v;
 end;
 
@@ -11110,7 +11619,7 @@ begin
                          + cls + '''');
 end;
 
-function pyvar_to_int(const v: Variant): Int64;
+function pyvar_to_int_slow(const v: Variant): Int64;
 var
   p: PPyVarRec;
   ds: AnsiString;
@@ -11160,6 +11669,32 @@ begin
   end;
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_to_int_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_to_int was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_to_int(const v: Variant): Int64;
+var t: Int64;
+begin
+  t := PPyVarRec(@v)^.VType;
+  if (t = 1) or (t = 2) or (t = 4) then
+    Result := PPyVarRec(@v)^.Payload
+  else
+    Result := pyvar_to_int_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+{ pyvar_to_float's TypeError, out of line. The 'a number' argument is a
+  managed string temp, and holding one gave pyvar_to_float an implicit cleanup
+  frame -- a setjmp on EVERY call, for an arm that runs only to raise. TSP
+  spent ~2% of its run in those setjmps. }
+procedure PyToFloatTypeError(t: Int64);
+begin
+  PyTypeError(t, 'a number');
+end;
+
 function pyvar_to_float(const v: Variant): Double;
 var
   p: PPyVarRec;
@@ -11187,7 +11722,7 @@ begin
   end
   else
   begin
-    PyTypeError(p^.VType, 'a number');
+    PyToFloatTypeError(p^.VType);
     Result := 0.0;
   end;
 end;
@@ -11222,7 +11757,7 @@ begin
   end;
 end;
 
-function pyvar_to_bool(const v: Variant): Boolean;
+function pyvar_to_bool_slow(const v: Variant): Boolean;
 var
   p: PPyVarRec;
   o: TObject;
@@ -11266,6 +11801,25 @@ begin
   else
     Result := p^.Payload <> 0;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_to_bool_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_to_bool was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_to_bool(const v: Variant): Boolean;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^ <> 0.0
+  else if p^.VType = 0 then
+    Result := False
+  else
+    Result := pyvar_to_bool_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyvar_to_char(const v: Variant): Char;
 var
@@ -11312,7 +11866,7 @@ begin
   end;
 end;
 
-function pylen_v(const v: Variant): Int64;
+function pylen_v_slow(const v: Variant): Int64;
 var
   p: PPyVarRec;
   o: TObject;
@@ -11364,6 +11918,27 @@ begin
   end;
 end;
 
+{ len(<variant>)'s commonest answer, a list's length, without the cleanup
+  frame pylen_v_slow needs for its `__len__` result: a setjmp on every
+  `len(xs)` of a module-level or unannotated list. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylen_v(const v: Variant): Int64;
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 7 then
+  begin
+    o := TObject(Pointer(p^.Payload));
+    if (o <> nil) and (o is TPyList) then
+    begin
+      Result := TPyList(o).FLen;
+      Exit;
+    end;
+  end;
+  Result := pylen_v_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
 function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
 { The AUGMENTED product, `xs *= n`, where the target reads as a VARIANT — an
   unannotated parameter, a dict value, a list element. A mutable LIST is
@@ -11400,7 +11975,7 @@ begin
   Result := pymul_v(a, b);
 end;
 
-function pymul_v(const a: Variant; const b: Variant): Variant;
+function pymul_v_slow(const a: Variant; const b: Variant): Variant;
 { `v * n`. A STRING payload repeats, a numeric one multiplies -- the whole
   reason this cannot be decided when lowering. Either operand order. }
 var
@@ -11492,6 +12067,19 @@ begin
   end;
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pymul_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pymul_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pymul_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 3) then Exit;
+  Result := pymul_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
 { Self-contained double-precision ln/exp, used ONLY by pypow_v's fractional-
   exponent path (`2 ** 0.5`). Deliberately hand-rolled rather than `uses Math`:
   that unit declares its OWN `Max`/`Min` overloads (Integer/Integer and
@@ -11521,7 +12109,7 @@ begin
   if x < 0.0 then begin Result := (x - x) / (x - x); Exit; end;
   {$else}
   if x <= 0.0 then
-    raise ValueError.Create('math domain error');
+    PyRaiseMathDomain;
   {$endif}
   e := 0; m := x;
   while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
@@ -11914,6 +12502,9 @@ begin
   else Result := '';
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_of_int(v: Int64): Variant;
 var r: PPyVarRec;
 begin
@@ -11921,6 +12512,7 @@ begin
   r^.VType := 2;
   r^.Payload := v;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { `-v` on a variant. The IR rewrites unary minus on a variant to `0 - v`, which
   is right for every tag but a double holding ZERO: 0 - 0.0 is +0.0 where CPython
@@ -11928,7 +12520,7 @@ end;
   parity sweep 2026-09-16; `copysign`, `1/x` and `atan2` all read that sign). A
   double's sign bit is flipped; every other tag keeps the subtraction, whose
   dispatch already raises for a non-number. }
-function pyvar_neg(const v: Variant): Variant;
+function pyvar_neg_slow(const v: Variant): Variant;
 var p, r: PPyVarRec;
 begin
   p := PPyVarRec(@v);
@@ -11946,6 +12538,30 @@ begin
     raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyvar_neg_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyvar_neg was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyvar_neg(const v: Variant): Variant;
+var p, r: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+  begin
+    r := PPyVarRec(@Result);
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := -PPyDouble(@p^.Payload)^;
+    Exit;
+  end;
+  Result := pyvar_neg_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_of_bool(b: Boolean): Variant;
 var r: PPyVarRec;
 begin
@@ -11953,11 +12569,16 @@ begin
   r^.VType := 4;
   if b then r^.Payload := 1 else r^.Payload := 0;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
+{ NO IMPLICIT CLEANUP FRAME: nothing here can raise while a managed value
+  is held (a pyvar_id setjmp per call was among lekkerzeilen's commonest). }
+{$IMPLICITEXCEPTIONS OFF}
 function pyvar_id(const v: Variant): Variant;
 begin
   Result := v;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyint_v(const v: Variant): Variant;
 var p: PPyVarRec; pr: array[0..1] of NativeInt;
@@ -11983,6 +12604,13 @@ begin
     PXXPromoToVariant(@Result, @pr);   { same shape as pyabs_v's promo arm }
     PXXPromoClear(@pr);
   end
+  else if p^.VType = 0 then
+    { VT_EMPTY is None. pyvar_to_int reads it as 0 on purpose (the
+      Optional[int] sentinel), but that is a coercion, and int() is a call the
+      program wrote: `int(read(path))` on a missing file answered 0 and the
+      program's `except TypeError` never ran (sysdash read a root-only RAPL
+      counter as 0 J; bug-nilpy-int-of-none-returns-zero). }
+    raise TypeError.Create('int() argument must be a string, a bytes-like object or a real number, not ''NoneType''')
   else
     Result := pyvar_of_int(pyvar_to_int(v));
 end;
@@ -12089,13 +12717,25 @@ begin
   end;
   if not (((ta = 1) or (ta = 2) or (ta = 4)) and ((tb = 1) or (tb = 2) or (tb = 4))) then Exit;
   ia := pa^.Payload; ib := pb^.Payload;
-  if op = 1 then ir := ia + ib
-  else if op = 2 then ir := ia - ib
+  { add and subtract test overflow by sign inline -- the result's sign
+    differs from both addends', or from the minuend's when the operands'
+    signs differ -- which is PyIntOpOverflows' own answer for those two ops
+    without a call per operation; multiply still asks it }
+  if op = 1 then
+  begin
+    ir := ia + ib;
+    if ((ia xor ir) and (ib xor ir)) < 0 then Exit;
+  end
+  else if op = 2 then
+  begin
+    ir := ia - ib;
+    if ((ia xor ib) and (ia xor ir)) < 0 then Exit;
+  end
   else
   begin
     ir := ia * ib;
+    if PyIntOpOverflows(ia, ib, ir, op) then Exit;
   end;
-  if PyIntOpOverflows(ia, ib, ir, op) then Exit;
   r^.VType := 2;
   r^.Payload := ir;
   Result := True;
@@ -12155,7 +12795,7 @@ begin
   Result := True;
 end;
 
-function pyadd_v(const a: Variant; const b: Variant): Variant;
+function pyadd_v_slow(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
@@ -12256,6 +12896,19 @@ begin
   end;
 end;
 
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyadd_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyadd_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyadd_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarNumFast(PPyVarRec(@a), PPyVarRec(@b), PPyVarRec(@Result), 1) then Exit;
+  Result := pyadd_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
 { `l += y` where `l`'s STATIC type is a variant (an unannotated parameter, an
   element pulled out of a list/dict, ...) — the compile-time PyNodeListCi
   check that lowers a STATICALLY-known list target's `+=` to `TPyList.extend`
@@ -12353,6 +13006,9 @@ begin
                          pytype_name_v(b) + Chr(39));
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
@@ -12392,6 +13048,7 @@ begin
     r^.Payload := ir;
   end;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pymod_v(const a: Variant; const b: Variant): Variant;
 begin
@@ -12756,6 +13413,9 @@ begin
   Result := pysub_v(a, b);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
@@ -12784,6 +13444,7 @@ begin
   r^.VType := 3;
   PPyDouble(@r^.Payload)^ := da / db;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 { The four ORDERING operators on a variant operand. Each checks orderability
   first, in the operand order the source wrote and naming its own operator, so
@@ -12817,7 +13478,7 @@ end;
   `x >= nan` are both False, where pycmp_v's 0 ("equal") made them True; and
   CPython compares an int with a float EXACTLY. The try declines (0) for every
   other pair, which keeps pycmp_v's answer. }
-function pylt_v(const a: Variant; const b: Variant): Boolean;
+function pylt_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc < 0); Exit; end;
@@ -12827,7 +13488,25 @@ begin
   Result := pycmp_v(a, b) < 0;
 end;
 
-function pyle_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pylt_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pylt_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pylt_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc < 0);
+    Exit;
+  end;
+  Result := pylt_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pyle_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc <= 0); Exit; end;
@@ -12837,7 +13516,25 @@ begin
   Result := pycmp_v(a, b) <= 0;
 end;
 
-function pygt_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyle_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyle_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyle_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc <= 0);
+    Exit;
+  end;
+  Result := pyle_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pygt_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc > 0); Exit; end;
@@ -12847,7 +13544,25 @@ begin
   Result := pycmp_v(a, b) > 0;
 end;
 
-function pyge_v(const a: Variant; const b: Variant): Boolean;
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pygt_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pygt_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pygt_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc > 0);
+    Exit;
+  end;
+  Result := pygt_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
+
+function pyge_v_slow(const a: Variant; const b: Variant): Boolean;
 var pc, fc: Integer; fn: Boolean;
 begin
   if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then begin Result := (not fn) and (fc >= 0); Exit; end;
@@ -12856,6 +13571,24 @@ begin
   if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) >= 0;
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyge_v_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyge_v was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyge_v(const a: Variant; const b: Variant): Boolean;
+var fc: Integer; fn: Boolean;
+begin
+  if PyVarCmpFast(PPyVarRec(@a), PPyVarRec(@b), fc, fn) then
+  begin
+    Result := (not fn) and (fc >= 0);
+    Exit;
+  end;
+  Result := pyge_v_slow(a, b);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec; ca, ra, cb, rb: Pointer; isca, iscb: Boolean;
@@ -13018,13 +13751,23 @@ end;
   on a math error (owner, 2026-09-24). `/` answers IEEE inf/nan; `//` and `%`
   on ints answer 0, as Pascal/C div and mod do there; float `//` is IEEE.
   feature-a-esp-math-errors-keep-the-device-running }
+{ The raise of pytruediv_f, out of line: its message is a managed string
+  temporary, and holding one gave every float `/` an implicit cleanup frame
+  -- a setjmp per division -- to free a string only the error path makes. }
+procedure PyRaiseZeroDivF;
+begin
+  raise ZeroDivisionError.Create('division by zero');
+end;
+
+{$IMPLICITEXCEPTIONS OFF}
 function pytruediv_f(a: Double; b: Double): Double;
 begin
   {$ifndef PXX_PLATFORM_ESP}
-  if b = 0 then raise ZeroDivisionError.Create('division by zero');
+  if b = 0 then PyRaiseZeroDivF;
   {$endif}
   pytruediv_f := a / b;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 var q, r: Int64;
@@ -13263,7 +14006,6 @@ begin
 end;
 
 constructor TPyBytes.Create(n: Integer);
-var k: Integer; p: PByte;
 begin
   PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
@@ -13290,14 +14032,13 @@ begin
     The empty case allocates too, rather than leaving FData nil: `b""` handed
     to a `const char *` must be the empty C string, not a null pointer. }
   GetMem(FData, n + 1);
-  { Python's bytearray(n) is n ZERO bytes, not uninitialised memory }
-  for k := 0 to n - 1 do
-  begin
-    p := PByte(NativeInt(FData) + k);
-    p^ := 0;
-  end;
-  p := PByte(NativeInt(FData) + n);
-  p^ := 0;
+  FCap := n;
+  { Python's bytearray(n) is n ZERO bytes, not uninitialised memory -- and
+    the terminator with them, in one block fill. It was a byte loop, and
+    every bytes object is built here: a tile's blobs off sqlite and each
+    slice of them made lekkerzeilen's loader spend more time zeroing than
+    reading. }
+  FillChar(FData^, n + 1, 0);
 end;
 
 function TPyBytes.count: Integer;
@@ -13362,25 +14103,26 @@ begin
 end;
 
 procedure PyBytesEnsure(b: TPyBytes; need: Integer);
-var np: Pointer; k: Integer; src, dst: PByte;
+var np: Pointer; newCap: Integer;
 begin
   if need <= b.FLen then Exit;
   PyBytesNoResize(b);
-  { need + 1, and a zero at [need] — same invariant as the constructor. }
-  GetMem(np, need + 1);
-  for k := 0 to need - 1 do
+  { room already: the bytes past FLen may be stale (a shrink leaves them), so
+    the new ones and the terminator at [need] are zeroed, as a fresh buffer's
+    would be }
+  if (b.FMapLen = 0) and (need <= b.FCap) then
   begin
-    dst := PByte(NativeInt(np) + k);
-    if k < b.FLen then
-    begin
-      src := PByte(NativeInt(b.FData) + k);
-      dst^ := src^;
-    end
-    else
-      dst^ := 0;
+    FillChar(PByte(NativeInt(b.FData) + b.FLen)^, need - b.FLen + 1, 0);
+    b.FLen := need;
+    Exit;
   end;
-  dst := PByte(NativeInt(np) + need);
-  dst^ := 0;
+  newCap := need;
+  if newCap < 2 * b.FLen then newCap := 2 * b.FLen;
+  if newCap < 16 then newCap := 16;
+  { newCap + 1, and zeros from FLen on -- same invariant as the constructor }
+  GetMem(np, newCap + 1);
+  if b.FLen > 0 then Move(b.FData^, np^, b.FLen);
+  FillChar(PByte(NativeInt(np) + b.FLen)^, newCap - b.FLen + 1, 0);
   { The old buffer is OWNED here: a view (the only borrowed FData) raised in
     PyBytesNoResize above, and PyObjFinalize frees a non-view's FData the same
     way. Dropping it instead leaked one buffer per growth -- per append() of a
@@ -13393,6 +14135,7 @@ begin
   else if b.FData <> nil then FreeMem(b.FData);
   b.FData := np;
   b.FLen := need;
+  b.FCap := newCap;
 end;
 
 { THE LIST/TUPLE ARM IS ITS OWN OVERLOAD NOW, and that is the fix rather than
@@ -13437,12 +14180,9 @@ begin
   if src = nil then Exit;
   base := FLen;
   PyBytesEnsure(Self, FLen + src.FLen);
-  for k := 0 to src.FLen - 1 do
-  begin
-    sp := PByte(NativeInt(src.FData) + k);
-    dp := PByte(NativeInt(FData) + base + k);
-    dp^ := sp^;
-  end;
+  { a block copy; Move is overlap-safe, so `b.extend(b)` reads what it had }
+  if src.FLen > 0 then
+    Move(src.FData^, PByte(NativeInt(FData) + base)^, src.FLen);
 end;
 
 procedure TPyBytes.append(v: Integer);
@@ -13473,7 +14213,7 @@ begin
 end;
 
 function TPyBytes.decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
-var code, eh, k, n, seqLen: Integer; p: PByte; cp, lead, trail: Int64;
+var code, eh, k, n, seqLen: Integer; p: PByte; cp, lead, trail, lo, hi: Int64;
     bswap: Boolean;
 
   function ByteAt(idx: Integer): Int64;
@@ -13526,32 +14266,50 @@ begin
       but it must be VALIDATED now, because strict decode is exactly what
       encoding-sniffing code relies on to reject a wrong guess. Substituting
       U+FFFD unconditionally, as this used to, made every guess look right. }
+    { CPython's rules exactly: the lead byte fixes the length AND the range
+      of the second byte (which is what rejects overlong forms, surrogates
+      and code points past U+10FFFF), and a broken sequence becomes ONE
+      U+FFFD for its longest valid prefix -- `b'\xe2\x82 '` is '\ufffd ',
+      not two of them. }
     k := 0;
     while k < FLen do
     begin
       cp := ByteAt(k);
-      if cp < $80 then seqLen := 0
-      else if (cp and $E0) = $C0 then begin seqLen := 1; cp := cp and $1F; end
-      else if (cp and $F0) = $E0 then begin seqLen := 2; cp := cp and $0F; end
-      else if (cp and $F8) = $F0 then begin seqLen := 3; cp := cp and $07; end
-      else seqLen := -1;
-      if (seqLen < 0) or (k + seqLen >= FLen) then
+      if cp < $80 then
       begin
-        BadInput('utf-8', k);
+        PyCpToUtf8(Result, cp);
         Inc(k);
-        if eh = 2 then Continue;
-        PyCpToUtf8(Result, $FFFD);
         Continue;
       end;
-      for n := 1 to seqLen do
+      lo := $80; hi := $BF;
+      if (cp >= $C2) and (cp <= $DF) then begin seqLen := 1; cp := cp and $1F; end
+      else if (cp >= $E0) and (cp <= $EF) then
       begin
-        if (ByteAt(k + n) and $C0) <> $80 then begin seqLen := -1; Break; end;
-        cp := (cp shl 6) or (ByteAt(k + n) and $3F);
-      end;
-      if seqLen < 0 then
+        seqLen := 2;
+        if cp = $E0 then lo := $A0 else if cp = $ED then hi := $9F;
+        cp := cp and $0F;
+      end
+      else if (cp >= $F0) and (cp <= $F4) then
+      begin
+        seqLen := 3;
+        if cp = $F0 then lo := $90 else if cp = $F4 then hi := $8F;
+        cp := cp and $07;
+      end
+      else seqLen := -1;
+      n := 1;
+      if seqLen > 0 then
+        while n <= seqLen do
+        begin
+          if k + n >= FLen then Break;
+          if (n > 1) and ((ByteAt(k + n) < $80) or (ByteAt(k + n) > $BF)) then Break;
+          if (n = 1) and ((ByteAt(k + n) < lo) or (ByteAt(k + n) > hi)) then Break;
+          cp := (cp shl 6) or (ByteAt(k + n) and $3F);
+          Inc(n);
+        end;
+      if (seqLen < 0) or (n <= seqLen) then
       begin
         BadInput('utf-8', k);
-        Inc(k);
+        k := k + n;                      { the lead plus its valid prefix }
         if eh = 2 then Continue;
         PyCpToUtf8(Result, $FFFD);
         Continue;
@@ -14096,7 +14854,6 @@ begin
 end;
 
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
-var k: Integer; src, dst: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   { a slice of a VIEW is a view -- no copy, which is the reason to have one }
@@ -14110,12 +14867,9 @@ begin
     travel with every operation that builds a new buffer from an old one, or it
     is lost at the first slice. bug-nilpy-bytearray-and-bytes-are-the-same-type }
   if b <> nil then Result.FIsByteArray := b.FIsByteArray;
-  for k := 0 to (hi - lo) - 1 do
-  begin
-    src := PByte(NativeInt(b.FData) + lo + k);
-    dst := PByte(NativeInt(Result.FData) + k);
-    dst^ := src^;
-  end;
+  { one block copy, not a byte loop: lekkerzeilen's tile parser slices
+    every record out of a blob this way }
+  if hi > lo then Move(PByte(NativeInt(b.FData) + lo)^, Result.FData^, hi - lo);
 end;
 
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
@@ -14153,12 +14907,8 @@ begin
       b.FLen := oldLen + delta;
     end;
   end;
-  for k := 0 to src.FLen - 1 do
-  begin
-    sp := PByte(NativeInt(src.FData) + k);
-    dp := PByte(NativeInt(b.FData) + lo + k);
-    dp^ := sp^;
-  end;
+  if src.FLen > 0 then
+    Move(src.FData^, PByte(NativeInt(b.FData) + lo)^, src.FLen);
 end;
 
 { `b[lo:hi:step] = src` — the write half of pybytes_slice_step, walking exactly
@@ -15160,13 +15910,30 @@ begin
   Result := r;
 end;
 
-function pyfloat_any(const v: Variant): Double;
+function pyfloat_any_slow(const v: Variant): Double;
 var t: Int64;
 begin
   t := pyvartag(v);
-  if (t = 5) or (t = 6) then pyfloat_any := pyfloat_parse(pystr_of(v))
-  else pyfloat_any := pyvar_to_float(v);
+  if (t = 5) or (t = 6) then Result := pyfloat_parse(pystr_of(v))
+  else Result := pyvar_to_float(v);
 end;
+
+{ NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
+  managed in hand, and everything else is the routine's old body, pyfloat_any_slow,
+  which keeps its frame. A raise in there happens before this wrapper holds
+  anything. The frames were a setjmp on every call -- pyfloat_any was among
+  lekkerzeilen's commonest frame owners. }
+{$IMPLICITEXCEPTIONS OFF}
+function pyfloat_any(const v: Variant): Double;
+var t: Int64;
+begin
+  t := PPyVarRec(@v)^.VType;
+  if (t = 1) or (t = 2) or (t = 3) or (t = 4) then
+    Result := pyvar_to_float(v)
+  else
+    Result := pyfloat_any_slow(v);
+end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyfloat_ofint(v: Int64): Double;
 begin
@@ -16005,6 +16772,33 @@ begin
   Result := stx.st_size;
 end;
 
+function pyos_path_getmtime(const p: AnsiString): Double;
+var stx: TPyStat;
+begin
+  stx := pyos_stat(p);
+  Result := stx.st_mtime;
+end;
+
+function pyos_getpid: Int64;
+begin
+  Result := PyPalGetId(0);
+end;
+
+function pyos_getuid: Int64;
+begin
+  Result := PyPalGetId(1);
+end;
+
+function pyos_geteuid: Int64;
+begin
+  Result := PyPalGetId(2);
+end;
+
+function pyos_getgid: Int64;
+begin
+  Result := PyPalGetId(3);
+end;
+
 function pyos_path_expanduser(const p: AnsiString): AnsiString;
 var home: Variant; hs: AnsiString;
 begin
@@ -16501,6 +17295,17 @@ begin
   pyos_raise_for(e, '[Errno ' + StrInt(e, 0) + '] ' + pyos_errno_text(e));
 end;
 
+{ os.access(path, mode). F_OK is 0, R_OK 4, W_OK 2, X_OK 1, as in CPython and
+  POSIX. A missing path or a refused mode is False, never an error. }
+function pyos_access(const path: AnsiString; mode: Int64): Boolean;
+var cs: AnsiString;
+begin
+  Result := False;
+  if Length(path) = 0 then Exit;
+  cs := path + #0;
+  Result := PyPalAccessMode(@cs[1], mode);
+end;
+
 function pyos_remove(const path: AnsiString): Integer;
 var cs: AnsiString; r: Int64;
 begin
@@ -16608,7 +17413,7 @@ begin
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
-var cs: AnsiString; r, mode, size: Int64;
+var cs: AnsiString; r: Int64; st: TPyPalStat;
 begin
   { Real stat on every Linux target (plain stat on x86-64, statx elsewhere --
     see PyPalStatModeSize) and on ESP-IDF (uforth FILE-STATUS: a missing file
@@ -16619,11 +17424,17 @@ begin
     os.path.getsize existed. }
   Result := TPyStat.Create;
   cs := path + #0;
-  r := PyPalStatModeSize(@cs[1], mode, size);
+  r := PyPalStatFull(@cs[1], st);
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
-  Result.st_mode := mode;
-  Result.st_size := size;
+  Result.st_mode := st.mode;
+  Result.st_size := st.size;
+  Result.st_uid := st.uid;
+  Result.st_gid := st.gid;
+  Result.st_ino := st.ino;
+  Result.st_nlink := st.nlink;
+  Result.st_mtime_ns := st.mtimeNs;
+  Result.st_mtime := st.mtimeNs / 1000000000.0;
 end;
 
 function pystdin_readline: AnsiString;
@@ -16669,6 +17480,17 @@ begin
   end;
   PXXObjRetain(Pointer(f));
   Result := f;
+end;
+
+procedure pysys_stream_to_none(fd: Int64);
+var path: AnsiString; nul: Int64;
+begin
+  if (fd < 1) or (fd > 2) then Exit;
+  path := '/dev/null' + #0;
+  nul := PyPalOpen(@path[1], 1, 0);      { O_WRONLY }
+  if nul < 0 then Exit;
+  PyPalDup3(nul, fd);
+  PyPalClose(nul);
 end;
 
 function pystdout_write(const s: AnsiString): Integer;
@@ -17439,8 +18261,12 @@ end;
 { The hot cursor kinds -- a list, a range, a generator -- with no managed
   temps of their own, so a step costs what its arm does. The arms are the
   same code as pyiter_has_slow's; everything else goes there. }
+{ NO IMPLICIT CLEANUP FRAME: every arm writes the box slot directly. The
+  range arm's `put(0, it.FStart)` boxed the Int64 into a Variant temporary,
+  which gave this routine a setjmp per step of every `for`. }
+{$IMPLICITEXCEPTIONS OFF}
 function pyiter_has(it: TPyIter): Boolean;
-var genCur: Pointer; l: TPyList;
+var genCur: Pointer; l: TPyList; p: PPyVarRec;
 begin
   Result := False;
   if it = nil then Exit;
@@ -17450,7 +18276,11 @@ begin
   begin
     l := it.FSrc;
     if (l = nil) or (it.FPos >= l.count) then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, l.at(it.FPos));
+    { slot to slot: `put(0, l.at(pos))` made a Variant temporary between
+      them, one more retain and release per element of every `for` over a
+      list of objects }
+    PyVarSlotSet(PPyVarRec(it.FBox.FItems),
+                 PPyVarRec(NativeInt(l.FItems) + it.FPos * 16));
     Inc(it.FPos);
     it.FHas := True;
     Result := True;
@@ -17459,7 +18289,10 @@ begin
   if it.FKind = PYITER_K_RANGE then
   begin
     if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, it.FStart);
+    p := PPyVarRec(it.FBox.FItems);
+    if (p^.VType < 0) or (p^.VType > 4) then PyVarSlotClear(p);
+    p^.VType := 2;                       { VT_INT64, as an Int64 boxes }
+    p^.Payload := it.FStart;
     it.FStart := it.FStart + it.FStep;
     Dec(it.FPos);
     it.FHas := True;
@@ -17473,7 +18306,7 @@ begin
     if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
     genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
     if genCur = nil then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, PPyVariant(genCur)^);
+    PyVarSlotSet(PPyVarRec(it.FBox.FItems), PPyVarRec(genCur));
     it.FHas := True;
     Result := True;
     Exit;
@@ -17481,15 +18314,29 @@ begin
   Result := pyiter_has_slow(it);
 end;
 
+{ Result is a fresh slot (see PyVarSlotInit), so None is written into it
+  directly: `Result := pynone` was a call and a Variant assignment, and the
+  cleanup frame that came with it. }
 function pyiter_take(it: TPyIter): Variant;
+var p, r: PPyVarRec;
 begin
-  Result := pynone;
+  r := PPyVarRec(@Result);
+  r^.VType := 0;
+  r^.Payload := 0;
   if it = nil then Exit;
   if not it.FHas then
     if not pyiter_has(it) then Exit;
-  Result := it.FBox.at(0);
+  { MOVE the prefetched value out: the box's reference becomes the result's,
+    and the box holds None until the next prefetch. Nothing else reads the
+    box. Result holds None here, a scalar, so there is nothing to release. }
+  p := PPyVarRec(it.FBox.FItems);
+  r^.VType := p^.VType;
+  r^.Payload := p^.Payload;
+  p^.VType := 0;
+  p^.Payload := 0;
   it.FHas := False;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pyiter_next(it: TPyIter): Variant;
 begin
@@ -17882,7 +18729,7 @@ end;
 function PyCxSqrt(x: Double): Double;
 var e, i: Integer; m, r: Double;
 begin
-  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x < 0.0 then PyRaiseMathDomain;
   if x = 0.0 then begin Result := 0.0; Exit; end;
   { x = m * 4^e with m in [1,4), so sqrt(x) = sqrt(m) * 2^e and the scaling
     back is exact — powers of two never round. }
@@ -18592,6 +19439,41 @@ begin
   else Result := pyvar_cbuf(v);
 end;
 
+{ Which arm of PyObjFinalize a class takes: 0 a user class (or anything
+  else), 1 TPyList, 2 TPyDict, 3 TPyBytes, 4 TPyIter, 5 TPyFile. The four `is` tests
+  each walked the whole parent chain, and a user object -- most of what
+  lekkerzeilen finalises -- failed all four: __pxxInheritsFrom was 2.6% of
+  its profile, 239 of 777 samples from here. Cached per class RTTI, the kind
+  packed into the low three bits of the RTTI address in ONE aligned word, so a
+  racing reader sees an old entry or a new one, never half of each; an entry
+  for another class, or an empty one, is a miss and the `is` chain answers. }
+var PyFinKindCache: array[0..255] of NativeUInt;
+
+function PyFinKind(o: TObject): Integer;
+var rt, e: NativeUInt; h: Integer;
+begin
+  { GetInstanceRTTI's two loads, inline: the call was most of this routine's
+    cost on the cache-hit path every freed instance takes }
+  rt := 0;
+  if (o <> nil) and (PPointer(o)^ <> nil) then
+    rt := NativeUInt(PPointer(PtrUInt(PPointer(o)^) - 8)^);
+  h := Integer((rt shr 4) and 255);
+  e := PyFinKindCache[h];
+  if (rt <> 0) and ((rt and 7) = 0) and ((e and not NativeUInt(7)) = rt) then
+  begin
+    Result := Integer(e and 7);
+    Exit;
+  end;
+  if o is TPyList then Result := 1
+  else if o is TPyDict then Result := 2
+  else if o is TPyBytes then Result := 3
+  else if o is TPyIter then Result := 4
+  else if o is TPyFile then Result := 5
+  else Result := 0;
+  if (rt <> 0) and ((rt and 7) = 0) then
+    PyFinKindCache[h] := rt or NativeUInt(Result);
+end;
+
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
   k: Integer;
@@ -18600,6 +19482,7 @@ var
   by: TPyBytes;
   it: TPyIter;
   o: TObject;
+  fk: Integer;
 begin
   if objp = nil then Exit;
   if rawKind = 2 then
@@ -18624,7 +19507,8 @@ begin
     Exit;
   end;
   o := TObject(objp);
-  if o is TPyList then
+  fk := PyFinKind(o);
+  if fk = 1 then
   begin
     l := TPyList(objp);
     for k := 0 to l.FLen - 1 do
@@ -18633,7 +19517,7 @@ begin
     l.FItems := nil; l.FLen := 0; l.FCap := 0;
     Exit;
   end;
-  if o is TPyDict then
+  if fk = 2 then
   begin
     d := TPyDict(objp);
     for k := 0 to d.FLen - 1 do
@@ -18653,7 +19537,7 @@ begin
     d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
     Exit;
   end;
-  if o is TPyBytes then
+  if fk = 3 then
   begin
     by := TPyBytes(objp);
     if by.FViewOf <> nil then
@@ -18673,13 +19557,23 @@ begin
     by.FData := nil; by.FLen := 0;
     Exit;
   end;
+  { a file nobody closed is closed when its last reference goes, as CPython's
+    refcount does it -- `open(p).read()` leaked one fd per call. Never 0..2:
+    a TPyFile over a standard stream does not own it.
+    bug-nilpy-with-open-never-closes-the-file }
+  if fk = 5 then
+  begin
+    if TPyFile(objp).FFd > 2 then PyPalClose(TPyFile(objp).FFd);
+    TPyFile(objp).FFd := -1;
+    Exit;
+  end;
   { a CURSOR owns its source, its upstream(s) and its prefetch box — every one
     of them taken with an explicit PXXObjRetain in the constructor, because a
     cursor routinely outlives the expression that built its source
     (`for v in map(f, [1, 2, 3])` has nothing else holding that list). The
     stored callable is released too: a lifted lambda / bound pair is a
     refcounted block, and PXXObjRelease no-ops on a plain code address. }
-  if o is TPyIter then
+  if fk = 4 then
   begin
     it := TPyIter(objp);
     PXXObjRelease(Pointer(it.FSrc));
@@ -19840,12 +20734,7 @@ begin
   { bytes(x) is an immutable COPY in Python; immutability is not modelled, but
     the copy is, because uforth uses it to snapshot memory }
   Result := TPyBytes.Create(b.FLen);
-  for k := 0 to b.FLen - 1 do
-  begin
-    src := PByte(NativeInt(b.FData) + k);
-    dst := PByte(NativeInt(Result.FData) + k);
-    dst^ := src^;
-  end;
+  if b.FLen > 0 then Move(b.FData^, Result.FData^, b.FLen);
 end;
 
 { bytes([32, 33]) — from a LIST of small ints. Called from the bytes() copy
@@ -21208,146 +22097,315 @@ begin
               Copy(digits, decpt + 1, Length(digits) - decpt);
 end;
 
-{ Python's `repr` of a float: the SHORTEST decimal string that reads back as the
-  same double, laid out by Python's rules. `str` and `repr` are the same function
-  in Python 3, so this serves both.
+{ SHORTEST DIGITS BY BURGER & DYBVIG'S FREE-FORMAT ALGORITHM (PLDI 1996), on
+  small fixed-size bignums. The value and the gaps to its neighbours' midpoints
+  are r/s, mp/s and mm/s; digits come out one at a time, and the loop stops at
+  the first prefix that already reads back as the value (strictly inside the
+  rounding interval, or on its edge when the mantissa is even, since the
+  reader rounds ties to even). The last digit goes to the nearer of the two
+  prefixes that would read back -- CPython's repr. A power of two above the
+  denormals has the gap below half the gap above, which is mp = 2 mm.
 
-  Shortest is found by trying precisions and CHECKING the round trip, so the
-  answer is correct by construction rather than by trusting a digit-count
-  heuristic — the same method sysutils' FloatToStrShortest uses, with Python's
-  layout instead of Pascal's. 17 significant digits always round-trip a double,
-  so the loop terminates.
-
-  The round trip compares BITS, not doubles. It is asking IDENTITY, not
-  proximity, so `=` would answer it exactly — but reading the bits says what it
-  means, makes -0.0 and NaN fall out correctly instead of needing special cases,
-  and is immune to an extended-precision register ever appearing in this path.
-
-  The parse is the proof, but it is too dear to be the SEARCH: each one is an
-  exact bracket search of ~750-digit expansions, and 17 of them took 4 s for
-  repr(2.2250738585072014e-308) on hosted riscv32. So a precision is first
-  filtered by the parser's own rule -- a decimal reads back as av exactly when
-  it lies strictly between av's two rounding midpoints, or on one of them with
-  av's mantissa even -- which costs three expansions for the whole loop, and
-  only a candidate that passes is parsed.
-
-  At each length the correctly rounded candidate is tried, and at a power of two
-  above the denormals also the one on the OTHER side of av. Elsewhere the
-  round-trip interval is symmetric, so the farther one never reads back when
-  the nearer did not; there, the gap below is half the gap above, and CPython's
-  shortest can be the one rounded the other way: 7.120236347223045e-307
-  (2^-1016), where rounding alone gave 17 digits. Only there, because trying
-  it at every length cost 60% on a 9762-value run for no other value.
-
-  `av` must be finite, positive and nonzero; the caller handles the rest.
-  Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
-function PyFloatRepr(av: Double): AnsiString;
-var sig, decExp, de0, loE, hiE, altE, loSig, hiSig, midSig: Integer;
-    ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
-    even, pow2: Boolean;
-
-  { True, with the candidate (digits, dexp) laid out in `found`, if it reads
-    back as av }
-  function TryCand(digits: AnsiString; dexp: Integer): Boolean;
-  var tail, cLo, cHi: Integer; cand: AnsiString;
-  begin
-    TryCand := False;
-    tail := Length(digits);
-    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
-    digits := Copy(digits, 1, tail);
-    cLo := PyExDecCmp(digits, dexp, loS, loE);
-    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
-    if not (((cLo > 0) or ((cLo = 0) and even)) and
-            ((cHi < 0) or ((cHi = 0) and even))) then Exit;
-    cand := PyFloatLayout(digits, dexp);
-    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-       PyExDecDoubleToBits(av) then
-    begin
-      found := cand;
-      TryCand := True;
-    end;
+  It replaced a digit-count search over exact decimal expansions held in
+  AnsiStrings (three per value, plus a search), which cost ~24 us a repr and
+  was 8% of That Space Program's STS-1 run, through json.dumps. Measured
+  2026-10-10 against CPython's repr on 376,994 doubles (random bit patterns,
+  every power of two, the subnormals, 1e23, round decimals): the same digits
+  on every one. }
+const
+  PYBN_LIMBS = 40;   { 1280 bits; the largest operand is ~1090 }
+type
+  TPyBn = record
+    n: Integer;                                  { limbs in use; 0 = zero }
+    d: array[0..PYBN_LIMBS - 1] of Cardinal;     { least significant first }
   end;
 
-  { the interval test of TryCand alone, for the digit-count search }
-  function InInterval(nsig: Integer): Boolean;
-  var digits: AnsiString; dexp, tail, cLo, cHi: Integer;
-  begin
-    digits := ds0;
-    dexp := de0;
-    PyExDecRound(digits, dexp, nsig);
-    tail := Length(digits);
-    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
-    digits := Copy(digits, 1, tail);
-    cLo := PyExDecCmp(digits, dexp, loS, loE);
-    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
-    InInterval := ((cLo > 0) or ((cLo = 0) and even)) and
-                  ((cHi < 0) or ((cHi = 0) and even));
-  end;
-
+procedure PyBnSet(var a: TPyBn; v: Int64);
 begin
-  Result := '';
-  PyExDecSplit(av, mant, exp2);
-  PyExDecOfMant(mant, exp2, ds0, de0);
-  { the midpoint with the next double up; and with the next one down, which
-    at a power of two above the denormals has half the spacing }
-  PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
-  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
-  if pow2 then
-    PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
-  else
-    PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
-  even := (mant and 1) = 0;
-  { BINARY SEARCH the digit count when the interval is symmetric (every value
-    but a power of two): a sig-digit decimal is also a (sig+1)-digit one, so
-    the nearest candidate only gets closer as sig grows, and once it is inside
-    a symmetric interval it stays inside. ~5 interval tests and ONE read-back
-    instead of up to 17 of each -- json.dumps of TSP's flight blobs spent 26%
-    of a run here. A failed read-back falls through to the linear walk. }
-  if not pow2 then
+  a.n := 0;
+  while v <> 0 do
   begin
-    loSig := 1;
-    hiSig := 17;
-    while loSig < hiSig do
+    a.d[a.n] := Cardinal(v and $FFFFFFFF);
+    v := v shr 32;
+    a.n := a.n + 1;
+  end;
+end;
+
+procedure PyBnMulSmall(var a: TPyBn; m: Int64);
+var i: Integer; t, carry: Int64;
+begin
+  carry := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    t := Int64(a.d[i]) * m + carry;
+    a.d[i] := Cardinal(t and $FFFFFFFF);
+    carry := t shr 32;
+  end;
+  if carry <> 0 then
+  begin
+    a.d[a.n] := Cardinal(carry);
+    a.n := a.n + 1;
+  end;
+end;
+
+procedure PyBnShl(var a: TPyBn; bits: Integer);
+var w, b, i: Integer; hi: Int64;
+begin
+  if a.n = 0 then Exit;
+  w := bits div 32;
+  b := bits mod 32;
+  if b <> 0 then
+  begin
+    a.d[a.n] := 0;
+    for i := a.n downto 1 do
+      a.d[i] := Cardinal(((Int64(a.d[i]) shl b) or (Int64(a.d[i - 1]) shr (32 - b))) and $FFFFFFFF);
+    a.d[0] := Cardinal((Int64(a.d[0]) shl b) and $FFFFFFFF);
+    a.n := a.n + 1;
+    if a.d[a.n - 1] = 0 then a.n := a.n - 1;
+  end;
+  if w > 0 then
+  begin
+    for i := a.n - 1 downto 0 do a.d[i + w] := a.d[i];
+    for i := 0 to w - 1 do a.d[i] := 0;
+    a.n := a.n + w;
+  end;
+end;
+
+procedure PyBnMulPow10(var a: TPyBn; k: Integer);
+begin
+  while k >= 9 do begin PyBnMulSmall(a, 1000000000); k := k - 9; end;
+  case k of
+    1: PyBnMulSmall(a, 10);
+    2: PyBnMulSmall(a, 100);
+    3: PyBnMulSmall(a, 1000);
+    4: PyBnMulSmall(a, 10000);
+    5: PyBnMulSmall(a, 100000);
+    6: PyBnMulSmall(a, 1000000);
+    7: PyBnMulSmall(a, 10000000);
+    8: PyBnMulSmall(a, 100000000);
+  end;
+end;
+
+function PyBnCmp(const a, b: TPyBn): Integer;
+var i: Integer;
+begin
+  if a.n <> b.n then
+  begin
+    if a.n > b.n then Result := 1 else Result := -1;
+    Exit;
+  end;
+  for i := a.n - 1 downto 0 do
+    if a.d[i] <> b.d[i] then
     begin
-      midSig := (loSig + hiSig) div 2;
-      if InInterval(midSig) then hiSig := midSig else loSig := midSig + 1;
-    end;
-    { NO read-back here: the interval test against the exact midpoints IS
-      the proof that the candidate parses to av (the parser rounds to nearest,
-      ties to even, which is what `even` encodes), and the read-back -- one
-      more exact expansion per candidate -- was half the cost of a repr. The
-      linear walk below keeps it, as the belt for the asymmetric case. }
-    if InInterval(loSig) then
-    begin
-      ds := ds0;
-      decExp := de0;
-      PyExDecRound(ds, decExp, loSig);
-      sig := Length(ds);
-      while (sig > 1) and (ds[sig] = '0') do sig := sig - 1;
-      Result := PyFloatLayout(Copy(ds, 1, sig), decExp);
+      if a.d[i] > b.d[i] then Result := 1 else Result := -1;
       Exit;
     end;
-  end;
-  for sig := 1 to 17 do
+  Result := 0;
+end;
+
+{ compare a + b against c, without a temporary when the sizes already decide }
+function PyBnCmpSum(const a, b, c: TPyBn): Integer;
+var t: TPyBn; i, m: Integer; carry, x: Int64;
+begin
+  if a.n > b.n then m := a.n else m := b.n;
+  carry := 0;
+  for i := 0 to m - 1 do
   begin
-    ds := ds0;
-    decExp := de0;
-    PyExDecRound(ds, decExp, sig);
-    if TryCand(ds, decExp) then begin Result := found; Exit; end;
-    if pow2 and (Length(ds0) > sig) then
+    x := carry;
+    if i < a.n then x := x + a.d[i];
+    if i < b.n then x := x + b.d[i];
+    t.d[i] := Cardinal(x and $FFFFFFFF);
+    carry := x shr 32;
+  end;
+  t.n := m;
+  if carry <> 0 then begin t.d[m] := Cardinal(carry); t.n := m + 1; end;
+  Result := PyBnCmp(t, c);
+end;
+
+{ a := a - b, a >= b }
+procedure PyBnSub(var a: TPyBn; const b: TPyBn);
+var i: Integer; x, borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    x := Int64(a.d[i]) - borrow;
+    if i < b.n then x := x - b.d[i];
+    if x < 0 then begin x := x + $100000000; borrow := 1; end else borrow := 0;
+    a.d[i] := Cardinal(x);
+  end;
+  while (a.n > 0) and (a.d[a.n - 1] = 0) do a.n := a.n - 1;
+end;
+
+
+{ a := a - q*b for a small q with q*b <= a }
+procedure PyBnSubMul(var a: TPyBn; const b: TPyBn; q: Int64);
+var i: Integer; x, borrow: Int64;
+begin
+  borrow := 0;
+  for i := 0 to a.n - 1 do
+  begin
+    x := Int64(a.d[i]) - borrow;
+    if i < b.n then x := x - Int64(b.d[i]) * q;
+    if x < 0 then
     begin
-      { the other sig-digit neighbour of av: the truncation if rounding went
-        up, else the truncation rounded up (a trailing 9 forces the carry) }
-      alt := Copy(ds0, 1, sig);
-      altE := de0;
-      if PyExDecCmp(alt, altE, ds, decExp) = 0 then
-      begin
-        alt := alt + '9';
-        PyExDecRound(alt, altE, sig);
-      end;
-      if TryCand(alt, altE) then begin Result := found; Exit; end;
+      borrow := (-x + $FFFFFFFF) shr 32;
+      x := x + (borrow shl 32);
+    end
+    else borrow := 0;
+    a.d[i] := Cardinal(x);
+  end;
+  while (a.n > 0) and (a.d[a.n - 1] = 0) do a.n := a.n - 1;
+end;
+
+{ the top of a, in units of 2^(32*(n-2)): enough bits for a quotient under 10 }
+function PyBnTop(const a: TPyBn; n: Integer): Double;
+begin
+  Result := 0.0;
+  if a.n > n then Result := Result + a.d[n] * 18446744073709551616.0;
+  if a.n > n - 1 then Result := Result + a.d[n - 1] * 4294967296.0;
+  if (n >= 2) and (a.n > n - 2) then Result := Result + a.d[n - 2];
+end;
+
+{ The shortest digits that read back as mant * 2^exp2 (mant > 0, the
+  PyExDecSplit form), and of those the nearest -- CPython's repr. `decExp` is
+  the power of ten the first digit stands for, as PyExDecOfMant gives it. }
+procedure PyShortestDigits(mant: Int64; exp2: Integer;
+                           var digits: AnsiString; var decExp: Integer);
+var r, s, mp, mm: TPyBn;
+    k, bl, nd, dg, c1, c2: Integer;
+    even, tc1, tc2, pow2: Boolean;
+    est: Double;
+    qr, qs, qp, qm: Int64;
+    buf: array[0..31] of Char;
+begin
+  even := (mant and 1) = 0;
+  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
+  { v = r / s, and the gaps to the neighbouring doubles are mp / s above and
+    mm / s below, all scaled by 2 so the midpoints are integers }
+  if exp2 >= 0 then
+  begin
+    PyBnSet(r, mant); PyBnShl(r, exp2 + 1);
+    PyBnSet(s, 2);
+    PyBnSet(mp, 1); PyBnShl(mp, exp2);
+    PyBnSet(mm, 1); PyBnShl(mm, exp2);
+    if pow2 then
+    begin
+      PyBnShl(r, 1); PyBnShl(s, 1); PyBnShl(mp, 1);
+    end;
+  end
+  else
+  begin
+    PyBnSet(r, mant); PyBnShl(r, 1);
+    PyBnSet(s, 1); PyBnShl(s, 1 - exp2);
+    PyBnSet(mp, 1);
+    PyBnSet(mm, 1);
+    if pow2 then
+    begin
+      PyBnShl(r, 1); PyBnShl(s, 1); PyBnShl(mp, 1);
     end;
   end;
+  { k = ceil(log10 v), estimated from below: never high, at most one low }
+  bl := 0;
+  while (mant shr bl) <> 0 do bl := bl + 1;
+  est := (exp2 + bl - 1) * 0.30102999566398114 - 1e-10;
+  k := Trunc(est);
+  if est > k then k := k + 1;
+  if k >= 0 then PyBnMulPow10(s, k)
+  else
+  begin
+    PyBnMulPow10(r, -k);
+    PyBnMulPow10(mp, -k);
+    PyBnMulPow10(mm, -k);
+  end;
+  c2 := PyBnCmpSum(r, mp, s);
+  if (c2 > 0) or ((c2 = 0) and even) then
+  begin
+    PyBnMulSmall(s, 10);
+    k := k + 1;
+  end;
+  decExp := k - 1;
+  nd := 0;
+  { THE COMMON CASE IN 64 BITS. Every value from about 0.016 up to 2^53 --
+    most of what a simulation prints -- has s under 2^58 here, and r, mp and
+    mm are below s, so ten times any of them and r + mp all fit an Int64. The
+    same loop as below, without the bignums. }
+  if (s.n = 1) or ((s.n = 2) and (s.d[1] < $4000000)) then
+  begin
+    qs := Int64(s.d[0]);
+    if s.n = 2 then qs := qs or (Int64(s.d[1]) shl 32);
+    qr := 0; qp := 0; qm := 0;
+    if r.n > 0 then qr := Int64(r.d[0]);
+    if r.n > 1 then qr := qr or (Int64(r.d[1]) shl 32);
+    if mp.n > 0 then qp := Int64(mp.d[0]);
+    if mp.n > 1 then qp := qp or (Int64(mp.d[1]) shl 32);
+    if mm.n > 0 then qm := Int64(mm.d[0]);
+    if mm.n > 1 then qm := qm or (Int64(mm.d[1]) shl 32);
+    repeat
+      qr := qr * 10; qp := qp * 10; qm := qm * 10;
+      dg := Integer(qr div qs);
+      qr := qr - dg * qs;
+      tc1 := (qr < qm) or ((qr = qm) and even);
+      tc2 := (qr + qp > qs) or ((qr + qp = qs) and even);
+      if tc1 and tc2 then
+      begin
+        if (2 * qr > qs) or ((2 * qr = qs) and Odd(dg)) then dg := dg + 1;
+      end
+      else if tc2 then
+        dg := dg + 1;
+      buf[nd] := Chr(Ord('0') + dg);
+      nd := nd + 1;
+    until tc1 or tc2;
+    SetLength(digits, nd);
+    Move(buf[0], digits[1], nd);
+    Exit;
+  end;
+  repeat
+    PyBnMulSmall(r, 10);
+    PyBnMulSmall(mp, 10);
+    PyBnMulSmall(mm, 10);
+    { the digit is r div s, under 10: estimated from the top limbs, one low
+      at worst, then corrected by plain subtraction }
+    dg := Trunc(PyBnTop(r, s.n) / PyBnTop(s, s.n));
+    if dg > 0 then
+    begin
+      dg := dg - 1;
+      if dg > 0 then PyBnSubMul(r, s, dg);
+    end;
+    while PyBnCmp(r, s) >= 0 do
+    begin
+      PyBnSub(r, s);
+      dg := dg + 1;
+    end;
+    c1 := PyBnCmp(r, mm);
+    tc1 := (c1 < 0) or ((c1 = 0) and even);
+    c2 := PyBnCmpSum(r, mp, s);
+    tc2 := (c2 > 0) or ((c2 = 0) and even);
+    if tc1 and tc2 then
+    begin
+      { both neighbours read back: the nearer one, 2r against s }
+      c1 := PyBnCmpSum(r, r, s);
+      if (c1 > 0) or ((c1 = 0) and Odd(dg)) then dg := dg + 1;
+    end
+    else if tc2 then
+      dg := dg + 1;
+    buf[nd] := Chr(Ord('0') + dg);
+    nd := nd + 1;
+  until tc1 or tc2;
+  SetLength(digits, nd);
+  Move(buf[0], digits[1], nd);
+end;
+
+{ Python's `repr` of a float: the SHORTEST decimal string that reads back as the
+  same double, laid out by Python's rules. `str` and `repr` are the same function
+  in Python 3, so this serves both. `av` must be finite, positive and nonzero;
+  the caller handles the rest. }
+function PyFloatRepr(av: Double): AnsiString;
+var mant: Int64; exp2, decExp: Integer; ds: AnsiString;
+begin
+  PyExDecSplit(av, mant, exp2);
+  PyShortestDigits(mant, exp2, ds, decExp);
+  Result := PyFloatLayout(ds, decExp);
 end;
 
 function PyFloatStr(d: Double): AnsiString;
@@ -21875,6 +22933,9 @@ begin
   Result := (l <> nil) and (l.count > 0);
 end;
 
+{ NO IMPLICIT CLEANUP FRAME (see TPyList.at): nothing here can raise while a
+  managed value is held, so the frame could never release anything. }
+{$IMPLICITEXCEPTIONS OFF}
 function pynone: Variant;
 var p: PPyVarRec;
 begin
@@ -21882,6 +22943,7 @@ begin
   p^.VType := 0;      { VT_EMPTY }
   p^.Payload := 0;
 end;
+{$IMPLICITEXCEPTIONS ON}
 
 function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 var pad: Char; i, need: Integer;
@@ -22971,13 +24033,22 @@ begin
   end;
   total := total + FLen * (parts.count - 1);
   Result := PyBytesLike(Self, total);
+  { block copies into the buffer sized above: the separator and each part
+    were copied one checked byte at a time (write_png joins its chunks) }
   w := 0;
   for i := 0 to parts.count - 1 do
   begin
-    if i > 0 then
-      for k := 0 to FLen - 1 do begin PyBytesSet(Result, w, at(k)); Inc(w); end;
+    if (i > 0) and (FLen > 0) then
+    begin
+      Move(FData^, PByte(NativeInt(Result.FData) + w)^, FLen);
+      w := w + FLen;
+    end;
     part := TPyBytes(TObject(pyvarobj(parts.at(i))));
-    for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
+    if part.FLen > 0 then
+    begin
+      Move(part.FData^, PByte(NativeInt(Result.FData) + w)^, part.FLen);
+      w := w + part.FLen;
+    end;
   end;
 end;
 
@@ -22992,20 +24063,27 @@ begin
 end;
 
 function TPyBytes.translate(table: TPyBytes): TPyBytes;
-var i: Integer;
+var i: Integer; src, dst, tb: PByte;
 begin
   { CPython accepts None for "no mapping" (the delete-only form); a table of
     any length other than 256 is a ValueError. }
   if table = nil then
   begin
     Result := PyBytesLike(Self, FLen);
-    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
+    if FLen > 0 then Move(FData^, Result.FData^, FLen);
     Exit;
   end;
   if table.FLen <> 256 then
     raise ValueError.Create('translation table must be 256 characters long');
   Result := PyBytesLike(Self, FLen);
-  for i := 0 to FLen - 1 do PyBytesSet(Result, i, table.at(at(i)));
+  { by raw pointer: every index is in range by construction (a byte indexes
+    a 256-entry table), and at()/PyBytesSet checked each one per byte --
+    lekkerzeilen's _cover_pixels translates whole images }
+  src := PByte(FData);
+  dst := PByte(Result.FData);
+  tb := PByte(table.FData);
+  for i := 0 to FLen - 1 do
+    PByte(NativeInt(dst) + i)^ := PByte(NativeInt(tb) + PByte(NativeInt(src) + i)^)^;
 end;
 
 { The is* predicates are all FALSE on an empty bytes in CPython — "at least one
@@ -23117,6 +24195,13 @@ begin
                             + 'open reads bytes and never decodes');
 end;
 
+function pyfile_errors_replace(f: TPyFile): TPyFile;
+{ `open(..., errors="replace")`: the frontend wraps the open in this }
+begin
+  if f <> nil then f.FReplace := True;
+  Result := f;
+end;
+
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend, wantExcl: Boolean;
 begin
@@ -23174,6 +24259,7 @@ function TPyFile.read(u: Int64): Variant;
   bug-nilpy-text-mode-read-n-returns-bytes-not-str }
 var r: TPyBytes; got: Int64; s: AnsiString; i: Integer;
 begin
+  CheckOpen;
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
   got := PyPalRead(FFd, r.FData, u);
@@ -23186,7 +24272,7 @@ begin
   end;
   s := '';
   for i := 0 to Integer(got) - 1 do s := s + Chr(PByte(NativeInt(r.FData) + i)^);
-  Result := s;
+  Result := TextOf(s);
 end;
 
 { Read to EOF from the current position. Chunked rather than byte-at-a-time
@@ -23197,6 +24283,7 @@ function TPyFile.readall: AnsiString;
 var buf: array[0..8191] of Char; got: Int64; res: AnsiString;
     rlen, rcap, i: Integer;
 begin
+  CheckOpen;
   res := ''; rlen := 0; rcap := 0;
   while True do
   begin
@@ -23226,7 +24313,7 @@ begin
   s := Self.readall;
   if not FBinary then
   begin
-    Result := s;
+    Result := TextOf(s);
     Exit;
   end;
   b := TPyBytes.Create(Length(s));
@@ -23243,6 +24330,7 @@ var content, line: AnsiString; i, n, k: Integer; lb: TPyBytes;
 begin
   Result := TPyList.Create;
   content := Self.readall;
+  if not FBinary then content := TextOf(content);   { U+FFFD has no newline byte }
   { each line KEEPS its trailing newline -- Python's file iteration yields them
     that way, and a final unterminated line is still a line }
   i := 1; n := Length(content); line := '';
@@ -23279,25 +24367,34 @@ begin
 end;
 
 function TPyFile.readline: Variant;
+begin
+  Result := readline(-1);
+end;
+
+function TPyFile.readline(size: Int64): Variant;
 { TEXT mode yields a str here too — it answered bytes, so `f.readline()` on a
   text file printed b'one\n'. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
-var r: TPyBytes; got: Int64; ch: Byte; s: AnsiString;
+var r: TPyBytes; got, n: Int64; ch: Byte; s: AnsiString;
 begin
+  CheckOpen;
   { one byte at a time — line reads are rare and short in the corpus }
   r := TPyBytes.Create(0);
   s := '';
-  while True do
+  n := 0;
+  while (size < 0) or (n < size) do
   begin
     got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
     if FBinary then r.append(ch) else s := s + Chr(ch);
+    Inc(n);
     if ch = 10 then Break;
   end;
-  if FBinary then Result := r else Result := s;
+  if FBinary then Result := r else Result := TextOf(s);
 end;
 
 function TPyFile.write(b: TPyBytes): Int64;
 begin
+  CheckOpen;
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, b.FData, b.FLen);
   { a failed write RAISES in CPython (`[Errno 28] No space left on device`);
@@ -23307,6 +24404,7 @@ end;
 
 function TPyFile.write(const s: AnsiString): Int64;
 begin
+  CheckOpen;
   { our strings are byte strings, so a text write is the bytes of s -- no
     encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
   if Length(s) = 0 then begin Result := 0; Exit; end;
@@ -23383,10 +24481,26 @@ var r: Int64;
 begin
   { closing twice is a no-op in CPython; a close that FAILS raises there (on
     ESP it is where a buffered write meets a full partition) }
+  closed := True;
   if FFd < 0 then Exit;
   r := PyPalClose(FFd);
   FFd := -1;
   if r < 0 then pyos_raise_oserror(r);
+end;
+
+function TPyFile.TextOf(const raw: AnsiString): AnsiString;
+var b: TPyBytes; i: Integer;
+begin
+  if not FReplace then begin Result := raw; Exit; end;
+  b := TPyBytes.Create(Length(raw));
+  for i := 1 to Length(raw) do PByte(NativeInt(b.FData) + i - 1)^ := Ord(raw[i]);
+  b.FLen := Length(raw);
+  Result := b.decode('utf-8', 'replace');
+end;
+
+procedure TPyFile.CheckOpen;
+begin
+  if closed then raise ValueError.Create('I/O operation on closed file.');
 end;
 
 function TPyFile.fileno: Int64;
@@ -23980,7 +25094,7 @@ begin
   if selfObj = nil then Exit;
   { this unit's own containers have their own value rules and must not come here
     (PyRecIsPylibOwnClass's runtime equivalent) }
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   if otherObj <> nil then
     if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
@@ -24267,7 +25381,7 @@ var cls: PClassRTTI; mi: PMethInfo; fn: TPyObjDunderFn; fnObj: TPyObjDunderObjFn
 begin
   PyUserObjObjDunder := False;
   if (selfObj = nil) or (otherObj = nil) then Exit;
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   mi := PyFindDunder(cls, dunder);
@@ -24317,7 +25431,7 @@ begin
   if selfObj = nil then Exit;
   { this unit's own containers have their own store rules and must not come
     here — pyvar_setitem tests them first, and this is the belt to that brace }
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   mi := PyFindDunder(cls, '__setitem__');
@@ -24359,7 +25473,7 @@ begin
     error 219 (bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219).
     The parameter stays for the reflected call sites' symmetry. }
   if selfObj = nil then Exit;
-  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if PyBoxKind(selfObj) in [1, 2, 5] then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   PyUserArithCall1 := PyUserArithCallMeth(selfObj, PyFindDunder(cls, dunder), otherV, res);

@@ -452,3 +452,4 @@
 2026-09-30T08:46:32Z  v452  7ff6198e28a13131a5092555f41ebe35b0592dbcdfb08a51115b6cd73e841ece  e736667eebaad982286b8edf212408c02a3651bd  tstate(borg): bench f964bc0cdc1e RED (0 bench rows, 550 conf)
 2026-10-08T08:57:36Z  v453  990183b73c5f212b9f276fdcfe04b5a1c4f0fd12cddaf2a8afe34d33a05cd271  3a87f68b3cad714edc9a4bd3b978080a60250a55  fix(A): two regressions from header extern variables (0a21c18151)
 2026-10-10T02:46:37Z  v454  9a8c88b4c26db78c0e6eb93b69e5c8150cf1dd6714df413e908e215d08c69c79  6bacf317458e0e75d79b0d7a863f28af7d72b514  pal: PalMmapFile, and a TPyBytes that owns a file mapping
+2026-10-31T00:21:46Z  v455  79f86d74dad32c12799c386f0be30acb94d6371ecb3fa6cf5b08367ea82a4812  a7c7ff69b7da5fa4ec215d646df606824602b93a  nilpy: a missed guarded from-import binds none of its names; tkinter withdraw()/state()

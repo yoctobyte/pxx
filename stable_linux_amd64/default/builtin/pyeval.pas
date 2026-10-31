@@ -1025,25 +1025,33 @@ end;
   cache is bounded (PY_LK_SLOTS records; a racing double fill leaks one) and
   an entry never changes under a reader. A hit is still VERIFIED by name
   against the descriptor it returns, so the slot index (which hashes the
-  name's ADDRESS, stable for a literal and arbitrary otherwise) only decides
-  where to look, never what is true. Misses (nil) are not cached. }
+  name's CONTENT -- see PyAttrLkIndex in pylib) only decides where to look,
+  never what is true. A method MISS is cached too, with the record's own
+  copy of the name to verify against (NameP); a field miss is not. }
 const PY_LK_SLOTS = 2048;
 type PPyLkRec = ^TPyLkRec;
-     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; end;
+     TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer; end;
 var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
 
 function PyLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): NativeInt;
-var h: NativeUInt;
 begin
-  h := (NativeUInt(cls) shr 3) * 31 + (NativeUInt(Pointer(name)) shr 3) + NativeUInt(kind) * 7;
-  h := h xor (h shr 11);
-  Result := NativeInt(h and (PY_LK_SLOTS - 1));
+  Result := PyAttrLkIndex(cls, name, kind) and (PY_LK_SLOTS - 1);
 end;
 
-procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt);
-var r: PPyLkRec;
+procedure PyLkPut(idx: NativeInt; cls, hit: Pointer; kind: NativeInt;
+                  const name: AnsiString);
+var r: PPyLkRec; n: NativeInt; np: Pointer;
 begin
   if PyLkSlot[idx] <> nil then Exit;
+  np := nil;
+  if hit = nil then
+  begin
+    { a cached MISS verifies against its own copy of the name }
+    n := Length(name);
+    np := GetMem(8 + n);
+    PInt64(np)^ := n;
+    if n > 0 then Move(Pointer(name)^, PByte(NativeInt(np) + 8)^, n);
+  end;
   r := PPyLkRec(GetMem(SizeOf(TPyLkRec)));
   r^.Cls := cls;
   r^.Hit := hit;
@@ -1051,6 +1059,7 @@ begin
     slots, and a field descriptor read as a method's (or the reverse) is a
     different record layout, not a miss }
   r^.Kind := kind;
+  r^.NameP := np;
   PyLkSlot[idx] := r;
 end;
 
@@ -1061,14 +1070,20 @@ var idx: NativeInt; r: PPyLkRec;
 begin
   idx := PyLkIndex(cls, name, 0);
   r := PyLkSlot[idx];
-  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) and
-     PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+  if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 0) then
   begin
-    Result := PMethInfo(r^.Hit);
-    Exit;
+    if r^.Hit = nil then
+    begin
+      if PyNameEqAt(r^.NameP, name, True) then begin Result := nil; Exit; end;
+    end
+    else if PyNameEqAt(PMethInfo(r^.Hit)^.NamePtr, name, True) then
+    begin
+      Result := PMethInfo(r^.Hit);
+      Exit;
+    end;
   end;
   Result := PyFindMethCISlow(cls, name);
-  if Result <> nil then PyLkPut(idx, cls, Result, 0);
+  PyLkPut(idx, cls, Result, 0, name);
 end;
 
 { GetFieldPtr through the same cache (kind 1). }
@@ -1080,12 +1095,12 @@ begin
   r := PyLkSlot[idx];
   fi := nil;
   if (r <> nil) and (r^.Cls = Pointer(cls)) and (r^.Kind = 1) and
-     (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
+     (r^.Hit <> nil) and (PFieldInfo(r^.Hit)^.NamePtr^ = name) then
     fi := PFieldInfo(r^.Hit)
   else
   begin
     fi := GetFieldInfoByName(cls, name);
-    if fi <> nil then PyLkPut(idx, cls, fi, 1);
+    if fi <> nil then PyLkPut(idx, cls, fi, 1, name);
   end;
   kind := 0;
   Result := nil;
@@ -1134,7 +1149,8 @@ end;
   with, or '' if it was positional. CPython's rule: positionals fill left to
   right, then each keyword goes to its own parameter.
 
-  A GAP — a keyword targeting parameter 3 while 2 has no value — is refused
+  A GAP — a keyword targeting parameter 3 while 2 has no value — is filled
+  from the callee's signature defaults when it has them, and otherwise refused
   loudly rather than guessed. The marshaller below can only express omitted
   TRAILING params (it tests `(i-1) >= nargs` against a dense list), so a gap has
   no representation; inventing a filler would put this straight back into the
@@ -1145,6 +1161,7 @@ var i, p, cnt, arity, tgt, nextPos, maxIdx: Integer;
     anyKw: Boolean;
     nm: AnsiString;
     pk: PInt64;
+    sig: Pointer;
     src: TPyList;
     seen: array[0..31] of Boolean;
 begin
@@ -1158,6 +1175,11 @@ begin
   pk := PInt64(mi^.ParamKinds);
   if (pk = nil) or (n <= 0) or (n > 31) then Exit;
   arity := Integer(mi^.Arity);
+  { the signature record, when the method has one: the source of defaults for a
+    slot a keyword skips (nil leaves pysig_default_slot answering nil) }
+  sig := nil;
+  if (mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0 then
+    sig := Pointer(NativeInt(pk[2 * (n + 1)]));
 
   for p := 0 to n - 1 do seen[p] := False;
   src := TPyList.Create;
@@ -1210,7 +1232,14 @@ begin
       wants slot 1 while slot 0 has no value. Caught HERE rather than by the
       completeness check below, because reaching that check would mean writing
       out of range first. }
-    if tgt >= cnt then
+    { The gap is closed from the CALLEE's own defaults when its signature
+      record has them: the list grows to the keyword's slot, and the check
+      below fills every slot nobody wrote. `.n(*xs, forced=9)` on a run-time
+      dispatched call reaches here whenever a defaulted parameter sits between
+      the star's last value and the keyword. }
+    while (tgt >= args.count) and (pysig_default_slot(sig, args.count) <> nil) do
+      args.append(PVariant(pysig_default_slot(sig, args.count))^);
+    if tgt >= args.count then
     begin
       src.Free;
       EvalError('cannot bind ' + nm + '= in a call to ' + mname +
@@ -1223,7 +1252,14 @@ begin
   end;
   src.Free;
 
-  { every slot up to the highest one used must actually have a value }
+  { every slot up to the highest one used must have a value: its own, or the
+    callee's default }
+  for p := 0 to maxIdx do
+    if (not seen[p]) and (pysig_default_slot(sig, p) <> nil) then
+    begin
+      args.put(p, PVariant(pysig_default_slot(sig, p))^);
+      seen[p] := True;
+    end;
   for p := 0 to maxIdx do
     if not seen[p] then
       EvalError('cannot bind keyword args to ' + mname +
@@ -6510,7 +6546,7 @@ var
   cls: PClassRTTI;
   kwNames: TPyList;
   res, cb: Variant;
-  i, cut, nargs: Integer;
+  i, cut, nargs, first: Integer;
   rest: AnsiString;
 begin
   Result := pynone;
@@ -6567,7 +6603,20 @@ begin
     begin
       kwNames := TPyList.Create;
       rest := kwspec;
-      for i := 0 to nargs - 1 do
+      { '>' = the fields name the LAST arguments only: a call that also has a
+        *unpack, whose length the frontend could not know. Pad the front with
+        positional slots now that the list is built. }
+      first := 0;
+      if rest[1] = '>' then
+      begin
+        rest := Copy(rest, 2, Length(rest) - 1);
+        first := nargs - 1;
+        for i := 1 to Length(rest) do
+          if rest[i] = '|' then Dec(first);
+        if first < 0 then first := 0;
+        for i := 0 to first - 1 do kwNames.append('');
+      end;
+      for i := first to nargs - 1 do
       begin
         cut := Pos('|', rest);
         if cut > 0 then

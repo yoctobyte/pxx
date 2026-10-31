@@ -148,6 +148,7 @@ function PXXStrAsciiCached(p: Pointer): Int64;
 procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
 procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+function PXXStrConcatN(pairs: Pointer; count: NativeInt): Pointer;
 { ---- UTF-16 (WideString/UnicodeString) ----
   Storage is 2-byte code units and the header length is their BYTE count, which
   is what lets concat/compare/copy stay the byte-level routines above. The
@@ -183,6 +184,8 @@ procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
 function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+procedure PXXStrAssign(p: Pointer; slot: Pointer);
+procedure PXXStrDecRefMask(top: Pointer; mask: LongWord);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
   The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
@@ -908,7 +911,7 @@ end;
   PXXFree for one. Distinct from the refcount address at [p-16], which is a
   different slot now — conflating them is the mistake this change can make
   silently, so both have names. }
-function PXXHdrBase(p: Pointer): Int64;
+function PXXHdrBase(p: Pointer): NativeInt;
 {$ifdef PXX_HEAP_DEBUG}
 var hdrKind: Int64;
 {$endif}
@@ -929,12 +932,12 @@ begin
     if hdrKind > PXX_KIND_MAX then Halt(204);
   end;
 {$endif}
-  PXXHdrBase := Int64(p) - PXX_HDR_SIZE;
+  PXXHdrBase := NativeInt(p) - PXX_HDR_SIZE;
 end;
 
-function PXXHdrRC(p: Pointer): Int64;
+function PXXHdrRC(p: Pointer): NativeInt;
 begin
-  PXXHdrRC := Int64(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { = p - 16, unchanged }
+  PXXHdrRC := NativeInt(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { = p - 16, unchanged }
 end;
 
 const
@@ -1084,9 +1087,15 @@ var
   HeapMappedBytes : Int64;   { arena bytes mapped, native profile only (0 elsewhere: a
                                calloc-backed profile does not own the reserve and must
                                not invent a figure for it) }
+{$ifndef PXX_ESP_IDF}
+  { The native allocator's free lists. Not on the IDF profile, whose PXXAlloc
+    and PXXFree are heap_caps calls: there these were 520 bytes of SRAM that
+    nothing read, and DCE drops code, not globals (owner 2026-10-12: RAM
+    outranks flash on ESP). }
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
+{$endif}
 {$ifdef PXX_ALLOC_CENSUS}
   { ---- allocation census (-dPXX_ALLOC_CENSUS) ------------------------------
     How much does this program allocate, and of what size? This runtime could
@@ -1496,8 +1505,17 @@ procedure esp_system_abort(details: PChar); external;
 const
   MALLOC_CAP_DEFAULT = $1000;   { esp_heap_caps.h: (1<<12), what calloc uses }
 
+{ No size header on this profile. The native allocator stores the block size
+  in 8 bytes below the payload; the IDF heap already records it, and
+  heap_caps_get_allocated_size reads it back, so the header was RAM paid twice
+  -- 8 bytes on every live pxx block (owner 2026-10-12: RAM outranks flash on
+  ESP). The block comes back 8-aligned from heap_caps_aligned_calloc, so the
+  payload IS the block. Only this unit ever read the header (HeapDecLive and
+  PXXRealloc's copy length); both arms below ask the heap instead. }
+function heap_caps_get_allocated_size(p: Pointer): NativeUInt; external;
+
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
-var p: Int64;
+var p: Int64; blk: NativeInt;
 begin
   { `(size + 7) and not 7`, not `((size + 7) div 8) * 8`: `div` by a literal is
     strength-reduced only at -O3, so at the -O2 DEFAULT every one of these
@@ -1510,23 +1528,34 @@ begin
     both pxx and FPC. }
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));
-  p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size + 8),
+  p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size),
                                       MALLOC_CAP_DEFAULT));   { zeroed: keeps the contract }
   if p = 0 then
     esp_system_abort('pxx: out of memory (ESP-IDF heap exhausted)');
-  PMachineWord(p)^ := size;                             { 8-byte size header }
-  Result := Pointer(p + 8);                      { payload }
-  if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
-  if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
-  HeapLiveBytes := HeapLiveBytes + size;
+  Result := Pointer(p);
+  { The envelope's low end sits 8 below the real block. PXXObjPlausible asks
+    for HeapLow + 24 -- the size header plus the 16-byte object header -- and
+    with no size header the lowest object's handle is block + 16. Without the
+    -8 that one object would fail the test and its retain/release would be
+    no-ops, the 2026-09-24 leak again. }
+  if (HeapLow = 0) or (p - 8 < HeapLow) then HeapLow := p - 8;
+  if p + size > HeapHigh then HeapHigh := p + size;
+  { The heap's own block size, the same figure PXXFree subtracts, so both
+    sides of HeapLiveBytes are one quantity. }
+  blk := NativeInt(heap_caps_get_allocated_size(Pointer(p)));
+  { calloc zeroes only what was asked for, and PXXRealloc copies the whole
+    block, so slack beyond `size` would carry garbage into the grown block
+    where growth code (SetLength) expects zeros. }
+  if blk > size then PXXMemZero(Pointer(p + size), blk - size);
+  HeapLiveBytes := HeapLiveBytes + blk;
   if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 end;
 
 procedure PXXFree(p: Pointer);
 begin
   if p = nil then Exit;
-  HeapDecLive(Int64(p));
-  free(Pointer(Int64(p) - 8));
+  HeapLiveBytes := HeapLiveBytes - NativeInt(heap_caps_get_allocated_size(p));
+  free(p);
 end;
 
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
@@ -1535,7 +1564,8 @@ begin
   np := PXXAlloc(newSize, align);
   if p <> nil then
   begin
-    oldSize := NativeInt(PMachineWord(Pointer(Int64(p) - 8))^);
+    { At least the size asked for; the tail beyond it is calloc-zeroed. }
+    oldSize := NativeInt(heap_caps_get_allocated_size(p));
     if oldSize > newSize then oldSize := newSize;
     PXXMemMove(np, p, oldSize);
     PXXFree(p);
@@ -1768,14 +1798,28 @@ begin
       end
       else if size <= ALLOC_INLINE_ZERO_MAX then
       begin
-        i := 0;
-        while i < size do
+        { Four 8-byte stores per turn, by a moving address and a count down:
+          the one-word loop with an index re-added per store was ~11
+          instructions a word, and every reused instance (a 56-byte Vec3)
+          paid it. `size` is a multiple of 8 (rounded above), so PInt64
+          stores tile it exactly on 32-bit targets too. }
+        i := size;
+        while i >= 32 do
         begin
-          PMachineWord(cur + i)^ := 0;
-          i := i + SizeOf(NativeInt);        { PMachineWord writes one machine word: 8 on
-                                               64-bit, 4 on 32-bit — must match the
-                                               step or half the span is skipped }
+          PInt64(cur)^ := 0;
+          PInt64(cur + 8)^ := 0;
+          PInt64(cur + 16)^ := 0;
+          PInt64(cur + 24)^ := 0;
+          cur := cur + 32;
+          i := i - 32;
         end;
+        while i > 0 do
+        begin
+          PInt64(cur)^ := 0;
+          cur := cur + 8;
+          i := i - 8;
+        end;
+        cur := cur - size;
       end
       else PXXMemZero(Pointer(cur), size);
       Result := Pointer(cur);
@@ -2446,7 +2490,16 @@ end;
 function PXXStrAllocSize(h: Pointer): Int64;
 begin
   if h = nil then PXXStrAllocSize := 0
+{$ifdef PXX_ESP_IDF}
+  { No size word on the IDF profile (see its PXXAlloc): the heap holds the
+    block size. Missing this reader was a heap corruption on real C3 silicon
+    (rv32-f, 2026-10-13): an in-place append trusted the TLSF header word as
+    its capacity and wrote string bytes over the next block's metadata. The
+    caller must only ask for an APPENDABLE block, i.e. a real heap block. }
+  else PXXStrAllocSize := Int64(heap_caps_get_allocated_size(Pointer(Int64(h) - PXX_HDR_SIZE)));
+{$else}
   else PXXStrAllocSize := PMachineWord(Int64(h) - PXX_HDR_SIZE - 8)^;
+{$endif}
 end;
 
 { The ASCII answer for the RESULT of an append, given what the destination
@@ -2539,8 +2592,12 @@ function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
   callers pass Int64 addresses), but a loop counted, compared and OR-ed in Int64
   on a 32-bit target pays a register pair and a carry for every step of a copy
   whose every address and length fits a word -- measured on i386 in the
-  commit that introduced this comment. }
-var dd, ss, nn, i, w, acc: NativeInt;
+  commit that introduced this comment.
+  The loop bound is a machine-word limit, not `i + w <= nn`: integer + is
+  typed Int64, so that test was a 64-bit add and compare per word on a 32-bit
+  target (riscv32: ~25 instructions of a ~40-instruction iteration). Each
+  word is read once into v, stored and OR-ed from there. }
+var dd, ss, nn, i, w, lim, v, acc: NativeInt;
 begin
   dd := NativeInt(d);
   ss := NativeInt(s);
@@ -2549,17 +2606,22 @@ begin
   i := 0;
   w := SizeOf(NativeInt);
   if PXXWordCopyOk(d, s, n) then
-    while i + w <= nn do
+  begin
+    lim := nn - w;
+    while i <= lim do
     begin
-      PMachineWord(dd + i)^ := PMachineWord(ss + i)^;
-      acc := acc or PMachineWord(ss + i)^;
+      v := PMachineWord(ss + i)^;
+      PMachineWord(dd + i)^ := v;
+      acc := acc or v;
       i := i + w;
     end;
+  end;
   if (Int64(acc) and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
   while i < nn do
   begin
-    PByte(dd + i)^ := PByte(ss + i)^;
-    acc := acc or PByte(ss + i)^;
+    v := PByte(ss + i)^;
+    PByte(dd + i)^ := v;
+    acc := acc or v;
     i := i + 1;
   end;
   if (acc and $80) <> 0 then PXXBlockCopy := $80 else PXXBlockCopy := 0;
@@ -2576,7 +2638,7 @@ end;
 
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 var
-  h, oldLen, newLen, rc, cap, need, want, base, d, s2, i: Int64;
+  h, oldLen, newLen, rc, need, want, base, d, s2, i: Int64;
   orAll, oldMeta: Int64;
   newH: Pointer;
 begin
@@ -2592,14 +2654,16 @@ begin
   rc := PMachineWord(h - 16)^;
   newLen := oldLen + lenB;
   need := PXX_HDR_SIZE + newLen + 1;          { +1 = nul terminator }
-  cap := PXXStrAllocSize(Pointer(h));
   oldMeta := PXXHdrMeta(Pointer(h));
   orAll := 0;
 
   { IN PLACE: sole owner, this code allocated the block's spare capacity (so
-    the size word below it means what we think), and that capacity is enough. }
+    the size word below it means what we think), and that capacity is enough.
+    The capacity is read LAST, only for an APPENDABLE block: a static literal
+    has no allocator size at all, and on the IDF profile asking the heap about
+    one is asking about a .rodata address. }
   if (rc <= 1) and ((oldMeta and PXX_FLAG_APPENDABLE) <> 0) and
-     (cap >= need) then
+     (PXXStrAllocSize(Pointer(h)) >= need) then
   begin
     d := h + oldLen;
     orAll := PXXBlockCopy(d, Int64(srcB), lenB);
@@ -2681,8 +2745,10 @@ end;
   for an empty result. Called from the AnsiStrConcatAddr shim under the heap
   lock. Raw pointers only. }
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+{ Machine-word locals: lengths and addresses, for the reason PXXBlockCopy's
+  header gives. }
 var
-  total, base, d, s, i, orAll, b: Int64;
+  total, base, d, s, i, orAll, b: NativeInt;
 begin
   total := lenA + lenB;
   if total <= 0 then
@@ -2716,6 +2782,47 @@ begin
   PByte(d + total)^ := 0;       { nul terminator }
   PXXHdrSetMeta(base, PXXStrMeta(orAll));
   Result := Pointer(d);
+end;
+
+function PXXStrConcatN(pairs: Pointer; count: NativeInt): Pointer;
+{ A whole `a + b + c ...` chain in one allocation (the riscv32 codegen
+  flattens it): `pairs` is count (len, src) word pairs, each term already
+  decomposed the way PXXStrConcat's operands are. The block is exact-size --
+  the same allocation and header as PXXStrConcat -- so a result stored in a
+  long-lived string holds no spare capacity. Machine-word locals, for the
+  reason PXXBlockCopy's header gives. }
+var
+  total, base, d, orAll, n, pp, pe: NativeInt;
+begin
+  total := 0;
+  pp := Int64(pairs);
+  pe := pp + count * 2 * SizeOf(Pointer);
+  while pp < pe do
+  begin
+    total := total + PMachineWord(pp)^;
+    pp := pp + 2 * SizeOf(Pointer);
+  end;
+  if total <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { zeroed: header high halves, padding }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;
+  PMachineWord(base + PXX_HDR_LEN)^ := total;
+  d := base + PXX_HDR_SIZE;
+  orAll := 0;
+  pp := Int64(pairs);
+  while pp < pe do
+  begin
+    n := PMachineWord(pp)^;
+    orAll := orAll or PXXBlockCopy(d, PMachineWord(pp + SizeOf(Pointer))^, n);
+    d := d + n;
+    pp := pp + 2 * SizeOf(Pointer);
+  end;
+  { the nul terminator is the zeroed byte at d }
+  PXXHdrSetMeta(base, PXXStrMeta(orAll));
+  Result := Pointer(base + PXX_HDR_SIZE);
 end;
 
 { ---- UTF-16 string runtime (feature-unicodestring-model) ----
@@ -2761,6 +2868,95 @@ function PXXIdfPosixRead(fd: Integer; buf: Pointer; count: Integer): Integer; cd
 function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'write';
 function PXXIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
 function PXXIdfGetchar: Integer; cdecl; external name 'getchar';
+
+{ pxx's own 64-bit divide for riscv32 on IDF, one out-of-line copy of each,
+  called by name by the codegen for an Int64/QWord div or mod instead of
+  inlining its ~55-instruction long division at every site (IREmitNodeRISCV32's
+  64-bit pair path). NOT libgcc's __divdi3 family, which every IDF image
+  happens to link: pxx does not depend on libgcc (owner ruling 2026-10-13).
+  The codegen's zero check runs first, so b <> 0 here, and the arguments come
+  in the word order the codegen already sets up: a in a0:a1, b in a2:a3,
+  wantMod in a4 (one routine per signedness, so no wrapper per operator).
+  Both operands fitting 32 bits -- the common case -- is one divu/remu; the
+  rest is the codegen's own restoring long division in inline asm (~20
+  instructions a bit; the same loop written in Pascal took ~150, because
+  every 64-bit shift and compare goes through the frame), so nothing in
+  here reaches back into a 64-bit divide. riscv32 only: no other target's
+  codegen calls these. }
+{$ifdef CPU_RISCV32}
+function PXXUDivMod64(a, b: QWord; wantMod: Boolean): QWord;
+var alo, ahi, blo, bhi, rlo, rhi: LongWord;
+begin
+  alo := LongWord(a); ahi := LongWord(a shr 32);
+  blo := LongWord(b); bhi := LongWord(b shr 32);
+  { ALL the dividing is in asm. A Pascal `LongWord(a) div LongWord(b)` here
+    would be typed 64-bit and call this routine again -- on IDF it recursed
+    until the task watchdog fired. Both operands within 32 bits: one
+    divu/remu. Otherwise the codegen's inline core (EmitUDivMod64RISCV32):
+    the dividend t0:t1 doubles as the quotient, the remainder builds in
+    t2:t3. }
+  asm
+    lw t0, alo
+    lw t1, ahi
+    lw a0, blo
+    lw a1, bhi
+    or t5, t1, a1
+    bne t5, zero, udm_long
+    remu t2, t0, a0
+    divu t0, t0, a0
+    addi t3, zero, 0
+    j udm_done
+  udm_long:
+    addi t2, zero, 0
+    addi t3, zero, 0
+    addi t4, zero, 64
+  udm_loop:
+    srli t5, t0, 31
+    add t0, t0, t0
+    srli t6, t1, 31
+    add t1, t1, t1
+    or t1, t1, t5
+    srli t5, t2, 31
+    add t2, t2, t2
+    or t2, t2, t6
+    add t3, t3, t3
+    or t3, t3, t5
+    bltu t3, a1, udm_nosub
+    bne t3, a1, udm_sub
+    bltu t2, a0, udm_nosub
+  udm_sub:
+    sltu t5, t2, a0
+    sub t2, t2, a0
+    sub t3, t3, a1
+    sub t3, t3, t5
+    ori t0, t0, 1
+  udm_nosub:
+    addi t4, t4, -1
+    bne t4, zero, udm_loop
+  udm_done:
+    sw t0, alo
+    sw t1, ahi
+    sw t2, rlo
+    sw t3, rhi
+  end;
+  if wantMod then Result := (QWord(rhi) shl 32) or rlo
+  else Result := (QWord(ahi) shl 32) or alo;
+end;
+
+{ Signed: divide the magnitudes; the quotient is negative when the signs
+  differ, the remainder takes the dividend's sign (Pascal truncates toward
+  zero). Low(Int64) has no positive counterpart, but its QWord negation is
+  the right magnitude, 2^63. }
+function PXXIDivMod64(a, b: Int64; wantMod: Boolean): Int64;
+var ua, ub: QWord; neg: Boolean;
+begin
+  if a < 0 then ua := QWord(0) - QWord(a) else ua := QWord(a);
+  if b < 0 then ub := QWord(0) - QWord(b) else ub := QWord(b);
+  Result := Int64(PXXUDivMod64(ua, ub, wantMod));
+  if wantMod then neg := a < 0 else neg := (a < 0) <> (b < 0);
+  if neg then Result := -Result;
+end;
+{$endif}
 
 { fd 0/1/2 ARE NOT POSIX FDS UNDER IDF. esp_libc's picolibc_init opens the
   console and stores WHATEVER fd open() returned in its stdin/stdout streams,
@@ -3625,7 +3821,7 @@ end;
   (the ThreadSafeMode target check); that condition is the authority and this
   comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
-var rcAddr: Int64;
+var rcAddr: NativeInt;
 {$ifdef PXX_THREADSAFE}
     tsIgnore: Int64;
 {$endif}
@@ -3679,7 +3875,7 @@ begin
 end;
 
 procedure PXXStrDecRef(p: Pointer);
-var rcAddr, rc: Int64;
+var rcAddr, rc: NativeInt;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
@@ -3709,7 +3905,8 @@ begin
 {$endif}
   { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
     they must move together, because suppressing one direction only is what
-    would let a static block's count drift. }
+    would let a static block's count drift. PXXStrAssign carries a copy of
+    this release; it moves with them too. }
   if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_THREADSAFE}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
@@ -3720,6 +3917,56 @@ begin
   { NOT Pointer(rcAddr): the refcount no longer sits at the block base — see
     the header note. This was one address before the kind word and is two now. }
   if rc = 0 then PXXFree(Pointer(PXXHdrBase(p)));
+end;
+
+{ Release the string handles in up to 32 machine-word slots at once: bit i
+  of mask names the slot at top - i * SizeOf(Pointer). riscv32 on ESP releases
+  a proc's string locals at scope exit with one call to this per 32-slot
+  window instead of a load and a PXXStrDecRef call per local -- size over
+  speed, so a few loop turns per return replace eight bytes per local. }
+procedure PXXStrDecRefMask(top: Pointer; mask: LongWord);
+var a: NativeInt;
+begin
+  a := NativeInt(top);
+  while mask <> 0 do
+  begin
+    if (mask and 1) <> 0 then PXXStrDecRef(Pointer(PMachineWord(a)^));
+    mask := mask shr 1;
+    a := a - SizeOf(Pointer);
+  end;
+end;
+
+{ slot^ := p, then release the handle the slot held. p already carries its
+  own +1, so the store-first order is safe for p = old. riscv32's string
+  assignment calls this with the slot address instead of emitting the
+  load/store/move before a PXXStrDecRef call at every site. It is
+  PXXStrPublish with the arguments the other way round: the new handle is
+  already in the first argument register at the call.
+  The release is PXXStrDecRef's own body, so an assignment stays one call;
+  it must move together with PXXStrDecRef. Under PXX_HEAP_DEBUG it calls
+  PXXStrDecRef instead, which keeps the quarantine checks in one place. }
+procedure PXXStrAssign(p: Pointer; slot: Pointer);
+var oldp: Pointer;
+{$ifndef PXX_HEAP_DEBUG}
+    rcAddr, rc: NativeInt;
+{$endif}
+begin
+  oldp := Pointer(PMachineWord(slot)^);
+  PMachineWord(slot)^ := NativeInt(p);
+{$ifdef PXX_HEAP_DEBUG}
+  PXXStrDecRef(oldp);
+{$else}
+  if oldp = nil then Exit;
+  rcAddr := PXXHdrRC(oldp);
+  if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
+{$ifdef PXX_THREADSAFE}
+  rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;
+{$else}
+  rc := PMachineWord(rcAddr)^ - 1;
+  PMachineWord(rcAddr)^ := rc;
+{$endif}
+  if rc = 0 then PXXFree(Pointer(PXXHdrBase(oldp)));
+{$endif}
 end;
 
 { NilPy object-reclamation primitives. An instance allocated here lives at
@@ -5492,6 +5739,8 @@ var
   subDesc: Pointer;
   memberSize: Int64;
 begin
+{ ESP: a no-op walk; see PXXRecordReleaseIntf. }
+{$ifndef PXX_ESP}
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
   memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
@@ -5524,6 +5773,7 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+{$endif}
 end;
 
 procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
@@ -5539,6 +5789,10 @@ var
   subDesc: Pointer;
   memberSize: Int64;
 begin
+{ A bare ESP build (PXX_ESP) has no COM interfaces -- the kind-4 arm is
+  compiled out below -- so the whole walk is a no-op there. (On IDF it is
+  real; the DCE drops its calls when no descriptor has a kind-4 member.) }
+{$ifndef PXX_ESP}
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
   memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
@@ -5571,6 +5825,15 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+{$endif}
+end;
+
+procedure PXXDceNoCall(p: Pointer);
+{ The target the DCE re-aims a call at when the dispatch arm holding it can
+  never be selected (DceCutDeadKindArms, dce.inc): PXXRecordRelease's kind-6
+  call to PXXObjRelease, in a program whose descriptors carry no kind 6. Never
+  reached; it exists so that the call site keeps a valid target. }
+begin
 end;
 
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
@@ -5809,7 +6072,7 @@ end;
 { Zero n bytes at dst. }
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
 { Machine-word locals, for the reason PXXBlockCopy's header gives. }
-var d, i, w: NativeInt;
+var d, i, w, lim: NativeInt;
 {$ifdef CPUX86_64}
     bmR: Int64;
 {$endif}
@@ -5832,13 +6095,17 @@ begin
 {$endif}
   i := 0;
   w := SizeOf(NativeInt);
-  { same alignment rule as PXXBlockCopy, with no source to agree with }
+  { same alignment rule as PXXBlockCopy, with no source to agree with, and
+    the same machine-word limit in place of an Int64 `i + w <= n` }
   if (n >= w) and ((d and (w - 1)) = 0) then
-    while i + w <= n do
+  begin
+    lim := n - w;
+    while i <= lim do
     begin
       PMachineWord(d + i)^ := 0;
       i := i + w;
     end;
+  end;
   while i < n do
   begin
     PByte(d + i)^ := 0;

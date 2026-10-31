@@ -21,90 +21,34 @@ function NewlibToLinuxErrno(newlibErrno: Integer): Integer;
 
 implementation
 
+const
+  { Linux's number for newlib/picolibc errno 35..148, one byte each. A TABLE,
+    not the case statement it was: the ladder compiled to ~3.9 KB of riscv32
+    code on a C3 for what is 114 bytes of data (remote_thermostat, 2026-10-12).
+    Entries where the two numberings agree hold their own index. The case
+    arms it replaces, with their names, are in git history; this table was
+    generated from them, not retyped. }
+  NewlibErrnoLo = 35;
+  NewlibErrnoHi = 148;
+  NewlibToLinuxTab: array[NewlibErrnoLo..NewlibErrnoHi] of Byte = (
+     42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  35,  37,   { 35..46 }
+     47,  48,  49,  52,  53,  54,  55,  56,  57,  35,  59,  58,   { 47..58 }
+     59,  60,  61,  62,  63,  64,  65,  66,  67,  68,  69,  70,   { 59..70 }
+     71,  72,  73,  72,  75,  73,  74,  78,  79,  76,  77,  78,   { 71..82 }
+     79,  80,  81,  82,  83,  38,  89,  39,  36,  40,  93,  94,   { 83..94 }
+     95,  96,  97,  98,  99, 100, 101, 102, 103, 104, 105,  97,   { 95..106 }
+     91,  88,  92, 108, 111,  98, 103, 101, 100, 110, 112, 113,   { 107..118 }
+    115, 114,  89,  90,  93,  94,  99, 102, 106, 107, 109, 130,   { 119..130 }
+     87, 122, 116,  95, 123, 136, 137,  84,  75, 125, 131, 130,   { 131..142 }
+     86, 133, 120, 127, 129, 128   { 143..148 }
+  );
+
 function NewlibToLinuxErrno(newlibErrno: Integer): Integer;
 begin
-  case newlibErrno of
-    35: NewlibToLinuxErrno := 42;   { ENOMSG }
-    36: NewlibToLinuxErrno := 43;   { EIDRM }
-    37: NewlibToLinuxErrno := 44;   { ECHRNG }
-    38: NewlibToLinuxErrno := 45;   { EL2NSYNC }
-    39: NewlibToLinuxErrno := 46;   { EL3HLT }
-    40: NewlibToLinuxErrno := 47;   { EL3RST }
-    41: NewlibToLinuxErrno := 48;   { ELNRNG }
-    42: NewlibToLinuxErrno := 49;   { EUNATCH }
-    43: NewlibToLinuxErrno := 50;   { ENOCSI }
-    44: NewlibToLinuxErrno := 51;   { EL2HLT }
-    45: NewlibToLinuxErrno := 35;   { EDEADLK }
-    46: NewlibToLinuxErrno := 37;   { ENOLCK }
-    50: NewlibToLinuxErrno := 52;   { EBADE }
-    51: NewlibToLinuxErrno := 53;   { EBADR }
-    52: NewlibToLinuxErrno := 54;   { EXFULL }
-    53: NewlibToLinuxErrno := 55;   { ENOANO }
-    54: NewlibToLinuxErrno := 56;   { EBADRQC }
-    55: NewlibToLinuxErrno := 57;   { EBADSLT }
-    56: NewlibToLinuxErrno := 35;   { EDEADLOCK }
-    57: NewlibToLinuxErrno := 59;   { EBFONT }
-    74: NewlibToLinuxErrno := 72;   { EMULTIHOP }
-    76: NewlibToLinuxErrno := 73;   { EDOTDOT }
-    77: NewlibToLinuxErrno := 74;   { EBADMSG }
-    80: NewlibToLinuxErrno := 76;   { ENOTUNIQ }
-    81: NewlibToLinuxErrno := 77;   { EBADFD }
-    82: NewlibToLinuxErrno := 78;   { EREMCHG }
-    83: NewlibToLinuxErrno := 79;   { ELIBACC }
-    84: NewlibToLinuxErrno := 80;   { ELIBBAD }
-    85: NewlibToLinuxErrno := 81;   { ELIBSCN }
-    86: NewlibToLinuxErrno := 82;   { ELIBMAX }
-    87: NewlibToLinuxErrno := 83;   { ELIBEXEC }
-    88: NewlibToLinuxErrno := 38;   { ENOSYS }
-    90: NewlibToLinuxErrno := 39;   { ENOTEMPTY }
-    91: NewlibToLinuxErrno := 36;   { ENAMETOOLONG }
-    92: NewlibToLinuxErrno := 40;   { ELOOP }
-    106: NewlibToLinuxErrno := 97;   { EAFNOSUPPORT }
-    107: NewlibToLinuxErrno := 91;   { EPROTOTYPE }
-    108: NewlibToLinuxErrno := 88;   { ENOTSOCK }
-    109: NewlibToLinuxErrno := 92;   { ENOPROTOOPT }
-    110: NewlibToLinuxErrno := 108;   { ESHUTDOWN }
-    112: NewlibToLinuxErrno := 98;   { EADDRINUSE }
-    113: NewlibToLinuxErrno := 103;   { ECONNABORTED }
-    114: NewlibToLinuxErrno := 101;   { ENETUNREACH }
-    115: NewlibToLinuxErrno := 100;   { ENETDOWN }
-    116: NewlibToLinuxErrno := 110;   { ETIMEDOUT }
-    117: NewlibToLinuxErrno := 112;   { EHOSTDOWN }
-    118: NewlibToLinuxErrno := 113;   { EHOSTUNREACH }
-    119: NewlibToLinuxErrno := 115;   { EINPROGRESS }
-    120: NewlibToLinuxErrno := 114;   { EALREADY }
-    121: NewlibToLinuxErrno := 89;   { EDESTADDRREQ }
-    122: NewlibToLinuxErrno := 90;   { EMSGSIZE }
-    123: NewlibToLinuxErrno := 93;   { EPROTONOSUPPORT }
-    124: NewlibToLinuxErrno := 94;   { ESOCKTNOSUPPORT }
-    125: NewlibToLinuxErrno := 99;   { EADDRNOTAVAIL }
-    126: NewlibToLinuxErrno := 102;   { ENETRESET }
-    127: NewlibToLinuxErrno := 106;   { EISCONN }
-    128: NewlibToLinuxErrno := 107;   { ENOTCONN }
-    129: NewlibToLinuxErrno := 109;   { ETOOMANYREFS }
-    131: NewlibToLinuxErrno := 87;   { EUSERS }
-    132: NewlibToLinuxErrno := 122;   { EDQUOT }
-    133: NewlibToLinuxErrno := 116;   { ESTALE }
-    134: NewlibToLinuxErrno := 95;   { ENOTSUP }
-    135: NewlibToLinuxErrno := 123;   { ENOMEDIUM }
-    138: NewlibToLinuxErrno := 84;   { EILSEQ }
-    139: NewlibToLinuxErrno := 75;   { EOVERFLOW }
-    140: NewlibToLinuxErrno := 125;   { ECANCELED }
-    141: NewlibToLinuxErrno := 131;   { ENOTRECOVERABLE }
-    142: NewlibToLinuxErrno := 130;   { EOWNERDEAD }
-    143: NewlibToLinuxErrno := 86;   { ESTRPIPE }
-    { PICOLIBC-only names (IDF 6 builds with picolibc; newlib stops at 143).
-      The 124 names both define agree, measured against both toolchains'
-      sys/errno.h (xtensa and riscv32 identical), so these five are the whole
-      difference. }
-    144: NewlibToLinuxErrno := 133;   { EHWPOISON }
-    145: NewlibToLinuxErrno := 120;   { EISNAM }
-    146: NewlibToLinuxErrno := 127;   { EKEYEXPIRED }
-    147: NewlibToLinuxErrno := 129;   { EKEYREJECTED }
-    148: NewlibToLinuxErrno := 128;   { EKEYREVOKED }
+  if (newlibErrno >= NewlibErrnoLo) and (newlibErrno <= NewlibErrnoHi) then
+    NewlibToLinuxErrno := NewlibToLinuxTab[newlibErrno]
   else
     NewlibToLinuxErrno := newlibErrno;
-  end;
 end;
 
 end.
