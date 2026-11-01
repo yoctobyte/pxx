@@ -32,7 +32,7 @@ const
   SMOKE_PORT = 3333;
 
 var
-  srv, cli: Integer;
+  srv, cli, lsn, tc: Integer;
   srvAddr, peerAddr: LongWord;
   srvBoundPort, peerPort: Integer;
   msg, buf: array[0..2] of Byte;
@@ -84,6 +84,23 @@ begin
 
   rc := PalSocketClose(cli);
   rc := PalSocketClose(srv);
+
+  { TCP: a connected socket must report WRITABLE. PAL's poll bits are Linux's
+    and IDF's lwIP numbers them differently (OUT is 8 there); untranslated, a
+    wait for PAL_POLL_OUT asked for POLLRDBAND and never fired, so every timed
+    send/connect timed out on a board. 64 = connect failed, 128 = no OUT. }
+  lsn := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  rc := PalSetSocketReuseAddr(lsn, 1);
+  rc := PalBindIpv4(lsn, PAL_NET_IP_LOOPBACK, SMOKE_PORT + 1);
+  rc := PalListen(lsn, 1);
+  tc := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  rc := PalConnectIpv4(tc, PAL_NET_IP_LOOPBACK, SMOKE_PORT + 1);
+  if rc < 0 then status := status or 64;
+  pr := PalPoll(tc, PAL_POLL_OUT, 2000);
+  esp_rom_printf('PXX-net diag tcp-poll-out=%d'#10, pr);
+  if (pr and PAL_POLL_OUT) = 0 then status := status or 128;
+  rc := PalSocketClose(tc);
+  rc := PalSocketClose(lsn);
 
   esp_rom_printf('PXX-net-smoke status=%d'#10, status);
 
