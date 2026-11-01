@@ -46,25 +46,30 @@ means nothing was rebuilt.
 ## Which compiler an app builds with: latest
 
 On plexus, pxx lives in ~/pxx (origin = githome:pxx.git; a push also goes to
-GitHub). Apps build with that tree's compiler, never the pin:
+GitHub). There are three compilers, each with one job:
 
-    PXX_HOME_DIR="${PXX_HOME_DIR:-$HOME/pxx}"
-    PXX="${PXX:-$("$PXX_HOME_DIR/tools/pxx_latest.sh")}"   # rebuilds compiler/pascal26 if stale
-    RTL="$PXX_HOME_DIR/lib/rtl"                            # same tree as the compiler, always
+| | what | who uses it |
+|---|---|---|
+| **dev** | ~/pxx's live compiler/pascal26, uncommitted work included | pxx development; an app fixing a bug together with pxx (`PXX_CHANNEL=dev`) |
+| **latest** | the newest commit whose gate passed, published to ~/pxx-frozen/latest | every app, by default |
+| **pinned** | stable_linux_amd64/default/pinned | the self-host seed only. Never apps. A stale pin cost a week of wrong measurements |
 
-- latest is the default. A program that breaks on latest is a pxx bug or
-  regression: fix it, do not pin around it.
-- The pin is the self-host seed and the "proven to compile itself" anchor. It
-  is pxx's own business; apps do not read stable_linux_amd64/.
-- Never take the compiler from one tree and lib/ from another.
+    PXX_HOME_DIR="${PXX_HOME_DIR:-$("$HOME/pxx/tools/pxx_latest.sh" --home)}"
+    PXX="${PXX:-$PXX_HOME_DIR/compiler/pascal26}"
+    RTL="$PXX_HOME_DIR/lib/rtl"          # same root as the compiler, always
+
+- A green `tools/gate.sh quick` (or full) on a committed tree publishes latest
+  (tools/pxx_publish_latest.sh). The newest 5 are kept.
+- A program that breaks on latest is a pxx bug or regression: fix it, do not
+  pin around it.
+- Never take the compiler from one root and lib/ from another.
 - An old compiler is not worth keeping: check out that day's source and run
-  `make bootstrap`. Freeze one (~/pxx-frozen) only while A/B testing a
-  regression, or when a session asks for a fixed compiler for a measurement.
-  Say which one in the result.
-- Print the compiler's sha256 with every build result, so a number can be
-  tied to a binary.
-- While an agent is mid-change in ~/pxx, latest moves under you. Sessions
-  tell each other ("rebuild now, fix X landed"; "hold, compiler is broken").
+  `make bootstrap`. Freeze one by hand only for an A/B regression hunt or a
+  measurement someone asked to fix.
+- pxx_latest.sh prints the channel and the compiler's sha on stderr. Keep it
+  beside any result.
+- Sessions tell each other when to move: "latest has fix X, rebuild" or "use
+  dev for X until it lands".
 
 ## Test
 

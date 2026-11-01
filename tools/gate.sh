@@ -1272,4 +1272,10 @@ esac
 # property as the seed canary naming the sha it stands on — publish the evidence
 # you rely on, so a reader can check the claim instead of trusting it.
 if [ "$RC" = 0 ]; then say "gate: GREEN (exit 0)"; else say "gate: RED (exit $RC)"; fi
+# A green quick or full gate on a committed tree is what apps build with
+# ("latest", tools/pxx_publish_latest.sh). It refuses an uncommitted build by
+# itself, and a refusal never turns the verdict red.
+if [ "$RC" = 0 ] && { [ "$MODE" = quick ] || [ "$MODE" = full ]; }; then
+  tools/pxx_publish_latest.sh 2>&1 | sed 's/^/  /' || true
+fi
 exit "$RC"
