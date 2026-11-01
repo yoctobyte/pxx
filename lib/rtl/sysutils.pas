@@ -1833,8 +1833,9 @@ begin
   n := Length(s);
   if index < 1 then index := 1;
   if count < 0 then count := 0;
+  { cap count BEFORE forming last: Copy(s, i, MaxInt) overflowed to '' }
+  if count > n - index + 1 then count := n - index + 1;
   last := index + count - 1;
-  if last > n then last := n;
   len := last - index + 1;
   if len <= 0 then begin Result := ''; Exit; end;
   { build the result once — SetLength + a single Move, not char-by-char append }

@@ -11971,6 +11971,10 @@ test-core: $(COMPILER)
 	# bug-p-a-negative-default-on-a-real-parameter-is-nan
 	./$(COMPILER) test/test_real_param_default_is_a_real.pas $(TESTTMP)/test_realdflt26
 	tools/expect_same.sh test_realdflt26 "$$($(TESTTMP)/test_realdflt26)" "$$(printf -- '-1.00 -1.50 3.00 -2.00 5.00\nTRUE 7.00\n-1.00 4.00')"
+	./$(COMPILER) test/test_copy_delete_insert_are_one_move.pas $(TESTTMP)/test_cdimove26
+	tools/expect_same.sh test_cdimove26 "$$($(TESTTMP)/test_cdimove26)" "$$(cat test/test_copy_delete_insert_are_one_move.expected)"
+	./$(COMPILER) --target=riscv32 test/test_copy_delete_insert_are_one_move.pas $(TESTTMP)/test_cdimove26_rv
+	tools/expect_same.sh riscv32/test_cdimove26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdimove26_rv)" "$$(cat test/test_copy_delete_insert_are_one_move.expected)"
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas $(TESTTMP)/test_class_overload_directive_b24726
 	tools/expect_same.sh test_class_overload_directive_b24726 "$$($(TESTTMP)/test_class_overload_directive_b24726)" "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"

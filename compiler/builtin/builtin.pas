@@ -2472,38 +2472,47 @@ begin
 end;
 
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
-var i, n, last: Integer; r: AnsiString;
+var n: Integer;
 begin
   n := Length(s);
   if index < 1 then index := 1;
   if count < 0 then count := 0;
-  { Cap count to the chars available from index BEFORE forming `last`, so the
-    2-arg form's sentinel count (MaxInt) cannot overflow `index + count - 1`. }
+  { Cap count to the chars available from index, so the 2-arg form's sentinel
+    count (MaxInt) never forms an `index + count - 1` that overflows. }
   if index > n then count := 0
   else if count > n - index + 1 then count := n - index + 1;
-  last := index + count - 1;
-  r := '';
-  i := index;
-  while i <= last do
-  begin
-    r := r + s[i];
-    i := i + 1;
-  end;
-  Result := r;
+  { One SetLength and one Move. This appended a char at a time, a realloc per
+    char: ~4 ms per 470-byte Copy on an ESP32, 30x a SetLength+Move. }
+  SetLength(Result, count);
+  count := Length(Result);   { a frozen Result holds at most its capacity }
+  if count > 0 then __pxxMove(s[index], Result[1], count);
 end;
 
 procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
+var n: Integer; r: AnsiString;
 begin
-  if (count <= 0) or (index < 1) or (index > Length(s)) then Exit;
-  { __pxxStrCopy clamps count to the string end, so an over-long count is fine. }
-  s := __pxxStrCopy(s, 1, index - 1) + __pxxStrCopy(s, index + count, Length(s));
+  n := Length(s);
+  if (count <= 0) or (index < 1) or (index > n) then Exit;
+  if count > n - index + 1 then count := n - index + 1;
+  SetLength(r, n - count);
+  if index > 1 then __pxxMove(s[1], r[1], index - 1);
+  if index + count <= n then __pxxMove(s[index + count], r[index], n - index - count + 1);
+  s := r;
 end;
 
 procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
+var n, m: Integer; r: AnsiString;
 begin
+  n := Length(s);
+  m := Length(src);
+  if m = 0 then Exit;
   if index < 1 then index := 1;
-  if index > Length(s) + 1 then index := Length(s) + 1;
-  s := __pxxStrCopy(s, 1, index - 1) + src + __pxxStrCopy(s, index, Length(s));
+  if index > n + 1 then index := n + 1;
+  SetLength(r, n + m);
+  if index > 1 then __pxxMove(s[1], r[1], index - 1);
+  __pxxMove(src[1], r[index], m);
+  if index <= n then __pxxMove(s[index], r[index + m], n - index + 1);
+  s := r;
 end;
 
 function __pxxAbsInt(x: Int64): Int64;
