@@ -2682,6 +2682,14 @@ begin
     the whole difference between O(n) and O(n^2) for `s += c`; without it an
     exact-fit block is full again on the very next append. }
   want := need * 2;
+{$if defined(PXX_ESP_BARE) or defined(PXX_ESP_IDF)}
+  { ESP (either profile; PXX_ESP here means bare only): the slack is capped at 16 KB. Doubling a 100 KB string asked for
+    200 KB of a ~200 KB heap. Below the cap a string still doubles, so a
+    short string never carries more slack than its own size (a flat 16 KB
+    would cost every short string appended once and kept in a list). A PC
+    keeps doubling: untouched capacity is virtual memory there. }
+  if need > 16384 then want := need + 16384;
+{$endif}
   base := Int64(PXXAlloc(want, 8));
   PXXHdrInit(base);
   { Stamp APPENDABLE: this block, and only a block from here, carries spare

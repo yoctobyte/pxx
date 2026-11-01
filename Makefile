@@ -40821,6 +40821,15 @@ test-esp-idf: $(COMPILER)
 	  if grep -qF "$$want" $(TESTTMP)/test_esp_idf_$$e.out; then echo "esp32c3 $$e ok ($$want)"; \
 	  else echo "esp32c3 $$e MISMATCH -- wanted: $$want"; sed -n '1,12p' $(TESTTMP)/test_esp_idf_$$e.out; exit 1; fi; \
 	done
+	@# String growth is capped at 16 KB of slack on ESP: doubling made a ~90 KB
+	@# string ask for ~180 KB and an S3 ran out of heap. 112 KB must fit on both.
+	@for c in esp32c3 esp32s3; do \
+	  want='PXX-strgrow len=114688 sum=8880480'; \
+	  ESP_RUN_TIMEOUT=60 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$c test/esp_a_string_grows_past_its_doubled_size.pas > $(TESTTMP)/test_esp_idf_strgrow_$$c.out 2>/dev/null || true; \
+	  if grep -qF "$$want" $(TESTTMP)/test_esp_idf_strgrow_$$c.out; then echo "$$c strgrow ok"; \
+	  else echo "$$c strgrow MISMATCH -- wanted: $$want"; grep -E 'PXX-|out of memory' $(TESTTMP)/test_esp_idf_strgrow_$$c.out | head -3; exit 1; fi; \
+	done
 	@# fs-c3 CANNOT go through esp_run.sh and that is not a defect in either.
 	@# esp_run.sh builds every program inside the hello-c3/hello-s3 project;
 	@# fs-c3 ships its own partitions.csv adding a `storage` FAT partition and an
