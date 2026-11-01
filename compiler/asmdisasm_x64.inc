@@ -955,7 +955,7 @@ begin
     if (Procs[i].BodyAddr >= 0) and (Procs[i].BodyAddr <= CodeLen) then
       AsmDisProcAtPos[Procs[i].BodyAddr] := i;
 
-  fd := sysopen(outPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  fd := OutOpen(outPath); { O_WRONLY | O_CREAT | O_TRUNC }
   if fd < 0 then Error('-S: cannot open ' + outPath + ' for output');
   sysfchmod(fd, 420); { chmod 644 }
 

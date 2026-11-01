@@ -156,7 +156,7 @@ var
   i, j, gi: Integer;
   loc, nm: AnsiString;
 begin
-  WTFd := sysopen(path, 577);        { O_WRONLY | O_CREAT | O_TRUNC }
+  WTFd := OutOpen(path);        { O_WRONLY | O_CREAT | O_TRUNC }
   if WTFd < 0 then WasmFail('wasm: cannot open ' + path + ' for writing');
   sysfchmod(WTFd, 420);              { chmod 644 }
   WTLen := 0;

@@ -11975,6 +11975,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_cdimove26 "$$($(TESTTMP)/test_cdimove26)" "$$(cat test/test_copy_delete_insert_are_one_move.expected)"
 	./$(COMPILER) --target=riscv32 test/test_copy_delete_insert_are_one_move.pas $(TESTTMP)/test_cdimove26_rv
 	tools/expect_same.sh riscv32/test_cdimove26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdimove26_rv)" "$$(cat test/test_copy_delete_insert_are_one_move.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_var_dynarray_parameter_indexes_its_own_data.pas $(TESTTMP)/test_vardynpar26_rv
+	tools/expect_same.sh riscv32/test_vardynpar26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_vardynpar26_rv)" "$$(cat test/test_a_var_dynarray_parameter_indexes_its_own_data.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_var_dynarray_parameter_indexes_its_own_data.pas $(TESTTMP)/test_vardynpar26_xtw
+	tools/expect_same.sh xtensa-windowed/test_vardynpar26 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_vardynpar26_xtw)" "$$(cat test/test_a_var_dynarray_parameter_indexes_its_own_data.expected)"
+	./$(COMPILER) test/test_building_over_a_running_program_replaces_it.pas $(TESTTMP)/test_outbusy26 >/dev/null
+	@$(TESTTMP)/test_outbusy26 wait & pid=$$!; sleep 0.3; \
+	 ./$(COMPILER) test/test_building_over_a_running_program_replaces_it.pas $(TESTTMP)/test_outbusy26 >/dev/null; rc=$$?; kill $$pid 2>/dev/null; \
+	 tools/expect_same.sh test_outbusy26 "rc=$$rc $$($(TESTTMP)/test_outbusy26)" "rc=0 replaced while running"
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas $(TESTTMP)/test_class_overload_directive_b24726
 	tools/expect_same.sh test_class_overload_directive_b24726 "$$($(TESTTMP)/test_class_overload_directive_b24726)" "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"

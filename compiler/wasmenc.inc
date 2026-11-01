@@ -1767,7 +1767,7 @@ var f, n: Integer; p: AnsiString;
 begin
   WasmEmitModule;
   p := path;
-  f := sysopen(p, 577);        { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(p);        { O_WRONLY | O_CREAT | O_TRUNC }
   if f < 0 then WasmFail('wasm: cannot open ' + path + ' for writing');
   if WBLen > 0 then
   begin

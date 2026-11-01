@@ -725,7 +725,7 @@ begin
     end;
   end;
 
-  f := sysopen(mapPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(mapPath); { O_WRONLY | O_CREAT | O_TRUNC }
   if f >= 0 then
   begin
     AssignPath := mapPath;
@@ -2455,7 +2455,7 @@ begin
   RoPermuteData;   { last: every patch above wrote Data[] at its OLD position }
 
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
   writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);
@@ -2823,7 +2823,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF32 ehdr (52 bytes) }
@@ -3442,7 +3442,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577);
+  f := OutOpen(AssignPath);
 {$endif}
 
   { ehdr (ET_REL), 11 or 13 sections, shstrndx 10 }
@@ -3767,7 +3767,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF32 ehdr (52 bytes), ET_REL }
@@ -5745,7 +5745,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF64 ehdr (64 bytes), ET_REL, EM_X86_64 or EM_AARCH64 }
@@ -6432,7 +6432,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF32 ehdr (52 bytes), ET_REL, EM_386 }
@@ -6765,7 +6765,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF64 ehdr (64 bytes), ET_REL }
@@ -7047,7 +7047,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
   AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
   { ELF64 ehdr, ET_DYN, no section headers }

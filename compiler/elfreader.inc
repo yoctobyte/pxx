@@ -1032,7 +1032,7 @@ begin
   Assign(ElfLnkF, path); Rewrite(ElfLnkF, 1);
 {$else}
   AssignPath := path;
-  ElfLnkF := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  ElfLnkF := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 end;
 

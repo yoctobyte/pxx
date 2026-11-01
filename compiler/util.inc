@@ -369,6 +369,44 @@ end;
   pinned seed refuses a SysWrite as an ARGUMENT (fixed beside this, row
   test_siaa26.1), and compiler.pas must keep building from the pin. Leave it so
   until a pin carries that row. }
+{ Open an output artefact O_WRONLY|O_CREAT|O_TRUNC (577). A running program
+  cannot be opened for writing (ETXTBSY), and rebuilding one in place is
+  ordinary: a host build serving HTTP, rebuilt while it runs. Unlinking it is
+  allowed, and the running process keeps its own inode, so on ETXTBSY the
+  old file is unlinked and the open retried; this is what ld does. Before
+  this, the -26 came back as a descriptor, every write failed, and the
+  report blamed the disk. Under FPC fpOpen answers -1 and leaves the code
+  in errno; the self-hosted sysopen answers -errno. }
+function OutOpen(const path: AnsiString): Integer;
+var busy: Boolean; rc: Int64;
+begin
+  Result := sysopen(path, 577);
+{$ifdef FPC}
+  busy := (Result < 0) and (fpGetErrno = ESysETXTBSY);
+  if busy then
+  begin
+    fpUnlink(path);
+    Result := sysopen(path, 577);
+  end;
+{$else}
+  busy := Result = -26;
+  if busy then
+  begin
+    { unlinkat(AT_FDCWD, path, 0) }
+{$if defined(CPUX86_64)}
+    rc := __pxxrawsyscall(263, -100, Int64(PChar(path)), 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64) or defined(CPU_RISCV32)}
+    rc := __pxxrawsyscall(35, -100, Int64(PChar(path)), 0, 0, 0, 0);
+{$elseif defined(CPU_ARM32)}
+    rc := __pxxrawsyscall(328, -100, Int64(PChar(path)), 0, 0, 0, 0);
+{$elseif defined(CPU_I386)}
+    rc := __pxxrawsyscall(301, -100, Int64(PChar(path)), 0, 0, 0, 0);
+{$endif}
+    Result := sysopen(path, 577);
+  end;
+{$endif}
+end;
+
 procedure OutWrite(f: Integer; const buf: array of Byte; off, n: Integer);
 var got: Integer;
 begin
