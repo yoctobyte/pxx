@@ -32,3 +32,9 @@ every clamp edge, `Copy(...)[k]`, a string[5] result, a shared source left
 untouched, and a 5000-byte string. Its output is identical to FPC 3.2.2. It
 runs in test-core on x86-64 and riscv32, and also matched by hand on xtensa,
 i386, aarch64 and arm32.
+
+**Confirmed on hardware** 2026-11-01 by the thermostat session, ESP32 bridge
+board, d1a3dc081d built through tools/pxx_latest.sh, with the app's workaround
+removed. NextWord on 33 lines: 1032 ms (old builtin), 37 ms (workaround),
+40 ms (new builtin). The whole S command went from 1354 ms to 215 ms, and a
+32-frame round trip from 2.8 s to 0.69 s. No libgcc helpers.
