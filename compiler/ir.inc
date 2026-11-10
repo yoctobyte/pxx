@@ -8756,7 +8756,7 @@ function IRInlineExpand(callNode, cpi: Integer): Integer;
 var item, n, clonedRoot, tsym, identNode, aval, resSym, savedRetRecId: Integer;
     rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
     boundAST: array[0..MAX_PROC_PARAMS-1] of Integer;
-    ptk: TTypeKind; anyImpure, argBoxed: Boolean;
+    ptk: TTypeKind; anyImpure, argBoxed, argClassOk: Boolean;
     condNode, condF, condT: Integer;
 begin
   IRInlineExpand := -1;
@@ -8811,7 +8811,22 @@ begin
       are not inlined. }
     argBoxed := TypeIsPromoInt(IntToTypeKind(ASTTk[rawArg[n]])) or
                 (IntToTypeKind(ASTTk[rawArg[n]]) = tyVariant);
-    if (not anyImpure) and InlineArgIsPure(rawArg[n]) and (not argBoxed) then
+    { An integer LITERAL is substituted even when another argument is impure
+      or the body calls: it reads nothing, so no side effect before or after it
+      can change its value, and the body never writes a parameter (retention
+      allows only local/Result assigns). Binding it to a temp instead hid the
+      constant from the backend -- `Sar(x, 11)` with an impure x lowered its
+      shifts as variable-count shifts, 72 bytes each on riscv32 against 12. }
+    { An integer argument for a FLOAT parameter is never substituted: the body
+      was typed with the parameter as a float, so `x + d` is a float add, and an
+      integer node dropped into it reached the aarch64/i386/arm32 backends as
+      float bits (AddD(v, 3) printed 0.0 at -O3; x86-64 converted per operand
+      and hid it). The temp below converts on its store. }
+    argClassOk := (not TypeIsFloat(Procs[cpi].Params[n].TypeKind)) or
+                  TypeIsFloat(IntToTypeKind(ASTTk[rawArg[n]]));
+    if (not argBoxed) and argClassOk and
+       ((ASTKind[rawArg[n]] = AN_INT_LIT) or
+        ((not anyImpure) and InlineArgIsPure(rawArg[n]))) then
       boundAST[n] := rawArg[n]
     else
     begin

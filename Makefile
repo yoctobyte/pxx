@@ -11979,6 +11979,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh riscv32/test_vardynpar26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_vardynpar26_rv)" "$$(cat test/test_a_var_dynarray_parameter_indexes_its_own_data.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_var_dynarray_parameter_indexes_its_own_data.pas $(TESTTMP)/test_vardynpar26_xtw
 	tools/expect_same.sh xtensa-windowed/test_vardynpar26 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_vardynpar26_xtw)" "$$(cat test/test_a_var_dynarray_parameter_indexes_its_own_data.expected)"
+	./$(COMPILER) --target=riscv32 -O2 test/test_rv32_a_constant_64_bit_shift_is_the_fixed_sequence.pas $(TESTTMP)/test_rvkshift26
+	tools/expect_same.sh riscv32/test_rvkshift26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkshift26)" "$$(cat test/test_rv32_a_constant_64_bit_shift_is_the_fixed_sequence.expected)"
+	./$(COMPILER) --target=riscv32 -O0 test/test_rv32_a_constant_64_bit_shift_is_the_fixed_sequence.pas $(TESTTMP)/test_rvkshift26_o0
+	tools/expect_same.sh riscv32-O0/test_rvkshift26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rvkshift26_o0)" "$$(cat test/test_rv32_a_constant_64_bit_shift_is_the_fixed_sequence.expected)"
+	./$(COMPILER) -O3 test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.pas $(TESTTMP)/test_inlit26_x
+	tools/expect_same.sh x86_64-O3/test_inlit26 "$$($(TESTTMP)/test_inlit26_x)" "$$(cat test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.expected)"
+	./$(COMPILER) --target=riscv32 -O3 test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.pas $(TESTTMP)/test_inlit26_rv
+	tools/expect_same.sh riscv32-O3/test_inlit26 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_inlit26_rv)" "$$(cat test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.expected)"
+	./$(COMPILER) --target=aarch64 -O3 test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.pas $(TESTTMP)/test_inlit26_a64
+	tools/expect_same.sh aarch64-O3/test_inlit26 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_inlit26_a64)" "$$(cat test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.expected)"
+	./$(COMPILER) --target=i386 -O3 test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.pas $(TESTTMP)/test_inlit26_i386
+	tools/expect_same.sh i386-O3/test_inlit26 "$$(tools/run_target.sh i386 $(TESTTMP)/test_inlit26_i386)" "$$(cat test/test_an_inlined_literal_argument_stays_a_literal_beside_an_impure_one.expected)"
 	./$(COMPILER) test/test_building_over_a_running_program_replaces_it.pas $(TESTTMP)/test_outbusy26 >/dev/null
 	@$(TESTTMP)/test_outbusy26 wait & pid=$$!; sleep 0.3; \
 	 ./$(COMPILER) test/test_building_over_a_running_program_replaces_it.pas $(TESTTMP)/test_outbusy26 >/dev/null; rc=$$?; kill $$pid 2>/dev/null; \

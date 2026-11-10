@@ -1376,6 +1376,74 @@ begin
     Exit;
   end;
 
+  { left shifted by a constant: the count is known, so the shift is the fixed
+    word sequence for that count, in place on a0:a1. The general path below
+    loads the count and runs the variable sequence (two branches, ~18
+    instructions), which was every `x shr 11` and every inlined Sar of a
+    real app's Int64 sensor math (remote_thermostat BmpTemp: 6 such). Same
+    semantics as that path: count and 63, a narrow logical shr zeroes the
+    high word first, a narrow shl re-extends its low 32 bits after. }
+  if kc and ((op = Ord(tkShl)) or (op = Ord(tkShr)) or (op = Ord(tkShrLogical))) then
+  begin
+    EmitNode64RISCV32(left);
+    klo := klo and 63;
+    if op = Ord(tkShl) then
+    begin
+      if klo >= 32 then
+      begin
+        rv32_slli(reg_a1, reg_a0, klo - 32);
+        rv32_addi(reg_a0, reg_zero, 0);
+      end
+      else if klo > 0 then
+      begin
+        rv32_srli(reg_t4, reg_a0, 32 - klo);
+        rv32_slli(reg_a1, reg_a1, klo);
+        rv32_or(reg_a1, reg_a1, reg_t4);
+        rv32_slli(reg_a0, reg_a0, klo);
+      end;
+      if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
+      begin
+        if TypeSigned(IntToTypeKind(IRTk[left])) then
+          rv32_srai(reg_a1, reg_a0, 31)
+        else
+          rv32_addi(reg_a1, reg_zero, 0);
+      end;
+    end
+    else if (op = Ord(tkShrLogical)) or not signedOp then
+    begin
+      if (op = Ord(tkShrLogical)) and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) then
+        rv32_addi(reg_a1, reg_zero, 0);
+      if klo >= 32 then
+      begin
+        rv32_srli(reg_a0, reg_a1, klo - 32);
+        rv32_addi(reg_a1, reg_zero, 0);
+      end
+      else if klo > 0 then
+      begin
+        rv32_slli(reg_t4, reg_a1, 32 - klo);
+        rv32_srli(reg_a0, reg_a0, klo);
+        rv32_or(reg_a0, reg_a0, reg_t4);
+        rv32_srli(reg_a1, reg_a1, klo);
+      end;
+    end
+    else
+    begin
+      if klo >= 32 then
+      begin
+        rv32_srai(reg_a0, reg_a1, klo - 32);
+        rv32_srai(reg_a1, reg_a1, 31);
+      end
+      else if klo > 0 then
+      begin
+        rv32_slli(reg_t4, reg_a1, 32 - klo);
+        rv32_srli(reg_a0, reg_a0, klo);
+        rv32_or(reg_a0, reg_a0, reg_t4);
+        rv32_srai(reg_a1, reg_a1, klo);
+      end;
+    end;
+    Exit;
+  end;
+
   { left = / <> a constant: each word's difference, or-ed, tested for zero.
     `x = 0` is or + seqz. }
   if kc and ((op = Ord(tkEq)) or (op = Ord(tkNeq))) then
