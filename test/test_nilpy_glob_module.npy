@@ -6,7 +6,12 @@
 import glob
 import os
 
-root = "/tmp/pxx_test_nilpy_glob_tree"
+# The tree goes under the run's own scratch (TESTMGR_TMP survives testmgr's
+# environment allowlist; TESTTMP is what `make test` sets), so two runs do not
+# build and delete the same directory. Output is root-relative either way.
+root = (os.environ.get("TESTMGR_TMP")
+        or os.environ.get("TESTTMP")
+        or "/tmp") + "/pxx_test_nilpy_glob_tree"
 paths = ["cpu0/cpufreq/cur", "cpu1/cpufreq/cur", "cpu12/cpufreq/cur",
          "cpufreq/cur", "cpuidle/x", "hwmon0/temp1_label", "hwmon0/temp1_input",
          "hwmon0/temp2_label", "hwmon1/name", ".hidden/x", "a.txt", "b.txt",

@@ -12,15 +12,23 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <netinet/in.h>
+#include <stdlib.h>
 
 int main(void) {
-  const char *path = "/tmp/pxx_c_crtl_busybox_struct_members";
+  /* the run's own scratch first (TESTMGR_TMP survives testmgr's environment
+     allowlist; TESTTMP is what `make test` sets), so parallel runs differ */
+  const char *dir = getenv("TESTMGR_TMP");
+  char path[512];
   struct timespec ts[2];
   struct stat st;
   struct ipc_perm perm;
   struct msqid_ds q;
   struct in_pktinfo pk;
-  int fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  int fd;
+  if (!dir || !*dir) dir = getenv("TESTTMP");
+  if (!dir || !*dir) dir = "/tmp";
+  snprintf(path, sizeof path, "%s/pxx_c_crtl_busybox_struct_members", dir);
+  fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
   if (fd < 0) { puts("open failed"); return 1; }
   close(fd);
   ts[0].tv_sec = 1000000000; ts[0].tv_nsec = 123456789;   /* atime */
