@@ -33,11 +33,11 @@ end;
 
 var
   f: TF;
-  pf: PF;
+  pfv: PF;
   m: string;
 begin
   f := 'hello';
-  pf := @f;
+  pfv := @f;
 
   { store + the inline length prefix }
   writeln('len=', Length(f));
@@ -52,9 +52,9 @@ begin
   writeln('first=', FirstChar(f));
 
   { frozen reached through a pointer deref, both as a value and as an argument }
-  m := pf^;
+  m := pfv^;
   writeln('deref=', m);
-  writeln('deref-arg=', ByValue(pf^));
+  writeln('deref-arg=', ByValue(pfv^));
 
   { reassignment must not leak the old length }
   f := 'hi';

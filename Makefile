@@ -11805,6 +11805,20 @@ test-core: $(COMPILER)
 	@# ...and BOTH are reported from one compile, because the check recovers. A
 	@# fatal one would have certified the second arm untested.
 	tools/expect_same.sh test_casedup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_casedup.log)" "2"
+	@# A var may not redeclare ANY name of its own scope (string const, set
+	@# const, type, routine, or a var in the same spelling); all seven are
+	@# reported from one compile. The shadowing file is the negative control.
+	! ./$(COMPILER) test/test_a_var_may_not_redeclare_any_name_of_its_own_scope.pas $(TESTTMP)/test_vardup26 > $(TESTTMP)/test_vardup.log 2>&1
+	grep -q 'duplicate identifier "same": already declared in this scope as a variable or constant' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "tel": already declared in this scope as a string constant' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "digits": already declared in this scope as a set constant' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "TWidth": already declared in this scope as a type' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "probe": already declared in this scope as a routine' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "greeting": already declared in this scope as a string constant' $(TESTTMP)/test_vardup.log
+	grep -q 'duplicate identifier "Inner": already declared in this scope as a routine' $(TESTTMP)/test_vardup.log
+	tools/expect_same.sh test_vardup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_vardup.log)" "7"
+	./$(COMPILER) test/test_a_var_may_shadow_a_name_of_an_outer_scope.pas $(TESTTMP)/test_varshadow26
+	tools/expect_same.sh test_varshadow26 "$$($(TESTTMP)/test_varshadow26)" "$$(cat test/test_a_var_may_shadow_a_name_of_an_outer_scope.expected)"
 	@# THE NEGATIVE CONTROLS, drawn from the population the census actually found
 	@# rather than from imagination. The census turned up three families that
 	@# differ only in case in ONE scope and are LEGAL, and the refusal must not

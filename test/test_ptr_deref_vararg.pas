@@ -21,7 +21,7 @@ var
   rr: TR;
   p: PR;
   a: TA;
-  pa: PA;
+  pav: PA;
 begin
   rr.b := 0;
   p := @rr;
@@ -33,7 +33,7 @@ begin
   writeln(rr.b);
 
   a[2] := 0;
-  pa := @a;
-  SetWord(pa^[2]);     { p^[i] as var arg }
+  pav := @a;
+  SetWord(pav^[2]);     { p^[i] as var arg }
   writeln(a[2]);
 end.

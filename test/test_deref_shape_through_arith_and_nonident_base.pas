@@ -24,19 +24,19 @@ var
   pcs: array[0..2] of PPC;
   r2: TRec2;
   raw2: Pointer;
-  pp: PPC; pi: PInt; pb: PB;
+  pp: PPC; pi: PInt; pbv: PB;
   s1, s2: PChar;
 begin
   s1 := 'alpha'; s2 := 'beta';
   a[0] := s1; a[1] := s2; a[2] := s1;
   ints[0] := 10; ints[1] := 20; ints[2] := 30; ints[3] := 40;
   bs[0] := 1; bs[1] := 2; bs[2] := 3; bs[3] := 4;
-  pp := @a[0]; pi := @ints[0]; pb := @bs[0];
+  pp := @a[0]; pi := @ints[0]; pbv := @bs[0];
   pcs[0] := @a[0]; pcs[1] := @a[1];
   r2.q[0] := @a[0]; r2.q[1] := @a[1];
   raw2 := @r2;
   writeln('1 ', (pi + 2)^);            { expect 30  -- ^Integer arithmetic }
-  writeln('2 ', (pb + 3)^);            { expect 4   -- ^Byte arithmetic, span matters }
+  writeln('2 ', (pbv + 3)^);            { expect 4   -- ^Byte arithmetic, span matters }
   writeln('3 ', (pp + 1)^);            { expect beta }
   writeln('4 ', pcs[1]^);              { expect beta -- index over an IDENT base }
   writeln('5 ', PRec2(raw2)^.q[1]^);   { expect beta -- index over a FIELD base }

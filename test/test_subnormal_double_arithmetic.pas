@@ -82,18 +82,18 @@ begin
 end;
 
 var
-  bits: Int64;
+  raw: Int64;
   v, small, one, two, zero, r: Double;
   flush: Boolean;
 begin
   Failures := 0;
 
   { 2**-1074, the minimum positive subnormal: exponent field 0, mantissa 1. }
-  bits := 1;
-  v := PDouble(@bits)^;
+  raw := 1;
+  v := PDouble(@raw)^;
   { 2**-1019, normal, eight halvings above the subnormal boundary. }
-  bits := Int64(4) shl 52;
-  small := PDouble(@bits)^;
+  raw := Int64(4) shl 52;
+  small := PDouble(@raw)^;
   one := 1.0;
   two := 2.0;
   zero := 0.0;

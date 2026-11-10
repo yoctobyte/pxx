@@ -6041,6 +6041,72 @@ begin
   end;
 end;
 
+{ IS `name` ALREADY DECLARED IN THE SCOPE A `var` IS ABOUT TO BE ADDED TO, by
+  any kind of declaration? Returns what it is ('' = free).
+
+  CaseDupRefuse covers two SYMBOLS whose names differ only in case. Every other
+  pair went through silently, and the later declaration won: a var beside a
+  string const, a type or a routine of the same name, and even `var a` twice
+  in the same spelling. fpc refuses them all. Cost found in remote_thermostat:
+  a 600-byte telegram `const TEL = '...'` read as '' because a later
+  `var tel: AnsiString` replaced it, and every check failed with no hint.
+  bug-p-a-var-may-redeclare-a-string-const-type-or-routine-of-the-same-name
+
+  Each table answers with its own scope columns: symbols by InnermostScopeBase
+  (as CaseDupSameScope), string/set consts and type aliases by their owner
+  routine + unit, routines by their lexical parent + unit. A symbol in a
+  DIFFERENT spelling is left to CaseDupRefuse, so one pair is reported once. }
+function VarNameTakenHere(const name: AnsiString): AnsiString;
+var j, base: Integer; scoped, cs: Boolean; lo: AnsiString;
+  function NameIs(const other: AnsiString): Boolean;
+  begin
+    if cs then NameIs := StrEqual(other, name)
+    else NameIs := CaseEqual(other, name);
+  end;
+begin
+  Result := '';
+  cs := DeclCaseSensitive;
+  InnermostScopeBase(base, scoped);
+  j := SymHashHead[SymNameFoldHash(name)];
+  while j >= 0 do
+  begin
+    if StrEqual(Syms[j].Name, name) and
+       ((scoped and (j >= base)) or
+        ((not scoped) and (SymUnitIdx[j] = CurrentUnitIdx))) then
+    begin
+      Result := 'a variable or constant'; Exit;
+    end;
+    j := SymHashPrev[j];
+  end;
+  for j := StrConstCount - 1 downto 0 do
+    if (StrConstOwner[j] = CurProc) and (StrConstUnitIdx[j] = CurrentUnitIdx) and
+       NameIs(StrConstName[j]) then
+    begin
+      Result := 'a string constant'; Exit;
+    end;
+  for j := SetConstCount - 1 downto 0 do
+    if (SetConstOwner[j] = CurProc) and (SetConstUnitIdx[j] = CurrentUnitIdx) and
+       NameIs(SetConstName[j]) then
+    begin
+      Result := 'a set constant'; Exit;
+    end;
+  lo := ULower(name);
+  for j := 0 to AliasCount - 1 do
+    if (AliasOwnerProc[j] = CurProc) and (AliasOwnerCi[j] = -1) and
+       (AliasUnitIdx[j] = CurrentUnitIdx) and
+       ((cs and UNameMatchCS(AliasNOff[j], AliasNLen[j], name)) or
+        ((not cs) and UNameMatch(AliasNOff[j], AliasNLen[j], lo))) then
+    begin
+      Result := 'a type'; Exit;
+    end;
+  for j := 0 to ProcCount - 1 do
+    if (ProcLexParent[j] = CurProc) and (ProcUnitIdx[j] = CurrentUnitIdx) and
+       NameIs(Procs[j].Name) then
+    begin
+      Result := 'a routine'; Exit;
+    end;
+end;
+
 procedure SymHashInsert(idx: Integer);
 var b: Integer;
 begin

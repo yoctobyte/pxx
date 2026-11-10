@@ -2874,7 +2874,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
     grpIdx: array[0..MAX_DECL_NAMES-1] of Integer;  { the previous declaration group's symbols }
     grpN: Integer;                                   { ...and how many; 0 before the first }
-    dirName: AnsiString;
+    dirName, dupKind, dupName: AnsiString;
   grpHadInit: Boolean;
     fvKind, fvAux: Integer; fvVal: Int64;   { TryParseInitValForm's non-ordinal value form }
 begin
@@ -3008,6 +3008,16 @@ begin
     n := 0;
     repeat
       if n >= MAX_DECL_NAMES then Error('too many comma-separated names in one var declaration');
+      dupKind := VarNameTakenHere(CurTok.SVal);
+      if dupKind <> '' then
+      begin
+        { a reference to a nested routine has already been rewritten to its
+          mangled name (Inner$82), token span included; name the routine }
+        dupName := CurTok.SVal;
+        if Pos('$', dupName) > 1 then dupName := Copy(dupName, 1, Pos('$', dupName) - 1);
+        ErrorRecover('duplicate identifier "' + dupName + '": already declared in this scope as '
+                     + dupKind);
+      end;
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');

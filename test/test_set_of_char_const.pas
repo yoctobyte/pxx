@@ -4,18 +4,18 @@ program test_set_of_char_const;
   is case-insensitive) must not win over a real variable
   (bug-set-of-char-const-corrupts-char-codegen). }
 type T = set of char;
-const C: T = [#65];                 { name collides case-insensitively with `c` }
+const C: T = [#65];                 { a same-named var in this scope is a duplicate identifier now (fpc agrees) }
 const Vowels: T = ['a', 'e', 'i', 'o', 'u'];
 const Digits = ['0'..'9'];          { untyped set const }
-var c: char;
+var ch: char;
 begin
-  c := #65;
-  writeln(Ord(c));                  { 65 — must be the char var, not the set }
-  c := 'e';
-  writeln(Ord(c in Vowels));        { 1 }
-  c := 'x';
-  writeln(Ord(c in Vowels));        { 0 }
+  ch := #65;
+  writeln(Ord(ch));                  { 65 — must be the char var, not the set }
+  ch := 'e';
+  writeln(Ord(ch in Vowels));        { 1 }
+  ch := 'x';
+  writeln(Ord(ch in Vowels));        { 0 }
   writeln(Ord('7' in Digits));      { 1 }
   writeln(Ord('a' in Digits));      { 0 }
-  writeln(Ord(c));                  { 120 — still the char var }
+  writeln(Ord(ch));                  { 120 — still the char var }
 end.
