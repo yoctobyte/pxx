@@ -43278,7 +43278,9 @@ lib-test: pxx-stable-check
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
 	  tools/expect_same.sh lib_tk_kwargs "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
-	  tools/expect_same.sh lib_tk_callbacks "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
+	  if python3 -c 'import tkinter' 2>/dev/null; then \
+	    tools/expect_same.sh lib_tk_callbacks "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(GDK_BACKEND=x11 xvfb-run -a python3 examples/tk/callbacks.npy | tail -n 6)"; \
+	  else echo "  lib_tk_callbacks: SKIP (python3 has no tkinter; CPython is the oracle -- a canvas bbox's padding varies by Tk build)"; echo lib_tk_callbacks >> $(TESTTMP)/lib-test.skipped; fi && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
 	  tools/expect_same.sh lib_tk_htmlview "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \

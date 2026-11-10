@@ -2302,6 +2302,10 @@ begin
     end
     else one := one + raw[i];
   end;
+  { a TUPLE, as the comment on the declaration says and CPython returns:
+    print(canvas.bbox(...)) showed [0, 0, 11, 11] where python3 shows
+    (0, 0, 11, 11). Same tag mimic_struct's unpack uses. }
+  l.FKind := PYSEQ_TUPLE;
   bbox := l;
 end;
 
