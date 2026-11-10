@@ -107,6 +107,7 @@ AN_ARG Left PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi)
 AN_ARG Left PyMakeNone
 AN_ARG Left PyMakeObjPtr(atRecv)
 AN_ARG Left PyMakeObjPtr(baseNode)
+AN_ARG Left PyMakeObjPtr(recvNode)
 AN_ARG Left PyStarIterableNode(PyZipStarOperand(CurASTNode))
 AN_ARG Left RParseCallArg(procIdx, argSlot)
 AN_ARG Left Result
@@ -229,6 +230,7 @@ AN_ARG Left pairNode
 AN_ARG Left polAddr
 AN_ARG Left ppBase
 AN_ARG Left ppExp
+AN_ARG Left prior
 AN_ARG Left procAddr
 AN_ARG Left raDest
 AN_ARG Left rbVal

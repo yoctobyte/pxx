@@ -1,0 +1,17 @@
+False
+False
+False
+False True 1025
+True False False True False True False True False True True False False True 
+branch: truthy
+-1026 -1026 -1180591620717411303425
+False True False True
+a truthy
+z falsy
+True False 5 7 1025 0
+loop 0
+[1025, 1024] False True
+2 y
+5 7 1025 0
+5 1025
+s 1025

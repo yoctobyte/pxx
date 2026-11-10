@@ -11265,7 +11265,19 @@ begin
   if hadPos then
   begin
     posOvl := UnaryOpOverloadCall(Ord(tkPlus), CurASTNode);
-    if posOvl >= 0 then CurASTNode := posOvl;
+    if posOvl >= 0 then CurASTNode := posOvl
+    else if PyExprMode and (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+            (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) then
+    begin
+      { NilPy `+obj` calls the class's __pos__, as `-obj` calls __neg__ in
+        PyParseFactorCore. It was eaten as a no-op, so `+v` was `v` itself.
+        bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+      posOvl := PyCallMeth1(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE, '__pos__', CurASTNode, -1);
+      if posOvl < 0 then posOvl := PyMakeUnsupportedOperand;
+      CurASTNode := posOvl;
+    end
+    else if PyExprMode and (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
+      CurASTNode := PyCallProc1('pyvar_pos', CurASTNode);
   end;
   if neg then
   begin

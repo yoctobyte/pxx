@@ -528,7 +528,9 @@ var
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
   convCall: AnsiString;    { a `!r`/`!s` that a format spec follows; see the ':' arm }
+  nested: Boolean;         { a hole held an f-string of its own; see the tail }
 begin
+  nested := False;
   pdepth := 0;
   convCall := '';
   n := Length(Source);
@@ -700,6 +702,11 @@ begin
         if PyFStrIsQuote(c) then
         begin
           hq := c;
+          { an f-prefixed string INSIDE the hole is copied through as written
+            (prefix and all) and expanded by a second pass -- see the tail }
+          if (i > 1) and ((Source[i - 1] = 'f') or (Source[i - 1] = 'F')) and
+             ((i = 2) or not PyIsIdentCont(Source[i - 2])) then
+            nested := True;
           PyFsPutCh(c);
           Inc(i);
           while (i <= n) and (Source[i] <> hq) do
@@ -877,6 +884,13 @@ begin
     Inc(i);
   end;
   Source := PyFsDone;
+  { A NESTED f-string, f"{f'{w}x':>8}": the inner one sat in a hole, where a
+    quoted string is copied verbatim, so it came out as the identifier `f`
+    beside a plain string ("undefined variable (f)"). The output is ordinary
+    source again, so one more pass expands what the first left behind; each
+    pass removes one level of nesting.
+    feature-nilpy-fstring-nested-spec-and-nested-fstring }
+  if nested then PyExpandFStrings;
 end;
 
 function PyTrailingDotFloat(P: Integer): Boolean;

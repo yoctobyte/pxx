@@ -1,0 +1,13 @@
+(-2.0, 102.0, 20.0, -3.0)
+103.0 -103.0 97.0 5 -5 2.5
+TypeError
+W(-1.0) W(101.0) W(10.0)
+-2.5 2.5 2.5
+-3 3 3
+W(-2.0) -4
+1 -1
+7 -7
+2.5 -2.5
+-0.0 0.0
+TypeError bad operand type for unary -: 'M'
+TypeError bad operand type for unary +: 'M'

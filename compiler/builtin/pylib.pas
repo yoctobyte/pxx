@@ -1679,6 +1679,8 @@ function pyfloat_ofint(v: Int64): Double;
 function pyfloat_is_integer(x: Double): Boolean;
 function pyfloat_conjugate(x: Double): Double;
 function pyfloat_hex(x: Double): AnsiString;
+{ float.fromhex(s): the inverse of pyfloat_hex. }
+function pyfloat_fromhex(const s: AnsiString): Double;
 function pyfloat_as_integer_ratio(x: Double): TPyList;
 { int's three methods of the same NAMES. An int is not a float here: CPython's
   (3).as_integer_ratio() is (3, 1) and (3).conjugate() is 3 — ints, not 3.0 —
@@ -2509,6 +2511,8 @@ function pyconv_set(const a0: Variant): Variant;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
 function pyvar_neg(const v: Variant): Variant;
+function pyvar_pos(const v: Variant): Variant;
+function pyvar_invert(const v: Variant): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
   boxes it through the ordinary call-argument path, which is the one place that
   knows how to make a variant out of any value — so an Integer field read and a
@@ -3285,6 +3289,10 @@ function pystr_del_slice(const s: AnsiString; lo, hi: Integer): Variant;
 { `type(x).__name__` for any value — see the body for why the frontend cannot
   answer this from RTTI alone (tuple and list share one class). }
 function pytype_name_v(const v: Variant): AnsiString;
+{ hasattr's answer for a list/tuple/set/frozenset, which are all TPyList: see
+  the bodies. `prior` is what the class-identity predicates answered. }
+function pyseq_hasattr_p(o: Pointer; const name: AnsiString; prior: Boolean): Boolean;
+function pyseq_hasattr_v(const v: Variant; const name: AnsiString; prior: Boolean): Boolean;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -6248,6 +6256,65 @@ begin
       into a DYNAMIC ATTRIBUTE fetch instead of the RTTI call, and a user class
       then died with "'Dog' object has no attribute 'ClassName'". }
     Result := TObject(obj).ClassName;
+end;
+
+{ list, tuple, set and frozenset are ONE class, TPyList, so hasattr's
+  class-identity predicates answered the union of all four surfaces for each:
+  hasattr([1], 'add') and hasattr((1,), 'append') were True, and
+  hasattr({1}, 'update') False. FKind is what type() already reads, so for a
+  name on any of the four surfaces the answer is that kind's own; any other
+  name (a dunder, a subclass's own method) keeps `prior`.
+  bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart }
+function PySeqSurfaceHas(kind: Integer; const nm: AnsiString): Boolean;
+const
+  { the methods, then the container dunders a program probes for (CPython's
+    dir() of each type, the comparison and pickling dunders left out) }
+  LIST_M = ' append clear copy count extend index insert pop remove reverse sort '
+         + '__contains__ __iter__ __len__ __getitem__ __setitem__ __delitem__ '
+         + '__add__ __mul__ __iadd__ __imul__ __reversed__ ';
+  TUPLE_M = ' count index __contains__ __iter__ __len__ __getitem__ __add__ __mul__ ';
+  SET_M = ' add clear copy difference difference_update discard intersection '
+        + 'intersection_update isdisjoint issubset issuperset pop remove '
+        + 'symmetric_difference symmetric_difference_update union update '
+        + '__contains__ __iter__ __len__ __and__ __or__ __xor__ __sub__ '
+        + '__iand__ __ior__ __ixor__ __isub__ ';
+  FSET_M = ' copy difference intersection isdisjoint issubset issuperset '
+         + 'symmetric_difference union __contains__ __iter__ __len__ '
+         + '__and__ __or__ __xor__ __sub__ ';
+var key: AnsiString;
+begin
+  key := ' ' + nm + ' ';
+  case kind of
+    PYSEQ_LIST: Result := Pos(key, LIST_M) > 0;
+    PYSEQ_TUPLE: Result := Pos(key, TUPLE_M) > 0;
+    PYSEQ_SET: Result := Pos(key, SET_M) > 0;
+    PYSEQ_FROZENSET: Result := Pos(key, FSET_M) > 0;
+  else
+    Result := False;
+  end;
+end;
+
+function pyseq_hasattr_p(o: Pointer; const name: AnsiString; prior: Boolean): Boolean;
+var k: Integer;
+begin
+  Result := prior;
+  if o = nil then Exit;
+  if not (TObject(o) is TPyList) then Exit;
+  k := TPyList(o).FKind;
+  if (k < PYSEQ_LIST) or (k > PYSEQ_FROZENSET) then Exit;
+  if PySeqSurfaceHas(PYSEQ_LIST, name) or PySeqSurfaceHas(PYSEQ_SET, name) or
+     PySeqSurfaceHas(PYSEQ_TUPLE, name) then
+    Result := PySeqSurfaceHas(k, name);
+end;
+
+function pyseq_hasattr_v(const v: Variant; const name: AnsiString; prior: Boolean): Boolean;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 7 then
+    Result := pyseq_hasattr_p(Pointer(p^.Payload), name, prior)
+  else
+    Result := prior;
 end;
 
 function pyvar_is_strtag(const v: Variant): Boolean;
@@ -12532,10 +12599,40 @@ begin
   end
   else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 8193) then
     Result := 0 - v
+  { a user object behind a variant -- a list element, an unannotated
+    parameter the frontend could not type -- calls its __neg__, as a statically
+    typed one does. bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+  else if (p^.VType = 7) and
+          PyUserObjNoArgDunder(TObject(Pointer(p^.Payload)), '__neg__', Result) then
   else
     { Pascal's own variant subtraction would raise EVariantError here; the
       program wrote Python and gets Python's error }
-    raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
+    if p^.VType = 7 then
+      raise TypeError.Create('bad operand type for unary -: ''' + pytype_name_v(v) + '''')
+    else
+      raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
+end;
+
+{ `+v` on a variant: a number (int, float, bool -> int, big int) is itself
+  (bool becomes its int), a user object calls its __pos__, anything else is
+  CPython's TypeError. The parser used to eat the `+` as a no-op.
+  bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+function pyvar_pos(const v: Variant): Variant;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 3) or (p^.VType = 8193) then
+    Result := v
+  else if p^.VType = 4 then
+    Result := 0 + v
+  else if (p^.VType = 7) and
+          PyUserObjNoArgDunder(TObject(Pointer(p^.Payload)), '__pos__', Result) then
+  else
+  begin
+    if p^.VType = 7 then
+      raise TypeError.Create('bad operand type for unary +: ''' + pytype_name_v(v) + '''');
+    raise TypeError.Create('bad operand type for unary +: ''' + PyVarTypeNameOf(v) + '''');
+  end;
 end;
 
 { NO IMPLICIT CLEANUP FRAME: the common case answers here with nothing
@@ -13109,6 +13206,21 @@ begin
   end;
   if PXXPromoVarArithTry(@Result, @a, @b, 8) <> 0 then Exit;
   Result := pyvar_of_int(pyvar_to_int(a) xor pyvar_to_int(b));
+end;
+
+{ `~v` on a variant: a user object calls its __invert__; everything else is
+  `v ^ -1`, which is ~x for every int and bool. It went straight to the xor,
+  whose dunder search looks for __xor__, so a user object with __invert__
+  answered a plausible large integer, silently.
+  bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+function pyvar_invert(const v: Variant): Variant;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and
+     PyUserObjNoArgDunder(TObject(Pointer(p^.Payload)), '__invert__', Result) then
+    Exit;
+  Result := pybitxor_v(v, -1);
 end;
 
 function pyshl_v(const a: Variant; const b: Variant): Variant;
@@ -16016,6 +16128,98 @@ begin
   if e < 0 then begin Result := Result + '-'; e := -e; end
   else Result := Result + '+';
   Result := Result + pystr_of(e);
+end;
+
+{ CPython's float.fromhex(): `[sign] ['0x'] hexdigits ['.' hexdigits]
+  ['p' [sign] decimal]`, surrounding blanks allowed, plus inf / infinity / nan
+  in any case. Exact for anything pyfloat_hex prints (at most 14 significant
+  hex digits = 56 bits, so the integer-to-double step does the only rounding);
+  longer inputs keep the first 15 digits. No libm: the scale by 2**e is exact
+  multiplication by 2 or 0.5. feature-nilpy-methods-on-int-and-float }
+function pyfloat_fromhex(const s: AnsiString): Double;
+var i, n, e, esign, ndig, fracDig, d: Integer; mant: Int64; neg, any, inFrac: Boolean;
+    t, lo: AnsiString;
+  function HexVal(c: Char): Integer;
+  begin
+    if (c >= '0') and (c <= '9') then Result := Ord(c) - Ord('0')
+    else if (c >= 'a') and (c <= 'f') then Result := Ord(c) - Ord('a') + 10
+    else if (c >= 'A') and (c <= 'F') then Result := Ord(c) - Ord('A') + 10
+    else Result := -1;
+  end;
+  procedure Bad;
+  begin
+    raise ValueError.Create('invalid hexadecimal floating-point string');
+  end;
+begin
+  t := s;
+  while (Length(t) > 0) and (t[1] <= ' ') do t := Copy(t, 2, Length(t) - 1);
+  while (Length(t) > 0) and (t[Length(t)] <= ' ') do t := Copy(t, 1, Length(t) - 1);
+  n := Length(t);
+  i := 1;
+  neg := False;
+  if (i <= n) and ((t[i] = '-') or (t[i] = '+')) then begin neg := t[i] = '-'; Inc(i); end;
+  lo := Copy(t, i, n - i + 1);
+  for d := 1 to Length(lo) do
+    if (lo[d] >= 'A') and (lo[d] <= 'Z') then lo[d] := Chr(Ord(lo[d]) + 32);
+  if (lo = 'inf') or (lo = 'infinity') then
+  begin
+    Result := 1.0 / 0.0;
+    if neg then Result := -Result;
+    Exit;
+  end;
+  if lo = 'nan' then begin Result := 0.0 / 0.0; Exit; end;
+  if (i + 1 <= n) and (t[i] = '0') and ((t[i + 1] = 'x') or (t[i + 1] = 'X')) then Inc(i, 2);
+  mant := 0; ndig := 0; fracDig := 0; any := False; inFrac := False;
+  while i <= n do
+  begin
+    if (t[i] = '.') and not inFrac then begin inFrac := True; Inc(i); continue; end;
+    d := HexVal(t[i]);
+    if d < 0 then Break;
+    any := True;
+    if (mant <> 0) or (d <> 0) then
+    begin
+      if ndig < 15 then
+      begin
+        mant := mant * 16 + d;
+        Inc(ndig);
+        if inFrac then Inc(fracDig);
+      end
+      else if not inFrac then
+        Dec(fracDig);        { a dropped integer digit still scales by 16 }
+    end
+    else if inFrac then
+      Inc(fracDig);          { a leading fractional zero }
+    Inc(i);
+  end;
+  if not any then Bad;
+  e := 0;
+  if (i <= n) and ((t[i] = 'p') or (t[i] = 'P')) then
+  begin
+    Inc(i);
+    esign := 1;
+    if (i <= n) and ((t[i] = '-') or (t[i] = '+')) then
+    begin
+      if t[i] = '-' then esign := -1;
+      Inc(i);
+    end;
+    if (i > n) or (t[i] < '0') or (t[i] > '9') then Bad;
+    while (i <= n) and (t[i] >= '0') and (t[i] <= '9') do
+    begin
+      if e < 100000 then e := e * 10 + (Ord(t[i]) - Ord('0'));
+      Inc(i);
+    end;
+    e := e * esign;
+  end;
+  if i <= n then Bad;
+  e := e - 4 * fracDig;
+  Result := mant;
+  while (e > 0) and (Result <> 0.0) and (Result < 1.0e308) do begin Result := Result * 2.0; Dec(e); end;
+  if e > 0 then
+  begin
+    if Result <> 0.0 then raise OverflowError.Create('hexadecimal value too large to represent as a float');
+  end;
+  while e < 0 do begin Result := Result * 0.5; Inc(e); end;
+  if neg then Result := -Result;
 end;
 
 function pyfloat_as_integer_ratio(x: Double): TPyList;
@@ -22664,6 +22868,11 @@ begin
     PXXPromoClear(@pa);
     Exit;
   end;
+  { a user object behind a variant calls its __abs__, as a statically typed
+    one does (pyparser's abs arm). bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+  if (t = 7) and
+     PyUserObjNoArgDunder(TObject(Pointer(PPyVarRec(@v)^.Payload)), '__abs__', Result) then
+    Exit;
   if t = 3 then           { VT_DOUBLE }
   begin
     d := pyvar_to_float(v);

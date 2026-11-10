@@ -1,0 +1,3 @@
+bool return, variant operand -> True
+str  return, LITERAL operand -> LT
+str  return, variant operand -> LT

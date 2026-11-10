@@ -3488,12 +3488,18 @@ begin
       cmpNode := CurASTNode;
       CurASTNode := ASTLeft[cmpNode];
     end;
-    litNode := AllocNode(AN_INT_LIT);
-    ASTIVal[litNode] := -1;
-    ASTTk[litNode] := Ord(tyInt64);
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
-    ASTLeft[node] := CurASTNode; ASTRight[node] := litNode;
-    ASTTk[node] := Ord(PyBitWiden(CurASTNode, litNode));
+    if IntToTypeKind(ASTTk[CurASTNode]) = tyVariant then
+      { a variant may hold a user object with __invert__ -- see pyvar_invert }
+      node := PyCallProc1('pyvar_invert', CurASTNode)
+    else
+    begin
+      litNode := AllocNode(AN_INT_LIT);
+      ASTIVal[litNode] := -1;
+      ASTTk[litNode] := Ord(tyInt64);
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
+      ASTLeft[node] := CurASTNode; ASTRight[node] := litNode;
+      ASTTk[node] := Ord(PyBitWiden(CurASTNode, litNode));
+    end;
     CurASTNode := node;
     if cmpNode >= 0 then
     begin
@@ -4163,10 +4169,40 @@ begin
       ASTRight[node] := zeroNode;
       ASTTk[node] := Ord(tyBoolean);
     end
+    else if (opTk = tyPromoInt32) or (opTk = tyPromoInt64) then
+    begin
+      { A PROMOTABLE int ({tag, payload}: `a = x + 1` makes one) is truthy when
+        non-zero, so `not a` is `a == 0` -- the comparison already knows both
+        tiers. It fell to AN_NOT below, which complemented the BOX: `not a`
+        answered True for 1025 and `if not a:` took the wrong branch, silently.
+        bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic }
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(tyInt64);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
+    else if opTk = tyVariant then
+    begin
+      { A VARIANT is truthy exactly as bool() says, so `not v` is
+        `not pyvar_to_bool(v)`. Left to AN_NOT, the IR read the payload as a
+        scalar, which is wrong for a promotable int (`a = x + 1` boxes one):
+        `not a` answered True for 1025 and `if not a:` took the wrong branch,
+        while bool(a) beside it was right.
+        bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic }
+      truthNode := PyCallProc1('pyvar_to_bool', operand);
+      ASTTk[truthNode] := Ord(tyBoolean);
+      node := AllocNode(AN_NOT);
+      ASTLeft[node] := truthNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
     else if (opTk = tyBoolean) or not PyNumeric(opTk) then
     begin
-      { tyBoolean, where AN_NOT is genuinely logical -- and variant / unknown
-        operands, which stay their own question as this routine's header says. }
+      { tyBoolean, where AN_NOT is genuinely logical -- and unknown operands,
+        which stay their own question as this routine's header says. }
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
       ASTTk[node] := Ord(tyBoolean);
@@ -4543,7 +4579,12 @@ begin
     Boolean instead of the value. Measured against CPython, including the
     original repro shape (a str/Boolean pair used AS A CONDITION), which is
     unchanged because a condition only truthiness-tests the result. }
+  { a PROMOTABLE int (`a = x + 1`) is an int to Python: `a and 5` is 5, not
+    True. It was in none of the arms, so it took the Boolean lowering.
+    bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic }
   Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass)
+            or (ta = tyPromoInt32) or (ta = tyPromoInt64)
+            or (tb = tyPromoInt32) or (tb = tyPromoInt64)
             or (PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb))
             or (PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb))
             or (PyIsStrBaseTk(ta) and (PyIsIntLikeTk(tb) or TypeIsFloat(tb) or (tb = tyBoolean)))
@@ -15715,6 +15756,7 @@ begin
   else if dotted = 'os.getgid' then Result := 'pyos_getgid'
   else if dotted = 'os.path.expanduser' then Result := 'pyos_path_expanduser'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
+  else if dotted = 'float.fromhex' then Result := 'pyfloat_fromhex'   { feature-nilpy-methods-on-int-and-float }
   else if dotted = 'os.environ.get' then Result := 'pyos_environ_get'
   else if dotted = 'os.getenv' then Result := 'pyos_getenv'
   else if dotted = 'os.remove' then Result := 'pyos_remove'
@@ -15972,7 +16014,7 @@ begin
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
      (base <> 'random') and (base <> 'str') and (base <> 'time') and
-     (base <> 'collections') then Exit;
+     (base <> 'collections') and (base <> 'float') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + GetTokenStr(TokPos + 1);   { as spelled -- see PyStdlibCallProc }
@@ -16379,6 +16421,53 @@ begin
       AppendChar(accName, TokChars[UPropReadMOff[pri] + i]);
     Result := PyCallMeth1(ci, accName, recvNode, -1);
   end;
+end;
+
+{ hasattr on a receiver that may be a list, tuple, set or frozenset -- all one
+  class, TPyList, so the class-identity answer is the union of four surfaces.
+  A VARIANT may hold one; a static TPyList is one. The answer is corrected at
+  run time from the object's own kind (pyseq_hasattr_*).
+  bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart }
+function PySeqHasAttrFixable(recvNode: Integer): Boolean;
+var rec, lci: Integer;
+begin
+  Result := False;
+  if recvNode < 0 then Exit;
+  if IntToTypeKind(ASTTk[recvNode]) = tyVariant then begin Result := True; Exit; end;
+  if IntToTypeKind(ASTTk[recvNode]) <> tyClass then Exit;
+  rec := ResolveNodeRec(recvNode);
+  lci := FindUClass('TPyList');
+  Result := (lci >= 0) and (rec = REC_UCLASS_BASE + lci);
+end;
+
+function PySeqHasAttrWrapN(recvNode, nameNode, prior: Integer): Integer;
+var pi, a0, a1, a2: Integer;
+begin
+  Result := prior;
+  if IntToTypeKind(ASTTk[recvNode]) = tyVariant then
+    pi := FindProc('pyseq_hasattr_v')
+  else
+    pi := FindProc('pyseq_hasattr_p');
+  if pi < 0 then Exit;
+  a0 := AllocNode(AN_ARG);
+  if IntToTypeKind(ASTTk[recvNode]) = tyVariant then ASTLeft[a0] := recvNode
+  else ASTLeft[a0] := PyMakeObjPtr(recvNode);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := prior; ASTRight[a2] := -1;
+  ASTRight[a0] := a1; ASTRight[a1] := a2;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTTk[Result] := Ord(tyBoolean);
+  ASTLeft[Result] := a0;
+end;
+
+function PySeqHasAttrWrap(recvNode: Integer; const attr: AnsiString; prior: Integer): Integer;
+var lit: Integer;
+begin
+  lit := AllocNode(AN_STR_LIT);
+  ASTSOffset[lit] := StoredName(attr); ASTSLen[lit] := Length(attr);
+  ASTTk[lit] := Ord(tyString);
+  Result := PySeqHasAttrWrapN(recvNode, lit, prior);
 end;
 
 function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean;
@@ -22759,7 +22848,26 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     clsUnboxA, clsUnboxC, clsRefCall, clsRefSelf, clsRefLast,
     clsTern, clsPairN, clsCondArg, clsCondCall,
     clsRaiseCall, clsIfNode, clsPairFix, clsNameNode, clsNameArg: Integer;
+    clsOwnRecv: Boolean;      { the receiver is this classmethod's own `cls` -- see below }
+    clsOwnMmi: Integer;
 begin
+  { `cls.m(...)` inside a @classmethod of a class nothing derives from: `cls`
+    can only BE that class, so its own class-level `m` is the carrier, however
+    many other classes declare the name. Decided before the receiver is hoisted
+    (after which it is a temp, not `cls`). See PyClassLevelCarrier, which gives
+    up on two static carriers -- `species` on Chart and on Plot.
+    bug-n-a-staticmethod-called-through-cls-raises-attributeerror }
+  clsOwnRecv := False;
+  clsOwnMmi := -1;
+  if (CurProc >= 0) and (CurProc = PyClsMethProc) and (PyClsMethLocal >= 0) and
+     (PyClsMethCi >= 0) and (baseNode >= 0) and (ASTKind[baseNode] = AN_IDENT) and
+     (ASTIVal[baseNode] = PyClsMethLocal) and
+     not PyClassNameIsABase(PyRawName(UClsNOff[PyClsMethCi], UClsNLen[PyClsMethCi])) then
+  begin
+    clsOwnMmi := FindUMeth(PyClsMethCi, mname);
+    clsOwnRecv := (clsOwnMmi >= 0) and UMthIsStatic[clsOwnMmi] and
+                  (UMthProc_[clsOwnMmi] >= 0);
+  end;
   smArmPossible := False;
   smArmBuilt := False;
   dynFbBuilt := False;
@@ -23612,6 +23720,13 @@ begin
     attribute` message this defect was reported as.
     bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
   clsRefOk := PyClassLevelCarrier(mname, clsOnlyMmi, clsAnyInst);
+  if clsOwnRecv then
+  begin
+    { `cls` is never an instance: the class arm alone, with its own carrier }
+    clsRefOk := True;
+    clsOnlyMmi := clsOwnMmi;
+    clsAnyInst := False;
+  end;
   clsOnly := clsRefOk and (not clsAnyInst);
   clsArm := clsRefOk and clsAnyInst;
   if clsOnly then
@@ -59801,7 +59916,7 @@ var modName: AnsiString;   { __name__ of an imported module }
     qcSegs, qcUnitIdx, qcI: Integer;         { the qualified-construction arm }
     clsScopeSym: Integer;   { a class attribute visible in a method's DEFAULT }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists, atSeq: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -60669,6 +60784,24 @@ begin
         end;
       end;
       CurASTNode := node;
+    end;
+    tkPlus:
+    begin
+      { a `+` that ParseSimpleExpr's leading sign did not take: one after a
+        unary minus or another plus (`-+v`, `++v` is the increment token),
+        an "expected expression" before. A user class calls its __pos__;
+        anything else is itself. bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
+      Next; ParseFactor;
+      left := CurASTNode;
+      if (IntToTypeKind(ASTTk[left]) = tyClass) and
+         (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
+      begin
+        node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__pos__', left, -1);
+        if node < 0 then node := PyMakeUnsupportedOperand;
+        CurASTNode := node;
+      end
+      else if IntToTypeKind(ASTTk[left]) = tyVariant then
+        CurASTNode := PyCallProc1('pyvar_pos', left);
     end;
     tkMinus:
     begin
@@ -62192,7 +62325,17 @@ begin
             atDflt := CurASTNode;
           end;
           Expect(tkRParen, ')');
+          { hasattr(<list/tuple/set>, name): corrected at run time from the
+            object's kind -- see PySeqHasAttrFixable. Receiver, then name,
+            each bound once, in Python's evaluation order. }
+          atSeq := (not atIsGet) and PySeqHasAttrFixable(atRecv);
+          if atSeq then
+          begin
+            atRecv := PyEvalOnce(atRecv);
+            atFld := PyEvalOnce(atFld);
+          end;
           CurASTNode := PyMakeDynAttrByExpr(atRecv, atFld, atDflt, not atIsGet);
+          if atSeq then CurASTNode := PySeqHasAttrWrapN(atRecv, atFld, CurASTNode);
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
         end;
@@ -62217,6 +62360,11 @@ begin
         atProp := -1;
         if atFld < 0 then atProp := PyMakePropRead(atRecv, atName);
         if atProp >= 0 then atExists := True;
+        { a list/tuple/set receiver: the answer is corrected from the
+          object's own kind at run time -- see PySeqHasAttrFixable. Bound once
+          here, because both exits below read it. }
+        atSeq := (not atIsGet) and (atFld < 0) and PySeqHasAttrFixable(atRecv);
+        if atSeq then atRecv := PyEvalOnce(atRecv);
         atDflt := -1;
         if CurTok.Kind = tkComma then
         begin
@@ -62338,6 +62486,7 @@ begin
               ASTTk[argSeq2] := Ord(tyBoolean);
               node := argSeq2;
             end;
+            if atSeq then node := PySeqHasAttrWrap(atRecv, atName, node);
             CurASTNode := node;
           end;
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
@@ -62348,6 +62497,7 @@ begin
           node := AllocNode(AN_INT_LIT);
           if atExists then ASTIVal[node] := 1 else ASTIVal[node] := 0;
           ASTTk[node] := Ord(tyBoolean);
+          if atSeq then node := PySeqHasAttrWrap(atRecv, atName, node);
           CurASTNode := node;
           LastExprTk := tyBoolean;
           Exit;
@@ -64700,6 +64850,27 @@ begin
            (ProcUnitIdx[procIdx] <> CurrentUnitIdx))) then
         procIdx := -1;
 
+      { A NAME THIS MODULE BINDS BEATS A PASCAL ROUTINE IT ONLY CASE-FOLDS TO.
+
+        Python is case-sensitive, so `lo` can never denote builtin.pas's `Lo`,
+        nor `abs` System's `Abs`: those matches exist only because Pascal's
+        lookup folds case. When the module itself binds the EXACT spelling --
+        `lo = f` -- that binding is the only thing the name can mean. Without
+        this, `lo = f; lo(2)` ran Lo(2) and printed 2 and `hi(2)` printed 0:
+        the intrinsic's answer, silent and plausible. `ord = f` was right all
+        along because pylib's `ord` matches exactly and is a def-shadowing
+        question the arms above already answer (the control in the ticket).
+
+        Inside a def the skLocal arm above already wins; this is the module
+        arm. Above the assignment the global does not exist yet (FindSym
+        misses), so `abs(-5)` before `abs = f` still reaches the builtin, which
+        is CPython's order too.
+        bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call }
+      if (qUnit < 0) and (procIdx >= 0) and (idx >= 0) and
+         (Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx) and
+         (Syms[idx].Name = name) and (Procs[procIdx].Name <> name) then
+        procIdx := -1;
+
       pyLateDefPi := -1;
       if (qUnit < 0) and (procIdx >= 0) and
          PyShadowDeclHere(procIdx) and (not PyDefBoundHere(procIdx)) and
@@ -65499,12 +65670,20 @@ begin
         declared in the user's unit (or the main program, unit index -1), which
         is exactly what the unit test excludes. Pascal parsing is untouched:
         NilPyUserCode is false there, so the gate stays `procIdx < 0`.
-        bug-nilpy-uses-math-breaks-abs-on-a-float }
+        bug-nilpy-uses-math-breaks-abs-on-a-float
+        A VARIABLE the program binds under the exact spelling (`abs = f`,
+        module level or local) is the name's meaning, so the intrinsic stands
+        aside for it too.
+        bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call }
       if (CaseEqual(name, 'Abs') or CaseEqual(name, 'Sqr')) and
          ((procIdx < 0) or
           ((procIdx < ProcCount) and
            (ProcUnitIdx[procIdx] <> CurrentUnitIdx) and
            (ProcUnitIdx[procIdx] >= 0))) and
+         (not ((idx >= 0) and (Syms[idx].Name = name) and
+               ((Syms[idx].Kind in [skLocal, skParam]) or
+                ((Syms[idx].Kind = skGlobal) and
+                 (SymUnitIdx[idx] = CurrentUnitIdx))))) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');

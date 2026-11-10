@@ -57,3 +57,21 @@ constructors.
 
 ## Log
 - 2026-08-19 — filed from a Track D documentation verification pass.
+
+## Status 2026-11-10
+
+- `return super().hi()` now works and prints what python3 prints, at latest
+  1c6f046ff4. That half is done.
+- `B.__init__(self)` for a SECOND base is still "class method not found", and
+  so is any `B.meth(self)` where B is flattened. The cause is by design
+  (pyparser.inc, PyClsUsedAsMixin): a class named as a second base anywhere in
+  the program is NOT compiled standalone. Its body is replayed into each host.
+  So B has no methods of its own: even `B().meth()` on a plain B instance
+  fails to compile ("B has no method meth"), once any class lists B second.
+  A member the host overrides (its own `__init__`) is skipped in the replay,
+  so B's version is compiled nowhere.
+- The fix direction: during the replay, compile each host-overridden mixin
+  member as well, under a mangled name (`B$__init__`). Then resolve an unbound
+  `B.meth(self)` inside a host that flattens B to that copy. Compiling B
+  standalone as well is a separate step; it is unsafe for a mixin that reads
+  members only its hosts declare.

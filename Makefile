@@ -1248,6 +1248,54 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
+	./$(COMPILER) test/test_nilpy_augmented_bitwise_on_a_parameter_mutates_the_callers_object.py $(TESTTMP)/test_nilpy_augparam26
+	$(TESTTMP)/test_nilpy_augparam26 | diff -u test/test_nilpy_augmented_bitwise_on_a_parameter_mutates_the_callers_object.expected -
+	./$(COMPILER) test/test_nilpy_unary_dunders_on_a_variant_operand.py $(TESTTMP)/test_nilpy_unaryvar26
+	$(TESTTMP)/test_nilpy_unaryvar26 | diff -u test/test_nilpy_unary_dunders_on_a_variant_operand.expected -
+	./$(COMPILER) test/test_nilpy_hasattr_tells_list_tuple_and_set_apart.py $(TESTTMP)/test_nilpy_hasattrseq26
+	$(TESTTMP)/test_nilpy_hasattrseq26 | diff -u test/test_nilpy_hasattr_tells_list_tuple_and_set_apart.expected -
+	./$(COMPILER) test/test_nilpy_a_nested_fstring.py $(TESTTMP)/test_nilpy_nestedfstr26
+	$(TESTTMP)/test_nilpy_nestedfstr26 | diff -u test/test_nilpy_a_nested_fstring.expected -
+	./$(COMPILER) test/test_nilpy_a_nonzero_variant_default_reaches_the_callee.npy $(TESTTMP)/test_nilpy_vardflt26
+	$(TESTTMP)/test_nilpy_vardflt26 | diff -u test/test_nilpy_a_nonzero_variant_default_reaches_the_callee.expected -
+	./$(COMPILER) test/test_nilpy_int_and_float_methods.py $(TESTTMP)/test_nilpy_intfloatm26
+	$(TESTTMP)/test_nilpy_intfloatm26 | diff -u test/test_nilpy_int_and_float_methods.expected -
+	./$(COMPILER) test/test_nilpy_not_and_boolops_on_a_promotable_int.py $(TESTTMP)/test_nilpy_promonot26
+	$(TESTTMP)/test_nilpy_promonot26 | diff -u test/test_nilpy_not_and_boolops_on_a_promotable_int.expected -
+	./$(COMPILER) test/test_nilpy_a_staticmethod_called_through_cls.py $(TESTTMP)/test_nilpy_clsstatic26
+	$(TESTTMP)/test_nilpy_clsstatic26 | diff -u test/test_nilpy_a_staticmethod_called_through_cls.expected -
+	./$(COMPILER) test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.py $(TESTTMP)/test_nilpy_shadowfold26
+	$(TESTTMP)/test_nilpy_shadowfold26 | diff -u test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.expected -
+	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
+	# ticket's own code block; expected = python3), so they stay fixed.
+	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
+	$(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26 | diff -u test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.expected -
+	./$(COMPILER) test/test_nilpy_print_passed_as_a_value.py $(TESTTMP)/test_nilpy_print_passed_as_a_value26
+	$(TESTTMP)/test_nilpy_print_passed_as_a_value26 | diff -u test/test_nilpy_print_passed_as_a_value.expected -
+	./$(COMPILER) test/test_nilpy_a_classmethod_calls_another_through_cls.py $(TESTTMP)/test_nilpy_a_classmethod_calls_another_through_cls26
+	$(TESTTMP)/test_nilpy_a_classmethod_calls_another_through_cls26 | diff -u test/test_nilpy_a_classmethod_calls_another_through_cls.expected -
+	./$(COMPILER) test/test_nilpy_a_frozenset_returned_from_a_def_keeps_its_items.py $(TESTTMP)/test_nilpy_a_frozenset_returned_from_a_def_keeps_its_items26
+	$(TESTTMP)/test_nilpy_a_frozenset_returned_from_a_def_keeps_its_items26 | diff -u test/test_nilpy_a_frozenset_returned_from_a_def_keeps_its_items.expected -
+	./$(COMPILER) test/test_nilpy_a_name_bound_to_a_pascal_class_and_its_subclass_subscripts.py $(TESTTMP)/test_nilpy_a_name_bound_to_a_pascal_class_and_its_subclass_subscripts26
+	$(TESTTMP)/test_nilpy_a_name_bound_to_a_pascal_class_and_its_subclass_subscripts26 | diff -u test/test_nilpy_a_name_bound_to_a_pascal_class_and_its_subclass_subscripts.expected -
+	./$(COMPILER) test/test_nilpy_str_partition_returned_from_a_def.py $(TESTTMP)/test_nilpy_str_partition_returned_from_a_def26
+	$(TESTTMP)/test_nilpy_str_partition_returned_from_a_def26 | diff -u test/test_nilpy_str_partition_returned_from_a_def.expected -
+	./$(COMPILER) test/test_nilpy_an_ordering_dunder_returning_a_non_bool_on_a_variant.py $(TESTTMP)/test_nilpy_an_ordering_dunder_returning_a_non_bool_on_a_variant26
+	$(TESTTMP)/test_nilpy_an_ordering_dunder_returning_a_non_bool_on_a_variant26 | diff -u test/test_nilpy_an_ordering_dunder_returning_a_non_bool_on_a_variant.expected -
+	./$(COMPILER) test/test_nilpy_kwargs_collector_takes_the_unconsumed_keys.py $(TESTTMP)/test_nilpy_kwargs_collector_takes_the_unconsumed_keys26
+	$(TESTTMP)/test_nilpy_kwargs_collector_takes_the_unconsumed_keys26 | diff -u test/test_nilpy_kwargs_collector_takes_the_unconsumed_keys.expected -
+	./$(COMPILER) test/test_nilpy_len_dispatches_len_dunder_on_a_dynamic_value.py $(TESTTMP)/test_nilpy_len_dispatches_len_dunder_on_a_dynamic_value26
+	$(TESTTMP)/test_nilpy_len_dispatches_len_dunder_on_a_dynamic_value26 | diff -u test/test_nilpy_len_dispatches_len_dunder_on_a_dynamic_value.expected -
+	./$(COMPILER) test/test_nilpy_struct_pack_computed_format_and_star_args.py $(TESTTMP)/test_nilpy_struct_pack_computed_format_and_star_args26
+	$(TESTTMP)/test_nilpy_struct_pack_computed_format_and_star_args26 | diff -u test/test_nilpy_struct_pack_computed_format_and_star_args.expected -
+	./$(COMPILER) test/test_nilpy_inline_tuple_unpacking_of_iterable_values.py $(TESTTMP)/test_nilpy_inline_tuple_unpacking_of_iterable_values26
+	$(TESTTMP)/test_nilpy_inline_tuple_unpacking_of_iterable_values26 | diff -u test/test_nilpy_inline_tuple_unpacking_of_iterable_values.expected -
+	./$(COMPILER) test/test_nilpy_a_generator_returned_from_a_def.py $(TESTTMP)/test_nilpy_a_generator_returned_from_a_def26
+	$(TESTTMP)/test_nilpy_a_generator_returned_from_a_def26 | diff -u test/test_nilpy_a_generator_returned_from_a_def.expected -
+	./$(COMPILER) test/test_nilpy_a_bound_method_callback_with_several_arguments.py $(TESTTMP)/test_nilpy_a_bound_method_callback_with_several_arguments26
+	$(TESTTMP)/test_nilpy_a_bound_method_callback_with_several_arguments26 | diff -u test/test_nilpy_a_bound_method_callback_with_several_arguments.expected -
+	./$(COMPILER) test/test_nilpy_str_format_named_keyword_fields.py $(TESTTMP)/test_nilpy_str_format_named_keyword_fields26
+	$(TESTTMP)/test_nilpy_str_format_named_keyword_fields26 | diff -u test/test_nilpy_str_format_named_keyword_fields.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
 	# Every one of those shapes called from NilPy: each is released exactly once
 	# (alive 0 after N discards and N rebinds), borrowed receivers survive, the

@@ -1,0 +1,23 @@
+False False False True True True
+add False True False False True False
+update False True False False True False
+append True False False True False False
+sort True False False True False False
+count True False True True False True
+index True False True True False True
+union False True False False True False
+discard False True False False True False
+extend True False False True False False
+False True True False True False
+False True True True False
+(False, True, False) (True, False, False) (False, False, False) (False, False, True) (False, False, False)
+True True
+__contains__ True True True True
+__iter__ True True True True
+__len__ True True True True
+__getitem__ True False True False
+__setitem__ True False False False
+__add__ True False True False
+__and__ False True False True
+__ior__ False True False False
+__reversed__ True False False False

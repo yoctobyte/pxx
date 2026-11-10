@@ -1,0 +1,6 @@
+# A library routine's non-zero Variant default (`v: Variant = 7`) reaches the
+# callee when NilPy omits the argument. It arrived as None (tag 0), so the
+# callee read 0. A ZERO default stays the "not supplied" sentinel (tag 0).
+# bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply
+import 'mimic_variant_default_probe.pas' as d
+print(d.vd(), d.vd(5), d.vneg(), d.vneg(2), d.vzero(), d.bd(), d.bd(False))

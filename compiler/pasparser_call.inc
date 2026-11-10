@@ -1424,7 +1424,13 @@ begin
   else if isNilPy and (ParamStoredKind(mpi, k) = tyVariant) and
           (ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] or
            ((ProcUnitIdx[mpi] >= 0) and
-            (not UnitIsPyModule(ProcUnitIdx[mpi])))) then
+            (not UnitIsPyModule(ProcUnitIdx[mpi])) and
+            { ...but only the ZERO default is that sentinel (149 of 151
+              Variant defaults in lib/ and builtin/). A non-zero one, zlib's
+              `value: Variant = 1`, is a real value: it is boxed below like a
+              NilPy def's, so the callee sees the 1 that Pascal callers get.
+              bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply }
+            (ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k] = 0))) then
     { A variant parameter is passed by REFERENCE — the callee reads a 16-byte
       slot through a pointer — so a `= None` default cannot be a bare ordinal:
       the callee dereferences it the moment it touches the parameter.
