@@ -457,6 +457,26 @@ begin
   ScopeHopsToProc := -1;
 end;
 
+function SymScopeHops(idx: Integer): Integer;
+{ ScopeHopsToProc's twin for a SYMBOL: how many lexical hops out from CurProc
+  the routine that declared symbol `idx` sits; MaxInt for a global. Symbols
+  carry no owner, but each routine's locals start at its ScopeBase and a
+  finished sibling's are rolled back, so the innermost routine on the chain
+  whose base is at or below idx is the owner.
+  bug-p-a-local-string-const-does-not-shadow-an-outer-var }
+var p, guard: Integer;
+begin
+  p := ScopeStartProc;
+  guard := 0;
+  while (p >= 0) and (guard <= ProcCount) do
+  begin
+    if idx >= Procs[p].ScopeBase then begin SymScopeHops := guard; Exit; end;
+    p := ProcLexParent[p];
+    Inc(guard);
+  end;
+  SymScopeHops := MaxInt;
+end;
+
 function FindTypeAlias(const name: AnsiString): Integer;
 var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString; owned, bestOwned: Boolean;
 begin
@@ -6016,7 +6036,10 @@ begin
   j := SymHashPrev[idx];
   while j >= 0 do
   begin
-    if (not SymCaseSensitive[j]) and
+    { j < SysConstSymTop is System's (MaxSmallInt & co), which a program may
+      redeclare in any spelling, as fpc's tcase2.pp does:
+      bug-p-a-const-or-type-may-redeclare-a-var-declared-before-it }
+    if (not SymCaseSensitive[j]) and (j >= SysConstSymTop) and
        CaseEqual(Syms[j].Name, Syms[idx].Name) and
        (not StrEqual(Syms[j].Name, Syms[idx].Name)) and
        CaseDupSameScope(idx, j) then
@@ -6055,8 +6078,22 @@ end;
   Each table answers with its own scope columns: symbols by InnermostScopeBase
   (as CaseDupSameScope), string/set consts and type aliases by their owner
   routine + unit, routines by their lexical parent + unit. A symbol in a
-  DIFFERENT spelling is left to CaseDupRefuse, so one pair is reported once. }
-function VarNameTakenHere(const name: AnsiString): AnsiString;
+  DIFFERENT spelling is left to CaseDupRefuse, so one pair is reported once.
+
+  The same question is asked in the OTHER order too -- a const or a type
+  declared after a var, a string const or a set const of the same name -- and
+  there the two flags change the answer:
+  - anyCaseSyms: match symbols in any spelling (Pascal mode only). A string
+    const or a type is not a symbol, so CaseDupRefuse never sees the pair; a
+    const that IS a symbol is renamed by the caller after the report, so it is
+    still reported once.
+  - withTypes: also look in the type table. Off for a type, because a
+    forward class declaration states its name twice.
+  - withRoutines: also look in the routine table. Off for a const and a type:
+    nothing has been measured to cost there, and the census is what earns a
+    narrowing (see CaseDupRefuse).
+  bug-p-a-const-or-type-may-redeclare-a-var-declared-before-it }
+function VarNameTakenHere(const name: AnsiString; anyCaseSyms, withTypes, withRoutines: Boolean): AnsiString;
 var j, base: Integer; scoped, cs: Boolean; lo: AnsiString;
   function NameIs(const other: AnsiString): Boolean;
   begin
@@ -6070,7 +6107,10 @@ begin
   j := SymHashHead[SymNameFoldHash(name)];
   while j >= 0 do
   begin
-    if StrEqual(Syms[j].Name, name) and
+    if (StrEqual(Syms[j].Name, name) or
+        (anyCaseSyms and (not cs) and (not SymCaseSensitive[j]) and
+         CaseEqual(Syms[j].Name, name))) and
+       (j >= SysConstSymTop) and   { System's consts: a program may redeclare them, as in fpc }
        ((scoped and (j >= base)) or
         ((not scoped) and (SymUnitIdx[j] = CurrentUnitIdx))) then
     begin
@@ -6091,6 +6131,7 @@ begin
       Result := 'a set constant'; Exit;
     end;
   lo := ULower(name);
+  if withTypes then
   for j := 0 to AliasCount - 1 do
     if (AliasOwnerProc[j] = CurProc) and (AliasOwnerCi[j] = -1) and
        (AliasUnitIdx[j] = CurrentUnitIdx) and
@@ -6099,6 +6140,7 @@ begin
     begin
       Result := 'a type'; Exit;
     end;
+  if withRoutines then
   for j := 0 to ProcCount - 1 do
     if (ProcLexParent[j] = CurProc) and (ProcUnitIdx[j] = CurrentUnitIdx) and
        NameIs(Procs[j].Name) then

@@ -1,0 +1,8 @@
+B A const
+C 3
+A A const
+D 4
+F F const
+E E var
+H TRUE
+main 1 global const

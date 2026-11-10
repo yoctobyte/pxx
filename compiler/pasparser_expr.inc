@@ -801,6 +801,7 @@ end;
 
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
+    strSymIdx: Integer;   { the same-named symbol a string const is weighed against -- see SymScopeHops }
     i64v: Int64;         { a compiler constant answered as a literal (__pxxTlsBlockSize et al) }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
     eoNode: Integer;     { TryExplicitOpCast's result — an `operator Explicit` on a record/class operand, at both name doors }
@@ -8824,7 +8825,18 @@ begin
          ((idx < SysConstSymTop) or (SymUnitIdx[idx] <> CurrentUnitIdx)) then
         idx := -1;
       sci := -1;
-      if idx < 0 then sci := FindSetConstIn(name, qUnit);
+      if idx < 0 then sci := FindSetConstIn(name, qUnit)
+      else if (qUnit = -1) and (idx = FindSym(name)) then
+      begin
+        { ...unless the set constant is the INNER one: a routine's own
+          `const digs = [...]` beside a global `var digs: Integer` read the
+          integer, and `c in digs` crashed. Same rule as the string-const
+          guard below. bug-p-a-local-string-const-does-not-shadow-an-outer-var }
+        sci := FindSetConstIn(name, qUnit);
+        if (sci >= 0) and
+           (SymScopeHops(idx) <= ScopeHopsToProc(SetConstOwner[sci])) then
+          sci := -1;
+      end;
       if sci >= 0 then
       begin
         { Named set constant — yields the baked 32-byte mask's address, exactly
@@ -8870,8 +8882,22 @@ begin
         away from the const it had just refused to see. In NilPy that is the
         ordinary spelling of a module import (`digits = string.digits`), which
         is how it reached the corpus as a wall.
-        bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails }
-      if (sci >= 0) and (qUnit = -1) and (FindSym(name) >= 0) then sci := -1;
+        bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails
+
+        ...and "a variable in scope" means one at least as INNER as the
+        constant. The table is scoped now (FindStrConstIn is innermost-wins),
+        and an any-depth variable still won: `var outer` at program level beat
+        a routine's own `const outer = 'inner'`, which read the global's value
+        with no diagnostic. fpc prints the const. A one-character const never
+        showed it, being a char symbol and found by FindSym itself.
+        bug-p-a-local-string-const-does-not-shadow-an-outer-var }
+      if (sci >= 0) and (qUnit = -1) then
+      begin
+        strSymIdx := FindSym(name);
+        if (strSymIdx >= 0) and
+           (SymScopeHops(strSymIdx) <= ScopeHopsToProc(StrConstOwner[sci])) then
+          sci := -1;
+      end;
       if (sci < 0) and CaseEqual(name, 'LineEnding') and
          ((qUnit <> -1) or (FindSym(name) < 0)) then
       begin

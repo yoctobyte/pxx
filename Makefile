@@ -1266,14 +1266,17 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc26
 	$(TESTTMP)/test_nilpy_gc26 | diff -u test/test_nilpy_gc_module_micropython_style.expected -
 	@$(TESTTMP)/test_nilpy_gc26 keep | grep -q 'alloc level False' || { echo "FAIL: nilpy gc control (keep) stayed level"; exit 1; }
+	# The C3 and S3 compiles and the nm loop stay ADJACENT: testmgr cuts a job at
+	# each change of source, and two rows between them left the loop's job
+	# without the C3 object it reads.
 	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_c3.o >/dev/null
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_s3.o >/dev/null
+	@for o in c3 s3; do nm $(TESTTMP)/test_nilpy_gc_$$o.o | grep -q ' U heap_caps_get_free_size' || { echo "FAIL: nilpy gc on $$o does not read IDF's heap"; exit 1; }; done
 	# ESP Text records are small: 5 standard Text files at 4096 each were 20.6 KB
 	# of .bss on the C3 (museum_landkaart). textfile.pas TF_BUFSIZE: 32 since
 	# 2026-10-13, a 64-byte record (was 128 / 160).
 	tools/expect_same.sh esp_text_buffers_are_small "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_text_buffers_are_small.pas $(TESTTMP)/test_esp_textbuf.o 2>&1 | grep -c 'bss 64B  ')" "5"
 	tools/expect_same.sh esp_reactor_is_pointer_width "$$(PXXDBG=a.datamap ./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/test_esp_reactor_is_pointer_width.pas $(TESTTMP)/test_esp_reactor.o 2>&1 | grep ' reactors$$' | grep -o '[0-9][0-9]*B')" "2920B"
-	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_s3.o >/dev/null
-	@for o in c3 s3; do nm $(TESTTMP)/test_nilpy_gc_$$o.o | grep -q ' U heap_caps_get_free_size' || { echo "FAIL: nilpy gc on $$o does not read IDF's heap"; exit 1; }; done
 	# `<computed string> * n` releases the computed string, one row per spelling.
 	./$(COMPILER) test/test_nilpy_a_computed_string_repeated_is_released.py $(TESTTMP)/test_nilpy_strrep26
 	$(TESTTMP)/test_nilpy_strrep26 | diff -u test/test_nilpy_a_computed_string_repeated_is_released.expected -
@@ -11819,6 +11822,22 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_vardup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_vardup.log)" "7"
 	./$(COMPILER) test/test_a_var_may_shadow_a_name_of_an_outer_scope.pas $(TESTTMP)/test_varshadow26
 	tools/expect_same.sh test_varshadow26 "$$($(TESTTMP)/test_varshadow26)" "$$(cat test/test_a_var_may_shadow_a_name_of_an_outer_scope.expected)"
+	@# The reverse order: a const or type after a var / string const / set
+	@# const of the same name, seven pairs, each reported ONCE (fpc: the same
+	@# seven). Then the controls: inner-scope reuse, a forward class, System's
+	@# consts redeclared; and a routine's own string/set const beating an outer
+	@# var at every depth (fpc's output).
+	! ./$(COMPILER) test/test_a_const_or_type_may_not_redeclare_a_var_declared_before_it.pas $(TESTTMP)/test_constdup26 > $(TESTTMP)/test_constdup.log 2>&1
+	grep -q 'duplicate identifier "TEL": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
+	grep -q 'duplicate identifier "VV": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
+	grep -q 'duplicate identifier "Digits": already declared in this scope as a set constant' $(TESTTMP)/test_constdup.log
+	grep -q 'duplicate identifier "X": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
+	grep -q 'duplicate identifier "LOC": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
+	tools/expect_same.sh test_constdup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_constdup.log)" "7"
+	./$(COMPILER) test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.pas $(TESTTMP)/test_constshadow26
+	tools/expect_same.sh test_constshadow26 "$$($(TESTTMP)/test_constshadow26)" "$$(cat test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.expected)"
+	./$(COMPILER) test/test_a_local_string_or_set_const_shadows_an_outer_var.pas $(TESTTMP)/test_strconstshadow26
+	tools/expect_same.sh test_strconstshadow26 "$$($(TESTTMP)/test_strconstshadow26)" "$$(cat test/test_a_local_string_or_set_const_shadows_an_outer_var.expected)"
 	@# THE NEGATIVE CONTROLS, drawn from the population the census actually found
 	@# rather than from imagination. The census turned up three families that
 	@# differ only in case in ONE scope and are LEGAL, and the refusal must not

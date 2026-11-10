@@ -3008,7 +3008,7 @@ begin
     n := 0;
     repeat
       if n >= MAX_DECL_NAMES then Error('too many comma-separated names in one var declaration');
-      dupKind := VarNameTakenHere(CurTok.SVal);
+      dupKind := VarNameTakenHere(CurTok.SVal, False, True, True);
       if dupKind <> '' then
       begin
         { a reference to a nested routine has already been rewritten to its
@@ -4086,6 +4086,7 @@ var name: AnsiString; v: Int64;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     cBssBefore, cBssAfter, cFirstPI: Integer;   { typed-const-array -> .data promotion, see TryBakeConstArrayIntoData }
     cBaked: Boolean;
+    dupKind: AnsiString;
 begin
   savedCCi := ParsingClassConstCi; savedCVis := ParsingClassConstVis;
   ParsingClassConstCi := clsCi; ParsingClassConstVis := clsVis;
@@ -4136,6 +4137,20 @@ begin
         (not CaseEqual(CurTok.SVal, 'finalization')) do
   begin
     name := CurTok.SVal; Next;
+    { a const after a var, string const, set const or type of the same name
+      (the var-first order is checked in ParseVarSection). Renamed after the
+      report so CaseDupRefuse does not report the pair a second time.
+      bug-p-a-const-or-type-may-redeclare-a-var-declared-before-it }
+    if clsCi < 0 then
+    begin
+      dupKind := VarNameTakenHere(name, True, True, False);
+      if dupKind <> '' then
+      begin
+        ErrorRecover('duplicate identifier "' + name + '": already declared in this scope as '
+                     + dupKind);
+        name := name + '$dup';
+      end;
+    end;
     if CurTok.Kind = tkColon then
     begin
       { Typed constant: `const Name: type = value | (e0,e1,...)`. FPC typed
@@ -7708,6 +7723,7 @@ var
   curVis: Integer;   { current member visibility (VIS_*) for the class body section; stamped onto each field/method (enforced only under StrictVisibility) }
   curStrictVis: Boolean;  { the pending section was introduced by `strict` }
   etid, propEnumId, propSetEnumId: Integer;
+  tDupKind: AnsiString;   { see the type-name read below }
   propIsIndexed, propIsDefault, propRedecl, propHasIndex: Boolean;
   propIndexVal: Int64;   { indexed (array) property + `default;` + `property X;` redeclaration }
   propBase: Integer;                                   { the ancestor row a redeclaration copies }
@@ -7853,6 +7869,18 @@ begin
       tnOff := Tokens[TokPos-1].SOffset;
       tnLen := Tokens[TokPos-1].SLen;
       tname := CurTok.SVal; Next;
+      { a type after a var, string const or set const of the same name (the
+        var-first order is checked in ParseVarSection). Not against other
+        types: a forward class declaration states its name twice. Not inside
+        a class or record body: a nested type has its own scope.
+        bug-p-a-const-or-type-may-redeclare-a-var-declared-before-it }
+      if ParsingClassBodyCi < 0 then
+      begin
+        tDupKind := VarNameTakenHere(tname, True, False, False);
+        if tDupKind <> '' then
+          ErrorRecover('duplicate identifier "' + tname + '": already declared in this scope as '
+                       + tDupKind);
+      end;
       Expect(tkEq, '=');
       { A generic class specialization streams the concrete class body in place
         and leaves CurTok on 'class', falling through to the class-binding
