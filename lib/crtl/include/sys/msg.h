@@ -73,6 +73,10 @@ struct msginfo {
   unsigned short msgseg;
 };
 
+/* glibc's extension name for the queue's byte count (under __USE_MISC there;
+   always here, as crtl has no feature-test levels). busybox ipcs reads it. */
+#define msg_cbytes __msg_cbytes
+
 int     msgget(key_t key, int msgflg);
 int     msgctl(int msqid, int cmd, struct msqid_ds *buf);
 int     msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);

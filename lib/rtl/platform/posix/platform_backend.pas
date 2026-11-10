@@ -750,6 +750,9 @@ procedure ClearPalFileStat(var info: TPalFileStat);
 begin
   info.Size := -1;
   info.MTimeSec := 0;
+  info.ATimeNsec := 0;
+  info.MTimeNsec := 0;
+  info.CTimeNsec := 0;
   info.Mode := 0;
   info.IsDir := False;
   info.IsFile := False;
@@ -818,6 +821,10 @@ begin
   info.Gid := Integer(StatxDwordLE(@sx[0], $18));
   info.ATimeSec := StatxInt64LE(@sx[0], $40);
   info.CTimeSec := StatxInt64LE(@sx[0], $60);
+  { tv_nsec sits 8 bytes after each timestamp's tv_sec }
+  info.ATimeNsec := Int64(StatxDwordLE(@sx[0], $48));
+  info.CTimeNsec := Int64(StatxDwordLE(@sx[0], $68));
+  info.MTimeNsec := Int64(StatxDwordLE(@sx[0], $78));
   info.Rdev := EncodeDevUser(StatxDwordLE(@sx[0], $80), StatxDwordLE(@sx[0], $84));
   { stable (dev,ino) key for sqlite locks, AND a value major()/minor() can read }
   info.Dev := EncodeDevUser(StatxDwordLE(@sx[0], $88), StatxDwordLE(@sx[0], $8C));

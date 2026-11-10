@@ -48,13 +48,16 @@ typedef int key_t;
    a caller must NOT, or the command comes out unrecognised. Declaring the old
    layout here would compile and would read a uid out of the middle of a gid. */
 struct ipc_perm {
-  key_t          __key;   /* key supplied to *get() */
+  /* glibc spells these __key/__seq, the kernel's <linux/ipc.h> key/seq, and
+     programs pick by __GNU_LIBRARY__ (busybox ipcs), which crtl does not
+     claim. One slot, both names. */
+  union { key_t __key; key_t key; };   /* key supplied to *get() */
   uid_t          uid;     /* owner's effective user ID */
   gid_t          gid;     /* owner's effective group ID */
   uid_t          cuid;    /* creator's effective user ID */
   gid_t          cgid;    /* creator's effective group ID */
   mode_t         mode;    /* read/write permission */
-  unsigned short __seq;   /* sequence number */
+  union { unsigned short __seq; unsigned short seq; };   /* sequence number */
   unsigned short __pad2;
   unsigned long  __glibc_reserved1;
   unsigned long  __glibc_reserved2;

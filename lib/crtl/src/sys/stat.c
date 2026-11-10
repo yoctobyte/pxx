@@ -30,6 +30,10 @@ struct __pxx_statbuf {
   long long ctime;
   int       uid;
   int       gid;
+  /* appended again: the nanosecond halves, for st_atim/st_mtim/st_ctim */
+  long long atime_nsec;
+  long long mtime_nsec;
+  long long ctime_nsec;
 };
 
 extern int __pxx_fstat(int fd, struct __pxx_statbuf *sb);
@@ -52,9 +56,12 @@ static void fill(struct stat *buf, const struct __pxx_statbuf *sb) {
   buf->st_size    = (off_t)sb->size;
   buf->st_blksize = (blksize_t)sb->blksize;
   buf->st_blocks  = (blkcnt_t)sb->blocks;
-  buf->st_atime   = (long)sb->atime;
-  buf->st_mtime   = (long)sb->mtime;
-  buf->st_ctime   = (long)sb->ctime;
+  buf->st_atim.tv_sec  = (long)sb->atime;
+  buf->st_atim.tv_nsec = (long)sb->atime_nsec;
+  buf->st_mtim.tv_sec  = (long)sb->mtime;
+  buf->st_mtim.tv_nsec = (long)sb->mtime_nsec;
+  buf->st_ctim.tv_sec  = (long)sb->ctime;
+  buf->st_ctim.tv_nsec = (long)sb->ctime_nsec;
 }
 
 /* The PAL stat calls return the raw syscall result: 0 on success, -errno on

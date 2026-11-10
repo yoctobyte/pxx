@@ -195,6 +195,20 @@ struct sockaddr_in6 {
   uint32_t    sin6_scope_id;
 };
 
+/* IP_PKTINFO's ancillary payload, glibc's layout. busybox's udp_io sizes a
+   cmsg buffer by it and writes ipi_spec_dst. */
+struct in_pktinfo {
+  int            ipi_ifindex;   /* interface index */
+  struct in_addr ipi_spec_dst;  /* local address */
+  struct in_addr ipi_addr;      /* header destination address */
+};
+
+/* The v6 one, for completeness of the type (crtl has no IPV6_PKTINFO). */
+struct in6_pktinfo {
+  struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
+  unsigned int    ipi6_ifindex; /* send/recv interface index */
+};
+
 extern const struct in6_addr in6addr_any;
 extern const struct in6_addr in6addr_loopback;
 #define IN6ADDR_ANY_INIT      { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } }

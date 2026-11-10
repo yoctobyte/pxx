@@ -80,6 +80,10 @@ begin
        (s[i+6] = 'd') then
     begin
       j := i + 7;
+      { `__aligned__(8)`, the reserved spelling glibc's and busybox's headers
+        use: step over the trailing underscores, or the `(` test below fails
+        and the alignment reads as 0 (busybox tls_sp_c32's sp_point). }
+      while (j <= Length(s)) and (s[j] = '_') do Inc(j);
       while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
       if (j <= Length(s)) and (s[j] = '(') then
       begin
@@ -94,6 +98,11 @@ begin
         Result := v;
         Exit;
       end;
+      { Bare `aligned`, no argument: gcc's "the largest alignment ever used for
+        any data type on the target" (__BIGGEST_ALIGNMENT__), 16 everywhere we
+        target except arm32's 8. Left at 0 it marked the struct body not simple
+        and the whole struct went OPAQUE. }
+      if TargetArch = TARGET_ARM32 then Result := 8 else Result := 16;
       Exit;
     end;
     Inc(i);

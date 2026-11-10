@@ -591,6 +591,9 @@ procedure ClearPalFileStat(var info: TPalFileStat);
 begin
   info.Size := -1;
   info.MTimeSec := 0;
+  info.ATimeNsec := 0;
+  info.MTimeNsec := 0;
+  info.CTimeNsec := 0;
   info.Mode := 0;
   info.IsDir := False;
   info.IsFile := False;

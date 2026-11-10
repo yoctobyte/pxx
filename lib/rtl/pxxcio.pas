@@ -107,6 +107,10 @@ type
     CTime:   Int64;
     Uid:     Integer;
     Gid:     Integer;
+    { appended again, same rule: the nanosecond halves for st_atim & co }
+    ATimeNsec: Int64;
+    MTimeNsec: Int64;
+    CTimeNsec: Int64;
   end;
 
 function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;
@@ -592,6 +596,9 @@ begin
   sb^.CTime   := info.CTimeSec;
   sb^.Uid     := info.Uid;
   sb^.Gid     := info.Gid;
+  sb^.ATimeNsec := info.ATimeNsec;
+  sb^.MTimeNsec := info.MTimeNsec;
+  sb^.CTimeNsec := info.CTimeNsec;
 end;
 
 function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;

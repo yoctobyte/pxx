@@ -73,6 +73,11 @@ type
     Rdev: Int64;
     ATimeSec: Int64;
     CTimeSec: Int64;
+    { the nanosecond halves, for C's st_atim/st_mtim/st_ctim (POSIX 2008).
+      statx has them beside the seconds; 0 where the platform has none. }
+    ATimeNsec: Int64;
+    MTimeNsec: Int64;
+    CTimeNsec: Int64;
   end;
 
   { An IPv6 address as its 16 wire-order bytes. Deliberately a byte array rather

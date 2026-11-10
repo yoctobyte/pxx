@@ -28209,6 +28209,15 @@ test-core: $(COMPILER)
 	# bug-a-stat-returns-st-dev-and-st-rdev-in-the-kernel-internal-encoding
 	./$(COMPILER) test/c_stat_rdev_decodes.c $(TESTTMP)/c_rdev26
 	tools/expect_same.sh c_rdev26 "$$($(TESTTMP)/c_rdev26)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
+	# The busybox members crtl lacked (st_atim & co, ipc_perm.key, msg_cbytes,
+	# struct in_pktinfo), each surfaced when the 2026-09-24 member check started
+	# refusing what pxx read at offset 0. Output equals gcc+glibc's.
+	./$(COMPILER) test/c_crtl_busybox_struct_members.c $(TESTTMP)/c_bbmembers26
+	tools/expect_same.sh c_bbmembers26 "$$($(TESTTMP)/c_bbmembers26)" "$$(printf 'atim 1000000000.123456789 mtim 1700000000.987654321\nst_atime=st_atim.tv_sec 1 st_mtime=st_mtim.tv_sec 1 ctim.nsec<1e9 1\nkey 5eed 5eed seq 3 3\nmsg_cbytes 4242\nin_pktinfo 12 4 8 100007f\nipc_perm 48 24')"
+	# `__aligned__(N)` read as alignment 0 and bare `aligned` too: the struct
+	# went OPAQUE and every member was refused. Expected output is gcc's.
+	./$(COMPILER) test/c_reserved_aligned_spelling_keeps_the_struct_layout.c $(TESTTMP)/c_alignedsp26
+	tools/expect_same.sh c_alignedsp26 "$$($(TESTTMP)/c_alignedsp26)" "$$(cat test/c_reserved_aligned_spelling_keeps_the_struct_layout.c.expected)"
 	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
 	# via <sys/types.h> -- and the frontend USED TO take the LAST of two
 	# conflicting typedefs with no diagnostic (gcc errors), so the width

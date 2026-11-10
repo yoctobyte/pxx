@@ -7,6 +7,7 @@
    symbols resolve on a libc-free cross link. */
 
 #include <sys/types.h>
+#include <time.h>   /* struct timespec, for st_atim & co */
 
 typedef unsigned long nlink_t;
 typedef long          blksize_t;
@@ -26,10 +27,16 @@ struct stat {
   off_t     st_size;
   blksize_t st_blksize;
   blkcnt_t  st_blocks;
-  long      st_atime;
-  long      st_mtime;
-  long      st_ctime;
+  /* POSIX 2008 timestamps, with glibc's macros for the old second-only
+     names. busybox stat reads st_atim; with only st_atime here the member
+     check refused it (before 2026-09-24 it read offset 0 instead). */
+  struct timespec st_atim;
+  struct timespec st_mtim;
+  struct timespec st_ctim;
 };
+#define st_atime st_atim.tv_sec
+#define st_mtime st_mtim.tv_sec
+#define st_ctime st_ctim.tv_sec
 
 /* file type bits */
 #define S_IFMT   0170000
