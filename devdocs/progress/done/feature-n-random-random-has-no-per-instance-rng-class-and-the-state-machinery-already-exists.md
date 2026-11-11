@@ -118,3 +118,20 @@ import random
 r = random.Random(7)
 print(type(r).__name__)      # CPython: Random
 ```
+
+## Done 2026-11-11
+
+Most of it had already landed: `random.Random(seed)` builds a pylib
+`TPyRandom` with its own state, and two instances with one seed give the same
+stream. What was left:
+
+- `type(r).__name__` printed `TPyRandom`. pytype_name_v now maps it to
+  `Random` (and TPyStat to `stat_result`, the same leak for `os.stat`).
+- The method surface gained `randrange(start, stop[, step])` (overloads beside
+  the one-argument form), `sample(population, k)` (a copy, then a partial
+  Fisher-Yates, so the caller's list is untouched; ValueError past the
+  population) and `getrandbits(k)` up to 63 bits.
+
+Test: test_nilpy_a_seeded_random_instance.py. The streams differ from
+CPython's Mersenne Twister by design, so the test checks reproducibility,
+ranges and invariants, never exact values.

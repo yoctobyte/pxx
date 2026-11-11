@@ -107,6 +107,7 @@ AN_ARG Left PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi)
 AN_ARG Left PyMakeNone
 AN_ARG Left PyMakeObjPtr(atRecv)
 AN_ARG Left PyMakeObjPtr(baseNode)
+AN_ARG Left PyMakeObjPtr(node)
 AN_ARG Left PyMakeObjPtr(recvNode)
 AN_ARG Left PyStarIterableNode(PyZipStarOperand(CurASTNode))
 AN_ARG Left RParseCallArg(procIdx, argSlot)
@@ -138,6 +139,7 @@ AN_ARG Left argNode
 AN_ARG Left argNodes[i]
 AN_ARG Left argSeq2
 AN_ARG Left argsNode
+AN_ARG Left argv[k]
 AN_ARG Left asrtCond
 AN_ARG Left asrtMsg
 AN_ARG Left assertMsgLit
@@ -757,6 +759,7 @@ AN_CALL Left enArg0
 AN_CALL Left eoArg
 AN_CALL Left excFoldA
 AN_CALL Left fcArg
+AN_CALL Left fieldNode
 AN_CALL Left firstArg
 AN_CALL Left flArg1
 AN_CALL Left flArg2
@@ -813,6 +816,7 @@ AN_CALL Left wrapperArg
 AN_CALL Right -1
 AN_CALL Right ASTRight[Result]
 AN_CALL Right ProcRetRecId[ASTIVal[Result]]
+AN_CALL Right ProcRetRecId[fpi]
 AN_CALL Right ProcRetRecId[helperPi]
 AN_CALL Right ProcRetRecId[iterPi]
 AN_CALL Right ProcRetRecId[k]
@@ -875,6 +879,7 @@ AN_COMMA Left pyPrintNode
 AN_COMMA Left right
 AN_COMMA Left setTmpAssign
 AN_COMMA Left tmpAssign
+AN_COMMA Left wAsg
 AN_COMMA Right ASTLeft[lastArg]
 AN_COMMA Right ASTLeft[n]
 AN_COMMA Right AllocNode(AN_INT_LIT)
@@ -882,6 +887,7 @@ AN_COMMA Right CurASTNode
 AN_COMMA Right ParseCExpr
 AN_COMMA Right PyMakeIdent(setTmpSym)
 AN_COMMA Right PyMakeIdent(tmpSym)
+AN_COMMA Right PyMakeIdent(wSym)
 AN_COMMA Right PyMakeNone
 AN_COMMA Right PyMakeTruthy(PyMakeIdent(aSym))
 AN_COMMA Right Result

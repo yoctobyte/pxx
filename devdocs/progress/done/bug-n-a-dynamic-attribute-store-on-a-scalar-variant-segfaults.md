@@ -76,3 +76,11 @@ existing class-reference row (`c.num = 9`,
 `mk().foo = 1` does not parse at all — a call result is not accepted as an
 assignment target, where CPython accepts it and raises at run time. Loud, no
 wrong value, and a different ticket if it is worth one.
+
+## Fixed (2026-11-11)
+
+pydynattr_set_v now raises CPython's AttributeError (`'int' object has no
+attribute 'foo' and no __dict__ for setting new attributes`) for any tag other
+than an object, and for None. The class-reference arm before it is unchanged.
+Test: `test/test_nilpy_a_dynamic_attribute_store_on_a_scalar_raises.py` (row
+dynsetscalar26), which covers int, str, float, bool, None and `xs[0].foo = 1`.

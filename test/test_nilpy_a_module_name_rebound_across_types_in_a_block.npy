@@ -1,0 +1,26 @@
+# A module name first bound to a NUMBER and rebound to a STRING (or a list,
+# or any object) INSIDE A BLOCK was stored raw into the number's slot: the
+# first loop printed 6291688, the string's address, where CPython prints `sss`,
+# and leaked the string every pass. Refused by name from 2026-10-02; since
+# 2026-11-11 the module pre-pass trial-parses a block binding whose names all
+# resolve, so the slot widens as it does in straight-line code.
+# bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw
+a = [1, 2, 3]
+for k in range(2):
+    x = len(a)
+    x = "s" * 3
+    print(x)
+total = 0
+for v in a:
+    total = total + v
+    w = str(v) + "!"
+    w = v * 2
+print(total, w)
+if a:
+    y = max(a)
+    y = sorted(a)
+print(y)
+for k in range(1, 3):
+    z = len(a)
+    z = "t" * k
+    print(z)

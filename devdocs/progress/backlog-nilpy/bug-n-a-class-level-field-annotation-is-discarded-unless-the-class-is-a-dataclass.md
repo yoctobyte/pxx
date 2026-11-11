@@ -217,3 +217,27 @@ Whether dropping `isDC` is sufficient or whether the annotation-only line also
 has to suppress the later `self.x = x` registration in `__init__` — if both run,
 `FindUField` already guards the duplicate, but the ORDER decides which type wins
 and that has not been measured. Check it before assuming the guard is enough.
+
+## "Drop isDC" was tried and reverted (2026-11-11)
+
+An arm for a plain class's annotation-only line was built. It used the same
+PyAnnTypeAt reader and the same PyFJFind join the dataclass arm uses, for scalar
+annotations only. It buys nothing and breaks two things:
+
+1. **No speed gain on the ticket's own shape.** `__init__(self, x)` storing
+   `self.x = x` reaches the field join as a variant, and the join widens the
+   annotated double back to a variant. `PXXDBG=n.locals` on `q = v.x * 2.0`
+   still showed `tk=22`. The field only stays a double if the annotation
+   OVERRIDES the join.
+2. **Overriding the join changes visible values.** CPython does not coerce on
+   a store: `P(3, ...)` with `x: float` keeps the int, and `print(p.x)` prints
+   `3`. A double slot prints `3.0`. That is not an insignificant bit, so the
+   2026-09-23 "performance beats last-ULP parity" ruling does not cover it.
+3. **hasattr changes.** An annotation-only class attribute does not exist in
+   CPython (`hasattr(Q(), "a")` is False). A registered field answers True.
+
+So the fix the ticket proposes is the owner's decision, not a mechanical one:
+treating the annotation as authoritative (as the module level and dataclasses
+already do) gains the speed and costs exactness for any caller that passes an
+int where the annotation says float. Until that is decided, annotating the
+`__init__` parameter (`x: float`) is the exact route and already gives `tk=19`.

@@ -146,3 +146,19 @@ clause catches which object and skips **what `str()` prints inside a base-class
 clause**, with the divergence named in its docstring and in the Makefile.
 Asserting it would make the file fail under one interpreter. So this bug is
 recorded, not papered over, and the gate goes green without pretending.
+
+## Fixed 2026-11-11
+
+PyClassStrNode's exception arm read `msg` off the STATIC type. It now calls
+`pyexc_str_of` (pylib), which asks PyUserObjStr. That is the RTTI dunder lookup
+a variant receiver already used, and the reason the runtime path was right all
+along: `[e][0]` printed `<urlopen error boom>` from the same except clause. With
+no `__str__` it falls back to the message, so builtin exceptions, KeyError's
+repr'd argument and the sysutils-rooted mimic exceptions read as before.
+
+A static class that declares `__str__` itself still calls it directly (the
+first arm), so `except URLError as e` is unchanged.
+
+Test: test_nilpy_str_of_an_exception_follows_its_runtime_class.py, with
+builtin, KeyError, NilPy subclass with and without `__str__`, URLError caught
+as Exception and OSError, struct.error, f-string and print rows.

@@ -3,7 +3,7 @@ slug: bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 track: N
 type: bug
 prio: 70
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankB
@@ -60,3 +60,12 @@ argument for a buffer has never been measured here.
 
 The two-row program above, asserting `'DATA'` on the FIRST row. A control that
 only exercises the `with` spelling passes today and certifies the bug.
+
+# Closed (2026-11-11)
+
+All three shapes are correct on the wt2 tree based on 1c6f046ff4: the
+one-liner, a handle dropped at the end of a def, and a module-level handle
+still open at exit (the file holds `AT_EXIT` after the program ends). No fix was
+made under this ticket. The object-reclamation work (the file's destructor runs
+when its last reference goes) fixed it. Test:
+`test/test_nilpy_a_write_to_a_file_never_closed_lands.py` (row unclosed26).

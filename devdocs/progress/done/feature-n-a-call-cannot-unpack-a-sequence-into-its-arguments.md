@@ -4,7 +4,7 @@ track: N
 prio: 70
 type: feature
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
@@ -118,3 +118,18 @@ And the reason this is not a demo blocker: unlike the 4-arg dispatch cap, a
 dynamically-typed receiver can be annotated at the call site, and the corpus rule
 for this umbrella explicitly permits editing lekkerzeilen where something is
 principally incompatible.
+
+## The last shape, closed (2026-11-11)
+
+The "dynamically-typed receiver" reading was wrong. A dynamic receiver
+(`def h(o): o.m(*xs)`) already worked through PyParseVariantMethod's list path.
+The shape that failed was a star into a method reached through a CALL CHAIN:
+`pick().m(*xs)`, `pick().me().m(*xs)`. `(pick()).m(*xs)` and `[K()][0].m(*xs)`
+worked. The chain goes through PyParseClassRecordSelectors' Pascal method arm,
+which is arity-driven and has no star, so it handed the `*` to the expression
+parse. That arm now passes a call with a star argument (PyCallHasStarArgAt) to
+PyParseClassMethodCall, the NilPy method path that named receivers and
+`__call__` already use.
+
+Test: `test/test_nilpy_a_star_unpack_into_a_method_on_a_call_result.py` (row
+starchain26).

@@ -18,7 +18,7 @@ track: N
 type: bug
 prio: 75
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured
@@ -480,3 +480,29 @@ with a LITERAL mapping (a name works). Fixed on the way: `print(x) if c else
 None` as a statement (the print statement ended at its ')' and the `if` began
 a new one; `f() if c else None` always worked) --
 test_nilpy_a_conditional_print_runs_as_a_statement.
+
+## The remaining temporaries, measured instead of read (2026-11-11)
+
+A static rescan of pylib.pas for locals bound to `TPyList.Create`,
+`TPyDict.Create`, `pyseq_of_obj(` or `list(` and never released, returned or
+stored found 14 hits. Each one is owned: a global attribute table, a deque's
+`FBuf`, an iterator's `FSrc`, an exception's args, or `TPyList.sort`'s `keys`,
+which is freed in its `finally`. The ~28 the summary counted are no longer
+there as that shape.
+
+Measured the same way as the table above (`/proc/self/statm`, two passes, the
+second one reported, 2000 calls per phase) on the wt2 tree based on 1c6f046ff4:
+72 operations, every one at most 8 bytes per call. The positive control
+(`keep.append(...)`) read 135 bytes per call, so the instrument is live.
+Covered: format, f-string with `!r`, set()/frozenset and the four set
+operators, split/rsplit/splitlines/join/replace/strip/partition/upper/title/
+swapcase/expandtabs/zfill/ljust/rjust/center/startswith-tuple/count/find/
+encode-decode, dict items/keys/values/copy/get/update, sorted (plain, key,
+reverse, over items), reversed/enumerate/zip/map/filter/any/all/max-key,
+tuple(), list and str slices, `in`, re match/findall/sub/split, json dumps/loads,
+`%` formatting, str repetition, int/str round trips, list/dict/set
+comprehensions, generator sum, index, list concatenation, divmod, repr/str of
+containers, isinstance with a tuple, hash, chr/ord join, bytes and bytearray.
+`list.sort(key=...)` in place was also measured separately: 0.
+
+Closed. A new leak in this class is a new ticket with its own repro.

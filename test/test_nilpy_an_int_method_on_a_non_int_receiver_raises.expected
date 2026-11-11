@@ -1,0 +1,6 @@
+3 1 71 b'\x01\x02'
+AttributeError 'NoneType' object has no attribute 'bit_length'
+AttributeError 'float' object has no attribute 'bit_length'
+AttributeError 'str' object has no attribute 'bit_length'
+AttributeError 'list' object has no attribute 'bit_length'
+AttributeError 'dict' object has no attribute 'bit_length'

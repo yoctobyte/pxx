@@ -148,6 +148,12 @@ var
     feature-n-nilpy-ast-typing-module-scope }
   PyUnkBindNames: array[0..PY_MAX_LOCALS-1] of AnsiString;
   PyUnkBindCount: Integer;
+  { generator FACTORIES (PyGenFactoryFor): the procs, and the generator each
+    builds, waiting for every generator body to be compiled }
+  PyGenFactPi: array[0..PY_MAX_NESTED-1] of Integer;
+  PyGenFactGen: array[0..PY_MAX_NESTED-1] of Integer;
+  PyGenFactCount: Integer;
+  PyGenArgBuf: array[0..31] of Integer;
   { names bound at module TOP level (depth 0) anywhere in the file — the
     over-inclusive token prescan behind the PyTopTarget guard above. Over-
     inclusion only means FEWER phantoms, i.e. today's behaviour, which is the
@@ -878,6 +884,12 @@ function PyParenTargetListAssign(i: Integer): Integer; forward; { Nil Python: `(
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
 procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString); forward;
+function PyIsPhantom(const nm: AnsiString): Boolean; forward;
+function PyDefBodyHasYield(bodyStart: Integer): Boolean; forward;
+procedure PyApplyGeneratorABI; forward;
+procedure PyMarkGeneratorProc(procIdx: Integer); forward;
+procedure PyMarkVariantParamsByRef(procIdx: Integer); forward;
+function PyGenValueFromArgs(gpi, recvNode, nargs: Integer): Integer; forward;
 { PyBareGenExprAhead is likewise forward-declared in pasparser_*.inc now (same
   duplicate-forward issue as PyCallMeth1 above). }
 { Called from the bytes membership/slice paths ~3900 lines before its body.
@@ -5504,6 +5516,54 @@ begin
   end;
 end;
 
+{ Can a block binding's right-hand side be TRIAL-PARSED by the module
+  pre-pass? Only when it cannot Halt the compile on a name: every bare
+  identifier in it already resolves -- a symbol of this unit that is not a
+  phantom, a routine, a class, or one of the builtins below -- and it opens no
+  scope of its own (no lambda, comprehension, def, yield). A member name after
+  '.' and a keyword label before '=' are not looked up, as the parser does not
+  look them up either. Anything else answers False and the caller keeps its
+  no-parse shapes. bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw }
+function PyBlkRhsAllResolve(k: Integer): Boolean;
+var depth: Integer; nm: AnsiString;
+begin
+  Result := False;
+  depth := 0;
+  while k < MainProgramTokCount do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(depth);
+      tkRParen, tkRBrack, tkEnd:
+        begin
+          Dec(depth);
+          if depth < 0 then Exit;
+        end;
+      tkNewline, tkDedent, tkIndent, tkSemicolon:
+        if depth = 0 then Break else Exit;
+      tkFor, tkFunction, tkClass, tkColon: Exit;
+      tkIdent:
+        if not ((k > 0) and (Tokens[k - 1].Kind = tkDot)) and
+           not ((depth > 0) and (k + 1 < MainProgramTokCount) and
+                (Tokens[k + 1].Kind = tkAssign)) then
+        begin
+          nm := GetTokenStr(k);
+          if (nm = 'lambda') or (nm = 'yield') or (nm = 'await') or
+             (nm = 'if') or (nm = 'else') then Exit;
+          if PyIsPhantom(nm) then Exit;
+          if not ((PyProgSym(nm) >= 0) or (FindUClass(nm) >= 0) or
+                  (FindProcInUnit(nm, CurrentUnitIdx) >= 0) or
+                  (nm = 'len') or (nm = 'str') or (nm = 'int') or (nm = 'float') or
+                  (nm = 'abs') or (nm = 'min') or (nm = 'max') or (nm = 'sorted') or
+                  (nm = 'list') or (nm = 'dict') or (nm = 'tuple') or
+                  (nm = 'repr') or (nm = 'round') or (nm = 'sum') or (nm = 'bool') or
+                  (nm = 'ord') or (nm = 'chr') or (nm = 'hex')) then Exit;
+        end;
+    end;
+    Inc(k);
+  end;
+  Result := depth = 0;
+end;
+
 function PyBlkRhsEndsAt(k: Integer): Boolean;
 { Is token k the LAST token of its statement? The other half of
   PyBlkRhsEndsAfterCall's lesson: the depth>0 arm's safe-shape tests each looked
@@ -8973,7 +9033,7 @@ end;
 
 procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
 var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
-    savedBodyCi, savedBodyUpTo: Integer;
+    savedBodyCi, savedBodyUpTo: Integer; scalarKeep: Boolean;
 begin
   nm := CurTok.SVal;
   { jump to the '=' rather than assuming it is the very next token — an
@@ -8998,12 +9058,26 @@ begin
     var (PyClsAttrEnsureGlobal) — RETYPE it here rather than allocating a second
     one, because the pre-pass had only the tokens to go on }
   gsym := FindSym(gname);
+  { A SCALAR expression initialiser keeps the pre-pass's VARIANT slot, boxed.
+    A method ABOVE this line was compiled against that variant, and retyping
+    the slot to the scalar under it read None (`def r(self): return self.P`
+    above `P = 1 + 2`). Containers keep the retype below: they are a class
+    handle either way and the container fix depends on it. Typing the slot
+    scalar in the pre-pass instead was measured to segfault (see the ticket).
+    bug-n-a-scalar-expression-class-attribute-declared-after-a-method-reads-none }
+  scalarKeep := (gsym >= 0) and PyClsAttrExprAhead(eqAt) and
+                (Syms[gsym].TypeKind = tyVariant) and
+                (IntToTypeKind(ASTTk[valNode]) <> tyClass) and
+                (IntToTypeKind(ASTTk[valNode]) <> tyVariant) and
+                (IntToTypeKind(ASTTk[valNode]) <> tyPointer);
+  if scalarKeep then valNode := PyForceVariant(valNode);
   if gsym < 0 then
   begin
     gsym := AllocVar(gname, PyStorageTk(ASTTk[valNode]));
     Syms[gsym].RecName := ResolveNodeRec(valNode);
     SymSyncTypeRef(gsym);
   end
+  else if scalarKeep then
   else if PyClsAttrExprAhead(eqAt) then
   begin
     { retype only for an EXPRESSION initialiser — see the field note below }
@@ -9023,7 +9097,7 @@ begin
     tkString to tyAnsiString, while the literal NODE is tyString — and a tyString
     FIELD means an inline string[N] to the store path, which is a different
     layout entirely. }
-  if (fi >= 0) and PyClsAttrExprAhead(eqAt) then
+  if (fi >= 0) and PyClsAttrExprAhead(eqAt) and not scalarKeep then
   begin
     UFldTk[fi] := ASTTk[valNode];
     UFldRec_[fi] := Syms[gsym].RecName;
@@ -15137,7 +15211,26 @@ end;
 { The one dispatcher every intercept site calls once it has decided the suffix
   is an int method. CurTok is the '(' . }
 function PyParseIntMethod(baseNode: Integer; const nm: AnsiString): Integer;
+var pi, a0, a1, lit: Integer;
 begin
+  { a VARIANT receiver is checked first -- see pyint_method_recv }
+  if (baseNode >= 0) and (IntToTypeKind(ASTTk[baseNode]) = tyVariant) then
+  begin
+    pi := FindProc('pyint_method_recv');
+    if pi >= 0 then
+    begin
+      lit := AllocNode(AN_STR_LIT);
+      ASTSOffset[lit] := StoredName(nm); ASTSLen[lit] := Length(nm);
+      ASTTk[lit] := Ord(tyString);
+      a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+      a1 := AllocNode(AN_ARG); ASTLeft[a1] := lit; ASTRight[a1] := -1;
+      ASTRight[a0] := a1;
+      baseNode := AllocNode(AN_CALL);
+      ASTIVal[baseNode] := pi;
+      ASTLeft[baseNode] := a0;
+      ASTTk[baseNode] := Ord(tyVariant);
+    end;
+  end;
   if nm = 'to_bytes' then PyParseIntMethod := PyParseToBytes(baseNode)
   else PyParseIntMethod := PyParseBitLenCount(baseNode, nm);
 end;
@@ -24326,10 +24419,18 @@ begin
     answers a Variant, and typing the whole expression from the static arm
     alone is how a value gets silently narrowed.
     bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
+  { ...and in an IMPORTED module, whatever the arity. That module is compiled
+    before its importer, so the importer's classes are not candidates here:
+    `other.keys()` in helper.py bound statically to helper's own Mapping.keys
+    (or to TPyDict's keylist when helper declared none) and a Duck from main
+    reached a body written for something else -- SIGSEGV. The closed-world
+    pick is only safe where the whole world is visible, which is the main
+    program. bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module }
   if (hitCi >= 0) and (hitMmi >= 0) and (not clsOnly) and (not anyKw)
      and (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0)
      and (i >= 0) and (i <= 4) and (i <= High(argExprs) + 1)
-     and (i + 1 < Procs[mpi].ParamCount) then
+     and ((i + 1 < Procs[mpi].ParamCount) or
+          ((CurrentUnitIdx >= 0) and (i + 1 = Procs[mpi].ParamCount))) then
   begin
     dynFbProc := FindProc('pydyn_meth' + PyIntLiteralText(i));
     if dynFbProc >= 0 then
@@ -27843,11 +27944,28 @@ begin
       hoistTail := PyHoistTail;
       node := PyEvalOnce(node);
     end;
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := node;
-    ASTSOffset[fieldNode] := StoredName('msg');
-    ASTSLen[fieldNode] := 3;
-    ASTTk[fieldNode] := Ord(tyAnsiString);
+    { The RUNTIME class decides: a subclass's own __str__ (a Pascal unit's
+      URLError caught `as Exception`) must win over the static type's message.
+      pyexc_str_of falls back to `msg` exactly as this arm did.
+      bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base }
+    if FindProc('pyexc_str_of') >= 0 then
+    begin
+      fieldNode := AllocNode(AN_ARG);
+      ASTLeft[fieldNode] := PyMakeObjPtr(node); ASTRight[fieldNode] := -1;
+      mmi := AllocNode(AN_CALL);
+      ASTIVal[mmi] := FindProc('pyexc_str_of');
+      ASTLeft[mmi] := fieldNode;
+      ASTTk[mmi] := Ord(tyAnsiString);
+      fieldNode := mmi;
+    end
+    else
+    begin
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := node;
+      ASTSOffset[fieldNode] := StoredName('msg');
+      ASTSLen[fieldNode] := 3;
+      ASTTk[fieldNode] := Ord(tyAnsiString);
+    end;
     if hoistTail <> -2 then fieldNode := PyFoldHoistSince(hoistTail, fieldNode);
     PyClassStrNode := fieldNode;
   end;
@@ -32418,7 +32536,7 @@ end;
 
 function PyBuildComp(targetSym, exprStart: Integer): Integer;
 var seq, node, sizeNode, createNode, aSeq, savedTarget, savedStart, listCiN: Integer;
-    buildSym: Integer;
+    buildSym, wi, wDepth, wSym: Integer;
 begin
   if PyCompIsDict then listCiN := FindUClass('TPyDict')
   else listCiN := FindUClass('TPyList');
@@ -32452,6 +32570,29 @@ begin
   ASTRight[node] := createNode;
   seq := PySeqAppend(-1, node);
 
+  { a walrus in the filter (`[y for x in xs if (y := f(x)) is not None]`)
+    binds a name the ELEMENT reads, and the element is parsed first: declare
+    each walrus target up front, as a variant (its value is only known in the
+    filter). Python binds it in the enclosing scope, so does this.
+    feature-nilpy-walrus-operator }
+  wi := exprStart; wDepth := 0;
+  while (wi + 2 < TokCount) and (wDepth >= 0) do
+  begin
+    case Tokens[wi].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(wDepth);
+      tkRParen, tkRBrack, tkEnd: Dec(wDepth);
+      tkNewline: Break;
+    end;
+    if (Tokens[wi].Kind = tkIdent) and (Tokens[wi + 1].Kind = tkColon) and
+       (Tokens[wi + 2].Kind = tkAssign) then
+    begin
+      wSym := FindSym(PyRawName(Tokens[wi].SOffset, Tokens[wi].SLen));
+      if (wSym >= 0) and (CurProc >= 0) and (Syms[wSym].Kind = skGlobal) then
+        wSym := -1;
+      if wSym < 0 then AllocVar(PyRawName(Tokens[wi].SOffset, Tokens[wi].SLen), tyVariant);
+    end;
+    Inc(wi);
+  end;
   savedTarget := PyCompTarget;
   savedStart := PyCompExprStart;
   PyCompTarget := buildSym;
@@ -33042,57 +33183,34 @@ end;
 { The value of a generator CALL with the cursor on its `(`. recvNode >= 0 is
   a generator METHOD's receiver, seeded as declared parameter 1 (`self`), the
   way the `for` desugar passes it as argument 0. }
-function PyBuildGeneratorValueAt(gpi, recvNode: Integer): Integer;
-var gIdx, nargs, argNode, k: Integer;
-    instLit, allocCall, stepNode, a0, a1: Integer;
+{ The cursor build itself, from argument nodes already in hand: PyGenArgBuf
+  holds the declared arguments (defaults and a nested generator's captures
+  included), after the receiver when recvNode >= 0. Shared by the call site
+  and by the generator's FACTORY (PyGenFactoryFor), so the two cannot drift.
+  Needs the generator's body compiled: the instance size and the slot offsets
+  are only known then. }
+function PyGenValueFromArgs(gpi, recvNode, nargs: Integer): Integer;
+var gIdx, k, base, instLit, allocCall, stepNode, a0, a1: Integer;
+    argv: array[0..31] of Integer;
 begin
-  if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) then
-    Error('Nil Python: a generator value needs lib/rtl/slgen in scope');
-  if FindProc('pygen_iter_new') < 0 then
-    Error('Nil Python: pylib (pygen_iter_new) not loaded');
-  Expect(tkLParen, '(');
-  if ProcPyStarIdx[gpi] >= 0 then
-    Error('Nil Python: a generator with *args is not supported yet (`'
-          + Procs[gpi].Name + '`)');
-
+  for k := 0 to nargs - 1 do argv[k] := PyGenArgBuf[k];
   gIdx := AllocVar('', tyPointer);
   instLit := AllocNode(AN_INT_LIT);
   ASTIVal[instLit] := ProcGenInstSize[gpi];
   ASTTk[instLit] := Ord(tyInt64);
   allocCall := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
   PyHoistStmt(PyMakeAssignNode(GenMakeIdent(gIdx, tyPointer), allocCall));
-
   { Each declared parameter is seeded into its persistent slot, in declaration
     order — slot k at SL_OFF_SLOTS + 8*k, the numbering the state-machine
     transform assigns and the `for` desugar already relies on. }
-  nargs := 0;
+  base := 0;
   if recvNode >= 0 then
   begin
     PyGenSeedValueArg(gpi, gIdx, 1, recvNode);
-    nargs := 1;
+    base := 1;
   end;
-  if CurTok.Kind <> tkRParen then
-    repeat
-      PyParseBoolExpr;
-      argNode := CurASTNode;
-      if nargs >= ProcGenParamCnt[gpi] then
-        Error('Nil Python: too many arguments to generator `'
-              + Procs[gpi].Name + '`');
-      PyGenSeedValueArg(gpi, gIdx, nargs + 1, argNode);
-      Inc(nargs);
-    until not Eat(tkComma);
-  Expect(tkRParen, ')');
-  { an omitted trailing argument takes its declared default, as a call of a
-    plain def does }
-  while (nargs < ProcGenParamCnt[gpi]) and PyGenParamHasDefault(gpi, nargs + 1) do
-  begin
-    PyGenSeedValueArg(gpi, gIdx, nargs + 1, DefaultArgValueNode(gpi, nargs + 1));
-    Inc(nargs);
-  end;
-  if nargs < ProcGenParamCnt[gpi] then
-    Error('Nil Python: generator `' + Procs[gpi].Name + '` needs '
-          + AIntToStr(ProcGenParamCnt[gpi]) + ' argument(s), got '
-          + AIntToStr(nargs));
+  for k := 0 to nargs - 1 do
+    PyGenSeedValueArg(gpi, gIdx, base + k + 1, argv[k]);
 
   stepNode := AllocNode(AN_PROCADDR);
   ASTIVal[stepNode] := gpi;
@@ -33114,6 +33232,161 @@ begin
     receiver's class sees a TPyIter rather than an untyped node — see
     PyCallProc1, which carries it for the same reason }
   if Procs[k].RetType = tyClass then ASTRight[Result] := ProcRetRecId[k];
+end;
+
+{ A generator called BEFORE its body is compiled -- above its def, or a
+  generator nested in a def (whose body compiles after the enclosing one) --
+  cannot be built inline: the instance size and slot offsets do not exist yet,
+  and baking in the zeros allocated a header-only instance the seeds wrote past
+  (SIGSEGV). It calls this FACTORY instead: `$pygenmk_<gpi>(args)` returns the
+  cursor, and its body is built by PyGenValueFromArgs once every generator body
+  is in (PyDrainGenFactories, at the end of the program or module).
+  bug-nilpy-a-generator-called-above-its-def-crashes,
+  bug-n-a-generator-def-nested-in-a-def-segfaults }
+function PyGenFactoryFor(gpi: Integer): Integer;
+var nm: AnsiString; i, n, k: Integer;
+    pnames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+begin
+  nm := '$pygenmk_' + AIntToStr(gpi);
+  Result := FindProc(nm);
+  if Result >= 0 then Exit;
+  n := Procs[gpi].ParamCount - 1;            { without __genself }
+  for i := 0 to n - 1 do
+  begin
+    pnames[i] := 'a' + AIntToStr(i + 1);
+    ptypes[i] := Procs[gpi].Params[i + 1].TypeKind;
+  end;
+  { the SAME result the inline build has (pygen_iter_new's, a TPyIter), so a
+    call typed by the module pre-pass -- before any generator body exists --
+    and the real parse agree on the binding's type }
+  k := FindProc('pygen_iter_new');
+  Result := RegisterProc(nm, True, Procs[k].RetType, n, pnames, ptypes);
+  if Procs[k].RetType = tyClass then ProcRetRecId[Result] := ProcRetRecId[k];
+  for i := 0 to n - 1 do
+    if ((i + 1) < MAX_PROC_PARAMS) and (Result * MAX_PROC_PARAMS + i < Length(ProcParamRecId)) then
+      ProcParamRecId[Result * MAX_PROC_PARAMS + i] := ProcParamRecId[gpi * MAX_PROC_PARAMS + i + 1];
+  PyMarkVariantParamsByRef(Result);
+  Procs[Result].BodyAddr := -1;
+  if PyGenFactCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many generators called before their definition');
+  PyGenFactPi[PyGenFactCount] := Result;
+  PyGenFactGen[PyGenFactCount] := gpi;
+  Inc(PyGenFactCount);
+end;
+
+{ The value of a generator CALL with the cursor on its `(`. recvNode >= 0 is
+  a generator METHOD's receiver, seeded as declared parameter 1 (`self`), the
+  way the `for` desugar passes it as argument 0. }
+function PyBuildGeneratorValueAt(gpi, recvNode: Integer): Integer;
+var nargs, nUser, base, k, capSym, fpi, a, last, kwAt: Integer;
+    argv: array[0..31] of Integer;
+    filled: array[0..31] of Boolean;
+    sawKw: Boolean; kwName: AnsiString;
+begin
+  if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) then
+    Error('Nil Python: a generator value needs lib/rtl/slgen in scope');
+  if FindProc('pygen_iter_new') < 0 then
+    Error('Nil Python: pylib (pygen_iter_new) not loaded');
+  Expect(tkLParen, '(');
+  if ProcPyStarIdx[gpi] >= 0 then
+    Error('Nil Python: a generator with *args is not supported yet (`'
+          + Procs[gpi].Name + '`)');
+  { nargs counts declared parameters in the generator's own numbering (the
+    receiver, when there is one, is parameter 1); argv holds the rest. }
+  base := 0;
+  if recvNode >= 0 then base := 1;
+  nargs := base;
+  nUser := ProcGenParamCnt[gpi] - PyCapCount[gpi];
+  if nUser - base > 32 then Error('Nil Python: too many generator arguments');
+  for k := 0 to 31 do filled[k] := False;
+  { positional arguments first, then `name=value` bound by the parameter's
+    NAME, as a plain def's call does -- the value path took positionals only,
+    so `gen(3, k=2)` said "undefined variable (k)" }
+  sawKw := False;
+  if CurTok.Kind <> tkRParen then
+    repeat
+      if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign) then
+      begin
+        kwName := CurTok.SVal;
+        Next; Next;
+        sawKw := True;
+        kwAt := -1;
+        for k := base + 1 to nUser do
+          if (k < Procs[gpi].ParamCount) and
+             ParamNameEq(gpi, Procs[gpi].Params[k].Name, kwName) then
+            kwAt := k;
+        if kwAt < 0 then
+          Error('Nil Python: generator `' + Procs[gpi].Name
+                + '` has no parameter named ''' + kwName + '''');
+        if filled[kwAt - 1 - base] then
+          Error('Nil Python: generator `' + Procs[gpi].Name
+                + '` got multiple values for ''' + kwName + '''');
+        PyParseBoolExpr;
+        argv[kwAt - 1 - base] := CurASTNode;
+        filled[kwAt - 1 - base] := True;
+      end
+      else
+      begin
+        if sawKw then
+          Error('Nil Python: positional argument follows keyword argument');
+        PyParseBoolExpr;
+        if nargs >= nUser then
+          Error('Nil Python: too many arguments to generator `'
+                + Procs[gpi].Name + '`');
+        argv[nargs - base] := CurASTNode;
+        filled[nargs - base] := True;
+        Inc(nargs);
+      end;
+    until not Eat(tkComma);
+  Expect(tkRParen, ')');
+  { an omitted argument takes its declared default, as a call of a plain def
+    does }
+  for k := base to nUser - 1 do
+    if not filled[k - base] then
+    begin
+      if not PyGenParamHasDefault(gpi, k + 1) then
+        Error('Nil Python: generator `' + Procs[gpi].Name + '` needs '
+              + AIntToStr(nUser - base) + ' argument(s)');
+      argv[k - base] := DefaultArgValueNode(gpi, k + 1);
+      filled[k - base] := True;
+    end;
+  nargs := nUser;
+  { a NESTED generator's captured enclosing locals, after the declared ones,
+    by value -- see PyQueueNestedDef. bug-n-a-generator-def-nested-in-a-def-segfaults }
+  for k := 0 to PyCapCount[gpi] - 1 do
+  begin
+    capSym := PyProgSym(PyCapName[gpi * PY_MAX_CAPS + k]);
+    if (capSym < 0) or (SymCellPtr[capSym] >= 0) then
+      Error('Nil Python: nested generator `' + Procs[gpi].Name
+            + '` captures `' + PyCapName[gpi * PY_MAX_CAPS + k]
+            + '`, which is not a plain enclosing local here');
+    if nargs - base > 31 then Error('Nil Python: too many generator arguments');
+    argv[nargs - base] := PyMakeIdent(capSym);
+    Inc(nargs);
+  end;
+  if (recvNode < 0) and (ProcGenInstSize[gpi] <= 0) then
+  begin
+    { the body is not compiled yet: call the factory (PyGenFactoryFor) }
+    fpi := PyGenFactoryFor(gpi);
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := fpi;
+    ASTTk[Result] := Ord(Procs[fpi].RetType);
+    if Procs[fpi].RetType = tyClass then ASTRight[Result] := ProcRetRecId[fpi];
+    last := -1;
+    for k := 0 to nargs - 1 do
+    begin
+      a := AllocNode(AN_ARG);
+      ASTLeft[a] := argv[k];
+      ASTRight[a] := -1;
+      if last < 0 then ASTLeft[Result] := a else ASTRight[last] := a;
+      last := a;
+    end;
+    Exit;
+  end;
+  for k := 0 to nargs - base - 1 do PyGenArgBuf[k] := argv[k];
+  Result := PyGenValueFromArgs(gpi, recvNode, nargs - base);
 end;
 
 { ...with the cursor on the generator's NAME. }
@@ -33270,7 +33543,11 @@ begin
   begin
     genPi := FindProcInUnit(CurTok.SVal, -1);
     if genPi < 0 then genPi := FindProc(CurTok.SVal);
-    if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] then
+    { ...and only once its body is compiled: the desugar bakes in the instance
+      size and slot offsets. Called above its def, the generator goes the
+      VALUE route instead, through its factory (PyGenFactoryFor). }
+    if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] and
+       (ProcGenInstSize[genPi] > 0) then
     begin
       symIdx := PyGenBindTarget(name, name2, genProl);
       Next;                                { past the generator's name }
@@ -35399,6 +35676,7 @@ var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capC
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
     capRecs: array[0..PY_MAX_CAPS-1] of Integer;
     savedDefInit, defAssigns: Integer;
+    isGenNest: Boolean;
 begin
   defTok := TokPos - 1;
   { Evaluate non-constant parameter defaults HERE, at the `def` statement. That
@@ -35423,6 +35701,15 @@ begin
   qname := PyNestedDefQName(defTok, PyHdrName);
   bodyStart := TokPos - 1;
   bodyEnd := PyFindBodyEnd(bodyStart);
+  { A nested GENERATOR registers with the generator ABI here, as a module-level
+    def's shell does. It was registered as a plain routine while its body
+    (PyParseDef, at the drain) was compiled as a step function, so the
+    enclosing body's `g(5)` was an ordinary CALL into a state machine and
+    SEGFAULTED. The captures below append after `__genself` and the declared
+    parameters; PyBuildGeneratorValueAt seeds them.
+    bug-n-a-generator-def-nested-in-a-def-segfaults }
+  isGenNest := PyDefBodyHasYield(bodyStart);
+  if isGenNest then PyApplyGeneratorABI;
   { CAPTURE: every enclosing local/parameter the body mentions becomes a
     trailing by-value parameter, filled in at each call site. Scanned from the
     body's tokens because the body itself is not parsed until later — a name is
@@ -35679,6 +35966,7 @@ begin
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + j] := True;
         ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + j] := False;
       end;
+  if isGenNest then PyMarkGeneratorProc(procIdx);
   { record the def's token position: a nested def taken AS A VALUE re-lowers
     from this span as a value-binding closure (see PyNestedDefClosureValue) }
   PyDefTokOf[procIdx] := defTok + 1;
@@ -37242,6 +37530,12 @@ begin
   Result := -1;
   PyStmtAteBlock := False;
   PyExprHadOptionalMissing := False;
+  { A `class` statement inside a def reached the expression parse and said
+    "expected expression" on the keyword. Say what is missing instead.
+    feature-n-a-class-statement-inside-a-def-is-refused }
+  if (CurTok.Kind = tkClass) and (CurProc >= 0) then
+    Error('Nil Python: a class statement inside a def is not supported yet; '
+      + 'move the class to module level');
   { `nonlocal x, y` / `global x, y` — a scope DECLARATION, parsed and skipped.
     The nested-def capture already exposes the enclosing name for reading; a
     WRITE does not yet propagate back to the enclosing frame (capture is
@@ -39966,6 +40260,20 @@ begin
           blkTk := tyClass;
           blkRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(blkJ));
         end;
+        { ...and any other right-hand side whose every name already resolves:
+          trial-parse it exactly as the depth-0 arm does, so `x = len(a)` and
+          `x = "s" * 3` in one loop widen x the way straight-line code does.
+          Before this, neither shape was readable here, the real parse's FIRST
+          binding chose the slot, and the second was stored raw into it.
+          bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw }
+        if (blkTk = tyUnknown) and PyBlkRhsAllResolve(blkJ) then
+        begin
+          TokPos := i;
+          Next;
+          PyParseStatement;
+          i := TokPos - 1;
+          continue;
+        end;
         if blkTk <> tyUnknown then
         begin
           PyNoteLocalType(blkName, blkTk, blkRec);
@@ -41618,7 +41926,17 @@ begin
   end;
   if PyDefUsedAsValue(PyHdrName) then
   begin
-    if PyHdrIsProc or (PyHdrRetType <> tyVariant) then
+    { ...except a str dunder's RESULT. Its signature is forced to AnsiString
+      (PyMethodRetType, the other half of the forcing above) whether or not
+      the name is used as a value, so re-typing only the frame here made the
+      two disagree: `m = N(5).__repr__` anywhere in a def turned the frame's
+      result into a variant while every caller -- the repr renderer included
+      -- still read a string, and `repr(N(2))` SEGFAULTED before the def ever
+      ran. A bound-method value of a non-variant method already goes through
+      $pyboundretwrap (PyMakeBoundMethod), so the str result costs nothing.
+      bug-n-a-repr-dunder-taken-as-a-value-segfaults-repr }
+    if (PyHdrIsProc or (PyHdrRetType <> tyVariant)) and
+       not (PyStrDunderName(PyHdrName) and (PyHdrRetType = tyAnsiString)) then
     begin
       PyHdrIsProc := False;
       PyHdrRetType := tyVariant;
@@ -41939,7 +42257,9 @@ begin
   ProcIsStackless[procIdx] := True;
   ProcGenElemTk[procIdx]   := PyGenElemTk;
   ProcGenElemRec[procIdx]  := REC_NONE;
-  ProcGenParamCnt[procIdx] := PyGenDeclParams;
+  { ...plus a nested generator's captured enclosing locals, which trail the
+    declared parameters and are seeded by the value construction like them }
+  ProcGenParamCnt[procIdx] := PyGenDeclParams + PyCapCount[procIdx];
 end;
 
 { Pull lib/rtl/slgen into scope when the module defines any generator. The
@@ -42391,7 +42711,15 @@ begin
   EmitParamSpillsForTarget(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
-  if bStart = -2 then
+  if bStart = -4 then
+  begin
+    { A GENERATOR FACTORY (PyGenFactoryFor): the cursor build, over this
+      proc's own parameters, now that the generator's body is compiled. }
+    for i := 0 to nparams - 1 do
+      PyGenArgBuf[i] := PyMakeIdent(Procs[procIdx].Params[i].SymIdx);
+    CurASTNode := PyGenValueFromArgs(realProcIdx, -1, nparams);
+  end
+  else if bStart = -2 then
   begin
     { A CLONE THUNK (PyGetOrMakeCloneThunk): hand-build `REALPROC(Int64(arg))`.
       The cast is what makes the raw word an ordinary NilPy integer, so the
@@ -42634,6 +42962,34 @@ begin
     TokPos := savedTok - 1;
     Next;
   end;
+end;
+
+{ Compile every queued generator FACTORY (PyGenFactoryFor). Called where every
+  generator body of the unit is known to be compiled -- the end of the program
+  and of each imported module. A factory whose generator is STILL bodiless is
+  left queued for the next drain. }
+procedure PyDrainGenFactories;
+var i, keep, savedTok: Integer; savedPfx: AnsiString;
+begin
+  keep := 0;
+  for i := 0 to PyGenFactCount - 1 do
+  begin
+    if ProcGenInstSize[PyGenFactGen[i]] <= 0 then
+    begin
+      PyGenFactPi[keep] := PyGenFactPi[i];
+      PyGenFactGen[keep] := PyGenFactGen[i];
+      Inc(keep);
+      Continue;
+    end;
+    savedTok := TokPos;
+    savedPfx := PyNestPrefix;
+    PyNestPrefix := '';
+    PyCompileLambdaBody(PyGenFactPi[i], -4, PyGenFactGen[i]);
+    PyNestPrefix := savedPfx;
+    TokPos := savedTok - 1;
+    Next;
+  end;
+  PyGenFactCount := keep;
 end;
 
 { THE UNWIND LANDING PAD, FOR NIL-PYTHON BODIES.
@@ -49316,7 +49672,13 @@ begin
         if PxxDbgWants('p.boxed', origName) then
           WriteLn('PXXDBG p.boxed ', origName,
                   ' coarse-getattr=', Ord(PyModuleHasComputedGetattr));
-        if mRet <> tyVariant then begin mRet := tyVariant; mRetRec := REC_NONE; end;
+        { ...but a str dunder keeps its str RESULT: every direct caller (the
+          repr/str arms, the runtime renderer) reads a string, and the bound
+          value goes through $pyboundretwrap like any non-variant method.
+          bug-n-a-repr-dunder-taken-as-a-value-segfaults-repr }
+        if (mRet <> tyVariant) and
+           not (PyStrDunderName(name) and (mRet = tyAnsiString)) then
+        begin mRet := tyVariant; mRetRec := REC_NONE; end;
         for k := 1 to nparams - 1 do
           if (k <> mStarIdx) and (k <> mKwIdx) then ptypes[k] := tyVariant;
       end;
@@ -54763,6 +55125,8 @@ begin
     TokPos := stmt - 1;
     Next;
   end;
+  { every generator of this module has its body now -- see PyGenFactoryFor }
+  PyDrainGenFactories;
 
   ASTArenaFloor := savedFloor;
   PyExprMode := savedExprMode;
@@ -55316,6 +55680,7 @@ begin
   end;
   PyExprMode := False;
   PyDrainPendingLambdas(0);
+  PyDrainGenFactories;
   { Patch forward proc-call placeholders (e.g. the builtin heap allocator,
     whose body is compiled after the string runtime that calls it). Pascal
     ParseProgram does this; .npy needs it too now that string/variant codegen
@@ -55689,6 +56054,24 @@ begin
         tk := tyVariant; recId := REC_NONE; outTk := tk;
         Result := node;
         Exit;
+      end;
+      { `pick().m(*xs)` -- a star-unpack into a method reached through a
+        chain. The arm below is the Pascal one, ARITY-DRIVEN, and has no star:
+        it handed the `*` to the expression parse ("expected expression"). The
+        NilPy method-call path has the whole Python argument grammar, and a
+        named receiver (`k.m(*xs)`) and `obj(...)`'s `__call__` already go
+        through it. feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments }
+      if isNilPy and (ci >= 0) and (not UClsIsInterface[ci]) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         PyCallHasStarArgAt(TokPos) and (FindUMeth(ci, fieldName) >= 0) then
+      begin
+        Next;                                  { consume the method name }
+        node := PyParseClassMethodCall(node, ci, fieldName);
+        tk := IntToTypeKind(ASTTk[node]);
+        if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(node)
+        else recId := REC_NONE;
+        outTk := tk;
+        Continue;
       end;
       mmi := -1;
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
@@ -60167,8 +60550,45 @@ var modName: AnsiString;   { __name__ of an imported module }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     entryPi: Integer;   { __pxxclone's thread entry, before and after the thunk }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
+    wName: AnsiString; wTail, wVal, wSym, wAsg: Integer;   { `name := expr` }
 begin
   LastExprTk := tyInteger;
+  { THE WALRUS, `name := expr`. Python's lexer has no `:=` token here: it is a
+    tkColon then a tkAssign, and nothing else in expression position puts an
+    `=` straight after a colon (a dict value, a slice bound, an annotation all
+    start with a value or a type). The binding is an AN_COMMA -- assign, then
+    yield the name -- so it runs exactly where the expression is evaluated: in
+    a `while` condition every iteration, in a comprehension filter per element.
+    The name is bound in the ENCLOSING function or module, as Python scopes a
+    walrus, and stays bound after the statement.
+    feature-nilpy-walrus-operator }
+  if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+     (Tokens[TokPos].Kind = tkColon) and (Tokens[TokPos + 1].Kind = tkAssign) then
+  begin
+    wName := CurTok.SVal;
+    Next; Next; Next;                { the name, ':', '=' }
+    wTail := PyHoistTail;
+    PyParseBoolExpr;
+    wVal := PyFoldHoistSince(wTail, PyBoxCallableValue(CurASTNode));
+    wSym := FindSym(wName);
+    { inside a def a walrus binds a LOCAL, as any assignment does (`global n`
+      beside a walrus is not distinguished here -- rare enough to leave) }
+    if (wSym >= 0) and (CurProc >= 0) and (Syms[wSym].Kind = skGlobal) then
+      wSym := -1;
+    if wSym < 0 then
+    begin
+      wSym := AllocVar(wName, PyStorageTk(ASTTk[wVal]));
+      Syms[wSym].RecName := ResolveNodeRec(wVal);
+      SymSyncTypeRef(wSym);
+    end;
+    wAsg := PyMakeAssignNode(PyMakeIdent(wSym), wVal);
+    CurASTNode := AllocNode(AN_COMMA);
+    ASTLeft[CurASTNode] := wAsg;
+    ASTRight[CurASTNode] := PyMakeIdent(wSym);
+    ASTTk[CurASTNode] := ASTTk[ASTRight[CurASTNode]];
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    Exit;
+  end;
   { Nil Python: ClassName(args) in ANY expression position is construction
     (Pascal reads it as a typecast). The statement-level intercept only saw
     top-level assignments, so a ctor call in a method arg quietly became a
@@ -61463,7 +61883,12 @@ begin
       if (Tokens[TokPos].Kind = tkLParen) and
          (PyProgSym(name) < 0) then
       begin
-        procIdx := FindProcInUnit(name, -1);
+        { a generator NESTED in this def registers as `outer.g`, and the bare
+          `g` names it -- PyQualifyNested, as an ordinary call resolves it.
+          bug-n-a-generator-def-nested-in-a-def-segfaults }
+        procIdx := -1;
+        if PyQualifyNested(name) <> name then procIdx := FindProc(PyQualifyNested(name));
+        if procIdx < 0 then procIdx := FindProcInUnit(name, -1);
         if procIdx < 0 then procIdx := FindProc(name);
         if (procIdx >= 0) and ProcIsStackless[procIdx] and
            ProcIsGenerator[procIdx] then

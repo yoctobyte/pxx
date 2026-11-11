@@ -3,7 +3,7 @@ slug: bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
 track: N
 prio: 55
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "`other.keys()` on an untyped parameter is not dispatched on the receiver when the call sits in an IMPORTED module: it either falls through to the dict-view builtin or binds to a `keys()` the callee's module declares, and a foreign object reaching a self-iterating `keys()` segfaults. Reopens bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, which was closed on the single-module case. Found by Track B reverting a workaround the closed ticket had unblocked."
 ---
@@ -114,3 +114,18 @@ directly and neither calls `keys()` — and re-pointed the registry entry in
 The two-file repro prints `['d1']`, and `mimic_collections_abc.update()` reverts
 to CPython's three-branch form (`isinstance` → `hasattr` → pairs) with
 `test/lib_mimic_collections_abc.npy` gaining a duck-typed `update()` row.
+
+## Fixed 2026-11-11
+
+PyParseVariantMethod's dynamic fallback, the `is <hit class> ? static :
+pydyn_meth<n>` ternary, was only built when the static pick's DEFAULTS filled
+the call. It is now also built inside an imported module (`CurrentUnitIdx >=
+0`) for an exact-arity call. That module is compiled before its importer, so the
+importer's classes are never candidates there, and the closed-world static pick
+is only sound in the main program, where every class is visible. A receiver of
+the picked class (or a descendant) keeps the static call; anything else
+(`Duck` from main) dispatches by name at run time.
+
+Test: test_nilpy_keys_through_an_untyped_receiver_across_a_module.npy plus
+nilpy_keys_openworld_mod.py: keys, items, values and get through a foreign
+class and through a dict.

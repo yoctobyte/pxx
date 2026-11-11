@@ -39,3 +39,16 @@ a call argument.
 `make test-nilpy` + self-host byte-identical, with a CPython-diffed test over
 all three shapes plus the scoping rule (the name is still bound AFTER the
 statement).
+
+## Done (2026-11-11)
+
+PyParseFactorCore reads `name := expr` as AN_COMMA(assign, name): the value
+(callables boxed) is stored, then the name is the expression's value. Inside a
+def the target is a LOCAL even if a module global shares the name (a `global`
+declaration beside a walrus is not distinguished). In a comprehension the
+element is parsed before the filter, so PyBuildComp pre-declares each walrus
+target in the comprehension's tokens as a variant in the enclosing scope, which
+is where Python binds it too. Covered: if / while / call args / for body /
+comprehension filter and element / genexpr in sum() / re.match.
+
+Test: `test/test_nilpy_the_walrus_operator.py` (row walrus26).

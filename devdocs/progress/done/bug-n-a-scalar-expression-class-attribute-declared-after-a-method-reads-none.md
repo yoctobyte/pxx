@@ -64,3 +64,17 @@ program: before the container fix, `TwoReaders.early()` returned empty and
 `late()` returned `[5, 6]` for the same field `C`. One field, two answers, by
 method compile order — that is the proof the typing is per-method and not a
 property of the field, and it is sharper than any single arrangement.
+
+## Fixed 2026-11-11, in the STORE path as the ticket said
+
+PyEmitClassAttrExpr no longer retypes a pre-pass VARIANT slot to a scalar
+expression's kind. It boxes the value (PyForceVariant) and stores it into the
+variant slot every method was compiled against, above or below the line, and
+leaves the field's type alone too. Container initialisers (tyClass) keep the
+retype the container fix needs. The pre-pass typing is untouched, so the
+segfault the ticket measured for that route is not reopened.
+
+Test: test_nilpy_a_scalar_class_attribute_declared_after_a_method.py covers the
+three ticket rows, a str attribute, and arithmetic, string methods, float
+division, a negated literal and an f-string over late-declared attributes, plus
+the Above and container controls.

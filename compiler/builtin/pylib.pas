@@ -1080,9 +1080,13 @@ type
     function random: Double;
     function uniform(a, b: Double): Double;
     function randint(a, b: Int64): Int64;
-    function randrange(n: Int64): Int64;
+    function randrange(n: Int64): Int64; overload;
+    function randrange(a, b: Int64): Int64; overload;
+    function randrange(a, b, step: Int64): Int64; overload;
     function choice(const src: Variant): Variant;
     function shuffle(const src: Variant): Variant;
+    function sample(const src: Variant; k: Int64): TPyList;
+    function getrandbits(k: Int64): Int64;
   end;
 
   TPyDeque = class
@@ -3293,6 +3297,8 @@ function pytype_name_v(const v: Variant): AnsiString;
   the bodies. `prior` is what the class-identity predicates answered. }
 function pyseq_hasattr_p(o: Pointer; const name: AnsiString; prior: Boolean): Boolean;
 function pyseq_hasattr_v(const v: Variant; const name: AnsiString; prior: Boolean): Boolean;
+function pyint_method_recv(const v: Variant; const mname: AnsiString): Variant;
+function pyexc_str_of(o: Pointer): AnsiString;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -6201,6 +6207,13 @@ begin
     raise AttributeError.Create('type object ''' + PyClsRefName(v)
       + ''' has no attribute ''' + name + '''');
   end;
+  { ...and a SCALAR (int/str/float/bool) or None has no attribute storage at
+    all: its bits are not an object address, and handing them to
+    pydynattr_set dereferenced garbage (SIGSEGV). The getter twin always
+    checked this. bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults }
+  if (pyvartag(v) <> 7) or (pyvarobj(v) = nil) then
+    raise AttributeError.Create('''' + pytype_name_v(v) + ''' object has no '
+      + 'attribute ''' + name + ''' and no __dict__ for setting new attributes');
   pydynattr_set(pyvarobj(v), name, val);
 end;
 
@@ -6250,6 +6263,10 @@ begin
   else if o is TPyRange then Result := 'range'
   else if o is TPyComplex then Result := 'complex'
   else if o is TPyDeque then Result := 'deque'
+  { CPython's own names for the other pylib-backed objects a program can hold.
+    feature-n-random-random-has-no-per-instance-rng-class-and-the-state-machinery-already-exists }
+  else if o is TPyRandom then Result := 'Random'
+  else if o is TPyStat then Result := 'stat_result'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -6443,6 +6460,23 @@ begin
   else
     cn := PyVarTypeNameOf(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
+end;
+
+{ The receiver of an INT method (`x.bit_length()`, `x.to_bytes(..)`) reached
+  through a variant: the intercept claims every variant, then unboxes it, and a
+  None's empty payload unboxed as 0 -- `None.bit_length()` answered 0 where
+  CPython raises. A float, str or object receiver was refused too, but by the
+  unboxer's "expected a number" TypeError rather than CPython's AttributeError.
+  Ints, bools and promoted ints pass through untouched.
+  bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising }
+function pyint_method_recv(const v: Variant; const mname: AnsiString): Variant;
+var tg: Int64;
+begin
+  tg := pyvartag(v);
+  if (tg = 0) or (tg = 3) or (tg = 5) or (tg = 6) or (tg = 7) or (tg = 8) then
+    raise AttributeError.Create('''' + pytype_name_v(v) + ''' object has no attribute '''
+                                + mname + '''');
+  Result := v;
 end;
 
 { Which of the five subscriptable boxes `o` is, from ONE walk of its class
@@ -10977,6 +11011,62 @@ begin
   if n <= 0 then
     raise ValueError.Create('empty range for randrange()');
   Result := randint(0, n - 1);
+end;
+
+{ randrange(start, stop[, step]) and sample(population, k) -- the rest of the
+  surface a seeded Random instance is used through (TSP's smoke/commentary).
+  feature-n-random-random-has-no-per-instance-rng-class-and-the-state-machinery-already-exists }
+function TPyRandom.randrange(a, b: Int64): Int64;
+begin
+  if b <= a then
+    raise ValueError.Create('empty range for randrange()');
+  Result := randint(a, b - 1);
+end;
+
+function TPyRandom.randrange(a, b, step: Int64): Int64;
+var n: Int64;
+begin
+  if step = 0 then raise ValueError.Create('zero step for randrange()');
+  if step > 0 then n := (b - a + step - 1) div step
+  else n := (a - b - step - 1) div (-step);
+  if n <= 0 then raise ValueError.Create('empty range for randrange()');
+  Result := a + step * randint(0, n - 1);
+end;
+
+function TPyRandom.sample(const src: Variant; k: Int64): TPyList;
+var l: TPyList; i, j, n: Integer; tmp: Variant;
+begin
+  l := pylist_v(src);
+  Result := TPyList.Create;
+  try
+    if l <> nil then
+      for i := 0 to l.count - 1 do Result.append(l.at(i));
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
+  n := Result.count;
+  if (k < 0) or (k > n) then
+  begin
+    PXXObjRelease(Pointer(Result));
+    raise ValueError.Create('Sample larger than population or is negative');
+  end;
+  { a partial Fisher-Yates from the front: the first k slots are the sample }
+  for i := 0 to Integer(k) - 1 do
+  begin
+    j := Integer(randint(i, n - 1));
+    tmp := Result.at(i);
+    Result.put(i, Result.at(j));
+    Result.put(j, tmp);
+  end;
+  while Result.count > k do Result.pop;
+end;
+
+function TPyRandom.getrandbits(k: Int64): Int64;
+begin
+  if k < 0 then raise ValueError.Create('number of bits must be non-negative');
+  if k = 0 then begin Result := 0; Exit; end;
+  if k > 63 then raise OverflowError.Create('getrandbits beyond 63 bits is not supported');
+  Result := next64 and ((Int64(1) shl k) - 1);
 end;
 
 function TPyRandom.choice(const src: Variant): Variant;
@@ -26174,6 +26264,22 @@ begin
   fn := TPyDunderFn(mi^.Code);
   outS := fn(Pointer(o));
   PyUserObjStr := True;
+end;
+
+{ str() of an exception whose STATIC type is an exception class: the RUNTIME
+  class's __str__ when it has one (a Pascal unit's URLError, a NilPy subclass),
+  else the message. The frontend used to read `msg` straight off the static
+  type, so `except Exception as e: str(e)` lost URLError's own __str__ while
+  `except URLError as e` kept it.
+  bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base }
+function pyexc_str_of(o: Pointer): AnsiString;
+var s: AnsiString;
+begin
+  Result := '';
+  if o = nil then begin Result := 'None'; Exit; end;
+  s := '';
+  if PyUserObjStr(TObject(o), False, s) then Result := s
+  else if TObject(o) is ExceptionBase then Result := ExceptionBase(o).Message;
 end;
 
 function pyvar_repr(const v: Variant): AnsiString;

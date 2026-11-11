@@ -89,3 +89,11 @@ This is the second shim in two days to collapse a constructor overload set for a
 reason that is not about the shim — `mimic_array` did the same thing on
 2026-09-09 for the sibling ticket. Two shims cannot both be wrong about how to
 write a constructor; the resolution path is.
+
+## Closed 2026-11-11: already fixed
+
+`queue.Queue(maxsize=2)` compiles and runs, and maxsize reads 2 (master after
+ba3b84f1a2). The fixing commit was not traced. Pinned by
+test_nilpy_a_keyword_binds_against_a_ctor_overload_set_with_a_zero_arg_arm.py,
+which checks the keyword form, the zero-argument arm and the positional arm
+against CPython.

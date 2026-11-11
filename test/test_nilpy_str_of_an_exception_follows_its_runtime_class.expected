@@ -1,0 +1,9 @@
+ValueError v | v
+KeyError 'k' | 'k'
+MyErr mine | mine
+Plain p | p
+URLError <urlopen error boom> | <urlopen error boom>
+mine
+struct unpack requires a bu
+<urlopen error boom>
+plain q

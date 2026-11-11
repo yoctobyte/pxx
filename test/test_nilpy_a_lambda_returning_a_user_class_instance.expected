@@ -1,0 +1,8 @@
+L1 lambda -> obj, called direct  -> V3(7.00)
+L2 lambda -> obj, through param  -> V3(7.00)
+L3 lambda -> new obj, thru param -> V3(9.00)
+L4 lambda -> float, thru param   -> 22.0
+L5 lambda -> str, thru param     -> hello
+L6 lambda -> list, thru param    -> [1, 2]
+L7 def    -> obj, thru param     -> V3(7.00)
+L8 inline lambda, thru param     -> V3(7.00)

@@ -52,3 +52,12 @@ pygen_iter_new). Every value-position call then becomes an ordinary forward
 call that ApplyCallFixups resolves. The `for` desugar (ParseForInGeneratorAST)
 has the same dependency and would want the same treatment, or a guard that
 routes an uncompiled generator through the factory.
+
+## Fixed 2026-11-11
+
+The factory the diagnosis above proposes: see
+bug-n-a-generator-def-nested-in-a-def-segfaults, which needed the same thing
+because a nested body always compiles after its caller. All three rows above
+(`gen(n)`, `gen(n, k=SCALE)`, `gen(n, xs=None)`) now match CPython, plus a
+`for` over the generator, `next()`, and keyword arguments.
+Test: `test/test_nilpy_a_generator_called_above_its_def.py` (row genabove26).

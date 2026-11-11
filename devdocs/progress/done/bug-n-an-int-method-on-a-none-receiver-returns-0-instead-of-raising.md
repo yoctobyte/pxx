@@ -53,3 +53,15 @@ this is filed as a bug rather than a compat item.
 The table above diffed against CPython (the message text normalised or the row
 asserted as "raises"), plus `to_bytes` and `bit_count` on the same receivers, and
 `(7).bit_length()` / `True.bit_length()` still answering 3 / 1.
+
+## Fixed 2026-11-11
+
+PyParseIntMethod wraps a VARIANT receiver in `pyint_method_recv(v, name)`
+(pylib). It raises CPython's `AttributeError: '<type>' object has no attribute
+'<name>'` for None, float, str, object and function-value tags, and passes ints,
+bools and promoted ints through. So the None row raises instead of answering 0,
+and the dict, list and str rows now give the AttributeError CPython gives
+rather than the unboxer's "expected a number" TypeError.
+
+Test: test_nilpy_an_int_method_on_a_non_int_receiver_raises.py covers int, bool,
+big int and to_bytes as controls, plus None, float, str, list and dict.

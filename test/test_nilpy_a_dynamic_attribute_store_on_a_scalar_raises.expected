@@ -1,0 +1,6 @@
+AE 'int' object has no attribute 'foo' and no __dict__ for setting new attributes
+AE 'str' object has no attribute 'foo' and no __dict__ for setting new attributes
+AE 'float' object has no attribute 'foo' and no __dict__ for setting new attributes
+AE 'bool' object has no attribute 'foo' and no __dict__ for setting new attributes
+AE 'NoneType' object has no attribute 'foo' and no __dict__ for setting new attributes
+AE 'int' object has no attribute 'foo' and no __dict__ for setting new attributes

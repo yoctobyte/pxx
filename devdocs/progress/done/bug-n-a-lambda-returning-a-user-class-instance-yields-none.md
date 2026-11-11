@@ -12,7 +12,7 @@ track: N
 type: bug
 prio: 62
 owner: unassigned
-status: open
+status: done
 ---
 
 ## How it was reached
@@ -140,3 +140,11 @@ another bug's table, and was only separated out because the rows disagreed with
 a direct re-run. A harness written in lambdas is not a safe harness on this
 compiler until this is fixed, which is a fact about every fixture either of us
 writes from here on.
+
+## Closed (2026-11-11)
+
+All eight rows match CPython on the wt2 tree based on 1c6f046ff4 (latest
+ba3b84f1a2 plus the November NilPy batches). No fix was made under this
+ticket; an earlier lambda/callable-boxing change fixed it, and nobody had
+re-checked. The repro is now a test:
+`test/test_nilpy_a_lambda_returning_a_user_class_instance.py` (row lamobj26).

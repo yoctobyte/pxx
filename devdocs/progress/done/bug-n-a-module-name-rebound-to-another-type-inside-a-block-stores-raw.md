@@ -2,7 +2,7 @@
 type: bug
 track: N
 prio: 80
-status: open
+status: done
 slug: bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw
 summary: "A module-level name first bound to a number and rebound to a string or an object INSIDE a for/while/if block was stored RAW into the number's slot. `x = len(a); x = \"s\" * 3; print(x)` in a module-level loop printed 6291688 (the string's address) where CPython prints `sss`, and leaked the string every pass. REFUSED at compile time since 2026-10-02 (frankuser), naming the `x: Any` annotation that makes it work. The real fix, making the module pre-pass read these bindings, is still open."
 ---
@@ -58,7 +58,9 @@ positive above, which the narrowing removed. No program in the tree is refused.
 
 Tests:
 - `test/test_nilpy_a_module_name_rebound_to_a_string_in_a_block_is_refused_fail.npy`
-  (the refusal fires).
+  (the refusal fires). Renamed 2026-11-11 to
+  `test_nilpy_a_module_name_rebound_across_types_in_a_block.npy`, now a
+  CPython-diffed pass test.
 - `test/test_nilpy_a_module_name_annotated_any_rebinds_across_types_in_a_block.npy`
   (the named fix works, diffed against CPython).
 
@@ -73,3 +75,23 @@ Tests:
    reliable static kind for operators over objects first.
 3. Other binding forms (for targets, tuple unpack, augmented assignment) do not
    go through this check.
+
+## The real fix (2026-11-11)
+
+Open item 1, the first way. `PyBlkRhsAllResolve` (pyparser.inc) says whether a
+block binding's right-hand side can be trial-parsed without risking a Halt:
+every bare identifier resolves (a non-phantom symbol of this unit, a routine, a
+class, or a short builtin list: len, str, int, float, abs, min, max, sorted,
+list, dict, tuple, repr, round, sum, bool, ord, chr, hex), and it opens no
+scope (no `for`, `def`, `class`, `lambda`, `yield`, `await`, ternary `if`,
+colon). Member names after `.` and keyword labels are not looked up. When it
+holds, PyCollectModuleLocalsAST trial-parses the statement exactly as the
+depth-0 arm does, after the no-parse shapes and before the phantom fallback.
+`x = len(a)` then `x = "s" * 3` in one loop now widens x to a variant and
+prints `sss`, as CPython does.
+
+PyRefuseUnwidenedModuleRebind stays as the backstop for anything the resolve
+check still declines. Items 2 and 3 are unchanged.
+
+Test: `test/test_nilpy_a_module_name_rebound_across_types_in_a_block.npy`
+(row blkrebindstr26, now diffed against CPython).

@@ -1278,6 +1278,36 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_hasattrcomp26 | diff -u test/test_nilpy_hasattr_with_a_computed_name_sees_builtin_methods.expected -
 	./$(COMPILER) test/test_nilpy_tuple_unpacking_boxes_a_callable_value.py $(TESTTMP)/test_nilpy_unpackfn26
 	$(TESTTMP)/test_nilpy_unpackfn26 | diff -u test/test_nilpy_tuple_unpacking_boxes_a_callable_value.expected -
+	./$(COMPILER) test/test_nilpy_an_int_method_on_a_non_int_receiver_raises.py $(TESTTMP)/test_nilpy_intrecv26
+	$(TESTTMP)/test_nilpy_intrecv26 | diff -u test/test_nilpy_an_int_method_on_a_non_int_receiver_raises.expected -
+	./$(COMPILER) test/test_nilpy_str_of_an_exception_follows_its_runtime_class.py $(TESTTMP)/test_nilpy_excstr26
+	$(TESTTMP)/test_nilpy_excstr26 | diff -u test/test_nilpy_str_of_an_exception_follows_its_runtime_class.expected -
+	./$(COMPILER) test/test_nilpy_keys_through_an_untyped_receiver_across_a_module.npy $(TESTTMP)/test_nilpy_keysxmod26
+	$(TESTTMP)/test_nilpy_keysxmod26 | diff -u test/test_nilpy_keys_through_an_untyped_receiver_across_a_module.expected -
+	./$(COMPILER) test/test_nilpy_a_scalar_class_attribute_declared_after_a_method.py $(TESTTMP)/test_nilpy_clsattrlate26
+	$(TESTTMP)/test_nilpy_clsattrlate26 | diff -u test/test_nilpy_a_scalar_class_attribute_declared_after_a_method.expected -
+	./$(COMPILER) test/test_nilpy_a_keyword_binds_against_a_ctor_overload_set_with_a_zero_arg_arm.py $(TESTTMP)/test_nilpy_ctorkw026
+	$(TESTTMP)/test_nilpy_ctorkw026 | diff -u test/test_nilpy_a_keyword_binds_against_a_ctor_overload_set_with_a_zero_arg_arm.expected -
+	./$(COMPILER) test/test_nilpy_a_seeded_random_instance.py $(TESTTMP)/test_nilpy_rndinst26
+	$(TESTTMP)/test_nilpy_rndinst26 | diff -u test/test_nilpy_a_seeded_random_instance.expected -
+	./$(COMPILER) test/test_nilpy_the_walrus_operator.py $(TESTTMP)/test_nilpy_walrus26
+	$(TESTTMP)/test_nilpy_walrus26 | diff -u test/test_nilpy_the_walrus_operator.expected -
+	./$(COMPILER) test/test_nilpy_a_lambda_returning_a_user_class_instance.py $(TESTTMP)/test_nilpy_lamobj26
+	$(TESTTMP)/test_nilpy_lamobj26 | diff -u test/test_nilpy_a_lambda_returning_a_user_class_instance.expected -
+	./$(COMPILER) test/test_nilpy_a_star_unpack_into_a_method_on_a_call_result.py $(TESTTMP)/test_nilpy_starchain26
+	$(TESTTMP)/test_nilpy_starchain26 | diff -u test/test_nilpy_a_star_unpack_into_a_method_on_a_call_result.expected -
+	./$(COMPILER) test/test_nilpy_a_dynamic_attribute_store_on_a_scalar_raises.py $(TESTTMP)/test_nilpy_dynsetscalar26
+	$(TESTTMP)/test_nilpy_dynsetscalar26 | diff -u test/test_nilpy_a_dynamic_attribute_store_on_a_scalar_raises.expected -
+	./$(COMPILER) test/test_nilpy_a_write_to_a_file_never_closed_lands.py $(TESTTMP)/test_nilpy_unclosed26
+	$(TESTTMP)/test_nilpy_unclosed26 | diff -u test/test_nilpy_a_write_to_a_file_never_closed_lands.expected -
+	! ./$(COMPILER) test/test_nilpy_a_class_statement_inside_a_def_is_refused_fail.py $(TESTTMP)/test_nilpy_localcls26 > $(TESTTMP)/test_nilpy_localcls.log 2>&1
+	grep -q "class statement inside a def is not supported" $(TESTTMP)/test_nilpy_localcls.log
+	./$(COMPILER) test/test_nilpy_a_repr_dunder_taken_as_a_value.py $(TESTTMP)/test_nilpy_reprval26
+	$(TESTTMP)/test_nilpy_reprval26 | diff -u test/test_nilpy_a_repr_dunder_taken_as_a_value.expected -
+	./$(COMPILER) test/test_nilpy_a_generator_nested_in_a_def.py $(TESTTMP)/test_nilpy_gennest26
+	$(TESTTMP)/test_nilpy_gennest26 | diff -u test/test_nilpy_a_generator_nested_in_a_def.expected -
+	./$(COMPILER) test/test_nilpy_a_generator_called_above_its_def.py $(TESTTMP)/test_nilpy_genabove26
+	$(TESTTMP)/test_nilpy_genabove26 | diff -u test/test_nilpy_a_generator_called_above_its_def.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
@@ -8237,10 +8267,10 @@ test-nilpy: $(COMPILER)
 	@# the old inline expectation encoded the list-repr this ticket removed.
 	$(TESTTMP)/test_nilpy_setops26 | diff -u test/test_nilpy_set_ops.expected -
 	@# A module name bound to a number and rebound to a string INSIDE A BLOCK
-	@# printed the string's address (pin v452) -- refused now, by name; the
-	@# `x: Any` annotation the refusal names makes the same loop work.
-	! ./$(COMPILER) test/test_nilpy_a_module_name_rebound_to_a_string_in_a_block_is_refused_fail.npy $(TESTTMP)/test_nilpy_blkrebindstr26 > $(TESTTMP)/test_nilpy_blkrebindstr.log 2>&1
-	grep -q "cannot give it both types" $(TESTTMP)/test_nilpy_blkrebindstr.log
+	@# printed the string's address (pin v452); the pre-pass now widens it.
+	@# The `x: Any` annotation the old refusal named still works too.
+	./$(COMPILER) test/test_nilpy_a_module_name_rebound_across_types_in_a_block.npy $(TESTTMP)/test_nilpy_blkrebindstr26
+	$(TESTTMP)/test_nilpy_blkrebindstr26 | diff -u test/test_nilpy_a_module_name_rebound_across_types_in_a_block.expected -
 	./$(COMPILER) test/test_nilpy_a_module_name_annotated_any_rebinds_across_types_in_a_block.npy $(TESTTMP)/test_nilpy_blkrebindany26
 	$(TESTTMP)/test_nilpy_blkrebindany26 | diff -u test/test_nilpy_a_module_name_annotated_any_rebinds_across_types_in_a_block.expected -
 	# bin()/oct() builtins, and enumerate(xs, start) / enumerate(xs, start=N); expectation is CPython's own output

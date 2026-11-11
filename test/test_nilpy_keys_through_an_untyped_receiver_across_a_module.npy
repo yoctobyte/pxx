@@ -1,0 +1,19 @@
+# Methods called on an untyped receiver INSIDE an imported module dispatch on
+# the receiver at run time: the importer's classes are not visible there.
+# bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
+from nilpy_keys_openworld_mod import Caller
+
+class Duck:
+    def keys(self):
+        return ["d1"]
+    def items(self):
+        return [("k", 1)]
+    def values(self):
+        return [42]
+    def get(self, k):
+        return "duck-" + k
+
+c = Caller()
+print(c.take_keys(Duck()), c.take_items(Duck()), c.take_values(Duck()), c.take_get(Duck(), "x"))
+d = {"a": 1}
+print(c.take_keys(d), c.take_items(d), c.take_values(d), c.take_get(d, "a"))
