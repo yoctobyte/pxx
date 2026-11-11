@@ -3,7 +3,7 @@ slug: bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-call
 track: N
 type: bug
 prio: 65
-status: backlog
+status: done
 owner: ""
 created: 2026-09-21
 found-by: frankb-8e
@@ -172,3 +172,14 @@ default `optionxform` can produce.
 
 - `feature-demo-songformatter-pxx-target` — the blocked demo.
 - `lib/rtl/configparser.pas:17` — the unit documenting the intent.
+
+## Closed (2026-11-11)
+
+The repro and both arms of the positive control are right on latest-ba3b84f1a2:
+`CasePreserving` reads `['Alpha', 'Beta']` (case kept, so the override's value
+is used) and the plain ConfigParser reads `['alpha', 'beta']`. It was fixed
+under bug-n-a-python-override-of-a-pascal-virtual-widens-the-compiled-base
+(the override no longer widens the compiled Pascal base's AnsiString result to
+a variant, which is the ABI disagreement described above). That ticket's test,
+`test/test_nilpy_an_unannotated_override_of_a_pascal_virtual.npy` (row
+ovrpasv26), covers this shape.

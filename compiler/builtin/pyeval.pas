@@ -248,6 +248,12 @@ function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer
   escaped closure share state, the way CPython's cell does. Leaked with the
   bound-fn object, like pyboundfn_bind_var's slot — same reasoning, same rarity. }
 function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
+{ Bind a STR capture. The body's parameter is an AnsiString, one register word,
+  but the enclosing local dies with its frame -- so the closure keeps its own
+  reference in a private variant slot (BK_STRSLOT) and the bridge passes the
+  string word read out of it. bug-n-a-returned-nested-def-reads-zero-for-its-
+  captures-past-arity-three }
+function pyboundfn_bind_str(obj: Pointer; idx: Int64; const s: AnsiString): Pointer;
 { A FRAME cell: the one shared storage for an enclosing local that some nested
   def declares `nonlocal`. CPython gives every closure over a frame — and the
   frame itself — ONE cell; pxx used to give each closure a fresh copy, so the
@@ -3203,12 +3209,14 @@ type
         BK_OBJ     1  pyboundfn_bind_obj retained it
         BK_VARSLOT 2  pyboundfn_bind_var's private 16-byte variant slot
         BK_CELL    3  pyboundfn_bind_cell's private 8-byte cell
-      TWO BITS PER SLOT packed into one word, not an array: this record is
+        BK_STRSLOT 4  pyboundfn_bind_str's private variant slot holding a str;
+                      the bridge passes the string word inside it, not the slot
+      THREE BITS PER SLOT packed into one word, not an array: this record is
       allocated once per escaping closure, and the whole point of the change
       that added this field is to make that allocation cheap enough to reclaim
       — a per-slot array grew the object enough to push it into the next
       allocator size class, which MEASURABLY made the still-leaking shapes
-      leak more. 20 slots x 2 bits = 40 bits, so one Int64 is ample. }
+      leak more. 20 slots x 3 bits = 60 bits, so one Int64 still holds it. }
     BKindMask: Int64;
     { A lambda that COLLECTS: `lambda *a: len(a)`. The own-parameter slot at
       this index is the callee's TPyList, and the caller's surplus arguments
@@ -3225,6 +3233,10 @@ type
     Sig: Pointer;
   end;
   PBoundFnObj = ^TBoundFnObj;
+  { The caller's arguments as the lifted bound-fn bridge sees them: up to
+    PY_BFN_MAXARGS, the widest call a callable value can receive
+    (pyvar_callv8). Slots past nargs hold None. }
+  TPyBfnArgv = array[0..7] of Variant;
   { A plain compiled def taken as a value: the value IS its code address.
     Declared as returning a VARIANT, because that is what an unannotated
     `def f(): ...` compiles to — and a Variant result travels through a hidden
@@ -3307,21 +3319,22 @@ const
   BK_OBJ     = 1;
   BK_VARSLOT = 2;
   BK_CELL    = 3;
+  BK_STRSLOT = 4;
 
-{ The two-bit field for slot `idx`. Written by the binders, read by the
-  finalizer; nothing else may touch the mask. }
+{ The three-bit field for slot `idx`. Written by the binders, read by the
+  finalizer and the call bridge; nothing else may touch the mask. }
 procedure PyBFSetKind(o: PBoundFnObj; idx: Int64; k: Int64);
 begin
   if (idx < 0) or (idx > 19) then Exit;
-  o^.BKindMask := (o^.BKindMask and (not (Int64(3) shl (idx * 2))))
-                  or ((k and 3) shl (idx * 2));
+  o^.BKindMask := (o^.BKindMask and (not (Int64(7) shl (idx * 3))))
+                  or ((k and 7) shl (idx * 3));
 end;
 
 function PyBFGetKind(o: PBoundFnObj; idx: Int64): Int64;
 begin
   PyBFGetKind := BK_PLAIN;
   if (idx < 0) or (idx > 19) then Exit;
-  PyBFGetKind := (o^.BKindMask shr (idx * 2)) and 3;
+  PyBFGetKind := (o^.BKindMask shr (idx * 3)) and 7;
 end;
 
 var
@@ -3470,7 +3483,7 @@ begin
     if bo^.Bound[i] = 0 then Continue;
     if PyBFGetKind(bo, i) = BK_OBJ then
       PXXObjRelease(Pointer(NativeInt(bo^.Bound[i])))
-    else if PyBFGetKind(bo, i) = BK_VARSLOT then
+    else if (PyBFGetKind(bo, i) = BK_VARSLOT) or (PyBFGetKind(bo, i) = BK_STRSLOT) then
     begin
       { a whole variant slot: release what it carries, then the slot }
       pv := PVariant(NativeInt(bo^.Bound[i]));
@@ -3506,6 +3519,15 @@ end;
   over-allocating is free here while under-allocating would scribble the next
   heap object. A VARIANT capture keeps pyboundfn_bind_var, whose 16-byte slot is
   already the right shape for a by-address variant. }
+function pyboundfn_bind_str(obj: Pointer; idx: Int64; const s: AnsiString): Pointer;
+var v: Variant;
+begin
+  v := s;
+  pyboundfn_bind_var(obj, idx, v);
+  PyBFSetKind(PBoundFnObj(obj), idx, BK_STRSLOT);
+  pyboundfn_bind_str := obj;
+end;
+
 function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
 var o: PBoundFnObj; pc: PInt64;
 begin
@@ -3677,7 +3699,7 @@ begin
   pyboundfn_callvn_mask(objptr, a0, a1, a2, nargs, -1, res);
 end;
 
-procedure PyBoundFnCallvnMaskBody(objptr: Pointer; const a0, a1, a2: Variant;
+procedure PyBoundFnCallvnMaskBody(objptr: Pointer; var av: TPyBfnArgv;
                                 nargs, suppliedMask: Int64; var res: Variant);
 { Call code(own..., bound...). The own arguments come first because that is the
   order the compiled body declares them in — its capture parameters were LIFTED
@@ -3690,8 +3712,8 @@ procedure PyBoundFnCallvnMaskBody(objptr: Pointer; const a0, a1, a2: Variant;
   other way. Only arity 1 lined up
   (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one). }
 var o: PBoundFnObj; b: PInt64; code: Pointer;
-    va0, va1, va2: Variant;
-    vd0, vd1, vd2: Variant;   { by-address slots for an OVERRIDDEN variant default }
+    va: TPyBfnArgv;           { by-address slots for VARIANT own params }
+    vd: TPyBfnArgv;           { by-address slots for an OVERRIDDEN variant default }
     dv, si: Int64;
     star: TPyList;
     p: array[0..31] of Int64;
@@ -3710,11 +3732,14 @@ begin
   { the body takes what it declares, not what the caller happened to supply }
   n := o^.NOwn;
   if n > nargs then n := nargs;
-  if n > 3 then n := 3;
+  if n > 8 then n := 8;
   for i := 0 to 31 do p[i] := 0;
-  if n > 0 then p[0] := PyBoundFnArgWord(o, a0, @va0);
-  if n > 1 then p[1] := PyBoundFnArgWord(o, a1, @va1);
-  if n > 2 then p[2] := PyBoundFnArgWord(o, a2, @va2);
+  { Up to eight own arguments, the widest call a value can receive. This used
+    to stop at three (a0..a2 were the only parameters), so a nested def of four
+    or more own parameters could not be carried as a value at all and fell back
+    to its bare code address, reading its captures as zero
+    (bug-n-a-returned-nested-def-reads-zero-for-its-captures-past-arity-three). }
+  for i := 0 to n - 1 do p[i] := PyBoundFnArgWord(o, av[i], @va[i]);
   { `lambda *a:` — the own slot at StarIdx is a TPyList, and every argument
     from that position on belongs INSIDE it. The word written there by the
     loop above (the first surplus argument, read as a list pointer) is
@@ -3728,9 +3753,8 @@ begin
     star := TPyList.Create;
     if si < nargs then
     begin
-      if si <= 0 then star.append(a0);
-      if (si <= 1) and (nargs > 1) then star.append(a1);
-      if (si <= 2) and (nargs > 2) then star.append(a2);
+      for i := si to nargs - 1 do
+        if i <= 7 then star.append(av[i]);
     end;
     pylist_mark_tuple(star);
     if si <= 31 then p[si] := Int64(NativeInt(star));
@@ -3741,7 +3765,13 @@ begin
   if n > 31 then n := 31;
   b := @o^.Bound[0];
   for i := 0 to o^.NBound - 1 do
-    if n + i <= 31 then p[n + i] := b[i];
+    if n + i <= 31 then
+    begin
+      if (PyBFGetKind(o, i) = BK_STRSLOT) and (b[i] <> 0) then
+        p[n + i] := PPyRec(Pointer(NativeInt(b[i])))^.Payload   { the str word }
+      else
+        p[n + i] := b[i];
+    end;
 
   { A DEFAULTED parameter is a bound slot the caller may override. Done after
     the bind copy above, deliberately: the default is written first and the
@@ -3750,15 +3780,11 @@ begin
     NOT NOwn+i, because a zero-parameter lambda carries a dummy own parameter
     the caller never counts. }
   for i := 0 to o^.NDef - 1 do
-    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 31) and
+    if (o^.NDefBase + i <= 7) and (o^.NDefBase + i < nargs) and (n + i <= 31) and
        ((suppliedMask shr (o^.NDefBase + i)) and 1 = 1) then
     begin
       dv := (o^.DefVarMask shr i) and 1;
-      case o^.NDefBase + i of
-        0: p[n + i] := PyBoundFnDefWord(a0, dv, @vd0);
-        1: p[n + i] := PyBoundFnDefWord(a1, dv, @vd1);
-        2: p[n + i] := PyBoundFnDefWord(a2, dv, @vd2);
-      end;
+      p[n + i] := PyBoundFnDefWord(av[o^.NDefBase + i], dv, @vd[o^.NDefBase + i]);
     end;
   { EXACT arity only — see the TBF table. Never round up: a call with more
     arguments than the body declares crashes it. }
@@ -3841,10 +3867,32 @@ end;
   regression-test-uforth-core }
 procedure pyboundfn_callvn_mask(objptr: Pointer; const a0, a1, a2: Variant;
                                 nargs, suppliedMask: Int64; var res: Variant);
+var av: TPyBfnArgv; i: Integer;
 begin
+  av[0] := a0; av[1] := a1; av[2] := a2;
+  for i := 3 to 7 do av[i] := pynone;
   PXXObjRetain(objptr);
   try
-    PyBoundFnCallvnMaskBody(objptr, a0, a1, a2, nargs, suppliedMask, res);
+    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res);
+  finally
+    PXXObjRelease(objptr);
+  end;
+end;
+
+{ The same funnel for a call of four to eight arguments, which reach the
+  runtime as a TPyList (pyvar_callv4..8). Same ownership rule as above. }
+procedure pyboundfn_call_wide(objptr: Pointer; args: TPyList; var res: Variant);
+var av: TPyBfnArgv; i, n: Integer;
+begin
+  n := args.count;
+  if n > 8 then
+    raise TypeError.Create('a compiled closure takes at most 8 arguments, got '
+      + pystr_of(Int64(n)));
+  for i := 0 to 7 do
+    if i < n then av[i] := args.at(i) else av[i] := pynone;
+  PXXObjRetain(objptr);
+  try
+    PyBoundFnCallvnMaskBody(objptr, av, n, -1, res);
   finally
     PXXObjRelease(objptr);
   end;
@@ -6383,10 +6431,12 @@ begin
       args.Free;
       Exit;
     end;
-    { a LIFTED bound-fn: the bridge carries three own arguments, and a lambda of
-      four own parameters is not lifted for exactly that reason — so this is
-      unreachable today, and says so rather than truncating if it ever is not. }
-    raise TypeError.Create('a compiled closure takes at most 3 arguments, got 4');
+    { a LIFTED bound-fn: a nested def of four own parameters taken as a value }
+    args := TPyList.Create;
+    args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+    pyboundfn_call_wide(o, args, Result);
+    args.Free;
+    Exit;
   end;
   { a plain compiled code address — what the old lowering handled correctly }
   f4 := TPyCallFn4(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -6456,8 +6506,8 @@ begin
       PyCallClosureBody(PClosureObj(o)^.Cidx, args, res);
       Exit;
     end;
-    raise TypeError.Create('a compiled closure takes at most 3 arguments, got '
-      + pystr_of(Int64(nargs)));
+    pyboundfn_call_wide(o, args, res);
+    Exit;
   end;
   { a plain compiled code address: the caller's own indirect call }
   Result := False;

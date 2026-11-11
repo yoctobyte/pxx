@@ -1,0 +1,13 @@
+a0 42
+a1 42
+a3 42
+a4 42
+a5 i=False o=7 sum=6
+a8 136
+inside 43
+s1 forty-two
+s4 forty-two!4
+l4 [4, 2]
+lam4 i=False o=7
+self4 i=1 o=2 tag=T
+many ['forty-two00', 'forty-two11', 'forty-two22']

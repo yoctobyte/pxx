@@ -1308,6 +1308,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_gennest26 | diff -u test/test_nilpy_a_generator_nested_in_a_def.expected -
 	./$(COMPILER) test/test_nilpy_a_generator_called_above_its_def.py $(TESTTMP)/test_nilpy_genabove26
 	$(TESTTMP)/test_nilpy_genabove26 | diff -u test/test_nilpy_a_generator_called_above_its_def.expected -
+	./$(COMPILER) test/test_nilpy_a_returned_nested_def_keeps_its_captures_at_every_arity.py $(TESTTMP)/test_nilpy_retcap26
+	$(TESTTMP)/test_nilpy_retcap26 | diff -u test/test_nilpy_a_returned_nested_def_keeps_its_captures_at_every_arity.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

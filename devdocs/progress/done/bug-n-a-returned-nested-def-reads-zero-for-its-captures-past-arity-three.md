@@ -16,7 +16,7 @@ track: N
 type: bug
 prio: 60
 owner: unassigned
-status: open
+status: done
 ---
 
 ## How it was reached
@@ -165,3 +165,22 @@ the wrong lowering.
 - 2026-09-14 — filed from the lekkerzeilen startup investigation. Reduction and
   table measured by the lekkerzeilen seat; fixture files are single-file and
   inline above, so nothing outside this ticket is needed to reproduce.
+- 2026-11-11 — fixed. Two separate caps, both removed:
+  1. **Arity.** `PyBoundFnCallvnMaskBody` took `a0..a2` only. It now takes a
+     `TPyBfnArgv` (8 variants); `pyboundfn_callvn_mask` fills three, and the new
+     `pyboundfn_call_wide` serves `pyvar_callv4` and `pyvar_wide_prelude`
+     (5..8), which used to raise "a compiled closure takes at most 3 arguments".
+     `PyNestedDefClosureValue` now warns only past 8. The list-capture `[]` and
+     the method-plus-`self` segfault were this same cap.
+  2. **str capture.** New `pyboundfn_bind_str`: the closure keeps its own
+     reference in a private variant slot, kind `BK_STRSLOT`, and the bridge
+     passes the string word read out of it. `BKindMask` went from 2 to 3 bits
+     per slot (20 x 3 = 60 bits). The new binder joined the three
+     callable-source name lists (ir.inc x2, pyparser.inc), without which the
+     value was boxed as a non-callable. A NONLOCAL str capture still warns:
+     it needs a writable str cell, which nothing builds.
+  - Test `test_nilpy_a_returned_nested_def_keeps_its_captures_at_every_arity.py`
+    (row retcap26): arity 0..8, int/str/list/param captures, inside and
+    escaped, method + self, lambda control; expectations from CPython.
+  - RSS probe, 200k closures built and called (str capture arity 4, int arity
+    5, int arity 3 control): 0 bytes/iteration growth.

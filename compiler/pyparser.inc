@@ -13322,6 +13322,7 @@ var defTok, i, j, k, depth: Integer;
     starPi: Integer;
     node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, dblBindPi, symIdx: Integer;
     objBindPi, cellBindPi, defPi, varMask: Integer;
+    strBindPi: Integer;              { pyboundfn_bind_str — a str capture }
     sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
     nm: AnsiString;
     anyBind: Boolean;
@@ -13370,6 +13371,18 @@ var defTok, i, j, k, depth: Integer;
                        Procs[procIdx].Params[pidx].IsRef;
   end;
 
+  { A by-value STR parameter: bound through pyboundfn_bind_str, which keeps
+    the closure's own reference -- the plain binder would copy a word whose
+    string dies with the enclosing frame. }
+  function BoundParamIsStr(bi: Integer): Boolean;
+  var pidx: Integer;
+  begin
+    pidx := nOwn + bi;
+    BoundParamIsStr := (pidx < Procs[procIdx].ParamCount) and
+                       (Procs[procIdx].Params[pidx].TypeKind = tyAnsiString) and
+                       not Procs[procIdx].Params[pidx].IsRef;
+  end;
+
   { chain one pyboundfn_bind / _bind_var / _bind_obj / _bind_cell call:
     node := bind(node, idx, valNode) }
   procedure ChainBind(valNode: Integer; isVar: Boolean; isObj: Boolean;
@@ -13405,6 +13418,8 @@ var defTok, i, j, k, depth: Integer;
       cell — recorded on the ticket rather than guessed at here. }
     if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
     else if isVar then ASTIVal[node] := varBindPi
+    else if (not isCell) and BoundParamIsStr(bindIdx) and (strBindPi >= 0) then
+      ASTIVal[node] := strBindPi
     else if isCell and (cellBindPi >= 0) then ASTIVal[node] := cellBindPi
     else if BoundParamIsDouble(bindIdx) and (dblBindPi >= 0) then ASTIVal[node] := dblBindPi
     else ASTIVal[node] := bindPi;
@@ -13430,6 +13445,7 @@ begin
   dblBindPi := FindProc('pyboundfn_bind_dbl');
   objBindPi := FindProc('pyboundfn_bind_obj');
   cellBindPi := FindProc('pyboundfn_bind_cell');
+  strBindPi := FindProc('pyboundfn_bind_str');
   if (newPi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
 
   { scan the header straight off the tokens: def NAME ( params ) ... }
@@ -13507,19 +13523,20 @@ begin
   if not anyBind then
     if (nOwn <> 1) or (nDef > 0) or (Procs[procIdx].ParamCount < 1) or
        (Procs[procIdx].Params[0].TypeKind <> tyVariant) then Exit;
-  { The bridge marshals up to THREE own arguments before the bound values, so
-    every ordinary closure arity is representable. It used to assume exactly
+  { The bridge marshals up to EIGHT own arguments before the bound values (the
+    widest call a value receives, pyvar_callv8); it stopped at three until
+    bug-n-a-returned-nested-def-reads-zero-for-its-captures-past-arity-three. It used to assume exactly
     one and this read `if nOwn <> 1 then Exit` — and that Exit did not fall
     back to anything safe: it emitted the bare code address with NO captures
     bound, so `def b():` capturing an enclosing local read its captures out of
     the dead parent frame and printed an address
     (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one).
-    Past three, there is still no way to pass the arguments — WARN rather than
+    Past eight, there is still no way to pass the arguments — WARN rather than
     silently produce that wrong value. }
-  if nOwn > 3 then
+  if nOwn > 8 then
   begin
     PyWarnUnbindableClosure(procIdx, 'it takes ' + PyIntLiteralText(nOwn) +
-                            ' arguments and the call bridge marshals at most 3');
+                            ' arguments and the call bridge marshals at most 8');
     Exit;
   end;
   { The ceiling is the bound-fn object's slot array (PY_MAX_CAPS of them), not
@@ -13550,7 +13567,12 @@ begin
       PyWarnUnbindableClosure(procIdx, 'it captures ' + nm + ', which is not a value');
       Exit;
     end;
-    if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then
+    { a by-value str capture binds through pyboundfn_bind_str; a NONLOCAL one
+      would need a writable str cell, which nothing builds yet }
+    if (Syms[symIdx].TypeKind = tyAnsiString) and (strBindPi >= 0) and
+       BoundParamIsStr(nDef + j) then
+      { bindable }
+    else if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then
     begin
       PyWarnUnbindableClosure(procIdx, 'it captures the string ' + nm +
                               ', which cannot travel as a register word');
@@ -25258,7 +25280,8 @@ begin
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
     (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
-    (nm = 'pyboundfn_bind_cell') or (nm = 'pyboundfn_bind_dbl');
+    (nm = 'pyboundfn_bind_cell') or (nm = 'pyboundfn_bind_dbl') or
+    (nm = 'pyboundfn_bind_str');
 end;
 
 function PyBareNoneHere: Boolean;
