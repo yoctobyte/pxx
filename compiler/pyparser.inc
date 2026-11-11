@@ -15091,13 +15091,18 @@ begin
   if ((ASTIVal[sliceNode] = FindProc('pylist_slice_step')) or
       (ASTIVal[sliceNode] = FindProc('pybytes_slice_step'))) and
      (IntToTypeKind(ASTTk[rhsNode]) = tyVariant) then
-    { A VARIANT source, unboxed for the contiguous form by pybytes_setslice_v,
-      has no _step twin. Refused rather than passed through: the setters take a
+  begin
+    { A VARIANT source cannot go to the typed _step setters: they take a
       TPyBytes/TPyList, and a raw variant handed to one is read as that object's
-      HEADER — a plausible wrong length and wrong bytes, with no diagnostic. }
-    Error('Nil Python: the source of an extended-slice assignment must have a '
-          + 'static list or bytes type, not a variant; bind it to a typed name '
-          + 'first')
+      HEADER -- a plausible wrong length and wrong bytes, with no diagnostic.
+      It was REFUSED here, which is also what stopped lekkerzeilen building on
+      latest (`pixels[channel::step] = grid.values.tobytes()[lo::2].translate(..)`,
+      app.py). pyvar_setslice_step already unboxes BOTH sides and dispatches on
+      the runtime types, so the static target is boxed and handed to it.
+      bug-n-an-extended-slice-store-from-a-variant-source-is-refused }
+    ASTLeft[ASTLeft[sliceNode]] := PyForceVariant(ASTLeft[ASTLeft[sliceNode]]);
+    procIdx := FindProc('pyvar_setslice_step');
+  end
   else if ASTIVal[sliceNode] = FindProc('pylist_slice_step') then
     procIdx := FindProc('pylist_setslice_step')
   else if ASTIVal[sliceNode] = FindProc('pybytes_slice_step') then
