@@ -23187,6 +23187,16 @@ begin
   if (t = 7) and
      PyUserObjNoArgDunder(TObject(Pointer(PPyVarRec(@v)^.Payload)), '__abs__', Result) then
     Exit;
+  { a COMPLEX behind a variant -- `(-8.0) ** 0.5` is one -- is its magnitude, as
+    a statically typed complex already was (pycomplex_abs). It raised
+    "expected a number, got object". bug-n-abs-of-a-complex-raises-typeerror }
+  if (t = 7) and (PPyVarRec(@v)^.Payload <> 0) and
+     (TObject(Pointer(PPyVarRec(@v)^.Payload)) is TPyComplex) then
+  begin
+    d := pycomplex_abs(TPyComplex(Pointer(PPyVarRec(@v)^.Payload)));
+    Result := d;
+    Exit;
+  end;
   if t = 3 then           { VT_DOUBLE }
   begin
     d := pyvar_to_float(v);

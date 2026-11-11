@@ -3,6 +3,7 @@ track: N
 prio: 12
 type: bug
 blocked-by: []
+status: done
 summary: "`abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set."
 ---
 
@@ -47,3 +48,13 @@ and wants lifting to a named function rather than a second copy.
 
 `abs((-8.0) ** 0.5)` matching CPython, plus `abs(3+4j)` = `5.0` as the exact
 control; `make test-nilpy`; self-host fixedpoint.
+
+## Resolution (2026-11-11)
+
+A statically typed complex already took pycomplex_abs; the hole was a complex
+behind a VARIANT -- which is exactly what `(-8.0) ** 0.5` yields. pyabs_v now
+has that arm. The ticket's own row prints 2.8284271247461894 against CPython's
+...903: the 4-ULP difference is in the power's imaginary part, not in abs, and
+is left alone (performance-beats-last-ULP-parity). Test
+test_nilpy_abs_of_a_complex_behind_a_variant.py (row abscplx26), the power row
+rounded to 12 places.

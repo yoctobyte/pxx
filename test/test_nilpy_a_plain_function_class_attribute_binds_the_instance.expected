@@ -1,0 +1,14 @@
+a=int b=7
+a=C b=7
+a=C b=3
+one 5
+40
+one 6
+a=D b=8 a=D b=3
+one 9
+5.0
+C2 1 init 5
+E2 2 init 5
+F2 2 init 5
+G2 3 init 5
+30 2 2

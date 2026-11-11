@@ -127,6 +127,10 @@ var
     source of type information and a phantom would swallow it. }
   PyPhantomNames: array[0..PY_MAX_LOCALS-1] of AnsiString;
   PyPhantomCount: Integer;
+  { One-shot: a node PyMakeDynCall puts FIRST in the argument list it parses,
+    then clears. Set by the instance read of a plain function held as a class
+    attribute, which binds the receiver (PyClsAttrBindsReceiver). }
+  PyDynCallLeadArg: Integer;
   { Names with an UNREADABLE block-nested binding — the same `raw = f.read()` /
     `z = c.two(1)` shapes the phantom covers, recorded by NAME rather than as a
     symbol.
@@ -8474,6 +8478,35 @@ begin
   while ci >= 0 do begin Inc(Result); ci := UClsParent[ci]; end;
 end;
 
+{ The fields a class's NON-LITERAL class attributes may live in: its own AND
+  every ancestor's. Both class-attribute emitters used to walk only the class's
+  own fields, and a subclass that REBINDS an inherited attribute declares no
+  field of its own -- so `class E(C): plain = staticmethod(one)` had its hidden
+  global E$plain filled and never copied, and `E().plain(9)` ran C's value.
+  The global is still looked up under the class being walked, so each level
+  stores only what IT bound, root first, and the subclass's store lands last.
+  Indexed rather than returned as a list so neither caller needs a buffer. }
+function PyClsAttrChainFieldCount(ci: Integer): Integer;
+var a: Integer;
+begin
+  Result := 0;
+  a := ci;
+  while a >= 0 do begin Inc(Result, UClsFCount[a]); a := UClsParent[a]; end;
+end;
+
+function PyClsAttrChainField(ci, k: Integer): Integer;
+var a: Integer;
+begin
+  Result := -1;
+  a := ci;
+  while a >= 0 do
+  begin
+    if k < UClsFCount[a] then begin Result := UClsFBase[a] + k; Exit; end;
+    Dec(k, UClsFCount[a]);
+    a := UClsParent[a];
+  end;
+end;
+
 function PyClassAncestorAt(ci, up: Integer): Integer;
 { ci's ancestor `up` steps above it — 0 is ci, PyClassDepth(ci)-1 is the root.
 
@@ -10223,6 +10256,42 @@ begin
   ASTRight[n] := a;
 end;
 
+{ The class that DECLARES method mi, walking ci's chain; -1 if none does. }
+function PyMethOwnerCi(ci, mi: Integer): Integer;
+begin
+  Result := ci;
+  while Result >= 0 do
+  begin
+    if (mi >= UClsMBase[Result]) and (mi < UClsMBase[Result] + UClsMCount[Result]) then Exit;
+    Result := UClsParent[Result];
+  end;
+end;
+
+{ Does any class body in ci's chain contain `self.<nm> =`? Token-level and
+  conservative (any method, any branch): it decides only whether a class
+  attribute stored AFTER construction could clobber what the constructor set,
+  and "yes" keeps the old behaviour for that name. ci = -1: no chain. }
+function PyChainAssignsSelfAttr(ci: Integer; const nm: AnsiString): Boolean;
+var c, ct, bs, be, j: Integer;
+begin
+  Result := False;
+  c := ci;
+  while c >= 0 do
+  begin
+    ct := PyClassDeclTok(PyRawName(UClsNOff[c], UClsNLen[c]));
+    if (ct >= 0) and PyTokClassBody(ct, TokCount, bs, be) then
+      for j := bs to be - 4 do
+        if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkDot) and
+           (Tokens[j + 2].Kind = tkIdent) and (Tokens[j + 3].Kind = tkAssign) and
+           (GetTokenStr(j) = 'self') and (GetTokenStr(j + 2) = nm) then
+        begin
+          Result := True;
+          Exit;
+        end;
+    c := UClsParent[c];
+  end;
+end;
+
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     rsvCtor: AnsiString;   { the underscored spelling, probed before it is adopted }
@@ -10232,6 +10301,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
     attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi, attrGSym: Integer;
     attrD, attrCur: Integer;   { the ancestor-chain walk, root first }
+    attrTop, attrMi, attrOwner: Integer;   { levels below an INHERITED constructor's owner }
     excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI, excArgsTup: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
     szArgNode, starHead: Integer;  { *args packing (see below) }
@@ -10919,8 +10989,24 @@ begin
     all for `class Sub(Base): pass` and `Sub().kind` read a zeroed field —
     silently, because the field IS inherited and only its value was missing
     (bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance). }
+  { An INHERITED constructor applies its OWNER's chain only (PyClassAttrInitSeq
+    runs with the owner's class, the only one it knows), so `class E(C)` with
+    no __init__ of its own and a rebound `plain = ...` kept C's value. The
+    levels BELOW the owner are this site's to store, after construction, as for
+    a class with no constructor at all. attrTop bounds the walk to them; an OWN
+    constructor leaves it 0, so nothing is hoisted, as before. }
+  attrTop := PyClassDepth(ci);
+  attrMi := FindUMeth(ci, 'create');
+  if attrMi >= 0 then
+  begin
+    attrOwner := PyMethOwnerCi(ci, attrMi);
+    attrTop := 0;
+    while (attrTop < PyClassDepth(ci)) and (PyClassAncestorAt(ci, attrTop) <> attrOwner) do
+      Inc(attrTop);
+  end
+  else attrOwner := -1;
   attrAny := False;
-  for attrD := PyClassDepth(ci) - 1 downto 0 do
+  for attrD := attrTop - 1 downto 0 do
   begin
     attrCur := PyClassAncestorAt(ci, attrD);
     for i := 0 to PyClsAttrCount - 1 do
@@ -10929,10 +11015,10 @@ begin
       than in the constant table (PyEmitClassAttrExpr). They are found by name,
       from the DECLARING class's own field list — the global is named after the
       class that declared the attribute, not after the one being constructed. }
-    for i := 0 to UClsFCount[attrCur] - 1 do
+    for attrFi := 0 to PyClsAttrChainFieldCount(attrCur) - 1 do
       if FindSym(PyClsAttrGlobalName(attrCur,
-           PyRawName(UFldNOff[UClsFBase[attrCur] + i],
-                     UFldNLen[UClsFBase[attrCur] + i]))) >= 0 then
+           PyRawName(UFldNOff[PyClsAttrChainField(attrCur, attrFi)],
+                     UFldNLen[PyClsAttrChainField(attrCur, attrFi)]))) >= 0 then
         attrAny := True;
   end;
   { A class WITH a constructor applies its class attributes at the head of that
@@ -10940,7 +11026,6 @@ begin
     `__init__` runs, so `__init__` can overwrite them. Only a class without one
     needs the hoisted-temp form below, where "after" is the only order there is
     and nothing can be overwritten. }
-  if attrAny and (FindUMeth(ci, 'create') >= 0) then attrAny := False;
   if attrAny then
   begin
     attrSym := AllocVar(PyHiddenName('clsattr'), tyClass);
@@ -10952,12 +11037,17 @@ begin
     PyHoistStmt(attrAsgn);
     { ROOT FIRST, so a subclass that redeclares an attribute stores last and its
       value is the one the instance keeps. }
-    for attrD := PyClassDepth(ci) - 1 downto 0 do
+    for attrD := attrTop - 1 downto 0 do
     begin
       attrCur := PyClassAncestorAt(ci, attrD);
       for i := 0 to PyClsAttrCount - 1 do
         if PyClsAttrCi[i] = attrCur then
         begin
+          { stored AFTER construction, so a name the inherited __init__ sets on
+            self keeps __init__'s value, as an instance attribute shadows a
+            class attribute in CPython }
+          if PyChainAssignsSelfAttr(attrOwner,
+               PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i])) then Continue;
           attrFld := AllocNode(AN_FIELD);
           ASTLeft[attrFld] := PyMakeIdent(attrSym);
           ASTSOffset[attrFld] := PyClsAttrNOff[i];
@@ -10971,12 +11061,14 @@ begin
           PyHoistStmt(attrAsgn);
         end;
       { the non-literal ones: copy the shared value out of its hidden global }
-      for i := 0 to UClsFCount[attrCur] - 1 do
+      for i := 0 to PyClsAttrChainFieldCount(attrCur) - 1 do
       begin
-        attrFi := UClsFBase[attrCur] + i;
+        attrFi := PyClsAttrChainField(attrCur, i);
         attrGSym := FindSym(PyClsAttrGlobalName(attrCur,
                       PyRawName(UFldNOff[attrFi], UFldNLen[attrFi])));
         if attrGSym < 0 then Continue;
+        if PyChainAssignsSelfAttr(attrOwner,
+             PyRawName(UFldNOff[attrFi], UFldNLen[attrFi])) then Continue;
         attrFld := AllocNode(AN_FIELD);
         ASTLeft[attrFld] := PyMakeIdent(attrSym);
         ASTSOffset[attrFld] := UFldNOff[attrFi];
@@ -11026,9 +11118,9 @@ begin
         seq := PySeqAppend(seq, asgn);
       end;
     { the non-literal ones live in a hidden global apiece }
-    for i := 0 to UClsFCount[cur] - 1 do
+    for i := 0 to PyClsAttrChainFieldCount(cur) - 1 do
     begin
-      fi := UClsFBase[cur] + i;
+      fi := PyClsAttrChainField(cur, i);
       gsym := FindSym(PyClsAttrGlobalName(cur, PyRawName(UFldNOff[fi], UFldNLen[fi])));
       if gsym < 0 then Continue;
       fldNode := AllocNode(AN_FIELD);
@@ -18097,6 +18189,16 @@ begin
   argsHead := -1; lastArg := -1; n := 0;
   starSym := -1;
   kwNamesSym := -1; kwValsSym := -1;
+  { a bound receiver, as if the source had written it first -- see
+    PyDynCallLeadArg }
+  if PyDynCallLeadArg >= 0 then
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyForceVariant(PyDynCallLeadArg);
+    ASTRight[argNode] := -1;
+    argsHead := argNode; lastArg := argNode; n := 1;
+    PyDynCallLeadArg := -1;
+  end;
   while CurTok.Kind <> tkRParen do
   begin
     { `fn(*xs)` through a callable VALUE. There is no signature here to expand
@@ -47382,6 +47484,55 @@ begin
   end;
 end;
 
+{ Does `fname`, read through an INSTANCE of class ci, bind the instance as the
+  first argument? CPython's plain-function-becomes-method rule: a class-body
+  `plain = two` (a module def) or `f = lambda s, x: ...` is a METHOD when read
+  off an instance, and `c.plain(7)` calls `two(c, 7)`. `staticmethod(two)` is
+  exactly the opt-out, so only a BARE def name or a lambda counts. Token-level
+  and nearest-class-first: the first class in ci's chain whose own body binds
+  `fname` at body level decides, so a subclass rebinding it to anything else
+  stops the walk. An instance attribute set in a method (`self.cb = f`) is not
+  a class-body statement and never binds -- also CPython's rule.
+  bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver }
+function PyClsAttrBindsReceiver(ci: Integer; const fname: AnsiString): Boolean;
+var d, cur, ct, bs, be, j, depth, rhs, pi: Integer; nm: AnsiString;
+begin
+  Result := False;
+  if (ci < 0) or (fname = '') then Exit;
+  for d := 0 to PyClassDepth(ci) - 1 do
+  begin
+    cur := PyClassAncestorAt(ci, d);
+    if cur < 0 then Exit;
+    ct := PyClassDeclTok(PyRawName(UClsNOff[cur], UClsNLen[cur]));
+    if (ct < 0) or not PyTokClassBody(ct, TokCount, bs, be) then Continue;
+    depth := 0;
+    j := bs;
+    while j < be do
+    begin
+      if Tokens[j].Kind = tkIndent then Inc(depth)
+      else if Tokens[j].Kind = tkDedent then Dec(depth)
+      else if (depth = 0) and (Tokens[j].Kind = tkIdent) and
+              ((j = bs) or (Tokens[j - 1].Kind in [tkNewline, tkDedent, tkIndent])) and
+              (j + 2 < be) and (Tokens[j + 1].Kind = tkAssign) and
+              (GetTokenStr(j) = fname) then
+      begin
+        rhs := j + 2;
+        if (Tokens[rhs].Kind = tkIdent) and (GetTokenStr(rhs) = 'lambda') then
+          Result := True
+        else if (Tokens[rhs].Kind = tkIdent) and (rhs + 1 < TokCount) and
+                (Tokens[rhs + 1].Kind in [tkNewline, tkDedent, tkEOF]) then
+        begin
+          nm := GetTokenStr(rhs);
+          pi := FindProc(nm);
+          Result := (pi >= 0) and PyProcIsNilPyDef(pi) and (FindUClass(nm) < 0);
+        end;
+        Exit;               { the nearest binding decides, whatever it is }
+      end;
+      Inc(j);
+    end;
+  end;
+end;
+
 function PyTokStmtEnd(s, limit: Integer): Integer;
 { the NEWLINE (or DEDENT/EOF) ending the statement that runs from s, groups
   skipped, or -1 }
@@ -55852,6 +56003,7 @@ begin
   PyHoistHead := -1;    { no pending hoisted statements }
   PyDefInitHead := -1;
   PyDefaultEvalMode := False;
+  PyDynCallLeadArg := -1;
   PyDefaultClsName := '';
   PyDefaultClsCi := -1;
   PyClsBodyCi := -1;
@@ -60630,6 +60782,21 @@ begin
       ASTTk[fieldNode] := Ord(tk);
       Next;
       node := fieldNode;
+
+      { `c.plain(7)` where the class body says `plain = two`: a plain function
+        read off an INSTANCE is a method in CPython and receives the instance
+        first. Only a bare-name receiver, which can be read twice without a
+        second side effect. bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver }
+      if NilPyUserCode and (tk = tyVariant) and (CurTok.Kind = tkLParen) and
+         (baseRecFld >= REC_UCLASS_BASE) and (ASTKind[ASTLeft[fieldNode]] = AN_IDENT) and
+         PyClsAttrBindsReceiver(baseRecFld - REC_UCLASS_BASE, fieldName) then
+      begin
+        PyDynCallLeadArg := CloneAST(ASTLeft[fieldNode]);
+        node := PyMakeDynCall(fieldNode);
+        tk := IntToTypeKind(ASTTk[node]);
+        recName := REC_NONE;
+        Continue;
+      end;
 
       { Indirect call through a procedural-type field: `rec.field(args)`. The
         field value is the proc pointer (tyPointer) or a {Code,Data} method

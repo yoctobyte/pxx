@@ -3,7 +3,7 @@ slug: bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver
 track: N
 prio: 40
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankB
@@ -47,3 +47,28 @@ We refuse where CPython succeeds, with a message naming the arity. Nothing
 computes a wrong value, and nobody gets a silently mis-shifted argument list.
 That is what puts it at 40 rather than higher — it fails the way a missing
 feature should fail.
+
+# Resolution (2026-11-11)
+
+`c.plain(7)` now calls `two(c, 7)`. PyClsAttrBindsReceiver reads the class
+body (nearest class in the chain first): a body-level `name = <module def>`
+or `name = lambda ...` binds the receiver; `staticmethod(...)`, any other
+right-hand side, and an instance attribute set in a method (`self.cb = f`) do
+not -- CPython's rules. The instance read followed by `(` becomes a dynamic
+call with the receiver as its first argument (PyDynCallLeadArg, consumed by
+PyMakeDynCall). Bare-name receivers only (`c`, `self`), so the receiver is
+never evaluated twice.
+
+Found on the way, and fixed with it because the test could not be written
+without it: a subclass REBINDING an inherited non-literal class attribute
+(`class E(C): plain = staticmethod(one)`) was ignored on instances -- E's
+hidden global was filled and never copied, because both class-attribute
+emitters walked only the class's OWN fields and a rebinding declares none.
+They now walk the chain's fields (PyClsAttrChainField). And when the
+constructor is INHERITED, the levels below its owner are stored after
+construction, skipping any name the owner's chain assigns as `self.<name> =`
+so `__init__` still wins.
+
+Test test_nilpy_a_plain_function_class_attribute_binds_the_instance.py (row
+plainattr26), expected = python3. test_nilpy_staticmethod_as_a_value.npy's
+header no longer calls the instance row a known divergence.
