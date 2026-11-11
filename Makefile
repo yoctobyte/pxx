@@ -1372,6 +1372,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_condef26 | diff -u test/test_nilpy_a_conditional_def_rebinds_by_execution.expected -
 	./$(COMPILER) test/test_nilpy_a_generator_def_as_a_value.py $(TESTTMP)/test_nilpy_gensval26
 	$(TESTTMP)/test_nilpy_gensval26 | diff -u test/test_nilpy_a_generator_def_as_a_value.expected -
+	./$(COMPILER) test/test_nilpy_a_from_imported_class_beats_a_same_named_one.py $(TESTTMP)/test_nilpy_clsfrom26
+	$(TESTTMP)/test_nilpy_clsfrom26 | diff -u test/test_nilpy_a_from_imported_class_beats_a_same_named_one.expected -
+	./$(COMPILER) test/test_nilpy_super_from_an_override_of_an_imported_class.py $(TESTTMP)/test_nilpy_superimp26
+	$(TESTTMP)/test_nilpy_superimp26 | diff -u test/test_nilpy_super_from_an_override_of_an_imported_class.expected -
+	./$(COMPILER) test/test_nilpy_a_shim_class_reports_its_python_name.py $(TESTTMP)/test_nilpy_shimtn26
+	$(TESTTMP)/test_nilpy_shimtn26 | diff -u test/test_nilpy_a_shim_class_reports_its_python_name.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

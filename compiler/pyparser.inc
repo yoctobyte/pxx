@@ -9416,6 +9416,8 @@ begin
 end;
 
 function PyClassCreate: Integer; forward;
+function PyOwnScopeClassAlias(const name: AnsiString): Integer; forward;
+function PyClassOfUnit(const name: AnsiString; u: Integer): Integer; forward;
 { Defined far below, next to the method-call paths that were its first callers;
   PyClassCreate uses it too, and the FPC SEED needs the forward because it
   compiles this include top-down (bug-a-fpc-seed-drift-emitasmx64-forward — the
@@ -10416,6 +10418,7 @@ end;
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     rsvCtor: AnsiString;   { the underscored spelling, probed before it is adopted }
+    wasQual: Boolean;      { the construction was module-qualified (PyCtorQualUnit) }
     nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
     kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
     kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
@@ -10468,6 +10471,7 @@ begin
   end;
   ci := -1;
   excArgsTup := -1;
+  wasQual := PyCtorQualUnit >= 0;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
   { A qualifier binds the ONE class name it precedes — never the constructions
     nested in that class's own ARGUMENTS. It was left set across the argument
@@ -10492,6 +10496,15 @@ begin
   PyCtorQualUnit := -1;
   { skip a same-named RECORD (the RTL's `Text` file type against tkinter's Text
     widget): a construction always means the class }
+  { A class this scope BOUND by a from-import (an alias row of this unit, or
+    of the main program) beats a same-named class row from elsewhere, unless
+    the scope declares the class itself. `from tpkg import Trie` beside
+    `import tpkg._base`: the flat non-record scan ranks by uses-order and built
+    the BASE class from a bare `Trie()`.
+    bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+  if (ci < 0) and (not wasQual) and
+     (FindUClassInUnit(name, CurrentUnitIdx) < 0) then
+    ci := PyOwnScopeClassAlias(name);
   if ci < 0 then ci := FindUClassNonRecord(name);
   if ci < 0 then ci := FindUClass(name);
   if ci < 0 then Error('Nil Python: class not found: ' + name);
@@ -28044,6 +28057,69 @@ procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever 
 
   Extracted rather than copied a third time (normalise-dont-special-case): the
   copies had already diverged once, in the direction of doing nothing. }
+function PyImportedClassNamed(const name: AnsiString; notCi: Integer): Integer;
+{ The class this scope bound to `name` with a from-import, other than notCi;
+  -1 when there is none. For `from m import Base` then `class Base(Base):` --
+  the BASE is m's class, while the bare name already names the class being
+  declared (its shell is registered before any import runs). Latest import
+  first. }
+var i, ni: Integer;
+begin
+  Result := -1;
+  ni := InternStr(LowerCase(name));
+  for i := PyImpNameCount - 1 downto 0 do
+    if (PyImpName[i] = ni) and (PyImpNameUnit[i] = CurrentUnitIdx) and
+       (PyImpNameSrc[i] >= 0) then
+    begin
+      Result := PyClassOfUnit(Strs[PyImpNameReal[i]].Text, PyImpNameSrc[i]);
+      if Result = notCi then Result := -1;
+      if Result >= 0 then Exit;
+    end;
+end;
+
+function PyOwnScopeClassAlias(const name: AnsiString): Integer;
+{ The class the CURRENT scope binds `name` to through an alias row of its own
+  (a from-import), latest binding first; -1 when it binds none. Exact case:
+  Python names are case-sensitive. }
+var i, j: Integer; ok: Boolean;
+begin
+  Result := -1;
+  for i := UClsAliasCount - 1 downto 0 do
+    if (UClsAliasUnitIdx[i] = CurrentUnitIdx) and (UClsAliasOwnerCi[i] < 0) and
+       (UClsAliasNLen[i] = Length(name)) then
+    begin
+      ok := True;
+      for j := 0 to UClsAliasNLen[i] - 1 do
+        if TokChars[UClsAliasNOff[i] + j] <> name[j + 1] then begin ok := False; Break; end;
+      if ok and (UClsAliasCi[i] >= 0) and not UClsIsRecord[UClsAliasCi[i]] then
+      begin
+        Result := UClsAliasCi[i];
+        Exit;
+      end;
+    end;
+end;
+
+function PyClassOfUnit(const name: AnsiString; u: Integer): Integer;
+{ The class `name` means IN unit u: a class it declares, else one it binds by
+  an alias row (a package `__init__` doing `from .py import Trie` re-exports
+  the class only as an alias row of its own). -1 when u binds no class of
+  that name. }
+var i: Integer; lo: AnsiString;
+begin
+  Result := -1;
+  if u < 0 then Exit;
+  Result := FindUClassInUnit(name, u);
+  if Result >= 0 then Exit;
+  lo := LowerCase(name);
+  for i := UClsAliasCount - 1 downto 0 do
+    if (UClsAliasUnitIdx[i] = u) and (UClsAliasOwnerCi[i] < 0) and
+       UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
+    begin
+      Result := UClsAliasCi[i];
+      Exit;
+    end;
+end;
+
 procedure PyAddImportUnitAlias(const aliasName, realKey: AnsiString);
 { Bind the Python name `aliasName` to the unit `realKey` names, through the
   unit-alias table. The target is stored RESOLVED: whatever unit realKey
@@ -50415,17 +50491,36 @@ begin
                 pylib base (a subclass of list, bytearray, ...) is exempt: its
                 methods are reached through the builtin dispatch, and widening
                 them is the long-standing behaviour its fixtures pin. }
-              if (not PyInHeaderSweep) and
+              { ...and "the pre-pass" is not enough: a base declared in an
+                IMPORTED module was compiled before this program's pre-pass
+                began. Widening it there retyped a routine that returns an
+                Int64, and `super().size() + 10` in the override read the 1 it
+                returned as a variant pointer -- a segfault in any subclass of
+                an imported class that called super() from its override. A
+                compiled body is the contract: an override whose result was
+                only INFERRED as a variant adopts the base's type (the
+                `else` arm below); a real disagreement is refused by name. }
+              if (Procs[ovPi].BodyAddr >= 0) and (mRet = tyVariant) and
+                 (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + UClsParent[ci])) then
+              begin
+                mRet := Procs[ovPi].RetType;
+                mRetRec := ProcRetRecId[ovPi];
+              end
+              else
+              begin
+              if ((not PyInHeaderSweep) or (Procs[ovPi].BodyAddr >= 0)) and
                  (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + UClsParent[ci])) then
                 Error('Nil Python: ' + origName + ' overrides '
                       + Procs[ovPi].Name + ' with a different result type, in '
-                      + 'a class laid out after its base was compiled (it has '
-                      + 'several bases, or derives from one that does) -- '
+                      + 'a class laid out after its base was compiled (the base '
+                      + 'is in an imported module, or the class has several '
+                      + 'bases or derives from one that does) -- '
                       + 'annotate both results with the same type');
               Procs[ovPi].RetType := tyVariant;
               ProcRetRecId[ovPi] := REC_NONE;
               mRet := tyVariant;
               mRetRec := REC_NONE;
+              end;
             end
             else
             begin
@@ -52303,6 +52398,10 @@ begin
             { no parent, and nothing to wait for }
           else if not multiBase then
           begin
+            if (baseCi = ci) and (PyImportedClassNamed(PyRawName(Tokens[i + 1].SOffset,
+                                Tokens[i + 1].SLen), ci) >= 0) then
+              baseCi := PyImportedClassNamed(PyRawName(Tokens[i + 1].SOffset,
+                                Tokens[i + 1].SLen), ci);
             if (baseCi >= 0) and PyParentWouldLoop(ci, baseCi) then
               Error('Nil Python: class ' + PyRawName(Tokens[i + 1].SOffset, Tokens[i + 1].SLen) +
                     PyParentLoopWhy(ci, baseCi))
@@ -52780,6 +52879,10 @@ begin
       diagnostic at all. Checked against the whole ancestor chain, not just
       self, so any future cause reports too.
       bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler }
+    { ...except `from m import Base` then `class Base(Base):`, where the bare
+      base name resolved to the class being declared and the base is m's }
+    if (baseCi = ci) and (ci >= 0) and (PyImportedClassNamed(CurTok.SVal, ci) >= 0) then
+      baseCi := PyImportedClassNamed(CurTok.SVal, ci);
     if (baseCi = ci) or ((ci >= 0) and PyClsHasAncestor(baseCi, ci)) then
       Error('Nil Python: class ' + CurTok.SVal + ' cannot inherit from itself'
             + ' — a base class must not be the class being declared, nor one of'
@@ -52842,6 +52945,11 @@ begin
         bug-nilpy-multiple-inheritance-does-not-parse }
       if (realBases >= 1) and not PyClsUsedAsMixin[baseCiList[0]] then
         parentIx := 0;
+    { `from m import Base` then `class Base(Base):` -- the bare base name
+      first resolved to the class being declared; the base is m's }
+    if (parentIx >= 0) and (baseCiList[parentIx] = ci) and
+       (PyImportedClassNamed(TokSliceStr(UClsNOff[ci], UClsNLen[ci]), ci) >= 0) then
+      baseCiList[parentIx] := PyImportedClassNamed(TokSliceStr(UClsNOff[ci], UClsNLen[ci]), ci);
     if (parentIx >= 0) and PyParentWouldLoop(ci, baseCiList[parentIx]) then
       Error('Nil Python: class ' + TokSliceStr(UClsNOff[ci], UClsNLen[ci]) +
             PyParentLoopWhy(ci, baseCiList[parentIx]));
@@ -53945,6 +54053,7 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     impPkg: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi, aliasUnit: Integer;
+    mainClsFix: Boolean;   { see the main-program class arm below }
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
@@ -54292,7 +54401,31 @@ begin
             if impParen then PySkipNewlines;
             Continue;
           end;
-          if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
+          { An UN-aliased class from-import in the MAIN program normally needs
+            nothing (flat scope finds it), but not when flat scope finds a
+            DIFFERENT class of that name, now or after a later import:
+            `from tpkg import Trie` beside an
+            import of tpkg._base, whose own `class Trie` is the subclass's
+            base, constructed the BASE from a bare `Trie()`. Then the main
+            program gets its own alias row, which outranks the flat scan
+            (FindUClassImpl). bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+          mainClsFix := False;
+          { never for a MISSED soft import (a partial shim inside a `try:` --
+            CPython binds nothing, and the alias row would type-check the dead
+            code behind the guard against the class) }
+          if (impAlias = impReal) and (CurrentUnitIdx < 0) and
+             (not SoftUnitMissed) and (FindUnitOrAlias(impName) >= 0) then
+          begin
+            aliasCi := PyClassOfUnit(impReal, FindUnitOrAlias(impName));
+            { not decided by what flat scope answers NOW: the colliding module
+              is often imported on a LATER line (measured: at this point both
+              answers agreed, and the bare name went wrong after
+              `import tpkg._base`). Skipped when the main program declares the
+              class itself -- its own `class X` must keep winning, and an alias
+              row would outrank it at program scope. }
+            mainClsFix := (aliasCi >= 0) and not UnitDeclaresClassExactly(impReal, -1);
+          end;
+          if (impAlias <> impReal) or (CurrentUnitIdx >= 0) or mainClsFix then
           begin
             { The SOURCE module's class first. A flat FindUClass ranks the
               importer's OWN rows highest, and the importer's classes are
@@ -54308,7 +54441,7 @@ begin
               bug-n-compiling-html5lib-trie-never-terminates }
             aliasCi := -1;
             if FindUnitOrAlias(impName) >= 0 then
-              aliasCi := FindUClassInUnit(impReal, FindUnitOrAlias(impName));
+              aliasCi := PyClassOfUnit(impReal, FindUnitOrAlias(impName));
             if aliasCi < 0 then aliasCi := FindUClass(impReal);
             { ...but NOT a class that merely matches with the case folded away,
               when this unit spells that name as a routine or a variable.
@@ -54330,7 +54463,8 @@ begin
               importer of it -- `from tsp.ephem import SPK` was "undefined
               variable (SPK)" (TSP). The alias row belongs to THIS unit, and
               alias lookup is what an importer's FindUClass falls back to. }
-            if (aliasCi >= 0) and (impAlias = impReal) and (CurrentUnitIdx < 0) then
+            if (aliasCi >= 0) and (impAlias = impReal) and (CurrentUnitIdx < 0) and
+               not mainClsFix then
               { nothing to do }
             else if aliasCi >= 0 then
               RegisterUClassAlias(StoredName(impAlias), Length(impAlias), aliasCi)

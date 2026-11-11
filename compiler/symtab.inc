@@ -2099,12 +2099,22 @@ begin
     program with exactly that. Guarding this on >= 0 fixed the same bug in a
     unit and left it live in a program, which is the harder half to notice
     because the repro is shorter. }
-  i := FindUClassAliasRow(lo, False);
-  if (i >= 0) and (UClsAliasUnitIdx[i] = CurrentUnitIdx) then
-  begin
-    Result := UClsAliasCi[i];
-    Exit;
-  end;
+  { Scanned for a row OF THIS SCOPE directly. FindUClassAliasRow returns one
+    best-ranked row, and at program scope it ranks by uses-order, so the
+    program's own row could lose to a module's same-named re-export and the
+    test below then fell through to the flat scan: `from tpkg import Trie`
+    plus `import tpkg._base` built the base class from a bare `Trie()`.
+    The LATEST row wins, as a later Python binding does.
+    bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+  for i := UClsAliasCount - 1 downto 0 do
+    if (UClsAliasUnitIdx[i] = CurrentUnitIdx) and
+       UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) and
+       ClassOwnerVisibleHere(UClsAliasOwnerCi[i]) and
+       UClsAliasVisibleHere(i) then
+    begin
+      Result := UClsAliasCi[i];
+      Exit;
+    end;
   if useIdx then i := UClsBHead[hsh] else i := 0;
   while (i >= 0) and (useIdx or (i < UClsCount)) do
   begin

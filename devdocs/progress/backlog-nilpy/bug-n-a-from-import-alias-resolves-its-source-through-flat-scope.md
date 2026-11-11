@@ -288,3 +288,36 @@ it, and flat scope picks whichever same-named class row ranks first. The
 from-import alias arm now resolves the class in the SOURCE unit first
 (bug-n-compiling-html5lib-trie-never-terminates), but a bare main-program
 name still never reaches that arm. Fixture shape: test/nilpy_samename26.
+
+## 2026-11-11 (later): the CLASS shape of residue 1 is fixed
+
+`from tpkg import Trie` plus `import tpkg._base` now constructs the
+re-exported subclass from a bare `Trie()`, as CPython does (`2 1 Trie True`).
+Three pieces:
+
+- PyParseImportRun: an un-aliased class from-import in the MAIN program now
+  registers a main-program alias row for the source module's class
+  (PyClassOfUnit, which also reads a package `__init__`'s re-export rows),
+  unless the main program declares that class itself. This is not decided by
+  what flat scope answers at the import: the colliding module is often
+  imported on a later line, and at the import both answers agreed.
+- PyClassCreate: a construction asks the scope's own alias rows
+  (PyOwnScopeClassAlias, exact case, latest first) before the flat non-record
+  scan, unless the scope declares the class.
+- FindUClassImpl: the "an alias declared here beats a class row from
+  elsewhere" step scans this scope's rows directly. FindUClassAliasRow ranks by
+  uses-order at program scope and could hand back a module's same-named row.
+
+Test: test_nilpy_a_from_imported_class_beats_a_same_named_one (row clsfrom26,
+fixture test/nilpy_clsfrom26); the batch-17 compiler fails it.
+
+Still open, measured the same day and older than this fix:
+- ~~`from tpkg import Trie` then `class Trie(Trie): ...` refused, "class Trie
+  cannot inherit from itself".~~ FIXED in the same batch: when a base resolves
+  to the class being declared, PyImportedClassNamed answers with the class
+  the scope from-imported under that name (three base-assignment sites). Test:
+  test_nilpy_super_from_an_override_of_an_imported_class. Testing it found
+  done/bug-n-super-from-an-override-of-an-imported-class-segfaults.
+- `from a import T`, use, then `from b import T`, use: both uses see the LATER
+  class (`2 2`, CPython `1 2`). Class names bind statically.
+- Residue 1's module-global store (above) is unchanged.

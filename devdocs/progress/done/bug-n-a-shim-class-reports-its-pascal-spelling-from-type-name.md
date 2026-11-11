@@ -3,7 +3,7 @@ slug: bug-n-a-shim-class-reports-its-pascal-spelling-from-type-name
 type: bug
 track: N
 prio: 25
-status: open
+status: done
 summary: "`type(collections.deque()).__name__` answers `TPyDeque` where CPython answers `deque`, because the Python-facing name is a type ALIAS and `__name__` reports the declared Pascal class. The alias makes construction and annotation work, so the gap is invisible until a program introspects — and introspection is exactly where a program has been told it can trust the answer. A CLASS, not one row: every shim that aliases around a name collision (`lib/rtl/pil.pas`'s `Image = TPILImage`, and any future one) has it, so the fix belongs wherever `__name__` is derived, not in the units."
 ---
 
@@ -69,3 +69,12 @@ since a partial fix here is the sibling-spelling trap.
 
 `type(collections.deque()).__name__` answering `deque`, with a row for the
 `pil.pas` alias in the same fixture so the second spelling is not left behind.
+
+## 2026-11-11: no longer reproduces -- closed
+
+`type(collections.deque()).__name__` is `deque`, and `OrderedDict`,
+`Counter`, `defaultdict`, `list`, `dict` and `set` all match CPython on
+latest-7020208c34. The fixing commit was not bisected. The PIL row cannot be
+measured: lib/rtl's PIL shim has no `Image.new`, so the probe stops at "no
+member new". That is a missing API, not this naming bug. Pinned by
+test_nilpy_a_shim_class_reports_its_python_name (row shimtn26).
