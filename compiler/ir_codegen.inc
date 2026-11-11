@@ -361,8 +361,8 @@ procedure EmitHeapMagAllocTry(var pDone: Integer);
   are not scratch here -- EmitHeapAllocLocked pushes the same family around its
   own call precisely because the surrounding expression may be holding values
   in them. }
-var pMiss1, pMiss2, pMiss3, pMiss4: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64([
     'push rcx', 'push rdx', 'push rdi', 'push r8',
     { rounded = (size + 7) and not 7, spelled as a shift pair so no negative
@@ -372,9 +372,9 @@ begin
     'shr rcx, 3',
     'shl rcx, 3',
     'cmp rcx, 8' ]);
-  EmitB($0F); EmitB($82); pMiss1 := CodeLen; EmitI32(0);      { jb  .missplain }
+  EmitAsmX64(['jb missplain']);
   EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
-  EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
+  EmitAsmX64(['ja missplain']);
   EmitHeapMagTlsBase;                                          { rdx = TLS block }
   { OWNERSHIP GUARD -- see TLS_SLOT_HEAP_MAGBUSY and EmitHeapMagTakeGuard. It
     guards against a signal handler on this thread AND against another thread
@@ -384,12 +384,12 @@ begin
   EmitAsmX64(['mov edi, 1']);
   EmitHeapMagTakeGuard;                                        { rdi = previous }
   EmitAsmX64(['test rdi, rdi']);
-  EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
+  EmitAsmX64(['jnz missplain']);
   EmitAsmX64([
     'add rdx, rcx',                                            { head at [rdx+HDISP] }
     'mov r8, [rdx+%]', HEAP_MAG_HDISP,
     'test r8, r8' ]);
-  EmitB($0F); EmitB($84); pMiss3 := CodeLen; EmitI32(0);      { jz  .missguarded }
+  EmitAsmX64(['jz missguarded']);
   EmitAsmX64([
     'mov rdi, [r8]',                                           { next }
     'mov [rdx+%], rdi', HEAP_MAG_HDISP,
@@ -413,12 +413,11 @@ begin
   { .missguarded: the guard is SET and the class was empty -- release it, then
     fall into the plain miss. Two miss labels rather than one because a miss
     taken before the guard was set must not clear a guard it does not own. }
-  Patch32(pMiss3, CodeLen - (pMiss3 + 4));
+  EmitAsmX64(['missguarded:']);
   EmitAsmX64(['sub rdx, rcx', 'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0]);
-  Patch32(pMiss1, CodeLen - (pMiss1 + 4));
-  Patch32(pMiss2, CodeLen - (pMiss2 + 4));
-  Patch32(pMiss4, CodeLen - (pMiss4 + 4));
+  EmitAsmX64(['missplain:']);
   EmitAsmX64(['pop r8', 'pop rdi', 'pop rdx', 'pop rcx']);
+  AsmScopeEnd;
 end;
 
 procedure EmitHeapMagFreeTry(var pDone: Integer);
@@ -440,26 +439,27 @@ procedure EmitHeapMagFreeTry(var pDone: Integer);
   where any thread can reach it. Without that, a thread that only ever frees a
   class parks blocks forever while the thread that allocates them always
   misses. }
-var pNil, pMiss1, pMiss2, pMiss3, pMiss4, pTaken: Integer;
+var pNil, pTaken: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['push rcx', 'push rdx', 'push rdi', 'test rax, rax']);
   EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0);        { jz  .taken }
   EmitAsmX64([
     'mov rcx, [rax-8]',
     'cmp rcx, 8' ]);
-  EmitB($0F); EmitB($82); pMiss1 := CodeLen; EmitI32(0);      { jb  .missplain }
+  EmitAsmX64(['jb missplain']);
   EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
-  EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
+  EmitAsmX64(['ja missplain']);
   EmitHeapMagTlsBase;                                          { rdx = TLS block }
   EmitAsmX64(['mov edi, 1']);
   EmitHeapMagTakeGuard;                                        { ownership guard }
   EmitAsmX64(['test rdi, rdi']);
-  EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
+  EmitAsmX64(['jnz missplain']);
   EmitAsmX64([
     'add rdx, rcx',
     'mov rdi, [rdx+%]', HEAP_MAG_NDISP,                        { how many parked }
     'cmp rdi, %', HEAP_MAG_DEPTH ]);
-  EmitB($0F); EmitB($83); pMiss3 := CodeLen; EmitI32(0);      { jae .missguarded (class full) }
+  EmitAsmX64(['jae missguarded']);      { jae .missguarded (class full) }
   EmitAsmX64([
     'mov rdi, [rdx+%]', HEAP_MAG_HDISP,
     'mov [rax], rdi',                                          { p^.next = head }
@@ -471,12 +471,11 @@ begin
   Patch32(pNil, pTaken - (pNil + 4));
   EmitAsmX64(['pop rdi', 'pop rdx', 'pop rcx']);
   EmitB($E9); pDone := CodeLen; EmitI32(0);                   { jmp .done }
-  Patch32(pMiss3, CodeLen - (pMiss3 + 4));
+  EmitAsmX64(['missguarded:']);
   EmitAsmX64(['sub rdx, rcx', 'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0]);
-  Patch32(pMiss1, CodeLen - (pMiss1 + 4));
-  Patch32(pMiss2, CodeLen - (pMiss2 + 4));
-  Patch32(pMiss4, CodeLen - (pMiss4 + 4));
+  EmitAsmX64(['missplain:']);
   EmitAsmX64(['pop rdi', 'pop rdx', 'pop rcx']);
+  AsmScopeEnd;
 end;
 
 procedure EmitScaleByElem(reg: Integer; es: Integer);
@@ -618,20 +617,20 @@ procedure EmitDynArrayReleaseLocked;
   label/forward-jump table resets at the start of every call), and a proc call
   can't be expressed as an asmtext line. The straight-line instructions
   themselves are still readable text, not raw opcodes. }
-var pNil, pNonZero: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  EmitAsmX64(['jz short done']);
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
-  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
+  EmitAsmX64(['jnz short done']);
   { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
     sits below the refcount (devdocs/dev/managed-block-header.md). These were
     the same address before that word existed. }
   EmitAsmX64(['sub rax, 24']);
   EmitHeapFreeLocked;
-  PatchRel8(pNil);
-  PatchRel8(pNonZero);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitAnsiStrReleaseLocked;
@@ -647,23 +646,22 @@ procedure EmitAnsiStrReleaseLocked;
   every other guard tests, so the block was live-counted from then on. The
   read-only data segment turned it into a SIGSEGV, which is how it was found.
   feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
-var pNil, pStatic, pNonZero: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  EmitAsmX64(['jz short done']);
   EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
-  EmitB($73); pStatic := CodeLen; EmitB(0);       { jae done: a static block }
+  EmitAsmX64(['jae short done']);       { jae done: a static block }
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
-  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
+  EmitAsmX64(['jnz short done']);
   { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
     sits below the refcount (devdocs/dev/managed-block-header.md). These were
     the same address before that word existed. }
   EmitAsmX64(['sub rax, 24']);
   EmitHeapFreeLocked;
-  PatchRel8(pNil);
-  PatchRel8(pStatic);
-  PatchRel8(pNonZero);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 { The runtime retain entry point for a single element of kind 5 or 6, by name.
@@ -1312,8 +1310,9 @@ procedure EmitIoLockStubs;
   x86 total-store-order gives the store-release /
   cmpxchg-acquire semantics for free. Clobbers rax/rcx/rsi/r11 — called only at
   statement boundaries, where no evaluation registers are live. }
-var spinStart, ioLockJePatch, ioUnlockJnzPatch: Integer;
+var spinStart: Integer;
 begin
+  AsmScopeBegin;
   IOLockAddr := CodeLen;
   { ---- the owner tid, from TLS when the block is provably ours ----
     This used to be an unconditional gettid SYSCALL PER I/O STATEMENT: measured
@@ -1366,7 +1365,7 @@ begin
     hand-counted displacement over a block containing a global reference is a
     length assumption about the ENCODER, and this one was at least honest
     enough to assert -- the sibling in EmitIoUnlock was not. }
-  EmitB($74); ioLockJePatch := CodeLen; EmitB(0);
+  EmitAsmX64(['jz short ioLockJePatch']);
   spinStart := CodeLen;
   EmitAsmX64(['xor eax, eax', 'mov rcx, rsi']);
   { lock cmpxchg [BSS_IO_OWNER], rcx — expect 0 (free), take with our tid.
@@ -1374,7 +1373,7 @@ begin
   EmitB($F0); EmitB($48); EmitB($0F); EmitB($B1); EmitB($0C); EmitB($25); EmitGlobRef(BSS_IO_OWNER);
   EmitAsmX64(['je +2']);               { got it -> depth bump }
   EmitB($EB); EmitRel8(spinStart);     { jmp back to the spin retry }
-  PatchRel8(ioLockJePatch);            { ...and now the forward je knows the size }
+  EmitAsmX64(['ioLockJePatch:']);            { ...and now the forward je knows the size }
   EmitAsmX64([
     'inc qword [@glob]', BSS_IO_DEPTH,
     'ret'
@@ -1388,13 +1387,14 @@ begin
     inside whatever follows. Nothing asserted it -- the spin block above at
     least had a size check, this had a comment. Patched, so the question does
     not arise again. }
-  EmitB($75); ioUnlockJnzPatch := CodeLen; EmitB(0);
+  EmitAsmX64(['jnz short ioUnlockJnzPatch']);
   EmitAsmX64([
     'xor ecx, ecx',
     'mov [@glob], rcx', BSS_IO_OWNER   { release: plain store is a release on x86 }
   ]);
-  PatchRel8(ioUnlockJnzPatch);
+  EmitAsmX64(['ioUnlockJnzPatch:']);
   EmitAsmX64(['ret']);
+  AsmScopeEnd;
 end;
 
 procedure EnsureSignalBss;
@@ -5410,10 +5410,10 @@ begin
 end;
 
 procedure EmitAnsiStringRuntime;
-var pNilUnique, pNilUnique2, pDone, pDone2,
+var
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
-    pRelNil, pRelLive, pRelStatic, pRetNil, pRetStatic, pAsciiSkip: Integer;
 begin
+  AsmScopeBegin;
   EmitAnsiStrFromLiteral;
 
   { Retain blob. The nil test and the MSTR_STATIC_RC guard are decided BEFORE
@@ -5466,12 +5466,11 @@ begin
       therefore a strict improvement over a lock that half the participants
       never took. }
     EmitAsmX64(['test rax, rax']);
-    EmitB($74); pRetNil := CodeLen; EmitB(0);     { jz done }
+    EmitAsmX64(['jz short done']);
     EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
-    EmitB($73); pRetStatic := CodeLen; EmitB(0);  { jae done }
+    EmitAsmX64(['jae short done']);
     EmitAsmX64(['lock inc qword [rax-16]']);
-    PatchRel8(pRetNil);
-    PatchRel8(pRetStatic);
+    EmitAsmX64(['done:']);
   end
   else
     { Unchanged, and byte-identical: with ThreadSafeMode off both lock helpers
@@ -5503,12 +5502,12 @@ begin
     them onto one label would either release a lock never taken or leak one. }
   AnsiStrReleaseAddr := CodeLen;
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done_unlocked }
+  EmitAsmX64(['jz short done_unlocked']);
   { Saturated static literal: no write, and no free to consider. Same guard as
     PXXStrDecRef, which every OTHER backend reaches and this blob used to
     bypass — see the retain blob above for why the WRITE is what matters. }
   EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
-  EmitB($73); pRelStatic := CodeLen; EmitB(0);    { jae done_unlocked }
+  EmitAsmX64(['jae short done_unlocked']);
   { THE DECREMENT RUNS UNLOCKED. It is already a `lock dec` under
     --threadsafe, so the spinlock was serialising an operation the CPU had
     made atomic -- pure contention for every release that does NOT free, which
@@ -5527,7 +5526,7 @@ begin
     about releasing a lock never taken no longer has a case to describe. }
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
-  EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done — lock never taken }
+  EmitAsmX64(['jnz short done_unlocked']);      { jnz done — lock never taken }
   EmitAcquireHeapLock;
   { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
     sits below the refcount (devdocs/dev/managed-block-header.md). }
@@ -5536,9 +5535,9 @@ begin
   EmitHeapFreeLocked;
   EmitAsmX64(['pop rax']);
   EmitReleaseHeapLock;
-  PatchRel8(pRelNil);                             { never took it }
-  PatchRel8(pRelStatic);                          { never took it }
-  PatchRel8(pRelLive);                            { never took it either, now }
+  EmitAsmX64(['done_unlocked:']);                             { never took it }
+                            { never took it }
+                              { never took it either, now }
   EmitAsmX64(['ret']);
 
   { Object retain/release blobs (feature-nilpy-object-reclamation): thin
@@ -5573,13 +5572,13 @@ begin
     'mov rdi, [rbx]', { rdi = string pointer }
     'test rdi, rdi'
   ]);
-  EmitB($74); pNilUnique := CodeLen; EmitB(0);     { jz done_nil }
+  EmitAsmX64(['jz short done_nil']);
 
   EmitAsmX64([
     'mov rcx, [rdi-16]', { rcx = refcount }
     'cmp rcx, 1'
   ]);
-  EmitB($76); pNilUnique2 := CodeLen; EmitB(0);    { jbe done_keep }
+  EmitAsmX64(['jbe short done_keep']);
 
   { Clone path }
   EmitAsmX64([
@@ -5596,20 +5595,19 @@ begin
 
   EmitAsmX64(['mov [rbx], rax']);
   { Now rax contains the new string pointer }
-  EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp done }
+  EmitAsmX64(['jmp short done2']);
 
   { done_nil path }
-  PatchRel8(pNilUnique);
+  EmitAsmX64(['done_nil:']);
   EmitAsmX64(['xor eax, eax']);
-  EmitB($EB); pDone2 := CodeLen; EmitB(0);         { jmp done }
+  EmitAsmX64(['jmp short done2']);
 
   { done_keep path }
-  PatchRel8(pNilUnique2);
+  EmitAsmX64(['done_keep:']);
   EmitAsmX64(['mov rax, rdi']);
 
   { done }
-  PatchRel8(pDone);
-  PatchRel8(pDone2);
+  EmitAsmX64(['done2:']);
   { FORGET the cached ASCII answer, exactly as the Pascal PXXStrUnique does at
     both of its exits. The caller is about to WRITE bytes through the handle we
     are returning, so a stamped answer stops being true — and the clone path is
@@ -5629,10 +5627,10 @@ begin
     PXX_HDR_SIZE = 24); PXX_ASCII_CACHE_BITS clears ASCII and ASCII_KNOWN
     and, being sign-extended, leaves the reserved upper half alone. }
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pAsciiSkip := CodeLen; EmitB(0);    { jz skip }
+  EmitAsmX64(['jz short skip']);
   EmitB($48); EmitB($81); EmitB($60); EmitB($E8); { and qword [rax-24], imm32 }
   EmitI32(not PXX_ASCII_CACHE_BITS);
-  PatchRel8(pAsciiSkip);
+  EmitAsmX64(['skip:']);
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx', 'ret']);
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }
@@ -5724,6 +5722,7 @@ begin
   { Last: the variant clear/retain blobs call AnsiStrRelease/Retain and the
     object blobs, whose addresses are set above. See EmitVariantBlobs. }
   EmitVariantBlobs;
+  AsmScopeEnd;
 end;
 
 procedure EmitLoadManagedHandleRdi(symIdx: Integer);
@@ -5829,8 +5828,8 @@ procedure EmitArgvToStringManaged(dstIdx: Integer);
 { On entry rax = argv index. Build a managed string from argv[index] (a C
   string) and publish it into dst (releasing dst's old handle). Managed
   counterpart of EmitArgvToString. }
-var inRangePatch, doneOutPatch: Integer;
 begin
+  AsmScopeBegin;
   { Bounds check: out-of-range index (>= argc, or negative) publishes nil (empty
     string) instead of dereferencing a bad argv slot. argc is at [initial_rsp]. }
   EmitAsmX64([
@@ -5838,11 +5837,11 @@ begin
     'mov rcx, [rcx]',                    { rcx = argc }
     'cmp rax, rcx'
   ]);
-  EmitB($72); inRangePatch := CodeLen; EmitB(0);    { jb in_range }
+  EmitAsmX64(['jb short in_range']);
   EmitAsmX64(['xor rax, rax']);                     { nil handle }
   EmitPublishManagedString(dstIdx);                  { dst := '' }
-  EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
-  PatchRel8(inRangePatch);
+  EmitAsmX64(['jmp short done']);
+  EmitAsmX64(['in_range:']);
   EmitAsmX64([
     'shl rax, 3',
     'mov rcx, [@glob]', BSS_INITIAL_RSP,
@@ -5867,7 +5866,8 @@ begin
   EmitAsmX64(['mov rdi, rcx']);                     { length }
   IREmitCodeCall(AnsiStrFromLiteralAddr);           { rax = new managed string }
   EmitPublishManagedString(dstIdx);
-  PatchRel8(doneOutPatch);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitVariantClearBody(zeroSlot: Boolean);
@@ -5883,21 +5883,21 @@ procedure EmitVariantClearBody(zeroSlot: Boolean);
   read, so `v := v` came back Empty. The zeroing was never wanted here — the
   copy overwrites those bytes on the next instruction.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf, pFast: Integer;
 begin
+  AsmScopeBegin;
   { Every tag below VT_STRING (empty, null, the numbers, boolean) owns nothing,
     and they are nearly every slot this blob sees: a NilPy method's scope exit
     clears every variant temp it has, most still empty because only one path
     ran -- ~95 of them in lekkerzeilen's TiledGrid.at. One unsigned compare
     sends those straight to the zeroing instead of down the whole tag chain. }
   EmitAsmX64(['cmp qword [rax], %', VT_STRING]);
-  EmitB($0F); EmitB($82); pFast := CodeLen; EmitI32(0);  { jb fast }
+  EmitAsmX64(['jb fast']);
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
     its decimal. Without this arm every such variant LEAKED. The block is
     contiguous so this stays a range test in six hand-written emitters. }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
-  EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je release }
+  EmitAsmX64(['jz release']);
   { VT_OBJECT / VT_BOUNDMETHOD: a refcounted object block shares the string
     header protocol exactly (rc at [p-16], free base = p-16), so the SAME
     release blob serves — guarded by the [p-8] population tag so a
@@ -5908,45 +5908,43 @@ begin
     (classref / callable / builtin-type) fall through to the promo test and out,
     which is exactly what they need: none of them owns a heap block. }
   EmitAsmX64(['cmp rcx, %', VT_OBJ_FIRST]);
-  EmitB($0F); EmitB($8C); pObj2 := CodeLen; EmitI32(0);  { jl notobj }
+  EmitAsmX64(['jl notobj']);
   EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
-  EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
-  Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
+  EmitAsmX64(['jle objchk']);
+  EmitAsmX64(['notobj:']);                 { notobj: }
   { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
     range above: widening the range would route it to PXXObjRelease/Retain,
     which no-op on a manual-lifetime instance, so the refcount would simply
     never move -- no crash, no wrong value, only RSS. See VT_INTF_TAG in
     defs.inc; it is refcounted through _Release/_AddRef in the IMT. }
   EmitAsmX64(['cmp rcx, %', VT_INTF_TAG]);
-  EmitB($0F); EmitB($84); pIntf := CodeLen; EmitI32(0);  { je intf }
+  EmitAsmX64(['jz intf']);
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
-  EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
+  EmitAsmX64(['jl done']);
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
-  EmitB($0F); EmitB($8F); pDone2 := CodeLen; EmitI32(0); { jg done }
-  Patch32(pHit, CodeLen - (pHit + 4));
+  EmitAsmX64(['jg done']);
+  EmitAsmX64(['release:']);
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrReleaseAddr);
-  EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
+  EmitAsmX64(['jmp done']);
   { objchk: release via the object blob — the Pascal callee carries the nil
     check, the population-tag guard AND the recursive finalizer hook }
-  Patch32(pObj, CodeLen - (pObj + 4));
+  EmitAsmX64(['objchk:']);
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjReleaseBlobAddr);
-  EmitB($E9); pSkip2 := CodeLen; EmitI32(0);             { jmp done }
-  Patch32(pIntf, CodeLen - (pIntf + 4));                 { intf: }
+  EmitAsmX64(['jmp done']);
+  EmitAsmX64(['intf:']);                 { intf: }
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(IntfReleaseBlobAddr);
-  Patch32(pSkip2, CodeLen - (pSkip2 + 4));
-  Patch32(pDone, CodeLen - (pDone + 4));
-  Patch32(pDone2, CodeLen - (pDone2 + 4));
-  Patch32(pSkip, CodeLen - (pSkip + 4));
+  EmitAsmX64(['done:']);
   EmitAsmX64(['pop rax']);
-  Patch32(pFast, CodeLen - (pFast + 4));                 { fast: rax untouched }
+  EmitAsmX64(['fast:']);                 { fast: rax untouched }
   if zeroSlot then
     EmitAsmX64([
       'mov qword [rax], %', VT_EMPTY,
       'mov qword [rax+8], 0'
     ]);
+  AsmScopeEnd;
 end;
 
 { "is this indexed base a managed string, so an lvalue write to it needs
@@ -6097,53 +6095,51 @@ end;
 procedure EmitVariantRetainBody;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClearBody for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf, pFast: Integer;
 begin
+  AsmScopeBegin;
   { Same managed-payload test as EmitVariantClearBody — see there, including the
     object-tag arm, its population-tag guard and the below-VT_STRING fast exit. }
   EmitAsmX64(['cmp qword [rax], %', VT_STRING]);
-  EmitB($0F); EmitB($82); pFast := CodeLen; EmitI32(0);  { jb fast }
+  EmitAsmX64(['jb fast']);
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
-  EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
+  EmitAsmX64(['jz retain']);
   { The object tags are a RANGE (VT_OBJ_FIRST..VT_OBJ_LAST), not four equality
     tests — see defs.inc for why one list beats four. Tags above the range
     (classref / callable / builtin-type) fall through to the promo test and out,
     which is exactly what they need: none of them owns a heap block. }
   EmitAsmX64(['cmp rcx, %', VT_OBJ_FIRST]);
-  EmitB($0F); EmitB($8C); pObj2 := CodeLen; EmitI32(0);  { jl notobj }
+  EmitAsmX64(['jl notobj']);
   EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
-  EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
-  Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
+  EmitAsmX64(['jle objchk']);
+  EmitAsmX64(['notobj:']);                 { notobj: }
   { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
     range above: widening the range would route it to PXXObjRelease/Retain,
     which no-op on a manual-lifetime instance, so the refcount would simply
     never move -- no crash, no wrong value, only RSS. See VT_INTF_TAG in
     defs.inc; it is refcounted through _Release/_AddRef in the IMT. }
   EmitAsmX64(['cmp rcx, %', VT_INTF_TAG]);
-  EmitB($0F); EmitB($84); pIntf := CodeLen; EmitI32(0);  { je intf }
+  EmitAsmX64(['jz intf']);
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
-  EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
+  EmitAsmX64(['jl done']);
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
-  EmitB($0F); EmitB($8F); pDone2 := CodeLen; EmitI32(0); { jg done }
-  Patch32(pHit, CodeLen - (pHit + 4));
+  EmitAsmX64(['jg done']);
+  EmitAsmX64(['retain:']);
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrRetainAddr);
-  EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
+  EmitAsmX64(['jmp done']);
   { objchk: retain via the object blob — the Pascal callee carries the nil
     check and the population-tag guard }
-  Patch32(pObj, CodeLen - (pObj + 4));
+  EmitAsmX64(['objchk:']);
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjRetainBlobAddr);
-  EmitB($E9); pSkip2 := CodeLen; EmitI32(0);             { jmp done }
-  Patch32(pIntf, CodeLen - (pIntf + 4));                 { intf: }
+  EmitAsmX64(['jmp done']);
+  EmitAsmX64(['intf:']);                 { intf: }
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(IntfRetainBlobAddr);
-  Patch32(pSkip2, CodeLen - (pSkip2 + 4));
-  Patch32(pDone, CodeLen - (pDone + 4));
-  Patch32(pDone2, CodeLen - (pDone2 + 4));
-  Patch32(pSkip, CodeLen - (pSkip + 4));
+  EmitAsmX64(['done:']);
   EmitAsmX64(['pop rax']);
-  Patch32(pFast, CodeLen - (pFast + 4));                 { fast: }
+  EmitAsmX64(['fast:']);                 { fast: }
+  AsmScopeEnd;
 end;
 
 { The variant clear/retain pair, emitted ONCE as callable blobs, exactly like
@@ -6191,12 +6187,13 @@ end;
   clear blob, which zeroes the slot whatever the tag. Measured 2026-10-10: the
   retain and release blobs were ~4.5% of That Space Program's STS-1 run. }
 procedure EmitVariantBlobCallUnlessScalar(blobAddr: Integer);
-var p: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['cmp qword [rax], 6']);
-  EmitB($72); p := CodeLen; EmitB(0);               { jb past the call }
+  EmitAsmX64(['jb short past']);               { jb past the call }
   IREmitCodeCall(blobAddr);
-  PatchRel8(p);
+  EmitAsmX64(['past:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitVariantClear;
@@ -6212,17 +6209,18 @@ end;
   destination of every variant-returning call): the blob's entry test and its
   zeroing exit were ~3% of TSP, nearly all of it on floats and ints. }
 procedure EmitVariantClearScalarInline;
-var pSlow, pDone: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['cmp qword [rax], 6']);
-  EmitB($73); pSlow := CodeLen; EmitB(0);           { jae slow }
+  EmitAsmX64(['jae short slow']);
   EmitAsmX64([
     'mov qword [rax], 0',
     'mov qword [rax+8], 0']);
-  EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
-  PatchRel8(pSlow);
+  EmitAsmX64(['jmp short done']);
+  EmitAsmX64(['slow:']);
   IREmitCodeCall(VariantClearBlobAddr);
-  PatchRel8(pDone);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitVariantReleasePayload;
@@ -6520,27 +6518,28 @@ procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
   double: shr 1 or'd with bit0 keeps correct IEEE rounding. The unsigned-big
   path destroys the source register and r11 — the source is consumed by the
   conversion at every call site, and r11 is free in this backend. }
-var pBig, pDone: Integer;
 begin
+  AsmScopeBegin;
   if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
   begin
     EmitB($48); EmitB($85); EmitB($C0 or (reg shl 3) or reg);  { test reg, reg }
-    EmitB($79); pBig := CodeLen; EmitB(0);                     { jns small }
+    EmitAsmX64(['jns short small']);
     EmitB($49); EmitB($89); EmitB($C3 or (reg shl 3));         { mov r11, reg }
     EmitAsmX64(['and r11, 1']);
     EmitB($48); EmitB($D1); EmitB($E8 or reg);                 { shr reg, 1 }
     EmitB($4C); EmitB($09); EmitB($D8 or reg);                 { or reg, r11 }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
     EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0 or (xmm shl 3) or xmm);             { addsd xmm, xmm }
-    EmitB($EB); pDone := CodeLen; EmitB(0);                    { jmp done }
-    PatchRel8(pBig);                  { small: }
+    EmitAsmX64(['jmp short done']);
+    EmitAsmX64(['small:']);                  { small: }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
-    PatchRel8(pDone);                { done: }
+    EmitAsmX64(['done:']);                { done: }
   end
   else
   begin
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd xmm, reg }
   end;
+  AsmScopeEnd;
 end;
 
 { ===== FROZEN-STRING LENGTH PREFIX, x86-64 =====
@@ -6666,24 +6665,23 @@ end;
   false positive costs a few instructions and changes nothing.
   bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently }
 procedure EmitF2ISaturateX64;
-var pDoneNE, pDoneNaN, pDoneHi: Integer;
 begin
+  AsmScopeBegin;
   EmitB($48); EmitB($BA); EmitI64(Int64($8000000000000000));  { mov rdx, INT64_MIN }
   EmitAsmX64(['cmp rax, rdx']);
-  EmitB($75); pDoneNE := CodeLen; EmitB(0);                   { jne .done }
+  EmitAsmX64(['jnz short done']);
   EmitAsmX64([
     'xor eax, eax',                        { (NaN -> 0) }
     'ucomisd xmm0, xmm0']);
-  EmitB($7A); pDoneNaN := CodeLen; EmitB(0);                  { jp .done  (NaN) }
+  EmitAsmX64(['jp short done']);                  { jp .done  (NaN) }
   EmitAsmX64([
     'xorpd xmm1, xmm1',
     'comisd xmm0, xmm1']);
   EmitB($48); EmitB($B8); EmitI64(Int64($7FFFFFFFFFFFFFFF));  { mov rax, INT64_MAX }
-  EmitB($77); pDoneHi := CodeLen; EmitB(0);                   { ja .done  (source > 0) }
+  EmitAsmX64(['ja short done']);                   { ja .done  (source > 0) }
   EmitB($48); EmitB($B8); EmitI64(Int64($8000000000000000));  { mov rax, INT64_MIN }
-  PatchRel8(pDoneNE);
-  PatchRel8(pDoneNaN);
-  PatchRel8(pDoneHi);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitTruncToIntegralX64;
@@ -6700,79 +6698,77 @@ procedure EmitTruncToIntegralX64;
   makes inf/NaN pass through untouched, |x| >= 2^52 unchanged (already
   integral), and |x| < 1 a signed zero — which is what FPC prints for
   Int(-0.5), namely -0. Clobbers rcx and rdx. }
-var pDone, pLt1, pDone2, pDone3: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64([
     'mov rcx, rax',
     'shr rcx, 52',
     'and ecx, 0x7FF',                    { (biased exponent) }
     'cmp ecx, 2047']);
-  EmitB($74); pDone := CodeLen; EmitB(0);        { je .done   (inf / NaN) }
+  EmitAsmX64(['jz short done']);        { je .done   (inf / NaN) }
   EmitAsmX64(['cmp ecx, 1023']);
-  EmitB($72); pLt1 := CodeLen; EmitB(0);         { jb .lt1    (|x| < 1) }
+  EmitAsmX64(['jb short lt1']);         { jb .lt1    (|x| < 1) }
   EmitAsmX64(['cmp ecx, 1075']);
-  EmitB($73); pDone2 := CodeLen; EmitB(0);       { jae .done  (already integral) }
+  EmitAsmX64(['jae short done']);       { jae .done  (already integral) }
   EmitAsmX64([
     'mov edx, 1075',
     'sub edx, ecx',                        { (fracbits, 1..52) }
     'mov ecx, edx',
     'shr rax, cl',
     'shl rax, cl']);
-  EmitB($EB); pDone3 := CodeLen; EmitB(0);       { jmp .done }
-  PatchRel8(pLt1);      { .lt1: keep the sign bit only }
+  EmitAsmX64(['jmp short done']);
+  EmitAsmX64(['lt1:']);      { .lt1: keep the sign bit only }
   EmitAsmX64([
     'shr rax, 63',
     'shl rax, 63']);
-  PatchRel8(pDone);
-  PatchRel8(pDone2);
-  PatchRel8(pDone3);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
   caller-saved set like the other write helpers; balances its own stack. }
-var pPromoSkip, pPromoStr: Integer;
-    pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3,
-    pBoolF, pEnd4, trueOff, falseOff: Integer;
-    pNone, pObj, pEnd5, pEnd6, noneOff, objOff: Integer;
+var
+    pEnd4, trueOff, falseOff: Integer;
+    noneOff, objOff: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['push rax', 'mov rax, [rax]']);  { [rsp]=addr; rax=tag }
 
   EmitAsmX64(['cmp rax, %', VT_INT]);
-  EmitB($0F); EmitB($84); pInt := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pInt']);
   EmitAsmX64(['cmp rax, %', VT_INT64]);
-  EmitB($0F); EmitB($84); pInt64 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pInt']);
   EmitAsmX64(['cmp rax, %', VT_BOOL]);
-  EmitB($0F); EmitB($84); pBool := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pBool']);
   EmitAsmX64(['cmp rax, %', VT_DOUBLE]);
-  EmitB($0F); EmitB($84); pDbl := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pDbl']);
   EmitAsmX64(['cmp rax, %', VT_CHAR]);
-  EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pChar']);
   EmitAsmX64(['cmp rax, %', VT_STRING]);
-  EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pStr']);
   { A promotable int too big for the inline tier rides in the variant as a
     managed AnsiString of its exact decimal, so it PRINTS through the string
     branch. The promo tags were reserved as a contiguous block precisely so
     every such site stays a range test rather than a growing switch — see
     EmitVariantClear, which does the same. }
   EmitAsmX64(['cmp rax, %', VT_PROMO_BASE]);
-  EmitB($0F); EmitB($8C); pPromoSkip := CodeLen; EmitI32(0);   { jl skip }
+  EmitAsmX64(['jl skip']);
   EmitAsmX64(['cmp rax, %', VT_PROMO_LAST]);
-  EmitB($0F); EmitB($8E); pPromoStr := CodeLen; EmitI32(0);    { jle -> string }
-  Patch32(pPromoSkip, CodeLen - (pPromoSkip + 4));
+  EmitAsmX64(['jle pStr']);    { jle -> string }
+  EmitAsmX64(['skip:']);
   EmitAsmX64(['cmp rax, %', VT_EMPTY]);
-  EmitB($0F); EmitB($84); pNone := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz pNone']);
   EmitAsmX64(['cmp rax, %', VT_OBJECT]);
-  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);
-  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default: nothing }
+  EmitAsmX64(['jz pObj']);
+  EmitAsmX64(['jmp Lend']);   { default: nothing }
 
   { integer: payload as signed int64 }
-  Patch32(pInt,   CodeLen - (pInt   + 4));
-  Patch32(pInt64, CodeLen - (pInt64 + 4));
+  EmitAsmX64(['pInt:']);
   EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]']);   { addr; payload }
   EmitwriteInt;
-  EmitB($E9); pEnd1 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jmp Lend']);
 
   { bool: 0/1 -> False/True (Python spelling — the .npy print path; a Pascal
     writeln of a Variant-held bool matches FPC's True/False rendering) }
@@ -6788,14 +6784,14 @@ begin
   Data[DataLen] := Ord('l'); Inc(DataLen);
   Data[DataLen] := Ord('s'); Inc(DataLen);
   Data[DataLen] := Ord('e'); Inc(DataLen);
-  Patch32(pBool, CodeLen - (pBool + 4));
+  EmitAsmX64(['pBool:']);
   EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]', 'test rax, rax']);
-  EmitB($0F); EmitB($84); pBoolF := CodeLen; EmitI32(0);  { jz -> False }
+  EmitAsmX64(['jz pBoolF']);  { jz -> False }
   EmitB($48); EmitB($BE); EmitDataRef(trueOff);           { mov rsi, &'True' }
   EmitAsmX64(['mov rdx, 4']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   EmitB($E9); pEnd4 := CodeLen; EmitI32(0);
-  Patch32(pBoolF, CodeLen - (pBoolF + 4));
+  EmitAsmX64(['pBoolF:']);
   EmitB($48); EmitB($BE); EmitDataRef(falseOff);          { mov rsi, &'False' }
   EmitAsmX64(['mov rdx, 5']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
@@ -6803,30 +6799,29 @@ begin
   EmitB($E9); pEnd4 := CodeLen; EmitI32(0);
 
   { double: payload bits -> xmm0 }
-  Patch32(pDbl, CodeLen - (pDbl + 4));
+  EmitAsmX64(['pDbl:']);
   EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]', 'movq xmm0, rax']);
   EmitWriteFloatNat;
-  EmitB($E9); pEnd2 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jmp Lend']);
 
   { char: payload low byte }
-  Patch32(pChar, CodeLen - (pChar + 4));
+  EmitAsmX64(['pChar:']);
   EmitAsmX64(['mov rax, [rsp]', 'movzx eax, byte [rax+8]']);
   EmitwriteChar;
-  EmitB($E9); pEnd3 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jmp Lend']);
 
   { managed string: payload points after the refcount/length header }
-  Patch32(pStr, CodeLen - (pStr + 4));
-  Patch32(pPromoStr, CodeLen - (pPromoStr + 4));
+  EmitAsmX64(['pStr:']);
   EmitAsmX64([
     'mov rax, [rsp]',
     'mov rax, [rax+8]',
     'test rax, rax'
   ]);
-  EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0); { jz Lend }
+  EmitAsmX64(['jz Lend']);
   EmitAsmX64(['mov rsi, rax', 'mov rdx, [rax-8]']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
-  EmitB($E9); pEnd5 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jmp Lend']);
 
   { empty slot: Python spells it None — an unassigned variant used to print
     NOTHING, so `print(d.get(missing))` produced a blank line where CPython
@@ -6839,7 +6834,7 @@ begin
     output, and it was x86-64 ONLY: PXXWriteVariant, which every other target
     calls, already declines this arm for exactly this reason.
     bug-a-a-null-variant-renders-as-none-in-pascal }
-  Patch32(pNone, CodeLen - (pNone + 4));
+  EmitAsmX64(['pNone:']);
   if PyProgramMode then
   begin
     DataEnsure(4);   { 'None' }
@@ -6852,7 +6847,7 @@ begin
     EmitAsmX64(['mov rdx, 4']);
     MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   end;
-  EmitB($E9); pEnd6 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jmp Lend']);
 
   { object slot: CPython prints `<__main__.C object at 0x…>`, whose address
     cannot be diffed against an oracle — but a BLANK line is worse than a
@@ -6867,21 +6862,16 @@ begin
   Data[DataLen] := Ord('c'); Inc(DataLen);
   Data[DataLen] := Ord('t'); Inc(DataLen);
   Data[DataLen] := Ord('>'); Inc(DataLen);
-  Patch32(pObj, CodeLen - (pObj + 4));
+  EmitAsmX64(['pObj:']);
   EmitB($48); EmitB($BE); EmitDataRef(objOff);
   EmitAsmX64(['mov rdx, 8']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
   { Lend }
-  Patch32(pEnd5, CodeLen - (pEnd5 + 4));
-  Patch32(pEnd6, CodeLen - (pEnd6 + 4));
-  Patch32(pNil, CodeLen - (pNil + 4));
-  Patch32(jmpDefault, CodeLen - (jmpDefault + 4));
-  Patch32(pEnd1, CodeLen - (pEnd1 + 4));
-  Patch32(pEnd2, CodeLen - (pEnd2 + 4));
-  Patch32(pEnd3, CodeLen - (pEnd3 + 4));
+  EmitAsmX64(['Lend:']);
   Patch32(pEnd4, CodeLen - (pEnd4 + 4));
   EmitAsmX64(['add rsp, 8']);   { discard addr }
+  AsmScopeEnd;
 end;
 
 procedure EmitSetcc(opTk: Integer; signed: Boolean);
@@ -6976,19 +6966,16 @@ procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
 { rdi = left variant addr, rsi = right variant addr. Closed double-dispatch:
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
   isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
-var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
+var pForceDbl: Integer;
     pIsStr1, pIsStr2, pIsStr3, pIsStr4, pNumericPath: Integer;
     pLeftStrOk, pNumericPath2, vcProc: Integer;
     pasPlus: Boolean;
-    pLhsOk, pRhsOk, pDiffTags1, pDiffTags2, pSkipCoerce: Integer;
-    pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
-    pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
-    pNoneA, pNoneB, pNoneDone, pNotNone: Integer;
-    pNullA, pNullB, pNullDone, pNotNull: Integer;
-    pLhsStrConcat, pLhsCharConcat, pLhsDoneConcat, pLhsDone2Concat, pLhsDone3Concat, pLhsNilConcat: Integer;
-    pRhsStrConcat, pRhsCharConcat, pRhsDoneConcat, pRhsDone2Concat, pRhsDone3Concat, pRhsNilConcat: Integer;
+    pSkipCoerce: Integer;
+    pNoneDone: Integer;
+    pNullB, pNullDone: Integer;
     pDoneStr1, pDoneStr2, pDoneStr3: Integer;
 begin
+  AsmScopeBegin;
   pIsStr1 := -1; pIsStr2 := -1; pIsStr3 := -1; pIsStr4 := -1;
   pNumericPath := -1;
   pLeftStrOk := -1; pNumericPath2 := -1;
@@ -7015,13 +7002,12 @@ begin
       'mov rax, [rdi]',
       'mov rcx, [rsi]',
       'test rax, rax']);
-    EmitB($0F); EmitB($84); pNoneA := CodeLen; EmitI32(0);    { jz L_none }
+    EmitAsmX64(['jz L_none']);
     EmitAsmX64(['test rcx, rcx']);
-    EmitB($0F); EmitB($84); pNoneB := CodeLen; EmitI32(0);    { jz L_none }
-    EmitB($E9); pNotNone := CodeLen; EmitI32(0);              { jmp L_not_none }
+    EmitAsmX64(['jz L_none']);
+    EmitAsmX64(['jmp L_not_none']);
     { L_none: one side is None — equal only when the other is None too }
-    Patch32(pNoneA, CodeLen - (pNoneA + 4));
-    Patch32(pNoneB, CodeLen - (pNoneB + 4));
+    EmitAsmX64(['L_none:']);
     EmitAsmX64([
       'cmp rax, rcx',
       'sete al',
@@ -7032,7 +7018,7 @@ begin
     end;
     EmitB($E9); pNoneDone := CodeLen; EmitI32(0);             { jmp L_all_done }
     { L_not_none: }
-    Patch32(pNotNone, CodeLen - (pNotNone + 4));
+    EmitAsmX64(['L_not_none:']);
   end;
 
   { --- NULL PROPAGATION, ahead of the string dispatch and the coercion ---
@@ -7061,13 +7047,13 @@ begin
     EmitAsmX64([
       'mov rax,[rdi]',
       'test rax,rax']);
-    EmitB($0F); EmitB($84); pNullA := CodeLen; EmitI32(0);    { jz L_null }
+    EmitAsmX64(['jz L_null']);
     EmitAsmX64([
       'mov rax,[rsi]',
       'test rax,rax']);
-    EmitB($0F); EmitB($85); pNotNull := CodeLen; EmitI32(0);  { jnz L_not_null }
+    EmitAsmX64(['jnz L_not_null']);
     { L_null: result := Null }
-    Patch32(pNullA, CodeLen - (pNullA + 4));
+    EmitAsmX64(['L_null:']);
     EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(resultOff);  { lea rax,[result] }
     EmitVariantClear;
     EmitAsmX64([
@@ -7075,7 +7061,7 @@ begin
       'mov qword [rax+8], %', 0]);
     EmitB($E9); pNullDone := CodeLen; EmitI32(0);             { jmp L_all_done }
     { L_not_null: }
-    Patch32(pNotNull, CodeLen - (pNotNull + 4));
+    EmitAsmX64(['L_not_null:']);
   end;
 
   { COMPARISON coerces a stringy operand too, by the same rule as arithmetic --
@@ -7170,53 +7156,51 @@ begin
         'mov rcx, [rsi]']);
       
       EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);
-      EmitB($74); pLhsOk := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsOk']);
       EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);
-      EmitB($0F); EmitB($85); pDiffTags1 := CodeLen; EmitI32(0);   { jne L_diff_tags }
+      EmitAsmX64(['jnz L_diff_tags']);
       
       { L_lhs_ok }
-      PatchRel8(pLhsOk);
+      EmitAsmX64(['pLhsOk:']);
       EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_CHAR);
-      EmitB($74); pRhsOk := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsOk']);
       EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_STRING);
-      EmitB($0F); EmitB($85); pDiffTags2 := CodeLen; EmitI32(0);   { jne L_diff_tags }
+      EmitAsmX64(['jnz L_diff_tags']);
       
       { L_rhs_ok }
-      PatchRel8(pRhsOk);
+      EmitAsmX64(['pRhsOk:']);
 
       { Extract LHS details from rdi }
       EmitAsmX64([
         'push rsi',
         'mov rax, [rdi]',
         'cmp rax, %', VT_STRING]);
-      EmitB($74); pLhsStrCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsStrCmp']);
       EmitAsmX64(['cmp rax, %', VT_CHAR]);
-      EmitB($74); pLhsCharCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsCharCmp']);
       
       EmitAsmX64([
         'xor esi, esi',
         'xor edx, edx']);
-      EmitB($EB); pLhsDoneCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pLhsDoneCmp']);
       
-      PatchRel8(pLhsCharCmp);
+      EmitAsmX64(['pLhsCharCmp:']);
       EmitAsmX64(['lea rsi, [rdi+8]']);
       EmitAsmX64(['mov rdx, 1']);
-      EmitB($EB); pLhsDone2Cmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pLhsDoneCmp']);
       
-      PatchRel8(pLhsStrCmp);
+      EmitAsmX64(['pLhsStrCmp:']);
       EmitAsmX64(['mov rsi, [rdi+8]']);
       EmitAsmX64(['test rsi, rsi']);
-      EmitB($74); pLhsNilCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsNilCmp']);
       EmitAsmX64(['mov rdx, [rsi-8]']);
-      EmitB($EB); pLhsDone3Cmp := CodeLen; EmitB(0);
-      PatchRel8(pLhsNilCmp);
+      EmitAsmX64(['jmp short pLhsDoneCmp']);
+      EmitAsmX64(['pLhsNilCmp:']);
       EmitAsmX64([
         'xor esi, esi',
         'xor edx, edx']);
       
-      PatchRel8(pLhsDoneCmp);
-      PatchRel8(pLhsDone2Cmp);
-      PatchRel8(pLhsDone3Cmp);
+      EmitAsmX64(['pLhsDoneCmp:']);
 
       { Pop RHS Variant address to r8 }
       EmitAsmX64(['pop r8']);
@@ -7225,34 +7209,32 @@ begin
       EmitAsmX64([
         'mov eax, [r8]',
         'cmp rax, %', VT_STRING]);
-      EmitB($74); pRhsStrCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsStrCmp']);
       EmitAsmX64(['cmp rax, %', VT_CHAR]);
-      EmitB($74); pRhsCharCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsCharCmp']);
       
       EmitAsmX64([
         'xor edi, edi',
         'xor r9d, r9d']);
-      EmitB($EB); pRhsDoneCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pRhsDoneCmp']);
       
-      PatchRel8(pRhsCharCmp);
+      EmitAsmX64(['pRhsCharCmp:']);
       EmitAsmX64(['lea rdi, [r8+8]']);
       EmitB($41); EmitB($C7); EmitB($C1); EmitI32(1);           { mov r9d, 1 }
-      EmitB($EB); pRhsDone2Cmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pRhsDoneCmp']);
       
-      PatchRel8(pRhsStrCmp);
+      EmitAsmX64(['pRhsStrCmp:']);
       EmitAsmX64(['mov rdi, [r8+8]']);
       EmitAsmX64(['test rdi, rdi']);
-      EmitB($74); pRhsNilCmp := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsNilCmp']);
       EmitAsmX64(['mov r9, [rdi-8]']);
-      EmitB($EB); pRhsDone3Cmp := CodeLen; EmitB(0);
-      PatchRel8(pRhsNilCmp);
+      EmitAsmX64(['jmp short pRhsDoneCmp']);
+      EmitAsmX64(['pRhsNilCmp:']);
       EmitAsmX64([
         'xor edi, edi',
         'xor r9d, r9d']);
       
-      PatchRel8(pRhsDoneCmp);
-      PatchRel8(pRhsDone2Cmp);
-      PatchRel8(pRhsDone3Cmp);
+      EmitAsmX64(['pRhsDoneCmp:']);
 
       { Compare }
       EmitAsmX64([
@@ -7273,8 +7255,7 @@ begin
       EmitB($E9); pDoneStr2 := CodeLen; EmitI32(0);             { jmp L_done_str }
 
       { L_diff_tags }
-      Patch32(pDiffTags1, CodeLen - (pDiffTags1 + 4));
-      Patch32(pDiffTags2, CodeLen - (pDiffTags2 + 4));
+      EmitAsmX64(['L_diff_tags:']);
       if opTk = Ord(tkNeq) then
         MovRaxImm(1)
       else
@@ -7287,75 +7268,71 @@ begin
       EmitAsmX64([
         'mov rax, [rdi]',
         'cmp rax, %', VT_STRING]);
-      EmitB($74); pLhsStrConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsStrConcat']);
       EmitAsmX64(['cmp rax, %', VT_CHAR]);
-      EmitB($74); pLhsCharConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsCharConcat']);
       
       EmitAsmX64([
         'xor r8, r8',
         'xor r9, r9']);
-      EmitB($EB); pLhsDoneConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pLhsDoneConcat']);
       
-      PatchRel8(pLhsCharConcat);
+      EmitAsmX64(['pLhsCharConcat:']);
       EmitAsmX64(['lea r8, [rdi+8]']);
       EmitAsmX64(['mov r9, 1']);
-      EmitB($EB); pLhsDone2Concat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pLhsDoneConcat']);
       
-      PatchRel8(pLhsStrConcat);
+      EmitAsmX64(['pLhsStrConcat:']);
       EmitAsmX64(['mov rax, [rdi+8]']);
       EmitAsmX64(['test rax, rax']);
-      EmitB($74); pLhsNilConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pLhsNilConcat']);
       EmitAsmX64(['mov rcx, [rax-8]']);
       EmitAsmX64([
         'mov r8, rax',
         'mov r9, rcx']);
-      EmitB($EB); pLhsDone3Concat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pLhsDoneConcat']);
       
-      PatchRel8(pLhsNilConcat);
+      EmitAsmX64(['pLhsNilConcat:']);
       EmitAsmX64([
         'xor r8, r8',
         'xor r9, r9']);
       
-      PatchRel8(pLhsDoneConcat);
-      PatchRel8(pLhsDone2Concat);
-      PatchRel8(pLhsDone3Concat);
+      EmitAsmX64(['pLhsDoneConcat:']);
 
       { RHS string/char details from rsi -> r10 (data), r11 (len) }
       EmitAsmX64([
         'mov rax, [rsi]',
         'cmp rax, %', VT_STRING]);
-      EmitB($74); pRhsStrConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsStrConcat']);
       EmitAsmX64(['cmp rax, %', VT_CHAR]);
-      EmitB($74); pRhsCharConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsCharConcat']);
       
       EmitAsmX64([
         'xor r10, r10',
         'xor r11, r11']);
-      EmitB($EB); pRhsDoneConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pRhsDoneConcat']);
       
-      PatchRel8(pRhsCharConcat);
+      EmitAsmX64(['pRhsCharConcat:']);
       EmitAsmX64(['lea r10, [rsi+8]']);
       EmitAsmX64(['mov r11, 1']);
-      EmitB($EB); pRhsDone2Concat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pRhsDoneConcat']);
       
-      PatchRel8(pRhsStrConcat);
+      EmitAsmX64(['pRhsStrConcat:']);
       EmitAsmX64(['mov rax, [rsi+8]']);
       EmitAsmX64(['test rax, rax']);
-      EmitB($74); pRhsNilConcat := CodeLen; EmitB(0);
+      EmitAsmX64(['jz short pRhsNilConcat']);
       EmitAsmX64(['mov rcx, [rax-8]']);
       EmitAsmX64([
         'mov r10, rax',
         'mov r11, rcx']);
-      EmitB($EB); pRhsDone3Concat := CodeLen; EmitB(0);
+      EmitAsmX64(['jmp short pRhsDoneConcat']);
       
-      PatchRel8(pRhsNilConcat);
+      EmitAsmX64(['pRhsNilConcat:']);
       EmitAsmX64([
         'xor r10, r10',
         'xor r11, r11']);
 
-      PatchRel8(pRhsDoneConcat);
-      PatchRel8(pRhsDone2Concat);
-      PatchRel8(pRhsDone3Concat);
+      EmitAsmX64(['pRhsDoneConcat:']);
 
       EmitAsmX64([
         'mov rsi, r8',
@@ -7409,10 +7386,10 @@ begin
   EmitAsmX64([
     'mov rax,[rdi]',                       { (lTag) }
     'cmp rax, %', VT_DOUBLE]);
-  EmitB($0F); EmitB($84); pDbl1 := CodeLen; EmitI32(0);     { je  Ldouble }
+  EmitAsmX64(['jz Ldouble']);
   EmitAsmX64(['mov rax,[rsi]']); { (rTag) }
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
-  EmitB($0F); EmitB($84); pDbl2 := CodeLen; EmitI32(0);     { je  Ldouble }
+  EmitAsmX64(['jz Ldouble']);
 
   { both integer-class }
   EmitAsmX64([
@@ -7467,28 +7444,27 @@ begin
       'mov [rdx+8],rax']);
     EmitAsmX64(['mov rax,rdx']);
   end;
-  EmitB($E9); pDoneInt := CodeLen; EmitI32(0);              { jmp Ldone }
+  EmitAsmX64(['jmp Ldone']);
 
   { Ldouble: load both operands into xmm0/xmm1 }
-  Patch32(pDbl1, CodeLen - (pDbl1 + 4));
-  Patch32(pDbl2, CodeLen - (pDbl2 + 4));
+  EmitAsmX64(['Ldouble:']);
   if pForceDbl >= 0 then Patch32(pForceDbl, CodeLen - (pForceDbl + 4));
   EmitAsmX64(['mov rax,[rdi]']);
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
-  EmitB($75); pLi := CodeLen; EmitB(0);                     { jne  Lli }
+  EmitAsmX64(['jnz short Lli']);
   EmitAsmX64(['movsd xmm0,[rdi+8]']);
-  EmitB($EB); pLd := CodeLen; EmitB(0);                     { jmp  Lldone }
-  PatchRel8(pLi);
+  EmitAsmX64(['jmp short Lldone']);
+  EmitAsmX64(['Lli:']);
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($47); EmitB($08);{ cvtsi2sd xmm0,[rdi+8] }
-  PatchRel8(pLd);
+  EmitAsmX64(['Lldone:']);
   EmitAsmX64(['mov rax,[rsi]']);
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
-  EmitB($75); pRi := CodeLen; EmitB(0);                     { jne  Lri }
+  EmitAsmX64(['jnz short Lri']);
   EmitAsmX64(['movsd xmm1,[rsi+8]']);
-  EmitB($EB); pRd := CodeLen; EmitB(0);
-  PatchRel8(pRi);
+  EmitAsmX64(['jmp short pRd']);
+  EmitAsmX64(['Lri:']);
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($4E); EmitB($08);{ cvtsi2sd xmm1,[rsi+8] }
-  PatchRel8(pRd);
+  EmitAsmX64(['pRd:']);
   if isCompare then
   begin
     EmitAsmX64(['comisd xmm0,xmm1']);
@@ -7578,7 +7554,7 @@ begin
   end;
 
   { Ldone: }
-  Patch32(pDoneInt, CodeLen - (pDoneInt + 4));
+  EmitAsmX64(['Ldone:']);
 
   { L_done_str: }
   if isCompare or (opTk = Ord(tkPlus)) then
@@ -7597,6 +7573,7 @@ begin
   { L_all_done — the None-equality arm above jumps straight here }
   if pNoneDone >= 0 then Patch32(pNoneDone, CodeLen - (pNoneDone + 4));
   if pNullDone >= 0 then Patch32(pNullDone, CodeLen - (pNullDone + 4));
+  AsmScopeEnd;
 end;
 
 procedure EmitWriteCStr;
@@ -7980,18 +7957,19 @@ procedure EmitPadSpacesFromRax;
   field-width construct produced three separate defects in one day from exactly
   that duplication.
   bug-a-three-backends-drop-the-field-width-on-a-string-variable }
-var pDone, pLoop, pChunkOk: Integer;
+var pLoop: Integer;
 begin
+  AsmScopeBegin;
   EnsureSpaces;
   EmitAsmX64(['test rax, rax']);
-  EmitB($7E); pDone := CodeLen; EmitB(0);                  { jle done }
+  EmitAsmX64(['jle short done']);
   pLoop := CodeLen;
   EmitAsmX64([
     'mov rdx, rax',
     'cmp rdx, %', SPACES_SIZE]);
-  EmitB($76); pChunkOk := CodeLen; EmitB(0);               { jbe chunk_ok }
+  EmitAsmX64(['jbe short chunk_ok']);
   MovRdxImm(SPACES_SIZE);
-  PatchRel8(pChunkOk);                                     { chunk_ok: }
+  EmitAsmX64(['chunk_ok:']);                                     { chunk_ok: }
   EmitAsmX64([
     'push rax',                            { (remaining) }
     'push rdx']);                          { (this chunk) }
@@ -8002,7 +7980,8 @@ begin
     'pop rax',
     'sub rax, rdx']);
   EmitB($7F); EmitRel8(pLoop);                             { jg loop }
-  PatchRel8(pDone);                                        { done: }
+  EmitAsmX64(['done:']);                                        { done: }
+  AsmScopeEnd;
 end;
 
 { The SSE opcode byte for a NilPy variant arithmetic helper whose float-with-

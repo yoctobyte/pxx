@@ -58,6 +58,30 @@ disagrees with its bytes is never trusted; that line stays raw and is listed.
   against GNU as; where our encoder picks the r/m form over an al/eax short
   form, the test says so).
 
+## Progress
+
+- 2026-11-11 batch 1 (54a6cced1f): ~1,300 straight-line lines; exception
+  runtime and clone stub whole. Remaining EmitB($ lines: ir_codegen 1317,
+  symtab 494, cparser 126, thread_emit 63, exception_emit 33 (i386), emit 66,
+  pasparser_lval 33, coroutine_emit 15.
+- batch 2: 161 forward-jump placeholders in 29 routines become scope labels
+  (named from the jump's own comment, `.missplain` -> `missplain`; jumps that
+  land on one spot share one label; the placeholder variables are gone).
+  Only routines with no `Exit` (an Exit would skip AsmScopeEnd) and only
+  variables with exactly one jump and one patch.
+
+## The hazard this work has, and the guard for it
+
+A hand-counted literal jump (`EmitB($74); EmitB(5)` = `je +5`) is correct only
+while what it spans keeps its size. Converting the span to EmitAsmX64 lets the
+assembler pick another encoding -- and it does pick shorter ones. The gate's
+rel8 lint (tools/rel8_literal_span_check.py) refuses such a span; it caught 12
+in batch 1, all now labels. The disassembly oracle used to blank branch
+targets, which is exactly where this bug would show; it now compares each
+target as an INSTRUCTION-COUNT offset, which encoding sizes cannot move, and
+flags a target that is not an instruction start (mutation-tested: one rel8
+byte +1 is reported).
+
 ## Left
 
 - jump/patch idioms (`p := CodeLen; EmitI32(0)` ... `Patch32`/`PatchRel8`):

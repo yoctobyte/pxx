@@ -9710,8 +9710,8 @@ begin
 end;
 
 procedure EmitArgvToString(dstIdx: Integer);
-var inRangePatch, doneOutPatch, capPatch: Integer;
 begin
+  AsmScopeBegin;
   { On entry: rax = argv index. Copy argv[rax] C-string to global string dstIdx. }
   { Bounds check: an out-of-range index (>= argc, or negative) yields '' rather
     than dereferencing a NULL/out-of-bounds argv slot (which segfaulted). argc is
@@ -9719,11 +9719,11 @@ begin
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);  { mov rcx, [initial_rsp] }
   EmitB($48); EmitB($8B); EmitB($09);               { mov rcx, [rcx] = argc }
   EmitAsmX64(['cmp rax, rcx']);
-  EmitB($72); inRangePatch := CodeLen; EmitB(0);    { jb in_range (unsigned: 0<=index<argc) }
+  EmitAsmX64(['jb short in_range']);    { jb in_range (unsigned: 0<=index<argc) }
   EmitAsmX64(['xor rax, rax']);
   EmitStoreStrLen(dstIdx);                           { dst := '' }
-  EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
-  PatchRel8(inRangePatch);
+  EmitAsmX64(['jmp short done']);
+  EmitAsmX64(['in_range:']);
   EmitAsmX64(['shl rax, 3']);
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitAsmX64([
@@ -9751,14 +9751,15 @@ begin
     stored LENGTH and the copy COUNT are fixed by one clamp and cannot disagree.
     bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
   EmitAsmX64(['cmp rcx, %', FROZEN_CSTR_CAP]);
-  EmitB($76); capPatch := CodeLen; EmitB(0);                     { jbe fits }
+  EmitAsmX64(['jbe short fits']);
   EmitAsmX64(['mov rcx, %', FROZEN_CSTR_CAP]);
-  PatchRel8(capPatch);
+  EmitAsmX64(['fits:']);
   EmitAsmX64(['mov rax, rcx']);
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);
   EmitB($F3); EmitB($A4);
-  PatchRel8(doneOutPatch);
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
 end;
 
 procedure EmitTerminateString(idx: Integer);
@@ -9794,6 +9795,7 @@ end;
 procedure EmitLoadFile(pathIdx, dstIdx: Integer);
 var pSkip: Integer;   { rel8 placeholder: jump over the negative-read clamp }
 begin
+  AsmScopeBegin;
   { open(path, O_RDONLY) }
   EmitTerminateString(pathIdx);
   EmitLeaStrDataRdi(pathIdx);
@@ -9815,9 +9817,9 @@ begin
   { jns skip -- COMPUTED. The span is one MovRaxImm, whose encoding depends on
     the immediate and on what the emitter chooses today; 0x0A was right for a
     10-byte `mov rax, 0` and says nothing about tomorrow's. }
-  EmitB($79); pSkip := CodeLen; EmitB(0);          { jns skip }
+  EmitAsmX64(['jns short skip']);
   MovRaxImm(0);                                    { mov rax, 0 }
-  PatchRel8(pSkip);                                { skip }
+  EmitAsmX64(['skip:']);                                { skip }
 
   EmitStoreStrLen(dstIdx);
 
@@ -9825,12 +9827,14 @@ begin
   EmitAsmX64(['pop rdi']);
   MovRaxImm(SYS_CLOSE);
   EmitSyscall;
+  AsmScopeEnd;
 end;
 
 procedure EmitStrCmp(aIdx, bIdx: Integer; eq: Boolean);
 { rax = 1 if (a=b), 0 otherwise.  eq=False → rax = 1 if (a<>b). }
-var skipJmp, okJmp: Integer;
+var skipJmp: Integer;
 begin
+  AsmScopeBegin;
   { Compare lengths first }
   EmitLoadVar(aIdx);
   EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(Syms[bIdx].Offset);
@@ -9846,14 +9850,15 @@ begin
   { repe cmpsb }
   EmitB($F3); EmitB($A6);
   { je → bytes equal }
-  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz okJmp']);
   { Not equal }
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
   if eq then MovRaxImm(0) else MovRaxImm(1);
   EmitB($E9); skipJmp := CodeLen; EmitI32(0);
-  Patch32(okJmp, CodeLen - (okJmp + 4));
+  EmitAsmX64(['okJmp:']);
   if eq then MovRaxImm(1) else MovRaxImm(0);
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  AsmScopeEnd;
 end;
 
 procedure EmitStrCmpReg(eq: Boolean; lhsTk, rhsTk: TTypeKind);
@@ -9875,8 +9880,9 @@ procedure EmitStrCmpReg(eq: Boolean; lhsTk, rhsTk: TTypeKind);
   The lengths can no longer be compared memory-to-memory, because they are read
   at different widths; r11 holds the LHS length for the compare. It is already
   used as a scratch elsewhere in this file's emitters. }
-var skipJmp, okJmp: Integer;
+var skipJmp: Integer;
 begin
+  AsmScopeBegin;
   { lea rsi, [rcx + rhs prefix] — RHS chars }
   EmitB($48); EmitB($8D); EmitB($71); EmitB(FrozenStrPrefixSize(rhsTk));
   { lea rdi, [rax + lhs prefix] — LHS chars }
@@ -9901,7 +9907,7 @@ begin
   EmitB($F3); EmitB($A6);
 
   { je equal }
-  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz okJmp']);
 
   { not_equal: }
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
@@ -9909,37 +9915,39 @@ begin
   EmitB($E9); skipJmp := CodeLen; EmitI32(0);
 
   { equal: }
-  Patch32(okJmp, CodeLen - (okJmp + 4));
+  EmitAsmX64(['okJmp:']);
   if eq then MovRaxImm(1) else MovRaxImm(0);
 
   { end: }
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  AsmScopeEnd;
 end;
 
 procedure EmitAnsiStrCmpReg(eq: Boolean; lhsTk, rhsTk: TTypeKind);
-var pLhsNil, pLhsDone, pRhsNil, pRhsDone, skipJmp, okJmp, okJmp2: Integer;
+var skipJmp: Integer;
 begin
+  AsmScopeBegin;
   { --- Load LHS (rax) -> rsi (chars), rdx (len) --- }
   if lhsTk = tyAnsiString then
   begin
     { test rax, rax }
     EmitB($48); EmitB($85); EmitB($C0);
     { jz lhs_nil }
-    EmitB($74); pLhsNil := CodeLen; EmitB(0);
+    EmitAsmX64(['jz short pLhsNil']);
     
     EmitAsmX64(['mov rsi, rax']);
     EmitAsmX64(['mov rdx, [rax-8]']);
     { jmp lhs_done }
-    EmitB($EB); pLhsDone := CodeLen; EmitB(0);
+    EmitAsmX64(['jmp short pLhsDone']);
     
     { lhs_nil: }
-    PatchRel8(pLhsNil);
+    EmitAsmX64(['pLhsNil:']);
     EmitAsmX64([
       'xor esi, esi',
       'xor edx, edx']);
     
     { lhs_done: }
-    PatchRel8(pLhsDone);
+    EmitAsmX64(['pLhsDone:']);
   end
   else
   begin
@@ -9958,21 +9966,21 @@ begin
     { test rcx, rcx }
     EmitB($48); EmitB($85); EmitB($C9);
     { jz rhs_nil }
-    EmitB($74); pRhsNil := CodeLen; EmitB(0);
+    EmitAsmX64(['jz short pRhsNil']);
     
     EmitAsmX64(['mov rdi, rcx']);
     EmitAsmX64(['mov r8, [rcx-8]']);
     { jmp rhs_done }
-    EmitB($EB); pRhsDone := CodeLen; EmitB(0);
+    EmitAsmX64(['jmp short pRhsDone']);
     
     { rhs_nil: }
-    PatchRel8(pRhsNil);
+    EmitAsmX64(['pRhsNil:']);
     EmitAsmX64([
       'xor edi, edi',
       'xor r8d, r8d']);
     
     { rhs_done: }
-    PatchRel8(pRhsDone);
+    EmitAsmX64(['pRhsDone:']);
   end
   else
   begin
@@ -9993,14 +10001,14 @@ begin
   { test rdx, rdx }
   EmitB($48); EmitB($85); EmitB($D2);
   { jz equal }
-  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz okJmp']);
 
   { Compare contents:
     rcx = rdx (length for repe) }
   EmitAsmX64(['mov rcx, rdx']);
   EmitB($F3); EmitB($A6);                          { repe cmpsb }
   { je equal }
-  EmitB($0F); EmitB($84); okJmp2 := CodeLen; EmitI32(0);
+  EmitAsmX64(['jz okJmp']);
 
   { not_equal: }
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
@@ -10009,12 +10017,12 @@ begin
   EmitB($E9); skipJmp := CodeLen; EmitI32(0);
 
   { equal: }
-  Patch32(okJmp, CodeLen - (okJmp + 4));
-  Patch32(okJmp2, CodeLen - (okJmp2 + 4));
+  EmitAsmX64(['okJmp:']);
   if eq then MovRaxImm(1) else MovRaxImm(0);
 
   { end: }
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  AsmScopeEnd;
 end;
 
 procedure EmitAnsiStrCmp3Reg(op: TTokenKind; lhsTk, rhsTk: TTypeKind);
@@ -10022,21 +10030,21 @@ procedure EmitAnsiStrCmp3Reg(op: TTokenKind; lhsTk, rhsTk: TTypeKind);
   rax = LHS handle, rcx = RHS handle.  Sets rax := 0/1 per op (< <= > >=).
   Mirrors EmitAnsiStrCmpReg's loading prologue, then a min-length repe cmpsb
   with a length tie-break, then an unsigned setcc. }
-var pLhsNil, pLhsDone, pRhsNil, pRhsDone, pMinOk, pLenCmp, pSetcc: Integer;
 begin
+  AsmScopeBegin;
   { --- Load LHS (rax) -> rsi (chars), rdx (len) --- }
   if lhsTk = tyAnsiString then
   begin
     EmitAsmX64(['test rax, rax']);
-    EmitB($74); pLhsNil := CodeLen; EmitB(0);       { jz lhs_nil }
+    EmitAsmX64(['jz short lhs_nil']);
     EmitAsmX64(['mov rsi, rax']);
     EmitAsmX64(['mov rdx, [rax-8]']);
-    EmitB($EB); pLhsDone := CodeLen; EmitB(0);      { jmp lhs_done }
-    PatchRel8(pLhsNil);
+    EmitAsmX64(['jmp short lhs_done']);
+    EmitAsmX64(['lhs_nil:']);
     EmitAsmX64([
       'xor esi, esi',
       'xor edx, edx']);
-    PatchRel8(pLhsDone);
+    EmitAsmX64(['lhs_done:']);
   end
   else
   begin
@@ -10053,15 +10061,15 @@ begin
   if rhsTk = tyAnsiString then
   begin
     EmitAsmX64(['test rcx, rcx']);
-    EmitB($74); pRhsNil := CodeLen; EmitB(0);       { jz rhs_nil }
+    EmitAsmX64(['jz short rhs_nil']);
     EmitAsmX64(['mov rdi, rcx']);
     EmitAsmX64(['mov r8, [rcx-8]']);
-    EmitB($EB); pRhsDone := CodeLen; EmitB(0);      { jmp rhs_done }
-    PatchRel8(pRhsNil);
+    EmitAsmX64(['jmp short rhs_done']);
+    EmitAsmX64(['rhs_nil:']);
     EmitAsmX64([
       'xor edi, edi',
       'xor r8d, r8d']);
-    PatchRel8(pRhsDone);
+    EmitAsmX64(['rhs_done:']);
   end
   else
   begin
@@ -10076,16 +10084,16 @@ begin
   EmitAsmX64([
     'mov rcx, rdx',
     'cmp rcx, r8']);
-  EmitB($76); pMinOk := CodeLen; EmitB(0);          { jbe min_ok }
+  EmitAsmX64(['jbe short min_ok']);
   EmitAsmX64(['mov rcx, r8']);
-  PatchRel8(pMinOk);     { min_ok: }
+  EmitAsmX64(['min_ok:']);     { min_ok: }
   EmitAsmX64(['test rcx, rcx']);
-  EmitB($74); pLenCmp := CodeLen; EmitB(0);         { jz len_cmp }
+  EmitAsmX64(['jz short len_cmp']);
   EmitB($F3); EmitB($A6);                           { repe cmpsb }
-  EmitB($75); pSetcc := CodeLen; EmitB(0);          { jne set_cc (flags = lhs-rhs) }
-  PatchRel8(pLenCmp);   { len_cmp: }
+  EmitAsmX64(['jnz short set_cc']);          { jne set_cc (flags = lhs-rhs) }
+  EmitAsmX64(['len_cmp:']);   { len_cmp: }
   EmitAsmX64(['cmp rdx, r8']);
-  PatchRel8(pSetcc);     { set_cc: }
+  EmitAsmX64(['set_cc:']);     { set_cc: }
   case op of
     tkLt: begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb }
     tkLe: begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe }
@@ -10093,6 +10101,7 @@ begin
     tkGe: begin EmitB($0F); EmitB($93); EmitB($C0); end;  { setae }
   end;
   EmitAsmX64(['movzx rax, al']);
+  AsmScopeEnd;
 end;
 
 { ===== Array element access ===== }
@@ -10102,8 +10111,8 @@ procedure EmitBumpAlloc;
   Rounds size up to 8, bumps BSS_HEAP_PTR, grows the break via brk if needed.
   Shared by GetMem/class-new and dynamic-array SetLength (both
   backends), so it lives here in symtab.inc ahead of every caller. }
-var jbePatch: Integer;
 begin
+  AsmScopeBegin;
   { Round size up to multiple of 8 for alignment }
   EmitAsmX64([
     'add rax, 7',
@@ -10115,7 +10124,7 @@ begin
   { cmp rbx, [BSS_HEAP_END] }
   EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   { jbe skip_brk }
-  EmitB($76); jbePatch := CodeLen; EmitB(0);
+  EmitAsmX64(['jbe short jbePatch']);
   { push rbx }
   EmitB($53);
   { mov rdi, rbx }
@@ -10129,11 +10138,12 @@ begin
   { mov [BSS_HEAP_END], rax }
   EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   { Patch short jump offset }
-  PatchRel8(jbePatch);
+  EmitAsmX64(['jbePatch:']);
   { mov rax, [BSS_HEAP_PTR] }
   EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
   { mov [BSS_HEAP_PTR], rbx }
   EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  AsmScopeEnd;
 end;
 
 procedure EmitArrElemAddr(arrIdx: Integer);
@@ -15062,15 +15072,16 @@ end;
 { ===== int-to-string write ===== }
 
 procedure EmitwriteInt;
-var jnsOff, loopStart: Integer;
+var loopStart: Integer;
 begin
+  AsmScopeBegin;
   EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($79); jnsOff := CodeLen; EmitB(0);
+  EmitAsmX64(['jns short jnsOff']);
   EmitB($48); EmitB($F7); EmitB($D8);
   EmitB($50);
   EmitwriteSyscall(MINUS_OFFSET, 1);
   EmitB($58);
-  PatchRel8(jnsOff);
+  EmitAsmX64(['jnsOff:']);
   EmitB($48); EmitB($31); EmitB($C9);
   MovRbxImm(10);
   EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
@@ -15086,6 +15097,7 @@ begin
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  AsmScopeEnd;
 end;
 
 procedure EmitwriteUInt;
@@ -15127,17 +15139,18 @@ end;
 
 procedure EmitwriteIntW(width: Integer);
 { rax = signed int → right-aligned in field of min width chars }
-var jnsOff, jleOff, jzOff, loopStart: Integer;
+var loopStart: Integer;
 begin
+  AsmScopeBegin;
   { r8 = sign flag (0=positive, 1=negative) }
   EmitAsmX64([
     'xor r8, r8',
     'test rax, rax']);
-  EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
+  EmitAsmX64(['jns short positive']);
   EmitAsmX64([
     'neg rax',
     'inc r8']);
-  PatchRel8(jnsOff);
+  EmitAsmX64(['positive:']);
   { Digit conversion into INTBUF from end }
   EmitAsmX64(['xor rcx, rcx']);
   MovRbxImm(10);
@@ -15160,28 +15173,30 @@ begin
   EmitAsmX64([
     'sub rax, rcx',
     'sub rax, r8']);
-  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EmitAsmX64(['jle short no_pad']);
   EnsureSpaces;
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);    { mov rsi, spaces }
   EmitAsmX64(['mov rdx, rax']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-  PatchRel8(jleOff);
+  EmitAsmX64(['no_pad:']);
   { Write sign if negative }
   EmitAsmX64(['test r8, r8']);
-  EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
+  EmitAsmX64(['jz short no_sign']);
   EmitwriteSyscall(MINUS_OFFSET, 1);
-  PatchRel8(jzOff);
+  EmitAsmX64(['no_sign:']);
   { Write digits }
   EmitAsmX64([
     'pop rdx',
     'pop rsi']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  AsmScopeEnd;
 end;
 
 procedure EmitwriteUIntW(width: Integer);
 { rax = unsigned int → right-aligned in field of min width chars }
-var jleOff, loopStart: Integer;
+var loopStart: Integer;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['xor rcx, rcx']);
   MovRbxImm(10);
   EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
@@ -15200,16 +15215,17 @@ begin
     'push rcx']);
   MovRaxImm(width);
   EmitAsmX64(['sub rax, rcx']);
-  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EmitAsmX64(['jle short no_pad']);
   EnsureSpaces;
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
   EmitAsmX64(['mov rdx, rax']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-  PatchRel8(jleOff);
+  EmitAsmX64(['no_pad:']);
   EmitAsmX64([
     'pop rdx',
     'pop rsi']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  AsmScopeEnd;
 end;
 
 procedure EmitWriteFloatNat;
@@ -15219,10 +15235,11 @@ procedure EmitWriteFloatNat;
   (value - trunc)*1e15 rounded to an Int64, emitted most-significant-first and
   stopped once the remainder reaches zero. frac kept in r13 across the syscalls. }
 const FRAC = 15;
-var jncOff, jbCarry, i, k, nJz: Integer;
+var i, k, nJz: Integer;
     endJz: array[0..FRAC-1] of Integer;
     divisor, scale: Int64;
 begin
+  AsmScopeBegin;
   scale := 1;
   for k := 1 to FRAC do scale := scale * 10;                   { 10^15 }
 
@@ -15231,11 +15248,11 @@ begin
   { sign: strip and print '-' }
   EmitAsmX64(['movq rax, xmm0']);
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
-  EmitB($73); jncOff := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitAsmX64(['jae short pos']);
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
   EmitAsmX64(['movq xmm0, rax']);
   MovRaxImm(Ord('-')); EmitwriteChar;
-  PatchRel8(jncOff);                 { .pos: }
+  EmitAsmX64(['pos:']);                 { .pos: }
 
   { intpart = trunc(value) -> rax ; frac double = value - intpart }
   EmitAsmX64([
@@ -15251,11 +15268,11 @@ begin
   { carry: if rbx >= scale (frac rounded up to 1.0): rbx -= scale; intpart++ }
   EmitB($49); EmitB($B8); EmitI64(scale);                       { mov r8, scale }
   EmitAsmX64(['cmp rbx, r8']);
-  EmitB($72); jbCarry := CodeLen; EmitB(0);                     { jb .nocarry }
+  EmitAsmX64(['jb short nocarry']);
   EmitAsmX64([
     'sub rbx, r8',
     'inc rax']);
-  PatchRel8(jbCarry);               { .nocarry: }
+  EmitAsmX64(['nocarry:']);               { .nocarry: }
   EmitAsmX64(['mov r13, rbx']); { (frac) }
 
   { print intpart (non-negative) then '.' }
@@ -15289,6 +15306,7 @@ begin
   for k := 0 to nJz - 1 do
     Patch32(endJz[k], CodeLen - (endJz[k] + 4));
   EmitAsmX64(['pop r13']);
+  AsmScopeEnd;
 end;
 
 procedure EmitWriteFloatFixedNative(width, decimals: Integer); forward;
@@ -15570,12 +15588,12 @@ procedure EmitWriteFloatSciSelfContained;
   arithmetic, so the last 1-2 digits may differ from a correctly-rounded bignum
   formatter; adequate for general output. e10 kept in r12. }
 const FRAC = 16;
-var jncPos, jmpSignDone, jnzNz, jmpDone: Integer;
-    laTop, laJb, lbTop, lbJae, jnsPos2, jmpEd: Integer;
-    clampJle, bdLoop, roundJl, ovJb: Integer;
-    nfJne, nfJnz, nfJnc, nfJmpSign, nfDoneInf, nfDoneNan: Integer;
+var
+    laTop, lbTop: Integer;
+    bdLoop: Integer;
     k, j: Integer; divisor: Int64;
 begin
+  AsmScopeBegin;
   EmitAsmX64(['push r12']);
 
   { ---- NON-FINITE first: Inf and NaN have no decimal normalisation ----
@@ -15606,44 +15624,44 @@ begin
     write syscall sequence, so these branches span far more than 127 bytes and a
     byte displacement silently TRUNCATES — which is what made NaN still hang
     after the Inf case was already right. }
-  EmitB($0F); EmitB($85); nfJne := CodeLen; EmitI32(0);         { jne .finite }
+  EmitAsmX64(['jnz finite']);
   EmitAsmX64(['mov rcx, rax']); { (keep sign) }
   EmitB($48); EmitB($BA); EmitI64($000FFFFFFFFFFFFF);           { mov rdx, mantmask }
   EmitAsmX64([
     'and rax, rdx',
     'test rax, rax']);
-  EmitB($0F); EmitB($85); nfJnz := CodeLen; EmitI32(0);          { jnz .nan }
+  EmitAsmX64(['jnz nan']);
   { Inf: sign from the saved bits, then the magnitude spelling }
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($E1); EmitB($3F);   { bt rcx, 63 }
-  EmitB($0F); EmitB($83); nfJnc := CodeLen; EmitI32(0);          { jnc .posinf }
+  EmitAsmX64(['jae posinf']);
   MovRaxImm(Ord('-')); EmitwriteChar;
-  EmitB($E9); nfJmpSign := CodeLen; EmitI32(0);                  { jmp .infbody }
-  Patch32(nfJnc, CodeLen - (nfJnc + 4));                        { .posinf: }
+  EmitAsmX64(['jmp infbody']);
+  EmitAsmX64(['posinf:']);                        { .posinf: }
   MovRaxImm(Ord(' ')); EmitwriteChar;
-  Patch32(nfJmpSign, CodeLen - (nfJmpSign + 4));                { .infbody: }
+  EmitAsmX64(['infbody:']);                { .infbody: }
   MovRaxImm(Ord('I')); EmitwriteChar;
   MovRaxImm(Ord('n')); EmitwriteChar;
   MovRaxImm(Ord('f')); EmitwriteChar;
-  EmitB($E9); nfDoneInf := CodeLen; EmitI32(0);                 { jmp .done }
-  Patch32(nfJnz, CodeLen - (nfJnz + 4));                        { .nan: }
+  EmitAsmX64(['jmp done']);
+  EmitAsmX64(['nan:']);                        { .nan: }
   MovRaxImm(Ord(' ')); EmitwriteChar;
   MovRaxImm(Ord('N')); EmitwriteChar;
   MovRaxImm(Ord('a')); EmitwriteChar;
   MovRaxImm(Ord('n')); EmitwriteChar;
-  EmitB($E9); nfDoneNan := CodeLen; EmitI32(0);                 { jmp .done }
-  Patch32(nfJne, CodeLen - (nfJne + 4));                        { .finite: }
+  EmitAsmX64(['jmp done']);
+  EmitAsmX64(['finite:']);                        { .finite: }
 
   { ---- sign ---- }
   EmitAsmX64(['movq rax, xmm0']);
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
-  EmitB($73); jncPos := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitAsmX64(['jae short pos']);
   EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
   EmitAsmX64(['movq xmm0, rax']);
   MovRaxImm(Ord('-')); EmitwriteChar;
-  EmitB($EB); jmpSignDone := CodeLen; EmitB(0);                 { jmp .signdone }
-  PatchRel8(jncPos);                 { .pos: }
+  EmitAsmX64(['jmp short signdone']);
+  EmitAsmX64(['pos:']);                 { .pos: }
   MovRaxImm(Ord(' ')); EmitwriteChar;
-  PatchRel8(jmpSignDone);       { .signdone: }
+  EmitAsmX64(['signdone:']);       { .signdone: }
 
   { 10.0 -> xmm1, 1.0 -> xmm2 (preserved across syscalls) }
   MovRaxImm(10); EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); { cvtsi2sd xmm1, rax }
@@ -15653,34 +15671,34 @@ begin
   EmitAsmX64([
     'movq rax, xmm0',
     'test rax, rax']);
-  EmitB($0F); EmitB($85); jnzNz := CodeLen; EmitI32(0);        { jnz .nz }
+  EmitAsmX64(['jnz nz']);
   MovRaxImm(Ord('0')); EmitwriteChar;
   MovRaxImm(Ord('.')); EmitwriteChar;
   for j := 1 to FRAC do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
   MovRaxImm(Ord('E')); EmitwriteChar;
   MovRaxImm(Ord('+')); EmitwriteChar;
   for j := 1 to 3 do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
-  EmitB($E9); jmpDone := CodeLen; EmitI32(0);                  { jmp .done }
-  Patch32(jnzNz, CodeLen - (jnzNz + 4));                       { .nz: }
+  EmitAsmX64(['jmp done']);
+  EmitAsmX64(['nz:']);                       { .nz: }
 
   { ---- normalize value into [1,10), tracking decimal exponent in r12 ---- }
   EmitAsmX64(['xor r12, r12']);
   laTop := CodeLen;                                            { .la: while value>=10 }
   EmitAsmX64(['ucomisd xmm0, xmm1']);
-  EmitB($72); laJb := CodeLen; EmitB(0);                       { jb .ea }
+  EmitAsmX64(['jb short ea']);
   EmitAsmX64([
     'divsd xmm0, xmm1',
     'inc r12']);
   EmitB($EB); EmitRel8(laTop);              { jmp .la }
-  PatchRel8(laJb);                    { .ea: }
+  EmitAsmX64(['ea:']);                    { .ea: }
   lbTop := CodeLen;                                            { .lb: while value<1 }
   EmitAsmX64(['ucomisd xmm0, xmm2']);
-  EmitB($73); lbJae := CodeLen; EmitB(0);                      { jae .eb }
+  EmitAsmX64(['jae short eb']);
   EmitAsmX64([
     'mulsd xmm0, xmm1',
     'dec r12']);
   EmitB($EB); EmitRel8(lbTop);              { jmp .lb }
-  PatchRel8(lbJae);                  { .eb: }
+  EmitAsmX64(['eb:']);                  { .eb: }
 
   { m = round-to-nearest(value * 10^FRAC) built as a (FRAC+1)-digit integer in
     rbx, extracted MSD-first by iteration so each step only truncates a value in
@@ -15695,9 +15713,9 @@ begin
   EmitAsmX64([
     'cvttsd2si rax, xmm0',
     'cmp rax, 9']);
-  EmitB($7E); clampJle := CodeLen; EmitB(0);                   { jle .ok }
+  EmitAsmX64(['jle short ok']);
   EmitAsmX64(['mov eax, 9']);
-  PatchRel8(clampJle);            { .ok: }
+  EmitAsmX64(['ok:']);            { .ok: }
   EmitAsmX64([
     'imul rbx, rbx, 10',
     'add rbx, rax',
@@ -15710,14 +15728,14 @@ begin
   EmitAsmX64([
     'cvttsd2si rax, xmm0',
     'cmp rax, 5']);
-  EmitB($7C); roundJl := CodeLen; EmitB(0);                    { jl .noround }
+  EmitAsmX64(['jl short noround']);
   EmitAsmX64(['inc rbx']);
-  PatchRel8(roundJl);              { .noround: }
+  EmitAsmX64(['noround:']);              { .noround: }
   { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
   divisor := 1; for k := 0 to FRAC do divisor := divisor * 10;  { 10^(FRAC+1) }
   EmitB($48); EmitB($B8); EmitI64(divisor);                    { mov rax, 10^17 }
   EmitAsmX64(['cmp rbx, rax']);
-  EmitB($72); ovJb := CodeLen; EmitB(0);                       { jb .nov }
+  EmitAsmX64(['jb short nov']);
   EmitAsmX64([
     'mov rax, rbx',
     'xor rdx, rdx',
@@ -15725,7 +15743,7 @@ begin
     'div rcx',
     'mov rbx, rax',
     'inc r12']);
-  PatchRel8(ovJb);                    { .nov: }
+  EmitAsmX64(['nov:']);                    { .nov: }
 
   { print m as d.<FRAC digits>, most significant first }
   for k := FRAC downto 0 do
@@ -15748,16 +15766,16 @@ begin
   EmitAsmX64([
     'mov rax, r12',
     'test rax, rax']);
-  EmitB($79); jnsPos2 := CodeLen; EmitB(0);                    { jns .pos2 }
+  EmitAsmX64(['jns short pos2']);
   EmitAsmX64([
     'neg rax',
     'mov rbx, rax']);
   MovRaxImm(Ord('-')); EmitwriteChar;
-  EmitB($EB); jmpEd := CodeLen; EmitB(0);                      { jmp .ed }
-  PatchRel8(jnsPos2);              { .pos2: }
+  EmitAsmX64(['jmp short ed']);
+  EmitAsmX64(['pos2:']);              { .pos2: }
   EmitAsmX64(['mov rbx, rax']);
   MovRaxImm(Ord('+')); EmitwriteChar;
-  PatchRel8(jmpEd);                  { .ed: }
+  EmitAsmX64(['ed:']);                  { .ed: }
   for k := 2 downto 0 do
   begin
     divisor := 1; for j := 1 to k do divisor := divisor * 10;
@@ -15772,10 +15790,11 @@ begin
     EmitwriteChar;
   end;
 
-  Patch32(jmpDone, CodeLen - (jmpDone + 4));                   { .done: }
-  Patch32(nfDoneInf, CodeLen - (nfDoneInf + 4));               { ...Inf joins here }
-  Patch32(nfDoneNan, CodeLen - (nfDoneNan + 4));               { ...and NaN }
+  EmitAsmX64(['done:']);                   { .done: }
+                 { ...Inf joins here }
+                 { ...and NaN }
   EmitAsmX64(['pop r12']);
+  AsmScopeEnd;
 end;
 
 procedure SciFormatFor(wid: Integer; tk: Integer; var fracdigits, expdigits: Integer);
