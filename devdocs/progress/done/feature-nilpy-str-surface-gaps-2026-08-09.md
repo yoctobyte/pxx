@@ -3,6 +3,7 @@ prio: 40
 track: N
 type: feature
 blocked-by: []
+status: done
 ---
 
 # str/bytes surface gaps found by the 2026-08-09 differential sweep
@@ -111,3 +112,22 @@ The test asserts all six related predicates per case (isnumeric, istitle,
 isdigit, isalnum, isupper, islower) because they share the "empty is False" and
 "needs a cased character" rules, and copying a neighbour is exactly how one of
 them ends up disagreeing.
+
+## Closed 2026-11-11
+
+The last open items, re-measured on latest-7c787e5c98:
+
+- `format(0.1, ".17f")` -- the builtin -- works (`0.10000000000000001`, plus
+  `05d`, `>4` and the no-spec form, byte-identical to CPython). Fixed at some
+  point since; no entry here said so.
+- `sorted(xs, key=str.lower)` works through PyUnboundStrMethodValue (zero-arg
+  str methods). A BOUND method value (`s.upper`, `"-".join`, `d.get`) is a
+  value too now: bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused.
+- `bytes.fromhex` -- the pair of `hex()` -- added: pybytes_fromhex via the
+  dotted static table, either case, whitespace between bytes, CPython's two
+  ValueError messages with its 0-based positions. Test
+  test_nilpy_bytes_fromhex.py (row fromhex26), expected = python3.
+
+Not done, and not worth a ticket of its own unless a program asks:
+`bytes.maketrans`, and a `str`-typed table for `translate` (which CPython 3
+does not accept for str either; only the bytes form takes one).

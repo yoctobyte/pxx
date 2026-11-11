@@ -1679,6 +1679,7 @@ function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
   routine, and the conversions above stay the single source of the arithmetic.
   bug-nilpy-to-bytes-refuses-big-endian-and-demands-the-signed-keyword }
 function pybytes_reversed(b: TPyBytes): TPyBytes;
+function pybytes_fromhex(const s: AnsiString): TPyBytes;   { bytes.fromhex }
 { `n.bit_length()` / `n.bit_count()`. Both are defined on the MAGNITUDE — the
   sign is ignored, so (-8) answers as 8 — and both take a Variant rather than
   an Int64 so an arbitrary-precision receiver stays exact: `(2**70)` is outside
@@ -15561,6 +15562,46 @@ begin
     dst := PByte(NativeInt(Result.FData) + (n - 1 - k));
     dst^ := src^;
   end;
+end;
+
+{ bytes.fromhex(s): two hex digits per byte, either case, ASCII whitespace
+  allowed BETWEEN bytes (not inside one) -- CPython's rule, and its message,
+  so a program matching on the text still matches. The natural pair of
+  TPyBytes.hex (feature-nilpy-str-surface-gaps-2026-08-09). }
+function pybytes_fromhex(const s: AnsiString): TPyBytes;
+var i, n, hi, lo, cnt: Integer; buf: AnsiString;
+  function HexVal(c: Char): Integer;
+  begin
+    if (c >= '0') and (c <= '9') then HexVal := Ord(c) - Ord('0')
+    else if (c >= 'a') and (c <= 'f') then HexVal := Ord(c) - Ord('a') + 10
+    else if (c >= 'A') and (c <= 'F') then HexVal := Ord(c) - Ord('A') + 10
+    else HexVal := -1;
+  end;
+begin
+  n := Length(s);
+  SetLength(buf, n div 2 + 1);
+  cnt := 0;
+  i := 1;
+  while i <= n do
+  begin
+    if s[i] in [' ', #9, #10, #11, #12, #13] then begin Inc(i); Continue; end;
+    hi := HexVal(s[i]);
+    if hi < 0 then
+      raise ValueError.Create('non-hexadecimal number found in fromhex() arg at position '
+        + pystr_of(Int64(i - 1)));
+    if (i = n) or (s[i + 1] in [' ', #9, #10, #11, #12, #13]) then
+      raise ValueError.Create('fromhex() arg must contain an even number of hexadecimal digits');
+    lo := HexVal(s[i + 1]);
+    if lo < 0 then
+      raise ValueError.Create('non-hexadecimal number found in fromhex() arg at position '
+        + pystr_of(Int64(i)));
+    Inc(cnt);
+    buf[cnt] := Chr(hi * 16 + lo);
+    Inc(i, 2);
+  end;
+  Result := TPyBytes.Create(cnt);
+  for i := 0 to cnt - 1 do
+    PByte(NativeInt(Result.FData) + i)^ := Ord(buf[i + 1]);
 end;
 
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;

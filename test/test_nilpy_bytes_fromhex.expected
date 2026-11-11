@@ -1,0 +1,8 @@
+b'\n\xff'
+b'\xde\xad\xbe\xef'
+b''
+b'Hello' 48656c6c6f 5
+ValueError: non-hexadecimal number found in fromhex() arg at position 1
+ValueError: fromhex() arg must contain an even number of hexadecimal digits
+ValueError: fromhex() arg must contain an even number of hexadecimal digits
+ValueError: non-hexadecimal number found in fromhex() arg at position 0

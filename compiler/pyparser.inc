@@ -11317,6 +11317,17 @@ begin
       ASTLeft[tpBlobNode] := tpCallNode;
       CurASTNode := tpBlobNode;
       LastExprTk := tyVariant;
+      { `type(self)(args)` -- Python's other spelling of `self.__class__(args)`.
+        The type object is a variant (VT_CLASSREF for an instance), and calling
+        it is the same dynamic call `cls = self.__class__; cls(args)` makes;
+        this prefix Exits before ParseFactor's own call loop could see the
+        '(', so the call is taken here.
+        feature-n-type-of-self-cannot-be-called-as-a-constructor }
+      while CurTok.Kind = tkLParen do
+      begin
+        CurASTNode := PyMakeDynCall(CurASTNode);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+      end;
       Exit;
     end;
     Next; Next;                { '.', '__name__' }
@@ -16052,6 +16063,7 @@ begin
   { str.maketrans — a STATIC method, reaching the same table for the same
     reason dict.fromkeys does: the base name is a type rather than a module. }
   else if dotted = 'str.maketrans' then Result := 'pystr_maketrans'
+  else if dotted = 'bytes.fromhex' then Result := 'pybytes_fromhex'
   { math.floor/math.ceil must NOT reach the RTL Math unit's own Floor/Ceil
     (Double->Double, correct for the Pascal frontend, wrong for Python's int
     contract) -- intercepted here by name, ahead of the ordinary qualified-
@@ -16261,7 +16273,7 @@ begin
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
      (base <> 'random') and (base <> 'str') and (base <> 'time') and
-     (base <> 'collections') and (base <> 'float') then Exit;
+     (base <> 'collections') and (base <> 'float') and (base <> 'bytes') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + GetTokenStr(TokPos + 1);   { as spelled -- see PyStdlibCallProc }
@@ -20558,6 +20570,7 @@ begin
     ct := PyClassDeclTok(nm);
     if (ct >= 0) and PyTokClassBody(ct, TokCount, bs, be) then
       for j := bs to be - 2 do
+      begin
         if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkLParen) and
            (GetTokenStr(j) = '__class__') and (j > 0) and
            (Tokens[j - 1].Kind = tkDot) then
@@ -20565,6 +20578,25 @@ begin
           PyClassUsedAsValueEx := True;
           Exit;
         end;
+        { ...and its other spelling, `type(<x>)(` -- the closing ')' of
+          type's argument followed by '(' }
+        if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'type') and
+           (Tokens[j + 1].Kind = tkLParen) then
+        begin
+          lo := j + 2; hi := 1;
+          while (lo < be) and (hi > 0) do
+          begin
+            if Tokens[lo].Kind = tkLParen then Inc(hi)
+            else if Tokens[lo].Kind = tkRParen then Dec(hi);
+            Inc(lo);
+          end;
+          if (hi = 0) and (lo < be) and (Tokens[lo].Kind = tkLParen) then
+          begin
+            PyClassUsedAsValueEx := True;
+            Exit;
+          end;
+        end;
+      end;
   end;
   { EVERY Python range of the stream, not this module's tokens: since the
     import closure is lexed first (PyLexImportClosure, 2026-09-16) a class's
