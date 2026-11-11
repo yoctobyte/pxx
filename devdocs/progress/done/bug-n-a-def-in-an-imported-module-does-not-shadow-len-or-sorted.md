@@ -13,7 +13,7 @@ track: N
 type: bug
 prio: 55
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Repro
@@ -88,3 +88,16 @@ module docstring).
   ticket on purpose: the four names that were repaired and the two that were
   not go through different lowerings, and merging them would let the green
   half certify the red one.
+- 2026-11-11 — fixed. The call itself bound the module's def all along (the
+  IR at HEAD shows `call [proc=len]`, the user's). What was wrong was the
+  CALLER's registered result type: `PyInferExprType`'s builtin table typed
+  `len(...)` as int and `sorted(...)` as a list without asking whether the file
+  defines that name, so `def caller(x): return len(x)` registered an int
+  signature over a str value (printed as the string's address) and `sorted`'s
+  str was converted to a list (`[]`). New `PyOwnDefProc` (a def of this file,
+  via PyShadowDeclHere) takes precedence over the table, and `PyTopDefByScan`
+  (one cached token scan per file) covers a def that comes LATER than its
+  caller, whose proc does not exist yet when the caller's shell is typed.
+  Fixture rows added to `test_nilpy_a_def_in_an_imported_module_shadows_a_builtin`
+  (`len`/`sorted` defined below their caller, plus a caller below them and the
+  main program's own `sorted` as the control).

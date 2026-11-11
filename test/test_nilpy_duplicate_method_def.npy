@@ -58,13 +58,64 @@ def free_scope():
 print(E("p", "q").prefix)
 
 
-# DELIBERATELY ABSENT: calling a duplicated ORDINARY method, e.g.
-#     class D:
-#         def m(self, prefix): self.prefix = prefix
-#         def m(self, other, prefix): self.prefix = prefix
-#     D().m("p", "q")
-# That compiles and then SEGFAULTS, on the pre-fix binary and after this fix
-# alike, so it is a different defect that happens to share this source shape:
-# bug-nilpy-calling-a-duplicated-ordinary-method-segfaults. Add it here when that
-# is fixed. Until then, do not read this file as covering duplicated methods that
-# are CALLED -- everything above only constructs.
+# CALLING a duplicated ordinary method: the earlier definition is dead, the
+# last one wins -- across different arities (this segfaulted), equal arities,
+# three definitions, a subclass that overrides it, and a property defined twice.
+# bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
+class D:
+    def m(self, prefix):
+        self.prefix = prefix
+
+    def m(self, other, prefix):
+        self.prefix = prefix
+
+
+d = D()
+d.m("p", "q")
+print(d.prefix)
+
+
+class F:
+    def m(self, a):
+        return "first " + str(a)
+
+    def m(self, a):
+        return "second " + str(a)
+
+    def m(self, a, b=1):
+        return "third " + str(a + b)
+
+    def uses(self):
+        return self.m(10)
+
+
+print(F().m(3))
+print(F().uses())
+
+
+class G(F):
+    def m(self, a, b=1):
+        return "G " + str(a * b)
+
+    def m(self, a, b=1):
+        return "G2 " + str(a * b)
+
+
+print(G().m(3))
+print(G().uses())
+
+
+class P:
+    def __init__(self):
+        self._v = 5
+
+    @property
+    def v(self):
+        return 1
+
+    @property
+    def v(self):
+        return self._v * 2
+
+
+print(P().v)

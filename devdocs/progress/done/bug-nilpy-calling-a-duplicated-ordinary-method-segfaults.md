@@ -2,7 +2,7 @@
 prio: 55
 track: N
 type: bug
-status: backlog
+status: done
 owner:
 blocked-by: []
 summary: "A class defining one ordinary method twice compiles, then SEGFAULTS when the method is called. CPython rebinds and the last definition wins. Pre-existing — identical on the pre-fix pinned binary and on the fix for the duplicate-method HANG, so the two are different defects sharing one source shape."
@@ -70,3 +70,17 @@ lands through the wrong frame.
 `make compiler/pascal26` + this repro printing `q`, and add it to
 `test/test_nilpy_duplicate_method_def.npy`, which currently carries a comment
 saying this shape is deliberately absent because it crashes.
+
+## Log
+- 2026-11-11 — fixed. Both definitions were registered under one member
+  name; with different arities a call bound one's signature and the other's
+  body. New `PyMethodShadowedAt(defIdx)`: an earlier `def` in a class body that
+  a later sibling `def` of the same member (same property-accessor prefix)
+  rebinds is compiled under `<name>$shadowed<tok>` (PyShadowedMethodName), and
+  its method-table entry carries that name too. Asked by the member pre-pass,
+  PyParseMethod and PyDefMemberKeyAt, so all three agree. `__init__` is left
+  on its existing arity-overload path. Covered in
+  `test_nilpy_duplicate_method_def.npy` (row dupmethod26): different arity,
+  equal arity, three definitions with a caller inside the class, a subclass
+  overriding a duplicated method, and a property defined twice. Found on the
+  way: bug-n-an-overrides-own-default-is-ignored-when-dispatched-through-the-base.

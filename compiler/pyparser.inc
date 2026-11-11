@@ -6545,7 +6545,69 @@ begin
     Result := PyWiden(a, b);
 end;
 
+{ The proc of a def THIS FILE declares under `name` -- the main program's own,
+  or the imported module's being compiled (PyShadowDeclHere) -- or -1. A def
+  named after a builtin replaces it for every call in the file, so the
+  builtin's fixed result type must not be assumed for it.
+  bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted }
+function PyOwnDefProc(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if not NilPyUserCode then Exit;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if ProcNameMatches(i, name) and PyShadowDeclHere(i) and (ProcPyDefTok[i] > 0) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
+{ ...and the same question by TOKEN SCAN, for a def that comes LATER in the
+  file than the def being inferred: the shell pass registers defs in order, so
+  `def caller(x): return len(x)` above `def len(x)` is typed before len's proc
+  exists. One scan per file, cached: the module-level def names between
+  PyScanLo and MainProgramTokCount. }
+var PyTopDefLo, PyTopDefHi, PyTopDefN: Integer;
+    PyTopDefNames: array of AnsiString;
+
+function PyTopDefByScan(const name: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  if (PyTopDefLo <> PyScanLo) or (PyTopDefHi <> MainProgramTokCount) or
+     (PyTopDefNames = nil) then
+  begin
+    PyTopDefLo := PyScanLo; PyTopDefHi := MainProgramTokCount;
+    PyTopDefN := 0;
+    SetLength(PyTopDefNames, 16);
+    depth := 0;
+    i := PyScanLo;
+    while i < MainProgramTokCount do
+    begin
+      if Tokens[i].Kind = tkIndent then Inc(depth)
+      else if Tokens[i].Kind = tkDedent then Dec(depth)
+      else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+              (i + 1 < MainProgramTokCount) then
+      begin
+        if PyTopDefN >= Length(PyTopDefNames) then
+          SetLength(PyTopDefNames, 2 * Length(PyTopDefNames));
+        PyTopDefNames[PyTopDefN] := GetTokenStr(i + 1);
+        Inc(PyTopDefN);
+      end;
+      Inc(i);
+    end;
+  end;
+  Result := False;
+  for i := 0 to PyTopDefN - 1 do
+    if PyTopDefNames[i] = name then begin Result := True; Exit; end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
+var ownPi: Integer;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
     qcUnit, qcProc, qcSym: Integer; qcTk: TTypeKind;   { a qualified module MEMBER -- see the arm }
@@ -7356,7 +7418,24 @@ begin
             through to tyVariant and poison the local's type (a variant local
             scalar-loaded on `return` yields its TAG, not the value). }
           lo := LowerCase(name);
-          if (lo = 'length') or (lo = 'ord') or (lo = 'pos') then tk := tyInteger
+          { a def of this file named after a builtin: ITS result type, not the
+            builtin's -- `def len(x): return "USER"` made every def returning
+            len(...) register an int over a str value }
+          ownPi := -1;
+          if not ((i > startIdx) and (Tokens[i - 1].Kind = tkDot)) then
+            ownPi := PyOwnDefProc(name);
+          if (ownPi < 0) and NilPyUserCode and
+             not ((i > startIdx) and (Tokens[i - 1].Kind = tkDot)) and
+             PyTopDefByScan(name) then
+            tk := tyVariant          { a later def of this file: not yet typed }
+          else if ownPi >= 0 then
+          begin
+            tk := Procs[ownPi].RetType;
+            if (tk = tyClass) and (ProcRetRecId[ownPi] >= REC_UCLASS_BASE) then
+              PyInferLastCi := ProcRetRecId[ownPi] - REC_UCLASS_BASE;
+            if (tk = tyUnknown) or ProcIsGenerator[ownPi] then tk := tyVariant;
+          end
+          else if (lo = 'length') or (lo = 'ord') or (lo = 'pos') then tk := tyInteger
           else if lo = 'chr' then tk := tyAnsiString   { chr() is a 1-character str }
           else if lo = 'copy' then tk := tyString
           { The NilPy BUILTINS the shared parser lowers as intrinsics: they are
@@ -43592,6 +43671,47 @@ begin
     Result := '__prop_set_';
 end;
 
+{ Is the `def` at defIdx SHADOWED by a later `def` of the same member in the
+  same class body? CPython rebinds and the last definition wins, so the earlier
+  one is dead. Both were registered under one name, and when their arities
+  differed a call bound one definition's signature and the other's body and
+  segfaulted. The earlier def is now compiled under an unreachable name
+  (PyShadowedMethodName). Asked by the member pre-pass, the method parse and
+  PyDefMemberKeyAt, so all three agree. A constructor is left alone: two
+  `__init__`s resolve by arity today and that path is covered by its own test.
+  bug-nilpy-calling-a-duplicated-ordinary-method-segfaults }
+function PyMethodShadowedAt(defIdx: Integer): Boolean;
+var j, depth: Integer; nm, pfx: AnsiString;
+begin
+  Result := False;
+  if (defIdx < 0) or (defIdx + 1 >= TokCount) then Exit;
+  nm := GetTokenStr(defIdx + 1);
+  if nm = '__init__' then Exit;
+  pfx := PyPropAccessorPrefixAt(defIdx);
+  depth := 0;
+  j := defIdx + 1;
+  while j < TokCount do
+  begin
+    case Tokens[j].Kind of
+      tkIndent: Inc(depth);
+      tkDedent: begin Dec(depth); if depth < 0 then Exit; end;
+      tkEOF: Exit;
+    end;
+    if (depth = 0) and (Tokens[j].Kind = tkFunction) and (j + 1 < TokCount) and
+       (GetTokenStr(j + 1) = nm) and (PyPropAccessorPrefixAt(j) = pfx) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
+function PyShadowedMethodName(const name: AnsiString; defIdx: Integer): AnsiString;
+begin
+  Result := name + '$shadowed' + AIntToStr(defIdx);
+end;
+
 { Is the `def` at defIdx decorated `@staticmethod`?
 
   Deliberately the same backward scan as PyPropAccessorPrefixAt above, and for
@@ -45867,6 +45987,7 @@ begin
   Result := PyMethodName(GetTokenStr(i + 1));
   if PyPropAccessorPrefixAt(i) <> '' then
     Result := PyPropAccessorPrefixAt(i) + GetTokenStr(i + 1);
+  if PyMethodShadowedAt(i) then Result := PyShadowedMethodName(Result, i);
 end;
 
 procedure PyMixSkipAdd(const nm: AnsiString);
@@ -49407,6 +49528,7 @@ begin
       name := PyMethodName(origName);
       if PyPropAccessorPrefixAt(i) <> '' then
         name := PyPropAccessorPrefixAt(i) + origName;
+      if PyMethodShadowedAt(i) then name := PyShadowedMethodName(name, i);
       isCtor := name = 'create';
       nparams := 0;
       { @staticmethod: a HIDDEN receiver at slot 0. Python's static method
@@ -49874,6 +49996,10 @@ begin
           end;
         end;
       end
+      else if PyMethodShadowedAt(i) then
+        { a dead earlier definition: its table entry carries the mangled name
+          so no lookup of the source name can land on it }
+        AddUMeth(ci, StoredName(name), Length(name), procIdx)
       else
         AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
       { @staticmethod: no receiver. UMthIsStatic is the SAME flag Pascal's
@@ -50300,6 +50426,7 @@ begin
     the name that follows it. }
   if PyPropAccessorPrefixAt(TokPos - 2) <> '' then
     name := PyPropAccessorPrefixAt(TokPos - 2) + origName;
+  if PyMethodShadowedAt(TokPos - 2) then name := PyShadowedMethodName(name, TokPos - 2);
   Next;
   isCtor := name = 'create';
   Expect(tkLParen, '(');

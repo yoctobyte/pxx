@@ -3,3 +3,6 @@ internal  region rijn / S<7> / opened nothing
 here fmt  7.5
 here str  7
 here len  4
+mod len   L<abcd> / sorted-by-module
+mod cnt   L<[1, 2]>
+here srt  [1, 2, 3]
