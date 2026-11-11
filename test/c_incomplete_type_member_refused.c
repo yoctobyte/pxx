@@ -47,8 +47,10 @@ int inc_arrow(struct nosuchtype *p) { return p->field; }
    UClsLayoutDropped exists. Refusing is not a choice between a message and
    silence: with the layout dropped, sizeof answers 0 against gcc's 16 and
    every member reads at offset 0, so `v.a=7; v.b=9' PRINTS 9 9. Staying quiet
-   here was tried and reintroduced this ticket's own bug. */
-struct dropped { int a; int b; } __attribute__((aligned));
+   here was tried and reintroduced this ticket's own bug.
+   The trigger was a bare `aligned` until pxx learned that one (it is 16, as
+   in gcc); an alignment given by an expression is still not parsed. */
+struct dropped { int a; int b; } __attribute__((aligned(__alignof__(long double))));
 int opaque_read(void) { struct dropped v; return v.a; }
 
 /* THE TYPO ARM -- the struct is fully known and the member is not its. */

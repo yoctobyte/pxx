@@ -269,7 +269,7 @@ begin
   AsmEncAbsRM(regField, kind, off);
 end;
 
-{ A register HOLE: `%r64` / `%r32` / `%r16` / `%r8` stands for the register
+{ A register HOLE: `%r64` / `%r32` / `%r16` / `%r8` / `%xmm` stands for the register
   whose number (0..15, the encoder's numbering) is the next int element. For
   codegen that picks its register at compile time -- `shl %r64, %` with the
   register and the count both bound -- which raw code spelled as arithmetic on
@@ -279,6 +279,7 @@ function AsmTextRegHoleSize(const op: AnsiString): Integer;
 begin
   Result := 0;
   if (Length(op) < 3) or (AsmTextCharAt(op, 1) <> '%') then Exit;
+  if CaseEqual(op, '%xmm') then begin Result := 16; Exit; end;   { an xmm register, 0..15 }
   if AsmTextLower(AsmTextCharAt(op, 2)) <> 'r' then Exit;
   if CaseEqual(op, '%r64') then Result := 8
   else if CaseEqual(op, '%r32') then Result := 4
@@ -570,6 +571,7 @@ begin
   if CaseEqual(mnem, 'xgetbv') then begin EncB($0F); EncB($01); EncB($D0); Exit; end;
   if CaseEqual(mnem, 'rdtsc')  then begin EncB($0F); EncB($31); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
+  if CaseEqual(mnem, 'cdqe') then begin EncB($48); EncB($98); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin x64_movsb; Exit; end;
   if CaseEqual(mnem, 'cld') then begin EncB($FC); Exit; end;
   if CaseEqual(mnem, 'std') then begin EncB($FD); Exit; end;
@@ -677,6 +679,18 @@ begin
       else if k0 >= 3 then begin EncB($8F); AsmEncAbsRM(0, k0, md0); end
       else Error('EmitAsmX64: pop takes a register or a memory operand: ' + line);
     end;
+    Exit;
+  end;
+  { stmxcsr / ldmxcsr [mem] -- 0F AE /3 and /2; a dword in memory, no REX.W. }
+  if CaseEqual(mnem, 'stmxcsr') or CaseEqual(mnem, 'ldmxcsr') then
+  begin
+    k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
+    if (k0 <> 2) or (Length(op1) <> 0) then
+      Error('EmitAsmX64: ' + mnem + ' takes one memory operand: ' + line);
+    if CaseEqual(mnem, 'stmxcsr') then i := 3 else i := 2;
+    EncPrefixAndREXMem(4, i, mb0, False);
+    EncB($0F); EncB($AE);
+    EncModRMMem(i, mb0, md0, False);
     Exit;
   end;
   if CaseEqual(mnem, 'inc') or CaseEqual(mnem, 'dec') then
@@ -860,6 +874,12 @@ begin
       EncB($63);
       EncModRMMem(r0, mb1, md1, False);
     end
+    else if k1 >= 3 then
+    begin
+      EncPrefixAndREX(s0, r0, 0, False);
+      EncB($63);
+      AsmEncAbsRM(r0, k1, md1);                         { r64, dword [@glob] }
+    end
     else Error('EmitAsmX64: unsupported movsxd form: ' + line);
     Exit;
   end;
@@ -873,6 +893,17 @@ begin
     begin
       if s1 = 0 then Error('EmitAsmX64: movzx/movsx mem needs an explicit size (byte/word)');
       x64_movx_reg_mem(s0, s1, r0, mb1, md1, CaseEqual(mnem, 'movsx'), False);
+    end
+    else if k1 >= 3 then
+    begin
+      { absolute [@glob]/[@data]: [66|REX] 0F B6/B7 (movzx) or BE/BF (movsx) }
+      if (s1 <> 1) and (s1 <> 2) then Error('EmitAsmX64: movzx/movsx mem needs an explicit size (byte/word)');
+      EncPrefixAndREX(s0, r0, 0, False);
+      EncB($0F);
+      if CaseEqual(mnem, 'movsx') then i := $BE else i := $B6;
+      if s1 = 2 then Inc(i);
+      EncB(i);
+      AsmEncAbsRM(r0, k1, md1);
     end
     else Error('EmitAsmX64: unsupported movzx/movsx form: ' + line);
     Exit;
@@ -891,6 +922,30 @@ begin
       x64_test_mem_imm(s0, mb0, md0, imm1, False);
     end
     else Error('EmitAsmX64: unsupported test form: ' + line);
+    Exit;
+  end;
+
+  { xadd / cmpxchg r/m, r -- 0F C1 /r and 0F B1 /r, 32 or 64 bit; the source
+    register is the ModRM reg field. Usually behind `lock` for an atomic. }
+  if CaseEqual(mnem, 'xadd') or CaseEqual(mnem, 'cmpxchg') then
+  begin
+    if CaseEqual(mnem, 'xadd') then i := $C1 else i := $B1;
+    if (k1 <> 0) or ((s1 <> 4) and (s1 <> 8)) then
+      Error('EmitAsmX64: unsupported ' + mnem + ' form: ' + line);
+    if k0 = 0 then
+    begin
+      if s0 <> s1 then Error('EmitAsmX64: ' + mnem + ' operand sizes differ: ' + line);
+      EncPrefixAndREX(s1, r1, r0, False);
+      EncB($0F); EncB(i);
+      EncModRMReg(r1, r0);
+    end
+    else if k0 = 2 then
+    begin
+      EncPrefixAndREXMem(s1, r1, mb0, False);
+      EncB($0F); EncB(i);
+      EncModRMMem(r1, mb0, md0, False);
+    end
+    else Error('EmitAsmX64: unsupported ' + mnem + ' form: ' + line);
     Exit;
   end;
 
@@ -936,6 +991,23 @@ begin
   { movq — five encodings selected by operand kind (xmm flagged size 16):
     xmm,gp (66 [W] 0F 6E) / gp,xmm (66 [W] 0F 7E) / xmm,xmm (F3 0F 7E) /
     xmm,[mem] (F3 0F 7E) / [mem],xmm (66 0F D6). }
+  { movd -- the 32-bit twin of movq's GP<->xmm forms: xmm,r32 (66 0F 6E) and
+    r32,xmm (66 0F 7E); no REX.W. The same two opcodes take a memory operand:
+    xmm,[mem] loads a dword (upper lanes zeroed), [mem],xmm stores one. }
+  if CaseEqual(mnem, 'movd') then
+  begin
+    if (k0 = 0) and (k1 = 0) and (s0 = 16) and (s1 = 4) then
+      x64_sse_rr($66, $6E, r0, r1, False)               { xmm, r32 }
+    else if (k0 = 0) and (k1 = 0) and (s0 = 4) and (s1 = 16) then
+      x64_sse_rr($66, $7E, r1, r0, False)               { r32, xmm }
+    else if (k0 = 0) and (k1 = 2) and (s0 = 16) then
+      x64_sse_rm($66, $6E, r0, mb1, md1, False, False)  { xmm, [mem] }
+    else if (k0 = 2) and (k1 = 0) and (s1 = 16) then
+      x64_sse_rm($66, $7E, r1, mb0, md0, False, False)  { [mem], xmm }
+    else Error('EmitAsmX64: unsupported movd form: ' + line);
+    Exit;
+  end;
+
   if CaseEqual(mnem, 'movq') then
   begin
     if (k0 = 0) and (k1 = 0) and (s0 = 16) and (s1 = 16) then
@@ -962,15 +1034,17 @@ begin
      CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or
      CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
      CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') or
-     CaseEqual(mnem, 'xorps') or CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then
+     CaseEqual(mnem, 'xorps') or CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') or
+     CaseEqual(mnem, 'movaps') or CaseEqual(mnem, 'movapd') then
   begin
     { prefix }
     if CaseEqual(mnem, 'movss') or CaseEqual(mnem, 'addss') or CaseEqual(mnem, 'subss') or
        CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or CaseEqual(mnem, 'cvtss2sd') then
       ssePfx := $F3
     else if CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
-            CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then ssePfx := $66
-    else if CaseEqual(mnem, 'xorps') then ssePfx := 0
+            CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') or
+            CaseEqual(mnem, 'movapd') then ssePfx := $66
+    else if CaseEqual(mnem, 'xorps') or CaseEqual(mnem, 'movaps') then ssePfx := 0
     else ssePfx := $F2;
     { opcode }
     if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss') then sseOp := $10
@@ -982,6 +1056,7 @@ begin
     else if CaseEqual(mnem, 'ucomisd') then sseOp := $2E
     else if CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') then sseOp := $5A
     else if CaseEqual(mnem, 'pxor') then sseOp := $EF
+    else if CaseEqual(mnem, 'movaps') or CaseEqual(mnem, 'movapd') then sseOp := $28   { load / reg form; no store form here }
     else sseOp := $57;   { xorps / xorpd }
     if (k0 = 0) and (k1 = 0) then x64_sse_rr(ssePfx, sseOp, r0, r1, False)
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm(ssePfx, sseOp, r0, mb1, md1, False, False)
@@ -1079,6 +1154,19 @@ begin
       AsmEncAbsRM(r0, k1, md1);
     end
     else Error('EmitAsmX64: unsupported lea form: ' + line);
+    Exit;
+  end;
+
+  { bit test with an immediate bit number: 0F BA /4 bt, /5 bts, /6 btr, /7 btc }
+  if (k0 = 0) and (k1 = 1) and (CaseEqual(mnem, 'bt') or CaseEqual(mnem, 'bts') or
+     CaseEqual(mnem, 'btr') or CaseEqual(mnem, 'btc')) then
+  begin
+    if CaseEqual(mnem, 'bt') then i := 4
+    else if CaseEqual(mnem, 'bts') then i := 5
+    else if CaseEqual(mnem, 'btr') then i := 6
+    else i := 7;
+    EncPrefixAndREX(s0, 0, r0, False);
+    EncB($0F); EncB($BA); EncModRMReg(i, r0); EncB(Integer(imm1) and $FF);
     Exit;
   end;
 
@@ -1467,6 +1555,8 @@ const
 
 var
   AsmCMKey: array[0..ASM_CM_SLOTS - 1] of AnsiString;
+  AsmCMPtr: array[0..ASM_CM_SLOTS - 1] of Pointer;   { the literal's address, or nil for a text key }
+  AsmCMProbePtr: Pointer = nil;   { what the last probe keyed on: AsmCallMemoStore records it }
   AsmCMNHoles: array[0..ASM_CM_SLOTS - 1] of Integer;
   AsmCMHoles: array[0..ASM_CM_SLOTS * ASM_MAX_HOLES - 1] of Int64;
   AsmCMOff: array[0..ASM_CM_SLOTS - 1] of Integer;
@@ -1491,7 +1581,7 @@ end;
   appended. False with slot >= 0: a free slot to fill if the call qualifies.
   slot < 0: the call cannot be cached (shape, too many holes, table full). }
 function AsmCallMemoProbe(const items: array of const; var slot: Integer): Boolean;
-var b: PAsmTextByte; n, nh, k, L, i, probes: Integer; h: Int64; v: Int64; same: Boolean;
+var b, kp: PAsmTextByte; n, nh, k, L, i, probes: Integer; h: Int64; v: Int64; same: Boolean;
 begin
   Result := False;
   slot := -1;
@@ -1499,12 +1589,33 @@ begin
   nh := n - 1;
   if (nh > ASM_MAX_HOLES) or (items[0].VAnsiString = nil) then Exit;
   b := PAsmTextByte(items[0].VAnsiString);
-  h := 5381;
-  L := 0;
-  while b[L] <> 0 do
+  { AN IMMORTAL LITERAL IS KEYED BY ITS ADDRESS. Nearly every call passes the
+    line as a string literal, whose block is static: it never moves and is
+    never freed, so the same address is the same text for the whole compile.
+    Hashing and comparing it byte by byte cost ~1,000 instructions a call
+    (measured 2026-11-11, lib_charset: 60 M in this function for 58,867
+    calls, two per-character loops). The refcount floor test is the one
+    PyAttrLkStaticH uses (PXX_STATIC_RC_FLOOR read at half). A heap string can
+    reuse an address for other text, so it keeps the text key. An FPC-built
+    compiler stores -1 there, which is below the floor, so it simply takes the
+    text path. }
+  AsmCMProbePtr := nil;
+  if PInt64(NativeInt(Pointer(b)) - 16)^ >= $20000000 then
+    AsmCMProbePtr := Pointer(b);
+  if AsmCMProbePtr <> nil then
   begin
-    h := ((h * 33) + b[L]) and $0FFFFFFF;
-    Inc(L);
+    h := (NativeInt(Pointer(b)) shr 3) and $0FFFFFFF;
+    L := -1;
+  end
+  else
+  begin
+    h := 5381;
+    L := 0;
+    while b[L] <> 0 do
+    begin
+      h := ((h * 33) + b[L]) and $0FFFFFFF;
+      Inc(L);
+    end;
   end;
   for k := 1 to nh do
   begin
@@ -1516,14 +1627,20 @@ begin
   while probes < 8 do
   begin
     if Length(AsmCMKey[slot]) = 0 then Exit;      { free: caller may fill it }
-    if (Length(AsmCMKey[slot]) = L) and (AsmCMNHoles[slot] = nh) then
+    if AsmCMNHoles[slot] = nh then
     begin
-      same := True;
-      i := 0;
-      while same and (i < L) do
+      if AsmCMProbePtr <> nil then
+        same := AsmCMPtr[slot] = AsmCMProbePtr
+      else
       begin
-        if Ord(AsmCMKey[slot][i + 1]) <> b[i] then same := False;
-        Inc(i);
+        same := Length(AsmCMKey[slot]) = L;
+        kp := PAsmTextByte(Pointer(AsmCMKey[slot]));
+        i := 0;
+        while same and (i < L) do
+        begin
+          if kp[i] <> b[i] then same := False;
+          Inc(i);
+        end;
       end;
       k := 1;
       while same and (k <= nh) do
@@ -1557,7 +1674,7 @@ begin
 end;
 
 procedure AsmCallMemoStore(slot: Integer; const line: AnsiString;
-  const holes: array of Int64; nh, startLen: Integer);
+  const holes: array of Int64; nh, startLen: Integer; litPtr: Pointer);
 var i, n: Integer;
 begin
   n := CodeLen - startLen;
@@ -1569,6 +1686,7 @@ begin
   for i := 0 to nh - 1 do
     AsmCMHoles[slot * ASM_MAX_HOLES + i] := holes[i];
   AsmCMKey[slot] := line;
+  AsmCMPtr[slot] := litPtr;   { the probe's own key, carried by the caller }
   AsmCMNHoles[slot] := nh;
   AsmCMOff[slot] := AsmCMPoolLen;
   AsmCMLen[slot] := n;
@@ -1585,6 +1703,7 @@ var
   cc, k, targetPos, disp, width: Integer;
   isJmp, isCall, defined, scoped: Boolean;
   cmSlot, cmLen0, cmF, cmG, cmC, cmP, cmS, cmSl: Integer;
+  cmPtr: Pointer;
   cmPlain: Int64;
 begin
   AsmLblCount := 0; AsmFwCount := 0;
@@ -1592,6 +1711,7 @@ begin
   cmSlot := -1;
   if (not EncToAsmBuffer) and (n >= 1) and (items[0].VType = vtAnsiString) then
     if AsmCallMemoProbe(items, cmSlot) then Exit;
+  cmPtr := AsmCMProbePtr;   { this call's key; a nested emit may probe again }
   cmLen0 := CodeLen; cmF := FixCount; cmG := GlobFixCount; cmC := CallFixCount;
   cmP := ProcAddrFixCount; cmS := LibcSyscallCallCount;
   cmSl := AsmSLblCount; cmPlain := AsmPlainLines;
@@ -1814,7 +1934,7 @@ begin
      (FixCount = cmF) and (GlobFixCount = cmG) and (CallFixCount = cmC) and
      (ProcAddrFixCount = cmP) and
      (LibcSyscallCallCount = cmS) and not EncToAsmBuffer then
-    AsmCallMemoStore(cmSlot, line, holes, nHoles, cmLen0);
+    AsmCallMemoStore(cmSlot, line, holes, nHoles, cmLen0, cmPtr);
 end;
 
 { Single-line convenience overload: EmitAsmX64('ret') / EmitAsmX64('mov rax, %', v)

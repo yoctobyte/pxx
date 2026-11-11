@@ -12997,7 +12997,7 @@ begin
   SetProcBodyAddrHere(fsIdx);
   if TargetArch = TARGET_X86_64 then
   begin
-    EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
+    EmitAsmX64(['stmxcsr [rsp-4]']);
     EmitAsmX64([
       'mov eax, [rsp-4]',
       'and eax, ~0x6000']);
@@ -13007,7 +13007,7 @@ begin
     EmitAsmX64(['and ecx, 0x6000']);
     EmitAsmX64(['or eax, ecx']);
     EmitAsmX64(['mov [rsp-4], eax']);
-    EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($FC);  { ldmxcsr [rsp-4] }
+    EmitAsmX64(['ldmxcsr [rsp-4]']);
     EmitAsmX64([
       'xor eax, eax',
       'ret']);
@@ -13079,7 +13079,7 @@ begin
   SetProcBodyAddrHere(fgIdx);
   if TargetArch = TARGET_X86_64 then
   begin
-    EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
+    EmitAsmX64(['stmxcsr [rsp-4]']);
     EmitAsmX64([
       'mov eax, [rsp-4]',
       'and eax, 0x6000']);

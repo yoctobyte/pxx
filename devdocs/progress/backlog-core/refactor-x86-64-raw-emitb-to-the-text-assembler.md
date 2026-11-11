@@ -54,6 +54,9 @@ disagrees with its bytes is never trusted; that line stays raw and is listed.
   `[rsi..rdi], imm` each carried a meaningless REX 40, because the /digit or
   the memory base went through the register rule that forces REX for
   spl/bpl/sil/dil.
+- `movd xmm, [mem]` / `movd [mem], xmm`; `xadd` and `cmpxchg` (reg or mem
+  destination, 32/64 bit, usually behind `lock`); absolute `[@glob]`
+  sources for movzx/movsx/movsxd; `stmxcsr` / `ldmxcsr [mem]` (batch 7).
 - tests: test/test_asm_emit_x64.pas pins every addition (bytes checked
   against GNU as; where our encoder picks the r/m form over an al/eax short
   form, the test says so).
@@ -78,6 +81,87 @@ disagrees with its bytes is never trusted; that line stays raw and is listed.
   missing-accumulator-forms.md); the self-hosted compiler's code is 77 KB
   smaller for it. It also added a missing feature: SSE scalar to and from
   [@glob]/[@data]/[num].
+
+- batch 4 (raw-asm batches 22+23, 2026-11-11):
+  - 188 more commented lines converted in place. The converter now accepts
+    `= x` / `; x` remarks, double spaces inside operands, an inferred
+    `qword`/`dword` size, and constant EmitI64 tails.
+  - All ~60 computed-opcode lines (`EmitB($C0 or ((r - 8) shl 3))`) now use
+    register holes, including the new `%xmm` hole. The code passes the full
+    register number and the assembler derives REX.R/REX.B, so the hand
+    `(r - 8)` arithmetic is gone.
+  - EmitAluRaxRight and EmitW2InPlace pick the instruction TEXT by operation
+    instead of an opcode byte.
+  - New assembler forms: cdqe, bt/bts/btr/btc reg,imm8, movd r32<->xmm,
+    movaps/movapd.
+  - New regression test: test/test_x64_register_hole_paths.pas (test-threads,
+    -O0 and -O3). It was mutation-checked: movsx->movzx in the narrow
+    re-extend turns -68 into 188.
+
+- batch 5 (2026-11-11): 264 UNCOMMENTED lines (ir_codegen 169, symtab 95).
+  Here the comment cannot be the oracle, so the candidate text comes from
+  objdump on the run's bytes, with sentinel values in the hole positions. A
+  candidate is accepted only when GNU as reproduces those bytes and our own
+  assembler, fed the same sentinels, also reproduces them. The second check
+  is a generated harness over all 136 distinct lines; the only differences
+  are the three `[@glob]` forms, where the mock writes the fixup as zeros.
+  A one-byte run can decode as an instruction and still be a fragment.
+  `2: EmitB($95); { rdx }` is a ModRM byte in a case arm, and objdump reads
+  it as `xchg ebp, eax`. So every objdump-sourced line was reviewed in
+  context. Three were fragments and stay raw: ir_codegen ~1085 (the REX
+  prefix comes from the line above) and the two ModRM case arms ~3327 and
+  ~3448. The rel8 lint then caught three hand-counted short jumps in the
+  frozen-string concat (`EmitB($74); EmitB(15)`, `EmitB($EB);
+  EmitB(Byte(-20))`, `EmitB($7E); EmitB(7)`) that now spanned EmitAsmX64.
+  That block is now one labelled sequence per copy loop.
+- batch 6 (2026-11-11):
+  - 58 reloc-shaped lines (`48 B8+r EmitDataRef` -> `mov r64, @data`;
+    `48 8B/89 modrm 25 EmitGlobRef` -> `mov r64, [@glob]` /
+    `mov [@glob], r64`), in ir_codegen, symtab, pasparser_lval and emit.
+    Only REX.W runs, which are x86-64 by construction.
+  - 58 forward-jump placeholders in routines that DO have an `Exit` now use
+    scope labels, each with a TIGHT scope around its own jump and landing
+    site. A region qualifies only if it has no Exit/Break/Continue/raise,
+    balanced begin/end (and repeat/until), whole-line statements at both
+    ends that are not under an if/else without begin, and no other dotless
+    label text. Overlapping regions merge into one scope.
+  - The first version paired a jump with the FIRST of its patches.
+    EmitObjRefFastPath patches `pDone` in both arms of an if/else, so the
+    release arm lost its landing label. That would have been an
+    "undefined scope label" error, though only when that path compiled.
+    It is fixed (each arm defines `done:`), and the converter now refuses a
+    placeholder with a second patch. The other leftover patches of
+    converted names were checked one by one; all belong to jumps that are
+    still raw.
+  - Dead placeholder variables removed.
+  Remaining EmitB($ lines: ir_codegen 389, symtab 182.
+- batch 7 (2026-11-11):
+  - EmitPromoInline, EmitVarGetItemInline, EmitListAtInline: 18 jcc rel8
+    placeholders collected in a `slow[]` patch list become `jcc short slow`,
+    one asm scope per routine, `slow:` after the `jmp done`. (Each routine's
+    `jmp done` rel8 is patched by its caller, so it stays raw.)
+  - IR_LOAD_MEM / IR_STORE_MEM: 12 sites built the ModRM by hand
+    (EmitRaxMemModRM, now removed) and are `[rax+%]` with the folded field
+    offset; the assembler picks the same none/disp8/disp32 width.
+  - EmitSetccFloat's four setcc/and/or triples; three `cqo; idiv rcx`.
+  - `rep movsb` / `rep stosb`: ir_codegen 15, symtab 6, pasparser_lval 4.
+  - imm64 moves (`48 B8+r EmitI64`) as `movabs r64, %`: ir_codegen 3,
+    symtab 16, emit 3. `movabs` because plain `mov` would shrink a small
+    hole value to imm32.
+  - four `lock xadd` / `lock cmpxchg` (ATOMIC_ADD/CAS, 32 and 64 bit).
+  - symtab: 20 `[@glob]` loads, stores and compares (movsx/movzx/movsxd
+    included).
+  - MXCSR: ir_codegen's rounding-mode get/set (3 plus the split
+    `and ecx, ~0x1F80`) and cparser's x86-64 fenv stubs (3). The stubs are
+    not in the compiler's own code, so c_fesetround_rounds_or_refuses and
+    lib_rounding_contract were compared A/B: byte-identical, both pass.
+  Every new encoder form was checked against GNU as at every displacement
+  width. The fixedpoint converged in one round after each step, which means
+  the old and the new emitter produced the same compiler. Sampled A/B
+  (every 8th Pascal test plus all test_nilpy_*.py, default -O2): 356 SAME,
+  0 DIFF.
+  Remaining EmitB($ lines: ir_codegen 325, symtab 140, cparser 88, emit 58,
+  pasparser_lval 13. Most of cparser's and much of symtab's are i386.
 
 ## Compile-time cost, and the whole-call memo
 
@@ -104,6 +188,22 @@ The remaining +2.4% is the open-array constructor: each `[...]` argument is
 heap-built and released per call
 (backlog-core/perf-an-open-array-constructor-argument-is-heap-built-per-call.md).
 Fixing that removes it and also speeds up user programs that call Format.
+
+**Resolved: the remaining cost was the exit sweep.** Each `[...]` site owns a
+hidden dyn-array temp, and every exit released all of them, nil or not.
+IREmitNode made 18.8 M release calls on one compile. A nil slot now skips the
+release (done/perf-x86-64-scope-exit-releases-every-nil-dyn-array-temp.md).
+After that fix the compiler with batches 22+23 runs 2.294 G instructions on
+lib_charset, 8% BELOW the pre-conversion compiler (2.494 G).
+
+**Batch 23 follow-up: the memo now keys on the literal's address.** The
+probe cost ~1000 instructions per call (58,867 calls on lib_charset), mostly
+two per-character loops: hashing the line text and comparing it on a hit. An
+immortal string literal (`PInt64(p-16)^ >= $20000000`, the same test
+pylib's PyAttrLkStaticH uses) is now keyed by its address; anything else
+keeps the text key. EmitAsmX64 carries the probe's pointer to the store
+itself, because the stored `line` may be a copy. lib_charset: 2.417 G ->
+2.376 G; the compiler it builds is byte-identical.
 
 **Before converting another hot path, profile it.** The compiler binary has no
 symbols. Symbolize callgrind addresses with the `.map` file written beside the

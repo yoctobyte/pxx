@@ -207,13 +207,14 @@ int main(void)
   /* 9: nice. THE RELATION, not the value: whatever the process starts at, one
      more is one more. Printed as a boolean so the row carries no per-machine
      constant, and nice(0) is checked to return the same value twice so a
-     nice() that always answered 0 could not pass. */
+     nice() that always answered 0 could not pass. Niceness stops at 19: a run
+     that starts there (a runner under `nice -n 19') stays there. */
   {
     int base, again, up;
     errno = 0; base  = nice(0);
     errno = 0; again = nice(0);
     errno = 0; up    = nice(1);
-    printf("9 %d %d\n", base == again, up == base + 1);
+    printf("9 %d %d\n", base == again, up == (base < 19 ? base + 1 : 19));
   }
 
   /* 10: pause. It has no success return -- it comes back only when a handled

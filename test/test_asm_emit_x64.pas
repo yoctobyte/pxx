@@ -303,6 +303,31 @@ begin
   AssertBytes('mov rax,[rdi+r9*8]', [$4A,$8B,$04,$CF]);
   ResetCode; EmitAsmX64(['lea rax, [rdi+r9*8]']);
   AssertBytes('lea rax,[rdi+r9*8]', [$4A,$8D,$04,$CF]);
+  { %xmm register holes (and movaps): the hole carries the full register
+    number 0..15; the assembler derives REX.R/REX.B. Bytes from GNU as. }
+  ResetCode; EmitAsmX64(['movaps xmm9, xmm2']);
+  AssertBytes('movaps xmm9,xmm2', [$44,$0F,$28,$CA]);
+  ResetCode; EmitAsmX64(['movaps %xmm, %xmm', 9, 2]);
+  AssertBytes('movaps %xmm9,%xmm2', [$44,$0F,$28,$CA]);
+  ResetCode; EmitAsmX64(['movsd [rbp+%], %xmm', -8, 10]);
+  AssertBytes('movsd [rbp-8],%xmm10', [$F2,$44,$0F,$11,$55,$F8]);
+  ResetCode; EmitAsmX64(['cvtsi2sd %xmm, %r64', 3, 9]);
+  AssertBytes('cvtsi2sd %xmm3,%r9', [$F2,$49,$0F,$2A,$D9]);
+  ResetCode; EmitAsmX64(['movq %xmm, rax', 5]);
+  AssertBytes('movq %xmm5,rax', [$66,$48,$0F,$6E,$E8]);
+  ResetCode; EmitAsmX64(['addsd %xmm, %xmm', 1, 12]);
+  AssertBytes('addsd %xmm1,%xmm12', [$F2,$41,$0F,$58,$CC]);
+  ResetCode; EmitAsmX64(['movsd %xmm, [rbp+%]', 11, 16]);
+  AssertBytes('movsd %xmm11,[rbp+16]', [$F2,$44,$0F,$10,$5D,$10]);
+  { cdqe, bit test with an immediate, movd GP<->xmm (bytes from GNU as) }
+  ResetCode; EmitAsmX64(['cdqe']);           AssertBytes('cdqe', [$48,$98]);
+  ResetCode; EmitAsmX64(['bt rax, 63']);     AssertBytes('bt rax,63', [$48,$0F,$BA,$E0,$3F]);
+  ResetCode; EmitAsmX64(['btr rax, 63']);    AssertBytes('btr rax,63', [$48,$0F,$BA,$F0,$3F]);
+  ResetCode; EmitAsmX64(['bts r9, 3']);      AssertBytes('bts r9,3', [$49,$0F,$BA,$E9,$03]);
+  ResetCode; EmitAsmX64(['btc ecx, 5']);     AssertBytes('btc ecx,5', [$0F,$BA,$F9,$05]);
+  ResetCode; EmitAsmX64(['movd ecx, xmm1']); AssertBytes('movd ecx,xmm1', [$66,$0F,$7E,$C9]);
+  ResetCode; EmitAsmX64(['movd xmm2, eax']); AssertBytes('movd xmm2,eax', [$66,$0F,$6E,$D0]);
+  ResetCode; EmitAsmX64(['movd r9d, xmm10']); AssertBytes('movd r9d,xmm10', [$66,$45,$0F,$7E,$D1]);
   { push / pop a memory operand (FF /6, 8F /0). }
   ResetCode; EmitAsmX64(['push [rax]']);
   AssertBytes('push [rax]', [$FF,$30]);
@@ -369,6 +394,24 @@ begin
   ResetCode; EmitAsmX64(['lock xchg [@glob], eax', 4096]);
   AssertBytes('lock xchg [@glob],eax', [$F0,$87,$04,$25,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('lock-xchg glob reloc failed');
+
+  { --- batch 7: movd mem, xadd/cmpxchg, absolute movzx/movsx/movsxd (bytes from GNU as) --- }
+  ResetCode; EmitAsmX64(['movd xmm0, [rax+%]', 8]); AssertBytes('movd xmm0,[rax+8]', [$66,$0F,$6E,$40,$08]);
+  ResetCode; EmitAsmX64(['movd xmm0, [rax+%]', 128]); AssertBytes('movd xmm0,[rax+128]', [$66,$0F,$6E,$80,$80,$00,$00,$00]);
+  ResetCode; EmitAsmX64('movd [rax], xmm1'); AssertBytes('movd [rax],xmm1', [$66,$0F,$7E,$08]);
+  ResetCode; EmitAsmX64('lock xadd [rcx], eax'); AssertBytes('lock xadd [rcx],eax', [$F0,$0F,$C1,$01]);
+  ResetCode; EmitAsmX64('lock cmpxchg [rcx], rdx'); AssertBytes('lock cmpxchg [rcx],rdx', [$F0,$48,$0F,$B1,$11]);
+  ResetCode; EmitAsmX64('lock xadd [r12+8], r11d'); AssertBytes('lock xadd [r12+8],r11d', [$F0,$45,$0F,$C1,$5C,$24,$08]);
+  ResetCode; EmitAsmX64('cmpxchg r9, r10'); AssertBytes('cmpxchg r9,r10', [$4D,$0F,$B1,$D1]);
+  ResetCode; EmitAsmX64(['movzx r9, byte [@glob]', 64]);
+  AssertBytes('movzx r9,byte[@glob]', [$4C,$0F,$B6,$0C,$25,$00,$00,$00,$00]);
+  if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 64) then Error('movzx glob reloc failed');
+  ResetCode; EmitAsmX64(['movsx rax, word [@glob]', 64]); AssertBytes('movsx rax,word[@glob]', [$48,$0F,$BF,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['movsxd r11, dword [@glob]', 64]); AssertBytes('movsxd r11,dword[@glob]', [$4C,$63,$1C,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64('stmxcsr [rsp-8]'); AssertBytes('stmxcsr [rsp-8]', [$0F,$AE,$5C,$24,$F8]);
+  ResetCode; EmitAsmX64('ldmxcsr [rax+200]'); AssertBytes('ldmxcsr [rax+200]', [$0F,$AE,$90,$C8,$00,$00,$00]);
+  ResetCode; EmitAsmX64('stmxcsr [r12]'); AssertBytes('stmxcsr [r12]', [$41,$0F,$AE,$1C,$24]);
+  ResetCode; EmitAsmX64(['movabs rcx, %', Int64(10)]); AssertBytes('movabs rcx,10', [$48,$B9,$0A,$00,$00,$00,$00,$00,$00,$00]);
   ResetCode; EmitAsmX64(['mov dword [@glob], 0', 4096]);
   AssertBytes('mov dword [@glob],0', [$C7,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('mov-abs glob reloc failed');

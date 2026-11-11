@@ -4967,7 +4967,7 @@ begin
   EmitAsmX64([
     'push rdi',
     'shl rax, 3']);
-  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  EmitAsmX64(['mov rcx, [@glob]', BSS_INITIAL_RSP]);
   EmitAsmX64([
     'add rcx, 8',
     'add rax, rcx',
@@ -4985,7 +4985,7 @@ begin
     'pop rdi',
     'mov [rdi], rcx',
     'add rdi, 8']);
-  EmitB($F3); EmitB($A4);                           { rep movsb }
+  EmitAsmX64(['rep movsb']);
 end;
 
 procedure CompileLValueAddressInternal(idx: Integer; var tk: TTypeKind; var recName: Integer);
@@ -5001,7 +5001,7 @@ begin
     if Syms[idx].TypeKind = tyClass then
     begin
       { Global class pointer: load value from BSS variable }
-      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      EmitAsmX64(['mov rax, [@glob]', Syms[idx].Offset]);
     end
     else
     begin
@@ -5015,7 +5015,7 @@ begin
        (Syms[idx].IsRef or Syms[idx].IsArray or TypeIsFrozenString(Syms[idx].TypeKind)) then
     begin
       { param slot holds pointer P; address of string/array struct = P }
-      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
+      EmitAsmX64(['mov rax, [rbp+%]', Syms[idx].Offset]); { = P }
     end
     else
     begin
@@ -5215,7 +5215,7 @@ begin
             EmitAsmX64([
               'mov rcx, rax',
               'add rsi, 8']);
-            EmitB($F3); EmitB($A4); { rep movsb }
+            EmitAsmX64(['rep movsb']);
           end;
         end
         else Error('string assignment: literal or string LValue required');
@@ -5241,10 +5241,10 @@ begin
         EmitAsmX64(['pop rdi']); { -- LHS address }
         EmitB($48); EmitB($C7); EmitB($C0); EmitI32(Strs[si].Len);
         EmitB($48); EmitB($89); EmitB($07);
-        EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+        EmitAsmX64(['mov rsi, @data', Strs[si].Offset + 8]);
         EmitB($48); EmitB($89); EmitB($C1);
         EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
-        EmitB($F3); EmitB($A4);
+        EmitAsmX64(['rep movsb']);
       end
       else if (CurTok.Kind = tkIdent) and
               (CaseEqual(CurTok.SVal, 'ParamStr') or CaseEqual(CurTok.SVal, 'ArgStr')) and
@@ -5276,7 +5276,7 @@ begin
           'mov rcx, rax',
           'add rsi, 8',
           'add rdi, 8']);
-        EmitB($F3); EmitB($A4);
+        EmitAsmX64(['rep movsb']);
       end;
     end
     else

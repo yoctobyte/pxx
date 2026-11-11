@@ -492,11 +492,11 @@ begin
   while (k < 32) and ((1 shl k) < es) do Inc(k);
   if (1 shl k) = es then
   begin
-    EmitB($48); EmitB($C1); EmitB($E0 + reg); EmitB(k);        { shl reg, k }
+    EmitAsmX64(['shl %r64, %', reg, k]);
   end
   else
   begin
-    EmitB($48); EmitB($69); EmitB($C0 + reg * 9); EmitI32(es); { imul reg, reg, es }
+    EmitAsmX64(['imul %r64, %r64, %', reg, reg, es]);
   end;
 end;
 
@@ -3909,14 +3909,14 @@ begin
   end;
   { x86-64: save rsp then jmp to main body.
     mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  EmitAsmX64(['mov [@glob], rsp', BSS_INITIAL_RSP]);
   if withHeapArena then
   begin
     EmitMmapArena(HEAP_ARENA_SIZE);                            { -> rax = base }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    EmitAsmX64(['mov [@glob], rax', BSS_HEAP_PTR]);
     EmitB($48); EmitB($89); EmitB($C2);                        { mov rdx, rax }
     EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
-    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+    EmitAsmX64(['mov [@glob], rdx', BSS_HEAP_END]);
   end;
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 end;
@@ -4413,8 +4413,8 @@ procedure EmitHeapLockStubs;
   turn the heap magazine OFF, so under either instrument EVERY allocation takes
   this lock and pays the identity check. That is a measurement-speed cost, not a
   shipped one. }
-var jePatch, jzPatch, callStart, unlockJnzPatch: Integer;
-    asyncPatch, syncLoPatch, syncHiPatch, bumpPatch: Integer;
+var jePatch, callStart: Integer;
+    asyncPatch, bumpPatch: Integer;
 begin
   if HeapLockAddr <> 0 then Exit;
   if not ThreadSafeMode then Exit;
@@ -4560,13 +4560,14 @@ begin
     if BSS_SIG_ALTSS <> BSS_SIG_ALTSTK + SIG_ALTSTACK_SIZE then
       Error('compiler error: the heap lock reads BSS_SIG_ALTSS as the sigaltstack upper bound, so EnsureSignalBss must keep it immediately after BSS_SIG_ALTSTK');
     EmitAsmX64(['mov rcx, rsp', 'mov rax, @glob', BSS_SIG_ALTSTK, 'cmp rcx, rax']);
-    EmitB($72); syncLoPatch := CodeLen; EmitB(0);    { jb  -> .sync, below the alt stack }
+    AsmScopeBegin;
+    EmitAsmX64(['jb short sync']);    { jb  -> .sync, below the alt stack }
     EmitAsmX64(['mov rax, @glob', BSS_SIG_ALTSS, 'cmp rcx, rax']);
-    EmitB($73); syncHiPatch := CodeLen; EmitB(0);    { jae -> .sync, above it }
+    EmitAsmX64(['jae short sync']);    { jae -> .sync, above it }
     { fallthrough: rsp is INSIDE the alt stack -- a handler. Refuse the grant. }
     EmitB($EB); asyncPatch := CodeLen; EmitB(0);     { jmp -> .acquire }
-    PatchRel8(syncLoPatch);
-    PatchRel8(syncHiPatch);
+    EmitAsmX64(['sync:']);
+    AsmScopeEnd;
   end;
   { .sync -- a genuine synchronous re-entry: bump the depth and return WITHOUT
     touching the lock word. }
@@ -4584,12 +4585,14 @@ begin
     'lock xchg [@glob], eax', BSS_HEAP_LOCK,
     'test eax, eax'
   ]);
-  EmitB($74); jzPatch := CodeLen; EmitB(0);          { jz over the call }
+  AsmScopeBegin;
+  EmitAsmX64(['jz short over']);          { jz over the call }
   callStart := CodeLen;
   IREmitCodeCall(HeapLockSlowAddr);
   if CodeLen - callStart <> 5 then
     Error('compiler error: the heap-lock slow-path call must be exactly 5 bytes');
-  PatchRel8(jzPatch);
+  EmitAsmX64(['over:']);
+  AsmScopeEnd;
   { We hold it now, so we are the owner. Depth is 0 here — the releaser zeroed
     it — and the bump below makes it 1. }
   EmitAsmX64(['mov [@glob], rsi', BSS_HEAP_OWNER]);
@@ -4603,7 +4606,8 @@ begin
 
   HeapUnlockAddr := CodeLen;
   EmitAsmX64(['push rcx', 'dec qword [@glob]', BSS_HEAP_DEPTH]);
-  EmitB($75); unlockJnzPatch := CodeLen; EmitB(0);   { jnz -> still nested }
+  AsmScopeBegin;
+  EmitAsmX64(['jnz short nested']);   { jnz -> still nested }
   { Outermost release. Owner first, then the lock word: a thread that observes
     the lock free must not then read a stale owner and believe it holds it. }
   EmitAsmX64([
@@ -4611,7 +4615,8 @@ begin
     'mov [@glob], rcx', BSS_HEAP_OWNER,
     'mov dword [@glob], 0', BSS_HEAP_LOCK
   ]);
-  PatchRel8(unlockJnzPatch);
+  EmitAsmX64(['nested:']);
+  AsmScopeEnd;
   EmitAsmX64(['pop rcx', 'ret']);
 end;
 
@@ -5123,21 +5128,14 @@ end;
   these two agree by construction rather than by coincidence. }
 procedure EmitCmpLeftReg(lreg, rreg: Integer);
 begin
-  EmitB($48 or (Ord(lreg <> 0) shl 2) or Ord(rreg <> 0));
-  EmitB($3B);
-  if lreg = 0 then EmitB($C0 or (rreg - 8))
-  else if rreg = 0 then EmitB($C1 or ((lreg - 8) shl 3))
-  else EmitB($C0 or ((lreg - 8) shl 3) or (rreg - 8));
+  EmitAsmX64(['cmp %r64, %r64', lreg, rreg]);
 end;
 
 { `cmp <left>, [rbp+off]` — mod=10 rm=101 is rbp+disp32, so the ModRM base is $85
   and the left register rides the reg field exactly as above. }
 procedure EmitCmpLeftMemRbp(lreg, off: Integer);
 begin
-  if lreg = 0 then EmitB($48) else EmitB($4C);
-  EmitB($3B);
-  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
-  EmitI32(off);
+  EmitAsmX64(['cmp %r64, [rbp+%]', lreg, off]);
 end;
 
 { `cmp <left32>, DWORD PTR [rbp+off]` -- opcode 3B with NO REX.W, so the compare
@@ -5147,10 +5145,7 @@ end;
   point -- dropping W is what makes the operand width 32. }
 procedure EmitCmpLeftMemRbp32(lreg, off: Integer);
 begin
-  if lreg <> 0 then EmitB($44);
-  EmitB($3B);
-  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
-  EmitI32(off);
+  EmitAsmX64(['cmp %r32, [rbp+%]', lreg, off]);
 end;
 
 { -O3 W1 slice 10: does the shift arm OPEN with a `cdqe` on the left operand?
@@ -5231,17 +5226,13 @@ end;
   no REX.W, which is the point. }
 procedure EmitMovEaxRegD(reg: Integer);
 begin
-  if reg >= 8 then EmitB($44);
-  EmitB($89);
-  EmitB($C0 or ((reg and 7) shl 3));
+  EmitAsmX64(['mov eax, %r32', reg]);
 end;
 
 { movsxd rax, rNd -- REX.W[+B] 63 /r with mod=11, reg=000 (rax), rm=N. }
 procedure EmitMovsxdRaxReg(reg: Integer);
 begin
-  if reg >= 8 then EmitB($49) else EmitB($48);
-  EmitB($63);
-  EmitB($C0 or (reg and 7));
+  EmitAsmX64(['movsxd rax, %r32', reg]);
 end;
 
 function CmpFusible(node: Integer): Boolean;
@@ -5310,68 +5301,63 @@ end;
   Off under -dPXX_OBJTRACE and -dPXX_HEAP_DEBUG, whose instrumentation lives in
   the Pascal routines, and when builtinheap's bounds cannot be found. }
 procedure EmitObjRefFastPath(isRelease: Boolean);
-var pDone, pDone2, pSlow1, pSlow2, pSlow3, pLive, pHit1, pHit2, pHit3: Integer;
 begin
   if PasDefineExists('PXX_OBJTRACE') or PasDefineExists('PXX_HEAP_DEBUG') then Exit;
   if ObjFastN > High(ObjFastStart) then Exit;
   ObjFastStart[ObjFastN] := CodeLen;
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pDone := CodeLen; EmitB(0);          { jz done }
+  AsmScopeBegin;
+  EmitAsmX64(['jz short done']);
   EmitAsmX64(['test al, 7']);
-  EmitB($75); pDone2 := CodeLen; EmitB(0);         { jnz done }
+  EmitAsmX64(['jnz short done']);
   { HeapHigh and HeapLow: placeholder offsets, see PatchObjRefFastPaths }
   EmitAsmX64(['cmp rax, [@glob]', 0]);
   ObjFastFixIdx[ObjFastFixN] := GlobFixCount - 1;
   ObjFastFixIsHi[ObjFastFixN] := True;
   Inc(ObjFastFixN);
-  EmitB($7D); pSlow1 := CodeLen; EmitB(0);         { jge slow }
+  EmitAsmX64(['jge short slow']);
   EmitAsmX64(['lea rax, [rax-24]']);
   EmitAsmX64(['cmp rax, [@glob]', 0]);
   ObjFastFixIdx[ObjFastFixN] := GlobFixCount - 1;
   ObjFastFixIsHi[ObjFastFixN] := False;
   Inc(ObjFastFixN);
   EmitAsmX64(['lea rax, [rax+24]']);               { lea leaves the flags }
-  EmitB($7C); pSlow2 := CodeLen; EmitB(0);         { jl slow }
+  EmitAsmX64(['jl short slow']);
   { All four magics: PXXObjRetain increments each of them the same way, and a
     release that does not reach zero is the same decrement. RAW/RAW2/DONE
     differ only in what PXXObjRelease's finaliser does at zero, which stays on
     the slow path. Measured on lekkerzeilen, where the slow path was the hottest
     stub bucket. }
   EmitAsmX64(['cmp qword [rax-8], 0x505942F1']);  { PXX_OBJ_MAGIC }
-  EmitB($74); pHit1 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['jz short hit']);
   EmitAsmX64(['cmp qword [rax-8], 0x505942F9']);  { PXX_OBJ_MAGIC_RAW }
-  EmitB($74); pHit2 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['jz short hit']);
   EmitAsmX64(['cmp qword [rax-8], 0x505942E1']);  { PXX_OBJ_MAGIC_RAW2 }
-  EmitB($74); pHit3 := CodeLen; EmitB(0);          { je hit }
+  EmitAsmX64(['jz short hit']);
   EmitAsmX64(['cmp qword [rax-8], 0x505942D1']);  { PXX_OBJ_MAGIC_DONE }
-  EmitB($75); pSlow3 := CodeLen; EmitB(0);         { jne slow }
-  PatchRel8(pHit1);
-  PatchRel8(pHit2);
-  PatchRel8(pHit3);
+  EmitAsmX64(['jnz short slow']);
+  EmitAsmX64(['hit:']);
   if not isRelease then
   begin
     if ThreadSafeMode then EmitAsmX64(['lock inc qword [rax-16]'])
     else EmitAsmX64(['inc qword [rax-16]']);
-    PatchRel8(pDone);
-    PatchRel8(pDone2);
+    EmitAsmX64(['done:']);   { one arm or the other defines it }
     EmitAsmX64(['ret']);
   end
   else
   begin
     if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
     else EmitAsmX64(['dec qword [rax-16]']);
-    EmitB($74); pLive := CodeLen; EmitB(0);        { jz last }
-    PatchRel8(pDone);
-    PatchRel8(pDone2);
-    EmitB($C3);                                    { ret: still live }
-    PatchRel8(pLive);
+    EmitAsmX64(['jz short last']);
+    EmitAsmX64(['done:']);   { one arm or the other defines it }
+    EmitAsmX64(['ret']); { ret: still live }
+    EmitAsmX64(['last:']);
     { the last reference: undo, and let PXXObjRelease finalise and free }
     if ThreadSafeMode then EmitAsmX64(['lock inc qword [rax-16]'])
     else EmitAsmX64(['inc qword [rax-16]']);
   end;
-  PatchRel8(pSlow1);
-  PatchRel8(pSlow2);
-  PatchRel8(pSlow3);
+  EmitAsmX64(['slow:']);
+  AsmScopeEnd;
   ObjFastSlow[ObjFastN] := CodeLen;
   Inc(ObjFastN);
 end;
@@ -6300,7 +6286,7 @@ begin
     EmitAsmX64(['xor eax, eax'])
   else
   begin
-    EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset + 8);   { the handle: Offset is the length prefix, data follows }
+    EmitAsmX64(['mov rax, @data', Strs[si].Offset + 8]);   { the handle: Offset is the length prefix, data follows }
     { NO RETAIN, since 2026-08-31 — the same shape aarch64 has had since
       2026-08-30, and for the same reason. This used to emit `inc qword
       [rax-16]` to compensate for the release blob's UNGUARDED `dec`: handing
@@ -6413,7 +6399,7 @@ begin
     bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode. }
   rhsTk := IRStrTkOf(rhs);
   IREmitNode(rhs);
-  EmitB($50);                                       { push rhs value }
+  EmitAsmX64(['push rax']); { push rhs value }
   if rhsTk = tyAnsiString then
   begin
     EmitAsmX64([
@@ -6445,9 +6431,9 @@ begin
       'mov edx, 1']);
   end;
   if Syms[symIdx].Kind = skGlobal then
-    begin EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+    begin EmitAsmX64(['lea rdi, [@glob]', Syms[symIdx].Offset]); end
   else
-    begin EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[symIdx].Offset); end;
+    begin EmitAsmX64(['lea rdi, [rbp+%]', Syms[symIdx].Offset]); end;
   IREmitCodeCall(AnsiStrAppendAddr);
   EmitAsmX64(['pop rcx']); { — drop the rhs }
 end;
@@ -6522,23 +6508,21 @@ begin
   AsmScopeBegin;
   if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
   begin
-    EmitB($48); EmitB($85); EmitB($C0 or (reg shl 3) or reg);  { test reg, reg }
-    EmitAsmX64(['jns short small']);
-    EmitB($49); EmitB($89); EmitB($C3 or (reg shl 3));         { mov r11, reg }
-    EmitAsmX64(['and r11, 1']);
-    EmitB($48); EmitB($D1); EmitB($E8 or reg);                 { shr reg, 1 }
-    EmitB($4C); EmitB($09); EmitB($D8 or reg);                 { or reg, r11 }
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
-    EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0 or (xmm shl 3) or xmm);             { addsd xmm, xmm }
-    EmitAsmX64(['jmp short done']);
-    EmitAsmX64(['small:']);                  { small: }
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
-    EmitAsmX64(['done:']);                { done: }
+    EmitAsmX64(['test %r64, %r64', reg, reg,
+                'jns short small',
+                'mov r11, %r64', reg,
+                'and r11, 1',
+                'shr %r64, 1', reg,
+                'or %r64, r11', reg,
+                'cvtsi2sd %xmm, %r64', xmm, reg,
+                'addsd %xmm, %xmm', xmm, xmm,
+                'jmp short done',
+                'small:',
+                'cvtsi2sd %xmm, %r64', xmm, reg,
+                'done:']);
   end
   else
-  begin
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd xmm, reg }
-  end;
+    EmitAsmX64(['cvtsi2sd %xmm, %r64', xmm, reg]);
   AsmScopeEnd;
 end;
 
@@ -6667,7 +6651,7 @@ end;
 procedure EmitF2ISaturateX64;
 begin
   AsmScopeBegin;
-  EmitB($48); EmitB($BA); EmitI64(Int64($8000000000000000));  { mov rdx, INT64_MIN }
+  EmitAsmX64(['mov rdx, %', Int64($8000000000000000)]);  { INT64_MIN }
   EmitAsmX64(['cmp rax, rdx']);
   EmitAsmX64(['jnz short done']);
   EmitAsmX64([
@@ -6677,9 +6661,9 @@ begin
   EmitAsmX64([
     'xorpd xmm1, xmm1',
     'comisd xmm0, xmm1']);
-  EmitB($48); EmitB($B8); EmitI64(Int64($7FFFFFFFFFFFFFFF));  { mov rax, INT64_MAX }
+  EmitAsmX64(['mov rax, %', Int64($7FFFFFFFFFFFFFFF)]);  { INT64_MAX }
   EmitAsmX64(['ja short done']);                   { ja .done  (source > 0) }
-  EmitB($48); EmitB($B8); EmitI64(Int64($8000000000000000));  { mov rax, INT64_MIN }
+  EmitAsmX64(['mov rax, %', Int64($8000000000000000)]);  { INT64_MIN }
   EmitAsmX64(['done:']);
   AsmScopeEnd;
 end;
@@ -6787,12 +6771,12 @@ begin
   EmitAsmX64(['pBool:']);
   EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]', 'test rax, rax']);
   EmitAsmX64(['jz pBoolF']);  { jz -> False }
-  EmitB($48); EmitB($BE); EmitDataRef(trueOff);           { mov rsi, &'True' }
+  EmitAsmX64(['mov rsi, @data', trueOff]);           { mov rsi, &'True' }
   EmitAsmX64(['mov rdx, 4']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   EmitB($E9); pEnd4 := CodeLen; EmitI32(0);
   EmitAsmX64(['pBoolF:']);
-  EmitB($48); EmitB($BE); EmitDataRef(falseOff);          { mov rsi, &'False' }
+  EmitAsmX64(['mov rsi, @data', falseOff]);          { mov rsi, &'False' }
   EmitAsmX64(['mov rdx, 5']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   Patch32(pEnd4, CodeLen - (pEnd4 + 4));
@@ -6843,7 +6827,7 @@ begin
     Data[DataLen] := Ord('o'); Inc(DataLen);
     Data[DataLen] := Ord('n'); Inc(DataLen);
     Data[DataLen] := Ord('e'); Inc(DataLen);
-    EmitB($48); EmitB($BE); EmitDataRef(noneOff);
+    EmitAsmX64(['mov rsi, @data', noneOff]);
     EmitAsmX64(['mov rdx, 4']);
     MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   end;
@@ -6863,7 +6847,7 @@ begin
   Data[DataLen] := Ord('t'); Inc(DataLen);
   Data[DataLen] := Ord('>'); Inc(DataLen);
   EmitAsmX64(['pObj:']);
-  EmitB($48); EmitB($BE); EmitDataRef(objOff);
+  EmitAsmX64(['mov rsi, @data', objOff]);
   EmitAsmX64(['mov rdx, 8']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
@@ -6908,20 +6892,21 @@ procedure EmitSetccFloat(opTk: Integer);
   unsigned setcc reads only ZF/CF: sete/setb/setbe -> 1, setne -> 0 on NaN. Fold
   in PF (parity=unordered) for ==,!=,<,<=; seta/setae (Gt/Ge, CF=0) are already 0
   on unordered. cl is a free scratch at both float callers (i386 float binop,
-  Variant double compare). Raw bytes are identical in 32- and 64-bit (no REX). }
+  Variant double compare). No form here takes a REX, so the bytes are the
+  same in 32- and 64-bit code. }
 begin
   if opTk = Ord(tkEq) then
-    begin EmitB($0F);EmitB($94);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { sete al; setnp cl; and al,cl }
+    EmitAsmX64(['sete al', 'setnp cl', 'and al, cl'])
   else if opTk = Ord(tkNeq) then
-    begin EmitB($0F);EmitB($95);EmitB($C0); EmitB($0F);EmitB($9A);EmitB($C1); EmitB($08);EmitB($C8); end { setne al; setp cl; or al,cl }
+    EmitAsmX64(['setne al', 'setp cl', 'or al, cl'])
   else if opTk = Ord(tkLt) then
-    begin EmitB($0F);EmitB($92);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { setb al; setnp cl; and al,cl }
+    EmitAsmX64(['setb al', 'setnp cl', 'and al, cl'])
   else if opTk = Ord(tkLe) then
-    begin EmitB($0F);EmitB($96);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { setbe al; setnp cl; and al,cl }
+    EmitAsmX64(['setbe al', 'setnp cl', 'and al, cl'])
   else if opTk = Ord(tkGt) then
-    begin EmitB($0F);EmitB($97);EmitB($C0); end { seta al }
+    begin EmitAsmX64(['seta al']); end
   else if opTk = Ord(tkGe) then
-    begin EmitB($0F);EmitB($93);EmitB($C0); end { setae al }
+    begin EmitAsmX64(['setae al']); end
   else Error('float compare: unsupported operator');
   EmitAsmX64(['movzx eax, al']);
 end;
@@ -6967,16 +6952,15 @@ procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
   isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
 var pForceDbl: Integer;
-    pIsStr1, pIsStr2, pIsStr3, pIsStr4, pNumericPath: Integer;
+    pIsStr1, pIsStr2, pNumericPath: Integer;
     pLeftStrOk, pNumericPath2, vcProc: Integer;
     pasPlus: Boolean;
-    pSkipCoerce: Integer;
     pNoneDone: Integer;
     pNullB, pNullDone: Integer;
     pDoneStr1, pDoneStr2, pDoneStr3: Integer;
 begin
   AsmScopeBegin;
-  pIsStr1 := -1; pIsStr2 := -1; pIsStr3 := -1; pIsStr4 := -1;
+  pIsStr1 := -1; pIsStr2 := -1;
   pNumericPath := -1;
   pLeftStrOk := -1; pNumericPath2 := -1;
   { Pascal's `+` concatenates only when BOTH operands are stringy; with one
@@ -7082,7 +7066,6 @@ begin
     PXXVarBinOpPas (the other five targets) carries the identical rule in Pascal.
     The two implementations have drifted once already; keep them in step.
     bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand }
-  pSkipCoerce := -1;
   if isCompare and (not PyProgramMode) then
   begin
     vcProc := FindProc('PXXVarNumCoerce');
@@ -7102,10 +7085,12 @@ begin
         'setbe cl',
         'movzx rcx, cl',
         'cmp rax, rcx']);
-      EmitB($0F); EmitB($84); pSkipCoerce := CodeLen; EmitI32(0);   { je L_no_coerce }
+      AsmScopeBegin;
+      EmitAsmX64(['jz l_no_coerce']);
       EmitVarNumCoercePair(vcProc);
       { L_no_coerce: }
-      Patch32(pSkipCoerce, CodeLen - (pSkipCoerce + 4));
+      EmitAsmX64(['l_no_coerce:']);
+      AsmScopeEnd;
     end;
   end;
 
@@ -7135,9 +7120,10 @@ begin
     EmitAsmX64([
       'mov rax, [rsi]',
       'cmp rax, %', VT_STRING]);
-    EmitB($0F); EmitB($84); pIsStr3 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    AsmScopeBegin;
+    EmitAsmX64(['jz l_is_str_op']);
     EmitAsmX64(['cmp rax, %', VT_CHAR]);
-    EmitB($0F); EmitB($84); pIsStr4 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    EmitAsmX64(['jz l_is_str_op']);
 
     { If we reach here, neither side is stringy -> go to numeric path }
     EmitB($E9); pNumericPath := CodeLen; EmitI32(0);          { jmp L_numeric_path }
@@ -7145,8 +7131,8 @@ begin
     { L_is_str_op }
     if pIsStr1 >= 0 then Patch32(pIsStr1, CodeLen - (pIsStr1 + 4));
     if pIsStr2 >= 0 then Patch32(pIsStr2, CodeLen - (pIsStr2 + 4));
-    Patch32(pIsStr3, CodeLen - (pIsStr3 + 4));
-    Patch32(pIsStr4, CodeLen - (pIsStr4 + 4));
+    EmitAsmX64(['l_is_str_op:']);
+    AsmScopeEnd;
 
     if isCompare then
     begin
@@ -7155,16 +7141,16 @@ begin
         'mov rax, [rdi]',
         'mov rcx, [rsi]']);
       
-      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);
+      EmitAsmX64(['cmp rax, %', VT_CHAR]);
       EmitAsmX64(['jz short pLhsOk']);
-      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);
+      EmitAsmX64(['cmp rax, %', VT_STRING]);
       EmitAsmX64(['jnz L_diff_tags']);
       
       { L_lhs_ok }
       EmitAsmX64(['pLhsOk:']);
-      EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_CHAR);
+      EmitAsmX64(['cmp rcx, %', VT_CHAR]);
       EmitAsmX64(['jz short pRhsOk']);
-      EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_STRING);
+      EmitAsmX64(['cmp rcx, %', VT_STRING]);
       EmitAsmX64(['jnz L_diff_tags']);
       
       { L_rhs_ok }
@@ -7388,7 +7374,7 @@ begin
     'cmp rax, %', VT_DOUBLE]);
   EmitAsmX64(['jz Ldouble']);
   EmitAsmX64(['mov rax,[rsi]']); { (rTag) }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitAsmX64(['cmp rax, %', VT_DOUBLE]);
   EmitAsmX64(['jz Ldouble']);
 
   { both integer-class }
@@ -7411,11 +7397,11 @@ begin
       bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
     if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
       EmitDivZeroCheckX64;
-    if      opTk = Ord(tkPlus)  then begin EmitB($48); EmitB($01); EmitB($C8); end             { add  rax,rcx }
-    else if opTk = Ord(tkMinus) then begin EmitB($48); EmitB($29); EmitB($C8); end             { sub  rax,rcx }
+    if      opTk = Ord(tkPlus)  then begin EmitAsmX64(['add rax, rcx']); end
+    else if opTk = Ord(tkMinus) then begin EmitAsmX64(['sub rax, rcx']); end
     else if opTk = Ord(tkStar)  then begin EmitAsmX64(['imul rax,rcx']); end
-    else if opTk = Ord(tkDiv)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end                       { cqo; idiv rcx -> quotient in rax }
-    else if opTk = Ord(tkMod)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); EmitB($48); EmitB($89); EmitB($D0); end  { cqo; idiv rcx; mov rax,rdx (remainder) }
+    else if opTk = Ord(tkDiv)   then begin EmitAsmX64(['cqo', 'idiv rcx']); end   { quotient in rax }
+    else if opTk = Ord(tkMod)   then begin EmitAsmX64(['cqo', 'idiv rcx', 'mov rax, rdx']); end   { the remainder }
     else if opTk = Ord(tkSlash) then { dead code: '/' is force-jumped to the double path above }
     { Bitwise ops on variant ints. Python leans on these for machine-word
       masking (`v & 0xFFFFFFFFFFFFFFFF` normalising a cell to 64 bits), and a
@@ -7428,10 +7414,10 @@ begin
       uses. A float operand never reaches here — it is diverted to the double
       path above, where a bitwise op is correctly rejected, as in Python.
       bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
-    else if opTk = Ord(tkAnd)   then begin EmitB($48); EmitB($21); EmitB($C8); end             { and  rax,rcx }
-    else if opTk = Ord(tkOr)    then begin EmitB($48); EmitB($09); EmitB($C8); end             { or   rax,rcx }
-    else if opTk = Ord(tkXor)   then begin EmitB($48); EmitB($31); EmitB($C8); end             { xor  rax,rcx }
-    else if opTk = Ord(tkShl)   then begin EmitB($48); EmitB($D3); EmitB($E0); end             { shl  rax,cl }
+    else if opTk = Ord(tkAnd)   then begin EmitAsmX64(['and rax, rcx']); end
+    else if opTk = Ord(tkOr)    then begin EmitAsmX64(['or rax, rcx']); end
+    else if opTk = Ord(tkXor)   then begin EmitAsmX64(['xor rax, rcx']); end
+    else if opTk = Ord(tkShl)   then begin EmitAsmX64(['shl rax, cl']); end
     else if opTk = Ord(tkShr)   then
     begin
       EmitB($48); EmitB($D3);
@@ -7450,20 +7436,20 @@ begin
   EmitAsmX64(['Ldouble:']);
   if pForceDbl >= 0 then Patch32(pForceDbl, CodeLen - (pForceDbl + 4));
   EmitAsmX64(['mov rax,[rdi]']);
-  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitAsmX64(['cmp rax, %', VT_DOUBLE]);
   EmitAsmX64(['jnz short Lli']);
   EmitAsmX64(['movsd xmm0,[rdi+8]']);
   EmitAsmX64(['jmp short Lldone']);
   EmitAsmX64(['Lli:']);
-  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($47); EmitB($08);{ cvtsi2sd xmm0,[rdi+8] }
+  EmitAsmX64(['cvtsi2sd xmm0, qword [rdi+8]']);
   EmitAsmX64(['Lldone:']);
   EmitAsmX64(['mov rax,[rsi]']);
-  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitAsmX64(['cmp rax, %', VT_DOUBLE]);
   EmitAsmX64(['jnz short Lri']);
   EmitAsmX64(['movsd xmm1,[rsi+8]']);
   EmitAsmX64(['jmp short pRd']);
   EmitAsmX64(['Lri:']);
-  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($4E); EmitB($08);{ cvtsi2sd xmm1,[rsi+8] }
+  EmitAsmX64(['cvtsi2sd xmm1, qword [rsi+8]']);
   EmitAsmX64(['pRd:']);
   if isCompare then
   begin
@@ -7509,11 +7495,11 @@ begin
     end
     else
     begin
-      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0);                { cvtsd2si  rax, xmm0 }
-      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C9);                { cvtsd2si  rcx, xmm1 }
+      EmitAsmX64(['cvtsd2si rax, xmm0']);
+      EmitAsmX64(['cvtsd2si rcx, xmm1']);
     end;
     if      opTk = Ord(tkAnd) then begin EmitAsmX64(['and rax,rcx']); end
-    else if opTk = Ord(tkOr)  then begin EmitB($48); EmitB($09); EmitB($C8); end { or  rax,rcx }
+    else if opTk = Ord(tkOr)  then begin EmitAsmX64(['or rax, rcx']); end
     else if opTk = Ord(tkXor) then begin EmitAsmX64(['xor rax,rcx']); end
     else if opTk = Ord(tkShl) then begin EmitAsmX64(['shl rax,cl']); end
     else if opTk = Ord(tkShr) then
@@ -7528,7 +7514,7 @@ begin
       what EmitDivZeroCheckX64 expects.
       bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
     EmitDivZeroCheckX64;
-    EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);                  { cqo; idiv rcx }
+    EmitAsmX64(['cqo', 'idiv rcx']);
     if opTk = Ord(tkMod) then begin EmitAsmX64(['mov rax,rdx']); end; { (remainder) }
     end;
     EmitAsmX64(['lea rdx,[@glob]', resultOff]);
@@ -7540,10 +7526,10 @@ begin
   end
   else
   begin
-    if      opTk = Ord(tkPlus)  then begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end   { addsd }
-    else if opTk = Ord(tkMinus) then begin EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1); end   { subsd }
-    else if opTk = Ord(tkStar)  then begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end   { mulsd }
-    else if opTk = Ord(tkSlash) then begin EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1); end   { divsd ('/' real division) }
+    if      opTk = Ord(tkPlus)  then begin EmitAsmX64(['addsd xmm0, xmm1']); end { addsd }
+    else if opTk = Ord(tkMinus) then begin EmitAsmX64(['subsd xmm0, xmm1']); end { subsd }
+    else if opTk = Ord(tkStar)  then begin EmitAsmX64(['mulsd xmm0, xmm1']); end { mulsd }
+    else if opTk = Ord(tkSlash) then begin EmitAsmX64(['divsd xmm0, xmm1']); end { divsd ('/' real division) }
     else Error('Variant arithmetic: unsupported operator');
     EmitAsmX64(['movq rax,xmm0']);
     EmitAsmX64(['lea rdx,[@glob]', resultOff]);
@@ -7670,19 +7656,14 @@ begin
     if rx = 0 then
       EmitFloatTree(IRB[node], dst + 1);  { right -> xmm<dst+1> }
     op := IntToTokenKind(IRC[node]);
-    EmitB($F2);
-    if rx <> 0 then EmitB($41);         { REX.B: the source is xmm8..13 }
-    EmitB($0F);
+    { the right operand: the resident register, else xmm<dst+1> }
+    if rx = 0 then rx := dst + 1;
     case op of
-      tkPlus:  EmitB($58);   { addsd }
-      tkMinus: EmitB($5C);   { subsd }
-      tkStar:  EmitB($59);   { mulsd }
-      tkSlash: EmitB($5E);   { divsd }
+      tkPlus:  EmitAsmX64(['addsd %xmm, %xmm', dst, rx]);
+      tkMinus: EmitAsmX64(['subsd %xmm, %xmm', dst, rx]);
+      tkStar:  EmitAsmX64(['mulsd %xmm, %xmm', dst, rx]);
+      tkSlash: EmitAsmX64(['divsd %xmm, %xmm', dst, rx]);
     end;
-    if rx <> 0 then
-      EmitB($C0 or (dst shl 3) or (rx - 8))   { op xmm<dst>, xmm<resident> }
-    else
-      EmitB($C0 or (dst shl 3) or (dst + 1)); { op xmm<dst>, xmm<dst+1> (= left OP right) }
     Exit;
   end;
 
@@ -7690,7 +7671,7 @@ begin
   rx := FloatResidentLeafXmm(node);
   if rx <> 0 then
   begin
-    EmitB($41); EmitB($0F); EmitB($28); EmitB($C0 or (dst shl 3) or (rx - 8)); { movaps xmm<dst>, xmm<resident> }
+    EmitAsmX64(['movaps %xmm, %xmm', dst, rx]);           { xmm<dst> := resident }
   end
   else if (IRKind[node] = IR_LOAD_SYM) and (not Syms[IRA[node]].IsArray) and
      TypeIsFloat(Syms[IRA[node]].TypeKind) and
@@ -7699,12 +7680,12 @@ begin
   begin
     idx := IRA[node];
     EmitLoadVar(idx);                                   { float sym -> xmm0 }
-    EmitB($0F); EmitB($28); EmitB($C0 or (dst shl 3));  { movaps xmm<dst>, xmm0 }
+    EmitAsmX64(['movaps %xmm, xmm0', dst]);
   end
   else if TypeIsFloat(IntToTypeKind(IRTk[node])) then
   begin
     IREmitNode(node);                                   { float value bits -> rax }
-    EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 or (dst shl 3)); { movq xmm<dst>, rax }
+    EmitAsmX64(['movq %xmm, rax', dst]);
   end
   else
   begin
@@ -7841,7 +7822,7 @@ end;
 
 procedure IREmitStrCmpReleaseOperands(left, right: Integer);
 begin
-  EmitB($50);                                                  { push cmp result }
+  EmitAsmX64(['push rax']); { push cmp result }
   if IRStrCmpOwnsOperand(left) then
   begin
     EmitAsmX64(['mov rax, [rsp+16]']);
@@ -7852,7 +7833,7 @@ begin
     EmitAsmX64(['mov rax, [rsp+8]']);
     IREmitCodeCall(AnsiStrReleaseAddr);
   end;
-  EmitB($58);                                                  { pop cmp result }
+  EmitAsmX64(['pop rax']); { pop cmp result }
   EmitAsmX64(['add rsp, 16']);
 end;
 
@@ -7973,7 +7954,7 @@ begin
   EmitAsmX64([
     'push rax',                            { (remaining) }
     'push rdx']);                          { (this chunk) }
-  EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);       { mov rsi, spaces }
+  EmitAsmX64(['mov rsi, @data', SpacesOffset]);       { mov rsi, spaces }
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   EmitAsmX64([
     'pop rdx',
@@ -8039,32 +8020,31 @@ end;
   -- and everything else calls. Returns the `jmp done` rel8 to patch after
   the call. }
 function EmitPromoInline(kind: Integer): Integer;
-var slow: array[0..3] of Integer; ns, k: Integer;
 begin
-  ns := 0;
+  AsmScopeBegin;
   if kind <= 3 then
   begin
     EmitAsmX64(['cmp qword [rsi], 0']);
-    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitAsmX64(['jne short slow']);
     EmitAsmX64(['cmp qword [rdi], 0']);
-    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitAsmX64(['jne short slow']);
     EmitAsmX64(['mov rax, [rsi+8]']);
     if kind = 1 then begin EmitAsmX64(['add rax, rdx']); end
     else if kind = 2 then begin EmitAsmX64(['sub rax, rdx']); end
     else begin EmitAsmX64(['imul rax, rdx']); end;
-    EmitB($70); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jo slow }
+    EmitAsmX64(['jo short slow']);
     EmitAsmX64(['mov [rdi+8], rax']);
   end
   else if kind = 4 then
   begin
     EmitAsmX64(['cmp qword [rdi], 0']);
-    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitAsmX64(['jne short slow']);
     EmitAsmX64(['mov [rdi+8], rsi']);
   end
   else if kind = 5 then
   begin
     EmitAsmX64(['cmp qword [rdi], 1']);
-    EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { je slow (HEAP) }
+    EmitAsmX64(['je short slow']); { (HEAP) }
     EmitAsmX64([
       'xor eax, eax',
       'mov [rdi], rax']);
@@ -8073,9 +8053,9 @@ begin
   else if kind = 7 then
   begin
     EmitAsmX64(['cmp qword [rsi], 0']);
-    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitAsmX64(['jne short slow']);
     EmitAsmX64(['cmp qword [rdi], 6']);
-    EmitB($73); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jae slow }
+    EmitAsmX64(['jae short slow']);
     EmitAsmX64(['mov rax, [rsi+8]']);
     EmitAsmX64(['mov qword [rdi], 2']);
     EmitAsmX64(['mov [rdi+8], rax']);
@@ -8083,11 +8063,12 @@ begin
   else
   begin
     EmitAsmX64(['cmp qword [rdi], 0']);
-    EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);  { jne slow }
+    EmitAsmX64(['jne short slow']);
     EmitAsmX64(['mov rax, [rdi+8]']);
   end;
   EmitB($EB); Result := CodeLen; EmitB(0);               { jmp done }
-  for k := 0 to ns - 1 do PatchRel8(slow[k]);
+  EmitAsmX64(['slow:']);
+  AsmScopeEnd;
 end;
 
 { pyvar_getitem's own fast path, inline at the call: rdi = &v, rsi = &key,
@@ -8100,7 +8081,7 @@ end;
   ~6% of TSP's profile for exactly this case. Returns the `jmp done` rel8 to
   patch after the call, or -1 when TPyList's layout cannot be read here. }
 function EmitVarGetItemInline: Integer;
-var ci, fLen, fItems: Integer; slow: array[0..7] of Integer; ns, k: Integer;
+var ci, fLen, fItems: Integer;
 begin
   Result := -1;
   ci := FindUClass('TPyList');
@@ -8110,32 +8091,32 @@ begin
   if (fLen < 0) or (fItems < 0) then Exit;
   if (UFldOff_[fLen] < 0) or (UFldOff_[fLen] > 127) or
      (UFldOff_[fItems] < 0) or (UFldOff_[fItems] > 127) then Exit;
-  ns := 0;
+  AsmScopeBegin;
   EmitAsmX64(['cmp qword [rdi], 7']);
-  EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jne slow }
+  EmitAsmX64(['jne short slow']);
   EmitAsmX64([
     'mov rax, [rsi]',
     'dec rax',
     'cmp rax, 1']);
-  EmitB($77); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { ja slow: tag not 1..2 }
+  EmitAsmX64(['ja short slow']); { tag not 1..2 }
   EmitAsmX64(['mov rcx, [rdi+8]']);
   EmitAsmX64(['test rcx, rcx']);
-  EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jz slow }
+  EmitAsmX64(['jz short slow']);
   EmitAsmX64(['mov rdx, [rcx]']); { -- the VMT }
-  EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[ci]);      { mov rax, TPyList's VMT }
+  EmitAsmX64(['mov rax, @data', UClsVMTOffset[ci]]);      { mov rax, TPyList's VMT }
   EmitAsmX64(['cmp rdx, rax']);
-  EmitB($75); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jne slow }
+  EmitAsmX64(['jne short slow']);
   EmitAsmX64([
     'mov rax, [rsi+8]',
     'movsxd rdx, dword [rcx+%]', Byte(UFldOff_[fLen])]);
   EmitAsmX64(['cmp rax, rdx']);
-  EmitB($73); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jae slow (negative too) }
+  EmitAsmX64(['jae short slow']); { (negative too) }
   EmitAsmX64(['shl rax, 4']);
   EmitAsmX64(['add rax, [rcx+%]', Byte(UFldOff_[fItems])]);
   EmitAsmX64(['cmp qword [rax], 4']);
-  EmitB($77); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { ja slow: element holds a reference }
+  EmitAsmX64(['ja short slow']); { element holds a reference }
   EmitAsmX64(['cmp qword [r10], 4']);
-  EmitB($77); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { ja slow: destination does }
+  EmitAsmX64(['ja short slow']); { destination does }
   EmitAsmX64([
     'mov rdx, [rax]',
     'mov [r10], rdx']);
@@ -8144,7 +8125,8 @@ begin
     'mov [r10+8], rdx']);
   EmitAsmX64(['mov rax, r10']);
   EmitB($EB); Result := CodeLen; EmitB(0);                     { jmp done }
-  for k := 0 to ns - 1 do PatchRel8(slow[k]);
+  EmitAsmX64(['slow:']);
+  AsmScopeEnd;
 end;
 
 { TPyList.at(i) -- what `xs[i]` on a list-typed name lowers to -- inline at
@@ -8155,7 +8137,7 @@ end;
   `at` is static, so a subclass instance runs this same body anyway.
   Returns the done-jump's rel8 position, or -1 when nothing was emitted. }
 function EmitListAtInline(procIdx: Integer): Integer;
-var ci, fLen, fItems: Integer; slow: array[0..3] of Integer; ns, k: Integer;
+var ci, fLen, fItems: Integer;
 begin
   Result := -1;
   if (procIdx < 0) or (Length(Procs[procIdx].Name) <> 10) or
@@ -8168,17 +8150,17 @@ begin
   if (fLen < 0) or (fItems < 0) then Exit;
   if (UFldOff_[fLen] < 0) or (UFldOff_[fLen] > 127) or
      (UFldOff_[fItems] < 0) or (UFldOff_[fItems] > 127) then Exit;
-  ns := 0;
+  AsmScopeBegin;
   EmitAsmX64(['test rdi, rdi']);
-  EmitB($74); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jz slow }
+  EmitAsmX64(['jz short slow']);
   EmitAsmX64(['movsxd rax, esi']);
   EmitAsmX64(['movsxd rdx, dword [rdi+%]', Byte(UFldOff_[fLen])]);
   EmitAsmX64(['cmp rax, rdx']);
-  EmitB($73); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { jae slow (negative too) }
+  EmitAsmX64(['jae short slow']); { (negative too) }
   EmitAsmX64(['shl rax, 4']);
   EmitAsmX64(['add rax, [rdi+%]', Byte(UFldOff_[fItems])]);
   EmitAsmX64(['cmp qword [rax], 4']);
-  EmitB($77); slow[ns] := CodeLen; EmitB(0); Inc(ns);          { ja slow: element holds a reference }
+  EmitAsmX64(['ja short slow']); { element holds a reference }
   EmitAsmX64([
     'mov rdx, [rax]',
     'mov [r10], rdx']);
@@ -8187,7 +8169,8 @@ begin
     'mov [r10+8], rdx']);
   EmitAsmX64(['mov rax, r10']);
   EmitB($EB); Result := CodeLen; EmitB(0);                     { jmp done }
-  for k := 0 to ns - 1 do PatchRel8(slow[k]);
+  EmitAsmX64(['slow:']);
+  AsmScopeEnd;
 end;
 
 { The four variant ORDERING helpers, float with float, inline: the SETcc
@@ -8208,36 +8191,18 @@ begin
   else if n = 'pyle_v' then Result := -$93;     { b >= a }
 end;
 
-{ The ModRM byte of a memory operand based on rax -- [rax], [rax+disp8] or
-  [rax+disp32] -- with `reg` in the register field. disp = 0 is the plain
-  [rax] every load and store used before IR_LOAD_MEM and IR_STORE_MEM folded
-  an IR_FIELD offset into it. }
-procedure EmitRaxMemModRM(reg, disp: Integer);
-begin
-  if disp = 0 then
-    EmitB(Byte(reg shl 3))
-  else if (disp >= -128) and (disp <= 127) then
-  begin
-    EmitB(Byte($40 or (reg shl 3))); EmitB(Byte(disp and $FF));
-  end
-  else
-  begin
-    EmitB(Byte($80 or (reg shl 3))); EmitI32(disp);
-  end;
-end;
-
 procedure IREmitNode(node: Integer);
-var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
+var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
     chrCmpPfx: Integer;     { length-prefix width of the frozen string in a Char<->String comparison }
     srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
     memFrozenTk: TTypeKind; { frozen kind of a store-through-an-address DESTINATION }
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
-    allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
+    allocaLoop: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
-    pVarFastOp, pVarFastDone, pVarSlow1, pVarSlow2, pVarSlow3, pVarCmpOp: Integer;   { X64VarFloatArithOp's and X64VarFloatCmpOp's inline arms }
-    pVarIntDone, pVarIntS1, pVarIntS2, pVarIntS3: Integer;   { ...and the int arm beside the float one }
+    pVarFastOp, pVarFastDone, pVarSlow3, pVarCmpOp: Integer;   { X64VarFloatArithOp's and X64VarFloatCmpOp's inline arms }
+    pVarIntDone: Integer;   { ...and the int arm beside the float one }
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -8249,10 +8214,10 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
       far past the set path. Set elements are values, not sizes.
       bug-p-set-membership-item-constant-truncated-to-32-bits }
     setLo, setHi: Int64;
-    argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
+    argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
-    searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
-    pUnsNeg, pUnsDone, pAppendDone: Integer;
+    searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil: Integer;
+    pAppendDone: Integer;
     pAnsiPadEnd: Integer;   { rel8 placeholder: jump past the nil-handle pad arm }
     pMagDone: Integer;   { the heap-magazine fast path's jump over the locked path; -1 = no fast path emitted }
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
@@ -8275,7 +8240,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx, foldDisp: Integer;
     ncSrc, ncBytes: Integer;  { narrowing-cast fold }
     ncSigned: Boolean;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
-    itemNode, trueCount, nextJmp, falseJmp: Integer;
+    itemNode, trueCount: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
     intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff, vaPopN: Integer;
@@ -8344,14 +8309,14 @@ begin
         { Intern the string literal and load it }
         sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
         si := InternStr(sVal);
-        EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
+        EmitAsmX64(['mov rax, @data', Strs[si].Offset]);
       end;
 
     IR_CONST_DATA:
       begin
         { Absolute data address; IRIVal may be a negative dataref sentinel
           (record-desc/classref), resolved by the pre-link fixup pass. }
-        EmitB($48); EmitB($B8); EmitDataRef(Integer(IRIVal[node]));
+        EmitAsmX64(['mov rax, @data', Integer(IRIVal[node])]);
       end;
 
     IR_IO_LOCK:
@@ -8439,18 +8404,18 @@ begin
           UClsRTTIOff is only known after EmitRTTI (runs post-parse), so emit a
           per-class sentinel data-ref patched to the real offset in compiler.pas
           (mirrors the -100 RTTI-registry / -101 resource-table sentinels). }
-        EmitB($48); EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node]));
+        EmitAsmX64(['mov rax, @data', -(CLASSREF_DATAREF_BASE + IRA[node])]);
       end;
 
     IR_VMTADDR:
       { rax = address of class ci's VMT (the per-class identity stored at
         [instance+0]). VMT offsets are final at codegen (emitted during parse),
         so the data-ref is direct — same as instance construction. }
-      begin EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[IRA[node]]); end;
+      begin EmitAsmX64(['mov rax, @data', UClsVMTOffset[IRA[node]]]); end;
 
     IR_SET_LIT:
       begin
-        EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);
+        EmitAsmX64(['mov rax, @data', IRIVal[node]]);
       end;
       
     IR_ASM:
@@ -8478,12 +8443,12 @@ begin
 
     IR_RTTI_REG:
       begin
-        EmitB($48); EmitB($B8); EmitDataRef(-100);
+        EmitAsmX64(['mov rax, @data', -100]);
       end;
 
     IR_RESOURCES:
       begin
-        EmitB($48); EmitB($B8); EmitDataRef(-101);
+        EmitAsmX64(['mov rax, @data', -101]);
       end;
 
     IR_SYSCALL:
@@ -8523,11 +8488,11 @@ begin
           onto the stack, pop into rdi (pfrom) / rsi (pto), then call the bare
           CoSwitch stub. }
         argNode := IRA[node];
-        IREmitNode(IRA[argNode]);  EmitB($50);   { pfrom -> push rax }
+        IREmitNode(IRA[argNode]);  EmitAsmX64(['push rax']); { pfrom -> push rax }
         argNode := IRB[argNode];
-        IREmitNode(IRA[argNode]);  EmitB($50);   { pto   -> push rax }
-        EmitB($5E);                              { pop rsi = pto }
-        EmitB($5F);                              { pop rdi = pfrom }
+        IREmitNode(IRA[argNode]);  EmitAsmX64(['push rax']); { pto   -> push rax }
+        EmitAsmX64(['pop rsi']); { = pto }
+        EmitAsmX64(['pop rdi']); { = pfrom }
         { pxx internal ABI: CoSwitch saves only the GPR callee-saved set on the
           switched stack — the other context's code owns xmm8..13 while we are
           suspended. Save the pool to THIS frame's slots before switching and
@@ -8594,7 +8559,7 @@ begin
         EmitAsmX64([
           'mov rcx, rax',                        { (b) }
           'pop rax']);                           { (a) }
-        EmitB($48); EmitB($F7); EmitB($E1);            { mul rcx -> rdx:rax }
+        EmitAsmX64(['mul rcx']); { mul rcx -> rdx:rax }
         EmitAsmX64(['mov rax, rdx']); { (high half) }
       end;
 
@@ -8619,7 +8584,7 @@ begin
                 'pop rdx',                             { (newval) }
                 'pop rax',                             { (expected) }
                 'pop rcx']);                           { (addr) }
-              EmitB($F0); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [rcx], edx }
+              EmitAsmX64(['lock cmpxchg [rcx], edx']);
             end;                          { eax = old *addr }
           ATOMIC_ADD:
             begin
@@ -8627,7 +8592,7 @@ begin
               EmitAsmX64([
                 'pop rax',                             { (delta) }
                 'pop rcx']);                           { (addr) }
-              EmitB($F0); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [rcx], eax }
+              EmitAsmX64(['lock xadd [rcx], eax']);
             end;                          { eax = old *addr }
           ATOMIC_CAS64:
             begin
@@ -8636,14 +8601,14 @@ begin
                 'pop rdx',                             { (newval) }
                 'pop rax',                             { (expected) }
                 'pop rcx']);                           { (addr) }
-              EmitB($F0); EmitB($48); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [rcx], rdx }
+              EmitAsmX64(['lock cmpxchg [rcx], rdx']);
             end;                          { rax = old *addr }
           ATOMIC_ADD64:
             begin
               EmitAsmX64([
                 'pop rax',                             { (delta) }
                 'pop rcx']);                           { (addr) }
-              EmitB($F0); EmitB($48); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [rcx], rax }
+              EmitAsmX64(['lock xadd [rcx], rax']);
             end;                          { rax = old *addr }
           ATOMIC_XCHG64:
             begin
@@ -8783,7 +8748,7 @@ begin
               Inc(nSlots);
             end;
           end;
-          IREmitNode(IRA[node]); EmitB($50);       { push callee; P = &this slot }
+          IREmitNode(IRA[node]); EmitAsmX64(['push rax']); { push callee; P = &this slot }
           { Align + reserve, saving P (= rsp, pointing at the callee slot) below
             the arg area: after `push r11` rsp = aligned-8, so the saved-P slot
             plus mStack 8-byte args needs 8 more pad when mStack is even for the
@@ -8812,14 +8777,14 @@ begin
                 aggK := slotSrcOff[slotIdx] div 8;
                 while aggK >= 0 do
                 begin
-                  if aggK = 0 then begin EmitB($FF); EmitB($30); end
-                  else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;
+                  if aggK = 0 then begin EmitAsmX64(['push qword [rax]']); end
+                  else begin EmitAsmX64(['push qword [rax+%]', aggK * 8]); end;
                   Dec(aggK);
                 end;
                 Continue;
               end;
               IREmitNode(argNodeArr[i]);
-              EmitB($50);                           { push arg }
+              EmitAsmX64(['push rax']); { push arg }
             end;
           { Register args: push right-to-left, pop left-to-right into the ABI
             registers. slotArg is no longer injective -- an aggregate owns two
@@ -8836,14 +8801,14 @@ begin
                 aggK := slotSrcOff[slotIdx] div 8;
                 while aggK >= 0 do
                 begin
-                  if aggK = 0 then begin EmitB($FF); EmitB($30); end
-                  else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;
+                  if aggK = 0 then begin EmitAsmX64(['push qword [rax]']); end
+                  else begin EmitAsmX64(['push qword [rax+%]', aggK * 8]); end;
                   Dec(aggK);
                 end;
                 Continue;
               end;
               IREmitNode(argNodeArr[i]);
-              EmitB($50);                           { push arg }
+              EmitAsmX64(['push rax']); { push arg }
             end;
           for slotIdx := 0 to nSlots - 1 do
             if not slotIsStack[slotIdx] then
@@ -8852,10 +8817,10 @@ begin
               if slotIsSse[slotIdx] then
               begin
                 EmitAsmX64(['pop rax']);
-                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + slotRegIdx[slotIdx] * 8); { movq xmm[n], rax }
+                EmitAsmX64(['movq %xmm, rax', slotRegIdx[slotIdx]]);
                 if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) and
                    (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
-                  begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + slotRegIdx[slotIdx] * 9); end; { cvtsd2ss xmm,xmm }
+                  EmitAsmX64(['cvtsd2ss %xmm, %xmm', slotRegIdx[slotIdx], slotRegIdx[slotIdx]]);
               end
               else
                 case slotRegIdx[slotIdx] of
@@ -8881,10 +8846,10 @@ begin
             IREmitNode(IRCallDest[node]);
             EmitAsmX64(['mov r10, rax']);
           end;
-          EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
+          EmitAsmX64(['mov eax, %', sseIdx]); { mov eax, #vector-regs (vararg ABI) }
           { Callee: the saved-P slot sits above the pad + stack args. }
           EmitLoadSavedRspX64(mStack * 8 + padBytes);   { r11 = P }
-          EmitB($4D); EmitB($8B); EmitB($1B);       { mov r11, [r11] = callee }
+          EmitAsmX64(['mov r11, [r11]']); { = callee }
           { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
             save the callee-saved xmm8..13 pool around the call. }
           FloatPoolSave;
@@ -8921,7 +8886,7 @@ begin
               Fixed on the fly 2026-09-01, no ticket; the sibling's is
               bug-c-crtl-pulled-fn-inline-signed-compare and LOGBOOK.md carries the
               line. }
-            EmitB($48); EmitB($98);                   { cdqe: sign-extend eax -> rax }
+            EmitAsmX64(['cdqe']); { cdqe: sign-extend eax -> rax }
           end;
         end
         else
@@ -8939,21 +8904,21 @@ begin
               args + callee after. Reached only by the bound-compiled-fn
               bridge (pyboundfn_call_ptr's 7+-arg fan-out); ordinary indirect
               calls stay on the register arm below. }
-            IREmitNode(IRA[node]); EmitB($50);       { push callee addr (deepest) }
+            IREmitNode(IRA[node]); EmitAsmX64(['push rax']); { push callee addr (deepest) }
             argNode := IRB[node];
             while argNode <> -1 do
             begin
               IREmitNode(IRA[argNode]);
-              EmitB($50);                            { push arg }
+              EmitAsmX64(['push rax']); { push arg }
               argNode := IRB[argNode];
             end;
-            EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(nArgs * 8); { mov r11, [rsp + nArgs*8] = callee }
+            EmitAsmX64(['mov r11, qword [rsp+%]', nArgs * 8]); { mov r11, [rsp + nArgs*8] = callee }
             EmitAsmX64(['call r11']);
-            EmitB($48); EmitB($81); EmitB($C4); EmitI32((nArgs + 1) * 8);       { add rsp: args + callee }
+            EmitAsmX64(['add rsp, %', (nArgs + 1) * 8]); { add rsp: args + callee }
           end
           else
           begin
-          IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
+          IREmitNode(IRA[node]); EmitAsmX64(['push rax']); { = callee addr }
           { -O2 (promoted from -O3 2026-07-11): the last arg's push/pop pair is back-to-back — keep it in rax
             and mov it into its register (same as the direct-call collapse). }
           skipLastArg := (OptLevel >= 2) and (nArgs >= 1);
@@ -8971,8 +8936,8 @@ begin
               1: begin EmitAsmX64(['mov rsi, rax']); end;
               2: begin EmitAsmX64(['mov rdx, rax']); end;
               3: begin EmitAsmX64(['mov rcx, rax']); end;
-              4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
-              5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+              4: begin EmitAsmX64(['mov r8, rax']); end;
+              5: begin EmitAsmX64(['mov r9, rax']); end;
             end;
           for i := nArgs - 1 - Ord(skipLastArg) downto 0 do
             case i of
@@ -8989,7 +8954,7 @@ begin
             IREmitNode(IRCallDest[node]);
             EmitAsmX64(['mov r10, rax']);
           end;
-          EmitB($41); EmitB($5B);                     { pop r11 = callee }
+          EmitAsmX64(['pop r11']); { = callee }
           { pxx internal ABI: an indirect target can't be proven to honor the
             xmm8..13 callee-saved convention (a proc-typed value may hold an
             @extern) — save the pool around the call. No-op unless FxSaveOn. }
@@ -9048,7 +9013,7 @@ begin
             (IRA < 0) keep the conservative retain. }
           if not IRNodeOwnsFreshCallResult(IRB[node]) then
             EmitDynArrayRetain;
-          EmitB($50);                             { push new data pointer }
+          EmitAsmX64(['push rax']); { push new data pointer }
           if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
           begin
             { A by-ref (var/out) dynarray param: the frame slot holds the ADDRESS
@@ -9081,19 +9046,19 @@ begin
           else
           begin
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov rax, [@glob]', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($50);                             { push old data pointer }
+              begin EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]); end;
+            EmitAsmX64(['push rax']); { push old data pointer }
             EmitAsmX64(['mov rax, [rsp+8]']);
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov [@glob], rax', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($58);                             { pop rax = old data pointer }
+              begin EmitAsmX64(['mov qword [rbp+%], rax', Syms[symIdx].Offset]); end;
+            EmitAsmX64(['pop rax']); { = old data pointer }
           end;
           EmitDynArrayReleaseForSym(symIdx);
-          EmitB($58);                             { pop rax = new data pointer }
+          EmitAsmX64(['pop rax']); { = new data pointer }
         end
         else if Syms[symIdx].TypeKind = tyAnsiString then
         begin
@@ -9119,7 +9084,7 @@ begin
             begin
               sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
               si := InternStr(sVal);
-              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitAsmX64(['mov rsi, @data', Strs[si].Offset + 8]);
               EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
               IREmitCodeCall(AnsiStrFromLiteralAddr);
             end;
@@ -9153,36 +9118,36 @@ begin
               IREmitCodeCall(AnsiStrRetainAddr);
             end;
           end;
-          EmitB($50);                             { push new pointer }
+          EmitAsmX64(['push rax']); { push new pointer }
           if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
           begin
             { by-ref (var/out) managed string: the param slot holds the ADDRESS
               of the caller's handle slot. Release the old handle there, publish
               the new one into the caller's slot — not the local param copy. }
-            EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
-            EmitB($48); EmitB($8B); EmitB($01);                               { mov rax, [rcx] = old }
-            EmitB($50);                             { push old pointer }
-            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08);       { mov rax, [rsp+8] = new }
+            EmitAsmX64(['mov rcx, [rbp+%]', Syms[symIdx].Offset]); { = caller slot addr }
+            EmitAsmX64(['mov rax, [rcx]']); { = old }
+            EmitAsmX64(['push rax']); { push old pointer }
+            EmitAsmX64(['mov rax, [rsp+8]']); { = new }
             EmitAsmX64(['mov [rcx], rax']);
-            EmitB($58);                             { pop rax = old pointer }
+            EmitAsmX64(['pop rax']); { = old pointer }
             IREmitCodeCall(AnsiStrReleaseAddr);
-            EmitB($58);                             { pop rax = new pointer }
+            EmitAsmX64(['pop rax']); { = new pointer }
           end
           else
           begin
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov rax, [@glob]', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($50);                             { push old pointer }
+              begin EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]); end;
+            EmitAsmX64(['push rax']); { push old pointer }
             EmitAsmX64(['mov rax, [rsp+8]']);
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov [@glob], rax', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($58);                             { pop rax = old pointer }
+              begin EmitAsmX64(['mov qword [rbp+%], rax', Syms[symIdx].Offset]); end;
+            EmitAsmX64(['pop rax']); { = old pointer }
             IREmitCodeCall(AnsiStrReleaseAddr);
-            EmitB($58);                             { pop rax = new pointer }
+            EmitAsmX64(['pop rax']); { = new pointer }
           end;
           end;
         end
@@ -9198,18 +9163,18 @@ begin
           else
           begin
             IREmitNode(valueNode); { rax = source string address (or char ordinal) }
-            EmitB($50); { push source }
+            EmitAsmX64(['push rax']); { push source }
             if Syms[symIdx].Kind = skGlobal then
             begin
-              EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset);
+              EmitAsmX64(['lea rax, [@glob]', Syms[symIdx].Offset]);
             end
             else if Syms[symIdx].Kind = skParam then
             begin
-              EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
+              EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]);
             end
             else
             begin
-              EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
+              EmitAsmX64(['lea rax, [rbp+%]', Syms[symIdx].Offset]);
             end;
             EmitAsmX64([
               'mov rdi, rax',
@@ -9222,16 +9187,18 @@ begin
                 rsi = handle (char pointer), length at [rsi-8]. Materialise into the
                 inline [len][chars] buffer at rdi. nil handle -> empty string. }
               EmitAsmX64(['test rsi, rsi']);
-              EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
+              AsmScopeBegin;
+              EmitAsmX64(['jz short empty']);
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = len }
               EmitClampRcxToStrCap(SymStrCap[symIdx]);          { truncate to string[N] capacity }
               EmitStoreRcxAsStrLen(Syms[symIdx].TypeKind);      { [rdi] := len, at the DEST's width }
               EmitAsmX64(['add rdi, %', FrozenStrPrefixSize(Syms[symIdx].TypeKind)]); { (dest chars) }
-              EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
-              EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
-              PatchRel8(pNil);         { empty: }
+              EmitAsmX64(['rep movsb']);                           { rsi already at chars }
+              EmitAsmX64(['jmp short done']);
+              EmitAsmX64(['empty:']);         { empty: }
               EmitZeroStrLen(Syms[symIdx].TypeKind);            { [rdi] := 0, at the DEST's width }
-              PatchRel8(pDone);       { done: }
+              EmitAsmX64(['done:']);       { done: }
+              AsmScopeEnd;
             end
             else
             begin
@@ -9263,7 +9230,7 @@ begin
               EmitStoreRcxAsStrLen(Syms[symIdx].TypeKind);
               EmitAsmX64(['add rsi, %', FrozenStrPrefixSize(srcFrozenTk)]);
               EmitAsmX64(['add rdi, %', FrozenStrPrefixSize(Syms[symIdx].TypeKind)]);
-              EmitB($F3); EmitB($A4);             { rep movsb }
+              EmitAsmX64(['rep movsb']);
             end;
           end;
         end
@@ -9294,14 +9261,14 @@ begin
             if FloatTreeFits(IRB[node]) then
             begin
               EmitFloatTree(IRB[node], 2);
-              EmitB($44); EmitB($0F); EmitB($28); EmitB($C0 or ((rx - 8) shl 3) or 2); { movaps xmm<resident>, xmm2 }
+              EmitAsmX64(['movaps %xmm, xmm2', rx]);          { resident := xmm2 }
               EmitAsmX64(['movq rax, xmm2']);
             end
             else
             begin
               sx := FloatResidentLeafXmm(IRB[node]);
-              EmitB($45); EmitB($0F); EmitB($28); EmitB($C0 or ((rx - 8) shl 3) or (sx - 8)); { movaps xmm<resident>, xmm<source> }
-              EmitB($66); EmitB($4C); EmitB($0F); EmitB($7E); EmitB($C0 or ((sx - 8) shl 3)); { movq rax, xmm<source> }
+              EmitAsmX64(['movaps %xmm, %xmm', rx, sx,      { resident := source }
+                          'movq rax, %xmm', sx]);
             end;
             PoisonFloatResidentSlot(symIdx);
             Exit;
@@ -9363,12 +9330,12 @@ begin
              ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) then
           begin
             if InLValueWrite then
-              begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['lea rax, [@glob]', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end;
+              begin EmitAsmX64(['mov rax, [@glob]', Syms[symIdx].Offset]); end;
           end
           else
-            begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end;
+            begin EmitAsmX64(['lea rax, [@glob]', Syms[symIdx].Offset]); end;
         end
         else
         begin
@@ -9383,9 +9350,9 @@ begin
                 ADDRESS of the caller's handle slot. Load it once → &caller_slot
                 (what COW/SetLength want, a write); on a read deref once more to
                 reach the data pointer (what Length/indexing want). }
-              EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); { mov rax,[rbp+off] = &caller_slot }
+              EmitAsmX64(['mov rax, [rbp+%]', Syms[symIdx].Offset]); { = &caller_slot }
               if not InLValueWrite then
-                begin EmitB($48); EmitB($8B); EmitB($00); end;                  { mov rax,[rax] = data ptr }
+                begin EmitAsmX64(['mov rax, [rax]']); end; { = data ptr }
             end
             { abi-divergence: NOT a re-derivation -- this whole block is
               already inside `if ... ABIParamSlotHoldsValueAddr(symIdx) then`.
@@ -9399,7 +9366,7 @@ begin
                 ADDRESS of the caller's handle slot; load it so AnsiStrUnique/COW
                 operate on the caller's handle in place, not the local param copy.
                 (The read path is unchanged — handled via EmitLoadVar elsewhere.) }
-              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]); end
             else if InLValueWrite and
                (((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) or
                 (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1))) then
@@ -9417,13 +9384,13 @@ begin
                 address (bug-var-array-of-ansistring-param-loses-writes).
                 Mirrors the same not-IsArray guard already used two branches
                 up (the scalar var/out AnsiString write path). }
-              begin EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['lea rax, [rbp+%]', Syms[symIdx].Offset]); end
             else
-              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+              begin EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]); end;
           end
           else
           begin
-            EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
+            EmitAsmX64(['lea rax, [rbp+%]', Syms[symIdx].Offset]);
           end;
         end;
       end;
@@ -9435,9 +9402,9 @@ begin
           InLValueWrite). }
         symIdx := IRA[node];
         if Syms[symIdx].Kind = skGlobal then
-          begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          begin EmitAsmX64(['mov rax, [@glob]', Syms[symIdx].Offset]); end
         else
-          begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          begin EmitAsmX64(['mov rax, qword [rbp+%]', Syms[symIdx].Offset]); end;
       end;
 
     IR_ZERO_SYM:
@@ -9455,7 +9422,7 @@ begin
             i := 0;
             while i < size do
             begin
-              EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[symIdx].Offset + i); EmitI32(0); { mov qword [rbp+off+q], 0 }
+              EmitAsmX64(['mov qword [rbp+%], 0', Syms[symIdx].Offset + i]); { mov qword [rbp+off+q], 0 }
               i := i + 8;
             end;
           end
@@ -9465,7 +9432,7 @@ begin
             EmitAsmX64([
               'xor rax, rax',
               'mov rcx, %', size]);
-            EmitB($F3); EmitB($AA);                                       { rep stosb }
+            EmitAsmX64(['rep stosb']);
           end;
           { The zeroing wrote the frame slot directly — re-sync a resident
             register cache (loop-residency locals can hit this mid-body). }
@@ -9473,9 +9440,7 @@ begin
             RegcallRefreshResident(symIdx);
           if FloatResidentXmmOf(symIdx) <> 0 then
           begin
-            EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
-            EmitB($85 or ((FloatResidentXmmOf(symIdx) - 8) shl 3));
-            EmitI32(Syms[symIdx].Offset);                 { movsd xmm8/9, [rbp+off] }
+            EmitAsmX64(['movsd %xmm, [rbp+%]', FloatResidentXmmOf(symIdx), Syms[symIdx].Offset]);
           end;
         end;
       end;
@@ -9485,18 +9450,18 @@ begin
         IREmitNode(IRA[node]);                  { rax = destination address }
         if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
         begin
-          EmitB($50);                           { preserve destination }
+          EmitAsmX64(['push rax']); { preserve destination }
           EmitAcquireHeapLock;
           EmitAsmX64(['mov rbx, [rsp]']);
           EmitManagedRecordReleaseLocked(IRC[node]);
           EmitReleaseHeapLock;
-          EmitB($5F);                           { pop rdi = destination }
+          EmitAsmX64(['pop rdi']); { = destination }
         end
         else
           begin EmitAsmX64(['mov rdi, rax']); end;
         EmitAsmX64(['xor rax, rax']);
         EmitB($48); EmitB($B9); EmitI64(IRIVal[node]);   { movabs rcx, byte count }
-        EmitB($F3); EmitB($AA);                          { rep stosb }
+        EmitAsmX64(['rep stosb']);
       end;
 
     IR_SLOTADDR:
@@ -9506,9 +9471,9 @@ begin
           safe base for IR_DYNUNIQUE in both read and write mode. }
         symIdx := IRA[node];
         if Syms[symIdx].Kind = skGlobal then
-          begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          begin EmitAsmX64(['lea rax, [@glob]', Syms[symIdx].Offset]); end
         else
-          begin EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          begin EmitAsmX64(['lea rax, [rbp+%]', Syms[symIdx].Offset]); end;
       end;
 
     IR_DYNUNIQUE:
@@ -9536,7 +9501,7 @@ begin
           four backends and carries element metadata other paths read, so
           deleting it would renumber IR ops for a cosmetic gain. }
         IREmitNode(IRA[node]);                  { rax = slot address }
-        EmitB($48); EmitB($8B); EmitB($00);     { mov rax, [rax] = data pointer }
+        EmitAsmX64(['mov rax, [rax]']); { = data pointer }
       end;
 
     IR_INDEX:
@@ -9676,8 +9641,9 @@ begin
         { An IR_FIELD address folds into the load's displacement: `mov rax,
           [rax+ofs]` instead of `add rax, ofs` then `mov rax, [rax]` -- one
           instruction, and one link fewer in the address's dependency chain.
-          Every load below names [rax] with ModRM r/m = 000, so only that byte
-          changes: EmitRaxMemModRM. Not at -O0, whose bytes are the 1:1 gate. }
+          Every load below names [rax+foldDisp]; the assembler picks no, an
+          8-bit or a 32-bit displacement. Not at -O0, whose bytes are the 1:1
+          gate. }
         foldDisp := 0;
         if (OptLevel >= 1) and (IRKind[addressNode] = IR_FIELD) then
         begin
@@ -9697,7 +9663,7 @@ begin
           (bug-single-field-element-in-aggregate). }
         if tk = tySingle then
         begin
-          EmitB($66); EmitB($0F); EmitB($6E); EmitRaxMemModRM(0, foldDisp);       { movd xmm0, [rax] }
+          EmitAsmX64(['movd xmm0, [rax+%]', foldDisp]);
           EmitAsmX64([
             'cvtss2sd xmm0, xmm0',
             'movq rax, xmm0']);
@@ -9708,38 +9674,38 @@ begin
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($0F); EmitB($BE); EmitRaxMemModRM(0, foldDisp); { movsx rax, byte ptr [rax] }
+            EmitAsmX64(['movsx rax, byte [rax+%]', foldDisp]);
           end
           else
           begin
-            EmitB($48); EmitB($0F); EmitB($B6); EmitRaxMemModRM(0, foldDisp); { movzx rax, byte ptr [rax] }
+            EmitAsmX64(['movzx rax, byte [rax+%]', foldDisp]);
           end;
         end
         else if size = 2 then
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($0F); EmitB($BF); EmitRaxMemModRM(0, foldDisp); { movsx rax, word ptr [rax] }
+            EmitAsmX64(['movsx rax, word [rax+%]', foldDisp]);
           end
           else
           begin
-            EmitB($48); EmitB($0F); EmitB($B7); EmitRaxMemModRM(0, foldDisp); { movzx rax, word ptr [rax] }
+            EmitAsmX64(['movzx rax, word [rax+%]', foldDisp]);
           end;
         end
         else if size = 4 then
         begin
           if isSigned then
           begin
-            EmitB($48); EmitB($63); EmitRaxMemModRM(0, foldDisp); { movsxd rax, dword ptr [rax] }
+            EmitAsmX64(['movsxd rax, dword [rax+%]', foldDisp]);
           end
           else
           begin
-            EmitB($8B); EmitRaxMemModRM(0, foldDisp); { mov eax, dword ptr [rax] }
+            EmitAsmX64(['mov eax, [rax+%]', foldDisp]);
           end;
         end
         else
         begin
-          EmitB($48); EmitB($8B); EmitRaxMemModRM(0, foldDisp); { mov rax, qword ptr [rax] }
+          EmitAsmX64(['mov rax, [rax+%]', foldDisp]);
         end;
       end;
 
@@ -9755,11 +9721,11 @@ begin
         IREmitNode(valueNode);                       { rax = new data pointer }
         if not IRNodeOwnsFreshCallResult(valueNode) then
           EmitDynArrayRetain;
-        EmitB($50);                                  { push new }
+        EmitAsmX64(['push rax']); { push new }
         IREmitNode(IRA[node]);                       { rax = slot address }
-        EmitB($50);                                  { push slot; [rsp+8]=new }
+        EmitAsmX64(['push rax']); { push slot; [rsp+8]=new }
         EmitAsmX64(['mov rax, [rax]']); { (old) }
-        EmitB($50);                                  { push old; [rsp+8]=slot,[rsp+16]=new }
+        EmitAsmX64(['push rax']); { push old; [rsp+8]=slot,[rsp+16]=new }
         EmitAsmX64([
           'mov rax,[rsp+16]',                    { (new) }
           'mov rcx,[rsp+8]']);                   { (slot) }
@@ -9796,7 +9762,7 @@ begin
             x86-64 needed this as well because it never asked the walker. }
           memFrozenTk := IRFrozenKindOfAddr(addressNode);
           IREmitNode(valueNode); { rax = source string address (or char ordinal) }
-          EmitB($50); { push source }
+          EmitAsmX64(['push rax']); { push source }
 
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
@@ -9814,17 +9780,19 @@ begin
               rsi = handle (char pointer), length at [rsi-8]. Mirrors the
               IR_STORE_SYM managed->frozen path. nil handle -> empty string. }
             EmitAsmX64(['test rsi, rsi']);
-            EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
-            EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
+            AsmScopeBegin;
+            EmitAsmX64(['jz short empty']);
+            EmitAsmX64(['mov rcx, [rsi-8]']); { = len }
             EmitClampRcxToStrCap(Integer(IRIVal[node]));      { truncate to string[N] capacity }
             EmitStoreRcxAsStrLen(memFrozenTk);
             EmitB($48); EmitB($83); EmitB($C7);
             EmitB(FrozenStrPrefixSize(memFrozenTk));          { add rdi, dest prefix }
-            EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
-            EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
-            PatchRel8(pNil);         { empty: }
+            EmitAsmX64(['rep movsb']);                           { rsi already at chars }
+            EmitAsmX64(['jmp short done']);
+            EmitAsmX64(['empty:']);         { empty: }
             EmitZeroStrLen(memFrozenTk);
-            PatchRel8(pDone);       { done: }
+            EmitAsmX64(['done:']);       { done: }
+            AsmScopeEnd;
           end
           else
           begin
@@ -9838,7 +9806,7 @@ begin
             EmitB(FrozenStrPrefixSize(srcFrozenTk));   { add rsi, src prefix }
             EmitB($48); EmitB($83); EmitB($C7);
             EmitB(FrozenStrPrefixSize(memFrozenTk));   { add rdi, dst prefix }
-            EmitB($F3); EmitB($A4);             { rep movsb }
+            EmitAsmX64(['rep movsb']);
           end;
         end
         else if tk = tyAnsiString then
@@ -9849,7 +9817,7 @@ begin
             begin
               sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
               si := InternStr(sVal);
-              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitAsmX64(['mov rsi, @data', Strs[si].Offset + 8]);
               EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
               IREmitCodeCall(AnsiStrFromLiteralAddr);
             end;
@@ -9955,24 +9923,24 @@ begin
             EmitAsmX64([
               'movq xmm1, rcx',
               'cvtsd2ss xmm1, xmm1']);
-            EmitB($66); EmitB($0F); EmitB($7E); EmitB($C9);             { movd ecx, xmm1 }
+            EmitAsmX64(['movd ecx, xmm1']);
           end;
 
           if size = 1 then
         begin
-          EmitB($88); EmitRaxMemModRM(1, foldDisp); { mov byte ptr [rax], cl }
+          EmitAsmX64(['mov [rax+%], cl', foldDisp]);
         end
         else if size = 2 then
         begin
-          EmitB($66); EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov word ptr [rax], cx }
+          EmitAsmX64(['mov [rax+%], cx', foldDisp]);
         end
         else if size = 4 then
         begin
-          EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov dword ptr [rax], ecx }
+          EmitAsmX64(['mov [rax+%], ecx', foldDisp]);
         end
         else
         begin
-          EmitB($48); EmitB($89); EmitRaxMemModRM(1, foldDisp); { mov qword ptr [rax], rcx }
+          EmitAsmX64(['mov [rax+%], rcx', foldDisp]);
         end;
         end;
       end;
@@ -10058,21 +10026,21 @@ begin
           EmitCmpLeftImm32(w1LeftReg, Integer(IRIVal[right]));       { cmp rax|rN, imm32 }
           if TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
             case op of
-              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
-              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
-              tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb   al }
-              tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe  al }
-              tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;  { seta   al }
-              tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;  { setae  al }
+              tkEq:  begin EmitAsmX64(['sete al']); end;
+              tkNeq: begin EmitAsmX64(['setne al']); end;
+              tkLt:  begin EmitAsmX64(['setb al']); end;
+              tkLe:  begin EmitAsmX64(['setbe al']); end;
+              tkGt:  begin EmitAsmX64(['seta al']); end;
+              tkGe:  begin EmitAsmX64(['setae al']); end;
             end
           else
             case op of
-              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
-              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
-              tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;  { setl   al }
-              tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;  { setle  al }
-              tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;  { setg   al }
-              tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;  { setge  al }
+              tkEq:  begin EmitAsmX64(['sete al']); end;
+              tkNeq: begin EmitAsmX64(['setne al']); end;
+              tkLt:  begin EmitAsmX64(['setl al']); end;
+              tkLe:  begin EmitAsmX64(['setle al']); end;
+              tkGt:  begin EmitAsmX64(['setg al']); end;
+              tkGe:  begin EmitAsmX64(['setge al']); end;
             end;
           EmitAsmX64(['movzx rax, al']);
           Exit;
@@ -10088,10 +10056,10 @@ begin
           IREmitNode(ncSrc);
           if ncSigned then
             case ncBytes of
-              1: begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end  { movsx  rax, al }
+              1: begin EmitAsmX64(['movsx rax, al']); end
             else
               if ncBytes = 2 then
-                begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end   { movsx  rax, ax }
+                begin EmitAsmX64(['movsx rax, ax']); end
               else
                 begin EmitAsmX64(['movsxd rax, eax']); end;
             end
@@ -10149,7 +10117,7 @@ begin
                 EmitAsmX64([
                   'mov rcx, rax',
                   'sar rcx, 63']);
-                EmitB($48); EmitB($C1); EmitB($E9); EmitB(64 - pow2k);          { shr rcx, 64-k }
+                EmitAsmX64(['shr rcx, %', 64 - pow2k]); { shr rcx, 64-k }
                 EmitAsmX64([
                   'add rax, rcx',
                   'sar rax, %', pow2k]);
@@ -10168,7 +10136,7 @@ begin
               EmitAsmX64([
                 'mov rcx, rax',
                 'sar rcx, 63']);
-              EmitB($48); EmitB($C1); EmitB($E9); EmitB(64 - pow2k);            { shr rcx, 64-k }
+              EmitAsmX64(['shr rcx, %', 64 - pow2k]); { shr rcx, 64-k }
               EmitAsmX64(['add rcx, rax']);
               EmitB($48); EmitB($81); EmitB($E1); EmitI32(Integer(-(Int64(1) shl pow2k))); { and rcx, -(2^k) }
               EmitAsmX64(['sub rax, rcx']);
@@ -10221,7 +10189,7 @@ begin
             tkPlus:  begin EmitAsmX64(['add rax, %', IRIVal[right]]); end;
             tkMinus: begin EmitAsmX64(['sub rax, %', IRIVal[right]]); end;
             tkAnd:   begin EmitAsmX64(['and rax, %', IRIVal[right]]); end;
-            tkOr:    begin EmitB($48); EmitB($0D); EmitI32(IRIVal[right]); end;             { or  rax, imm32 }
+            tkOr:    begin EmitAsmX64(['or rax, %', IRIVal[right]]); end;
             tkXor:   begin EmitAsmX64(['xor rax, %', IRIVal[right]]); end;
             tkStar:  EmitImulRaxLeftImm32(w1LeftReg, IRIVal[right]);                       { imul rax, rax|rN, imm32 }
           end;
@@ -10478,8 +10446,8 @@ begin
             the others hand PXXStrConcat lengths their own helpers computed. }
           lhsTk := IRStrTkOf(left);
           rhsTk := IRStrTkOf(right);
-          EmitB($50); { push lhs value }
-          EmitB($51); { push rhs value }
+          EmitAsmX64(['push rax']); { push lhs value }
+          EmitAsmX64(['push rcx']); { push rhs value }
 
           if rhsTk = tyAnsiString then
           begin
@@ -10541,7 +10509,7 @@ begin
           end;
 
           IREmitCodeCall(AnsiStrConcatAddr);
-          EmitB($50); { preserve concat result while releasing owned children }
+          EmitAsmX64(['push rax']); { preserve concat result while releasing owned children }
           { An OWNED operand dies with the concat: a nested concat's temp — and
             equally a CALL result, which arrives at rc=1 by the function-result
             convention. Without the call arm every `"x" + f()` leaked f's
@@ -10564,7 +10532,7 @@ begin
             EmitAsmX64(['mov rax, [rsp+8]']);
             IREmitCodeCall(AnsiStrReleaseAddr);
           end;
-          EmitB($58);                                     { pop concat result }
+          EmitAsmX64(['pop rax']); { pop concat result }
           EmitAsmX64(['add rsp, 16']);
         end
         else if (IntToTypeKind(IRTk[node]) = tyString) and (op = tkPlus) then
@@ -10587,8 +10555,9 @@ begin
           lhsTk := IRStrTkOf(left);
           rhsTk := IRStrTkOf(right);
 
+          AsmScopeBegin;
           EmitAsmX64(['mov r10, rcx']);
-          EmitB($48); EmitB($81); EmitB($EC); EmitI32(272);
+          EmitAsmX64(['sub rsp, 272']);
           EmitAsmX64(['mov r11, rsp']);
 
           if TypeIsFrozenString(lhsTk) then
@@ -10603,20 +10572,23 @@ begin
             end;
             EmitAsmX64(['lea rsi, [rax+%]', FrozenStrPrefixSize(lhsTk)]);
             EmitAsmX64(['lea rdi, [r11+8]']);
-            EmitB($4C); EmitB($89); EmitB($C1);
-            EmitB($48); EmitB($85); EmitB($C9);
-            EmitB($74); EmitB(15);
-            EmitB($8A); EmitB($16);
-            EmitB($88); EmitB($17);
-            EmitB($48); EmitB($FF); EmitB($C6);
-            EmitB($48); EmitB($FF); EmitB($C7);
-            EmitB($48); EmitB($FF); EmitB($C9);
-            EmitB($EB); EmitB(Byte(-20));
+            EmitAsmX64([
+              'mov rcx, r8',
+              'lcopy:',
+              'test rcx, rcx',
+              'jz short ldone',
+              'mov dl, byte [rsi]',
+              'mov byte [rdi], dl',
+              'inc rsi',
+              'inc rdi',
+              'dec rcx',
+              'jmp short lcopy',
+              'ldone:']);
           end
           else
           begin
-            EmitB($49); EmitB($C7); EmitB($C0); EmitI32(1);
-            EmitB($41); EmitB($88); EmitB($43); EmitB($08);
+            EmitAsmX64(['mov r8, 1']);
+            EmitAsmX64(['mov byte [r11+8], al']);
           end;
 
           if TypeIsFrozenString(rhsTk) then
@@ -10631,31 +10603,37 @@ begin
             end;
             EmitAsmX64(['lea rsi, [r10+%]', FrozenStrPrefixSize(rhsTk)]);
             EmitAsmX64(['lea rdi, [r11+8]']);
-            EmitB($4C); EmitB($01); EmitB($C7);
-            EmitB($4C); EmitB($89); EmitB($CA);
-            EmitB($48); EmitB($85); EmitB($D2);
-            EmitB($74); EmitB(15);
-            EmitB($8A); EmitB($06);
-            EmitB($88); EmitB($07);
-            EmitB($48); EmitB($FF); EmitB($C6);
-            EmitB($48); EmitB($FF); EmitB($C7);
-            EmitB($48); EmitB($FF); EmitB($CA);
-            EmitB($EB); EmitB(Byte(-20));
+            EmitAsmX64(['add rdi, r8']);
+            EmitAsmX64([
+              'mov rdx, r9',
+              'rcopy:',
+              'test rdx, rdx',
+              'jz short rdone',
+              'mov al, byte [rsi]',
+              'mov byte [rdi], al',
+              'inc rsi',
+              'inc rdi',
+              'dec rdx',
+              'jmp short rcopy',
+              'rdone:']);
           end
           else
           begin
-            EmitB($49); EmitB($C7); EmitB($C1); EmitI32(1);
-            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
-            EmitB($4C); EmitB($01); EmitB($C7);
-            EmitB($44); EmitB($88); EmitB($17);
+            EmitAsmX64(['mov r9, 1']);
+            EmitAsmX64(['lea rdi, [r11+8]']);
+            EmitAsmX64(['add rdi, r8']);
+            EmitAsmX64(['mov byte [rdi], r10b']);
           end;
 
-          EmitB($4B); EmitB($8D); EmitB($04); EmitB($08);
-          EmitB($48); EmitB($3D); EmitI32(256);
-          EmitB($7E); EmitB(7);
-          EmitB($48); EmitB($C7); EmitB($C0); EmitI32(256);
-          EmitB($49); EmitB($89); EmitB($03);
-          EmitB($4C); EmitB($89); EmitB($D8);
+          EmitAsmX64([
+            'lea rax, [r8+r9*1]',
+            'cmp rax, 256',
+            'jle short lenok',
+            'mov rax, 256',          { cap at the 256 bytes the frame buffer holds }
+            'lenok:',
+            'mov qword [r11], rax',
+            'mov rax, r11']);
+          AsmScopeEnd;
         end
         else
         begin
@@ -10732,8 +10710,8 @@ begin
                           'setnp cl',
                           'and al, cl']);
                       end;
-                    tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end; { seta al }
-                    tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end; { setae al }
+                    tkGt:  begin EmitAsmX64(['seta al']); end;
+                    tkGe:  begin EmitAsmX64(['setae al']); end;
                   end;
                   EmitAsmX64(['movzx rax, al']);
                 end;
@@ -10862,7 +10840,7 @@ begin
                   if w1WidenLeftReg <> 0 then
                     EmitMovsxdRaxReg(w1WidenLeftReg)          { movsxd rax, rNd }
                   else
-                    begin EmitB($48); EmitB($98); end         { cdqe (sign-extend) }
+                    begin EmitAsmX64(['cdqe']); end { (sign-extend) }
                 end
                 else if w1WidenLeftReg <> 0 then
                   EmitMovEaxRegD(w1WidenLeftReg)              { mov eax, rNd — read AND zero-extend }
@@ -10880,7 +10858,7 @@ begin
               if (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) and
                  (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) and
                  TypeSigned(IntToTypeKind(IRTk[left])) then
-                begin EmitB($48); EmitB($98); end;            { cdqe }
+                begin EmitAsmX64(['cdqe']); end;
             end;
           { C signed `>>` (bug-c-signed-arith-shift-right): arithmetic shift,
             sign-extending. Mirrors the logical `shr` case above but with a
@@ -10893,7 +10871,7 @@ begin
                 if w1WidenLeftReg <> 0 then                   { -O3 W1 slice 10 }
                   EmitMovsxdRaxReg(w1WidenLeftReg)            { movsxd rax, rNd }
                 else
-                  begin EmitB($48); EmitB($98); end;          { cdqe (sign-extend) }
+                  begin EmitAsmX64(['cdqe']); end; { (sign-extend) }
               end;
               EmitShiftRax($F8, True, shiftImmCnt);          { sar rax, cl|imm }
             end;
@@ -10925,7 +10903,7 @@ begin
                  (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) then
               begin
                 if TypeSigned(IntToTypeKind(IRTk[left])) then
-                  begin EmitB($48); EmitB($98); end           { cdqe }
+                  begin EmitAsmX64(['cdqe']); end
                 else
                   begin EmitAsmX64(['mov eax, eax']); end;
               end;
@@ -10935,7 +10913,8 @@ begin
             begin
               { rax = element value (LHS), rcx = set address (RHS) }
               EmitAsmX64(['cmp rax, 255']);
-              EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out_of_range }
+              AsmScopeBegin;
+              EmitAsmX64(['ja out_of_range']);
               
               EmitAsmX64([
                 'mov rdx, rax',
@@ -10952,11 +10931,12 @@ begin
                 'test rax, rdx',
                 'setnz al',
                 'movzx rax, al']);
-              EmitB($E9); falseJmp := CodeLen; EmitI32(0); { jmp exit }
+              EmitAsmX64(['jmp exit']);
               
-              Patch32(nextJmp, CodeLen - (nextJmp + 4));
+              EmitAsmX64(['out_of_range:']);
               MovRaxImm(0);
-              Patch32(falseJmp, CodeLen - (falseJmp + 4));
+              EmitAsmX64(['exit:']);
+              AsmScopeEnd;
             end;
           
           tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
@@ -10987,48 +10967,50 @@ begin
                 if (lhsTk = tyAnsiString) and (rhsTk = tyChar) then
                 begin
                   EmitAsmX64(['push rcx']);
-                  EmitB($48); EmitB($85); EmitB($C0);
-                  EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);      { jz not_equal }
+                  EmitAsmX64(['test rax, rax']);
+                  AsmScopeBegin;
+                  EmitAsmX64(['jz not_equal']);
                   EmitAsmX64(['mov rcx, [rax-8]']);
                   EmitAsmX64(['cmp rcx, 1']);
-                  EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);     { jne not_equal }
+                  EmitAsmX64(['jnz not_equal']);
                   EmitAsmX64([
                     'movzx rcx, byte [rax]',
                     'pop rax',
                     'cmp rcx, rax']);
-                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
-                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  if op = tkEq then begin EmitAsmX64(['sete al']); end
+                  else begin EmitAsmX64(['setne al']); end;
                   EmitAsmX64(['movzx rax, al']);
-                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  EmitAsmX64(['jmp end']);
                   
-                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
-                  Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+                  EmitAsmX64(['not_equal:']);
                   EmitAsmX64(['pop rcx']);
                   if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
-                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                  EmitAsmX64(['end:']);
+                  AsmScopeEnd;
                 end
                 else if (lhsTk = tyChar) and (rhsTk = tyAnsiString) then
                 begin
                   EmitAsmX64(['push rax']);
-                  EmitB($48); EmitB($85); EmitB($C9);
-                  EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);      { jz not_equal }
+                  EmitAsmX64(['test rcx, rcx']);
+                  AsmScopeBegin;
+                  EmitAsmX64(['jz not_equal']);
                   EmitAsmX64(['mov rax, [rcx-8]']);
                   EmitAsmX64(['cmp rax, 1']);
-                  EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);     { jne not_equal }
+                  EmitAsmX64(['jnz not_equal']);
                   EmitAsmX64([
                     'movzx rax, byte [rcx]',
                     'pop rdx',
                     'cmp rax, rdx']);
-                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
-                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  if op = tkEq then begin EmitAsmX64(['sete al']); end
+                  else begin EmitAsmX64(['setne al']); end;
                   EmitAsmX64(['movzx rax, al']);
-                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  EmitAsmX64(['jmp end']);
                   
-                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
-                  Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+                  EmitAsmX64(['not_equal:']);
                   EmitAsmX64(['pop rdx']);
                   if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
-                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                  EmitAsmX64(['end:']);
+                  AsmScopeEnd;
                 end
                 else
                   EmitAnsiStrCmpReg(op = tkEq, lhsTk, rhsTk);
@@ -11086,19 +11068,21 @@ begin
                     EmitAsmX64(['mov rcx, [rax]']);
                   end;
                   EmitAsmX64(['cmp rcx, 1']);
-                  EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
+                  AsmScopeBegin;
+                  EmitAsmX64(['jnz not_equal']);
                   EmitAsmX64(['movzx rcx, byte [rax+%]', chrCmpPfx]);
                   EmitAsmX64([
                     'pop rax',
                     'cmp rcx, rax']);
-                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
-                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  if op = tkEq then begin EmitAsmX64(['sete al']); end
+                  else begin EmitAsmX64(['setne al']); end;
                   EmitAsmX64(['movzx rax, al']);
-                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
-                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  EmitAsmX64(['jmp end']);
+                  EmitAsmX64(['not_equal:']);
                   EmitAsmX64(['pop rcx']);
                   if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
-                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                  EmitAsmX64(['end:']);
+                  AsmScopeEnd;
                 end
                 else if (lhsTk = tyChar) and TypeIsFrozenString(rhsTk) then
                 begin
@@ -11116,19 +11100,21 @@ begin
                     EmitAsmX64(['mov rax, [rcx]']);
                   end;
                   EmitAsmX64(['cmp rax, 1']);
-                  EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
+                  AsmScopeBegin;
+                  EmitAsmX64(['jnz not_equal']);
                   EmitAsmX64(['movzx rax, byte [rcx+%]', chrCmpPfx]);
                   EmitAsmX64([
                     'pop rdx',
                     'cmp rax, rdx']);
-                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
-                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  if op = tkEq then begin EmitAsmX64(['sete al']); end
+                  else begin EmitAsmX64(['setne al']); end;
                   EmitAsmX64(['movzx rax, al']);
-                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
-                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  EmitAsmX64(['jmp end']);
+                  EmitAsmX64(['not_equal:']);
                   EmitAsmX64(['pop rdx']);
                   if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
-                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                  EmitAsmX64(['end:']);
+                  AsmScopeEnd;
                 end
                 else
                   { The two sides can differ in width — see EmitStrCmpReg. The
@@ -11162,23 +11148,23 @@ begin
                 if cmpUnsigned then
                 begin
                   case op of
-                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-                    tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;
-                    tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;
-                    tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;
-                    tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;
+                    tkEq:  begin EmitAsmX64(['sete al']); end;
+                    tkNeq: begin EmitAsmX64(['setne al']); end;
+                    tkLt:  begin EmitAsmX64(['setb al']); end;
+                    tkLe:  begin EmitAsmX64(['setbe al']); end;
+                    tkGt:  begin EmitAsmX64(['seta al']); end;
+                    tkGe:  begin EmitAsmX64(['setae al']); end;
                   end;
                 end
                 else
                 begin
                   case op of
-                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-                    tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
-                    tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
-                    tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
-                    tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+                    tkEq:  begin EmitAsmX64(['sete al']); end;
+                    tkNeq: begin EmitAsmX64(['setne al']); end;
+                    tkLt:  begin EmitAsmX64(['setl al']); end;
+                    tkLe:  begin EmitAsmX64(['setle al']); end;
+                    tkGt:  begin EmitAsmX64(['setg al']); end;
+                    tkGe:  begin EmitAsmX64(['setge al']); end;
                   end;
                 end;
                 EmitAsmX64(['movzx rax, al']);
@@ -11254,14 +11240,16 @@ begin
           exists for the ones that are not, which is the bug. }
         allocaLoop := CodeLen;
         EmitAsmX64(['cmp rdx, r11']);
-        EmitB($73); allocaDone := CodeLen; EmitB(0);     { jae done }
+        AsmScopeBegin;
+        EmitAsmX64(['jae short done']);
         EmitAsmX64([
           'mov rax, [r10]',
           'mov [rdx], rax',
           'add rdx, 8',
           'add r10, 8']);
         EmitB($EB); EmitRel8(allocaLoop);                { jmp loop }
-        PatchRel8(allocaDone);
+        EmitAsmX64(['done:']);
+        AsmScopeEnd;
         EmitAsmX64(['mov rax, r11']); { (the hole = the new base) }
         EmitAsmX64([
           'mov r11, [rsp-24]',
@@ -11283,24 +11271,25 @@ begin
         begin
           { SET: rax = new mask (0..63) -> splice into MXCSR, return the old. }
           IREmitNode(IRA[node]);
-          EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8); { stmxcsr [rsp-8] }
-          EmitAsmX64(['mov ecx, [rsp-8]']);
           EmitAsmX64([
+            'stmxcsr [rsp-8]',
+            'mov ecx, [rsp-8]',
             'mov edx, ecx',                        { (old) }
             'and eax, 63',
             'shl eax, 7']);
-          EmitB($81); EmitB($E1); EmitB($7F); EmitB($E0);
-          EmitB($FF); EmitB($FF);                                   { and ecx, ~$1F80 }
-          EmitAsmX64(['or ecx, eax']);
-          EmitAsmX64(['mov [rsp-8], ecx']);
-          EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($F8); { ldmxcsr [rsp-8] }
-          EmitAsmX64(['mov eax, edx']);
+          EmitAsmX64([
+            'and ecx, ~0x1F80',
+            'or ecx, eax',
+            'mov [rsp-8], ecx',
+            'ldmxcsr [rsp-8]',
+            'mov eax, edx']);
         end
         else
         begin
           { GET: the current word is the answer. }
-          EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8); { stmxcsr [rsp-8] }
-          EmitAsmX64(['mov eax, [rsp-8]']);
+          EmitAsmX64([
+            'stmxcsr [rsp-8]',
+            'mov eax, [rsp-8]']);
         end;
         EmitAsmX64([
           'shr eax, 7',
@@ -11357,7 +11346,7 @@ begin
           if (wid > 0) and (wid > Strs[si].Len) then
           begin
             EnsureSpaces;
-            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
+            EmitAsmX64(['mov rsi, @data', SpacesOffset]);
             MovRdxImm(wid - Strs[si].Len);
             MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
           end;
@@ -11383,21 +11372,21 @@ begin
           IREmitNode(valNode);
           EmitAsmX64(['test rax, rax']);
           EmitB($74); pNil := CodeLen; EmitB(0);          { jz nil_handle }
-          EmitB($50);                                     { preserve managed expression (handle) }
+          EmitAsmX64(['push rax']); { preserve managed expression (handle) }
           if wid > 0 then
           begin
             { Field width: pad with max(0, wid - len) spaces before the string.
               rax = handle, length at [rax-8]. Mirrors the runtime tyString path. }
-            EmitB($48); EmitB($8B); EmitB($48); EmitB($F8); { mov rcx, [rax-8] = len }
+            EmitAsmX64(['mov rcx, [rax-8]']); { = len }
             MovRaxImm(wid);
             EmitAsmX64(['sub rax, rcx']);
             EmitPadSpacesFromRax;
           end;
-          EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] = handle (reload; syscall clobbered rax) }
+          EmitAsmX64(['mov rax, [rsp]']); { = handle (reload; syscall clobbered rax) }
           EmitAsmX64(['mov rsi, rax']);
           EmitAsmX64(['mov rdx, [rax-8]']);
           MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-          EmitB($58);                                     { restore managed expression }
+          EmitAsmX64(['pop rax']); { restore managed expression }
           { An OWNED handle -- a concat, or any fresh call result -- is this
             write's to release. Listing IR_BINOP alone leaked one block per
             `WriteLn(F(x))`, and NilPy's print lowers every promotable int,
@@ -11450,7 +11439,7 @@ begin
             if wrFrozenPfx = 1 then
               begin EmitAsmX64(['movzx rcx, byte [rax]']); end
             else
-              begin EmitB($48); EmitB($8B); EmitB($08); end;             { mov rcx, [rax] = len }
+              begin EmitAsmX64(['mov rcx, [rax]']); end; { = len }
             MovRaxImm(wid);
             EmitAsmX64(['sub rax, rcx']);
             EmitPadSpacesFromRax;
@@ -11484,7 +11473,7 @@ begin
             begin
               EmitAsmX64(['push rax']); { (the char) }
               EnsureSpaces;
-              EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
+              EmitAsmX64(['mov rsi, @data', SpacesOffset]); { mov rsi, spaces }
               MovRdxImm(wid - 1);
               MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
               EmitAsmX64(['pop rax']);
@@ -11783,16 +11772,14 @@ begin
                 if slotIsSse[slotIdx] then
                 begin
                   EmitAsmX64(['pop rax']);
-                  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
-                  EmitB($C0 + slotRegIdx[slotIdx] * 8);    { movq xmm[n], rax }
+                  EmitAsmX64(['movq %xmm, rax', slotRegIdx[slotIdx]]);
                   { Narrow to single ONLY for a named `float` parameter. A single
                     passed through `...` undergoes C default argument promotion to
                     double, so a variadic arg (i >= ParamCount) must stay double —
                     narrowing it made printf("%f", floatvar) round wrong. }
                   if (i < Procs[procIdx].ParamCount) and (tk = tySingle) then
                   begin
-                    EmitB($F2); EmitB($0F); EmitB($5A);
-                    EmitB($C0 + slotRegIdx[slotIdx] * 9);   { cvtsd2ss xmm[n],xmm[n] }
+                    EmitAsmX64(['cvtsd2ss %xmm, %xmm', slotRegIdx[slotIdx], slotRegIdx[slotIdx]]);
                   end;
                 end
                 else
@@ -11849,7 +11836,7 @@ begin
                 Stored-to-int first, the tyInt32 load already sign-extends — this
                 fixes the INLINE case (bug-c-crtl-pulled-fn-inline-signed-compare).
                 Only external calls need it: an internal pxx body leaves full RAX. }
-              EmitB($48); EmitB($98);                    { cdqe: sign-extend eax -> rax }
+              EmitAsmX64(['cdqe']); { cdqe: sign-extend eax -> rax }
             end;
           end
           else
@@ -11941,8 +11928,8 @@ begin
                   1: begin EmitAsmX64(['mov rsi, rax']); end;
                   2: begin EmitAsmX64(['mov rdx, rax']); end;
                   3: begin EmitAsmX64(['mov rcx, rax']); end;
-                  4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
-                  5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                  4: begin EmitAsmX64(['mov r8, rax']); end;
+                  5: begin EmitAsmX64(['mov r9, rax']); end;
                 end;
               for i := nArgs - 1 downto 0 do
                 if (not argIsSse[i]) and (i <> lastOrd) then
@@ -11964,8 +11951,8 @@ begin
                     1: begin EmitAsmX64(['mov rsi, rax']); end;
                     2: begin EmitAsmX64(['mov rdx, rax']); end;
                     3: begin EmitAsmX64(['mov rcx, rax']); end;
-                    4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
-                    5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                    4: begin EmitAsmX64(['mov r8, rax']); end;
+                    5: begin EmitAsmX64(['mov r9, rax']); end;
                   end;
                 end;
             end
@@ -12052,8 +12039,8 @@ begin
                   1: begin EmitAsmX64(['mov rsi, rax']); end;
                   2: begin EmitAsmX64(['mov rdx, rax']); end;
                   3: begin EmitAsmX64(['mov rcx, rax']); end;
-                  4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
-                  5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                  4: begin EmitAsmX64(['mov r8, rax']); end;
+                  5: begin EmitAsmX64(['mov r9, rax']); end;
                 end;
               for i := Procs[procIdx].ParamCount - 1 - Ord(skipLastArg) downto 0 do
                 case i of
@@ -12083,9 +12070,10 @@ begin
                 tag pair, ints included (they need the overflow test), takes
                 the call. Patched, not hand-counted. }
               EmitAsmX64(['cmp qword [rdi], 3']);
-              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne int arm (or slow) }
+              AsmScopeBegin;
+              EmitAsmX64(['jnz short int']);    { jne int arm (or slow) }
               EmitAsmX64(['cmp qword [rsi], 3']);
-              EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
+              EmitAsmX64(['jnz short slow2']);
               pVarSlow3 := -1;
               if pVarFastOp = $5E then
               begin
@@ -12101,7 +12089,7 @@ begin
               EmitAsmX64(['movsd [r10+8], xmm0']);
               EmitAsmX64(['mov rax, r10']);
               EmitB($EB); pVarFastDone := CodeLen; EmitB(0); { jmp done }
-              PatchRel8(pVarSlow1);
+              EmitAsmX64(['int:']);
               { ...and INT with INT for `+ - *`: both tags 1..2 (VT_INT,
                 VT_INT64), the op with the CPU's own overflow flag -- which is
                 PyVarNumFast's overflow answer for all three, Low(Int64) * -1
@@ -12109,19 +12097,18 @@ begin
                 overflow (it promotes), a bool or any other tag takes the
                 call. True division of ints is a float and always calls. }
               pVarIntDone := -1;
-              pVarIntS3 := -1;
               if pVarFastOp <> $5E then
               begin
                 EmitAsmX64([
                   'mov rax, [rdi]',
                   'dec rax',
                   'cmp rax, 1']);
-                EmitB($77); pVarIntS1 := CodeLen; EmitB(0);    { ja slow }
+                EmitAsmX64(['ja short slow']);
                 EmitAsmX64([
                   'mov rax, [rsi]',
                   'dec rax',
                   'cmp rax, 1']);
-                EmitB($77); pVarIntS2 := CodeLen; EmitB(0);    { ja slow }
+                EmitAsmX64(['ja short slow']);
                 EmitAsmX64(['mov rax, [rdi+8]']);
                 if pVarFastOp = $58 then
                 begin
@@ -12135,16 +12122,15 @@ begin
                 begin
                   EmitAsmX64(['imul rax, [rsi+8]']);
                 end;
-                EmitB($70); pVarIntS3 := CodeLen; EmitB(0);    { jo slow }
+                EmitAsmX64(['jo short slow']);
                 EmitAsmX64(['mov qword [r10], 2']);
                 EmitAsmX64(['mov [r10+8], rax']);
                 EmitAsmX64(['mov rax, r10']);
                 EmitB($EB); pVarIntDone := CodeLen; EmitB(0);  { jmp done }
-                PatchRel8(pVarIntS1);
-                PatchRel8(pVarIntS2);
-                PatchRel8(pVarIntS3);
+                EmitAsmX64(['slow:']);
               end;
-              PatchRel8(pVarSlow2);
+              EmitAsmX64(['slow2:']);
+              AsmScopeEnd;
               if pVarSlow3 >= 0 then PatchRel8(pVarSlow3);
             end
             else
@@ -12162,9 +12148,10 @@ begin
               { ...and the ordering helpers the same way: rdi = &a, rsi = &b,
                 a Boolean back in eax. PyVarCmpFast's float arm, inline. }
               EmitAsmX64(['cmp qword [rdi], 3']);
-              EmitB($75); pVarSlow1 := CodeLen; EmitB(0);    { jne slow }
+              AsmScopeBegin;
+              EmitAsmX64(['jnz short slow']);
               EmitAsmX64(['cmp qword [rsi], 3']);
-              EmitB($75); pVarSlow2 := CodeLen; EmitB(0);    { jne slow }
+              EmitAsmX64(['jnz short slow2']);
               if pVarCmpOp > 0 then
               begin
                 EmitAsmX64([
@@ -12180,7 +12167,7 @@ begin
               EmitB($0F); EmitB(Byte(Abs(pVarCmpOp))); EmitB($C0);   { seta/setae al }
               EmitAsmX64(['movzx eax, al']);
               EmitB($EB); pVarFastDone := CodeLen; EmitB(0);         { jmp done }
-              PatchRel8(pVarSlow1);
+              EmitAsmX64(['slow:']);
               { ...and INT with INT (tags 1..2 both sides): a signed compare of
                 the payloads, as PyVarCmpFast's int arm answers. Bools, mixed
                 operands and everything else call the helper. }
@@ -12188,12 +12175,12 @@ begin
                 'mov rax, [rdi]',
                 'dec rax',
                 'cmp rax, 1']);
-              EmitB($77); pVarIntS1 := CodeLen; EmitB(0);    { ja slow }
+              EmitAsmX64(['ja short slow2']);
               EmitAsmX64([
                 'mov rax, [rsi]',
                 'dec rax',
                 'cmp rax, 1']);
-              EmitB($77); pVarIntS2 := CodeLen; EmitB(0);    { ja slow }
+              EmitAsmX64(['ja short slow2']);
               EmitAsmX64([
                 'mov rax, [rdi+8]',
                 'cmp rax, [rsi+8]']);
@@ -12205,9 +12192,8 @@ begin
               EmitB($C0);
               EmitAsmX64(['movzx eax, al']);
               EmitB($EB); pVarIntDone := CodeLen; EmitB(0);  { jmp done }
-              PatchRel8(pVarIntS1);
-              PatchRel8(pVarIntS2);
-              PatchRel8(pVarSlow2);
+              EmitAsmX64(['slow2:']);
+              AsmScopeEnd;
             end;
             EmitCallProc(procIdx);   { PXXObjRetain/Release: EmitCallProc routes them through the blob }
             if pVarFastDone >= 0 then PatchRel8(pVarFastDone);
@@ -12255,7 +12241,7 @@ begin
           classIdx := IRC[node];
           if classIdx >= REC_UCLASS_BASE then
           begin
-            EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov rax, VMT_addr }
+            EmitAsmX64(['mov rax, @data', UClsVMTOffset[classIdx - REC_UCLASS_BASE]]); { mov rax, VMT_addr }
             EmitAsmX64(['mov [rdi], rax']);
             
             { Find constructor 'Create' of this class }
@@ -12306,12 +12292,12 @@ begin
               if Procs[cpi].ParamCount <= 6 then
                 for i := Procs[cpi].ParamCount-1 downto 0 do
                   case i of
-                    0: EmitB($5F);
-                    1: EmitB($5E);
-                    2: EmitB($5A);
-                    3: EmitB($59);
-                    4: begin EmitB($41); EmitB($58); end;
-                    5: begin EmitB($41); EmitB($59); end;
+                    0: EmitAsmX64(['pop rdi']);
+                    1: EmitAsmX64(['pop rsi']);
+                    2: EmitAsmX64(['pop rdx']);
+                    3: EmitAsmX64(['pop rcx']);
+                    4: begin EmitAsmX64(['pop r8']); end;
+                    5: begin EmitAsmX64(['pop r9']); end;
                   end;
 
               if Procs[cpi].ParamCount > 6 then
@@ -12417,9 +12403,11 @@ begin
                    handle slot; deref once to reach the handle. }
                  begin EmitAsmX64(['mov rax, [rax]']); end;
                EmitAsmX64(['test rax, rax']);
-               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
+               AsmScopeBegin;
+               EmitAsmX64(['jz short done']);
                EmitAsmX64(['mov rax, [rax-8]']);
-               PatchRel8(jbePatch);
+               EmitAsmX64(['done:']);
+               AsmScopeEnd;
              end
              else if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
                 and ((Syms[IRA[val1Node]].ArrLen = -1) or
@@ -12430,9 +12418,11 @@ begin
                  word at [P-8] is the element count. }
                IREmitNode(val1Node);                          { rax = data ptr (or 0) }
                EmitAsmX64(['test rax, rax']);
-               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
+               AsmScopeBegin;
+               EmitAsmX64(['jz short done']);     { jz done (rax already 0) }
                EmitAsmX64(['mov rax, [rax-8]']);
-               PatchRel8(jbePatch);
+               EmitAsmX64(['done:']);
+               AsmScopeEnd;
              end
              else if ((IRKind[val1Node] = IR_INDEX) or (IRKind[val1Node] = IR_FIELD)) and
                      (IntToTypeKind(IRTk[val1Node]) = tyPointer) then
@@ -12442,11 +12432,13 @@ begin
                  val1Node is the ADDRESS of the handle slot; load the handle,
                  then read its header length word. }
                IREmitNode(val1Node);                          { rax = &handle }
-               EmitB($48); EmitB($8B); EmitB($00);            { mov rax, [rax] = data ptr }
+               EmitAsmX64(['mov rax, [rax]']); { = data ptr }
                EmitAsmX64(['test rax, rax']);
-               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
+               AsmScopeBegin;
+               EmitAsmX64(['jz short done']);
                EmitAsmX64(['mov rax, [rax-8]']);
-               PatchRel8(jbePatch);
+               EmitAsmX64(['done:']);
+               AsmScopeEnd;
              end
             else
             begin
@@ -12500,17 +12492,19 @@ begin
                 'mov rbx, rax',
                 'mov rax, [rbx]',                      { ; tag }
                 'cmp rax, %', VT_DOUBLE]);
-              EmitB($75); pNotDouble := CodeLen; EmitB(0);     { jne .not_double }
-              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
+              AsmScopeBegin;
+              EmitAsmX64(['jnz short not_double']);
+              EmitAsmX64(['mov rax, [rbx+8]']); { payload }
               EmitAsmX64([
                 'movq xmm0, rax',
                 'cvttsd2si rax, xmm0']);
-              EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
+              EmitAsmX64(['jmp short done']);
               { .not_double: }
-              PatchRel8(pNotDouble);
-              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
+              EmitAsmX64(['not_double:']);
+              EmitAsmX64(['mov rax, [rbx+8]']); { payload }
               { .done: }
-              PatchRel8(pDone);
+              EmitAsmX64(['done:']);
+              AsmScopeEnd;
               EmitAsmX64(['pop rbx']);
             end;
           end
@@ -12535,17 +12529,19 @@ begin
                 'mov rbx, rax',
                 'mov rax, [rbx]',                      { ; tag }
                 'cmp rax, %', VT_DOUBLE]);
-              EmitB($75); pNotDouble := CodeLen; EmitB(0);     { jne .not_double }
-              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
-              EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
+              AsmScopeBegin;
+              EmitAsmX64(['jnz short not_double']);
+              EmitAsmX64(['mov rax, [rbx+8]']); { payload }
+              EmitAsmX64(['jmp short done']);
               { .not_double: an integer payload -> its double bits }
-              PatchRel8(pNotDouble);
+              EmitAsmX64(['not_double:']);
               EmitAsmX64(['mov rax, [rbx+8]']);
               EmitAsmX64([
                 'cvtsi2sd xmm0, rax',
                 'movq rax, xmm0']);
               { .done: }
-              PatchRel8(pDone);
+              EmitAsmX64(['done:']);
+              AsmScopeEnd;
               EmitAsmX64(['pop rbx']);
             end;
             if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) or
@@ -12593,10 +12589,11 @@ begin
                 if IntToTypeKind(IRTk[val1Node]) = tyUInt64 then
                 begin
                   EmitAsmX64(['test rax, rax']);
-                  EmitB($78); pUnsNeg := CodeLen; EmitB(0);               { js .neg }
+                  AsmScopeBegin;
+                  EmitAsmX64(['js short neg']);
                   EmitAsmX64(['cvtsi2sd xmm0, rax']);
-                  EmitB($EB); pUnsDone := CodeLen; EmitB(0);              { jmp .done }
-                  PatchRel8(pUnsNeg);         { .neg: }
+                  EmitAsmX64(['jmp short done']);
+                  EmitAsmX64(['neg:']);         { .neg: }
                   EmitAsmX64([
                     'mov rcx, rax',
                     'shr rax, 1',
@@ -12604,7 +12601,8 @@ begin
                     'or rax, rcx',
                     'cvtsi2sd xmm0, rax',
                     'addsd xmm0, xmm0']);
-                  PatchRel8(pUnsDone);       { .done: }
+                  EmitAsmX64(['done:']);       { .done: }
+                  AsmScopeEnd;
                 end
                 else
                   begin EmitAsmX64(['cvtsi2sd xmm0, rax']); end;
@@ -12615,9 +12613,9 @@ begin
           end
           else if specialId = Ord(tkArgCount) then
           begin
-            EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-            EmitB($48); EmitB($8B); EmitB($00);
-            EmitB($48); EmitB($FF); EmitB($C8);
+            EmitAsmX64(['mov rax, [@glob]', BSS_INITIAL_RSP]);
+            EmitAsmX64(['mov rax, qword [rax]']);
+            EmitAsmX64(['dec rax']);
           end
           else if specialId = 100 then
           begin
@@ -12669,7 +12667,7 @@ begin
               IREmitNode(val1Node);            { rax = buffer address }
               EmitAsmX64(['push rax']);
               IREmitNode(IRA[arg2Node]);       { rax = new length }
-              EmitB($59);                      { pop rcx = buffer address }
+              EmitAsmX64(['pop rcx']); { = buffer address }
               EmitStoreStrLenAt(IRFrozenKindOfAddr(val1Node));
             end
             else
@@ -12711,21 +12709,21 @@ begin
               elemSize := 1;
 
             IREmitNode(IRA[arg2Node]);      { rax = n }
-            EmitB($50);                     { push n }
+            EmitAsmX64(['push rax']); { push n }
             EmitAcquireHeapLock;
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov rsi, [@glob]', Syms[symIdx].Offset]); end
             else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
               begin
                 { by-ref (var/out) param: the slot holds the ADDRESS of the
                   caller's handle/data-pointer slot; deref to reach the old data
                   pointer, and (below) publish the new one into the caller's slot. }
-                EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); { mov rsi, [rbp+off] = caller slot addr }
-                EmitB($48); EmitB($8B); EmitB($36);                               { mov rsi, [rsi] = old data ptr }
+                EmitAsmX64(['mov rsi, [rbp+%]', Syms[symIdx].Offset]); { = caller slot addr }
+                EmitAsmX64(['mov rsi, [rsi]']); { = old data ptr }
               end
             else
-              begin EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($56);                     { push old data pointer }
+              begin EmitAsmX64(['mov rsi, qword [rbp+%]', Syms[symIdx].Offset]); end;
+            EmitAsmX64(['push rsi']); { push old data pointer }
             { NilPy managed string: SetLength(s, 0) must publish a REAL
               zero-length block, not nil, so `is None` can tell None from ""
               (bug-nilpy-empty-str-and-none-are-the-same-value). This is the
@@ -12741,7 +12739,7 @@ begin
                            and not Syms[symIdx].IsArray;
             if not slNoStrZero then
             begin
-              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+              EmitAsmX64(['mov rax, [rsp+8]']); { = n }
               EmitAsmX64(['test rax, rax']);
               EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
             end;
@@ -12776,39 +12774,39 @@ begin
                               not Syms[symIdx].IsArray);
             if slDynFast then
             begin
-              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [rsp] = old data }
+              EmitAsmX64(['mov rsi, [rsp]']); { = old data }
               EmitAsmX64(['test rsi, rsi']);
               EmitB($0F); EmitB($84); pDynFastNil := CodeLen; EmitI32(0); { jz alloc }
               EmitAsmX64(['cmp qword [rsi-16], 1']);
               EmitB($0F); EmitB($85); pDynFastShared := CodeLen; EmitI32(0); { jne alloc }
-              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx, [rsi-8] = old len }
+              EmitAsmX64(['mov rdx, [rsp+8]']); { = n }
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
               EmitAsmX64(['cmp rdx, rcx']);
               EmitB($0F); EmitB($82); pDynFastShrink := CodeLen; EmitI32(0); { jb alloc (shrink drops elements) }
               EmitAsmX64(['mov rax, rdx']);
               EmitScaleByElem(0, elemSize);                             { rax := n * elemSize }
-              EmitB($48); EmitB($83); EmitB($C0); EmitB($18);             { add rax, 24 = needed payload }
-              EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);             { cmp rax, [rsi-32] = capacity }
+              EmitAsmX64(['add rax, 24']); { = needed payload }
+              EmitAsmX64(['cmp rax, [rsi-32]']); { = capacity }
               EmitB($0F); EmitB($87); pDynFastBig := CodeLen; EmitI32(0); { ja alloc }
 
               EmitScaleByElem(1, elemSize);                             { rcx := oldLen * elemSize }
-              EmitB($48); EmitB($83); EmitB($E8); EmitB($18);             { sub rax, 24 = n bytes }
-              EmitB($48); EmitB($29); EmitB($C8);                         { sub rax, rcx = tail bytes }
-              EmitB($48); EmitB($8D); EmitB($3C); EmitB($0E);             { lea rdi, [rsi+rcx] = old end }
+              EmitAsmX64(['sub rax, 24']); { = n bytes }
+              EmitAsmX64(['sub rax, rcx']); { = tail bytes }
+              EmitAsmX64(['lea rdi, [rsi+rcx]']); { = old end }
               EmitAsmX64([
                 'mov rcx, rax',
                 'xor eax, eax']);
-              EmitB($F3); EmitB($AA);                                     { rep stosb }
-              EmitB($48); EmitB($89); EmitB($56); EmitB($F8);             { mov [rsi-8], rdx = new length }
-              EmitB($58);                                                 { pop rax = data (unchanged) }
-              EmitB($59);                                                 { pop rcx = n }
+              EmitAsmX64(['rep stosb']);
+              EmitAsmX64(['mov [rsi-8], rdx']); { = new length }
+              EmitAsmX64(['pop rax']); { = data (unchanged) }
+              EmitAsmX64(['pop rcx']); { = n }
               EmitB($E9); pDynFastDone := CodeLen; EmitI32(0);            { jmp release-lock }
 
               Patch32(pDynFastNil, CodeLen - (pDynFastNil + 4));
               Patch32(pDynFastShared, CodeLen - (pDynFastShared + 4));
               Patch32(pDynFastShrink, CodeLen - (pDynFastShrink + 4));
               Patch32(pDynFastBig, CodeLen - (pDynFastBig + 4));
-              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+              EmitAsmX64(['mov rax, [rsp+8]']); { = n }
             end;
 
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
@@ -12817,27 +12815,27 @@ begin
                 capacity. Resize unique buffers in place when the request fits;
                 otherwise allocate with geometric headroom so AppendChar is
                 amortized. The visible length remains n. }
-              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);           { mov rsi, [rsp] = old data }
+              EmitAsmX64(['mov rsi, [rsp]']); { = old data }
               EmitAsmX64(['test rsi, rsi']);
               EmitB($0F); EmitB($84); pAnsiAlloc := CodeLen; EmitI32(0); { jz alloc }
               EmitAsmX64(['cmp qword [rsi-16], 1']);
               EmitB($0F); EmitB($85); pAnsiShared := CodeLen; EmitI32(0); { jne alloc }
-              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
-              EmitB($48); EmitB($83); EmitB($C0); EmitB($19);           { add rax, 25 = needed payload (24 header + nul) }
-              EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);           { cmp rax, [rsi-32] = capacity payload (allocator's size word, pushed back by the kind qword) }
+              EmitAsmX64(['mov rax, [rsp+8]']); { = n }
+              EmitAsmX64(['add rax, 25']); { = needed payload (24 header + nul) }
+              EmitAsmX64(['cmp rax, [rsi-32]']); { = capacity payload (allocator's size word, pushed back by the kind qword) }
               EmitB($0F); EmitB($87); pAnsiTooSmall := CodeLen; EmitI32(0); { ja alloc }
 
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old len }
-              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
+              EmitAsmX64(['mov rdx, [rsp+8]']); { = n }
               EmitAsmX64(['cmp rdx, rcx']);
               EmitB($0F); EmitB($86); pAnsiNoZeroGrow := CodeLen; EmitI32(0); { jbe no_zero }
               EmitAsmX64(['lea rdi, [rsi+rcx]']);
               EmitAsmX64(['mov rcx, rdx']);
               EmitAsmX64(['sub rcx, [rsi-8]']);
               EmitAsmX64(['xor eax, eax']);
-              EmitB($F3); EmitB($AA);                                   { rep stosb }
+              EmitAsmX64(['rep stosb']);
               Patch32(pAnsiNoZeroGrow, CodeLen - (pAnsiNoZeroGrow + 4));
-              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
+              EmitAsmX64(['mov rdx, [rsp+8]']); { = n }
               EmitAsmX64(['mov [rsi-8], rdx']);
               { INVALIDATE the cached ASCII answer: this branch resizes the block
                 IN PLACE and the bytes between the old and new length were
@@ -12860,19 +12858,19 @@ begin
               EmitB($48); EmitB($81); EmitB($66); EmitB($E8);           { and qword [rsi-24], ... }
               EmitB($FF); EmitB($EB); EmitB($FF); EmitB($FF);           { ...NOT (ASCII_KNOWN or ASCII) }
               EmitAsmX64(['mov byte [rsi+rdx], 0']);
-              EmitB($58);                                               { pop rax = old data }
-              EmitB($59);                                               { pop rcx = n }
+              EmitAsmX64(['pop rax']); { = old data }
+              EmitAsmX64(['pop rcx']); { = n }
               EmitB($E9); pAnsiFastDone := CodeLen; EmitI32(0);         { jmp done/release-lock }
 
               Patch32(pAnsiAlloc, CodeLen - (pAnsiAlloc + 4));
               Patch32(pAnsiShared, CodeLen - (pAnsiShared + 4));
               Patch32(pAnsiTooSmall, CodeLen - (pAnsiTooSmall + 4));
-              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);           { mov rsi, [rsp] = old data }
-              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
-              EmitB($48); EmitB($83); EmitB($C0); EmitB($19);           { add rax, 25 = needed payload (24 header + nul) }
+              EmitAsmX64(['mov rsi, [rsp]']); { = old data }
+              EmitAsmX64(['mov rax, [rsp+8]']); { = n }
+              EmitAsmX64(['add rax, 25']); { = needed payload (24 header + nul) }
               EmitAsmX64(['test rsi, rsi']);
               EmitB($0F); EmitB($84); pAnsiUseNeededNil := CodeLen; EmitI32(0); { jz use needed }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length (NOT [rsi-32] block cap: a short string that reused an oversized freed block via first-fit would otherwise double the block size each grow -> 4M,8M,16M... OOM) }
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = old length (NOT [rsi-32] block cap: a short string that reused an oversized freed block via first-fit would otherwise double the block size each grow -> 4M,8M,16M... OOM) }
               EmitAsmX64([
                 'add rcx, rcx',                        { (geometric headroom from the LENGTH, decoupled from block size) }
                 'cmp rcx, rax']);
@@ -12916,10 +12914,10 @@ begin
 
                 An array grown from NIL takes no headroom (oldLen = 0), so a
                 one-shot `SetLength(a, big)` still allocates exactly big. }
-              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [rsp] = old data }
+              EmitAsmX64(['mov rsi, [rsp]']); { = old data }
               EmitAsmX64(['test rsi, rsi']);
               EmitB($0F); EmitB($84); pDynCapNil := CodeLen; EmitI32(0);  { jz cap_done }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx, [rsi-8] = old len }
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
               EmitScaleByElem(1, elemSize);                             { rcx := oldLen * elemSize }
               EmitAsmX64([
                 'add rcx, rcx',
@@ -12931,14 +12929,14 @@ begin
               Patch32(pDynCapSmall, CodeLen - (pDynCapSmall + 4));
             end;
             EmitHeapAllocLocked;            { rax = allocator payload / array base }
-            EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
+            EmitAsmX64(['mov rcx, [rsp+8]']); { = n }
             EmitAsmX64([
               'mov qword [rax], 0',               { (kind: untagged, phase 1) }
               'mov qword [rax+8], 1']);           { (refcount) }
             EmitAsmX64([
               'mov [rax+16], rcx',                   { (length) }
               'lea rdi, [rax+24]']);                 { (new data) }
-            EmitB($57);                     { push new data pointer }
+            EmitAsmX64(['push rdi']); { push new data pointer }
 
             { NO ZERO-FILL HERE, DELIBERATELY -- the new slots are ALREADY zero.
               EmitHeapAllocLocked calls PXXAlloc, whose contract is a zeroed
@@ -12962,35 +12960,35 @@ begin
               between the old and the new length. Only the post-allocation fill
               is redundant. feature-opt-heap-per-thread-cache }
 
-            EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
-            EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi, [rsp+8] = old data }
+            EmitAsmX64(['mov rdi, [rsp]']); { = new data }
+            EmitAsmX64(['mov rsi, [rsp+8]']); { = old data }
             EmitAsmX64(['test rsi, rsi']);
             EmitB($0F); EmitB($84); pDynNoOld := CodeLen; EmitI32(0);
-            EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length }
-            EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx, [rsp+16] = n }
+            EmitAsmX64(['mov rcx, [rsi-8]']); { = old length }
+            EmitAsmX64(['mov rdx, [rsp+16]']); { = n }
             EmitAsmX64(['cmp rcx, rdx']);
             EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0); { jbe copy_size }
             EmitAsmX64(['mov rcx, rdx']);
             Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
             if elemSize = 8 then
-              begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+              begin EmitAsmX64(['shl rcx, 3']); end
             else if elemSize > 1 then
               begin
-                EmitB($48); EmitB($C7); EmitB($C0); EmitI32(elemSize);
-                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+                EmitAsmX64(['mov rax, %', elemSize]);
+                EmitAsmX64(['imul rcx, rax']);
               end;
-            EmitB($F3); EmitB($A4);          { rep movsb }
+            EmitAsmX64(['rep movsb']);
             Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
             slMek := ManagedElemKindLocked(SymTR[symIdx].ElemTk, SymTR[symIdx].ElemRec);
             if Syms[symIdx].IsArray and (slMek <> 0) then
             begin
               { The copied array prefix owns its own references. }
-              EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
-              EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi, [rsp+8] = old data }
+              EmitAsmX64(['mov rdi, [rsp]']); { = new data }
+              EmitAsmX64(['mov rsi, [rsp+8]']); { = old data }
               EmitAsmX64(['test rsi, rsi']);
               EmitB($0F); EmitB($84); pDynNoRetain := CodeLen; EmitI32(0);
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length }
-              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx, [rsp+16] = n }
+              EmitAsmX64(['mov rcx, [rsi-8]']); { = old length }
+              EmitAsmX64(['mov rdx, [rsp+16]']); { = n }
               EmitAsmX64(['cmp rcx, rdx']);
               EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0);
               EmitAsmX64(['mov rcx, rdx']);
@@ -13084,18 +13082,18 @@ begin
               EmitAsmX64(['mov byte [rdi+rcx], 0']);
             end;
 
-            EmitB($58);                     { pop rax = new data pointer }
-            EmitB($5E);                     { pop rsi = old data pointer }
-            EmitB($59);                     { pop rcx = n }
+            EmitAsmX64(['pop rax']); { = new data pointer }
+            EmitAsmX64(['pop rsi']); { = old data pointer }
+            EmitAsmX64(['pop rcx']); { = n }
             if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              begin EmitAsmX64(['mov [@glob], rax', Syms[symIdx].Offset]); end
             else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
               begin
-                EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+                EmitAsmX64(['mov rcx, [rbp+%]', Syms[symIdx].Offset]); { = caller slot addr }
                 EmitAsmX64(['mov [rcx], rax']); { (new ptr -> caller slot) }
               end
             else
-              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+              begin EmitAsmX64(['mov qword [rbp+%], rax', Syms[symIdx].Offset]); end;
             EmitAsmX64(['mov rax, rsi']);
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
               EmitAnsiStrReleaseLocked
@@ -13110,18 +13108,18 @@ begin
             if not slNoStrZero then
             begin
               Patch32(pDynZero, CodeLen - (pDynZero + 4));
-              EmitB($5E);                     { pop rsi = old data pointer }
-              EmitB($59);                     { pop rcx = n }
+              EmitAsmX64(['pop rsi']); { = old data pointer }
+              EmitAsmX64(['pop rcx']); { = n }
               EmitAsmX64(['xor eax, eax']);
               if Syms[symIdx].Kind = skGlobal then
-                begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+                begin EmitAsmX64(['mov [@glob], rax', Syms[symIdx].Offset]); end
               else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
                 begin
-                  EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+                  EmitAsmX64(['mov rcx, [rbp+%]', Syms[symIdx].Offset]); { = caller slot addr }
                   EmitAsmX64(['mov [rcx], rax']); { (nil -> caller slot) }
                 end
               else
-                begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+                begin EmitAsmX64(['mov qword [rbp+%], rax', Syms[symIdx].Offset]); end;
               EmitAsmX64(['mov rax, rsi']);
               if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
                 EmitAnsiStrReleaseLocked
@@ -13157,13 +13155,15 @@ begin
                 setLo := IRIVal[IRA[itemNode]];
                 setHi := IRIVal[IRB[itemNode]];
                 CmpRcxImm(setLo);
-                EmitB($0F); EmitB($8C); nextJmp := CodeLen; EmitI32(0);
+                AsmScopeBegin;
+                EmitAsmX64(['jl next']);
                 CmpRcxImm(setHi);
                 EmitB($0F); EmitB($8E);
                 if trueCount >= 128 then Error('set expression too large');
                 trueJumps[trueCount] := CodeLen; Inc(trueCount);
                 EmitI32(0);
-                Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                EmitAsmX64(['next:']);
+                AsmScopeEnd;
               end
               else
               begin
@@ -13178,11 +13178,13 @@ begin
             end;
 
             MovRaxImm(0);
-            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+            AsmScopeBegin;
+            EmitAsmX64(['jmp done']);
             for i := 0 to trueCount - 1 do
               Patch32(trueJumps[i], CodeLen - (trueJumps[i] + 4));
             MovRaxImm(1);
-            Patch32(falseJmp, CodeLen - (falseJmp + 4));
+            EmitAsmX64(['done:']);
+            AsmScopeEnd;
           end
           else if specialId = Ord(tkSysOpen) then
           begin
@@ -13209,7 +13211,7 @@ begin
 
             IREmitNode(val2Node); { Evaluates flags -> rax }
             EmitAsmX64(['mov rsi, rax']);
-            MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2);
+            MovRaxImm(0); EmitAsmX64(['mov rdx, rax']);
             MovRaxImm(SYS_OPEN); EmitSyscall;
           end
           else if specialId = Ord(tkSysRead) then
@@ -13379,7 +13381,7 @@ begin
               answers 0 for anything that is not a string append, and then the
               general path below runs exactly as it always did. }
             IREmitNode(IRB[IRB[node]]);          { rax = right slot addr }
-            EmitB($50);                          { push right }
+            EmitAsmX64(['push rax']); { push right }
             IREmitNode(IRA[node]);               { rax = dest slot addr }
             EmitAsmX64([
               'mov rdi, rax',
@@ -13402,7 +13404,7 @@ begin
             from a virtual call is BORROWED, so moving it here frees an object
             the receiver still points at. }
           EmitVariantRetain;
-          EmitB($50);
+          EmitAsmX64(['push rax']);
           IREmitNode(IRA[node]);                 { rax = dest addr }
           EmitVariantReleasePayload;
           EmitAsmX64([
@@ -13463,7 +13465,7 @@ begin
               EmitObjRetainRaxGuarded;
           end
           else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
-          begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }
+          begin EmitAsmX64(['cdqe']); end; { cdqe: sign-extend eax -> rax }
           EmitAsmX64(['push rax']); { (payload) }
           IREmitNode(IRA[node]);                 { rax = dest addr }
           { both words are stored below, so only the old PAYLOAD needs
@@ -13515,8 +13517,8 @@ begin
         else if tk = tyClass then
           IREmitCodeCall(ObjRetainBlobAddr)
         else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
-        begin EmitB($48); EmitB($98); end;     { cdqe }
-        EmitB($50);                            { push payload }
+        begin EmitAsmX64(['cdqe']); end;
+        EmitAsmX64(['push rax']); { push payload }
         IREmitNode(IRA[node]);                 { rax = temp addr }
         EmitVariantReleasePayload;             { both words are stored below }
         EmitAsmX64([
@@ -13548,7 +13550,7 @@ begin
     IR_VAR_BINOP:
       begin
         IREmitNode(IRA[node]);                 { rax = left addr }
-        EmitB($50);                            { push left }
+        EmitAsmX64(['push rax']); { push left }
         IREmitNode(IRB[node]);                 { rax = right addr }
         EmitAsmX64([
           'mov rsi, rax',                        { (right) }
@@ -13560,13 +13562,13 @@ begin
       begin
         { full-record copy: rep movsb IRIVal bytes from src (IRB) to dest (IRA) }
         IREmitNode(IRB[node]);                 { rax = source address }
-        EmitB($50);                            { push rsi-source }
+        EmitAsmX64(['push rax']); { push rsi-source }
         IREmitNode(IRA[node]);                 { rax = dest address }
         EmitAsmX64([
           'mov rdi, rax',
           'pop rsi']);
         EmitB($48); EmitB($B9); EmitI64(IRIVal[node]); { movabs rcx, byte count }
-        EmitB($F3); EmitB($A4);                { rep movsb }
+        EmitAsmX64(['rep movsb']);
       end;
 
     IR_BLOCK_MEM:
@@ -13620,31 +13622,31 @@ begin
           releasing makes self-assignment and shared fields safe. dest/src are
           parked on the stack so the retain/release helpers may clobber freely. }
         IREmitNode(IRB[node]);                 { rax = source address }
-        EmitB($50);                            { push src      [rsp+16 below] }
+        EmitAsmX64(['push rax']); { push src      [rsp+16 below] }
         IREmitNode(IRA[node]);                 { rax = dest address }
-        EmitB($50);                            { push dest     [rsp+8 below]  }
+        EmitAsmX64(['push rax']); { push dest     [rsp+8 below] }
         EmitAsmX64(['push rbx']); { [rsp] }
 
         { Interface members FIRST, with no lock held (see
           EmitManagedRecordIntfWalk). Retain the source before releasing the
           destination so `a := a` nets zero instead of destroying the value. }
-        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
+        EmitAsmX64(['mov rbx, [rsp+16]']); { = src }
         EmitManagedRecordIntfWalk(IRC[node], 'PXXRecordRetainIntf');
-        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov rbx, [rsp+8] = dest }
+        EmitAsmX64(['mov rbx, [rsp+8]']); { = dest }
         EmitManagedRecordIntfWalk(IRC[node], 'PXXRecordReleaseIntf');
 
         EmitAcquireHeapLock;
-        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
+        EmitAsmX64(['mov rbx, [rsp+16]']); { = src }
         EmitManagedRecordRetain(IRC[node]);
-        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov rbx, [rsp+8] = dest }
+        EmitAsmX64(['mov rbx, [rsp+8]']); { = dest }
         EmitManagedRecordReleaseLocked(IRC[node]);
         EmitReleaseHeapLock;
 
         EmitAsmX64(['pop rbx']);
-        EmitB($5F);                            { pop rdi = dest }
-        EmitB($5E);                            { pop rsi = src }
+        EmitAsmX64(['pop rdi']); { = dest }
+        EmitAsmX64(['pop rsi']); { = src }
         EmitB($48); EmitB($B9); EmitI64(IRIVal[node]); { movabs rcx, byte count }
-        EmitB($F3); EmitB($A4);                { rep movsb (src -> dest) }
+        EmitAsmX64(['rep movsb']);                { src -> dest }
       end;
 
     IR_SETLEN_STR:
@@ -13710,18 +13712,18 @@ begin
         savedLValueWrite := InLValueWrite; InLValueWrite := True;
         IREmitNode(IRA[node]);                                 { rax = &slot }
         InLValueWrite := savedLValueWrite;
-        EmitB($50);                                            { push &slot }
+        EmitAsmX64(['push rax']); { push &slot }
 
         IREmitNode(IRB[node]);                                 { rax = n }
-        EmitB($50);                                            { push n }
+        EmitAsmX64(['push rax']); { push n }
 
         EmitAcquireHeapLock;
 
-        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = &slot }
-        EmitB($48); EmitB($8B); EmitB($30);                    { mov rsi,[rax] = old data ptr }
-        EmitB($56);                                            { push old }
+        EmitAsmX64(['mov rax, [rsp+8]']); { = &slot }
+        EmitAsmX64(['mov rsi, [rax]']); { = old data ptr }
+        EmitAsmX64(['push rsi']); { push old }
 
-        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = n }
+        EmitAsmX64(['mov rax, [rsp+8]']); { = n }
         EmitAsmX64(['test rax,rax']);
         EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0); { jz zero }
 
@@ -13734,30 +13736,30 @@ begin
           Stack here is [rsp]=old, [rsp+8]=n, [rsp+16]=&slot, and the RESULT of
           this node is the data pointer, which the fast path leaves unchanged.
           feature-opt-dynarray-grows-in-place }
-        EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi,[rsp] = old data }
+        EmitAsmX64(['mov rsi, [rsp]']); { = old data }
         EmitAsmX64(['test rsi,rsi']);
         EmitB($0F); EmitB($84); pDynFastNil := CodeLen; EmitI32(0); { jz alloc }
         EmitAsmX64(['cmp qword [rsi-16],1']);
         EmitB($0F); EmitB($85); pDynFastShared := CodeLen; EmitI32(0); { jne alloc }
-        EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx,[rsp+8] = n }
-        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx,[rsi-8] = old len }
+        EmitAsmX64(['mov rdx, [rsp+8]']); { = n }
+        EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
         EmitAsmX64(['cmp rdx,rcx']);
         EmitB($0F); EmitB($82); pDynFastShrink := CodeLen; EmitI32(0); { jb alloc }
         EmitAsmX64(['mov rax,rdx']);
         EmitScaleByElem(0, slElemSize);                             { rax := n * elemSize }
-        EmitB($48); EmitB($83); EmitB($C0); EmitB($18);             { add rax,24 = needed payload }
-        EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);             { cmp rax,[rsi-32] = capacity }
+        EmitAsmX64(['add rax, 24']); { = needed payload }
+        EmitAsmX64(['cmp rax, [rsi-32]']); { = capacity }
         EmitB($0F); EmitB($87); pDynFastBig := CodeLen; EmitI32(0); { ja alloc }
 
         EmitScaleByElem(1, slElemSize);                             { rcx := oldLen * elemSize }
-        EmitB($48); EmitB($83); EmitB($E8); EmitB($18);             { sub rax,24 = n bytes }
-        EmitB($48); EmitB($29); EmitB($C8);                         { sub rax,rcx = tail bytes }
-        EmitB($48); EmitB($8D); EmitB($3C); EmitB($0E);             { lea rdi,[rsi+rcx] = old end }
+        EmitAsmX64(['sub rax, 24']); { = n bytes }
+        EmitAsmX64(['sub rax, rcx']); { = tail bytes }
+        EmitAsmX64(['lea rdi, [rsi+rcx]']); { = old end }
         EmitAsmX64([
           'mov rcx,rax',
           'xor eax,eax']);
-        EmitB($F3); EmitB($AA);                                     { rep stosb }
-        EmitB($48); EmitB($89); EmitB($56); EmitB($F8);             { mov [rsi-8],rdx = new length }
+        EmitAsmX64(['rep stosb']);
+        EmitAsmX64(['mov [rsi-8], rdx']); { = new length }
         EmitAsmX64([
           'mov rax,rsi',                         { (result = data) }
           'add rsp,24']);
@@ -13767,24 +13769,24 @@ begin
         Patch32(pDynFastShared, CodeLen - (pDynFastShared + 4));
         Patch32(pDynFastShrink, CodeLen - (pDynFastShrink + 4));
         Patch32(pDynFastBig, CodeLen - (pDynFastBig + 4));
-        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = n }
+        EmitAsmX64(['mov rax, [rsp+8]']); { = n }
 
         { size = n*elemSize + 24 }
         if slElemSize = 8 then
-          begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end
+          begin EmitAsmX64(['shl rax, 3']); end
         else
           begin
-            EmitB($48); EmitB($C7); EmitB($C1); EmitI32(slElemSize);
-            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);
+            EmitAsmX64(['mov rcx, %', slElemSize]);
+            EmitAsmX64(['imul rax, rcx']);
           end;
         EmitAsmX64(['add rax,24']); { (header: kind+rc+len) }
         { Geometric headroom off the LENGTH -- see the symbol-target arm for why
           it must not come off [rsi-32]. Without it the in-place path above is
           reachable at most once per array. }
-        EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi,[rsp] = old data }
+        EmitAsmX64(['mov rsi, [rsp]']); { = old data }
         EmitAsmX64(['test rsi,rsi']);
         EmitB($0F); EmitB($84); pDynCapNil := CodeLen; EmitI32(0);  { jz cap_done }
-        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx,[rsi-8] = old len }
+        EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
         EmitScaleByElem(1, slElemSize);                             { rcx := oldLen * elemSize }
         EmitAsmX64([
           'add rcx,rcx',
@@ -13795,65 +13797,65 @@ begin
         Patch32(pDynCapNil, CodeLen - (pDynCapNil + 4));
         Patch32(pDynCapSmall, CodeLen - (pDynCapSmall + 4));
         EmitHeapAllocLocked;                                   { rax = block base }
-        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx,[rsp+8] = n }
+        EmitAsmX64(['mov rcx, [rsp+8]']); { = n }
         EmitAsmX64([
           'mov qword [rax],0',                { (kind: untagged, phase 1) }
           'mov qword [rax+8],1']);            { (refcount) }
         EmitAsmX64([
           'mov [rax+16],rcx',                    { (length) }
           'lea rdi,[rax+24]']);                  { (new data) }
-        EmitB($57);                                            { push new data }
+        EmitAsmX64(['push rdi']); { push new data }
 
         { zero new data: rcx = n * elemSize bytes }
-        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx,[rsp+16] = n }
+        EmitAsmX64(['mov rcx, [rsp+16]']); { = n }
         if slElemSize = 8 then
-          begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+          begin EmitAsmX64(['shl rcx, 3']); end
         else
           begin
-            EmitB($48); EmitB($C7); EmitB($C0); EmitI32(slElemSize);
-            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+            EmitAsmX64(['mov rax, %', slElemSize]);
+            EmitAsmX64(['imul rcx, rax']);
           end;
-        EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);        { mov rdi,[rsp] = new data }
+        EmitAsmX64(['mov rdi, [rsp]']); { = new data }
         EmitAsmX64(['xor eax,eax']);
-        EmitB($F3); EmitB($AA);                                { rep stosb }
+        EmitAsmX64(['rep stosb']);
 
         { copy old prefix: min(oldlen, n) elements }
-        EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
+        EmitAsmX64(['mov rsi, [rsp+8]']); { = old }
         EmitAsmX64(['test rsi,rsi']);
         EmitB($0F); EmitB($84); pDynNoOld := CodeLen; EmitI32(0);
-        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);        { mov rcx,[rsi-8] = old len }
-        EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx,[rsp+16] = n }
+        EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
+        EmitAsmX64(['mov rdx, [rsp+16]']); { = n }
         EmitAsmX64(['cmp rcx,rdx']);
         EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0); { jbe c1 }
         EmitAsmX64(['mov rcx,rdx']);
         Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
-        EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);        { mov rdi,[rsp] = new data }
+        EmitAsmX64(['mov rdi, [rsp]']); { = new data }
         if slElemSize = 8 then
-          begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+          begin EmitAsmX64(['shl rcx, 3']); end
         else
           begin
-            EmitB($48); EmitB($C7); EmitB($C0); EmitI32(slElemSize);
-            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+            EmitAsmX64(['mov rax, %', slElemSize]);
+            EmitAsmX64(['imul rcx, rax']);
           end;
-        EmitB($F3); EmitB($A4);                                { rep movsb }
+        EmitAsmX64(['rep movsb']);
         Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
 
         { Retain copied sub-array handles or managed leaf values. }
         slMek := ManagedElemKindLocked(Ord(slBaseTk), slBaseRec);   { this whole sequence runs under the heap lock }
         if (slDepth > 1) or (slMek <> 0) then
         begin
-          EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
+          EmitAsmX64(['mov rsi, [rsp+8]']); { = old }
           EmitAsmX64(['test rsi,rsi']);
           EmitB($0F); EmitB($84); pSlRetainDone := CodeLen; EmitI32(0);
-          EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);      { mov rcx,[rsi-8] = old len }
-          EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx,[rsp+16] = n }
+          EmitAsmX64(['mov rcx, [rsi-8]']); { = old len }
+          EmitAsmX64(['mov rdx, [rsp+16]']); { = n }
           EmitAsmX64(['cmp rcx,rdx']);
           EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0);
           EmitAsmX64(['mov rcx,rdx']);
           Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
           EmitAsmX64(['test rcx,rcx']);
           EmitB($0F); EmitB($84); pDynKeepCopy := CodeLen; EmitI32(0);
-          EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);      { mov rdi,[rsp] = new data }
+          EmitAsmX64(['mov rdi, [rsp]']); { = new data }
           slRetainTop := CodeLen;
           if slDepth > 1 then
           begin
@@ -13935,28 +13937,28 @@ begin
         end;
 
         { publish new data into the slot, release old block, result = new data }
-        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($18); { mov rcx,[rsp+24] = &slot }
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data }
+        EmitAsmX64(['mov rcx, [rsp+24]']); { = &slot }
+        EmitAsmX64(['mov rax, [rsp]']); { = new data }
         EmitAsmX64(['mov [rcx],rax']);
-        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = old }
+        EmitAsmX64(['mov rax, [rsp+8]']); { = old }
         EmitAsmX64(['mov rdi, rax']);
-        EmitB($48); EmitB($BE); EmitDataRef(AnonDynArrayOff[anonIdx]); { mov rsi, desc }
+        EmitAsmX64(['mov rsi, @data', AnonDynArrayOff[anonIdx]]); { mov rsi, desc }
         procIdx := FindProc('PXXDynArrayRelease');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
         EmitCallProc(procIdx);
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data (result) }
+        EmitAsmX64(['mov rax, [rsp]']); { = new data (result) }
         EmitAsmX64(['add rsp,32']);
         EmitB($E9); pJmpDone := CodeLen; EmitI32(0);           { jmp done }
 
         { zero case (n == 0): publish nil, release old }
         Patch32(pDynZero, CodeLen - (pDynZero + 4));
-        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx,[rsp+16] = &slot }
+        EmitAsmX64(['mov rcx, [rsp+16]']); { = &slot }
         EmitAsmX64([
           'xor eax,eax',
           'mov [rcx],rax']);                     { (nil) }
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = old }
+        EmitAsmX64(['mov rax, [rsp]']); { = old }
         EmitAsmX64(['mov rdi, rax']);
-        EmitB($48); EmitB($BE); EmitDataRef(AnonDynArrayOff[anonIdx]); { mov rsi, desc }
+        EmitAsmX64(['mov rsi, @data', AnonDynArrayOff[anonIdx]]); { mov rsi, desc }
         procIdx := FindProc('PXXDynArrayRelease');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
         EmitCallProc(procIdx);
@@ -13970,23 +13972,23 @@ begin
     IR_SET_COPY:
       begin
         IREmitNode(IRB[node]);                 { rax = source address }
-        EmitB($50);
+        EmitAsmX64(['push rax']);
         IREmitNode(IRA[node]);                 { rax = dest address }
         EmitAsmX64([
           'mov rdi, rax',
           'pop rsi',
           'mov rcx, 32']);
-        EmitB($F3); EmitB($A4);                { rep movsb }
+        EmitAsmX64(['rep movsb']);
       end;
 
     IR_SET_BINOP:
       begin
         IREmitNode(IRA[node]);                 { lhs address }
-        EmitB($50);
+        EmitAsmX64(['push rax']);
         IREmitNode(IRB[node]);                 { rhs address }
         EmitAsmX64(['mov rsi, rax']);
-        EmitB($5A);                            { pop rdx = lhs }
-        EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rdi, scratch }
+        EmitAsmX64(['pop rdx']); { = lhs }
+        EmitAsmX64(['lea rdi, [@glob]', IRIVal[node]]); { lea rdi, scratch }
         for i := 0 to 3 do
         begin
           EmitAsmX64([
@@ -14004,25 +14006,25 @@ begin
               end;
           end;
           if IntToTokenKind(IRC[node]) = tkPlus then
-            begin EmitB($09); EmitB($C8); end               { or rax, rcx }
+            begin EmitAsmX64(['or eax, ecx']); end { or rax, rcx }
           else if IntToTokenKind(IRC[node]) = tkStar then
-            begin EmitB($21); EmitB($C8); end               { and rax, rcx }
+            begin EmitAsmX64(['and eax, ecx']); end { and rax, rcx }
           else if IntToTokenKind(IRC[node]) = tkSymDiff then
-            begin EmitB($31); EmitB($C8); end;              { xor rax, rcx  (`><`) }
+            begin EmitAsmX64(['xor eax, ecx']); end; { xor rax, rcx  (`><`) }
           EmitAsmX64(['mov [rdi+%], rax', i * 8]);
         end;
-        EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rax, scratch }
+        EmitAsmX64(['lea rax, [@glob]', IRIVal[node]]); { lea rax, scratch }
       end;
 
     IR_SET_CMP:
       begin
         IREmitNode(IRA[node]);                 { lhs address }
-        EmitB($50);
+        EmitAsmX64(['push rax']);
         IREmitNode(IRB[node]);                 { rhs address }
         EmitAsmX64(['mov rsi, rax']);
-        EmitB($5A);                            { pop rdx = lhs }
-        EmitB($4D); EmitB($31); EmitB($C0);    { xor r8, r8: subset violations }
-        EmitB($4D); EmitB($31); EmitB($C9);    { xor r9, r9: differences }
+        EmitAsmX64(['pop rdx']); { = lhs }
+        EmitAsmX64(['xor r8, r8']); { xor r8, r8: subset violations }
+        EmitAsmX64(['xor r9, r9']); { xor r9, r9: differences }
         for i := 0 to 3 do
         begin
           EmitAsmX64([
@@ -14179,8 +14181,8 @@ begin
               1: begin EmitAsmX64(['mov rsi, rax']); end;
               2: begin EmitAsmX64(['mov rdx, rax']); end;
               3: begin EmitAsmX64(['mov rcx, rax']); end;
-              4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
-              5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+              4: begin EmitAsmX64(['mov r8, rax']); end;
+              5: begin EmitAsmX64(['mov r9, rax']); end;
             end;
           for i := Procs[procIdx].ParamCount - 1 - Ord(skipLastArg) downto 0 do
             case i of
@@ -15437,12 +15439,10 @@ begin
         the caller's register to a reserved frame slot; EmitProcEpilog restores
         it on every return path (same contract as the GPR save below). }
       FrResidentSaveOff[fslot] := saveOff;
-      EmitB($F2); EmitB($44); EmitB($0F); EmitB($11);
-      EmitB($85 or (fslot shl 3)); EmitI32(saveOff);          { movsd [rbp+saveoff], xmm(8+fslot) }
+      EmitAsmX64(['movsd [rbp+%], %xmm', saveOff, 8 + fslot]);     { save the caller's xmm(8+fslot) }
       { Init the cache from the frame slot (params were spilled by the prologue;
         an uninitialized local is garbage in BOTH places — consistently). }
-      EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
-      EmitB($85 or (fslot shl 3)); EmitI32(Syms[si].Offset);  { movsd xmm(8+fslot), [rbp+off] }
+      EmitAsmX64(['movsd %xmm, [rbp+%]', 8 + fslot, Syms[si].Offset]);
       FrResidentSym[fslot] := si;
       if PxxDbgEnabled('a.resid') then
         WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
@@ -15453,9 +15453,9 @@ begin
     else
     begin
       reg := FreeGpr[islot];
-      EmitB($4C); EmitB($89); EmitB($85 or ((reg - 8) shl 3)); EmitI32(saveOff); { mov [rbp+saveoff], r12..r15 }
+      EmitAsmX64(['mov [rbp+%], %r64', saveOff, reg]);    { save the caller's r12..r15 }
       EmitLoadVar(si);                                    { rax = canonical frame value (register not yet listed) }
-      EmitB($49); EmitB($89); EmitB($C0 or (reg - 8));    { mov r12..r15, rax }
+      EmitAsmX64(['mov %r64, rax', reg]);
       RcResidentSym[RcResidentCount] := si;
       RcResidentReg[RcResidentCount] := reg;
       RcResidentSaveOff[RcResidentCount] := saveOff;
@@ -17167,7 +17167,7 @@ begin
       'mov [rsp], rax',
       'mov rax, rsp']);
     EmitStatusSlotX64(0, BSS_EXC_TOP, True);
-    EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+    EmitAsmX64(['lea rdi, [rsp+%]', EXC_JMP_OFFSET]);
     IREmitCodeCall(ExcSetJmpAddr);
     EmitAsmX64(['test eax, eax']);
     EmitB($0F); EmitB($85); landPatch := CodeLen; EmitI32(0);    { jne landing }

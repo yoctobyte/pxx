@@ -289,8 +289,8 @@ var
   RingCount: LongInt;   { how many are queued; atomic, see above }
   Handlers:  array[0 .. MAX_HANDLERS - 1] of THandlerSlot;
   NHandlers: Integer;
-  Dropped:   Int64;
-  Delivered: Int64;
+  DroppedCount:   Int64;
+  DeliveredCount: Int64;
   PushSeq:   Int64;
   Budget:    Integer;
   LiveSources: Integer;
@@ -320,7 +320,7 @@ begin
     failure this repo keeps paying for. IntDropped is the record. }
   if RingCount >= INT_RING_CAPACITY then
   begin
-    Dropped := Dropped + 1;
+    DroppedCount := DroppedCount + 1;
     Result := False;
     Exit;
   end;
@@ -486,7 +486,7 @@ begin
         pycallback_call1(Handlers[idx].PyCb, event.Create(ev));
       {$endif}
     end;
-    Delivered := Delivered + 1;
+    DeliveredCount := DeliveredCount + 1;
     n := n + 1;
   end;
   InDrain := False;
@@ -500,12 +500,12 @@ end;
 
 function IntDropped: Int64;
 begin
-  Result := Dropped;
+  Result := DroppedCount;
 end;
 
 function IntDelivered: Int64;
 begin
-  Result := Delivered;
+  Result := DeliveredCount;
 end;
 
 function IntInDrain: Boolean;
@@ -548,8 +548,8 @@ begin
   RingHead := 0;
   RingTail := 0;
   RingCount := 0;
-  Dropped := 0;
-  Delivered := 0;
+  DroppedCount := 0;
+  DeliveredCount := 0;
   PushSeq := 0;
   InDrain := False;
   for i := 0 to MAX_HANDLERS - 1 do
@@ -588,7 +588,7 @@ begin
   while (n < lim) and IntNext(ev) do
   begin
     Result.append_self(event.Create(ev));
-    Delivered := Delivered + 1;
+    DeliveredCount := DeliveredCount + 1;
     n := n + 1;
   end;
 end;

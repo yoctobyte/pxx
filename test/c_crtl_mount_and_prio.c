@@ -35,7 +35,7 @@
 
 int main(void) {
   char path[256];
-  int sid, sid2, base, got;
+  int sid, sid2, base, got, want;
   FILE *f;
   struct mntent me, out;
   char buf[512];
@@ -65,14 +65,20 @@ int main(void) {
 
   /* 3: set a priority and read it back. See the header -- this is the row the
      kernel's 20-nice encoding would fail. Raising niceness needs no privilege,
-     so the test only ever goes up from wherever it started. */
+     so the test only ever goes up from wherever it started. Niceness stops at
+     19, so a run that STARTS high (a test runner under `nice -n 15') can rise
+     by less than 3: the kernel clamps, and so must the expectation. The row
+     prints 3 when the step is exactly the clamped one. A wrapper forwarding
+     the raw 20-nice still fails: it reads a small base and asks to LOWER the
+     niceness, which setpriority refuses without privilege. */
   errno = 0;
   base = getpriority(PRIO_PROCESS, 0);
   if (errno != 0) { printf("3 getpriority-failed\n"); return 1; }
   if (setpriority(PRIO_PROCESS, 0, base + 3) != 0) { printf("3 setpriority-failed\n"); return 1; }
   errno = 0;
   got = getpriority(PRIO_PROCESS, 0);
-  printf("3 %d %d\n", got - base, errno);
+  want = base + 3 > 19 ? 19 - base : 3;
+  printf("3 %d %d\n", got - base == want ? 3 : got - base, errno);
 
   /* 4: a `who' nobody owns -- ESRCH, and -1 is the RETURN as well as a legal
      nice value, which is exactly why errno carries the answer. */

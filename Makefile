@@ -1280,8 +1280,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_unpackfn26 | diff -u test/test_nilpy_tuple_unpacking_boxes_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_an_int_method_on_a_non_int_receiver_raises.py $(TESTTMP)/test_nilpy_intrecv26
 	$(TESTTMP)/test_nilpy_intrecv26 | diff -u test/test_nilpy_an_int_method_on_a_non_int_receiver_raises.expected -
-	./$(COMPILER) test/test_nilpy_str_of_an_exception_follows_its_runtime_class.py $(TESTTMP)/test_nilpy_excstr26
-	$(TESTTMP)/test_nilpy_excstr26 | diff -u test/test_nilpy_str_of_an_exception_follows_its_runtime_class.expected -
+	./$(COMPILER) test/test_nilpy_str_of_an_exception_follows_its_runtime_class.py $(TESTTMP)/test_nilpy_excrtcls26
+	$(TESTTMP)/test_nilpy_excrtcls26 | diff -u test/test_nilpy_str_of_an_exception_follows_its_runtime_class.expected -
 	./$(COMPILER) test/test_nilpy_keys_through_an_untyped_receiver_across_a_module.npy $(TESTTMP)/test_nilpy_keysxmod26
 	$(TESTTMP)/test_nilpy_keysxmod26 | diff -u test/test_nilpy_keys_through_an_untyped_receiver_across_a_module.expected -
 	./$(COMPILER) test/test_nilpy_a_scalar_class_attribute_declared_after_a_method.py $(TESTTMP)/test_nilpy_clsattrlate26
@@ -1292,8 +1292,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_rndinst26 | diff -u test/test_nilpy_a_seeded_random_instance.expected -
 	./$(COMPILER) test/test_nilpy_the_walrus_operator.py $(TESTTMP)/test_nilpy_walrus26
 	$(TESTTMP)/test_nilpy_walrus26 | diff -u test/test_nilpy_the_walrus_operator.expected -
-	./$(COMPILER) test/test_nilpy_a_lambda_returning_a_user_class_instance.py $(TESTTMP)/test_nilpy_lamobj26
-	$(TESTTMP)/test_nilpy_lamobj26 | diff -u test/test_nilpy_a_lambda_returning_a_user_class_instance.expected -
+	./$(COMPILER) test/test_nilpy_a_lambda_returning_a_user_class_instance.py $(TESTTMP)/test_nilpy_lamuser26
+	$(TESTTMP)/test_nilpy_lamuser26 | diff -u test/test_nilpy_a_lambda_returning_a_user_class_instance.expected -
 	./$(COMPILER) test/test_nilpy_a_star_unpack_into_a_method_on_a_call_result.py $(TESTTMP)/test_nilpy_starchain26
 	$(TESTTMP)/test_nilpy_starchain26 | diff -u test/test_nilpy_a_star_unpack_into_a_method_on_a_call_result.expected -
 	./$(COMPILER) test/test_nilpy_a_dynamic_attribute_store_on_a_scalar_raises.py $(TESTTMP)/test_nilpy_dynsetscalar26
@@ -10002,6 +10002,12 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_cmpresid326 "$$($(TESTTMP)/test_cmpresid326)" "$$(printf 'acc=393213\none=131071\ndone')"
 	./$(COMPILER) -O0 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid026
 	tools/expect_same.sh test_cmpresid026 "$$($(TESTTMP)/test_cmpresid026)" "$$(printf 'acc=393213\none=131071\ndone')"
+	# register-hole codegen paths (qword->double, xmm8+ and r12..r15 residents,
+	# W2 in-place ALU, narrow re-extend): the same output at -O3 and -O0
+	./$(COMPILER) -O3 test/test_x64_register_hole_paths.pas $(TESTTMP)/test_x64holep326
+	tools/expect_same.sh test_x64holep326 "$$($(TESTTMP)/test_x64holep326)" "$$(printf -- '18446744073709549568.0\n9223372036854775808.0\n12345.0\n-10.624816\n-37.883320\n-76.029240\n-123.556237\n2595887\n2692887\n2657279\n2832215\n-68 125 13392 52567 1910065408 389361043\n120 250 26784 39598 -474836480 778722086\n52 119 -25360 26629 1435228928 1168083129\n-16 244 -11968 13660 -949672960 1557444172\n10505972\n224.062500')"
+	./$(COMPILER) -O0 test/test_x64_register_hole_paths.pas $(TESTTMP)/test_x64holep026
+	tools/expect_same.sh test_x64holep026 "$$($(TESTTMP)/test_x64holep026)" "$$(printf -- '18446744073709549568.0\n9223372036854775808.0\n12345.0\n-10.624816\n-37.883320\n-76.029240\n-123.556237\n2595887\n2692887\n2657279\n2832215\n-68 125 13392 52567 1910065408 389361043\n120 250 26784 39598 -474836480 778722086\n52 119 -25360 26629 1435228928 1168083129\n-16 244 -11968 13660 -949672960 1557444172\n10505972\n224.062500')"
 	# a register-RESIDENT left operand times a CONSTANT uses imul's three-operand
 	# form at -O3 (`imul rax, r12, k`). imul is the ONLY form in the immediate-fold
 	# arm that can take its input from somewhere other than its output; the five
@@ -11993,8 +11999,8 @@ test-core: $(COMPILER)
 	grep -q 'duplicate identifier "X": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
 	grep -q 'duplicate identifier "LOC": already declared in this scope as a variable or constant' $(TESTTMP)/test_constdup.log
 	tools/expect_same.sh test_constdup-count "$$(grep -c 'duplicate identifier' $(TESTTMP)/test_constdup.log)" "7"
-	./$(COMPILER) test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.pas $(TESTTMP)/test_constshadow26
-	tools/expect_same.sh test_constshadow26 "$$($(TESTTMP)/test_constshadow26)" "$$(cat test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.expected)"
+	./$(COMPILER) test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.pas $(TESTTMP)/test_constshadowouter26
+	tools/expect_same.sh test_constshadowouter26 "$$($(TESTTMP)/test_constshadowouter26)" "$$(cat test/test_a_const_or_type_may_shadow_a_name_of_an_outer_scope.expected)"
 	./$(COMPILER) test/test_a_local_string_or_set_const_shadows_an_outer_var.pas $(TESTTMP)/test_strconstshadow26
 	tools/expect_same.sh test_strconstshadow26 "$$($(TESTTMP)/test_strconstshadow26)" "$$(cat test/test_a_local_string_or_set_const_shadows_an_outer_var.expected)"
 	@# THE NEGATIVE CONTROLS, drawn from the population the census actually found

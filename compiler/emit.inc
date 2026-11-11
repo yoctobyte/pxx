@@ -1543,7 +1543,7 @@ begin
     Exit;
   end;
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd);
-  EmitB($48); EmitB($BE); EmitDataRef(dataOff);
+  EmitAsmX64(['mov rsi, @data', dataOff]);
   MovRdxImm(len); EmitSyscall;
 end;
 
@@ -1607,9 +1607,9 @@ begin
   MovRsiImm(len);                        { length }
   MovRdiImm(0);                          { addr = NULL }
   MovRdxImm(3);                          { PROT_READ | PROT_WRITE }
-  EmitB($49); EmitB($BA); EmitI64($22);  { mov r10, MAP_PRIVATE|MAP_ANONYMOUS }
-  EmitB($49); EmitB($B8); EmitI64(-1);   { mov r8, -1  (fd) }
-  EmitB($49); EmitB($B9); EmitI64(0);    { mov r9, 0   (offset) }
+  EmitAsmX64(['movabs r10, %', Int64($22)]);  { MAP_PRIVATE|MAP_ANONYMOUS }
+  EmitAsmX64(['movabs r8, %', Int64(-1)]);   { fd }
+  EmitAsmX64(['movabs r9, %', Int64(0)]);    { offset }
   MovRaxImm(SYS_MMAP);
   EmitSyscall;
 end;
