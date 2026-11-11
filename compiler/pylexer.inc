@@ -1186,6 +1186,147 @@ begin
   end;
 end;
 
+{ A METHOD'S RECEIVER IS ITS FIRST PARAMETER, WHATEVER IT IS CALLED.
+
+  Python binds an instance method's receiver by POSITION; `self` is only a
+  convention. The compiler reads the spelling in some twenty places -- field
+  discovery in `__init__`, the receiver type of `self.x`, the implicit-self
+  parameter itself -- so `def get(zz): return zz.x` segfaulted and
+  `def __init__(s, v): s.x = v` never created `x`. The @classmethod path was
+  already right for any spelling because it binds by position.
+
+  One rule, served once, here: in a class body, an undecorated (or
+  @property-family) def whose first parameter is not `self` has that name
+  renamed to `self` throughout its own body, so every downstream reader sees
+  the conventional spelling. @staticmethod has no receiver and @classmethod
+  binds its own by position; both are left alone.
+
+  Not renamed: an attribute (`x.zz`, preceded by '.'), a keyword-argument
+  label (`f(zz=1)`, '=' inside brackets), and nothing at all when the body
+  already says `self` for something else -- renaming would merge two names.
+  bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts }
+procedure PyClassReceiverSelf(lo, hi: Integer);
+var i, k, j, e, depth, brackets, bodyEnd, d, selfOff: Integer;
+    atStart, skipNext, hasSelf: Boolean; rname, w: AnsiString;
+begin
+  selfOff := -1;
+  for i := lo to hi - 1 do
+  begin
+    if Tokens[i].Kind <> tkClass then Continue;
+    k := i + 1;
+    brackets := 0;
+    while (k < hi) and not ((brackets = 0) and (Tokens[k].Kind = tkColon)) and
+          (Tokens[k].Kind <> tkNewline) do
+    begin
+      if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(brackets)
+      else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(brackets);
+      Inc(k);
+    end;
+    if (k + 2 >= hi) or (Tokens[k].Kind <> tkColon) or
+       (Tokens[k + 1].Kind <> tkNewline) or (Tokens[k + 2].Kind <> tkIndent) then Continue;
+    k := k + 3;
+    depth := 0; atStart := True; skipNext := False;
+    while k < hi do
+    begin
+      case Tokens[k].Kind of
+        tkIndent: begin Inc(depth); atStart := True; end;
+        tkDedent: begin Dec(depth); atStart := True; if depth < 0 then Break; end;
+        tkNewline: atStart := True;
+      else
+        begin
+          if atStart and (depth = 0) then
+          begin
+            atStart := False;
+            if Tokens[k].Kind = tkAt then
+            begin
+              { the decorator's last dotted name }
+              w := '';
+              j := k + 1;
+              while (j < hi) and (Tokens[j].Kind in [tkIdent, tkDot]) do
+              begin
+                if Tokens[j].Kind = tkIdent then w := PyLexTokText(j);
+                Inc(j);
+              end;
+              if (w = 'staticmethod') or (w = 'classmethod') then skipNext := True;
+            end
+            else if Tokens[k].Kind = tkFunction then
+            begin
+              if (not skipNext) and (k + 4 < hi) and
+                 (Tokens[k + 1].Kind = tkIdent) and (Tokens[k + 2].Kind = tkLParen) and
+                 (Tokens[k + 3].Kind = tkIdent) and
+                 (Tokens[k + 4].Kind in [tkComma, tkRParen, tkColon]) then
+              begin
+                rname := PyLexTokText(k + 3);
+                if rname <> 'self' then
+                begin
+                  { the def's extent: its header line, then an indented suite
+                    or the rest of a one-line body }
+                  e := k + 2; brackets := 0;
+                  while (e < hi) and not ((brackets = 0) and (Tokens[e].Kind = tkColon)) do
+                  begin
+                    if Tokens[e].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(brackets)
+                    else if Tokens[e].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(brackets);
+                    Inc(e);
+                  end;
+                  if (e + 2 < hi) and (Tokens[e + 1].Kind = tkNewline) and
+                     (Tokens[e + 2].Kind = tkIndent) then
+                  begin
+                    bodyEnd := e + 3; d := 1;
+                    while (bodyEnd < hi) and (d > 0) do
+                    begin
+                      if Tokens[bodyEnd].Kind = tkIndent then Inc(d)
+                      else if Tokens[bodyEnd].Kind = tkDedent then Dec(d);
+                      Inc(bodyEnd);
+                    end;
+                  end
+                  else
+                  begin
+                    bodyEnd := e;
+                    while (bodyEnd < hi) and (Tokens[bodyEnd].Kind <> tkNewline) do Inc(bodyEnd);
+                  end;
+                  hasSelf := False;
+                  for j := k + 3 to bodyEnd - 1 do
+                    if (Tokens[j].Kind = tkIdent) and (PyLexTokText(j) = 'self') then
+                      hasSelf := True;
+                  if not hasSelf then
+                  begin
+                    if selfOff < 0 then
+                    begin
+                      if TokCharLen + 4 >= STRING_CAP then Error('token char buffer overflow');
+                      selfOff := TokCharLen;
+                      TokChars[TokCharLen] := 's'; TokChars[TokCharLen + 1] := 'e';
+                      TokChars[TokCharLen + 2] := 'l'; TokChars[TokCharLen + 3] := 'f';
+                      Inc(TokCharLen, 4);
+                    end;
+                    brackets := 0;
+                    for j := k + 2 to bodyEnd - 1 do
+                    begin
+                      if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(brackets)
+                      else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(brackets)
+                      else if (Tokens[j].Kind = tkIdent) and (PyLexTokText(j) = rname) and
+                              (Tokens[j - 1].Kind <> tkDot) and
+                              not ((brackets > 0) and (j > k + 3) and (j + 1 < hi) and
+                                   (Tokens[j + 1].Kind = tkAssign)) then
+                      begin
+                        Tokens[j].SOffset := selfOff;
+                        Tokens[j].SLen := 4;
+                      end;
+                    end;
+                  end;
+                end;
+              end;
+              skipNext := False;
+            end
+            else
+              skipNext := False;
+          end;
+        end;
+      end;
+      Inc(k);
+    end;
+  end;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -1991,6 +2132,7 @@ begin
 
   PyEmitToken(tkEOF, 0, SrcLine, '');
   PyClassBodySemicolons(streamBase, TokCount);
+  PyClassReceiverSelf(streamBase, TokCount);
 end;
 
 { Lex a `.py` MODULE into the token stream, after whatever is already there,

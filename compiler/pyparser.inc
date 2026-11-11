@@ -6957,8 +6957,13 @@ begin
       Exit;
     end;
   end;
+  { EXACT spelling: Python names are case-sensitive, so `v(1.0)` beside
+    `class V` is a call of the variable v and never V's constructor
+    (bug-n-a-module-level-instance-called-by-name-in-a-function-constructs-
+    instead-of-calling -- its "case is not involved" reading was half right: an
+    unrelated name failed in the arm below, and `v` failed here). }
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
-     IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
+     PyIsClassTypeExact(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
      (Tokens[startIdx + 1].Kind = tkLParen) and
      (FindUClass(GetTokenStr(startIdx)) >= 0) then
   begin
@@ -7443,6 +7448,25 @@ begin
         begin
           si := PyProgSym(name);
           if si >= 0 then tk := Syms[si].TypeKind;
+        end;
+        { `inst(args)` where the name holds an INSTANCE is `inst.__call__(args)`,
+          not a construction: the class it holds says nothing about what the
+          call returns. Typed the class, `def t(): return v(1.0)` registered a V
+          result for a str-returning `__call__`, and the call site then built a
+          V where CPython answers "CALL" (and crashed or printed nothing when
+          the value was used). A CLASS NAME followed by `(` is the constructor
+          and is excluded -- that is the tk set from PyIsClassTypeExact above.
+          bug-n-a-module-level-instance-called-by-name-in-a-function-constructs-instead-of-calling }
+        if (tk = tyClass) and (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
+           ((i <= startIdx) or (Tokens[i - 1].Kind <> tkDot)) and
+           not (PyIsClassTypeExact(name) and
+                not PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi, PyInferBodyLo,
+                                     PyInferBodyHi, name)) then
+        begin
+          i := PyEndOfGroup(i + 1, endIdx);
+          PyInferLastCi := -1;
+          Result := PyWidenArith(Result, tyVariant);
+          Continue;
         end;
         { A bare PARAMETER typed only by its CALL SITES -- `return dt * 2`
           where dt is Double by PyParamTypeFromSites but carries no annotation
@@ -16428,12 +16452,31 @@ end;
   A VARIANT may hold one; a static TPyList is one. The answer is corrected at
   run time from the object's own kind (pyseq_hasattr_*).
   bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart }
+
+{ A statically typed dict, str, int or float receiver: its builtin surface is
+  answered at run time too (pyseq_hasattr_v -> PyBuiltinSurfaceHas), boxed to
+  a variant on the way in. A computed name has no other source for it.
+  bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method }
+function PyHasAttrBoxedSurface(recvNode: Integer): Boolean;
+var tk: TTypeKind; dci: Integer;
+begin
+  Result := False;
+  if recvNode < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[recvNode]);
+  if (tk = tyAnsiString) or (tk = tyString) or (tk = tyDouble) or
+     (tk = tyInteger) or (tk = tyInt64) then begin Result := True; Exit; end;
+  if tk <> tyClass then Exit;
+  dci := FindUClass('TPyDict');
+  Result := (dci >= 0) and (ResolveNodeRec(recvNode) = REC_UCLASS_BASE + dci);
+end;
+
 function PySeqHasAttrFixable(recvNode: Integer): Boolean;
 var rec, lci: Integer;
 begin
   Result := False;
   if recvNode < 0 then Exit;
   if IntToTypeKind(ASTTk[recvNode]) = tyVariant then begin Result := True; Exit; end;
+  if PyHasAttrBoxedSurface(recvNode) then begin Result := True; Exit; end;
   if IntToTypeKind(ASTTk[recvNode]) <> tyClass then Exit;
   rec := ResolveNodeRec(recvNode);
   lci := FindUClass('TPyList');
@@ -16444,6 +16487,7 @@ function PySeqHasAttrWrapN(recvNode, nameNode, prior: Integer): Integer;
 var pi, a0, a1, a2: Integer;
 begin
   Result := prior;
+  if PyHasAttrBoxedSurface(recvNode) then recvNode := PyForceVariant(recvNode);
   if IntToTypeKind(ASTTk[recvNode]) = tyVariant then
     pi := FindProc('pyseq_hasattr_v')
   else
@@ -35305,6 +35349,48 @@ begin
   end;
 end;
 
+{ Does the DEF that encloses defTok hold more than one `def nm`? Walks back
+  to the INDENT that opens the nearest enclosing block whose header line starts
+  with `def`, then counts `def nm` in that body. -1 range (module level) or one
+  def answers False. A deeper nested def of the same name is counted too; that
+  only makes the binding dynamic where it was already correct.
+  bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently }
+function PyNestedDefIsMultiBound(defTok: Integer; const nm: AnsiString): Boolean;
+var j, depth, ls, bodyEnd, n: Integer;
+begin
+  Result := False;
+  depth := 0;
+  j := defTok - 1;
+  while j >= 0 do
+  begin
+    if Tokens[j].Kind = tkDedent then Inc(depth)
+    else if Tokens[j].Kind = tkIndent then
+    begin
+      if depth > 0 then Dec(depth)
+      else
+      begin
+        { the header line of the block this INDENT opens }
+        ls := j - 1;
+        while (ls > 0) and (Tokens[ls].Kind = tkNewline) do Dec(ls);
+        while (ls > 0) and not (Tokens[ls - 1].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(ls);
+        if Tokens[ls].Kind = tkFunction then Break;
+        if Tokens[ls].Kind = tkClass then Exit;
+      end;
+    end;
+    Dec(j);
+  end;
+  if j < 0 then Exit;
+  bodyEnd := PyFindBodyEnd(j + 1);
+  n := 0;
+  while j < bodyEnd do
+  begin
+    if (Tokens[j].Kind = tkFunction) and (j + 1 < bodyEnd) and
+       (Tokens[j + 1].Kind = tkIdent) and (GetTokenStr(j + 1) = nm) then Inc(n);
+    Inc(j);
+  end;
+  Result := n >= 2;
+end;
+
 function PyQueueNestedDef: Integer;
 var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi, capSym: Integer;
     capNow: TTypeKind;
@@ -35612,6 +35698,31 @@ begin
     PyPendNestPfx[PyPendNestCount] := PyNestPrefix;
     PyPendNestSelf[PyPendNestCount] := CurSelfClass;
     Inc(PyPendNestCount);
+  end;
+  { TWO DEFS OF ONE NAME IN ONE FUNCTION bind it at RUN time. Each nested
+    def is its own proc (PyNestedDefQName keys a redefinition by its token),
+    but a bare call resolved between them by POSITION, so after
+    `if flag: def pick(): .. else: def pick(): ..` every `pick()` ran the
+    LAST body, whichever branch ran. Python's def is an assignment, so that is
+    what the def statement now also emits when the name has two defs here: the
+    function value into a LOCAL of that name. The local-beats-a-def rule at the
+    call site then routes every `pick()` through it, so the def that RAN is
+    the one called. A name with one def keeps the static call.
+    bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently }
+  if (CurProc >= 0) and PyNestedDefIsMultiBound(defTok, PyHdrName) then
+  begin
+    csym := FindSym(PyHdrName);
+    if (csym < 0) or (Syms[csym].Kind <> skLocal) then
+      csym := AllocVar(PyHdrName, tyVariant);
+    { the value builder re-lowers from the def's token span; the cursor is
+      on the statement after the def and must stay there }
+    j := TokPos;
+    k := PyMakeFuncValueFor(procIdx, PyHdrName);
+    TokPos := j - 1;
+    Next;
+    if k >= 0 then
+      defAssigns := PySeqAppend(defAssigns,
+                                PyMakeAssignNode(PyMakeIdent(csym), k));
   end;
   { The nested def statement emits no code of its own — but its non-constant
     parameter defaults do, and they belong here, at the def statement in the
@@ -36259,7 +36370,11 @@ begin
     PyParseBoolExpr;
     if nValues >= nTargets then
       Error('Nil Python: too many values to unpack');
-    vals[nValues] := CurASTNode;
+    { a fresh callable (a lambda, a lifted closure) is boxed here exactly as
+      the single-target `g = lambda ...` boxes it, or the target is a raw
+      pointer the dynamic-call path does not recognise.
+      bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value }
+    vals[nValues] := PyBoxCallableValue(CurASTNode);
     Inc(nValues);
   until not Eat(tkComma);
   { `w, h = map(int, s.split("x"))` — a cursor cannot be indexed, so it is
@@ -41966,8 +42081,10 @@ begin
 end;
 
 procedure PyRegisterDefShells;
-var savedTok, i, depth, procIdx, savedHoist: Integer;
-    isGenDef: Boolean;
+var savedTok, i, depth, procIdx, savedHoist, j: Integer;
+    isGenDef, atLine: Boolean;
+    opaque: array[0..255] of Boolean;
+    lineKind: TTokenKind;
 begin
   savedTok := TokPos;
   { This pass parses HEADERS ONLY, but a header can queue a hoisted setup
@@ -42044,6 +42161,71 @@ begin
         top-level (a `self` parameter with no annotation, reported as a stray
         token 40 lines away). }
       i := TokPos - 3;
+    end;
+    Inc(i);
+  end;
+  { SECOND PASS: a def inside a MODULE-level suite -- `if`, `for`, `while`,
+    `try`/`except`/`finally`, `with` -- binds a module name when it runs, the
+    same as a depth-0 def. Without a shell here a depth-0 def ABOVE it that
+    calls it was refused (`undefined variable (fact)`), because its body is
+    parsed before the statement that queues the conditional one. A suite opened
+    by a `def` or a `class` is OPAQUE: what is inside is a nested def or a
+    method, with machinery of its own.
+
+    Only for a name no module def has claimed yet. Two module-level bindings of
+    one name are the positional rebinding question, which the first pass
+    answers for depth-0 defs and which a branch cannot answer statically (a
+    `def` under `if False:` must not displace one at depth 0); the conditional
+    def's shell is then whatever PyQueueNestedDef finds, as before.
+    bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name }
+  i := PyScanLo;
+  depth := 0;
+  atLine := True;
+  lineKind := tkEOF;
+  opaque[0] := False;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then
+    begin
+      if depth < 255 then
+        opaque[depth + 1] := opaque[depth] or (lineKind = tkFunction) or (lineKind = tkClass);
+      Inc(depth);
+      atLine := True;
+    end
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      atLine := True;
+    end
+    else if Tokens[i].Kind = tkNewline then
+      atLine := True
+    else if atLine then
+    begin
+      atLine := False;
+      lineKind := Tokens[i].Kind;
+      if (depth > 0) and (depth <= 255) and (not opaque[depth]) and
+         (Tokens[i].Kind = tkFunction) and not PyDefAtIsOverloadStub(i) then
+      begin
+        TokPos := i;
+        Next;
+        PyParseDefHeader;
+        if FindProcInUnit(PyHdrName, CurrentUnitIdx) < 0 then
+        begin
+          isGenDef := PyDefBodyHasYield(TokPos - 1);
+          if isGenDef then PyApplyGeneratorABI;
+          procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
+                                  PyHdrNParams, PyHdrPNames, PyHdrPTypes);
+          PyApplyDefSignature(procIdx);
+          if isGenDef then PyDeclareDefDefaults(i, procIdx, 1)
+          else PyDeclareDefDefaults(i, procIdx, 0);
+          if isGenDef then PyMarkGeneratorProc(procIdx);
+          ProcPyDefTok[procIdx] := i + 1;
+        end;
+        { back to the body's INDENT, as the first pass does }
+        j := TokPos - 2;
+        while i < j do Inc(i);
+        Continue;
+      end;
     end;
     Inc(i);
   end;
@@ -54702,6 +54884,7 @@ var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx, tmark: Integer; needsB
     aStrIdx, realStrIdx: Integer;
     pyWantsPow: Boolean;
     powSym, powPi, powAddr, powAsgn: Integer;
+    nestSelf: Integer;
 begin
   needsBuiltin := True;
   pyHasExceptions := False;
@@ -55105,6 +55288,33 @@ begin
     and nothing else drains the module's queue. Emitted after the exit on
     purpose: the code below is only ever reached by a call, and EmitExit never
     falls through into it. }
+  PyDrainPendingLambdas(0);
+  { ...and a `def` inside a MODULE-level suite -- `if`, `for`, `try`,
+    `except ImportError:` -- is queued by PyQueueNestedDef exactly like one
+    inside a def, with an empty prefix because the module IS its scope. Every
+    other queue owner (PyParseDef, the class and module parsers) drains its
+    own; the main program did not, so the shell registered at the def
+    statement never got a body: `error: unresolved forward: pick`. Half of
+    Python's only #ifdef -- `try: from x import f / except ImportError:
+    def f(...)` -- failed on it.
+    bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name }
+  { NilPy expression rules back ON for these bodies: they were switched off
+    above, and without them a call through a variant (`lam(v)`) does not parse
+    -- the same trap PyCompileLambdaBody notes. }
+  if PyPendNestCount > 0 then PyExprMode := True;
+  while PyPendNestCount > 0 do
+  begin
+    Dec(PyPendNestCount);
+    nestSelf := CurSelfClass;
+    PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    CurSelfClass := PyPendNestSelf[PyPendNestCount];
+    TokPos := PyPendNestTok[PyPendNestCount];
+    Next;
+    PyParseDef;
+    CurSelfClass := nestSelf;
+    PyNestPrefix := '';
+  end;
+  PyExprMode := False;
   PyDrainPendingLambdas(0);
   { Patch forward proc-call placeholders (e.g. the builtin heap allocator,
     whose body is compiled after the string runtime that calls it). Pascal

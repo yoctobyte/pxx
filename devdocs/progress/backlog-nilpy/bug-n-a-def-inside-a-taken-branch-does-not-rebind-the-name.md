@@ -191,3 +191,29 @@ to live in the same file as the argument it defeats.**
 `isqrt` fallback above compiles and prints 4; the top-level-`def` control still
 works; the `except ValueError:` row still matches CPython's `NameError` rather
 than printing 7.
+
+## 2026-11-10: the REFUSAL half is fixed; the rebind half stays open
+
+Two changes in pyparser.inc:
+
+1. **ParsePyProgram drains the nested-def queue.** PyQueueNestedDef already
+   queued a module-level suite's def with an empty prefix; PyParseDef, the class
+   parser and the module parser each drain their own queue, but the main program
+   never did. So the shell had no body: `unresolved forward: pick`. Expression
+   mode is switched back on for the drain, the trap PyCompileLambdaBody notes.
+2. **PyRegisterDefShells has a second pass** for defs in module-level suites
+   (`if`/`for`/`while`/`try`/`with`), skipping any suite opened by a `def` or a
+   `class`. Without it, a depth-0 def ABOVE the suite that calls the conditional
+   def was refused (`undefined variable (fact)`). It registers only when no
+   module def of that name exists yet.
+
+Now right: a conditional def with no prior binding, a call from inside the same
+block, `try: import / except ImportError: def`, a def in a `for` body, and a
+depth-0 def calling a conditional one. Test:
+test_nilpy_a_def_inside_a_module_level_suite.py.
+
+**Still open:** `def g(): return 1` then `if True: def g(): return 2` prints 1.
+That is the positional question this ticket's first half describes. The second
+pass deliberately leaves an already-claimed name alone, because a def under
+`if False:` must not displace a depth-0 one, and the compiler cannot tell the two
+branches apart statically.

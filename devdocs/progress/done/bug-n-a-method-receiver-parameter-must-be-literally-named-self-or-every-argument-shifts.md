@@ -226,3 +226,19 @@ line. It is right about the pinned compiler and wrong about the tree.
 And carry BOTH probes: `__slots__` is what separates 139 from 217, so a fixture
 with only one of them pins one message and will read as a flake if the other
 shape is ever fixed independently.
+
+## Fixed 2026-11-10
+
+One rule, served once, in the lexer: `PyClassReceiverSelf` (pylexer.inc), run
+after `PyClassBodySemicolons`. In a class body, a def that is not
+@staticmethod/@classmethod and whose first parameter is not `self` has that
+name renamed to `self` throughout its own body. Every downstream reader of the
+spelling (field discovery in `__init__`, `self.x` receiver typing, the
+implicit-self parameter) then sees the convention, which is why one pass fixes
+all eight matrix cells and both callable-field probes.
+
+Not renamed: an attribute (`x.zz`), a keyword-argument label (`f(zz=1)`), and
+nothing at all when the body already uses `self` for something else.
+
+Test: test_nilpy_a_method_receiver_need_not_be_named_self.py: the matrix,
+@property, a one-line def, the callable field and the `__slots__` probe.

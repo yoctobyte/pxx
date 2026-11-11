@@ -1266,6 +1266,18 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_clsstatic26 | diff -u test/test_nilpy_a_staticmethod_called_through_cls.expected -
 	./$(COMPILER) test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.py $(TESTTMP)/test_nilpy_shadowfold26
 	$(TESTTMP)/test_nilpy_shadowfold26 | diff -u test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.expected -
+	./$(COMPILER) test/test_nilpy_a_method_receiver_need_not_be_named_self.py $(TESTTMP)/test_nilpy_recvname26
+	$(TESTTMP)/test_nilpy_recvname26 | diff -u test/test_nilpy_a_method_receiver_need_not_be_named_self.expected -
+	./$(COMPILER) test/test_nilpy_a_def_inside_a_module_level_suite.py $(TESTTMP)/test_nilpy_conddef26
+	$(TESTTMP)/test_nilpy_conddef26 | diff -u test/test_nilpy_a_def_inside_a_module_level_suite.expected -
+	./$(COMPILER) test/test_nilpy_a_module_level_instance_called_by_name_in_a_def.py $(TESTTMP)/test_nilpy_instcall26
+	$(TESTTMP)/test_nilpy_instcall26 | diff -u test/test_nilpy_a_module_level_instance_called_by_name_in_a_def.expected -
+	./$(COMPILER) test/test_nilpy_two_same_named_defs_in_exclusive_branches.py $(TESTTMP)/test_nilpy_branchdefs26
+	$(TESTTMP)/test_nilpy_branchdefs26 | diff -u test/test_nilpy_two_same_named_defs_in_exclusive_branches.expected -
+	./$(COMPILER) test/test_nilpy_hasattr_with_a_computed_name_sees_builtin_methods.py $(TESTTMP)/test_nilpy_hasattrcomp26
+	$(TESTTMP)/test_nilpy_hasattrcomp26 | diff -u test/test_nilpy_hasattr_with_a_computed_name_sees_builtin_methods.expected -
+	./$(COMPILER) test/test_nilpy_tuple_unpacking_boxes_a_callable_value.py $(TESTTMP)/test_nilpy_unpackfn26
+	$(TESTTMP)/test_nilpy_unpackfn26 | diff -u test/test_nilpy_tuple_unpacking_boxes_a_callable_value.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

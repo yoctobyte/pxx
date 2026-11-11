@@ -6307,6 +6307,46 @@ begin
     Result := PySeqSurfaceHas(k, name);
 end;
 
+{ The builtin surfaces a DYNAMIC hasattr cannot see: the attribute lookup it
+  falls back to knows user classes, and a dict's `keys` or a str's `upper` is
+  not a field of anything. A computed name (`hasattr(x, n)`) only has this
+  answer; a literal one reaches it too when the receiver is a variant.
+  bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method }
+function PyBuiltinSurfaceHas(const v: Variant; const nm: AnsiString): Boolean;
+const
+  DICT_M = ' clear copy fromkeys get items keys pop popitem setdefault update values '
+         + '__contains__ __iter__ __len__ __getitem__ __setitem__ __delitem__ '
+         + '__or__ __ior__ __reversed__ ';
+  STR_M = ' capitalize casefold center count encode endswith expandtabs find format '
+        + 'format_map index isalnum isalpha isascii isdecimal isdigit isidentifier '
+        + 'islower isnumeric isprintable isspace istitle isupper join ljust lower '
+        + 'lstrip maketrans partition removeprefix removesuffix replace rfind rindex '
+        + 'rjust rpartition rsplit rstrip split splitlines startswith strip swapcase '
+        + 'title translate upper zfill __contains__ __iter__ __len__ __getitem__ '
+        + '__add__ __mul__ __mod__ ';
+  INT_M = ' as_integer_ratio bit_count bit_length conjugate denominator from_bytes '
+        + 'imag is_integer numerator real to_bytes __abs__ __add__ __and__ __floordiv__ '
+        + '__index__ __int__ __float__ __invert__ __lshift__ __mod__ __mul__ __neg__ '
+        + '__or__ __pos__ __pow__ __rshift__ __sub__ __truediv__ __xor__ ';
+  FLOAT_M = ' as_integer_ratio conjugate fromhex hex imag is_integer real __abs__ '
+          + '__add__ __floordiv__ __int__ __float__ __mod__ __mul__ __neg__ __pos__ '
+          + '__pow__ __sub__ __truediv__ ';
+var p: PPyVarRec; key: AnsiString; tag: Integer;
+begin
+  Result := False;
+  key := ' ' + nm + ' ';
+  p := PPyVarRec(@v);
+  tag := p^.VType;
+  if (tag = 7) and (p^.Payload <> 0) and (TObject(Pointer(p^.Payload)) is TPyDict) then
+    Result := Pos(key, DICT_M) > 0
+  else if (tag = 5) or (tag = 6) then
+    Result := Pos(key, STR_M) > 0
+  else if tag = 3 then
+    Result := Pos(key, FLOAT_M) > 0
+  else if pyvar_is_inttag(v) then
+    Result := Pos(key, INT_M) > 0;
+end;
+
 function pyseq_hasattr_v(const v: Variant; const name: AnsiString; prior: Boolean): Boolean;
 var p: PPyVarRec;
 begin
@@ -6315,6 +6355,7 @@ begin
     Result := pyseq_hasattr_p(Pointer(p^.Payload), name, prior)
   else
     Result := prior;
+  if (not Result) and PyBuiltinSurfaceHas(v, name) then Result := True;
 end;
 
 function pyvar_is_strtag(const v: Variant): Boolean;

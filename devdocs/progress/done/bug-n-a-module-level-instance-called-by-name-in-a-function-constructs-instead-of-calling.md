@@ -14,7 +14,7 @@ track: N
 type: bug
 prio: 58
 owner: unassigned
-status: open
+status: done
 ---
 
 ## How it was reached
@@ -143,3 +143,23 @@ arm instead of the call path.
 
 Measured and written by the peer session **lekkerzeilen-c8**, which cannot
 commit in this checkout; this file is left untracked for that seat to pick up.
+
+## Fixed 2026-11-10: it was the RETURN-TYPE inference, at two arms
+
+The call lowering was right all along. The def's inferred RESULT type was wrong
+(`PXXDBG=n.ret`: `t1 tk=6 rec=V`). A V-typed result for a str-returning
+`__call__` made the caller treat the string as a V. That is why only shapes the
+token scan types (a top-level `return v(...)`, or a local assigned from it)
+failed, while `if True: return`, a tuple element and module level did not.
+
+Two arms in PyInferExprType:
+
+1. **The constructor arm case-folded.** `IsClassType('v')` answers for
+   `class V`. It now requires PyIsClassTypeExact. So reading 4 ("case is not
+   involved") was half right.
+2. **The bare-name arm** typed `inst` by the class it holds, and the trailing
+   `(...)` then kept that type. A call on an instance-typed name, which is not an
+   exact class name, is now `__call__` and is typed as a variant.
+
+Test: test_nilpy_a_module_level_instance_called_by_name_in_a_def.py, with the
+table's rows plus an unrelated-name class and a constructor-then-field control.

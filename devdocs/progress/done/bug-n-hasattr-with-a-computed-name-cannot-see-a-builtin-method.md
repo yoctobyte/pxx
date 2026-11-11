@@ -82,3 +82,20 @@ The table above as a `.npy` with a CPython-generated `.expected`, each computed
 row beside its literal sibling so the two arms disagreeing is what fails; plus
 `getattr(x, n)` on the same receivers, which is this predicate's partner and
 should be measured at the same time.
+
+## Fixed 2026-11-11
+
+The dynamic attribute lookup that a computed name falls back to knows user
+classes only, so a dict's `keys` or a str's `upper` was never found.
+
+- pylib: `PyBuiltinSurfaceHas` holds dict, str, int and float surface tables,
+  each type's methods plus the dunders a program probes for. `pyseq_hasattr_v`
+  ORs it in, so it can only add a True that CPython also gives.
+- pyparser: `PyHasAttrBoxedSurface` routes a statically typed dict, str, int or
+  float receiver through the same wrapper, boxed to a variant. Before, only
+  variant and list receivers were wrapped (the
+  list-tuple-set-share-one-class fix), and a module-level dict reached the
+  computed path unwrapped.
+
+Test: test_nilpy_hasattr_with_a_computed_name_sees_builtin_methods.py, with
+positive and negative rows per type and a user class as the control.

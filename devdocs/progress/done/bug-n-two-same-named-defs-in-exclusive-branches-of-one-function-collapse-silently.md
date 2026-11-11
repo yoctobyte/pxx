@@ -5,7 +5,7 @@ type: bug
 owner:
 blocked-by: []
 summary: "`if flag: def pick(): return 7` / `else: def pick(): return 9` inside ONE function answers 9 for BOTH branches -- CPython gives 7 and 9. SILENT, exit 0, no diagnostic. Two same-named nested defs in one function collapse to one proc and the call resolves by POSITION, so a call after the if/else takes the LAST definition whatever ran. It is loud only when the arities DIFFER (`no overload of outer.pick$29 matches`), which is the already-closed method-collision case; when they MATCH -- the idiomatic shape, since exclusive branches naturally define the same signature -- it is a wrong value. Sequential rebinding in one function is CORRECT (`def pick` ... `def pick` answers 7 then 9), so this is specific to defs the program treats as alternatives. DISTINCT from bug-nilpy-same-named-nested-defs-in-two-methods-collide (two METHODS, loud, done) whose own note records that two plain FUNCTIONS do not collide -- one function was never tested. Cousin of bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name at module level, where the same source shape is REFUSED instead: conditional definition is broken at both scopes, differently."
-status: open
+status: done
 ---
 
 # Two same-named defs in exclusive branches of one function collapse silently
@@ -100,3 +100,20 @@ straight than the shape.**
 `outer(True), outer(False)` answers `7 9`. The sequential-rebind row still
 answers `(7, 9)`, and the arity-mismatch row must not start silently picking
 one — if it cannot be made to work it should stay loud.
+
+## Fixed 2026-11-10
+
+Python's `def` is an assignment, and now it is one here too, but only where it
+matters. When the enclosing function holds two or more `def <name>`
+(`PyNestedDefIsMultiBound`), PyQueueNestedDef also emits
+`<name> = <function value>` into a LOCAL of that name at the def statement.
+The existing local-beats-a-def rule at the call site then routes `pick()`
+through the local, so the def that RAN is the one called. A name with a single
+def keeps the static call, so nothing else changes.
+
+The arity-mismatch row works too, rather than being refused: each def has its
+own proc, and the call goes through whichever one the local holds.
+
+Test: test_nilpy_two_same_named_defs_in_exclusive_branches.py covers exclusive
+branches, differing arity, sequential rebind, captures (a local and a
+parameter), a def in a loop and a def in try/except.
