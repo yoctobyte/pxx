@@ -2567,10 +2567,20 @@ function PyWidenValue(a, b: TTypeKind): TTypeKind;
   variant loses nothing (VT_PROMO_INT64 carries the int), which is
   PyWidenBinding's reasoning for a rebound name. TSP app.py
   `timeline_bottom(sc) + 3 * sc if ... else m` was refused once arithmetic on a
-  float-annotated parameter started returning float. }
+  float-annotated parameter started returning float.
+
+  The SAME holds for a plain int against a float: a conditional SELECTS one arm
+  unchanged, it does not compute, so `0 if y is None else float(y)` is the int
+  0 in CPython. PyWiden's numeric arm answered tyDouble and the int arm printed
+  as 0.0 -- a wrong value with no diagnostic, module level and def result
+  alike. An all-int or all-float pair still widens as before and boxes nothing.
+  bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float }
 begin
   if (TypeIsPromoInt(a) and TypeIsFloat(b)) or
      (TypeIsFloat(a) and TypeIsPromoInt(b)) then
+    Result := tyVariant
+  else if PyNumeric(a) and PyNumeric(b) and (a <> b) and
+          (TypeIsFloat(a) <> TypeIsFloat(b)) then
     Result := tyVariant
   else
     Result := PyWiden(a, b);
@@ -40344,6 +40354,24 @@ begin
   end;
 end;
 
+{ The pre-pass's scratch symbol for a module-level for TARGET, so a later
+  statement's trial parse resolves the name. See the call in
+  PyCollectModuleLocalsAST's for arm. }
+procedure PyRegisterForTargetScratch(const nm: AnsiString; tk: TTypeKind);
+var si: Integer;
+begin
+  si := -1;
+  if PyProgSym(nm) >= 0 then Exit;
+  if tk <> tyUnknown then
+    si := AllocVar(nm, tk)
+  else if (PyFindConstraint(nm) < 0) and (not PyTopTarget(nm)) then
+  begin
+    si := AllocVar(nm, tyVariant);
+    PyNotePhantom(nm);
+  end;
+  if si < 0 then ;
+end;
+
 procedure PyCollectModuleLocalsAST;
 var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     newCi, oldCi: Integer;
@@ -40987,6 +41015,7 @@ begin
             if Tokens[bodyIx].Kind = tkIdent then
             begin
               PyNoteLocalType(GetTokenStr(bodyIx), forElemTk, REC_NONE);
+              PyRegisterForTargetScratch(GetTokenStr(bodyIx), forElemTk);   { see the single-name arm }
               forElemTk := tyVariant;   { only the first name can be an index }
             end;
             Inc(bodyIx);
@@ -41099,6 +41128,15 @@ begin
                 (PyProgSym(GetTokenStr(forJ)) < 0) then   { not a user def of that name }
           forElemTk := tyVariant;
         if forElemTk <> tyUnknown then PyNoteLocalType(forName, forElemTk, REC_NONE);
+        { ...and REGISTER the target in the scratch table, as the block-binding
+          arm does for its names: noting a type puts it in the widening table
+          but makes no symbol, so a LATER module statement's trial parse --
+          `a = i` after `for i in range(3):` -- died "undefined variable (i)"
+          while `print(i)` one line earlier was fine. Typed when the iterable
+          gave a type; otherwise a PHANTOM (see PyPhantomNames), which asserts
+          nothing. Rolled back with the round either way.
+          bug-n-a-module-level-assignment-from-a-for-target-after-the-loop-is-undefined }
+        PyRegisterForTargetScratch(forName, forElemTk);
       end;
       Inc(i);
     end;

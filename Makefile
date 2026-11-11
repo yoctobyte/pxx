@@ -1344,6 +1344,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_fromhex26 | diff -u test/test_nilpy_bytes_fromhex.expected -
 	./$(COMPILER) test/test_nilpy_type_of_self_called_as_a_constructor.py $(TESTTMP)/test_nilpy_typeself26
 	$(TESTTMP)/test_nilpy_typeself26 | diff -u test/test_nilpy_type_of_self_called_as_a_constructor.expected -
+	./$(COMPILER) test/test_nilpy_an_int_arm_of_a_conditional_stays_an_int.py $(TESTTMP)/test_nilpy_terint26
+	$(TESTTMP)/test_nilpy_terint26 | diff -u test/test_nilpy_an_int_arm_of_a_conditional_stays_an_int.expected -
+	./$(COMPILER) test/test_nilpy_a_for_target_read_by_a_later_module_assignment.py $(TESTTMP)/test_nilpy_fortgt26
+	$(TESTTMP)/test_nilpy_fortgt26 | diff -u test/test_nilpy_a_for_target_read_by_a_later_module_assignment.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

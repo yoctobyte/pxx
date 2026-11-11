@@ -3,7 +3,7 @@ name: bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float
 type: bug
 track: N
 prio: 40
-status: open
+status: done
 summary: >
   `0 if y is None else float(y)` answers 0.0 under pxx where CPython answers 0.
   A conditional expression whose arms are an int and a float is typed tyDouble
@@ -70,3 +70,14 @@ lekkerzeilen's world.Furniture.__init__ writes eleven times). Fixed in the same
 session by giving PyInferExprType an arm for the None literal -- see the
 logbook row. Do not read that fix as covering this one: it does not, and d9 in
 that session's probe set is this row still failing after it.
+
+## Resolution (2026-11-11)
+
+Done as recommended: PyWidenValue (the join for a conditional's arms and for
+PyJoinInferTk) now answers tyVariant for an int-meets-float pair, the same row
+PyWidenBinding has. All-int and all-float pairs still widen as before and box
+nothing. Every row above now prints CPython's output, and so do a list
+comprehension and an assignment; the variant result keeps working in
+arithmetic, `int()`, `math.sqrt`, a float-annotated parameter and a
+comparison. Test test_nilpy_an_int_arm_of_a_conditional_stays_an_int.py (row
+terint26), expected = python3.
