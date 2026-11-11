@@ -1368,6 +1368,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_kwcbval26 | diff -u test/test_nilpy_kwargs_collector_through_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_relative_import_keeps_case_and_rebinds.py $(TESTTMP)/test_nilpy_relcase26
 	$(TESTTMP)/test_nilpy_relcase26 | diff -u test/test_nilpy_relative_import_keeps_case_and_rebinds.expected -
+	./$(COMPILER) test/test_nilpy_a_conditional_def_rebinds_by_execution.py $(TESTTMP)/test_nilpy_condef26
+	$(TESTTMP)/test_nilpy_condef26 | diff -u test/test_nilpy_a_conditional_def_rebinds_by_execution.expected -
+	./$(COMPILER) test/test_nilpy_a_generator_def_as_a_value.py $(TESTTMP)/test_nilpy_gensval26
+	$(TESTTMP)/test_nilpy_gensval26 | diff -u test/test_nilpy_a_generator_def_as_a_value.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

@@ -896,6 +896,7 @@ procedure PyApplyGeneratorABI; forward;
 procedure PyMarkGeneratorProc(procIdx: Integer); forward;
 procedure PyMarkVariantParamsByRef(procIdx: Integer); forward;
 function PyGenValueFromArgs(gpi, recvNode, nargs: Integer): Integer; forward;
+function PyGenFactoryFor(gpi: Integer): Integer; forward;
 { PyBareGenExprAhead is likewise forward-declared in pasparser_*.inc now (same
   duplicate-forward issue as PyCallMeth1 above). }
 { Called from the bytes membership/slice paths ~3900 lines before its body.
@@ -19928,6 +19929,21 @@ begin
     (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame). }
   if PxxDbgEnabled('n.bfn') then
     WriteLn('PXXDBG n.bfn funcvalue for ', nm, ' pi=', pi);
+  { A GENERATOR def is not called through its own code: its proc is the
+    stackless STEP routine, whose first parameter is the instance, so `gen =
+    _g; gen(5)` handed 5 to __genself and said "missing 1 required positional
+    argument(s)". Its value is its FACTORY (PyGenFactoryFor), an ordinary
+    function of the user's parameters that builds the cursor -- the same thing
+    a call above the def already uses. Captures and `*args` keep the old road
+    (the factory takes neither). NOT in the typing pre-pass: it trial-parses
+    arms the real parse skips as statically dead (`if True: ... else: gen =
+    _h`), and a factory registered there for a generator whose body is never
+    compiled stayed an "unresolved forward". The pre-pass only needs the
+    value's type, which is tyVariant either way. }
+  if (not PyTypingPass) and
+     ProcIsStackless[pi] and ProcIsGenerator[pi] and (PyCapCount[pi] = 0) and
+     (ProcPyStarIdx[pi] < 0) and (FindProc('pygen_iter_new') >= 0) then
+    pi := PyGenFactoryFor(pi);
   Result := PyNestedDefClosureValue(pi);
   if Result >= 0 then
   begin
@@ -33842,9 +33858,12 @@ begin
   Result := FindProc(nm);
   if Result >= 0 then Exit;
   n := Procs[gpi].ParamCount - 1;            { without __genself }
+  { the generator's own parameter NAMES, so a keyword call through the
+    factory's value (`gen = g; gen(3, step=2)`) binds by name }
   for i := 0 to n - 1 do
   begin
-    pnames[i] := 'a' + AIntToStr(i + 1);
+    pnames[i] := Procs[gpi].Params[i + 1].Name;
+    if pnames[i] = '' then pnames[i] := 'a' + AIntToStr(i + 1);
     ptypes[i] := Procs[gpi].Params[i + 1].TypeKind;
   end;
   { the SAME result the inline build has (pygen_iter_new's, a TPyIter), so a
@@ -33856,6 +33875,28 @@ begin
   for i := 0 to n - 1 do
     if ((i + 1) < MAX_PROC_PARAMS) and (Result * MAX_PROC_PARAMS + i < Length(ProcParamRecId)) then
       ProcParamRecId[Result * MAX_PROC_PARAMS + i] := ProcParamRecId[gpi * MAX_PROC_PARAMS + i + 1];
+  { ...and its DEFAULTS, every carrier of them: through a callable value the
+    factory IS the generator, and `c = count; c(3)` omitting `step=1` said
+    "missing 1 required positional argument(s)". Generator slot i+1 (past
+    __genself) is factory slot i. }
+  for i := 0 to n - 1 do
+    if (i + 1 < MAX_PROC_PARAMS) then
+    begin
+      k := gpi * MAX_PROC_PARAMS + i + 1;
+      if not ProcParamHasDefault[k] then Continue;
+      ProcParamHasDefault[Result * MAX_PROC_PARAMS + i] := True;
+      ProcParamDefaultVal[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultVal[k];
+      ProcParamDefaultIsStr[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultIsStr[k];
+      ProcParamDefaultIsNone[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultIsNone[k];
+      ProcParamDefaultIsFloat[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultIsFloat[k];
+      ProcParamDefaultIsBool[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultIsBool[k];
+      ProcParamDefaultSym[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultSym[k];
+      ProcParamDefaultGName[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultGName[k];
+      ProcParamDefaultIsSet[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultIsSet[k];
+      ProcParamDefaultSOff[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultSOff[k];
+      ProcParamDefaultSLen[Result * MAX_PROC_PARAMS + i] := ProcParamDefaultSLen[k];
+    end;
+  k := FindProc('pygen_iter_new');
   PyMarkVariantParamsByRef(Result);
   Procs[Result].BodyAddr := -1;
   if PyGenFactCount >= PY_MAX_NESTED then
@@ -55580,6 +55621,11 @@ var i, j, k, depth, idx, ci, pci: Integer; nm: AnsiString;
     usedEarlier, pendingDef, pendingShadow: Boolean;
     inDefStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
     shadowStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
+    { opq[d]: the suite at depth d is a def or class body (or inside one), so an
+      assignment there binds no MODULE name. An `if`/`try`/`for`/`while`/`with`
+      suite at module level is not opaque: Python has no block scope. }
+    opq: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
+    lineKind: TTokenKind;
 begin
   { ONLY the names a routine ABOVE them reads — the shape that fails outright:
     `def refresh(): bpm_label.set(...)` at the top of the file,
@@ -55588,13 +55634,35 @@ begin
     pre-creating every module name from the type pre-pass instead was tried and
     is too eager — the pre-pass's guess is not always the assignment's type, and
     a name it typed one way then took stores of another. }
+  { A name bound only inside a module-level SUITE counts too:
+      def f(): return HAVE
+      try: import x; HAVE = True
+      except ImportError: HAVE = False
+    was "undefined variable (HAVE)" in f, while the same assignment at depth 0
+    worked. bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name }
   depth := 0;
+  opq[0] := False;
+  lineKind := tkEOF;
   i := PyScanLo;
   while i < MainProgramTokCount do
   begin
-    if Tokens[i].Kind = tkIndent then Inc(depth)
+    if ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) and
+       not (Tokens[i].Kind in [tkIndent, tkDedent, tkNewline]) then
+    begin
+      lineKind := Tokens[i].Kind;
+      if (lineKind = tkIdent) and (i + 1 < MainProgramTokCount) and
+         (Tokens[i + 1].Kind = tkFunction) and TokenCaseEqual(i, 'async') then
+        lineKind := tkFunction;
+    end;
+    if Tokens[i].Kind = tkIndent then
+    begin
+      if depth < PY_ALLOCMOD_MAXDEPTH then
+        opq[depth + 1] := opq[depth] or (lineKind = tkFunction) or (lineKind = tkClass);
+      Inc(depth);
+    end
     else if Tokens[i].Kind = tkDedent then Dec(depth)
-    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+    else if (depth >= 0) and (depth <= PY_ALLOCMOD_MAXDEPTH) and (not opq[depth]) and
+            (Tokens[i].Kind = tkIdent) and
             (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) and
             { a STATEMENT BOUNDARY — see the note in PyCollectModuleLocalsAST:
               a keyword argument inside a call is not an assignment }

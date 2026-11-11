@@ -1327,6 +1327,166 @@ begin
   end;
 end;
 
+{ ---- conditional module-level defs (bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name)
+  A module name bound by TWO OR MORE `def` statements, at least one of them
+  inside a module-level suite (`if`/`else`/`try`/`except`/`for`/`while`/`with`),
+  is bound by whichever def statement RAN LAST:
+
+      if sys.platform == "win32":
+          def plat(): return "w"
+      else:
+          def plat(): return "p"
+
+  The compiler resolves a def name statically (one shell per def, ordered by
+  position), and no position can say which arm ran, so the call silently took
+  the first arm. Lowered here the way a decorator is: each such def gets a
+  hidden name and the line `plat = <hidden>` follows its body, so the name is a
+  module variable holding a callable value, rebound when the def statement
+  executes, as in CPython. `__name__` still reads `plat` (PySigDisplayName strips
+  the __pxxdec prefix).
+
+  Only names with a CONDITIONAL def among several. A single conditional def
+  keeps its shell (it works, and stays a direct call). Two depth-0 defs keep the
+  positional machinery. A name is left alone entirely when any of its defs is
+  decorated (the decorator lowering already owns that binding). A generator
+  def is fine: its value is its factory (PyGenFactoryFor). }
+procedure PyCondDefRebind(lo, hi: Integer);
+const CDR_MAX = 256;
+var k, m, depth, n, a, b, bdepth, br, insPos, i: Integer;
+    opq: array[0..255] of Boolean;
+    lineKind: TTokenKind;
+    dTok, dIns: array[0..CDR_MAX-1] of Integer;
+    dName: array[0..CDR_MAX-1] of AnsiString;
+    dCond, dBad, dDo: array[0..CDR_MAX-1] of Boolean;
+    anyCond, anyBad: Boolean; cnt: Integer;
+    hidden, nm: AnsiString;
+    ins: array[0..3] of TRawToken;
+begin
+  n := 0;
+  depth := 0;
+  opq[0] := False;
+  lineKind := tkEOF;
+  k := lo;
+  while k < hi do
+  begin
+    if ((k = lo) or (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) and
+       not (Tokens[k].Kind in [tkIndent, tkDedent, tkNewline]) then
+    begin
+      lineKind := Tokens[k].Kind;
+      if (lineKind = tkIdent) and (k + 1 < hi) and (Tokens[k + 1].Kind = tkFunction) and
+         (PyLexTokText(k) = 'async') then
+        lineKind := tkFunction
+      else if (lineKind = tkFunction) and (depth <= 255) and (not opq[depth]) and
+              (k + 1 < hi) and (Tokens[k + 1].Kind = tkIdent) and (n < CDR_MAX) then
+      begin
+        nm := PyLexTokText(k + 1);
+        if Copy(nm, 1, 8) <> '__pxxdec' then
+        begin
+          dTok[n] := k;
+          dName[n] := nm;
+          dCond[n] := depth > 0;
+          dDo[n] := False;
+          { decorated: the previous line starts with '@' }
+          dBad[n] := False;
+          if (k - 1 >= lo) and (Tokens[k - 1].Kind = tkNewline) then
+          begin
+            m := k - 2;
+            while (m >= lo) and not (Tokens[m].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(m);
+            if (m + 1 < k) and (Tokens[m + 1].Kind = tkAt) then dBad[n] := True;
+          end;
+          { the header's ':' at bracket depth 0, then the body }
+          m := k + 2;
+          br := 0;
+          while (m < hi) and not ((br = 0) and (Tokens[m].Kind = tkColon)) do
+          begin
+            if Tokens[m].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(br)
+            else if Tokens[m].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(br);
+            Inc(m);
+          end;
+          insPos := -1;
+          if (m + 2 < hi) and (Tokens[m + 1].Kind = tkNewline) and (Tokens[m + 2].Kind = tkIndent) then
+          begin
+            bdepth := 0;
+            i := m + 2;
+            while i < hi do
+            begin
+              if Tokens[i].Kind = tkIndent then Inc(bdepth)
+              else if Tokens[i].Kind = tkDedent then
+              begin
+                Dec(bdepth);
+                if bdepth = 0 then begin insPos := i + 1; Break; end;
+              end;
+              Inc(i);
+            end;
+          end
+          else
+          begin
+            i := m + 1;
+            while (i < hi) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+            if i < hi then insPos := i + 1;
+          end;
+          if insPos < 0 then dBad[n] := True;
+          dIns[n] := insPos;
+          Inc(n);
+        end;
+      end;
+    end;
+    if Tokens[k].Kind = tkIndent then
+    begin
+      if depth < 255 then
+        opq[depth + 1] := opq[depth] or (lineKind = tkFunction) or (lineKind = tkClass);
+      Inc(depth);
+    end
+    else if Tokens[k].Kind = tkDedent then Dec(depth);
+    Inc(k);
+  end;
+  { which names qualify }
+  for a := 0 to n - 1 do
+  begin
+    cnt := 0; anyCond := False; anyBad := False;
+    for b := 0 to n - 1 do
+      if dName[b] = dName[a] then
+      begin
+        Inc(cnt);
+        if dCond[b] then anyCond := True;
+        if dBad[b] then anyBad := True;
+      end;
+    dDo[a] := (cnt >= 2) and anyCond and not anyBad;
+  end;
+  { rewrite, LAST def first, so an insertion never moves a def still to do }
+  for a := n - 1 downto 0 do
+    if dDo[a] then
+    begin
+      k := dTok[a];
+      Inc(PyDecSeq);
+      hidden := '__pxxdec' + PyIntLiteralText(PyDecSeq) + '_' + dName[a];
+      if TokCharLen + 2 * Length(hidden) + Length(dName[a]) >= STRING_CAP then
+        Error('token char buffer overflow');
+      Tokens[k + 1].SOffset := TokCharLen;
+      Tokens[k + 1].SLen := Length(hidden);
+      for i := 1 to Length(hidden) do
+      begin
+        TokChars[TokCharLen] := hidden[i];
+        Inc(TokCharLen);
+      end;
+      { `name = hidden NEWLINE` }
+      ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[k].Line;
+      ins[0].SOffset := TokCharLen; ins[0].SLen := Length(dName[a]);
+      for i := 1 to Length(dName[a]) do
+      begin
+        TokChars[TokCharLen] := dName[a][i];
+        Inc(TokCharLen);
+      end;
+      ins[1].Kind := tkAssign; ins[1].IVal := 0; ins[1].Line := Tokens[k].Line;
+      ins[1].SOffset := 0; ins[1].SLen := 0;
+      ins[2].Kind := tkIdent; ins[2].IVal := 0; ins[2].Line := Tokens[k].Line;
+      ins[2].SOffset := Tokens[k + 1].SOffset; ins[2].SLen := Tokens[k + 1].SLen;
+      ins[3].Kind := tkNewline; ins[3].IVal := 0; ins[3].Line := Tokens[k].Line;
+      ins[3].SOffset := 0; ins[3].SLen := 0;
+      InsertTokens(dIns[a], ins, 4);
+    end;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -2133,6 +2293,7 @@ begin
   PyEmitToken(tkEOF, 0, SrcLine, '');
   PyClassBodySemicolons(streamBase, TokCount);
   PyClassReceiverSelf(streamBase, TokCount);
+  PyCondDefRebind(streamBase, TokCount);
 end;
 
 { Lex a `.py` MODULE into the token stream, after whatever is already there,

@@ -471,7 +471,7 @@ end;
   (`$pylam1`), and an internal `$...` suffix dropped (`m$shadowed12` -> `m`).
   bug-n-a-function-value-has-no-name }
 function PySigDisplayName(const nm: AnsiString): AnsiString;
-var k: Integer;
+var k, i: Integer;
 begin
   Result := nm;
   k := Length(Result);
@@ -480,6 +480,16 @@ begin
   if Copy(Result, 1, 6) = '$pylam' then
   begin
     Result := '<lambda>';
+    Exit;
+  end;
+  { a generator taken as a VALUE is its factory, `$pygenmk_<gpi>` (pyparser's
+    PyGenFactoryFor); its name is the generator's }
+  if Copy(Result, 1, 9) = '$pygenmk_' then
+  begin
+    k := 0;
+    for i := 10 to Length(Result) do
+      if Result[i] in ['0'..'9'] then k := k * 10 + (Ord(Result[i]) - Ord('0'));
+    if (k > 0) and (k < ProcCount) then Result := PySigDisplayName(Procs[k].Name);
     Exit;
   end;
   k := Pos('$', Result);

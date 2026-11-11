@@ -217,3 +217,50 @@ That is the positional question this ticket's first half describes. The second
 pass deliberately leaves an already-claimed name alone, because a def under
 `if False:` must not displace a depth-0 one, and the compiler cannot tell the two
 branches apart statically.
+
+## 2026-11-11: the rebind half is fixed -- closed
+
+A NEW observable first: two conditional defs and NO depth-0 one,
+
+```python
+if sys.platform == "win32":
+    def plat(): return "w"
+else:
+    def plat(): return "p"
+print(plat())        # CPython p, pxx w -- silently the FIRST arm
+```
+
+which is the platform idiom, and worse than the `if True:` rebind this ticket
+opened on.
+
+**Fix: the lexer lowers it the way it lowers a decorator** (`PyCondDefRebind` in
+pylexer.inc, run after each file is lexed). For a module name with two or more
+module-level defs, at least one inside a suite, every one of those defs gets a
+hidden name (`__pxxdecN_plat`) and `plat = __pxxdecN_plat` is inserted after its
+body. The name becomes a module variable holding a callable value, rebound
+when the def statement executes -- CPython's semantics, with no positional
+question left to answer. `plat.__name__` still reads `plat`.
+
+Left alone on purpose:
+- one conditional def (nothing to rebind; it stays a direct call);
+- only depth-0 defs (the positional machinery already answers those);
+- a name with a decorated def (the decorator lowering owns that binding).
+
+Generator defs are included. Through a callable value a generator was called
+through its step routine ("missing 1 required positional argument(s)"); that
+was fixed in the same batch (done/bug-n-a-generator-def-taken-as-a-value-is-called-through-its-step-routine).
+
+**Second fix, found on the way:** a module name assigned ONLY inside a suite
+was invisible to a def written above it (`def have(): return HAVE` over
+`try: import x; HAVE = True / except ImportError: HAVE = False` said
+"undefined variable (HAVE)"). PyAllocModuleGlobals pre-created only depth-0
+targets; it now also takes targets in non-def, non-class suites.
+
+Gate rows, all matching CPython: the platform pair, `g` 1 -> 2 under `if True:`
+and unchanged under `if False:`, the `isqrt` ImportError fallback, a def in a
+`for` body, the lone conditional def, a recursive def rebound with a new
+signature (`fact(5)`, `fact(5, 2)`), and a def above the block calling the
+rebound name. Test: test_nilpy_a_conditional_def_rebinds_by_execution (row
+condef26). The function-level sibling,
+bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently,
+is a different mechanism and was closed on its own.
