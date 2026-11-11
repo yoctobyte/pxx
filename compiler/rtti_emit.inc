@@ -468,6 +468,26 @@ begin
   PatchDataU64(fiPos + 32, flags);
 end;
 
+{ A def's Python-visible NAME from its proc name: the last component of a
+  qualified one (`mk.inner` -> `inner`), `<lambda>` for a lifted lambda
+  (`$pylam1`), and an internal `$...` suffix dropped (`m$shadowed12` -> `m`).
+  bug-n-a-function-value-has-no-name }
+function PySigDisplayName(const nm: AnsiString): AnsiString;
+var k: Integer;
+begin
+  Result := nm;
+  k := Length(Result);
+  while (k > 0) and (Result[k] <> '.') do Dec(k);
+  if k > 0 then Result := Copy(Result, k + 1, Length(Result) - k);
+  if Copy(Result, 1, 6) = '$pylam' then
+  begin
+    Result := '<lambda>';
+    Exit;
+  end;
+  k := Pos('$', Result);
+  if k > 1 then Result := Copy(Result, 1, k - 1);
+end;
+
 { Emit one PYSIG_SIZE signature record per NilPy `def`, and record its Data[]
   offset in ProcSigOff so a callable value can point at it.
 
@@ -506,9 +526,39 @@ begin
   Result := False;
 end;
 
+{ Does the program read a function's name -- `.__name__` / `.__qualname__`
+  anywhere in its Python token ranges (an imported mimic module counts: that is
+  how argparse asks)? Gates PYSIG_STAR_HASFNAME. A bare `__name__` is the
+  module-name idiom (`if __name__ == "__main__"`) and does not count. }
+function PyProgramReadsFuncName: Boolean;
+{$ifdef PXX_NO_NILPY}
+begin
+  Result := False;
+end;
+{$else}
+var rIdx, lo, hi, j: Integer;
+begin
+  Result := False;
+  rIdx := 0;
+  while PyPyRangeAt(rIdx, lo, hi) do
+  begin
+    Inc(rIdx);
+    for j := lo + 1 to hi - 1 do
+      if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
+         ((GetTokenStr(j) = '__name__') or (GetTokenStr(j) = '__qualname__')) then
+      begin
+        Result := True;
+        Exit;
+      end;
+  end;
+end;
+{$endif}
+
 procedure EmitPySignatures;
 var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
     lastDecl: Integer;   { one past the last DECLARED (non-collector) parameter }
+    wantFName: Boolean;  { PYSIG_STAR_HASFNAME -- see PyProgramReadsFuncName }
+    starWord: Int64;
 begin
   { ProcCapacity, not MAX_PROCS: these tables are allocated to fit (see
     EnsureProcCapacity) and a loop to the old fixed bound now writes off the end
@@ -522,6 +572,7 @@ begin
     NilPy construct. The caller's guard excludes C/BASIC/Rust/... but NOT
     Pascal, so the test has to be here. }
   if not isNilPy then Exit;
+  wantFName := PyProgramReadsFuncName;
   { Where an ORPHANED def-time store lands -- see PyDfltScratchOff in defs.inc.
     Emitted unconditionally so the address exists even in a module with no
     unbakeable defaults; 16 bytes is one variant. }
@@ -694,13 +745,32 @@ begin
     if nUser > 0 then
     begin
       namesOff := DataLen;
-      DataPutZeros(nUser * 8);
+      if wantFName then DataPutZeros((nUser + 1) * 8)   { + the def's own name }
+      else DataPutZeros(nUser * 8);
       AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_NAMES, namesOff);
       for k := firstUser to lastDecl - 1 do
       begin
         AddDataPtrFix(namesOff + (k - firstUser) * 8, DataLen);
         DataPutZ(Procs[pi].Params[k].Name);
       end;
+    end;
+    { ...and the def's own name after them, when the program asks for one
+      (PYSIG_STAR_HASFNAME). A def with no parameters gets a one-entry array. }
+    if wantFName then
+    begin
+      { with parameters, the slot was reserved with the pointer array above
+        (the parameter-name strings follow that array) }
+      if nUser = 0 then
+      begin
+        namesOff := DataLen;
+        DataPutZeros(8);
+        AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_NAMES, namesOff);
+      end;
+      AddDataPtrFix(namesOff + nUser * 8, DataLen);
+      DataPutZ(PySigDisplayName(Procs[pi].Name));
+      starWord := 0;
+      if ProcPyStarIdx[pi] >= 0 then starWord := ProcPyStarIdx[pi] + 1;
+      PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, starWord or PYSIG_STAR_HASFNAME);
     end;
   end;
 

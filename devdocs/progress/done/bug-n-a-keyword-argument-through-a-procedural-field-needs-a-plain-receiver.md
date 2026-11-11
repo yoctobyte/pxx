@@ -2,6 +2,7 @@
 track: N
 prio: 55
 type: bug
+status: done
 owner: unassigned
 blocked-by: []
 summary: "`H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had."
@@ -131,3 +132,10 @@ order, and a dict of two functions with different parameter names must still
 bind per-callee (`alpha(laden, room)` and `beta(width, depth)` in one dict).
 `test/test_nilpy_double_star_at_a_callable_value_call.npy` pins the `**`
 spelling of the same family and is the file to extend.
+
+## Log
+- 2026-11-11 — closed as already fixed: all four cells answer 3 with latest
+  (136e3a3ca3) and with the side compiler on top of it; the fix predates today.
+  No code change here; the table is now
+  `test_nilpy_a_keyword_through_a_procedural_field_on_any_receiver.py`
+  (row pfkw26) so it stays fixed.

@@ -44,10 +44,6 @@ Where this differs, knowingly:
   * help text is wrapped by a greedy word wrap that splits at the hyphens
     textwrap would split at; a single word wider than the column is not
     broken.
-  * `type=` given a def words its error with the function's repr, not its
-    name (`invalid <function at 0x...> value`), because a NilPy function value
-    has no __name__ yet (bug-n-a-function-value-has-no-name). Builtin types
-    and classes are named correctly.
 """
 
 import os

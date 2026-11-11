@@ -885,6 +885,8 @@ function PyParenTargetListAssign(i: Integer): Integer; forward; { Nil Python: `(
   sits EARLIER in this include — the FPC seed build needs the forward. }
 procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString); forward;
 function PyIsPhantom(const nm: AnsiString): Boolean; forward;
+function PyClassDeclTok(const name: AnsiString): Integer; forward;
+function PyTokClassBody(ct, limit: Integer; var bs, be: Integer): Boolean; forward;
 function PyDefBodyHasYield(bodyStart: Integer): Boolean; forward;
 procedure PyApplyGeneratorABI; forward;
 procedure PyMarkGeneratorProc(procIdx: Integer); forward;
@@ -18121,6 +18123,23 @@ begin
        (Tokens[TokPos].Kind = tkAssign) then
     begin
       kwName := CurTok.SVal;
+      { More than four positionals before the first keyword: pyvar_callv_kw
+        has four slots, so the positionals move into a list here -- BEFORE the
+        keyword's value is parsed, keeping Python's left-to-right evaluation --
+        and the call takes the list form, pyvar_callv_kw_star, below.
+        bug-n-a-keyword-argument-through-a-callable-value-is-refused-above-four-positionals }
+      if (starSym < 0) and (n > 4) and (kwNamesSym < 0) and
+         (FindProc('pyvar_callv_kw_star') >= 0) then
+      begin
+        starSym := PyNewContainerTemp('TPyList', 'dynargs');
+        starN := argsHead;
+        while starN >= 0 do
+        begin
+          PyContainerCall1(starSym, 'TPyList', 'append', ASTLeft[starN], -1);
+          starN := ASTRight[starN];
+        end;
+        argsHead := -1; lastArg := -1;
+      end;
       Next;                              { the name }
       Next;                              { the '=' }
       PyParseBoolExpr;
@@ -20419,11 +20438,29 @@ function PyClassUsedAsValueEx(const nm: AnsiString; precise: Boolean): Boolean;
   per-instance copy for one shared slot), so neither `print(Plain.n)` nor a local
   spelled like its class may demote a class nobody ever holds.
   bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
-var j, rIdx, lo, hi: Integer;
+var j, rIdx, lo, hi, ct, bs, be: Integer;
     atStmtStart, inSkipStmt, qualified: Boolean;
 begin
   PyClassUsedAsValueEx := False;
   if nm = '' then Exit;
+  { The class's OWN body constructing through its runtime class --
+    `self.__class__(...)` -- is a value use too: the call
+    reaches PyClassRefNew, which needs the widened ctor, and nothing in the
+    scan below names the class there.
+    bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime }
+  if not precise then
+  begin
+    ct := PyClassDeclTok(nm);
+    if (ct >= 0) and PyTokClassBody(ct, TokCount, bs, be) then
+      for j := bs to be - 2 do
+        if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkLParen) and
+           (GetTokenStr(j) = '__class__') and (j > 0) and
+           (Tokens[j - 1].Kind = tkDot) then
+        begin
+          PyClassUsedAsValueEx := True;
+          Exit;
+        end;
+  end;
   { EVERY Python range of the stream, not this module's tokens: since the
     import closure is lexed first (PyLexImportClosure, 2026-09-16) a class's
     constructor is typed from sites in OTHER modules, so a value use in another
@@ -20644,6 +20681,46 @@ begin
     else
     begin
       if (depth = 1) and atArgStart and (Tokens[k].Kind = tkStar) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      atArgStart := False;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ Does the call whose `(` is at parenTok pass a KEYWORD argument (`name=` at
+  an argument start)? Same argument-start tracking as PyCallHasStarArgAt, for
+  the same reason: `f(a == b)` is a comparison. }
+function PyCallHasKwArgAt(parenTok: Integer): Boolean;
+var k, depth: Integer; atArgStart: Boolean;
+begin
+  Result := False;
+  if (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  k := parenTok + 1; depth := 1; atArgStart := True;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if (Tokens[k].Kind = tkLParen) or (Tokens[k].Kind = tkLBrack) or
+       (Tokens[k].Kind = tkBegin) then
+    begin
+      Inc(depth);
+      atArgStart := False;
+    end
+    else if (Tokens[k].Kind = tkRParen) or (Tokens[k].Kind = tkRBrack) or
+            (Tokens[k].Kind = tkEnd) then
+    begin
+      Dec(depth);
+      atArgStart := False;
+    end
+    else if (depth = 1) and (Tokens[k].Kind = tkComma) then
+      atArgStart := True
+    else
+    begin
+      if (depth = 1) and atArgStart and (Tokens[k].Kind = tkIdent) and
+         (k + 1 < TokCount) and (Tokens[k + 1].Kind = tkAssign) then
       begin
         Result := True;
         Exit;
@@ -33648,8 +33725,12 @@ begin
     { ...and only once its body is compiled: the desugar bakes in the instance
       size and slot offsets. Called above its def, the generator goes the
       VALUE route instead, through its factory (PyGenFactoryFor). }
+    { ...and with POSITIONAL arguments only: the desugar seeds the argument
+      slots in order. A keyword call takes the VALUE route, whose
+      PyBuildGeneratorValueAt binds keywords by name.
+      bug-nilpy-a-keyword-argument-to-a-generator-does-not-compile }
     if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] and
-       (ProcGenInstSize[genPi] > 0) then
+       (ProcGenInstSize[genPi] > 0) and not PyCallHasKwArgAt(TokPos) then
     begin
       symIdx := PyGenBindTarget(name, name2, genProl);
       Next;                                { past the generator's name }
@@ -62096,6 +62177,24 @@ begin
         global -- `x = acc; x(4)` raised "not callable", and `CallPr(acc, 5)`
         passed the Integer as a code address (nil reference). A qualified
         import binds `c`, never `Acc`; the direct call `acc(2)` was right. }
+      { `size.__name__` on a def NAME: the name itself, folded here. The
+        dynamic spelling (`f = size; f.__name__`) reads the signature record.
+        bug-n-a-function-value-has-no-name }
+      if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+         (GetTokenStr(TokPos + 1) = '__name__') and
+         ((PyProgSym(name) < 0) or PyNestedDefOutranksSym(name)) and
+         (FindUClass(name) < 0) and
+         (FindProcExactCase(PyQualifyNested(name)) >= 0) then
+      begin
+        Next; Next; Next;            { name . __name__ }
+        node := AllocNode(AN_STR_LIT);
+        ASTSOffset[node] := StoredName(name); ASTSLen[node] := Length(name);
+        ASTTk[node] := Ord(tyString);
+        CurASTNode := node;
+        LastExprTk := tyString;
+        Exit;
+      end;
       if (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
          ((PyProgSym(name) < 0) or PyNestedDefOutranksSym(name)) and

@@ -174,6 +174,8 @@ type
   { ...and a ZERO-argument call of a callable VALUE, pyeval's pyvar_callv0:
     a defaultdict's factory. }
   TPyCall0 = function(const cb: Variant): Variant;
+  { a lifted bound-fn's signature record; pyeval owns the object's layout }
+  TPySigOfObj = function(p: Pointer): Pointer;
   { ...and its N-argument twin for `map(f, a, b, ...)`: the callable as a
     VARIANT (pyeval's pyvar_callv<n> dispatch) and one zipped tuple, spread. }
   TPyIterStarCall = function(const cb: Variant; t: Pointer): Variant;   { t: the TPyList tuple, declared below }
@@ -1267,6 +1269,7 @@ function PyCallablePartsP(p: PPyVarRec; var code, recv: Pointer): Boolean;
 function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
 function PyVarIsCallableRec(p: PPyVarRec): Boolean;
 
+function PyCallableName(const v: Variant): AnsiString;   { a function value's __name__, '' if unknown }
 function PyCallableStr(const v: Variant): AnsiString;
 function PyClassRefStr(const v: Variant): AnsiString;
 { `==`/`!=` TRY for two variant slots by address, in PXXPromoVarCmpTry's
@@ -1975,6 +1978,10 @@ var
   PyIterCallHook: TPyIterCall;
   PyIterStarHook: TPyIterStarCall;
   PyCall0Hook: TPyCall0;
+  { installed by pyboundfn_new: the Sig of a tag-10 lifted bound-fn, which this
+    unit cannot read because the object's layout is pyeval's.
+    bug-n-a-function-value-has-no-name }
+  PyBoundFnSigHook: TPySigOfObj;
 
 { ---- cursors (TPyIter) -------------------------------------------------
   The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
@@ -6049,6 +6056,13 @@ begin
     raise AttributeError.Create('type object ''' + pybtype_name(PPyVarRec(@v)^.Payload)
       + ''' has no attribute ''' + name + '''');
   end;
+  { a FUNCTION value's name, from its signature record }
+  if ((tg = 8) or (tg = 10)) and ((name = '__name__') or (name = '__qualname__')) and
+     (PyCallableName(v) <> '') then
+  begin
+    Result := PyCallableName(v);
+    Exit;
+  end;
   obj := pyvarobj(v);
   if pydynattr_has(obj, name) then
   begin
@@ -6188,6 +6202,10 @@ begin
       exists to close. }
     Result := (name = '__name__') or
               (PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k) <> nil)
+  else if ((pyvartag(v) = 8) or (pyvartag(v) = 10)) and
+          ((name = '__name__') or (name = '__qualname__')) and
+          (PyCallableName(v) <> '') then
+    Result := True
   else
     Result := pydynattr_has(pyvarobj(v), name);
 end;
@@ -24909,6 +24927,26 @@ begin
   end;
 end;
 
+{ The Python NAME of a function value, from its signature record's FName --
+  '' when the carrier has no record (a plain code address, tag 12, or a
+  pyeval closure). bug-n-a-function-value-has-no-name }
+function PyCallableName(const v: Variant): AnsiString;
+var sig: Pointer; sr: PPySigRec;
+begin
+  Result := '';
+  sig := nil;
+  if PPyVarRec(@v)^.Payload = 0 then Exit;
+  if pyvartag(v) = 8 then sig := pybound_sig(v)
+  else if (pyvartag(v) = 10) and (PyBoundFnSigHook <> nil) then
+    sig := PyBoundFnSigHook(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if sig = nil then Exit;
+  sr := PPySigRec(sig);
+  { PYSIG_STAR_HASFNAME (256): the names array has one more pointer, the
+    def's own name, emitted only when the program reads __name__ }
+  if ((sr^.Star and 256) = 0) or (sr^.Names = nil) then Exit;
+  Result := AnsiString(PChar(PPointer(NativeInt(sr^.Names) + sr^.TotN * 8)^));
+end;
+
 function PyCallableStr(const v: Variant): AnsiString;
 const HEXD = '0123456789abcdef';
 var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
@@ -24942,6 +24980,8 @@ begin
   if hx = '' then hx := '0';
   if isBound then
     Result := '<bound method at 0x' + hx + '>'
+  else if PyCallableName(v) <> '' then
+    Result := '<function ' + PyCallableName(v) + ' at 0x' + hx + '>'
   else
     Result := '<function at 0x' + hx + '>';
 end;

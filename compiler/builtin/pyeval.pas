@@ -3340,6 +3340,13 @@ end;
 var
   PyBoundFnMagicMarker: Integer;
 
+function PyBoundFnSigOf(p: Pointer): Pointer;
+begin
+  PyBoundFnSigOf := nil;
+  if (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker) then
+    PyBoundFnSigOf := PBoundFnObj(p)^.Sig;
+end;
+
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 var o: PBoundFnObj; i: Integer;
 begin
@@ -3351,6 +3358,7 @@ begin
     a lifted bound-fn without ever building an interpreted closure. }
   PXXObjFinalizeHook := @PyObjFinalize;
   PyClosureFinalizeHook := @PyEvalClosureFree;
+  PyBoundFnSigHook := @PyBoundFnSigOf;   { f.__name__ on a lifted bound-fn }
   o := PBoundFnObj(PXXObjAllocRaw2(SizeOf(TBoundFnObj)));
   o^.Magic := @PyBoundFnMagicMarker;
   o^.Code := code;
@@ -3879,6 +3887,19 @@ begin
   end;
 end;
 
+{ The funnel with the caller's arguments already in an argv and a supplied mask
+  (a keyword call through PyBoundFnCallKwV). Same ownership rule as above. }
+procedure pyboundfn_call_argv(objptr: Pointer; var av: TPyBfnArgv;
+                              nargs, suppliedMask: Int64; var res: Variant);
+begin
+  PXXObjRetain(objptr);
+  try
+    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res);
+  finally
+    PXXObjRelease(objptr);
+  end;
+end;
+
 { The same funnel for a call of four to eight arguments, which reach the
   runtime as a TPyList (pyvar_callv4..8). Same ownership rule as above. }
 procedure pyboundfn_call_wide(objptr: Pointer; args: TPyList; var res: Variant);
@@ -4075,6 +4096,18 @@ begin
   Result := PyBoxObjNew(inst);
 end;
 
+{ The PYSIG record of a reflected method -- names, ReqN/TotN, defaults -- or
+  nil when it has none. It rides as ONE EXTRA WORD after the `arity` kinds and
+  `arity` names (RTTI_METH_FLAG_HASSIG); `n` is the user arity, Self excluded. }
+function PyMethSig(mi: PMethInfo; n: Integer): Pointer;
+var pk: PInt64;
+begin
+  PyMethSig := nil;
+  pk := PInt64(mi^.ParamKinds);
+  if (pk = nil) or ((mi^.Flags and RTTI_METH_FLAG_HASSIG) = 0) then Exit;
+  PyMethSig := Pointer(NativeInt(pk[2 * (n + 1)]));
+end;
+
 procedure PyClassRefNew(const cb: Variant; nargs: Integer;
                         const a0, a1, a2, a3: Variant; var res: Variant);
 { `cls(args)` where `cls` holds a VT_CLASSREF variant — a NilPy class reached as
@@ -4106,7 +4139,8 @@ var
   star: TPyList;
   vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
   vs1: TVPrS1; vs2: TVPrS2; vs3: TVPrS3; sp1: TSPr1;
-  strCtor: Boolean;
+  strCtor, filled: Boolean;
+  dp: Pointer;
 begin
   res := pynone;
   cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -4136,7 +4170,21 @@ begin
       star := TPyList.Create;
       for i := nFixed to nargs - 1 do star.append(av[i]);
     end
-    else if n <> nargs then PyRaiseArity(nargs, n, n);
+    else if n <> nargs then
+    begin
+      { omitted trailing arguments take the ctor's OWN defaults, from its
+        signature record -- `self.__class__(a)` against `__init__(self, a, b=2)`
+        raised "takes 2 positional arguments but 1 were given".
+        bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime }
+      filled := nargs < n;
+      if filled then
+        for i := nargs to n - 1 do
+        begin
+          dp := pysig_default_slot(PyMethSig(mi, n), i);
+          if dp = nil then filled := False else av[i] := PVariant(dp)^;
+        end;
+      if not filled then PyRaiseArity(nargs, n, n);
+    end;
     pk := PInt64(mi^.ParamKinds);
     { `class E(Exception): pass` inherits Exception.Create(const msg:
       AnsiString) — a REAL signature this must marshal to, not a widening the
@@ -4184,6 +4232,73 @@ begin
   res := PyBoxObjNew(inst);
 end;
 
+
+{ `cls(x, b=99)` -- a keyword argument to a class reached as a VALUE. Matched
+  against the ctor's own parameter names from its signature record, unsupplied
+  parameters take its defaults, and the now-positional call goes through
+  PyClassRefNew. bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime }
+procedure PyClassRefNewKw(const cb: Variant; nPos: Integer;
+                          const a0, a1, a2, a3: Variant;
+                          kwNames, kwVals: TPyList; var res: Variant);
+var cls: PClassRTTI; mi: PMethInfo; sig, dp: Pointer;
+    av: array[0..3] of Variant;
+    n, i, hit, nkw: Integer; supplied: Int64; kn: AnsiString;
+begin
+  res := pynone;
+  cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  if cls = nil then Exit;
+  mi := PyFindMethCI(cls, 'create');
+  nkw := 0;
+  if kwNames <> nil then nkw := kwNames.count;
+  if mi = nil then
+  begin
+    if nkw > 0 then
+      raise TypeError.Create(cls^.NamePtr^ + '() takes no keyword arguments');
+    PyClassRefNew(cb, nPos, a0, a1, a2, a3, res);
+    Exit;
+  end;
+  n := Integer(mi^.Arity) - 1;
+  if Integer((mi^.Flags shr 8) and 255) > 0 then
+    raise TypeError.Create('a keyword argument constructing ' + cls^.NamePtr^
+      + ' through a class value is not supported yet for a constructor that '
+      + 'collects *args');
+  if n > 4 then
+    raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+      + 'class value supports at most 4 constructor parameters');
+  sig := PyMethSig(mi, n);
+  if sig = nil then
+    raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+      + 'class value: its constructor carries no parameter names, so a '
+      + 'keyword argument cannot be matched');
+  if nPos > n then PyRaiseArity(nPos, n, n);
+  av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
+  for i := nPos to 3 do av[i] := pynone;
+  supplied := 0;
+  for i := 0 to nPos - 1 do supplied := supplied or (Int64(1) shl i);
+  for i := 0 to nkw - 1 do
+  begin
+    kn := pystr_of(kwNames.at(i));
+    hit := PySigFindParam(sig, kn);
+    if (hit < 0) or (hit >= n) then
+      raise TypeError.Create(cls^.NamePtr^ + '.__init__() got an unexpected '
+        + 'keyword argument ''' + kn + '''');
+    if (supplied shr hit) and 1 = 1 then
+      raise TypeError.Create(cls^.NamePtr^ + '.__init__() got multiple values '
+        + 'for argument ''' + kn + '''');
+    av[hit] := kwVals.at(i);
+    supplied := supplied or (Int64(1) shl hit);
+  end;
+  for i := 0 to n - 1 do
+    if (supplied shr i) and 1 = 0 then
+    begin
+      dp := pysig_default_slot(sig, i);
+      if dp = nil then
+        raise TypeError.Create(cls^.NamePtr^ + '.__init__() missing a required '
+          + 'argument at position ' + pystr_of(Int64(i + 1)));
+      av[i] := PVariant(dp)^;
+    end;
+  PyClassRefNew(cb, n, av[0], av[1], av[2], av[3], res);
+end;
 
 function PyMakeClosure(fnIdx: Integer): Variant;
 var c, i: Integer; r: PPyRec;
@@ -6178,9 +6293,8 @@ begin
   Result := f0();
 end;
 
-function PyBoundFnCallKw(o: PBoundFnObj; nPos: Integer;
-                         const a0, a1, a2, a3: Variant;
-                         kwNames, kwVals: TPyList): Variant;
+function PyBoundFnCallKwV(o: PBoundFnObj; nPos: Integer; var pos: TPyBfnArgv;
+                          kwNames, kwVals: TPyList): Variant;
 { A keyword argument through a LIFTED bound-fn -- a lambda or a nested def taken
   as a value (tag 10). The names come from the same signature record the tag-8
   pair reads, through the same lookup (PySigFindParam), which is the whole point
@@ -6197,7 +6311,7 @@ function PyBoundFnCallKw(o: PBoundFnObj; nPos: Integer;
   counts the LIFTED signature including the capture parameters the frontend
   appended. A keyword naming a capture is therefore an unexpected keyword, which
   is what CPython answers for a name that is not a parameter. }
-var av: array[0..2] of Variant;
+var av: TPyBfnArgv;
     supplied: Int64;
     i, hit, nkw, visible, req, nargs, miss: Integer;
     kn: AnsiString;
@@ -6211,9 +6325,9 @@ begin
   if o^.Sig = nil then
     raise TypeError.Create('this callable value carries no parameter names, '
             + 'so a keyword argument cannot be matched to a parameter');
-  if nPos > 3 then
+  if nPos > 8 then
     raise TypeError.Create('a keyword argument through a callable value is '
-            + 'not supported yet past three positional arguments');
+            + 'not supported yet past eight positional arguments');
   { NDefBase < 0 is pyboundfn_new's "arity unchecked" -- the lenient callback
     bridges. Nothing there can tell a parameter from a capture, so the visible
     window is the own-parameter count and nothing counts as required. }
@@ -6227,8 +6341,8 @@ begin
     visible := o^.NOwn;
     req := 0;
   end;
-  av[0] := a0; av[1] := a1; av[2] := a2;
-  for i := nPos to 2 do av[i] := pynone;
+  for i := 0 to 7 do
+    if i < nPos then av[i] := pos[i] else av[i] := pynone;
   supplied := 0;
   for i := 0 to nPos - 1 do supplied := supplied or (Int64(1) shl i);
   nargs := nPos;
@@ -6238,9 +6352,9 @@ begin
     hit := PySigFindParam(o^.Sig, kn);
     if (hit < 0) or (hit >= visible) then
       raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
-    if hit > 2 then
+    if hit > 7 then
       raise TypeError.Create('a keyword argument through a callable value is '
-              + 'not supported yet past three positional arguments');
+              + 'not supported yet past eight parameters');
     if (supplied shr hit) and 1 = 1 then
       raise TypeError.Create('got multiple values for argument ''' + kn + '''');
     av[hit] := kwVals.at(i);
@@ -6259,7 +6373,17 @@ begin
   { A HOLE below nargs -- `f(0, c=9)` leaving b unsupplied -- must keep b's
     default, so the supplied mask travels with the call instead of the callee
     reading the pynone sitting in the slot. }
-  pyboundfn_callvn_mask(Pointer(o), av[0], av[1], av[2], nargs, supplied, Result);
+  pyboundfn_call_argv(Pointer(o), av, nargs, supplied, Result);
+end;
+
+function PyBoundFnCallKw(o: PBoundFnObj; nPos: Integer;
+                         const a0, a1, a2, a3: Variant;
+                         kwNames, kwVals: TPyList): Variant;
+var pos: TPyBfnArgv; i: Integer;
+begin
+  pos[0] := a0; pos[1] := a1; pos[2] := a2; pos[3] := a3;
+  for i := 4 to 7 do pos[i] := pynone;
+  Result := PyBoundFnCallKwV(o, nPos, pos, kwNames, kwVals);
 end;
 
 function pyvar_callv_kw(const cb: Variant; nPos: Integer;
@@ -6294,9 +6418,14 @@ begin
                               kwNames, kwVals);
     Exit;
   end;
+  if pyclassref_is(cb) then
+  begin
+    PyClassRefNewKw(cb, nPos, a0, a1, a2, a3, kwNames, kwVals, Result);
+    Exit;
+  end;
   raise TypeError.Create('a keyword argument through this kind of callable '
-          + 'value is not supported yet (an interpreted closure and a class '
-          + 'reached as a value still carry no parameter names)');
+          + 'value is not supported yet (an interpreted closure still carries '
+          + 'no parameter names)');
 end;
 
 function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList): Variant;
@@ -6308,14 +6437,18 @@ function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList):
   width pyvar_callv_kw has; past it a named refusal rather than dropping
   arguments. This is what `functools.partial`'s
   `self.func(*self.args, *args, **kw)` is made of. }
-var n: Integer; a: array[0..3] of Variant; i: Integer;
+{ Past four positionals the two carriers whose keyword binders take eight --
+  the {code, recv} pair and the lifted bound-fn -- are served directly; the
+  frontend also routes a plain `f(a, b, c, d, e, k=v)` here for that reason.
+  bug-n-a-keyword-argument-through-a-callable-value-is-refused-above-four-positionals }
+var n: Integer; a: TPyBfnArgv; i: Integer; o: Pointer;
 begin
   n := args.count;
-  if n > 4 then
-    raise TypeError.Create('a call through a callable value with *unpacking '
-            + 'and keyword arguments takes at most 4 positional arguments, got '
+  if n > 8 then
+    raise TypeError.Create('a call through a callable value with keyword '
+            + 'arguments takes at most 8 positional arguments, got '
             + pystr_of(Int64(n)));
-  for i := 0 to 3 do
+  for i := 0 to 7 do
     if i < n then a[i] := args.at(i) else a[i] := pynone;
   if (kwNames = nil) or (kwNames.count = 0) then
   begin
@@ -6324,12 +6457,35 @@ begin
       1: Result := pyvar_callv1(cb, a[0]);
       2: Result := pyvar_callv2(cb, a[0], a[1]);
       3: Result := pyvar_callv3(cb, a[0], a[1], a[2]);
+      4: Result := pyvar_callv4(cb, a[0], a[1], a[2], a[3]);
+      5: Result := pyvar_callv5(cb, a[0], a[1], a[2], a[3], a[4]);
+      6: Result := pyvar_callv6(cb, a[0], a[1], a[2], a[3], a[4], a[5]);
+      7: Result := pyvar_callv7(cb, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
     else
-      Result := pyvar_callv4(cb, a[0], a[1], a[2], a[3]);
+      Result := pyvar_callv8(cb, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
     end;
     Exit;
   end;
-  Result := pyvar_callv_kw(cb, n, a[0], a[1], a[2], a[3], kwNames, kwVals);
+  if n <= 4 then
+  begin
+    Result := pyvar_callv_kw(cb, n, a[0], a[1], a[2], a[3], kwNames, kwVals);
+    Exit;
+  end;
+  if pycallback_is(cb) then
+  begin
+    Result := pybound_pair_call_kw(Pointer(NativeInt(PPyRec(@cb)^.Payload)),
+                                   n, a[0], a[1], a[2], a[3],
+                                   a[4], a[5], a[6], a[7], kwNames, kwVals);
+    Exit;
+  end;
+  o := PyCallableObj(cb);
+  if (o <> nil) and pyboundfn_is(o) then
+  begin
+    Result := PyBoundFnCallKwV(PBoundFnObj(o), n, a, kwNames, kwVals);
+    Exit;
+  end;
+  raise TypeError.Create('a keyword argument through this kind of callable '
+          + 'value is not supported past 4 positional arguments');
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
@@ -6594,9 +6750,10 @@ function PyDynMethL(const recv: Variant; const name, kwspec: AnsiString;
 var
   obj: Pointer;
   cls: PClassRTTI;
-  kwNames: TPyList;
+  kwNames, kn, kv: TPyList;
   res, cb: Variant;
-  i, cut, nargs, first: Integer;
+  pa: array[0..3] of Variant;
+  i, cut, nargs, first, nPos: Integer;
   rest: AnsiString;
 begin
   Result := pynone;
@@ -6635,19 +6792,8 @@ begin
     raise AttributeError.Create('''' + PyVarTypeNameOf(recv) +
       ''' object has no attribute ''' + name + '''');
 
-  cls := GetInstanceRTTI(obj);
-  if (cls <> nil) and (PyFindMethCI(cls, name) <> nil) then
-  begin
-    { PyHostCall marshals every parameter/return shape the RTTI records and
-      halts if the method is absent -- which is why the lookup above is a
-      GUARD and not a duplicate: it is what turns "absent" into a Python
-      exception instead of a process exit. }
-    { args arrives BUILT. It used to be assembled here out of a0..a3, which is
-      the whole reason the entry points were a ladder — PyHostCall has always
-      taken a list. }
-    { kwspec's fields are parallel to args -- '' for a positional slot, which is
-      exactly what PyHostCall's binder skips. Split here rather than at the call
-      site so the emitted code carries one string constant per call. }
+  { kwspec's fields are parallel to args -- '' for a positional slot. Split
+    once, here, for both the method arm and the callable-field arm below. }
     kwNames := nil;
     if kwspec <> '' then
     begin
@@ -6681,6 +6827,19 @@ begin
         end;
       end;
     end;
+  cls := GetInstanceRTTI(obj);
+  if (cls <> nil) and (PyFindMethCI(cls, name) <> nil) then
+  begin
+    { PyHostCall marshals every parameter/return shape the RTTI records and
+      halts if the method is absent -- which is why the lookup above is a
+      GUARD and not a duplicate: it is what turns "absent" into a Python
+      exception instead of a process exit. }
+    { args arrives BUILT. It used to be assembled here out of a0..a3, which is
+      the whole reason the entry points were a ladder — PyHostCall has always
+      taken a list. }
+    { kwspec's fields are parallel to args -- '' for a positional slot, which is
+      exactly what PyHostCall's binder skips. Split here rather than at the call
+      site so the emitted code carries one string constant per call. }
     { A DICT RECEIVER's keyword run is KEYS, not parameter names, and this is
       the only place that knows which the receiver is. `d.update(a=1)` names a
       KEY; PyBindHostKwArgs below would look for a PARAMETER called `a` on
@@ -6712,13 +6871,48 @@ begin
     Exit;
   end;
 
-  cb := pydynattr_get(obj, name);   { raises AttributeError on a genuine miss }
-  { A CALLABLE FIELD is reached through pyvar_callv*, which has no parameter
-    names to bind against -- binding by position is the mis-binding this whole
-    path exists not to do. Refused by name rather than guessed. }
-  if kwspec <> '' then
-    raise TypeError.Create(name + '() is dispatched at run time through a '
-      + 'callable attribute, which takes positional arguments only');
+  { raises AttributeError on a genuine miss -- after the split above, so the
+    split list is released on the way out }
+  try
+    cb := pydynattr_get(obj, name);
+  except
+    if kwNames <> nil then kwNames.Free;
+    raise;
+  end;
+  { A CALLABLE FIELD with keywords goes through pyvar_callv_kw, which binds
+    them by NAME against the callable's own signature record (a def, a lambda,
+    a class value) and refuses a carrier that has none. The leading ''
+    fields are the positional arguments.
+    bug-n-a-keyword-argument-through-a-callable-field-is-refused }
+  if kwNames <> nil then
+  begin
+    nPos := 0;
+    while (nPos < nargs) and (pystr_of(kwNames.at(nPos)) = '') do Inc(nPos);
+    if nPos > 4 then
+    begin
+      kwNames.Free;
+      raise TypeError.Create(name + '() is dispatched at run time through a '
+        + 'callable attribute, which takes keywords after at most 4 positional '
+        + 'arguments');
+    end;
+    kn := TPyList.Create;
+    kv := TPyList.Create;
+    for i := nPos to nargs - 1 do
+    begin
+      kn.append(kwNames.at(i));
+      kv.append(args.at(i));
+    end;
+    kwNames.Free;
+    for i := 0 to 3 do
+      if i < nPos then pa[i] := args.at(i) else pa[i] := pynone;
+    try
+      Result := pyvar_callv_kw(cb, nPos, pa[0], pa[1], pa[2], pa[3], kn, kv);
+    finally
+      kn.Free;
+      kv.Free;
+    end;
+    Exit;
+  end;
   { The ladder reaches EIGHT, and this arm stopped at four because it was
     written while the ladder did. "past four it has no rung" was true at
     95e7eb26e and stopped being true later the SAME DAY at 2b7068dd7, which

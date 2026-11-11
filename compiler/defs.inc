@@ -2136,6 +2136,15 @@ const
     second mechanism: one carrier answers every signature question.
     bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
   PYSIG_OFF_NAMES  = 40;
+  { A flag in the STAR word (whose low byte is the star index + 1; nothing
+    reads the word otherwise): the names array carries ONE MORE pointer after
+    the TotN parameter names, to the def's own NAME -- what `f.__name__` and
+    repr() answer for a function value. Python's spelling: the last component
+    of a qualified name, `<lambda>` for a lambda.
+    Emitted only when the program reads `.__name__` / `.__qualname__`, because
+    the record is .data and .data is RAM on ESP: a program that never asks pays
+    nothing, not even a field. bug-n-a-function-value-has-no-name }
+  PYSIG_STAR_HASFNAME = 256;
 
   { ResolveDataRefSentinel's answers (emit.inc). It is the ONE decoder for the
     families below -- compiler.pas's fixup loop and wasm32's late-cell pass both

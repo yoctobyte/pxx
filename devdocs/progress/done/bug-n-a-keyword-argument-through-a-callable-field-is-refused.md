@@ -4,7 +4,7 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "A keyword argument on a run-time-dispatched call REFUSES when the name resolves to a CALLABLE FIELD rather than a method: `TypeError: zap() is dispatched at run time through a callable attribute, which takes positional arguments only`. CPython runs the same program. Method dispatch carries keywords correctly (pydyn_methkw binds by name against the RTTI's parameter names); the callable-field arm goes through pyvar_callv*, which takes POSITIONS and has no names, so the refusal is a deliberate choice of an error over a silent mis-binding. A NilPy def and lambda DO carry a signature at run time (feature-n-a-callable-value-carries-its-signature-type, pybound_new_sig), so the names may already be reachable from the callable's own value -- that is the thing to measure before designing anything."
-status: open
+status: done
 owner: ""
 ---
 
@@ -56,3 +56,16 @@ with the value — if the NAMES are in it, this is a binder call and not a desig
 question. If only arity and defaults are there, it is a bigger job and should
 be ranked on how much real code writes a keyword through a callable attribute,
 which is not obviously much.
+
+## Log
+- 2026-11-11 — fixed. The measurement: yes, the names travel with the value.
+  A lambda or nested def is a bound-fn with a Sig, a plain def is a tag-8
+  pair with one, and a class value now answers from its ctor's PYSIG record.
+  `pyvar_callv_kw` already bound keywords for all three, so PyDynMethN's
+  callable-field arm now splits kwspec (moved above the method arm, shared by
+  both) into leading positionals plus a names/values pair and calls it.
+  Up to 4 positionals before a keyword, the width pyvar_callv_kw has; past it
+  a named refusal. `test/nilpy_open_world_kwarg_fail.npy` became
+  `test_nilpy_a_keyword_argument_through_a_callable_field.py` (same row
+  target nilpy_ow_kw26): lambda and plain-def fields, keyword with and without
+  a positional, and an unknown keyword's TypeError.

@@ -3,7 +3,7 @@ slug: bug-n-a-function-value-has-no-name
 track: N
 type: bug
 prio: 30
-status: backlog
+status: done
 owner: ""
 created: 2026-09-19
 found-by: frankH
@@ -38,3 +38,27 @@ this ticket lands.
   fold to a string literal.
 - The dynamic spelling needs the name in the boxed callable. It is the same
   representation that repr() reads, so fixing it fixes both.
+
+# Log
+- 2026-11-11 — fixed.
+  - Static: `size.__name__` on a def name folds to the string in the factor
+    (PyParseFactorCore, beside the def-as-value arm).
+  - Dynamic: the def's own name rides as ONE EXTRA POINTER after the TotN
+    parameter names in its PYSIG record, flagged by PYSIG_STAR_HASFNAME (256)
+    in the Star word (which nothing else reads), and emitted ONLY when the
+    program reads `.__name__` / `.__qualname__` somewhere
+    (PyProgramReadsFuncName). The record is .data, which is RAM on ESP, so a
+    program that never asks pays nothing and the record does not grow.
+    rtti_emit.inc's `PySigDisplayName` gives Python's spelling (last component
+    of a qualified name, `<lambda>` for a lifted lambda, an internal `$...`
+    suffix dropped). pylib's `PyCallableName` reads it for a tag-8 pair
+    directly and for a tag-10 bound-fn through the new `PyBoundFnSigHook`,
+    installed by pyboundfn_new. `pydynattr_get` and hasattr answer `__name__`
+    (and `__qualname__`, as the bare name) from it, and repr() prints
+    `<function size at 0x...>` when the name was emitted. Still nameless: a
+    tag-12 bare code address and a tag-9 interpreted closure (a lambda with
+    captures that went through pyclosure_src_new).
+  - argparse: `view --size wide` is back in
+    test_nilpy_argparse_tsp_surface.cases (the message now says `invalid size
+    value`, as CPython), and mimic_argparse.py's caveat is gone.
+  - Test `test_nilpy_a_function_value_has_a_name.py` (row fnname26).

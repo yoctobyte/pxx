@@ -2,6 +2,7 @@
 track: N
 prio: 55
 type: bug
+status: done
 owner: unassigned
 blocked-by: []
 summary: "`cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other."
@@ -64,3 +65,22 @@ A loud, accurate-shaped refusal rather than a wrong value — it names the
 limitation and does not corrupt anything. That is why it is 55 and not higher.
 The cost is that the standard `self.__class__(...)` idiom silently only supports
 its positional half, and a caller discovers which half at run time.
+
+## Log
+- 2026-11-11 — fixed, three parts:
+  1. **Keywords.** New `PyClassRefNewKw` (pyeval): matches each keyword
+     against the ctor's names in its PYSIG record (reached through the
+     RTTI_METH_FLAG_HASSIG word, new helper `PyMethSig`), fills unsupplied
+     parameters from the record's defaults, and calls PyClassRefNew
+     positionally. Unknown and duplicate keywords raise TypeError as CPython
+     does. `pyvar_callv_kw` routes a classref there instead of refusing.
+  2. **Omitted defaults, positional.** `self.__class__(a)` against
+     `__init__(self, a, b=2)` raised an arity error too; PyClassRefNew now
+     fills omitted trailing arguments from the same record.
+  3. **Widening.** A class whose only value use is `self.__class__(...)` in
+     its own body was never widened, so PyClassRefNew refused its typed ctor.
+     PyClassUsedAsValueEx now scans the class body for `.__class__(`.
+  Test `test_nilpy_a_keyword_argument_through_a_class_value.py` (row
+  clskw26): keyword, omitted default, keywords only, through a subclass, a
+  class bound to a name, a class picked from a dict, and both TypeErrors.
+  Split out: feature-n-type-of-self-cannot-be-called-as-a-constructor.

@@ -1310,6 +1310,16 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_genabove26 | diff -u test/test_nilpy_a_generator_called_above_its_def.expected -
 	./$(COMPILER) test/test_nilpy_a_returned_nested_def_keeps_its_captures_at_every_arity.py $(TESTTMP)/test_nilpy_retcap26
 	$(TESTTMP)/test_nilpy_retcap26 | diff -u test/test_nilpy_a_returned_nested_def_keeps_its_captures_at_every_arity.expected -
+	./$(COMPILER) test/test_nilpy_a_keyword_argument_to_a_generator.py $(TESTTMP)/test_nilpy_genkw26
+	$(TESTTMP)/test_nilpy_genkw26 | diff -u test/test_nilpy_a_keyword_argument_to_a_generator.expected -
+	./$(COMPILER) test/test_nilpy_a_keyword_argument_through_a_class_value.py $(TESTTMP)/test_nilpy_clskw26
+	$(TESTTMP)/test_nilpy_clskw26 | diff -u test/test_nilpy_a_keyword_argument_through_a_class_value.expected -
+	./$(COMPILER) test/test_nilpy_a_keyword_through_a_procedural_field_on_any_receiver.py $(TESTTMP)/test_nilpy_pfkw26
+	$(TESTTMP)/test_nilpy_pfkw26 | diff -u test/test_nilpy_a_keyword_through_a_procedural_field_on_any_receiver.expected -
+	./$(COMPILER) test/test_nilpy_a_keyword_after_five_positionals_through_a_callable_value.py $(TESTTMP)/test_nilpy_kw5pos26
+	$(TESTTMP)/test_nilpy_kw5pos26 | diff -u test/test_nilpy_a_keyword_after_five_positionals_through_a_callable_value.expected -
+	./$(COMPILER) test/test_nilpy_a_function_value_has_a_name.py $(TESTTMP)/test_nilpy_fnname26
+	$(TESTTMP)/test_nilpy_fnname26 | diff -u test/test_nilpy_a_function_value_has_a_name.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
@@ -8788,13 +8798,10 @@ test-nilpy: $(COMPILER)
 	# class that is not the receiver's.
 	./$(COMPILER) test/test_nilpy_open_world_keyword_dispatch.npy $(TESTTMP)/test_nilpy_owkw26
 	$(TESTTMP)/test_nilpy_owkw26 | diff -u test/test_nilpy_open_world_keyword_dispatch.expected -
-	# The one shape that still has no names to bind against is a CALLABLE FIELD,
-	# refused BY NAME at run time rather than bound by position. It compiles --
-	# the refusal is the program's exception, not the compiler's.
-	./$(COMPILER) test/nilpy_open_world_kwarg_fail.npy $(TESTTMP)/nilpy_ow_kw26
-	@$(TESTTMP)/nilpy_ow_kw26 2>&1 \
-	  | grep -q "takes positional arguments only" \
-	  || { echo 'nilpy_open_world_kwarg_fail: FAIL - a keyword through a CALLABLE FIELD must be refused, not bound by position'; exit 1; }
+	# ...and a CALLABLE FIELD binds its keywords by name against the callable's
+	# own signature record (bug-n-a-keyword-argument-through-a-callable-field-is-refused).
+	./$(COMPILER) test/test_nilpy_a_keyword_argument_through_a_callable_field.py $(TESTTMP)/nilpy_ow_kw26
+	$(TESTTMP)/nilpy_ow_kw26 | diff -u test/test_nilpy_a_keyword_argument_through_a_callable_field.expected -
 	# ...and a fifth positional argument is not silently DROPPED. This row used to
 	# grep the compiler output for the literal `takes at most 4 arguments`, and
 	# 95e7eb26e removed that cap (a list-taking pydyn_methl), so the string can

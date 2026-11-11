@@ -5,7 +5,7 @@ summary: "`pascal26:531: error: Nil Python: a keyword argument through a callabl
 track: N
 type: bug
 prio: 55
-status: backlog
+status: done
 owner: ""
 blocked-by: []
 created: 2026-09-21
@@ -56,3 +56,22 @@ callee being a **callable value** rather than a known function. Through
 `historic.py`, `anchor` is already bound at module level by line 26. That would
 explain why the entry point changes the outcome — **and nothing here tested
 it.** Do not start from it; start from the two compiles above, which are facts.
+
+## Log
+- 2026-11-11 — fixed. First, the TSP site itself no longer reaches this
+  path: `tsp/historic.py` compiles with latest (136e3a3ca3) as well, so the
+  call resolves statically there now. The refusal was still live for a real
+  callable VALUE (`fs[0](1, 2, 3, 4, 5, tol=1000.0)`), which is what is fixed:
+  - frontend (PyMakeDynCall's argument loop): at the first keyword after more
+    than four positionals, the positionals move into a list (before the
+    keyword's value is parsed, so evaluation stays left to right) and the call
+    takes `pyvar_callv_kw_star`;
+  - runtime: `pyvar_callv_kw_star` takes up to 8 positionals, serving the
+    tag-8 pair through `pybound_pair_call_kw` (8 slots already) and the
+    lifted bound-fn through the new `PyBoundFnCallKwV` (8-wide
+    `PyBoundFnCallKw`, via `pyboundfn_call_argv`).
+  Still four: a keyword through a callable FIELD on a dynamically-typed
+  receiver (its own refusal in PyMakeVariantFieldCall), and a class value
+  (PyClassRefNew's 4-parameter cap).
+  Test `test_nilpy_a_keyword_after_five_positionals_through_a_callable_value.py`
+  (row kw5pos26), including an evaluation-order trace.

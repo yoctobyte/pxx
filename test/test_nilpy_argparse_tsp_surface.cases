@@ -37,4 +37,5 @@ view
 view --demo
 view --demo --size 640x480 --yaw -30 --camera chase --launch-in 5
 view --camera orbit
+view --size wide
 view --help

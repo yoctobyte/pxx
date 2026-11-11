@@ -6,8 +6,8 @@
 # `except SystemExit` sees (bug-n-sys-exit-is-a-halt-so-no-handler-sees-it), so
 # the Makefile row runs the binary once per line of the .cases file and prints
 # the exit status after each. .expected is python3 running this same file.
-# `view --size wide` is NOT in the .cases: its message names the `type=`
-# function, which NilPy cannot yet (bug-n-a-function-value-has-no-name).
+# `view --size wide` names the `type=` function in its message, which needs a
+# function value's __name__ (bug-n-a-function-value-has-no-name).
 
 import argparse
 import sys
