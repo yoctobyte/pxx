@@ -12556,16 +12556,10 @@ begin
                    bits move. `2.` needs nothing — that path reads digits first. }
                  if (Length(Result) > 0) and (Result[1] = '.') then
                    Result := '0' + Result;
-                 { pyeval's own tokenizer cannot read an exponent, so an `1e3`
-                   spelling would compile here and die at RUN time. Refuse at
-                   COMPILE time instead: this arm is reached only when the body
-                   is being reconstructed FOR pyeval, so a lifted body is
-                   unaffected, and a refusal must not move later than it already
-                   was. bug-n-pyeval-cannot-read-an-exponent-float-literal }
-                 if (Pos('e', Result) > 0) or (Pos('E', Result) > 0) then
-                   Error('Nil Python: an exponent float literal (' + Result
-                         + ') is not supported in an interpreted lambda/closure '
-                         + 'body yet — write it in plain decimal');
+                 { An exponent spelling (`1e3`) goes through as written: pyeval's
+                   tokenizer reads exponents since 2026-11-11, with the same
+                   parser float(str) uses, so it was refused here until then.
+                   bug-n-pyeval-cannot-read-an-exponent-float-literal }
                end
                else
                  Error('Nil Python: a synthesised float in a lambda/closure '

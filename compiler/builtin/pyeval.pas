@@ -2623,16 +2623,32 @@ begin
       begin
         isFloat := True;
         Pos := Pos + 1;
-        scale := 0.1;
-        while (Pos <= SLen) and IsDigit(Src[Pos]) do
+        while (Pos <= SLen) and (IsDigit(Src[Pos]) or (Src[Pos] = '_')) do Pos := Pos + 1;
+      end;
+      { an EXPONENT -- `1e3`, `2.5E-3`. Refused by name until 2026-11-11, which
+        made `lambda: 1e3` a compile-time refusal (the lambda body is rebuilt as
+        text and re-lexed here). Only when a digit follows the optional sign, so
+        `2e` / `2ex` still end the number where CPython's tokenizer would
+        complain on its own terms.
+        bug-n-pyeval-cannot-read-an-exponent-float-literal }
+      if (Pos <= SLen) and ((Src[Pos] = 'e') or (Src[Pos] = 'E')) then
+      begin
+        dg := Pos + 1;
+        if (dg <= SLen) and ((Src[dg] = '+') or (Src[dg] = '-')) then dg := dg + 1;
+        if (dg <= SLen) and IsDigit(Src[dg]) then
         begin
-          fv := fv + (Ord(Src[Pos]) - Ord('0')) * scale;
-          scale := scale * 0.1;
-          Pos := Pos + 1;
+          isFloat := True;
+          Pos := dg;
+          while (Pos <= SLen) and (IsDigit(Src[Pos]) or (Src[Pos] = '_')) do Pos := Pos + 1;
         end;
       end;
-      if (Pos <= SLen) and ((Src[Pos] = 'e') or (Src[Pos] = 'E')) then
-        TokError('float exponent literals not supported in M1');
+      { The value of a float literal comes from the SAME parser float(str) uses,
+        on the literal's own text: the digit-by-digit `scale * 0.1` accumulation
+        this replaced is not correctly rounded, so `0.3` read here and `0.3`
+        compiled could differ in the last place (the second half of the same
+        ticket). }
+      if isFloat then
+        fv := pyfloat_parse(pystr_replace(Copy(Src, start, Pos - start), '_', ''));
       if isFloat then AddTok(PK_FLOAT, '', 0, fv)
       else if ovf then AddTok(PK_BIGINT, Copy(Src, start, Pos - start), 0, 0)
       else AddTok(PK_INT, '', iv, 0);

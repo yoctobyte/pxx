@@ -4,6 +4,7 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "pyeval's tokenizer refuses an exponent float literal (`1e3`, `2E-3`) — `float exponent literals not supported in M1`, compiler/builtin/pyeval.pas:1882. It surfaced when the lambda/closure body reconstruction started carrying float literals at all (2026-09-12): the body is rebuilt as TEXT and re-lexed by pyeval, so `lambda: 1e3` would have compiled and died at RUN time. It is refused at COMPILE time instead, by name, so nothing moved later than it already was — that refusal is the current behaviour and this ticket is to replace it with support. Scoped to the INTERPRETED path only: a lifted/compiled lambda body never reaches pyeval and handles exponents fine. A SECOND question is in the same tokenizer and should be answered in the same visit, but is NOT the same bug and must not be silently folded in: the fraction is accumulated digit-by-digit against `scale := scale * 0.1` (pyeval.pas:1873-1879), which is not the same arithmetic as StrToDoubleBits, so an interpreted literal and a compiled one can differ in the last place. Rank the exponent gap on the refusal; rank the accumulation on evidence that a real program cares, per the F-lane rule."
+status: done
 ---
 
 # pyeval cannot read an exponent float literal
@@ -41,3 +42,20 @@ is exact by inspection was taken; this one needs the tokenizer.
 Do not implement the exponent by a `for i := 1 to exp do fv := fv * 10` loop —
 that compounds rounding and would turn a loud refusal into a quiet wrong value,
 which is strictly worse than today.
+
+## Resolution (2026-11-11)
+
+Both halves, in one visit as the ticket asked, and kept apart in the
+explanation:
+
+- The EXPONENT: pyeval's number tokenizer reads `e`/`E`, an optional sign and
+  digits (only when a digit follows, so a bare `2e` still ends the number). The
+  compile-time refusal in the lambda-body reconstruction is gone.
+- The ACCUMULATION: a float literal's value now comes from pyfloat_parse on the
+  literal's own text (underscores removed), the parser float(str) uses, instead
+  of the digit-by-digit `scale * 0.1` sum. That was not correctly rounded; the
+  test pins `eval("0.3") == 0.3`.
+
+Test test_nilpy_pyeval_reads_an_exponent_float_literal.py (row pyexpflt26),
+expected = python3: exec, eval and lambda bodies with `1e3`, `2.5E-3`, `3E+2`,
+`1_0.2_5`, `7.` and `0.1 + 0.2`.

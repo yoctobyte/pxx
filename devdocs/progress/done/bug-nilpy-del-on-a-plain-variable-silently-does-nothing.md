@@ -2,6 +2,7 @@
 track: N
 prio: 35
 type: bug
+status: done
 summary: "NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct."
 ---
 
@@ -221,3 +222,18 @@ found the previous session's design wrong on one point. The reason it keeps
 happening is not that the fix is hard but that the failure mode is asymmetric —
 today's bug is silent and harmless, and every wrong version of the fix is a
 loud, wrong refusal of a valid program. Nothing applied; back to backlog.
+
+## Closed 2026-11-11 -- the half that matters is done, the rest is policy
+
+Re-measured on latest-e1cf2db123. `del x` on a local or module variable that
+holds an object RELEASES it now (the del arm in pyparser.inc stores None into
+a variant, or the ARC release store into a class-typed name). Census: a loop
+that builds a 50-element list and `del`s it has the same live count at exit
+for N=10 and N=1000 (5 and 5), so the first reason the ticket gives for
+writing `del` -- dropping a reference so the object can go -- is granted.
+
+The second -- a later read failing loudly -- is not, and is not going to be
+built: a read after `del` is a program CPython REJECTS, and accepting it is
+the documented direction of laxity (devdocs/dev/nilpy-semantics-divergences.md,
+"accepting what CPython rejects is a feature, not a defect"). The del arm's
+own comment says the same. Nothing changed in the compiler for this close.

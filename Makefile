@@ -1354,6 +1354,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_plainattr26 | diff -u test/test_nilpy_a_plain_function_class_attribute_binds_the_instance.expected -
 	./$(COMPILER) test/test_nilpy_abs_of_a_complex_behind_a_variant.py $(TESTTMP)/test_nilpy_abscplx26
 	$(TESTTMP)/test_nilpy_abscplx26 | diff -u test/test_nilpy_abs_of_a_complex_behind_a_variant.expected -
+	./$(COMPILER) test/test_nilpy_pyeval_reads_an_exponent_float_literal.py $(TESTTMP)/test_nilpy_pyexpflt26
+	$(TESTTMP)/test_nilpy_pyexpflt26 | diff -u test/test_nilpy_pyeval_reads_an_exponent_float_literal.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
