@@ -3,6 +3,7 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
+status: done
 summary: "`return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`."
 ---
 
@@ -75,3 +76,14 @@ constructors.
   `B.meth(self)` inside a host that flattens B to that copy. Compiling B
   standalone as well is a separate step; it is unsafe for a mixin that reads
   members only its hosts declare.
+
+## Resolution (2026-11-11)
+
+`super()` in expression position is supported now: the repro above prints `P`
+on 720885e964, as CPython does, so the misleading refusal no longer exists.
+
+The "second, related finding" (`B.__init__(self)` for a second base) still
+fails and is a different mechanism: a flattened base's method that the
+derived class overrides is never replayed, so nothing named `B.__init__` exists
+on the derived class. Filed as
+[[feature-n-an-overridden-method-of-a-second-base-cannot-be-called-explicitly]].

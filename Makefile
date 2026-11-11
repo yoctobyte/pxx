@@ -1334,6 +1334,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_aliassrc26 | diff -u test/test_nilpy_a_from_import_alias_reads_its_own_module.expected -
 	./$(COMPILER) -Futest/nilpy_qdeffirst test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py $(TESTTMP)/test_nilpy_qdeffirst26
 	$(TESTTMP)/test_nilpy_qdeffirst26 | diff -u test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.expected -
+	./$(COMPILER) test/test_nilpy_the_2026_08_06_syntax_sweep_rows.py $(TESTTMP)/test_nilpy_sweep0806
+	$(TESTTMP)/test_nilpy_sweep0806 | diff -u test/test_nilpy_the_2026_08_06_syntax_sweep_rows.expected -
+	./$(COMPILER) test/test_nilpy_object_is_a_value_and_a_sentinel.py $(TESTTMP)/test_nilpy_objsent26
+	$(TESTTMP)/test_nilpy_objsent26 | diff -u test/test_nilpy_object_is_a_value_and_a_sentinel.expected -
+	./$(COMPILER) test/test_nilpy_a_builtin_method_is_a_value.py $(TESTTMP)/test_nilpy_bltmeth26
+	$(TESTTMP)/test_nilpy_bltmeth26 | diff -u test/test_nilpy_a_builtin_method_is_a_value.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

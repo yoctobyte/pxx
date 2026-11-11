@@ -1,0 +1,33 @@
+AB
+AB zb
+True ['a']
+[1, 3]
+['a', 'b', 'c']
+False False
+True
+True
+['X', 'Y']
+AttributeError 'str' object has no attribute 'nope'
+AB dflt
+strip 'Hello World'
+lower '  hello world  '
+upper '  HELLO WORLD  '
+title '  Hello World  '
+swapcase '  hELLO wORLD  '
+lstrip 'Hello World  '
+rstrip '  Hello World'
+['a', 'b', 'c'] ['a-b', 'c'] ('a', '-', 'b-c')
+2 2 a+b-c
+007 **ab** x  |
+True True True
+1 None 9
+[1, 2] [('j', 2), ('k', 1)]
+[0, 1, 4]
+['1x2', '3']
+abc abc
+4 True (3, 2)
+builtin_function_or_method
+['a', 'b'] x 2
+axb
+['1-2']
+ab

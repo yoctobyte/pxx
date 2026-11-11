@@ -15,7 +15,7 @@ summary: >
   fixed rather than beside it.
 track: N
 type: bug
-status: backlog
+status: done
 prio: 45
 owner: frank-user
 ---
@@ -101,3 +101,35 @@ and then these are one ticket and not two.
 
 NOT VERIFIED. The table is measured; the shared-cause reading is a hypothesis,
 and whoever takes either ticket should take both and find out.
+
+## Resolution (2026-11-11)
+
+A builtin's method read as a value is now a real value, TPyBuiltinMethod
+(receiver + name), whatever the spelling: `getattr(s, "upper")`, `f = s.upper`,
+`add = l.append`, `g = d.get`, `"-".join` on a literal. `type()` names it
+`builtin_function_or_method`, `repr` matches CPython's shape, `callable()` is
+True, and `hasattr`/`getattr` agree on every receiver kind.
+
+Calling one goes through a by-name table:
+
+- str, int and float receivers: pyeval's method dispatch, extracted from
+  ParseMethodCall into PyEvalMethodOn. Its str arm was about ten methods; it is
+  now PyStrMethodByName (~45 methods), which exec'd code gets as well.
+- list, dict and bytes receivers: pydyn_methl, plus the arms its RTTI lookup
+  cannot do (dict.keys/values/items are keylist/vallist/itemlist on the class;
+  dict.get/pop/setdefault and list.pop pick by arity, where the lookup took the
+  first overload and `g("z", 9)` answered None).
+
+Two crashes went with it. A STATIC list's `l.sort` used to bind a raw
+{code, self} pair, and calling it with no arguments jumped through a garbage
+`key` (the Pascal defaults are out of the pair's reach); pylib containers now
+take the builtin-method route at both bound-method sites. And `map(s.upper, xs)`
+or `sorted(xs, key=d.get)` called the object as a code address; PyCallKey1 now
+recognises it by VMT (never `is`, since the pointer may be a code address).
+
+No leak: census live-at-exit equal at N=100 and N=1000 for each shape.
+Test: test_nilpy_a_builtin_method_is_a_value.py (row bltmeth26), expected =
+python3.
+
+Not covered: `(5).bit_length` as a value on a parenthesised int literal
+(parse error, a rare spelling).

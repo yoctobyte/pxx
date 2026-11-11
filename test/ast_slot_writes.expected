@@ -73,6 +73,7 @@ AN_ARG Left PyForceVariant(tpObjNode)
 AN_ARG Left PyForceVariant(valNode)
 AN_ARG Left PyForceVariant(xNode)
 AN_ARG Left PyMakeBuiltinTypeValue(12)
+AN_ARG Left PyMakeBuiltinTypeValue(16)
 AN_ARG Left PyMakeIdent(ASTIVal[CurASTNode])
 AN_ARG Left PyMakeIdent(Procs[procIdx].Params[0].SymIdx)
 AN_ARG Left PyMakeIdent(baseSym)
@@ -1171,6 +1172,7 @@ AN_PAIR Right CurASTNode
 AN_PAIR Right DefaultArgValueNode(mpi, rbK)
 AN_PAIR Right DefaultArgValueNode(procIdx, k)
 AN_PAIR Right ParseSetElementAST
+AN_PAIR Right PyForceVariant(atDflt)
 AN_PAIR Right PyMakeIdent(accSym)
 AN_PAIR Right PyMakeIdent(cbN)
 AN_PAIR Right Result

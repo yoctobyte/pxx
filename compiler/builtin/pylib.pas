@@ -95,7 +95,11 @@ const
     while `type(f).__name__` said function, because no code carried the name }
   PYBT_FUNCTION  = 14;
   PYBT_METHOD    = 15;
-  PYBT_LAST      = 15;
+  { `object` -- `_MISSING = object()` (the sentinel idiom), `isinstance(x,
+    object)` and `B = object`. Its instances are TPyObject.
+    bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value }
+  PYBT_OBJECT    = 16;
+  PYBT_LAST      = 16;
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -1073,6 +1077,25 @@ type
     contract a seeded Random is used for (That Space Program casts a mission's
     voices from `random.Random(mission_id)`). A str seed is hashed (FNV-1a), an
     int seed is used as is, no seed draws from the module generator. }
+  { A bare `object()`: no state, no attributes, identity only. Python's
+    sentinel (`_MISSING = object()`, then `x is _MISSING`). The Pascal name
+    cannot be `object`, a reserved word, so the Python name is given by
+    pytype_name_v and the repr arm.
+    bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value }
+  TPyObject = class
+  end;
+
+  { A METHOD of a builtin scalar or container taken as a VALUE --
+    `f = s.upper`, `getattr(s, "upper")`, `add = seen.add` on a variant. The
+    receiver and the name, called later through the same by-name dispatcher a
+    dynamic `recv.name(...)` call uses (pydyn_methl), from PyCallDunder.
+    bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused }
+  TPyBuiltinMethod = class
+  public
+    FRecv: Variant;
+    FName: AnsiString;
+  end;
+
   TPyRandom = class
   public
     FState: Int64;
@@ -3022,6 +3045,7 @@ function deque(const iterable: Variant): TPyDeque; overload;
 function pydeque_new(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
 function pyrandom_new: TPyRandom; overload;
 function pyrandom_new(const a: Variant): TPyRandom; overload;
+function pyobject_new: TPyObject;
 { dataclasses.replace(obj, a=x, b=y) is compiled as
   pydc_set(pydc_set(pydc_clone(obj), 'a', x), 'b', y). See pydc_clone. }
 function pydc_clone(const v: Variant): Variant;
@@ -3269,6 +3293,7 @@ function PyUserObjGetattr(o: TObject; const name: AnsiString;
   is what a PRESENCE question (hasattr, getattr-with-a-default) needs. }
 function PyUserObjGetattrTry(o: TObject; const name: AnsiString;
                              var res: Variant): Boolean;
+function pybuiltinmeth_is(p: Pointer): Boolean;   { a TPyBuiltinMethod, safely on a pointer that may be a code address }
 function pydynattr_has_any_v(const v: Variant; const name: AnsiString): Boolean;   { hasattr for a COMPUTED name: the dynamic store PLUS declared fields and methods, matching what pydynattr_get_v resolves }
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
@@ -6030,6 +6055,32 @@ end;
 function PyVarTypeName(t: Int64): AnsiString; forward;
 function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
+{ The class's VMT, captured from the first instance made: the test below must
+  run on a pointer that may be a bare CODE address (a callable handed to map or
+  sorted), where `is` would walk a parent chain read out of instruction bytes.
+  Comparing the first word against this is a read and an equality, nothing
+  else -- the same shape pyclosure_is's magic test is. Nil until one exists,
+  and then nothing can be one. }
+var PyBuiltinMethodVMT: Pointer = nil;
+
+function pybuiltinmeth_is(p: Pointer): Boolean;
+begin
+  Result := (p <> nil) and (PyBuiltinMethodVMT <> nil)
+            and (PPointer(p)^ = PyBuiltinMethodVMT);
+end;
+
+procedure PyBuiltinMethodNew(const recv: Variant; const name: AnsiString; var res: Variant);
+var bm: TPyBuiltinMethod; tmp: Variant;
+begin
+  bm := TPyBuiltinMethod.Create;
+  if PyBuiltinMethodVMT = nil then PyBuiltinMethodVMT := PPointer(bm)^;
+  bm.FRecv := recv;
+  bm.FName := name;
+  PyObjAsVar(bm, tmp);
+  PXXObjRelease(Pointer(bm));
+  res := tmp;
+end;
+
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
     gaRes: Variant; sigp: Pointer; slotAddr: Pointer; slotKind: Int64;
@@ -6139,6 +6190,18 @@ begin
       PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
       Exit;
     end;
+    { a builtin CONTAINER's method (`l.sort`, `d.get`) is the by-name builtin
+      method below, not a raw {code, self} pair: pylib's Pascal signatures have
+      defaults the pair cannot fill (`sort(key: Pointer = nil; ...)` called
+      with no arguments jumped through a garbage key), and their Python names
+      are not always the class's (dict.keys is keylist) }
+    if (obj <> nil) and ((TObject(obj) is TPyList) or (TObject(obj) is TPyDict)
+       or (TObject(obj) is TPyBytes))
+       and (Copy(name, 1, 2) <> '__') and pyseq_hasattr_v(v, name, False) then
+    begin
+      PyBuiltinMethodNew(v, name, Result);
+      Exit;
+    end;
     if obj <> nil then
     begin
       mi := PyFindMethByName(GetInstanceRTTI(obj), name);
@@ -6176,6 +6239,15 @@ begin
   end
   else
     cn := PyVarTypeNameOf(v);
+  { ...a METHOD of a builtin str / number / container, read as a value:
+    `f = s.upper`, `getattr(d, "keys")`. Dunders stay refused -- they are
+    the operators, not something a program takes the value of here. }
+  if (Copy(name, 1, 2) <> '__') and pyseq_hasattr_v(v, name, False) then
+  begin
+    PyBuiltinMethodNew(v, name, Result);
+    Exit;
+  end;
+  if (tg = 7) and (obj <> nil) then cn := pytype_name_v(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
 end;
 
@@ -6198,6 +6270,12 @@ begin
   Result := pydynattr_has_v(v, name);
   if Result then Exit;
   tg := pyvartag(v);
+  { a str / number method: what pydynattr_get_v hands back as a builtin method }
+  if (tg <> 7) and (tg <> 11) then
+  begin
+    Result := (Copy(name, 1, 2) <> '__') and pyseq_hasattr_v(v, name, False);
+    Exit;
+  end;
   if tg <> 7 then Exit;                  { a class ref is fully answered above }
   obj := pyvarobj(v);
   if obj = nil then Exit;
@@ -6322,6 +6400,8 @@ begin
     feature-n-random-random-has-no-per-instance-rng-class-and-the-state-machinery-already-exists }
   else if o is TPyRandom then Result := 'Random'
   else if o is TPyStat then Result := 'stat_result'
+  else if o is TPyObject then Result := 'object'
+  else if o is TPyBuiltinMethod then Result := 'builtin_function_or_method'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -11240,6 +11320,12 @@ begin
   Result := TPyRandom.Create;
 end;
 
+{ `object()` called by name -- see TPyObject. }
+function pyobject_new: TPyObject;
+begin
+  Result := TPyObject.Create;
+end;
+
 function pyrandom_new(const a: Variant): TPyRandom; overload;
 begin
   Result := TPyRandom.Create;
@@ -14232,6 +14318,7 @@ begin
   if pyvartag(v) <> 7 then Exit;
   if PPyVarRec(@v)^.Payload = 0 then Exit;
   o := TObject(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if o is TPyBuiltinMethod then begin callable := True; Exit; end;   { `s.upper` }
   if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(o));
   if cls = nil then Exit;
@@ -25062,6 +25149,7 @@ begin
     PYBT_NONETYPE:  Result := 'NoneType';
     PYBT_FUNCTION:  Result := 'function';
     PYBT_METHOD:    Result := 'method';
+    PYBT_OBJECT:    Result := 'object';
   else
     Result := '?';
   end;
@@ -25201,7 +25289,7 @@ begin
 end;
 
 procedure pybtype_call0(const t: Variant; var res: Variant);
-var tmp: Variant; e: TPyList; d: TPyDict;
+var tmp: Variant; e: TPyList; d: TPyDict; o: TPyObject;
 begin
   { the empty value of the type — `list()`, `str()`, `int()`, spelled through a
     binding. Built by handing the conversion an empty value of its own shape,
@@ -25234,6 +25322,13 @@ begin
         end;
         PyObjAsVar(e, tmp);
         PXXObjRelease(Pointer(e));
+        res := tmp;
+      end;
+    PYBT_OBJECT:
+      begin
+        o := TPyObject.Create;
+        PyObjAsVar(o, tmp);
+        PXXObjRelease(Pointer(o));
         res := tmp;
       end;
   else
@@ -25317,6 +25412,12 @@ begin
     if pybtype_code(t) = PYBT_TYPE then
     begin
       Result := (pyvartag(x) = 11) or (pyvartag(x) = 13);
+      Exit;
+    end;
+    { everything is an object }
+    if pybtype_code(t) = PYBT_OBJECT then
+    begin
+      Result := True;
       Exit;
     end;
     Result := pybtype_of_value(x) = pybtype_code(t);
@@ -26318,6 +26419,21 @@ begin
       outS := TObject(o).ClassName + '()'
     else
       outS := TObject(o).ClassName + '(' + pyrepr_of(ExceptionBase(o).Message) + ')';
+    PyUserObjStr := True;
+    Exit;
+  end;
+  if (mi = nil) and (o is TPyBuiltinMethod) then
+  begin
+    outS := '<built-in method ' + TPyBuiltinMethod(o).FName + ' of '
+            + pytype_name_v(TPyBuiltinMethod(o).FRecv) + ' object at '
+            + hex(Int64(NativeUInt(Pointer(o)))) + '>';
+    PyUserObjStr := True;
+    Exit;
+  end;
+  if (mi = nil) and (o is TPyObject) then
+  begin
+    { a bare object() -- CPython's `<object object at 0x..>` }
+    outS := '<object object at ' + hex(Int64(NativeUInt(Pointer(o)))) + '>';
     PyUserObjStr := True;
     Exit;
   end;

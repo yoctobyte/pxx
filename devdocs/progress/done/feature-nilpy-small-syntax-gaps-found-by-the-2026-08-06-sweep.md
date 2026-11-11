@@ -3,6 +3,7 @@ track: N
 prio: 58
 type: feature
 summary: "Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension"
+status: done
 ---
 
 # Small NilPy syntax gaps found by the 2026-08-06 differential sweep
@@ -151,3 +152,16 @@ Left unsupported: a LITERAL receiver, `(1).__class__.__name__`, which does not
 parse. `type(1).__name__` is the spelling for that and works.
 
 Test `test/test_nilpy_class_name_chain.{npy,expected}`, wired into `test-nilpy`.
+
+## 2026-11-11: the last five rows work; closed
+
+Re-measured at 720885e964 against CPython: `type(1) == int`,
+`lambda x, y=1: x + y`, `d.update(b=2)` and `d.update(c=3, e=4)`,
+`c[::2] = [7, 8]`, `(c, d), e = (3, 4), 5` and the bare `t = 1, 2, 3` all
+compile and match. Every row of the original table is now one line of
+`test/test_nilpy_the_2026_08_06_syntax_sweep_rows.py` (row `sweep0806`),
+so none can come back silently.
+
+The test uses distinct names where the sweep reused `c` (int, then list).
+Rebinding a module variable from a number to an object is refused by design,
+with a message naming `Any`, and that is not this ticket.

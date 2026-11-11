@@ -5336,28 +5336,159 @@ begin
     raise ValueError.Create('byteorder must be either ''little'' or ''big''');
 end;
 
-procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
-                          var res: Variant);
+{ A str method by NAME on already-evaluated arguments: the one dispatcher both
+  exec'd code (`s.upper()` in an eval'd body) and a str's bound method held as
+  a value (`f = s.upper; f()`, `getattr(s, "split")(",")`) reach. Compiled code
+  with a statically known receiver never comes here -- the frontend lowers
+  those calls to the pystr_* helper directly. False = not a str method this
+  table knows; the caller words the error.
+  bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused }
+function PyStrMethodByName(const s, mname: AnsiString; args: TPyList;
+                           var res: Variant): Boolean;
+var n: Integer; b2: TPyBytes;
+  function SArg(i: Integer): AnsiString; begin SArg := pystr_of(args.at(i)); end;
+  function IArg(k: Integer): Int64; begin IArg := pyvar_to_int(args.at(k)); end;
+  function NoneAt(k: Integer): Boolean;
+  begin NoneAt := (args.count <= k) or (pyvartag(args.at(k)) = 0); end;
+begin
+  PyStrMethodByName := True;
+  n := args.count;
+  if mname = 'upper' then res := MakeStr(pystr_upper(s))
+  else if mname = 'lower' then res := MakeStr(pystr_lower(s))
+  else if mname = 'casefold' then res := MakeStr(pystr_lower(s))
+  else if mname = 'title' then res := MakeStr(pystr_title(s))
+  else if mname = 'capitalize' then res := MakeStr(pystr_capitalize(s))
+  else if mname = 'swapcase' then res := MakeStr(pystr_swapcase(s))
+  else if mname = 'strip' then
+  begin
+    if NoneAt(0) then res := MakeStr(pystr_strip(s))
+    else res := MakeStr(pystr_strip_chars(s, SArg(0)));
+  end
+  else if mname = 'lstrip' then
+  begin
+    if NoneAt(0) then res := MakeStr(pystr_lstrip(s))
+    else res := MakeStr(pystr_lstrip_chars(s, SArg(0)));
+  end
+  else if mname = 'rstrip' then
+  begin
+    if NoneAt(0) then res := MakeStr(pystr_rstrip(s))
+    else res := MakeStr(pystr_rstrip_chars(s, SArg(0)));
+  end
+  else if mname = 'join' then
+    res := MakeStr(pystr_join(s, TPyList(pyvarobj(args.at(0)))))
+  else if mname = 'split' then
+  begin
+    if NoneAt(0) then
+    begin
+      if n >= 2 then res := PyBoxObjNew(Pointer(pystr_split_ws_max(s, IArg(1))))
+      else res := PyBoxObjNew(Pointer(pystr_split_ws(s)));
+    end
+    else if n >= 2 then res := PyBoxObjNew(Pointer(pystr_split_sep_max(s, SArg(0), IArg(1))))
+    else res := PyBoxObjNew(Pointer(pystr_split_sep(s, SArg(0))));
+  end
+  else if mname = 'rsplit' then
+  begin
+    if NoneAt(0) then
+    begin
+      if n >= 2 then res := PyBoxObjNew(Pointer(pystr_rsplit_ws_max(s, IArg(1))))
+      else res := PyBoxObjNew(Pointer(pystr_split_ws(s)));
+    end
+    else if n >= 2 then res := PyBoxObjNew(Pointer(pystr_rsplit_sep_max(s, SArg(0), IArg(1))))
+    else res := PyBoxObjNew(Pointer(pystr_split_sep(s, SArg(0))));
+  end
+  else if mname = 'splitlines' then
+  begin
+    if n >= 1 then res := PyBoxObjNew(Pointer(pystr_splitlines_n(s, pyvar_to_bool(args.at(0)))))
+    else res := PyBoxObjNew(Pointer(pystr_splitlines(s)));
+  end
+  else if mname = 'partition' then res := PyBoxObjNew(Pointer(pystr_partition(s, SArg(0))))
+  else if mname = 'rpartition' then res := PyBoxObjNew(Pointer(pystr_rpartition(s, SArg(0))))
+  else if mname = 'replace' then
+  begin
+    if n >= 3 then res := MakeStr(pystr_replace_n(s, SArg(0), SArg(1), IArg(2)))
+    else res := MakeStr(pystr_replace(s, SArg(0), SArg(1)));
+  end
+  else if mname = 'startswith' then res := pyvar_of_bool(pystr_startswith(s, SArg(0)))
+  else if mname = 'endswith' then res := pyvar_of_bool(pystr_endswith(s, SArg(0)))
+  else if mname = 'removeprefix' then res := MakeStr(pystr_removeprefix(s, SArg(0)))
+  else if mname = 'removesuffix' then res := MakeStr(pystr_removesuffix(s, SArg(0)))
+  else if mname = 'find' then
+  begin
+    if n >= 2 then res := pyvar_of_int(pystr_find_from(s, SArg(0), IArg(1)))
+    else res := pyvar_of_int(pystr_find(s, SArg(0)));
+  end
+  else if mname = 'rfind' then
+  begin
+    if n >= 2 then res := pyvar_of_int(pystr_rfind_from(s, SArg(0), IArg(1)))
+    else res := pyvar_of_int(pystr_rfind(s, SArg(0)));
+  end
+  else if mname = 'index' then
+  begin
+    { a miss is a ValueError instead of -1 }
+    if n >= 2 then res := pyvar_of_int(pystr_index_from(s, SArg(0), IArg(1)))
+    else res := pyvar_of_int(pystr_index(s, SArg(0)));
+  end
+  else if mname = 'rindex' then res := pyvar_of_int(pystr_rindex(s, SArg(0)))
+  else if mname = 'count' then
+  begin
+    if n >= 2 then res := pyvar_of_int(pystr_count_from(s, SArg(0), IArg(1)))
+    else res := pyvar_of_int(pystr_count(s, SArg(0)));
+  end
+  else if mname = 'ljust' then
+  begin
+    if n >= 2 then res := MakeStr(pystr_ljust_c(s, IArg(0), SArg(1)))
+    else res := MakeStr(pystr_ljust(s, IArg(0)));
+  end
+  else if mname = 'rjust' then
+  begin
+    if n >= 2 then res := MakeStr(pystr_rjust_c(s, IArg(0), SArg(1)))
+    else res := MakeStr(pystr_rjust(s, IArg(0)));
+  end
+  else if mname = 'center' then
+  begin
+    if n >= 2 then res := MakeStr(pystr_center_c(s, IArg(0), SArg(1)))
+    else res := MakeStr(pystr_center(s, IArg(0)));
+  end
+  else if mname = 'zfill' then res := MakeStr(pystr_zfill(s, IArg(0)))
+  else if mname = 'expandtabs' then
+  begin
+    if n >= 1 then res := MakeStr(pystr_expandtabs_n(s, IArg(0)))
+    else res := MakeStr(pystr_expandtabs(s));
+  end
+  else if mname = 'isdigit' then res := pyvar_of_bool(pystr_isdigit(s))
+  else if mname = 'isdecimal' then res := pyvar_of_bool(pystr_isdigit(s))
+  else if mname = 'isnumeric' then res := pyvar_of_bool(pystr_isnumeric(s))
+  else if mname = 'isalpha' then res := pyvar_of_bool(pystr_isalpha(s))
+  else if mname = 'isalnum' then res := pyvar_of_bool(pystr_isalnum(s))
+  else if mname = 'isspace' then res := pyvar_of_bool(pystr_isspace(s))
+  else if mname = 'isupper' then res := pyvar_of_bool(pystr_isupper(s))
+  else if mname = 'islower' then res := pyvar_of_bool(pystr_islower(s))
+  else if mname = 'istitle' then res := pyvar_of_bool(pystr_istitle(s))
+  else if mname = 'isascii' then res := pyvar_of_bool(pystr_isascii(s))
+  else if mname = 'encode' then
+  begin
+    if n >= 1 then b2 := pystr_encode_enc(s, SArg(0)) else b2 := pystr_encode(s);
+    res := PyBoxObjNew(Pointer(b2));   { fresh: the slot takes its +1 }
+  end
+  else
+    PyStrMethodByName := False;
+end;
+
+{ The method dispatch of ParseMethodCall, on already-parsed arguments, so a
+  bound builtin method VALUE (`f = s.upper`, `getattr(s, "upper")`) calls the same
+  arms a direct `s.upper()` does. `kwNames` carries one entry per argument, with
+  '' for a positional. }
+procedure PyEvalMethodOn(const recv: Variant; const mname: AnsiString;
+                         args, kwNames: TPyList; signedKw: Boolean;
+                         var res: Variant);
 var
-  args: TPyList;
-  kwNames: TPyList;
   o: TObject; li: TPyList; by: TPyBytes;
   s: AnsiString; b2: TPyBytes;
   i: Integer;
-  signedKw: Boolean;
   rvt: Int64;
   byRev: TPyBytes;   { the byte-reversed half of a big-endian to_bytes/from_bytes }
 begin
-  args := TPyList.Create;
-  kwNames := TPyList.Create;
-  { BOTH lists are this call's and die with it, on every exit: `args` was never
-    freed and `kwNames` only on two of the paths, so each method call from exec'd
-    code (uforth: every `out.append(..)` in a PYTHON word) left them behind. }
-  try
-    ParseArgs(args, kwNames, signedKw);
-    { trailing positionals get their '' markers here — see the pad in ParseArgs }
     while kwNames.count < args.count do kwNames.append(MakeStr(''));
-    if not Executing then begin res := MakeNone; Exit; end;
     rvt := PPyRec(@recv)^.VType;
 
     { int.to_bytes(length, byteorder, *, signed=…) -> bytes }
@@ -5384,7 +5515,28 @@ begin
         res := PyBoxObjNew(Pointer(by));   { fresh: the slot takes its +1 }
         Exit;
       end;
-      EvalError('int method not supported: ' + mname);
+      if mname = 'bit_length' then res := pyvar_of_int(pyint_bit_length(recv))
+      else if mname = 'bit_count' then res := pyvar_of_int(pyint_bit_count(recv))
+      else if mname = 'is_integer' then res := pyvar_of_bool(True)
+      else if mname = 'conjugate' then res := pyvar_of_int(pyvar_to_int(recv))
+      else if mname = 'as_integer_ratio' then
+        res := PyBoxObjNew(Pointer(pyint_as_integer_ratio(pyvar_to_int(recv))))
+      else
+        EvalError('int method not supported: ' + mname);
+      Exit;
+    end;
+
+    { float methods -- a bound float method held as a value reaches here too }
+    if rvt = 3 then
+    begin
+      if mname = 'is_integer' then res := pyvar_of_bool(pyfloat_is_integer(pyvar_to_float(recv)))
+      else if mname = 'conjugate' then res := MakeFloat(pyvar_to_float(recv))
+      else if mname = 'hex' then res := MakeStr(pyfloat_hex(pyvar_to_float(recv)))
+      else if mname = 'as_integer_ratio' then
+        res := PyBoxObjNew(Pointer(pyfloat_as_integer_ratio(pyvar_to_float(recv))))
+      else
+        EvalError('float method not supported: ' + mname);
+      Exit;
     end;
 
     { int.from_bytes(bytes, byteorder, *, signed=…) — a static method on the int
@@ -5415,45 +5567,11 @@ begin
       EvalError('type method not supported: ' + mname);
     end;
 
-    { string methods }
+    { string methods -- the by-name table PyStrMethodByName also serves a str's
+      bound method held as a value }
     if rvt = 6 then
     begin
-      s := PAnsiString(@PPyRec(@recv)^.Payload)^;
-      if mname = 'upper' then res := MakeStr(pystr_upper(s))
-      else if mname = 'lower' then res := MakeStr(pystr_lower(s))
-      else if mname = 'strip' then
-      begin
-        if args.count = 0 then res := MakeStr(pystr_strip(s))
-        else res := MakeStr(pystr_strip_chars(s, pystr_of(args.at(0))));
-      end
-      else if mname = 'join' then
-        res := MakeStr(pystr_join(s, TPyList(pyvarobj(args.at(0)))))
-      else if mname = 'startswith' then
-        res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
-      else if mname = 'endswith' then
-        res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
-      else if mname = 'rjust' then
-      begin
-        if args.count >= 2 then
-          res := MakeStr(pystr_rjust_c(s, pyvar_to_int(args.at(0)), pystr_of(args.at(1))))
-        else
-          res := MakeStr(pystr_rjust(s, pyvar_to_int(args.at(0))));
-      end
-      else if mname = 'find' then
-        res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
-      else if mname = 'index' then
-      begin
-        { str.index: find, but a MISS is a ValueError instead of -1 }
-        i := pystr_find(s, pystr_of(args.at(0)));
-        if i < 0 then EvalError('ValueError: substring not found');
-        res := pyvar_of_int(i);
-      end
-      else if mname = 'encode' then
-      begin
-        b2 := pystr_encode(s);
-        res := PyBoxObjNew(Pointer(b2));   { fresh: the slot takes its +1 }
-      end
-      else
+      if not PyStrMethodByName(PAnsiString(@PPyRec(@recv)^.Payload)^, mname, args, res) then
         EvalError('str method not supported: ' + mname);
       Exit;
     end;
@@ -5521,6 +5639,26 @@ begin
     end;
 
     EvalError('cannot call method ' + mname + ' on this value');
+end;
+
+procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
+                          var res: Variant);
+var
+  args: TPyList;
+  kwNames: TPyList;
+  signedKw: Boolean;
+begin
+  args := TPyList.Create;
+  kwNames := TPyList.Create;
+  { BOTH lists are this call's and die with it, on every exit: `args` was never
+    freed and `kwNames` only on two of the paths, so each method call from exec'd
+    code (uforth: every `out.append(..)` in a PYTHON word) left them behind. }
+  try
+    ParseArgs(args, kwNames, signedKw);
+    { trailing positionals get their '' markers here — see the pad in ParseArgs }
+    while kwNames.count < args.count do kwNames.append(MakeStr(''));
+    if not Executing then begin res := MakeNone; Exit; end;
+    PyEvalMethodOn(recv, mname, args, kwNames, signedKw, res);
   finally
     args.Free;
     kwNames.Free;
@@ -6188,6 +6326,8 @@ begin
     would be a regression, so this arm stays narrow. }
   if t = VT_NC_OBJECT then
   begin
+    { a builtin's method held as a value -- see TPyBuiltinMethod }
+    if TObject(Pointer(NativeInt(PPyRec(@cb)^.Payload))) is TPyBuiltinMethod then Exit;
     if PyFindMethCI(GetInstanceRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload))),
                     '__call__') = nil then
       raise TypeError.Create('object is not callable');
@@ -6197,6 +6337,61 @@ begin
   { the allow-list's closing arm: an int, a float, a string, a promo, a tag
     nobody has classified — none of them is code. }
   raise TypeError.Create('object is not callable');
+end;
+
+{ Call a builtin's method held as a value (TPyBuiltinMethod) on an argument
+  list: an object receiver (list, dict, ...) through the compiled by-name
+  dispatcher, a scalar one (str, int, float) through the evaluator's, which is
+  the only by-name table for those. Shared by PyCallDunder (`f()` on a
+  variant) and PyCallKey1 (map/filter/sorted handed `s.upper`). }
+procedure PyBuiltinMethodCallL(inst: Pointer; args: TPyList; var res: Variant);
+var kw: TPyList; brecv: Variant; nm: AnsiString; done: Boolean; dct: TPyDict;
+begin
+    kw := TPyList.Create;
+    try
+      { an object receiver (list, dict, ...) has the compiled by-name dispatcher;
+        a scalar one (str, int) the evaluator's, which is the only by-name table
+        for those }
+      brecv := TPyBuiltinMethod(inst).FRecv;
+      nm := TPyBuiltinMethod(inst).FName;
+      done := False;
+      { The RTTI lookup pydyn_methl does finds a method by NAME, so it cannot
+        see dict's views (keylist/vallist/itemlist on the class) and takes the
+        FIRST of an overload pair: `d.get` held as a value answered None for
+        `g("z", 9)`. The arity-split ones are picked here. }
+      if (PPyRec(@brecv)^.VType = 7) and (TObject(pyvarobj(brecv)) is TPyDict) then
+      begin
+        dct := TPyDict(pyvarobj(brecv));
+        done := True;
+        if (nm = 'keys') and (args.count = 0) then res := PyBoxObjNew(Pointer(dct.keylist))
+        else if (nm = 'values') and (args.count = 0) then res := PyBoxObjNew(Pointer(dct.vallist))
+        else if (nm = 'items') and (args.count = 0) then res := PyBoxObjNew(Pointer(dct.itemlist))
+        else if (nm = 'get') and (args.count = 1) then res := dct.get(args.at(0))
+        else if (nm = 'get') and (args.count = 2) then res := dct.get(args.at(0), args.at(1))
+        else if (nm = 'pop') and (args.count = 1) then res := dct.pop(args.at(0))
+        else if (nm = 'pop') and (args.count = 2) then res := dct.pop(args.at(0), args.at(1))
+        else if (nm = 'setdefault') and (args.count = 1) then res := dct.setdefault(args.at(0), pynone)
+        else if (nm = 'setdefault') and (args.count = 2) then res := dct.setdefault(args.at(0), args.at(1))
+        else done := False;
+      end
+      else if (PPyRec(@brecv)^.VType = 7) and (TObject(pyvarobj(brecv)) is TPyList) then
+      begin
+        done := True;
+        if (nm = 'pop') and (args.count = 0) then res := TPyList(pyvarobj(brecv)).pop
+        else if (nm = 'pop') and (args.count = 1) then
+          res := TPyList(pyvarobj(brecv)).pop(pyvar_to_int(args.at(0)))
+        else done := False;
+      end;
+      if done then
+      else if PPyRec(@brecv)^.VType = 7 then
+        res := pydyn_methl(TPyBuiltinMethod(inst).FRecv, TPyBuiltinMethod(inst).FName,
+                           '', args)
+      else
+        PyEvalMethodOn(TPyBuiltinMethod(inst).FRecv, TPyBuiltinMethod(inst).FName,
+                       args, kw, False, res);
+    finally
+      kw.Free;
+    end;
 end;
 
 function PyCallDunder(const cb: Variant; n: Integer;
@@ -6228,6 +6423,23 @@ begin
   if PPyRec(@cb)^.VType <> VT_NC_OBJECT then Exit;
   inst := Pointer(NativeInt(PPyRec(@cb)^.Payload));
   if inst = nil then Exit;
+  { `f = s.upper; f()` -- a builtin's method held as a value calls through the
+    by-name dispatcher a dynamic `recv.name(...)` uses.
+    bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused }
+  if TObject(inst) is TPyBuiltinMethod then
+  begin
+    args := TPyList.Create;
+    if n >= 1 then args.append(a0);
+    if n >= 2 then args.append(a1);
+    if n >= 3 then args.append(a2);
+    try
+      PyBuiltinMethodCallL(inst, args, res);
+    finally
+      args.Free;
+    end;
+    PyCallDunder := True;
+    Exit;
+  end;
   mi := PyFindMethCI(GetInstanceRTTI(inst), '__call__');
   if mi = nil then Exit;
   { A `__call__(self, *args)` COLLECTS: PyHostCall passes arguments one slot
@@ -7251,7 +7463,7 @@ type
       all, identified purely by elimination of the other three).
   feature-nilpy-callable-value-unified-dispatch }
 function PyCallKey1(key: Pointer; const a0: Variant): Variant;
-var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res, cref: Variant;
+var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res, cref: Variant; kargs: TPyList;
 begin
   Result := pynone;
   if key = nil then Exit;
@@ -7278,6 +7490,20 @@ begin
     Exit;
   end;
   if pyclosure_is(key) then begin Result := pyclosure_call1(key, a0); Exit; end;
+  { `map(s.upper, xs)`, `sorted(xs, key=d.get)`: a builtin's method value }
+  if pybuiltinmeth_is(key) then
+  begin
+    kargs := TPyList.Create;
+    try
+      kargs.append(a0);
+      res := pynone;
+      PyBuiltinMethodCallL(key, kargs, res);
+    finally
+      kargs.Free;
+    end;
+    Result := res;
+    Exit;
+  end;
   if pyboundfn_is(key) then
   begin
     res := pynone;

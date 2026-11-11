@@ -9803,6 +9803,23 @@ begin
     CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
+  { ...and the same receiver's method with NO call, as a VALUE: `"-".join`
+    handed to map, `f = "AB".lower`. The loop above needs the '(' and nothing
+    else took the bare name, so the caller met the '.' and said "expected
+    expression". The runtime's by-name builtin method (pydynattr_get_v) is
+    what a named str receiver's `s.upper` already gives. }
+  if PyExprMode and (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkIdent) and
+     ((TokPos + 1 >= TokCount) or
+      not (Tokens[TokPos + 1].Kind in [tkLParen, tkAssign])) and
+     PyIsStrBaseTk(IntToTypeKind(ASTTk[CurASTNode])) then
+  begin
+    Next;                       { consume '.'; CurTok = the method name }
+    smNameTok := TokPos - 1;
+    Next;                       { consume the name }
+    CurASTNode := PyMakeDynAttrGet(PyForceVariant(CurASTNode), GetTokenStr(smNameTok));
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
   { A method on a CALL RESULT whose declared type is a scalar — `get(a, b,
     c).split("x")`. An unannotated def's result is inferred, and an expression
     the inferrer cannot type comes back tyInteger while the VALUE at run time

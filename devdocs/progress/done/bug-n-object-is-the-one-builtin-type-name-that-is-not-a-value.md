@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`B = object` is `undefined variable (object)`, while `t = str`, `u = int`, `v = dict` all bind and call fine. `object` is the single builtin type name that is not a first-class value — it is consumed as a no-op in the base-class position and has no row anywhere else, so any expression naming it fails."
-status: backlog
+status: done
 ---
 
 # `object` is the one builtin type name that is not a first-class value
@@ -75,3 +75,23 @@ html5lib, which need a base that is a **call** — see the parent ticket's
 
 `B = object` compiles and the program runs; `t = str` / `u = int` / `v = dict`
 keep working (they are the controls, and they pass today).
+
+## Resolution (2026-11-11)
+
+Measured first: `object()`, the sentinel idiom (`_MISSING = object()`),
+was refused too, `undefined variable (object)`, and so was
+`isinstance(x, object)`. That made this more than a value-position gap.
+
+- pylib: `TPyObject` (a stateless class; Pascal reserves the word `object`)
+  and `pyobject_new`. Type code `PYBT_OBJECT = 16`, named `object`.
+  `pytype_name_v` answers `object` and the repr is CPython's
+  `<object object at 0x..>`. `pybtype_call0` builds one (`B = object; B()`),
+  and `pyisinstance_v` against the `object` type value is always True.
+- Frontend: `object` in value position is the builtin type value
+  (PyBuiltinTypeCode). `object()` calls `pyobject_new` unless the program
+  binds the name itself. `isinstance(x, object)` goes to the runtime test.
+  `class C(object)` was already accepted.
+
+Identity, `==`, `dict.get(k, _MISSING) is _MISSING`, a def default, a class
+attribute and a list of distinct sentinels all match CPython. Test
+`test/test_nilpy_object_is_a_value_and_a_sentinel.py` (row `objsent26`).

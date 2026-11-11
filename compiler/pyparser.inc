@@ -3262,6 +3262,24 @@ begin
       ASTTk[term] := Ord(tyBoolean);
       ASTLeft[term] := rtArg;
     end
+    { `isinstance(x, object)` -- True for everything, answered by the same
+      runtime test with `object` as the type value, unless the program declares
+      its own class of that name.
+      bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value }
+    else if (CurTok.SVal = 'object') and (FindUClass('object') < 0) and
+            (FindSym('object') < 0) then
+    begin
+      rtArg := AllocNode(AN_ARG);
+      ASTLeft[rtArg] := PyForceVariant(xNode);
+      rtArg2 := AllocNode(AN_ARG);
+      ASTLeft[rtArg2] := PyMakeBuiltinTypeValue(16);   { PYBT_OBJECT }
+      ASTRight[rtArg] := rtArg2;
+      term := AllocNode(AN_CALL);
+      ASTIVal[term] := FindProc('pyisinstance_v');
+      if ASTIVal[term] < 0 then Error('Nil Python: pylib (pyisinstance_v) not loaded');
+      ASTTk[term] := Ord(tyBoolean);
+      ASTLeft[term] := rtArg;
+    end
     else
     begin
       { Python's container type NAMES map to the pylib classes that back them;
@@ -5764,6 +5782,9 @@ begin
   { `type` only as a bare VALUE — `type(x)` keeps its own intercept, which the
     caller's `not followed by '('` guard leaves alone. }
   else if lo = 'type' then Result := 12
+  { `B = object`, `(object,)`; an `object()` CALL has its own arm.
+    bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value }
+  else if nm = 'object' then Result := 16
   else Result := 0;
 end;
 
@@ -56470,6 +56491,10 @@ begin
            (ci >= 0) and not UClsIsInterface[ci] then
         begin
           Next;                                  { consume the method name }
+          { a list/dict/bytes method: the by-name builtin method, as above }
+          if PyIsPylibContainerCi(ci) then
+            node := PyMakeDynAttrGet(PyForceVariant(node), fieldName)
+          else
           node := PyMakeBoundMethod(mpi, node);
           ASTTk[node] := Ord(tyVariant);
           outTk := tyVariant;
@@ -60038,6 +60063,12 @@ begin
         if (CurTok.Kind <> tkLParen) and
            (mci >= 0) and not UClsIsInterface[mci] then
         begin
+          { a list/dict/bytes method value is the runtime's by-name builtin
+            method: the Pascal method's defaults (`sort(key: Pointer = nil)`)
+            are out of a {code, self} pair's reach -- see pydynattr_get_v }
+          if PyIsPylibContainerCi(mci) then
+            node := PyMakeDynAttrGet(PyForceVariant(node), fieldName)
+          else
           node := PyMakeBoundMethod(mpi, node);
           tk := tyVariant; recName := REC_NONE;
           ASTTk[node] := Ord(tyVariant);
@@ -60482,6 +60513,16 @@ begin
             tk := IntToTypeKind(ASTTk[fldIdx]);
           recName := REC_NONE;
           Continue;
+        end;
+        { a METHOD of the scalar taken as a VALUE (`f = s.upper`) is a bound
+          builtin method; anything else raises the same AttributeError.
+          pydynattr_get_v answers both on the boxed receiver.
+          bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused }
+        if (tk = tyAnsiString) or (tk = tyString) or (tk = tyDouble) or
+           (tk = tyInt64) or (tk = tyInteger) then
+        begin
+          Result := PyMakeDynAttrGet(PyForceVariant(node), fieldName);
+          Exit;
         end;
         Result := PyMakeScalarAttrMissingCall(Ord(tk), fieldName);
         Exit;
@@ -63582,6 +63623,43 @@ begin
           LastExprTk := tyVariant;
           Exit;
         end;
+        { A receiver that is neither a class nor a variant -- a str, a
+          number -- has no declared fields, but it HAS methods, and CPython's
+          getattr returns them bound: `getattr(s, "upper")()`. Answered at run
+          time on the boxed receiver (pydynattr_get_v knows the builtin
+          surfaces); without a default a genuinely missing name raises
+          AttributeError there, as in CPython, rather than refusing the program.
+          With a default, the same runtime presence test the variant arm uses.
+          bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused }
+        if atIsGet and (atFld < 0) and
+           not (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
+        begin
+          atRecv := PyEvalOnce(PyForceVariant(atRecv));
+          if atDflt < 0 then
+            CurASTNode := PyMakeDynAttrGet(atRecv, atName)
+          else
+          begin
+            idx := FindProc('pydynattr_has_any_v');
+            if idx < 0 then Error('Nil Python: pylib (pydynattr_has_any_v) not loaded');
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+            argSeq2 := AllocNode(AN_STR_LIT);
+            ASTSOffset[argSeq2] := StoredName(atName); ASTSLen[argSeq2] := Length(atName);
+            ASTTk[argSeq2] := Ord(tyString);
+            argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
+            ASTRight[argSeq] := argSeq3;
+            node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+            ASTTk[node] := Ord(tyBoolean); ASTLeft[node] := argSeq;
+            argSeq2 := AllocNode(AN_PAIR);
+            ASTLeft[argSeq2] := PyMakeDynAttrGet(atRecv, atName);
+            ASTRight[argSeq2] := PyForceVariant(atDflt);
+            argSeq3 := AllocNode(AN_TERNARY);
+            ASTLeft[argSeq3] := node; ASTRight[argSeq3] := argSeq2;
+            ASTTk[argSeq3] := Ord(tyVariant);
+            CurASTNode := argSeq3;
+          end;
+          LastExprTk := tyVariant;
+          Exit;
+        end;
         if atFld >= 0 then
         begin
           { the field exists: an ordinary field read }
@@ -66672,6 +66750,24 @@ begin
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
         ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
         LastExprTk := tyVariant;
+        Exit;
+      end;
+      { `object()` -- a fresh bare object, Python's sentinel idiom
+        (`_MISSING = object()`). Only when nothing the program binds is
+        called `object`. bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value }
+      if (name = 'object') and (procIdx < 0) and (idx < 0) and
+         (FindUClass('object') < 0) and
+         (Tokens[TokPos].Kind = tkLParen) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos + 1].Kind = tkRParen) and (FindProc('pyobject_new') >= 0) then
+      begin
+        Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
+        helperPi := FindProc('pyobject_new');
+        CurASTNode := AllocNode(AN_CALL);
+        ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := -1;
+        ASTTk[CurASTNode] := Ord(tyClass);
+        ASTRight[CurASTNode] := ProcRetRecId[helperPi];   { class identity, as PyCallProc1 }
+        LastExprTk := tyClass;
         Exit;
       end;
       if CaseEqual(name, 'ascii') and (procIdx < 0) and
