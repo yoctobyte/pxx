@@ -235,3 +235,43 @@ TYPED from M's `X` while its VALUE is still read through flat scope -- which
 turns this ticket's silent wrong value into a loud `TypeError` for a field
 whose two candidates differ in type. A fixture for the collision was written
 and taken out of that test for exactly that reason: it measures this ticket.
+
+## 2026-11-11: the source lookup is unit-first; two residues stay open
+
+`PyParseImportRun` now looks the source up in the exporting unit
+(`FindSymInUnit` / `FindProcInUnit` on `FindUnitOrAlias(impName)`). The flat
+lookup only stands when that unit declares neither, as in a re-export chain or
+a shim-mapped package unit. Measured against CPython; the old column is the tree
+compiler at 3550aef827:
+
+| shape | CPython | before | now |
+| --- | --- | --- | --- |
+| `from m import A as MA` / `from n import A as NA` | `5 7` | `7 7` | `5 7` |
+| `from m import f as mf` / `from n import f as nf` | `5 70` | `5 5` | `5 70` |
+| `from m import A as B, B as A` → `A*1000+B` | 18005 | 7007 / 7005 | 18005 |
+
+Test `test/test_nilpy_a_from_import_alias_reads_its_own_module.py` (row
+`aliassrc26`, modules in `test/nilpy_aliassrc/`).
+
+**Still wrong, two different mechanisms:**
+
+1. **A module's top-level store lands on the MAIN program's same-named
+   global when the main program bound that name before the module was
+   parsed.** `from m import A as B, B as A` makes a main-program `A`. A later
+   `n.py` saying `A = 7` then writes main's `A`, n gets no `A` of its own, and
+   `from n import A as NA` reads 18. `PyProgSym` lets a module see unit -1
+   symbols. Hiding them from a module is easy (tried), but then the MAIN
+   program's identifier reads mis-resolve: the shared factor reads through
+   flat `FindSym`, which returns the NEWEST `A` (now n's). Both halves have to
+   move together. That means a unit-aware identifier read for NilPy, which is a
+   bigger change than this ticket.
+2. ~~`from m import f as g`, where m also defines `g`: `g()` calls `m.g`.~~
+   **FIXED the same day.** It was not call resolution. PyFlushImportAliasesFrom
+   built the value as `PyMakeFuncValueFor(source, ALIAS name)`, and that
+   helper looks up an all-Variant overload by name: `g` with the same arity
+   is m's own `g`. Only zero-argument defs collided, which is why the
+   one-argument control passed. It now passes the source's own name, which
+   is also CPython's `g.__name__` (`f`). Covered by the last row of
+   test_nilpy_a_from_import_alias_reads_its_own_module.py.
+
+Residue 1 is what keeps this ticket open.

@@ -1103,9 +1103,15 @@ begin
     if PyImpAliasSrc[i] >= 0 then
       rhs := PyMakeIdent(PyImpAliasSrc[i])
     else
-      { a def: the same function object `g = f` builds, via the shared helper }
+      { a def: the same function object `g = f` builds, via the shared helper,
+        under the SOURCE's name. The helper looks up an all-Variant overload BY
+        NAME, so handing it the ALIAS name found the source module's own
+        same-named routine: `from m import f as g`, m also defining a
+        same-arity `g`, made the variable hold m.g. (And CPython's
+        `g.__name__` is 'f'.)
+        bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
       rhs := PyMakeFuncValueFor(-(PyImpAliasSrc[i]) - 1,
-                                Syms[PyImpAliasSym[i]].Name);
+                                Procs[-(PyImpAliasSrc[i]) - 1].Name);
     if rhs < 0 then Continue;
     asgn := AllocNode(AN_ASSIGN);
     ASTLeft[asgn] := PyMakeIdent(PyImpAliasSym[i]);
@@ -53832,6 +53838,27 @@ begin
                     Break;
                   end;
               aliasRealProc := -1;
+              { THE EXPORTING MODULE FIRST, when it declares the name at all.
+                Flat FindSym answers whichever unit's `X` it meets first, so two
+                modules exporting one member name gave both aliases the later
+                module's value (`from m import A as MA; from n import A as NA`
+                printed 7 7), and a def named like the alias in the source
+                module won over the def asked for. Only when the unit declares
+                neither a variable nor a routine of that name (a re-export
+                chain, a shim-mapped package unit) does the flat lookup below
+                stand.
+                bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+              aliasUnit := FindUnitOrAlias(impName);
+              if aliasUnit >= 0 then
+              begin
+                if FindSymInUnit(impReal, aliasUnit) >= 0 then
+                  aliasRealSym := FindSymInUnit(impReal, aliasUnit)
+                else if FindProcInUnit(impReal, aliasUnit) >= 0 then
+                begin
+                  aliasRealSym := -1;
+                  aliasRealProc := FindProcInUnit(impReal, aliasUnit);
+                end;
+              end;
               { The EXPORTING module's own def wins over a same-named var some
                 OTHER module made. Flat FindSym answers the first `first` it
                 knows, and once a sibling module had re-exported vec's `first`

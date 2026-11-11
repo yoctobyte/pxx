@@ -16,7 +16,7 @@ track: N
 type: bug
 prio: 60
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured 2026-09-13 (frankH), at the tree carrying the module-qualified fix
@@ -87,3 +87,15 @@ dispatch is PyHostCall's `ptrFamily` loop, which is exactly what
 names as its own non-ladder answer. **One trampoline closes both tickets and
 this one**, which is the argument for building it rather than widening anything
 again.
+
+## Resolution (2026-11-11): already fixed, now pinned in the failing order
+
+Rechecked at 3550aef827 with both reductions above in the DEFS-FIRST order:
+the return side (`Holder(details=retkinds.r_three)` called back through the
+field) gives `([1], [2])`, and the parameter side gives `5`, `a!`, `3` (the
+`list` parameter that SEGFAULTED). Both match CPython. No commit is named
+here because the fixing change was not bisected.
+
+Test `test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py`
+(row `qdeffirst26`, modules in `test/nilpy_qdeffirst/`). It imports the defs
+module first, the order the across_modules fixture avoids.

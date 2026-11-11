@@ -1330,6 +1330,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_sharedslot26 | diff -u test/test_nilpy_a_shared_slot_class_attribute_is_visible_to_getattr.expected -
 	./$(COMPILER) test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.py $(TESTTMP)/test_nilpy_randalias26
 	$(TESTTMP)/test_nilpy_randalias26 | diff -u test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.expected -
+	./$(COMPILER) -Futest/nilpy_aliassrc test/test_nilpy_a_from_import_alias_reads_its_own_module.py $(TESTTMP)/test_nilpy_aliassrc26
+	$(TESTTMP)/test_nilpy_aliassrc26 | diff -u test/test_nilpy_a_from_import_alias_reads_its_own_module.expected -
+	./$(COMPILER) -Futest/nilpy_qdeffirst test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py $(TESTTMP)/test_nilpy_qdeffirst26
+	$(TESTTMP)/test_nilpy_qdeffirst26 | diff -u test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
