@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "MECHANISM (re-measured 2026-09-19 at 2bfcfa8bf23e, and it is an ANCHORING bug, not a spelling one): `from .pkg import <submodule-file>` resolves only when the package directory is itself a search root. The submodule arm now exists and finds the file -- strace shows `<root>/P/platform/_gl.py` opened -- and then the unit resolver probes the MANGLED key beside the importer and the DOTTED path under the -Fu ROOTS, so a package one level below a root is never reached. A main script INSIDE the package works; a module of the package driven from outside gives `no unit named platform__gl`. Fix: derive the package dotted path from the root that contains it. Same anchoring question as bug-n-a-subpackage-directory-does-not-resolve-as-a-module (p55) -- do them together."
-status: open
+status: done
 ---
 
 # `from .package import <submodule-file>` binds nothing
@@ -89,3 +89,13 @@ question as
 bug-n-a-subpackage-directory-does-not-resolve-as-a-module (p55), whose
 `from .platform.gl import area` row fails identically on HEAD and on pin v411.
 Worth doing the two together.
+
+## Resolution (2026-11-11) -- no longer reproduces
+
+The ticket's own shape (a module inside package `app` doing
+`from .platform import _gl` and `from .platform import gl`, where `_gl` is the
+file `platform/_gl.py`, reached from a root ABOVE the package via `import app.main`)
+prints `plain True 5` on latest-c8ae56fadd, the same as CPython. Fixed by the
+package-import work (c8ae56fadd: parent packages imported first, `relProbe` in
+ResolveUsesUnitSource). The same shape, `from .sub import leafmod`, is pinned by
+test_nilpy_relative_import_keeps_case_and_rebinds (row relcase26).

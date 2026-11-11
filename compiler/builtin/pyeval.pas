@@ -3724,7 +3724,8 @@ begin
 end;
 
 procedure PyBoundFnCallvnMaskBody(objptr: Pointer; var av: TPyBfnArgv;
-                                nargs, suppliedMask: Int64; var res: Variant);
+                                nargs, suppliedMask: Int64; var res: Variant;
+                                kwd: TPyDict);
 { Call code(own..., bound...). The own arguments come first because that is the
   order the compiled body declares them in — its capture parameters were LIFTED
   onto the end of its own signature by the frontend.
@@ -3738,8 +3739,9 @@ procedure PyBoundFnCallvnMaskBody(objptr: Pointer; var av: TPyBfnArgv;
 var o: PBoundFnObj; b: PInt64; code: Pointer;
     va: TPyBfnArgv;           { by-address slots for VARIANT own params }
     vd: TPyBfnArgv;           { by-address slots for an OVERRIDDEN variant default }
-    dv, si: Int64;
+    dv, si, ks: Int64;
     star: TPyList;
+    ownKwd: Boolean;
     p: array[0..31] of Int64;
     n, i: Integer;
     f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5;
@@ -3763,7 +3765,19 @@ begin
     or more own parameters could not be carried as a value at all and fell back
     to its bare code address, reading its captures as zero
     (bug-n-a-returned-nested-def-reads-zero-for-its-captures-past-arity-three). }
-  for i := 0 to n - 1 do p[i] := PyBoundFnArgWord(o, av[i], @va[i]);
+  { ...except the slots a COLLECTOR owns. Every argument from the `*args`
+    position on belongs inside the tuple packed below, and the `**kwargs` slot
+    holds the dict; converting one of those to a word first is not only wasted
+    work but WRONG -- an unannotated own slot converts as a NUMBER, so
+    `def wrapper(*args): return fn(*args)` called with a str died with
+    "expected a number, got str" before its body ran (an int converted
+    silently and was then overwritten, which is why only strings showed it).
+    The decorator idiom, broken on any non-numeric argument. }
+  si := o^.StarIdx;
+  ks := PySigKwSlot(o^.Sig);
+  for i := 0 to n - 1 do
+    if not (((si >= 0) and (i >= si)) or (i = ks)) then
+      p[i] := PyBoundFnArgWord(o, av[i], @va[i]);
   { `lambda *a:` — the own slot at StarIdx is a TPyList, and every argument
     from that position on belongs INSIDE it. The word written there by the
     loop above (the first surplus argument, read as a list pointer) is
@@ -3782,6 +3796,26 @@ begin
     end;
     pylist_mark_tuple(star);
     if si <= 31 then p[si] := Int64(NativeInt(star));
+  end;
+  { `def wrapper(*args, **kwargs)` -- the own slot of a `**kwargs` collector is
+    the callee's TPyDict: the keywords no parameter claimed (built by
+    PyBoundFnCallKwV), or a fresh empty one for a call with none. Without it
+    the slot held whatever the loop above or the capture copy left there, and
+    the decorator idiom read its captured `fn` out of `kwargs`
+    ("expected a number, got method"), or segfaulted.
+    feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+  ownKwd := False;
+  if (ks >= 0) and (ks < o^.NOwn) and (ks <= 31) then
+  begin
+    if (si < 0) and (nargs > ks) then
+      raise TypeError.Create('takes ' + pystr_of(ks)
+        + ' positional argument(s) but ' + pystr_of(nargs) + ' were given');
+    if kwd = nil then
+    begin
+      kwd := TPyDict.Create;
+      ownKwd := True;
+    end;
+    p[ks] := Int64(NativeInt(kwd));
   end;
   { a body declaring MORE own params than the caller passed still gets a slot
     per parameter -- zeroed, which is what an unsupplied argument reads as }
@@ -3856,6 +3890,7 @@ begin
   { the packed tuple's own +1, dropped like the hidden local a written call
     site gets: a body that KEEPS it has retained it by now }
   if star <> nil then PXXObjRelease(Pointer(star));
+  if ownKwd then PXXObjRelease(Pointer(kwd));
   res := rv;
 end;
 
@@ -3897,20 +3932,22 @@ begin
   for i := 3 to 7 do av[i] := pynone;
   PXXObjRetain(objptr);
   try
-    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res);
+    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res, nil);
   finally
     PXXObjRelease(objptr);
   end;
 end;
 
 { The funnel with the caller's arguments already in an argv and a supplied mask
-  (a keyword call through PyBoundFnCallKwV). Same ownership rule as above. }
+  (a keyword call through PyBoundFnCallKwV). Same ownership rule as above.
+  kwd is the `**kwargs` dict of the keywords no parameter claimed, or nil. }
 procedure pyboundfn_call_argv(objptr: Pointer; var av: TPyBfnArgv;
-                              nargs, suppliedMask: Int64; var res: Variant);
+                              nargs, suppliedMask: Int64; var res: Variant;
+                              kwd: TPyDict);
 begin
   PXXObjRetain(objptr);
   try
-    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res);
+    PyBoundFnCallvnMaskBody(objptr, av, nargs, suppliedMask, res, kwd);
   finally
     PXXObjRelease(objptr);
   end;
@@ -3929,7 +3966,7 @@ begin
     if i < n then av[i] := args.at(i) else av[i] := pynone;
   PXXObjRetain(objptr);
   try
-    PyBoundFnCallvnMaskBody(objptr, av, n, -1, res);
+    PyBoundFnCallvnMaskBody(objptr, av, n, -1, res, nil);
   finally
     PXXObjRelease(objptr);
   end;
@@ -6541,15 +6578,23 @@ function PyBoundFnCallKwV(o: PBoundFnObj; nPos: Integer; var pos: TPyBfnArgv;
   is what CPython answers for a name that is not a parameter. }
 var av: TPyBfnArgv;
     supplied: Int64;
-    i, hit, nkw, visible, req, nargs, miss: Integer;
+    i, hit, nkw, visible, req, nargs, miss, si, ks: Integer;
     kn: AnsiString;
+    kwd: TPyDict;
 begin
   Result := pynone;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
-  if o^.StarIdx >= 0 then
-    raise TypeError.Create('a keyword argument through a callable value is '
-            + 'not supported yet for a callee that collects *args');
+  { A `*args` callee takes keywords too, as long as each one either names a
+    parameter BEFORE the star (bound in its slot, which stays below the star so
+    the packing is unchanged) or lands in a `**kwargs` collector. That is the
+    decorator idiom, `def wrapper(*args, **kwargs)`, which used to refuse
+    every keyword call by name. A callee that collects *args and has no
+    `**kwargs` still refuses a keyword past the star, as CPython does.
+    feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+  si := Integer(o^.StarIdx);
+  ks := PySigKwSlot(o^.Sig);
+  kwd := nil;
   if o^.Sig = nil then
     raise TypeError.Create('this callable value carries no parameter names, '
             + 'so a keyword argument cannot be matched to a parameter');
@@ -6578,8 +6623,16 @@ begin
   begin
     kn := pystr_of(kwNames.at(i));
     hit := PySigFindParam(o^.Sig, kn);
-    if (hit < 0) or (hit >= visible) then
-      raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+    if (hit < 0) or (hit >= visible) or (hit = ks) or
+       ((si >= 0) and (hit >= si)) then
+    begin
+      { no parameter claims it: the collector's, when there is one }
+      if ks < 0 then
+        raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+      if kwd = nil then kwd := TPyDict.Create;
+      kwd.store(kwNames.at(i), kwVals.at(i));
+      Continue;
+    end;
     if hit > 7 then
       raise TypeError.Create('a keyword argument through a callable value is '
               + 'not supported yet past eight parameters');
@@ -6594,14 +6647,21 @@ begin
     positionally. The same rule the tag-8 path states. }
   miss := 0;
   for i := 0 to req - 1 do
-    if (supplied shr i) and 1 = 0 then Inc(miss);
+    if ((supplied shr i) and 1 = 0) and (i <> si) and (i <> ks) then Inc(miss);
   if miss > 0 then
+  begin
+    if kwd <> nil then PXXObjRelease(Pointer(kwd));
     raise TypeError.Create('missing ' + pystr_of(Int64(miss))
             + ' required positional argument(s)');
+  end;
   { A HOLE below nargs -- `f(0, c=9)` leaving b unsupplied -- must keep b's
     default, so the supplied mask travels with the call instead of the callee
     reading the pynone sitting in the slot. }
-  pyboundfn_call_argv(Pointer(o), av, nargs, supplied, Result);
+  try
+    pyboundfn_call_argv(Pointer(o), av, nargs, supplied, Result, kwd);
+  finally
+    if kwd <> nil then PXXObjRelease(Pointer(kwd));
+  end;
 end;
 
 function PyBoundFnCallKw(o: PBoundFnObj; nPos: Integer;

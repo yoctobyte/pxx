@@ -13803,16 +13803,23 @@ begin
     else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
             ((Tokens[i - 1].Kind = tkLParen) or (Tokens[i - 1].Kind = tkComma) or
              ((Tokens[i - 1].Kind = tkStar) and (i >= 2) and
-              ((Tokens[i - 2].Kind = tkLParen) or (Tokens[i - 2].Kind = tkComma)))) then
+              ((Tokens[i - 2].Kind = tkLParen) or (Tokens[i - 2].Kind = tkComma))) or
+             { `**kw` -- two tkStar tokens. A parameter like `*args`: one
+               TPyDict slot, which the bridge now fills
+               (PyBoundFnCallvnMaskBody). Left uncounted, the captures were
+               placed one slot too far left and `def wrapper(*args, **kwargs)`
+               read its captured `fn` out of `kwargs`.
+               feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+             ((Tokens[i - 1].Kind = tkStar) and (i >= 3) and
+              (Tokens[i - 2].Kind = tkStar) and
+              ((Tokens[i - 3].Kind = tkLParen) or (Tokens[i - 3].Kind = tkComma)))) then
     begin
       { `*args` is a PARAMETER — one TPyList slot the bridge packs into. The
         scan matched only an ident after `(` or `,`, so a collecting nested def
         counted ZERO own parameters and pyboundfn_setown published 0: the
         bridge then placed the captures one slot too far left and the body read
         its own `args` out of a capture word (len(args) = 1275068416, and the
-        capture itself came back empty). `**kw` is a tkStar preceded by another
-        tkStar and is deliberately still not counted — that shape does not
-        compile at all yet. }
+        capture itself came back empty). `**kw` counts the same way (above). }
       if nP > High(pNames) then Exit;
       pNames[nP] := GetTokenStr(i);
       pDefS[nP] := -1; pDefE[nP] := -1;
@@ -49462,6 +49469,38 @@ begin
   end;
 end;
 
+{ Would making baseCi the parent of ci close a LOOP in the class hierarchy?
+  True when ci is baseCi or any of its ancestors. Every walk up UClsParent
+  assumes the chain ends, so a loop is not a wrong answer but a compiler that
+  never terminates -- html5lib's `class Trie(ABCTrie)`, ABCTrie an alias that
+  resolved to the class being declared, held a core for forty hours with no
+  diagnostic. The two parent assignments refuse it by name instead. Bounded,
+  so an existing loop elsewhere cannot hang this check too.
+  bug-n-compiling-html5lib-trie-never-terminates }
+function PyParentWouldLoop(ci, baseCi: Integer): Boolean;
+var p, n: Integer;
+begin
+  Result := False;
+  p := baseCi;
+  n := 0;
+  while (p >= 0) and (n <= UClsCount) do
+  begin
+    if p = ci then begin Result := True; Exit; end;
+    p := UClsParent[p];
+    Inc(n);
+  end;
+end;
+
+function PyParentLoopWhy(ci, baseCi: Integer): AnsiString;
+{ The tail of the refusal PyParentWouldLoop leads to. A base that IS the class
+  keeps the long-standing wording, "cannot inherit from itself", which tests and
+  users grep for; only a longer chain back to the class gets the ancestor
+  wording. }
+begin
+  if baseCi = ci then Result := ' cannot inherit from itself'
+  else Result := ' would be its own ancestor: its base chain leads back to it';
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz, vmtN: Integer;
@@ -52223,7 +52262,10 @@ begin
             { no parent, and nothing to wait for }
           else if not multiBase then
           begin
-            if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
+            if (baseCi >= 0) and PyParentWouldLoop(ci, baseCi) then
+              Error('Nil Python: class ' + PyRawName(Tokens[i + 1].SOffset, Tokens[i + 1].SLen) +
+                    PyParentLoopWhy(ci, baseCi))
+            else if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
               UClsParent[ci] := baseCi
             else
               hoist := False;
@@ -52759,6 +52801,9 @@ begin
         bug-nilpy-multiple-inheritance-does-not-parse }
       if (realBases >= 1) and not PyClsUsedAsMixin[baseCiList[0]] then
         parentIx := 0;
+    if (parentIx >= 0) and PyParentWouldLoop(ci, baseCiList[parentIx]) then
+      Error('Nil Python: class ' + TokSliceStr(UClsNOff[ci], UClsNLen[ci]) +
+            PyParentLoopWhy(ci, baseCiList[parentIx]));
     if parentIx >= 0 then UClsParent[ci] := baseCiList[parentIx];
     for k := 0 to realBases - 1 do
       if k <> parentIx then
@@ -54208,7 +54253,22 @@ begin
           end;
           if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
           begin
-            aliasCi := FindUClass(impReal);
+            { The SOURCE module's class first. A flat FindUClass ranks the
+              importer's OWN rows highest, and the importer's classes are
+              registered before its imports are bound -- so in html5lib's
+              _trie/py.py,
+                  from ._base import Trie as ABCTrie
+                  class Trie(ABCTrie): ...
+              the alias ABCTrie named py.py's own Trie, the class became its
+              own parent, and every walk up the parent chain spun: the
+              compile never terminated (it held a core for forty hours once).
+              The flat lookup stays as the fallback for a name the source
+              unit re-exports rather than declares.
+              bug-n-compiling-html5lib-trie-never-terminates }
+            aliasCi := -1;
+            if FindUnitOrAlias(impName) >= 0 then
+              aliasCi := FindUClassInUnit(impReal, FindUnitOrAlias(impName));
+            if aliasCi < 0 then aliasCi := FindUClass(impReal);
             { ...but NOT a class that merely matches with the case folded away,
               when this unit spells that name as a routine or a variable.
               FindUClass folds case because Pascal does; Python does not, and

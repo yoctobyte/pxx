@@ -2,7 +2,7 @@
 track: N
 prio: 35
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-11
 found-by: frankuser
@@ -55,3 +55,11 @@ never a silent wrong value, and **no module in the lekkerzeilen corpus has a
 capital in its name**, so it blocks nothing ranked today. It will bite the first
 corpus that ships a `CamelCase.py`, which in Python is common enough for class-per-module
 layouts.
+
+## Resolution (2026-11-11)
+
+Fixed in `ResolveUsesUnitSource` (pasparser_proc.inc): when the relative probe
+misses on the lowercased unit name, it retries with the original-case `name`, so
+`from . import MyMod` finds `MyMod.py`. Regression: test_nilpy_relative_import_keeps_case_and_rebinds
+(fixture test/nilpy_relcase26, row relcase26); latest-c8ae56fadd fails it with
+"no unit named mymod and no shim mimic_mymod".

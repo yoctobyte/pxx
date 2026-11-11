@@ -3498,6 +3498,11 @@ function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiStr
   this unit, which is the point of exporting the question instead of the type.
   refactor-a-one-signature-record-for-every-callable-carrier }
 function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
+{ ...and the other question the lifted carrier asks of the same record: the
+  user-space slot of the callee's `**kwargs` collector, or -1. Exported as a
+  question for the same reason (the layout stays private to this unit).
+  feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+function PySigKwSlot(sig: Pointer): Integer;
 
 { The bound slot for `name` on `cls` or any ancestor. pyeval's PyHasAttr asks
   this unit the question rather than walking the parent chain a second time, so
@@ -20524,6 +20529,13 @@ begin
   PySigNameEq := pc[Length(nm)] = #0;
 end;
 
+function PySigKwSlot(sig: Pointer): Integer;
+begin
+  PySigKwSlot := -1;
+  if sig = nil then Exit;
+  PySigKwSlot := Integer((PPySigRec(sig)^.Star shr 16) and $FF) - 1;   { PYSIG_STAR_KWSHIFT }
+end;
+
 function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
 var sr: PPySigRec; np: PPointer; i: Integer;
 begin
@@ -20589,10 +20601,18 @@ type
 function PyBoundCallStarSig(b: PPyBoundRec; nPos: Integer;
                             const av: array of Variant;
                             kwNames, kwVals: TPyList): Variant;
-var sr: PPySigRec; si, n, totN, i, j, hit, m: Integer;
+{ ...and a `**kwargs` collector rides the same staging (PYSIG_STAR_KWSHIFT in
+  the record's star word): its slot gets a dict of every keyword no parameter
+  claims, empty when there are none. A callee may collect either or both, so
+  si (the star slot) can be -1 here. Without the dict there was no way to call
+  such a callee through a value at all -- the collector stayed counted as a
+  required parameter so the call was refused, since dispatching without it
+  would hand the body garbage where its dict belongs.
+  feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+var sr: PPySigRec; si, ks, n, totN, i, j, hit, m: Integer;
     slots: array[0..7] of Variant; bnd: array[0..7] of Boolean;
     ptr: array[0..8] of Pointer;
-    star: TPyList; kn: AnsiString; dp, code: Pointer;
+    star: TPyList; kwd: TPyDict; kn: AnsiString; dp, code: Pointer;
     q1: TPyCbQ1; q2: TPyCbQ2; q3: TPyCbQ3; q4: TPyCbQ4; q5: TPyCbQ5;
     q6: TPyCbQ6; q7: TPyCbQ7; q8: TPyCbQ8; q9: TPyCbQ9;
     r1: TPyCbQP1; r2: TPyCbQP2; r3: TPyCbQP3; r4: TPyCbQP4; r5: TPyCbQP5;
@@ -20601,32 +20621,56 @@ begin
   Result := pynone;
   sr := PPySigRec(b^.Sig);
   si := b^.StarIdx;
+  ks := Integer((sr^.Star shr 16) and $FF) - 1;   { PYSIG_STAR_KWSHIFT }
   totN := Integer(sr^.TotN);
-  { a TRAILING star is stripped from the record (EmitPySignatures), so the
-    tuple's slot is one past the recorded ones }
+  { a TRAILING star and kwargs are stripped from the record
+    (EmitPySignatures), so their slots are past the recorded ones }
   n := totN;
   if n < si + 1 then n := si + 1;
+  if n < ks + 1 then n := ks + 1;
   if n > 8 then
     raise TypeError.Create('a collecting callee reached as a value takes at '
       + 'most 8 declared parameters, got ' + pystr_of(Int64(n)));
   for i := 0 to 7 do bnd[i] := False;
+  { positional arguments fill the fixed slots; past them they go to the star
+    tuple, or are one too many when there is no star }
+  if (si < 0) and (nPos > totN) then
+    raise TypeError.Create('takes ' + pystr_of(Int64(totN))
+      + ' positional argument(s) but ' + pystr_of(Int64(nPos)) + ' were given');
   for i := 0 to nPos - 1 do
-    if i < si then
+    if (si < 0) or (i < si) then
     begin
       slots[i] := av[i];
       bnd[i] := True;
     end;
-  star := TPyList.Create;
-  for i := si to nPos - 1 do star.append(av[i]);
-  pylist_mark_tuple(star);
-  bnd[si] := True;
+  star := nil;
+  if si >= 0 then
+  begin
+    star := TPyList.Create;
+    for i := si to nPos - 1 do star.append(av[i]);
+    pylist_mark_tuple(star);
+    bnd[si] := True;
+  end;
+  kwd := nil;
+  if ks >= 0 then
+  begin
+    kwd := TPyDict.Create;
+    bnd[ks] := True;
+  end;
   if kwNames <> nil then
     for j := 0 to kwNames.count - 1 do
     begin
       kn := pystr_of(kwNames.at(j));
       hit := PySigFindParam(b^.Sig, kn);
-      if (hit < 0) or (hit = si) or (hit >= n) then
-        raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+      { only a NAMED fixed parameter binds by keyword; any other name is the
+        collector's, when there is one }
+      if (hit < 0) or (hit = si) or (hit >= totN) then
+      begin
+        if kwd = nil then
+          raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+        kwd.store(kwNames.at(j), kwVals.at(j));
+        Continue;
+      end;
       if bnd[hit] then
         raise TypeError.Create('got multiple values for argument ''' + kn + '''');
       slots[hit] := kwVals.at(j);
@@ -20650,7 +20694,9 @@ begin
   end;
   for i := 0 to n - 1 do
   begin
-    if i = si then ptr[m] := Pointer(star) else ptr[m] := @slots[i];
+    if i = si then ptr[m] := Pointer(star)
+    else if i = ks then ptr[m] := Pointer(kwd)
+    else ptr[m] := @slots[i];
     Inc(m);
   end;
   code := b^.Code;
@@ -20678,7 +20724,8 @@ begin
       8: begin r8 := TPyCbQP8(code); r8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]); end;
       9: begin r9 := TPyCbQP9(code); r9(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7], ptr[8]); end;
     end;
-  PXXObjRelease(Pointer(star));
+  if star <> nil then PXXObjRelease(Pointer(star));
+  if kwd <> nil then PXXObjRelease(Pointer(kwd));
 end;
 
 function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
@@ -20722,7 +20769,8 @@ begin
   for i := nPos to MAXSLOT do av[i] := pynone;
   { a collecting callee with a signature: slots and positions disagree past
     the star, so it is staged on its own -- see PyBoundCallStarSig }
-  if (b^.StarIdx >= 0) and (b^.Sig <> nil) then
+  if (b^.Sig <> nil) and
+     ((b^.StarIdx >= 0) or (((PPySigRec(b^.Sig)^.Star shr 16) and $FF) <> 0)) then
   begin
     Result := PyBoundCallStarSig(b, nPos, av, kwNames, kwVals);
     Exit;

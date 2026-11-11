@@ -1362,6 +1362,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_pkgparent26 | diff -u test/test_nilpy_package_parents_init_first.expected -
 	./$(COMPILER) test/test_nilpy_one_module_file_runs_once.py $(TESTTMP)/test_nilpy_pkgonce26
 	$(TESTTMP)/test_nilpy_pkgonce26 | diff -u test/test_nilpy_one_module_file_runs_once.expected -
+	timeout 60 ./$(COMPILER) test/test_nilpy_subclass_named_like_its_aliased_base.py $(TESTTMP)/test_nilpy_alibase26
+	$(TESTTMP)/test_nilpy_alibase26 | diff -u test/test_nilpy_subclass_named_like_its_aliased_base.expected -
+	./$(COMPILER) test/test_nilpy_kwargs_collector_through_a_callable_value.py $(TESTTMP)/test_nilpy_kwcbval26
+	$(TESTTMP)/test_nilpy_kwcbval26 | diff -u test/test_nilpy_kwargs_collector_through_a_callable_value.expected -
+	./$(COMPILER) test/test_nilpy_relative_import_keeps_case_and_rebinds.py $(TESTTMP)/test_nilpy_relcase26
+	$(TESTTMP)/test_nilpy_relcase26 | diff -u test/test_nilpy_relative_import_keeps_case_and_rebinds.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26
@@ -1833,11 +1839,13 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/tk/no_display_raises_tclerror.npy $(TESTTMP)/test_nilpy_tknodisp26
 	./$(COMPILER) examples/tk/canvas_items_dialog_and_events.npy $(TESTTMP)/test_nilpy_tkcide26
 	./$(COMPILER) examples/tk/sidebar_cards_and_hover_rows.npy $(TESTTMP)/test_nilpy_tksbar26
+	./$(COMPILER) examples/tk/notebook_select_by_variant.npy $(TESTTMP)/test_nilpy_tknbsel26
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkstyle26 | diff -u examples/tk/style_and_short_options.expected - || exit 1; \
 	  env -u DISPLAY -u WAYLAND_DISPLAY $(TESTTMP)/test_nilpy_tknodisp26 | diff -u examples/tk/no_display_raises_tclerror.expected - || exit 1; \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkcide26 2>&1 | diff -u examples/tk/canvas_items_dialog_and_events.expected - || exit 1; \
 	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tksbar26 2>&1 | diff -u examples/tk/sidebar_cards_and_hover_rows.expected - || exit 1; \
+	  timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tknbsel26 2>&1 | diff -u examples/tk/notebook_select_by_variant.expected - || exit 1; \
 	else echo "  tk: no xvfb-run, skipping the style and no-display RUNs (compiled only)"; fi
 	# An event callback's Event and the widgets winfo_children() returns are
 	# released (both were boxed with an extra retain: pin v451 leaves ~2,400

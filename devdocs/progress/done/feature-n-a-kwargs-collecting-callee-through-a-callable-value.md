@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -80,3 +80,61 @@ that would have taken it.
 The bridge packs **at most four arguments**, so a star at position 4 or beyond is
 refused with a message of its own (`…is past what the dynamic bridge can pack`).
 That is a separate, pre-existing, loud ceiling — not part of this ticket.
+
+## Built 2026-11-11
+
+Both halves, as the ticket said, plus the same gap on the other carrier.
+
+**Signature record.** EmitPySignatures records the collector's user-space
+slot in bits 16..23 of the STAR word (PYSIG_STAR_KWSHIFT). Where the collector
+is the LAST parameter (a plain def) it comes off ReqN/TotN, and a star before
+it then comes off too. In a lifted nested def or lambda the captures follow
+it, so the slot is recorded and the counts keep it. Answered as a question
+for pyeval, PySigKwSlot, beside PySigFindParam, so the layout stays private.
+No new field in the box and none in the record.
+
+**Tag-8 pair (a module def as a value).** PyBoundCallStarSig, which already
+staged every slot by pointer for a `*args` callee, now takes a callee that
+collects either or both. Keywords naming a fixed parameter bind there;
+anything else goes into a TPyDict built for the call (empty when there are
+none) and passed at the collector's slot. Too many positionals with no star
+is a TypeError.
+
+**Tag 10 (a nested def or lambda carried as a bound-fn).** Three defects, one
+shape:
+- the nested-def parameter scan did not count `**kw`, so `nOwn` was one short
+  and every capture landed one slot left (the decorator's captured `fn` was
+  read out of `kwargs`: "expected a number, got method"); with a capture and
+  no star it segfaulted;
+- PyBoundFnCallvnMaskBody never put a dict in the collector's slot;
+- it also converted every argument to a word BEFORE packing the star tuple,
+  and an unannotated slot converts as a number, so `def wrapper(*args)`
+  called with a str died "expected a number, got str" before its body ran.
+  An int converted silently and was then overwritten, so only strings showed
+  it. This one predates the kwargs work: `def wrapper(*args): return fn(*args)`
+  failed on any str argument.
+PyBoundFnCallKwV now takes keywords for a `*args` callee too (bound below the
+star, or into the dict), instead of refusing every keyword call by name.
+
+Also: `fn.__name__` of a decorated def answered the mangled `__pxxdec1_add`;
+PySigDisplayName strips the decorator mangling.
+
+| shape | before | now (= CPython) |
+| --- | --- | --- |
+| `def f(a, **kw)`; `zz = f; zz(1)` | TypeError | `1` |
+| `def f(a, lo=7, **kw)`; `zz(1)`, `zz(1, 2)`, `zz(1, lo=3, extra=9)` | TypeError | `8 3 4` |
+| `def f(a, lo=7, *rest, **kw)`; `zz(1, 2, 3, k=1, j=2)` | TypeError | `2103` |
+| bound method `cfg = b.config; cfg("w", fg="red")` | TypeError | `w1`, dict filled |
+| nested `def inner(a, **kw)` capturing `base` | segfault | `11 13` |
+| `@logged` / `@retry(3)` with `*args, **kwargs` | TypeError | CPython's output |
+
+Test test_nilpy_kwargs_collector_through_a_callable_value.py (row kwval26),
+expected = python3.
+
+**Still open, all loud:** a LAMBDA with `**kw` keeps its old arity refusal
+(`<lambda>() takes 2 positional arguments`; the lambda lifter counts the
+collector as required). `functools.wraps` is dropped by the decorator rewrite,
+so `add.__name__` after `@wraps` answers `wrapper`. A custom decorator on a
+METHOD is refused by name ("unsupported decorator inside class"). A nested def
+with a DEFAULT before `*args`/`**kw` is not covered by the own/bound slot
+split.

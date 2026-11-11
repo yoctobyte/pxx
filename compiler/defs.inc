@@ -2145,6 +2145,11 @@ const
     the record is .data and .data is RAM on ESP: a program that never asks pays
     nothing, not even a field. bug-n-a-function-value-has-no-name }
   PYSIG_STAR_HASFNAME = 256;
+  { ...and bits 16..23 of the same word: the `**kwargs` collector's USER-SPACE
+    slot PLUS ONE (0 = none). The collector is not counted in ReqN/TotN and has
+    no name or default slot; the dynamic bridge builds the dict it receives.
+    feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+  PYSIG_STAR_KWSHIFT = 16;
 
   { ResolveDataRefSentinel's answers (emit.inc). It is the ONE decoder for the
     families below -- compiler.pas's fixup loop and wasm32's late-cell pass both

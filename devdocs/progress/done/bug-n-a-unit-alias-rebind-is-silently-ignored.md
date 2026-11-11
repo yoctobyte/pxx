@@ -3,7 +3,7 @@ slug: bug-n-a-unit-alias-rebind-is-silently-ignored
 track: N
 type: bug
 prio: 40
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankZ
@@ -56,3 +56,13 @@ deserves at this rank.
 
 Instrument: count duplicate names in `UnitAliasName` at the end of a compilation
 of the NilPy corpus, grouped by which site registered them.
+
+## Resolution (2026-11-11) -- no longer reproduces
+
+`from . import a as x` then `from . import b as x` answers `b`, matching CPython,
+on latest-c8ae56fadd and on the side compiler. So do `from pk import a as y` /
+`from pk import b as y` and `import pk.a as z` / `import pk.b as z`. Not traced which
+change fixed it: PyAddImportUnitAlias still APPENDS rows, so the later binding
+wins somewhere other than the alias table scan (not located).
+It is pinned by test_nilpy_relative_import_keeps_case_and_rebinds (row relcase26),
+which also covers the mixed-case relative import.

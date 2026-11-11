@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "`from xml.dom import minidom` binds `minidom` to the PARENT package `xml.dom`, not the submodule. Member lookups then resolve the parent's names silently -- `minidom.XHTML_NAMESPACE` returns `http://www.w3.org/1999/xhtml` where CPython raises AttributeError. STILL LIVE at `ca814b0aabcc` (re-measured 2026-09-10) and still a silent wrong value. BOUNDARY NARROWED: a real filesystem package is CORRECT in all three spellings, measured against a parent and child that both define the same name with different values -- so this is the DOTTED SHIM path (`xml.dom` flattened to `mimic_xml_dom`, trailing name dropped) and not `from <package> import <submodule>` in general. `lib/rtl/mimic_xml_dom_minidom.py` already exists, so the right target is in the tree, unused."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -167,3 +167,15 @@ one: three correct spellings against a discriminator built so a wrong binding
 could not hide is more evidence than most closes get, and it was evidence about
 a different mechanism. The title should say `shim` where it says `package`, and
 whoever takes it should re-derive that boundary rather than trust this table.
+
+## Resolution (2026-11-11) -- no longer reproduces
+
+Re-measured on latest-c8ae56fadd and on the batch-16 side compiler:
+`from xml.dom import minidom` binds the SUBMODULE shim. `minidom.getDOMImplementation()`,
+`createDocument(...)` and `minidom.Node.ELEMENT_NODE` match CPython (`root`, `1`).
+The parent-only name `minidom.XHTML_NAMESPACE` is now refused at compile time
+("no member XHTML_NAMESPACE came of the qualifier minidom") where CPython raises
+AttributeError at run time -- a reject, not the silent wrong value this ticket
+was filed for. Fixed incidentally by the package-import work (c8ae56fadd and
+earlier); no separate commit. `parseString` is still absent from the shim by design
+(see its header).

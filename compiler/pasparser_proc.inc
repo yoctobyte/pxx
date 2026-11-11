@@ -5925,6 +5925,15 @@ begin
       relProbe := PyDottedToRelPath(pyDotted);
     PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), relProbe, True,
                        path, UnitContent);
+    { ...and the module's OWN spelling. `lo` is lowercased, and a Python module
+      name is case-sensitive on disk: `from . import MyMod` probed mymod.py and
+      failed with "no unit named mymod", while `import pkg.MyMod` (whose dotted
+      path keeps its case) resolved the same file.
+      bug-n-a-relative-import-lowercases-the-module-name-but-an-absolute-one-does-not }
+    if (Length(UnitContent) = 0) and (pyRelLevel >= 1) and
+       (not pyDottedIsPath) and (name <> lo) then
+      PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), name, True,
+                         path, UnitContent);
     { A NAMESPACE PACKAGE -- a package directory with no `__init__` -- can be
       split across several roots, and CPython finds a relative import's
       module in any PORTION of it: micropython-lib ships umqtt.robust and

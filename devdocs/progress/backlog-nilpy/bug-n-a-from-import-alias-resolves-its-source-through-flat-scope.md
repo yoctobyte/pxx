@@ -275,3 +275,16 @@ Test `test/test_nilpy_a_from_import_alias_reads_its_own_module.py` (row
    test_nilpy_a_from_import_alias_reads_its_own_module.py.
 
 Residue 1 is what keeps this ticket open.
+
+**A third shape of residue 1, for CLASSES (measured 2026-11-11).** Two modules
+each declare `class Trie` (one subclasses the other). The main program does
+`from pkg import Trie` (pkg re-exports the SUBCLASS) and also imports the
+base's module (`from pkg._base import Trie as Base`, or even only
+`import pkg._base as b`). Bare `Trie()` in main then constructs the BASE:
+`t.size()` gives the base's answer, where CPython gives the subclass's. With
+only the first import it is right. An un-aliased class from-import in the
+main program registers nothing, on the reasoning that flat unit scope finds
+it, and flat scope picks whichever same-named class row ranks first. The
+from-import alias arm now resolves the class in the SOURCE unit first
+(bug-n-compiling-html5lib-trie-never-terminates), but a bare main-program
+name still never reaches that arm. Fixture shape: test/nilpy_samename26.

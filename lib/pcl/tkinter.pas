@@ -347,6 +347,14 @@ type
     function select: AnsiString; overload;
     function select(child: Widget): AnsiString; overload;
     function select(index: Integer): AnsiString; overload;
+    { ...and a VARIANT argument -- an index read back from JSON, or a widget
+      out of a list -- decided by its run-time tag. Without this a variant
+      tied between the two overloads above, the first declared (Widget) won,
+      and `nb.select(idx)` with `idx` from json.loads raised "expected an
+      object argument, got int" (songformatter). Only the tag can decide:
+      `nb.select(tabs[i])` holding a widget is just as ordinary.
+      bug-n-a-variant-argument-picks-the-class-overload-without-a-tag-test }
+    function select(const v: Variant): AnsiString; overload;
     { `nb.tab(child, text=...)` renames a tab — how a title follows its
       document. The read form is not modelled. }
     procedure tab(child: Widget; const text: AnsiString);
@@ -2904,6 +2912,14 @@ end;
 function Notebook.select(index: Integer): AnsiString;
 begin
   select := TkEval(path + ' select ' + TkiIntStr(index));
+end;
+
+function Notebook.select(const v: Variant): AnsiString;
+begin
+  if pyvar_is_inttag(v) then
+    select := select(Integer(pyvar_to_int(v)))
+  else
+    select := select(Widget(pyvarobj_arg(v)));
 end;
 
 procedure Notebook.tab(child: Widget; const text: AnsiString);

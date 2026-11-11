@@ -3,7 +3,7 @@ summary: "A variant argument to a typed receiver's overload set picks the CLASS 
 type: bug
 track: N
 blocked-by: []
-prio: 50
+prio: 30
 status: backlog
 ---
 
@@ -46,3 +46,20 @@ App-side workaround until then: `k: int = idx; nb.select(k)`.
 
 Related: an unhandled exception prints only "Unhandled exception: TypeError:
 ..." with no location, so finding this site took print-marker bisecting.
+
+## 2026-11-11: the reported case fixed in the library; the general tie stays
+
+`Notebook.select(const v: Variant)` added to lib/pcl/tkinter.pas. It decides
+by the run-time tag (an int is an index, anything else goes through
+pyvarobj_arg as a Widget). A Variant argument now matches it exactly, so the
+tie never arises for this overload set. `nb.select(idx)` with idx from
+json.loads, `nb.select(int(idx) - 1)` and `nb.select(tabs[1])` all give
+CPython's answers under Xvfb: examples/tk/notebook_select_by_variant.npy
+(row tknbsel26, in the Xvfb block, expected = python3).
+
+That is the "shims are the path" route (owner, 2026-09-10), and it is the whole
+fix for songformatter. The compile-time tie itself is unchanged: any other
+Pascal overload set with a class overload and an int overload at the same
+slot still picks the first declared for a Variant argument. Re-ranked 50 -> 30
+on that basis; add a Variant overload to the next library that hits it, and
+build the general tag test (the shape above) if a third one does.

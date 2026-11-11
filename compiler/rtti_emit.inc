@@ -484,6 +484,18 @@ begin
   end;
   k := Pos('$', Result);
   if k > 1 then Result := Copy(Result, 1, k - 1);
+  { A DECORATED def is compiled under a hidden name (pylexer.inc's decorator
+    rewrite, `__pxxdec<N>_<name>`), and the decorator receives THAT function --
+    so `fn.__name__` in every logging/registry decorator answered
+    `__pxxdec1_add` where CPython says `add`. The user's own name is the part
+    after the sequence number. }
+  if Copy(Result, 1, 8) = '__pxxdec' then
+  begin
+    k := 9;
+    while (k <= Length(Result)) and (Result[k] in ['0'..'9']) do Inc(k);
+    if (k > 9) and (k < Length(Result)) and (Result[k] = '_') then
+      Result := Copy(Result, k + 1, Length(Result) - k);
+  end;
 end;
 
 { Emit one PYSIG_SIZE signature record per NilPy `def`, and record its Data[]
@@ -557,6 +569,8 @@ var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
     lastDecl: Integer;   { one past the last DECLARED (non-collector) parameter }
     wantFName: Boolean;  { PYSIG_STAR_HASFNAME -- see PyProgramReadsFuncName }
     starWord: Int64;
+    kwWord: Int64;       { the `**kwargs` slot, PYSIG_STAR_KWSHIFT-shifted; 0 = none }
+    kwStripped: Boolean; { ...and it was the LAST parameter, so it left the counts }
 begin
   { ProcCapacity, not MAX_PROCS: these tables are allocated to fit (see
     EnsureProcCapacity) and a loop to the old fixed bound now writes off the end
@@ -629,23 +643,45 @@ begin
       returned a plausible wrong number.
       bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 
-      Stripped only when the star is the LAST parameter and the callee does NOT
-      also collect `**kwargs`. Two reasons, and neither is timidity:
+      Stripped only when the star is the LAST parameter once a trailing
+      `**kwargs` collector has come off (below). Two reasons:
 
       * Indices stay put. Dflts and Names are indexed by (k - firstUser), so
         dropping a parameter that is not last would leave a live index >= the
         shrunken count and write past the array. Scanning from the END can only
         ever remove a suffix, so every surviving index is unchanged by
         construction.
-      * A `**kwargs` collector must keep counting. The runtime bridge has no way
-        to synthesize the empty dict the body expects in that slot (see
-        PyBoundCallV2 in pylib.pas), so leaving the collector in reqN is what
-        makes the bridge REFUSE such a call with a TypeError instead of
-        dispatching at an arity the body does not have -- which is a segfault.
-        Deliberate, and the missing capability is filed as
+      * A `**kwargs` collector is stripped too, but only because the bridge
+        now builds the dict for its slot (PyBoundCallStarSig in pylib.pas).
+        Uncounted WITHOUT that, the body would be dispatched at an arity it
+        does not have, which is a segfault -- the reason it stayed counted,
+        and every such call refused, until
         feature-n-a-kwargs-collecting-callee-through-a-callable-value. }
     lastDecl := Procs[pi].ParamCount;
-    if (ProcPyKwIdx[pi] < 0) and (lastDecl - 1 = ProcPyStarIdx[pi]) and
+    { A TRAILING `**kwargs` collector comes off first, by the same suffix rule,
+      and its USER-SPACE slot is recorded in the star word (PYSIG_STAR_KWSHIFT)
+      so the bridge can hand the body the dict it expects there -- built from
+      the keywords no parameter claims, empty when there are none. Before that
+      existed the collector was left counted on purpose, so the bridge REFUSED
+      every such call rather than dispatch without the dict.
+      feature-n-a-kwargs-collecting-callee-through-a-callable-value }
+    { A LIFTED nested def or lambda has its capture parameters appended after
+      the collector, so there the collector is not last: its slot is still
+      recorded (the lifted-closure bridge reads it, PyBoundFnCallvnMaskBody)
+      but the counts keep it, as they keep the captures. }
+    kwWord := 0;
+    kwStripped := False;
+    if ProcPyKwIdx[pi] >= firstUser then
+    begin
+      kwWord := Int64(ProcPyKwIdx[pi] - firstUser + 1) shl PYSIG_STAR_KWSHIFT;
+      if lastDecl - 1 = ProcPyKwIdx[pi] then
+      begin
+        Dec(lastDecl);
+        kwStripped := True;
+      end;
+    end;
+    if ((ProcPyKwIdx[pi] < 0) or kwStripped) and
+       (lastDecl - 1 = ProcPyStarIdx[pi]) and
        (lastDecl - 1 >= firstUser) then Dec(lastDecl);
     nUser := lastDecl - firstUser;
     if nUser < 0 then nUser := 0;
@@ -663,8 +699,10 @@ begin
     AddMethodFix(ProcSigOff[pi] + PYSIG_OFF_CODE, pi, MFK_PYSIG);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_TOTN, nUser);
-    if ProcPyStarIdx[pi] >= 0 then
-      PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, ProcPyStarIdx[pi] + 1);
+    starWord := kwWord;
+    if ProcPyStarIdx[pi] >= 0 then starWord := starWord or (ProcPyStarIdx[pi] + 1);
+    if starWord <> 0 then
+      PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, starWord);
     if nUser > 0 then
     begin
       dfltOff := DataLen;
@@ -766,8 +804,6 @@ begin
       end;
       AddDataPtrFix(namesOff + nUser * 8, DataLen);
       DataPutZ(PySigDisplayName(Procs[pi].Name));
-      starWord := 0;
-      if ProcPyStarIdx[pi] >= 0 then starWord := ProcPyStarIdx[pi] + 1;
       PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, starWord or PYSIG_STAR_HASFNAME);
     end;
   end;

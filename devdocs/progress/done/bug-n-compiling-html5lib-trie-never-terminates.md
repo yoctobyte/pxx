@@ -3,6 +3,7 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
+status: done
 summary: "Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit."
 ---
 
@@ -98,3 +99,42 @@ were complete.
 emits a real diagnostic. Add whichever intermediate file the bisect blames as a
 regression test with a timeout, since a hang cannot be gated by an expected
 output — the test has to be the bound.
+
+## Fixed 2026-11-11
+
+Bisected as the ticket asked: `_base.py` alone compiles, `py.py` alone hangs.
+Reduced to ten lines with no html5lib in them:
+
+```python
+# pk/_base.py: class Trie: ...
+# pk/py.py:
+from ._base import Trie as ABCTrie
+class Trie(ABCTrie): ...
+```
+
+The from-import alias arm resolved `Trie` with a flat FindUClass, which ranks
+the IMPORTING module's own rows highest, and the importer's classes are
+registered before its imports are bound. So `ABCTrie` named py.py's own
+`Trie`, the class became its own parent, and every walk up the parent chain
+spun. Not the module named `py`, not the try/except fallback, not the ABC shim.
+
+- The alias arm asks the SOURCE unit for the class first (FindUClassInUnit),
+  and falls back to the flat lookup only for a name that unit re-exports.
+- Both parent assignments refuse a loop by name (PyParentWouldLoop), so a
+  base that resolves to the class itself is now
+  `class A would be its own ancestor`, not a hang. `class A(A)` with no prior
+  A, which CPython rejects with NameError, now gets that error too.
+
+html5lib (copied from a venv, 1.1): `_trie/py.py` and `_trie/__init__.py`
+compile in under 5 s, and a driver exercising keys(prefix),
+has_keys_with_prefix, longest_prefix, longest_prefix_item, len, [] and `in`
+prints exactly what CPython prints.
+
+Test test_nilpy_subclass_named_like_its_aliased_base.py (row alibase26,
+fixture test/nilpy_samename26), compile bounded by `timeout 60` in the row.
+The tree compiler before the fix times out on it (rc=124).
+
+Next wall for this file's importers: `import html5lib._trie` now runs
+html5lib/__init__ first (as CPython does), and that stops at html5parser's
+`from six import with_metaclass, viewkeys`, which the six shim does not
+serve. That is feature-b-module-shims-for-the-html5lib-corpus.

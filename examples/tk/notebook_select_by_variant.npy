@@ -1,0 +1,27 @@
+# ttk.Notebook.select with a VARIANT argument: an index read from JSON, and a
+# widget taken out of a list. The variant tied between select(Widget) and
+# select(int), the Widget overload won, and the index raised "expected an
+# object argument, got int". Expected = python3 under Xvfb.
+# bug-n-a-variant-argument-picks-the-class-overload-without-a-tag-test
+import json
+import tkinter as tk
+from tkinter import ttk
+
+root = tk.Tk()
+nb = ttk.Notebook(root)
+a = ttk.Frame(nb)
+b = ttk.Frame(nb)
+nb.add(a, text="A")
+nb.add(b, text="B")
+idx = json.loads('{"i": 1}').get("i", 0)
+nb.select(idx)
+print(nb.index("current"))
+nb.select(int(idx) - 1)
+print(nb.index("current"))
+tabs = [a, b]
+w = tabs[1]
+nb.select(w)
+print(nb.index("current"))
+nb.select(0)
+print(nb.index("current"))
+root.destroy()
