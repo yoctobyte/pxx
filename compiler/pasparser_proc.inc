@@ -5741,6 +5741,7 @@ var
   deferredCPath, deferredCContent, pasRefusedPath: AnsiString;
   deferredCIsHeader: Boolean;
   nsDir, nsName, nsProbe: AnsiString; nsIdx, nsFd: Integer; nsIsRegular: Boolean;   { namespace-package portions }
+  relProbe: AnsiString;   { the relative probe's file path: lo, or the dotted path }
 begin
   isCUnit := False;
   isCHeader := False;
@@ -5911,7 +5912,18 @@ begin
       constants" while the absolute `from html5lib.constants import ...` on the
       same tree resolved fine.
       bug-a-package-and-sibling-module-resolution-is-the-corpus-wall }
-    PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), lo, True,
+    { `from .inner.leaf import val`: a relative import whose module part is
+      itself DOTTED names a file under a subpackage, `<rel dir>/inner/leaf.py`.
+      The bare name here is the MANGLED one (`inner_leaf`), which names no
+      file, so the import failed with "no unit named inner_leaf" while
+      `from .inner import X` and the absolute `from pkg.inner.leaf import val`
+      both resolved. Only for a relative import: an absolute dotted path is
+      resolved from the package roots below, never from the importer's own
+      directory. }
+    relProbe := lo;
+    if (pyRelLevel >= 1) and pyDottedIsPath then
+      relProbe := PyDottedToRelPath(pyDotted);
+    PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), relProbe, True,
                        path, UnitContent);
     { A NAMESPACE PACKAGE -- a package directory with no `__init__` -- can be
       split across several roots, and CPython finds a relative import's
@@ -5942,7 +5954,7 @@ begin
         nsIdx := 0;
         while (Length(UnitContent) = 0) and (nsIdx < PasUnitDirCount) do
         begin
-          PyTryPackageSource(PasUnitDirs[nsIdx] + nsName + '/', lo, True,
+          PyTryPackageSource(PasUnitDirs[nsIdx] + nsName + '/', relProbe, True,
                              path, UnitContent);
           Inc(nsIdx);
         end;

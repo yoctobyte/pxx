@@ -3,7 +3,7 @@ slug: bug-n-an-unused-import-edge-makes-a-method-receive-an-instance-of-the-wron
 type: bug
 track: N
 prio: 75
-status: open
+status: done
 summary: "Adding an import of a name that is NEVER REFERENCED makes a method receive an instance of the WRONG CLASS as self — `from .world import Grid` in wind.py, with Grid unused, kills the demo with \"'World' object has no attribute 'flow'\" where flow is a field of Environment, so a World is arriving as self inside an Environment method. CPython runs the identical source. Same registration-order family as the import-closure ticket and the OPPOSITE direction — that one is FIXED by adding an edge, this one is CAUSED by adding one, which makes it a hazard for that ticket's own implementation."
 ---
 
@@ -72,3 +72,29 @@ tree. The demo is the artefact; the trigger is a one-line import.
 frames and the value parity intact — and a fixture pinning the general shape
 once the mechanism is known, since the general shape is what the closure ticket
 will exercise everywhere.
+
+## 2026-11-11: does not reproduce on latest -- closed
+
+Re-run against `latest` (latest-e1cf2db123, compiler 87c8620f85f0) on an
+unmodified copy of today's lekkerzeilen tree with exactly the trigger line
+added: `from .world import Grid` after `from .math3d import Vec3` in wind.py,
+Grid unused.
+
+- `--region roofs --shot x.png --for 10`, world loaded (the chart line prints):
+  no AttributeError, exit 0, end state `8.2 kn, heading 231 deg, heel -0.0 deg`.
+  CPython on the same source and arguments: `8.2 kn, heading 231 deg,
+  heel -0.0 deg`.
+- `--conform`: pixel columns identical to CPython's (only the PNG byte counts
+  differ, as they do without the import).
+
+Not bisected. The mechanism was never located, so this records that the
+symptom is gone on this tree, not why. The candidates are the class-registration
+and import-scope fixes since 2026-09-20 (among them today's unit-first from-import
+source lookup). The 250-frame run with a display was not done; the deterministic
+10 s shot is what was run.
+
+A LAYOUT NOTE for whoever re-runs a world shot: a pxx binary's `__file__` is
+the BINARY, and world.py finds the world at dirname(dirname(__file__))/world.
+So the binary must sit in `<dir>/bin/` with `<dir>/world` beside it, or the run
+silently falls back to open water and never reaches the code this ticket is
+about.

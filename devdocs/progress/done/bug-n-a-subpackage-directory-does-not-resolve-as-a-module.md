@@ -2,9 +2,9 @@
 track: N
 prio: 55
 type: bug
-blocked-by: [bug-a-a-python-module-s-identity-is-its-name-not-its-file]
+blocked-by: []
 summary: "`from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
-status: backlog
+status: done
 owner: frank2
 ---
 
@@ -226,3 +226,19 @@ named platform_gl` on HEAD and on pin v411 alike, while the absolute
 script sitting in the package directory the relative spelling works, so the
 variable is the importer being a -Fu module, consistent with "the relative
 form hands the resolver a name with no package prefix".
+
+## Closed 2026-11-11 -- the coverage this ticket stayed open for
+
+The blocker (done/bug-a-a-python-module-s-identity-is-its-name-not-its-file)
+fixed both symptoms: `from .inner import X` on a subpackage resolves, and the
+double-execution repro above runs `sub-init-ran` once. Re-measured today.
+
+The `.npy` coverage asked for above is now written, as a count, not an output
+comparison: test_nilpy_one_module_file_runs_once.py (row pkgonce26, fixture
+test/nilpy_pkgonce26). The module counts its own executions in a sibling that
+both spellings share (1, not 2), and `isinstance` holds across the relative
+and absolute spellings in both directions. Expected = python3. Passes on the
+tree compiler as well as the development one.
+
+The relative DOTTED form (`from .inner.leaf import val`) was a separate miss,
+fixed with bug-nilpy-importing-a-submodule-skips-the-package-init.

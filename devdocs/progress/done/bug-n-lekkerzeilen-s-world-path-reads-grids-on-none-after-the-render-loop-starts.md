@@ -18,7 +18,7 @@ track: N
 type: bug
 prio: 75
 owner: unassigned
-status: open
+status: done
 blocked-by:
   - bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
 
@@ -242,3 +242,25 @@ Filed as
 `bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state`
 (Track A, prio 85), which this ticket is blocked by. The helgrind/drd line
 above is retired: the instrument that answered it was reading the clone flags.
+
+## 2026-11-11 -- re-measured, does not reproduce; closed
+
+The re-measure the summary asked for, on `latest` (latest-e1cf2db123, compiler
+87c8620f85f0), with today's lekkerzeilen tree built `--threadsafe` (default
+optimisation), binary in `<dir>/bin/` beside `<dir>/world` so the world loads
+(a pxx binary's `__file__` is the binary; elsewhere the run silently falls
+back to open water):
+
+| run | pxx | CPython 3 |
+| --- | --- | --- |
+| `--region rijn --shot --for 60` | rc=0, `9.8 kn, heading 281 deg, heel +0.0 deg`, 76.4 s wall, 1.35 GB max RSS | `9.8 kn, heading 281 deg, heel +0.0 deg`, 39.9 s wall |
+| `--region roofs --shot --for 60` | rc=0, `8.3 kn, heading 231 deg`, 44.5 s, 0.50 GB | not run |
+
+No `.grids`-on-None, no malloc abort. The picture shows the Rhine corridor
+with banks, trees and buoys. The blocker (pxx threads sharing glibc's thread
+pointer) has been fixed on x86-64 since 2026-09-14. Not run under valgrind
+again. Nothing here is demonstrably open.
+
+The wall-clock column is NOT a perf claim: one run each, unpaired, and a shot
+renders frames as well as stepping. It is recorded because pxx was slower than
+CPython on this run, which is worth a proper measurement elsewhere.

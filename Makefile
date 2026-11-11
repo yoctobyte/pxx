@@ -1356,6 +1356,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_abscplx26 | diff -u test/test_nilpy_abs_of_a_complex_behind_a_variant.expected -
 	./$(COMPILER) test/test_nilpy_pyeval_reads_an_exponent_float_literal.py $(TESTTMP)/test_nilpy_pyexpflt26
 	$(TESTTMP)/test_nilpy_pyexpflt26 | diff -u test/test_nilpy_pyeval_reads_an_exponent_float_literal.expected -
+	./$(COMPILER) test/test_nilpy_property_call_spelling.py $(TESTTMP)/test_nilpy_propcall26
+	$(TESTTMP)/test_nilpy_propcall26 | diff -u test/test_nilpy_property_call_spelling.expected -
+	./$(COMPILER) test/test_nilpy_package_parents_init_first.py $(TESTTMP)/test_nilpy_pkgparent26
+	$(TESTTMP)/test_nilpy_pkgparent26 | diff -u test/test_nilpy_package_parents_init_first.expected -
+	./$(COMPILER) test/test_nilpy_one_module_file_runs_once.py $(TESTTMP)/test_nilpy_pkgonce26
+	$(TESTTMP)/test_nilpy_pkgonce26 | diff -u test/test_nilpy_one_module_file_runs_once.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

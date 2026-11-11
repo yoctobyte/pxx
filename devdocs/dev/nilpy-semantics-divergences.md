@@ -421,6 +421,35 @@ time", which reads as though the IMPORT fails. It does not; the USE does. The
 design point is real, the wall is one statement later than that phrasing
 implies, and the coordinator caught it by measuring the unused case.
 
+## A module's imports run before its own first statement (2026-11-11)
+
+A NilPy module is compiled as a unit, and a unit is initialised after every
+unit it uses. So all of a module's imports run before any of its own top-level
+statements, wherever the `import` lines sit:
+
+```python
+# m.py                       # main.py
+print("a")                   print("main start")
+import other   # prints "o"  import m
+print("b")                   print("main end")
+```
+
+| | output |
+| --- | --- |
+| CPython | `main start`, `a`, `o`, `b`, `main end` |
+| pxx | `o`, `a`, `b`, `main start`, `main end` |
+
+The values agree; only the ORDER of module-level side effects differs. A
+program that depends on code running before a later import (setting a flag
+that the imported module reads at its own top level, or printing a banner
+before a slow import) can observe it.
+
+Not fixed, and not a quick fix: it is the unit model itself. Parent packages
+ARE imported before their submodules (`import pkg.mod` runs pkg/__init__
+first, as CPython does), and that order holds because the parents are
+separate units imported ahead of the leaf.
+bug-nilpy-importing-a-submodule-skips-the-package-init
+
 ## `exec` binds, but injects no `__builtins__` key (2026-08-14)
 
 `exec(src, g, l)` now really does bind into `l` — it used to run and publish

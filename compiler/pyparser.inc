@@ -8913,6 +8913,126 @@ begin
                                     Tokens[eqAt + 1].SLen));
 end;
 
+function PyClsPropertyCallAt(nameIdx, stopIdx: Integer;
+                             out getIdx, setIdx: Integer): Boolean;
+{ `name = property(getter[, setter[, deleter[, doc]]])` in a class body: True,
+  with the token indices of the getter and setter identifiers (setIdx -1 when
+  absent or None).
+
+  The decorator spelling (@property) was always supported, but the CALL spelling
+  is the older one and real code still uses it -- html5lib's treebuilders write
+  `childNodes = property(getChildNodes, setChildNodes)`. It arrived as a class
+  ATTRIBUTE whose initialiser called a builtin that did not exist, and died with
+  `undefined variable (property)`. It is the same property the decorator makes:
+  registered by the member pre-pass with the named methods as its accessors.
+  bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name
+
+  PURELY SYNTACTIC, unlike PyClsMethodAliasTarget. The fieldsOnly pre-pass runs
+  before the methods exist, and it must agree with the full pass that this line
+  is not a field -- so the shape decides, and the accessor lookup happens only
+  where the property is registered. Only bare identifiers (and None) are
+  accepted as accessors; a lambda or an expression stays an attribute and
+  keeps its diagnostic. A trailing doc string literal is allowed and ignored. }
+var eqAt, k, argN: Integer;
+begin
+  Result := False;
+  getIdx := -1;
+  setIdx := -1;
+  eqAt := PyClsAttrEqIdx(nameIdx, stopIdx);
+  if eqAt < 0 then Exit;
+  k := eqAt + 1;
+  if (k + 2 >= stopIdx) or (Tokens[k].Kind <> tkIdent) or
+     (PyRawName(Tokens[k].SOffset, Tokens[k].SLen) <> 'property') or
+     (Tokens[k + 1].Kind <> tkLParen) then Exit;
+  k := k + 2;
+  argN := 0;
+  while (k < stopIdx) and (Tokens[k].Kind <> tkRParen) do
+  begin
+    if Tokens[k].Kind = tkNil then
+    begin
+      if argN = 0 then Exit;
+    end
+    else if Tokens[k].Kind = tkIdent then
+    begin
+      if argN = 0 then getIdx := k
+      else if argN = 1 then setIdx := k
+      else if argN > 2 then Exit;
+      { a deleter (argN = 2) is accepted and ignored: `del obj.x` on a
+        property is not a NilPy operation }
+    end
+    else if Tokens[k].Kind = tkString then
+    begin
+      if argN <> 3 then Exit;
+    end
+    else Exit;
+    Inc(argN);
+    Inc(k);
+    if (k < stopIdx) and (Tokens[k].Kind = tkComma) then Inc(k)
+    else if (k >= stopIdx) or (Tokens[k].Kind <> tkRParen) then Exit;
+  end;
+  if (k >= stopIdx) or (getIdx < 0) then Exit;
+  Inc(k);
+  if (k < stopIdx) and not (Tokens[k].Kind in [tkNewline, tkDedent, tkEOF]) then Exit;
+  Result := True;
+end;
+
+procedure PyAddClassPropertyCall(ci, nameIdx, stopIdx: Integer);
+{ Register the `name = property(g, s)` at nameIdx (see PyClsPropertyCallAt).
+
+  The accessors are NOT the named methods themselves but NON-VIRTUAL aliases
+  of their procs (`__pcall_get_<name>`, `__pcall_set_<name>`). property() is
+  handed the FUNCTION OBJECTS the class body sees at that line, so a subclass
+  that overrides `getV` does not change what `v` reads -- CPython answers
+  A.getV for B().v. Naming `getV` itself as the accessor would dispatch through
+  its VMT slot and call B's. The @property spelling is different: there the
+  property IS the override unit, and its virtual accessor is right. The read
+  and write lowering find an accessor with FindUMeth, which walks the parent
+  chain, so a subclass inherits these as it inherits any method. }
+var getIdx, setIdx, gmi, smi, pri, gProc, sProc: Integer;
+    nm, gnm, snm, acc: AnsiString;
+begin
+  if not PyClsPropertyCallAt(nameIdx, stopIdx, getIdx, setIdx) then Exit;
+  nm := PyRawName(Tokens[nameIdx].SOffset, Tokens[nameIdx].SLen);
+  gnm := PyRawName(Tokens[getIdx].SOffset, Tokens[getIdx].SLen);
+  gmi := FindUMeth(ci, gnm);
+  if gmi < 0 then
+    Error('Nil Python: property(' + gnm + '): ' + gnm +
+          ' is not a method of this class defined above it');
+  { read the procs BEFORE AddUMeth, which may relocate this class's method
+    window and leave gmi/smi naming different rows }
+  gProc := UMthProc_[gmi];
+  sProc := -1;
+  if setIdx >= 0 then
+  begin
+    snm := PyRawName(Tokens[setIdx].SOffset, Tokens[setIdx].SLen);
+    smi := FindUMeth(ci, snm);
+    if smi < 0 then
+      Error('Nil Python: property(..., ' + snm + '): ' + snm +
+            ' is not a method of this class defined above it');
+    sProc := UMthProc_[smi];
+  end;
+  pri := FindUProp(ci, nm);
+  if pri < 0 then
+  begin
+    pri := AddUProperty(ci, StoredName(nm), Length(nm),
+                        Ord(Procs[gProc].RetType), ProcRetRecId[gProc]);
+    UPropPub[pri] := 1;
+  end;
+  acc := '__pcall_get_' + nm;
+  AddUMeth(ci, StoredName(acc), Length(acc), gProc);
+  UPropReadMOff[pri] := StoredName(acc);
+  UPropReadMLen[pri] := Length(acc);
+  UPropTk[pri] := Ord(Procs[gProc].RetType);
+  UPropRec[pri] := ProcRetRecId[gProc];
+  if sProc >= 0 then
+  begin
+    acc := '__pcall_set_' + nm;
+    AddUMeth(ci, StoredName(acc), Length(acc), sProc);
+    UPropWriteMOff[pri] := StoredName(acc);
+    UPropWriteMLen[pri] := Length(acc);
+  end;
+end;
+
 procedure PyAddClassMethodAlias(ci, nameIdx, stopIdx: Integer);
 { Register the alias at nameIdx as a real method of ci sharing its target's
   proc. Called by the member pre-pass only; the class body's own branch just
@@ -27901,22 +28021,42 @@ procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever 
 
   Extracted rather than copied a third time (normalise-dont-special-case): the
   copies had already diverged once, in the direction of doing nothing. }
-function PyBindImportUnitAlias(const realKey: AnsiString): Boolean;
-var aStrIdx, realStrIdx: Integer;
+procedure PyAddImportUnitAlias(const aliasName, realKey: AnsiString);
+{ Bind the Python name `aliasName` to the unit `realKey` names, through the
+  unit-alias table. The target is stored RESOLVED: whatever unit realKey
+  answers to NOW, not realKey itself.
+
+  Stored unresolved, the table could close a CYCLE. A module's identity is its
+  file, so a module first reached by a relative import is compiled under its
+  BARE name (`leaf`), and a later absolute spelling of the same file only adds
+  `pkg_inner_leaf -> leaf`. Then `from pkg.inner import leaf` bound
+  `leaf -> pkg_inner_leaf`, which leads back to itself. FindUnitOrAlias chased
+  the loop to its bound and answered a name no unit was compiled under, and
+  the first `leaf.val()` said "no member val came of the qualifier leaf".
+  Resolved first, that binding is `leaf -> leaf`, which binds nothing new and
+  is skipped -- the name already names that unit. }
+var aStrIdx, realStrIdx, u: Integer;
 begin
-  Result := False;
-  if not PyIsIdent('as') then Exit;
-  Next;
-  if CurTok.Kind <> tkIdent then
-    Error('Nil Python: expected a name after `as` in an import');
-  aStrIdx := InternStr(LowerCase(CurTok.SVal));
-  realStrIdx := InternStr(LowerCase(realKey));
+  aStrIdx := InternStr(LowerCase(aliasName));
+  u := FindUnitOrAlias(realKey);
+  if u >= 0 then realStrIdx := InternStr(LowerCase(Strs[u].Text))
+  else realStrIdx := InternStr(LowerCase(realKey));
   if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
   begin
     UnitAliasName[UnitAliasCount] := aStrIdx;
     UnitAliasReal[UnitAliasCount] := realStrIdx;
     Inc(UnitAliasCount);
   end;
+end;
+
+function PyBindImportUnitAlias(const realKey: AnsiString): Boolean;
+begin
+  Result := False;
+  if not PyIsIdent('as') then Exit;
+  Next;
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: expected a name after `as` in an import');
+  PyAddImportUnitAlias(CurTok.SVal, realKey);
   Next;
   Result := True;
 end;
@@ -49333,6 +49473,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     ownBS, ownBE, mixIx: Integer;  { the span loop — own body, then each flattened base }
     dcCmp: Integer;   { @dataclass(order=True): 0=lt 1=le 2=gt 3=ge }
     inMixin: Boolean;
+    propGi, propSi: Integer;   { PyClsPropertyCallAt outs, unused here }
     caVal: Integer;   { class-attribute initialiser token, past any annotation }
     caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
@@ -49409,6 +49550,16 @@ begin
             PyMixSkipHas(GetTokenStr(i)) then
     begin
       { same, for a class ATTRIBUTE the derived class redefines }
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            PyClsPropertyCallAt(i, bodyEnd, propGi, propSi) then
+    begin
+      { `name = property(g, s)` -- a PROPERTY, not an attribute: registered
+        in the full pass, stepped over in both. See PyClsPropertyCallAt. }
+      if not fieldsOnly then PyAddClassPropertyCall(ci, i, bodyEnd);
       while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
     end
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
@@ -52392,7 +52543,7 @@ begin
 end;
 
 procedure PyParseClass(isDC: Boolean);
-var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
+var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt, propGi, propSi: Integer;
     realBases, baseDepth, baseQUnit, parentIx: Integer;
     baseCiList: array[0..6] of Integer;
     baseAtTok: array[0..6] of Integer;
@@ -52885,7 +53036,8 @@ begin
         disagreed, one of them would leave a method registered whose body the
         other evaluates as a variable.
         bug-n-a-class-body-cannot-alias-a-method-defined-above-it }
-      if PyClsMethodAliasTarget(TokPos - 1, TokCount, ci) >= 0 then
+      if (PyClsMethodAliasTarget(TokPos - 1, TokCount, ci) >= 0) or
+         PyClsPropertyCallAt(TokPos - 1, TokCount, propGi, propSi) then
       begin
         while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
         PySkipNewlines;
@@ -53259,6 +53411,75 @@ end;
   pylib/pyeval/builtin units, the `mimic_` re-entry inside the resolver — stay
   on the bare call on purpose: they are not import statements and must keep
   resolving under the unchanged Pascal rules. }
+{ Is there a package `__init__` on disk for the ABSOLUTE dotted name `dotted`,
+  under the roots an absolute dotted import resolves from (the main script's
+  directory, the working directory, the -Fu roots -- ResolveUsesUnitSource's
+  order)? Asked by PyImportPackageParents, which must not pull a prefix that
+  is only a shim's spelling: `xml.dom.minidom` has no `xml/__init__.py`. }
+function PyPackageInitOnDisk(const dotted: AnsiString): Boolean;
+var rel: AnsiString; i: Integer;
+begin
+  rel := PyDottedToRelPath(dotted);
+  Result := PySourceExists(SourceFileDir + rel + '/__init__.py') or
+            PySourceExists(SourceFileDir + rel + '/__init__.npy') or
+            PySourceExists(rel + '/__init__.py') or
+            PySourceExists(rel + '/__init__.npy');
+  i := 0;
+  while (not Result) and (i < PasUnitDirCount) do
+  begin
+    Result := PySourceExists(PasUnitDirs[i] + rel + '/__init__.py') or
+              PySourceExists(PasUnitDirs[i] + rel + '/__init__.npy');
+    Inc(i);
+  end;
+end;
+
+{ `import pkg.sub.mod` (and `from pkg.sub.mod import x`) runs pkg/__init__.py,
+  then pkg/sub/__init__.py, then mod -- CPython imports every parent package
+  first, and a package's `__init__` is where its module-level state, registry
+  population and re-exports live. pxx compiled only the leaf, so the parents'
+  bodies never ran and their names were unreachable (`pkg.TOP` after
+  `import pkg.mod` was "undefined variable (pkg)").
+  bug-nilpy-importing-a-submodule-skips-the-package-init
+
+  Each prefix is imported exactly as `import <prefix>` would be, BEFORE the
+  leaf, so unit initialisation runs parents first. Only a prefix with an
+  `__init__` on disk is pulled: a namespace package has no body to run, and a
+  dotted name a shim answers (`xml.dom.minidom` -> mimic_xml_dom_minidom) has
+  no package directory at all. A relative import's parents are the importing
+  package itself, already initialising, so only level 0 asks. }
+procedure PyImportPackageParents(const name: AnsiString);
+var dotted, prefix, savedLang: AnsiString; level, k, savedCUC: Integer;
+    savedMissed: Boolean;
+begin
+  dotted := PyDottedImport;
+  level := PyRelativeLevel;
+  if (level <> 0) or (Pos('.', dotted) = 0) then Exit;
+  if PyDottedMangled(dotted) <> LowerCase(name) then Exit;
+  savedLang := PyImportLang;
+  savedMissed := SoftUnitMissed;
+  for k := 1 to Length(dotted) do
+    if dotted[k] = '.' then
+    begin
+      prefix := Copy(dotted, 1, k - 1);
+      if PyPackageInitOnDisk(prefix) then
+      begin
+        PyDottedImport := prefix;
+        PyRelativeLevel := 0;
+        PyImportLang := 'py';
+        savedCUC := CompiledUnitCount;
+        SoftUnitMissed := False;
+        ParseUsesUnit(PyDottedMangled(prefix));
+        { a parent's OWN guarded imports may soft-miss; that is not this
+          import's miss (the same leak PyParseImportUnitAs guards below) }
+        if CompiledUnitCount > savedCUC then SoftUnitMissed := False;
+        SoftUnitMissed := savedMissed or SoftUnitMissed;
+      end;
+    end;
+  PyDottedImport := dotted;
+  PyRelativeLevel := level;
+  PyImportLang := savedLang;
+end;
+
 procedure PyParseImportUnitAs(const name, lang: AnsiString);
 var savedCUC: Integer;
 begin
@@ -53325,6 +53546,7 @@ begin
     CompiledUnitCount on that path, so a unit that was actually compiled is
     distinguishable: the count went UP. An already-compiled unit exits early,
     writes nothing, and correctly leaves the flag clear. }
+  if lang = 'py' then PyImportPackageParents(name);
   PyImportLang := lang;
   savedCUC := CompiledUnitCount;
   SoftUnitMissed := False;
@@ -53978,13 +54200,7 @@ begin
             PyDottedImport := impDotted + '.' + impReal;
             PyRelativeLevel := impLevel;
             PyParseImportUnit(subKey);
-            if (UnitAliasCount < MAX_UNIT_ALIASES) and
-               (LowerCase(impAlias) <> LowerCase(subKey)) then
-            begin
-              UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
-              UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(subKey));
-              Inc(UnitAliasCount);
-            end;
+            PyAddImportUnitAlias(impAlias, subKey);
             if impParen then PySkipNewlines;
             if not Eat(tkComma) then Break;
             if impParen then PySkipNewlines;

@@ -4,7 +4,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-08-30
 summary: "@property compiles and works, but `property` as a plain builtin NAME does not exist: `v = property(getter)` and `v = property(getter, setter)` both give `undefined variable (property)`. Real CPython code uses the callable form for read/write properties, because @property.setter needs the decorator pair and the two-arg call is the older, shorter spelling. Blocks html5lib's treebuilders/base.py:321 and therefore the whole dom treebuilder."
 ---
@@ -98,3 +98,29 @@ success that the object exists.
 Setter behaviour is untested here because the callable form never compiles —
 whoever fixes it should assert `c.v = 7; c.v == 7` by value, not just that the
 form compiles.
+
+## Resolution (2026-11-11)
+
+Not a builtin `property` object: the class-body line `name = property(...)` is
+recognised by its SHAPE (PyClsPropertyCallAt) and registered by the member
+pre-pass as the same kind of property @property makes (PyAddClassPropertyCall).
+The class body steps over the line, the way it steps over a method alias.
+
+- Accepted: `property(getter)`, `property(getter, setter)`, `None` in the setter
+  slot, a deleter (ignored; `del obj.x` is not a NilPy operation) and a doc
+  string literal. The accessors must be bare names of methods defined above the
+  line; anything else (a lambda, an expression) stays an attribute and keeps its
+  old diagnostic.
+- The accessors are non-virtual aliases of the named methods' procs
+  (`__pcall_get_<name>`, `__pcall_set_<name>`). property() captures the
+  function objects at that line, so a subclass overriding the getter does NOT
+  change what the property reads. CPython gives A's getter for B().v, and so
+  does NilPy now. Naming the method itself as the accessor would have
+  dispatched through its VMT slot.
+- `property` used anywhere else as a value (passed, stored, subclassed) is
+  still undefined.
+
+Test test_nilpy_property_call_spelling.py (row propcall26), expected = python3:
+read/write and read-only properties, inheritance, the override case above, and
+this ticket's own repro. html5lib is not vendored in this tree, so base.py:321
+itself was not compiled here.
