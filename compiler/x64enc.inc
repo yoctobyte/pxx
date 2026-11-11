@@ -67,6 +67,16 @@ begin
           + ' prefix that encodes one makes the other unspellable');
 end;
 
+{ An INDEX register for the next memory operand, set only by the text
+  assembler (asmtext.inc) while it encodes one `[base+index*scale+disp]` line,
+  and reset to -1 straight after. Typed codegen never sets it, so for every
+  other caller EncModRMMem and the two REX builders behave exactly as before.
+  Module state rather than a parameter because 23 encoders sit between the
+  operand parser and EncModRMMem, and only this one path needs it. }
+var
+  EncMemIndex: Integer = -1;
+  EncMemScale: Integer = 0;     { the SIB scale field: 0..3 for *1 *2 *4 *8 }
+
 procedure EncPrefixAndREX(size: Integer; regField, rmReg: Integer; force: Boolean);
 var
   w, r, x, b, rex: Integer;
@@ -80,10 +90,10 @@ begin
   if size = 2 then EncB($66);
   w := 0; if size = 8 then w := 1;
   r := 0; if regField >= 8 then r := 1;
-  x := 0;
+  x := 0; if EncMemIndex >= 8 then x := 1;
   b := 0; if (rmReg >= 8) then b := 1;
   
-  if (w <> 0) or (r <> 0) or (b <> 0) or force or 
+  if (w <> 0) or (r <> 0) or (x <> 0) or (b <> 0) or force or 
      ((size = 1) and (((regField >= 4) and (regField <= 7)) or ((rmReg >= 4) and (rmReg <= 7)))) then
   begin
     rex := $40 or (w shl 3) or (r shl 2) or (x shl 1) or b;
@@ -96,7 +106,7 @@ end;
   8-bit *register operand* (regField when regIsByteOperand), never to the memory
   base register — a base in 4..7 (rsp/rbp/rsi/rdi) must NOT pull in a REX. }
 procedure EncPrefixAndREXMem(size, regField, baseReg: Integer; regIsByteOperand: Boolean);
-var w, r, b, rex: Integer;
+var w, r, x, b, rex: Integer;
 begin
   { the memory-operand twin of the rule above — `movb %ah,(%rbx)` reaches here
     rather than EncPrefixAndREX, and needs REX suppressed for the same reason.
@@ -111,11 +121,12 @@ begin
   if size = 2 then EncB($66);
   w := 0; if size = 8 then w := 1;
   r := 0; if regField >= 8 then r := 1;
+  x := 0; if EncMemIndex >= 8 then x := 1;
   b := 0; if baseReg >= 8 then b := 1;
-  if (w <> 0) or (r <> 0) or (b <> 0) or
+  if (w <> 0) or (r <> 0) or (x <> 0) or (b <> 0) or
      (regIsByteOperand and (regField >= 4) and (regField <= 7)) then
   begin
-    rex := $40 or (w shl 3) or (r shl 2) or b;
+    rex := $40 or (w shl 3) or (r shl 2) or (x shl 1) or b;
     EncB(rex);
   end;
 end;
@@ -132,7 +143,14 @@ var
 begin
   needsSIB := (baseReg and 7) = 4; { RSP or R12 }
   
-  if needsSIB then
+  if EncMemIndex >= 0 then
+  begin
+    { [base + index*scale]: rm=100 names the SIB byte, which carries both }
+    needsSIB := True;
+    rmVal := 4;
+    sibVal := (EncMemScale shl 6) or ((EncMemIndex and 7) shl 3) or (baseReg and 7);
+  end
+  else if needsSIB then
   begin
     rmVal := 4;
     sibVal := $24; { scale=0, index=4 (none), base=4 }
@@ -435,7 +453,11 @@ end;
 
 procedure EncALUImm(size, destReg: Integer; immVal: Int64; ext: Integer);
 begin
-  EncPrefixAndREX(size, ext, destReg, False);
+  { ext is the /digit, not a register: passing it as regField made the
+    byte-size "spl..dil need a REX" rule fire for and/sub/xor/cmp (ext 4..7),
+    so `cmp al, 0x30` came out 40 80 F8 30 -- a byte longer than 80 F8 30 and
+    meaning the same. Only destReg can need REX here. }
+  EncPrefixAndREX(size, 0, destReg, False);
   if size = 1 then
   begin
     EncB($80);

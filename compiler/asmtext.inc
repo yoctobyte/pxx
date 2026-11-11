@@ -123,6 +123,18 @@ var i, n: Integer; neg: Boolean; v: Int64; c: Char; d: Integer; hex: Boolean;
 begin
   v := 0; neg := False; hex := False;
   n := Length(s);
+  { bitwise NOT, `~0x6000`, as GNU as and NASM both take it }
+  if (n >= 2) and (AsmTextCharAt(s, 1) = '~') then
+  begin
+    Result := not AsmTextParseInt(AsmTextSlice(s, 2, n - 1));
+    Exit;
+  end;
+  { a character literal, 'c': its code, as in NASM (`cmp al, '0'`) }
+  if (n = 3) and (AsmTextCharAt(s, 1) = '''') and (AsmTextCharAt(s, 3) = '''') then
+  begin
+    Result := Ord(s[2]);
+    Exit;
+  end;
   i := 1;
   if (i <= n) and (AsmTextCharAt(s, i) = '-') then begin neg := True; Inc(i); end;
   if (i + 1 <= n) and (AsmTextCharAt(s, i) = '0') and (AsmTextLower(AsmTextCharAt(s, i+1)) = 'x') then
@@ -135,7 +147,7 @@ begin
     d := -1;
     if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
     else if hex and (c >= 'a') and (c <= 'f') then d := 10 + Ord(c) - Ord('a')
-    else Error('EmitAsmX64: bad integer literal');
+    else Error('EmitAsmX64: bad integer literal ''' + s + '''');
     if hex then v := v * 16 + d else v := v * 10 + d;
     Inc(i);
   end;
@@ -196,7 +208,9 @@ end;
   (add0 or1 adc2 sbb3 and4 sub5 xor6 cmp7). }
 procedure AsmEncAluMemImm(ext, size, baseReg, disp: Integer; imm: Int64);
 begin
-  EncPrefixAndREX(size, ext, baseReg, False);
+  { the MEMORY-operand REX rule: a byte op on [rsi] needs no REX (the register
+    rule would force one for "sil", which is not an operand here) }
+  EncPrefixAndREXMem(size, ext, baseReg, False);
   if size = 1 then
   begin
     EncB($80); EncModRMMem(ext, baseReg, disp, False); EncB(Integer(imm) and $FF);
@@ -211,18 +225,59 @@ begin
   end;
 end;
 
+{ Position of a `gs:` / `fs:` segment override in an operand list, 0 if none.
+  Only a segment name directly followed by ':' counts, so a register such as
+  `fs` never appears in this syntax by accident. }
+function AsmTextSegAt(const s: AnsiString): Integer;
+var i: Integer; c: Char;
+begin
+  Result := 0;
+  for i := 1 to Length(s) - 2 do
+    if (s[i + 2] = ':') and ((s[i + 1] = 's') or (s[i + 1] = 'S')) then
+    begin
+      c := AsmTextLower(s[i]);
+      if (c = 'g') or (c = 'f') then
+        if (i = 1) or AsmTextIsSpace(s[i - 1]) or (s[i - 1] = ',') then
+        begin
+          Result := i;
+          Exit;
+        end;
+    end;
+end;
+
 { Absolute-address r/m: ModRM mod=00 rm=100 + SIB=$25 (no base/index, disp32)
-  followed by a 4-byte relocation. kind 3 = glob (BSS), 4 = data. The r/m form
+  followed by a 4-byte relocation, or for kind 5 by the plain disp32 -- the
+  `gs:[8*k]` thread-block slots address memory this way, relative to the
+  segment base and with nothing to relocate. kind 3 = glob (BSS), 4 = data. The r/m form
   the atomic mutex slot and zeroing store use ([@glob]). }
 procedure AsmEncAbsRM(regField, kind, off: Integer);
 begin
   EncB(((regField and 7) shl 3) or 4);
   EncB($25);
-  if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
+  if kind = 5 then EncI32(off)
+  else if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
+end;
+
+{ A register HOLE: `%r64` / `%r32` / `%r16` / `%r8` stands for the register
+  whose number (0..15, the encoder's numbering) is the next int element. For
+  codegen that picks its register at compile time -- `shl %r64, %` with the
+  register and the count both bound -- which raw code spelled as arithmetic on
+  an opcode byte (`EmitB($E0 + reg)`). Result = the size in bytes, 0 if `op` is
+  not a register hole. }
+function AsmTextRegHoleSize(const op: AnsiString): Integer;
+begin
+  Result := 0;
+  if (Length(op) < 3) or (AsmTextCharAt(op, 1) <> '%') then Exit;
+  if AsmTextLower(AsmTextCharAt(op, 2)) <> 'r' then Exit;
+  if CaseEqual(op, '%r64') then Result := 8
+  else if CaseEqual(op, '%r32') then Result := 4
+  else if CaseEqual(op, '%r16') then Result := 2
+  else if CaseEqual(op, '%r8') then Result := 1;
 end;
 
 { Classify one operand text. Returns kind via Result: 0=register, 1=immediate,
-  2=memory [base+disp], 3=absolute [@glob], 4=absolute [@data]. Fills the
+  2=memory [base+disp], 3=absolute [@glob], 4=absolute [@data], 5=absolute
+  numeric [disp32] (kinds >= 3 all encode through AsmEncAbsRM). Fills the
   relevant out params (regSize doubles as the
   explicit memory-operand size for kind 2, 0 if unspecified). `%` immediates/
   disps pull the next value from holes[] via holeCur. }
@@ -269,6 +324,23 @@ begin
       Exit;
     end;
 
+    { absolute numeric r/m: [%] / [0x10] -- a bare disp32, kind 5. On its own it
+      is an absolute address; behind a `gs:` / `fs:` (AsmTextLine strips the
+      segment and emits its prefix) it is an offset into the thread block. }
+    if (inner = '%') or
+       ((AsmTextCharAt(inner, 1) >= '0') and (AsmTextCharAt(inner, 1) <= '9')) then
+    begin
+      if AsmTextCharAt(inner, 1) = '%' then
+      begin
+        memDisp := Integer(holes[holeCur]); Inc(holeCur);
+      end
+      else
+        memDisp := Integer(AsmTextParseInt(inner));
+      regSize := memSize;
+      Result := 5;
+      Exit;
+    end;
+
     { split on + or - }
     dispStr := ''; sign := 1;
     i := 1;
@@ -281,10 +353,59 @@ begin
       Inc(i);
       dispStr := AsmTextSlice(inner, i, Length(inner) - i + 1);
     end;
+    { an INDEX term right after the base: `+ index` or `+ index*scale`, then
+      the displacement (if any) as before. Hands the index to EncModRMMem
+      through EncMemIndex, which AsmTextLineMemo resets after the line. }
+    if (sign = 1) and (Length(dispStr) > 0) then
+    begin
+      p := 1;
+      while (p <= Length(dispStr)) and AsmTextIsSpace(AsmTextCharAt(dispStr, p)) do Inc(p);
+      i := p;
+      while (i <= Length(dispStr)) and (AsmTextCharAt(dispStr, i) <> '+') and
+            (AsmTextCharAt(dispStr, i) <> '-') and (AsmTextCharAt(dispStr, i) <> '*') do Inc(i);
+      firstWord := AsmTextTrim(AsmTextSlice(dispStr, p, i - p));
+      n := -1;
+      if AsmTextRegHoleSize(firstWord) = 8 then
+      begin
+        n := Integer(holes[holeCur]); Inc(holeCur);
+      end
+      else if not AsmRegNum(firstWord, n, dummySize) then n := -1;
+      if n >= 0 then
+      begin
+        if (n and 15) = 4 then Error('EmitAsmX64: rsp cannot be an index register');
+        EncMemIndex := n;
+        EncMemScale := 0;
+        if AsmTextCharAt(dispStr, i) = '*' then
+        begin
+          Inc(i);
+          case AsmTextCharAt(dispStr, i) of
+            '1': EncMemScale := 0;
+            '2': EncMemScale := 1;
+            '4': EncMemScale := 2;
+            '8': EncMemScale := 3;
+          else Error('EmitAsmX64: index scale must be 1, 2, 4 or 8');
+          end;
+          Inc(i);
+          while (i <= Length(dispStr)) and AsmTextIsSpace(AsmTextCharAt(dispStr, i)) do Inc(i);
+        end;
+        { what follows the index is the displacement, with its own sign }
+        if i <= Length(dispStr) then
+        begin
+          if AsmTextCharAt(dispStr, i) = '-' then sign := -1;
+          dispStr := AsmTextSlice(dispStr, i + 1, Length(dispStr) - i);
+        end
+        else
+          dispStr := '';
+      end;
+    end;
     { trim base }
     while AsmTextIsSpace(AsmTextCharAt(baseStr, Length(baseStr))) do
       baseStr := AsmTextSlice(baseStr, 1, Length(baseStr) - 1);
-    if not AsmRegNum(baseStr, memBase, dummySize) then
+    if AsmTextRegHoleSize(baseStr) = 8 then
+    begin
+      memBase := Integer(holes[holeCur]); Inc(holeCur);
+    end
+    else if not AsmRegNum(baseStr, memBase, dummySize) then
       Error('EmitAsmX64: bad memory base register');
     { trim disp }
     while AsmTextIsSpace(AsmTextCharAt(dispStr, 1)) do
@@ -296,7 +417,7 @@ begin
       memDisp := Integer(holes[holeCur]) * sign; Inc(holeCur);
     end
     else if AsmRegNum(dispStr, dummySize, dummySize) then
-      Error('EmitAsmX64: [base+index-register] (SIB) addressing not supported — write it as raw EmitB')
+      Error('EmitAsmX64: a second index register; write [base+index*scale+disp]')
     else
       memDisp := Integer(AsmTextParseInt(dispStr)) * sign;
     regSize := memSize;   { explicit operand size, 0 if unspecified }
@@ -307,6 +428,16 @@ begin
   { register }
   if AsmRegNum(op, regNum, regSize) then
   begin
+    Result := 0;
+    Exit;
+  end;
+  { register hole }
+  dummySize := AsmTextRegHoleSize(op);
+  if dummySize > 0 then
+  begin
+    regNum := Integer(holes[holeCur]); Inc(holeCur);
+    if (regNum < 0) or (regNum > 15) then Error('EmitAsmX64: register hole out of range');
+    regSize := dummySize;
     Result := 0;
     Exit;
   end;
@@ -365,6 +496,7 @@ var
   haveOps: Boolean;
 begin
   holeCur := 0;
+  EncMemIndex := -1;
   n := Length(line);
   { skip leading spaces }
   i := 1;
@@ -378,6 +510,21 @@ begin
   { rest = operands, trimmed once here rather than by each arm below }
   rest := AsmTextTrim(AsmTextSlice(line, i, n - i + 1));
   haveOps := Length(rest) > 0;
+
+  { Segment override, written on the memory operand as `gs:[...]` / `fs:[...]`.
+    The prefix byte goes out FIRST -- before any 66/REX the encoder writes --
+    and the operand is then parsed without it, so every form that takes memory
+    takes a segment for free. One per line; the bytes are what `mov rax,
+    gs:[%]` has always been by hand: 65 48 8B 04 25 disp32. }
+  if haveOps then
+  begin
+    k0 := AsmTextSegAt(rest);
+    if k0 > 0 then
+    begin
+      if AsmTextLower(rest[k0]) = 'g' then EncB($65) else EncB($64);
+      rest := AsmTextSlice(rest, 1, k0 - 1) + AsmTextSlice(rest, k0 + 3, Length(rest) - k0 - 2);
+    end;
+  end;
 
   { The zero-operand forms — reachable ONLY when the line carries no operands,
     so the whole chain is skipped for the ~90% of lines that do. It used to run
@@ -413,16 +560,32 @@ begin
   if CaseEqual(mnem, 'rdtsc')  then begin EncB($0F); EncB($31); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin x64_movsb; Exit; end;
+  if CaseEqual(mnem, 'cld') then begin EncB($FC); Exit; end;
+  if CaseEqual(mnem, 'std') then begin EncB($FD); Exit; end;
+  if CaseEqual(mnem, 'stosq') then begin EncB($48); EncB($AB); Exit; end;
+  if CaseEqual(mnem, 'movsq') then begin EncB($48); EncB($A5); Exit; end;
   if CaseEqual(mnem, 'stosb') then begin x64_stosb; Exit; end;
   Error('EmitAsmX64: unknown 0-operand mnemonic');
   end;
 
   { rep prefix: `rep movsb` / `rep stosb` (rest holds the string op) }
+  { repe/repz/repne/repnz + a string op: F3 / F2, then the op's own bytes }
+  if CaseEqual(mnem, 'repe') or CaseEqual(mnem, 'repz') or
+     CaseEqual(mnem, 'repne') or CaseEqual(mnem, 'repnz') then
+  begin
+    if CaseEqual(mnem, 'repe') or CaseEqual(mnem, 'repz') then EncB($F3) else EncB($F2);
+    if CaseEqual(rest, 'cmpsb') then begin EncB($A6); Exit; end;
+    if CaseEqual(rest, 'scasb') then begin EncB($AE); Exit; end;
+    Error('EmitAsmX64: unsupported repe/repne string op: ' + line);
+  end;
+
   if CaseEqual(mnem, 'rep') then
   begin
     if CaseEqual(rest, 'movsb') then begin x64_rep_movsb; Exit; end;
     if CaseEqual(rest, 'stosb') then begin x64_rep_stosb; Exit; end;
-    Error('EmitAsmX64: unsupported rep string op');
+    if CaseEqual(rest, 'stosq') then begin EncB($F3); EncB($48); EncB($AB); Exit; end;
+    if CaseEqual(rest, 'movsq') then begin EncB($F3); EncB($48); EncB($A5); Exit; end;
+    Error('EmitAsmX64: unsupported rep string op: ' + line);
   end;
 
   { lock prefix: `lock xchg ...` etc — emit F0, then assemble the rest as a
@@ -451,6 +614,38 @@ begin
     AsmTextOperand also trims, so this is harmless for the operand path. }
   op0 := AsmTextTrim(op0);
   op1 := AsmTextTrim(op1);
+
+  { three-operand imul: `imul dst, src, imm` -- 6B /r ib when the immediate
+    fits a signed byte, else 69 /r id. The only three-operand form x86-64
+    integer code has, so it is split off here rather than in the general
+    two-operand parser. }
+  if CaseEqual(mnem, 'imul') then
+  begin
+    commaPos := 0;
+    for i := 1 to Length(op1) do
+      if (op1[i] = ',') and (commaPos = 0) then commaPos := i;
+    if commaPos > 0 then
+    begin
+      rest := AsmTextTrim(AsmTextSlice(op1, commaPos + 1, Length(op1) - commaPos));
+      op1 := AsmTextTrim(AsmTextSlice(op1, 1, commaPos - 1));
+      if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+        Error('EmitAsmX64: imul dst must be a register');
+      if AsmTextOperand(op1, holes, holeCur, r1, s1, mb1, md1, imm1) <> 0 then
+        Error('EmitAsmX64: three-operand imul takes a register source (this slice)');
+      if AsmTextOperand(rest, holes, holeCur, k0, k1, mb0, md0, imm0) <> 1 then
+        Error('EmitAsmX64: imul third operand must be an immediate');
+      EncPrefixAndREX(s0, r0, r1, False);
+      if (imm0 >= -128) and (imm0 <= 127) then
+      begin
+        EncB($6B); EncModRMReg(r0, r1); EncB(Integer(imm0) and $FF);
+      end
+      else
+      begin
+        EncB($69); EncModRMReg(r0, r1); EncI32(imm0);
+      end;
+      Exit;
+    end;
+  end;
 
   { single-operand: push / pop }
   if CaseEqual(mnem, 'push') then
@@ -482,14 +677,14 @@ begin
       if s0 = 1 then EncB($FE) else EncB($FF);
       EncModRMMem(i, mb0, md0, False);
     end
-    else if (k0 = 3) or (k0 = 4) then
+    else if k0 >= 3 then
     begin
       if s0 = 0 then Error('EmitAsmX64: inc/dec [@glob]/[@data] needs an explicit size (byte/dword/qword)');
       EncPrefixAndREX(s0, i, 0, False);
       if s0 = 1 then EncB($FE) else EncB($FF);
       AsmEncAbsRM(i, k0, md0);
     end
-    else Error('EmitAsmX64: unsupported inc/dec form');
+    else Error('EmitAsmX64: unsupported inc/dec form: ' + line);
     Exit;
   end;
 
@@ -523,6 +718,22 @@ begin
     EncPrefixAndREX(s0, i, r0, False);
     EncB($0F); EncB($C7);
     EncModRMReg(i, r0);
+    Exit;
+  end;
+
+  { jmp reg / jmp qword [base+disp] (FF /4). Reaches here only for those: the
+    driver sends label and @code jumps down its own path. }
+  if CaseEqual(mnem, 'jmp') then
+  begin
+    k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
+    if k0 = 0 then x64_jmp_reg(r0)
+    else if k0 = 2 then
+    begin
+      EncPrefixAndREXMem(4, 4, mb0, False);   { no REX.W: FF /4 is 64-bit by default }
+      EncB($FF);
+      EncModRMMem(4, mb0, md0, False);
+    end
+    else Error('EmitAsmX64: jmp takes a label, @code, a register or [mem]');
     Exit;
   end;
 
@@ -607,11 +818,33 @@ begin
   if CaseEqual(mnem, 'imul') then
   begin
     if (k0 = 0) and (k1 = 0) then x64_imul_reg_reg(s0, r0, r1)
-    else Error('EmitAsmX64: unsupported imul form');
+    else if (k0 = 0) and (k1 = 2) then
+    begin
+      EncPrefixAndREXMem(s0, r0, mb1, False);   { imul r, [mem]: 0F AF /r }
+      EncB($0F); EncB($AF);
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else Error('EmitAsmX64: unsupported imul form: ' + line);
     Exit;
   end;
 
   { movzx / movsx reg, reg|mem }
+  { movsxd r64, r32 / dword [mem]: 63 /r with REX.W. A memory source goes
+    through the same prefix+ModRM pair as every other r,[m] form. }
+  if CaseEqual(mnem, 'movsxd') then
+  begin
+    if k0 <> 0 then Error('EmitAsmX64: movsxd dest must be a register: ' + line);
+    if k1 = 0 then x64_movx_reg_reg(s0, 4, r0, r1, True)
+    else if k1 = 2 then
+    begin
+      EncPrefixAndREXMem(s0, r0, mb1, False);
+      EncB($63);
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else Error('EmitAsmX64: unsupported movsxd form: ' + line);
+    Exit;
+  end;
+
   if CaseEqual(mnem, 'movzx') or CaseEqual(mnem, 'movsx') then
   begin
     if k0 <> 0 then Error('EmitAsmX64: movzx/movsx dest must be a register');
@@ -622,7 +855,7 @@ begin
       if s1 = 0 then Error('EmitAsmX64: movzx/movsx mem needs an explicit size (byte/word)');
       x64_movx_reg_mem(s0, s1, r0, mb1, md1, CaseEqual(mnem, 'movsx'), False);
     end
-    else Error('EmitAsmX64: unsupported movzx/movsx form');
+    else Error('EmitAsmX64: unsupported movzx/movsx form: ' + line);
     Exit;
   end;
 
@@ -638,7 +871,7 @@ begin
       if s0 = 0 then Error('EmitAsmX64: test mem,imm needs an explicit size');
       x64_test_mem_imm(s0, mb0, md0, imm1, False);
     end
-    else Error('EmitAsmX64: unsupported test form');
+    else Error('EmitAsmX64: unsupported test form: ' + line);
     Exit;
   end;
 
@@ -665,19 +898,19 @@ begin
       if s1 = 1 then EncB($86) else EncB($87);
       EncModRMMem(r1, mb0, md0, False);
     end
-    else if ((k0 = 3) or (k0 = 4)) and (k1 = 0) then
+    else if (k0 >= 3) and (k1 = 0) then
     begin
       EncPrefixAndREX(s1, r1, 0, False);
       if s1 = 1 then EncB($86) else EncB($87);
       AsmEncAbsRM(r1, k0, md0);
     end
-    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    else if (k0 = 0) and (k1 >= 3) then
     begin
       EncPrefixAndREX(s0, r0, 0, False);
       if s0 = 1 then EncB($86) else EncB($87);
       AsmEncAbsRM(r0, k1, md1);
     end
-    else Error('EmitAsmX64: unsupported xchg form');
+    else Error('EmitAsmX64: unsupported xchg form: ' + line);
     Exit;
   end;
 
@@ -696,7 +929,7 @@ begin
       x64_sse_rm($F3, $7E, r0, mb1, md1, False, False)  { xmm, [mem] }
     else if (k0 = 2) and (k1 = 0) and (s1 = 16) then
       x64_sse_rm($66, $D6, r1, mb0, md0, False, False)  { [mem], xmm }
-    else Error('EmitAsmX64: unsupported movq form');
+    else Error('EmitAsmX64: unsupported movq form: ' + line);
     Exit;
   end;
 
@@ -735,7 +968,7 @@ begin
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm(ssePfx, sseOp, r0, mb1, md1, False, False)
     else if (k0 = 2) and (k1 = 0) and (CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss')) then
       x64_sse_rm(ssePfx, $11, r1, mb0, md0, False, False)   { store xmm -> [mem] }
-    else Error('EmitAsmX64: unsupported SSE form');
+    else Error('EmitAsmX64: unsupported SSE form: ' + line);
     Exit;
   end;
 
@@ -745,14 +978,14 @@ begin
   begin
     if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2A, r0, r1, s1 = 8)
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2A, r0, mb1, md1, s1 = 8, False)
-    else Error('EmitAsmX64: unsupported cvtsi2sd form');
+    else Error('EmitAsmX64: unsupported cvtsi2sd form: ' + line);
     Exit;
   end;
   if CaseEqual(mnem, 'cvttsd2si') then
   begin
     if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2C, r0, r1, s0 = 8)
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2C, r0, mb1, md1, s0 = 8, False)
-    else Error('EmitAsmX64: unsupported cvttsd2si form');
+    else Error('EmitAsmX64: unsupported cvttsd2si form: ' + line);
     Exit;
   end;
   { cvtsd2si is cvttsd2si's ROUNDING sibling ($2D vs $2C) — it honours the
@@ -762,7 +995,7 @@ begin
   begin
     if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2D, r0, r1, s0 = 8)
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2D, r0, mb1, md1, s0 = 8, False)
-    else Error('EmitAsmX64: unsupported cvtsd2si form');
+    else Error('EmitAsmX64: unsupported cvtsd2si form: ' + line);
     Exit;
   end;
 
@@ -789,7 +1022,7 @@ begin
       x64_mov_mem_imm(s0, mb0, md0, imm1, False);
     end
     { absolute [@glob]/[@data] r/m forms }
-    else if ((k0 = 3) or (k0 = 4)) and (k1 = 1) then
+    else if (k0 >= 3) and (k1 = 1) then
     begin
       if s0 = 0 then Error('EmitAsmX64: mov [@..] needs an explicit size');
       EncPrefixAndREX(s0, 0, 0, False);
@@ -798,31 +1031,31 @@ begin
       if s0 = 1 then EncB(Integer(imm1) and $FF)
       else if s0 = 2 then EncI16(imm1) else EncI32(imm1);
     end
-    else if ((k0 = 3) or (k0 = 4)) and (k1 = 0) then
+    else if (k0 >= 3) and (k1 = 0) then
     begin
       EncPrefixAndREX(s1, r1, 0, False);
       if s1 = 1 then EncB($88) else EncB($89);
       AsmEncAbsRM(r1, k0, md0);
     end
-    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    else if (k0 = 0) and (k1 >= 3) then
     begin
       EncPrefixAndREX(s0, r0, 0, False);
       if s0 = 1 then EncB($8A) else EncB($8B);
       AsmEncAbsRM(r0, k1, md1);
     end
-    else Error('EmitAsmX64: unsupported mov form');
+    else Error('EmitAsmX64: unsupported mov form: ' + line);
     Exit;
   end;
   if CaseEqual(mnem, 'lea') then
   begin
     if (k0 = 0) and (k1 = 2) then x64_lea_reg_mem(s0, r0, mb1, md1, False)
-    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    else if (k0 = 0) and (k1 >= 3) then
     begin
       EncPrefixAndREX(s0, r0, 0, False);
       EncB($8D);
       AsmEncAbsRM(r0, k1, md1);
     end
-    else Error('EmitAsmX64: unsupported lea form');
+    else Error('EmitAsmX64: unsupported lea form: ' + line);
     Exit;
   end;
 
@@ -837,7 +1070,7 @@ begin
     else if CaseEqual(mnem, 'cmp') then x64_cmp_reg_imm(s0, r0, imm1)
     else if CaseEqual(mnem, 'adc') then EncALUImm(s0, r0, imm1, 2)
     else if CaseEqual(mnem, 'sbb') then EncALUImm(s0, r0, imm1, 3)
-    else Error('EmitAsmX64: unsupported reg,imm mnemonic');
+    else Error('EmitAsmX64: unsupported reg,imm mnemonic: ' + line);
     Exit;
   end;
   if (k0 = 0) and (k1 = 0) then
@@ -850,7 +1083,7 @@ begin
     else if CaseEqual(mnem, 'cmp') then x64_cmp_reg_reg(s0, r0, r1)
     else if CaseEqual(mnem, 'adc') then EncALURegReg($11, $13, s0, r0, r1)
     else if CaseEqual(mnem, 'sbb') then EncALURegReg($19, $1B, s0, r0, r1)
-    else Error('EmitAsmX64: unsupported reg,reg mnemonic');
+    else Error('EmitAsmX64: unsupported reg,reg mnemonic: ' + line);
     Exit;
   end;
 
@@ -865,14 +1098,14 @@ begin
     else if CaseEqual(mnem, 'sub') then i := $29
     else if CaseEqual(mnem, 'xor') then i := $31
     else if CaseEqual(mnem, 'cmp') then i := $39
-    else begin Error('EmitAsmX64: unsupported reg/mem ALU mnemonic'); i := 0; end;
+    else begin Error('EmitAsmX64: unsupported reg/mem ALU mnemonic: ' + line); i := 0; end;
     if k1 = 2 then x64_alu_reg_mem(i + 2, s0, r0, mb1, md1, False)   { reg,[mem] }
     else x64_alu_mem_reg(i, s1, mb0, md0, r1, False);               { [mem],reg }
     Exit;
   end;
 
   { ALU reg,[@glob/@data] and [@glob/@data],reg (absolute-address form). }
-  if ((k0 = 0) and ((k1 = 3) or (k1 = 4))) or (((k0 = 3) or (k0 = 4)) and (k1 = 0)) then
+  if ((k0 = 0) and (k1 >= 3)) or ((k0 >= 3) and (k1 = 0)) then
   begin
     if CaseEqual(mnem, 'add') then i := $01
     else if CaseEqual(mnem, 'or')  then i := $09
@@ -882,7 +1115,7 @@ begin
     else if CaseEqual(mnem, 'sub') then i := $29
     else if CaseEqual(mnem, 'xor') then i := $31
     else if CaseEqual(mnem, 'cmp') then i := $39
-    else begin Error('EmitAsmX64: unsupported reg/abs ALU mnemonic'); i := 0; end;
+    else begin Error('EmitAsmX64: unsupported reg/abs ALU mnemonic: ' + line); i := 0; end;
     if k0 = 0 then
     begin
       EncPrefixAndREX(s0, r0, 0, False);
@@ -910,12 +1143,12 @@ begin
     else if CaseEqual(mnem, 'sub') then i := 5
     else if CaseEqual(mnem, 'xor') then i := 6
     else if CaseEqual(mnem, 'cmp') then i := 7
-    else begin Error('EmitAsmX64: unsupported mem,imm mnemonic'); i := 0; end;
+    else begin Error('EmitAsmX64: unsupported mem,imm mnemonic: ' + line); i := 0; end;
     AsmEncAluMemImm(i, s0, mb0, md0, imm1);
     Exit;
   end;
 
-  Error('EmitAsmX64: unsupported instruction');
+  Error('EmitAsmX64: unsupported instruction: ' + line);
 end;
 
 const ASM_MAX_LABELS = 32;
@@ -930,7 +1163,99 @@ var
   AsmLblCount: Integer;
   AsmFwName:  array[0..ASM_MAX_LABELS - 1] of AnsiString;
   AsmFwPatch: array[0..ASM_MAX_LABELS - 1] of Integer;
+  AsmFwShort: array[0..ASM_MAX_LABELS - 1] of Boolean;
   AsmFwCount: Integer;
+
+{ ---- scope labels ------------------------------------------------------------
+
+  A `.name` label belongs to the one EmitAsmX64 call that writes it. That is
+  enough for a self-contained blob and not for the shape most raw-byte codegen
+  has: a jump in one call, then Pascal that decides what comes next (an
+  EmitCallProc, a MovRaxImm, an `if`), then the target in a later call. Raw code
+  spelled that with a `p := CodeLen; EmitI32(0)` placeholder and a Patch32 at
+  the target -- the bookkeeping that the text assembler exists to delete.
+
+  So a label WITHOUT the leading dot is a SCOPE label: it lives from
+  AsmScopeBegin to the matching AsmScopeEnd, across any number of calls and any
+  Pascal in between, and AsmScopeEnd resolves every jump to it (an undefined
+  one is a compile error there, as is defining a name twice in one scope).
+  Scopes nest: a helper that opens its own scope sees only its own labels, so
+  it cannot collide with -- or jump into -- its caller's. With no scope open a
+  dotless name behaves exactly as it always did, local to its call. }
+const
+  ASM_SCOPE_MAX_LABELS = 256;
+  ASM_SCOPE_MAX_DEPTH = 8;
+var
+  AsmSLblName: array[0..ASM_SCOPE_MAX_LABELS - 1] of AnsiString;
+  AsmSLblPos:  array[0..ASM_SCOPE_MAX_LABELS - 1] of Integer;
+  AsmSLblCount: Integer;
+  AsmSFwName:  array[0..ASM_SCOPE_MAX_LABELS - 1] of AnsiString;
+  AsmSFwPatch: array[0..ASM_SCOPE_MAX_LABELS - 1] of Integer;
+  AsmSFwShort: array[0..ASM_SCOPE_MAX_LABELS - 1] of Boolean;
+  AsmSFwCount: Integer;
+  AsmScopeLblBase: array[0..ASM_SCOPE_MAX_DEPTH - 1] of Integer;
+  AsmScopeFwBase:  array[0..ASM_SCOPE_MAX_DEPTH - 1] of Integer;
+  AsmScopeDepth: Integer;
+
+procedure AsmScopeBegin;
+begin
+  if AsmScopeDepth >= ASM_SCOPE_MAX_DEPTH then Error('EmitAsmX64: asm scopes nested too deep');
+  AsmScopeLblBase[AsmScopeDepth] := AsmSLblCount;
+  AsmScopeFwBase[AsmScopeDepth] := AsmSFwCount;
+  Inc(AsmScopeDepth);
+end;
+
+{ Fill one forward jump: rel32 at `patch`, or for a `short` jump the rel8 byte
+  there. Both are measured from the end of the displacement field. }
+procedure AsmPatchFw(patch, target: Integer; isShort: Boolean);
+var d: Integer;
+begin
+  if isShort then
+  begin
+    d := target - (patch + 1);
+    CheckRel8(d, 'asm short forward jump');
+    Code[patch] := Byte(d);
+  end
+  else
+    Patch32(patch, target - (patch + 4));
+end;
+
+function AsmScopeFind(const nm: AnsiString; var pos: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := AsmScopeLblBase[AsmScopeDepth - 1] to AsmSLblCount - 1 do
+    if AsmSLblName[k] = nm then
+    begin
+      pos := AsmSLblPos[k];
+      Result := True;
+      Exit;
+    end;
+end;
+
+procedure AsmScopeEnd;
+var k, pos: Integer;
+begin
+  if AsmScopeDepth <= 0 then Error('EmitAsmX64: AsmScopeEnd without AsmScopeBegin');
+  for k := AsmScopeFwBase[AsmScopeDepth - 1] to AsmSFwCount - 1 do
+  begin
+    pos := 0;
+    if not AsmScopeFind(AsmSFwName[k], pos) then
+      Error('EmitAsmX64: jump to undefined scope label ' + AsmSFwName[k]);
+    AsmPatchFw(AsmSFwPatch[k], pos, AsmSFwShort[k]);
+  end;
+  Dec(AsmScopeDepth);
+  AsmSLblCount := AsmScopeLblBase[AsmScopeDepth];
+  AsmSFwCount := AsmScopeFwBase[AsmScopeDepth];
+end;
+
+{ Is `nm` a scope label here? Dotless, and a scope is open. }
+function AsmIsScopeLabel(const nm: AnsiString): Boolean;
+begin
+  { AsmTextCharAt, not nm[1]: PXX evaluates `and` in full, and indexing an
+    empty AnsiString reads through nil (see the landmine note in the ticket) }
+  Result := (AsmScopeDepth > 0) and (Length(nm) > 0) and (AsmTextCharAt(nm, 1) <> '.');
+end;
 
 { ---- fixed-line encode memo -------------------------------------------------
 
@@ -1030,6 +1355,7 @@ begin
   if EncToAsmBuffer or (nHoles > 0) then
   begin
     AsmTextLine(line, holes, nHoles);
+    EncMemIndex := -1;
     Exit;
   end;
 
@@ -1043,6 +1369,7 @@ begin
       Exit;
     end;
     AsmTextLine(line, holes, nHoles);       { poisoned — always the slow path }
+    EncMemIndex := -1;
     Exit;
   end;
 
@@ -1051,6 +1378,7 @@ begin
   f0 := FixCount;
   s0 := LibcSyscallCallCount;
   AsmTextLine(line, holes, nHoles);
+  EncMemIndex := -1;
   AsmMemoMisses := AsmMemoMisses + 1;
 
   if slot < 0 then begin AsmMemoNoRoom := AsmMemoNoRoom + 1; Exit; end;
@@ -1095,8 +1423,8 @@ var
   i, n, h, nHoles, j: Integer;
   line, trimmed, mnem, target: AnsiString;
   holes: array[0..ASM_MAX_HOLES - 1] of Int64;
-  cc, k, targetPos, disp: Integer;
-  isJmp, defined: Boolean;
+  cc, k, targetPos, disp, width: Integer;
+  isJmp, isCall, defined, scoped: Boolean;
 begin
   AsmLblCount := 0; AsmFwCount := 0;
   n := Length(items);
@@ -1119,24 +1447,88 @@ begin
     if AsmTextHasUpper(mnem) then mnem := AsmTextLowerStr(mnem);
 
     isJmp := CaseEqual(mnem, 'jmp');
+    { the operand text, for the jump/call classification below }
+    while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
+    target := AsmTextSlice(trimmed, j, Length(trimmed) - j + 1);
+    isCall := CaseEqual(mnem, 'call') and CaseEqual(target, '@code');
+    { an INDIRECT jmp (register, register hole or memory) is an ordinary
+      instruction, encoded by AsmTextLine }
+    if isJmp then
+      if (AsmTextCharAt(target, 1) = '[') or (AsmTextCharAt(target, 1) = '%') or
+         (AsmTextSizeKeyword(AsmTextSlice(target, 1, 5)) > 0) or AsmRegNum(target, k, disp) then
+        isJmp := False;
     if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
     begin
       { label definition: `name:` (a bare line ending in ':') }
-      if AsmLblCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many labels');
-      AsmLblName[AsmLblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
-      AsmLblPos[AsmLblCount] := CodeLen;
-      Inc(AsmLblCount);
+      target := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+      if AsmIsScopeLabel(target) then
+      begin
+        if AsmScopeFind(target, disp) then
+          Error('EmitAsmX64: scope label defined twice: ' + target);
+        if AsmSLblCount >= ASM_SCOPE_MAX_LABELS then Error('EmitAsmX64: too many scope labels');
+        AsmSLblName[AsmSLblCount] := target;
+        AsmSLblPos[AsmSLblCount] := CodeLen;
+        Inc(AsmSLblCount);
+      end
+      else
+      begin
+        if AsmLblCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many labels');
+        AsmLblName[AsmLblCount] := target;
+        AsmLblPos[AsmLblCount] := CodeLen;
+        Inc(AsmLblCount);
+      end;
       Inc(i);
     end
-    else if isJmp or AsmTextJccCode(mnem, cc) then
+    else if isJmp or isCall or AsmTextJccCode(mnem, cc) then
     begin
       { operand = label name, or a constant byte displacement (`jnz +5`,
         `jmp -3`): bytes to skip relative to the END of the (short-form)
         instruction — i.e. the raw rel8 field. For hops over emission the
         assembler cannot see (an EmitCallProc between two EmitAsmX64 calls,
         whose labels are per-call). Short range only (+-127). }
-      while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
-      target := AsmTextSlice(trimmed, j, Length(trimmed) - j + 1);
+      { `short` / `near` force the rel8 / rel32 form, as in NASM. Without one a
+        known (backward) target takes rel8 when it reaches and a forward one
+        takes rel32. Raw-byte code that is converted line for line needs both:
+        a hand-written `EB 00` forward placeholder is a short forward jump, and
+        a hand-written `E9 rel32` back edge stays rel32 so the bytes match. }
+      width := 0;
+      if (Length(target) > 6) and CaseEqual(AsmTextSlice(target, 1, 6), 'short ') then
+      begin
+        width := 1; target := AsmTextTrim(AsmTextSlice(target, 7, Length(target) - 6));
+      end
+      else if (Length(target) > 5) and CaseEqual(AsmTextSlice(target, 1, 5), 'near ') then
+      begin
+        width := 2; target := AsmTextTrim(AsmTextSlice(target, 6, Length(target) - 5));
+      end;
+
+      { `jmp @code` / `jcc @code` / `call @code`: a known code position, taken
+        from the next int element -- a routine emitted earlier (ExcLongJmpAddr,
+        a loop head saved in a Pascal variable). Always rel32 unless `short`. }
+      if CaseEqual(target, '@code') then
+      begin
+        if i + 1 >= n then Error('EmitAsmX64: @code needs an integer code position');
+        if items[i + 1].VType <> vtInteger then
+          Error('EmitAsmX64: @code needs an integer code position');
+        targetPos := items[i + 1].VInteger;
+        if width = 1 then
+        begin
+          if isCall then Error('EmitAsmX64: there is no short call');
+          if isJmp then EncB($EB) else EncB($70 + cc);
+          disp := targetPos - (CodeLen + 1);
+          CheckRel8(disp, 'asm short jump to @code');
+          EncB(disp and $FF);
+        end
+        else
+        begin
+          if isCall then EncB($E8)
+          else if isJmp then EncB($E9)
+          else begin EncB($0F); EncB($80 + cc); end;
+          EncI32(targetPos - (CodeLen + 4));
+        end;
+        i := i + 2;
+        continue;
+      end;
+      if isCall then Error('EmitAsmX64: call takes a register or @code');
 
       if (Length(target) >= 1) and
          ((target[1] = '+') or (target[1] = '-') or
@@ -1162,14 +1554,19 @@ begin
       end;
 
       defined := False; targetPos := 0;
-      for k := 0 to AsmLblCount - 1 do
-        if AsmLblName[k] = target then begin defined := True; targetPos := AsmLblPos[k]; end;
+      scoped := AsmIsScopeLabel(target);
+      if scoped then
+        defined := AsmScopeFind(target, targetPos)
+      else
+        for k := 0 to AsmLblCount - 1 do
+          if AsmLblName[k] = target then begin defined := True; targetPos := AsmLblPos[k]; end;
 
       if defined then
       begin
         { backward (or same-call known) target: short form if it reaches. }
         disp := targetPos - (CodeLen + 2);
-        if (disp >= -128) and (disp <= 127) then
+        if width = 1 then CheckRel8(disp, 'asm short back jump');
+        if (width <> 2) and (disp >= -128) and (disp <= 127) then
         begin
           if isJmp then EncB($EB) else EncB($70 + cc);
           EncB(disp and $FF);
@@ -1182,13 +1579,30 @@ begin
       end
       else
       begin
-        { forward target: emit the near (rel32) form and record a patch. }
-        if isJmp then EncB($E9) else begin EncB($0F); EncB($80 + cc); end;
-        if AsmFwCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many forward jumps');
-        AsmFwName[AsmFwCount] := target;
-        AsmFwPatch[AsmFwCount] := CodeLen;   { position of the rel32 displacement }
-        Inc(AsmFwCount);
-        EncI32(0);
+        { forward target: the near (rel32) form, or rel8 under `short`, and a
+          patch recorded in the call's table or the open scope's. }
+        if width = 1 then
+        begin
+          if isJmp then EncB($EB) else EncB($70 + cc);
+        end
+        else if isJmp then EncB($E9) else begin EncB($0F); EncB($80 + cc); end;
+        if scoped then
+        begin
+          if AsmSFwCount >= ASM_SCOPE_MAX_LABELS then Error('EmitAsmX64: too many scope forward jumps');
+          AsmSFwName[AsmSFwCount] := target;
+          AsmSFwPatch[AsmSFwCount] := CodeLen;
+          AsmSFwShort[AsmSFwCount] := width = 1;
+          Inc(AsmSFwCount);
+        end
+        else
+        begin
+          if AsmFwCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many forward jumps');
+          AsmFwName[AsmFwCount] := target;
+          AsmFwPatch[AsmFwCount] := CodeLen;   { position of the displacement }
+          AsmFwShort[AsmFwCount] := width = 1;
+          Inc(AsmFwCount);
+        end;
+        if width = 1 then EncB(0) else EncI32(0);
       end;
       Inc(i);
     end
@@ -1222,7 +1636,7 @@ begin
     for j := 0 to AsmLblCount - 1 do
       if AsmLblName[j] = AsmFwName[k] then targetPos := AsmLblPos[j];
     if targetPos < 0 then Error('EmitAsmX64: undefined label in jump');
-    Patch32(AsmFwPatch[k], targetPos - (AsmFwPatch[k] + 4));
+    AsmPatchFw(AsmFwPatch[k], targetPos, AsmFwShort[k]);
   end;
 end;
 

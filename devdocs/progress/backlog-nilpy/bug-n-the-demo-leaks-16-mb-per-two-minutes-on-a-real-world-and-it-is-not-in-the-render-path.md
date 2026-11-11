@@ -350,3 +350,15 @@ picks", mimic_urllib_request.pas). gauges.py does not pick one, so a real
 fetch raises "https requires a TLS backend". Whether the shim should
 register one by default for Python programs (CPython always has ssl) is an
 owner decision, not taken here.
+
+## 2026-11-11 -- the TLS question is answered, and was already done
+
+Owner 2026-11-11: yes, register a TLS backend automatically for Python
+programs. That has been the behaviour since 2026-10-05: mimic_urllib_request's
+urlopen installs the native TLS 1.3 backend (Tls13NativeRegister) on the first
+https request when none is registered, POSIX only. On ESP, https through
+urllib stays a refusal that points at urequests / mbedTLS. The 10-04 note above
+("a real fetch raises 'https requires a TLS backend'") predates it.
+
+What is left on this ticket is a measurement, not a decision: the gauges
+thread over real https on a real world, RSS slope at HEAD.

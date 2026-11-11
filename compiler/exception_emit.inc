@@ -59,12 +59,13 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean);
 var t: Integer;
 begin
   t := StatusSlotTlsIndex(bssSlot);
-  if t >= 0 then EmitB($65);                    { gs: }
-  if reg >= 8 then EmitB($4C) else EmitB($48);  { REX.W, +R for r8..r15 }
-  if store then EmitB($89) else EmitB($8B);
-  EmitB($04 + ((reg and 7) shl 3));             { mod=00 reg=<reg> rm=100 (SIB) }
-  EmitB($25);                                   { SIB: no base, no index -> disp32 }
-  if t >= 0 then EmitI32(8 * t) else EmitGlobRef(bssSlot);
+  if t >= 0 then
+  begin
+    if store then EmitAsmX64(['mov gs:[%], %r64', 8 * t, reg])
+    else EmitAsmX64(['mov %r64, gs:[%]', reg, 8 * t]);
+  end
+  else if store then EmitAsmX64(['mov [@glob], %r64', bssSlot, reg])
+  else EmitAsmX64(['mov %r64, [@glob]', reg, bssSlot]);
 end;
 
 procedure EmitExceptionRuntime;
@@ -76,38 +77,39 @@ begin
   begin
     { Save enough integer state to return from a raise into the protected frame. }
     ExcSetJmpAddr := CodeLen;
-    EmitB($48); EmitB($89); EmitB($1F);                         { mov [rdi], rbx }
-    EmitB($48); EmitB($89); EmitB($6F); EmitB($08);             { mov [rdi+8], rbp }
-    EmitB($4C); EmitB($89); EmitB($67); EmitB($10);             { mov [rdi+16], r12 }
-    EmitB($4C); EmitB($89); EmitB($6F); EmitB($18);             { mov [rdi+24], r13 }
-    EmitB($4C); EmitB($89); EmitB($77); EmitB($20);             { mov [rdi+32], r14 }
-    EmitB($4C); EmitB($89); EmitB($7F); EmitB($28);             { mov [rdi+40], r15 }
-    EmitB($48); EmitB($8D); EmitB($44); EmitB($24); EmitB($08); { lea rax, [rsp+8] }
-    EmitB($48); EmitB($89); EmitB($47); EmitB($30);             { mov [rdi+48], rax }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($24);             { mov rax, [rsp] }
-    EmitB($48); EmitB($89); EmitB($47); EmitB($38);             { mov [rdi+56], rax }
-    EmitB($31); EmitB($C0);                                     { xor eax, eax }
-    EmitB($C3);                                                 { ret }
+    EmitAsmX64([
+      'mov [rdi], rbx',
+      'mov [rdi+8], rbp',
+      'mov [rdi+16], r12',
+      'mov [rdi+24], r13',
+      'mov [rdi+32], r14',
+      'mov [rdi+40], r15',
+      'lea rax, [rsp+8]',
+      'mov [rdi+48], rax',
+      'mov rax, [rsp]',
+      'mov [rdi+56], rax',
+      'xor eax, eax',
+      'ret']);
 
     ExcLongJmpAddr := CodeLen;
-    EmitB($48); EmitB($8B); EmitB($1F);                         { mov rbx, [rdi] }
-    EmitB($48); EmitB($8B); EmitB($6F); EmitB($08);             { mov rbp, [rdi+8] }
-    EmitB($4C); EmitB($8B); EmitB($67); EmitB($10);             { mov r12, [rdi+16] }
-    EmitB($4C); EmitB($8B); EmitB($6F); EmitB($18);             { mov r13, [rdi+24] }
-    EmitB($4C); EmitB($8B); EmitB($77); EmitB($20);             { mov r14, [rdi+32] }
-    EmitB($4C); EmitB($8B); EmitB($7F); EmitB($28);             { mov r15, [rdi+40] }
-    EmitB($48); EmitB($8B); EmitB($67); EmitB($30);             { mov rsp, [rdi+48] }
-    EmitB($B8); EmitI32(1);                                     { mov eax, 1 }
-    EmitB($FF); EmitB($67); EmitB($38);                         { jmp qword [rdi+56] }
+    EmitAsmX64([
+      'mov rbx, [rdi]',
+      'mov rbp, [rdi+8]',
+      'mov r12, [rdi+16]',
+      'mov r13, [rdi+24]',
+      'mov r14, [rdi+32]',
+      'mov r15, [rdi+40]',
+      'mov rsp, [rdi+48]',
+      'mov eax, 1',
+      'jmp qword [rdi+56]']);
 
     ExcRaiseAddr := CodeLen;
     { RAISE SITE: the `call` that got us here pushed its own return address, so
       [rsp] IS the instruction after the `raise`. Record it for ExceptAddr before
       anything else runs. rax is reloaded right below, so clobbering it is free. }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($24);             { mov rax, [rsp] }
+    EmitAsmX64(['mov rax, [rsp]']);
     EmitStatusSlotX64(0, BSS_EXC_ADDR, True);                   { mov [EXC_ADDR], rax }
     EmitStatusSlotX64(0, BSS_EXC_TOP, False);                   { mov rax, [EXC_TOP] }
-
     { ---- VALIDATE THE FRAME BEFORE JUMPING INTO IT -----------------------
       A chain head is a POINTER THE UNWINDER JUMPS TO, so a corrupt one is not
       a wrong answer, it is a wild jump: `jmp [rdi+56]` with whatever is at that
@@ -147,20 +149,19 @@ begin
       What it buys is that the failure ARRIVES AS A MESSAGE. x86-64 only for
       now, deliberately -- the other five backends have the same shape and none
       of them is where this was measured. }
+    AsmScopeBegin;
     ExcValidateAddr := CodeLen;
-    EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
-    EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
-    EmitB($48); EmitB($8B); EmitB($50);
-      EmitB(EXC_JMP_OFFSET + 48);                               { mov rdx, [rax+56]  saved rsp }
-    EmitB($48); EmitB($39); EmitB($C2);                         { cmp rdx, rax }
-    EmitB($0F); EmitB($85); excSkip1 := CodeLen; EmitI32(0);    { jne skip }
-    excSkip2 := excSkip1;
+    EmitAsmX64([
+      'test rax, rax',
+      'jz unhandled',
+      'mov rdx, [rax+%]', EXC_JMP_OFFSET + 48,                  { saved rsp }
+      'cmp rdx, rax',
+      'jne skip']);
     EmitStatusSlotX64(0, BSS_EXC_TOP, True);                    { mov [EXC_TOP], rax }
-    EmitB($48); EmitB($8D); EmitB($78); EmitB(EXC_JMP_OFFSET);  { lea rdi, [rax+8] }
-    EmitB($E9); EmitI32(ExcLongJmpAddr - (CodeLen + 4));        { jmp longjmp }
-
-    Patch32(excSkip1, CodeLen - (excSkip1 + 4));
-    Patch32(excSkip2, CodeLen - (excSkip2 + 4));
+    EmitAsmX64([
+      'lea rdi, [rax+%]', EXC_JMP_OFFSET,
+      'jmp @code', ExcLongJmpAddr,
+    'skip:']);
     if not NoUnhandledHandler then
     begin
       { Say so. A skip that is silent is the same class of defect as the wild
@@ -168,14 +169,14 @@ begin
         chain was broken. r8 carries the frame across the syscall, which
         clobbers rax/rcx/r11. }
       siCorrupt := InternStr('exception frame chain: a stale handler frame (its saved stack pointer is not its own address), skipping it');
-      EmitB($49); EmitB($89); EmitB($C0);                       { mov r8, rax }
+      EmitAsmX64(['mov r8, rax']);
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(Strs[siCorrupt].Offset + 8);
+      EmitAsmX64(['mov rsi, @data', Strs[siCorrupt].Offset + 8]);
       MovRdxImm(Strs[siCorrupt].Len); EmitSyscall;
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(NEWLINE_OFFSET);
+      EmitAsmX64(['mov rsi, @data', NEWLINE_OFFSET]);
       MovRdxImm(1); EmitSyscall;
-      EmitB($4C); EmitB($89); EmitB($C0);                       { mov rax, r8 }
+      EmitAsmX64(['mov rax, r8']);
     end;
     { THE LINK OF A DEAD FRAME IS DEAD TOO, so it is followed only when it
       points strictly UP. The walk used to follow it blind: measured 2026-09-19
@@ -190,19 +191,20 @@ begin
       where the chain is known to be broken and ending on the unhandled path
       (which prints) is the goal. Never promote it to the validation itself.
       Zero lands on the unhandled path too, as it always did. }
-    EmitB($48); EmitB($8B); EmitB($10);                         { mov rdx, [rax]  previous head }
-    EmitB($48); EmitB($39); EmitB($C2);                         { cmp rdx, rax }
-    EmitB($0F); EmitB($86); unhandledJmp2 := CodeLen; EmitI32(0); { jbe unhandled }
-    EmitB($48); EmitB($89); EmitB($D0);                         { mov rax, rdx }
-    EmitB($E9); EmitI32(ExcValidateAddr - (CodeLen + 4));       { jmp validate }
-    Patch32(unhandledJmp, CodeLen - (unhandledJmp + 4));
-    Patch32(unhandledJmp2, CodeLen - (unhandledJmp2 + 4));
+    EmitAsmX64([
+      'mov rdx, [rax]',                                         { previous head }
+      'cmp rdx, rax',
+      'jbe unhandled',
+      'mov rax, rdx',
+      'jmp @code', ExcValidateAddr,
+    'unhandled:']);
+    AsmScopeEnd;
 
     if not NoUnhandledHandler then
     begin
       si := InternStr('Unhandled exception');
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+      EmitAsmX64(['mov rsi, @data', Strs[si].Offset + 8]);
       MovRdxImm(Strs[si].Len); EmitSyscall;
 
       { Detail line: `Unhandled exception: <ClassName>: <Message>`. r13 = the
@@ -214,57 +216,59 @@ begin
         Exception's `msg` is its first field (obj+8) and holds a managed
         AnsiString pointer whose length sits at ptr-8. }
       siColon := InternStr(': ');
+      AsmScopeBegin;
       EmitStatusSlotX64(13, BSS_EXC_OBJ, False);                 { mov r13, [BSS_EXC_OBJ] }
-      EmitB($4D); EmitB($31); EmitB($E4);                         { xor r12, r12 }
-      EmitB($49); EmitB($81); EmitB($FD); EmitI32(65536);         { cmp r13, 65536 }
-      EmitB($0F); EmitB($82); jo1 := CodeLen; EmitI32(0);         { jb  objbad }
-      EmitB($49); EmitB($8B); EmitB($45); EmitB($00);             { mov rax, [r13] }
-      EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
-      EmitB($0F); EmitB($84); jo2 := CodeLen; EmitI32(0);         { jz  objbad }
-      EmitB($4C); EmitB($8B); EmitB($60); EmitB($F8);             { mov r12, [rax-8] }
-      Patch32(jo1, CodeLen - (jo1 + 4)); Patch32(jo2, CodeLen - (jo2 + 4));
-
-      EmitB($4D); EmitB($85); EmitB($E4);                         { test r12, r12 }
-      EmitB($0F); EmitB($84); jc1 := CodeLen; EmitI32(0);         { jz  noclass }
-      EmitB($49); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [r12] }
-      EmitB($48); EmitB($85); EmitB($F6);                         { test rsi, rsi }
-      EmitB($0F); EmitB($84); jc2 := CodeLen; EmitI32(0);         { jz  noclass }
-      EmitB($48); EmitB($8B); EmitB($16);                         { mov rdx, [rsi] }
-      EmitB($48); EmitB($85); EmitB($D2);                         { test rdx, rdx }
-      EmitB($0F); EmitB($8E); jc3 := CodeLen; EmitI32(0);         { jle noclass }
-      EmitB($48); EmitB($81); EmitB($FA); EmitI32(256);           { cmp rdx, 256 }
-      EmitB($0F); EmitB($83); jc4 := CodeLen; EmitI32(0);         { jae noclass }
+      EmitAsmX64([
+        'xor r12, r12',
+        'cmp r13, 65536',
+        'jb objbad',
+        'mov rax, [r13]',
+        'test rax, rax',
+        'jz objbad',
+        'mov r12, [rax-8]',
+      'objbad:',
+        'test r12, r12',
+        'jz noclass',
+        'mov rsi, [r12]',
+        'test rsi, rsi',
+        'jz noclass',
+        'mov rdx, [rsi]',
+        'test rdx, rdx',
+        'jle noclass',
+        'cmp rdx, 256',
+        'jae noclass']);
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(Strs[siColon].Offset + 8);
+      EmitAsmX64(['mov rsi, @data', Strs[siColon].Offset + 8]);
       MovRdxImm(Strs[siColon].Len); EmitSyscall;
-      EmitB($49); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [r12] }
-      EmitB($48); EmitB($8B); EmitB($16);                         { mov rdx, [rsi] }
-      EmitB($48); EmitB($83); EmitB($C6); EmitB($08);             { add rsi, 8 }
+      EmitAsmX64([
+        'mov rsi, [r12]',
+        'mov rdx, [rsi]',
+        'add rsi, 8']);
       MovRaxImm(SYS_WRITE); MovRdiImm(2); EmitSyscall;
-      Patch32(jc1, CodeLen - (jc1 + 4)); Patch32(jc2, CodeLen - (jc2 + 4));
-      Patch32(jc3, CodeLen - (jc3 + 4)); Patch32(jc4, CodeLen - (jc4 + 4));
-
-      EmitB($49); EmitB($81); EmitB($FD); EmitI32(65536);         { cmp r13, 65536 }
-      EmitB($0F); EmitB($82); jm1 := CodeLen; EmitI32(0);         { jb  nomsg }
-      EmitB($49); EmitB($8B); EmitB($75); EmitB($08);             { mov rsi, [r13+8] }
-      EmitB($48); EmitB($81); EmitB($FE); EmitI32(65536);         { cmp rsi, 65536 }
-      EmitB($0F); EmitB($82); jm2 := CodeLen; EmitI32(0);         { jb  nomsg }
-      EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);             { mov rdx, [rsi-8] }
-      EmitB($48); EmitB($85); EmitB($D2);                         { test rdx, rdx }
-      EmitB($0F); EmitB($8E); jm3 := CodeLen; EmitI32(0);         { jle nomsg }
-      EmitB($48); EmitB($81); EmitB($FA); EmitI32(4096);          { cmp rdx, 4096 }
-      EmitB($0F); EmitB($83); jm4 := CodeLen; EmitI32(0);         { jae nomsg }
+      EmitAsmX64([
+      'noclass:',
+        'cmp r13, 65536',
+        'jb nomsg',
+        'mov rsi, [r13+8]',
+        'cmp rsi, 65536',
+        'jb nomsg',
+        'mov rdx, [rsi-8]',
+        'test rdx, rdx',
+        'jle nomsg',
+        'cmp rdx, 4096',
+        'jae nomsg']);
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(Strs[siColon].Offset + 8);
+      EmitAsmX64(['mov rsi, @data', Strs[siColon].Offset + 8]);
       MovRdxImm(Strs[siColon].Len); EmitSyscall;
-      EmitB($49); EmitB($8B); EmitB($75); EmitB($08);             { mov rsi, [r13+8] }
-      EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);             { mov rdx, [rsi-8] }
+      EmitAsmX64([
+        'mov rsi, [r13+8]',
+        'mov rdx, [rsi-8]']);
       MovRaxImm(SYS_WRITE); MovRdiImm(2); EmitSyscall;
-      Patch32(jm1, CodeLen - (jm1 + 4)); Patch32(jm2, CodeLen - (jm2 + 4));
-      Patch32(jm3, CodeLen - (jm3 + 4)); Patch32(jm4, CodeLen - (jm4 + 4));
+      EmitAsmX64(['nomsg:']);
+      AsmScopeEnd;
 
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
-      EmitB($48); EmitB($BE); EmitDataRef(NEWLINE_OFFSET);
+      EmitAsmX64(['mov rsi, @data', NEWLINE_OFFSET]);
       MovRdxImm(1); EmitSyscall;
     end;
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);

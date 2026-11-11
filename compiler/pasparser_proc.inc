@@ -3858,8 +3858,8 @@ begin
       EmitStatusSlotX64, whose length is not fixed (the threadsafe build takes a
       `gs:` prefix) — a hand-counted branch distance over a variable-length
       emitter is a worse hazard than the one it would be guarding. }
-    EmitB($48); EmitB($8B); EmitB($43); EmitB(CO_OFF_CALLERCTX);  { mov rax, [rbx+callerctx] }
-    EmitB($48); EmitB($8B); EmitB($00);                           { mov rax, [rax]  (consumer's saved exc_top) }
+    EmitAsmX64(['mov rax, [rbx+%]', CO_OFF_CALLERCTX]);
+    EmitAsmX64(['mov rax, [rax]']); { (consumer's saved exc_top) }
     EmitStatusSlotX64(0, BSS_EXC_TOP, True);                      { mov [EXC_TOP], rax }
     for i := 0 to nparams - 1 do
     begin
@@ -4074,10 +4074,11 @@ begin
   begin
     if not CurGenSeenYield then
       Error('generator has no yield');
-    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[CurGenSelfSym].Offset);  { mov rax, [rbp+selfOff] }
+    EmitAsmX64(['mov rax, [rbp+%]', Syms[CurGenSelfSym].Offset]);
     EmitB($48); EmitB($C7); EmitB($80); EmitI32(CO_OFF_DONE); EmitI32(1);      { mov qword [rax+DONE], 1 }
-    EmitB($48); EmitB($8D); EmitB($78); EmitB(CO_OFF_GENCTX);                  { lea rdi, [rax+genctx]  (from) }
-    EmitB($48); EmitB($8D); EmitB($70); EmitB(CO_OFF_CALLERCTX);               { lea rsi, [rax+callerctx] (to) }
+    EmitAsmX64([
+      'lea rdi, [rax+%]', CO_OFF_GENCTX,     { (from) }
+      'lea rsi, [rax+%]', CO_OFF_CALLERCTX]); { (to) }
     IREmitCodeCall(CoSwitchAddr);
   end;
 

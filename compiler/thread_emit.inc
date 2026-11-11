@@ -77,7 +77,8 @@ begin
   if TargetArch = TARGET_X86_64 then
   begin
     { jump over the stub body — execution must reach it only via `call`. }
-    EmitB($E9); jmpOver := CodeLen; EmitI32(0);
+    AsmScopeBegin;
+    EmitAsmX64(['jmp over']);
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
     { ---- carve the child's TLS block off the top of its stack ---- }
@@ -133,34 +134,35 @@ begin
       child's rsp, so putting the new region at the TOP leaves all of them
       unchanged and the scratch is the one address computed with the full sum.
       See CLONE_RETBUF_SIZE for why the register must be set at all. }
-    EmitB($48); EmitB($81); EmitB($EE); EmitI32(CLONE_RETBUF_SIZE);  { sub rsi, CLONE_RETBUF_SIZE }
-    EmitB($48); EmitB($81); EmitB($EE); EmitI32(SIG_ALTSTACK_SIZE);  { sub rsi, SIG_ALTSTACK_SIZE }
-    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TlsBlockSize);  { sub rsi, TlsBlockSize }
-    EmitB($FC);                                       { cld }
-    EmitB($57);                                       { push rdi   (flags) }
-    EmitB($51);                                       { push rcx   (arg) }
-    EmitB($48); EmitB($89); EmitB($F7);               { mov rdi, rsi }
-    EmitB($31); EmitB($C0);                           { xor eax, eax }
-    EmitB($B9); EmitI32(TlsBlockSize div 8);        { mov ecx, slot count }
-    EmitB($F3); EmitB($48); EmitB($AB);               { rep stosq }
-    EmitB($59);                                       { pop rcx }
-    EmitB($5F);                                       { pop rdi }
-    EmitB($48); EmitB($89); EmitB($36);               { mov [rsi], rsi  (slot 0 = self) }
-    EmitB($48); EmitB($83); EmitB($EE); EmitB($10);   { sub rsi, 16   (stage area) }
-    EmitB($48); EmitB($89); EmitB($16);               { mov [rsi], rdx     (entry) }
-    EmitB($48); EmitB($89); EmitB($4E); EmitB($08);   { mov [rsi+8], rcx   (arg) }
-    EmitB($4C); EmitB($89); EmitB($C2);               { mov rdx, r8    (parent_tid = ctidptr) }
-    EmitB($4D); EmitB($89); EmitB($C2);               { mov r10, r8    (child_tid  = ctidptr) }
-    EmitB($45); EmitB($31); EmitB($C0);               { xor r8d, r8d   (tls = NULL) }
-    EmitB($B8); EmitB($38); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 56  (SYS_clone) }
-    EmitB($0F); EmitB($05);                           { syscall }
-    EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
+    EmitAsmX64([
+      'sub rsi, %', CLONE_RETBUF_SIZE,
+      'sub rsi, %', SIG_ALTSTACK_SIZE,
+      'sub rsi, %', TlsBlockSize,
+      'cld',
+      'push rdi',                       { flags }
+      'push rcx',                       { arg }
+      'mov rdi, rsi',
+      'xor eax, eax',
+      'mov ecx, %', TlsBlockSize div 8, { slot count }
+      'rep stosq',
+      'pop rcx',
+      'pop rdi',
+      'mov [rsi], rsi',                 { slot 0 = self }
+      'sub rsi, 16',                    { stage area }
+      'mov [rsi], rdx',                 { entry }
+      'mov [rsi+8], rcx',               { arg }
+      'mov rdx, r8',                    { parent_tid = ctidptr }
+      'mov r10, r8',                    { child_tid  = ctidptr }
+      'xor r8d, r8d',                   { tls = NULL }
+      'mov eax, 56',                    { SYS_clone }
+      'syscall_raw',
+      'test rax, rax']);
     { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
       instructions of child setup, and every one of them is a line someone may
       add to. }
     { rel32, not rel8: the child sequence passed 127 bytes when it gained the
       init-image copy (2026-09-24), and PatchRel8 refused it at build time. }
-    EmitB($0F); EmitB($85); pParent := CodeLen; EmitI32(0);   { jnz .parent }
+    EmitAsmX64(['jnz parent']);
     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
     { Install the TLS block FIRST, before anything Pascal runs. clone does not
       reset the thread pointer, so a child that skipped this would read the PARENT's block --
@@ -177,13 +179,13 @@ begin
       install replaces it. See TLS_SLOT_INIT_IMAGE. }
     if TlsUserBytes > 0 then
     begin
-      EmitB($65); EmitB($4C); EmitB($8B); EmitB($24); EmitB($25);
-        EmitI32(8 * TLS_SLOT_INIT_IMAGE);             { mov r12, gs:[8*slot] }
+      EmitAsmX64(['mov r12, gs:[%]', 8 * TLS_SLOT_INIT_IMAGE]);
     end;
-    EmitB($BF); EmitI32($1001);                       { mov edi, ARCH_SET_GS }
-    EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
-    EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
-    EmitB($0F); EmitB($05);                           { syscall }
+    EmitAsmX64([
+      'mov edi, 0x1001',              { ARCH_SET_GS }
+      'lea rsi, [rsp+16]',
+      'mov eax, 158',                   { arch_prctl }
+      'syscall_raw']);
     { ---- start the user area from the init image, when there is one ----
       The block was zeroed above; the image holds every thread-local's
       initial value (0 where it has no initialiser), so this is the start C
@@ -191,17 +193,16 @@ begin
       new block's own slot, so a thread this thread creates copies it too. }
     if TlsUserBytes > 0 then
     begin
-      EmitB($4D); EmitB($85); EmitB($E4);             { test r12, r12 }
-      EmitB($74); pNoInst := CodeLen; EmitB(0);       { jz .nocopy }
-      EmitB($4C); EmitB($89); EmitB($E6);             { mov rsi, r12 }
-      EmitB($48); EmitB($8D); EmitB($BC); EmitB($24);
-        EmitI32(16 + TLS_USER_FIRST_OFF);             { lea rdi, [rsp+16+user] }
-      EmitB($B9); EmitI32(TlsUserBytes);              { mov ecx, TlsUserBytes }
-      EmitB($FC);                                     { cld }
-      EmitB($F3); EmitB($A4);                         { rep movsb }
-      EmitB($4C); EmitB($89); EmitB($A4); EmitB($24);
-        EmitI32(16 + 8 * TLS_SLOT_INIT_IMAGE);        { mov [rsp+16+8*slot], r12 }
-      PatchRel8(pNoInst);                             { .nocopy: }
+      EmitAsmX64([
+        'test r12, r12',
+        'jz short nocopy',
+        'mov rsi, r12',
+        'lea rdi, [rsp+%]', 16 + TLS_USER_FIRST_OFF,
+        'mov ecx, %', TlsUserBytes,
+        'cld',
+        'rep movsb',
+        'mov [rsp+%], r12', 16 + 8 * TLS_SLOT_INIT_IMAGE,
+      'nocopy:']);
     end;
     { ---- register the alt stack carved above, on THIS thread ---- }
     { The stack_t is built on the child's own stack rather than in BSS for the
@@ -212,37 +213,34 @@ begin
       area holding (entry, arg) is the 16 bytes below it.
       rdi, rsi and rax are all dead here: rdi and rsi were arch_prctl's
       arguments and entry/arg live on the stack. }
-    EmitB($48); EmitB($8D); EmitB($B4); EmitB($24);
-      EmitI32(16 + TlsBlockSize);                   { lea rsi, [rsp+16+TlsBlockSize] }
-    EmitB($48); EmitB($83); EmitB($EC); EmitB($20);   { sub rsp, 32 }
-    EmitB($48); EmitB($89); EmitB($34); EmitB($24);   { mov [rsp], rsi      (ss_sp) }
-    EmitB($48); EmitB($C7); EmitB($44); EmitB($24); EmitB($08);
-      EmitI32(0);                                     { mov qword [rsp+8], 0  (ss_flags) }
-    EmitB($48); EmitB($C7); EmitB($44); EmitB($24); EmitB($10);
-      EmitI32(SIG_ALTSTACK_SIZE);                     { mov qword [rsp+16], size }
-    EmitB($48); EmitB($89); EmitB($E7);               { mov rdi, rsp        (new) }
-    EmitB($31); EmitB($F6);                           { xor esi, esi        (old = nil) }
-    EmitB($B8); EmitI32(131);                         { mov eax, 131 (sigaltstack) }
-    EmitB($0F); EmitB($05);                           { syscall }
-    EmitB($48); EmitB($83); EmitB($C4); EmitB($20);   { add rsp, 32 }
+    EmitAsmX64([
+      'lea rsi, [rsp+%]', 16 + TlsBlockSize,
+      'sub rsp, 32',
+      'mov [rsp], rsi',                 { ss_sp }
+      'mov qword [rsp+8], 0',           { ss_flags }
+      'mov qword [rsp+16], %', SIG_ALTSTACK_SIZE,
+      'mov rdi, rsp',                   { new }
+      'xor esi, esi',                   { old = nil }
+      'mov eax, 131',                   { sigaltstack }
+      'syscall_raw',
+      'add rsp, 32']);
     { r10 = the hidden-destination scratch, BEFORE the two pops move rsp.
       An entry with no result ignores r10; one that returns a record/set/frozen
       string/Variant/promo-int copies its result there and the child discards
       it by exiting. rsp is still the stage area here, so the scratch is
       stage + 16 (past entry/arg) + the TLS block + the alt stack. }
-    EmitB($4C); EmitB($8D); EmitB($94); EmitB($24);
-      EmitI32(16 + TlsBlockSize + SIG_ALTSTACK_SIZE); { lea r10, [rsp+16+TLS+ALT] }
-    EmitB($58);                                       { pop rax  (entry) }
-    EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
-    EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }
-    EmitB($31); EmitB($FF);                           { xor edi, edi  (exit code 0) }
-    EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60  (SYS_exit) }
-    EmitB($0F); EmitB($05);                           { syscall  (thread exits here) }
-    { ---- .parent: rax already = child tid ---- }
-    Patch32(pParent, CodeLen - (pParent + 4));
-    EmitB($C3);                                       { ret }
-    { patch the jump-over to land here, past the stub. }
-    Patch32(jmpOver, CodeLen - (jmpOver + 4));
+    EmitAsmX64([
+      'lea r10, [rsp+%]', 16 + TlsBlockSize + SIG_ALTSTACK_SIZE,
+      'pop rax',                        { entry }
+      'pop rdi',                        { arg -> first int arg }
+      'call rax',                       { entry(arg) }
+      'xor edi, edi',                   { exit code 0 }
+      'mov eax, 60',                    { SYS_exit }
+      'syscall_raw',                    { the thread exits here }
+    'parent:',                          { rax already = child tid }
+      'ret',
+    'over:']);                          { the jump-over lands past the stub }
+    AsmScopeEnd;
   end;
   if TargetArch = TARGET_I386 then
   begin

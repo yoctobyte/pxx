@@ -4964,21 +4964,27 @@ end;
 procedure EmitArgvToAddr;
 begin
   { On entry: rax = argv index, rdi = destination address. }
-  EmitB($57); { push rdi }
-  EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
+  EmitAsmX64([
+    'push rdi',
+    'shl rax, 3']);
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
-  EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
-  EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
-  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
-  EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
-  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0 }
-  EmitB($74); EmitB($05);                           { je +5 }
-  EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
-  EmitB($EB); EmitB($F5);                           { jmp -11 }
-  EmitB($5F); { pop rdi }
-  EmitB($48); EmitB($89); EmitB($0F);               { mov [rdi], rcx }
-  EmitB($48); EmitB($83); EmitB($C7); EmitB($08);   { add rdi, 8 }
+  EmitAsmX64([
+    'add rcx, 8',
+    'add rax, rcx',
+    'mov rax, [rax]',
+    'mov rsi, rax',
+    'xor rcx, rcx']);
+  EmitAsmX64([
+  '.scan:',
+    'cmp byte [rsi+rcx], 0',
+    'je short .found',
+    'inc rcx',
+    'jmp short .scan',
+  '.found:']);
+  EmitAsmX64([
+    'pop rdi',
+    'mov [rdi], rcx',
+    'add rdi, 8']);
   EmitB($F3); EmitB($A4);                           { rep movsb }
 end;
 
@@ -5058,12 +5064,13 @@ begin
 
         if elemSize = 8 then
         begin
-          EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); { shl rax, 3 }
+          EmitAsmX64(['shl rax, 3']);
         end
         else if elemSize > 1 then
         begin
-          EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
-          EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); { imul rax, rcx }
+          EmitAsmX64([
+            'mov rcx, %', elemSize,
+            'imul rax, rcx']);
         end;
 
         if curRec = REC_TPARAM then lo := 0
@@ -5071,11 +5078,11 @@ begin
 
         if lo <> 0 then
         begin
-          EmitB($48); EmitB($2D); EmitI32(lo * elemSize); { sub rax, lo*elemSize }
+          EmitAsmX64(['sub rax, %', lo * elemSize]);
         end;
 
         EmitB($59); { pop rcx -- base address }
-        EmitB($48); EmitB($01); EmitB($C8); { add rax, rcx }
+        EmitAsmX64(['add rax, rcx']);
 
         isArr := False;
         if curRec = REC_TPARAM then
@@ -5095,7 +5102,7 @@ begin
         { rax = index (1-based). We want to compute: base + 8 + (rax - 1) = base + 7 + rax }
         EmitB($48); EmitB($05); EmitI32(7);
         EmitB($59); { pop rcx -- base address }
-        EmitB($48); EmitB($01); EmitB($C8); { add rax, rcx }
+        EmitAsmX64(['add rax, rcx']);
 
         curTk := tyChar;
         curRec := REC_NONE;
@@ -5109,7 +5116,7 @@ begin
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
       if DebugTrace then writeln('Dot selector: curRec = ', curRec, ', field = ', CurTok.SVal);
       offset := RecFieldOffset(curRec, CurTok.SVal);
-      EmitB($48); EmitB($05); EmitI32(offset); { add rax, offset }
+      EmitAsmX64(['add rax, %', offset]);
 
       isArr := RecFieldIsArray(curRec, CurTok.SVal);
 
@@ -5201,11 +5208,13 @@ begin
               Error('type mismatch: expected string');
             end;
             EmitLeaStrDataRdi(idx);
-            EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
-            EmitB($48); EmitB($8B); EmitB($06); { mov rax, [rsi] }
+            EmitAsmX64([
+              'mov rsi, rax',
+              'mov rax, [rsi]']);
             EmitStoreStrLen(idx);
-            EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
-            EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+            EmitAsmX64([
+              'mov rcx, rax',
+              'add rsi, 8']);
             EmitB($F3); EmitB($A4); { rep movsb }
           end;
         end
@@ -5243,7 +5252,7 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
-        EmitB($50); { push rax }
+        EmitAsmX64(['push rax']);
         EmitB($5F); { pop rdi -- LHS address }
         EmitB($58); { pop rax -- index }
         EmitArgvToAddr;
@@ -5260,12 +5269,13 @@ begin
           Error('type mismatch: expected string');
         end;
         EmitB($5F); { pop rdi -- LHS address }
-        EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
-        EmitB($48); EmitB($8B); EmitB($06); { mov rax, [rsi] }
-        EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
-        EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
-        EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
-        EmitB($48); EmitB($83); EmitB($C7); EmitB($08); { add rdi, 8 }
+        EmitAsmX64([
+          'mov rsi, rax',
+          'mov rax, [rsi]',
+          'mov [rdi], rax',
+          'mov rcx, rax',
+          'add rsi, 8',
+          'add rdi, 8']);
         EmitB($F3); EmitB($A4);
       end;
     end

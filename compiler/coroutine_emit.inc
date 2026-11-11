@@ -26,25 +26,28 @@ begin
   if TargetArch = TARGET_X86_64 then
   begin
     CoSwitchAddr := CodeLen;
-    EmitB($55);                                                 { push rbp }
-    EmitB($53);                                                 { push rbx }
-    EmitB($41); EmitB($54);                                     { push r12 }
-    EmitB($41); EmitB($55);                                     { push r13 }
-    EmitB($41); EmitB($56);                                     { push r14 }
-    EmitB($41); EmitB($57);                                     { push r15 }
+    EmitAsmX64([
+      'push rbp',
+      'push rbx',
+      'push r12',
+      'push r13',
+      'push r14',
+      'push r15']);
     EmitStatusSlotX64(0, BSS_EXC_TOP, False);                   { mov rax, [BSS_EXC_TOP] }
-    EmitB($50);                                                 { push rax }
-    EmitB($48); EmitB($89); EmitB($27);                         { mov [rdi], rsp }
-    EmitB($48); EmitB($8B); EmitB($26);                         { mov rsp, [rsi] }
-    EmitB($58);                                                 { pop rax }
+    EmitAsmX64([
+      'push rax',
+      'mov [rdi], rsp',
+      'mov rsp, [rsi]',
+      'pop rax']);
     EmitStatusSlotX64(0, BSS_EXC_TOP, True);                    { mov [BSS_EXC_TOP], rax }
-    EmitB($41); EmitB($5F);                                     { pop r15 }
-    EmitB($41); EmitB($5E);                                     { pop r14 }
-    EmitB($41); EmitB($5D);                                     { pop r13 }
-    EmitB($41); EmitB($5C);                                     { pop r12 }
-    EmitB($5B);                                                 { pop rbx }
-    EmitB($5D);                                                 { pop rbp }
-    EmitB($C3);                                                 { ret }
+    EmitAsmX64([
+      'pop r15',
+      'pop r14',
+      'pop r13',
+      'pop r12',
+      'pop rbx',
+      'pop rbp',
+      'ret']);
   end
   else if TargetArch = TARGET_I386 then
   begin

@@ -183,11 +183,17 @@ var
 { PXXDBG channel selector. Always False here: this harness asserts exact byte
   sequences, so a debug line on stdout would be noise in the thing being
   measured. }
+function AIntToStr(v: Int64): AnsiString;
+begin
+  Result := IntToStr(v);
+end;
+
 function PxxDbgWants(const prefix, name: AnsiString): Boolean;
 begin
   Result := False;
 end;
 
+{$include ../compiler/rel8.inc}   { CheckRel8: the assembler's short-jump range check }
 {$include ../compiler/x64enc.inc}
 {$include ../compiler/asmtext.inc}
 
@@ -458,6 +464,95 @@ begin
   ResetCode; EmitAsmX64(['test rax, rax', 'jz .done', 'inc qword [rax-16]', '.done:']);
   AssertBytes('test/jz .done/inc/.done:',
     [$48,$85,$C0, $0F,$84,$04,$00,$00,$00, $48,$FF,$40,$F0]);
+
+  { --- the 2026-11-11 additions, each pinned against GNU as --- }
+  { scope labels: a forward jump in one call, its target in a later one, Pascal
+    between them }
+  ResetCode;
+  AsmScopeBegin;
+  EmitAsmX64(['test rax, rax', 'jz skip']);
+  EmitAsmX64(['inc rax']);
+  EmitAsmX64(['skip:', 'ret']);
+  AsmScopeEnd;
+  AssertBytes('scope forward jump',
+    [$48,$85,$C0, $0F,$84,$03,$00,$00,$00, $48,$FF,$C0, $C3]);
+  { short forward, and a back edge across calls }
+  ResetCode;
+  AsmScopeBegin;
+  EmitAsmX64(['top:', 'dec ecx', 'jz short out']);
+  EmitAsmX64(['jmp top', 'out:']);
+  AsmScopeEnd;
+  AssertBytes('scope short fwd + back edge', [$FF,$C9, $74,$02, $EB,$FA]);
+  { near forces rel32 on a back edge that would fit rel8 }
+  ResetCode;
+  AsmScopeBegin;
+  EmitAsmX64(['top:', 'jmp near top']);
+  AsmScopeEnd;
+  AssertBytes('jmp near back', [$E9,$FB,$FF,$FF,$FF]);
+  { nested scopes do not see each other's labels }
+  ResetCode;
+  AsmScopeBegin;
+  EmitAsmX64(['jmp short done']);
+  AsmScopeBegin; EmitAsmX64(['done:', 'nop']); AsmScopeEnd;
+  EmitAsmX64(['done:']);
+  AsmScopeEnd;
+  AssertBytes('nested scope', [$EB,$01, $90]);
+  { @code: rel32 to a known position }
+  ResetCode; EmitAsmX64(['nop', 'jmp @code', 0]);
+  AssertBytes('jmp @code', [$90, $E9,$FA,$FF,$FF,$FF]);
+  ResetCode; EmitAsmX64(['call @code', 0]);
+  AssertBytes('call @code', [$E8,$FB,$FF,$FF,$FF]);
+  ResetCode; EmitAsmX64(['jne @code', 0]);
+  AssertBytes('jne @code', [$0F,$85,$FA,$FF,$FF,$FF]);
+  { segment override and absolute disp32 }
+  ResetCode; EmitAsmX64(['mov rax, gs:[%]', 16]);
+  AssertBytes('mov rax, gs:[16]', [$65,$48,$8B,$04,$25,$10,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov gs:[%], r12', 8]);
+  AssertBytes('mov gs:[8], r12', [$65,$4C,$89,$24,$25,$08,$00,$00,$00]);
+  { register holes, as operand and as memory base }
+  ResetCode; EmitAsmX64(['shl %r64, %', 9, 3]);
+  AssertBytes('shl r9, 3', [$49,$C1,$E1,$03]);
+  ResetCode; EmitAsmX64(['mov %r32, [%r64+8]', 2, 13]);
+  AssertBytes('mov edx, [r13+8]', [$41,$8B,$55,$08]);
+  { [base+index*scale+disp] }
+  ResetCode; EmitAsmX64('mov byte [rsi+rdx], 0');
+  AssertBytes('mov byte [rsi+rdx], 0', [$C6,$04,$16,$00]);
+  ResetCode; EmitAsmX64('mov rax, [rbx+r9*8+16]');
+  AssertBytes('mov rax, [rbx+r9*8+16]', [$4A,$8B,$44,$CB,$10]);
+  ResetCode; EmitAsmX64('cmp byte [rsi+rcx], 0');
+  AssertBytes('cmp byte [rsi+rcx], 0', [$80,$3C,$0E,$00]);
+  { the index state does not leak into the next line }
+  ResetCode; EmitAsmX64(['lea rax, [rdi+rcx*4]', 'mov rax, [rdi]']);
+  AssertBytes('index reset', [$48,$8D,$04,$8F, $48,$8B,$07]);
+  { indirect jmp, movsxd, 3-operand imul, imul r,[m], literals }
+  ResetCode; EmitAsmX64('jmp qword [rdi+56]');
+  AssertBytes('jmp [rdi+56]', [$FF,$67,$38]);
+  ResetCode; EmitAsmX64('jmp rax');
+  AssertBytes('jmp rax', [$FF,$E0]);
+  ResetCode; EmitAsmX64('movsxd rax, esi');
+  AssertBytes('movsxd rax, esi', [$48,$63,$C6]);
+  ResetCode; EmitAsmX64('movsxd rdx, dword [rcx+12]');
+  AssertBytes('movsxd rdx, [rcx+12]', [$48,$63,$51,$0C]);
+  ResetCode; EmitAsmX64('imul rbx, rbx, 10');
+  AssertBytes('imul rbx, rbx, 10', [$48,$6B,$DB,$0A]);
+  ResetCode; EmitAsmX64('imul rcx, rcx, 1000');
+  AssertBytes('imul rcx, rcx, 1000', [$48,$69,$C9,$E8,$03,$00,$00]);
+  ResetCode; EmitAsmX64('imul rax, [rsi+8]');
+  AssertBytes('imul rax, [rsi+8]', [$48,$0F,$AF,$46,$08]);
+  ResetCode; EmitAsmX64('and eax, ~0x6000');
+  AssertBytes('and eax, ~0x6000', [$81,$E0,$FF,$9F,$FF,$FF]);   { the r/m form; GNU as picks the 1-byte-shorter eax form 25 }
+  ResetCode; EmitAsmX64('cmp al, ''0''');
+  AssertBytes('cmp al, ''0''', [$80,$F8,$30]);   { r/m form; GNU as picks the al form 3C 30 }
+  ResetCode; EmitAsmX64(['cld', 'rep stosq', 'rep movsq']);
+  AssertBytes('cld/rep stosq/rep movsq', [$FC, $F3,$48,$AB, $F3,$48,$A5]);
+
+  ResetCode; EmitAsmX64(['repe cmpsb', 'repne scasb']);
+  AssertBytes('repe cmpsb/repne scasb', [$F3,$A6, $F2,$AE]);
+  { a strlen scan with call-local short labels, as it replaced `je +5` /
+    `jmp -11` in three places }
+  ResetCode; EmitAsmX64(['.scan:', 'cmp byte [rsi+rcx], 0', 'je short .found',
+                         'inc rcx', 'jmp short .scan', '.found:']);
+  AssertBytes('strlen scan', [$80,$3C,$0E,$00, $74,$05, $48,$FF,$C1, $EB,$F5]);
 
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.

@@ -730,7 +730,7 @@ var
   done: Boolean;
 begin
   { Left expression is in rax. Keep it in rcx and produce boolean in rax. }
-  EmitB($48); EmitB($89); EmitB($C1);       { mov rcx, rax }
+  EmitAsmX64(['mov rcx, rax']);
   Expect(tkLBrack, '[');
   trueCount := 0;
   if CurTok.Kind <> tkRBrack then
@@ -744,7 +744,7 @@ begin
 
       if lo = hi then
       begin
-        EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo); { cmp rcx, imm32 }
+        EmitAsmX64(['cmp rcx, %', lo]);
         EmitB($0F); EmitB($84);
         if trueCount >= MAX_SET_JUMPS then Error('set expression too large');
         trueJumps[trueCount] := CodeLen; Inc(trueCount);
@@ -752,9 +752,9 @@ begin
       end
       else
       begin
-        EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo); { cmp rcx, lo }
+        EmitAsmX64(['cmp rcx, %', lo]);
         EmitB($0F); EmitB($8C); nextJmp := CodeLen; EmitI32(0); { jl next }
-        EmitB($48); EmitB($81); EmitB($F9); EmitI32(hi); { cmp rcx, hi }
+        EmitAsmX64(['cmp rcx, %', hi]);
         EmitB($0F); EmitB($8E);
         if trueCount >= MAX_SET_JUMPS then Error('set expression too large');
         trueJumps[trueCount] := CodeLen; Inc(trueCount);

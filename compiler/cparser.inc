@@ -12945,8 +12945,9 @@ begin
   case TargetArch of
   TARGET_X86_64, TARGET_I386:
   begin
-    EmitB($31); EmitB($C0);   { xor eax, eax }
-    EmitB($C3);               { ret }
+    EmitAsmX64([
+      'xor eax, eax',
+      'ret']);
   end;
   TARGET_AARCH64:
   begin
@@ -12997,16 +12998,19 @@ begin
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
-    EmitB($8B); EmitB($44); EmitB($24); EmitB($FC);              { mov eax, [rsp-4] }
-    EmitB($25); EmitB($FF); EmitB($9F); EmitB($FF); EmitB($FF);  { and eax, ~0x6000 }
-    EmitB($89); EmitB($F9);                                      { mov ecx, edi }
-    EmitB($C1); EmitB($E1); EmitB($03);                          { shl ecx, 3 }
-    EmitB($81); EmitB($E1); EmitB($00); EmitB($60); EmitB($00); EmitB($00); { and ecx, 0x6000 }
-    EmitB($09); EmitB($C8);                                      { or eax, ecx }
-    EmitB($89); EmitB($44); EmitB($24); EmitB($FC);              { mov [rsp-4], eax }
+    EmitAsmX64([
+      'mov eax, [rsp-4]',
+      'and eax, ~0x6000']);
+    EmitAsmX64([
+      'mov ecx, edi',
+      'shl ecx, 3']);
+    EmitAsmX64(['and ecx, 0x6000']);
+    EmitAsmX64(['or eax, ecx']);
+    EmitAsmX64(['mov [rsp-4], eax']);
     EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($FC);  { ldmxcsr [rsp-4] }
-    EmitB($31); EmitB($C0);                                      { xor eax, eax }
-    EmitB($C3);                                                  { ret }
+    EmitAsmX64([
+      'xor eax, eax',
+      'ret']);
   end
   else if TargetArch = TARGET_I386 then
   begin
@@ -13076,10 +13080,12 @@ begin
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
-    EmitB($8B); EmitB($44); EmitB($24); EmitB($FC);              { mov eax, [rsp-4] }
-    EmitB($25); EmitB($00); EmitB($60); EmitB($00); EmitB($00);  { and eax, 0x6000 }
-    EmitB($C1); EmitB($E8); EmitB($03);                          { shr eax, 3 }
-    EmitB($C3);                                                  { ret }
+    EmitAsmX64([
+      'mov eax, [rsp-4]',
+      'and eax, 0x6000']);
+    EmitAsmX64([
+      'shr eax, 3',
+      'ret']);
   end
   else if TargetArch = TARGET_I386 then
   begin
@@ -13125,17 +13131,19 @@ begin
     { env in rdi. Layout: [0]=rbx [8]=rbp [16]=r12 [24]=r13 [32]=r14 [40]=r15
       [48]=caller-rsp [56]=return-addr. }
     EmitB($48); EmitB($89); EmitB($5F); EmitB($00);              { mov [rdi+0], rbx }
-    EmitB($48); EmitB($89); EmitB($6F); EmitB($08);              { mov [rdi+8], rbp }
-    EmitB($4C); EmitB($89); EmitB($67); EmitB($10);              { mov [rdi+16], r12 }
-    EmitB($4C); EmitB($89); EmitB($6F); EmitB($18);              { mov [rdi+24], r13 }
-    EmitB($4C); EmitB($89); EmitB($77); EmitB($20);              { mov [rdi+32], r14 }
-    EmitB($4C); EmitB($89); EmitB($7F); EmitB($28);              { mov [rdi+40], r15 }
-    EmitB($48); EmitB($8D); EmitB($44); EmitB($24); EmitB($08);  { lea rax, [rsp+8] }
-    EmitB($48); EmitB($89); EmitB($47); EmitB($30);              { mov [rdi+48], rax }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($24);              { mov rax, [rsp] }
-    EmitB($48); EmitB($89); EmitB($47); EmitB($38);              { mov [rdi+56], rax }
-    EmitB($31); EmitB($C0);                                      { xor eax, eax }
-    EmitB($C3);                                                  { ret }
+    EmitAsmX64([
+      'mov [rdi+8], rbp',
+      'mov [rdi+16], r12',
+      'mov [rdi+24], r13',
+      'mov [rdi+32], r14',
+      'mov [rdi+40], r15',
+      'lea rax, [rsp+8]',
+      'mov [rdi+48], rax']);
+    EmitAsmX64(['mov rax, [rsp]']);
+    EmitAsmX64(['mov [rdi+56], rax']);
+    EmitAsmX64([
+      'xor eax, eax',
+      'ret']);
   end;
   TARGET_I386:
   begin
@@ -13150,8 +13158,9 @@ begin
     EmitB($89); EmitB($41); EmitB($10);               { mov [ecx+16], eax }
     EmitB($8B); EmitB($04); EmitB($24);               { mov eax, [esp] (return addr) }
     EmitB($89); EmitB($41); EmitB($14);               { mov [ecx+20], eax }
-    EmitB($31); EmitB($C0);                           { xor eax, eax }
-    EmitB($C3);                                       { ret }
+    EmitAsmX64([
+      'xor eax, eax',
+      'ret']);
   end;
   TARGET_AARCH64:
   begin
@@ -13220,18 +13229,21 @@ begin
   TARGET_X86_64:
   begin
     EmitB($48); EmitB($8B); EmitB($5F); EmitB($00);              { mov rbx, [rdi+0] }
-    EmitB($48); EmitB($8B); EmitB($6F); EmitB($08);              { mov rbp, [rdi+8] }
-    EmitB($4C); EmitB($8B); EmitB($67); EmitB($10);              { mov r12, [rdi+16] }
-    EmitB($4C); EmitB($8B); EmitB($6F); EmitB($18);              { mov r13, [rdi+24] }
-    EmitB($4C); EmitB($8B); EmitB($77); EmitB($20);              { mov r14, [rdi+32] }
-    EmitB($4C); EmitB($8B); EmitB($7F); EmitB($28);              { mov r15, [rdi+40] }
-    EmitB($48); EmitB($8B); EmitB($67); EmitB($30);              { mov rsp, [rdi+48] }
-    EmitB($48); EmitB($8B); EmitB($4F); EmitB($38);              { mov rcx, [rdi+56] }
-    EmitB($89); EmitB($F0);                                      { mov eax, esi  (val) }
-    EmitB($85); EmitB($C0);                                      { test eax, eax }
-    EmitB($75); EmitB($02);                                      { jnz +2 }
-    EmitB($FF); EmitB($C0);                                      { inc eax  (0 -> 1) }
-    EmitB($FF); EmitB($E1);                                      { jmp rcx }
+    EmitAsmX64([
+      'mov rbp, [rdi+8]',
+      'mov r12, [rdi+16]',
+      'mov r13, [rdi+24]',
+      'mov r14, [rdi+32]',
+      'mov r15, [rdi+40]',
+      'mov rsp, [rdi+48]',
+      'mov rcx, [rdi+56]']);
+    EmitAsmX64([
+      'mov eax, esi',                        { (val) }
+      'test eax, eax',
+      'jnz short .nz',
+      'inc eax',                                                 { 0 -> 1 }
+    '.nz:',
+      'jmp rcx']);
   end;
   TARGET_I386:
   begin
@@ -13246,8 +13258,9 @@ begin
     EmitB($8B); EmitB($71); EmitB($04);               { mov esi, [ecx+4] }
     EmitB($8B); EmitB($79); EmitB($08);               { mov edi, [ecx+8] }
     EmitB($8B); EmitB($69); EmitB($0C);               { mov ebp, [ecx+12] }
-    EmitB($89); EmitB($D0);                           { mov eax, edx (val) }
-    EmitB($85); EmitB($C0);                           { test eax, eax }
+    EmitAsmX64([
+      'mov eax, edx',                        { (val) }
+      'test eax, eax']);
     EmitB($75); EmitB($01);                           { jnz +1 }
     EmitB($40);                                       { inc eax (0 -> 1) }
     EmitB($8B); EmitB($61); EmitB($10);               { mov esp, [ecx+16] }
@@ -14813,7 +14826,7 @@ begin
         i386 puts it on the stack. }
       if TargetArch = TARGET_X86_64 then
       begin
-        EmitB($48); EmitB($89); EmitB($D7); { mov rdi, rdx  (envp, from ld.so) }
+        EmitAsmX64(['mov rdi, rdx']); { (envp, from ld.so) }
         EmitCallProc(envPi);
       end
       else
@@ -14825,10 +14838,10 @@ begin
           would take, because cdecl wants esp 16-aligned AT the call WITH the
           argument already in place, and a bare push leaves it 12 mod 16. }
         EmitB($8B); EmitB($44); EmitB($24); EmitB($28); { mov eax, [esp+40] }
-        EmitB($83); EmitB($EC); EmitB($10);             { sub esp, 16 }
+        EmitAsmX64(['sub esp, 16']);
         EmitB($89); EmitB($04); EmitB($24);             { mov [esp], eax }
         EmitCallProc(envPi);
-        EmitB($83); EmitB($C4); EmitB($10);             { add esp, 16 }
+        EmitAsmX64(['add esp, 16']);
       end;
     end;
     CompilePendingGlobalInits;
@@ -16160,14 +16173,15 @@ begin
       if ProcNamedGP[procIdx] > 6 then sz := (ProcNamedGP[procIdx] - 6) * 8;
       if ProcNamedFP[procIdx] > 8 then sz := sz + (ProcNamedFP[procIdx] - 8) * 8;
       EmitB($48); EmitB($8D); EmitB($85); EmitI32(16 + sz);                     { lea rax, [rbp+16+namedSpill] }
-      EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset);   { mov [rbp+o], rax }
-      EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
+      EmitAsmX64([
+        'mov [rbp+%], rax', Syms[vaOverflowSym].Offset,
+        'mov [rbp+%], rdi', Syms[vaSaveSym].Offset + 0]);
       EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
       EmitB($48); EmitB($89); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 16);   { rdx }
       EmitB($48); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 24);   { rcx }
       EmitB($4C); EmitB($89); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 32);   { r8 }
       EmitB($4C); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 40);   { r9 }
-      EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 48);   { movsd [rbp+o], xmm0 }
+      EmitAsmX64(['movsd [rbp+%], xmm0', Syms[vaSaveSym].Offset + 48]);
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 80);   { xmm2 }
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($9D); EmitI32(Syms[vaSaveSym].Offset + 96);   { xmm3 }

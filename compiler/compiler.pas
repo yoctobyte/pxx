@@ -113,6 +113,18 @@ function StaticArraySourceInfo(argAST: Integer; var cnt: Integer; var elemTk: TT
 {$ifndef PXX_NO_FORTRAN}{$include flexer.inc}{$endif}
 {$ifndef PXX_NO_ALGOL}{$include glexer.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include elexer.inc}{$endif}
+{ emit.inc and symtab.inc emit through the x86-64 text assembler, which is
+  defined in asmtext.inc further down. Only the array-of-const overload
+  is called from there. Beside DbgFileId / AddDefaultCIncludeDirs, which exist
+  for exactly this reason: PXX's own prescan is order-agnostic, so a missing
+  forward is invisible until the FPC-seeded cold-start bootstrap
+  (bug-a-fpc-seed-drift-emitasmx64-forward). }
+procedure EmitAsmX64(const items: array of const); overload; forward;
+{ Scope labels (asmtext.inc): converted raw-byte blocks in symtab.inc and the
+  emitters after it open a scope around jumps whose target is written in a
+  later EmitAsmX64 call. }
+procedure AsmScopeBegin; forward;
+procedure AsmScopeEnd; forward;
 {$include emit.inc}
 {$include rel8.inc}   { range-checked rel8 displacements — after emit.inc: EmitRel8 calls EmitB }
 procedure AsmB(b: Integer); forward;
@@ -132,13 +144,6 @@ procedure AsmI64(v: Int64); forward;
 {$ifdef FPC}{$define PXX_NEED_FORWARDS}{$endif}
 {$ifdef PXX_REQUIRE_FORWARD}{$define PXX_NEED_FORWARDS}{$endif}
 {$ifdef PXX_NEED_FORWARDS}{$include forwards.inc}{$endif}
-{ symtab.inc's float writers emit through the x86-64 text assembler, which is
-  defined in asmtext.inc five includes later. Only the array-of-const overload
-  is called from there. Beside DbgFileId / AddDefaultCIncludeDirs, which exist
-  for exactly this reason: PXX's own prescan is order-agnostic, so a missing
-  forward is invisible until the FPC-seeded cold-start bootstrap
-  (bug-a-fpc-seed-drift-emitasmx64-forward). }
-procedure EmitAsmX64(const items: array of const); overload; forward;
 { Hoisted above symtab.inc (from beside its siblings after ir.inc) because the
   per-target EmitProcEpilog arms in symtab.inc need a dyn-array descriptor for
   the scope-exit release. Same reason as the forwards above: PXX's own prescan

@@ -551,10 +551,11 @@ begin
     begin EmitB($48); EmitB($81); EmitB($F9); EmitI32(v); end   { cmp rcx, imm32 }
   else
   begin
-    EmitB($52);                                                 { push rdx      }
+    EmitAsmX64(['push rdx']);
     MovRdxImm(v);                                               { movabs rdx,i64}
-    EmitB($48); EmitB($39); EmitB($D1);                         { cmp rcx, rdx  }
-    EmitB($5A);                                                 { pop rdx       }
+    EmitAsmX64([
+      'cmp rcx, rdx',
+      'pop rdx']);
   end;
 end;
 

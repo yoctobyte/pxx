@@ -1081,7 +1081,7 @@ procedure EmitInitFiniThunks;
 var callSite: Integer;
 begin
   { The program body falls into here. Return to the loader instead of exiting. }
-  EmitB($C3);                                     { ret }
+  EmitAsmX64(['ret']);
 
   InitThunkOff := CodeLen;
   EmitSharedThunkPrologue;
@@ -2764,28 +2764,28 @@ begin
     the decoder reads. }
   if FpcMemErrors then
   begin
-    EmitAsmX64(['mov edi, %', 11]);                      { SIGSEGV }
+    EmitAsmX64(['mov edi, 11']);                      { SIGSEGV }
     EmitCodeAbsToRdx(FpcMemErrStubAddr);
     EmitAsmX64(['mov rsi, rdx']);
     IREmitCodeCall(SigSetHookAddr);
-    EmitAsmX64(['mov edi, %', 7]);                       { SIGBUS }
+    EmitAsmX64(['mov edi, 7']);                       { SIGBUS }
     EmitCodeAbsToRdx(FpcMemErrStubAddr);
     EmitAsmX64(['mov rsi, rdx']);
     IREmitCodeCall(SigSetHookAddr);
   end;
   if FpcFloatErrors then
   begin
-    EmitAsmX64(['mov edi, %', 8]);                       { SIGFPE }
+    EmitAsmX64(['mov edi, 8']);                       { SIGFPE }
     EmitCodeAbsToRdx(FpcFloatErrStubAddr);
     EmitAsmX64(['mov rsi, rdx']);
     IREmitCodeCall(SigSetHookAddr);
     { Raw bytes, like IR_FPU_MASK's emitter: the text assembler has no
       stmxcsr/ldmxcsr. 50 shl 7 = $1900 = the FPC mask in MXCSR position. }
     EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8);   { stmxcsr [rsp-8] }
-    EmitB($8B); EmitB($44); EmitB($24); EmitB($F8);               { mov eax, [rsp-8] }
+    EmitAsmX64(['mov eax, [rsp-8]']);
     EmitB($25); EmitB($7F); EmitB($E0); EmitB($FF); EmitB($FF);   { and eax, ~$1F80 }
     EmitB($0D); EmitB($00); EmitB($19); EmitB($00); EmitB($00);   { or eax, $1900 }
-    EmitB($89); EmitB($44); EmitB($24); EmitB($F8);               { mov [rsp-8], eax }
+    EmitAsmX64(['mov [rsp-8], eax']);
     EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($F8);   { ldmxcsr [rsp-8] }
   end;
 
