@@ -52,6 +52,7 @@ function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer; forwar
 function PyBitVariantCall(const fname: AnsiString; left, right: Integer): Integer; forward;
 function PyRecIsComplex(recId: Integer): Boolean; forward;
 function PyNodeIsComplex(n: Integer): Boolean; forward;
+function PyUnaryOperandIsNotANumber(n: Integer): Boolean; forward;
 function PyComplexCoerce(n: Integer): Integer; forward;
 function PyMakeComplexBinop(op: TTokenKind; a, b: Integer): Integer; forward;
 function PyCallMeth1(ci: Integer; const mname: AnsiString;

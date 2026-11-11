@@ -3,7 +3,7 @@ slug: bug-n-an-aliased-from-import-binds-a-same-named-pascal-routine-the-plain-s
 type: bug
 track: N
 prio: 60
-status: open
+status: done
 summary: "FLOOR DECIDED 2026-09-21 (frankuser): a silent wrong value is ruled out by the project's own rule that real code running wrong is a bug, so both spellings must behave alike and A LOUD REFUSAL SATISFIES IT — this is NOT an open design fork and was mis-filed as one. MECHANISM CORRECTED: it is the BACKING-UNIT arm and PASCAL's case-insensitive routine lookup, not the stdlib alias table, which neither name reaches. `from random import Random as R` compiles and `R()` returns the INTEGER 0 where CPython returns an RNG object — it binds Pascal's `Random` out of the backing unit. The mechanism is a same-named Pascal routine with an accepting signature and different semantics, and the condition that springs it is an ALIAS: the plain spelling `from random import Random` refuses loudly at the call (`no overload of Random matches these arguments`) while the aliased spelling is silent. Two spellings of one import, two different answers, and the silent one is the one a program written for CPython uses. Live at HEAD and in pin v414 (binary aeadb1754b80). NOT the case-fold defect fixed in pxx@3d3d90a2d — that one is closed and this one survived it, which is how it was found."
 ---
 
@@ -155,3 +155,22 @@ covering only one certifies the other.
 Positive control: the fixture must fail on a build where the alias arm binds the
 Pascal routine. Pin v414 is that build, so it needs no manufacturing — run the
 row against `stable_linux_amd64/default/pinned` and it must return 0.
+
+## Resolution (2026-11-11)
+
+Since random.Random got its own route (`pyrandom_new`, TPyRandom), the
+plain spelling returns the RNG. The aliased spelling still returned an int:
+the unit-arm from-import recorded the stdlib alias row, then bound `R` through
+flat scope to System's `Random`.
+
+Fix (pyparser.inc, the unit-arm from-import): after `PyStdAliasRecord`, when
+the compiler provides `<root>.<member>` and the backing unit declares no
+class, symbol or routine of that name, the alias row IS the binding. The flat
+scope arms are skipped, because the only thing they can find under that name
+is a routine in an unrelated unit. Members the backing unit does declare keep
+the old path.
+
+Checked: `Random as R` in the main program and inside an imported module,
+`randint as ri`, `deque as dq`, `Counter as C`, `floor as fl`. Test
+`test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.py`
+(row `randalias26`).

@@ -14,7 +14,7 @@ track: N
 type: bug
 prio: 55
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured
@@ -148,3 +148,35 @@ in one thing.** Anything else that changes between them moves the count too, so
 it holds for the call-versus-value spelling of ONE name in ONE file and does NOT
 hold across a pull, a rebuild, or two different programs. Read it as a delta
 between two invocations you made back to back, never as an absolute.
+
+## Resolution (2026-11-11)
+
+**min / max:** already correct on master when rechecked. `f = min` serves
+`f([3, 1, 2])` and `f(3, 1)`, and `map(min, ...)` / `map(max, ...)` agree with
+CPython.
+
+**The json.dumps half had got worse:** `f = json.dumps; f([1, 2])` SEGFAULTED.
+It now matches CPython for `f(x)`, `f(x, indent=2)`, `f(x, sort_keys=True)`,
+`f(x, ensure_ascii=False)` and `map(json.dumps, ...)`. The discriminator is the
+declaration, as this ticket asked; no unit list was added.
+
+- `PyCallableValueArity`: a Pascal routine outside pylib/pyeval, i.e. not a
+  NilPy def, gets its required arity plus the run of defaulted parameters whose
+  Pascal default is *bakeable* (new `PyPascalDefaultIsBakeable`: an ordinal,
+  bool or float, or a Variant's zero default, which becomes None). The run stops
+  at the first string, set or pointer default, and Pascal fills that one and
+  everything after it.
+- `PyCopyPascalDefaultsToWrapper` copies those defaults onto the synthesized
+  `$pycallwrap_N`. EmitPySignatures bakes them into the wrapper's signature
+  record, and the dispatcher fills omitted arguments from it as it does for a
+  def.
+- The box carries the WRAPPER's signature when the real routine is Pascal and
+  the wrapper took defaults. Pascal routines have no record of their own.
+  pylib builtins keep their old path (their wrapper takes no defaults).
+- The wrapper's parameters take the real routine's names instead of `a0..aN`,
+  so keywords through the value match. The body refers to parameters by
+  symbol, so nothing else reads the names.
+
+Test `test/test_nilpy_a_shim_function_with_defaults_taken_as_a_value.py`
+(row `shimdflt26`). The `abs` half is its own ticket,
+[[bug-n-abs-is-not-a-value-while-len-and-str-are]].

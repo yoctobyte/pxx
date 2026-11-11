@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -76,3 +76,13 @@ Check `b'\xNN'` (bytes literals) separately — there the byte IS the right thin
 and the fix must not change it. The bug is that the *str* path uses the bytes
 rule. Also check `'\NNN'` octal escapes, which have the same "code point, not
 byte" semantics in Python and are likely to share the implementation.
+
+## Resolution (2026-11-11)
+
+Already fixed by 453fe76221 (2026-09-25, "str escapes are code points in
+UTF-8; bytes escapes stay bytes"), which added `PyAppendCodePoint` to the
+string lexer but left this ticket in the backlog and added no test. Rechecked
+on master: every row of the table above now matches CPython (`'\x80'` is
+len 1, ord 128, `[194, 128]`). Regression test
+`test/test_nilpy_a_hex_escape_is_a_code_point.py` (row `hexesc26`) covers
+`\x`, octal, `\u`, comparisons with `chr()`, and a bytes literal keeping raw bytes.

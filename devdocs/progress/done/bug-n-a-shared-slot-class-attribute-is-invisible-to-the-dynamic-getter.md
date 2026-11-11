@@ -18,7 +18,7 @@ track: N
 type: bug
 prio: 60
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured
@@ -62,3 +62,17 @@ reference), `PyBoxByKind` (shared boxing, now including kinds 27/28).
 A positive control must include a LITERAL-valued attribute: the bug is about
 the lowering, and a fixture that only tries expression values would pass for
 the wrong reason once the promotable-int arms are in.
+
+## Resolution (2026-11-11)
+
+The registry was already there (`PyClsAttrSlotOf`, the walk
+`pyclsattr_inst_get` uses for a static `self.K`). The dynamic routes now
+ask it, after fields and properties and before `__class__`/`__getattr__`:
+`pydynattr_get`, `pydynattr_hasattr`, `pydynattr_get_v` and
+`pydynattr_has_v`. `pydynattr_has_any_v` calls `has_v` first, so it is
+covered too. Lookup goes by the receiver's RUNTIME class, so a subclass that
+redeclares the attribute answers its own value and a write through the class
+name is seen by every instance. pylib-only change.
+
+Test `test/test_nilpy_a_shared_slot_class_attribute_is_visible_to_getattr.py`
+(row `sharedslot26`).

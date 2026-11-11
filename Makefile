@@ -1320,6 +1320,16 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_kw5pos26 | diff -u test/test_nilpy_a_keyword_after_five_positionals_through_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_a_function_value_has_a_name.py $(TESTTMP)/test_nilpy_fnname26
 	$(TESTTMP)/test_nilpy_fnname26 | diff -u test/test_nilpy_a_function_value_has_a_name.expected -
+	./$(COMPILER) test/test_nilpy_a_hex_escape_is_a_code_point.py $(TESTTMP)/test_nilpy_hexesc26
+	$(TESTTMP)/test_nilpy_hexesc26 | diff -u test/test_nilpy_a_hex_escape_is_a_code_point.expected -
+	./$(COMPILER) test/test_nilpy_a_unary_sign_on_a_str_list_or_bool.py $(TESTTMP)/test_nilpy_unarystr26
+	$(TESTTMP)/test_nilpy_unarystr26 | diff -u test/test_nilpy_a_unary_sign_on_a_str_list_or_bool.expected -
+	./$(COMPILER) test/test_nilpy_a_shim_function_with_defaults_taken_as_a_value.py $(TESTTMP)/test_nilpy_shimdflt26
+	$(TESTTMP)/test_nilpy_shimdflt26 | diff -u test/test_nilpy_a_shim_function_with_defaults_taken_as_a_value.expected -
+	./$(COMPILER) test/test_nilpy_a_shared_slot_class_attribute_is_visible_to_getattr.py $(TESTTMP)/test_nilpy_sharedslot26
+	$(TESTTMP)/test_nilpy_sharedslot26 | diff -u test/test_nilpy_a_shared_slot_class_attribute_is_visible_to_getattr.expected -
+	./$(COMPILER) test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.py $(TESTTMP)/test_nilpy_randalias26
+	$(TESTTMP)/test_nilpy_randalias26 | diff -u test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.expected -
 	# Repros of fourteen NilPy tickets found already fixed on 2026-11-10 (each
 	# ticket's own code block; expected = python3), so they stay fixed.
 	./$(COMPILER) test/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple.py $(TESTTMP)/test_nilpy_a_bare_tuple_from_a_mimic_method_stays_a_tuple26

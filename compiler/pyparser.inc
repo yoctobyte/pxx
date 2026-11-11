@@ -19295,6 +19295,54 @@ end;
   through some OTHER unit (an RTL shim) still gets ParamCount here and keeps the
   pre-existing unwrapped behaviour. Widening this to "any Pascal-declared proc"
   is the general fix and wants its own measurement of what else it moves. }
+{ Can parameter k of the Pascal routine pi carry its default into a NilPy
+  signature record (EmitPySignatures)? Only a constant that bakes into a
+  variant slot: an ordinal, a bool, a float, or a Variant parameter's zero
+  default, which every library facade reads as "not supplied" and which bakes
+  as None. Not a string (a managed payload cannot be baked), a set, a pointer
+  or class (no Variant coercion), nor a var/out slot. }
+function PyPascalDefaultIsBakeable(pi, k: Integer): Boolean;
+var tk: TTypeKind; ix: Integer;
+begin
+  Result := False;
+  if (k < 0) or (k >= MAX_PROC_PARAMS) or (k >= Procs[pi].ParamCount) then Exit;
+  ix := pi * MAX_PROC_PARAMS + k;
+  if not ProcParamHasDefault[ix] then Exit;
+  if ProcParamDefaultIsStr[ix] or ProcParamDefaultIsSet[ix] then Exit;
+  if ProcParamDefaultSym[ix] >= 0 then Exit;
+  if Procs[pi].Params[k].IsArray then Exit;
+  if ProcParamExplicitByRef[ix] and not ProcParamIsConst[ix] then Exit;
+  tk := Procs[pi].Params[k].TypeKind;
+  if (tk = tyAnsiString) or (tk = tyString) then Exit;
+  if tk = tyVariant then
+    Result := not ProcParamDefaultIsFloat[ix]
+  else
+    Result := PyScalarWrappableParamType(tk);
+end;
+
+{ Give the wrapper realPi's bakeable Pascal defaults (see PyCallableValueArity),
+  so its signature record fills what a call through the value omits. }
+procedure PyCopyPascalDefaultsToWrapper(realPi, wrapPi, wrapArity: Integer);
+var k, src, dst: Integer;
+begin
+  if PyProcIsNilPyDef(realPi) then Exit;
+  for k := 0 to wrapArity - 1 do
+  begin
+    src := realPi * MAX_PROC_PARAMS + k;
+    if not ProcParamHasDefault[src] then Continue;
+    dst := wrapPi * MAX_PROC_PARAMS + k;
+    ProcParamHasDefault[dst] := True;
+    ProcParamDefaultVal[dst] := ProcParamDefaultVal[src];
+    ProcParamDefaultIsStr[dst] := False;
+    ProcParamDefaultIsSet[dst] := False;
+    ProcParamDefaultSym[dst] := -1;
+    ProcParamDefaultIsFloat[dst] := ProcParamDefaultIsFloat[src];
+    ProcParamDefaultIsBool[dst] := Procs[realPi].Params[k].TypeKind = tyBoolean;
+    ProcParamDefaultIsNone[dst] := (Procs[realPi].Params[k].TypeKind = tyVariant) and
+                                   (ProcParamDefaultVal[src] = 0);
+  end;
+end;
+
 function PyCallableValueArity(pi: Integer): Integer;
 var un: AnsiString;
 begin
@@ -19303,7 +19351,24 @@ begin
   if ProcUnitIdx[pi] < 0 then Exit;          { the main program — a user def }
   un := Strs[ProcUnitIdx[pi]].Text;
   if (un = 'pylib') or (un = 'pyeval') then
+    Result := PyProcRequiredArity(pi)
+  else if not PyProcIsNilPyDef(pi) then
+  begin
+    { THE KNOWN GAP ABOVE, closed by what the DECLARATION carries rather than
+      by a longer unit list: a Pascal routine in any other unit (an RTL shim:
+      `json.dumps(obj; indent: Integer = -1; ensure_ascii: Boolean = True;
+      sort_keys: Boolean = False)`) keeps the defaulted parameters whose Pascal
+      default PyCopyPascalDefaultsToWrapper can BAKE into the wrapper's
+      signature record. The dispatcher fills an omitted one from that record,
+      as it does for a NilPy def, so `f = json.dumps` serves both `f(xs)` and
+      `f(xs, 2)`. It segfaulted on `f(xs)`: a 4-slot wrapper with three slots
+      unstaged. The run stops at the first default that cannot be baked (a
+      string, a set, a pointer); Pascal fills that one and everything after it.
+      bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit }
     Result := PyProcRequiredArity(pi);
+    while (Result < Procs[pi].ParamCount) and PyPascalDefaultIsBakeable(pi, Result) do
+      Inc(Result);
+  end;
 end;
 
 { realPi already has an all-Variant PARAMETER list (the caller found it via
@@ -19351,11 +19416,16 @@ begin
   wrapArity := PyCallableValueArity(realPi);
   for wpi := 0 to wrapArity - 1 do
   begin
-    pnames[wpi] := 'a' + AIntToStr(wpi);
+    { the REAL parameter's name: the signature record carries these, and a
+      keyword through the value (`f = json.dumps; f(x, indent=2)`) matches
+      against them. The body names its parameters by symbol, never by name. }
+    pnames[wpi] := Procs[realPi].Params[wpi].Name;
+    if pnames[wpi] = '' then pnames[wpi] := 'a' + AIntToStr(wpi);
     ptypes[wpi] := tyVariant;
   end;
   wrapPi := RegisterProc(wrapName, True, tyVariant,
                          wrapArity, pnames, ptypes);
+  PyCopyPascalDefaultsToWrapper(realPi, wrapPi, wrapArity);
   Procs[wrapPi].BodyAddr := -1;
   if PyPendLamCount >= PY_MAX_NESTED then
     Error('Nil Python: too many pending callable-value wrappers/lambdas');
@@ -19763,6 +19833,14 @@ begin
   begin
     sigNode := AllocNode(AN_PYSIGREF);
     ASTIVal[sigNode] := origPi;
+    { ...EXCEPT a Pascal routine, which has no record of its own: when the
+      wrapper took over its bakeable defaults (PyCopyPascalDefaultsToWrapper),
+      the wrapper's record is the only one that knows them. }
+    if (pi <> origPi) and (Procs[pi].ParamCount > 0) and
+       (Procs[pi].ParamCount <= MAX_PROC_PARAMS) and
+       (not PyProcIsNilPyDef(origPi)) and
+       ProcParamHasDefault[pi * MAX_PROC_PARAMS + Procs[pi].ParamCount - 1] then
+      ASTIVal[sigNode] := pi;
     ASTTk[sigNode]   := Ord(tyPointer);
     argE := AllocNode(AN_ARG); ASTLeft[argE] := sigNode; ASTRight[argE] := -1;
     ASTRight[argD] := argE;
@@ -30399,6 +30477,22 @@ begin
   if (sym < 0) or (sym >= Length(PyFSeqProc)) or (CurProc < 0) then Exit;
   Result := (PyFSeqProc[sym] = CurProc + 1) and (Syms[sym].Kind = skParam) and
             (PyFSeqName[sym] = Syms[sym].Name);
+end;
+
+{ A unary +/- operand whose static type is no plain number: a str, a bool, or a pylib object
+  handle (list, dict, set, ...). Those go through pyvar_neg / pyvar_pos, which
+  raise CPython's `bad operand type for unary -: 'str'`. A user class has its
+  own __neg__ arm and complex its own; neither reaches here.
+  bug-n-reading-the-typeerror-a-unary-minus-raised-inside-a-def-segfaults }
+function PyUnaryOperandIsNotANumber(n: Integer): Boolean;
+var k: TTypeKind;
+begin
+  k := IntToTypeKind(ASTTk[n]);
+  { a bool too: -True is -1 and +True is 1, an int, where AN_NEG kept the
+    Boolean type and printed True }
+  Result := (k = tyAnsiString) or (k = tyString) or (k = tyBoolean) or
+            ((k = tyClass) and (ResolveNodeRec(n) < REC_UCLASS_BASE) and
+             not PyNodeIsComplex(n));
 end;
 
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer;
@@ -53281,7 +53375,7 @@ end;
 
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
-    rsvImp: AnsiString; rsvUnit: Integer;   { a member Pascal reserves -- see the arm }
+    rsvImp: AnsiString; rsvUnit, stdUnit: Integer;   { a member Pascal reserves -- see the arm }
     subKey: AnsiString;   { `from pkg import sub`, sub a MODULE -- see PyPackageSubmoduleKey }
     { `from . import (a, b)` — a parenthesised name list. See the loop below. }
     impParen: Boolean;
@@ -53585,6 +53679,25 @@ begin
             rather than the consumed-only one, but its members are mapped by
             the same table sys.exit uses and the unit alone does not bind them. }
           PyStdAliasRecord(impDotted, impReal, impAlias);
+          { ...and when the compiler provides it while the backing unit does NOT
+            declare that name, the alias row just recorded IS the binding. The
+            arms below would bind through flat scope, and the only thing flat
+            scope can find under that name is an unrelated routine in another
+            unit: `from random import Random as R` bound System's Pascal
+            `Random`, so `R(42)` was an int, while the un-aliased spelling (no
+            arm below runs for it in the main program) got the RNG object.
+            bug-n-an-aliased-from-import-binds-a-same-named-pascal-routine-the-plain-spelling-refuses }
+          stdUnit := FindUnitOrAlias(impName);
+          if PyStdProvidesMember(impDotted, impReal) and (stdUnit >= 0) and
+             (FindUClassInUnit(impReal, stdUnit) < 0) and
+             (FindSymInUnit(impReal, stdUnit) < 0) and
+             (FindProcInUnit(impReal, stdUnit) < 0) then
+          begin
+            if impParen then PySkipNewlines;
+            if not Eat(tkComma) then Break;
+            if impParen then PySkipNewlines;
+            Continue;
+          end;
           { A member whose Python name Pascal RESERVES: `from array import
             array`. mimic_array cannot declare a class called `array`, so it
             declares `array_` (PyMapReservedMember's convention), and the three
@@ -61658,10 +61771,12 @@ begin
          (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
       begin
         node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__pos__', left, -1);
-        if node < 0 then node := PyMakeUnsupportedOperand;
+        { no __pos__ (a list, a class without the dunder): CPython's own
+          `bad operand type for unary +: 'list'` from the variant path }
+        if node < 0 then node := PyCallProc1('pyvar_pos', left);
         CurASTNode := node;
       end
-      else if IntToTypeKind(ASTTk[left]) = tyVariant then
+      else if (IntToTypeKind(ASTTk[left]) = tyVariant) or PyUnaryOperandIsNotANumber(left) then
         CurASTNode := PyCallProc1('pyvar_pos', left);
     end;
     tkMinus:
@@ -61686,12 +61801,21 @@ begin
           integer. }
         node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__neg__', left, -1);
         if node < 0 then
-          node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
+          { runtime TypeError, not a build abort; through pyvar_neg so the
+            message is CPython's `bad operand type for unary -: 'list'` }
+          node := PyCallProc1('pyvar_neg', left);
       end
       else if IntToTypeKind(ASTTk[left]) = tyVariant then
         { the IR's variant arm rewrites `-v` to `0 - v`, and 0 - 0.0 is +0.0
           where CPython keeps -0.0; pyvar_neg flips a double's sign and leaves
           every other tag to that same subtraction }
+        node := PyCallProc1('pyvar_neg', left)
+      else if PyUnaryOperandIsNotANumber(left) then
+        { a str or a list/dict/... handle: the AN_NEG below negated the POINTER
+          and then reference-counted the result, a segfault inside the def that
+          read like a crash in the handler. Boxed to a variant, pyvar_neg raises
+          CPython's own TypeError.
+          bug-n-reading-the-typeerror-a-unary-minus-raised-inside-a-def-segfaults }
         node := PyCallProc1('pyvar_neg', left)
       else
       begin

@@ -1,0 +1,7 @@
+True 7 dflt 7
+True 9 dflt 9
+True 7 dflt 7
+7 9
+[3, 9, 3]
+AttributeError 'H' object has no attribute 'nope'
+True 3 3

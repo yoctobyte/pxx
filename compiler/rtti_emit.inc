@@ -362,10 +362,8 @@ end;
   reserved record array). The generic native-call trampoline reads arity +
   param kinds to marshal variant args to each param's type. Record must be
   reserved by the caller first. }
-function PyProcIsNilPyDef(pi: Integer): Boolean; forward;
-{ Forward because EmitMethInfo needs it and its body sits with the signature
-  emitter further down — the same single-pass reason TypeInfoOrdName is
-  forward-declared below. }
+{ PyProcIsNilPyDef is forward-declared in compiler.pas (EmitMethInfo below
+  and pyparser.inc both call it before its body). }
 
 procedure AddMethSigFix(dataPos, procIdx: Integer);
 var n: Integer;

@@ -11273,10 +11273,11 @@ begin
         PyParseFactorCore. It was eaten as a no-op, so `+v` was `v` itself.
         bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand }
       posOvl := PyCallMeth1(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE, '__pos__', CurASTNode, -1);
-      if posOvl < 0 then posOvl := PyMakeUnsupportedOperand;
+      if posOvl < 0 then posOvl := PyCallProc1('pyvar_pos', CurASTNode);
       CurASTNode := posOvl;
     end
-    else if PyExprMode and (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
+    else if PyExprMode and ((IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) or
+                            PyUnaryOperandIsNotANumber(CurASTNode)) then
       CurASTNode := PyCallProc1('pyvar_pos', CurASTNode);
   end;
   if neg then

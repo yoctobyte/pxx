@@ -1,0 +1,13 @@
+TypeError: bad operand type for unary -: 'str'
+TypeError: bad operand type for unary +: 'str'
+TypeError: bad operand type for unary -: 'list'
+TypeError: bad operand type for unary +: 'dict'
+-3
+-2.5
+4
+TypeError: bad operand type for unary -: 'str'
+TypeError: bad operand type for unary -: 'str'
+TypeError: bad operand type for unary -: 'list'
+-3 2 1 -1
+1 -1 -1 1 0
+TypeError: bad operand type for unary -: 'C'

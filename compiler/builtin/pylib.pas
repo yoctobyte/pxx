@@ -5417,7 +5417,7 @@ begin
 end;
 
 function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
-var declFound: Boolean; dummy: Variant;
+var declFound: Boolean; dummy: Variant; slotKind: Int64;
 begin
   Result := pydynattr_has(obj, name);
   if Result then Exit;
@@ -5428,6 +5428,14 @@ begin
     not carry — see PyPropertyGet }
   dummy := PyPropertyGet(obj, name, declFound);
   if declFound then begin Result := True; Exit; end;
+  { a class attribute lowered as a SHARED SLOT has no instance field; it is
+    found by the receiver's runtime class, as pyclsattr_inst_get reads it.
+    bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter }
+  if PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, slotKind) <> nil then
+  begin
+    Result := True;
+    Exit;
+  end;
   if PyFindMethByName(GetInstanceRTTI(obj), name) <> nil then
   begin
     Result := True;
@@ -5957,7 +5965,7 @@ begin
 end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
-var declFound: Boolean; gaRes: Variant;
+var declFound: Boolean; gaRes: Variant; slotAddr: Pointer; slotKind: Int64;
 begin
   { Reached with a receiver STATICALLY known to be a real class instance (or
     nil, a class-typed field/local defaulting to None) — never an int/str/etc
@@ -5983,6 +5991,17 @@ begin
     { ...then a @property, CALLED, since it has no storage of its own }
     Result := PyPropertyGet(obj, name, declFound);
     if declFound then Exit;
+    { ...then a class attribute lowered as a SHARED SLOT (a class used as a
+      value, written through the class name, or redeclared by a subclass): no
+      instance field exists, so the field step above cannot see it. Looked up
+      on the receiver's RUNTIME class, the walk pyclsattr_inst_get does.
+      bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter }
+    slotAddr := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, slotKind);
+    if slotAddr <> nil then
+    begin
+      Result := PyBoxByKind(slotAddr, slotKind, declFound);
+      if declFound then Exit;
+    end;
     { `obj.__class__` — the runtime twin of PyMakeClassRefOf, kept on BOTH
       getters so the two agree. The compile-time route claims this name for a
       statically class-typed receiver, so what arrives here is the residue: a
@@ -6013,7 +6032,7 @@ function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
-    gaRes: Variant; sigp: Pointer;
+    gaRes: Variant; sigp: Pointer; slotAddr: Pointer; slotKind: Int64;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -6082,6 +6101,17 @@ begin
       lives (devdocs/dev/normalise-dont-special-case.md). }
     Result := PyPropertyGet(obj, name, declFound);
     if declFound then Exit;
+    { ...then a SHARED-SLOT class attribute, as pydynattr_get does.
+      bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter }
+    if obj <> nil then
+    begin
+      slotAddr := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, slotKind);
+      if slotAddr <> nil then
+      begin
+        Result := PyBoxByKind(slotAddr, slotKind, declFound);
+        if declFound then Exit;
+      end;
+    end;
     { ...and a METHOD read as a VALUE — `f = obj.scale`, `map(obj.scale, xs)`
       where the receiver is a variant. CALLING it already worked (the frontend
       resolves the call), so only the value form reached here, and it raised
@@ -6207,7 +6237,14 @@ begin
           (PyCallableName(v) <> '') then
     Result := True
   else
+  begin
     Result := pydynattr_has(pyvarobj(v), name);
+    { ...or a SHARED-SLOT class attribute of an object's runtime class: it has
+      no field, so the compile-time half of hasattr cannot see it either.
+      bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter }
+    if (not Result) and (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
+      Result := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(pyvarobj(v))), name, k) <> nil;
+  end;
 end;
 
 procedure pydynattr_set_v(const v: Variant; const name: AnsiString;
