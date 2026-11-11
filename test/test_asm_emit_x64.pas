@@ -32,6 +32,8 @@ var
   FixCount: Integer = 0;
   GlobFix: array[0..1023] of record CodePos, BSSoff: Integer; end;
   GlobFixCount: Integer = 0;
+  CallFixCount: Integer = 0;      { read by asmtext.inc's whole-call memo guard }
+  ProcAddrFixCount: Integer = 0;
 
 procedure EmitB(b: Byte);
 begin
@@ -102,57 +104,8 @@ begin
   EmitI32(0);   { BSS is low 4G → 4-byte }
 end;
 
-{ Full x86-64 register map: name -> (num, size-in-bytes). }
-function AsmRegNum(const nm: AnsiString; var num, size: Integer): Boolean;
-  function M(n, s: Integer): Boolean; begin num := n; size := s; M := True; end;
-var l: AnsiString;
-begin
-  l := LowerCase(nm);
-  Result := True;
-  { 64-bit }
-  if l = 'rax' then begin AsmRegNum := M(0,8); Exit; end;
-  if l = 'rcx' then begin AsmRegNum := M(1,8); Exit; end;
-  if l = 'rdx' then begin AsmRegNum := M(2,8); Exit; end;
-  if l = 'rbx' then begin AsmRegNum := M(3,8); Exit; end;
-  if l = 'rsp' then begin AsmRegNum := M(4,8); Exit; end;
-  if l = 'rbp' then begin AsmRegNum := M(5,8); Exit; end;
-  if l = 'rsi' then begin AsmRegNum := M(6,8); Exit; end;
-  if l = 'rdi' then begin AsmRegNum := M(7,8); Exit; end;
-  if l = 'r8'  then begin AsmRegNum := M(8,8); Exit; end;
-  if l = 'r9'  then begin AsmRegNum := M(9,8); Exit; end;
-  if l = 'r10' then begin AsmRegNum := M(10,8); Exit; end;
-  if l = 'r11' then begin AsmRegNum := M(11,8); Exit; end;
-  if l = 'r12' then begin AsmRegNum := M(12,8); Exit; end;
-  if l = 'r13' then begin AsmRegNum := M(13,8); Exit; end;
-  if l = 'r14' then begin AsmRegNum := M(14,8); Exit; end;
-  if l = 'r15' then begin AsmRegNum := M(15,8); Exit; end;
-  { 32-bit }
-  if l = 'eax' then begin AsmRegNum := M(0,4); Exit; end;
-  if l = 'ecx' then begin AsmRegNum := M(1,4); Exit; end;
-  if l = 'edx' then begin AsmRegNum := M(2,4); Exit; end;
-  if l = 'ebx' then begin AsmRegNum := M(3,4); Exit; end;
-  if l = 'esp' then begin AsmRegNum := M(4,4); Exit; end;
-  if l = 'ebp' then begin AsmRegNum := M(5,4); Exit; end;
-  if l = 'esi' then begin AsmRegNum := M(6,4); Exit; end;
-  if l = 'edi' then begin AsmRegNum := M(7,4); Exit; end;
-  { 16-bit }
-  if l = 'ax' then begin AsmRegNum := M(0,2); Exit; end;
-  { 8-bit }
-  if l = 'al'  then begin AsmRegNum := M(0,1); Exit; end;
-  if l = 'cl'  then begin AsmRegNum := M(1,1); Exit; end;
-  if l = 'dl'  then begin AsmRegNum := M(2,1); Exit; end;
-  if l = 'bl'  then begin AsmRegNum := M(3,1); Exit; end;
-  if l = 'sil' then begin AsmRegNum := M(6,1); Exit; end;
-  if l = 'dil' then begin AsmRegNum := M(7,1); Exit; end;
-  { xmm0..xmm15 (size 16 marker) }
-  if l = 'xmm0' then begin AsmRegNum := M(0,16); Exit; end;
-  if l = 'xmm1' then begin AsmRegNum := M(1,16); Exit; end;
-  if l = 'xmm2' then begin AsmRegNum := M(2,16); Exit; end;
-  if l = 'xmm3' then begin AsmRegNum := M(3,16); Exit; end;
-  if l = 'xmm8' then begin AsmRegNum := M(8,16); Exit; end;
-  if l = 'xmm9' then begin AsmRegNum := M(9,16); Exit; end;
-  Result := False;
-end;
+{ the REAL register resolver, not a mock table }
+{$include ../compiler/asmregs.inc}
 
 { --- the environment asmtext.inc reaches into defs.inc for --------------------
   This harness supplies its own environment rather than {$include}ing defs.inc,
@@ -179,6 +132,7 @@ var
     Nothing in this harness lowers a libc syscall, so this stays 0 and the
     check correctly never fires -- 0 is the honest value here, not a placeholder. }
   LibcSyscallCallCount: Integer = 0;
+  MemoRound: Integer;   { loop counter for the whole-call memo test }
 
 { PXXDBG channel selector. Always False here: this harness asserts exact byte
   sequences, so a debug line on stdout would be noise in the thing being
@@ -320,6 +274,57 @@ begin
   AssertBytes('mov rax,[@glob]', [$48,$8B,$04,$25,$00,$00,$00,$00]);
   ResetCode; EmitAsmX64(['lea rsi, [@glob]', 400]);
   AssertBytes('lea rsi,[@glob]', [$48,$8D,$34,$25,$00,$00,$00,$00]);
+  { whole-call memo: the same line with different hole values must re-encode
+    (disp8 vs disp32, shift-by-1 vs imm8, register hole into REX.B), and a
+    repeat must replay identical bytes. Bytes from GNU as. }
+  for MemoRound := 1 to 2 do
+  begin
+    ResetCode; EmitAsmX64(['mov rax, [rbp-%]', 8]);
+    AssertBytes('memo mov rax,[rbp-8]', [$48,$8B,$45,$F8]);
+    ResetCode; EmitAsmX64(['mov rax, [rbp-%]', 200]);
+    AssertBytes('memo mov rax,[rbp-200]', [$48,$8B,$85,$38,$FF,$FF,$FF]);
+    ResetCode; EmitAsmX64(['shl %r64, %', 0, 1]);
+    AssertBytes('memo shl rax,1', [$48,$D1,$E0]);
+    ResetCode; EmitAsmX64(['shl %r64, %', 9, 1]);
+    AssertBytes('memo shl r9,1', [$49,$D1,$E1]);
+    ResetCode; EmitAsmX64(['shl %r64, %', 0, 5]);
+    AssertBytes('memo shl rax,5', [$48,$C1,$E0,$05]);
+  end;
+  { byte memory forms: a base of rsp..rdi is NOT a byte register -- no REX. }
+  ResetCode; EmitAsmX64(['mov [rdi], cl']);
+  AssertBytes('mov [rdi],cl', [$88,$0F]);
+  ResetCode; EmitAsmX64(['mov cl, [rsi]']);
+  AssertBytes('mov cl,[rsi]', [$8A,$0E]);
+  ResetCode; EmitAsmX64(['mov [rdi], sil']);
+  AssertBytes('mov [rdi],sil', [$40,$88,$37]);
+  ResetCode; EmitAsmX64(['inc byte [rdi]']);
+  AssertBytes('inc byte [rdi]', [$FE,$07]);
+  ResetCode; EmitAsmX64(['mov rax, [rdi+r9*8]']);
+  AssertBytes('mov rax,[rdi+r9*8]', [$4A,$8B,$04,$CF]);
+  ResetCode; EmitAsmX64(['lea rax, [rdi+r9*8]']);
+  AssertBytes('lea rax,[rdi+r9*8]', [$4A,$8D,$04,$CF]);
+  { push / pop a memory operand (FF /6, 8F /0). }
+  ResetCode; EmitAsmX64(['push [rax]']);
+  AssertBytes('push [rax]', [$FF,$30]);
+  ResetCode; EmitAsmX64(['push [rax+%]', 8]);
+  AssertBytes('push [rax+8]', [$FF,$70,$08]);
+  ResetCode; EmitAsmX64(['pop [rbx]']);
+  AssertBytes('pop [rbx]', [$8F,$03]);
+  ResetCode; EmitAsmX64(['push [r9]']);
+  AssertBytes('push [r9]', [$41,$FF,$31]);
+  ResetCode; EmitAsmX64(['push [rbp-%]', 200]);
+  AssertBytes('push [rbp-200]', [$FF,$B5,$38,$FF,$FF,$FF]);
+  ResetCode; EmitAsmX64(['xor r8d, r8d']);
+  AssertBytes('xor r8d,r8d', [$45,$31,$C0]);
+  { SSE scalar <-> absolute memory: the SSE prefix precedes REX. }
+  ResetCode; EmitAsmX64(['movsd xmm0, [@glob]', 300]);
+  AssertBytes('movsd xmm0,[@glob]', [$F2,$0F,$10,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['movsd [@glob], xmm0', 300]);
+  AssertBytes('movsd [@glob],xmm0', [$F2,$0F,$11,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['movss [@glob], xmm9', 300]);
+  AssertBytes('movss [@glob],xmm9', [$F3,$44,$0F,$11,$0C,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['addsd xmm2, [%]', 16]);
+  AssertBytes('addsd xmm2,[16]', [$F2,$0F,$58,$14,$25,$10,$00,$00,$00]);
   ResetCode; EmitAsmX64(['lea rax, [@data]', 500]);
   AssertBytes('lea rax,[@data]', [$48,$8D,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
 
@@ -540,9 +545,23 @@ begin
   ResetCode; EmitAsmX64('imul rax, [rsi+8]');
   AssertBytes('imul rax, [rsi+8]', [$48,$0F,$AF,$46,$08]);
   ResetCode; EmitAsmX64('and eax, ~0x6000');
-  AssertBytes('and eax, ~0x6000', [$81,$E0,$FF,$9F,$FF,$FF]);   { the r/m form; GNU as picks the 1-byte-shorter eax form 25 }
+  AssertBytes('and eax, ~0x6000', [$25,$FF,$9F,$FF,$FF]);   { eax accumulator form, as GNU as }
   ResetCode; EmitAsmX64('cmp al, ''0''');
-  AssertBytes('cmp al, ''0''', [$80,$F8,$30]);   { r/m form; GNU as picks the al form 3C 30 }
+  AssertBytes('cmp al, ''0''', [$3C,$30]);   { accumulator form, as GNU as }
+  { accumulator forms (bytes from GNU as): rax with an imm32 / al with imm8;
+    an imm8 on rax keeps 83 /ext, a non-rax register keeps 81 /ext. }
+  ResetCode; EmitAsmX64(['and rax, %', $7FFFFFFF]);
+  AssertBytes('and rax,7fffffff', [$48,$25,$FF,$FF,$FF,$7F]);
+  ResetCode; EmitAsmX64(['add eax, %', 1000]);
+  AssertBytes('add eax,1000', [$05,$E8,$03,$00,$00]);
+  ResetCode; EmitAsmX64(['sub rax, %', 5]);
+  AssertBytes('sub rax,5', [$48,$83,$E8,$05]);
+  ResetCode; EmitAsmX64(['cmp ax, %', 1000]);
+  AssertBytes('cmp ax,1000', [$66,$3D,$E8,$03]);
+  ResetCode; EmitAsmX64(['xor rax, %', -1000]);
+  AssertBytes('xor rax,-1000', [$48,$35,$18,$FC,$FF,$FF]);
+  ResetCode; EmitAsmX64(['and rcx, %', $7FFFFFFF]);
+  AssertBytes('and rcx,7fffffff', [$48,$81,$E1,$FF,$FF,$FF,$7F]);
   ResetCode; EmitAsmX64(['cld', 'rep stosq', 'rep movsq']);
   AssertBytes('cld/rep stosq/rep movsq', [$FC, $F3,$48,$AB, $F3,$48,$A5]);
 

@@ -116,3 +116,4 @@ compiler/.pxx-under-test-*
 compiler/pascal26_*
 compiler/p26_*
 compiler/.pxx_latest.lock
+test/.x64_asm_static_check_gen.pas

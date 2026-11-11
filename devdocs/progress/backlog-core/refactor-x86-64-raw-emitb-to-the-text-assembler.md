@@ -69,6 +69,45 @@ disagrees with its bytes is never trusted; that line stays raw and is listed.
   land on one spot share one label; the placeholder variables are gone).
   Only routines with no `Exit` (an Exit would skip AsmScopeEnd) and only
   variables with exactly one jump and one patch.
+- batch 3: ~250 lines with holes converted in place (ir_codegen 168, symtab
+  61, cparser 9, emit 5, pasparser_lval 9), including the hot emit.inc
+  helpers (MovRaxImm & co). Remaining EmitB($ lines: ir_codegen 866, symtab
+  367, cparser 91, thread_emit 63, exception_emit 33, emit 62,
+  pasparser_lval 21, coroutine_emit 15. This batch found three encoder
+  defects (done/bug-x86-64-encoder-spurious-rex-on-byte-memory-ops-and-
+  missing-accumulator-forms.md); the self-hosted compiler's code is 77 KB
+  smaller for it. It also added a missing feature: SSE scalar to and from
+  [@glob]/[@data]/[num].
+
+## Compile-time cost, and the whole-call memo
+
+Converting hot codegen to EmitAsmX64 costs compile time. Every hole line went
+through label/jump classification and the full lexer on each emission. The
+fixed-line memo skips lines with holes, and nearly every converted line has
+one. Callgrind on lib_charset.pas, compiler instruction totals:
+
+| compiler | instructions |
+|---|---|
+| batch 2 | 2.494 G |
+| batch 3 | 2.707 G (+8.5%) |
+| batch 3 + whole-call memo | 2.554 G (+2.4%) |
+
+The whole-call memo (asmtext.inc, above EmitAsmX64) keys on the line text plus
+the exact hole values. A lookup reads the literal in place and allocates
+nothing. Entries are admitted by observation: one plain instruction, no fixup,
+syscall or scope-label counter moved, and no `@`. On lib_charset the hit rate
+is about 97%. Check it with `PXXDBG='a.asmmemo:*'`. Across the corpus, in all
+five configurations, the memo build was byte-identical to the build without
+it (1,090 SAME, 0 DIFF).
+
+The remaining +2.4% is the open-array constructor: each `[...]` argument is
+heap-built and released per call
+(backlog-core/perf-an-open-array-constructor-argument-is-heap-built-per-call.md).
+Fixing that removes it and also speeds up user programs that call Format.
+
+**Before converting another hot path, profile it.** The compiler binary has no
+symbols. Symbolize callgrind addresses with the `.map` file written beside the
+compiler binary.
 
 ## The hazard this work has, and the guard for it
 

@@ -3778,6 +3778,7 @@ begin
   end;
 
   AsmMemoReport;
+  AsmCallMemoReport;
   { PXXDBG a.rel8max — how close the tightest one-byte jump displacement in this
     compile came to the ±128 limit. The counters are declared in rel8.inc; this
     reads them.

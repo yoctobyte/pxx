@@ -13955,7 +13955,7 @@ begin
   case TargetArch of
     TARGET_X86_64:
     begin
-      EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov [initial_rsp], rsp }
+      EmitAsmX64(['mov [@glob], rsp', BSS_INITIAL_RSP]);
       { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
         argument registers, which is what makes the ordering constraint vanish:
         there is nothing live to save across the call yet, only the stack
@@ -13966,12 +13966,12 @@ begin
         stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
       if needInit then
       begin
-        EmitB($48); EmitB($89); EmitB($E7);                    { mov rdi, rsp (arg1 = initial sp) }
+        EmitAsmX64(['mov rdi, rsp']); { (arg1 = initial sp) }
         EmitB($E8); initPatch := CodeLen; EmitI32(0);          { call __pxx_run_initializers }
       end;
-      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [initial_rsp] }
-      EmitB($8B); EmitB($38);                                                       { mov edi, [rax]  (argc) }
-      EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] (argv) }
+      EmitAsmX64(['mov rax, [@glob]', BSS_INITIAL_RSP]);
+      EmitAsmX64(['mov edi, [rax]']); { (argc) }
+      EmitAsmX64(['lea rsi, [rax+8]']); { (argv) }
       EmitB($E8); callPatch := CodeLen; EmitI32(0);                                 { call main }
       { Run registered finalizers before exiting, so a plain `return` from main
         is not a silent skip. The stub is `call main; exit_group(retval)`, so
@@ -13986,8 +13986,8 @@ begin
       EmitB($50); EmitB($50);            { push rax x2 (value + 16-byte alignment) }
       EmitCallProc(GetFiniRunnerProc);
       EmitB($58); EmitB($58);            { pop rax x2 }
-      EmitB($89); EmitB($C7);            { mov edi, eax }
-      EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
+      EmitAsmX64(['mov edi, eax']);
+      EmitAsmX64(['mov eax, 231']); { (exit_group) }
       EmitB($0F); EmitB($05);            { syscall }
     end;
     TARGET_I386:
@@ -14837,11 +14837,12 @@ begin
           would be at 56. Then 16 bytes are reserved rather than the 4 a `push`
           would take, because cdecl wants esp 16-aligned AT the call WITH the
           argument already in place, and a bare push leaves it 12 mod 16. }
-        EmitB($8B); EmitB($44); EmitB($24); EmitB($28); { mov eax, [esp+40] }
-        EmitAsmX64(['sub esp, 16']);
-        EmitB($89); EmitB($04); EmitB($24);             { mov [esp], eax }
+        EmitAsm386([
+          'mov eax, [esp+40]',
+          'sub esp, 16',
+          'mov [esp], eax']);
         EmitCallProc(envPi);
-        EmitAsmX64(['add esp, 16']);
+        EmitAsm386(['add esp, 16']);
       end;
     end;
     CompilePendingGlobalInits;

@@ -188,35 +188,8 @@ begin
 end;
 
 { Mock functions from compiler/asmenc.inc & compiler/x64enc.inc }
-function AsmRegNum(const nm: AnsiString; var num, size: Integer): Boolean;
-begin
-  Result := True;
-  if CaseEqual(nm,'eax') then begin num:=0; size:=4; Exit; end;
-  if CaseEqual(nm,'ecx') then begin num:=1; size:=4; Exit; end;
-  if CaseEqual(nm,'edx') then begin num:=2; size:=4; Exit; end;
-  if CaseEqual(nm,'ebx') then begin num:=3; size:=4; Exit; end;
-  if CaseEqual(nm,'esp') then begin num:=4; size:=4; Exit; end;
-  if CaseEqual(nm,'ebp') then begin num:=5; size:=4; Exit; end;
-  if CaseEqual(nm,'esi') then begin num:=6; size:=4; Exit; end;
-  if CaseEqual(nm,'edi') then begin num:=7; size:=4; Exit; end;
-  if CaseEqual(nm,'ax')  then begin num:=0; size:=2; Exit; end;
-  if CaseEqual(nm,'cx')  then begin num:=1; size:=2; Exit; end;
-  if CaseEqual(nm,'dx')  then begin num:=2; size:=2; Exit; end;
-  if CaseEqual(nm,'bx')  then begin num:=3; size:=2; Exit; end;
-  if CaseEqual(nm,'sp')  then begin num:=4; size:=2; Exit; end;
-  if CaseEqual(nm,'bp')  then begin num:=5; size:=2; Exit; end;
-  if CaseEqual(nm,'si')  then begin num:=6; size:=2; Exit; end;
-  if CaseEqual(nm,'di')  then begin num:=7; size:=2; Exit; end;
-  if CaseEqual(nm,'al')  then begin num:=0; size:=1; Exit; end;
-  if CaseEqual(nm,'cl')  then begin num:=1; size:=1; Exit; end;
-  if CaseEqual(nm,'dl')  then begin num:=2; size:=1; Exit; end;
-  if CaseEqual(nm,'bl')  then begin num:=3; size:=1; Exit; end;
-  if CaseEqual(nm,'xmm0') then begin num:=0; size:=16; Exit; end;
-  if CaseEqual(nm,'xmm1') then begin num:=1; size:=16; Exit; end;
-  if CaseEqual(nm,'xmm2') then begin num:=2; size:=16; Exit; end;
-  if CaseEqual(nm,'xmm3') then begin num:=3; size:=16; Exit; end;
-  Result := False;
-end;
+{ the REAL register resolver, not a mock table }
+{$include ../compiler/asmregs.inc}
 
 procedure EncModRMReg(regField, rmReg: Integer);
 begin

@@ -258,6 +258,17 @@ begin
   else if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
 end;
 
+{ SSE xmm <-> absolute memory: [prefix] [REX.R] 0F op ModRM(rm=100) SIB=25
+  disp32 -- the absolute form AsmEncAbsRM emits, after the SSE prefix (which
+  must precede REX). }
+procedure AsmEncSseAbs(prefix, opcode, regField, kind, off: Integer);
+begin
+  if prefix <> 0 then EncB(prefix);
+  if regField >= 8 then EncB($44);
+  EncB($0F); EncB(opcode and $FF);
+  AsmEncAbsRM(regField, kind, off);
+end;
+
 { A register HOLE: `%r64` / `%r32` / `%r16` / `%r8` stands for the register
   whose number (0..15, the encoder's numbering) is the next int element. For
   codegen that picks its register at compile time -- `shl %r64, %` with the
@@ -648,17 +659,25 @@ begin
   end;
 
   { single-operand: push / pop }
-  if CaseEqual(mnem, 'push') then
+  { push/pop r64, [mem] (FF /6, 8F /0) or an absolute [@glob]/[@data]/[num] }
+  if CaseEqual(mnem, 'push') or CaseEqual(mnem, 'pop') then
   begin
-    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
-      Error('EmitAsmX64: push expects a register');
-    x64_push_reg(r0); Exit;
-  end;
-  if CaseEqual(mnem, 'pop') then
-  begin
-    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
-      Error('EmitAsmX64: pop expects a register');
-    x64_pop_reg(r0); Exit;
+    k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
+    if CaseEqual(mnem, 'push') then
+    begin
+      if k0 = 0 then x64_push_reg(r0)
+      else if k0 = 2 then x64_push_mem(mb0, md0, False)
+      else if k0 >= 3 then begin EncB($FF); AsmEncAbsRM(6, k0, md0); end
+      else Error('EmitAsmX64: push takes a register or a memory operand: ' + line);
+    end
+    else
+    begin
+      if k0 = 0 then x64_pop_reg(r0)
+      else if k0 = 2 then x64_pop_mem(mb0, md0, False)
+      else if k0 >= 3 then begin EncB($8F); AsmEncAbsRM(0, k0, md0); end
+      else Error('EmitAsmX64: pop takes a register or a memory operand: ' + line);
+    end;
+    Exit;
   end;
   if CaseEqual(mnem, 'inc') or CaseEqual(mnem, 'dec') then
   begin
@@ -968,6 +987,10 @@ begin
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm(ssePfx, sseOp, r0, mb1, md1, False, False)
     else if (k0 = 2) and (k1 = 0) and (CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss')) then
       x64_sse_rm(ssePfx, $11, r1, mb0, md0, False, False)   { store xmm -> [mem] }
+    else if (k0 = 0) and (k1 >= 3) then
+      AsmEncSseAbs(ssePfx, sseOp, r0, k1, md1)               { xmm, [@glob|@data|num] }
+    else if (k0 >= 3) and (k1 = 0) and (CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss')) then
+      AsmEncSseAbs(ssePfx, $11, r1, k0, md0)                 { store xmm -> absolute }
     else Error('EmitAsmX64: unsupported SSE form: ' + line);
     Exit;
   end;
@@ -1418,6 +1441,142 @@ begin
           ' pool=', AsmMemoPoolLen, '/', ASM_MEMO_POOL_CAP);
 end;
 
+{ ---- whole-call memo, holes included -------------------------------------
+
+  The fixed-line memo above skips any line with a hole, and the converted
+  codegen is almost all holes: `mov rax, [rbp-%]`, `cmp rcx, %`, `shl %r64, %`.
+  Each of those re-ran the label/jump classification (a trim and three slices,
+  all heap strings) and the full lexer on every emission. On lib_charset.pas
+  that was +8.5% of all compiler instructions for the 2026-11-11 batch.
+
+  This memo keys on the line TEXT plus the exact hole VALUES, so the bytes are
+  determined by the key. It does not have to predict how a value changes the
+  encoding: disp8 vs disp32, imm8 vs imm32, shift-by-1 and a register hole's
+  REX bits are all part of the key. Lookup reads the literal in place and
+  allocates nothing.
+
+  Admission is by observation, as for the fixed-line memo. On a miss the call
+  runs normally, and the result is stored only if it was ONE plain instruction
+  (no label, jump or call) and moved no fixup or syscall counter and no scope
+  label. Lines containing `@` (relocations) or `syscall` (a policy hook) are
+  refused outright as well. }
+
+const
+  ASM_CM_SLOTS = 4096;          { power of two }
+  ASM_CM_POOL_CAP = 65536;      { encoded bytes retained }
+
+var
+  AsmCMKey: array[0..ASM_CM_SLOTS - 1] of AnsiString;
+  AsmCMNHoles: array[0..ASM_CM_SLOTS - 1] of Integer;
+  AsmCMHoles: array[0..ASM_CM_SLOTS * ASM_MAX_HOLES - 1] of Int64;
+  AsmCMOff: array[0..ASM_CM_SLOTS - 1] of Integer;
+  AsmCMLen: array[0..ASM_CM_SLOTS - 1] of Integer;
+  AsmCMPool: array[0..ASM_CM_POOL_CAP - 1] of Byte;
+  AsmCMPoolLen: Integer = 0;
+  AsmCMUsed: Integer = 0;
+  AsmCMHits: Int64 = 0;
+  AsmCMMisses: Int64 = 0;
+  AsmPlainLines: Int64 = 0;     { plain instructions encoded by EmitAsmX64 }
+
+{ The hole value of items[k], or False if items[k] is not an integer. }
+function AsmCMHoleOf(const items: array of const; k: Integer; var v: Int64): Boolean;
+begin
+  Result := True;
+  if items[k].VType = vtInteger then v := items[k].VInteger
+  else if items[k].VType = vtInt64 then v := PHoleI64(items[k].VInt64)^
+  else Result := False;
+end;
+
+{ Probe for items = [line, hole, hole, ...]. True: the cached bytes were
+  appended. False with slot >= 0: a free slot to fill if the call qualifies.
+  slot < 0: the call cannot be cached (shape, too many holes, table full). }
+function AsmCallMemoProbe(const items: array of const; var slot: Integer): Boolean;
+var b: PAsmTextByte; n, nh, k, L, i, probes: Integer; h: Int64; v: Int64; same: Boolean;
+begin
+  Result := False;
+  slot := -1;
+  n := Length(items);
+  nh := n - 1;
+  if (nh > ASM_MAX_HOLES) or (items[0].VAnsiString = nil) then Exit;
+  b := PAsmTextByte(items[0].VAnsiString);
+  h := 5381;
+  L := 0;
+  while b[L] <> 0 do
+  begin
+    h := ((h * 33) + b[L]) and $0FFFFFFF;
+    Inc(L);
+  end;
+  for k := 1 to nh do
+  begin
+    if not AsmCMHoleOf(items, k, v) then Exit;
+    h := ((h * 31) + (v and $FFFFFF) + (v shr 40)) and $0FFFFFFF;
+  end;
+  slot := Integer(h and (ASM_CM_SLOTS - 1));
+  probes := 0;
+  while probes < 8 do
+  begin
+    if Length(AsmCMKey[slot]) = 0 then Exit;      { free: caller may fill it }
+    if (Length(AsmCMKey[slot]) = L) and (AsmCMNHoles[slot] = nh) then
+    begin
+      same := True;
+      i := 0;
+      while same and (i < L) do
+      begin
+        if Ord(AsmCMKey[slot][i + 1]) <> b[i] then same := False;
+        Inc(i);
+      end;
+      k := 1;
+      while same and (k <= nh) do
+      begin
+        AsmCMHoleOf(items, k, v);
+        if AsmCMHoles[slot * ASM_MAX_HOLES + k - 1] <> v then same := False;
+        Inc(k);
+      end;
+      if same then
+      begin
+        for i := 0 to AsmCMLen[slot] - 1 do
+          EmitB(AsmCMPool[AsmCMOff[slot] + i]);
+        EncMemIndex := -1;
+        AsmCMHits := AsmCMHits + 1;
+        Result := True;
+        Exit;
+      end;
+    end;
+    slot := (slot + 1) and (ASM_CM_SLOTS - 1);
+    Inc(probes);
+  end;
+  slot := -1;                                       { cluster full: no caching }
+end;
+
+{ One line under PXXDBG a.asmmemo: whole-call memo hit/miss at end of compile. }
+procedure AsmCallMemoReport;
+begin
+  if not PxxDbgWants('a.asmmemo', '*') then Exit;
+  WriteLn('PXXDBG a.asmmemo call-memo hits=', AsmCMHits, ' stored=', AsmCMMisses,
+          ' slots=', AsmCMUsed, '/', ASM_CM_SLOTS, ' pool=', AsmCMPoolLen, '/', ASM_CM_POOL_CAP);
+end;
+
+procedure AsmCallMemoStore(slot: Integer; const line: AnsiString;
+  const holes: array of Int64; nh, startLen: Integer);
+var i, n: Integer;
+begin
+  n := CodeLen - startLen;
+  if (n <= 0) or (AsmCMPoolLen + n > ASM_CM_POOL_CAP) then Exit;
+  if (AsmCMUsed * 4 >= ASM_CM_SLOTS * 3) then Exit;  { keep probe chains short }
+  if (Pos('@', line) > 0) or (Pos('syscall', line) > 0) then Exit;
+  for i := 0 to n - 1 do
+    AsmCMPool[AsmCMPoolLen + i] := Code[startLen + i];
+  for i := 0 to nh - 1 do
+    AsmCMHoles[slot * ASM_MAX_HOLES + i] := holes[i];
+  AsmCMKey[slot] := line;
+  AsmCMNHoles[slot] := nh;
+  AsmCMOff[slot] := AsmCMPoolLen;
+  AsmCMLen[slot] := n;
+  AsmCMPoolLen := AsmCMPoolLen + n;
+  Inc(AsmCMUsed);
+  AsmCMMisses := AsmCMMisses + 1;
+end;
+
 procedure EmitAsmX64(const items: array of const); overload;
 var
   i, n, h, nHoles, j: Integer;
@@ -1425,9 +1584,17 @@ var
   holes: array[0..ASM_MAX_HOLES - 1] of Int64;
   cc, k, targetPos, disp, width: Integer;
   isJmp, isCall, defined, scoped: Boolean;
+  cmSlot, cmLen0, cmF, cmG, cmC, cmP, cmS, cmSl: Integer;
+  cmPlain: Int64;
 begin
   AsmLblCount := 0; AsmFwCount := 0;
   n := Length(items);
+  cmSlot := -1;
+  if (not EncToAsmBuffer) and (n >= 1) and (items[0].VType = vtAnsiString) then
+    if AsmCallMemoProbe(items, cmSlot) then Exit;
+  cmLen0 := CodeLen; cmF := FixCount; cmG := GlobFixCount; cmC := CallFixCount;
+  cmP := ProcAddrFixCount; cmS := LibcSyscallCallCount;
+  cmSl := AsmSLblCount; cmPlain := AsmPlainLines;
   i := 0;
   while i < n do
   begin
@@ -1625,6 +1792,7 @@ begin
         if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
       end;
       AsmTextLineMemo(line, holes, nHoles);
+      AsmPlainLines := AsmPlainLines + 1;
       i := i + 1 + nHoles;
     end;
   end;
@@ -1638,6 +1806,15 @@ begin
     if targetPos < 0 then Error('EmitAsmX64: undefined label in jump');
     AsmPatchFw(AsmFwPatch[k], targetPos, AsmFwShort[k]);
   end;
+
+  { admit the call to the whole-call memo only if it was exactly one plain
+    instruction that moved nothing but CodeLen }
+  if (cmSlot >= 0) and (AsmPlainLines = cmPlain + 1) and (n = 1 + nHoles) and
+     (AsmFwCount = 0) and (AsmLblCount = 0) and (AsmSLblCount = cmSl) and
+     (FixCount = cmF) and (GlobFixCount = cmG) and (CallFixCount = cmC) and
+     (ProcAddrFixCount = cmP) and
+     (LibcSyscallCallCount = cmS) and not EncToAsmBuffer then
+    AsmCallMemoStore(cmSlot, line, holes, nHoles, cmLen0);
 end;
 
 { Single-line convenience overload: EmitAsmX64('ret') / EmitAsmX64('mov rax, %', v)

@@ -677,6 +677,19 @@ else
   RC=1
 fi
 
+# EVERY LITERAL EmitAsmX64 LINE MUST ASSEMBLE. The raw-asm conversion is checked
+# by corpus output identity, which covers only the lines the corpus reaches:
+# `push [rax+%]` on the C aggregate-argument path passed it and failed
+# test-nilpy's cpyext rows (2026-11-11). This assembles all of them, reached or
+# not, through the real asmtext.inc/x64enc.inc/asmregs.inc.
+if [ -f tools/x64_asm_static_check.py ]; then
+  step "every literal EmitAsmX64 line assembles" "$LOGDIR/x64-asm-static.log" \
+       python3 tools/x64_asm_static_check.py --compiler "$PWD/compiler/pascal26" || RC=1
+else
+  say "  FAIL  EmitAsmX64 static assemble — tools/x64_asm_static_check.py is MISSING"
+  RC=1
+fi
+
 # A COMPATIBILITY SHIM MUST BE REACHABLE. A NilPy `import X` prefers what we
 # ship, so writing mimic_X.pas for a module we already carry a unit X for --
 # or that PyRtlUnitServesPython already routes -- yields a shim that never

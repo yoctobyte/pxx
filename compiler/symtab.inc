@@ -8153,7 +8153,7 @@ begin
           'add rsp, 8']);
       end
       else
-        begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end;      { movsd xmm0, [rax] }
+        begin EmitAsmX64(['movsd xmm0, [rax]']); end;
     end
     else case Syms[idx].Kind of
       skLocal, skParam:
@@ -8172,11 +8172,11 @@ begin
             'add rsp, 8']);
         end
         else
-          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end;  { movsd xmm0, [rbp+off] }
+          begin EmitAsmX64(['movsd xmm0, [rbp+%]', Syms[idx].Offset]); end;
       skGlobal:
         if tk = tySingle then
         begin
-          EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);  { movss xmm0, [abs] }
+          EmitAsmX64(['movss xmm0, [@glob]', Syms[idx].Offset]);
           EmitAsmX64(['cvtss2sd xmm0, xmm0']);
         end
         else if tk = tyExtended then
@@ -8189,7 +8189,7 @@ begin
             'add rsp, 8']);
         end
         else
-          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd xmm0, [abs] }
+          begin EmitAsmX64(['movsd xmm0, [@glob]', Syms[idx].Offset]); end;
       skConst: MovRaxImm(Syms[idx].ConstVal);
     end;
     Exit;
@@ -8203,26 +8203,26 @@ begin
     if sz = 1 then
     begin
       if sgn then
-        begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); end { movsx rax, byte [rax] }
+        begin EmitAsmX64(['movsx rax, byte [rax]']); end
       else
-        begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;{ movzx rax, byte [rax] }
+        begin EmitAsmX64(['movzx rax, byte [rax]']); end;
     end
     else if sz = 2 then
     begin
       if sgn then
-        begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); end { movsx rax, word [rax] }
+        begin EmitAsmX64(['movsx rax, word [rax]']); end
       else
-        begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); end;{ movzx rax, word [rax] }
+        begin EmitAsmX64(['movzx rax, word [rax]']); end;
     end
     else if sz = 4 then
     begin
       if sgn then
-        begin EmitB($48); EmitB($63); EmitB($00); end { movsxd rax, dword [rax] }
+        begin EmitAsmX64(['movsxd rax, dword [rax]']); end
       else
-        begin EmitB($8B); EmitB($00); end;{ mov eax, dword [rax] (zero-extends to rax) }
+        begin EmitAsmX64(['mov eax, dword [rax]']); end; { (zero-extends to rax) }
     end
     else
-      begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
+      begin EmitAsmX64(['mov rax, [rax]']); end;
   end
   else if (Syms[idx].Kind = skParam) and (tk = tyString) then
   begin
@@ -8312,23 +8312,23 @@ begin
   if sz = 1 then
   begin
     if sgn then
-      begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end   { movsx rax, al }
+      begin EmitAsmX64(['movsx rax, al']); end
     else
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end;  { movzx rax, al }
+      begin EmitAsmX64(['movzx rax, al']); end;
   end
   else if sz = 2 then
   begin
     if sgn then
-      begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end   { movsx rax, ax }
+      begin EmitAsmX64(['movsx rax, ax']); end
     else
-      begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end;  { movzx rax, ax }
+      begin EmitAsmX64(['movzx rax, ax']); end;
   end
   else
   begin
     if sgn then
-      begin EmitB($48); EmitB($63); EmitB($C0); end               { movsxd rax, eax }
+      begin EmitAsmX64(['movsxd rax, eax']); end
     else
-      begin EmitB($89); EmitB($C0); end;                          { mov eax, eax (zero-extends) }
+      begin EmitAsmX64(['mov eax, eax']); end; { (zero-extends) }
   end;
 end;
 
@@ -9095,18 +9095,18 @@ begin
   sgn := TypeSigned(tk);
   if sz = 1 then
   begin
-    if sgn then begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end  { movsx rax, al }
-    else begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end;        { movzx rax, al }
+    if sgn then begin EmitAsmX64(['movsx rax, al']); end
+    else begin EmitAsmX64(['movzx rax, al']); end;
   end
   else if sz = 2 then
   begin
-    if sgn then begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end  { movsx rax, ax }
-    else begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end;        { movzx rax, ax }
+    if sgn then begin EmitAsmX64(['movsx rax, ax']); end
+    else begin EmitAsmX64(['movzx rax, ax']); end;
   end
   else if sz = 4 then
   begin
-    if sgn then begin EmitB($48); EmitB($63); EmitB($C0); end              { movsxd rax, eax }
-    else begin EmitB($89); EmitB($C0); end;                                { mov eax, eax }
+    if sgn then begin EmitAsmX64(['movsxd rax, eax']); end
+    else begin EmitAsmX64(['mov eax, eax']); end;
   end;
   { sz = 8: rax already holds the canonical value }
   EmitB($49); EmitB($89); EmitB($C0 or (rreg - 8));                        { mov r12..r15, rax }
@@ -9307,7 +9307,7 @@ begin
         EmitB($DB); EmitB($39);                                         { fstpt [rcx] }
       end
       else
-        begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end;     { movsd [rcx], xmm0 }
+        begin EmitAsmX64(['movsd [rcx], xmm0']); end;
     end
     else case Syms[idx].Kind of
       skLocal, skParam:
@@ -9367,12 +9367,12 @@ begin
             slot. Bodies with an exception frame keep the dual-write. }
         end
         else
-          begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd [rbp+off], xmm0 }
+          begin EmitAsmX64(['movsd [rbp+%], xmm0', Syms[idx].Offset]); end;
       skGlobal:
         if tk = tySingle then
         begin
           EmitAsmX64(['cvtsd2ss xmm0, xmm0']);
-          EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); { movss [abs], xmm0 }
+          EmitAsmX64(['movss [@glob], xmm0', Syms[idx].Offset]);
         end
         else if tk = tyExtended then
         begin
@@ -9384,7 +9384,7 @@ begin
           EmitB($DB); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset);  { fstpt [abs32] }
         end
         else
-          begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd [abs], xmm0 }
+          begin EmitAsmX64(['movsd [@glob], xmm0', Syms[idx].Offset]); end;
       skConst: Error('cannot assign to constant');
     end;
     { -O3 float loop residency dual-write: the frame slot was just written from
@@ -9508,21 +9508,21 @@ begin
     { param slot holds pointer P; store the length into [P] }
     EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); { mov rcx, [rbp+off] = P }
     if pfx = 1 then
-      begin EmitB($88); EmitB($01); end                              { mov [rcx], al }
+      begin EmitAsmX64(['mov [rcx], al']); end
     else
-      begin EmitB($48); EmitB($89); EmitB($01); end;                 { mov [rcx], rax }
+      begin EmitAsmX64(['mov [rcx], rax']); end;
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
         if pfx = 1 then
-          begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end            { mov [rbp+off], al }
+          begin EmitAsmX64(['mov [rbp+%], al', Syms[idx].Offset]); end
         else
           begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
       skGlobal:
         if pfx = 1 then
-          begin EmitB($88); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { mov [abs], al }
+          begin EmitAsmX64(['mov [@glob], al', Syms[idx].Offset]); end
         else
           begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
     end;
@@ -9545,9 +9545,9 @@ procedure EmitStoreStrLenAt(tk: TTypeKind);
   bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
 begin
   if FrozenStrPrefixSize(tk) = 1 then
-    begin EmitB($88); EmitB($01); end                { mov [rcx], al }
+    begin EmitAsmX64(['mov [rcx], al']); end
   else
-    begin EmitB($48); EmitB($89); EmitB($01); end;   { mov [rcx], rax }
+    begin EmitAsmX64(['mov [rcx], rax']); end;
 end;
 
 procedure EmitLoadStrLen(idx: Integer);
@@ -9563,9 +9563,9 @@ begin
   begin
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
     if pfx = 1 then
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($08); end      { movzx rcx, byte [rax] }
+      begin EmitAsmX64(['movzx rcx, byte [rax]']); end
     else
-      begin EmitB($48); EmitB($8B); EmitB($08); end;                 { mov rcx, [rax] }
+      begin EmitAsmX64(['mov rcx, [rax]']); end;
   end
   else
   begin
@@ -9649,7 +9649,7 @@ begin
       memory (bug-pascal-writeln-shortstring-param). }
     EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
     if pfx = 1 then
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($16); end     { movzx rdx, byte [rsi] }
+      begin EmitAsmX64(['movzx rdx, byte [rsi]']); end
     else
       begin EmitB($48); EmitB($8B); EmitB($16); end;                { mov rdx, [rsi] = length }
     EmitAsmX64(['add rsi, %', pfx]);
@@ -9716,7 +9716,7 @@ begin
   { Bounds check: an out-of-range index (>= argc, or negative) yields '' rather
     than dereferencing a NULL/out-of-bounds argv slot (which segfaulted). argc is
     at [initial_rsp]. }
-  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);  { mov rcx, [initial_rsp] }
+  EmitAsmX64(['mov rcx, [@glob]', BSS_INITIAL_RSP]);
   EmitB($48); EmitB($8B); EmitB($09);               { mov rcx, [rcx] = argc }
   EmitAsmX64(['cmp rax, rcx']);
   EmitAsmX64(['jb short in_range']);    { jb in_range (unsigned: 0<=index<argc) }
@@ -9889,14 +9889,14 @@ begin
   EmitB($48); EmitB($8D); EmitB($78); EmitB(FrozenStrPrefixSize(lhsTk));
   { rcx := RHS length, at the RHS's width }
   if FrozenStrPrefixSize(rhsTk) = 1 then
-    begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($09); end   { movzx rcx, byte [rcx] }
+    begin EmitAsmX64(['movzx rcx, byte [rcx]']); end
   else
-    begin EmitB($48); EmitB($8B); EmitB($09); end;              { mov rcx, [rcx] }
+    begin EmitAsmX64(['mov rcx, [rcx]']); end;
   { r11 := LHS length, at the LHS's width }
   if FrozenStrPrefixSize(lhsTk) = 1 then
-    begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($18); end   { movzx r11, byte [rax] }
+    begin EmitAsmX64(['movzx r11, byte [rax]']); end
   else
-    begin EmitB($4C); EmitB($8B); EmitB($18); end;              { mov r11, [rax] }
+    begin EmitAsmX64(['mov r11, [rax]']); end;
   { cmp rcx, r11 }
   EmitB($4C); EmitB($39); EmitB($D9);
 
@@ -9955,9 +9955,9 @@ begin
       bug-a-ordering-comparison-of-frozen-strings-ignores-content-on-x86-64 }
     EmitAsmX64(['lea rsi,[rax+%]', FrozenStrPrefixSize(lhsTk)]);
     if FrozenStrPrefixSize(lhsTk) = 1 then
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($10); end { movzx rdx, byte [rax] }
+      begin EmitAsmX64(['movzx rdx, byte [rax]']); end
     else
-      begin EmitB($48); EmitB($8B); EmitB($10); end;            { mov rdx, [rax] }
+      begin EmitAsmX64(['mov rdx, [rax]']); end;
   end;
 
   { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
@@ -9986,9 +9986,9 @@ begin
   begin
     EmitAsmX64(['lea rdi,[rcx+%]', FrozenStrPrefixSize(rhsTk)]);
     if FrozenStrPrefixSize(rhsTk) = 1 then
-      begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($01); end { movzx r8, byte [rcx] }
+      begin EmitAsmX64(['movzx r8, byte [rcx]']); end
     else
-      begin EmitB($4C); EmitB($8B); EmitB($01); end;            { mov r8, [rcx] }
+      begin EmitAsmX64(['mov r8, [rcx]']); end;
   end;
 
   { --- Comparison --- }
@@ -10052,9 +10052,9 @@ begin
       bug-a-ordering-comparison-of-frozen-strings-ignores-content-on-x86-64 }
     EmitAsmX64(['lea rsi,[rax+%]', FrozenStrPrefixSize(lhsTk)]);
     if FrozenStrPrefixSize(lhsTk) = 1 then
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($10); end { movzx rdx, byte [rax] }
+      begin EmitAsmX64(['movzx rdx, byte [rax]']); end
     else
-      begin EmitB($48); EmitB($8B); EmitB($10); end;            { mov rdx, [rax] }
+      begin EmitAsmX64(['mov rdx, [rax]']); end;
   end;
 
   { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
@@ -10075,9 +10075,9 @@ begin
   begin
     EmitAsmX64(['lea rdi,[rcx+%]', FrozenStrPrefixSize(rhsTk)]);
     if FrozenStrPrefixSize(rhsTk) = 1 then
-      begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($01); end { movzx r8, byte [rcx] }
+      begin EmitAsmX64(['movzx r8, byte [rcx]']); end
     else
-      begin EmitB($4C); EmitB($8B); EmitB($01); end;            { mov r8, [rcx] }
+      begin EmitAsmX64(['mov r8, [rcx]']); end;
   end;
 
   { --- minlen in rcx --- }
@@ -10201,26 +10201,26 @@ begin
   if sz = 1 then
   begin
     if sgn then
-      begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); end { movsx rax, byte [rax] }
+      begin EmitAsmX64(['movsx rax, byte [rax]']); end
     else
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;{ movzx rax, byte [rax] }
+      begin EmitAsmX64(['movzx rax, byte [rax]']); end;
   end
   else if sz = 2 then
   begin
     if sgn then
-      begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); end { movsx rax, word [rax] }
+      begin EmitAsmX64(['movsx rax, word [rax]']); end
     else
-      begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); end;{ movzx rax, word [rax] }
+      begin EmitAsmX64(['movzx rax, word [rax]']); end;
   end
   else if sz = 4 then
   begin
     if sgn then
-      begin EmitB($48); EmitB($63); EmitB($00); end { movsxd rax, dword [rax] }
+      begin EmitAsmX64(['movsxd rax, dword [rax]']); end
     else
-      begin EmitB($8B); EmitB($00); end;{ mov eax, dword [rax] }
+      begin EmitAsmX64(['mov eax, dword [rax]']); end;
   end
   else
-    begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
+    begin EmitAsmX64(['mov rax, [rax]']); end;
 end;
 
 procedure EmitStringCharLoad(strIdx: Integer);
@@ -10239,7 +10239,7 @@ procedure EmitArrStore(arrIdx: Integer);
 var sz: Integer;
 begin
   { addr was pushed before RHS eval }
-  EmitB($59);                   { pop rcx -- element address }
+  EmitAsmX64(['pop rcx']); { -- element address }
   sz := TypeSlotSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
   if sz = 1 then
     begin EmitB($88); EmitB($01); end
@@ -15664,8 +15664,8 @@ begin
   EmitAsmX64(['signdone:']);       { .signdone: }
 
   { 10.0 -> xmm1, 1.0 -> xmm2 (preserved across syscalls) }
-  MovRaxImm(10); EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); { cvtsi2sd xmm1, rax }
-  MovRaxImm(1);  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D0); { cvtsi2sd xmm2, rax }
+  MovRaxImm(10); EmitAsmX64(['cvtsi2sd xmm1, rax']);
+  MovRaxImm(1);  EmitAsmX64(['cvtsi2sd xmm2, rax']);
 
   { ---- zero special case ---- }
   EmitAsmX64([
@@ -16889,7 +16889,7 @@ begin
           payload, so the call is skipped outright; the slot is left as it is,
           which a second pass over the same frame (the unwind path) skips the
           same way. Patched, not hand-counted, as above. }
-        EmitB($48); EmitB($83); EmitB($BD); EmitI32(Syms[i].Offset); EmitB(VT_STRING); { cmp qword [rbp+off], VT_STRING }
+        EmitAsmX64(['cmp qword [rbp+%], %', Syms[i].Offset, VT_STRING]);
         EmitB($72); jzPatch := CodeLen; EmitB(0);   { jb over the clear }
         { lea rax, [rbp + Offset] }
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
@@ -16939,7 +16939,7 @@ begin
           { only a HEAP-tier slot holds anything to release; an inline one
             (nearly all of them) skips the call -- the slot is going out of
             scope, and a second pass over it skips the same way }
-          EmitB($48); EmitB($83); EmitB($BD); EmitI32(Syms[i].Offset); EmitB(1); { cmp qword [rbp+off], 1 }
+          EmitAsmX64(['cmp qword [rbp+%], 1', Syms[i].Offset]);
           EmitB($75); jzPatch := CodeLen; EmitB(0);              { jne over }
           x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { rdi = slot addr }
           EmitCallProc(procIdx);

@@ -5041,7 +5041,7 @@ begin
     if CurTok.Kind = tkLBrack then
     begin
       Next;
-      EmitB($50); { push rax -- base address }
+      EmitAsmX64(['push rax']); { -- base address }
       ParseExpr; { rax = index }
       Expect(tkRBrack, ']');
 
@@ -5081,7 +5081,7 @@ begin
           EmitAsmX64(['sub rax, %', lo * elemSize]);
         end;
 
-        EmitB($59); { pop rcx -- base address }
+        EmitAsmX64(['pop rcx']); { -- base address }
         EmitAsmX64(['add rax, rcx']);
 
         isArr := False;
@@ -5101,7 +5101,7 @@ begin
         { String character access! }
         { rax = index (1-based). We want to compute: base + 8 + (rax - 1) = base + 7 + rax }
         EmitB($48); EmitB($05); EmitI32(7);
-        EmitB($59); { pop rcx -- base address }
+        EmitAsmX64(['pop rcx']); { -- base address }
         EmitAsmX64(['add rax, rcx']);
 
         curTk := tyChar;
@@ -5230,7 +5230,7 @@ begin
   else
   begin
     CompileLValueAddressInternal(idx, tk, recName);
-    EmitB($50); { push rax -- destination address }
+    EmitAsmX64(['push rax']); { -- destination address }
     Expect(tkAssign, ':=');
 
     if tk = tyString then
@@ -5238,7 +5238,7 @@ begin
       if CurTok.Kind = tkString then
       begin
         si := InternStr(CurTok.SVal); Next;
-        EmitB($5F); { pop rdi -- LHS address }
+        EmitAsmX64(['pop rdi']); { -- LHS address }
         EmitB($48); EmitB($C7); EmitB($C0); EmitI32(Strs[si].Len);
         EmitB($48); EmitB($89); EmitB($07);
         EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
@@ -5253,8 +5253,8 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
         EmitAsmX64(['push rax']);
-        EmitB($5F); { pop rdi -- LHS address }
-        EmitB($58); { pop rax -- index }
+        EmitAsmX64(['pop rdi']); { -- LHS address }
+        EmitAsmX64(['pop rax']); { -- index }
         EmitArgvToAddr;
       end
       else
@@ -5268,7 +5268,7 @@ begin
           if DebugTrace then writeln('rhsTk: ', Ord(rhsTk));
           Error('type mismatch: expected string');
         end;
-        EmitB($5F); { pop rdi -- LHS address }
+        EmitAsmX64(['pop rdi']); { -- LHS address }
         EmitAsmX64([
           'mov rsi, rax',
           'mov rax, [rsi]',
@@ -5282,7 +5282,7 @@ begin
     else
     begin
       ParseExpr;
-      EmitB($59); { pop rcx -- LHS address }
+      EmitAsmX64(['pop rcx']); { -- LHS address }
       i := TypeSlotSize(tk);
       if i = 1 then
         begin EmitB($88); EmitB($01); end

@@ -318,14 +318,14 @@ end;
 
 procedure x64_mov_reg_mem(size, destReg, baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(size, destReg, baseReg, False);
+  EncPrefixAndREXMem(size, destReg, baseReg, size = 1);
   if size = 1 then EncB($8A) else EncB($8B);
   EncModRMMem(destReg, baseReg, disp, force32);
 end;
 
 procedure x64_mov_mem_reg(size, baseReg, disp, srcReg: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(size, srcReg, baseReg, False);
+  EncPrefixAndREXMem(size, srcReg, baseReg, size = 1);
   if size = 1 then EncB($88) else EncB($89);
   EncModRMMem(srcReg, baseReg, disp, force32);
 end;
@@ -370,7 +370,7 @@ end;
 
 procedure x64_lea_reg_mem(size, destReg, baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(size, destReg, baseReg, False);
+  EncPrefixAndREXMem(size, destReg, baseReg, False);
   EncB($8D);
   EncModRMMem(destReg, baseReg, disp, force32);
 end;
@@ -437,14 +437,14 @@ end;
 
 procedure x64_push_mem(baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(0, 6, baseReg, False);
+  EncPrefixAndREXMem(0, 6, baseReg, False);
   EncB($FF);
   EncModRMMem(6, baseReg, disp, force32);
 end;
 
 procedure x64_pop_mem(baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(0, 0, baseReg, False);
+  EncPrefixAndREXMem(0, 0, baseReg, False);
   EncB($8F);
   EncModRMMem(0, baseReg, disp, force32);
 end;
@@ -458,7 +458,22 @@ begin
     so `cmp al, 0x30` came out 40 80 F8 30 -- a byte longer than 80 F8 30 and
     meaning the same. Only destReg can need REX here. }
   EncPrefixAndREX(size, 0, destReg, False);
-  if size = 1 then
+  { al/ax/eax/rax have a ModRM-less accumulator form (04/05 + 8*ext): one
+    byte shorter than 80 /ext ib, and than 81 /ext imm32 when the value needs
+    32 bits. GNU as picks it too. For an 8-bit value 83 /ext ib stays shorter. }
+  if (destReg = 0) and ((size = 1) or (immVal < -128) or (immVal > 127)) then
+  begin
+    if size = 1 then
+    begin
+      EncB((ext shl 3) or 4); EncB(immVal and $FF);
+    end
+    else
+    begin
+      EncB((ext shl 3) or 5);
+      if size = 2 then EncI16(immVal) else EncI32(immVal);
+    end;
+  end
+  else if size = 1 then
   begin
     EncB($80);
     EncModRMReg(ext, destReg);
@@ -527,14 +542,14 @@ end;
 
 procedure x64_inc_mem(size: Integer; baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(size, 0, baseReg, False);
+  EncPrefixAndREXMem(size, 0, baseReg, False);
   if size = 1 then EncB($FE) else EncB($FF);
   EncModRMMem(0, baseReg, disp, force32);
 end;
 
 procedure x64_dec_mem(size: Integer; baseReg, disp: Integer; force32: Boolean);
 begin
-  EncPrefixAndREX(size, 1, baseReg, False);
+  EncPrefixAndREXMem(size, 1, baseReg, False);
   if size = 1 then EncB($FE) else EncB($FF);
   EncModRMMem(1, baseReg, disp, force32);
 end;
@@ -672,7 +687,7 @@ end;
 procedure x64_movx_reg_mem(destSize, srcSize, destReg, baseReg, disp: Integer;
   signed: Boolean; force32: Boolean);
 begin
-  EncPrefixAndREX(destSize, destReg, baseReg, False);
+  EncPrefixAndREXMem(destSize, destReg, baseReg, False);
   EncB($0F);
   if signed then begin if srcSize = 1 then EncB($BE) else EncB($BF); end
   else begin if srcSize = 1 then EncB($B6) else EncB($B7); end;

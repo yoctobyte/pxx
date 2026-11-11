@@ -520,11 +520,11 @@ begin
   if OptLevel >= 1 then
   begin
     if v = 0 then
-      begin EmitB($31); EmitB($C0); Exit; end                                 { xor eax, eax }
+      begin EmitAsmX64(['xor eax, eax']); Exit; end
     else if (v >= 0) and (v <= $FFFFFFFF) then
-      begin EmitB($B8); EmitI32(v); Exit; end                                 { mov eax, imm32 (zero-extends) }
+      begin EmitAsmX64(['mov eax, %', v]); Exit; end { (zero-extends) }
     else if (v >= -2147483648) and (v <= 2147483647) then
-      begin EmitB($48); EmitB($C7); EmitB($C0); EmitI32(v); Exit; end;        { mov rax, imm32 (sign-extends) }
+      begin EmitAsmX64(['mov rax, %', v]); Exit; end; { (sign-extends) }
   end;
   EmitB($48); EmitB($B8); EmitI64(v);                                         { movabs rax, imm64 }
 end;
@@ -548,7 +548,7 @@ procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 procedure CmpRcxImm(v: Int64);
 begin
   if (v >= -2147483648) and (v <= 2147483647) then
-    begin EmitB($48); EmitB($81); EmitB($F9); EmitI32(v); end   { cmp rcx, imm32 }
+    begin EmitAsmX64(['cmp rcx, %', v]); end
   else
   begin
     EmitAsmX64(['push rdx']);
