@@ -2430,6 +2430,11 @@ const
     posix or bare. See devdocs/progress/*/feature-platform-abstraction-layer.md. }
   KERNEL_LINUX   = 0;
   KERNEL_FREEBSD = 1;
+  { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
+    12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
+    oldest release the translator's constants were measured against. }
+  FB_ABI_NOTE_SIZE = 24;
+  FB_ABI_OSRELDATE = 1500000;
   PLATFORM_POSIX = 0;
   PLATFORM_ESP   = 1;
   { wasi = hosted, but through IMPORTS rather than syscalls. A third value and

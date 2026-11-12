@@ -29,9 +29,8 @@ unit fbsdabi;
   the assembler routine FbRawA, whose `syscall` the thunk hook never sees.
 
   PHASE 1 SCOPE (feature-port-freebsd-native): files, memory, time, process
-  basics, TLS, and the two /proc files the runtime reads (environ, exe). NOT YET: signal handler installation (rt_sigaction is accepted
-  and ignored, so a hardware fault kills the process instead of raising), the
-  signal mask, threads (clone -> ENOSYS), futex, sockets, file locks, and
+  basics, TLS, and the two /proc files the runtime reads (environ, exe). Signals: rt_sigaction / rt_sigprocmask translate
+  (see FbSigEntry). NOT YET: threads (clone -> ENOSYS), futex, sockets, file locks, and
   termios beyond isatty. Anything unmapped answers -ENOSYS. }
 
 interface
@@ -224,7 +223,8 @@ end;
 function FbSig(s: Int64): Int64;
 begin
   if (s >= 0) and (s <= 31) then Result := SigMap[Integer(s)]
-  else Result := s;                                   { realtime range: pass through }
+  else if (s >= 32) and (s <= 64) then Result := s + 33   { Linux RT 32.. -> FreeBSD SIGRTMIN 65.. }
+  else Result := s;
 end;
 
 { FreeBSD struct stat (224 B) at fb -> Linux x86-64 struct stat (144 B) at lx. }
@@ -458,6 +458,286 @@ begin
   Result := len;
 end;
 
+{ ---- Signals ----------------------------------------------------------------
+  The program's handler (the compiler's dispatch stub, or anything else that
+  installs one) speaks the Linux SA_SIGINFO ABI: Linux signal number in edi, a
+  Linux siginfo_t in rsi, a Linux ucontext_t in rdx -- the fault-to-raise path
+  reads and REWRITES the saved RIP/RSP in it (__pxxSigPCPtr/SPPtr). FreeBSD's
+  frame has a different siginfo (si_addr at 24, not 16; its own si_code
+  values) and a different mcontext order. So rt_sigaction never hands FreeBSD
+  the program's handler: it records it in FbLxHandler and installs FbSigEntry,
+  which builds Linux-shaped siginfo/ucontext on its own stack, calls the
+  handler, and copies the register file back before returning to FreeBSD's
+  sigcode trampoline (which does sigreturn -- so the program's SA_RESTORER
+  stub is never used here). Offsets measured with offsetof() on 15.1. }
+
+const
+  FB_SIGPROCMASK = 340; FB_SIGACTION = 416;
+  FB_SA_ONSTACK = $1; FB_SA_RESTART = $2; FB_SA_RESETHAND = $4;
+  FB_SA_NOCLDSTOP = $8; FB_SA_NODEFER = $10; FB_SA_NOCLDWAIT = $20;
+  FB_SA_SIGINFO = $40;
+  LX_SA_NOCLDSTOP = $1; LX_SA_NOCLDWAIT = $2; LX_SA_SIGINFO = $4;
+  LX_SA_ONSTACK = $08000000; LX_SA_RESTART = $10000000;
+  LX_SA_NODEFER = $40000000; LX_SA_RESETHAND = $80000000;
+  { Linux gregs[0..17] (R8 R9 R10 R11 R12 R13 R14 R15 RDI RSI RBP RBX RDX RAX
+    RCX RSP RIP EFL) -> offset in FreeBSD mcontext_t. }
+  FbGregOff: array[0..17] of Integer = (
+    40, 48, 80, 88, 96, 104, 112, 120, 8, 16, 72, 64, 24, 56, 32, 184, 160, 176);
+  FB_UC_MCONTEXT = 16;
+  LX_UC_GREGS = 40;           { uc_flags, uc_link, uc_stack(24) }
+  LX_UC_SIGMASK = 296;        { after the kernel's 256-byte sigcontext }
+
+var
+  FbLxHandler: array[0..127] of Int64;   { by FreeBSD signal number }
+
+{ FreeBSD signal -> Linux signal (inverse of FbSig). }
+function LxSig(s: Int64): Int64;
+var i: Integer;
+begin
+  if s >= 65 then begin Result := s - 33; Exit; end;
+  for i := 1 to 31 do
+    if SigMap[i] = s then begin Result := i; Exit; end;
+  Result := s;
+end;
+
+{ Linux 64-bit mask (bit s-1) -> FreeBSD sigset_t (4 x 32 bits, bit s-1). }
+procedure MaskToFb(lx, fb: Int64);
+var s, b: Int64;
+begin
+  PInt64(fb)^ := 0; PInt64(fb + 8)^ := 0;
+  for s := 1 to 64 do
+    if ((lx shr (s - 1)) and 1) <> 0 then
+    begin
+      b := FbSig(s);
+      if (b >= 1) and (b <= 128) then
+        PInteger(fb + ((b - 1) shr 5) * 4)^ :=
+          PInteger(fb + ((b - 1) shr 5) * 4)^ or Integer(Int64(1) shl ((b - 1) and 31));
+    end;
+end;
+
+function MaskToLx(fb: Int64): Int64;
+var b, s: Int64;
+begin
+  Result := 0;
+  for b := 1 to 128 do
+    if ((PInteger(fb + ((b - 1) shr 5) * 4)^ shr ((b - 1) and 31)) and 1) <> 0 then
+    begin
+      s := LxSig(b);
+      if (s >= 1) and (s <= 64) then Result := Result or (Int64(1) shl (s - 1));
+    end;
+end;
+
+function SaFlagsToFb(f: Int64): Int64;
+begin
+  Result := 0;
+  if (f and LX_SA_NOCLDSTOP) <> 0 then Result := Result or FB_SA_NOCLDSTOP;
+  if (f and LX_SA_NOCLDWAIT) <> 0 then Result := Result or FB_SA_NOCLDWAIT;
+  if (f and LX_SA_SIGINFO) <> 0 then Result := Result or FB_SA_SIGINFO;
+  if (f and LX_SA_ONSTACK) <> 0 then Result := Result or FB_SA_ONSTACK;
+  if (f and LX_SA_RESTART) <> 0 then Result := Result or FB_SA_RESTART;
+  if (f and LX_SA_NODEFER) <> 0 then Result := Result or FB_SA_NODEFER;
+  if (f and LX_SA_RESETHAND) <> 0 then Result := Result or FB_SA_RESETHAND;
+end;
+
+function SaFlagsToLx(f: Int64): Int64;
+begin
+  Result := 0;
+  if (f and FB_SA_NOCLDSTOP) <> 0 then Result := Result or LX_SA_NOCLDSTOP;
+  if (f and FB_SA_NOCLDWAIT) <> 0 then Result := Result or LX_SA_NOCLDWAIT;
+  if (f and FB_SA_SIGINFO) <> 0 then Result := Result or LX_SA_SIGINFO;
+  if (f and FB_SA_ONSTACK) <> 0 then Result := Result or LX_SA_ONSTACK;
+  if (f and FB_SA_RESTART) <> 0 then Result := Result or LX_SA_RESTART;
+  if (f and FB_SA_NODEFER) <> 0 then Result := Result or LX_SA_NODEFER;
+  if (f and FB_SA_RESETHAND) <> 0 then Result := Result or LX_SA_RESETHAND;
+end;
+
+{ The program's handler, called as SysV C: rdi, rsi, rdx. FbSigEntry keeps
+  nothing in registers across the call (pxx locals live in the frame), and
+  FreeBSD's sigreturn restores the interrupted register file from uc. }
+type
+  TFbLxHandler = procedure(sig, info, uc: Int64); cdecl;
+
+{ FreeBSD si_code -> Linux si_code. }
+function LxSiCode(sig, c: Int64): Int64;
+begin
+  case c of
+    $10001: Result := 0;       { SI_USER }
+    $10002: Result := -1;      { SI_QUEUE }
+    $10003: Result := -2;      { SI_TIMER }
+    $10004: Result := -3;      { SI_MESGQ }
+    $10005: Result := -4;      { SI_ASYNCIO }
+    $10006: Result := $80;     { SI_KERNEL }
+    $10007: Result := -6;      { SI_LWP -> SI_TKILL }
+  else
+    Result := c;
+    if sig = 8 then            { SIGFPE: INTOVF/INTDIV are swapped; 3.. agree }
+      if c = 1 then Result := 2 else if c = 2 then Result := 1;
+  end;
+end;
+
+{ The handler FreeBSD actually calls (SA_SIGINFO: rdi, rsi, rdx). }
+procedure FbSigEntry(sig, info, uc: Int64); cdecl;
+var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
+    lu: array[0..63] of Int64;        { Linux ucontext_t through uc_sigmask }
+    i: Integer;
+    h, ls, c: Int64;
+begin
+  if (sig < 0) or (sig > 127) then Exit;
+  h := FbLxHandler[Integer(sig)];
+  if h = 0 then Exit;
+  ls := LxSig(sig);
+  for i := 0 to 15 do li[i] := 0;
+  for i := 0 to 63 do lu[i] := 0;
+  PInteger(@li[0])^ := Integer(ls);                       { si_signo }
+  if info <> 0 then
+  begin
+    PInteger(Int64(@li[0]) + 4)^ := PInteger(info + 4)^; { si_errno }
+    c := PInteger(info + 8)^;
+    PInteger(Int64(@li[0]) + 8)^ := Integer(LxSiCode(ls, c));
+    if c >= $10000 then
+    begin
+      PInteger(Int64(@li[0]) + 16)^ := PInteger(info + 12)^;   { si_pid }
+      PInteger(Int64(@li[0]) + 20)^ := PInteger(info + 16)^;   { si_uid }
+    end
+    else
+      li[2] := PInt64(info + 24)^;                            { si_addr }
+  end;
+  if uc <> 0 then
+  begin
+    for i := 0 to 17 do
+      lu[LX_UC_GREGS div 8 + i] := PInt64(uc + FB_UC_MCONTEXT + FbGregOff[i])^;
+    lu[LX_UC_GREGS div 8 + 19] := PInt64(uc + FB_UC_MCONTEXT + 152)^;          { ERR }
+    lu[LX_UC_GREGS div 8 + 20] := PInteger(uc + FB_UC_MCONTEXT + 128)^;        { TRAPNO }
+    lu[LX_UC_GREGS div 8 + 22] := PInt64(uc + FB_UC_MCONTEXT + 136)^;          { CR2 }
+    lu[LX_UC_SIGMASK div 8] := MaskToLx(uc);
+  end;
+  if info <> 0 then TFbLxHandler(h)(ls, Int64(@li[0]), Int64(@lu[0]))
+  else TFbLxHandler(h)(ls, 0, Int64(@lu[0]));
+  if uc <> 0 then
+    for i := 0 to 17 do
+      PInt64(uc + FB_UC_MCONTEXT + FbGregOff[i])^ := lu[LX_UC_GREGS div 8 + i];
+end;
+
+function FbRtSigaction(sig, act, oact: Int64): Int64;
+var fa, fo: array[0..3] of Int64;     { FreeBSD struct sigaction, 32 B }
+    fs, h, oldh, r: Int64;
+begin
+  fs := FbSig(sig);
+  if (fs < 1) or (fs > 127) then begin Result := -LX_EINVAL; Exit; end;
+  oldh := FbLxHandler[Integer(fs)];
+  fa[0] := 0; fa[1] := 0; fa[2] := 0; fa[3] := 0;
+  fo[0] := 0; fo[1] := 0; fo[2] := 0; fo[3] := 0;
+  if act <> 0 then
+  begin
+    h := PInt64(act)^;
+    PInteger(Int64(@fa[0]) + 8)^ := Integer(SaFlagsToFb(PInt64(act + 8)^));
+    MaskToFb(PInt64(act + 24)^, Int64(@fa[0]) + 12);
+    if (h = 0) or (h = 1) then fa[0] := h                 { SIG_DFL / SIG_IGN }
+    else
+    begin
+      FbLxHandler[Integer(fs)] := h;
+      fa[0] := Int64(@FbSigEntry);
+      PInteger(Int64(@fa[0]) + 8)^ := PInteger(Int64(@fa[0]) + 8)^ or FB_SA_SIGINFO;
+    end;
+    r := FbSys(FB_SIGACTION, fs, Int64(@fa[0]), Int64(@fo[0]), 0, 0, 0);
+    if r <> 0 then FbLxHandler[Integer(fs)] := oldh
+    else if (h = 0) or (h = 1) then FbLxHandler[Integer(fs)] := 0;
+  end
+  else
+    r := FbSys(FB_SIGACTION, fs, 0, Int64(@fo[0]), 0, 0, 0);
+  if (r = 0) and (oact <> 0) then
+  begin
+    if fo[0] = Int64(@FbSigEntry) then PInt64(oact)^ := oldh
+    else PInt64(oact)^ := fo[0];
+    PInt64(oact + 8)^ := SaFlagsToLx(PInteger(Int64(@fo[0]) + 8)^);
+    PInt64(oact + 16)^ := 0;
+    PInt64(oact + 24)^ := MaskToLx(Int64(@fo[0]) + 12);
+  end;
+  Result := Lx(r);
+end;
+
+function FbRtSigprocmask(how, nset, oset: Int64): Int64;
+var fn, fo: array[0..1] of Int64;
+    r: Int64;
+begin
+  if (how < 0) or (how > 2) then begin Result := -LX_EINVAL; Exit; end;
+  fo[0] := 0; fo[1] := 0;
+  if nset <> 0 then
+  begin
+    MaskToFb(PInt64(nset)^, Int64(@fn[0]));
+    r := FbSys(FB_SIGPROCMASK, how + 1, Int64(@fn[0]), Int64(@fo[0]), 0, 0, 0);
+  end
+  else
+    r := FbSys(FB_SIGPROCMASK, how + 1, 0, Int64(@fo[0]), 0, 0, 0);
+  if (r = 0) and (oset <> 0) then PInt64(oset)^ := MaskToLx(Int64(@fo[0]));
+  Result := Lx(r);
+end;
+
+
+const
+  FB_SIGSUSPEND = 341; FB_SIGPENDING = 343; FB_SIGTIMEDWAIT = 345;
+
+{ FreeBSD siginfo_t (fb) -> Linux siginfo_t (lx, 128 bytes). }
+procedure SiginfoToLx(fb, lx: Int64);
+var i: Integer;
+    c, ls: Int64;
+begin
+  for i := 0 to 15 do PInt64(lx + i * 8)^ := 0;
+  ls := LxSig(PInteger(fb)^);
+  PInteger(lx)^ := Integer(ls);
+  PInteger(lx + 4)^ := PInteger(fb + 4)^;
+  c := PInteger(fb + 8)^;
+  PInteger(lx + 8)^ := Integer(LxSiCode(ls, c));
+  if c >= $10000 then
+  begin
+    PInteger(lx + 16)^ := PInteger(fb + 12)^;                 { si_pid }
+    PInteger(lx + 20)^ := PInteger(fb + 16)^;                 { si_uid }
+  end
+  else
+    PInt64(lx + 16)^ := PInt64(fb + 24)^;                     { si_addr }
+end;
+
+{ rt_sigtimedwait(set, info, timeout): answers the LINUX signal number. }
+function FbRtSigtimedwait(nset, info, ts: Int64): Int64;
+var fs: array[0..1] of Int64;
+    fi: array[0..9] of Int64;                                 { FreeBSD siginfo_t, 80 B }
+    r: Int64;
+begin
+  MaskToFb(PInt64(nset)^, Int64(@fs[0]));
+  r := FbSys(FB_SIGTIMEDWAIT, Int64(@fs[0]), Int64(@fi[0]), ts, 0, 0, 0);
+  if r > 0 then
+  begin
+    if info <> 0 then SiginfoToLx(Int64(@fi[0]), info);
+    Result := LxSig(r);
+  end
+  else Result := Lx(r);
+end;
+
+{ A wait status carries a signal number twice over: the terminating signal
+  in bits 0..6, the stopping signal in bits 8..15. FreeBSD "continued" is
+  0x13 (its SIGCONT), Linux's is 0xffff. }
+function WaitStatusToLx(st: Int64): Int64;
+var lo: Int64;
+begin
+  st := st and $FFFF;
+  lo := st and $7F;
+  if st = $13 then Result := $FFFF
+  else if lo = $7F then Result := (LxSig((st shr 8) and $FF) shl 8) or $7F
+  else if lo <> 0 then Result := (st and not Int64($7F)) or LxSig(lo)
+  else Result := st;
+end;
+
+function FbWait4(pid, status, options, rusage: Int64): Int64;
+var o, st, r: Int64;
+begin
+  o := options and 3;                                         { WNOHANG, WUNTRACED agree }
+  if (options and 8) <> 0 then o := o or 4;                   { WCONTINUED }
+  st := 0;
+  r := FbSys(FB_WAIT4, pid, Int64(@st), o, rusage, 0, 0);
+  if (r > 0) and (status <> 0) then PInteger(status)^ := Integer(WaitStatusToLx(st));
+  Result := Lx(r);
+end;
+
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
@@ -483,14 +763,19 @@ begin
     10: Result := Lx(FbSys(FB_MPROTECT, a0, a1, a2, 0, 0, 0));
     11: Result := Lx(FbSys(FB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := FbBrk(a0);
-    13: begin                                                   { rt_sigaction: phase 1 ignores }
-          if a2 <> 0 then begin PInt64(a2)^ := 0; PInt64(a2 + 8)^ := 0; PInt64(a2 + 16)^ := 0; PInt64(a2 + 24)^ := 0; end;
-          Result := 0;
-        end;
-    14: begin                                                   { rt_sigprocmask: phase 1 ignores }
-          if a2 <> 0 then PInt64(a2)^ := 0;
-          Result := 0;
-        end;
+    13: Result := FbRtSigaction(a0, a1, a2);
+    14: Result := FbRtSigprocmask(a0, a1, a2);
+    127: begin                                                  { rt_sigpending }
+           t[0] := 0; t[1] := 0;
+           r := FbSys(FB_SIGPENDING, Int64(@t[0]), 0, 0, 0, 0, 0);
+           if r = 0 then PInt64(a0)^ := MaskToLx(Int64(@t[0]));
+           Result := Lx(r);
+         end;
+    128: Result := FbRtSigtimedwait(a0, a1, a2);
+    130: begin                                                  { rt_sigsuspend }
+           MaskToFb(PInt64(a0)^, Int64(@t[0]));
+           Result := Lx(FbSys(FB_SIGSUSPEND, Int64(@t[0]), 0, 0, 0, 0, 0));
+         end;
     16: case Integer(a1) of                                              { ioctl }
           $5401: begin                                          { TCGETS: isatty only }
                    r := FbSys(FB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
@@ -527,7 +812,7 @@ begin
         end;
     59: Result := Lx(FbSys(FB_EXECVE, a0, a1, a2, 0, 0, 0));
     60, 231: begin FbSys(FB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;
-    61: Result := Lx(FbSys(FB_WAIT4, a0, a1, a2, a3, 0, 0));
+    61: Result := FbWait4(a0, a1, a2, a3);
     62: Result := Lx(FbSys(FB_KILL, a0, FbSig(a1), 0, 0, 0, 0));
     63: Result := FbUname(a0);
     72: case Integer(a1) of                                              { fcntl }

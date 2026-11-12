@@ -42,10 +42,14 @@ start)
   ;;
 run)
   shift; bin="$1"; shift
-  scp $SSHO -P "$PORT" "$bin" root@127.0.0.1:/tmp/pxxbin >/dev/null || exit 125
+  # Upload beside and rename over: a still-running earlier binary (a timed-out
+  # test) keeps /tmp/pxxbin busy, and scp onto a busy text file fails.
+  scp $SSHO -P "$PORT" "$bin" root@127.0.0.1:/tmp/pxxbin.new >/dev/null || exit 125
   # PXX_TEST_* variables are forwarded, so a test can compare env-dependent output.
   envs=$(env | grep '^PXX_TEST_[A-Za-z0-9_]*=' | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/" | tr '\n' ' ')
-  ssh $SSHO -p "$PORT" root@127.0.0.1 "chmod +x /tmp/pxxbin && cd /tmp && $envs /tmp/pxxbin $*"
+  # Linux's default 8 MB stack, not FreeBSD's 512 MB: a stack-overflow test
+  # then takes the same path in the same time on both kernels.
+  ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 && $envs /tmp/pxxbin $*"
   ;;
 stop)
   ssh $SSHO -p "$PORT" root@127.0.0.1 "shutdown -p now" 2>/dev/null || true

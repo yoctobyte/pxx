@@ -185,7 +185,7 @@ not in `test` because it needs the VM. VM tooling: `tools/vm/freebsd.sh
 fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
 
 **Phase 1 limits (each answers honestly rather than wrongly):**
-- **Signals:** `rt_sigaction` / `rt_sigprocmask` are accepted and ignored, so a
+- ~~**Signals:**~~ resolved below (2026-11-12, phase 2). Was: `rt_sigaction` / `rt_sigprocmask` are accepted and ignored, so a
   hardware fault (nil deref, div by zero trap) kills the process instead of
   raising an exception, and Ctrl-C takes the default action. Doing it properly
   needs FreeBSD `sigaction` (struct differs), FreeBSD's own signal trampoline
@@ -240,3 +240,41 @@ fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
   scans the C binary for exactly two kernel entries.
 - Linux output byte-identical to a HEAD-built compiler for Pascal, C and NilPy,
   default and `--rtl-libc`.
+
+## 2026-11-12 (pxx2-bsd) — signals, wait status, and the FreeBSD ABI note
+
+- **rt_sigaction** never hands FreeBSD the program's handler. It records it
+  (`FbLxHandler`, by FreeBSD signal number) and installs `FbSigEntry`, which
+  builds a Linux `siginfo_t` (si_code mapped: SI_USER 0x10001 -> 0 etc., the
+  swapped FPE_INTDIV/INTOVF) and a Linux `ucontext_t` (gregs copied from
+  FreeBSD's mcontext order, offsets measured) on its own stack, calls the
+  handler as SysV C, and copies the 18 gregs back -- so the PC/SP rewrites
+  that turn a fault into a raise work unchanged. It returns into FreeBSD's
+  own sigcode trampoline; the program's SA_RESTORER stub is never used
+  (the raw rt_sigreturn stays, unreached, as the second kernel entry).
+  Flags and masks translated both ways; old action reported in Linux shape.
+- **rt_sigprocmask, rt_sigpending, rt_sigtimedwait, rt_sigsuspend** translate
+  (how 0..2 -> 1..3; 64-bit Linux mask <-> 128-bit sigset_t with the signal
+  renumbering). Linux realtime 32..64 -> FreeBSD 65..97.
+- **wait4**: the wait status carries signal numbers (termsig bits 0..6,
+  stopsig bits 8..15) and FreeBSD's "continued" is 0x13, Linux's 0xffff;
+  translated. WCONTINUED 8 -> 4.
+- **NT_FREEBSD_ABI_TAG note** (PT_NOTE, osreldate 1500000) on every
+  `--os=freebsd` image, between the program headers and the code. Without it
+  the kernel treats the binary as pre-7.0: with machdep.prot_fault_translation
+  at its default (auto) a stack-guard fault arrived as SIGBUS, not SIGSEGV,
+  and test_stack_overflow_raise died.
+- `tools/vm/freebsd.sh run` sets `ulimit -s 8192` (Linux's default; FreeBSD's
+  512 MB made the stack-overflow test take 11 s) and uploads beside-and-renames
+  (a timed-out earlier binary kept /tmp/pxxbin busy).
+- `make test-freebsd` now also runs, diffed against the Linux build:
+  test_signal_pc_rewrite, test_signal_sp_rewrite, test_stack_overflow_raise,
+  test_float_exception_mask, lib_signals_fpc, c_crtl_signal_and_wait,
+  c_crtl_signal_dispositions. All identical. test-core checks the note.
+- Linux output byte-identical to the previous compiler (Pascal, C, NilPy,
+  default and --rtl-libc).
+- **Next:** the posix platform backend issues ~70 syscalls and the translator
+  still answers -ENOSYS to a batch of them (getrusage, getpgid/setpgid,
+  getsid, get/setpriority, fchmod/fchown(at), linkat, symlinkat, mknodat,
+  fdatasync, sync, truncate, get/setitimer, utimensat, get/setgroups, times,
+  vfork, clock_settime). Then threads (thr_new, _umtx_op).

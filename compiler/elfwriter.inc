@@ -2226,7 +2226,7 @@ end;
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
-    phCount, codeOffset, machine: Integer;
+    phCount, codeOffset, machine, noteLen: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
     zb: Byte;
@@ -2260,11 +2260,25 @@ begin
     Inc(phCount);
     codeOffset := codeOffset + PROG_HEADER_SIZE;
   end;
-  { Code starts immediately after the program headers, so the constant and the
-    header count are one fact spelled twice and drift silently: the image still
-    loads, every address it reports is off by 56, and nothing fails. Checked
-    here because this file keeps two parallel copies of this writer. }
-  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+  { --os=freebsd: a PT_NOTE carrying NT_FREEBSD_ABI_TAG, the note every native
+    FreeBSD binary has. Without it the kernel takes the image's osreldate as 0
+    and applies pre-7.0 compatibility -- measured: a stack-guard fault arrived
+    as SIGBUS instead of SIGSEGV (machdep.prot_fault_translation=0, "auto").
+    The note's bytes sit between the program headers and the code.
+    feature-port-freebsd-native }
+  noteLen := 0;
+  if TargetKernel = KERNEL_FREEBSD then
+  begin
+    Inc(phCount);
+    noteLen := FB_ABI_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end;
+  { Code starts immediately after the program headers (and the FreeBSD note),
+    so the constant and the header count are one fact spelled twice and drift
+    silently: the image still loads, every address it reports is off by 56,
+    and nothing fails. Checked here because this file keeps two parallel
+    copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen then
     ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
@@ -2361,6 +2375,17 @@ begin
     (bug-elf-missing-pt-gnu-stack) }
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
+  if noteLen > 0 then
+  begin
+    writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
+    writeU64(f,codeOffset - noteLen);
+    writeU64(f,LOAD_ADDR + codeOffset - noteLen);writeU64(f,LOAD_ADDR + codeOffset - noteLen);
+    writeU64(f,noteLen);writeU64(f,noteLen);writeU64(f,4);
+    writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
+    writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
+    writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
+    writeU32(f,FB_ABI_OSRELDATE);
+  end;
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
@@ -2378,7 +2403,7 @@ end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
 var f: Integer; i: Integer;
-    phCount, codeOffset, machine: Integer;
+    phCount, codeOffset, machine, noteLen: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
 begin
@@ -2411,11 +2436,25 @@ begin
     Inc(phCount);
     codeOffset := codeOffset + PROG_HEADER_SIZE;
   end;
-  { Code starts immediately after the program headers, so the constant and the
-    header count are one fact spelled twice and drift silently: the image still
-    loads, every address it reports is off by 56, and nothing fails. Checked
-    here because this file keeps two parallel copies of this writer. }
-  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
+  { --os=freebsd: a PT_NOTE carrying NT_FREEBSD_ABI_TAG, the note every native
+    FreeBSD binary has. Without it the kernel takes the image's osreldate as 0
+    and applies pre-7.0 compatibility -- measured: a stack-guard fault arrived
+    as SIGBUS instead of SIGSEGV (machdep.prot_fault_translation=0, "auto").
+    The note's bytes sit between the program headers and the code.
+    feature-port-freebsd-native }
+  noteLen := 0;
+  if TargetKernel = KERNEL_FREEBSD then
+  begin
+    Inc(phCount);
+    noteLen := FB_ABI_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end;
+  { Code starts immediately after the program headers (and the FreeBSD note),
+    so the constant and the header count are one fact spelled twice and drift
+    silently: the image still loads, every address it reports is off by 56,
+    and nothing fails. Checked here because this file keeps two parallel
+    copies of this writer. }
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen then
     ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
@@ -2523,6 +2562,17 @@ begin
     (bug-elf-missing-pt-gnu-stack) }
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
+  if noteLen > 0 then
+  begin
+    writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
+    writeU64(f,codeOffset - noteLen);
+    writeU64(f,LOAD_ADDR + codeOffset - noteLen);writeU64(f,LOAD_ADDR + codeOffset - noteLen);
+    writeU64(f,noteLen);writeU64(f,noteLen);writeU64(f,4);
+    writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
+    writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
+    writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
+    writeU32(f,FB_ABI_OSRELDATE);
+  end;
 
   if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
