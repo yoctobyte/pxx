@@ -832,6 +832,33 @@ begin
     EmitFrameAddrXtensa(rd, Syms[si].Offset);
 end;
 
+procedure XtLoadFrameWord(rd, off: Integer);
+{ rd = the word in the frame slot at symbol offset off: one l32i off the
+  biased a7 when it is in reach (windowed), else the slot address and a load
+  through it. riscv32's Rv32LoadSlotWord (0464cc9378). }
+var adj: Integer;
+begin
+  if XtFrameDirect(off, 4, adj) then
+    xtensa_l32i(rd, reg_xtensa_a7, adj)
+  else
+  begin
+    EmitFrameAddrXtensa(rd, off);
+    xtensa_l32i(rd, rd, 0);
+  end;
+end;
+
+procedure XtLoadSlotWord(rd, si: Integer);
+{ rd = the word in the variable's slot (global or frame). }
+begin
+  if Syms[si].Kind = skGlobal then
+  begin
+    EmitLoadGlobAddrXtensa(rd, Syms[si].Offset);
+    xtensa_l32i(rd, rd, 0);
+  end
+  else
+    XtLoadFrameWord(rd, Syms[si].Offset);
+end;
+
 procedure EmitHeapAllocLockedXtensa;
 { a2 = requested payload bytes -> a2 = payload pointer. Delegates to the Pascal
   PXXAlloc(size, align=8). No threadsafe lock: xtensa is not one of the four
@@ -2550,22 +2577,19 @@ begin
           { a2 = old handle from the slot }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
-            EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { caller slot addr }
+            XtLoadFrameWord(reg_xtensa_a2, Syms[si].Offset);  { caller slot addr }
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { old handle }
           end
           else
           begin
-            EmitSlotAddrXtensa(reg_xtensa_a2, si);
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { old handle }
+            XtLoadSlotWord(reg_xtensa_a2, si);  { old handle }
           end;
           EmitStrRefCallXtensa('PXXStrDecRef');            { DecRef(old) }
           XtensaPopA2;                                     { a2 = new handle }
           { recompute slot addr into a8 (no calls follow) and store }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
-            EmitFrameAddrXtensa(reg_xtensa_a8, Syms[si].Offset);
-            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);  { caller slot addr }
+            XtLoadFrameWord(reg_xtensa_a8, Syms[si].Offset);  { caller slot addr }
           end
           else
             EmitSlotAddrXtensa(reg_xtensa_a8, si);          { slot addr }
@@ -2673,10 +2697,10 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        if Syms[si].Kind = skGlobal then
-          EmitLoadGlobAddrXtensa(reg_xtensa_a2, Syms[si].Offset)
-        else
-          EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
+        { Every arm below that reads the slot's word does it through
+          XtLoadSlotWord (one l32i off a7 for a frame slot in reach); the
+          address itself is only formed by the final arm, when nothing is
+          loaded from it. riscv32's 0464cc9378. }
         { Slot holds a heap data pointer (handle) that must be loaded in a
           read/index position: a local dynamic array, or an open-array value
           param (the caller passed the handle). SetLength keeps the slot address.
@@ -2684,7 +2708,7 @@ begin
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
         begin
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+          XtLoadSlotWord(reg_xtensa_a2, si);
         { BY-REF (var/out) DYNAMIC-ARRAY PARAM: the frame slot holds
           &caller_slot, so the load above lands on the CALLER'S SLOT and not on
           the data pointer. One more deref. arm32 has carried both loads since
@@ -2720,7 +2744,7 @@ begin
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite and
                 not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
+          XtLoadSlotWord(reg_xtensa_a2, si)
         { Scalar var/out param: the slot holds the forwarded caller address, so its
           lvalue address is [slot], not &slot. Without this deref, forwarding a
           `var` param into another routine's `var` param (or `@op`) yields the
@@ -2746,7 +2770,9 @@ begin
           hand-written copy of one row of a shared predicate is exactly what
           makes the missing rows invisible. }
         else if ABIParamSlotHoldsValueAddr(si) then
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+          XtLoadSlotWord(reg_xtensa_a2, si)
+        else
+          EmitSlotAddrXtensa(reg_xtensa_a2, si);
       end;
 
     IR_SLOTADDR:
@@ -3870,8 +3896,7 @@ begin
             argBase := XtSpillDepth;
             if (Syms[si].Kind = skParam) and Syms[si].IsRef then
             begin
-              EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
-              xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0); { caller slot addr }
+              XtLoadFrameWord(reg_xtensa_a2, Syms[si].Offset); { caller slot addr }
             end
             else
               EmitSlotAddrXtensa(reg_xtensa_a2, si);        { slot address }
