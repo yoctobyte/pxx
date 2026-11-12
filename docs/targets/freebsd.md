@@ -284,19 +284,45 @@ the same output as on Linux when run on a real terminal. Under OpenBSD's
 flag at 0, because `script` copies the settings of a terminal it does not
 have.
 
+Some things OpenBSD lacks are emulated:
+
+- **timerfd** is a kqueue holding one `EVFILT_TIMER`. A kqueue fd is
+  readable while it has a pending event, so epoll and poll see it fire; a
+  `read` answers the expiration count. pxx's scheduler parks every timed
+  wait on a timerfd (`CoSleep`, the `*Timeout` waits, async DNS). Not
+  emulated: a repeat interval different from the first expiry, and the
+  values `timerfd_gettime` reports.
+- **`/dev/full`** is `/dev/zero` with writes failing ENOSPC.
+- **`/proc/sys/kernel/hostname`** is served from `kern.hostname`.
+- **`readlink("/proc/self/fd/N")`** works for a directory: the translator
+  changes into it, reads the cwd and changes back. crtl's `fchdir` relies on
+  this. For any other fd the answer is ENOENT.
+- **`fallocate`** mode 0 grows a short file with `ftruncate`. OpenBSD cannot
+  preallocate.
+- **Scheduling.** OpenBSD has no POSIX scheduling policies, so the
+  `sched_*` calls answer as Linux does for a `SCHED_OTHER` process.
+  `sched_getaffinity` reports every online CPU.
+
+`make test-openbsd` runs about 90 programs on the VM and compares their
+output and exit code with the Linux build. It covers files, signals, threads,
+sockets, async I/O, timers, termios (on a pty), and the C and NilPy runtimes.
+
 Not done yet:
 
-- `/proc/self/maps` and the rest of `/proc`, apart from `environ` and `exe`.
+- `/proc/self/maps` and the rest of `/proc`, apart from the files above.
 - Pseudo-terminals: OpenBSD has no `/dev/ptmx` (its ptys come from
   `/dev/ptm`), so `posix_openpt` fails with ENOENT.
-- eventfd and timerfd.
+- eventfd.
+- A thread stack mapped by the program itself for a raw `__pxxclone` call
+  must have `MAP_STACK`.
 - Debug info: `-g` is refused, because the debug data would go where the pin
   table is.
 
 Anything that is not mapped answers ENOSYS.
 
 To try it, run `tools/vm/openbsd.sh start`, then
-`tools/vm/openbsd.sh run <binary>`.
+`tools/vm/openbsd.sh run <binary>`. Set `PXX_VM_PTY=1` to run the binary on a
+real terminal. `PXX_TEST_*` environment variables are passed through.
 
 `--rtl-libc` alone is not enough on any of them: it passes Linux system call
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.

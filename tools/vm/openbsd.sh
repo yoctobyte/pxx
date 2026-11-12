@@ -32,7 +32,19 @@ case "$1" in
   run)
     shift; b="$1"; shift
     scp $SSHO -P "$PORT" "$b" root@127.0.0.1:/tmp/pxxbin.new >/dev/null || exit 125
-    ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && /tmp/pxxbin $*" ;;
+    # PXX_TEST_* variables are forwarded, as tools/vm/freebsd.sh does.
+    envs=$(env | grep '^PXX_TEST_[A-Za-z0-9_]*=' | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/" | tr '\n' ' ')
+    # Linux's default 8 MB stack, so a stack-overflow test takes the same path.
+    pre="mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 &&"
+    # PXX_VM_PTY=1 runs it on a real tty: ssh -tt inside a local script(1).
+    # OpenBSD's own script(1) with no tty on stdin hands the pty all-zero
+    # termios, which is not what a terminal program meets. CRs and the NUL
+    # the outer pty echoes (shown as ^@) are stripped.
+    if [ -n "$PXX_VM_PTY" ]; then
+      script -qc "ssh -tt $SSHO -p $PORT root@127.0.0.1 '$pre $envs /tmp/pxxbin $*'" /dev/null </dev/null | tr -d '\r' | sed 's/^\^@//'
+    else
+      ssh $SSHO -p "$PORT" root@127.0.0.1 "$pre $envs /tmp/pxxbin $*"
+    fi ;;
   ssh)
     shift; exec ssh $SSHO -p "$PORT" root@127.0.0.1 "$@" ;;
   stop)

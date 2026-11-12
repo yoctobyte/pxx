@@ -30,7 +30,7 @@ unit obsdabi;
   rlimits, /proc/self/environ and /proc/self/exe, isatty, signals (handlers,
   masks, the alt stack, kill/tgkill, itimers), threads (clone -> __tfork,
   thread exit, futex), sockets, ppoll/pselect6, epoll (over kqueue).
-  termios and the tty ioctls. NOT YET: eventfd/timerfd, ptys.
+  termios and the tty ioctls, timerfd (over kqueue). NOT YET: eventfd, ptys.
   Anything unmapped answers -ENOSYS. }
 
 interface
@@ -74,6 +74,12 @@ const
   OB_SIGALTSTACK = 288;
   OB_TFORK = 8; OB_FUTEX = 83; OB_THREXIT = 302;
   OB_PPOLL = 109; OB_PSELECT = 110;
+  OB_MKNOD = 14; OB_SYNC = 36; OB_STATFS = 63; OB_FSTATFS = 64; OB_UTIMES = 76;
+  OB_GETGROUPS = 79; OB_SETGROUPS = 80; OB_FUTIMENS = 85; OB_CLOCK_SETTIME = 88;
+  OB_SETREUID = 126; OB_SETREGID = 127; OB_GETTHRNAME = 142; OB_SETTHRNAME = 143;
+  OB_MLOCK = 203; OB_MUNLOCK = 204; OB_MLOCKALL = 271; OB_MUNLOCKALL = 272;
+  OB_GETRESUID = 281; OB_SETRESUID = 282; OB_GETRESGID = 283; OB_SETRESGID = 284;
+  OB_THRSIGDIVERT = 303; OB_MKNODAT = 320;
 
   OB_AT_FDCWD = -100;             { same value as Linux }
   OB_AT_EACCESS = $01; OB_AT_SYMLINK_NOFOLLOW = $02; OB_AT_SYMLINK_FOLLOW = $04;
@@ -513,6 +519,11 @@ const
                                        101,110,118,105,114,111,110);   { /proc/self/environ }
   ProcExe: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,
                                    101,120,101);                        { /proc/self/exe }
+  ProcHostname: array[0..24] of Byte = (47,112,114,111,99,47,115,121,115,47,107,101,
+                                        114,110,101,108,47,104,111,115,116,110,97,
+                                        109,101);                       { /proc/sys/kernel/hostname }
+  DevFull: array[0..8] of Byte = (47,100,101,118,47,102,117,108,108);  { /dev/full }
+  DevZero: array[0..9] of Byte = (47,100,101,118,47,122,101,114,111,0); { /dev/zero, NUL-terminated }
 
 { An fd that reads back len bytes from buf. OpenBSD has no anonymous shm and
   no memfd, so: a pipe when the bytes fit its buffer (16 KiB, no file system
@@ -590,6 +601,16 @@ begin
   Result := ObDataFd(outp, n);
   ObSys(OB_MUNMAP, outp, sz, 0, 0, 0, 0);
   ObSys(OB_MUNMAP, buf, sz, 0, 0, 0, 0);
+end;
+
+{ /proc/sys/kernel/hostname: kern.hostname and a newline. }
+function ObProcHostname: Int64;
+var b: array[0..271] of Byte; n: Int64;
+begin
+  SysctlStr(1, 10, Int64(@b[0]), 256);
+  n := StrLen0(Int64(@b[0]));
+  b[n] := 10;
+  Result := ObDataFd(Int64(@b[0]), n + 1);
 end;
 
 { readlink("/proc/self/exe"). OpenBSD keeps no path for a running image, so
@@ -1473,19 +1494,344 @@ begin
   PInteger(fb + 40)^ := Integer(sp);
 end;
 
+{ ---- timerfd over kqueue -----------------------------------------------------
+  OpenBSD has no timerfd, and pxx's scheduler parks every timed wait on one
+  (CoSleep, the *Timeout waits, DNS). A timerfd here is a kqueue holding one
+  EVFILT_TIMER: a kqueue fd is itself readable while it has a pending event,
+  so epoll (kqueue) and poll see it fire exactly as they would a timerfd. read
+  fetches the timer's kevent, whose data is the expiration count -- the u64 a
+  timerfd read answers. ObTfd marks which fds are such kqueues (bit 0), their
+  TFD_NONBLOCK (bit 1) and CLOCK_REALTIME (bit 2); close clears the mark.
+  NOT EMULATED: an interval different from the first expiry (the kqueue timer
+  is periodic at one rate: the first fire comes at the interval), and
+  timerfd_gettime / the old value (answered as disarmed). }
+
+const
+  OB_EVFILT_TIMER = -7;
+  OB_NOTE_NSECONDS = 3;
+  OB_TFD_MAX = 4096;
+
+var
+  ObTfd: array[0..OB_TFD_MAX - 1] of Byte;
+
+function ObIsTfd(fd: Int64): Boolean;
+begin
+  Result := (fd >= 0) and (fd < OB_TFD_MAX) and ((ObTfd[Integer(fd)] and 1) <> 0);
+end;
+
+function ObTimerfdCreate(clock, flags: Int64): Int64;
+var r: Int64;
+begin
+  if (clock <> 0) and (clock <> 1) and (clock <> 7) then begin Result := -LX_EINVAL; Exit; end;
+  r := ObSys(OB_KQUEUE, 0, 0, 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if r >= OB_TFD_MAX then
+  begin
+    ObSys(OB_CLOSE, r, 0, 0, 0, 0, 0);
+    Result := -24; Exit;                                      { EMFILE }
+  end;
+  if (flags and $80000) <> 0 then ObSys(OB_FCNTL, r, 2, 1, 0, 0, 0);   { TFD_CLOEXEC }
+  ObTfd[Integer(r)] := 1;
+  if (flags and $800) <> 0 then ObTfd[Integer(r)] := ObTfd[Integer(r)] or 2;   { TFD_NONBLOCK }
+  if clock = 0 then ObTfd[Integer(r)] := ObTfd[Integer(r)] or 4;
+  Result := r;
+end;
+
+function ObTimerfdSettime(fd, flags, nv, ov: Int64): Int64;
+var kv: array[0..3] of Int64; ts: array[0..1] of Int64;
+    valNs, intNs, i: Int64;
+begin
+  if not ObIsTfd(fd) then begin Result := -LX_EINVAL; Exit; end;
+  if nv = 0 then begin Result := -14; Exit; end;              { EFAULT }
+  if ov <> 0 then for i := 0 to 3 do PInt64(ov + i * 8)^ := 0;
+  intNs := PInt64(nv)^ * 1000000000 + PInt64(nv + 8)^;
+  valNs := PInt64(nv + 16)^ * 1000000000 + PInt64(nv + 24)^;
+  for i := 0 to 3 do kv[i] := 0;
+  kv[0] := 1;                                                 { ident }
+  PSmallInt(Int64(@kv[0]) + 8)^ := OB_EVFILT_TIMER;
+  if valNs = 0 then
+  begin                                                       { disarm }
+    PWord(Int64(@kv[0]) + 10)^ := OB_EV_DELETE;
+    ObSys(OB_KEVENT, fd, Int64(@kv[0]), 1, 0, 0, 0);
+    Result := 0; Exit;
+  end;
+  if (flags and 1) <> 0 then                                  { TFD_TIMER_ABSTIME }
+  begin
+    if (ObTfd[Integer(fd)] and 4) <> 0 then ObSys(OB_CLOCK_GETTIME, 0, Int64(@ts[0]), 0, 0, 0, 0)
+    else ObSys(OB_CLOCK_GETTIME, 3, Int64(@ts[0]), 0, 0, 0, 0);
+    valNs := valNs - (ts[0] * 1000000000 + ts[1]);
+    if valNs < 1 then valNs := 1;
+  end;
+  if intNs > 0 then
+  begin
+    PWord(Int64(@kv[0]) + 10)^ := OB_EV_ADD or OB_EV_ENABLE;
+    kv[2] := intNs;
+  end
+  else
+  begin
+    PWord(Int64(@kv[0]) + 10)^ := OB_EV_ADD or OB_EV_ENABLE or OB_EV_ONESHOT;
+    kv[2] := valNs;
+  end;
+  PInteger(Int64(@kv[0]) + 12)^ := OB_NOTE_NSECONDS;          { fflags }
+  Result := Lx(ObSys(OB_KEVENT, fd, Int64(@kv[0]), 1, 0, 0, 0));
+end;
+
+{ read(timerfd): the expiration count as a u64, or EAGAIN when not fired
+  and non-blocking. }
+function ObTimerfdRead(fd, buf, len: Int64): Int64;
+var kv: array[0..3] of Int64; ts: array[0..1] of Int64; r: Int64;
+begin
+  if len < 8 then begin Result := -LX_EINVAL; Exit; end;
+  ts[0] := 0; ts[1] := 0;
+  if (ObTfd[Integer(fd)] and 2) <> 0 then
+    r := ObSys(OB_KEVENT, fd, 0, 0, Int64(@kv[0]), 1, Int64(@ts[0]))
+  else
+    r := ObSys(OB_KEVENT, fd, 0, 0, Int64(@kv[0]), 1, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if r = 0 then begin Result := -11; Exit; end;               { EAGAIN }
+  PInt64(buf)^ := kv[2];
+  Result := 8;
+end;
+
+{ ---- process odds and ends -------------------------------------------------- }
+
+{ A wait status carries a signal number twice: the terminating signal in bits
+  0..6, the stopping one in bits 8..15. The layout is Linux's, "continued"
+  ($FFFF) included; only the numbers differ. }
+function WaitStatusToLx(st: Int64): Int64;
+var lo: Int64;
+begin
+  st := st and $FFFF;
+  lo := st and $7F;
+  if st = $FFFF then Result := st
+  else if lo = $7F then Result := (LxSig((st shr 8) and $FF) shl 8) or $7F
+  else if lo <> 0 then Result := (st and not Int64($7F)) or LxSig(lo)
+  else Result := st;
+end;
+
+function ObWait4(pid, status, options, rusage: Int64): Int64;
+var st, r: Int64;
+begin
+  st := 0;
+  r := ObSys(OB_WAIT4, pid, Int64(@st), options and $B, rusage, 0, 0);   { WNOHANG WUNTRACED WCONTINUED agree }
+  if (r > 0) and (status <> 0) then PInteger(status)^ := Integer(WaitStatusToLx(st));
+  Result := Lx(r);
+end;
+
+{ rt_sigtimedwait -> __thrsigdivert(mask by value, info, timeout). Answers
+  the LINUX signal number; a timeout is EAGAIN on both. }
+function ObRtSigtimedwait(nset, info, ts: Int64): Int64;
+var oi: array[0..16] of Int64;                                { OpenBSD siginfo_t, 136 B }
+    r: Int64;
+begin
+  r := ObSys(OB_THRSIGDIVERT, MaskToOb(PInt64(nset)^), Int64(@oi[0]), ts, 0, 0, 0);
+  if r > 0 then
+  begin
+    if info <> 0 then SiginfoToLx(Int64(@oi[0]), info);
+    Result := LxSig(r);
+  end
+  else Result := Lx(r);
+end;
+
+{ times(): no OpenBSD syscall. struct tms in Linux's USER_HZ (100) from
+  getrusage; the result is a monotonic tick count. }
+function ObTimes(buf: Int64): Int64;
+var ru: array[0..17] of Int64;     { struct rusage, 144 B on both }
+    ts: array[0..1] of Int64;
+begin
+  if buf <> 0 then
+  begin
+    ObSys(OB_GETRUSAGE, 0, Int64(@ru[0]), 0, 0, 0, 0);
+    PInt64(buf)^ := ru[0] * 100 + ru[1] div 10000;         { utime }
+    PInt64(buf + 8)^ := ru[2] * 100 + ru[3] div 10000;     { stime }
+    ObSys(OB_GETRUSAGE, -1, Int64(@ru[0]), 0, 0, 0, 0);
+    PInt64(buf + 16)^ := ru[0] * 100 + ru[1] div 10000;    { cutime }
+    PInt64(buf + 24)^ := ru[2] * 100 + ru[3] div 10000;    { cstime }
+  end;
+  ObSys(OB_CLOCK_GETTIME, 3, Int64(@ts[0]), 0, 0, 0, 0);
+  Result := ts[0] * 100 + ts[1] div 10000000;
+end;
+
+{ OpenBSD struct statfs (568 B, measured) -> Linux struct statfs (120 B). }
+function ObStatfs(nr, arg, lx: Int64): Int64;
+var fs: array[0..71] of Int64;
+    r, fl, ty, i, nm: Int64;
+begin
+  r := ObSys(nr, arg, Int64(@fs[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  for i := 0 to 14 do PInt64(lx + i * 8)^ := 0;
+  nm := Int64(@fs[0]) + 120;                                  { f_fstypename }
+  ty := 0;
+  case PByte(nm)^ of                                          { Linux f_type magics }
+    102: ty := $00011954;                                     { ffs }
+    116: ty := $01021994;                                     { tmpfs }
+    109: if PByte(nm + 1)^ = 102 then ty := $01021994         { mfs }
+         else ty := $4D44;                                    { msdos }
+    110: ty := $6969;                                         { nfs }
+    99:  ty := $9660;                                         { cd9660 }
+  end;
+  PInt64(lx)^ := ty;
+  PInt64(lx + 8)^ := PLongWord(Int64(@fs[0]) + 4)^;           { f_bsize }
+  for i := 0 to 4 do PInt64(lx + 16 + i * 8)^ := fs[2 + i];   { blocks bfree bavail files ffree }
+  PInt64(lx + 56)^ := fs[12];                                 { f_fsid }
+  PInt64(lx + 64)^ := PLongWord(Int64(@fs[0]) + 104)^;        { f_namelen }
+  PInt64(lx + 72)^ := PLongWord(Int64(@fs[0]) + 4)^;          { f_frsize }
+  fl := PLongWord(Int64(@fs[0]))^;
+  r := 0;
+  if (fl and $1) <> 0 then r := r or 1;                       { ST_RDONLY }
+  if (fl and $8) <> 0 then r := r or 2;                       { ST_NOSUID }
+  if (fl and $10) <> 0 then r := r or 4;                      { ST_NODEV }
+  if (fl and $4) <> 0 then r := r or 8;                       { ST_NOEXEC }
+  if (fl and $2) <> 0 then r := r or 16;                      { ST_SYNCHRONOUS }
+  if (fl and $8000) <> 0 then r := r or 1024;                 { ST_NOATIME }
+  PInt64(lx + 80)^ := r;
+  Result := 0;
+end;
+
+{ utimensat / futimens. UTIME_NOW/UTIME_OMIT are (1<<30)-1 / (1<<30)-2 on
+  Linux, -2 / -1 on OpenBSD; a nil path means "the fd itself" on Linux only. }
+function ObUtimensat(dirfd, path, times, flags: Int64): Int64;
+var ts: array[0..3] of Int64;
+    tp, i: Int64;
+begin
+  tp := 0;
+  if times <> 0 then
+  begin
+    for i := 0 to 3 do ts[i] := PInt64(times + i * 8)^;
+    for i := 0 to 1 do
+      if ts[i * 2 + 1] = $3FFFFFFF then ts[i * 2 + 1] := -2
+      else if ts[i * 2 + 1] = $3FFFFFFE then ts[i * 2 + 1] := -1;
+    tp := Int64(@ts[0]);
+  end;
+  if path = 0 then Result := Lx(ObSys(OB_FUTIMENS, dirfd, tp, 0, 0, 0, 0))
+  else Result := Lx(ObSys(OB_UTIMENSAT, dirfd, path, tp, ObAtFlags(flags), 0, 0));
+end;
+
+{ fallocate mode 0: OpenBSD has no preallocation at all, so the visible part
+  of Linux's semantics -- a file that ends short of offset+len grows to it --
+  is done with ftruncate. Other modes are EOPNOTSUPP, as on a Linux file
+  system without them. }
+function ObFallocate(fd, mode, off, len: Int64): Int64;
+var sb: array[0..15] of Int64; r: Int64;
+begin
+  if mode <> 0 then begin Result := -95; Exit; end;
+  if (off < 0) or (len <= 0) then begin Result := -LX_EINVAL; Exit; end;
+  r := ObSys(OB_FSTAT, fd, Int64(@sb[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if (PLongWord(@sb[0])^ and $F000) <> $8000 then begin Result := -19; Exit; end;   { not a regular file: ENODEV }
+  if off + len > sb[10] then r := ObSys(OB_FTRUNCATE, fd, off + len, 0, 0, 0, 0)
+  else r := 0;
+  Result := Lx(r);
+end;
+
+var
+  ObPersona: Int64;                         { personality(2): Linux's default PER_LINUX }
+
+{ prctl: PR_SET_NAME (15) / PR_GET_NAME (16) -> setthrname / getthrname on
+  this thread (tid 0). Any other option is EINVAL, as an unknown one is on
+  Linux. }
+function ObPrctl(op, arg: Int64): Int64;
+var i: Integer;
+begin
+  case op of
+    15: Result := Lx(ObSys(OB_SETTHRNAME, 0, arg, 0, 0, 0, 0));
+    16: begin
+          for i := 0 to 15 do PByte(arg + i)^ := 0;
+          Result := Lx(ObSys(OB_GETTHRNAME, 0, arg, 16, 0, 0, 0));
+        end;
+  else
+    Result := -LX_EINVAL;
+  end;
+end;
+
+{ sched_getaffinity: OpenBSD has no CPU affinity; answer every online CPU
+  (hw.ncpuonline), as an unrestricted Linux process sees. }
+function ObGetAffinity(len, mask: Int64): Int64;
+var mib: array[0..1] of Integer; n, sz, i: Int64; nc: Integer;
+begin
+  if len < 8 then begin Result := -LX_EINVAL; Exit; end;
+  if len > 128 then len := 128;
+  mib[0] := 6; mib[1] := 25;                                  { hw.ncpuonline }
+  nc := 1; sz := 4;
+  if ObSys(OB_SYSCTL, Int64(@mib[0]), 2, Int64(@nc), Int64(@sz), 0, 0) < 0 then nc := 1;
+  for i := 0 to len - 1 do PByte(mask + i)^ := 0;
+  n := nc;
+  if n > len * 8 then n := len * 8;
+  for i := 0 to n - 1 do
+    PByte(mask + i div 8)^ := PByte(mask + i div 8)^ or (1 shl (i mod 8));
+  Result := len;
+end;
+
+{ readlink("/proc/self/fd/N"). OpenBSD keeps no path for an open file, but
+  a DIRECTORY's can be had: fchdir into it, getcwd, and fchdir back to a saved
+  "." -- which is what crtl's fchdir and similar fd-to-path users need. Any
+  other fd is ENOENT, as for a deleted file on Linux. -4096 = not that path. }
+function ObProcFdLink(path, buf, cap: Int64): Int64;
+var i, fd, here, r, n: Int64; tmp: array[0..1023] of Byte;
+const Pre: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,102,100,47);   { /proc/self/fd/ }
+      Dot: array[0..1] of Byte = (46, 0);
+begin
+  Result := -4096;
+  if path = 0 then Exit;
+  for i := 0 to 13 do
+    if PByte(path + i)^ <> Pre[i] then Exit;
+  fd := 0; i := 14;
+  if (PByte(path + i)^ < 48) or (PByte(path + i)^ > 57) then Exit;
+  while (PByte(path + i)^ >= 48) and (PByte(path + i)^ <= 57) do
+  begin
+    fd := fd * 10 + PByte(path + i)^ - 48; i := i + 1;
+  end;
+  if PByte(path + i)^ <> 0 then Exit;
+  here := ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@Dot[0]), $20000 or $10000, 0, 0, 0);   { O_DIRECTORY|O_CLOEXEC }
+  if here < 0 then begin Result := Lx(here); Exit; end;
+  r := ObSys(OB_FCHDIR, fd, 0, 0, 0, 0, 0);
+  if r < 0 then
+  begin
+    ObSys(OB_CLOSE, here, 0, 0, 0, 0, 0);
+    if r = -9 then Result := -9 else Result := -LX_ENOENT;    { EBADF stays EBADF }
+    Exit;
+  end;
+  r := ObSys(OB_GETCWD, Int64(@tmp[0]), 1024, 0, 0, 0, 0);
+  ObSys(OB_FCHDIR, here, 0, 0, 0, 0, 0);
+  ObSys(OB_CLOSE, here, 0, 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := StrLen0(Int64(@tmp[0]));
+  if n > cap then n := cap;
+  for i := 0 to n - 1 do PByte(buf + i)^ := tmp[i];
+  Result := n;
+end;
+
+{ open/openat with the paths OpenBSD lacks. /dev/full is /dev/zero whose
+  writes fail with ENOSPC (bit 3 of ObTfd marks the fd). }
+function ObOpenAt(dirfd, path, flags, mode: Int64): Int64;
+begin
+  if PathIs(path, ProcEnviron) then Result := ObProcEnviron
+  else if PathIs(path, ProcHostname) then Result := ObProcHostname
+  else if PathIs(path, DevFull) then
+  begin
+    Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@DevZero[0]), ObOpenFlags(flags) and not Int64($E00), 0, 0, 0));
+    if (Result >= 0) and (Result < OB_TFD_MAX) then ObTfd[Integer(Result)] := 8;
+  end
+  else Result := Lx(ObSys(OB_OPENAT, dirfd, path, ObOpenFlags(flags), mode, 0, 0));
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..15] of Int64; t: array[0..3] of Int64; r, f, i, n: Int64;
 begin
   case nr of
-    0: Result := Lx(ObSys(OB_READ, a0, a1, a2, 0, 0, 0));
-    1: Result := Lx(ObSys(OB_WRITE, a0, a1, a2, 0, 0, 0));
-    2: if PathIs(a0, ProcEnviron) then Result := ObProcEnviron
-       else Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, a0, ObOpenFlags(a1), a2, 0, 0));
-    257: if PathIs(a1, ProcEnviron) then Result := ObProcEnviron
-         else Result := Lx(ObSys(OB_OPENAT, a0, a1, ObOpenFlags(a2), a3, 0, 0));
-    3: Result := Lx(ObSys(OB_CLOSE, a0, 0, 0, 0, 0, 0));
+    0: if ObIsTfd(a0) then Result := ObTimerfdRead(a0, a1, a2)
+       else Result := Lx(ObSys(OB_READ, a0, a1, a2, 0, 0, 0));
+    1: if (a0 >= 0) and (a0 < OB_TFD_MAX) and ((ObTfd[Integer(a0)] and 8) <> 0) and (a2 > 0) then
+         Result := -28                                          { /dev/full: ENOSPC }
+       else Result := Lx(ObSys(OB_WRITE, a0, a1, a2, 0, 0, 0));
+    2: Result := ObOpenAt(OB_AT_FDCWD, a0, a1, a2);
+    257: Result := ObOpenAt(a0, a1, a2, a3);
+    3: begin
+         if (a0 >= 0) and (a0 < OB_TFD_MAX) then ObTfd[Integer(a0)] := 0;
+         Result := Lx(ObSys(OB_CLOSE, a0, 0, 0, 0, 0, 0));
+       end;
     4: Result := ObStatAt(OB_AT_FDCWD, a0, a1, 0);              { stat }
     5: begin                                                    { fstat }
          r := ObSys(OB_FSTAT, a0, Int64(@sb[0]), 0, 0, 0, 0);
@@ -1598,7 +1944,7 @@ begin
     231: begin ObSys(OB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;
     56: Result := ObClone(a0, a1, a2, a3, a5);
     202: Result := ObFutex(a0, a1, a2, a3, a4, a5);
-    61: Result := Lx(ObSys(OB_WAIT4, a0, a1, a2 and 3, a3, 0, 0));   { WNOHANG/WUNTRACED same; status words agree }
+    61: Result := ObWait4(a0, a1, a2, a3);
     62: begin
           f := ObSig(a1);
           if (f = 0) and (a1 <> 0) then Result := -LX_EINVAL
@@ -1651,9 +1997,15 @@ begin
     88: Result := Lx(ObSys(OB_SYMLINK, a0, a1, 0, 0, 0, 0));
     266: Result := Lx(ObSys(OB_SYMLINKAT, a0, a1, a2, 0, 0, 0));
     89: if PathIs(a0, ProcExe) then Result := ObProcExe(a1, a2)
-        else Result := Lx(ObSys(OB_READLINK, a0, a1, a2, 0, 0, 0));
+        else begin
+          Result := ObProcFdLink(a0, a1, a2);
+          if Result = -4096 then Result := Lx(ObSys(OB_READLINK, a0, a1, a2, 0, 0, 0));
+        end;
     267: if PathIs(a1, ProcExe) then Result := ObProcExe(a2, a3)
-         else Result := Lx(ObSys(OB_READLINKAT, a0, a1, a2, a3, 0, 0));
+         else begin
+           Result := ObProcFdLink(a1, a2, a3);
+           if Result = -4096 then Result := Lx(ObSys(OB_READLINKAT, a0, a1, a2, a3, 0, 0));
+         end;
     90: Result := Lx(ObSys(OB_CHMOD, a0, a1, 0, 0, 0, 0));
     91: Result := Lx(ObSys(OB_FCHMOD, a0, a1, 0, 0, 0, 0));
     268: Result := Lx(ObSys(OB_FCHMODAT, a0, a1, a2, 0, 0, 0));
@@ -1719,18 +2071,7 @@ begin
            Result := Lx(ObSys(OB_NANOSLEEP, a2, a3, 0, 0, 0, 0))
          else
            Result := -LX_EINVAL;                                { TIMER_ABSTIME: not yet }
-    280: begin                                                  { utimensat: UTIME_NOW/OMIT differ }
-           if a2 <> 0 then
-           begin
-             for i := 0 to 3 do t[i] := PInt64(a2 + i * 8)^;
-             for i := 0 to 1 do
-               if t[i * 2 + 1] = $3FFFFFFF then t[i * 2 + 1] := -2      { UTIME_NOW }
-               else if t[i * 2 + 1] = $3FFFFFFE then t[i * 2 + 1] := -1; { UTIME_OMIT }
-             r := Int64(@t[0]);
-           end
-           else r := 0;
-           Result := Lx(ObSys(OB_UTIMENSAT, a0, a1, r, ObAtFlags(a3), 0, 0));
-         end;
+    280: Result := ObUtimensat(a0, a1, a2, a3);
     295: Result := Lx(ObSys(OB_PREADV, a0, a1, a2, a3, 0, 0));
     296: Result := Lx(ObSys(OB_PWRITEV, a0, a1, a2, a3, 0, 0));
     318: begin                                                  { getrandom: getentropy, 256 B per call }
@@ -1801,6 +2142,60 @@ begin
               end;
     233: Result := ObEpollCtl(a0, a1, a2, a3);
     232, 281: Result := ObEpollWait(a0, a1, a2, a3);            { epoll_pwait: mask not applied }
+    283: Result := ObTimerfdCreate(a0, a1);
+    286: Result := ObTimerfdSettime(a0, a1, a2, a3);
+    287: if ObIsTfd(a0) then                                    { timerfd_gettime: disarmed }
+         begin
+           for i := 0 to 3 do PInt64(a1 + i * 8)^ := 0;
+           Result := 0;
+         end
+         else Result := -LX_EINVAL;
+    128: Result := ObRtSigtimedwait(a0, a1, a2);
+    100: Result := ObTimes(a0);
+    137: Result := ObStatfs(OB_STATFS, a0, a1);
+    138: Result := ObStatfs(OB_FSTATFS, a0, a1);
+    113: Result := Lx(ObSys(OB_SETREUID, a0, a1, 0, 0, 0, 0));
+    114: Result := Lx(ObSys(OB_SETREGID, a0, a1, 0, 0, 0, 0));
+    115: Result := Lx(ObSys(OB_GETGROUPS, a0, a1, 0, 0, 0, 0));
+    116: Result := Lx(ObSys(OB_SETGROUPS, a0, a1, 0, 0, 0, 0));
+    117: Result := Lx(ObSys(OB_SETRESUID, a0, a1, a2, 0, 0, 0));
+    118: Result := Lx(ObSys(OB_GETRESUID, a0, a1, a2, 0, 0, 0));
+    119: Result := Lx(ObSys(OB_SETRESGID, a0, a1, a2, 0, 0, 0));
+    120: Result := Lx(ObSys(OB_GETRESGID, a0, a1, a2, 0, 0, 0));
+    133: Result := Lx(ObSys(OB_MKNOD, a0, a1, a2, 0, 0, 0));      { dev_t: same encoding for small numbers }
+    259: Result := Lx(ObSys(OB_MKNODAT, a0, a1, a2, a3, 0, 0));
+    135: begin                                                  { personality }
+           Result := ObPersona;
+           if a0 <> $FFFFFFFF then ObPersona := a0 and $FFFFFFFF;
+         end;
+    { sched_*: OpenBSD has no POSIX scheduling policies. Answer as Linux does
+      for a SCHED_OTHER process, the only kind there is here: priority 0,
+      and FIFO/RR refused as for a process without CAP_SYS_NICE. }
+    142: if (a1 = 0) or (PInteger(a1)^ <> 0) then Result := -LX_EINVAL else Result := 0;
+    143: if a1 = 0 then Result := -LX_EINVAL
+         else begin PInteger(a1)^ := 0; Result := 0; end;
+    144: case a1 and $3FFFFFFF of
+           0, 3, 5: if (a2 = 0) or (PInteger(a2)^ <> 0) then Result := -LX_EINVAL else Result := 0;
+           1, 2: Result := -1;                                  { EPERM }
+         else Result := -LX_EINVAL;
+         end;
+    145: Result := 0;                                           { SCHED_OTHER }
+    146: case a0 of 1, 2: Result := 99; 0, 3, 5: Result := 0; else Result := -LX_EINVAL; end;
+    147: case a0 of 1, 2: Result := 1; 0, 3, 5: Result := 0; else Result := -LX_EINVAL; end;
+    148: begin PInt64(a1)^ := 0; PInt64(a1 + 8)^ := 100000000; Result := 0; end;
+    203: Result := 0;                                           { sched_setaffinity: nothing to restrict }
+    204: Result := ObGetAffinity(a1, a2);
+    149: Result := Lx(ObSys(OB_MLOCK, a0, a1, 0, 0, 0, 0));
+    150: Result := Lx(ObSys(OB_MUNLOCK, a0, a1, 0, 0, 0, 0));
+    151: Result := Lx(ObSys(OB_MLOCKALL, a0 and 3, 0, 0, 0, 0, 0));   { MCL_CURRENT/FUTURE agree }
+    152: Result := Lx(ObSys(OB_MUNLOCKALL, 0, 0, 0, 0, 0, 0));
+    157: Result := ObPrctl(a0, a1);
+    162: begin ObSys(OB_SYNC, 0, 0, 0, 0, 0, 0); Result := 0; end;
+    218: Result := ObSys(OB_GETTHRID, 0, 0, 0, 0, 0, 0);       { set_tid_address: the tid }
+    227: Result := Lx(ObSys(OB_CLOCK_SETTIME, ObClock(a0), a1, 0, 0, 0, 0));
+    235: Result := Lx(ObSys(OB_UTIMES, a0, a1, 0, 0, 0, 0));
+    272: if a0 = 0 then Result := 0 else Result := -LX_EINVAL;  { unshare: nothing to unshare succeeds on Linux too }
+    285: Result := ObFallocate(a0, a1, a2, a3);
     13: Result := ObRtSigaction(a0, a1, a2);
     14: Result := ObRtSigprocmask(a0, a1, a2);
     127: begin                                                  { rt_sigpending }

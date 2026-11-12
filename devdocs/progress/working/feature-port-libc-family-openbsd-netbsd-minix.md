@@ -300,3 +300,40 @@ Next: termios, eventfd/timerfd (OpenBSD has neither natively), and /proc.
   - eventfd and timerfd: OpenBSD has neither; they would need emulating
     with a pipe or kqueue EVFILT_TIMER.
   - /proc/self/maps.
+
+### 2026-11-12: `--os=openbsd` gap sweep; `make test-openbsd`
+
+I ran test-freebsd's whole list against OpenBSD and fixed every difference
+that could be fixed:
+
+- **timerfd** over a kqueue with one EVFILT_TIMER (NOTE_NSECONDS). Without
+  it, CoSleep registered -ENOSYS as an fd and hung.
+- **Wait statuses.** Signal numbers are mapped back; WCONTINUED is 8 on both.
+- **rt_sigtimedwait** via __thrsigdivert, with the mask passed by value.
+- **futimens.** utimensat with a nil path.
+- **New mappings:** statfs/fstatfs (568-byte struct, measured), times,
+  setre*/setres*/getres*, get/setgroups, mlock*, sync, clock_settime,
+  utimes, mknod(at), set_tid_address and unshare(0).
+- **prctl** names via setthrname/getthrname.
+- **sched_*** answered as Linux does for SCHED_OTHER. sched_getaffinity
+  reports hw.ncpuonline CPUs.
+- **fallocate** mode 0 grows the file with ftruncate.
+- **Paths:** /dev/full (/dev/zero with writes failing ENOSPC),
+  /proc/sys/kernel/hostname, and readlink /proc/self/fd/N for directory
+  fds (fchdir in, getcwd, fchdir back).
+- **tools/vm/openbsd.sh run** passes PXX_TEST_* through, uses an 8 MB stack
+  ulimit, and runs on a real tty with PXX_VM_PTY=1 (ssh -tt inside a local
+  script(1)).
+- **`make test-openbsd`** checks about 90 programs for byte-identical output
+  and exit code against Linux.
+
+Left out of the target, because OpenBSD cannot do them:
+
+- c_pty_family, cisatty and lib_termio_isatty (no /dev/ptmx).
+- lib_net_v6only (no dual-stack IPv6).
+- test_a_joined_thread_leaves_the_pal_reap_table (/proc/self/maps).
+- test_thread_clone (raw stack without MAP_STACK).
+
+Hazard found: a test opening /dev/full for writing as root on OpenBSD
+created a regular file there. It was removed, and the translator now
+intercepts that path.
