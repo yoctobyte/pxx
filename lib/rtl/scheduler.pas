@@ -94,6 +94,19 @@ function WaitWritableTimeout(fd, ms: Integer): Boolean;
 
 implementation
 
+{ A raw mmap result is a FAILURE only in the errno range [-4095,-1] (or 0).
+  NEVER test its sign: arm32 widens a syscall return with an unconditional
+  sign-extend, so a successful address with bit 31 set -- every mapping on a
+  real 32-bit ARM kernel, which places them near 0xa0000000-0xbf000000 --
+  arrives NEGATIVE. qemu-arm maps low, so only real hardware showed it:
+  OpenWrt 25.12.6 armv7, 2026-11-12, where every thread create failed with
+  EAGAIN after a successful stack mmap. Same rule as builtinheap's
+  HeapMmapFailed. }
+function MmapOk(r: Int64): Boolean;
+begin
+  MmapOk := not ((r = 0) or ((r < 0) and (r >= -4095)));
+end;
+
 { THE PAL REACTOR. On ESP every raw syscall answers -ENOSYS, so epoll,
   timerfd and fcntl are not there; the reactor is then a per-coroutine wait
   record (fd, events, deadline) and an idle path that blocks in PalPollSet
@@ -661,7 +674,7 @@ begin
   usable := ((stackBytes + PAGE_SIZE - 1) div PAGE_SIZE) * PAGE_SIZE;
   mapBase := __pxxrawsyscall(SYS_mmap, 0, usable + CO_GUARD + CO_RED, PROT_RW,
                              MAP_ANON_PRIV, -1, 0);
-  if mapBase > 0 then
+  if MmapOk(mapBase) then
   begin
     { Fail CLOSED, not open: if the region cannot be made PROT_NONE then this
       mapping has no guard and is worth nothing over the heap, so give it back

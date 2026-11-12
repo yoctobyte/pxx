@@ -83,12 +83,11 @@ The details, how to test in the VM, and the plan for OpenBSD and NetBSD are in
 OpenWrt is Linux, so a normal pxx Linux build for the router's CPU runs on it
 unchanged. The program needs nothing from OpenWrt's musl libc or BusyBox.
 
-- **x86-64 and aarch64:** measured on OpenWrt 25.12.6 in QEMU (2026-11-12),
-  with Pascal, C and Nil Python programs, sockets, signals and `--threadsafe`
-  threads. The output was identical to the same binary on a desktop Linux.
-- **ARMv7 (`arm32`):** expected to work, not yet measured. pxx's arm32 code
-  needs ARMv7-A with VFP, so ARMv5 and ARMv6 boards (Kirkwood, Raspberry Pi 1)
-  are not supported.
+- **x86-64, aarch64 and ARMv7 (`arm32`):** measured on OpenWrt 25.12.6 in
+  QEMU (2026-11-12), with Pascal, C and Nil Python programs, sockets, signals
+  and `--threadsafe` threads. The output was identical to the same program
+  on the host. pxx's arm32 code needs ARMv7-A with VFP, so ARMv5 and ARMv6
+  boards (Kirkwood, Raspberry Pi 1) are not supported.
 - **MIPS:** not supported. pxx has no MIPS backend, and most older and cheaper
   routers (ath79, MT7621) are MIPS.
 
@@ -101,10 +100,19 @@ ssh root@192.168.1.1 'cat > /tmp/hello && chmod +x /tmp/hello && /tmp/hello' < h
 
 OpenWrt has no SFTP server by default, so a plain `scp` fails with
 "Connection closed". Use `scp -O` (the older protocol), or pipe the file
-through `ssh` as above. Before 2026-11-12, programs that
-allocate memory failed on routers with 256 MB of RAM or less: the heap asked
-for one 256 MiB block and Linux refused it. The heap now retries with smaller
-blocks.
+through `ssh` as above.
+
+Two fixes from 2026-11-12 matter here, so use a compiler from that date or
+later:
+
+- Programs that allocate memory failed on routers with 256 MB of RAM or less.
+  The heap asked for one 256 MiB block, and Linux refused it. The heap now
+  retries with smaller blocks.
+- On real 32-bit ARM hardware, `--threadsafe` threads never started:
+  creating a thread failed with `EAGAIN`. The kernel places memory above
+  `0x80000000` there, and the runtime mistook those addresses for errors.
+  Emulators place memory lower, so the tests run under QEMU's user-mode
+  emulation had not shown it.
 
 ## What each target supports
 

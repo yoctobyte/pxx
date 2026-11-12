@@ -133,7 +133,21 @@ const
     PARENT_SETTID|CHILD_CLEARTID make TidWord a race-free join handshake. }
   PXX_CLONE_THREAD = $350F00;
 
-  PROT_NONE     = 0;        { guard page: no access }
+{ A raw mmap result is a FAILURE only in the errno range [-4095,-1] (or 0).
+  NEVER test its sign: arm32 widens a syscall return with an unconditional
+  sign-extend, so a successful address with bit 31 set -- every mapping on a
+  real 32-bit ARM kernel, which places them near 0xa0000000-0xbf000000 --
+  arrives NEGATIVE. qemu-arm maps low, so only real hardware showed it:
+  OpenWrt 25.12.6 armv7, 2026-11-12, where every thread create failed with
+  EAGAIN after a successful stack mmap. Same rule as builtinheap's
+  HeapMmapFailed. }
+function MmapOk(r: Int64): Boolean;
+begin
+  MmapOk := not ((r = 0) or ((r < 0) and (r >= -4095)));
+end;
+
+const
+  PROT_NONE     = 0;       { guard page: no access }
   PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
   { $22 IS CORRECT HERE AND IS NOT THE MISSING ARCH SPLIT IT LOOKS LIKE.
     MAP_ANONYMOUS is $800 on xtensa, not $20, and getting that wrong does not
@@ -355,7 +369,7 @@ begin
 {$endif}
   blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes + altBytes,
                          PROT_RW, MAP_ANON_PRIV, -1, 0);
-  if blk > 0 then
+  if MmapOk(blk) then
   begin
     PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
 {$ifdef PXX_HAS_TLS_INIT_IMAGE}
@@ -392,7 +406,7 @@ begin
     img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
   k := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsFsEntrySlotOff)^;
   blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes, PROT_RW, MAP_ANON_PRIV, -1, 0);
-  if blk > 0 then
+  if MmapOk(blk) then
   begin
     PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
     PInt64(blk + __pxxTlsFsEntrySlotOff)^ := k;
@@ -713,7 +727,7 @@ begin
     Join's munmap releases the guard too. }
   h.StackSize := stackSize + PAGE_SIZE;
   h.StackBase := __pxxrawsyscall(SYS_mmap, 0, h.StackSize, PROT_RW, MAP_ANON_PRIV, -1, 0);
-  if h.StackBase < 0 then
+  if not MmapOk(h.StackBase) then
   begin
     h.StackBase := 0;
     Result := -1;

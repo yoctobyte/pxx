@@ -9372,6 +9372,15 @@ test-threads: $(COMPILER)
 	tools/run_target.sh aarch64 $(TESTTMP)/c_pdetach26_a64 | diff -u test/c_pthread_detach.expected -
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_detach.c $(TESTTMP)/c_pdetach26_arm32
 	tools/run_target.sh arm32 $(TESTTMP)/c_pdetach26_arm32 | diff -u test/c_pthread_detach.expected -
+	# A thread stack mapped above 0x80000000 starts on arm32 (the sign-extended mmap result is not
+	# a failure). qemu-arm maps low, so the test reserves 1.25 GiB first to push the stack high, as a
+	# real 32-bit ARM kernel does; pre-fix arm32 printed "create rc=11" (OpenWrt armv7, 2026-11-12).
+	./$(COMPILER) --threadsafe --target=arm32 test/c_thread_high_address_stack.c $(TESTTMP)/c_thr_high26_arm32
+	tools/expect_same.sh c_thr_high26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_thr_high26_arm32)" "threads ok 4, high mappings 1"
+	./$(COMPILER) --threadsafe --target=aarch64 test/c_thread_high_address_stack.c $(TESTTMP)/c_thr_high26_a64
+	tools/expect_same.sh c_thr_high26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_thr_high26_a64)" "threads ok 4, high mappings 1"
+	./$(COMPILER) --threadsafe test/c_thread_high_address_stack.c $(TESTTMP)/c_thr_high26
+	tools/expect_same.sh c_thr_high26 "$$($(TESTTMP)/c_thr_high26)" "threads ok 4, high mappings 1"
 	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
 	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
 	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is

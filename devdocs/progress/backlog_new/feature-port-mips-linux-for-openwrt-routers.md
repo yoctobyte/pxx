@@ -22,7 +22,7 @@ with musl and BusyBox; pxx binaries need no libc, so what matters is the CPU.
 | --- | --- | --- |
 | x86 boxes, VMs | x86-64 / i386 | works (x86-64 measured) |
 | MediaTek Filogic, Qualcomm IPQ807x/60xx, Raspberry Pi 3/4/5 | aarch64 | works (measured) |
-| IPQ40xx, mvebu, Raspberry Pi 2 | ARMv7 hard-float | expected (pxx arm32 is ARMv7-A + VFP); not measured |
+| IPQ40xx, mvebu, Raspberry Pi 2 | ARMv7 hard-float | works (measured, after the thread fix below) |
 | Kirkwood (ARMv5), Raspberry Pi 1 (ARMv6) | older ARM | no: arm32 codegen is ARMv7-A with VFP |
 | ath79, ramips MT7621, lantiq -- most routers in use | MIPS | **no backend** |
 
@@ -61,3 +61,14 @@ VM images (not in git): `/data/vm/openwrt` on plexus.
 ## Log
 
 - 2026-11-12 — filed from the OpenWrt smoke test (pxx2 session). Not claimed.
+- 2026-11-12 — ARMv7 measured (`armsr/armv7`, initramfs kernel booted with
+  `qemu-system-arm -M virt -kernel`, no UEFI firmware needed). Single-threaded
+  tests were identical at once; every `--threadsafe` thread failed with
+  EAGAIN. Cause: arm32 sign-extends a raw syscall return, so the real
+  kernel's stack mmap at 0xac8c1000 arrived negative, and palthread tested
+  the sign (`StackBase < 0`, `blk > 0`; scheduler.pas the same for coroutine
+  stacks, where it silently fell back to an unguarded heap stack). qemu-arm
+  maps low, which is why the emulated lane never saw it. Fixed with an
+  errno-range test (MmapOk, as builtinheap's HeapMmapFailed);
+  test/c_thread_high_address_stack.c in test-threads fails before the fix
+  under qemu-arm and on the router.
