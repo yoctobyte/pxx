@@ -3142,14 +3142,6 @@ begin
     if RtlOverLibc then
       ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly');
   end;
-  { OpenBSD (experimental): -g would place debug data where the pin table
-    goes. }
-  if TargetKernel = KERNEL_OPENBSD then
-  begin
-    if DebugInfo then
-      ErrorNoPos('--os=openbsd: -g is not supported yet (experimental target)');
-  end;
-
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
   isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');

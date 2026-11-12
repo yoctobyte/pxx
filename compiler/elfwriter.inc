@@ -2398,6 +2398,8 @@ begin
     DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
+    if TargetKernel = KERNEL_OPENBSD then   { past the pin table, written after the data }
+      dbgFileBase := dbgFileBase + (OB_SYS_MAXSYSCALL - 1) * 8;
     shoff := dbgFileBase + DbgLen;
     padN := (8 - (shoff mod 8)) mod 8;
     shoff := shoff + padN;
@@ -2649,6 +2651,8 @@ begin
     DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
+    if TargetKernel = KERNEL_OPENBSD then   { past the pin table, written after the data }
+      dbgFileBase := dbgFileBase + (OB_SYS_MAXSYSCALL - 1) * 8;
     shoff := dbgFileBase + DbgLen;
     padN := (8 - (shoff mod 8)) mod 8;
     shoff := shoff + padN;

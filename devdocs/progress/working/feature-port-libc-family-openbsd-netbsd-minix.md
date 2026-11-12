@@ -351,3 +351,15 @@ intercepts that path.
 - TIOCSPTLCK succeeds on a master: OpenBSD ptys have no lock.
 - c_pty_family, cisatty and lib_termio_isatty match Linux and are now in
   `make test-openbsd`.
+
+### 2026-11-12: `--os=openbsd -g`
+
+- The refusal is gone. The debug sections now start after the pin table
+  (file offset past the data plus (OB_SYS_MAXSYSCALL-1)*8) in both 64-bit
+  writeELF variants, instead of on top of it.
+- Checked: readelf reads the line and info sections cleanly; fileio,
+  test_nilpy_local_named_like_a_class and test_stack_overflow_raise built
+  with -g give the same output on OpenBSD as on Linux; every other target
+  (Linux, FreeBSD, aarch64, arm32, i386, with and without -g, --threadsafe)
+  is byte-identical to a control compiler.
+

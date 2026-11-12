@@ -320,8 +320,6 @@ Not done yet:
 - eventfd.
 - A thread stack mapped by the program itself for a raw `__pxxclone` call
   must have `MAP_STACK`.
-- Debug info: `-g` is refused, because the debug data would go where the pin
-  table is.
 
 Anything that is not mapped answers ENOSYS.
 

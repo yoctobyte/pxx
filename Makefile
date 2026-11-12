@@ -10905,6 +10905,8 @@ test-openbsd: $(COMPILER)
 	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=openbsd test/test_os_env.pas $$d/env.ob >/dev/null && \
 	  cp $$d/env.lx $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh openbsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.ob one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
+	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=openbsd test/fileio.pas $$d/g.ob >/dev/null && \
+	  tools/expect_same.sh openbsd_debug_info "$$(tools/vm/openbsd.sh run $$d/g.ob 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
