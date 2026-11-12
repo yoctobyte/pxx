@@ -108,3 +108,5 @@ within the hour). The honest answers, which are good ones:
   (visibility / release / launch): a beta needs no compatibility promise, so it ships far sooner
   and doubles as a rehearsal. The one-shot resource is the *moment*, not the version — so the
   coordinated blast waits until a real release has met real strangers.
+- 2026-11-12 — awesome-list entries split out as [[chore-web-awesome-list-entries]]
+  (entry line chosen; waits for the owner's "stable enough").
