@@ -6,8 +6,8 @@ order: 62
 # FreeBSD and the BSDs
 
 PXX writes native **FreeBSD/amd64** executables from Pascal, C and Nil
-Python. OpenBSD is experimental and the other BSDs are not supported yet; [their plan](#openbsd-netbsd-and-minix)
-is at the end of this page.
+Python. OpenBSD and NetBSD are experimental and Minix is not supported yet;
+[their notes](#openbsd-netbsd-and-minix) are at the end of this page.
 
 ```sh
 ./pxx --os=freebsd hello.pas hello      # copy hello to the FreeBSD box and run it
@@ -168,9 +168,10 @@ The work log, with the reasons behind each choice, is in
 
 ## OpenBSD, NetBSD and Minix
 
-NetBSD and Minix are not supported yet. OpenBSD has an EXPERIMENTAL
-`--os=openbsd` (since 2026-11-12) that may still be withdrawn in favour of
-going through libc; the choice has not been made.
+Minix is not supported yet. OpenBSD and NetBSD have EXPERIMENTAL
+`--os=openbsd` and `--os=netbsd` (since 2026-11-12). The OpenBSD one may
+still be withdrawn in favour of going through libc; the choice has not been
+made.
 
 ### `--os=openbsd` (experimental)
 
@@ -326,6 +327,63 @@ Anything that is not mapped answers ENOSYS.
 To try it, run `tools/vm/openbsd.sh start`, then
 `tools/vm/openbsd.sh run <binary>`. Set `PXX_VM_PTY=1` to run the binary on a
 real terminal. `PXX_TEST_*` environment variables are passed through.
+
+### `--os=netbsd` (experimental)
+
+The FreeBSD design again: the program is built against Linux, and
+`compiler/builtin/nbsdabi.pas` translates every system call to NetBSD 11.1.
+The executable carries a NetBSD ident note. NetBSD is the closest of the BSDs
+to Linux: it has native `timerfd`, `eventfd`, `futex`, `epoll`, `memfd_create`
+and dual-stack IPv6, and its wait statuses, `UTIME_*`, `getrandom` flags and
+scheduling policies have Linux's values.
+
+What the translator still has to do:
+
+- **System call numbers.** Many calls have versioned names (`__fstat50`,
+  `__getdents30`, `__socket30`, `__sigaction_sigtramp`). The plain numbers are
+  the old ABIs.
+- **`PAD` arguments.** `mmap`, `lseek`, `pread`, `pwrite`, `preadv`,
+  `pwritev`, `truncate`, `ftruncate`, `posix_fallocate` and `mknodat` take a
+  padding argument before their 64-bit one. `mmap`'s offset is then the
+  seventh argument, which NetBSD reads from the user stack, so the kernel
+  entry always pushes a seventh word.
+- **`epoll_event`** is 16 bytes in NetBSD's kernel (data at offset 8), not
+  Linux's packed 12, so `epoll_ctl` and `epoll_wait` repack it. NetBSD ships
+  no `<sys/epoll.h>`; the layout and `EPOLL_CLOEXEC` (= `O_CLOEXEC`) were
+  measured with the raw system calls.
+- **Directory entries** are up to 8 bytes shorter than Linux's, so
+  `getdents64` reads into a buffer two thirds the caller's size and widens.
+- **TLS lives in fs**, set with `_lwp_setprivate`, because `setcontext`, which
+  ends every signal handler, restores the fs base from the saved context. With
+  no libc in the program, fs is free.
+- **Signals** are installed with `__sigaction_sigtramp`. The translator's
+  entry builds the Linux `siginfo`/`ucontext`, calls the program's handler and
+  resumes with `setcontext` itself.
+- **errno** 1..84 are FreeBSD's; 85..98 differ. Linux's SIGPWR is NetBSD's
+  32, and the real-time signals are shifted by one (NetBSD has 33..63).
+- **Threads.** The clone stub calls `clone` through the translator, which
+  starts an LWP with `_lwp_create` from a ucontext made by `getcontext`: `rip`
+  is the stub's child entry, `rsp` the new stack, and `_UC_TLSBASE` sets the
+  thread's fs base. LWPs are created detached; the tid word is cleared and
+  its waiters woken by the exiting thread itself, with its signals blocked and
+  without touching its stack.
+- `/proc/self/environ`, `/proc/self/exe` and `/proc/sys/kernel/hostname` come
+  from sysctl, served through a memfd; `readlink("/proc/self/fd/N")` uses
+  `fcntl(F_GETPATH)`.
+- ptys are NetBSD's own `/dev/ptmx` and `/dev/pts/N`; `TIOCGPTN` reads the
+  number from `TIOCPTSNAME`, and `unlockpt` does `TIOCGRANTPT`.
+
+`make test-netbsd` runs about 90 programs on the VM and compares their output
+and exit code with the Linux build: files, signals, threads, sockets (IPv4,
+IPv6, dual-stack), async I/O, timers, termios on a pty, ptys, `-g`, and the C
+and NilPy runtimes. It passes.
+
+Not done yet: `/proc` apart from the files above.
+
+The VM is the stock `NetBSD-11.1-amd64-live.img`, booted under OVMF with
+`consdev=com0` in `/EFI/NetBSD/boot.cfg` on its EFI partition, and set up over
+the serial console (sshd, dhcpcd, a root key). Run `tools/vm/netbsd.sh start`,
+then `tools/vm/netbsd.sh run <binary>`; it listens on port 2227.
 
 `--rtl-libc` alone is not enough on any of them: it passes Linux system call
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.

@@ -2351,6 +2351,13 @@ begin
     Inc(phCount);
     noteLen := OB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_NETBSD then
+  begin
+    { The NetBSD ident note, same size and slot. }
+    Inc(phCount);
+    noteLen := NB_IDENT_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
     so the constant and the header count are one fact spelled twice and drift
@@ -2500,7 +2507,14 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
+  if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
+  begin
+    writeU32(f,7);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_NETBSD_IDENT }
+    writeU8(f,78);writeU8(f,101);writeU8(f,116);writeU8(f,66);   { "NetBSD", NUL, pad }
+    writeU8(f,83);writeU8(f,68);writeU8(f,0);writeU8(f,0);
+    writeU32(f,NB_OS_VERSION);
+  end
+  else if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
   begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_OPENBSD_IDENT }
     writeU8(f,79);writeU8(f,112);writeU8(f,101);writeU8(f,110);   { "OpenBSD", NUL }
@@ -2593,6 +2607,13 @@ begin
       OpenBSD answers ENOEXEC. }
     Inc(phCount);
     noteLen := OB_IDENT_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_NETBSD then
+  begin
+    { The NetBSD ident note, same size and slot. }
+    Inc(phCount);
+    noteLen := NB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
@@ -2754,7 +2775,14 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
+  if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
+  begin
+    writeU32(f,7);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_NETBSD_IDENT }
+    writeU8(f,78);writeU8(f,101);writeU8(f,116);writeU8(f,66);   { "NetBSD", NUL, pad }
+    writeU8(f,83);writeU8(f,68);writeU8(f,0);writeU8(f,0);
+    writeU32(f,NB_OS_VERSION);
+  end
+  else if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
   begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_OPENBSD_IDENT }
     writeU8(f,79);writeU8(f,112);writeU8(f,101);writeU8(f,110);   { "OpenBSD", NUL }

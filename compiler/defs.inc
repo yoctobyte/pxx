@@ -2460,6 +2460,14 @@ const
     SYS_MAXSYSCALL (sys/kern/exec_elf.c, elf_read_pintable). 331 on 8.0. }
   OB_SYS_MAXSYSCALL = 331;
   OB_SYS_TFORK = 8;   { SYS___tfork: pinned to ObTforkA, not ObRawA (elfwriter ObsdPinVA) }
+  { --os=netbsd (EXPERIMENTAL, feature-port-libc-family-openbsd-netbsd-minix):
+    the FreeBSD shape again -- raw syscalls through an in-program Linux-ABI
+    translator (compiler/builtin/nbsdabi.pas) -- with a NetBSD ident note
+    (NT_NETBSD_IDENT: "NetBSD\0" and __NetBSD_Version__). Same 24-byte slot
+    as the FreeBSD note. }
+  KERNEL_NETBSD = 3;
+  NB_IDENT_NOTE_SIZE = 24;
+  NB_OS_VERSION = 1101000000;   { 11.1, measured: sys/param.h __NetBSD_Version__ }
   { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
     12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
     oldest release the translator's constants were measured against. }
@@ -9100,19 +9108,22 @@ var
   (x86-64 only; the --os refusals in compiler.pas keep it there). }
 function KernelTranslated: Boolean;
 begin
-  KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD);
+  KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD)
+                      or (TargetKernel = KERNEL_NETBSD);
 end;
 
 { The translator's unit and entry proc, and the --os spelling for messages. }
 function KernelAbiUnit: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiUnit := 'obsdabi'
+  else if TargetKernel = KERNEL_NETBSD then KernelAbiUnit := 'nbsdabi'
   else KernelAbiUnit := 'fbsdabi';
 end;
 
 function KernelAbiProc: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiProc := 'PXXObsdSyscall'
+  else if TargetKernel = KERNEL_NETBSD then KernelAbiProc := 'PXXNbsdSyscall'
   else KernelAbiProc := 'PXXFbsdSyscall';
 end;
 
@@ -9124,12 +9135,14 @@ end;
   as fs: -- the assembler's `gs:` operands and the hand-written bytes alike. }
 function TlsSegPrefix: Integer;
 begin
-  if TargetKernel = KERNEL_OPENBSD then TlsSegPrefix := $64 else TlsSegPrefix := $65;
+  if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then TlsSegPrefix := $64
+  else TlsSegPrefix := $65;   { NetBSD: fs too -- setcontext restores the fs base (_mc_tlsbase) }
 end;
 
 function KernelOsName: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
+  else if TargetKernel = KERNEL_NETBSD then KernelOsName := 'netbsd'
   else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
   else KernelOsName := 'linux';
 end;

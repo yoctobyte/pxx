@@ -1206,6 +1206,8 @@ begin
   WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
   WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 output (EXPERIMENTAL):');
   WriteLn('                        the same design plus a syscall pin table');
+  WriteLn('  --os=netbsd           NetBSD 11.1/amd64 output (EXPERIMENTAL):');
+  WriteLn('                        the same design');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1871,6 +1873,14 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if option = '--os=netbsd' then
+    begin
+      { EXPERIMENTAL: see KERNEL_NETBSD in defs.inc. }
+      TargetKernel := KERNEL_NETBSD;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if option = '--os=openbsd' then

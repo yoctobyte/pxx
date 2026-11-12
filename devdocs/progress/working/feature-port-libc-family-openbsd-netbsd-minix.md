@@ -363,3 +363,44 @@ intercepts that path.
   (Linux, FreeBSD, aarch64, arm32, i386, with and without -g, --threadsafe)
   is byte-identical to a control compiler.
 
+### 2026-11-12: `--os=netbsd` (experimental), single-threaded
+
+- VM: NetBSD-11.1-amd64-live.img (sha512 checked) under /data/vm/netbsd,
+  booted with OVMF. Its EFI partition got /EFI/NetBSD/boot.cfg with
+  consdev=com0 (mtools, before the first boot), so the console is on serial
+  with no keystrokes; then root login on the serial console set up sshd,
+  dhcpcd and a root key. The live image grows its root to the disk (8 GB).
+  Typing at the efiboot menu was unreliable: `consdev com0` redraws the menu
+  and the next key was taken as "boot default". tools/vm/netbsd.sh, port 2227.
+- Probed on the VM with offsetof() and the headers (copied to the
+  scratchpad): errno, open/AT/mmap flags, clocks, signals and SA_ flags,
+  siginfo/ucontext/mcontext (_REG_* order), stat (152 B), dirent, statvfs
+  (3296 B), termios (FreeBSD's except CRTSCTS $10000 and no IUTF8), ioctls
+  (FreeBSD's), sockets (AF_INET6 24, MSG_NOSIGNAL $400, SO_RCVTIMEO $100C,
+  TCP_KEEPIDLE 3), poll bits, TFD/EFD flags (EFD_SEMAPHORE 2), futex ops
+  (Linux's).
+- epoll: the syscalls exist (502..504) but no header is installed. Measured
+  with a pipe: the kernel's epoll_event is 16 bytes, data at 8;
+  EPOLL_CLOEXEC is O_CLOEXEC ($400000), Linux's $80000 is EINVAL.
+- PAD arguments: mmap's offset is the 7th argument, read from [rsp+8]. NbRawA
+  pushes a 7th word (and a fake return slot) on every call, and captures CF
+  before restoring rsp.
+- TLS in fs via _lwp_setprivate (TlsSegPrefix $64, as OpenBSD), because
+  setcontext restores the fs base from _mc_tlsbase.
+- O_NOFOLLOW on a symlink fails with EFTYPE (79) on NetBSD; mapped to ELOOP.
+- `make test-netbsd`: test-openbsd's lists without threads, plus
+  lib_net_v6only (dual-stack works here). All match Linux. Every other target
+  is byte-identical to a control compiler (C programs built with -g differ
+  only in the crtl source path inside the debug info, because the control
+  reads crtl from its own tree; stripped, they are identical).
+- Threads (same day): the stub's OpenBSD leg (clone through the thunk, child
+  entry in r9) serves NetBSD too. NbClone: getcontext (selectors, mask, FPU),
+  rip = child entry, rsp = stage, _mc_tlsbase = the TLS block with
+  _UC_TLSBASE, _lwp_create(LWP_DETACHED). Exit of a non-main LWP (main is
+  always LWP 1): wait for the parent's tid store, block all signals, then a
+  register-only routine clears the word, wakes both futex queues and
+  _lwp_exits, with rsp moved to a shared read-only area because __futex's
+  7th argument is read from [rsp+8]. The thread list of test-openbsd plus
+  test_thread_clone all match Linux; lib_fpc_thread_surface and
+  test_parallel_for_private ran 60 times each with no failure.
+

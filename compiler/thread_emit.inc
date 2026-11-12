@@ -84,7 +84,8 @@ var
   sit below the stage area, on the thread's stack. }
 function ChildSys: AnsiString;
 begin
-  if TargetKernel = KERNEL_OPENBSD then ChildSys := 'syscall' else ChildSys := 'syscall_raw';
+  if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then ChildSys := 'syscall'
+  else ChildSys := 'syscall_raw';
 end;
 
 begin
@@ -116,7 +117,7 @@ begin
       does, but that syscall is inside the translator (obsdabi's ObTforkA),
       so ObTforkA sends the child here instead, with rsp = the stage area. }
     obChild := 0;
-    if TargetKernel = KERNEL_OPENBSD then
+    if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then
     begin
       obChild := CodeLen;
       EmitAsmX64(['jmp child']);
@@ -244,11 +245,12 @@ begin
         'jmp parent',
       'child:']);
     end
-    else if TargetKernel = KERNEL_OPENBSD then
+    else if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then
     begin
       { Linux clone through the translator, with the child's resume address
         in r9 (clone's unused sixth argument). The translator maps it to
-        __tfork; the parent returns here with the tid, the child never does. }
+        __tfork (OpenBSD) or _lwp_create (NetBSD); the parent returns here
+        with the tid, the child never does. }
       EmitCodeAbsToRdx(obChild);
       EmitAsmX64([
         'mov r9, rdx',
