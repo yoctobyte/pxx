@@ -29,7 +29,8 @@ unit obsdabi;
   DONE: files, directories, memory, time, process basics, TLS, uname,
   rlimits, /proc/self/environ and /proc/self/exe, isatty, signals (handlers,
   masks, the alt stack, kill/tgkill, itimers), threads (clone -> __tfork,
-  thread exit, futex). NOT YET: sockets, termios beyond TCGETS, epoll.
+  thread exit, futex), sockets, ppoll/pselect6, epoll (over kqueue).
+  NOT YET: termios beyond TCGETS, eventfd/timerfd.
   Anything unmapped answers -ENOSYS. }
 
 interface
@@ -72,6 +73,7 @@ const
   OB_GETITIMER = 70; OB_SETITIMER = 69; OB_SIGSUSPEND = 111; OB_THRKILL = 119;
   OB_SIGALTSTACK = 288;
   OB_TFORK = 8; OB_FUTEX = 83; OB_THREXIT = 302;
+  OB_PPOLL = 109; OB_PSELECT = 110;
 
   OB_AT_FDCWD = -100;             { same value as Linux }
   OB_AT_EACCESS = $01; OB_AT_SYMLINK_NOFOLLOW = $02; OB_AT_SYMLINK_FOLLOW = $04;
@@ -988,6 +990,396 @@ begin
     Result := Lx(ObSys(OB_FUTEX, uaddr, o or pf, val, ts, 0, 0));
 end;
 
+{ ---- Sockets -----------------------------------------------------------------
+  fbsdabi's code with OpenBSD's numbers: the structs are FreeBSD's (BSD
+  sockaddr header -- u8 length, u8 family; 48-byte msghdr with 32-bit
+  iovlen/controllen; 12-byte cmsghdr with the data at 16; 104-byte sun_path).
+  What differs from FreeBSD: AF_INET6 is 24, SOCK_NONBLOCK/SOCK_CLOEXEC are
+  $4000/$8000, MSG_NOSIGNAL is $400 and MSG_CMSG_CLOEXEC $800, accept4 is 93,
+  there is no SO_DOMAIN/SO_PROTOCOL or TCP_KEEP*, and SO_PEERCRED ($1022) is
+  uid, gid, pid where Linux's ucred is pid, uid, gid. Measured on 8.0 with
+  offsetof() and the headers (2026-11-12). }
+const
+  OB_SOCKET = 97; OB_CONNECT = 98; OB_ACCEPT = 30; OB_SENDTO = 133;
+  OB_RECVFROM = 29; OB_SENDMSG = 28; OB_RECVMSG = 27; OB_SHUTDOWN = 134;
+  OB_BIND = 104; OB_LISTEN = 106; OB_GETSOCKNAME = 32; OB_GETPEERNAME = 31;
+  OB_SOCKETPAIR = 135; OB_SETSOCKOPT = 105; OB_GETSOCKOPT = 118; OB_ACCEPT4 = 93;
+  LX_EAFNOSUPPORT = 97; LX_ENOPROTOOPT = 92;
+
+function ObAf(a: Int64): Int64;
+begin
+  case a of
+    0, 1, 2: Result := a;
+    10: Result := 24;
+  else Result := -1;
+  end;
+end;
+
+function LxAf(a: Int64): Int64;
+begin
+  if a = 24 then Result := 10 else Result := a;
+end;
+
+{ SOCK_NONBLOCK / SOCK_CLOEXEC ride in the type word on both, at other bits. }
+function ObSockType(t: Int64): Int64;
+begin
+  Result := t and $FF;
+  if (t and $800) <> 0 then Result := Result or $4000;
+  if (t and $80000) <> 0 then Result := Result or $8000;
+end;
+
+function ObMsgFlags(f: Int64): Int64;
+begin
+  Result := f and $7;                                          { OOB PEEK DONTROUTE }
+  if (f and $8) <> 0 then Result := Result or $20;             { CTRUNC }
+  if (f and $20) <> 0 then Result := Result or $10;            { TRUNC }
+  if (f and $40) <> 0 then Result := Result or $80;            { DONTWAIT }
+  if (f and $80) <> 0 then Result := Result or $8;             { EOR }
+  if (f and $100) <> 0 then Result := Result or $40;           { WAITALL }
+  if (f and $4000) <> 0 then Result := Result or $400;         { NOSIGNAL }
+  if (f and $40000000) <> 0 then Result := Result or $800;     { CMSG_CLOEXEC }
+end;
+
+function LxMsgFlags(f: Int64): Int64;
+begin
+  Result := f and $7;
+  if (f and $20) <> 0 then Result := Result or $8;
+  if (f and $10) <> 0 then Result := Result or $20;
+  if (f and $80) <> 0 then Result := Result or $40;
+  if (f and $8) <> 0 then Result := Result or $80;
+  if (f and $40) <> 0 then Result := Result or $100;
+end;
+
+{ Linux sockaddr (src, len) -> BSD sockaddr in dst (128 B). Answers the
+  length to pass, or -errno. }
+function SaToOb(src, len, dst: Int64): Int64;
+var i, af: Int64;
+begin
+  if (src = 0) or (len < 2) then begin Result := -LX_EINVAL; Exit; end;
+  if len > 128 then len := 128;
+  for i := 0 to len - 1 do PByte(dst + i)^ := PByte(src + i)^;
+  af := ObAf(PWord(src)^);
+  if af < 0 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  if (af = 1) and (len > 106) then len := 106;                  { sun_path 108 -> 104 }
+  PByte(dst)^ := Byte(len);
+  PByte(dst + 1)^ := Byte(af);
+  Result := len;
+end;
+
+{ BSD sockaddr at p, in place, -> Linux shape. }
+procedure SaToLx(p, lenp: Int64);
+begin
+  if (p = 0) or (lenp = 0) or (PInteger(lenp)^ < 2) then Exit;
+  PWord(p)^ := Word(LxAf(PByte(p + 1)^));
+end;
+
+{ socket option (level, name) -> OpenBSD; level -1 = no equivalent. }
+procedure SockOptToOb(var level, name: Int64);
+begin
+  case level of
+    1: begin                                                    { SOL_SOCKET }
+         level := $FFFF;
+         case name of
+           1: name := $1; 2: name := $4; 3: name := $1008; 4: name := $1007;
+           5: name := $10; 6: name := $20; 7: name := $1001; 8: name := $1002;
+           9: name := $8; 10: name := $100; 13: name := $80; 15: name := $200;
+           18: name := $1004; 19: name := $1003; 20: name := $1006; 21: name := $1005;
+           30: name := $2; 17: name := $1022;                     { SO_PEERCRED }
+         else level := -1;
+         end;
+       end;
+    6: case name of                                             { IPPROTO_TCP }
+         1, 2: ;
+       else level := -1;
+       end;
+    0: case name of                                             { IPPROTO_IP }
+         1: name := 3; 2: name := 4;
+         32: name := 9; 33: name := 10; 34: name := 11; 35: name := 12; 36: name := 13;
+       else level := -1;
+       end;
+    41: case name of                                            { IPPROTO_IPV6 }
+          26: name := 27; 16: name := 4; 17: name := 9; 18: name := 10;
+          19: name := 11; 20: name := 12; 21: name := 13;
+        else level := -1;
+        end;
+  else
+    if level <> 17 then level := -1;                            { IPPROTO_UDP: nothing renumbered }
+  end;
+end;
+
+function ObSockopt(isGet: Boolean; fd, level, name, val, lenp: Int64): Int64;
+var lv, nm, r, e: Int64;
+begin
+  lv := level; nm := name;
+  SockOptToOb(lv, nm);
+  if lv < 0 then begin Result := -LX_ENOPROTOOPT; Exit; end;
+  if not isGet then
+  begin
+    Result := Lx(ObSys(OB_SETSOCKOPT, fd, lv, nm, val, lenp, 0));
+    Exit;
+  end;
+  r := ObSys(OB_GETSOCKOPT, fd, lv, nm, val, lenp, 0);
+  if (r = 0) and (lv = $FFFF) and (val <> 0) then
+  begin
+    if nm = $1007 then                                          { SO_ERROR holds an errno }
+    begin
+      e := PInteger(val)^;
+      if (e >= 35) and (e <= 95) then PInteger(val)^ := ErrMap[Integer(e)];
+    end
+    else if (nm = $1022) and (lenp <> 0) and (PInteger(lenp)^ >= 12) then
+    begin                                                       { sockpeercred -> ucred }
+      e := PInteger(val + 8)^;                                  { pid }
+      PInteger(val + 8)^ := PInteger(val + 4)^;                 { gid }
+      PInteger(val + 4)^ := PInteger(val)^;                     { uid }
+      PInteger(val)^ := Integer(e);
+    end;
+  end;
+  Result := Lx(r);
+end;
+
+function ObSockAddrCall(nr, fd, sa, len: Int64): Int64;    { connect, bind }
+var b: array[0..15] of Int64; n: Int64;
+begin
+  n := SaToOb(sa, len, Int64(@b[0]));
+  if n < 0 then Result := n
+  else Result := Lx(ObSys(nr, fd, Int64(@b[0]), n, 0, 0, 0));
+end;
+
+function ObSockAddrOut(nr, fd, sa, lenp, flags: Int64): Int64;  { accept4, getsockname, getpeername }
+var r: Int64;
+begin
+  if nr = OB_ACCEPT4 then
+  begin
+    r := 0;
+    if (flags and $800) <> 0 then r := r or $4000;
+    if (flags and $80000) <> 0 then r := r or $8000;
+    r := ObSys(nr, fd, sa, lenp, r, 0, 0);
+  end
+  else r := ObSys(nr, fd, sa, lenp, 0, 0, 0);
+  if r >= 0 then SaToLx(sa, lenp);
+  Result := Lx(r);
+end;
+
+function ObSendto(fd, buf, len, flags, sa, salen: Int64): Int64;
+var b: array[0..15] of Int64; n: Int64;
+begin
+  if sa = 0 then
+  begin
+    Result := Lx(ObSys(OB_SENDTO, fd, buf, len, ObMsgFlags(flags), 0, 0));
+    Exit;
+  end;
+  n := SaToOb(sa, salen, Int64(@b[0]));
+  if n < 0 then Result := n
+  else Result := Lx(ObSys(OB_SENDTO, fd, buf, len, ObMsgFlags(flags), Int64(@b[0]), n));
+end;
+
+function ObRecvfrom(fd, buf, len, flags, sa, lenp: Int64): Int64;
+var r: Int64;
+begin
+  r := ObSys(OB_RECVFROM, fd, buf, len, ObMsgFlags(flags), sa, lenp);
+  if r >= 0 then SaToLx(sa, lenp);
+  Result := Lx(r);
+end;
+
+{ Linux cmsg chain (size_t len, int level, int type; data at 16) <-> OpenBSD
+  (u32 len, int level, int type; data at 16 -- _ALIGN(12) on amd64). Rewritten
+  in place: both headers fit the same 16 bytes and the data does not move.
+  SOL_SOCKET is the only level renumbered; SCM_RIGHTS is 1 on both. }
+procedure CmsgToOb(ctl, clen: Int64);
+var p, l: Int64;
+begin
+  p := ctl;
+  while (ctl <> 0) and (p + 16 <= ctl + clen) do
+  begin
+    l := PInt64(p)^;
+    if l < 16 then Exit;
+    PInteger(p)^ := Integer(l);
+    PInteger(p + 4)^ := PInteger(p + 8)^;                       { level }
+    if PInteger(p + 4)^ = 1 then PInteger(p + 4)^ := $FFFF;
+    PInteger(p + 8)^ := PInteger(p + 12)^;                      { type }
+    PInteger(p + 12)^ := 0;
+    p := p + ((l + 7) and not Int64(7));
+  end;
+end;
+
+procedure CmsgToLx(ctl, clen: Int64);
+var p, l, lv, ty: Int64;
+begin
+  p := ctl;
+  while (ctl <> 0) and (p + 16 <= ctl + clen) do
+  begin
+    l := PInteger(p)^ and $FFFFFFFF;
+    if l < 12 then Exit;
+    lv := PInteger(p + 4)^; ty := PInteger(p + 8)^;
+    if lv = $FFFF then lv := 1;
+    PInt64(p)^ := l;                                            { CMSG_LEN(n) = 16 + n on both }
+    PInteger(p + 8)^ := Integer(lv);
+    PInteger(p + 12)^ := Integer(ty);
+    p := p + ((l + 7) and not Int64(7));
+  end;
+end;
+
+{ msghdr: Linux 56 B (size_t iovlen/controllen, flags at 48), OpenBSD 48 B. }
+function ObMsg(isSend: Boolean; fd, lm, flags: Int64): Int64;
+var fm: array[0..5] of Int64;
+    nb: array[0..15] of Int64;
+    r, n: Int64;
+begin
+  fm[0] := PInt64(lm)^;                                         { msg_name }
+  fm[1] := PInteger(lm + 8)^;                                   { msg_namelen (int, upper 4 = 0) }
+  fm[2] := PInt64(lm + 16)^;                                    { msg_iov }
+  fm[3] := PInt64(lm + 24)^ and $FFFFFFFF;                      { msg_iovlen }
+  fm[4] := PInt64(lm + 32)^;                                    { msg_control }
+  fm[5] := PInt64(lm + 40)^ and $FFFFFFFF;                      { msg_controllen; flags = 0 }
+  if isSend then
+  begin
+    if fm[0] <> 0 then
+    begin
+      n := SaToOb(fm[0], fm[1], Int64(@nb[0]));
+      if n < 0 then begin Result := n; Exit; end;
+      fm[0] := Int64(@nb[0]); fm[1] := n;
+    end;
+    CmsgToOb(fm[4], fm[5]);
+    r := ObSys(OB_SENDMSG, fd, Int64(@fm[0]), ObMsgFlags(flags), 0, 0, 0);
+    CmsgToLx(fm[4], fm[5]);                                     { the caller's buffer, restored }
+  end
+  else
+  begin
+    r := ObSys(OB_RECVMSG, fd, Int64(@fm[0]), ObMsgFlags(flags), 0, 0, 0);
+    if r >= 0 then
+    begin
+      if fm[0] <> 0 then
+      begin
+        PWord(fm[0])^ := Word(LxAf(PByte(fm[0] + 1)^));
+        PInteger(lm + 8)^ := PInteger(Int64(@fm[1]))^;
+      end;
+      n := PInteger(Int64(@fm[5]))^ and $FFFFFFFF;
+      CmsgToLx(fm[4], n);
+      PInt64(lm + 40)^ := n;
+      PInteger(lm + 48)^ := Integer(LxMsgFlags(PInteger(Int64(@fm[5]) + 4)^));
+    end;
+  end;
+  Result := Lx(r);
+end;
+
+
+
+const
+  OB_KQUEUE = 269; OB_KEVENT = 72;
+  OB_EVFILT_READ = -1; OB_EVFILT_WRITE = -2;
+  OB_EV_ADD = $1; OB_EV_DELETE = $2; OB_EV_ENABLE = $4; OB_EV_ONESHOT = $10;
+  OB_EV_CLEAR = $20; OB_EV_ERROR = $4000; OB_EV_EOF = $8000;
+  LX_EPOLLIN = $1; LX_EPOLLPRI = $2; LX_EPOLLOUT = $4; LX_EPOLLERR = $8;
+  LX_EPOLLHUP = $10; LX_EPOLLRDHUP = $2000;
+  EP_MAX = 64;                    { kevents fetched per epoll_wait }
+
+{ ---- epoll over kqueue ------------------------------------------------------
+  fbsdabi's emulation. OpenBSD's struct kevent has FreeBSD's field offsets
+  (ident 0, filter 8, flags 10, fflags 12, data 16, udata 24) but no ext[],
+  so it is 32 bytes, not 64; the EVFILT_/EV_ values agree (measured on 8.0).
+  OpenBSD has no epoll. An epoll instance IS a kqueue; an interest in an fd is
+  up to two kevent filters (READ for EPOLLIN/PRI/RDHUP, WRITE for EPOLLOUT)
+  carrying the caller's epoll_data as udata. EPOLLET -> EV_CLEAR, EPOLLONESHOT
+  -> EV_ONESHOT. epoll_wait folds the READ and WRITE kevents of one fd back
+  into one epoll_event, as Linux reports it. struct epoll_event is PACKED on
+  x86-64: u32 events at 0, u64 data at 4, 12 bytes. }
+
+function ObKev1(kq, ident, filter, flags, udata: Int64): Int64;
+var kv: array[0..3] of Int64;     { struct kevent, 32 B }
+    i: Integer;
+begin
+  for i := 0 to 3 do kv[i] := 0;
+  kv[0] := ident;
+  PSmallInt(Int64(@kv[0]) + 8)^ := SmallInt(filter);
+  PWord(Int64(@kv[0]) + 10)^ := Word(flags);
+  kv[3] := udata;
+  Result := ObSys(OB_KEVENT, kq, Int64(@kv[0]), 1, 0, 0, 0);
+end;
+
+function ObEpollCtl(kq, op, fd, ev: Int64): Int64;
+var e, data, fl, r: Int64;
+begin
+  if (op = 2) or (ev = 0) then                                 { EPOLL_CTL_DEL }
+  begin
+    r := ObKev1(kq, fd, OB_EVFILT_READ, OB_EV_DELETE, 0);
+    if ObKev1(kq, fd, OB_EVFILT_WRITE, OB_EV_DELETE, 0) = 0 then r := 0;
+    Result := Lx(r);
+    Exit;
+  end;
+  e := PInteger(ev)^ and $FFFFFFFF;
+  data := PInt64(ev + 4)^;
+  fl := OB_EV_ADD or OB_EV_ENABLE;
+  if (e and $80000000) <> 0 then fl := fl or OB_EV_CLEAR;      { EPOLLET }
+  if (e and $40000000) <> 0 then fl := fl or OB_EV_ONESHOT;    { EPOLLONESHOT }
+  r := 0;
+  if (e and (LX_EPOLLIN or LX_EPOLLPRI or LX_EPOLLRDHUP)) <> 0 then
+    r := ObKev1(kq, fd, OB_EVFILT_READ, fl, data)
+  else if op = 3 then ObKev1(kq, fd, OB_EVFILT_READ, OB_EV_DELETE, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if (e and LX_EPOLLOUT) <> 0 then
+    r := ObKev1(kq, fd, OB_EVFILT_WRITE, fl, data)
+  else if op = 3 then ObKev1(kq, fd, OB_EVFILT_WRITE, OB_EV_DELETE, 0);
+  Result := Lx(r);
+end;
+
+function ObEpollWait(kq, evs, maxev, ms: Int64): Int64;
+var kv: array[0..EP_MAX * 4 - 1] of Int64;
+    ts: array[0..1] of Int64;
+    tp, r, i, j, n, e, fl, ident: Int64;
+    base: Int64;
+begin
+  if maxev <= 0 then begin Result := -LX_EINVAL; Exit; end;
+  if maxev > EP_MAX then maxev := EP_MAX;
+  tp := 0;
+  if ms >= 0 then
+  begin
+    ts[0] := ms div 1000; ts[1] := (ms mod 1000) * 1000000;
+    tp := Int64(@ts[0]);
+  end;
+  r := ObSys(OB_KEVENT, kq, 0, 0, Int64(@kv[0]), maxev, tp);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  for i := 0 to r - 1 do
+  begin
+    base := Int64(@kv[0]) + i * 32;
+    ident := PInt64(base)^;
+    fl := PWord(base + 10)^;
+    e := 0;
+    if PSmallInt(base + 8)^ = OB_EVFILT_READ then e := LX_EPOLLIN
+    else e := LX_EPOLLOUT;
+    if (fl and OB_EV_EOF) <> 0 then
+    begin
+      e := e or LX_EPOLLHUP;
+      if PSmallInt(base + 8)^ = OB_EVFILT_READ then e := e or LX_EPOLLRDHUP;
+      if PInteger(base + 12)^ <> 0 then e := e or LX_EPOLLERR;  { fflags = socket error }
+    end;
+    if (fl and OB_EV_ERROR) <> 0 then e := LX_EPOLLERR;
+    { fold into an earlier event for the same fd; kv[] holds ident, the
+      output array holds only data -- so match on the kevent list }
+    j := 0;
+    while j < i do
+    begin
+      if PInt64(Int64(@kv[0]) + j * 32)^ = ident then Break;
+      Inc(j);
+    end;
+    if j < i then
+    begin
+      { the earlier kevent j was emitted at output slot PInteger(kv j .data)^ }
+      j := PInt64(Int64(@kv[0]) + j * 32 + 16)^;
+      PInteger(evs + j * 12)^ := PInteger(evs + j * 12)^ or Integer(e);
+      PInt64(base + 16)^ := j;
+    end
+    else
+    begin
+      PInteger(evs + n * 12)^ := Integer(e);
+      PInt64(evs + n * 12 + 4)^ := PInt64(base + 24)^;
+      PInt64(base + 16)^ := n;                                 { remember the slot }
+      Inc(n);
+    end;
+  end;
+  Result := n;
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
@@ -1223,6 +1615,62 @@ begin
            end;
            Result := n;
          end;
+    41: begin                                                   { socket }
+          { Linux's check order (__sys_socket[pair], __sock_create): stray
+            flag bits in the type word, then the family, then the type. }
+          f := ObAf(a0);
+          if (a1 and not Int64($8080F)) <> 0 then Result := -LX_EINVAL   { type 0..15, SOCK_CLOEXEC $80000, SOCK_NONBLOCK $800 }
+          else if f < 0 then Result := -LX_EAFNOSUPPORT
+          else if (a1 and $F) >= 11 then Result := -LX_EINVAL            { SOCK_MAX = 11 }
+          else Result := Lx(ObSys(OB_SOCKET, f, ObSockType(a1), a2, 0, 0, 0));
+        end;
+    42: Result := ObSockAddrCall(OB_CONNECT, a0, a1, a2);
+    43: Result := ObSockAddrOut(OB_ACCEPT4, a0, a1, a2, 0);
+    288: Result := ObSockAddrOut(OB_ACCEPT4, a0, a1, a2, a3);
+    44: Result := ObSendto(a0, a1, a2, a3, a4, a5);
+    45: Result := ObRecvfrom(a0, a1, a2, a3, a4, a5);
+    46: Result := ObMsg(True, a0, a1, a2);
+    47: Result := ObMsg(False, a0, a1, a2);
+    48: Result := Lx(ObSys(OB_SHUTDOWN, a0, a1, 0, 0, 0, 0));
+    49: Result := ObSockAddrCall(OB_BIND, a0, a1, a2);
+    50: Result := Lx(ObSys(OB_LISTEN, a0, a1, 0, 0, 0, 0));
+    51: Result := ObSockAddrOut(OB_GETSOCKNAME, a0, a1, a2, 0);
+    52: Result := ObSockAddrOut(OB_GETPEERNAME, a0, a1, a2, 0);
+    53: begin                                                   { socketpair }
+          { Linux's check order (__sys_socket[pair], __sock_create): stray
+            flag bits in the type word, then the family, then the type. }
+          f := ObAf(a0);
+          if (a1 and not Int64($8080F)) <> 0 then Result := -LX_EINVAL   { type 0..15, SOCK_CLOEXEC $80000, SOCK_NONBLOCK $800 }
+          else if f < 0 then Result := -LX_EAFNOSUPPORT
+          else if (a1 and $F) >= 11 then Result := -LX_EINVAL            { SOCK_MAX = 11 }
+          else Result := Lx(ObSys(OB_SOCKETPAIR, f, ObSockType(a1), a2, a3, 0, 0));
+        end;
+    54: Result := ObSockopt(False, a0, a1, a2, a3, a4);
+    55: Result := ObSockopt(True, a0, a1, a2, a3, a4);
+    271: begin                                                  { ppoll: the mask is a u32 here }
+           if a3 <> 0 then
+           begin
+             t[0] := MaskToOb(PInt64(a3)^);
+             Result := Lx(ObSys(OB_PPOLL, a0, a1, a2, Int64(@t[0]), 0, 0));
+           end
+           else Result := Lx(ObSys(OB_PPOLL, a0, a1, a2, 0, 0, 0));
+         end;
+    270: begin                                                  { pselect6: a5 -> {sigset *, size} }
+           if (a5 <> 0) and (PInt64(a5)^ <> 0) then
+           begin
+             t[0] := MaskToOb(PInt64(PInt64(a5)^)^);
+             Result := Lx(ObSys(OB_PSELECT, a0, a1, a2, a3, a4, Int64(@t[0])));
+           end
+           else Result := Lx(ObSys(OB_PSELECT, a0, a1, a2, a3, a4, 0));
+         end;
+    213, 291: begin                                             { epoll_create, epoll_create1 }
+                r := ObSys(OB_KQUEUE, 0, 0, 0, 0, 0, 0);
+                if (r >= 0) and (nr = 291) and ((a0 and $80000) <> 0) then
+                  ObSys(OB_FCNTL, r, 2, 1, 0, 0, 0);            { F_SETFD FD_CLOEXEC }
+                Result := Lx(r);
+              end;
+    233: Result := ObEpollCtl(a0, a1, a2, a3);
+    232, 281: Result := ObEpollWait(a0, a1, a2, a3);            { epoll_pwait: mask not applied }
     13: Result := ObRtSigaction(a0, a1, a2);
     14: Result := ObRtSigprocmask(a0, a1, a2);
     127: begin                                                  { rt_sigpending }

@@ -269,3 +269,19 @@ Results:
   which OpenBSD does not have.
 
 Next: sockets.
+
+### 2026-11-12: `--os=openbsd` sockets, ppoll/pselect6, epoll
+
+- **Sockets.** fbsdabi's socket section was ported with OpenBSD's numbers,
+  measured on 8.0: AF_INET6 24, SOCK_NONBLOCK $4000, SOCK_CLOEXEC $8000,
+  MSG_NOSIGNAL $400, MSG_CMSG_CLOEXEC $800, accept4 93, SO_PEERCRED $1022
+  (fields reordered). OpenBSD has no SO_DOMAIN, SO_PROTOCOL or TCP_KEEP*.
+  msghdr, cmsghdr and sockaddr are the same as FreeBSD's.
+- **ppoll and pselect6** (109/110) take a u32 mask by pointer. pxx's PalPoll
+  uses ppoll, so before this every connect-with-timeout failed with ENOSYS.
+- **epoll** runs over kqueue (269/72). kevent is 32 bytes, with FreeBSD's
+  offsets.
+- **Results.** Nine socket tests match Linux. `lib_net_v6only` cannot: OpenBSD
+  IPv6 sockets are always v6-only.
+
+Next: termios, eventfd/timerfd (OpenBSD has neither natively), and /proc.

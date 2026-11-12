@@ -259,10 +259,27 @@ Threads work too (`--threadsafe`):
 `c_thread_local_is_per_thread`, `c_pthread_detach` and
 `crtl_pthread_recursive_mutex` give the same output on OpenBSD as on Linux.
 
+Sockets, `ppoll`/`pselect6` and epoll work too.
+
+- **Sockets** use FreeBSD's translation (the structs are the same) with
+  OpenBSD's numbers. `AF_INET6` is 24, `SOCK_NONBLOCK`/`SOCK_CLOEXEC` are
+  `0x4000`/`0x8000`, and `MSG_NOSIGNAL` is `0x400`. `SO_PEERCRED` is
+  reordered into Linux's pid, uid, gid.
+- **epoll** runs over kqueue, as on FreeBSD. OpenBSD's `struct kevent` is
+  32 bytes, not 64.
+- **IPv6 is always v6-only** on OpenBSD: a `[::]` listener never accepts
+  IPv4. So `lib_net_v6only`'s two dual-stack checks fail there, and that is
+  the system's behaviour, not a bug in the translation.
+
+`csocket_loopback_b88`, `c_crtl_sock_flags`, `c_crtl_cmsg_and_socket_levels`,
+`c_crtl_inet6`, `lib_net`, `lib_net6`, `lib_net_timeout`, `lib_dns_tcp` and
+`lib_asyncnet6` (coroutines over epoll) give the same output on OpenBSD as on
+Linux.
+
 Not done yet:
 
 - `/proc/self/maps` and the rest of `/proc`, apart from `environ` and `exe`.
-- Sockets, termios beyond the `isatty` check, and epoll.
+- termios beyond the `isatty` check, eventfd and timerfd.
 - Debug info: `-g` is refused, because the debug data would go where the pin
   table is.
 
