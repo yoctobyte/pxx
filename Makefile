@@ -36369,6 +36369,15 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-call0/xtfld-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfld_co0)" "$$($(TESTTMP)/test_xtfld_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_field_offsets_ride_in_the_access.pas $(TESTTMP)/test_xtfld_co2
 	tools/expect_same.sh xtensa-call0/xtfld-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfld_co2)" "$$($(TESTTMP)/test_xtfld_x64)"
+	./$(COMPILER) test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_xtfa_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O0 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_xtfa_wo0
+	tools/expect_same.sh xtensa-windowed/xtfa-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfa_wo0)" "$$($(TESTTMP)/test_xtfa_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O2 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_xtfa_wo2
+	tools/expect_same.sh xtensa-windowed/xtfa-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfa_wo2)" "$$($(TESTTMP)/test_xtfa_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O0 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_xtfa_co0
+	tools/expect_same.sh xtensa-call0/xtfa-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfa_co0)" "$$($(TESTTMP)/test_xtfa_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_store_through_a_frame_address.pas $(TESTTMP)/test_xtfa_co2
+	tools/expect_same.sh xtensa-call0/xtfa-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtfa_co2)" "$$($(TESTTMP)/test_xtfa_x64)"
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)

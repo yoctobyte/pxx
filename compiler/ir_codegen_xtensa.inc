@@ -3172,6 +3172,29 @@ begin
         begin
           { the value is stored in at most 4 bytes (the 64-bit arm above took
             the rest, floats left earlier), so only its low word is kept }
+          { A small integer constant has no side effects, so it can be loaded
+            AFTER the address straight into a3: no push and pop of the value
+            (riscv32's af239c24d7, constant half -- the frame-local half needs
+            a whitelist of addresses that run nothing and is not ported). }
+          if (IRKind[IRB[node]] = IR_CONST_INT) and
+             (IRIVal[IRB[node]] >= -2048) and (IRIVal[IRB[node]] <= 2047) and
+             ((sz = 1) or (sz = 2) or (sz = 4)) and
+             not XtensaAddrIsRagged(IRA[node]) then
+          begin
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            if XtFieldOffFits(IRA[node], sz, imm) then
+              EmitLow32Xtensa(IRA[IRA[node]])
+            else
+            begin
+              EmitLow32Xtensa(IRA[node]);
+              imm := 0;
+            end;
+            InLValueWrite := savedLVW;
+            xtensa_movi(reg_xtensa_a3, Integer(IRIVal[IRB[node]]));
+            EmitSizedStoreOffXtensa(reg_xtensa_a3, reg_xtensa_a2, imm, sz);
+            Exit;
+          end;
           EmitLow32Xtensa(IRB[node]);
           XtensaPushA2;
           savedLVW := InLValueWrite;
