@@ -1197,6 +1197,8 @@ begin
   WriteLn('  -include <file>       preprocess <file> before the primary C source');
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
+  WriteLn('  --os=freebsd          FreeBSD/amd64 output (experimental): raw syscalls via an');
+  WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1509,6 +1511,8 @@ begin
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
   RtlOverLibc := False;
+  TargetKernel := KERNEL_LINUX;
+  FbsdSyscallProcIdx := -1;
   LibcSyscallProcIdx := -1;
   LibcErrnoProcIdx := -1;
   LibcFflushProcIdx := -1;
@@ -1815,6 +1819,21 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if (option = '--os=freebsd') or (option = '--platform=freebsd') then
+    begin
+      { FreeBSD/amd64: raw syscalls through the in-program Linux-ABI
+        translator (compiler/builtin/fbsdabi.pas). The PAL stays posix.
+        feature-port-freebsd-native }
+      TargetKernel := KERNEL_FREEBSD;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
+      Inc(i);
+    end
+    else if option = '--os=linux' then
+    begin
+      TargetKernel := KERNEL_LINUX;
       Inc(i);
     end
     else if option = '--platform=posix' then
@@ -3556,6 +3575,16 @@ begin
     slots are roots), before anything reads a final code offset. Off unless
     --dce; see compiler/dce.inc for what turns it off again. }
   PatchObjRefFastPaths;   { BEFORE DceRun, which renumbers GlobFix }
+  { --os=freebsd: the syscall thunk calls PXXFbsdSyscall, but the thunk is
+    emitted after DCE, so no CallFix can say so -- root it by hand.
+    feature-port-freebsd-native }
+  if TargetKernel = KERNEL_FREEBSD then
+  begin
+    FbsdSyscallProcIdx := FindProc('PXXFbsdSyscall');
+    if FbsdSyscallProcIdx < 0 then
+      ErrorNoPos('--os=freebsd: PXXFbsdSyscall not found (compiler/builtin/fbsdabi.pas was not pulled)');
+    RecordEntryRoot(FbsdSyscallProcIdx);
+  end;
   DceRun;
   { AFTER DceRun for the same reason as the vector table below, and BEFORE it
     so that nothing reads BSSSize between the two. Drops the 64 KiB bare-ESP

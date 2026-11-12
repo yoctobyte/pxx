@@ -2102,6 +2102,14 @@ begin
     EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
 end;
 
+{ e_ident[EI_OSABI]. 0 (SYSV) for Linux, as it always was; FreeBSD brands a
+  static binary by this byte when there is no ABI note, and refuses an SYSV
+  one ("Exec format error"). feature-port-freebsd-native }
+function ElfOsAbi: Integer;
+begin
+  if TargetKernel = KERNEL_FREEBSD then ElfOsAbi := 9 else ElfOsAbi := 0;
+end;
+
 procedure ApplyImageFixups(codeVA, dataBase, bssBase, entry: Int64);
 { Resolve every code and data fixup against the addresses an IMAGE will have.
   One copy, because there were two and they had already drifted: writeELF is
@@ -2296,7 +2304,7 @@ begin
   Assign(f, outPath); Rewrite(f, 1);
 
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
-  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);
+  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,ElfOsAbi);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,2);writeU16(f,machine);writeU32(f,1);
@@ -2458,7 +2466,7 @@ begin
   f := OutOpen(AssignPath); { O_WRONLY | O_CREAT | O_TRUNC }
 
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
-  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);
+  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,ElfOsAbi);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,2);writeU16(f,machine);writeU32(f,1);

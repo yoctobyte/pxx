@@ -142,3 +142,62 @@ syscalls) prints byte-identical output and exits 0 on FreeBSD -- but only after
 fallback does not pick Linux. Setting `EI_OSABI = 3` (ELFOSABI_LINUX) on Linux
 output would make Linux pxx binaries run under linuxulator with no user step.
 
+
+## 2026-11-12 (pxx2-bsd) — native `--os=freebsd` runs; torture output byte-identical
+
+**Design changed from this ticket's plan, deliberately.** The plan was a
+FreeBSD syscall table plus a carry-flag error path at every wrapper. Measured
+first: the RTL makes 98 distinct Linux calls over ~190 sites, and they carry
+Linux *flag bits and struct layouts* too (open/mmap flags, `stat`, `dirent`,
+`stack_t`, clock ids, errno 35+), not just numbers. A number table alone would
+not have been enough. Instead:
+
+- `--os=freebsd` (alias `--platform=freebsd`) routes every kernel entry through
+  the shared out-of-line thunk `--rtl-libc` already uses (`EmitSyscall` ->
+  `EmitLibcSyscallThunk`). In FreeBSD mode the thunk makes a direct call to
+  `PXXFbsdSyscall` instead of libc's `syscall()`, and skips the errno fixup.
+- `compiler/builtin/fbsdabi.pas` (new, pulled only for `--os=freebsd`, like
+  `wasibackend`) is a small Linux-ABI translator: number map, open/mmap/AT_/clock
+  flag translation, `stat`/`statx`/`dirent64` conversion, `sigaltstack` field
+  order, `arch_prctl` -> `sysarch`, `brk` emulated over a MAP_GUARD reservation
+  (FreeBSD cannot answer `brk(0)`), `uname` via sysctl, errno 35..97 mapped back.
+  The kernel entry is an assembler routine (carry -> -errno). Every constant was
+  read from FreeBSD 15.1's headers / offsetof on the VM, not from memory.
+- The carry-flag convention is handled ONCE, in that routine.
+- `EI_OSABI = 9`. Nothing else in the ELF needed to change.
+- The RTL is untouched and the Linux default is unchanged (all new paths are
+  gated on `TargetKernel = KERNEL_FREEBSD`).
+
+**Results (FreeBSD 15.1-RELEASE amd64 under qemu/KVM):**
+
+| program | result |
+| --- | --- |
+| hello-world | runs, exit 0 |
+| `test/test_rtl_libc_torture.pas` (scalars, dynarray, AnsiString, class, raise/except, file write/read/delete) | stdout + exit code **byte-identical** to the Linux build |
+
+`tools/syscall_scan.py` finds 2 raw kernel entries: the translator's own, and
+the `rt_sigreturn` stub (`syscall_raw`, never reached -- see below).
+
+**Tests:** `test-core` gains a build-only check (OSABI 9, exactly 2 kernel
+entries -- a third would mean a site bypassed the thunk and would issue a Linux
+number on FreeBSD). `make test-freebsd` runs on the VM and diffs against Linux;
+not in `test` because it needs the VM. VM tooling: `tools/vm/freebsd.sh
+fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
+
+**Phase 1 limits (each answers honestly rather than wrongly):**
+- **Signals:** `rt_sigaction` / `rt_sigprocmask` are accepted and ignored, so a
+  hardware fault (nil deref, div by zero trap) kills the process instead of
+  raising an exception, and Ctrl-C takes the default action. Doing it properly
+  needs FreeBSD `sigaction` (struct differs), FreeBSD's own signal trampoline
+  (no SA_RESTORER), and the handler reading FreeBSD's `ucontext`/`siginfo`
+  layout. The `rt_sigreturn` raw stub must then go (Linux 15 = FreeBSD chmod).
+- **Threads:** `clone` -> ENOSYS. Needs `thr_new` + `_umtx_op` for futex.
+- **Environment:** the RTL's `GetEnvironmentVariable` reads `/proc/self/environ`;
+  FreeBSD has no `/proc` by default, so it returns '' (the torture test's tmp
+  path silently falls back to /tmp). RTL fix: read `envp` from the initial stack.
+- **termios:** only `isatty` (TCGETS); TCSETS* is a no-op.
+- **Not yet:** sockets, file locks, futex, `pidfd`, `epoll`/`timerfd` (kqueue).
+  Unmapped calls answer -ENOSYS.
+- **Other frontends:** only the Pascal frontend pulls `fbsdabi`; C / NilPy
+  drivers do not yet (same shape as `bug-a-a-frontend-cannot-see-that-a-backend-
+  calls-library-routines-it-never-mentions`).

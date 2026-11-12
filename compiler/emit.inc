@@ -568,7 +568,7 @@ end;
   feature-port-rtl-over-libc }
 procedure EmitSyscall;
 begin
-  if RtlOverLibc and (TargetArch = TARGET_X86_64) then
+  if (RtlOverLibc or (TargetKernel = KERNEL_FREEBSD)) and (TargetArch = TARGET_X86_64) then
   begin
     { REFUSED rather than emitted wrong: at -O3 EmitExternalIndirectCall wraps
       the call in FloatPoolSave/Restore, which address the float-resident pool

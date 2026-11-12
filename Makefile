@@ -10829,6 +10829,19 @@ test-threads: $(COMPILER)
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
 # Gives Track B a run-it-and-check path for lib/asmcore. x86-64.
+# --os=freebsd on a real FreeBSD kernel (qemu VM, tools/vm/freebsd.sh; the
+# image lives under $PXX_VM_DIR, default /data/vm). NOT in `test`: it needs the
+# VM. Output and exit code must be byte-identical to the Linux build.
+# feature-port-freebsd-native
+test-freebsd: $(COMPILER)
+	@d=$(TESTTMP)/os_freebsd_run26; mkdir -p $$d && \
+	  tools/vm/freebsd.sh start && \
+	  for t in test/test_rtl_libc_torture.pas; do \
+	    n=$$(basename $$t .pas); \
+	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/$$n.fb >/dev/null && \
+	    tools/expect_same.sh freebsd_$$n "$$(tools/vm/freebsd.sh run $$d/$$n.fb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; echo "test-freebsd: OK"
+
 test-asm: $(COMPILER)
 	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 3 -------------
 	# The five text-assembler oracle harnesses: each mocks the byte sink, then
@@ -10975,6 +10988,14 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --rtl-libc test/test_rtl_libc_torture.pas $$d/libc >/dev/null && \
 	  tools/expect_same.sh rtl_libc_output "$$(PXX_RTL_LIBC_TMP=$$d $$d/libc 2>&1; echo exit=$$?)" "$$(PXX_RTL_LIBC_TMP=$$d $$d/raw 2>&1; echo exit=$$?)" && \
 	  tools/expect_same.sh rtl_libc_kernel_entries "$$(python3 tools/syscall_scan.py $$d/libc | grep -o '[0-9]* kernel-entry')" "1 kernel-entry"
+	# --os=freebsd, build-only (the run is `make test-freebsd`, which needs the
+	# VM): branded FreeBSD, and exactly two raw kernel entries -- the
+	# translator's own and the never-reached rt_sigreturn. A third means some
+	# site bypassed the thunk and would issue a LINUX number on FreeBSD.
+	@d=$(TESTTMP)/os_freebsd26; mkdir -p $$d && \
+	  ./$(COMPILER) --os=freebsd test/test_rtl_libc_torture.pas $$d/fb >/dev/null && \
+	  tools/expect_same.sh freebsd_osabi "$$(od -An -tu1 -j7 -N1 $$d/fb | tr -d ' ')" "9" && \
+	  tools/expect_same.sh freebsd_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fb | grep -o '[0-9]* kernel-entry')" "2 kernel-entry"
 	# 100 -I roots, the header in the LAST one: an ESP-IDF translation unit
 	# passes 81, and MAX_C_INCLUDE_DIRS / MAX_PAS_UNIT_DIRS were 64 (pin v452:
 	# "too many -I include directories"). museum_landkaart's header import.

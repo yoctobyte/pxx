@@ -2428,6 +2428,8 @@ const
     (syscalls, fd IO, sockets, dlopen); esp = bare-metal esp32 (MMIO, no
     filesystem/sockets yet). Do NOT derive platform from CPU: aarch64 can be
     posix or bare. See devdocs/progress/*/feature-platform-abstraction-layer.md. }
+  KERNEL_LINUX   = 0;
+  KERNEL_FREEBSD = 1;
   PLATFORM_POSIX = 0;
   PLATFORM_ESP   = 1;
   { wasi = hosted, but through IMPORTS rather than syscalls. A third value and
@@ -6668,6 +6670,14 @@ var
     DT_NEEDED and PLT slot with no elfwriter change. -1 = not yet created.
     feature-port-rtl-over-libc }
   RtlOverLibc : Boolean;
+  { The kernel the output runs on (KERNEL_*), independent of TargetPlatform,
+    which picks the RTL's PAL directory. KERNEL_FREEBSD keeps the posix PAL and
+    the Linux-ABI RTL unchanged: every kernel entry goes through the same
+    shared thunk --rtl-libc uses, and the thunk calls PXXFbsdSyscall
+    (compiler/builtin/fbsdabi.pas), which translates the Linux call to the
+    FreeBSD one. x86-64 only. feature-port-freebsd-native }
+  TargetKernel : Integer;
+  FbsdSyscallProcIdx : Integer;
   LibcSyscallProcIdx : Integer;
   LibcErrnoProcIdx : Integer;
   LibcFflushProcIdx : Integer;   { libc$fflush, see EnsureLibcFflushProc }

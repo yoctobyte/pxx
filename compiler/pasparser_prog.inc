@@ -2558,6 +2558,11 @@ begin
     `/` is -- and no library unit calls the sys* family (only the compiler's own
     PxxEnvLoad and elfwriter do), so a miss through a unit is not reachable. }
   if needsWasiFile then ParseUsesUnitAmbient('wasibackend');
+  { --os=freebsd: the Linux-ABI translator every kernel entry is routed to.
+    Target-gated like wasibackend, for the same reason: an ambient unit would
+    be parsed by every lane's pinned compiler. feature-port-freebsd-native }
+  if (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_X86_64) then
+    ParseUsesUnitAmbient('fbsdabi');
   { BEFORE `builtin`, which `uses` it. Pulled for needsBuiltin as well as for
     the bare flag, so the formatters are always a DIRECT program-level unit on
     every target rather than reached transitively through builtin -- the parser's
