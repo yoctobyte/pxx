@@ -14346,7 +14346,7 @@ begin
       EmitCallProc(GetFiniRunnerProc);
       EmitI32($F84107E0);                 { ldr x0, [sp], #16 }
       EmitI32($D2800BC8);                 { mov x8, #94 (exit_group) }
-      EmitI32($D4000001);                 { svc #0 (x0 = exit code) }
+      EmitSvcA64;                 { svc #0 (x0 = exit code) }
     end;
     TARGET_RISCV32:
     begin

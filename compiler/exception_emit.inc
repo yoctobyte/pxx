@@ -466,7 +466,7 @@ begin
       EmitI32($14000003);                                       { b [pc+12] }
       EmitDataRef(Strs[si].Offset + 8);
       EmitI32($D2800002 + (Strs[si].Len shl 5));                { movz x2, #len }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
 
       { The detail line, `: <ClassName>: <Message>`, the x86-64 block's
         sequence instruction for instruction (see its note for the layouts and
@@ -504,13 +504,13 @@ begin
       EmitI32($14000003);                                       { b [pc+12] }
       EmitDataRef(Strs[siColon].Offset + 8);
       EmitI32($D2800002 + (Strs[siColon].Len shl 5));           { movz x2, #len }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
       EmitI32($F9400281);                                       { ldr x1, [x20] }
       EmitI32($F9400022);                                       { ldr x2, [x1] }
       EmitI32($91002021);                                       { add x1, x1, #8 }
       EmitI32($D2800808);                                       { movz x8, #64 }
       EmitI32($D2800040);                                       { movz x0, #2 }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
       Patch32(jc1, $B4000014 or ((((CodeLen - jc1) div 4) and $7ffff) shl 5));
       Patch32(jc2, $B4000001 or ((((CodeLen - jc2) div 4) and $7ffff) shl 5));
       Patch32(jc3, $5400000D or ((((CodeLen - jc3) div 4) and $7ffff) shl 5));
@@ -532,12 +532,12 @@ begin
       EmitI32($14000003);                                       { b [pc+12] }
       EmitDataRef(Strs[siColon].Offset + 8);
       EmitI32($D2800002 + (Strs[siColon].Len shl 5));           { movz x2, #len }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
       EmitI32($F9400661);                                       { ldr x1, [x19, #8] }
       EmitI32($F85F8022);                                       { ldur x2, [x1, #-8] }
       EmitI32($D2800808);                                       { movz x8, #64 }
       EmitI32($D2800040);                                       { movz x0, #2 }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
       Patch32(jm1, $54000003 or ((((CodeLen - jm1) div 4) and $7ffff) shl 5));
       Patch32(jm2, $54000003 or ((((CodeLen - jm2) div 4) and $7ffff) shl 5));
       Patch32(jm3, $5400000D or ((((CodeLen - jm3) div 4) and $7ffff) shl 5));
@@ -549,7 +549,7 @@ begin
       EmitI32($14000003);                                       { b [pc+12] }
       EmitDataRef(NEWLINE_OFFSET);
       EmitI32($D2800002 + (1 shl 5));                           { movz x2, #1 }
-      EmitI32($D4000001);                                       { svc #0 }
+      EmitSvcA64;                                       { svc #0 }
     end;
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end

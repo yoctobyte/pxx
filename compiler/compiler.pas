@@ -3201,8 +3201,10 @@ begin
     FreeBSD's libc Linux syscall numbers). docs/targets/freebsd.md }
   if KernelTranslated then
   begin
-    if TargetArch <> TARGET_X86_64 then
-      ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only; other CPUs are not supported yet');
+    if (TargetArch <> TARGET_X86_64) and
+       not ((TargetArch = TARGET_AARCH64) and (TargetKernel = KERNEL_FREEBSD)) then
+      ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only' +
+        ' (FreeBSD also takes --target=aarch64); other CPUs are not supported yet');
     if EmitSharedMode then
       ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
     if EmitObjMode then
@@ -3439,6 +3441,31 @@ begin
     feature-port-freebsd-native }
   if (not isAsm) and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_X86_64) then
     EmitAsmX64(['mov rsp, rdi']);
+  { FreeBSD/arm64 does the same with x0 and sp = x0 & ~15, and sp must stay
+    16-aligned, so the block comes down to sp instead: when x0 = sp + 8, the
+    argc word, argv[] and envp[] with their NULLs and the auxv pairs up to
+    AT_NULL move down 8 bytes (the strings stay; the pointers still reach
+    them). Afterwards [sp] = argc, the Linux entry layout every later stage
+    reads. feature-port-freebsd-native }
+  if (not isAsm) and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_AARCH64) then
+  begin
+    EmitI32($910003E9);       { mov  x9, sp }
+    EmitI32($EB09001F);       { cmp  x0, x9 }
+    EmitI32($54000160);       { b.eq .done   (+11) }
+    EmitI32($D280000B);       { mov  x11, #0          NULLs seen }
+    { .vec: argc, argv, envp }
+    EmitI32($F840840A);       { ldr  x10, [x0], #8 }
+    EmitI32($F800852A);       { str  x10, [x9], #8 }
+    EmitI32($B5FFFFCA);       { cbnz x10, .vec  (-2) }
+    EmitI32($9100056B);       { add  x11, x11, #1 }
+    EmitI32($F100097F);       { cmp  x11, #2 }
+    EmitI32($54FFFF63);       { b.lo .vec  (-5) }
+    { .aux: (type, value) pairs, AT_NULL's included }
+    EmitI32($A8C1300A);       { ldp  x10, x12, [x0], #16 }
+    EmitI32($A881312A);       { stp  x10, x12, [x9], #16 }
+    EmitI32($B5FFFFCA);       { cbnz x10, .aux  (-2) }
+    { .done }
+  end;
   if not isAsm then EmitTlsMainInstall;
 
   { Before ANY frontend runs -- see ResetDeclScopeSentinels. Only ParseProgram

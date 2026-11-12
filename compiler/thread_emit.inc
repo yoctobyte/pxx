@@ -75,6 +75,7 @@ var
   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
                         x86-64/i386, a branch immediate on aarch64/arm32 }
   fbChild: Integer;   { --os=freebsd: the thr_new entry that becomes a clone child }
+  pFbB, pFbFail, imm: Integer;   { the aarch64 thr_new leg's patch sites }
   obChild: Integer;   { --os=openbsd: where the translator's __tfork sends the child }
 
 { The child's kernel entries. Bare instructions everywhere but --os=openbsd,
@@ -572,6 +573,22 @@ begin
       svc #0. Hex verified against aarch64-linux-gnu-as. }
     EmitI32($14000000);                 { b .parent-skip — patched below (branch over stub) }
     jmpOver := CodeLen - 4;
+    { --os=freebsd: thr_new's entry, as on x86-64. The kernel starts the
+      thread at a function with x0 = its arg (the stage area) and its own sp;
+      this makes it the clone child: sp = the stage, ctidptr (parked at
+      stage-8 by the parent) into the new block's slot 14 for the exit path,
+      then the shared child code. thr_new copies the parent's tpidr_el0, so
+      that code's "running on a pxx block" test reads the same as after
+      clone. feature-port-freebsd-native }
+    fbChild := 0; pFbB := 0;
+    if TargetKernel = KERNEL_FREEBSD then
+    begin
+      fbChild := CodeLen;
+      EmitI32($9100001F);               { mov  sp, x0 }
+      EmitI32($F85F83E9);               { ldur x9, [sp, #-8]      (ctidptr) }
+      EmitI32($F90003E9 or (((16 + 8 * TLS_SLOT_FS_ENTRY) div 8) shl 10));   { str x9, [sp, #16+8*slot] }
+      pFbB := CodeLen; EmitI32($14000000);   { b .child (patched) }
+    end;
     CloneStubAddr := CodeLen;
     EmitI32($D1040021);                 { sub  x1, x1, #256       (hidden-dest scratch) }
     { ---- carve the child's TLS block below the scratch ----
@@ -590,6 +607,60 @@ begin
     EmitI32($D1004021);                 { sub  x1, x1, #16        (stage area) }
     EmitI32($F9000022);                 { str  x2, [x1]           (entry) }
     EmitI32($F9000423);                 { str  x3, [x1, #8]       (arg) }
+    if TargetKernel = KERNEL_FREEBSD then
+    begin
+      { thr_new(&param, 104), the x86-64 leg's parameter block: the thread
+        starts at fbChild with the stage area as its argument, on a 4 KiB
+        stack ending 16 below the stage (the stage-8 word carries ctidptr).
+        The tid lands in a scratch long and is stored to ctidptr as
+        CLONE_PARENT_SETTID would. C set = error, x0 the positive errno.
+        The `svc` is raw: this IS the kernel call, not a Linux one. }
+      EmitI32($F81F8024);               { stur x4, [x1, #-8]      (ctidptr for the child) }
+      EmitI32($D101C3FF);               { sub  sp, sp, #112 }
+      imm := fbChild - CodeLen;
+      EmitI32($10000000 or ((imm and 3) shl 29) or (((imm div 4) and $7FFFF) shl 5) or 9);  { adr x9, fbChild }
+      EmitI32($F90003E9);               { str  x9, [sp]           (start_func) }
+      EmitI32($F90007E1);               { str  x1, [sp, #8]       (arg = stage) }
+      EmitI32($D1400429);               { sub  x9, x1, #1, lsl #12 }
+      EmitI32($D1004129);               { sub  x9, x9, #16 }
+      EmitI32($F9000BE9);               { str  x9, [sp, #16]      (stack_base) }
+      EmitI32($D2820009);               { mov  x9, #4096 }
+      EmitI32($F9000FE9);               { str  x9, [sp, #24]      (stack_size) }
+      for imm := 5 to 13 do
+        if (imm <> 6) and (imm <> 7) then
+          EmitI32($F90003FF or (imm shl 10));   { str xzr, [sp, #8*imm] }
+      { tls_base = the new block: thr_new does NOT hand the child the
+        parent's tpidr_el0 (measured: it starts at 0), it sets the one given
+        here. The block's init-image slot comes from the parent's block first,
+        so the child code's threadvar copy finds it where clone leaves it. }
+      EmitI32($D53BD04A);               { mrs  x10, tpidr_el0 }
+      EmitI32($B400006A);               { cbz  x10, +3 }
+      EmitI32($F940014A or (TLS_SLOT_INIT_IMAGE shl 10));          { ldr x10, [x10, #8*slot] }
+      EmitI32($F900002A or ((2 + TLS_SLOT_INIT_IMAGE) shl 10));    { str x10, [x1, #16+8*slot] }
+      EmitI32($91004029);               { add  x9, x1, #16        (the block) }
+      EmitI32($F90013E9);               { str  x9, [sp, #32]      (tls_base) }
+      EmitI32($9101A3E9);               { add  x9, sp, #104       (tid scratch) }
+      EmitI32($F9001BE9);               { str  x9, [sp, #48]      (child_tid) }
+      EmitI32($F9001FE9);               { str  x9, [sp, #56]      (parent_tid) }
+      EmitI32($910003E0);               { mov  x0, sp }
+      EmitI32($D2800D01);               { mov  x1, #104 }
+      EmitI32($D28038E8);               { mov  x8, #455           (thr_new) }
+      EmitI32($D4000001);               { svc  #0 }
+      pFbFail := CodeLen; EmitI32($54000002);   { b.cs .fbfail (patched) }
+      EmitI32($B9406BE0);               { ldr  w0, [sp, #104]     (the tid) }
+      EmitI32($B4000044);               { cbz  x4, +2 }
+      EmitI32($B9000080);               { str  w0, [x4] }
+      EmitI32($9101C3FF);               { add  sp, sp, #112 }
+      EmitI32($D65F03C0);               { ret }
+      Patch32(pFbFail, $54000002 or ((((CodeLen - pFbFail) div 4) and $7FFFF) shl 5));
+      EmitI32($CB0003E0);               { neg  x0, x0 }
+      EmitI32($9101C3FF);               { add  sp, sp, #112 }
+      EmitI32($D65F03C0);               { ret }
+      Patch32(pFbB, $14000000 or (((CodeLen - pFbB) div 4) and $03FFFFFF));
+      pParent := -1;
+    end
+    else
+    begin
     EmitI32($AA0403E2);                 { mov  x2, x4             (parent_tid = ctidptr) }
     EmitI32($D2800003);                 { mov  x3, #0             (tls = NULL) }
     EmitI32($D2801B88);                 { mov  x8, #220           (SYS_clone) }
@@ -600,6 +671,7 @@ begin
       short -- inside the child path, in the PARENT. Three legs had already
       been converted for exactly this reason and this one had not. }
     pParent := CodeLen; EmitI32($B5000000);   { cbnz x0, .parent (patched) }
+    end;
     { ---- child: sp = the stage area, [sp]=entry [sp+8]=arg, block at sp+16 ---- }
     { Install the block, but ONLY if the parent was running on a pxx block.
       clone inherits tpidr_el0, so the register holds either the parent's pxx
@@ -644,9 +716,12 @@ begin
     EmitI32($D63F0020);                 { blr  x1                 (entry(arg)) }
     EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
     EmitI32($D2800BA8);                 { mov  x8, #93            (SYS_exit) }
-    EmitI32($D4000001);                 { svc  #0                 (thread exits here) }
+    { thread exits here; under --os=freebsd through the translator, whose exit
+      clears and wakes the tid word from slot 14 }
+    EmitSvcA64;
     { ---- .parent: x0 = child tid ---- }
-    Patch32(pParent, $B5000000 or ((((CodeLen - pParent) div 4) and $7FFFF) shl 5));
+    if pParent >= 0 then
+      Patch32(pParent, $B5000000 or ((((CodeLen - pParent) div 4) and $7FFFF) shl 5));
     EmitI32($D65F03C0);                 { ret }
     { patch the leading branch to land here (past the stub). B imm26 in words. }
     Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));

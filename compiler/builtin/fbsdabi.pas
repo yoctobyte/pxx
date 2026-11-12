@@ -130,6 +130,30 @@ var
   unit speaks one convention. rdx is written back because fork() answers in
   it (1 in the child). r12 holds the pointer across the syscall, which
   clobbers rcx and r11. }
+{$ifdef CPU_AARCH64}
+{ FreeBSD/arm64: x8 = nr, x0..x5, svc 0; an error sets C with the positive
+  errno in x0; x1 is the second result (1 in a fork child). x9 is not
+  touched by the kernel. }
+function FbRawA(args: Pointer): Int64; assembler;
+asm
+  mov x9, x0
+  ldr x8, [x9]
+  ldr x0, [x9, 8]
+  ldr x1, [x9, 16]
+  ldr x2, [x9, 24]
+  ldr x3, [x9, 32]
+  ldr x4, [x9, 40]
+  ldr x5, [x9, 48]
+  svc 0
+  str x1, [x9, 56]
+  mov x10, 0
+  b.cc fbrawok
+  mov x10, 1
+  sub x0, xzr, x0
+fbrawok:
+  str x10, [x9, 64]
+end;
+{$else}
 function FbRawA(args: Pointer): Int64; assembler;
 {$asmMode intel}
 asm
@@ -150,6 +174,7 @@ asm
   sub rax, rcx
   pop r12
 end;
+{$endif}
 
 { The last steps of a non-main thread's SYS_exit: zero the CLONE_CHILD_CLEARTID
   word at ctid, wake its waiters on both umtx queues, thr_exit. Registers
@@ -157,6 +182,30 @@ end;
   this thread's stack, and a Pascal FbSys storing its result there after the
   wake segfaulted (1 run in ~80 of lib_fpc_thread_surface, 2026-11-12). On
   Linux the kernel clears the word after the thread is gone. Does not return. }
+{$ifdef CPU_AARCH64}
+procedure FbClearTidExit(ctid: Int64); assembler;
+asm
+  mov x9, x0
+  str wzr, [x9]
+  mov x0, x9
+  mov x1, 3
+  mov x2, 2147483647
+  mov x3, 0
+  mov x4, 0
+  mov x8, 454
+  svc 0
+  mov x0, x9
+  mov x1, 16
+  mov x2, 2147483647
+  mov x3, 0
+  mov x4, 0
+  mov x8, 454
+  svc 0
+  mov x0, 0
+  mov x8, 431
+  svc 0
+end;
+{$else}
 procedure FbClearTidExit(ctid: Int64); assembler;
 {$asmMode intel}
 asm
@@ -181,6 +230,7 @@ asm
   mov eax, 431
   syscall
 end;
+{$endif}
 
 var
   FbRdx: Int64;
@@ -459,15 +509,18 @@ end;
   paths the way linuxulator's linprocfs would: from sysctl, which hands back
   the environment in exactly /proc's NUL-separated format. }
 
-{ Does the C string at p equal the bytes in w? }
-function PathIs(p: Int64; const w: array of Byte): Boolean;
+{ Does the C string at p equal the n bytes at w? Pointer and count, not an
+  open array: passing a typed constant as `const array of` copies it into a
+  temporary, which arm64 does through builtinheap's PXXMemMove -- a unit this
+  one is compiled before. }
+function PathIs(p: Int64; w: PByte; n: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
   if p = 0 then Exit;
-  for i := 0 to High(w) do
+  for i := 0 to n - 1 do
     if PByte(p + i)^ <> w[i] then Exit;
-  Result := PByte(p + Length(w))^ = 0;
+  Result := PByte(p + n)^ = 0;
 end;
 
 const
@@ -659,6 +712,59 @@ begin
   end;
 end;
 
+{$ifdef CPU_AARCH64}
+const
+  { FreeBSD arm64 ucontext: uc_sigmask(16), then mcontext's gpregs:
+    gp_x[30], gp_lr, gp_sp, gp_elr, gp_spsr. Linux arm64 ucontext:
+    uc_sigmask at 40, uc_mcontext at 176 = fault_address, regs[31], sp, pc,
+    pstate (the PC offset is UContextPCOffset's 440). }
+  FB_A64_GP = 16;
+  LX_A64_MC = 176;
+
+{ The handler FreeBSD actually calls (SA_SIGINFO: x0, x1, x2). }
+procedure FbSigEntry(sig, info, uc: Int64); cdecl;
+var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
+    lu: array[0..63] of Int64;        { Linux ucontext_t through the sigcontext's
+                                        fixed part; __reserved's head stays 0 }
+    i: Integer;
+    h, ls, c: Int64;
+begin
+  if (sig < 0) or (sig > 127) then Exit;
+  h := FbLxHandler[Integer(sig)];
+  if h = 0 then Exit;
+  ls := LxSig(sig);
+  for i := 0 to 15 do li[i] := 0;
+  for i := 0 to 63 do lu[i] := 0;
+  PInteger(@li[0])^ := Integer(ls);                       { si_signo }
+  if info <> 0 then
+  begin
+    PInteger(Int64(@li[0]) + 4)^ := PInteger(info + 4)^; { si_errno }
+    c := PInteger(info + 8)^;
+    PInteger(Int64(@li[0]) + 8)^ := Integer(LxSiCode(ls, c));
+    if c >= $10000 then
+    begin
+      PInteger(Int64(@li[0]) + 16)^ := PInteger(info + 12)^;   { si_pid }
+      PInteger(Int64(@li[0]) + 20)^ := PInteger(info + 16)^;   { si_uid }
+    end
+    else
+    begin
+      li[2] := PInt64(info + 24)^;                            { si_addr }
+      lu[LX_A64_MC div 8] := li[2];                           { fault_address }
+    end;
+  end;
+  if uc <> 0 then
+  begin
+    for i := 0 to 33 do                                       { x0..x30, sp, pc, pstate }
+      lu[LX_A64_MC div 8 + 1 + i] := PInt64(uc + FB_A64_GP + 8 * i)^;
+    lu[5] := MaskToLx(uc);                                    { uc_sigmask at 40 }
+  end;
+  if info <> 0 then TFbLxHandler(h)(ls, Int64(@li[0]), Int64(@lu[0]))
+  else TFbLxHandler(h)(ls, 0, Int64(@lu[0]));
+  if uc <> 0 then
+    for i := 0 to 32 do                                       { pstate is not the handler's }
+      PInt64(uc + FB_A64_GP + 8 * i)^ := lu[LX_A64_MC div 8 + 1 + i];
+end;
+{$else}
 { The handler FreeBSD actually calls (SA_SIGINFO: rdi, rsi, rdx). }
 procedure FbSigEntry(sig, info, uc: Int64); cdecl;
 var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
@@ -701,6 +807,7 @@ begin
     for i := 0 to 17 do
       PInt64(uc + FB_UC_MCONTEXT + FbGregOff[i])^ := lu[LX_UC_GREGS div 8 + i];
 end;
+{$endif}
 
 function FbRtSigaction(sig, act, oact: Int64): Int64;
 var fa, fo: array[0..3] of Int64;     { FreeBSD struct sigaction, 32 B }
@@ -1407,11 +1514,11 @@ const
   TBaudHi: array[1..15] of Integer = (57600,115200,230400,460800,500000,576000,921600,
                                       1000000,1152000,1500000,2000000,2500000,3000000,3500000,4000000);
 
-function MapBits(v: Int64; const src, dst: array of Int64): Int64;
+function MapBits(v: Int64; src, dst: PInt64; n: Integer): Int64;   { see PathIs }
 var i: Integer;
 begin
   Result := 0;
-  for i := 0 to High(src) do
+  for i := 0 to n - 1 do
     if (v and src[i]) = src[i] then Result := Result or dst[i];
 end;
 
@@ -1435,13 +1542,13 @@ procedure TermiosToLx(fb, lx: Int64);
 var i, ix: Integer; c: Byte; cf: Int64;
 begin
   for i := 0 to 35 do PByte(lx + i)^ := 0;
-  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, TIflFb, TIflLx));
-  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, TOflFb, TOflLx));
-  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, TCflFb, TCflLx);
+  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, @TIflFb[0], @TIflLx[0], Length(TIflFb)));
+  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, @TOflFb[0], @TOflLx[0], Length(TOflFb)));
+  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, @TCflFb[0], @TCflLx[0], Length(TCflFb));
   cf := cf or (((PInteger(fb + 8)^ shr 8) and 3) shl 4);        { CSIZE }
   cf := cf or SpeedToLx(PInteger(fb + 40)^);                    { c_ospeed -> CBAUD }
   PInteger(lx + 8)^ := Integer(cf);
-  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, TLflFb, TLflLx));
+  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, @TLflFb[0], @TLflLx[0], Length(TLflFb)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1457,11 +1564,11 @@ var i, ix: Integer; c: Byte; cf, sp: Int64;
 begin
   for i := 0 to 43 do PByte(fb + i)^ := 0;
   for i := 0 to 19 do PByte(fb + 16 + i)^ := $FF;
-  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, TIflLx, TIflFb));
-  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, TOflLx, TOflFb));
+  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, @TIflLx[0], @TIflFb[0], Length(TIflLx)));
+  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, @TOflLx[0], @TOflFb[0], Length(TOflLx)));
   cf := PInteger(lx + 8)^ and $FFFFFFFF;
-  PInteger(fb + 8)^ := Integer(MapBits(cf, TCflLx, TCflFb) or (((cf shr 4) and 3) shl 8));
-  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, TLflLx, TLflFb));
+  PInteger(fb + 8)^ := Integer(MapBits(cf, @TCflLx[0], @TCflFb[0], Length(TCflLx)) or (((cf shr 4) and 3) shl 8));
+  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, @TLflLx[0], @TLflFb[0], Length(TLflLx)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1541,7 +1648,11 @@ begin
   end;
 end;
 
+{$ifdef CPU_AARCH64}
+function FbLinuxCall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
+{$else}
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+{$endif}
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
     r, f: Int64;
@@ -1561,9 +1672,9 @@ begin
          else Result := Lx(FbSys(FB_READ, a0, a1, a2, 0, 0, 0));
        end;
     1: Result := Lx(FbSys(FB_WRITE, a0, a1, a2, 0, 0, 0));
-    2: if PathIs(a0, ProcEnviron) then Result := FbProcEnviron
-       else if PathIs(a0, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a1), 0, 0, 0, 0, 0))
-       else if PathIs(a0, ProcHostname) then Result := FbProcHostname
+    2: if PathIs(a0, @ProcEnviron[0], Length(ProcEnviron)) then Result := FbProcEnviron
+       else if PathIs(a0, @DevPtmx[0], Length(DevPtmx)) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a1), 0, 0, 0, 0, 0))
+       else if PathIs(a0, @ProcHostname[0], Length(ProcHostname)) then Result := FbProcHostname
        else Result := FbOpenAt(FB_AT_FDCWD, a0, a1, a2);
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
     4: Result := FbStatAt(FB_AT_FDCWD, a0, a1, 0);              { stat }
@@ -1772,7 +1883,7 @@ begin
     83: Result := Lx(FbSys(FB_MKDIR, a0, a1, 0, 0, 0, 0));
     84: Result := Lx(FbSys(FB_RMDIR, a0, 0, 0, 0, 0, 0));
     87: Result := Lx(FbSys(FB_UNLINK, a0, 0, 0, 0, 0, 0));
-    89: if PathIs(a0, ProcExe) then Result := FbProcExe(a1, a2)
+    89: if PathIs(a0, @ProcExe[0], Length(ProcExe)) then Result := FbProcExe(a1, a2)
         else if ProcFdNum(a0) >= 0 then Result := FbProcFd(ProcFdNum(a0), a1, a2)
         else Result := Lx(FbSys(FB_READLINK, a0, a1, a2, 0, 0, 0));
     90: Result := Lx(FbSys(FB_CHMOD, a0, a1, 0, 0, 0, 0));
@@ -1838,9 +1949,9 @@ begin
     228: Result := Lx(FbSys(FB_CLOCK_GETTIME, FbClock(a0), a1, 0, 0, 0, 0));
     229: Result := Lx(FbSys(FB_CLOCK_GETRES, FbClock(a0), a1, 0, 0, 0, 0));
     230: Result := Lx(FbSys(FB_CLOCK_NANOSLEEP, FbClock(a0), a1, a2, a3, 0, 0));
-    257: if PathIs(a1, ProcEnviron) then Result := FbProcEnviron
-         else if PathIs(a1, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a2), 0, 0, 0, 0, 0))
-         else if PathIs(a1, ProcHostname) then Result := FbProcHostname
+    257: if PathIs(a1, @ProcEnviron[0], Length(ProcEnviron)) then Result := FbProcEnviron
+         else if PathIs(a1, @DevPtmx[0], Length(DevPtmx)) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a2), 0, 0, 0, 0, 0))
+         else if PathIs(a1, @ProcHostname[0], Length(ProcHostname)) then Result := FbProcHostname
          else Result := FbOpenAt(a0, a1, a2, a3);
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
     262: Result := FbStatAt(a0, a1, a2, a3);                    { newfstatat }
@@ -1850,7 +1961,7 @@ begin
            Result := Lx(FbSys(FB_UNLINKAT, a0, a1, f, 0, 0, 0));
          end;
     264: Result := Lx(FbSys(FB_RENAMEAT, a0, a1, a2, a3, 0, 0));
-    267: if PathIs(a1, ProcExe) then Result := FbProcExe(a2, a3)
+    267: if PathIs(a1, @ProcExe[0], Length(ProcExe)) then Result := FbProcExe(a2, a3)
          else if ProcFdNum(a1) >= 0 then Result := FbProcFd(ProcFdNum(a1), a2, a3)
          else Result := Lx(FbSys(FB_READLINKAT, a0, a1, a2, a3, 0, 0));
     269: begin                                                  { faccessat }
@@ -2031,5 +2142,145 @@ begin
     Result := -LX_ENOSYS;
   end;
 end;
+
+
+{$ifdef CPU_AARCH64}
+{ ===== FreeBSD/arm64: Linux arm64's ABI in front of the x86-64 dispatch =====
+  The RTL and the compiler speak Linux's asm-generic syscall table on arm64.
+  It names the same calls as x86-64's under other numbers, so the front maps
+  the number and hands the call to FbLinuxCall, the dispatch above, which
+  already knows FreeBSD. What differs in the arguments is converted here:
+  struct stat (128 B, nlink and mode swapped in size and place), epoll_event
+  (16 B, not packed), struct sigaction (no sa_restorer, so the mask is at 16),
+  four open(2) flag bits, and clone, which is how arm64 forks. Everything else
+  -- errno, signals, mmap, sockets, termios, poll, timers -- is the same on
+  both. feature-port-freebsd-native }
+const
+  A64ToX64: array[0..293] of SmallInt = (
+    206, 207, 209, 210, 208, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+    199, 79, 212, 290, 291, 233, 281, 32, 292, 72, 294, 254, 255, 16, 251, 252,
+    73, 259, 258, 263, 266, 265, 264, 166, 165, 155, -1, 137, 138, 76, 77, 285,
+    269, 80, 81, 161, 91, 268, 260, 93, 257, 3, 153, 293, 179, 217, 8, 0,
+    1, 19, 20, 17, 18, 295, 296, 40, 270, 271, 289, 278, 275, 276, 267, 262,
+    5, 162, 74, 75, 277, 283, 286, 287, 280, 163, 125, 126, 135, 60, 231, 247,
+    218, 272, 202, 273, 274, 35, 36, 38, 246, 175, 176, 222, 224, 225, 223, 226,
+    227, 228, 229, 230, 103, 101, 142, 144, 145, 143, 203, 204, 24, 146, 147, 148,
+    219, 62, 200, 234, 131, 130, 13, 14, 127, 128, 129, 15, 141, 140, 169, 114,
+    106, 113, 105, 117, 118, 119, 120, 122, 123, 100, 109, 121, 124, 112, 115, 116,
+    63, 170, 171, 97, 160, 98, 95, 157, 309, 96, 164, 159, 39, 110, 102, 107,
+    104, 108, 186, 99, 240, 241, 242, 243, 244, 245, 68, 71, 70, 69, 64, 66,
+    220, 65, 29, 31, 30, 67, 41, 53, 49, 50, 43, 42, 51, 52, 44, 45,
+    54, 55, 48, 46, 47, 187, 12, 11, 25, 248, 249, 250, 56, 59, 9, 221,
+    167, 168, 10, 26, 149, 150, 151, 152, 27, 28, 216, 237, 239, 238, 256, 279,
+    297, 298, 288, 299, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, 61, 302, 300, 301, 303, 304, 305, 306, 308, 307, 310, 311,
+    312, 313, 314, 315, 316, 317, 318, 319, 321, 322, 323, 324, 325, 326, 327, 328,
+    329, 330, 331, 332, 333, 334);
+
+{ O_DIRECTORY/O_NOFOLLOW/O_DIRECT/O_LARGEFILE: arm64's 0x4000/0x8000/
+  0x10000/0x20000 are x86-64's 0x10000/0x20000/0x4000/0x8000. The map is its
+  own inverse. }
+function A64OpenFlags(f: Int64): Int64;
+begin
+  Result := f and not Int64($3C000);
+  if (f and $4000) <> 0 then Result := Result or $10000;
+  if (f and $8000) <> 0 then Result := Result or $20000;
+  if (f and $10000) <> 0 then Result := Result or $4000;
+  if (f and $20000) <> 0 then Result := Result or $8000;
+end;
+
+procedure X64StatToA64(x, a: Int64);
+var i: Integer;
+begin
+  PInt64(a)^ := PInt64(x)^;                                 { st_dev }
+  PInt64(a + 8)^ := PInt64(x + 8)^;                         { st_ino }
+  PInteger(a + 16)^ := PInteger(x + 24)^;                   { st_mode }
+  PInteger(a + 20)^ := Integer(PInt64(x + 16)^);            { st_nlink }
+  PInteger(a + 24)^ := PInteger(x + 28)^;                   { st_uid }
+  PInteger(a + 28)^ := PInteger(x + 32)^;                   { st_gid }
+  PInt64(a + 32)^ := PInt64(x + 40)^;                       { st_rdev }
+  PInt64(a + 40)^ := 0;
+  PInt64(a + 48)^ := PInt64(x + 48)^;                       { st_size }
+  PInteger(a + 56)^ := Integer(PInt64(x + 56)^);            { st_blksize }
+  PInteger(a + 60)^ := 0;
+  for i := 8 to 14 do                                       { st_blocks, the three times }
+    PInt64(a + 8 * i)^ := PInt64(x + 8 * i)^;
+  PInt64(a + 120)^ := 0;
+end;
+
+function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+var xs: array[0..17] of Int64;        { x86-64 struct stat, 144 B }
+    sa, so: array[0..3] of Int64;     { x86-64 struct sigaction }
+    ev: array[0..1] of Int64;         { a packed 12-byte epoll_event }
+    x, d, e: Int64;
+    i: Integer;
+begin
+  if (nr >= 0) and (nr <= 293) then x := A64ToX64[Integer(nr)]
+  else if nr >= 403 then x := nr
+  else x := -1;
+  if x < 0 then begin Result := -LX_ENOSYS; Exit; end;
+  case Integer(nr) of
+    56: Result := FbLinuxCall(257, a0, a1, A64OpenFlags(a2), a3, 0, 0);   { openat }
+    25: if a1 = 4 then                                                  { fcntl F_SETFL }
+          Result := FbLinuxCall(72, a0, 4, A64OpenFlags(a2), 0, 0, 0)
+        else
+        begin
+          Result := FbLinuxCall(72, a0, a1, a2, 0, 0, 0);
+          if (a1 = 3) and (Result >= 0) then Result := A64OpenFlags(Result);   { F_GETFL }
+        end;
+    79: begin                                                           { newfstatat }
+          Result := FbLinuxCall(262, a0, a1, Int64(@xs[0]), a3, 0, 0);
+          if Result = 0 then X64StatToA64(Int64(@xs[0]), a2);
+        end;
+    80: begin                                                           { fstat }
+          Result := FbLinuxCall(5, a0, Int64(@xs[0]), 0, 0, 0, 0);
+          if Result = 0 then X64StatToA64(Int64(@xs[0]), a1);
+        end;
+    21: if a3 = 0 then Result := FbLinuxCall(233, a0, a1, a2, 0, 0, 0)  { epoll_ctl }
+        else
+        begin
+          ev[0] := 0; ev[1] := 0;
+          PInteger(@ev[0])^ := PInteger(a3)^;
+          PInt64(Int64(@ev[0]) + 4)^ := PInt64(a3 + 8)^;
+          Result := FbLinuxCall(233, a0, a1, a2, Int64(@ev[0]), 0, 0);
+        end;
+    22: begin                                                           { epoll_pwait }
+          Result := FbLinuxCall(281, a0, a1, a2, a3, a4, a5);
+          { packed into the caller's own array; widen in place from the
+            last entry down, each read before its slot is overwritten }
+          i := Integer(Result) - 1;
+          while i >= 0 do
+          begin
+            e := PInteger(a1 + 12 * i)^;
+            d := PInt64(a1 + 12 * i + 4)^;
+            PInt64(a1 + 16 * i + 8)^ := d;
+            PInt64(a1 + 16 * i)^ := e and $FFFFFFFF;
+            Dec(i);
+          end;
+        end;
+    134: begin                                                          { rt_sigaction }
+          if a1 <> 0 then
+          begin
+            sa[0] := PInt64(a1)^; sa[1] := PInt64(a1 + 8)^;
+            sa[2] := 0; sa[3] := PInt64(a1 + 16)^;
+          end;
+          so[0] := 0; so[1] := 0; so[2] := 0; so[3] := 0;
+          if a1 <> 0 then d := Int64(@sa[0]) else d := 0;
+          if a2 <> 0 then e := Int64(@so[0]) else e := 0;
+          Result := FbLinuxCall(13, a0, d, e, a3, 0, 0);
+          if (Result = 0) and (a2 <> 0) then
+          begin
+            PInt64(a2)^ := so[0]; PInt64(a2 + 8)^ := so[1]; PInt64(a2 + 16)^ := so[3];
+          end;
+        end;
+    220: if ((a0 and not Int64($FF)) = 0) and (a1 = 0) then            { clone(SIGCHLD): fork }
+           Result := FbLinuxCall(57, 0, 0, 0, 0, 0, 0)
+         else
+           Result := -LX_ENOSYS;
+  else
+    Result := FbLinuxCall(x, a0, a1, a2, a3, a4, a5);
+  end;
+end;
+{$endif}
 
 end.

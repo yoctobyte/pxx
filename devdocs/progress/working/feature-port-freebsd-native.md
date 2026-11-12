@@ -421,3 +421,35 @@ Left as is, with the reason:
   both wakes + thr_exit in registers only. The clone stub's own exit path was
   already register-only. 150 runs clean afterwards (not proof at that rate;
   the evidence is the core plus the code shape).
+
+### 2026-11-13: FreeBSD/arm64 (`--os=freebsd --target=aarch64`)
+
+- VM: FreeBSD-15.1-RELEASE-arm64-aarch64-BASIC-CLOUDINIT-ufs.qcow2 (sha256
+  checked) under /data/vm/freebsd-arm64, qemu-system-aarch64 TCG, AAVMF
+  no-secboot firmware, port 2228. tools/vm/freebsd.sh grew PXX_FBSD_ARCH.
+  First boot applies 111 base packages over ~20 minutes.
+- Kernel entry: EmitSvcA64 replaces every aarch64 `svc #0` (35 sites). Under
+  translation it is a `bl` to EmitLibcSyscallThunkA64, which saves x1..x30,
+  shifts (x8, x0..x5) to (x0..x6) and calls PXXFbsdSyscall. Same 4 bytes, so
+  no hand-coded branch moves. The two leaf stubs that `ret` through x30 after
+  a kernel call (signal install, I/O lock) use EmitSvcA64Leaf, which parks x30
+  around the `bl`. Linux bytes are unchanged (control: 112 builds identical).
+- Entry: FreeBSD/arm64 gives x0 = the argc block and sp = x0 & ~15; when they
+  differ the vector (argc, argv, envp, auxv to AT_NULL) is slid down 8 bytes.
+- Translator: under CPU_AARCH64 the x86-64 dispatch is FbLinuxCall and a front
+  maps asm-generic numbers to x86-64's (294-entry table, >= 403 shared) and
+  converts stat, epoll_event, sigaction and four open flags; clone(SIGCHLD) is
+  fork. FbRawA/FbClearTidExit in aarch64 assembler (C flag = error). Signal
+  entry builds Linux's arm64 ucontext (FreeBSD's gpregs line up with Linux's
+  regs/sp/pc/pstate one to one; measured with offsetof on the VM).
+- PathIs/MapBits now take pointer + count: a typed constant passed as `const
+  array of` is copied through builtinheap's PXXMemMove on arm64, and this unit
+  is compiled before builtinheap.
+- Threads: thr_new from the aarch64 clone stub, tls_base = the new block
+  (FreeBSD does not copy tpidr_el0 to a new thread; the child faulted on a
+  zero thread pointer before this). Exit through the translator's SYS_exit.
+- make test-freebsd-arm64: test-freebsd's lists minus test_float_exception_mask
+  and test_signal_num_threads_race (x86-64 only) and lib_sockets (qemu-user's
+  socket(-1,-1,-1) errno is not Linux's). lib_fpc_thread_surface and
+  test_parallel_for_private ran 40 times each with no failure.
+

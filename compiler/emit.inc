@@ -591,6 +591,43 @@ begin
   else begin EmitB($0F); EmitB($05); end;
 end;
 
+{ The aarch64 kernel entry, the counterpart of EmitSyscall. Every caller has
+  set up Linux's convention (x8 = nr, x0..x5) and expects x1..x30 back
+  unchanged, as `svc #0` leaves them. Under --os=freebsd the 4-byte `svc`
+  becomes a 4-byte `bl` to the shared thunk (EmitLibcSyscallThunk), so no
+  hand-coded branch distance around a site moves. `bl` writes x30, which
+  every compiled body has already saved in its prologue; a LEAF routine that
+  returns through x30 after the call uses EmitSvcA64Leaf instead.
+  feature-port-freebsd-native }
+procedure EmitSvcA64;
+begin
+  if KernelTranslated then
+  begin
+    if LibcSyscallCallCount >= MAX_CALLFIX then
+      Error('too many --os=' + KernelOsName + ' syscall sites');
+    LibcSyscallCallPos[LibcSyscallCallCount] := CodeLen;
+    Inc(LibcSyscallCallCount);
+    EmitI32($94000000);                       { bl thunk (patched) }
+  end
+  else
+    EmitI32($D4000001);                       { svc #0 }
+end;
+
+{ EmitSvcA64 for a leaf stub that `ret`s through x30 after the call: x30 is
+  parked on the stack around the `bl`. Only under translation; the Linux
+  bytes are the bare `svc`. }
+procedure EmitSvcA64Leaf;
+begin
+  if KernelTranslated then
+  begin
+    EmitI32($F81F0FFE);                       { str x30, [sp, #-16]! }
+    EmitSvcA64;
+    EmitI32($F84107FE);                       { ldr x30, [sp], #16 }
+  end
+  else
+    EmitI32($D4000001);                       { svc #0 }
+end;
+
 function PICRefsAreRipRelative: Boolean;
 { Will a global/data reference emitted right now become rip-relative? ONE
   predicate because two readers must agree: EmitGlobRef, which rewrites the
@@ -1512,7 +1549,7 @@ begin
   EmitI32($14000003);  { b [pc+12] }
   EmitDataRef(dataOff);
   EmitI32($D2800002 + (len shl 5)); { movz x2, #len }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitwriteSyscall(dataOff, len: Integer);
@@ -1601,7 +1638,7 @@ begin
     EmitI32($92800004);                    { movn x4, #0         (fd = -1) }
     EmitLoadImmA64(5, 0);
     EmitLoadImmA64(8, 222);
-    EmitI32($D4000001);                    { svc #0              -> x0 = base }
+    EmitSvcA64;                    { svc #0              -> x0 = base }
     Exit;
   end;
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
@@ -1620,7 +1657,7 @@ procedure EmitExitA64(code: Int64);
 begin
   EmitI32($D2800BC8);  { movz x8, #94 }
   EmitI32($D2800000 + (code shl 5)); { movz x0, #code }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitExitArm32(code: Integer);
@@ -1836,7 +1873,7 @@ begin
   begin
     { x0 already holds the code. }
     EmitI32($D2800BC8);                              { movz x8, #94 (exit_group) }
-    EmitI32($D4000001);                              { svc #0 }
+    EmitSvcA64;                              { svc #0 }
     Exit;
   end;
   EmitB($48); EmitB($89); EmitB($C7);                { mov rdi, rax }
@@ -2084,7 +2121,7 @@ begin
   EmitI32($D2800808);  { movz x8, #64 }
   EmitI32($D2800000 + (CurWriteFd shl 5));  { movz x0, #fd }
   EmitI32($D2800022);  { movz x2, #1 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitwriteIntA64;
@@ -2146,7 +2183,7 @@ begin
   EmitI32($AA0303E1);  { mov x1, x3 }
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitwriteUIntA64;
@@ -2178,7 +2215,7 @@ begin
   EmitI32($AA0303E1);  { mov x1, x3 }
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitwriteIntWA64(width: Integer);
@@ -2260,7 +2297,7 @@ begin
   EmitDataRef(SpacesOffset);
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
   
   { Patch jleOff }
   Patch32(jleOff, $5400000D or (((CodeLen - jleOff) div 4) and $7ffff) shl 5);
@@ -2280,7 +2317,7 @@ begin
   EmitDataRef(MINUS_OFFSET);
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
   
   { Patch jzOff }
   Patch32(jzOff, $54000001 or (((CodeLen - jzOff) div 4) and $7ffff) shl 5);
@@ -2292,7 +2329,7 @@ begin
   EmitI32($AA0303E1);  { mov x1, x3 }
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitwriteUIntWA64(width: Integer);
@@ -2339,7 +2376,7 @@ begin
   EmitDataRef(SpacesOffset);
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
   
   { Patch jleOff }
   Patch32(jleOff, $5400000D or (((CodeLen - jleOff) div 4) and $7ffff) shl 5);
@@ -2351,7 +2388,7 @@ begin
   EmitI32($AA0303E1);  { mov x1, x3 }
   EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
-  EmitI32($D4000001);  { svc #0 }
+  EmitSvcA64;  { svc #0 }
 end;
 
 procedure EmitLoadImmArm32(rd: Integer; v: Int32);

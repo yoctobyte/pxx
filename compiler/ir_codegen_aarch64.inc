@@ -357,12 +357,12 @@ begin
   EmitI32($D2800002);   { mov  x2, #0 }
   EmitI32($D2800103);   { mov  x3, #8 }
   EmitI32($D28010C8);   { mov  x8, #134        rt_sigaction }
-  EmitI32($D4000001);   { svc  #0 }
+  EmitSvcA64;   { svc  #0 }
   EmitI32($D2801588);   { mov  x8, #172        getpid }
-  EmitI32($D4000001);   { svc  #0              x0 = pid }
+  EmitSvcA64;   { svc  #0              x0 = pid }
   EmitI32($AA1303E1);   { mov  x1, x19         sig }
   EmitI32($D2801028);   { mov  x8, #129        kill }
-  EmitI32($D4000001);   { svc  #0 }
+  EmitSvcA64;   { svc  #0 }
   EmitI32($A8C17BFD);   { ldp  x29, x30, [sp], #16 }
   EmitI32($D65F03C0);   { ret }
 
@@ -408,7 +408,7 @@ begin
   EmitI32($AA0D03E0);   { mov  x0, x13         new }
   EmitI32($D2800001);   { mov  x1, #0          old = nil }
   EmitI32($D2801088);   { mov  x8, #132        sigaltstack }
-  EmitI32($D4000001);   { svc  #0 }
+  EmitSvcA64Leaf;   { svc  #0 }
   EmitLoadGlobAddrA64(9, BSS_SIG_SCRATCH);
   EmitI32($52A2000B);   { movz w11, #$1000, lsl #16   SA_RESTART (NO SA_RESTORER on arm64) }
   EmitI32($7280008B);   { movk w11, #4               ...or SA_SIGINFO -> $10000004 }
@@ -430,7 +430,7 @@ begin
   EmitI32($D2800002);   { mov  x2, #0 }
   EmitI32($D2800103);   { mov  x3, #8 }
   EmitI32($D28010C8);   { mov  x8, #134        rt_sigaction }
-  EmitI32($D4000001);   { svc  #0 }
+  EmitSvcA64Leaf;   { svc  #0 }
   EmitI32($D65F03C0);   { ret }
 
   Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
@@ -451,7 +451,7 @@ begin
   EmitLoadGlobAddrA64(9, BSS_IO_OWNER);
   EmitLoadGlobAddrA64(13, BSS_IO_DEPTH);
   EmitI32($D2801648);   { mov  x8, #178          gettid }
-  EmitI32($D4000001);   { svc  #0                x0 = tid }
+  EmitSvcA64Leaf;   { svc  #0                x0 = tid }
   EmitI32($F940012A);   { ldr  x10, [x9]         current owner }
   EmitI32($EB00015F);   { cmp  x10, x0 }
   EmitI32($540000A0);   { b.eq bump  (+5, already ours) }
@@ -696,7 +696,7 @@ begin
   { done: }
   EmitI32($D2800000 + (CurWriteFd shl 5));   { mov x0, #fd }
   EmitI32($D2800808);   { mov x8, #64 (sys_write) }
-  EmitI32($D4000001);   { svc #0 }
+  EmitSvcA64;   { svc #0 }
 end;
 
 { Double BITS in x0 -> the runtime float writers, which carry the non-finite
@@ -3667,7 +3667,7 @@ begin
             EmitLoadImmA64(0, -100);           { AT_FDCWD }
             EmitLoadImmA64(3, 0);              { mode }
             EmitLoadImmA64(8, 56);             { __NR_openat }
-            EmitI32($D4000001);                { svc #0 }
+            EmitSvcA64;                { svc #0 }
             Exit;
           end
           else if specialId = Ord(tkSysRead) then
@@ -3684,7 +3684,7 @@ begin
             EmitI32($F84107E1);                { x1 = buf }
             EmitI32($F84107E0);                { x0 = fd }
             EmitLoadImmA64(8, 63);             { __NR_read }
-            EmitI32($D4000001);
+            EmitSvcA64;
             Exit;
           end
           else if specialId = Ord(tkSyswrite) then
@@ -3701,7 +3701,7 @@ begin
             EmitI32($F84107E1);                { x1 = buf }
             EmitI32($F84107E0);                { x0 = fd }
             EmitLoadImmA64(8, 64);             { __NR_write }
-            EmitI32($D4000001);
+            EmitSvcA64;
             Exit;
           end
           else if specialId = Ord(tkSysClose) then
@@ -3709,7 +3709,7 @@ begin
             argNode := IRB[node];
             IREmitNodeAarch64(IRA[argNode]);   { fd }
             EmitLoadImmA64(8, 57);             { __NR_close }
-            EmitI32($D4000001);
+            EmitSvcA64;
             Exit;
           end
           else if specialId = Ord(tkSysFchmod) then
@@ -3722,7 +3722,7 @@ begin
             EmitI32($AA0003E1);                { x1 = mode }
             EmitI32($F84107E0);                { x0 = fd }
             EmitLoadImmA64(8, 52);             { __NR_fchmod }
-            EmitI32($D4000001);
+            EmitSvcA64;
             Exit;
           end
           else if specialId = 210 then
@@ -4825,7 +4825,7 @@ begin
             EmitI32($F84107E8)          { ldr x8, [sp], #16 }
           else
             EmitI32($F84107E0 + i - 1); { ldr x[i-1], [sp], #16 }
-        EmitI32($D4000001); { svc #0 }
+        EmitSvcA64; { svc #0 }
       end;
 
     IR_CLONE:
@@ -5061,7 +5061,7 @@ begin
               EmitLeaStrDataA64(1, 0, IRStrTkOf(valNode));   { x1 = chars }
               EmitI32($D2800000 + (CurWriteFd shl 5));                    { movz x0, #fd }
               EmitI32($D2800808);                    { movz x8, #64 (write) }
-              EmitI32($D4000001);                    { svc #0 }
+              EmitSvcA64;                    { svc #0 }
             end;
           end
           else if tk = tyAnsiString then
@@ -5092,7 +5092,7 @@ begin
               EmitI32($AA0003E1);                    { mov x1, x0 (buf) }
               EmitI32($D2800000 + (CurWriteFd shl 5));                    { movz x0, #fd }
               EmitI32($D2800808);                    { movz x8, #64 (write) }
-              EmitI32($D4000001);                    { svc #0 }
+              EmitSvcA64;                    { svc #0 }
               EmitI32($F84107E0);                    { ldr x0, [sp], #16 (handle) }
               if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
                 EmitStrDecRefA64;

@@ -18774,10 +18774,52 @@ end;
   externals before this was written: a bad-fd write returns -1 with errno 9,
   and the raw build returns -9.
   feature-port-rtl-over-libc }
+procedure EmitLibcSyscallThunkA64;
+{ --os=freebsd on aarch64: every EmitSvcA64 site is a `bl` here, with Linux's
+  convention live (x8 = nr, x0..x5). The translator is an AAPCS routine
+  taking (nr, a0..a5) in x0..x6, so the arguments shift up one register.
+  `svc` hands back everything but x0, and the sites rely on it (x9, x19 and
+  x20 across the unhandled-exception writes), so x1..x28 are saved here
+  rather than only AAPCS's caller-saved set. feature-port-freebsd-native }
+var i, r: Integer;
+begin
+  LibcSyscallThunkAddr := CodeLen;
+  EmitI32($A9BF7BFD);                         { stp x29, x30, [sp, #-16]! }
+  EmitI32($910003FD);                         { mov x29, sp }
+  r := 1;
+  while r < 29 do
+  begin
+    EmitI32($A9BF03E0 or ((r + 1) shl 10) or r);   { stp x[r], x[r+1], [sp, #-16]! }
+    Inc(r, 2);
+  end;
+  for r := 6 downto 1 do
+    EmitI32($AA0003E0 or ((r - 1) shl 16) or r);   { mov x[r], x[r-1] }
+  EmitI32($AA0803E0);                         { mov x0, x8 }
+  if (FbsdSyscallProcIdx < 0) or (Procs[FbsdSyscallProcIdx].BodyAddr < 0) then
+    ErrorNoPos('internal: --os=' + KernelOsName + ' but ' + KernelAbiProc + ' has no code');
+  EmitI32($94000000 or (((Procs[FbsdSyscallProcIdx].BodyAddr - CodeLen) div 4) and $03FFFFFF));
+  r := 27;
+  while r >= 1 do
+  begin
+    EmitI32($A8C103E0 or ((r + 1) shl 10) or r);   { ldp x[r], x[r+1], [sp], #16 }
+    Dec(r, 2);
+  end;
+  EmitI32($A8C17BFD);                         { ldp x29, x30, [sp], #16 }
+  EmitI32($D65F03C0);                         { ret }
+  for i := 0 to LibcSyscallCallCount - 1 do
+    Patch32(LibcSyscallCallPos[i], $94000000 or
+            (((LibcSyscallThunkAddr - LibcSyscallCallPos[i]) div 4) and $03FFFFFF));
+end;
+
 procedure EmitLibcSyscallThunk;
 var i: Integer;
 begin
   if LibcSyscallCallCount = 0 then Exit;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitLibcSyscallThunkA64;
+    Exit;
+  end;
   LibcSyscallThunkAddr := CodeLen;
   { save the raw-convention argument registers }
   EmitAsmX64([

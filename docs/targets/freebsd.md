@@ -5,12 +5,13 @@ order: 62
 
 # FreeBSD and the BSDs
 
-PXX writes native **FreeBSD/amd64** executables from Pascal, C and Nil
-Python. OpenBSD and NetBSD are experimental and Minix is not supported yet;
+PXX writes native **FreeBSD/amd64** and **FreeBSD/arm64** executables from
+Pascal, C and Nil Python. OpenBSD and NetBSD are experimental and Minix is not supported yet;
 [their notes](#openbsd-netbsd-and-minix) are at the end of this page.
 
 ```sh
 ./pxx --os=freebsd hello.pas hello      # copy hello to the FreeBSD box and run it
+./pxx --os=freebsd --target=aarch64 hello.pas hello   # the same for FreeBSD/arm64
 ```
 
 Measured on FreeBSD 15.1 (November 2026). FreeBSD 14 or newer is needed:
@@ -76,11 +77,45 @@ Every Pascal library test (`test/lib_*.pas`, 157) and C test (`test/c_*.c`,
 translator bug was fixed. The rest are listed under
 [Not supported](#not-supported) or were caused by the test environment.
 
+## FreeBSD/arm64
+
+`--os=freebsd --target=aarch64` uses the same translator. On arm64 the
+runtime speaks Linux's generic system call table, so the translator has a
+front layer (under `CPU_AARCH64` in `fbsdabi.pas`) that maps those numbers
+onto the x86-64 ones the rest of it understands and converts the four things
+that differ between Linux's two 64-bit ABIs:
+
+- `struct stat` (128 bytes on arm64; `st_nlink` and `st_mode` differ in size
+  and place);
+- `struct epoll_event` (16 bytes, not packed);
+- `struct sigaction` (no `sa_restorer`, so the mask is at offset 16);
+- four `open` flags (`O_DIRECTORY`, `O_NOFOLLOW`, `O_DIRECT`, `O_LARGEFILE`
+  have other values).
+
+arm64 has no `fork` call: `clone(SIGCHLD)` becomes FreeBSD's `fork`.
+
+The compiler side: every `svc #0` the aarch64 backend emits becomes a `bl` to
+one shared stub that calls the translator, so no hand-written branch distance
+moves. FreeBSD/arm64 starts a program with the argument block in `x0` and `sp`
+rounded down to 16 bytes; the first instructions slide `argc`, `argv`, `envp`
+and the auxiliary vector down so that `sp` points at `argc`, as on Linux.
+Threads start with `thr_new`, which is handed the new thread's TLS block as
+its `tls_base` (FreeBSD does not copy `tpidr_el0` to a new thread). Signal
+handlers get a Linux arm64 `ucontext`, so `__pxxSigPCPtr` works.
+
+`make test-freebsd-arm64` runs about 70 programs on an arm64 VM and compares
+them with the Linux aarch64 build run under `qemu-aarch64`: files, signals,
+threads, sockets, async I/O, timers, termios on a pty, ptys, `-g`, and the C
+and NilPy runtimes. It passes. The VM runs under TCG emulation, so it is slow:
+`PXX_FBSD_ARCH=aarch64 tools/vm/freebsd.sh start`, port 2228, image under
+`/data/vm/freebsd-arm64`. Its first boot installs base-system updates and
+takes about 20 minutes.
+
 ## Not supported
 
 The compiler refuses these with a message that names the reason:
 
-- CPUs other than x86-64 (`--target=aarch64` and so on)
+- CPUs other than x86-64 and aarch64 (`--target=arm32` and so on)
 - `--shared` and `.so` output
 - `--emit-obj` and `.o` output
 - `--rtl-libc`
