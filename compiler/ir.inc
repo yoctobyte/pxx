@@ -4560,6 +4560,322 @@ begin
   Result := IRPointerStride(node);
 end;
 
+{ ===== C file-scope initialisers baked into .data (see CStaticDataMode) =====
+
+  CTryBakeGlobalInit is asked about every initialiser store of a global just
+  before it would be compiled: CompilePendingGlobalInits, the deferred scalar
+  replay and the aggregate walker all build `target := value` and hand it to
+  CompileAST, so this one door sees all of them. When the target lies in a
+  global CPlaceGlobalInData put in .data and the value is a constant, the
+  bytes go into Data[] (an address becomes a CDataReloc entry) and nothing is
+  compiled. Anything else answers False and is compiled as before. }
+
+function CBakeAddrOf(node: Integer; var sym: Integer; var off: Int64): Boolean;
+{ A constant address: a global, plus constant indexes and fields. }
+var rec, fi: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      begin
+        sym := ASTIVal[node];
+        if (sym < 0) or (sym >= SymCount) then Exit;
+        if Syms[sym].Kind <> skGlobal then Exit;
+        if SymTlsOffset[sym] >= 0 then Exit;
+        off := 0;
+        Result := True;
+      end;
+    AN_INDEX:
+      begin
+        if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) then Exit;
+        if not CBakeAddrOf(ASTLeft[node], sym, off) then Exit;
+        { a POINTER base is an indirection, not an array: no constant address }
+        if (ASTKind[ASTLeft[node]] = AN_IDENT) and not Syms[sym].IsArray then Exit;
+        off := off + Int64(ASTIVal[ASTRight[node]]) * IRArrayElemStride(ASTLeft[node]);
+        Result := True;
+      end;
+    AN_FIELD:
+      begin
+        if not CBakeAddrOf(ASTLeft[node], sym, off) then Exit;
+        rec := ResolveNodeRec(ASTLeft[node]);
+        if rec < REC_UCLASS_BASE then Exit;
+        fi := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(node));
+        if fi < 0 then Exit;
+        off := off + UFldOff_[fi];
+        Result := True;
+      end;
+  end;
+end;
+
+function CBakeIntValue(node: Integer; var v: Int64): Boolean;
+{ An integer constant expression, folded the way the store would compute it.
+  Unsigned and signed agree on every bit here; the store keeps the low bytes. }
+var a, b: Int64;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_INT_LIT:
+      begin
+        v := ASTIVal[node];
+        Result := True;
+      end;
+    AN_NEG:
+      if CBakeIntValue(ASTLeft[node], a) then
+      begin
+        v := -a;
+        Result := True;
+      end;
+    AN_NOT:
+      { C's `~` (its `!` is a compare): bitwise; the store keeps the low bytes }
+      if CBakeIntValue(ASTLeft[node], a) then
+      begin
+        v := not a;
+        Result := True;
+      end;
+    AN_IDENT:
+      if (ASTIVal[node] >= 0) and (Syms[ASTIVal[node]].Kind = skConst) and
+         TypeIsOrdinal(Syms[ASTIVal[node]].TypeKind) then
+      begin
+        v := Syms[ASTIVal[node]].ConstVal;
+        Result := True;
+      end;
+    AN_BINOP:
+      if CBakeIntValue(ASTLeft[node], a) and CBakeIntValue(ASTRight[node], b) then
+      begin
+        { The C binop builder's encoding (CMakeBinop): `&`/`|` arrive as
+          tkAnd/tkOr, integer `/` as tkDiv, a signed `>>` as tkShr and an
+          unsigned one as tkShrLogical. `&&`/`||` reach here only with their
+          operands wrapped in a truthiness compare, which this folder does not
+          take, so they are never folded bitwise by mistake. }
+        Result := True;
+        if ASTIVal[node] = Ord(tkPlus) then v := a + b
+        else if ASTIVal[node] = Ord(tkMinus) then v := a - b
+        else if ASTIVal[node] = Ord(tkStar) then v := a * b
+        else if ASTIVal[node] = Ord(tkOr) then v := a or b
+        else if ASTIVal[node] = Ord(tkAnd) then v := a and b
+        else if ASTIVal[node] = Ord(tkXor) then v := a xor b
+        else if (ASTIVal[node] = Ord(tkShl)) and (b >= 0) and (b < 64) then v := a shl b
+        else if (ASTIVal[node] = Ord(tkShrLogical)) and (b >= 0) and (b < 64) then v := a shr b
+        else if (ASTIVal[node] = Ord(tkShr)) and (b >= 0) and (b < 64) then
+        begin
+          if a < 0 then v := not ((not a) shr b) else v := a shr b;
+        end
+        else if (ASTIVal[node] = Ord(tkDiv)) and (b <> 0) then v := a div b
+        else if (ASTIVal[node] = Ord(tkMod)) and (b <> 0) then v := a mod b
+        else Result := False;
+      end;
+  end;
+end;
+
+function CBakeAddrValue(node: Integer; var kind, target: Integer; var addend: Int64): Boolean;
+{ A constant ADDRESS value: a string literal, a function, `&global...`, an
+  array name (it decays), or one of those plus a byte offset the frontend has
+  already scaled (ASTSLen = 1 on the add -- see CompilePendingGlobalInits). }
+var sym: Integer; off, k: Int64;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_STR_LIT:
+      begin
+        kind := CDR_DATA;
+        target := Strs[InternStr(GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node]))].Offset + 8;
+        addend := 0;
+        Result := True;
+      end;
+    AN_PROCADDR:
+      begin
+        kind := CDR_PROC;
+        target := ASTIVal[node];
+        addend := 0;
+        Result := (target >= 0) and (target < ProcCount);
+      end;
+    AN_ADDR:
+      if CBakeAddrOf(ASTLeft[node], sym, off) then
+      begin
+        kind := CDR_SYM;
+        target := sym;
+        addend := off;
+        Result := True;
+      end;
+    AN_IDENT:
+      if (ASTIVal[node] >= 0) and (Syms[ASTIVal[node]].Kind = skGlobal) and
+         Syms[ASTIVal[node]].IsArray and (SymTlsOffset[ASTIVal[node]] < 0) then
+      begin
+        kind := CDR_SYM;
+        target := ASTIVal[node];
+        addend := 0;
+        Result := True;
+      end;
+    AN_BINOP:
+      if (ASTSLen[node] = 1) and
+         ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+         CBakeAddrValue(ASTLeft[node], kind, target, addend) and
+         CBakeIntValue(ASTRight[node], k) then
+      begin
+        if ASTIVal[node] = Ord(tkPlus) then addend := addend + k
+        else addend := addend - k;
+        Result := True;
+      end;
+  end;
+end;
+
+procedure CBakeDropRelocsIn(pos, size: Integer);
+{ A later initialiser store overwrites an earlier one (a designator naming
+  the same member twice): its relocation must go with its bytes. }
+var k, n: Integer;
+begin
+  n := 0;
+  for k := 0 to CDRCount - 1 do
+    if (CDRPos[k] + 8 <= pos) or (CDRPos[k] >= pos + size) then
+    begin
+      CDRPos[n] := CDRPos[k]; CDRKind[n] := CDRKind[k];
+      CDRTarget[n] := CDRTarget[k]; CDRAddend[n] := CDRAddend[k];
+      Inc(n);
+    end;
+  CDRCount := n;
+end;
+
+procedure CBakeAddReloc(pos, kind, target: Integer; addend: Int64);
+begin
+  if CDRCount >= Length(CDRPos) then
+  begin
+    SetLength(CDRPos, CDRCount * 2 + 64);
+    SetLength(CDRKind, CDRCount * 2 + 64);
+    SetLength(CDRTarget, CDRCount * 2 + 64);
+    SetLength(CDRAddend, CDRCount * 2 + 64);
+  end;
+  CDRPos[CDRCount] := pos;
+  CDRKind[CDRCount] := kind;
+  CDRTarget[CDRCount] := target;
+  CDRAddend[CDRCount] := addend;
+  Inc(CDRCount);
+end;
+
+function CBakeNodeDesc(node: Integer): AnsiString;
+{ for the refusal: the node kind (and operator) the baker could not fold }
+begin
+  if node < 0 then begin Result := 'nothing'; Exit; end;
+  Result := 'AST node kind ' + AIntToStr(ASTKind[node]);
+  if ASTKind[node] = AN_BINOP then
+    Result := Result + ' (operator token ' + AIntToStr(ASTIVal[node]) + ')';
+end;
+
+function CTryBakeGlobalInit(asn: Integer): Boolean;
+var target, value, sym, rec, fi, size, pos, b, bitW, bitSh, kind, rtarget: Integer;
+    off, v, addend, mask, cur: Int64;
+    tk: TTypeKind;
+    d: Double; pd: ^Int64;
+begin
+  Result := False;
+  if (not CStaticDataMode) or (asn < 0) or (ASTKind[asn] <> AN_ASSIGN) then Exit;
+  target := ASTLeft[asn];
+  value := ASTRight[asn];
+  if not CBakeAddrOf(target, sym, off) then Exit;
+  if not CSymIsStaticData(sym) then Exit;
+  { the leaf: its type, width and (for a bit-field) its bits }
+  bitW := 0; bitSh := 0;
+  tk := tyUnknown;
+  size := 0;
+  if ASTKind[target] = AN_FIELD then
+  begin
+    rec := ResolveNodeRec(ASTLeft[target]);
+    fi := -1;
+    if rec >= REC_UCLASS_BASE then
+      fi := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(target));
+    if (fi < 0) or UFldIsArray[fi] then size := -1
+    else
+    begin
+      tk := IntToTypeKind(UFldTk[fi]);
+      if UFldBitWidth[fi] > 0 then
+      begin
+        bitW := UFldBitWidth[fi];
+        bitSh := UFldBitShift[fi];
+        size := UFldBitBytes[fi];
+        if size < 1 then size := 1;
+      end
+      else if tk = tyPointer then size := TARGET_PTR_SIZE
+      else size := TypeSlotSize(tk);
+    end;
+  end
+  else if ASTKind[target] = AN_INDEX then
+  begin
+    tk := IntToTypeKind(ASTTk[target]);
+    size := IRArrayElemStride(ASTLeft[target]);
+    if (tk = tyPointer) and (size <> TARGET_PTR_SIZE) then size := -1;
+  end
+  else if not Syms[sym].IsArray then
+  begin
+    tk := Syms[sym].TypeKind;
+    if tk = tyPointer then size := TARGET_PTR_SIZE else size := TypeSlotSize(tk);
+  end;
+  if (tk = tyRecord) or (size <= 0) or (size > 8) or
+     not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (tk = tyPointer)) or
+     (off < 0) or (off + size > SymAllocSize[sym]) then
+  begin
+    if FreestandingMode then
+      ErrorNoPos('--freestanding: C global ' + Syms[sym].Name +
+                 ': an initialiser store into a member of type ' + AIntToStr(Ord(tk)) +
+                 ' (' + AIntToStr(size) + ' bytes) cannot be placed in .data, and a ' +
+                 'freestanding object has nothing to run it as code');
+    Exit;
+  end;
+  pos := SymOffDataPart(Syms[sym].Offset) + Integer(off);
+  if (tk = tyPointer) and (bitW = 0) and
+     CBakeAddrValue(value, kind, rtarget, addend) then
+  begin
+    CBakeDropRelocsIn(pos, size);
+    for b := 0 to size - 1 do Data[pos + b] := 0;
+    CBakeAddReloc(pos, kind, rtarget, addend);
+    Result := True;
+    Exit;
+  end;
+  if TypeIsFloat(tk) then
+  begin
+    if (value >= 0) and (ASTKind[value] = AN_FLOAT_LIT) then v := ASTIVal[value]
+    else if (value >= 0) and (ASTKind[value] = AN_NEG) and (ASTLeft[value] >= 0) and
+            (ASTKind[ASTLeft[value]] = AN_FLOAT_LIT) then
+      v := ASTIVal[ASTLeft[value]] xor (Int64(1) shl 63)
+    else if CBakeIntValue(value, v) then
+    begin
+      d := v;
+      pd := @d;
+      v := pd^;
+    end
+    else
+    begin
+      if FreestandingMode then
+        ErrorNoPos('--freestanding: C global ' + Syms[sym].Name +
+                   ': its floating initialiser is not a constant this compiler can ' +
+                   'place in .data (' + CBakeNodeDesc(value) + ')');
+      Exit;
+    end;
+    if tk = tySingle then v := DoubleBitsToSingleBits(v);
+  end
+  else if not CBakeIntValue(value, v) then
+  begin
+    if FreestandingMode then
+      ErrorNoPos('--freestanding: C global ' + Syms[sym].Name +
+                 ': its initialiser is not a constant this compiler can place in ' +
+                 '.data (' + CBakeNodeDesc(value) + ')');
+    Exit;
+  end;
+  CBakeDropRelocsIn(pos, size);
+  if bitW > 0 then
+  begin
+    cur := 0;
+    for b := 0 to size - 1 do cur := cur or (Int64(Data[pos + b]) shl (8 * b));
+    if bitW >= 64 then mask := -1 else mask := (Int64(1) shl bitW) - 1;
+    cur := (cur and not (mask shl bitSh)) or ((v and mask) shl bitSh);
+    v := cur;
+  end;
+  for b := 0 to size - 1 do
+    Data[pos + b] := Byte((v shr (8 * b)) and $FF);
+  Result := True;
+end;
+
 { The size of the C OBJECT an lvalue node designates -- what `sizeof` answers
   for it and what `&node + 1` steps by -- or -1 when this cannot say. An array
   here is the WHOLE array (sizeof does not decay it), and a decayed row node is

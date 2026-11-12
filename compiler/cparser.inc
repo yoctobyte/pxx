@@ -163,6 +163,7 @@ procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forwa
 procedure CRefuseIncompleteSizeof(recId: Integer); forward;
 procedure CCheckIncompleteGlobals; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
+function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer; forward;
 function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
@@ -10772,7 +10773,7 @@ begin
   end
   else
   begin
-    CompileAST(asn);
+    if not CTryBakeGlobalInit(asn) then CompileAST(asn);   { CStaticDataMode }
     ASTNodeCount := ASTArenaFloor;
   end;
 end;
@@ -11288,7 +11289,7 @@ begin
     sAsn := AllocNode(AN_ASSIGN);
     ASTLeft[sAsn] := sTarget; ASTRight[sAsn] := sExpr;
     ASTTk[sAsn] := Ord(tyPointer);
-    CompileAST(sAsn);
+    if not CTryBakeGlobalInit(sAsn) then CompileAST(sAsn);   { CStaticDataMode }
     ASTNodeCount := ASTArenaFloor;
   end;
   for i := 0 to CAggInitCount - 1 do
@@ -11577,7 +11578,13 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
     gParenName: Boolean;  { THIS declarator's name is in redundant parens }
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
+    declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
+    gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
 begin
+  { PXXDBG=c.staticdata turns CStaticDataMode on for a whole test run, which
+    is how the C corpus exercises the baker without a flag on every row. }
+  if (not CStaticDataMode) and PxxDbgEnabled('c.staticdata') then CStaticDataMode := True;
+  declTypeTok := TokPos - 1;
   { Read the storage class BEFORE the type is consumed: both keywords are
     skipped without being recorded, so the token stream is the only place the
     answer still exists. Same scan, and the same reasoning, as the `static`
@@ -11835,10 +11842,14 @@ begin
        and (SymCModule[idx] <> CModuleOfTok(TokPos - 1)) then
       idx := -1;
     declSymIsNew := idx < 0;
+    gAlign := CDeclAttrAlign(declTypeTok, TokPos - 1);
     if idx < 0 then
     begin
+      AllocMinAlign := gAlign;
+      if gAlign > ReqBssAlign then ReqBssAlign := gAlign;
       if wasArr then idx := AllocArray(name, tyPointer, 0, arrLen - 1)
       else idx := AllocVar(name, tyPointer);
+      AllocMinAlign := 0;
     end
     else if wasArr then CGrowGlobalArray(idx, tyPointer, arrLen);
     { The SECOND declaration path, and the reason CRecordGlobalLinkage is a
@@ -11847,6 +11858,12 @@ begin
       about it made it invisible except which branch registered it. }
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     CApplyThreadLocalStorage(idx, declSawThread);
+    { its initialiser (already consumed above) is baked into .data -- see the
+      same call in the main declarator path below }
+    if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
+       (not declSawThread) and (TargetArch = TARGET_X86_64) and
+       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+      CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
     begin
       { An ARRAY of callable pointers carries its ELEMENT signature in
@@ -12071,6 +12088,7 @@ begin
     nArrElems := 0;
     ptrArrDeferTok := -1;
     ptrArrDeferCnt := 0;
+    gPreScanInit := False;
     { FLAT (1-D) pointer-array globals only. A MULTIDIM pointer array must be left for
       the brace-elision walker below (the `dimCount >= 2` branch): this pre-scan has no
       notion of nested braces or of the array's shape, and it would consume the whole
@@ -12082,6 +12100,7 @@ begin
        (Tokens[TokPos].Kind = tkBegin) then
     begin
       ptrArrDeferTok := TokPos;  { the opening brace's token index (not yet a defer) }
+      gPreScanInit := True;
       Next; Next;  { consume assignment and opening initializer token }
       while CBlockContinues do
       begin
@@ -12268,16 +12287,33 @@ begin
        and (SymCModule[idx] <> CModuleOfTok(TokPos - 1)) then
       idx := -1;
     declSymIsNew := idx < 0;
+    { __attribute__((aligned(N))) on the declaration: the lexer hangs it on
+      the token that follows it, anywhere from the storage class to here.
+      It was read nowhere for a variable, so `uint8_t q[..]
+      __attribute__((aligned(4096)))` landed wherever .bss happened to be
+      (Gibux's virtio queue memory; its 16-aligned FXSAVE area sat at 8 mod
+      16). bug-c-aligned-on-a-global-variable-is-ignored }
+    gAlign := CDeclAttrAlign(declTypeTok, TokPos - 1);
     if idx < 0 then
     begin
+      AllocMinAlign := gAlign;
+      if gAlign > ReqBssAlign then ReqBssAlign := gAlign;
       if wasArr then
         idx := AllocArray(name, baseTk, 0, arrLen - 1)
       else
         idx := AllocVar(name, baseTk);
+      AllocMinAlign := 0;
     end
     else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     CApplyThreadLocalStorage(idx, declSawThread);
+    { An initialised C global goes to .data now, before any code can capture
+      its .bss offset; its initialiser is baked there when it is replayed.
+      See CStaticDataMode. }
+    if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit) and (idx >= 0) and
+       (not declSawThread) and (TargetArch = TARGET_X86_64) and
+       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+      CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
     if (idx >= 0) and wasArr and (dimCount >= 2) then
@@ -15118,6 +15154,30 @@ begin
   end;
 end;
 
+function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer;
+{ The largest __attribute__((aligned(N))) on a declaration: the storage-class
+  tokens before the type (the same backward walk as CDeclSawSpecifier) through
+  endIdx. The lexer records an attribute on the token AFTER it (CAttrFlags bit
+  2, value in CAttrAlignValues). A bare `aligned` already carries the
+  target's biggest alignment. 0 when there is none. }
+var k, startIdx: Integer; s: AnsiString;
+begin
+  Result := 0;
+  startIdx := typeIdx;
+  k := typeIdx - 1;
+  while (k >= 0) and (Tokens[k].Kind = tkIdent) do
+  begin
+    s := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+    if not CIsTopLevelSkipIdent(s) then Break;
+    startIdx := k;
+    Dec(k);
+  end;
+  if startIdx < 0 then startIdx := 0;
+  for k := startIdx to endIdx do
+    if ((CAttrFlags[k] and 2) <> 0) and (CAttrAlignValues[k] > Result) then
+      Result := CAttrAlignValues[k];
+end;
+
 function CDeclSawStatic(typeIdx: Integer): Boolean;
 begin
   CDeclSawStatic := CDeclSawSpecifier(typeIdx, 'static');
@@ -15226,6 +15286,69 @@ begin
   if not ElfSoExportsSymbol(CHdrLibMemoFile, sym) then Exit;
   soname := CHdrLibMemoLib;
   Result := True;
+end;
+
+procedure CHoistBlockScopeExterns;
+{ Pass 1, at a function body's opening brace: register every block-scope
+  `extern T name...;` OBJECT declaration whose name no file-scope declaration
+  has given us, as though it had been written at file scope.
+
+  The pass-2 arm for a block-scope extern (ParseCStmtAST, localSawExtern)
+  parses the declaration and discards it, so a use resolves outward to the
+  file-scope symbol. With no file-scope declaration anywhere in the
+  translation unit there was nothing to resolve to, and the first use said
+  `undeclared identifier` (Gibux fs/ext2.c: `extern uint64_t boot_epoch;`
+  inside two functions, defined in another file). Registering it needs pass 1,
+  because pass 2 rolls back every symbol a body adds when the body ends.
+
+  Gives the name file scope rather than block scope, which C does not, but
+  only for a name nothing else in the file declares; an extern object refers
+  to the one definition with that name either way. A declarator with a
+  parenthesis (a function, or a pointer to one) is left to the old path.
+  bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared }
+var k, e, depth, savedPos, nameTok: Integer;
+    hasParen: Boolean;
+begin
+  savedPos := TokPos - 1;     { CurTok = the body's opening brace }
+  depth := 0;
+  k := savedPos;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkBegin then Inc(depth)
+    else if Tokens[k].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+    end
+    else if (Tokens[k].Kind = tkIdent) and (k > savedPos) and
+            ((Tokens[k - 1].Kind = tkBegin) or (Tokens[k - 1].Kind = tkSemicolon) or
+             (Tokens[k - 1].Kind = tkEnd)) and
+            (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) = 'extern') then
+    begin
+      { the declaration's extent and its (last) declarator name }
+      e := k + 1;
+      hasParen := False;
+      nameTok := -1;
+      while (e < TokCount) and (Tokens[e].Kind <> tkSemicolon) and
+            (Tokens[e].Kind <> tkBegin) and (Tokens[e].Kind <> tkEnd) do
+      begin
+        if Tokens[e].Kind = tkLParen then hasParen := True;
+        if (Tokens[e].Kind = tkIdent) and (Tokens[e + 1].Kind in [tkSemicolon, tkLBrack, tkComma]) then
+          nameTok := e;
+        Inc(e);
+      end;
+      if (e < TokCount) and (Tokens[e].Kind = tkSemicolon) and (not hasParen) and
+         (nameTok > k + 1) and
+         (FindSym(GetTokenStrFromRaw(Tokens[nameTok].SOffset, Tokens[nameTok].SLen)) < 0) then
+      begin
+        TokPos := k + 1; Next;     { CurTok = the type, `extern` just behind it }
+        ParseCGlobalVarDecl;
+        k := e;
+      end;
+    end;
+    Inc(k);
+  end;
+  TokPos := savedPos; Next;
 end;
 
 procedure ParseCSubroutine;
@@ -16024,6 +16147,7 @@ begin
         a dynamic import instead of an internal fixup. }
       ProcExternal[procIdx] := False;
       CProcHasLocalDef[procIdx] := True;
+      CHoistBlockScopeExterns;
     end
     else
     begin

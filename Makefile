@@ -19064,6 +19064,22 @@ test-core: $(COMPILER)
 	tools/check_freestanding_object.sh $(TESTTMP)/c_freestanding.o fs_sum
 	gcc -no-pie -o $(TESTTMP)/c_freestanding_va test/c_freestanding_object_has_no_runtime_hooks_main.c $(TESTTMP)/c_freestanding.o
 	tools/expect_same.sh c_freestanding_va "$$($(TESTTMP)/c_freestanding_va)" "321 36"
+	# File-scope initialisers as .data (Gibux): gcc's output three ways -- the
+	# run-time stores, --c-static-data, and a --freestanding object (which
+	# refuses any store it could not bake) linked by gcc, so its relocations
+	# are what is tested.
+	./$(COMPILER) test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_rt > /dev/null
+	tools/expect_same.sh cfsi_rt "$$($(TESTTMP)/cfsi_rt)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
+	./$(COMPILER) --c-static-data test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_sd > /dev/null
+	tools/expect_same.sh cfsi_sd "$$($(TESTTMP)/cfsi_sd)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
+	./$(COMPILER) --emit-obj --freestanding test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_fs.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/cfsi_fs $(TESTTMP)/cfsi_fs.o
+	tools/expect_same.sh cfsi_fs "$$($(TESTTMP)/cfsi_fs)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
+	# A block-scope extern naming something no file-scope declaration gives.
+	./$(COMPILER) test/c_block_scope_extern_with_no_file_scope_declaration.c $(TESTTMP)/cbse > /dev/null
+	tools/expect_same.sh cbse "$$($(TESTTMP)/cbse)" "1700000008"
+	./$(COMPILER) -dNO_DEFINITIONS --emit-obj test/c_block_scope_extern_with_no_file_scope_declaration.c $(TESTTMP)/cbse.o > /dev/null
+	readelf -sW $(TESTTMP)/cbse.o | grep -q ' UND boot_epoch$$' || { echo 'cbse: boot_epoch is not an undefined import'; exit 1; }
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

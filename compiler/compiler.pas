@@ -1189,8 +1189,11 @@ begin
   WriteLn('  --freestanding        --emit-obj (C): code with no runtime under it, a kernel.');
   WriteLn('                        No .init_array/.fini_array, no crtl implementation pulled');
   WriteLn('                        in by a header, no signal stack; implies --function-sections');
-  WriteLn('                        and --no-signals. A file-scope initialiser that needs');
-  WriteLn('                        run-time code is refused (nothing would run it).');
+  WriteLn('                        and --no-signals. Initialised C globals are placed in');
+  WriteLn('                        .data with their values (and relocations); one that would');
+  WriteLn('                        need run-time code is refused (nothing would run it).');
+  WriteLn('  --c-static-data       x86-64 C: initialised file-scope variables are .data at load');
+  WriteLn('                        time, not stores run before main (implied by --freestanding).');
   WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');
@@ -1709,6 +1712,15 @@ begin
       FreestandingMode := True;
       FunctionSections := True;
       NoSignals := True;
+      CStaticDataMode := True;   { initialised C globals are .data, not code }
+      Inc(i);
+    end
+    else if option = '--c-static-data' then
+    begin
+      { The --freestanding treatment of C file-scope initialisers, for any
+        x86-64 build: values in .data at load time instead of stores run
+        before main. See CStaticDataMode in defs.inc. }
+      CStaticDataMode := True;
       Inc(i);
     end
     else if option = '-OO' then

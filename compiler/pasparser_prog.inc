@@ -791,6 +791,13 @@ begin
     ASTLeft[assignNode] := target;
     ASTRight[assignNode] := valNode;
 
+    { A C global placed in .data takes its value as bytes, not as code (no
+      thread-local is ever placed, so the TLS copy below has nothing to do). }
+    if CTryBakeGlobalInit(assignNode) then
+    begin
+      ASTNodeCount := ASTArenaFloor;
+      Continue;
+    end;
     CompileAST(assignNode);
     ASTNodeCount := ASTArenaFloor;
 

@@ -232,3 +232,8 @@ procedure ParseExpr; forward;   { body in pasparser_expr.inc — called from pas
   shared-substrate fact, which is the side of
   the-substrate-is-ast-and-ir-not-the-parser.md that says to share the AST. }
 function ASTStrElemTkOf(node: Integer): Integer; forward;
+{ real body in ir.inc beside IRArrayElemStride, which it measures with;
+  pasparser_prog.inc's CompilePendingGlobalInits asks it before compiling each
+  global initialiser store, and cparser.inc's two replays do too. See
+  CStaticDataMode in defs.inc. }
+function CTryBakeGlobalInit(asn: Integer): Boolean; forward;

@@ -7011,6 +7011,7 @@ begin
 
     if (CurProc < 0) or AllocStaticLocal then
     begin
+      if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
       BSSSize := AlignTo(BSSSize, align);
       Syms[SymCount].Kind   := skGlobal;
       Syms[SymCount].Offset := BSSSize;
@@ -7601,6 +7602,76 @@ begin
   Result := True;
 end;
 
+function CGlobalOffsetIsReferenced(off, size: Integer): Boolean;
+{ Has emitted code already captured an address in [off, off+size) of .bss?
+  GlobFix keeps the OFFSET, not the symbol, so a global that code has
+  reached cannot move any more. }
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to GlobFixCount - 1 do
+    if (not SymOffIsData(GlobFix[k].BSSoff)) and
+       (GlobFix[k].BSSoff >= off) and (GlobFix[k].BSSoff < off + size) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function CPlaceGlobalInData(symIdx, minAlign: Integer): Boolean;
+{ Move a C file-scope variable that has an initialiser from .bss into .data,
+  zero-filled, so that CTryBakeGlobalInit can write its initial value there
+  as bytes and relocations. See CStaticDataMode.
+
+  It has to happen HERE, at allocation, and not when the initialiser is
+  replayed: that replay runs in main's prologue or the object's init thunk,
+  after the code that uses the variable has captured its .bss offset in
+  GlobFix. A variable an earlier `extern` declaration already gave a slot
+  moves only while no code has referenced that slot.
+
+  The .bss slot it leaves is reclaimed only when it is the last thing
+  allocated, as TryBakeConstArrayIntoData does. }
+var size, align, base, b: Integer;
+begin
+  Result := False;
+  if (symIdx < 0) or (symIdx >= SymCount) then Exit;
+  if Syms[symIdx].Kind <> skGlobal then Exit;
+  if SymOffIsData(Syms[symIdx].Offset) then Exit;
+  size := SymAllocSize[symIdx];
+  if size <= 0 then Exit;
+  if CGlobalOffsetIsReferenced(Syms[symIdx].Offset, size) then Exit;
+  if size >= 16 then align := 16
+  else if size >= 8 then align := 8
+  else if size >= 4 then align := 4
+  else if size >= 2 then align := 2
+  else align := 1;
+  if minAlign > align then align := minAlign;
+  { An executable's read-only split moves RW data by a multiple of 16 only
+    (RO_RESIDUE), so a larger aligned(N) would not survive it there: such a
+    global stays in .bss with its stores. An object has no split. }
+  if (align > 16) and not EmitObjMode then Exit;
+  if align > ReqDataAlign then ReqDataAlign := align;
+  base := AlignTo(DataLen, align);
+  DataEnsure(base - DataLen + size);
+  for b := DataLen to base + size - 1 do Data[b] := 0;
+  DataLen := base + size;
+  if BSSSize = Syms[symIdx].Offset + size then BSSSize := Syms[symIdx].Offset;
+  Syms[symIdx].Offset := DATA_SYM_BIAS + base;
+  if symIdx >= Length(CStatSymFlag) then
+  begin
+    b := Length(CStatSymFlag);
+    SetLength(CStatSymFlag, SymCount + 1024);
+    while b < Length(CStatSymFlag) do begin CStatSymFlag[b] := False; Inc(b); end;
+  end;
+  CStatSymFlag[symIdx] := True;
+  Result := True;
+end;
+
+function CSymIsStaticData(symIdx: Integer): Boolean;
+begin
+  Result := (symIdx >= 0) and (symIdx < Length(CStatSymFlag)) and CStatSymFlag[symIdx];
+end;
+
 { ===== The POINTEE carrier set of a named ARRAY type =====
 
   `TAp = array[0..1] of PPC` where `PPC = ^PChar` has to remember, on the TYPE
@@ -7812,6 +7883,7 @@ begin
 
   if (CurProc < 0) or AllocStaticLocal then
   begin
+    if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
     BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;

@@ -4,7 +4,7 @@ tags: [C]
 prio: 20
 type: feature
 blocked-by: []
-summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. Still open: (1) C file-scope initialisers are run-time code, so most kernel files are refused under --freestanding; (4) `--link --freestanding` for a higher-half image; (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
+summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. Still open: (4) `--link --freestanding` for a higher-half image; (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
 status: open
 owner: unassigned
 ---
@@ -40,7 +40,11 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
 
 ## Open, measured on kernel 64cc839 (rung 4), 2026-11-12
 
-1. **File-scope initialisers run as code.** pxx keeps every C global in
+1. **DONE 2026-11-12** ([[feature-c-file-scope-initialisers-become-static-data]];
+   on the way [[bug-c-aligned-on-a-global-variable-is-ignored]] and
+   [[bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared]]).
+   All 30 C files of kernel e8ea914 compile with --emit-obj --freestanding.
+   **File-scope initialisers run as code.** pxx keeps every C global in
    .bss and assigns its initial value in an init thunk (PendingInit /
    CAggInit, replayed by CompilePendingGlobalInits). A kernel has nothing to
    run a .init_array.

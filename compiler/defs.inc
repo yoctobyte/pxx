@@ -3095,6 +3095,10 @@ const
     BSS size and well below 2^31 so Integer arithmetic on it cannot overflow.
     feature/bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data }
   DATA_SYM_BIAS = $20000000;
+  { CDRKind values -- see CStaticDataMode }
+  CDR_DATA = 0;
+  CDR_PROC = 1;
+  CDR_SYM  = 2;
 
   { An untyped `file` has no element type, so FPC gives it a DEFAULT block size
     of 128 bytes — that is what Seek/FilePos/FileSize count in until an explicit
@@ -4093,6 +4097,34 @@ var
     initialisation is refused, because nothing will run a .init_array.
     --link: no _start and no runtime entry (see LinkMode). }
   FreestandingMode : Boolean;
+  { C FILE-SCOPE INITIALISERS AS DATA (CStaticDataMode; on under --freestanding,
+    and forced by --c-static-data). A C global with an initialiser is placed
+    in .data when it is ALLOCATED (CPlaceGlobalInData), before any code can
+    capture its offset, and each initialiser store is then BAKED into Data[]
+    (CTryBakeGlobalInit) instead of being compiled into the init thunk:
+    literals as bytes, addresses as CDataReloc entries. A store that cannot
+    be baked is still compiled -- .data is writable -- except under
+    --freestanding, where nothing would run it and it is refused by name.
+    x86-64 executables and objects only. Gibux. }
+  CStaticDataMode : Boolean;
+  CStatSymFlag    : array of Boolean;   { by Syms index: placed by CPlaceGlobalInData }
+  { One 8-byte slot in Data[] holding an address the writer supplies:
+    CDR_DATA = Data[] offset Target, CDR_PROC = Procs[Target]'s entry,
+    CDR_SYM = global Syms[Target] (in .data, .bss or another object). The
+    value is that address plus Addend. Executables patch it; objects emit an
+    R_X86_64_64 against a section or symbol. }
+  CDRPos      : array of Integer;
+  CDRKind     : array of Integer;
+  CDRTarget   : array of Integer;
+  CDRAddend   : array of Int64;
+  CDRCount    : Integer;
+  { __attribute__((aligned(N))) on a C global: AllocVar/AllocArray align the
+    slot to at least AllocMinAlign while it is non-zero, and ReqBssAlign /
+    ReqDataAlign carry the largest such request to the writers, which raise
+    the section's alignment (objects) or bssBase (executables) to match. }
+  AllocMinAlign : Integer;
+  ReqBssAlign   : Integer;
+  ReqDataAlign  : Integer;
   { `--function-sections`: under --emit-obj, turn every internal call into a
     RELOCATION against the callee's own FUNC symbol instead of a displacement
     baked at emit time by ApplyCallFixups.

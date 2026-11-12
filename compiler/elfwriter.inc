@@ -2234,6 +2234,29 @@ begin
   for i := 0 to DataPtrFixCount-1 do
     PatchDataU64(DataPtrFix[i].DataPos, DataVA(dataBase, DataPtrFix[i].TargetOff));
 
+  { C initialisers baked into .data (CStaticDataMode): string literals,
+    functions and globals, each plus its addend. }
+  for i := 0 to CDRCount-1 do
+  begin
+    case CDRKind[i] of
+      CDR_DATA:
+        addr := DataVA(dataBase, CDRTarget[i]);
+      CDR_PROC:
+        begin
+          if Procs[CDRTarget[i]].BodyAddr < 0 then
+            ErrorNoPos('a C initialiser takes the address of ' + Procs[CDRTarget[i]].Name +
+                       ', which has no body in this program');
+          addr := entry + Procs[CDRTarget[i]].BodyAddr;
+        end;
+    else
+      if SymOffIsData(Syms[CDRTarget[i]].Offset) then
+        addr := DataVA(dataBase, SymOffDataPart(Syms[CDRTarget[i]].Offset))
+      else
+        addr := bssBase + BssRemap(Syms[CDRTarget[i]].Offset);
+    end;
+    PatchDataU64(CDRPos[i], addr + CDRAddend[i]);
+  end;
+
   { Self-relative words inside Data[]: `target - pos`, measured in the IMAGE.
     Unchanged when nothing is split. With the read-only split the two ends move
     by different amounts whenever a literal range lies between them -- both can
@@ -2386,6 +2409,10 @@ begin
   { 64-bit on purpose: AlignTo takes Integer, and with --image-base above
     2 GB it truncated bssBase (p_memsz 0xffffff80..., SIGSEGV at start). }
   bssBase  := (DataVA(dataBase, DataLen) + 7) and (not Int64(7));
+  { ...and to a C global's __attribute__((aligned(N))): its offset inside
+    .bss is aligned, which is worth nothing unless .bss itself is. }
+  if ReqBssAlign > 8 then
+    bssBase := (bssBase + ReqBssAlign - 1) and (not Int64(ReqBssAlign - 1));
   entry    := ImageBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - ImageBase) + BSSSize;
@@ -2643,6 +2670,10 @@ begin
   { 64-bit on purpose: AlignTo takes Integer, and with --image-base above
     2 GB it truncated bssBase (p_memsz 0xffffff80..., SIGSEGV at start). }
   bssBase  := (DataVA(dataBase, DataLen) + 7) and (not Int64(7));
+  { ...and to a C global's __attribute__((aligned(N))): its offset inside
+    .bss is aligned, which is worth nothing unless .bss itself is. }
+  if ReqBssAlign > 8 then
+    bssBase := (bssBase + ReqBssAlign - 1) and (not Int64(ReqBssAlign - 1));
   entry    := ImageBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - ImageBase) + BSSSize;
@@ -5054,6 +5085,32 @@ begin
       ObjDataIsReferenced := True;
       Exit;
     end;
+  { ...or an initialiser baked into .data names it (`T *p = &ext;`) }
+  for k := 0 to CDRCount-1 do
+    if (CDRKind[k] = CDR_SYM) and (CDRTarget[k] = i) then
+    begin
+      ObjDataIsReferenced := True;
+      Exit;
+    end;
+end;
+
+function ObjDataShndx(i: Integer): Integer;
+{ The x86-64 object's section index for a C global: 3 = .data for one
+  CPlaceGlobalInData moved there, else 5 = .bss. }
+begin
+  if SymOffIsData(Syms[i].Offset) then ObjDataShndx := 3 else ObjDataShndx := 5;
+end;
+
+function ObjDataValue(i: Integer): Integer;
+begin
+  if SymOffIsData(Syms[i].Offset) then ObjDataValue := SymOffDataPart(Syms[i].Offset)
+  else ObjDataValue := Syms[i].Offset;
+end;
+
+function ObjSecAlign(req: Integer): Integer;
+{ .data/.bss sh_addralign: 16, or a C global's larger aligned(N) }
+begin
+  if req > 16 then ObjSecAlign := req else ObjSecAlign := 16;
 end;
 
 procedure CheckUndefinedExternData;
@@ -5823,6 +5880,84 @@ begin
     section and still link, so the flag is refused rather than half-served. }
 end;
 
+procedure ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0: Integer;
+                          var sym: Integer; var addend: Int64);
+{ The symbol and addend of CDataReloc entry i, for an R_X86_64_64 in .rela.data.
+  Section symbols: 1 = .text, 2 = .data, 3 = .bss -- the ones every other
+  relocation here uses. A function or a variable defined in another object
+  relocates against its own UND symbol; an exported definition against its
+  own symbol, for the reason ObjDataExportSymForOff gives. }
+var p, k, e: Integer;
+begin
+  addend := CDRAddend[i];
+  case CDRKind[i] of
+    CDR_DATA:
+      begin
+        sym := 2;
+        addend := addend + CDRTarget[i];
+      end;
+    CDR_PROC:
+      begin
+        p := CDRTarget[i];
+        if ObjProcRefIsRelocatable(p) then
+          sym := ObjProcSymIdx[p]
+        else if ObjProcIsDefined(p) then
+        begin
+          sym := ObjTextSym(Procs[p].BodyAddr);
+          addend := addend + ObjTextRel(Procs[p].BodyAddr);
+        end
+        else
+        begin
+          sym := -1;
+          for k := 0 to ExternalCount - 1 do
+            if ExternalProc[k] = p then sym := extSym0 + k;
+          if sym < 0 then
+            ErrorNoPos('internal: a C initialiser names ' + Procs[p].Name +
+                       ', which has neither a body nor an import (CRegisterCDataImports)');
+        end;
+      end;
+  else
+    begin
+      p := CDRTarget[i];
+      if ObjDataIsImport(p) then
+        sym := impSym0 + ObjDataImportOrdinal(p)
+      else if SymOffIsData(Syms[p].Offset) then
+      begin
+        sym := 2;
+        addend := addend + SymOffDataPart(Syms[p].Offset);
+      end
+      else
+      begin
+        e := ObjDataExportSymForOff(Syms[p].Offset);
+        if e >= 0 then
+          sym := firstGlobal + numExportProcs + ObjDataExportOrdinal(e)
+        else
+        begin
+          sym := 3;
+          addend := addend + Syms[p].Offset;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure CRegisterCDataImports;
+{ A function a baked C initialiser points at, with no body in this object and
+  never called from it, has no External entry and so no UND symbol to
+  relocate against. Give it one -- as a call would have -- before the writer
+  lays the object out. }
+var i, k: Integer; found: Boolean;
+begin
+  for i := 0 to CDRCount - 1 do
+    if (CDRKind[i] = CDR_PROC) and (not ObjProcIsDefined(CDRTarget[i])) then
+    begin
+      found := False;
+      for k := 0 to ExternalCount - 1 do
+        if ExternalProc[k] = CDRTarget[i] then found := True;
+      if not found then RegisterExternal(CDRTarget[i]);
+    end;
+end;
+
 procedure writeELFRelX64General(const outPath: AnsiString);
 var
   i: Integer;
@@ -5839,12 +5974,14 @@ var
     thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
   nSecSym, c, extraRelaOff, extraRelaCount: Integer;
   machine, rAbs64: Integer;
+  cdrSym: Integer; cdrAdd: Int64;   { a CDataReloc entry's symbol and addend }
 {$ifdef FPC}
   f: File;
 {$else}
   f: Integer;
 {$endif}
 begin
+  CRegisterCDataImports;   { before anything counts ExternalCount }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
     here with TargetArch = TARGET_X86_64, and the refusal a user sees is the
     TargetHasObjectWriter one beside that dispatch. It still has to name the
@@ -5970,7 +6107,7 @@ begin
   ObjGroupRelocs;
   relaTextCount := ObjCutRelN[0];
   extraRelaCount := ObjRelCount - relaTextCount;
-  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
+  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount + CDRCount;
 
   textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
   dataOff := AlignTo(textOff + CodeLen, 16);
@@ -6075,7 +6212,7 @@ begin
     pass which simply exports everything. }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-      writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
+      writeSym64(f, ObjDataStrOff[i], $01, ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
   { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
     data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
     -- a thunk is code no proc owns and its extent is recorded nowhere, so
@@ -6098,7 +6235,7 @@ begin
     SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), 5, Syms[i].Offset, SymAllocSize[i]);
+      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
     writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
@@ -6146,6 +6283,12 @@ begin
                   ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
   for i := 0 to ExternalCount-1 do
     writeRela64(f, ExternalGotOff[i], extSym0 + i, rAbs64, 0);
+  { C initialisers baked into .data (CStaticDataMode) }
+  for i := 0 to CDRCount-1 do
+  begin
+    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
+    writeRela64(f, CDRPos[i], cdrSym, rAbs64, cdrAdd);
+  end;
 
   { .init_array / .fini_array: ONE 8-byte slot each, whose VALUE is supplied by
     the relocation rather than by these bytes. The slot is written as zero
@@ -6202,11 +6345,11 @@ begin
   writeShdrA64(f, 7, 4, $40, relaTextOff, relaTextCount*24);
   writeShdrB64(f, 6, 1, 8, 24);
   writeShdrA64(f, 18, 1, 3, dataOff, DataLen);
-  writeShdrB64(f, 0, 0, 16, 0);
+  writeShdrB64(f, 0, 0, ObjSecAlign(ReqDataAlign), 0);
   writeShdrA64(f, 24, 4, $40, relaDataOff, relaDataCount*24);
   writeShdrB64(f, 6, 3, 8, 24);
   writeShdrA64(f, 35, 8, 3, dataOff + DataLen, BSSSize);
-  writeShdrB64(f, 0, 0, 16, 0);
+  writeShdrB64(f, 0, 0, ObjSecAlign(ReqBssAlign), 0);
   writeShdrA64(f, 40, 2, 0, symOff, numSyms*24);
   writeShdrB64(f, 7, firstGlobal, 8, 24);
   writeShdrA64(f, 48, 3, 0, strOff, strSize);

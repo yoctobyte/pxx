@@ -1268,6 +1268,14 @@ begin
     if owner < 0 then DceMark(ProcAddrFix[i].ProcIdx);
     Inc(i);
   end;
+  { A function a C initialiser baked into .data points at (CStaticDataMode):
+    the slot is written, unconditionally, so this is a root like a VMT slot. }
+  i := 0;
+  while i < CDRCount do
+  begin
+    if CDRKind[i] = CDR_PROC then DceMark(CDRTarget[i]);
+    Inc(i);
+  end;
   DceWhyNow := DCE_WHY_IRAM;
   i := 0;
   while i < IramCallFixCount do begin DceMark(IramCallFix[i].ProcIdx); Inc(i); end;
