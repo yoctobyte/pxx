@@ -168,6 +168,17 @@ begin
     ParseUsesUnitAmbient('softfloat');
 end;
 
+procedure PullKernelAbiUnit;
+{ --os=freebsd: every kernel entry is routed to PXXFbsdSyscall, the in-program
+  Linux-ABI translator (compiler/builtin/fbsdabi.pas). ParseProgram pulls it
+  itself; this is the door for every other driver, called after the program's
+  exit like the rest of this file's pulls. Without it a C or NilPy program
+  stopped with "PXXFbsdSyscall not found". feature-port-freebsd-native }
+begin
+  if (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_X86_64) then
+    ParseUsesUnitAmbient('fbsdabi');
+end;
+
 procedure PullTargetRuntimeUnits;
 { Pull the units this TARGET's codegen calls into, for a driver whose language
   has no `uses` clause to say so.
@@ -198,6 +209,7 @@ procedure PullTargetRuntimeUnits;
   version that does not.
   bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
 begin
+  PullKernelAbiUnit;
   if not TargetCodegenCallsHeapRuntime then Exit;
   PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');

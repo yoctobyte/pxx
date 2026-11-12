@@ -10845,6 +10845,10 @@ test-freebsd: $(COMPILER)
 	  cp $$d/env.lx $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value ./pxxbin one two; echo exit=$$?)" && \
 	  for k in 1 2 3 4 5 6 7 8; do \
 	    tools/expect_same.sh freebsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fb one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
+	  done; \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py; do \
+	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/fe.fb >/dev/null && \
+	    tools/expect_same.sh freebsd_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/fe.fb one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./fe.lx one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; echo "test-freebsd: OK"
 
 test-asm: $(COMPILER)
@@ -11000,7 +11004,9 @@ test-core: $(COMPILER)
 	@d=$(TESTTMP)/os_freebsd26; mkdir -p $$d && \
 	  ./$(COMPILER) --os=freebsd test/test_rtl_libc_torture.pas $$d/fb >/dev/null && \
 	  tools/expect_same.sh freebsd_osabi "$$(od -An -tu1 -j7 -N1 $$d/fb | tr -d ' ')" "9" && \
-	  tools/expect_same.sh freebsd_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fb | grep -o '[0-9]* kernel-entry')" "2 kernel-entry"
+	  tools/expect_same.sh freebsd_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fb | grep -o '[0-9]* kernel-entry')" "2 kernel-entry" && \
+	  ./$(COMPILER) --os=freebsd test/c_os_freebsd_runtime.c $$d/fbc >/dev/null && \
+	  tools/expect_same.sh freebsd_c_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fbc | grep -o '[0-9]* kernel-entry')" "2 kernel-entry"
 	# 100 -I roots, the header in the LAST one: an ESP-IDF translation unit
 	# passes 81, and MAX_C_INCLUDE_DIRS / MAX_PAS_UNIT_DIRS were 64 (pin v452:
 	# "too many -I include directories"). museum_landkaart's header import.

@@ -56414,6 +56414,7 @@ begin
   PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   if needsBuiltin then ParseUsesUnitAmbient('builtin');
+  PullKernelAbiUnit;
   { Resolve TVarRec now that builtinheap declared it, exactly as ParseProgram
     does. Without this TVarRecId stayed REC_NONE for .npy programs, so ANY unit
     an import pulls in that takes an `array of const` parameter was rejected with

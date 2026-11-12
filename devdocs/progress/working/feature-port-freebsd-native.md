@@ -198,7 +198,7 @@ fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
   Unmapped calls answer -ENOSYS.
 - **Other frontends:** only the Pascal frontend pulls `fbsdabi`; C / NilPy
   drivers do not yet (same shape as `bug-a-a-frontend-cannot-see-that-a-backend-
-  calls-library-routines-it-never-mentions`).
+  calls-library-routines-it-never-mentions`). **Resolved** below (C and NilPy).
 
 ## 2026-11-12 (pxx2-bsd) — environment works; an intermittent argc bug found and fixed
 
@@ -221,3 +221,22 @@ fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
 - `test/test_os_env.pas` (env value, unset var, count, argv0, argc + args) is in
   `make test-freebsd`, run 8 times against the Linux build's output.
   `tools/vm/freebsd.sh run` forwards `PXX_TEST_*` variables.
+
+## 2026-11-12 (pxx2-bsd) — C and NilPy frontends
+
+- `PullKernelAbiUnit` (frontend_prologue.inc) pulls `fbsdabi` for every
+  non-Pascal driver: called from `PullTargetRuntimeUnits` (the nine skeleton
+  drivers), the C driver (after pxxcio) and the NilPy driver (after builtin).
+  Before this a C or NilPy `--os=freebsd` compile stopped with
+  "PXXFbsdSyscall not found".
+- The C entry stub ended with a raw `mov eax, 231; syscall` (exit_group after
+  `main` returns) -- FreeBSD's 231 is not exit. Under `--os=freebsd` it now
+  goes through `EmitSyscall` (the thunk). Found by `syscall_scan --list`: three
+  entries where two are expected.
+- `test/c_os_freebsd_runtime.c` (getenv, malloc, fopen/fprintf/fscanf, argv,
+  `return 3` as exit status) and `test/os_freebsd_runtime.py` (dict, sorted,
+  sys.argv, os.environ) are in `make test-freebsd`, diffed against the Linux
+  build: identical, exit status included. test-core's build-only check also
+  scans the C binary for exactly two kernel entries.
+- Linux output byte-identical to a HEAD-built compiler for Pascal, C and NilPy,
+  default and `--rtl-libc`.

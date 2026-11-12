@@ -14000,7 +14000,10 @@ begin
       EmitB($58); EmitB($58);            { pop rax x2 }
       EmitAsmX64(['mov edi, eax']);
       EmitAsmX64(['mov eax, 231']); { (exit_group) }
-      EmitB($0F); EmitB($05);            { syscall }
+      { --os=freebsd: through the translator like every other kernel entry
+        (FreeBSD's 231 is not exit). feature-port-freebsd-native }
+      if TargetKernel = KERNEL_FREEBSD then EmitSyscall
+      else begin EmitB($0F); EmitB($05); end;            { syscall }
     end;
     TARGET_I386:
     begin
@@ -14573,6 +14576,7 @@ begin
       "PXXMemMove not found". Idempotent if already loaded. }
     ParseUsesUnitAmbient('builtinheap');
     ParseUsesUnitAmbient('pxxcio');
+    PullKernelAbiUnit;
     { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
       palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/
       __pxx_pthread_* resolve to bodied procs. Gated on ThreadSafeMode because
