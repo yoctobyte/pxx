@@ -1303,6 +1303,37 @@ end;
 { Refuse in the writer's own voice: name the path, and say the one thing the
   caller cannot see -- that the compile itself was fine. Halt(1) so a harness
   reading rc gets the same answer as a harness reading the text. }
+function ParseImageBaseOption(const s: AnsiString): Int64;
+{ --image-base=<n>: 0x.. or $.. hex, or decimal, `_` ignored. Refused unless
+  page-aligned, non-zero and below 2^47 (the x86-64 user half).
+  feature-a-x86-64-image-base-option-and-musl-loadable-static-output-for-gibix }
+var k, d: Integer; base: Int64; t: AnsiString; c: Char;
+begin
+  Result := 0; t := s; base := 10;
+  if (Length(t) > 2) and (t[1] = '0') and ((t[2] = 'x') or (t[2] = 'X')) then
+  begin t := Copy(t, 3, Length(t) - 2); base := 16; end
+  else if (Length(t) > 1) and (t[1] = '$') then
+  begin t := Copy(t, 2, Length(t) - 1); base := 16; end;
+  if t = '' then ErrorNoPos('--image-base: no number in "' + s + '"');
+  for k := 1 to Length(t) do
+  begin
+    c := t[k];
+    d := -1;
+    if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
+    else if (base = 16) and (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
+    else if (base = 16) and (c >= 'A') and (c <= 'F') then d := Ord(c) - Ord('A') + 10
+    else if c <> '_' then ErrorNoPos('--image-base: not a number: "' + s + '"');
+    if d >= 0 then
+    begin
+      if Result > ($7FFFFFFFFFFF div base) then
+        ErrorNoPos('--image-base: too large: "' + s + '"');
+      Result := Result * base + d;
+    end;
+  end;
+  if (Result <= 0) or (Result >= $800000000000) or ((Result and $FFF) <> 0) then
+    ErrorNoPos('--image-base: must be page-aligned, non-zero and below 2^47: "' + s + '"');
+end;
+
 procedure RequireOutputArtefact(const path: AnsiString);
 begin
   { `-o /dev/null` means "tell me whether it COMPILES" and is a legitimate
@@ -1489,6 +1520,8 @@ begin
   EmitObjMode := False;
   LinkMode := False;
   LinkOutPath := '';
+  ImageBase := LOAD_ADDR;
+  LdsoRunnable := False;
   LinkGcSections := True;
   TlsMainInstalled := False;
   TlsBaseUsed := False;
@@ -1951,6 +1984,28 @@ begin
         than falling through to the x86-64 arm.
         feature-a-wasm32-target-registration-skeleton }
       TargetArch := TARGET_WASM32;
+      Inc(i);
+    end
+    else if Copy(option, 1, 13) = '--image-base=' then
+    begin
+      { The load address of an x86-64 static image (writeELF and --link).
+        Hex as 0x.. or $.., or decimal; page-aligned, below 2^47. Default
+        LOAD_ADDR. feature-a-x86-64-image-base-option-and-musl-loadable-static-output-for-gibix }
+      ImageBase := ParseImageBaseOption(Copy(option, 14, Length(option) - 13));
+      Inc(i);
+    end
+    else if option = '--ldso-runnable' then
+    begin
+      LdsoRunnable := True;
+      Inc(i);
+    end
+    else if option = '--gibix' then
+    begin
+      { Both of the above, for Gibix: Ginux maps user memory only in
+        [2^39, 2^40), and a program written at runtime is started as
+        `/lib/ld-musl-x86_64.so.1 prog args`. }
+      ImageBase := $8000000000;
+      LdsoRunnable := True;
       Inc(i);
     end
     else if option = '--link' then
@@ -2921,6 +2976,9 @@ begin
     Halt(0);
   end;
 
+  if ((ImageBase <> LOAD_ADDR) or LdsoRunnable) and (TargetArch <> TARGET_X86_64) then
+    ErrorNoPos('--image-base / --ldso-runnable / --gibix: x86-64 static images only');
+
   { --link <obj>... <out>: stage 5, the user-facing mode. Here, after the
     option loop, because the loop stops at the first non-option and every
     argument from there on is an object except the last. }
@@ -3621,10 +3679,12 @@ begin
     header later -- the writer decides that on exactly these facts. }
   procMapRoShift := 0;
   if (not NoRoData) and (RoRangeCount > 0) then procMapRoShift := PROG_HEADER_SIZE;
+  if LdsoRunnable and (ExternalCount = 0) then
+    procMapRoShift := procMapRoShift + PROG_HEADER_SIZE + LDSO_BLOCK_SIZE;
   if DumpProcMap and (TargetArch = TARGET_X86_64) then
     for i := 0 to ProcCount - 1 do
       if Procs[i].BodyAddr >= 0 then
-        writeln(StdErr, 'PROC ', IntToHexStr(LOAD_ADDR + CODE_OFFSET + procMapRoShift + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
+        writeln(StdErr, 'PROC ', IntToHexStr(ImageBase + CODE_OFFSET + procMapRoShift + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
   if MeasureRegcall then
   begin
     writeln(StdErr, 'REGCALL-MEASURE: bodies-with-params=', RegcallProcsWithParams,

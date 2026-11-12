@@ -2223,10 +2223,59 @@ begin
                  Integer(DataRemap(DataRelFixTarget[i]) - DataRemap(DataRelFixPos[i])));
 end;
 
+{ --ldso-runnable: the smallest dynamic section a dynamic loader accepts, so a
+  STATIC image can be started as `/lib/ld-musl-x86_64.so.1 prog args`. That is
+  how Gibix (pxx on the Ginux kernel) runs a program written at runtime: the
+  kernel execs only files from its published root filesystem, and musl's ld.so
+  is one of them; it then mmaps the program like a library. musl refuses an
+  image without PT_DYNAMIC ("Not a valid dynamic program") and segfaults on one
+  whose table is only DT_NULL (it divides by DT_HASH's nbucket). The block sits
+  between the program headers and the code, inside the R+X segment; the kernel
+  ignores PT_DYNAMIC on a direct exec, so the image still runs on its own.
+  LDSO_BLOCK_SIZE bytes at VA `va`. Two copies for the two file-handle types.
+  feature-a-x86-64-image-base-option-and-musl-loadable-static-output-for-gibix }
+{$ifdef FPC}
+procedure WriteLdsoBlock(var f: File; va: Int64);
+begin
+  { the dynamic array: DT_HASH, DT_SYMTAB, DT_STRTAB, DT_STRSZ, DT_SYMENT, DT_NULL }
+  writeU64(f,4);  writeU64(f,va + LDSO_DYNAMIC_SIZE);
+  writeU64(f,6);  writeU64(f,va + LDSO_DYNAMIC_SIZE + 16);
+  writeU64(f,5);  writeU64(f,va + LDSO_DYNAMIC_SIZE + 16 + 24);
+  writeU64(f,10); writeU64(f,1);
+  writeU64(f,11); writeU64(f,24);
+  writeU64(f,0);  writeU64(f,0);
+  { DT_HASH: nbucket = 1, nchain = 1, bucket[0] = chain[0] = 0 (STN_UNDEF).
+    nbucket must not be 0: musl divides by it on every symbol lookup it makes
+    across the loaded objects, and the program is one of them. }
+  writeU32(f,1); writeU32(f,1); writeU32(f,0); writeU32(f,0);
+  { symbol 0, the null symbol, and the one-byte string table, padded to 8 }
+  writeU64(f,0); writeU64(f,0); writeU64(f,0);
+  writeU64(f,0);
+end;
+{$else}
+procedure WriteLdsoBlock(f: Integer; va: Int64);
+begin
+  { the dynamic array: DT_HASH, DT_SYMTAB, DT_STRTAB, DT_STRSZ, DT_SYMENT, DT_NULL }
+  writeU64(f,4);  writeU64(f,va + LDSO_DYNAMIC_SIZE);
+  writeU64(f,6);  writeU64(f,va + LDSO_DYNAMIC_SIZE + 16);
+  writeU64(f,5);  writeU64(f,va + LDSO_DYNAMIC_SIZE + 16 + 24);
+  writeU64(f,10); writeU64(f,1);
+  writeU64(f,11); writeU64(f,24);
+  writeU64(f,0);  writeU64(f,0);
+  { DT_HASH: nbucket = 1, nchain = 1, bucket[0] = chain[0] = 0 (STN_UNDEF).
+    nbucket must not be 0: musl divides by it on every symbol lookup it makes
+    across the loaded objects, and the program is one of them. }
+  writeU32(f,1); writeU32(f,1); writeU32(f,0); writeU32(f,0);
+  { symbol 0, the null symbol, and the one-byte string table, padded to 8 }
+  writeU64(f,0); writeU64(f,0); writeU64(f,0);
+  writeU64(f,0);
+end;
+{$endif}
+
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
-    phCount, codeOffset, machine, noteLen: Integer;
+    phCount, codeOffset, machine, noteLen, ldsoBlock: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
     zb: Byte;
@@ -2278,19 +2327,31 @@ begin
     silently: the image still loads, every address it reports is off by 56,
     and nothing fails. Checked here because this file keeps two parallel
     copies of this writer. }
-  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen then
+  { --ldso-runnable: one more header, PT_DYNAMIC, and its block right after the
+    headers (before the FreeBSD note, if both). A program that already has
+    PT_INTERP + PT_DYNAMIC needs neither. }
+  ldsoBlock := 0;
+  if LdsoRunnable and (ExternalCount = 0) then
+  begin
+    Inc(phCount);
+    ldsoBlock := LDSO_BLOCK_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + LDSO_BLOCK_SIZE;
+  end;
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen + ldsoBlock then
     ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
-  dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  dataBase := ImageBase + codeOffset + CodeLen;
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
-  bssBase  := AlignTo(DataVA(dataBase, DataLen), 8);
-  entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
+  { 64-bit on purpose: AlignTo takes Integer, and with --image-base above
+    2 GB it truncated bssBase (p_memsz 0xffffff80..., SIGSEGV at start). }
+  bssBase  := (DataVA(dataBase, DataLen) + 7) and (not Int64(7));
+  entry    := ImageBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataFileLen;
-  memsz    := (bssBase - LOAD_ADDR) + BSSSize;
+  memsz    := (bssBase - ImageBase) + BSSSize;
 
   { DbgArchSupported, not a fourth copy of the target list. This line said
     "x86_64 or aarch64" in BOTH writeELF variants and "i386 or arm32" in
@@ -2312,7 +2373,7 @@ begin
     shoff := shoff + padN;
   end;
 
-  ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
+  ApplyImageFixups(ImageBase + codeOffset, dataBase, bssBase, entry);
   RoPermuteData;   { last: every patch above wrote Data[] at its OLD position }
 
   Assign(f, outPath); Rewrite(f, 1);
@@ -2336,7 +2397,7 @@ begin
   { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
     segment is zero-filled at load, the page pad is real bytes in the file. }
   writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
-  writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
+  writeU64(f,0);writeU64(f,ImageBase);writeU64(f,ImageBase);
   writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
   writeU64(f,ElfSegAlign);
   { PT_LOAD -- the read-only data, R only, when there is a split: a store to
@@ -2370,6 +2431,14 @@ begin
     writeU64(f,DataVA(dataBase, DynamicOff));writeU64(f,DataVA(dataBase, DynamicOff));
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
+  if ldsoBlock > 0 then
+  begin
+    writeU32(f,2);writeU32(f,4); { PT_DYNAMIC, R -- the --ldso-runnable block }
+    writeU64(f,ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,8);
+  end;
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
     stack request, else newer kernels refuse to load the image entirely
     (bug-elf-missing-pt-gnu-stack) }
@@ -2379,8 +2448,15 @@ begin
   begin
     writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
     writeU64(f,codeOffset - noteLen);
-    writeU64(f,LOAD_ADDR + codeOffset - noteLen);writeU64(f,LOAD_ADDR + codeOffset - noteLen);
+    writeU64(f,ImageBase + codeOffset - noteLen);writeU64(f,ImageBase + codeOffset - noteLen);
     writeU64(f,noteLen);writeU64(f,noteLen);writeU64(f,4);
+  end;
+  { The bytes after the headers: the --ldso-runnable block, then the
+    FreeBSD note, which ends where the code starts. }
+  if ldsoBlock > 0 then
+    WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+  if noteLen > 0 then
+  begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
     writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
     writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
@@ -2398,12 +2474,12 @@ begin
   end;
   Close(f);
   FpChmod(outPath,&755);
-  if EmitMapFile then WriteMapFile(outPath, LOAD_ADDR, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, ImageBase, codeOffset);
 end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
 var f: Integer; i: Integer;
-    phCount, codeOffset, machine, noteLen: Integer;
+    phCount, codeOffset, machine, noteLen, ldsoBlock: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
 begin
@@ -2454,19 +2530,31 @@ begin
     silently: the image still loads, every address it reports is off by 56,
     and nothing fails. Checked here because this file keeps two parallel
     copies of this writer. }
-  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen then
+  { --ldso-runnable: one more header, PT_DYNAMIC, and its block right after the
+    headers (before the FreeBSD note, if both). A program that already has
+    PT_INTERP + PT_DYNAMIC needs neither. }
+  ldsoBlock := 0;
+  if LdsoRunnable and (ExternalCount = 0) then
+  begin
+    Inc(phCount);
+    ldsoBlock := LDSO_BLOCK_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + LDSO_BLOCK_SIZE;
+  end;
+  if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE + noteLen + ldsoBlock then
     ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
-  dataBase := LOAD_ADDR + codeOffset + CodeLen;
+  dataBase := ImageBase + codeOffset + CodeLen;
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
-  bssBase  := AlignTo(DataVA(dataBase, DataLen), 8);
-  entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
+  { 64-bit on purpose: AlignTo takes Integer, and with --image-base above
+    2 GB it truncated bssBase (p_memsz 0xffffff80..., SIGSEGV at start). }
+  bssBase  := (DataVA(dataBase, DataLen) + 7) and (not Int64(7));
+  entry    := ImageBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataFileLen;
-  memsz    := (bssBase - LOAD_ADDR) + BSSSize;
+  memsz    := (bssBase - ImageBase) + BSSSize;
 
   { DWARF -g. Build the .debug_* bytes, then place a section-header table after
     them (the load image is unchanged — debug sections live past p_filesz,
@@ -2498,7 +2586,7 @@ begin
     shoff := shoff + padN;
   end;
 
-  ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
+  ApplyImageFixups(ImageBase + codeOffset, dataBase, bssBase, entry);
   RoPermuteData;   { last: every patch above wrote Data[] at its OLD position }
 
   AssignPath := outPath;
@@ -2523,7 +2611,7 @@ begin
   { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
     segment is zero-filled at load, the page pad is real bytes in the file. }
   writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
-  writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
+  writeU64(f,0);writeU64(f,ImageBase);writeU64(f,ImageBase);
   writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
   writeU64(f,ElfSegAlign);
   { PT_LOAD -- the read-only data, R only, when there is a split: a store to
@@ -2557,6 +2645,14 @@ begin
     writeU64(f,DataVA(dataBase, DynamicOff));writeU64(f,DataVA(dataBase, DynamicOff));
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
+  if ldsoBlock > 0 then
+  begin
+    writeU32(f,2);writeU32(f,4); { PT_DYNAMIC, R -- the --ldso-runnable block }
+    writeU64(f,ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+    writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,8);
+  end;
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
     stack request, else newer kernels refuse to load the image entirely
     (bug-elf-missing-pt-gnu-stack) }
@@ -2566,8 +2662,15 @@ begin
   begin
     writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
     writeU64(f,codeOffset - noteLen);
-    writeU64(f,LOAD_ADDR + codeOffset - noteLen);writeU64(f,LOAD_ADDR + codeOffset - noteLen);
+    writeU64(f,ImageBase + codeOffset - noteLen);writeU64(f,ImageBase + codeOffset - noteLen);
     writeU64(f,noteLen);writeU64(f,noteLen);writeU64(f,4);
+  end;
+  { The bytes after the headers: the --ldso-runnable block, then the
+    FreeBSD note, which ends where the code starts. }
+  if ldsoBlock > 0 then
+    WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
+  if noteLen > 0 then
+  begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
     writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
     writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
@@ -2584,7 +2687,7 @@ begin
   end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
-  if EmitMapFile then WriteMapFile(outPath, LOAD_ADDR, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, ImageBase, codeOffset);
 end;
 {$endif}
 

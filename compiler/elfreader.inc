@@ -314,7 +314,8 @@ const
   ELFLNK_K_DATA = 3;
   ELFLNK_K_BSS  = 4;
   ELFLNK_K_ABS  = -1;           { a definition against SHN_ABS: its value is the address }
-  ELFLNK_BASE   = $400000;      { the static non-PIE image base ld uses on x86-64 }
+  { The image base is ImageBase: LOAD_ADDR ($400000, the static non-PIE base ld
+    uses on x86-64) unless --image-base / --gibix moved it. }
   ELFLNK_PAGE   = $1000;
   ELFLNK_STUB_SIZE = 93;        { the synthesised _start; see ElfLnkPutStub }
 
@@ -801,7 +802,7 @@ end;
   what makes the order of .init_array entries (and so of constructors) the
   command-line order rather than an accident of this table.
 
-  THE IMAGE: one RX segment from ELFLNK_BASE holding the ELF and program
+  THE IMAGE: one RX segment from ImageBase holding the ELF and program
   headers in its first page and .text from base+page -- the address ld gives
   .text in a -static -nostdlib link, so a reader comparing the two images sees
   the same code addresses -- then a RW segment starting on the next page
@@ -818,7 +819,7 @@ procedure ElfLnkLayout;
 var k, o, i, s0: Integer;
     addr, start, maxAl, rwFile: Int64;
 begin
-  addr := ELFLNK_BASE + ELFLNK_PAGE;
+  addr := ImageBase + ELFLNK_PAGE;
   for k := 0 to ELFLNK_NKIND - 1 do
   begin
     if k = ELFLNK_K_INIT then
@@ -826,7 +827,7 @@ begin
       { the RW segment: next page in the FILE, at the congruent address }
       rwFile := ElfLnkAlignUp(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], ELFLNK_PAGE);
       ElfLnkRwFile := rwFile;
-      addr := ELFLNK_BASE + rwFile;
+      addr := ImageBase + rwFile;
     end;
     maxAl := 1;
     for i := 0 to ElfLnkSecCount - 1 do
@@ -1333,7 +1334,8 @@ var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff
     stub: array of Byte;
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
     relaOf: array of Integer;
-    g: Integer;
+    g, phCount: Integer;
+    ldsoVA: Int64;
 const
   SHSTR = 68;   { see the blob below }
 begin
@@ -1375,7 +1377,7 @@ begin
     entry := ElfLnkGlobalAddr(g);
 
   { the RW segment's extent }
-  rwStart := ELFLNK_BASE + ElfLnkRwFile;
+  rwStart := ImageBase + ElfLnkRwFile;
   endAddr := rwStart;
   for k := ELFLNK_K_INIT to ELFLNK_K_DATA do
     if ElfLnkOutAddr[k] + ElfLnkOutSize[k] > endAddr then
@@ -1389,18 +1391,20 @@ begin
 
   ElfLnkOpen(outPath);
 
-  { ehdr + 3 phdrs, padded to the first page }
+  { ehdr + 3 phdrs (4 with --ldso-runnable), padded to the first page }
+  phCount := 3;
+  if LdsoRunnable then phCount := 4;
   ElfLnkBReset;
   ElfLnkBPut($464C457F, 4); ElfLnkBPut(2, 1); ElfLnkBPut(1, 1); ElfLnkBPut(1, 1);
   ElfLnkBPadTo(16);
   ElfLnkBPut(2, 2); ElfLnkBPut(62, 2); ElfLnkBPut(1, 4);   { ET_EXEC, EM_X86_64 }
   ElfLnkBPut(entry, 8); ElfLnkBPut(64, 8);
   ElfLnkBPut(0, 8);                                        { e_shoff, patched below }
-  ElfLnkBPut(0, 4); ElfLnkBPut(64, 2); ElfLnkBPut(56, 2); ElfLnkBPut(3, 2);
+  ElfLnkBPut(0, 4); ElfLnkBPut(64, 2); ElfLnkBPut(56, 2); ElfLnkBPut(phCount, 2);
   ElfLnkBPut(64, 2); ElfLnkBPut(9, 2); ElfLnkBPut(8, 2);   { shentsize, shnum, shstrndx }
   { PT_LOAD R+X: the headers and .text }
   ElfLnkBPut(1, 4); ElfLnkBPut(5, 4); ElfLnkBPut(0, 8);
-  ElfLnkBPut(ELFLNK_BASE, 8); ElfLnkBPut(ELFLNK_BASE, 8);
+  ElfLnkBPut(ImageBase, 8); ElfLnkBPut(ImageBase, 8);
   ElfLnkBPut(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], 8);
   ElfLnkBPut(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], 8);
   ElfLnkBPut(ELFLNK_PAGE, 8);
@@ -1412,6 +1416,24 @@ begin
   ElfLnkBPut($6474E551, 4); ElfLnkBPut(6, 4);
   for i := 1 to 5 do ElfLnkBPut(0, 8);
   ElfLnkBPut(16, 8);
+  { --ldso-runnable: PT_DYNAMIC and the minimal dynamic block (see
+    WriteLdsoBlock in elfwriter.inc, the same bytes) after the headers, still in
+    the first page, which .text never shares. }
+  if LdsoRunnable then
+  begin
+    ldsoVA := ImageBase + 64 + phCount * 56;
+    ElfLnkBPut(2, 4); ElfLnkBPut(4, 4); ElfLnkBPut(64 + phCount * 56, 8);
+    ElfLnkBPut(ldsoVA, 8); ElfLnkBPut(ldsoVA, 8);
+    ElfLnkBPut(LDSO_DYNAMIC_SIZE, 8); ElfLnkBPut(LDSO_DYNAMIC_SIZE, 8); ElfLnkBPut(8, 8);
+    ElfLnkBPut(4, 8);  ElfLnkBPut(ldsoVA + LDSO_DYNAMIC_SIZE, 8);            { DT_HASH }
+    ElfLnkBPut(6, 8);  ElfLnkBPut(ldsoVA + LDSO_DYNAMIC_SIZE + 16, 8);       { DT_SYMTAB }
+    ElfLnkBPut(5, 8);  ElfLnkBPut(ldsoVA + LDSO_DYNAMIC_SIZE + 16 + 24, 8);  { DT_STRTAB }
+    ElfLnkBPut(10, 8); ElfLnkBPut(1, 8);                                     { DT_STRSZ }
+    ElfLnkBPut(11, 8); ElfLnkBPut(24, 8);                                    { DT_SYMENT }
+    ElfLnkBPut(0, 8);  ElfLnkBPut(0, 8);                                     { DT_NULL }
+    ElfLnkBPut(1, 4); ElfLnkBPut(1, 4); ElfLnkBPut(0, 4); ElfLnkBPut(0, 4); { nbucket nchain bucket chain }
+    for i := 1 to 4 do ElfLnkBPut(0, 8);   { the null symbol (24) + empty strtab padded (8) }
+  end;
   ElfLnkBPadTo(ELFLNK_PAGE);
   { e_shoff is known only after the image; computed now from the layout }
   fileAt := ElfLnkRwFile + rwLen;
@@ -1557,7 +1579,7 @@ begin
     ElfLnkBPut(ElfLnkOutAddr[k], 8);
     if k = ELFLNK_K_TEXT then ElfLnkBPut(ELFLNK_PAGE, 8)
     else if k = ELFLNK_K_BSS then ElfLnkBPut(ElfLnkRwFile + rwLen, 8)
-    else ElfLnkBPut(ElfLnkOutAddr[k] - ELFLNK_BASE, 8);
+    else ElfLnkBPut(ElfLnkOutAddr[k] - ImageBase, 8);
     ElfLnkBPut(ElfLnkOutSize[k], 8);
     ElfLnkBPut(0, 4); ElfLnkBPut(0, 4);
     if k = ELFLNK_K_TEXT then ElfLnkBPut(16, 8)

@@ -2403,6 +2403,10 @@ const
     agree rather than trusting it. feature-a-second-pt-load-so-data-is-not-executable }
   CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE +
                      PROG_HEADER_SIZE;
+  { --ldso-runnable (WriteLdsoBlock): 6 dynamic entries, DT_HASH (16), one
+    null symbol (24), a one-byte string table padded to 8. }
+  LDSO_DYNAMIC_SIZE = 6 * 16;
+  LDSO_BLOCK_SIZE   = LDSO_DYNAMIC_SIZE + 16 + 24 + 8;
 
   { Compile targets. x86-64 is the native/self-host target; others are
     cross-only and grow op-by-op (unsupported constructs error, never
@@ -6852,6 +6856,13 @@ var
     Code[CodeLen-1] then -- the ModRM/SIB it would be rewriting is not there.
     Lives here rather than in x64enc.inc because emit.inc is included first. }
   EncToAsmBuffer : Boolean;
+  { --image-base: where an x86-64 static ET_EXEC (writeELF, and --link's
+    writer) loads. LOAD_ADDR unless asked. Gibix needs >= 2^39: Ginux maps user
+    memory only in [2^39, 2^40), and its ld.so already sits at 0x400000. }
+  ImageBase      : Int64;
+  { --ldso-runnable: add the minimal PT_DYNAMIC (WriteLdsoBlock) so ld.so can
+    start the static image as `ld.so prog args`. }
+  LdsoRunnable   : Boolean;
   EmitSharedMode : Boolean;   { --shared: x86-64 ET_DYN .so output. NOT the .asm
                                 frontend only, which is what this said until
                                 0419bab94 taught writeELFSharedX64 about compiled
