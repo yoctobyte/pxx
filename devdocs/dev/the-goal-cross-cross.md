@@ -431,6 +431,15 @@ perf number — and nothing in the repo said what "on-target" meant. A `prio:`
 number could not carry it: it is one scalar guessing at a question with two axes
 and no stated goal behind either.
 
+## UPDATE 2026-11-12: the BSD demotion is lifted for the libc-family port
+
+The owner, after sizing the through-libc port: *"quite a lot of work, but no
+real bears on the road ... let's write ourself a ticket with the plan, and
+let's start working."* `feature-port-libc-family-openbsd-netbsd-minix` is
+priced at **60** and is not to be re-demoted from the section below. wasm's
+demotion is unchanged. FreeBSD (raw-syscall family) is not covered by this
+ruling until the owner says so.
+
 ## CURRENT FOCUS, 2026-09-01: LINUX ONLY — BSD and wasm are demoted
 
 The owner, asked about umbrella pricing: *"we focus on linux only for now. that

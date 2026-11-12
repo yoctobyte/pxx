@@ -10967,6 +10967,14 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# --rtl-libc is output-identical to the raw build and leaves at most the one
+	# raw rt_sigreturn. It had no test at all, and DCE broke it silently: the
+	# libc syscall sites were patched at pre-compaction offsets (2026-11-12).
+	@d=$(TESTTMP)/rtl_libc26; mkdir -p $$d && \
+	  ./$(COMPILER) test/test_rtl_libc_torture.pas $$d/raw >/dev/null && \
+	  ./$(COMPILER) --rtl-libc test/test_rtl_libc_torture.pas $$d/libc >/dev/null && \
+	  tools/expect_same.sh rtl_libc_output "$$(PXX_RTL_LIBC_TMP=$$d $$d/libc 2>&1; echo exit=$$?)" "$$(PXX_RTL_LIBC_TMP=$$d $$d/raw 2>&1; echo exit=$$?)" && \
+	  tools/expect_same.sh rtl_libc_kernel_entries "$$(python3 tools/syscall_scan.py $$d/libc | grep -o '[0-9]* kernel-entry')" "1 kernel-entry"
 	# 100 -I roots, the header in the LAST one: an ESP-IDF translation unit
 	# passes 81, and MAX_C_INCLUDE_DIRS / MAX_PAS_UNIT_DIRS were 64 (pin v452:
 	# "too many -I include directories"). museum_landkaart's header import.

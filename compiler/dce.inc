@@ -2067,6 +2067,27 @@ begin
   end;
   DynCallCount := j;
 
+  { --rtl-libc's syscall sites: rel32 calls patched to the shared thunk by
+    EmitLibcSyscallThunk, which runs AFTER this pass. Omitted from the remap
+    until 2026-11-12, so every site behind a dropped body was patched at its
+    pre-compaction offset -- writing a rel32 into whatever had slid there --
+    while the real site kept `call +0` and fell through into the next routine.
+    Measured on hello-world: 30 recorded sites up to offset 32205 in a 15984-byte
+    image, 17 live `e8 00000000` left, SIGSEGV on the first WriteLn.
+    feature-port-libc-family-openbsd-netbsd-minix }
+  j := 0;
+  i := 0;
+  while i < LibcSyscallCallCount do
+  begin
+    if not DceIsRemoved(LibcSyscallCallPos[i]) then
+    begin
+      LibcSyscallCallPos[j] := DceNewOff(LibcSyscallCallPos[i]);
+      Inc(j);
+    end;
+    Inc(i);
+  end;
+  LibcSyscallCallCount := j;
+
   j := 0;
   i := 0;
   while i < CodeRefCount do
