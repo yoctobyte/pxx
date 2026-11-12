@@ -4,7 +4,8 @@
 # The properties `--emit-obj --freestanding` promises, read off the object
 # with readelf: no .init_array/.fini_array, .bss under 4 KiB, no crtl
 # implementation (strlen/strsignal bodies), EXPORTED_FN defined and global,
-# strlen left undefined. Prints "freestanding object ok" or what failed.
+# strlen left undefined, and va_arg's helper __pxx_va_arg_gp defined (stdarg
+# is compiler support, not libc). Prints "freestanding object ok" or what failed.
 set -u
 O=$1; FN=$2
 fail=0
@@ -18,5 +19,6 @@ syms=$(readelf -sW "$O")
 if echo "$syms" | awk '$7!="UND" {print $8}' | grep -qxE 'strlen|strsignal'; then echo "FAIL: a crtl body is in the object"; fail=1; fi
 if ! echo "$syms" | awk '$5=="GLOBAL" && $7!="UND" {print $8}' | grep -qx "$FN"; then echo "FAIL: $FN is not exported"; fail=1; fi
 if ! echo "$syms" | awk '$7=="UND" {print $8}' | grep -qx strlen; then echo "FAIL: strlen is not an undefined import"; fail=1; fi
+if ! echo "$syms" | awk '$7!="UND" {print $8}' | grep -qx __pxx_va_arg_gp; then echo "FAIL: va_arg's helper is not in the object"; fail=1; fi
 [ $fail = 0 ] && echo "freestanding object ok"
 exit $fail

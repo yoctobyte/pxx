@@ -3025,8 +3025,13 @@ begin
   { --freestanding: a header declares, nothing is pulled. The program (a
     kernel) brings its own memcpy and friends, as under gcc -ffreestanding,
     and a crtl impl would drag in run-time-initialised tables (strsignal's)
-    that nothing in a freestanding image would ever initialise. }
-  if FreestandingMode then Exit;
+    that nothing in a freestanding image would ever initialise.
+    Except stdarg: va_arg is compiler support, not libc (gcc's is a builtin),
+    and pxx's lowers to calls to the __pxx_va_arg_* helpers in stdarg.c, which
+    are pure functions with no state. stdarg.h is one of C's freestanding
+    headers, the only one with an impl file. Gibux's kprintf.c. }
+  if FreestandingMode then
+    if not (CPCrtlHeaderName(hdrPath, hdrName) and (hdrName = 'stdarg')) then Exit;
   if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
   if CPCrtlSrcPulled(src) then Exit;

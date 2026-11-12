@@ -4,7 +4,7 @@ tags: [C]
 prio: 20
 type: feature
 blocked-by: []
-summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done. Still open: (1) C file-scope initialisers are run-time code, so most kernel files are refused under --freestanding; (2) va_arg's helper under --freestanding; (3) a parse error in fs/procfs.c; (4) `--link --freestanding` for a higher-half image; (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
+summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. Still open: (1) C file-scope initialisers are run-time code, so most kernel files are refused under --freestanding; (4) `--link --freestanding` for a higher-half image; (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
 status: open
 owner: unassigned
 ---
@@ -55,11 +55,14 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    - Needed: a static data image for initialised globals, with R_X86_64_64
      relocations for addresses of strings, functions and globals. gcc
      semantics, and a faster start-up for every C program too.
-2. **va_arg under --freestanding.** kprintf.c fails because
+2. **DONE 2026-11-12** ([[bug-c-va-arg-fails-under-freestanding]]).
+   **va_arg under --freestanding.** kprintf.c fails because
    `__pxx_va_arg_gp` is a pxx-internal runtime symbol. It came from a crtl
    pull, which --freestanding switches off. stdarg is compiler support, not
    libc, so the helper has to come with the compiler under --freestanding.
-3. **fs/procfs.c:268**: `expected C expression near size_t gen_pid_stat`. A
+3. **DONE 2026-11-12** ([[bug-c-a-local-unsized-function-pointer-array-is-refused]]):
+   it was a block-scope `long (*gens[])(..) = {..}`.
+   **fs/procfs.c:268**: `expected C expression near size_t gen_pid_stat`. A
    C frontend parse gap; it still needs a repro.
 4. **`--link --freestanding`** must:
    - supply no _start, with entry `start32` (or `-e sym`);
@@ -88,6 +91,15 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
 
    The inline-asm encoder and the AT&T operand reader can be reused. The
    object writer has to handle arbitrary sections.
+7. **Kernel code-generation constraints**, which the kernel Makefile lists
+   as "pxx's equivalents are still to come":
+   - gcc builds with `-mno-red-zone`, because an interrupt arrives on the
+     same stack;
+   - `-mgeneral-regs-only`, because user SSE state lives in the registers;
+   - `-mcmodel=kernel`; pxx's PC32/R_X86_64_64-only code already covers it.
+   Each of these still has to be checked against what pxx's x86-64 code
+   generator emits.
+
 6. **`extern T big[N];` reserves .bss in every object** that includes the
    declaration. The symbol is correctly emitted UND, but the slot it was
    allocated is never released. proc.h's `extern struct proc procs[128]` is

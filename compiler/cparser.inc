@@ -7337,22 +7337,38 @@ begin
       call sig + [N]; allocate an array of callable pointers and materialise the
       brace initializer as per-element runtime `name[k] := &fk` assignments (a
       local inits at runtime, unlike the global PendingInit path). SOLE-declarator
-      form only (the rare `..., x;` tail falls outside). }
-    if arrLen >= 0 then
+      form only (the rare `..., x;` tail falls outside).
+      `RET (*name[])(params) = {..}` (arrLen -1) is sized from its initializer,
+      so the array is allocated after the list is read and each element's
+      AN_IDENT gets the symbol index then (Gibux's procfs.c gens[]). A list
+      shorter than [N] zero-fills the rest, as C requires of any initialised
+      aggregate. bug-c-a-local-unsized-function-pointer-array-is-refused }
+    if arrLen >= -1 then
     begin
       name := CTypeFnPtrName;
-      if arrLen < 1 then arrLen := 1;
-      idx := AllocArray(name, tyPointer, 0, arrLen - 1);
-      if procSig >= 0 then SymElemProcSig[idx] := procSig;  { fp[i](args) callable }
+      idx := -1;
+      if arrLen >= 0 then
+      begin
+        if arrLen < 1 then arrLen := 1;
+        idx := AllocArray(name, tyPointer, 0, arrLen - 1);
+        if procSig >= 0 then SymElemProcSig[idx] := procSig;  { fp[i](args) callable }
+      end;
       head := -1; tail := -1;
+      ei := 0;
       if CurTok.Kind = tkAssign then
       begin
         Next; Expect(tkBegin, '{');
-        ei := 0;
-        while CBlockContinues do
+        while CBlockContinues or (ei < arrLen) do
         begin
-          if CurTok.Kind = tkAmp then Next;   { `&func` == `func` }
-          initExpr := ParseCExpr;             { function name -> its address }
+          if CBlockContinues then
+          begin
+            if CurTok.Kind = tkAmp then Next;   { `&func` == `func` }
+            initExpr := ParseCExpr;             { function name -> its address }
+          end
+          else
+          begin
+            initExpr := AllocNode(AN_INT_LIT); ASTIVal[initExpr] := 0; ASTTk[initExpr] := Ord(tyPointer);
+          end;
           idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := ei; ASTTk[idxLit] := Ord(tyInteger);
           idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(tyPointer);
           inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit; ASTTk[inode] := Ord(tyPointer);
@@ -7361,9 +7377,22 @@ begin
           if head = -1 then begin head := seq; tail := seq; end
           else begin ASTRight[tail] := seq; tail := seq; end;
           Inc(ei);
-          if CurTok.Kind = tkComma then Next else Break;
+          if CurTok.Kind = tkComma then Next
+          else if CurTok.Kind <> tkEnd then Break;
         end;
         Expect(tkEnd, '}');
+      end;
+      if idx < 0 then
+      begin
+        if ei < 1 then ei := 1;
+        idx := AllocArray(name, tyPointer, 0, ei - 1);
+        if procSig >= 0 then SymElemProcSig[idx] := procSig;
+        seq := head;
+        while seq <> -1 do
+        begin
+          ASTIVal[ASTLeft[ASTLeft[ASTLeft[seq]]]] := idx;  { seq -> assign -> index -> ident }
+          seq := ASTRight[seq];
+        end;
       end;
       Eat(tkSemicolon);
       blk := AllocNode(AN_BLOCK); ASTLeft[blk] := head;

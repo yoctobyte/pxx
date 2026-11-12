@@ -19058,9 +19058,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh casm_kernel_um "$$($(TESTTMP)/casm_kernel_um)" "$$(printf 'far return cs=0x33\nes roundtrip 1\nimm 37\nlabels 15')"
 	tools/casm_sysinsn_vs_gcc.sh ./$(COMPILER) test/casm_kernel_system_instructions.c $(TESTTMP)/casm_sysinsn
 	# --emit-obj --freestanding (Gibux): no .init_array/.fini_array, no crtl body
-	# pulled in by a libc header, a .bss without the signal alternate stack.
+	# pulled in by a libc header except stdarg's helpers, a .bss without the
+	# signal alternate stack. va_arg is run through a gcc-linked driver.
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_object_has_no_runtime_hooks.c $(TESTTMP)/c_freestanding.o > /dev/null
 	tools/check_freestanding_object.sh $(TESTTMP)/c_freestanding.o fs_sum
+	gcc -no-pie -o $(TESTTMP)/c_freestanding_va test/c_freestanding_object_has_no_runtime_hooks_main.c $(TESTTMP)/c_freestanding.o
+	tools/expect_same.sh c_freestanding_va "$$($(TESTTMP)/c_freestanding_va)" "321 36"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
@@ -19695,6 +19698,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cmultidim_row_address26; tools/expect_same.sh cmultidim_row_address26-rc "$$?" "42"
 	./$(COMPILER) test/clocal_fnptr_array.c $(TESTTMP)/clocal_fnptr_array26
 	$(TESTTMP)/clocal_fnptr_array26; tools/expect_same.sh clocal_fnptr_array26-rc "$$?" "42"
+	./$(COMPILER) test/c_local_unsized_fnptr_array_from_its_initializer.c $(TESTTMP)/clufa26
+	tools/expect_same.sh clufa26 "$$($(TESTTMP)/clufa26)" "$$(cat test/c_local_unsized_fnptr_array_from_its_initializer.expected)"
 	./$(COMPILER) test/csigned_unsigned_compare64.c $(TESTTMP)/csigned_unsigned_compare6426
 	$(TESTTMP)/csigned_unsigned_compare6426; tools/expect_same.sh csigned_unsigned_compare6426-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_ptr_to_struct_array_elem.c $(TESTTMP)/cglobal_ptr_to_struct_array_elem26
