@@ -2321,6 +2321,7 @@ var
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
   low32Dem: Boolean;   { the consumer keeps only a2 (XtLow32Demand) }
+  imm: Integer;        { IR_INDEX: a constant index folded to a byte offset }
   narrow: Integer;     { XtNarrowBinop, when low32Dem }
 begin
   low32Dem := XtLow32Demand;
@@ -2750,6 +2751,29 @@ begin
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)   { &handle -> handle }
           else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { slot -> handle }
+        end;
+        { A constant index is a byte offset known now: add it to the base and
+          skip the spill, the index load and the scaling (riscv32's
+          af239c24d7). Within Int32 only; anything wider takes the general
+          path, which computes the same wrapped address. }
+        if (IRKind[right] = IR_CONST_INT) and
+           (IRIVal[right] >= -1000000) and (IRIVal[right] <= 1000000) and
+           (lo >= -1000000) and (lo <= 1000000) and
+           (elemSize >= 0) and (elemSize <= 1000000) and
+           ((IRIVal[right] - lo) * elemSize >= -2147483647) and
+           ((IRIVal[right] - lo) * elemSize <= 2147483647) then
+        begin
+          imm := Integer((IRIVal[right] - lo) * elemSize);
+          if (imm >= -128) and (imm <= 127) then
+          begin
+            if imm <> 0 then xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, imm);
+          end
+          else
+          begin
+            EmitLoadConstXtensa(reg_xtensa_a3, imm);
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end;
+          Exit;
         end;
         XtensaPushA2;
 
