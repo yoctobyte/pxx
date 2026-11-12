@@ -2438,7 +2438,7 @@ const
     the FreeBSD shape -- raw syscalls through an in-program Linux-ABI
     translator (compiler/builtin/obsdabi.pas) -- plus an OpenBSD ident note
     and a PT_OPENBSD_SYSCALLS pin table pointing every number at that
-    translator's one `syscall` (elfwriter.inc, ElfOpenbsdPinTable). }
+    translator's `syscall` sites (elfwriter.inc, ObsdPinVA). }
   KERNEL_OPENBSD = 2;
   { The OpenBSD ident note: 12-byte header + "OpenBSD\0" + a 4-byte zero. Same
     size as the FreeBSD one, so it takes the same slot. }
@@ -2447,6 +2447,7 @@ const
   { The kernel discards the WHOLE pin table if any entry has sysno <= 0 or >=
     SYS_MAXSYSCALL (sys/kern/exec_elf.c, elf_read_pintable). 331 on 8.0. }
   OB_SYS_MAXSYSCALL = 331;
+  OB_SYS_TFORK = 8;   { SYS___tfork: pinned to ObTforkA, not ObRawA (elfwriter ObsdPinVA) }
   { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
     12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
     oldest release the translator's constants were measured against. }

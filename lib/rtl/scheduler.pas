@@ -264,6 +264,14 @@ const
 {$else}
   MAP_ANON_PRIV = $22;
 {$endif}
+  { A coroutine's stack: rsp lives in it and syscalls are made from it, which
+    OpenBSD (experimental --os=openbsd) allows only in a MAP_STACK region.
+    Linux's MAP_STACK is a hint pxx has never passed, so only there. }
+{$ifdef PXX_OS_OPENBSD}
+  MAP_STACK_PRIV = $20022;
+{$else}
+  MAP_STACK_PRIV = MAP_ANON_PRIV;
+{$endif}
 
 { Per-arch Linux syscall numbers (verified against the FPC RTL sysnr tables).
   aarch64 / arm32 have no epoll_wait — they use epoll_pwait (two extra args:
@@ -673,7 +681,7 @@ begin
   { [ CO_GUARD PROT_NONE ][ CO_RED slack ][ canary ][ ...usable stack... ] top }
   usable := ((stackBytes + PAGE_SIZE - 1) div PAGE_SIZE) * PAGE_SIZE;
   mapBase := __pxxrawsyscall(SYS_mmap, 0, usable + CO_GUARD + CO_RED, PROT_RW,
-                             MAP_ANON_PRIV, -1, 0);
+                             MAP_STACK_PRIV, -1, 0);
   if MmapOk(mapBase) then
   begin
     { Fail CLOSED, not open: if the region cannot be made PROT_NONE then this

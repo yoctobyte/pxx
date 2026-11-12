@@ -75,6 +75,18 @@ var
   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
                         x86-64/i386, a branch immediate on aarch64/arm32 }
   fbChild: Integer;   { --os=freebsd: the thr_new entry that becomes a clone child }
+  obChild: Integer;   { --os=openbsd: where the translator's __tfork sends the child }
+
+{ The child's kernel entries. Bare instructions everywhere but --os=openbsd,
+  where a `syscall` outside the translator's pinned site is killed
+  (pinsyscalls), so the child goes through the translator like any other
+  code: the thunk saves what the stub needs, and the translator's own frames
+  sit below the stage area, on the thread's stack. }
+function ChildSys: AnsiString;
+begin
+  if TargetKernel = KERNEL_OPENBSD then ChildSys := 'syscall' else ChildSys := 'syscall_raw';
+end;
+
 begin
   if CloneStubAddr <> 0 then Exit;
   if TargetArch = TARGET_X86_64 then
@@ -99,6 +111,15 @@ begin
         'mov rax, [rsp-8]',
         'mov [rsp+%], rax', 16 + 8 * TLS_SLOT_FS_ENTRY,
         'jmp child']);
+    end;
+    { --os=openbsd: __tfork resumes the child after the syscall like clone
+      does, but that syscall is inside the translator (obsdabi's ObTforkA),
+      so ObTforkA sends the child here instead, with rsp = the stage area. }
+    obChild := 0;
+    if TargetKernel = KERNEL_OPENBSD then
+    begin
+      obChild := CodeLen;
+      EmitAsmX64(['jmp child']);
     end;
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
@@ -223,6 +244,23 @@ begin
         'jmp parent',
       'child:']);
     end
+    else if TargetKernel = KERNEL_OPENBSD then
+    begin
+      { Linux clone through the translator, with the child's resume address
+        in r9 (clone's unused sixth argument). The translator maps it to
+        __tfork; the parent returns here with the tid, the child never does. }
+      EmitCodeAbsToRdx(obChild);
+      EmitAsmX64([
+        'mov r9, rdx',
+        'mov rdx, r8',                  { parent_tid = ctidptr }
+        'mov r10, r8',                  { child_tid  = ctidptr }
+        'xor r8d, r8d',                 { tls = NULL }
+        'mov eax, 56',                  { SYS_clone }
+        'syscall',
+        'test rax, rax',
+        'jnz parent',
+      'child:']);
+    end
     else
     begin
       EmitAsmX64([
@@ -271,7 +309,7 @@ begin
       'mov edi, 0x1001',              { ARCH_SET_GS }
       'lea rsi, [rsp+16]',
       'mov eax, 158',                   { arch_prctl }
-      'syscall_raw']);
+      ChildSys]);
     { ---- start the user area from the init image, when there is one ----
       The block was zeroed above; the image holds every thread-local's
       initial value (0 where it has no initialiser), so this is the start C
@@ -321,7 +359,7 @@ begin
       'mov rdi, rsp',                   { new }
       'xor esi, esi',                   { old = nil }
       'mov eax, 131',                   { sigaltstack }
-      'syscall_raw',
+      ChildSys,
       'add rsp, 32']);
     { r10 = the hidden-destination scratch, BEFORE the two pops move rsp.
       An entry with no result ignores r10; one that returns a record/set/frozen
@@ -377,7 +415,7 @@ begin
       EmitAsmX64([
         'xor edi, edi',                 { exit code 0 }
         'mov eax, 60',                  { SYS_exit }
-        'syscall_raw']);                { the thread exits here }
+        ChildSys]);                     { the thread exits here }
     EmitAsmX64([
     'parent:',                          { rax already = child tid }
       'ret',

@@ -238,3 +238,34 @@ Things measured on 8.0:
 Six signal tests and an `--fpc-mem-errors` nil write match Linux byte for
 byte. Next: threads (`__tfork`, and thread stacks need MAP_STACK too), then
 sockets.
+
+### 2026-11-12: `--os=openbsd` threads
+
+`--threadsafe` is no longer refused. How each part works:
+
+- **Creation.** The clone stub (thread_emit.inc) has an OpenBSD leg that
+  calls clone through the thunk, with the child's resume address in r9. The
+  translator turns that into `__tfork`, via `ObTforkA`. The pin table pins
+  SYS___tfork (8) to `ObTforkA`'s syscall instruction, and every other number
+  to `ObRawA`'s.
+- **Exit.** The thread takes a spin lock and switches to a shared MAP_STACK
+  exit stack. It clears ctid, wakes both futex queues (calling ObRawA by
+  address), then calls `__threxit(&lock)`, so the kernel releases the lock.
+  The ctid pointer is parked in TLS slot 14, as on FreeBSD.
+- **Stacks.** A thread or coroutine stack must be MAP_STACK. The new
+  `PXX_OS_OPENBSD` define makes palthread and scheduler pass Linux MAP_STACK.
+- **sigaltstack.** It now passes the program's buffer straight through,
+  because the kernel converts the region itself (measured).
+- **Assembler limits found.** pxx's asm has no `jmp reg` or `call reg`, so
+  the code uses `push reg; ret` and a `call label` trampoline.
+
+Results:
+
+- Eleven thread tests match Linux, and `lib_fpc_thread_surface` passed 40
+  runs out of 40.
+- Linux, FreeBSD, aarch64 and i386 `--threadsafe` binaries are
+  byte-identical to a control built at the parent commit.
+- `test_a_joined_thread_leaves_the_pal_reap_table` reads `/proc/self/maps`,
+  which OpenBSD does not have.
+
+Next: sockets.

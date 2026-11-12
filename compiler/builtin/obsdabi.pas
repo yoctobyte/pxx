@@ -28,8 +28,8 @@ unit obsdabi;
 
   DONE: files, directories, memory, time, process basics, TLS, uname,
   rlimits, /proc/self/environ and /proc/self/exe, isatty, signals (handlers,
-  masks, the alt stack, kill/tgkill, itimers). NOT YET: sockets, termios
-  beyond TCGETS, epoll, threads (the compiler refuses --threadsafe).
+  masks, the alt stack, kill/tgkill, itimers), threads (clone -> __tfork,
+  thread exit, futex). NOT YET: sockets, termios beyond TCGETS, epoll.
   Anything unmapped answers -ENOSYS. }
 
 interface
@@ -71,6 +71,7 @@ const
   OB_SIGACTION = 46; OB_SIGPROCMASK = 48; OB_SIGPENDING = 52;
   OB_GETITIMER = 70; OB_SETITIMER = 69; OB_SIGSUSPEND = 111; OB_THRKILL = 119;
   OB_SIGALTSTACK = 288;
+  OB_TFORK = 8; OB_FUTEX = 83; OB_THREXIT = 302;
 
   OB_AT_FDCWD = -100;             { same value as Linux }
   OB_AT_EACCESS = $01; OB_AT_SYMLINK_NOFOLLOW = $02; OB_AT_SYMLINK_FOLLOW = $04;
@@ -106,6 +107,16 @@ const
 var
   ObBrkBase, ObBrkCur, ObBrkTop: Int64;
   ObTmpSeq: Int64;
+  ObMainTid: Int64;          { the thread that first called clone; 0 = no threads yet }
+  ObExitStack: Int64;        { the shared thread-exit stack (MAP_STACK) }
+  ObExitLock: Integer;       { its lock; __threxit's notdead clears it }
+
+const
+  OB_EXIT_STACK_SIZE = 16384;
+  { The TLS slot the clone stub leaves free for the child's ctid pointer on
+    x86-64: defs.inc's TLS_SLOT_FS_ENTRY (14), i386's fs entry slot, never
+    written on x86-64. fbsdabi uses the same slot for the same purpose. }
+  OB_TLS_SLOT_CTID = 14;
 
 { The ONE kernel entry, and the one address the pin table names. args ->
   [nr, a0..a5, rdx-out, cf-out]. OpenBSD reports an error with CF set and the
@@ -129,6 +140,89 @@ asm
   xor rax, rcx
   sub rax, rcx
   pop r12
+end;
+
+{ __tfork(param, psize), with the child sent to cont. This is the one other
+  syscall site the pin table names (SYS___tfork only, see ObsdPinVA): the
+  child resumes after the instruction like a clone child, on its new stack,
+  so it cannot come back through ObRawA's frame. r8 survives the syscall into
+  the child (the kernel copies the parent's registers), and the child jumps
+  to cont -- the clone stub's child entry -- with rsp = tf_stack. The parent
+  gets the tid, or -errno. }
+function ObTforkA(param, psize, cont: Int64): Int64; assembler;
+{$asmMode intel}
+asm
+  mov r8, cont
+  mov rdi, param
+  mov rsi, psize
+  mov eax, 8
+  syscall
+  jb obtf_fail
+  test eax, eax
+  jz obtf_child
+  jmp obtf_done
+obtf_child:
+  push r8                 { jmp r8: the assembler takes label targets only }
+  ret
+obtf_fail:
+  neg rax
+obtf_done:
+end;
+
+{ The last steps of a non-main thread's exit: the CLONE_CHILD_CLEARTID work
+  Linux's kernel does, which OpenBSD's does not (its __threxit clears a word
+  but wakes nobody). The moment the tid word is zero a joiner may unmap this
+  thread's stack, so the clear and the wakes run on a shared exit stack
+  (MAP_STACK, mapped by the translator) taken under a spin lock -- and the
+  lock word is __threxit's `notdead`, so the KERNEL releases it once this
+  thread is past using that stack. Wakes go to both futex queues (a joiner may
+  wait private or shared), through ObRawA called by address: registers and
+  the exit stack only. Does not return. }
+procedure ObThreadExitA(ctid, lock, top, raw: Int64); assembler;
+{$asmMode intel}
+asm
+  mov r12, ctid
+  mov r13, lock
+  mov r14, top
+  mov r15, raw
+  jmp obte_spin
+obte_raw:                 { call r15: the assembler takes label targets only }
+  push r15
+  ret
+obte_spin:
+  mov eax, 1
+  xchg [r13], eax
+  test eax, eax
+  jz obte_got
+  pause
+  jmp obte_spin
+obte_got:
+  mov rsp, r14
+  xor eax, eax
+  mov [r12], eax
+  sub rsp, 80
+  mov qword [rsp], 83
+  mov [rsp+8], r12
+  mov qword [rsp+16], 2
+  mov qword [rsp+24], $7FFFFFFF
+  mov qword [rsp+32], 0
+  mov qword [rsp+40], 0
+  mov qword [rsp+48], 0
+  mov rdi, rsp
+  call obte_raw
+  mov qword [rsp], 83
+  mov [rsp+8], r12
+  mov qword [rsp+16], 130
+  mov qword [rsp+24], $7FFFFFFF
+  mov qword [rsp+32], 0
+  mov qword [rsp+40], 0
+  mov qword [rsp+48], 0
+  mov rdi, rsp
+  call obte_raw
+  mov qword [rsp], 302
+  mov [rsp+8], r13
+  mov rdi, rsp
+  call obte_raw
 end;
 
 var
@@ -552,11 +646,9 @@ end;
   - siginfo is signo, CODE, errno (Linux: signo, errno, code). si_code values
     agree with Linux for faults (FPE_INTDIV 1, FPE_INTOVF 2 -- no FreeBSD
     swap); the user codes are 0, -1 (LWP), -2 (QUEUE), -3 (TIMER).
-  - THE ALT STACK MUST BE MAP_STACK. OpenBSD kills a process that makes a
-    syscall (or takes a page fault) with rsp outside a MAP_STACK mapping, and
-    pxx's alt stack is 32 KiB of BSS. So sigaltstack never hands OpenBSD the
-    program's buffer: the first call maps ObAltStack (MAP_STACK) and
-    registers that, and a read reports what the program asked for.
+  - OpenBSD kills a process that makes a syscall with rsp outside a
+    MAP_STACK mapping. pxx's alt stack is 32 KiB of BSS, but sigaltstack
+    converts what it registers (see ObSigaltstack), so it passes through.
   Offsets measured with offsetof() on OpenBSD 8.0 (2026-11-12). }
 
 const
@@ -573,13 +665,9 @@ const
   OB_SC_TRAPNO = 152; OB_SC_ERR = 160; OB_SC_FPSTATE = 208; OB_SC_MASK = 220;
   LX_UC_GREGS = 40;
   LX_UC_SIGMASK = 296;
-  OB_ALTSTACK_SIZE = 65536;          { over OpenBSD's MINSIGSTKSZ (12288) }
 
 var
   ObLxHandler: array[0..32] of Int64;   { by OpenBSD signal number }
-  ObAltStack: Int64;                    { our MAP_STACK alt stack, 0 = not mapped }
-  ObAltSet: Boolean;                    { the program registered one }
-  ObAltSp, ObAltSize, ObAltFlags: Int64; { what it registered, for reads }
 
 function LxSig(s: Int64): Int64;
 var i: Integer;
@@ -780,46 +868,34 @@ begin
 end;
 
 { sigaltstack: Linux stack_t is sp, flags(int), size; OpenBSD's is sp, size,
-  flags; SS_DISABLE is 2 on Linux and 4 on OpenBSD. See the header for why
-  the program's buffer is never registered. }
+  flags; SS_DISABLE is 2 on Linux and 4 on OpenBSD. The program's buffer is
+  registered as it is, BSS or not: OpenBSD converts a registered alt stack to
+  MAP_STACK itself (measured 2026-11-12: a handler on pxx's BSS alt stack
+  makes syscalls and lives, where any other non-MAP_STACK rsp is killed). }
 function ObSigaltstack(ss, oss: Int64): Int64;
-var t: array[0..2] of Int64; r, f: Int64;
+var t, o: array[0..2] of Int64; r, f, pt, po: Int64;
 begin
-  if oss <> 0 then
+  pt := 0; po := 0;
+  if ss <> 0 then
   begin
-    if ObAltSet then
-    begin
-      PInt64(oss)^ := ObAltSp;
-      PInteger(oss + 8)^ := Integer(ObAltFlags);
-      PInt64(oss + 16)^ := ObAltSize;
-    end
-    else
-    begin
-      PInt64(oss)^ := 0; PInteger(oss + 8)^ := 2; PInt64(oss + 16)^ := 0;   { SS_DISABLE }
-    end;
+    t[0] := PInt64(ss)^;
+    t[1] := PInt64(ss + 16)^;
+    f := PInteger(ss + 8)^;
+    t[2] := 0;
+    if (f and 1) <> 0 then t[2] := t[2] or 1;          { SS_ONSTACK }
+    if (f and 2) <> 0 then t[2] := t[2] or 4;          { SS_DISABLE }
+    pt := Int64(@t[0]);
   end;
-  Result := 0;
-  if ss = 0 then Exit;
-  f := PInteger(ss + 8)^;
-  if (f and 2) <> 0 then
+  if oss <> 0 then po := Int64(@o[0]);
+  r := ObSys(OB_SIGALTSTACK, pt, po, 0, 0, 0, 0);
+  if (r = 0) and (oss <> 0) then
   begin
-    t[0] := 0; t[1] := 0; t[2] := 4;
-    r := ObSys(OB_SIGALTSTACK, Int64(@t[0]), 0, 0, 0, 0, 0);
-    if r = 0 then ObAltSet := False;
-    Result := Lx(r); Exit;
-  end;
-  if ObAltStack = 0 then
-  begin
-    r := ObSys(OB_MMAP, 0, OB_ALTSTACK_SIZE, 3, 2 or OB_MAP_ANON or OB_MAP_STACK, -1, 0);
-    if r < 0 then begin Result := -LX_ENOMEM; Exit; end;
-    ObAltStack := r;
-  end;
-  t[0] := ObAltStack; t[1] := OB_ALTSTACK_SIZE; t[2] := 0;
-  r := ObSys(OB_SIGALTSTACK, Int64(@t[0]), 0, 0, 0, 0, 0);
-  if r = 0 then
-  begin
-    ObAltSet := True;
-    ObAltSp := PInt64(ss)^; ObAltFlags := 0; ObAltSize := PInt64(ss + 16)^;
+    PInt64(oss)^ := o[0];
+    f := 0;
+    if (PInteger(@o[2])^ and 1) <> 0 then f := f or 1;
+    if (PInteger(@o[2])^ and 4) <> 0 then f := f or 2;
+    PInteger(oss + 8)^ := Integer(f);
+    PInt64(oss + 16)^ := o[1];
   end;
   Result := Lx(r);
 end;
@@ -831,6 +907,85 @@ begin
   if (os = 0) and (sig <> 0) then begin Result := -LX_EINVAL; Exit; end;
   if tid = ObSys(OB_GETTHRID, 0, 0, 0, 0, 0, 0) then tid := 0;   { 0 = this thread }
   Result := Lx(ObSys(OB_THRKILL, tid, os, 0, 0, 0, 0));
+end;
+
+{ ---- Threads -----------------------------------------------------------------
+  The clone stub's OpenBSD leg (thread_emit.inc) calls clone through the
+  thunk, with the child's resume address in r9. Linux flags are honoured as
+  far as pxx uses them: the stack, PARENT_SETTID (tf_tid), CHILD_CLEARTID
+  (the ctid pointer is parked in the child's TLS block, which the stub has
+  already carved at stage+16, and acted on by the thread's exit), and the
+  TLS block itself (tf_tcb = the same block, so fs is right from the first
+  instruction). }
+
+function ObClone(flags, stack, ptid, ctid, cont: Int64): Int64;
+var p: array[0..2] of Int64;
+begin
+  if ((flags and $100) = 0) or (stack = 0) or (cont = 0) then
+  begin
+    Result := -LX_EINVAL; Exit;                           { only CLONE_VM threads }
+  end;
+  if ObMainTid = 0 then ObMainTid := ObSys(OB_GETTHRID, 0, 0, 0, 0, 0, 0);
+  if ObExitStack = 0 then
+  begin
+    Result := ObSys(OB_MMAP, 0, OB_EXIT_STACK_SIZE, 3, 2 or OB_MAP_ANON or OB_MAP_STACK, -1, 0);
+    if Result < 0 then begin Result := -LX_ENOMEM; Exit; end;
+    ObExitStack := Result;
+  end;
+  if (flags and $00200000) <> 0 then                      { CLONE_CHILD_CLEARTID }
+    PInt64(stack + 16 + 8 * OB_TLS_SLOT_CTID)^ := ctid
+  else
+    PInt64(stack + 16 + 8 * OB_TLS_SLOT_CTID)^ := 0;
+  p[0] := stack + 16;                                     { tf_tcb = the TLS block }
+  if (flags and $00100000) <> 0 then p[1] := ptid         { CLONE_PARENT_SETTID }
+  else p[1] := 0;
+  p[2] := stack;                                          { tf_stack }
+  Result := Lx(ObTforkA(Int64(@p[0]), 24, cont));
+end;
+
+{ exit(2): this thread. The main thread (or a program that never made one)
+  ends the process, as pxx's runtime expects. }
+procedure ObExitThread(code: Int64);
+var ctid: Int64;
+begin
+  if (ObMainTid = 0) or (ObSys(OB_GETTHRID, 0, 0, 0, 0, 0, 0) = ObMainTid) then
+    ObSys(OB_EXIT, code, 0, 0, 0, 0, 0);
+  ctid := PInt64(Int64(__pxxTlsBase) + 8 * OB_TLS_SLOT_CTID)^;
+  if ctid = 0 then ObSys(OB_THREXIT, 0, 0, 0, 0, 0, 0);
+  { The kernel stores the tid through tf_tid; wait until it has, or the
+    clear below would be undone and the joiner would wait for a dead thread. }
+  while PInteger(ctid)^ = 0 do ObSys(OB_SCHED_YIELD, 0, 0, 0, 0, 0, 0);
+  ObThreadExitA(ctid, Int64(@ObExitLock), ObExitStack + OB_EXIT_STACK_SIZE, Int64(@ObRawA));
+end;
+
+{ futex: Linux WAIT 0, WAKE 1, REQUEUE 3, WAIT_BITSET 9, WAKE_BITSET 10;
+  OpenBSD WAIT 1, WAKE 2, REQUEUE 3; FUTEX_PRIVATE_FLAG is 128 on both.
+  A bitset op with a full mask is the plain op. Timeouts are relative on
+  both for WAIT (a BITSET wait's absolute timeout is refused). }
+function ObFutex(uaddr, op, val, ts, uaddr2, val3: Int64): Int64;
+var o, pf: Int64;
+begin
+  pf := op and 128;
+  case op and 127 of
+    0: o := 1;
+    1: o := 2;
+    3: o := 3;
+    9: begin
+         if (val3 and $FFFFFFFF) <> $FFFFFFFF then begin Result := -LX_EINVAL; Exit; end;
+         if ts <> 0 then begin Result := -LX_EINVAL; Exit; end;
+         o := 1;
+       end;
+    10: begin
+          if (val3 and $FFFFFFFF) <> $FFFFFFFF then begin Result := -LX_EINVAL; Exit; end;
+          o := 2;
+        end;
+  else
+    Result := -LX_ENOSYS; Exit;
+  end;
+  if o = 3 then
+    Result := Lx(ObSys(OB_FUTEX, uaddr, o or pf, val, ts, uaddr2, 0))   { ts = the requeue count }
+  else
+    Result := Lx(ObSys(OB_FUTEX, uaddr, o or pf, val, ts, 0, 0));
 end;
 
 { ---- the dispatcher ------------------------------------------------------- }
@@ -917,7 +1072,10 @@ begin
               Result := Lx(r);
             end;
     59: Result := Lx(ObSys(OB_EXECVE, a0, a1, a2, 0, 0, 0));
-    60, 231: begin ObSys(OB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;
+    60: begin ObExitThread(a0); Result := 0; end;
+    231: begin ObSys(OB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;
+    56: Result := ObClone(a0, a1, a2, a3, a5);
+    202: Result := ObFutex(a0, a1, a2, a3, a4, a5);
     61: Result := Lx(ObSys(OB_WAIT4, a0, a1, a2 and 3, a3, 0, 0));   { WNOHANG/WUNTRACED same; status words agree }
     62: begin
           f := ObSig(a1);

@@ -1199,7 +1199,7 @@ begin
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --os=freebsd          FreeBSD/amd64 output (experimental): raw syscalls via an');
   WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
-  WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 output (EXPERIMENTAL, single-threaded):');
+  WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 output (EXPERIMENTAL):');
   WriteLn('                        the same design plus a syscall pin table');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
@@ -3142,13 +3142,10 @@ begin
     if RtlOverLibc then
       ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly');
   end;
-  { OpenBSD (experimental) is single-threaded for now: the clone stub has no
-    __tfork leg, and OpenBSD cannot set the GS base pxx's TLS uses. -g would
-    place debug data where the pin table goes. }
+  { OpenBSD (experimental): -g would place debug data where the pin table
+    goes. }
   if TargetKernel = KERNEL_OPENBSD then
   begin
-    if ThreadSafeMode then
-      ErrorNoPos('--os=openbsd: --threadsafe is not supported yet (experimental target, single-threaded)');
     if DebugInfo then
       ErrorNoPos('--os=openbsd: -g is not supported yet (experimental target)');
   end;

@@ -2110,24 +2110,25 @@ begin
   if TargetKernel = KERNEL_FREEBSD then ElfOsAbi := 9 else ElfOsAbi := 0;
 end;
 
-{ --os=openbsd: the address of the ONE `syscall` instruction every kernel
-  entry goes through -- the first 0F 05 in obsdabi's ObRawA. OpenBSD kills a
-  syscall made from any address its PT_OPENBSD_SYSCALLS table does not pin
-  for that number (pinsyscalls), so the table pins every number to this one
-  site, and any other raw `syscall` left in an image dies loudly (SIGABRT,
-  "PINS" in ktrace) instead of passing unnoticed. }
-function ObsdPinVA(codeOffset: Integer): Int64;
+{ --os=openbsd: the address of the `syscall` instruction in an obsdabi
+  assembler routine -- the first 0F 05 in it. OpenBSD kills a syscall made
+  from any address its PT_OPENBSD_SYSCALLS table does not pin for that number
+  (pinsyscalls). The table pins every number to ObRawA's site, except
+  __tfork (8), whose child resumes after the instruction on a new stack and
+  so has its own site in ObTforkA. Any other raw `syscall` left in an image
+  dies loudly (SIGABRT, "PINS" in ktrace) instead of passing unnoticed. }
+function ObsdPinVA(codeOffset: Integer; const procName: AnsiString): Int64;
 var p, a, lim: Integer;
 begin
-  p := FindProc('ObRawA');
+  p := FindProc(procName);
   if (p < 0) or (Procs[p].BodyAddr < 0) then
-    ErrorNoPos('internal: --os=openbsd but ObRawA has no code');
+    ErrorNoPos('internal: --os=openbsd but ' + procName + ' has no code');
   a := Procs[p].BodyAddr;
   lim := a + 96;
   if lim > CodeLen - 1 then lim := CodeLen - 1;
   while (a < lim) and not ((Code[a] = $0F) and (Code[a + 1] = $05)) do Inc(a);
   if a >= lim then
-    ErrorNoPos('internal: --os=openbsd: no syscall instruction in ObRawA');
+    ErrorNoPos('internal: --os=openbsd: no syscall instruction in ' + procName);
   ObsdPinVA := ImageBase + codeOffset + a;
 end;
 
@@ -2516,10 +2517,12 @@ begin
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
   if TargetKernel = KERNEL_OPENBSD then
   begin
-    addr := ObsdPinVA(codeOffset);
+    addr := ObsdPinVA(codeOffset, 'ObRawA');
     for i := 1 to OB_SYS_MAXSYSCALL - 1 do
     begin
-      writeU32(f, addr); writeU32(f, i);   { {vaddr, sysno} }
+      if i = OB_SYS_TFORK then writeU32(f, ObsdPinVA(codeOffset, 'ObTforkA'))
+      else writeU32(f, addr);
+      writeU32(f, i);                      { {vaddr, sysno} }
     end;
   end;
   if doDebug then
@@ -2766,10 +2769,12 @@ begin
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
   if TargetKernel = KERNEL_OPENBSD then
   begin
-    addr := ObsdPinVA(codeOffset);
+    addr := ObsdPinVA(codeOffset, 'ObRawA');
     for i := 1 to OB_SYS_MAXSYSCALL - 1 do
     begin
-      writeU32(f, addr); writeU32(f, i);   { {vaddr, sysno} }
+      if i = OB_SYS_TFORK then writeU32(f, ObsdPinVA(codeOffset, 'ObTforkA'))
+      else writeU32(f, addr);
+      writeU32(f, i);                      { {vaddr, sysno} }
     end;
   end;
   if doDebug then

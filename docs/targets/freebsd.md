@@ -217,10 +217,11 @@ which hands the program's handler a Linux-shaped siginfo and ucontext and
 copies the registers back. Three OpenBSD details matter:
 
 - The signal mask is a single 32-bit word, passed by value.
-- pxx's alternate signal stack is 32 KiB of BSS, but OpenBSD kills a process
-  that makes a system call while its stack pointer is outside a `MAP_STACK`
-  mapping. So the translator registers its own 64 KiB `MAP_STACK` region and
-  reports the program's own values back when they are read.
+- OpenBSD kills a process that makes a system call while its stack pointer
+  is outside a `MAP_STACK` mapping. pxx's alternate signal stack is 32 KiB of
+  BSS, but `sigaltstack` converts the region it is given, so the program's
+  buffer is registered unchanged. This was measured, not taken from the
+  documentation.
 - OpenBSD 8.0 reports every SSE floating-point trap as `FPE_FLTINV` and
   leaves the trap number 0. The translator works out the real cause from the
   saved MXCSR, the way Linux does.
@@ -230,9 +231,37 @@ copies the registers back. Three OpenBSD details matter:
 `test_float_exception_mask` and an `--fpc-mem-errors` nil write give the same
 output on OpenBSD as on Linux (2026-11-12).
 
+Threads work too (`--threadsafe`):
+
+- **Thread creation.** The clone stub's OpenBSD leg calls `clone` through
+  the translator, which turns it into `__tfork`. That system call has its own
+  pinned site, in `ObTforkA`, because the child resumes after the instruction
+  on its new stack and cannot return through the translator. `ObTforkA` sends
+  the child to the stub's child entry.
+- **Thread exit.** Linux's kernel clears the tid word and wakes the joiner
+  (`CLONE_CHILD_CLEARTID`); OpenBSD's does not. An exiting thread therefore
+  takes a lock and moves to a shared exit stack. There it clears the word and
+  wakes both futex queues, then calls `__threxit` with the lock word as its
+  argument, so the kernel releases the lock once the thread is gone.
+- **Thread stacks** must be `MAP_STACK`. Under `--os=openbsd` the compiler
+  defines `PXX_OS_OPENBSD`, and `palthread` and `scheduler` (coroutines) then
+  map their stacks with Linux's `MAP_STACK` bit, which the translator passes
+  on. A program that maps its own stack for a raw `__pxxclone` call (as
+  `test_thread_clone` does) must set that bit itself, or the thread is killed
+  at its first system call.
+- **futex.** WAIT, WAKE and REQUEUE are translated, and the BITSET forms
+  are accepted with a full mask.
+
+`test_a_threadvar_is_per_thread`, `test_cross_futex_through_the_pal`,
+`lib_fpc_thread_surface` (40 runs in a row), `lib_classes_tthread`,
+`test_signal_threads`, `test_signal_num_threads_race` and the C tests
+`c_pthread_join_returns_value`, `c_errno_is_per_thread`,
+`c_thread_local_is_per_thread`, `c_pthread_detach` and
+`crtl_pthread_recursive_mutex` give the same output on OpenBSD as on Linux.
+
 Not done yet:
 
-- Threads: `--threadsafe` is refused.
+- `/proc/self/maps` and the rest of `/proc`, apart from `environ` and `exe`.
 - Sockets, termios beyond the `isatty` check, and epoll.
 - Debug info: `-g` is refused, because the debug data would go where the pin
   table is.

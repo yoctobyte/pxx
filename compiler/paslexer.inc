@@ -1258,6 +1258,15 @@ begin
   { The same, for __pxxTlsFsEntrySlotOff (i386's block install, TLS_SLOT_FS_ENTRY). }
   name := 'PXX_HAS_TLS_FS_ENTRY';
   PasDefine(name);
+  { --os=openbsd (experimental): the program is still built against Linux
+    (LINUX stays defined), but a few RTL mappings must carry MAP_STACK there:
+    OpenBSD kills a syscall made with rsp outside a MAP_STACK region, so a
+    thread's or a coroutine's stack has to be one. }
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    name := 'PXX_OS_OPENBSD';
+    PasDefine(name);
+  end;
 end;
 
 procedure PasApplyMimicDefines;

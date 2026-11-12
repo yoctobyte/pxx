@@ -165,6 +165,16 @@ const
     the __pxxclone error above. So do NOT "fix" this to $802 or add an arch
     split: on the four targets that get here, $802 would be the wrong value. }
   MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
+  { A mapping rsp will point into: a thread's stack, or the block whose alt
+    stack a signal handler runs on. Linux's MAP_STACK is only a hint and pxx
+    has never passed it there; OpenBSD (experimental --os=openbsd) kills a
+    syscall made with rsp outside a MAP_STACK region, and the translator maps
+    this bit to its MAP_STACK. }
+{$ifdef PXX_OS_OPENBSD}
+  MAP_STACK_PRIV = $20022;  { MAP_PRIVATE or MAP_ANONYMOUS or MAP_STACK }
+{$else}
+  MAP_STACK_PRIV = $22;
+{$endif}
   PAGE_SIZE     = 4096;
 
 {$ifdef CPUX86_64}
@@ -368,7 +378,7 @@ begin
     img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
 {$endif}
   blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes + altBytes,
-                         PROT_RW, MAP_ANON_PRIV, -1, 0);
+                         PROT_RW, MAP_STACK_PRIV, -1, 0);
   if MmapOk(blk) then
   begin
     PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
@@ -726,7 +736,7 @@ begin
     whatever mmap happens to sit below. StackSize records the full mapping so
     Join's munmap releases the guard too. }
   h.StackSize := stackSize + PAGE_SIZE;
-  h.StackBase := __pxxrawsyscall(SYS_mmap, 0, h.StackSize, PROT_RW, MAP_ANON_PRIV, -1, 0);
+  h.StackBase := __pxxrawsyscall(SYS_mmap, 0, h.StackSize, PROT_RW, MAP_STACK_PRIV, -1, 0);
   if not MmapOk(h.StackBase) then
   begin
     h.StackBase := 0;
