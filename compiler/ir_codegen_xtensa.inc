@@ -1246,6 +1246,32 @@ end;
   at most 4 bytes. Pointer arithmetic written through Int64 --
   `PByte(Int64(p) + k)^`, all over the RTL's heap and string code -- is then
   one add instead of the pair add. riscv32's EmitLow32RISCV32, f09ac07a51. }
+function XtSameLow32(n: Integer): Integer;
+{ A node whose low 32 bits already ARE n's value, or -1: n is
+  `(x xor 2^31) - 2^31` (a sign-extension from 32 bits, which is how a cast to
+  a 32-bit signed type arrives -- NativeInt(...) in PXXBlockCopy's loop) or
+  `x and $FFFFFFFF`, over any number of either. On a 32-bit register both are
+  the value itself. riscv32's Rv32SameLow32, 7ec40c30f6. }
+var l, r: Integer;
+  function IsK(c: Integer; k: Int64): Boolean;
+  begin
+    Result := (IRKind[c] = IR_CONST_INT) and (IRIVal[c] = k);
+  end;
+begin
+  Result := -1;
+  while (n >= 0) and (IRKind[n] = IR_BINOP) and (IRIVal[n] = 0) do
+  begin
+    l := IRA[n]; r := IRB[n];
+    if (IRC[n] = Ord(tkMinus)) and IsK(r, 2147483648) and (IRKind[l] = IR_BINOP) and
+       (IRIVal[l] = 0) and (IRC[l] = Ord(tkXor)) and IsK(IRB[l], 2147483648) then
+      n := IRA[l]
+    else if (IRC[n] = Ord(tkAnd)) and (IsK(r, 4294967295) or IsK(r, -1)) then
+      n := l
+    else Break;
+    Result := n;
+  end;
+end;
+
 procedure EmitLow32Xtensa(node: Integer);
 begin
   XtLow32Demand := True;
@@ -3071,6 +3097,15 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IRC[node];
+
+        { a 32-bit result that is its operand's own low word (a cast to a
+          32-bit type, a mask with $FFFFFFFF): just the operand }
+        if (TypeSlotSize(IntToTypeKind(IRTk[node])) = 4) and
+           TypeIsMachineInt(IntToTypeKind(IRTk[node])) and (XtSameLow32(node) >= 0) then
+        begin
+          EmitLow32Xtensa(XtSameLow32(node));
+          Exit;
+        end;
 
         if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = Ord(tkPlus)) then
         begin

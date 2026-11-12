@@ -36342,6 +36342,15 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-call0/xtow-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_co0)" "$$($(TESTTMP)/test_xtow_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_co2
 	tools/expect_same.sh xtensa-call0/xtow-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_co2)" "$$($(TESTTMP)/test_xtow_x64)"
+	./$(COMPILER) test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_xtc32_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O0 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_xtc32_wo0
+	tools/expect_same.sh xtensa-windowed/xtc32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtc32_wo0)" "$$($(TESTTMP)/test_xtc32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O2 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_xtc32_wo2
+	tools/expect_same.sh xtensa-windowed/xtc32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtc32_wo2)" "$$($(TESTTMP)/test_xtc32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O0 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_xtc32_co0
+	tools/expect_same.sh xtensa-call0/xtc32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtc32_co0)" "$$($(TESTTMP)/test_xtc32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_cast_to_32_bits_is_the_low_word.pas $(TESTTMP)/test_xtc32_co2
+	tools/expect_same.sh xtensa-call0/xtc32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtc32_co2)" "$$($(TESTTMP)/test_xtc32_x64)"
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)
