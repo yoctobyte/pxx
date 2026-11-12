@@ -1541,6 +1541,18 @@ const
   AOP_IMM    = 3;
   AOP_GLOBAL = 4;   { absolute [disp32] — a named global var, BSS-relative }
   AOP_MEMR   = 5;   { explicit [reg], [reg+disp], [reg+reg*scale+disp] }
+  { System operands, for kernel code (Gibux). A segment register (es cs ss ds
+    fs gs = 0..5, the ModRM.reg numbering of 8C/8E) and a control register
+    (cr0..cr15, of which cr0/cr2/cr3/cr4/cr8 exist) ride in AsmOpReg; neither
+    is a general register, so they get kinds of their own rather than a size
+    the general paths would read as one. }
+  AOP_SREG   = 6;
+  AOP_CREG   = 7;
+  { RIP-relative to a numeric local label of the SAME template (`1f(%rip)`).
+    AsmModRM writes mod=00 rm=101 and a zero disp32 and leaves its position in
+    AsmRipFixPos; the AT&T reader patches it once the instruction's END is
+    known, because rip is the address of the NEXT instruction. }
+  AOP_RIPLBL = 8;
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -4067,6 +4079,12 @@ var
   FxSaveOn   : Boolean;  { -O3 x86-64 (pxx internal ABI §5b): this body reserved a 6-slot frame area for the xmm8..13 pool at ABI boundaries. The callee-saved discipline is invisible to SysV externs, indirect targets, coroutine switches and longjmp unwinds (skipped epilogues), so the pool is saved to these slots before each such boundary (extern call, IR_CALL_IND, IR_COSWITCH, try-entry) and restored right after (or on the IR_EXC_ENTER landing pad) — preserving residents that belong to ANY frame up-stack, not just this body's. Set per body by FloatPoolBoundaryAssign; False for -O0/-O2 / non-x86-64 / inline-asm bodies, so those stay byte-identical. }
   FxSaveBase : Integer;  { rbp offset of slot 0 (xmm8); slot k = FxSaveBase + 8*k }
   FunctionSections : Boolean;
+  { `--freestanding` (Gibux): code that runs with no C runtime and no OS
+    under it -- a kernel. --emit-obj: --function-sections and --no-signals
+    implied, no .fini_array, and a translation unit that needs run-time
+    initialisation is refused, because nothing will run a .init_array.
+    --link: no _start and no runtime entry (see LinkMode). }
+  FreestandingMode : Boolean;
   { `--function-sections`: under --emit-obj, turn every internal call into a
     RELOCATION against the callee's own FUNC symbol instead of a displacement
     baked at emit time by ApplyCallFixups.
@@ -7138,6 +7156,9 @@ var
     instruction by the AT&T operand loop, so it can never carry into the next.
     bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
   AsmHigh8Operand : Boolean;
+  { AsmBytes offset of the disp32 an AOP_RIPLBL operand just reserved, or -1.
+    Set by AsmModRM, consumed (and reset) by the AT&T reader. }
+  AsmRipFixPos : Integer;
   AsmOpScale: array[0..3] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;

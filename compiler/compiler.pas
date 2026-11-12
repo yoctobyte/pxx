@@ -1186,6 +1186,11 @@ begin
   WriteLn('                        every cross-function reference a relocation, so a linker');
   WriteLn('                        can drop what the program never reaches (ld --gc-sections).');
   WriteLn('                        The object''s symbols and exports are unchanged.');
+  WriteLn('  --freestanding        --emit-obj (C): code with no runtime under it, a kernel.');
+  WriteLn('                        No .init_array/.fini_array, no crtl implementation pulled');
+  WriteLn('                        in by a header, no signal stack; implies --function-sections');
+  WriteLn('                        and --no-signals. A file-scope initialiser that needs');
+  WriteLn('                        run-time code is refused (nothing would run it).');
   WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');
@@ -1477,6 +1482,7 @@ begin
   OptLevelExplicit := False;
   SourceOneToOne := False;
   FunctionSections := False;
+  FreestandingMode := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
   WarnedMissedFoldBranch := False;
@@ -1690,6 +1696,17 @@ begin
     else if option = '--function-sections' then
     begin
       FunctionSections := True;
+      Inc(i);
+    end
+    else if option = '--freestanding' then
+    begin
+      { Kernel code: no runtime underneath. --function-sections so a link
+        keeps only the runtime helpers the code really calls; --no-signals
+        because there is no OS to deliver a signal (and its 32 KiB alternate
+        stack was the bulk of every object's .bss). }
+      FreestandingMode := True;
+      FunctionSections := True;
+      NoSignals := True;
       Inc(i);
     end
     else if option = '-OO' then

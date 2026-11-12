@@ -131,6 +131,17 @@ begin
   begin
     EncModRMAbs(regField, Integer(AsmOpVal[rmSlot]));
   end
+  else if AsmOpKind[rmSlot] = AOP_RIPLBL then
+  begin
+    { mod=00 rm=101 is [rip+disp32] in 64-bit mode. The displacement is
+      relative to the END of the instruction, which is not known yet (an
+      immediate may follow), so it is reserved here and patched by the
+      caller. }
+    EncToAsmBuffer := False;
+    AsmB(((regField and 7) shl 3) or 5);
+    AsmRipFixPos := AsmBytesCount;
+    AsmB(0); AsmB(0); AsmB(0); AsmB(0);
+  end
   else if AsmOpKind[rmSlot] = AOP_MEMR then
   begin
     { Reuse lib/asmcore's SIB-capable EmitModRMMem (exported for exactly
@@ -658,12 +669,171 @@ begin
   if sz = 8 then AsmSseGpWidth := 8 else AsmSseGpWidth := 4;
 end;
 
+{ ---- system instructions, for kernel code ---------------------------------
+
+  What a freestanding x86-64 kernel needs from inline asm (Gibux's io.h, x86.h
+  and cpu.c): interrupt flag and halt, port I/O, MSRs, the descriptor-table
+  loads, TLB invalidation, the far/interrupt returns, and moves to and from
+  the segment and control registers. Byte layouts checked against GNU as
+  (binutils 2.46) on this box -- see test/casm_kernel_system_instructions.c.
+
+  x86-64 ONLY. The i386 text sink (AttKnows386) does not list these, so an
+  i386 C file using them is refused by name rather than encoded as x86-64
+  bytes; nothing 32-bit has asked for them. }
+function AsmSystemOp(const mn: AnsiString; nops: Integer): Boolean;
+var dataSlot, portSlot, sz, ext, rm, cr: Integer;
+begin
+  Result := True;
+  if nops = 0 then
+  begin
+    if CaseEqual(mn,'cli')     then begin AsmB($FA); Exit; end;
+    if CaseEqual(mn,'sti')     then begin AsmB($FB); Exit; end;
+    if CaseEqual(mn,'hlt')     then begin AsmB($F4); Exit; end;
+    if CaseEqual(mn,'rdmsr')   then begin AsmB($0F); AsmB($32); Exit; end;
+    if CaseEqual(mn,'wrmsr')   then begin AsmB($0F); AsmB($30); Exit; end;
+    if CaseEqual(mn,'swapgs')  then begin AsmB($0F); AsmB($01); AsmB($F8); Exit; end;
+    if CaseEqual(mn,'iretq')   then begin AsmB($48); AsmB($CF); Exit; end;
+    if CaseEqual(mn,'lretq')   then begin AsmB($48); AsmB($CB); Exit; end;
+    if CaseEqual(mn,'sysretq') then begin AsmB($48); AsmB($0F); AsmB($07); Exit; end;
+  end;
+
+  { in/out. Intel order (slot 0 = destination): `in al, dx` / `out dx, al`.
+    The data register must be al/ax/eax -- the instruction has no other
+    form -- and the port is dx or an 8-bit immediate. }
+  if (CaseEqual(mn,'in') or CaseEqual(mn,'out')) and (nops = 2) then
+  begin
+    if CaseEqual(mn,'in') then begin dataSlot := 0; portSlot := 1; end
+    else begin dataSlot := 1; portSlot := 0; end;
+    if (AsmOpKind[dataSlot] <> AOP_REG) or (AsmOpReg[dataSlot] <> 0) or
+       not ((AsmOpSize[dataSlot] = 1) or (AsmOpSize[dataSlot] = 2) or (AsmOpSize[dataSlot] = 4)) then
+      Error('asm: ' + mn + ' moves data through al, ax or eax only');
+    sz := AsmOpSize[dataSlot];
+    if sz = 2 then AsmB($66);
+    if (AsmOpKind[portSlot] = AOP_REG) and (AsmOpReg[portSlot] = 2) and (AsmOpSize[portSlot] = 2) then
+    begin
+      if CaseEqual(mn,'in') then begin if sz = 1 then AsmB($EC) else AsmB($ED); end
+      else begin if sz = 1 then AsmB($EE) else AsmB($EF); end;
+    end
+    else if AsmOpKind[portSlot] = AOP_IMM then
+    begin
+      if (AsmOpVal[portSlot] < 0) or (AsmOpVal[portSlot] > 255) then
+        Error('asm: ' + mn + ' port immediate must be 0..255 — use dx for a wider port');
+      if CaseEqual(mn,'in') then begin if sz = 1 then AsmB($E4) else AsmB($E5); end
+      else begin if sz = 1 then AsmB($E6) else AsmB($E7); end;
+      AsmB(Integer(AsmOpVal[portSlot]));
+    end
+    else
+      Error('asm: ' + mn + ' port must be dx or an 8-bit immediate');
+    Exit;
+  end;
+
+  { FPU/SSE state: fxsave64/fxrstor64 = REX.W 0F AE /0 and /1, ldmxcsr m32 =
+    0F AE /2, fninit = DB E3. A kernel saves user FP state with these. }
+  if CaseEqual(mn,'fninit') and (nops = 0) then begin AsmB($DB); AsmB($E3); Exit; end;
+  ext := -1;
+  if CaseEqual(mn,'fxsave64') then ext := 0
+  else if CaseEqual(mn,'fxrstor64') then ext := 1
+  else if CaseEqual(mn,'fxsave') then ext := 8
+  else if CaseEqual(mn,'fxrstor') then ext := 9
+  else if CaseEqual(mn,'ldmxcsr') then ext := 10
+  else if CaseEqual(mn,'stmxcsr') then ext := 11;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    if ext < 2 then AsmPrefixAndREX(8, ext, 0, 0)
+    else AsmPrefixAndREX(0, ext and 7, 0, 0);
+    AsmB($0F); AsmB($AE);
+    if ext < 8 then AsmModRM(ext, 0)
+    else if ext < 10 then AsmModRM(ext - 8, 0)
+    else AsmModRM(ext - 8, 0);
+    Exit;
+  end;
+
+  { 0F 01 /2 lgdt, /3 lidt, /7 invlpg: a memory operand only. 0F 00 /3 ltr
+    takes r/m16; a register is accepted at any width, as gas does. }
+  ext := -1;
+  if CaseEqual(mn,'lgdt') then ext := 2
+  else if CaseEqual(mn,'lidt') then ext := 3
+  else if CaseEqual(mn,'invlpg') then ext := 7;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    AsmPrefixAndREX(0, ext, 0, 0);
+    AsmB($0F); AsmB($01);
+    AsmModRM(ext, 0);
+    Exit;
+  end;
+  if CaseEqual(mn,'ltr') and (nops = 1) then
+  begin
+    if AsmOpKind[0] = AOP_REG then
+    begin
+      if AsmOpReg[0] >= 8 then AsmB($41);
+      AsmB($0F); AsmB($00);
+      AsmB($C0 or (3 shl 3) or (AsmOpReg[0] and 7));
+    end
+    else
+    begin
+      AsmPrefixAndREX(0, 3, 0, 0);
+      AsmB($0F); AsmB($00);
+      AsmModRM(3, 0);
+    end;
+    Exit;
+  end;
+
+  { mov to/from a segment register: 8E /r (load sreg) and 8C /r (store it).
+    A general register is taken at any width and encoded without a size
+    prefix, which is what gas emits for `movw %ax, %ds` (8e d8). }
+  if CaseEqual(mn,'mov') and (nops = 2) and
+     ((AsmOpKind[0] = AOP_SREG) or (AsmOpKind[1] = AOP_SREG)) then
+  begin
+    if AsmOpKind[0] = AOP_SREG then rm := 1 else rm := 0;
+    if AsmOpKind[rm] = AOP_SREG then Error('asm: mov between two segment registers');
+    if AsmOpKind[rm] = AOP_REG then
+    begin
+      if AsmOpReg[rm] >= 8 then AsmB($41);
+      if rm = 1 then AsmB($8E) else AsmB($8C);
+      AsmB($C0 or ((AsmOpReg[1 - rm] and 7) shl 3) or (AsmOpReg[rm] and 7));
+    end
+    else
+    begin
+      AsmPrefixAndREX(0, AsmOpReg[1 - rm], 0, rm);
+      if rm = 1 then AsmB($8E) else AsmB($8C);
+      AsmModRM(AsmOpReg[1 - rm], rm);
+    end;
+    Exit;
+  end;
+
+  { mov to/from a control register: 0F 22 /r (load crN) and 0F 20 /r (read
+    it). Always a 64-bit general register in long mode, and no REX.W; REX.R
+    names cr8, REX.B r8..r15. }
+  if CaseEqual(mn,'mov') and (nops = 2) and
+     ((AsmOpKind[0] = AOP_CREG) or (AsmOpKind[1] = AOP_CREG)) then
+  begin
+    if AsmOpKind[0] = AOP_CREG then begin cr := AsmOpReg[0]; rm := 1; end
+    else begin cr := AsmOpReg[1]; rm := 0; end;
+    if (AsmOpKind[rm] <> AOP_REG) or (AsmOpSize[rm] <> 8) then
+      Error('asm: mov to or from a control register needs a 64-bit general register');
+    if (cr >= 8) or (AsmOpReg[rm] >= 8) then
+      AsmB($40 or (Ord(cr >= 8) shl 2) or Ord(AsmOpReg[rm] >= 8));
+    AsmB($0F);
+    if rm = 1 then AsmB($22) else AsmB($20);
+    AsmB($C0 or ((cr and 7) shl 3) or (AsmOpReg[rm] and 7));
+    Exit;
+  end;
+  Result := False;
+end;
+
 { Encode a single instruction whose mnemonic is in mn and whose operands have
   already been parsed into AsmOp[0..nops-1]. Returns False if mnemonic unknown. }
 function AsmDispatch(const mn: AnsiString; nops: Integer): Boolean;
 var opSize, rf, rh, ext, cc: Integer; ssePfx, sseOp, sseSt: Integer; tail: AnsiString;
 begin
   Result := True;
+  if AsmSystemOp(mn, nops) then Exit;
 
   { ---- 0-operand ---- }
   if CaseEqual(mn,'nop')     then begin AsmB($90); Exit; end;
@@ -937,7 +1107,8 @@ begin
   { lea reg, mem/global/memr }
   if CaseEqual(mn,'lea') then
   begin
-    if (AsmOpKind[0] <> AOP_REG) or ((AsmOpKind[1] <> AOP_MEM) and (AsmOpKind[1] <> AOP_GLOBAL) and (AsmOpKind[1] <> AOP_MEMR)) then
+    if (AsmOpKind[0] <> AOP_REG) or ((AsmOpKind[1] <> AOP_MEM) and (AsmOpKind[1] <> AOP_GLOBAL)
+       and (AsmOpKind[1] <> AOP_MEMR) and (AsmOpKind[1] <> AOP_RIPLBL)) then
       Error('asm: lea needs reg, mem');
     opSize := AsmOpSize[0];
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;

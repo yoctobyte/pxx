@@ -14,15 +14,14 @@
  * true and it is useless — a reader cannot tell from it whether the missing
  * piece is a constraint class, an operand spelling, or a whole feature. The
  * operand sections are now captured, and the refusals run most-specific-first.
- * These assert that ordering, one compile each, selected by -d:
+ * This asserts that ordering:
  *
- *   (default)       "+r"        -> read-write constraint, named
- *   SHAPE_SYMBOLIC  [a] "=r"    -> symbolic operand spelling, named
+ *   "+r"        -> read-write constraint, named
  *
- * There is no blanket refusal left behind them: every remaining refusal names a
- * construct. A third shape, plain "=r"/"r", lived here until the operand
- * binding landed and now COMPILES — it moved to casm_gnu_operands.c, which is
- * what a refusal test graduating into an acceptance test looks like.
+ * There is no blanket refusal left behind it: every remaining refusal names a
+ * construct. Two shapes lived here and graduated into acceptance tests when
+ * their support landed: plain "=r"/"r" (now casm_gnu_operands.c) and the
+ * symbolic spelling [a] "=r" (2026-11-12, now casm_kernel_user_mode_subset.c).
  *
  * feature-c-gnu-inline-asm-with-a-non-empty-template */
 int printf(const char *, ...);
@@ -30,11 +29,7 @@ int printf(const char *, ...);
 int main(void)
 {
 	int x = 0;
-#if defined(SHAPE_SYMBOLIC)
-	asm volatile ("mov %[a], %[a]" : [a] "=r"(x));
-#else
 	asm volatile ("mov %0, %0" : "+r"(x));
-#endif
 	printf("%d\n", x);
 	return 0;
 }

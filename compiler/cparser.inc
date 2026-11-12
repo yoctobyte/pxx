@@ -8747,6 +8747,13 @@ begin
       Error('C: inline asm has more than ' + AIntToStr(MAX_CASM_OPERANDS)
             + ' operands');
     CAsmSplitConstraint(raw, cls, isOut, isInOut, early);
+    { "Nd" -- an 8-bit constant OR dx -- is how every port-I/O helper spells
+      its port (Gibux's io.h, Linux's, glibc's sys/io.h). Taking dx is always
+      one of the choices it allows, so the N is dropped, the same reading that
+      honours `g` as `r`. `n` is a numeric constant, which an `i` is too. }
+    if (Length(cls) > 1) and (Pos('N', cls) > 0) then
+      Delete(cls, Pos('N', cls), 1);
+    if cls = 'n' then cls := 'i';
     { A digit constraint names an earlier operand's location. It is only legal
       in the INPUT section -- an output tied to an output has no meaning -- and
       it must name an operand that already exists. }
@@ -8767,7 +8774,17 @@ begin
     CAsmOps[CAsmOpCount].Early := early;
     CAsmOps[CAsmOpCount].SymName := sym;
     CAsmOps[CAsmOpCount].TiedTo := tied;
-    CAsmOps[CAsmOpCount].Expr := ParseCExpr;
+    if cls = 'i' then
+    begin
+      { An immediate is a constant expression -- `FOUR * 10`, `KERNEL_CS`,
+        `(1 << 5) | 1` -- so it is EVALUATED here, by the evaluator array
+        sizes and case labels use, and carried as a literal. }
+      CAsmOps[CAsmOpCount].Expr := AllocNode(AN_INT_LIT);
+      ASTIVal[CAsmOps[CAsmOpCount].Expr] := CEvalConstExpr;
+      ASTTk[CAsmOps[CAsmOpCount].Expr] := Ord(tyInt64);
+    end
+    else
+      CAsmOps[CAsmOpCount].Expr := ParseCExpr;
     Inc(CAsmOpCount);
     Expect(tkRParen, ')');
     if CurTok.Kind = tkComma then Next else Break;
@@ -8933,14 +8950,31 @@ begin
     tls_pstm_montgomery_reduce.c spells five of them. }
   Result := (cls = 'r') or (cls = 'rm') or (cls = 'mr') or (cls = 'm')
             or (cls = 'g') or (CAsmFixedReg(cls) >= 0)
-            or CAsmClassIsRestricted(cls);
+            or CAsmClassIsRestricted(cls) or (cls = 'i');
 end;
 
-{ Does this class want a register, as opposed to memory? `"rm"` lets gcc choose;
-  we always take the register, which is a legal choice for it. }
+{ Does this class want a register, as opposed to memory or an immediate?
+  `"rm"` lets gcc choose; we always take the register, which is a legal
+  choice for it. }
 function CAsmClassWantsReg(const cls: AnsiString): Boolean;
 begin
-  Result := cls <> 'm';
+  Result := (cls <> 'm') and (cls <> 'i');
+end;
+
+{ The value of an `"i"` operand: an integer constant expression. Macros have
+  already expanded (KERNEL_CS -> 0x08); a cast or a sign in front of a literal
+  is read through, anything else is refused by name. }
+function CAsmImmValue(n: Integer; var v: Int64): Boolean;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  case ASTKind[n] of
+    AN_INT_LIT: begin v := ASTIVal[n]; Result := True; end;
+    AN_NEG:
+      if CAsmImmValue(ASTLeft[n], v) then begin v := -v; Result := True; end;
+    AN_PTR_CAST:
+      Result := CAsmImmValue(ASTLeft[n], v);
+  end;
 end;
 
 { Refuse the captured block by NAME where the reason is a specific operand,
@@ -8958,9 +8992,9 @@ var i, k: Integer;
 begin
   for i := 0 to CAsmOpCount - 1 do
   begin
-    if CAsmOps[i].SymName <> '' then
-      Error('C: inline asm symbolic operand [' + CAsmOps[i].SymName
-            + '] is not supported — only positional %0..%9 operands are read');
+    if (CAsmOps[i].Cons = 'i') and (i < CAsmOutCount) then
+      Error('C: inline asm output constraint "' + CAsmOps[i].Raw
+            + '" is an immediate, which cannot be written');
     if CAsmOps[i].IsInOut then
       Error('C: inline asm read-write constraint "' + CAsmOps[i].Raw
             + '" is not supported — write it as an "=' + CAsmOps[i].Cons
@@ -9067,6 +9101,7 @@ var
   head, tail, nd, idn, asn, sq, blk, val: Integer;
   cls, nm, rest: AnsiString;
   dummySize: Integer;
+  immV: Int64;
 begin
   { ---- what we can honour at all ---- }
   for i := 0 to CAsmOpCount - 1 do
@@ -9075,8 +9110,8 @@ begin
     if not CAsmClassSupported(CAsmOps[i].Cons) then
       Error('C: inline asm constraint "' + CAsmOps[i].Raw
             + '" is not supported — this frontend reads "r", "rm", "m", "g",'
-            + ' the byte-addressable classes Q and q, and the fixed-register'
-            + ' letters a b c d S D');
+            + ' the byte-addressable classes Q and q, the fixed-register'
+            + ' letters a b c d S D, and the immediates i n');
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
@@ -9262,6 +9297,11 @@ begin
     tk := ASTTk[CAsmOps[i].Expr];
     opSz[i] := TypeSlotSize(IntToTypeKind(tk));
     tmpSym[i] := -1;
+    if CAsmOps[i].Cons = 'i' then
+    begin
+      opOwn[i] := False;
+      Continue;
+    end;
     if (CAsmOps[i].Cons = 'm') and (ASTKind[CAsmOps[i].Expr] = AN_IDENT) then
     begin
       j := ASTIVal[CAsmOps[i].Expr];
@@ -9294,10 +9334,21 @@ begin
   AttSinkText := TargetArch = TARGET_I386;
   AttResetBindings;
   for i := 0 to CAsmOpCount - 1 do
-    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+  begin
+    if CAsmOps[i].Cons = 'i' then
+    begin
+      if not CAsmImmValue(CAsmOps[i].Expr, immV) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw
+              + '" must be an integer constant');
+      AttBindImmOperand(i, immV);
+    end
+    else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i], 0)
     else
       AttBindOperand(i, ATTBIND_MEM, 0, opSz[i], Syms[tmpSym[i]].Offset);
+    if CAsmOps[i].SymName <> '' then
+      AttNameOperand(i, CAsmOps[i].SymName);
+  end;
 
   { ---- encode: loads, the template, stores ---- }
   AttBeginBlock(startOff);
@@ -14881,6 +14932,12 @@ begin
       since 9b6ca0475 whether or not the body is empty; changing that is a
       separate question about a separate carrier, and this ticket is not the
       place to move the .so rows. bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
+    if FreestandingMode and EmitObjMode and (not EmitSharedMode) and
+       (CodeLen <> thunkBody) then
+      ErrorNoPos('--freestanding: this translation unit needs run-time'
+                 + ' initialisation (a file-scope initialiser that is not a'
+                 + ' constant, or environ), and a freestanding object has'
+                 + ' nothing to run a .init_array');
     if EmitObjMode and (not EmitSharedMode) and (CodeLen = thunkBody) then
     begin
       CodeLen := thunkStart;
@@ -14892,8 +14949,9 @@ begin
 
     { Same for finalization: the Pascal thunk already guards this and the C one
       did not, because under --shared the runner always exists. }
-    if (not EmitObjMode) or EmitSharedMode or
-       (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+    if ((not EmitObjMode) or EmitSharedMode or
+        (FiniProcCount > 0) or (FiniRunnerProc >= 0)) and
+       not (FreestandingMode and EmitObjMode) then
     begin
       FiniThunkOff := CodeLen;
       EmitSharedThunkPrologue;

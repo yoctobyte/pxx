@@ -32,6 +32,8 @@ const
   ATTBIND_NONE = 0;
   ATTBIND_REG  = 1;   { %N is a register: `"r"`, `"rm"`, `"a"` and friends }
   ATTBIND_MEM  = 2;   { %N is the FRAME SLOT at AttBindOff[n]: `"m"` }
+  ATTBIND_IMM  = 3;   { %N is the constant AttBindImm[n]: `"i"`, `"n"` }
+  ATT_MAX_LABELS = 64;
 
 var
   AttSrc     : AnsiString;   { the template being read }
@@ -45,7 +47,22 @@ var
     It is a SEPARATE lane from AttBindReg on purpose -- parking an offset in a
     field named Reg is how a value gets read as the thing its name promises. }
   AttBindOff : array[0..MAX_CASM_OPERANDS-1] of Integer;
+  AttBindImm : array[0..MAX_CASM_OPERANDS-1] of Int64;
+  { `[name] "c"(expr)` -- the name a template spells as %[name]. }
+  AttBindName: array[0..MAX_CASM_OPERANDS-1] of AnsiString;
   AttBindCount: Integer;
+  { Numeric local labels (`1:`, referenced as `1b` / `1f`), per template.
+    Ordinals, not byte offsets, decide b and f: a label written just before
+    an instruction shares that instruction's start offset, and gas reads
+    `1b` there as the label, `1f` as the NEXT definition. }
+  AttInstrOrd : Integer;
+  AttLblCount : Integer;
+  AttLblNum, AttLblOrd, AttLblPos : array[0..ATT_MAX_LABELS-1] of Integer;
+  AttFixCount : Integer;
+  AttFixPos, AttFixEnd, AttFixNum, AttFixOrd : array[0..ATT_MAX_LABELS-1] of Integer;
+  AttFixFwd : array[0..ATT_MAX_LABELS-1] of Boolean;
+  AttPendLblNum : Integer;     { label of the AOP_RIPLBL operand being encoded }
+  AttPendLblFwd : Boolean;
 
 { Clear every binding. Called on its own for an operand-free template, so a
   stale binding from an earlier statement can never satisfy a `%N`. }
@@ -58,6 +75,8 @@ begin
     AttBindReg[i] := 0;
     AttBindSize[i] := 0;
     AttBindOff[i] := 0;
+    AttBindImm[i] := 0;
+    AttBindName[i] := '';
   end;
   AttBindCount := 0;
 end;
@@ -69,6 +88,17 @@ begin
   AttBindSize[n] := size;
   AttBindOff[n] := off;
   if n >= AttBindCount then AttBindCount := n + 1;
+end;
+
+procedure AttBindImmOperand(n: Integer; v: Int64);
+begin
+  AttBindOperand(n, ATTBIND_IMM, 0, 0, 0);
+  AttBindImm[n] := v;
+end;
+
+procedure AttNameOperand(n: Integer; const nm: AnsiString);
+begin
+  AttBindName[n] := nm;
 end;
 
 { ---- the i386 sink: the same parse, rendered as TEXT ----------------------
@@ -441,6 +471,35 @@ end;
   top-level operand path cannot drift apart on it: extended asm requires the
   `%%` escape, basic asm forbids it. Being lenient about that would mean
   reading `%b0` -- an operand with a size modifier -- as a register named b0. }
+{ es cs ss ds fs gs, numbered as ModRM.reg names them in 8C/8E; -1 if none. }
+function AttSegRegNum(const nm: AnsiString): Integer;
+begin
+  Result := -1;
+  if (Length(nm) <> 2) or (AsmRegLower(nm[2]) <> 's') then Exit;
+  case AsmRegLower(nm[1]) of
+    'e': Result := 0;
+    'c': Result := 1;
+    's': Result := 2;
+    'd': Result := 3;
+    'f': Result := 4;
+    'g': Result := 5;
+  end;
+end;
+
+{ cr0 cr2 cr3 cr4 cr8 -- the control registers that exist in long mode. }
+function AttCtlRegNum(const nm: AnsiString): Integer;
+begin
+  Result := -1;
+  if (Length(nm) <> 3) or (AsmRegLower(nm[1]) <> 'c') or (AsmRegLower(nm[2]) <> 'r') then Exit;
+  case nm[3] of
+    '0': Result := 0;
+    '2': Result := 2;
+    '3': Result := 3;
+    '4': Result := 4;
+    '8': Result := 8;
+  end;
+end;
+
 procedure AttParseRegisterRef(slot: Integer);
 var nm: AnsiString; num, size: Integer;
 begin
@@ -455,6 +514,18 @@ begin
   end;
   nm := AttReadWord;
   if nm = '' then Error('C: inline asm template expected a register name after %');
+  num := AttSegRegNum(nm);
+  if num >= 0 then
+  begin
+    AsmOpKind[slot] := AOP_SREG; AsmOpReg[slot] := num; AsmOpSize[slot] := 2;
+    Exit;
+  end;
+  num := AttCtlRegNum(nm);
+  if num >= 0 then
+  begin
+    AsmOpKind[slot] := AOP_CREG; AsmOpReg[slot] := num; AsmOpSize[slot] := 8;
+    Exit;
+  end;
   if not AsmRegNum(nm, num, size) then
     Error('C: inline asm template has an unknown register: ' + nm);
   AsmOpKind[slot] := AOP_REG;
@@ -562,6 +633,108 @@ begin
   Result := n;
 end;
 
+{ `%[name]` -> the operand's number. The cursor is on the '['. }
+function AttReadNamedOperand: Integer;
+var nm: AnsiString; i: Integer;
+begin
+  Inc(AttPos);
+  nm := '';
+  while (not AttAtEnd) and (AttPeek <> ']') do
+  begin
+    nm := nm + AttPeek;
+    Inc(AttPos);
+  end;
+  if AttAtEnd then Error('C: inline asm template has an unclosed %[' + nm);
+  Inc(AttPos);
+  Result := -1;
+  for i := 0 to AttBindCount - 1 do
+    if (AttBindName[i] <> '') and (AttBindName[i] = nm) then Result := i;
+  if Result < 0 then
+    Error('C: inline asm template uses %[' + nm + '], which names no operand');
+  if Result > AttMaxOpnd then AttMaxOpnd := Result;
+end;
+
+{ Is the text at the cursor a numeric label reference, `<digits>f` or
+  `<digits>b`, followed by '('? Only the shape is checked; nothing moves. }
+function AttAtLabelRef: Boolean;
+var p: Integer;
+begin
+  Result := False;
+  p := AttPos;
+  if (p > Length(AttSrc)) or not AttIsDigit(AttSrc[p]) then Exit;
+  while (p <= Length(AttSrc)) and AttIsDigit(AttSrc[p]) do Inc(p);
+  if (p > Length(AttSrc)) or not ((AttSrc[p] = 'f') or (AttSrc[p] = 'b')) then Exit;
+  Inc(p);
+  while (p <= Length(AttSrc)) and AttIsHSpace(AttSrc[p]) do Inc(p);
+  Result := (p <= Length(AttSrc)) and (AttSrc[p] = '(');
+end;
+
+{ `1f(%rip)` / `1b(%rip)`: the address of a numeric local label in this same
+  template. Only rip may be the base: a label is a code address, and rip-
+  relative is how 64-bit code names one without a relocation. }
+procedure AttParseLabelRef(slot: Integer);
+var n: Integer; nm: AnsiString;
+begin
+  if AttSinkText then
+    Error('C: inline asm template references a local label, which the i386'
+          + ' path does not support');
+  n := 0;
+  while AttIsDigit(AttPeek) do
+  begin
+    n := n * 10 + (Ord(AttPeek) - Ord('0'));
+    Inc(AttPos);
+  end;
+  AttPendLblFwd := AttPeek = 'f';
+  AttPendLblNum := n;
+  Inc(AttPos);
+  AttSkipSpace;
+  Inc(AttPos);                                   { '(' }
+  AttSkipSpace;
+  if AttPeek <> '%' then Error('C: inline asm template expected %rip after a label');
+  Inc(AttPos);
+  if AttExtended then
+  begin
+    if AttPeek <> '%' then
+      Error('C: inline asm template needs %% before rip in an extended asm statement');
+    Inc(AttPos);
+  end;
+  nm := AttReadWord;
+  if not CaseEqual(nm, 'rip') then
+    Error('C: inline asm template can only address a local label as label(%rip)');
+  AttSkipSpace;
+  if AttPeek <> ')' then Error('C: inline asm template expected ) after %rip');
+  Inc(AttPos);
+  AsmOpKind[slot] := AOP_RIPLBL;
+  AsmOpVal[slot] := 0;
+  AsmOpSize[slot] := 0;
+end;
+
+{ Bind template slot `slot` to operand n, whatever kind it was bound as. }
+procedure AttUseOperand(slot, n: Integer);
+begin
+  if AttBindKind[n] = ATTBIND_REG then
+  begin
+    AsmOpKind[slot] := AOP_REG;
+    AsmOpReg[slot] := AttBindReg[n];
+    AsmOpSize[slot] := AttBindSize[n];
+  end
+  else if AttBindKind[n] = ATTBIND_IMM then
+  begin
+    { gcc prints an "i" operand as `$value` in AT&T, so %0 IS the immediate }
+    AsmOpKind[slot] := AOP_IMM;
+    AsmOpVal[slot] := AttBindImm[n];
+  end
+  else
+  begin
+    AsmOpKind[slot] := AOP_MEM;
+    AsmOpReg[slot] := 0;
+    AsmOpIndex[slot] := -1;
+    AsmOpScale[slot] := 1;
+    AsmOpVal[slot] := AttBindOff[n];
+    AsmOpSize[slot] := AttBindSize[n];
+  end;
+end;
+
 procedure AttParseOperand(slot: Integer);
 var disp: Int64; n: Integer; modCh: Char;
 begin
@@ -660,10 +833,17 @@ begin
         AsmHigh8Operand := True;
         Exit;
       end;
+      if AttPeek = '[' then
+      begin
+        AttUseOperand(slot, AttReadNamedOperand);
+        Exit;
+      end;
       if AttIsDigit(AttPeek) then
       begin
         n := AttReadOperandNumber;
-        if AttBindKind[n] = ATTBIND_REG then
+        if AttBindKind[n] = ATTBIND_IMM then
+          AttUseOperand(slot, n)
+        else if AttBindKind[n] = ATTBIND_REG then
         begin
           AsmOpKind[slot] := AOP_REG;
           AsmOpReg[slot] := AttBindReg[n];
@@ -693,6 +873,12 @@ begin
             + ' — write %% for a register in an extended asm statement');
     end;
     AttParseRegisterRef(slot);
+    Exit;
+  end;
+
+  if AttAtLabelRef then
+  begin
+    AttParseLabelRef(slot);
     Exit;
   end;
 
@@ -742,7 +928,17 @@ begin
            (SDL_assert.h's SDL_TriggerBreakpoint). `pause` is NOT here: it
            takes no operands, so it never reaches the suffix split -- the
            zero-operand arm passes it to AttEmitInstr unchanged. }
-         or CaseEqual(b,'bswap') or CaseEqual(b,'int');
+         or CaseEqual(b,'bswap') or CaseEqual(b,'int')
+         { kernel code (Gibux): port I/O, the stack ops a far return is
+           built from, and the descriptor-table and TLB instructions.
+           AsmSystemOp encodes them; the i386 sink refuses them by name. }
+         or CaseEqual(b,'in') or CaseEqual(b,'out')
+         or CaseEqual(b,'push') or CaseEqual(b,'pop')
+         or CaseEqual(b,'lgdt') or CaseEqual(b,'lidt') or CaseEqual(b,'ltr')
+         or CaseEqual(b,'invlpg')
+         or CaseEqual(b,'fxsave64') or CaseEqual(b,'fxrstor64')
+         or CaseEqual(b,'fxsave') or CaseEqual(b,'fxrstor')
+         or CaseEqual(b,'ldmxcsr') or CaseEqual(b,'stmxcsr');
 end;
 
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.
@@ -771,6 +967,71 @@ end;
 
 { ---- one instruction ------------------------------------------------------ }
 
+{ The value of an all-digit label name, or -1. }
+function AttReadLabelNum(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 1 to Length(s) do
+  begin
+    if not AttIsDigit(s[i]) then begin Result := -1; Exit; end;
+    Result := Result * 10 + (Ord(s[i]) - Ord('0'));
+  end;
+end;
+
+{ After an instruction: if it reserved a rip-relative label displacement,
+  remember where, and where the instruction ENDS (rip at run time). }
+procedure AttNoteRipFix;
+begin
+  if AsmRipFixPos < 0 then Exit;
+  if AttFixCount >= ATT_MAX_LABELS then
+    Error('C: inline asm template has more than ' + AIntToStr(ATT_MAX_LABELS)
+          + ' label references');
+  AttFixPos[AttFixCount] := AsmRipFixPos;
+  AttFixEnd[AttFixCount] := AsmBytesCount;
+  AttFixNum[AttFixCount] := AttPendLblNum;
+  AttFixFwd[AttFixCount] := AttPendLblFwd;
+  AttFixOrd[AttFixCount] := AttInstrOrd;
+  Inc(AttFixCount);
+  AsmRipFixPos := -1;
+end;
+
+{ Resolve every label reference of the template just encoded. `Nb` is the
+  latest definition at or before the referencing instruction, `Nf` the first
+  one after it -- gas's rule. }
+procedure AttResolveLabels;
+var i, k, tgt, d: Integer;
+begin
+  for i := 0 to AttFixCount - 1 do
+  begin
+    tgt := -1;
+    for k := 0 to AttLblCount - 1 do
+      if AttLblNum[k] = AttFixNum[i] then
+      begin
+        if AttFixFwd[i] then
+        begin
+          if (AttLblOrd[k] >= AttFixOrd[i]) and (tgt < 0) then tgt := AttLblPos[k];
+        end
+        else if AttLblOrd[k] < AttFixOrd[i] then
+          tgt := AttLblPos[k];
+      end;
+    if tgt < 0 then
+    begin
+      if AttFixFwd[i] then
+        Error('C: inline asm template references ' + AIntToStr(AttFixNum[i])
+              + 'f, but no label ' + AIntToStr(AttFixNum[i]) + ': follows it')
+      else
+        Error('C: inline asm template references ' + AIntToStr(AttFixNum[i])
+              + 'b, but no label ' + AIntToStr(AttFixNum[i]) + ': precedes it');
+    end;
+    d := tgt - AttFixEnd[i];
+    AsmBytes[AttFixPos[i]]     := Byte(d and $FF);
+    AsmBytes[AttFixPos[i] + 1] := Byte((d shr 8) and $FF);
+    AsmBytes[AttFixPos[i] + 2] := Byte((d shr 16) and $FF);
+    AsmBytes[AttFixPos[i] + 3] := Byte((d shr 24) and $FF);
+  end;
+end;
+
 procedure AttEncodeOne;
 var mn, base: AnsiString;
     size, nops, i, tmpKind, tmpReg, tmpIdx, tmpScale, tmpSize: Integer;
@@ -782,9 +1043,27 @@ begin
   mn := AttReadWord;
   if mn = '' then Error('C: inline asm template expected an instruction');
   AttSkipSpace;
+  if (not AttAtSeparator) and (AttPeek = ':') and AttIsDigit(mn[1]) and
+     (Length(mn) <= 9) and (AttReadLabelNum(mn) >= 0) then
+  begin
+    if AttSinkText then
+      Error('C: inline asm template defines a local label, which the i386'
+            + ' path does not support');
+    if AttLblCount >= ATT_MAX_LABELS then
+      Error('C: inline asm template defines more than '
+            + AIntToStr(ATT_MAX_LABELS) + ' local labels');
+    AttLblNum[AttLblCount] := AttReadLabelNum(mn);
+    AttLblOrd[AttLblCount] := AttInstrOrd;
+    AttLblPos[AttLblCount] := AsmBytesCount;
+    Inc(AttLblCount);
+    Inc(AttPos);
+    Exit;
+  end;
   if (not AttAtSeparator) and (AttPeek = ':') then
     Error('C: inline asm template defines the label "' + mn
-          + '", which is not supported');
+          + '", which is not supported — only numeric local labels are');
+  Inc(AttInstrOrd);
+  AsmRipFixPos := -1;
 
   { A zero-operand instruction is passed through unchanged: cmc, nop, ret and
     friends carry no AT&T suffix, so the base list must not see them.
@@ -800,6 +1079,45 @@ begin
   begin
     if not AttEmitInstr(mn, 0) then
       Error('C: inline asm template has an unsupported instruction: ' + mn);
+    AttNoteRipFix;
+    Exit;
+  end;
+
+  { jmp / jcc to a numeric local label: always the rel32 form (E9, 0F 8x),
+    so no relaxation is needed and the displacement is patched like any
+    other label reference -- relative to the end of the instruction. }
+  if (CaseEqual(mn, 'jmp') or
+      (AsmStartsWith(mn, 'j') and (AsmCC(AsmTail(mn, 1)) >= 0))) and
+     AttIsDigit(AttPeek) then
+  begin
+    if AttSinkText then
+      Error('C: inline asm template branches to a local label, which the i386'
+            + ' path does not support');
+    i := 0;
+    while AttIsDigit(AttPeek) do
+    begin
+      i := i * 10 + (Ord(AttPeek) - Ord('0'));
+      Inc(AttPos);
+    end;
+    if not ((AttPeek = 'f') or (AttPeek = 'b')) then
+      Error('C: inline asm template branch target must be a local label'
+            + ' written Nf or Nb');
+    AttPendLblFwd := AttPeek = 'f';
+    AttPendLblNum := i;
+    Inc(AttPos);
+    AttSkipSpace;
+    if not AttAtSeparator then
+      Error('C: inline asm template has trailing text after ' + mn);
+    if CaseEqual(mn, 'jmp') then
+      AsmB($E9)
+    else
+    begin
+      AsmB($0F);
+      AsmB($80 or AsmCC(AsmTail(mn, 1)));
+    end;
+    AsmRipFixPos := AsmBytesCount;
+    AsmB(0); AsmB(0); AsmB(0); AsmB(0);
+    AttNoteRipFix;
     Exit;
   end;
 
@@ -847,6 +1165,10 @@ begin
     memory operands, which is where AsmOpSizeOf looks. A register operand that
     disagrees with the suffix is a mistake in the template, not something to
     paper over. }
+  { in/out carry their width on the DATA register (al/ax/eax) and take the
+    port in dx whatever the suffix says, so the suffix-vs-register check below
+    would refuse `outb %al, %dx` for the dx it is required to name. }
+  if CaseEqual(base,'in') or CaseEqual(base,'out') then size := 0;
   if size <> 0 then
     for i := 0 to nops - 1 do
     begin
@@ -865,6 +1187,7 @@ begin
 
   if not AttEmitInstr(base, nops) then
     Error('C: inline asm template has an unsupported instruction: ' + mn);
+  AttNoteRipFix;
 end;
 
 { ---- the whole template ---------------------------------------------------
@@ -885,12 +1208,17 @@ begin
   { Same span rule as AttBeginBlock/AttEndBlock, and for the same reason: the
     counter this walks is whichever one the target's sink is filling. }
   AttBeginBlock(startOff);
+  AttInstrOrd := 0;
+  AttLblCount := 0;
+  AttFixCount := 0;
+  AsmRipFixPos := -1;
   AttSkipSeparators;
   while not AttAtEnd do
   begin
     AttEncodeOne;
     AttSkipSeparators;
   end;
+  AttResolveLabels;
   AttEndBlock(startOff, len);
 end;
 

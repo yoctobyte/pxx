@@ -18962,13 +18962,12 @@ test-core: $(COMPILER)
 	# a reader is told the smallest thing that has to change rather than the same
 	# blanket sentence for several different causes. A third shape, plain
 	# "=r"/"r", lived here until the operand binding landed; it now compiles and
-	# has moved to casm_gnu_operands.c below.
+	# has moved to casm_gnu_operands.c below. The symbolic spelling `[a] "=r"`
+	# graduated the same way on 2026-11-12 (Gibux's cpu.c writes %[cs]); it is
+	# exercised by casm_kernel_user_mode_subset.c.
 	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
 	  | grep -q 'read-write constraint "+r" is not supported' \
 	  || { echo 'casm_nonempty_template_fails: FAIL - "+r" was accepted, or refused without naming itself'; exit 1; }
-	@./$(COMPILER) -dSHAPE_SYMBOLIC test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
-	  | grep -q 'symbolic operand \[a\] is not supported' \
-	  || { echo 'casm_nonempty_template_fails SHAPE_SYMBOLIC: FAIL - [a] was accepted, or refused without naming itself'; exit 1; }
 	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
 	  | grep -q 'inline asm goto is not supported' \
 	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
@@ -18997,6 +18996,21 @@ test-core: $(COMPILER)
 	# expected number.
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/c_asm_fixed_reg_tie.c $(TESTTMP)/c_asm_tie26
 	tools/expect_same.sh c_asm_tie26 "$$($(TESTTMP)/c_asm_tie26)" "asm fixed-reg tie: 4 rows OK"
+	# Kernel inline asm (Gibux): the user-mode-runnable half executed and checked
+	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
+	# segment register moves, named operands, "i"/"n" immediates through a
+	# constant expression, and jnz 1b / jmp 2f. Then the privileged half
+	# (cli/hlt/in/out/rdmsr/wrmsr/crN/lgdt/lidt/ltr/invlpg/sreg moves/
+	# swapgs/iretq/sysretq/fxsave64/fxrstor64/fninit/ldmxcsr), which cannot run
+	# in user mode: compiled by pxx and by gcc and compared instruction by
+	# instruction.
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/casm_kernel_user_mode_subset.c $(TESTTMP)/casm_kernel_um
+	tools/expect_same.sh casm_kernel_um "$$($(TESTTMP)/casm_kernel_um)" "$$(printf 'far return cs=0x33\nes roundtrip 1\nimm 37\nlabels 15')"
+	tools/casm_sysinsn_vs_gcc.sh ./$(COMPILER) test/casm_kernel_system_instructions.c $(TESTTMP)/casm_sysinsn
+	# --emit-obj --freestanding (Gibux): no .init_array/.fini_array, no crtl body
+	# pulled in by a libc header, a .bss without the signal alternate stack.
+	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_object_has_no_runtime_hooks.c $(TESTTMP)/c_freestanding.o > /dev/null
+	tools/check_freestanding_object.sh $(TESTTMP)/c_freestanding.o fs_sum
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

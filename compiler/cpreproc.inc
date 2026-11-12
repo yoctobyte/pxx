@@ -3022,6 +3022,11 @@ procedure CPAutoPullCrtlImpl(depth: Integer; const hdrPath: AnsiString);
 var src, srcDir, hdrName: AnsiString;
     savedLo, savedHi: Integer;
 begin
+  { --freestanding: a header declares, nothing is pulled. The program (a
+    kernel) brings its own memcpy and friends, as under gcc -ffreestanding,
+    and a crtl impl would drag in run-time-initialised tables (strsignal's)
+    that nothing in a freestanding image would ever initialise. }
+  if FreestandingMode then Exit;
   if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
   if CPCrtlSrcPulled(src) then Exit;
