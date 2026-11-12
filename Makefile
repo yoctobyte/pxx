@@ -35950,11 +35950,14 @@ test-xtensa: $(COMPILER)
 	# emitting the body AGAIN with that label's slot reserved wide. The pre-fix
 	# compiler refuses this file with `j displacement 276001 is outside the
 	# encodable range`. A single `if` over a generated block is deliberate --
-	# one forward jump, over a body big enough to cross the bound.
+	# one forward jump, over a body big enough to cross the bound. 6000 lines
+	# since 2026-11-12: xtensa's low-32 demand made `s := s + 1` ~31 bytes
+	# (was ~59), and 3000 fell to 143676B, under 128 KiB, so the relaxation
+	# control below went red as it is meant to.
 	# bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build
 	@awk 'BEGIN{print "program fwdjump;"; print "var n, s: Integer;"; \
 	  print "begin"; print "  n := 0; s := 0;"; print "  if n = 0 then"; print "  begin"; \
-	  for(k=0;k<3000;k++) print "    s := s + 1;"; \
+	  for(k=0;k<6000;k++) print "    s := s + 1;"; \
 	  print "  end;"; print "  Writeln(\"s=\", s);"; print "end."}' \
 	  | tr '"' "'" > $(TESTTMP)/xt_fwdjump.pas
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump

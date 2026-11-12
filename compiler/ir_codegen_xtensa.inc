@@ -1196,6 +1196,76 @@ begin
   Result := (tk = tySingle) or (tk = tyDouble);
 end;
 
+{ --- Low-32 demand (the riscv32 design, ir_codegen_riscv32.inc) --------------
+  Pascal integer arithmetic is typed at 64 bits (Integer + Integer is an Int64
+  node; decide-shift-operator-promotion-width), so a plain `z := z + 1` over
+  Integers ran the a2:a3 pair path, and `i * j` was four multiplies (mull,
+  muluh and two cross products) whose high word the store then dropped. The
+  language rule stays. A consumer that keeps only the LOW 32 bits -- a store
+  to a 4-byte-or-narrower integer -- says so, and the binop under it takes the
+  32-bit arm when that gives the same low word:
+    + - * and or xor  always (the low word of the result depends only on the
+                      low words of the operands), and the demand passes down
+                      to their operands for the same reason;
+    div mod           only when both operands are 32-bit by TYPE and agree on
+                      signedness (XtExact32).
+  Never under {$Q+} (IRIVal = 1): its check reads the high word, and the
+  store-side range test is gated on that same flag -- if that gate ever goes,
+  this one must go with it.
+  XtLow32Demand is read and cleared at the top of IREmitNodeXtensa, so it
+  reaches exactly the node emitted next and nothing below it.
+  bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough }
+var
+  XtLow32Demand: Boolean;
+
+function XtExact32(n: Integer; uns: Boolean): Boolean;
+{ Node n's value is reproduced by sign- (uns = False) or zero- (uns = True)
+  extending its 32-bit register: a constant in range, or a value whose type is
+  an integer of at most 4 bytes. }
+var tk: TTypeKind; v: Int64;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  tk := IRValueKind(n);
+  if IRKind[n] = IR_CONST_INT then
+  begin
+    if IsFloatXtensa(tk) or IsFloatXtensa(IntToTypeKind(IRTk[n])) then Exit;
+    v := IRIVal[n];
+    if uns then Result := (v >= 0) and (v <= $FFFFFFFF)
+    else Result := (v >= -2147483648) and (v <= 2147483647);
+    Exit;
+  end;
+  if not TypeIsMachineInt(tk) then Exit;
+  if TypeSlotSize(tk) > 4 then Exit;
+  if uns then Result := not TypeSigned(tk)
+  else Result := TypeSigned(tk) or (TypeSlotSize(tk) < 4);
+end;
+
+function XtNarrowBinop(node: Integer): Integer;
+{ 0 = keep the 64-bit path; 1 = the generic 32-bit arm (+ - * and or xor);
+  2 = 32-bit signed div/mod; 3 = 32-bit unsigned div/mod. }
+var op: Integer; tk, lk, rk: TTypeKind;
+begin
+  Result := 0;
+  if IRIVal[node] = 1 then Exit;
+  tk := IntToTypeKind(IRTk[node]);
+  if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
+  lk := IRValueKind(IRA[node]);
+  rk := IRValueKind(IRB[node]);
+  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
+          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
+  if IsFloatXtensa(lk) or IsFloatXtensa(rk) then Exit;
+  op := IRC[node];
+  if (op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+     (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor)) then
+    Result := 1
+  else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    if XtExact32(IRA[node], False) and XtExact32(IRB[node], False) then Result := 2
+    else if XtExact32(IRA[node], True) and XtExact32(IRB[node], True) then Result := 3;
+  end;
+end;
+
 procedure EmitLoadConst64Xtensa(v: Int64);
 begin
   EmitLoadConstXtensa(reg_xtensa_a2, Integer(v and $FFFFFFFF));
@@ -2198,7 +2268,12 @@ var
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
+  low32Dem: Boolean;   { the consumer keeps only a2 (XtLow32Demand) }
+  narrow: Integer;     { XtNarrowBinop, when low32Dem }
 begin
+  low32Dem := XtLow32Demand;
+  XtLow32Demand := False;
+  narrow := 0;
   { A write to StdErr: point the runtime writers at fd 2 for this ONE node
     (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
     the node as usual, then restore both. A stdout write never gets here, so its
@@ -2418,6 +2493,10 @@ begin
         end
         else
         begin
+          { a store to an integer of at most 4 bytes keeps only a2 }
+          XtLow32Demand := TypeIsMachineInt(Syms[IRA[node]].TypeKind) and
+                           (not Syms[IRA[node]].IsArray) and
+                           (TypeSlotSize(Syms[IRA[node]].TypeKind) <= 4);
           IREmitNodeXtensa(IRB[node]);
           { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at THIS store,
             which is why there is no checked-add arm in the binop emitter and why
@@ -3247,7 +3326,8 @@ begin
           failed to COMPILE on all four 32-bit backends. Handled below instead,
           where the element is narrowed safely first.
           bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
-        if (op <> Ord(tkIn)) and
+        if low32Dem then narrow := XtNarrowBinop(node);
+        if (narrow = 0) and (op <> Ord(tkIn)) and
            (Is64BitXtensa(IntToTypeKind(IRTk[node])) or
             Is64BitXtensa(IntToTypeKind(IRTk[left])) or
             Is64BitXtensa(IntToTypeKind(IRTk[right]))) then
@@ -3260,6 +3340,7 @@ begin
         if (op = Ord(tkPlus)) and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
           Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
+        XtLow32Demand := narrow = 1;
         IREmitNodeXtensa(left);
         { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
           word -- $FFFFFFFF for a negative included -- is out of range. Saturate
@@ -3272,6 +3353,7 @@ begin
                          'movi a2, 256',
                          '.inrange:']);
         XtensaPushA2;
+        XtLow32Demand := narrow = 1;
         IREmitNodeXtensa(right);
         xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
         { pop the saved left operand into a2 }
@@ -3292,11 +3374,15 @@ begin
         else if op = Ord(tkStar) then xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkDiv) then
         begin
+          { narrow 2/3 (XtNarrowBinop): both operands are exact 32-bit values
+            of one signedness, so the predicate, not the operand types, says
+            which divide gives the 64-bit answer's low word. }
           EmitDivZeroCheckXtensa(False);       { divisor in a3 }
           { Unsigned operands divide unsigned (quou / __pxx_udivsi3), as riscv32
             picks divu through the same TypeDivideUnsigned. quou existed in
             xtensaenc.inc and was never called: 0xFFFFFFFFu / 2u answered 0. }
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+          if ((narrow = 3) or ((narrow = 0) and
+              TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])))) then
           begin
             if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_udivsi3')
             else xtensa_quou(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
@@ -3307,7 +3393,8 @@ begin
         else if op = Ord(tkMod) then
         begin
           EmitDivZeroCheckXtensa(False);       { divisor in a3 }
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+          if ((narrow = 3) or ((narrow = 0) and
+              TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])))) then
           begin
             if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_umodsi3')
             else xtensa_remu(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);

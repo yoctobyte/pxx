@@ -379,3 +379,23 @@ nonzero instruction count in the region, or no `<unknown>` — before counting
 mnemonics. Where no disassembler exists, a behavioural probe with a negative
 control is the better instrument anyway, which is how the xtensa row above was
 taken.
+
+## 2026-11-12 -- riscv32 and xtensa are done; i386 and arm32 remain
+
+Measured at HEAD with the `q := i * j` probe and its `+` control
+(llvm-objdump-21, armv7a triple for arm32, no `<unknown>` in the region):
+
+| target | multiplies | by |
+|---|---|---|
+| riscv32 | 1 | d236b0481d (low-32 demand, 2026-10-13) |
+| xtensa | 1 | perf-a-xtensa-keeps-the-pair-path-where-only-the-low-word-is-kept (2026-11-12) |
+| i386 | 3 | open |
+| arm32 | 3 | open |
+
+On xtensa this also removes the runtime requirement this ticket found: an
+`Integer * Integer` program runs on stock qemu without --xtensa-soft-mulhigh.
+WriteLn of an integer still needs the flag.
+
+The working design for the two that remain is the riscv32/xtensa one: a demand
+flag set by the consumer, not a new IR pass. The {$Q+} coupling recorded above
+holds there too.
