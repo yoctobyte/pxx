@@ -1337,13 +1337,28 @@ begin
     else if c <> '_' then ErrorNoPos('--image-base: not a number: "' + s + '"');
     if d >= 0 then
     begin
-      if Result > ($7FFFFFFFFFFF div base) then
-        ErrorNoPos('--image-base: too large: "' + s + '"');
-      Result := Result * base + d;
+      if base = 16 then
+      begin
+        { all 64 bits, so the kernel half (0xFFFFFFFF80100000) can be written }
+        if (Result shr 60) <> 0 then
+          ErrorNoPos('--image-base: too large: "' + s + '"');
+        Result := (Result shl 4) or d;
+      end
+      else
+      begin
+        if Result > ($7FFFFFFFFFFF div base) then
+          ErrorNoPos('--image-base: too large: "' + s + '"');
+        Result := Result * base + d;
+      end;
     end;
   end;
-  if (Result <= 0) or (Result >= $800000000000) or ((Result and $FFF) <> 0) then
-    ErrorNoPos('--image-base: must be page-aligned, non-zero and below 2^47: "' + s + '"');
+  { The kernel half, 0xFFFF800000000000 and up, is negative as an Int64 and is
+    accepted here; only --link --freestanding may use it (checked after the
+    option loop, which has not seen every option yet). }
+  if ((Result <= 0) and ((Result < -$800000000000) or (Result = 0)))
+     or (Result >= $800000000000) or ((Result and $FFF) <> 0) then
+    ErrorNoPos('--image-base: must be page-aligned, non-zero and below 2^47 '
+               + '(or in the kernel half, 0xFFFF800000000000 and up, for --link --freestanding): "' + s + '"');
 end;
 
 procedure RequireOutputArtefact(const path: AnsiString);
@@ -1533,6 +1548,7 @@ begin
   EmitObjMode := False;
   LinkMode := False;
   LinkOutPath := '';
+  LinkEntryName := '';
   ImageBase := LOAD_ADDR;
   LdsoRunnable := False;
   LinkGcSections := True;
@@ -2060,6 +2076,17 @@ begin
     else if option = '--link' then
     begin
       LinkMode := True;
+      Inc(i);
+    end
+    else if LinkMode and (option = '-e') and (i < ParamCount) then
+    begin
+      { the entry symbol, as ld's -e: a kernel enters at its own start32 }
+      LinkEntryName := ParamStr(i + 1);
+      Inc(i, 2);
+    end
+    else if LinkMode and (Copy(option, 1, 8) = '--entry=') then
+    begin
+      LinkEntryName := Copy(option, 9, Length(option) - 8);
       Inc(i);
     end
     else if LinkMode and (option = '--no-gc-sections') then
@@ -3031,6 +3058,8 @@ begin
   { --link <obj>... <out>: stage 5, the user-facing mode. Here, after the
     option loop, because the loop stops at the first non-option and every
     argument from there on is an object except the last. }
+  if (ImageBase < 0) and not (LinkMode and FreestandingMode) then
+    ErrorNoPos('--image-base: a kernel-half base is for --link --freestanding only');
   if LinkMode then
   begin
     if TargetArch <> TARGET_X86_64 then

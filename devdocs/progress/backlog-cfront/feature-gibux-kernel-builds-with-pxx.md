@@ -4,7 +4,7 @@ tags: [C]
 prio: 20
 type: feature
 blocked-by: []
-summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. Still open: (4) `--link --freestanding` for a higher-half image; (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
+summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. `--link --freestanding -e start32` links an image that boots to user space (item 4; boot.S/entry.S still assembled by gas). Still open: (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
 status: open
 owner: unassigned
 ---
@@ -68,7 +68,10 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    it was a block-scope `long (*gens[])(..) = {..}`.
    **fs/procfs.c:268**: `expected C expression near size_t gen_pid_stat`. A
    C frontend parse gap; it still needs a repro.
-4. **`--link --freestanding`** must:
+4. **DONE 2026-11-12** ([[feature-link-freestanding-links-a-kernel-image]]):
+   pxx-linked kernel booted under qemu to "Hello from user space" (status
+   33). The kernel Makefile's pxx LINK line needs `-e start32`.
+   **`--link --freestanding`** must:
    - supply no _start, with entry `start32` (or `-e sym`);
    - keep `.multiboot` (unreferenced) and place it first, in the first
      8 KiB;
@@ -95,7 +98,14 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
 
    The inline-asm encoder and the AT&T operand reader can be reused. The
    object writer has to handle arbitrary sections.
-7. **Kernel code-generation constraints**, which the kernel Makefile lists
+7. **PARTLY DONE 2026-11-13** (in [[feature-link-freestanding-links-a-kernel-image]]):
+   --freestanding emits no SSE (the variadic prologue's xmm spill is gone)
+   and refuses the two red-zone code paths (alloca/VLA, FPU mask) instead of
+   emitting them; the pxx-linked kernel is checked clean of both.
+   Open: give alloca/VLA frame slots instead of the red zone, so a kernel
+   may use a VLA; a float/double operation in --freestanding code is still
+   emitted as SSE rather than refused.
+   **Kernel code-generation constraints**, which the kernel Makefile lists
    as "pxx's equivalents are still to come":
    - gcc builds with `-mno-red-zone`, because an interrupt arrives on the
      same stack;

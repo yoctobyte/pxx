@@ -5556,6 +5556,8 @@ var
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
+  CTypeFnPtrNDims  : Integer; { how many `[..]` that declarator had: `(*h[16][4])(void)` is 2 (Gibux irq.c) }
+  CTypeFnPtrDims   : array[0..7] of Integer;  { their spans, outermost first; [0] = CTypeFnPtrArrLen }
   CTypePtrElemArrLen : Integer; { pointer-to-array declarator `elem (*Name)[N]`: the pointee is a fixed array of N (row length). For a multi-dim pointee `(*Name)[A][B]` it holds the FLATTENED product A*B. 0 = not a pointer-to-array. }
   CTypePtrElemNDims  : Integer; { pointer-to-array declarator: number of pointee array dims (1 for `[N]`, >1 for `[A][B]..`); the spans are in CTypePtrElemDim[0..NDims-1]. }
   CTypePtrElemDim    : array[0..MAX_ARR_DIMS-1] of Integer; { pointee per-dim spans for a `(*Name)[A][B]..` declarator }
@@ -6939,6 +6941,7 @@ var
     (Route 2 of feature-a-pxx-cannot-link-its-own-objects). elfreader.inc. }
   LinkMode : Boolean;
   LinkOutPath : AnsiString;   { --link -o <out>; '' means the LAST argument is the output }
+  LinkEntryName : AnsiString; { --link -e <sym> / --entry=<sym>; '' = _start, else a synthesised one }
   LinkGcSections : Boolean;   { --link drops unreachable sections; --no-gc-sections keeps them }
   { True while the x86-64 encoder is writing into AsmBytes (inline asm) rather
     than into Code. EmitGlobRef's rip-relative peephole must not look back at

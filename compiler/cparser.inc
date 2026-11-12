@@ -6560,6 +6560,8 @@ var
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
+  fpNDims, fpDi: Integer;          { every dimension of `(*name[N][M]..)`, same reason }
+  fpDims: array[0..7] of Integer;
   fpNParams, fpSig, fnRetNParams, pi: Integer;
   retSig: Integer;                 { returned-fnptr sig when the pointee returns a fn-pointer (00124) }
   pointeeRetFn: Boolean;           { declarator is `(* (*name)(...))(...)` — pointee returns a fn-pointer }
@@ -6593,6 +6595,7 @@ begin
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
+  CTypeFnPtrNDims := 0;
   CTypePtrElemArrLen := 0;
   CTypePtrElemNDims := 0;
   CTypeFnRetIsFunc := False;
@@ -6978,6 +6981,7 @@ begin
     CTypeIsVoid := False;
     fpName := '';
     fpArrLen := -2;
+    fpNDims := 0;
     fnRetIsFunc := False;
     fnRetNParams := 0;
     { first group `(*name)` — collapse to Pointer, capturing the declarator name }
@@ -7059,8 +7063,14 @@ begin
           from its initializer); `[N]` = fixed. The trailing Next below consumes
           the closing ']'. }
         Next;                          { consume '[' }
-        if CurTok.Kind = tkRBrack then fpArrLen := -1
-        else fpArrLen := CEvalConstExpr;
+        { EVERY dimension, outermost first: `(*h[16][4])(void)` is 16 rows of
+          4. Each `[` used to overwrite the last, so that registered a 1-D
+          array of 4 and h[1][0] = f wrote past its end (Gibux irq.c). }
+        if CurTok.Kind = tkRBrack then fpDi := -1
+        else fpDi := CEvalConstExpr;
+        if fpNDims = 0 then fpArrLen := fpDi;
+        if fpNDims <= 7 then fpDims[fpNDims] := fpDi;
+        Inc(fpNDims);
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
@@ -7135,6 +7145,9 @@ begin
       CTypeFnPtrNameOff := fpNameOff;  { assign AFTER the param recursion that reset the globals }
       CTypeFnPtrNameLen := fpNameLen;
       CTypeFnPtrArrLen := fpArrLen;    { ditto: `(*name[N])` dimension, clobbered by the param recursion }
+      CTypeFnPtrNDims := fpNDims;
+      for fpDi := 0 to fpNDims - 1 do
+        if fpDi <= 7 then CTypeFnPtrDims[fpDi] := fpDims[fpDi];
       if fnRetIsFunc then
       begin
         CTypeFnRetIsFunc := True;
@@ -7289,6 +7302,8 @@ var baseTk, declTk, scalarTk: TTypeKind;
     hadStar: Boolean;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
+    fpLocNDims: Integer;
+    fpLocDims: array[0..7] of Integer;
     beFlat, beBelow: Integer;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     unsizedOuter: Boolean;   { `T a[][N] = {...}`: rows come from the braces }
@@ -7351,8 +7366,34 @@ begin
       if arrLen >= 0 then
       begin
         if arrLen < 1 then arrLen := 1;
+        fpLocNDims := CTypeFnPtrNDims;
+        if fpLocNDims >= 2 then
+        begin
+          { `(*h[R][C])(..)`: R*C pointers, with the shape recorded so h[i][j]
+            strides like any 2-D array }
+          for ei := 0 to fpLocNDims - 1 do
+            if (ei < MAX_ARR_DIMS) and (ei <= 7) then fpLocDims[ei] := CTypeFnPtrDims[ei];
+          arrLen := 1;
+          for ei := 0 to fpLocNDims - 1 do
+            if (ei < MAX_ARR_DIMS) and (ei <= 7) then
+            begin
+              if fpLocDims[ei] < 1 then fpLocDims[ei] := 1;
+              arrLen := arrLen * fpLocDims[ei];
+            end;
+        end;
         idx := AllocArray(name, tyPointer, 0, arrLen - 1);
         if procSig >= 0 then SymElemProcSig[idx] := procSig;  { fp[i](args) callable }
+        if fpLocNDims >= 2 then
+        begin
+          SymArrNDims[idx] := fpLocNDims;
+          for ei := 0 to fpLocNDims - 1 do
+            if (ei < MAX_ARR_DIMS) and (ei <= 7) then
+            begin
+              SymArrDimLo[idx * MAX_ARR_DIMS + ei] := 0;
+              SymArrDimSpan[idx * MAX_ARR_DIMS + ei] := fpLocDims[ei];
+            end;
+        end;
+        ei := 0;
       end;
       head := -1; tail := -1;
       ei := 0;
@@ -11557,6 +11598,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
+    gFpNDims, gFpDi: Integer;
+    gFpDims: array[0..7] of Integer;
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok, paDeferTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     gTdDi: Integer;  { walks an array typedef's inherent dims }
@@ -11645,16 +11688,27 @@ begin
         NAME (an ordinary array declarator), not the fn-ptr declarator, so
         ParseCDeclType left CTypeFnPtrArrLen unset. Consume it here so wasArr is
         true and the brace init materialises per-element proc addresses. }
-      if CurTok.Kind = tkLBrack then
+      { `fptr h[R][C]` has every dimension here, as `(*h[R][C])` has them in
+        the declarator (Gibux irq.c) }
+      CTypeFnPtrNDims := 0;
+      while CurTok.Kind = tkLBrack do
       begin
         Next;
-        if CurTok.Kind = tkRBrack then CTypeFnPtrArrLen := -1   { unbounded `[]` }
-        else CTypeFnPtrArrLen := CEvalConstExpr;
+        if CurTok.Kind = tkRBrack then gFpDi := -1   { unbounded `[]` }
+        else gFpDi := CEvalConstExpr;
+        if CTypeFnPtrNDims = 0 then CTypeFnPtrArrLen := gFpDi;
+        if CTypeFnPtrNDims <= 7 then CTypeFnPtrDims[CTypeFnPtrNDims] := gFpDi;
+        Inc(CTypeFnPtrNDims);
         Expect(tkRBrack, ']');
       end;
     end;
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
     wasArr := (CTypeFnPtrArrLen >= -1);
+    { `(*h[R][C])(..)`: every dimension, taken now -- an initialiser's casts
+      re-enter ParseCDeclType and reset the globals (Gibux irq.c) }
+    gFpNDims := CTypeFnPtrNDims;
+    for gFpDi := 0 to gFpNDims - 1 do
+      if gFpDi <= 7 then gFpDims[gFpDi] := CTypeFnPtrDims[gFpDi];
     nArrElems := 0;
     paDeferTok := -1;
     if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
@@ -11797,6 +11851,16 @@ begin
       end;
     end;
     arrLen := CTypeFnPtrArrLen;
+    if gFpNDims >= 2 then
+    begin
+      arrLen := 1;
+      for gFpDi := 0 to gFpNDims - 1 do
+        if (gFpDi < MAX_ARR_DIMS) and (gFpDi <= 7) then
+        begin
+          if gFpDims[gFpDi] < 1 then gFpDims[gFpDi] := 1;
+          arrLen := arrLen * gFpDims[gFpDi];
+        end;
+    end;
     { With `[k]=` / range designators the array is sized to the highest index
       touched, not the element count. }
     fnMaxTgt := -1;
@@ -11858,6 +11922,16 @@ begin
       about it made it invisible except which branch registered it. }
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     CApplyThreadLocalStorage(idx, declSawThread);
+    if (idx >= 0) and wasArr and (gFpNDims >= 2) then
+    begin
+      SymArrNDims[idx] := gFpNDims;
+      for gFpDi := 0 to gFpNDims - 1 do
+        if (gFpDi < MAX_ARR_DIMS) and (gFpDi <= 7) then
+        begin
+          SymArrDimLo[idx * MAX_ARR_DIMS + gFpDi] := 0;
+          SymArrDimSpan[idx * MAX_ARR_DIMS + gFpDi] := gFpDims[gFpDi];
+        end;
+    end;
     { its initialiser (already consumed above) is baked into .data -- see the
       same call in the main declarator path below }
     if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
@@ -16413,6 +16487,13 @@ begin
       EmitB($48); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 24);   { rcx }
       EmitB($4C); EmitB($89); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 32);   { r8 }
       EmitB($4C); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 40);   { r9 }
+      { --freestanding (a kernel) touches no SSE register at all, the way gcc's
+        -mgeneral-regs-only does: user FPU state is live in them on every
+        syscall and interrupt, and the kernel saves it only on a process
+        switch (Gibux). So the XMM half of the save area is left unwritten,
+        and a double in a kernel's variadic tail is not a thing it reads. }
+      if not FreestandingMode then
+      begin
       EmitAsmX64(['movsd [rbp+%], xmm0', Syms[vaSaveSym].Offset + 48]);
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 80);   { xmm2 }
@@ -16421,6 +16502,7 @@ begin
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($AD); EmitI32(Syms[vaSaveSym].Offset + 128);  { xmm5 }
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 144);  { xmm6 }
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
+      end;
     end;
     TARGET_AARCH64:
     begin

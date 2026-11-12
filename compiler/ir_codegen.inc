@@ -11239,6 +11239,14 @@ begin
           The rounding is not decoration -- `and rsp, -16` in a call sequence
           assumes rsp's 16-alignment is invariant across argument evaluation,
           and an odd alloca(1) would break that for the CALL rather than here. }
+        { The register parking below borrows the red zone, which a kernel does
+          not have: an interrupt arrives on the same stack and overwrites
+          everything below rsp (gcc builds Gibux with -mno-red-zone). Refused
+          rather than miscompiled until the three registers get frame slots. }
+        if FreestandingMode then
+          Error('--freestanding: alloca() / a variable-length array is not supported yet -- '
+              + 'its code parks registers in the red zone below rsp, which an interrupt '
+              + 'on the same stack overwrites');
         IREmitNode(IRA[node]);
         EmitAsmX64([
           'add rax, 15',
@@ -11296,6 +11304,9 @@ begin
           arbitrary expression that may CALL, and a call writes below rsp —
           straight through the red-zone word the mask would have been sitting
           in. }
+        if FreestandingMode then
+          Error('--freestanding: the floating-point exception mask is not available -- '
+              + 'a kernel touches no SSE state, and this code uses the red zone below rsp');
         if IRC[node] = 1 then
         begin
           { SET: rax = new mask (0..63) -> splice into MXCSR, return the old. }

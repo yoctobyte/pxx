@@ -19080,6 +19080,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cbse "$$($(TESTTMP)/cbse)" "1700000008"
 	./$(COMPILER) -dNO_DEFINITIONS --emit-obj test/c_block_scope_extern_with_no_file_scope_declaration.c $(TESTTMP)/cbse.o > /dev/null
 	readelf -sW $(TESTTMP)/cbse.o | grep -q ' UND boot_epoch$$' || { echo 'cbse: boot_epoch is not an undefined import'; exit 1; }
+	# A 2-D array of function pointers (Gibux irq.c), both spellings, both scopes.
+	./$(COMPILER) test/c_two_dimensional_function_pointer_array.c $(TESTTMP)/c2dfp > /dev/null
+	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
+	# --link --freestanding: a kernel image at the kernel-half base (Gibux item 4).
+	tools/check_link_freestanding.sh ./$(COMPILER) $(TESTTMP)/clf
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
