@@ -379,6 +379,9 @@ configure_tree() {
     # allnoconfig. The whole answer is in one pass over .config.
     unmapped=""
     for a in $APPLETS; do
+      # `sh' has no CONFIG_SH; it is CONFIG_SH_IS_ASH, which REQUIRED_ON
+      # carries when `sh' is asked for (see below).
+      [ "$a" = sh ] && continue
       A=$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')
       if grep -qxF "# CONFIG_$A is not set" .config; then
         sed -i "s/^# CONFIG_$A is not set\$/CONFIG_$A=y/" .config
@@ -398,7 +401,16 @@ configure_tree() {
     fi
     sed -i 's/^CONFIG_SH_IS_ASH=y$/# CONFIG_SH_IS_ASH is not set/' .config
     sed -i '/^# CONFIG_SH_IS_NONE is not set$/d' .config
-    printf 'CONFIG_SH_IS_NONE=y\n' >> .config
+    if printf '%s\n' $APPLETS | grep -qx sh; then
+      # `sh' asked for BY NAME (a root filesystem needs /bin/sh for every
+      # #!/bin/sh script): SH_IS_ASH, and sh is then in the applet table and in
+      # the requested list alike, so the count still matches.
+      sed -i '/^CONFIG_SH_IS_NONE=y$/d' .config
+      sed -i 's/^# CONFIG_SH_IS_ASH is not set$/CONFIG_SH_IS_ASH=y/' .config
+      printf '# CONFIG_SH_IS_NONE is not set\n' >> .config
+    else
+      printf 'CONFIG_SH_IS_NONE=y\n' >> .config
+    fi
     # ash under allnoconfig is a SHELL THAT CANNOT DO ARITHMETIC: every ASH_*
     # and FEATURE_SH_MATH knob is off, so `echo $((1+1))` is a syntax error.
     # Comparing two builds of that is the guard-that-cannot-fail shape -- green,
@@ -444,6 +456,11 @@ configure_tree() {
     # of the corpus. Measured 2026-09-02: at 257 applets `crypt' was the ONLY
     # undefined symbol in the gcc oracle's 400-object link.
     sed -i 's/^# CONFIG_USE_BB_CRYPT is not set$/CONFIG_USE_BB_CRYPT=y/' .config
+    # The applet-dependent knobs in REQUIRED_ON (mount's flags, stat -f).
+    for f in $REQUIRED_ON; do
+      [ "$f" = SH_IS_ASH ] && continue
+      sed -i "s/^# CONFIG_$f is not set\$/CONFIG_$f=y/" .config
+    done
     yes '' | make oldconfig >/dev/null 2>&1 || exit 1
     make -j"$(nproc 2>/dev/null || echo 4)"
   ) > "$log" 2>&1
@@ -535,6 +552,16 @@ applet_table_matches() {
 # added has the right applets and the wrong build, and the applet comparison
 # above cannot see that.
 REQUIRED_ON="USE_BB_CRYPT"
+# And knobs an APPLET needs to do its job on a real root filesystem (Gibux's
+# initramfs -> disk root, 2026-11-12), on only when that applet is asked for:
+#   mount  FEATURE_MOUNT_FLAGS -- without it `mount --move/--bind' reach the
+#          kernel as option TEXT, and a directory source is then MS_BIND, so an
+#          initramfs cannot hand /dev and /proc over to switch_root;
+#   stat   FEATURE_STAT_FILESYSTEM -- `stat -f';
+#   sh     SH_IS_ASH -- /bin/sh, without which every #!/bin/sh script fails.
+for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM sh:SH_IS_ASH; do
+  printf '%s\n' $APPLETS | grep -qx "${_pair%%:*}" && REQUIRED_ON="$REQUIRED_ON ${_pair#*:}"
+done
 required_knobs_ok() {
   local f
   [ -f "$BB/.config" ] || return 1
@@ -617,7 +644,9 @@ fi
 # undefined `crypt' at LINK time, 400 objects later.
 for f in $REQUIRED_ON; do
   grep -qxF "CONFIG_$f=y" "$BB/.config" \
-    || die "oldconfig dropped CONFIG_$f -- without it the link needs -lcrypt, which the gcc oracle can be given and pxx cannot (lib/crtl has no crypt), so the two sides would not be the same program"
+    || { [ "$f" = USE_BB_CRYPT ] \
+           && die "oldconfig dropped CONFIG_$f -- without it the link needs -lcrypt, which the gcc oracle can be given and pxx cannot (lib/crtl has no crypt), so the two sides would not be the same program"; \
+         die "oldconfig dropped CONFIG_$f, which the requested applets need (see REQUIRED_ON)"; }
 done
 
 if printf '%s\n' $APPLETS | grep -qx ash; then

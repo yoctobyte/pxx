@@ -306,7 +306,19 @@ char *ttyname(int fd)
 
    The entry is now called PalFork (see the note at PalBackendFork for why
    renaming it beat leaving it), and fork() below is real. */
-int chroot(const char *path)   { (void)path; errno = ENOSYS; return -1; }
+/* chroot(2) through the raw syscall bridge, the way sys/mount.c does mount,
+   umount2 and pivot_root. It was an ENOSYS stub; Gibux's switch_root test
+   (2026-11-12) is the first caller that reaches it on a kernel that has it.
+   A target without SYS_chroot still says ENOSYS. */
+int chroot(const char *path) {
+#ifdef SYS_chroot
+  return (int)syscall(SYS_chroot, (long)path, 0L, 0L, 0L, 0L, 0L);
+#else
+  (void)path;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
 
 extern int __pxx_fork(void);
 

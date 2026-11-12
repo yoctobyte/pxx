@@ -35,6 +35,12 @@
 # Usage:
 #   tools/busybox_diff.sh --separate --targets i386 \
 #     --applets "$(grep -v '^#' tools/busybox-applets-394.txt | tr '\n' ' ')"
+#
+# For a ROOT FILESYSTEM (Gibux, 2026-11-12) append `sh' to that list: the
+# harness maps it to CONFIG_SH_IS_ASH, so /bin/sh exists. That is 395 applets,
+# a different scope, so do not cite it as 394. mount's FEATURE_MOUNT_FLAGS
+# (--move/--bind) and stat's FEATURE_STAT_FILESYSTEM (-f) come on for this
+# list automatically (REQUIRED_ON in busybox_diff.sh).
 acpid
 add-shell
 addgroup

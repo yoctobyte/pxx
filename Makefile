@@ -19080,6 +19080,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cbse "$$($(TESTTMP)/cbse)" "1700000008"
 	./$(COMPILER) -dNO_DEFINITIONS --emit-obj test/c_block_scope_extern_with_no_file_scope_declaration.c $(TESTTMP)/cbse.o > /dev/null
 	readelf -sW $(TESTTMP)/cbse.o | grep -q ' UND boot_epoch$$' || { echo 'cbse: boot_epoch is not an undefined import'; exit 1; }
+	# chroot() reaches the kernel; the oracle is gcc, run here, because root and
+	# non-root get different (both correct) answers.
+	./$(COMPILER) test/c_crtl_chroot_reaches_the_kernel.c $(TESTTMP)/cchroot > /dev/null
+	gcc -o $(TESTTMP)/cchroot_gcc test/c_crtl_chroot_reaches_the_kernel.c
+	tools/expect_same.sh cchroot "$$($(TESTTMP)/cchroot)" "$$($(TESTTMP)/cchroot_gcc)"
 	# A 2-D array of function pointers (Gibux irq.c), both spellings, both scopes.
 	./$(COMPILER) test/c_two_dimensional_function_pointer_array.c $(TESTTMP)/c2dfp > /dev/null
 	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
