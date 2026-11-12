@@ -10838,7 +10838,9 @@ test-freebsd: $(COMPILER)
 	  tools/vm/freebsd.sh start && \
 	  for t in test/test_rtl_libc_torture.pas test/test_signal_pc_rewrite.pas test/test_signal_sp_rewrite.pas \
 	           test/test_stack_overflow_raise.pas test/test_float_exception_mask.pas test/lib_signals_fpc.pas \
-	           test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas test/test_scheduler.pas test/test_async.pas; do \
+	           test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas test/test_scheduler.pas test/test_async.pas \
+	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_net.pas test/lib_net6.pas test/lib_http_serve.pas \
+	           test/lib_platform_net_sockopt.pas test/lib_sock_closedpeer.pas; do \
 	    n=$$(basename $$t .pas); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/$$n.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_$$n "$$(tools/vm/freebsd.sh run $$d/$$n.fb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
@@ -10853,9 +10855,23 @@ test-freebsd: $(COMPILER)
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
 	           test/test_nilpy_file_oserrors.npy test/test_nilpy_os_access_pathsep_gethostname.npy \
-	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy; do \
+	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy \
+	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
+	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
+	           test/c_pty_family.c test/cisatty.c test/lib_termio_isatty.pas; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/fe.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/fe.fb one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./fe.lx one 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
+	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
+	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
+	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas; do \
+	    ./$(COMPILER) --threadsafe $$t $$d/th.lx >/dev/null && ./$(COMPILER) --threadsafe --os=freebsd $$t $$d/th.fb >/dev/null && \
+	    tools/expect_same.sh freebsd_threads_$$(basename $$t) "$$(tools/vm/freebsd.sh run $$d/th.fb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/th.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in test/c_os_freebsd_termios.c; do \
+	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/fe.fb >/dev/null && \
+	    tools/expect_same.sh freebsd_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/freebsd.sh run $$d/fe.fb 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
 	  done; echo "test-freebsd: OK"
 
 test-asm: $(COMPILER)

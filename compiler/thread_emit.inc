@@ -1,6 +1,8 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== Thread runtime emission ===== }
 
+procedure EmitCodeAbsToRdx(targetOff: Integer); forward;   { defined in ir_codegen.inc, included later; the FPC seed build resolves in source order. Moved here from frontend_forwards.inc (included after this file). bug-a-fpc-seed-drift-emitasmx64-forward }
+
 { The only machine-code part of libc-free threading: a bare clone+trampoline stub.
   Everything else (futex wait/wake, mmap'd stacks, join, the PAL/TThread layers) is
   Pascal in the PXX-only RTL, built on __pxxrawsyscall.
@@ -72,6 +74,7 @@ var
   pNoInst, pNoInst2, pCopy: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
                         x86-64/i386, a branch immediate on aarch64/arm32 }
+  fbChild: Integer;   { --os=freebsd: the thr_new entry that becomes a clone child }
 begin
   if CloneStubAddr <> 0 then Exit;
   if TargetArch = TARGET_X86_64 then
@@ -79,6 +82,24 @@ begin
     { jump over the stub body — execution must reach it only via `call`. }
     AsmScopeBegin;
     EmitAsmX64(['jmp over']);
+    { --os=freebsd: thr_new starts a thread at a FUNCTION (rdi = its arg, rsp
+      the kernel's choice), where clone resumes it after the syscall on the
+      stack it was handed. This entry turns the one into the other: the arg is
+      the stage area, so the child continues at `child` exactly as a clone
+      child would, with rsp = the stage. feature-port-freebsd-native }
+    fbChild := 0;
+    if TargetKernel = KERNEL_FREEBSD then
+    begin
+      fbChild := CodeLen;
+      { ctidptr, parked at stage-8 by the parent, moves into the child's own
+        TLS block before anything is pushed over it: slot 14 is i386's
+        TLS_SLOT_FS_ENTRY and never written on x86-64 (the block is zeroed). }
+      EmitAsmX64([
+        'mov rsp, rdi',
+        'mov rax, [rsp-8]',
+        'mov [rsp+%], rax', 16 + 8 * TLS_SLOT_FS_ENTRY,
+        'jmp child']);
+    end;
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
     { ---- carve the child's TLS block off the top of its stack ---- }
@@ -150,19 +171,74 @@ begin
       'mov [rsi], rsi',                 { slot 0 = self }
       'sub rsi, 16',                    { stage area }
       'mov [rsi], rdx',                 { entry }
-      'mov [rsi+8], rcx',               { arg }
-      'mov rdx, r8',                    { parent_tid = ctidptr }
-      'mov r10, r8',                    { child_tid  = ctidptr }
-      'xor r8d, r8d',                   { tls = NULL }
-      'mov eax, 56',                    { SYS_clone }
-      'syscall_raw',
-      'test rax, rax']);
-    { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
-      instructions of child setup, and every one of them is a line someone may
-      add to. }
-    { rel32, not rel8: the child sequence passed 127 bytes when it gained the
-      init-image copy (2026-09-24), and PatchRel8 refused it at build time. }
-    EmitAsmX64(['jnz parent']);
+      'mov [rsi+8], rcx']);             { arg }
+    if TargetKernel = KERNEL_FREEBSD then
+    begin
+      { thr_new(&param, 104). The kernel starts the thread on
+        [stack_base, stack_base+size) with a fake return slot at the top, so
+        the top is put 16 below the stage area: the slot lands below stage-16
+        and stage-8 carries ctidptr to the child's entry, which moves it into
+        TLS slot 14 for the exit path. The new tid is
+        written to a scratch long on THIS stack (thr_new stores longs; the
+        caller's word is an int), then stored as CLONE_PARENT_SETTID would --
+        after the child may already be running, which the exit path allows
+        for. CF set = error, rax the positive errno. }
+      EmitAsmX64([
+        'mov [rsi-8], r8',              { ctidptr: the child entry moves it into its TLS block }
+        'sub rsp, 112']);               { thr_param (104) + tid scratch (8) }
+      EmitCodeAbsToRdx(fbChild);
+      EmitAsmX64([
+        'mov [rsp], rdx',               { start_func }
+        'mov [rsp+8], rsi',             { arg = the stage area }
+        'lea rax, [rsi-4112]',
+        'mov [rsp+16], rax',            { stack_base = stage - 16 - 4096 }
+        'mov qword [rsp+24], 4096',     { stack_size }
+        'xor eax, eax',
+        'mov [rsp+32], rax',            { tls_base }
+        'mov [rsp+40], rax',            { tls_size }
+        'mov [rsp+64], rax',            { flags (int) + pad }
+        'mov [rsp+72], rax',            { rtp }
+        'mov [rsp+80], rax',            { spare[0..2] }
+        'mov [rsp+88], rax',
+        'mov [rsp+96], rax',
+        'mov [rsp+104], rax',           { tid scratch }
+        'lea rax, [rsp+104]',
+        'mov [rsp+48], rax',            { child_tid }
+        'mov [rsp+56], rax',            { parent_tid }
+        'mov rdi, rsp',
+        'mov esi, 104',
+        'mov eax, 455',                 { thr_new }
+        'syscall_raw',
+        'jb fbfail',
+        'mov eax, [rsp+104]',           { the tid (lwpid_t fits 32 bits) }
+        'test r8, r8',
+        'jz fbnoset',
+        'mov [r8], eax',                { CLONE_PARENT_SETTID }
+      'fbnoset:',
+        'add rsp, 112',
+        'jmp parent',
+      'fbfail:',
+        'neg rax',
+        'add rsp, 112',
+        'jmp parent',
+      'child:']);
+    end
+    else
+    begin
+      EmitAsmX64([
+        'mov rdx, r8',                  { parent_tid = ctidptr }
+        'mov r10, r8',                  { child_tid  = ctidptr }
+        'xor r8d, r8d',                 { tls = NULL }
+        'mov eax, 56',                  { SYS_clone }
+        'syscall_raw',
+        'test rax, rax']);
+      { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
+        instructions of child setup, and every one of them is a line someone may
+        add to. }
+      { rel32, not rel8: the child sequence passed 127 bytes when it gained the
+        init-image copy (2026-09-24), and PatchRel8 refused it at build time. }
+      EmitAsmX64(['jnz parent']);
+    end;
     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
     { Install the TLS block FIRST, before anything Pascal runs. clone does not
       reset the thread pointer, so a child that skipped this would read the PARENT's block --
@@ -181,6 +257,16 @@ begin
     begin
       EmitAsmX64(['mov r12, gs:[%]', 8 * TLS_SLOT_INIT_IMAGE]);
     end;
+    if TargetKernel = KERNEL_FREEBSD then
+      EmitAsmX64([
+        'lea rax, [rsp+16]',
+        'push rax',                     { sysarch takes a POINTER to the base }
+        'mov rsi, rsp',
+        'mov edi, 131',                 { AMD64_SET_GSBASE }
+        'mov eax, 165',                 { sysarch }
+        'syscall_raw',
+        'add rsp, 8'])
+    else
     EmitAsmX64([
       'mov edi, 0x1001',              { ARCH_SET_GS }
       'lea rsi, [rsp+16]',
@@ -213,6 +299,19 @@ begin
       area holding (entry, arg) is the 16 bytes below it.
       rdi, rsi and rax are all dead here: rdi and rsi were arch_prctl's
       arguments and entry/arg live on the stack. }
+    if TargetKernel = KERNEL_FREEBSD then
+      EmitAsmX64([                      { FreeBSD stack_t: ss_sp, ss_size, ss_flags }
+        'lea rsi, [rsp+%]', 16 + TlsBlockSize,
+        'sub rsp, 32',
+        'mov [rsp], rsi',               { ss_sp }
+        'mov qword [rsp+8], %', SIG_ALTSTACK_SIZE,
+        'mov qword [rsp+16], 0',        { ss_flags }
+        'mov rdi, rsp',
+        'xor esi, esi',
+        'mov eax, 53',                  { sigaltstack }
+        'syscall_raw',
+        'add rsp, 32'])
+    else
     EmitAsmX64([
       'lea rsi, [rsp+%]', 16 + TlsBlockSize,
       'sub rsp, 32',
@@ -233,10 +332,53 @@ begin
       'lea r10, [rsp+%]', 16 + TlsBlockSize + SIG_ALTSTACK_SIZE,
       'pop rax',                        { entry }
       'pop rdi',                        { arg -> first int arg }
-      'call rax',                       { entry(arg) }
-      'xor edi, edi',                   { exit code 0 }
-      'mov eax, 60',                    { SYS_exit }
-      'syscall_raw',                    { the thread exits here }
+      'call rax']);                     { entry(arg) }
+    if TargetKernel = KERNEL_FREEBSD then
+      { CLONE_CHILD_CLEARTID by hand: zero the tid word and wake its waiters
+        (both umtx queues -- a joiner may wait shared or private), then
+        thr_exit. ctidptr is in this thread's TLS slot 14 (put there by the
+        thr_new entry). The word is cleared only once the PARENT has stored
+        the tid (it does so after thr_new returns, and this child may get
+        here first), or the store would resurrect a dead thread for its
+        joiner. }
+      EmitAsmX64([
+        'mov rbx, gs:[%]', 8 * TLS_SLOT_FS_ENTRY,
+        'test rbx, rbx',
+        'jz fbnoclr',
+      'fbspin:',
+        'mov eax, [rbx]',
+        'test eax, eax',
+        'jnz fbclr',
+        'mov eax, 331',                 { sched_yield }
+        'syscall_raw',
+        'jmp fbspin',
+      'fbclr:',
+        'xor eax, eax',
+        'mov [rbx], eax',
+        'mov rdi, rbx',
+        'mov esi, 3',                   { UMTX_OP_WAKE }
+        'mov edx, 0x7fffffff',
+        'xor r10d, r10d',
+        'xor r8d, r8d',
+        'mov eax, 454',                 { _umtx_op }
+        'syscall_raw',
+        'mov rdi, rbx',
+        'mov esi, 16',                  { UMTX_OP_WAKE_PRIVATE }
+        'mov edx, 0x7fffffff',
+        'xor r10d, r10d',
+        'xor r8d, r8d',
+        'mov eax, 454',
+        'syscall_raw',
+      'fbnoclr:',
+        'xor edi, edi',
+        'mov eax, 431',                 { thr_exit(NULL) }
+        'syscall_raw'])
+    else
+      EmitAsmX64([
+        'xor edi, edi',                 { exit code 0 }
+        'mov eax, 60',                  { SYS_exit }
+        'syscall_raw']);                { the thread exits here }
+    EmitAsmX64([
     'parent:',                          { rax already = child tid }
       'ret',
     'over:']);                          { the jump-over lands past the stub }

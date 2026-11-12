@@ -29,9 +29,10 @@ unit fbsdabi;
   the assembler routine FbRawA, whose `syscall` the thunk hook never sees.
 
   PHASE 1 SCOPE (feature-port-freebsd-native): files, memory, time, process
-  basics, TLS, and the two /proc files the runtime reads (environ, exe). Signals: rt_sigaction / rt_sigprocmask translate
-  (see FbSigEntry). NOT YET: threads (clone -> ENOSYS), futex, sockets, file locks, and
-  termios beyond isatty. Anything unmapped answers -ENOSYS. }
+  basics, TLS, and the two /proc files the runtime reads (environ, exe). Signals (see FbSigEntry), epoll over
+  kqueue, sockets, termios and ptys, futex over _umtx_op. Thread CREATION is
+  not here: clone is the compiler's stub (thread_emit.inc), which has a
+  thr_new leg under --os=freebsd. Anything unmapped answers -ENOSYS. }
 
 interface
 
@@ -74,7 +75,8 @@ const
   FB_FUTIMENS = 546; FB_UTIMENSAT = 547; FB_FDATASYNC = 550; FB_MKNODAT = 559;
   FB_GETGROUPS = 595; FB_SETGROUPS = 596;
   FB_PREADV = 289; FB_PWRITEV = 290; FB_SELECT = 93; FB_PSELECT = 522;
-  FB_PPOLL = 545; FB_STATFS = 555; FB_FSTATFS = 556;
+  FB_PPOLL = 545; FB_STATFS = 555; FB_FSTATFS = 556; FB_POSIX_OPENPT = 504;
+  FB_THR_EXIT = 431; FB_THR_KILL = 433; FB_UMTX_OP = 454;
   FB_KQUEUE = 362; FB_KEVENT = 560; FB_TIMERFD_CREATE = 585;
   FB_TIMERFD_GETTIME = 586; FB_TIMERFD_SETTIME = 587; FB_SPECIALFD = 577;
   FB_EVFILT_READ = -1; FB_EVFILT_WRITE = -2;
@@ -116,6 +118,7 @@ const
 
 var
   FbBrkBase, FbBrkCur, FbBrkTop: Int64;    { brk emulation, see FbBrk }
+  FbMainTid: Int64;                        { the first thread to enter: SYS_exit there ends the process }
 
 { The kernel entry. args -> [nr, a0..a5, rdx-out, cf-out]. FreeBSD reports an error
   with CF set and the positive errno in rax; this returns -errno instead (the
@@ -437,6 +440,7 @@ const
                                        101,110,118,105,114,111,110);   { /proc/self/environ }
   ProcExe: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,
                                    101,120,101);                        { /proc/self/exe }
+  DevPtmx: array[0..8] of Byte = (47,100,101,118,47,112,116,109,120);   { /dev/ptmx }
   ProcHostname: array[0..24] of Byte = (47,112,114,111,99,47,115,121,115,47,107,101,114,
                                         110,101,108,47,104,111,115,116,110,97,109,101);  { /proc/sys/kernel/hostname }
 
@@ -1079,12 +1083,374 @@ begin
   Result := Lx(FbSys(FB_SPECIALFD, 1, Int64(@a[0]), 8, 0, 0, 0));   { SPECIALFD_EVENTFD }
 end;
 
+
+{ ---- Sockets -----------------------------------------------------------------
+  The wire structs agree except for the sockaddr HEADER: Linux has a u16
+  family, BSD a u8 length then a u8 family; and AF_INET6 is 10 vs 28. Every
+  sockaddr crossing the boundary is rewritten -- inbound into a local copy,
+  outbound in place. SOL_SOCKET, the SO_/IP_/IPV6_ option numbers and the MSG_
+  flags are renumbered; msghdr and cmsghdr widen/narrow their length fields
+  (size_t on Linux, 32-bit on FreeBSD). Measured on 15.1 with offsetof(). }
+const
+  FB_SOCKET = 97; FB_CONNECT = 98; FB_ACCEPT = 30; FB_SENDTO = 133;
+  FB_RECVFROM = 29; FB_SENDMSG = 28; FB_RECVMSG = 27; FB_SHUTDOWN = 134;
+  FB_BIND = 104; FB_LISTEN = 106; FB_GETSOCKNAME = 32; FB_GETPEERNAME = 31;
+  FB_SOCKETPAIR = 135; FB_SETSOCKOPT = 105; FB_GETSOCKOPT = 118; FB_ACCEPT4 = 541;
+  LX_EAFNOSUPPORT = 97; LX_ENOPROTOOPT = 92;
+
+function FbAf(a: Int64): Int64;
+begin
+  case a of
+    0, 1, 2: Result := a;
+    10: Result := 28;
+  else Result := -1;
+  end;
+end;
+
+function LxAf(a: Int64): Int64;
+begin
+  if a = 28 then Result := 10 else Result := a;
+end;
+
+{ SOCK_NONBLOCK / SOCK_CLOEXEC ride in the type word on both, at other bits. }
+function FbSockType(t: Int64): Int64;
+begin
+  Result := t and $FF;
+  if (t and $800) <> 0 then Result := Result or $20000000;
+  if (t and $80000) <> 0 then Result := Result or $10000000;
+end;
+
+function FbMsgFlags(f: Int64): Int64;
+begin
+  Result := f and $7;                                          { OOB PEEK DONTROUTE }
+  if (f and $8) <> 0 then Result := Result or $20;             { CTRUNC }
+  if (f and $20) <> 0 then Result := Result or $10;            { TRUNC }
+  if (f and $40) <> 0 then Result := Result or $80;            { DONTWAIT }
+  if (f and $80) <> 0 then Result := Result or $8;             { EOR }
+  if (f and $100) <> 0 then Result := Result or $40;           { WAITALL }
+  if (f and $4000) <> 0 then Result := Result or $20000;       { NOSIGNAL }
+  if (f and $40000000) <> 0 then Result := Result or $40000;   { CMSG_CLOEXEC }
+end;
+
+function LxMsgFlags(f: Int64): Int64;
+begin
+  Result := f and $7;
+  if (f and $20) <> 0 then Result := Result or $8;
+  if (f and $10) <> 0 then Result := Result or $20;
+  if (f and $80) <> 0 then Result := Result or $40;
+  if (f and $8) <> 0 then Result := Result or $80;
+  if (f and $40) <> 0 then Result := Result or $100;
+end;
+
+{ Linux sockaddr (src, len) -> BSD sockaddr in dst (128 B). Answers the
+  length to pass, or -errno. }
+function SaToFb(src, len, dst: Int64): Int64;
+var i, af: Int64;
+begin
+  if (src = 0) or (len < 2) then begin Result := -LX_EINVAL; Exit; end;
+  if len > 128 then len := 128;
+  for i := 0 to len - 1 do PByte(dst + i)^ := PByte(src + i)^;
+  af := FbAf(PWord(src)^);
+  if af < 0 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  if (af = 1) and (len > 106) then len := 106;                  { sun_path 108 -> 104 }
+  PByte(dst)^ := Byte(len);
+  PByte(dst + 1)^ := Byte(af);
+  Result := len;
+end;
+
+{ BSD sockaddr at p, in place, -> Linux shape. }
+procedure SaToLx(p, lenp: Int64);
+begin
+  if (p = 0) or (lenp = 0) or (PInteger(lenp)^ < 2) then Exit;
+  PWord(p)^ := Word(LxAf(PByte(p + 1)^));
+end;
+
+{ socket option (level, name) -> FreeBSD; level -1 = no equivalent. }
+procedure SockOptToFb(var level, name: Int64);
+begin
+  case level of
+    1: begin                                                    { SOL_SOCKET }
+         level := $FFFF;
+         case name of
+           1: name := $1; 2: name := $4; 3: name := $1008; 4: name := $1007;
+           5: name := $10; 6: name := $20; 7: name := $1001; 8: name := $1002;
+           9: name := $8; 10: name := $100; 13: name := $80; 15: name := $200;
+           18: name := $1004; 19: name := $1003; 20: name := $1006; 21: name := $1005;
+           30: name := $2; 38: name := $1016; 39: name := $1019;
+         else level := -1;
+         end;
+       end;
+    6: case name of                                             { IPPROTO_TCP }
+         1, 2: ;
+         4: name := $100; 5: name := $200; 6: name := $400;
+       else level := -1;
+       end;
+    0: case name of                                             { IPPROTO_IP }
+         1: name := 3; 2: name := 4;
+         32: name := 9; 33: name := 10; 34: name := 11; 35: name := 12; 36: name := 13;
+       else level := -1;
+       end;
+    41: case name of                                            { IPPROTO_IPV6 }
+          26: name := 27; 16: name := 4; 17: name := 9; 18: name := 10;
+          19: name := 11; 20: name := 12; 21: name := 13;
+        else level := -1;
+        end;
+  else
+    if level <> 17 then level := -1;                            { IPPROTO_UDP: nothing renumbered }
+  end;
+end;
+
+function FbSockopt(isGet: Boolean; fd, level, name, val, lenp: Int64): Int64;
+var lv, nm, r, e: Int64;
+begin
+  lv := level; nm := name;
+  SockOptToFb(lv, nm);
+  if lv < 0 then begin Result := -LX_ENOPROTOOPT; Exit; end;
+  if not isGet then
+  begin
+    Result := Lx(FbSys(FB_SETSOCKOPT, fd, lv, nm, val, lenp, 0));
+    Exit;
+  end;
+  r := FbSys(FB_GETSOCKOPT, fd, lv, nm, val, lenp, 0);
+  if (r = 0) and (lv = $FFFF) and (val <> 0) then
+  begin
+    if nm = $1007 then                                          { SO_ERROR holds an errno }
+    begin
+      e := PInteger(val)^;
+      if (e >= 35) and (e <= 97) then PInteger(val)^ := ErrMap[Integer(e)];
+    end
+    else if nm = $1019 then PInteger(val)^ := Integer(LxAf(PInteger(val)^));   { SO_DOMAIN }
+  end;
+  Result := Lx(r);
+end;
+
+function FbSockAddrCall(nr, fd, sa, len: Int64): Int64;    { connect, bind }
+var b: array[0..15] of Int64; n: Int64;
+begin
+  n := SaToFb(sa, len, Int64(@b[0]));
+  if n < 0 then Result := n
+  else Result := Lx(FbSys(nr, fd, Int64(@b[0]), n, 0, 0, 0));
+end;
+
+function FbSockAddrOut(nr, fd, sa, lenp, flags: Int64): Int64;  { accept4, getsockname, getpeername }
+var r: Int64;
+begin
+  if nr = FB_ACCEPT4 then
+  begin
+    r := 0;
+    if (flags and $800) <> 0 then r := r or $20000000;
+    if (flags and $80000) <> 0 then r := r or $10000000;
+    r := FbSys(nr, fd, sa, lenp, r, 0, 0);
+  end
+  else r := FbSys(nr, fd, sa, lenp, 0, 0, 0);
+  if r >= 0 then SaToLx(sa, lenp);
+  Result := Lx(r);
+end;
+
+function FbSendto(fd, buf, len, flags, sa, salen: Int64): Int64;
+var b: array[0..15] of Int64; n: Int64;
+begin
+  if sa = 0 then
+  begin
+    Result := Lx(FbSys(FB_SENDTO, fd, buf, len, FbMsgFlags(flags), 0, 0));
+    Exit;
+  end;
+  n := SaToFb(sa, salen, Int64(@b[0]));
+  if n < 0 then Result := n
+  else Result := Lx(FbSys(FB_SENDTO, fd, buf, len, FbMsgFlags(flags), Int64(@b[0]), n));
+end;
+
+function FbRecvfrom(fd, buf, len, flags, sa, lenp: Int64): Int64;
+var r: Int64;
+begin
+  r := FbSys(FB_RECVFROM, fd, buf, len, FbMsgFlags(flags), sa, lenp);
+  if r >= 0 then SaToLx(sa, lenp);
+  Result := Lx(r);
+end;
+
+{ Linux cmsg chain (size_t len, int level, int type; data at 16) <-> FreeBSD
+  (u32 len, int level, int type; data at 16 -- _ALIGN(12) on amd64). Rewritten
+  in place: both headers fit the same 16 bytes and the data does not move.
+  SOL_SOCKET is the only level renumbered; SCM_RIGHTS is 1 on both. }
+procedure CmsgToFb(ctl, clen: Int64);
+var p, l: Int64;
+begin
+  p := ctl;
+  while (ctl <> 0) and (p + 16 <= ctl + clen) do
+  begin
+    l := PInt64(p)^;
+    if l < 16 then Exit;
+    PInteger(p)^ := Integer(l);
+    PInteger(p + 4)^ := PInteger(p + 8)^;                       { level }
+    if PInteger(p + 4)^ = 1 then PInteger(p + 4)^ := $FFFF;
+    PInteger(p + 8)^ := PInteger(p + 12)^;                      { type }
+    PInteger(p + 12)^ := 0;
+    p := p + ((l + 7) and not Int64(7));
+  end;
+end;
+
+procedure CmsgToLx(ctl, clen: Int64);
+var p, l, lv, ty: Int64;
+begin
+  p := ctl;
+  while (ctl <> 0) and (p + 16 <= ctl + clen) do
+  begin
+    l := PInteger(p)^ and $FFFFFFFF;
+    if l < 12 then Exit;
+    lv := PInteger(p + 4)^; ty := PInteger(p + 8)^;
+    if lv = $FFFF then lv := 1;
+    PInt64(p)^ := l;                                            { CMSG_LEN(n) = 16 + n on both }
+    PInteger(p + 8)^ := Integer(lv);
+    PInteger(p + 12)^ := Integer(ty);
+    p := p + ((l + 7) and not Int64(7));
+  end;
+end;
+
+{ msghdr: Linux 56 B (size_t iovlen/controllen, flags at 48), FreeBSD 48 B. }
+function FbMsg(isSend: Boolean; fd, lm, flags: Int64): Int64;
+var fm: array[0..5] of Int64;
+    nb: array[0..15] of Int64;
+    r, n: Int64;
+begin
+  fm[0] := PInt64(lm)^;                                         { msg_name }
+  fm[1] := PInteger(lm + 8)^;                                   { msg_namelen (int, upper 4 = 0) }
+  fm[2] := PInt64(lm + 16)^;                                    { msg_iov }
+  fm[3] := PInt64(lm + 24)^ and $FFFFFFFF;                      { msg_iovlen }
+  fm[4] := PInt64(lm + 32)^;                                    { msg_control }
+  fm[5] := PInt64(lm + 40)^ and $FFFFFFFF;                      { msg_controllen; flags = 0 }
+  if isSend then
+  begin
+    if fm[0] <> 0 then
+    begin
+      n := SaToFb(fm[0], fm[1], Int64(@nb[0]));
+      if n < 0 then begin Result := n; Exit; end;
+      fm[0] := Int64(@nb[0]); fm[1] := n;
+    end;
+    CmsgToFb(fm[4], fm[5]);
+    r := FbSys(FB_SENDMSG, fd, Int64(@fm[0]), FbMsgFlags(flags), 0, 0, 0);
+    CmsgToLx(fm[4], fm[5]);                                     { the caller's buffer, restored }
+  end
+  else
+  begin
+    r := FbSys(FB_RECVMSG, fd, Int64(@fm[0]), FbMsgFlags(flags), 0, 0, 0);
+    if r >= 0 then
+    begin
+      if fm[0] <> 0 then
+      begin
+        PWord(fm[0])^ := Word(LxAf(PByte(fm[0] + 1)^));
+        PInteger(lm + 8)^ := PInteger(Int64(@fm[1]))^;
+      end;
+      n := PInteger(Int64(@fm[5]))^ and $FFFFFFFF;
+      CmsgToLx(fm[4], n);
+      PInt64(lm + 40)^ := n;
+      PInteger(lm + 48)^ := Integer(LxMsgFlags(PInteger(Int64(@fm[5]) + 4)^));
+    end;
+  end;
+  Result := Lx(r);
+end;
+
+
+{ ---- termios -----------------------------------------------------------------
+  Linux's kernel struct termios is 36 bytes (4 flag words, c_line, c_cc[19]),
+  with the line speed coded into c_cflag (CBAUD); FreeBSD's is 44 (4 flag
+  words, c_cc[20], c_ispeed, c_ospeed as plain numbers). Almost every flag bit
+  and every c_cc index differs; a disabled control char is 0 on Linux and
+  0xff (_POSIX_VDISABLE) on FreeBSD. Both sides measured from headers. }
+const
+  TIflLx: array[0..13] of Int64 = ($1,$2,$4,$8,$10,$20,$40,$80,$100,$400,$1000,$800,$2000,$4000);
+  TIflFb: array[0..13] of Int64 = ($1,$2,$4,$8,$10,$20,$40,$80,$100,$200,$400,$800,$2000,$4000);
+  TOflLx: array[0..5] of Int64 = ($1,$4,$1800,$8,$10,$20);
+  TOflFb: array[0..5] of Int64 = ($1,$2,$4,$10,$20,$40);
+  TCflLx: array[0..6] of Int64 = ($40,$80,$100,$200,$400,$800,$80000000);
+  TCflFb: array[0..6] of Int64 = ($400,$800,$1000,$2000,$4000,$8000,$30000);
+  TLflLx: array[0..13] of Int64 = ($1,$2,$8,$10,$20,$40,$80,$100,$200,$400,$800,$1000,$4000,$8000);
+  TLflFb: array[0..13] of Int64 = ($80,$100,$8,$2,$4,$10,$80000000,$400000,$40,$20,$1,$800000,$20000000,$400);
+  { Linux c_cc index -> FreeBSD index (-1: VSWTC, none) }
+  TCcMap: array[0..16] of Integer = (8,9,3,5,0,17,16,-1,12,13,10,1,6,15,4,14,2);
+  { Linux CBAUD codes 0..15 and $1001..$100F as line speeds }
+  TBaudLo: array[0..15] of Integer = (0,50,75,110,134,150,200,300,600,1200,1800,2400,4800,9600,19200,38400);
+  TBaudHi: array[1..15] of Integer = (57600,115200,230400,460800,500000,576000,921600,
+                                      1000000,1152000,1500000,2000000,2500000,3000000,3500000,4000000);
+
+function MapBits(v: Int64; const src, dst: array of Int64): Int64;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(src) do
+    if (v and src[i]) = src[i] then Result := Result or dst[i];
+end;
+
+function SpeedToLx(n: Int64): Int64;
+var i: Integer;
+begin
+  for i := 0 to 15 do if TBaudLo[i] = n then begin Result := i; Exit; end;
+  for i := 1 to 15 do if TBaudHi[i] = n then begin Result := $1000 or i; Exit; end;
+  Result := 15;                                                 { unknown: B38400 }
+end;
+
+function SpeedToFb(c: Int64): Int64;
+begin
+  c := c and $100F;
+  if c <= 15 then Result := TBaudLo[Integer(c)]
+  else if (c and $F) >= 1 then Result := TBaudHi[Integer(c and $F)]
+  else Result := 38400;
+end;
+
+procedure TermiosToLx(fb, lx: Int64);
+var i, ix: Integer; c: Byte; cf: Int64;
+begin
+  for i := 0 to 35 do PByte(lx + i)^ := 0;
+  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, TIflFb, TIflLx));
+  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, TOflFb, TOflLx));
+  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, TCflFb, TCflLx);
+  cf := cf or (((PInteger(fb + 8)^ shr 8) and 3) shl 4);        { CSIZE }
+  cf := cf or SpeedToLx(PInteger(fb + 40)^);                    { c_ospeed -> CBAUD }
+  PInteger(lx + 8)^ := Integer(cf);
+  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, TLflFb, TLflLx));
+  for i := 0 to 16 do
+  begin
+    ix := TCcMap[i];
+    if ix < 0 then Continue;
+    c := PByte(fb + 16 + ix)^;
+    if (c = $FF) and (i <> 5) and (i <> 6) then c := 0;         { VTIME/VMIN are numbers }
+    PByte(lx + 17 + i)^ := c;
+  end;
+end;
+
+procedure TermiosToFb(lx, fb: Int64);
+var i, ix: Integer; c: Byte; cf, sp: Int64;
+begin
+  for i := 0 to 43 do PByte(fb + i)^ := 0;
+  for i := 0 to 19 do PByte(fb + 16 + i)^ := $FF;
+  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, TIflLx, TIflFb));
+  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, TOflLx, TOflFb));
+  cf := PInteger(lx + 8)^ and $FFFFFFFF;
+  PInteger(fb + 8)^ := Integer(MapBits(cf, TCflLx, TCflFb) or (((cf shr 4) and 3) shl 8));
+  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, TLflLx, TLflFb));
+  for i := 0 to 16 do
+  begin
+    ix := TCcMap[i];
+    if ix < 0 then Continue;
+    c := PByte(lx + 17 + i)^;
+    if (c = 0) and (i <> 5) and (i <> 6) then c := $FF;
+    PByte(fb + 16 + ix)^ := c;
+  end;
+  sp := SpeedToFb(cf);
+  PInteger(fb + 36)^ := Integer(sp);
+  PInteger(fb + 40)^ := Integer(sp);
+end;
+
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
     r, f: Int64;
     i: Integer;
 begin
+  if FbMainTid = 0 then                    { the very first syscall is the main thread's }
+  begin
+    FbSys(FB_THR_SELF, Int64(@FbMainTid), 0, 0, 0, 0, 0);
+    if FbMainTid = 0 then FbMainTid := -1;
+  end;
   case Integer(nr) of
     0: begin
          { a 0-byte read of a directory is EISDIR on Linux (pylib's open()
@@ -1095,6 +1461,7 @@ begin
        end;
     1: Result := Lx(FbSys(FB_WRITE, a0, a1, a2, 0, 0, 0));
     2: if PathIs(a0, ProcEnviron) then Result := FbProcEnviron
+       else if PathIs(a0, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a1), 0, 0, 0, 0, 0))
        else if PathIs(a0, ProcHostname) then Result := FbProcHostname
        else Result := Lx(FbSys(FB_OPENAT, FB_AT_FDCWD, a0, FbOpenFlags(a1), a2, 0, 0));
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
@@ -1125,12 +1492,46 @@ begin
            Result := Lx(FbSys(FB_SIGSUSPEND, Int64(@t[0]), 0, 0, 0, 0, 0));
          end;
     16: case Integer(a1) of                                              { ioctl }
-          $5401: begin                                          { TCGETS: isatty only }
+          $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := FbSys(FB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
-                   if (r = 0) and (a2 <> 0) then for i := 0 to 59 do PByte(a2 + i)^ := 0;
+                   if (r = 0) and (a2 <> 0) then TermiosToLx(Int64(@sb[0]), a2);
                    Result := Lx(r);
                  end;
-          $5402, $5403, $5404: Result := 0;                     { TCSETS*: not yet }
+          $5402, $5403, $5404: begin                            { TCSETS/W/F -> TIOCSETA/W/F }
+                   TermiosToFb(a2, Int64(@sb[0]));
+                   Result := Lx(FbSys(FB_IOCTL, a0, $802C7414 + (a1 - $5402), Int64(@sb[0]), 0, 0, 0));
+                 end;
+          $540B: begin                                          { TCFLSH -> TIOCFLUSH(FREAD/FWRITE) }
+                   if (a2 < 0) or (a2 > 2) then Result := -LX_EINVAL
+                   else
+                   begin
+                     t[0] := a2 + 1;
+                     Result := Lx(FbSys(FB_IOCTL, a0, $80047410, Int64(@t[0]), 0, 0, 0));
+                   end;
+                 end;
+          $5409: if a2 <> 0 then Result := Lx(FbSys(FB_IOCTL, a0, $2000745E, 0, 0, 0, 0))  { TCSBRK: drain }
+                 else Result := 0;                              { (the 0.25 s break is not sent) }
+          $540A: case Integer(a2) of                            { TCXONC }
+                   0: Result := Lx(FbSys(FB_IOCTL, a0, $2000746F, 0, 0, 0, 0));   { TCOOFF -> TIOCSTOP }
+                   1: Result := Lx(FbSys(FB_IOCTL, a0, $2000746E, 0, 0, 0, 0));   { TCOON -> TIOCSTART }
+                 else Result := 0;
+                 end;
+          $5427: Result := Lx(FbSys(FB_IOCTL, a0, $2000747B, 0, 0, 0, 0));   { TIOCSBRK }
+          -2147199952: begin                                    { $80045430 TIOCGPTN (the case is on Integer): FIODGNAME "pts/N" -> N }
+                   t[0] := 64; t[1] := Int64(@sb[0]);
+                   r := FbSys(FB_IOCTL, a0, $80106678, Int64(@t[0]), 0, 0, 0);
+                   if r < 0 then begin Result := Lx(r); Exit; end;
+                   f := 0; i := 4;                              { past "pts/" }
+                   while (PByte(Int64(@sb[0]) + i)^ >= 48) and (PByte(Int64(@sb[0]) + i)^ <= 57) do
+                   begin
+                     f := f * 10 + PByte(Int64(@sb[0]) + i)^ - 48;
+                     Inc(i);
+                   end;
+                   PInteger(a2)^ := Integer(f);
+                   Result := 0;
+                 end;
+          $40045431: Result := 0;                               { TIOCSPTLCK: FreeBSD ptys have no lock }
+          $5428: Result := Lx(FbSys(FB_IOCTL, a0, $2000747A, 0, 0, 0, 0));   { TIOCCBRK }
           $5413: Result := Lx(FbSys(FB_IOCTL, a0, $40087468, a2, 0, 0, 0));  { TIOCGWINSZ }
           $541B: Result := Lx(FbSys(FB_IOCTL, a0, $4004667F, a2, 0, 0, 0));  { FIONREAD }
           $540E: Result := Lx(FbSys(FB_IOCTL, a0, $20007461, 0, 0, 0, 0));   { TIOCSCTTY }
@@ -1180,7 +1581,71 @@ begin
           Result := Lx(r);
         end;
     59: Result := Lx(FbSys(FB_EXECVE, a0, a1, a2, 0, 0, 0));
-    60, 231: begin FbSys(FB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;
+    60: begin                                                   { exit: THIS thread }
+          t[0] := 0;
+          FbSys(FB_THR_SELF, Int64(@t[0]), 0, 0, 0, 0, 0);
+          if t[0] <> FbMainTid then
+          begin
+            { CLONE_CHILD_CLEARTID, as the clone stub's own exit does: the tid
+              word's address is in this thread's TLS slot 14 (put there by the
+              stub's thr_new entry); clear it once the parent has stored the
+              tid, and wake the joiner. }
+            r := PInt64(Int64(__pxxTlsBase) + 8 * 14)^;
+            if r <> 0 then
+            begin
+              while PInteger(r)^ = 0 do FbSys(FB_SCHED_YIELD, 0, 0, 0, 0, 0, 0);
+              PInteger(r)^ := 0;
+              FbSys(FB_UMTX_OP, r, 3, $7FFFFFFF, 0, 0, 0);
+              FbSys(FB_UMTX_OP, r, 16, $7FFFFFFF, 0, 0, 0);
+            end;
+            FbSys(FB_THR_EXIT, 0, 0, 0, 0, 0, 0);
+          end;
+          FbSys(FB_EXIT, a0, 0, 0, 0, 0, 0);
+          Result := 0;
+        end;
+    231: begin FbSys(FB_EXIT, a0, 0, 0, 0, 0, 0); Result := 0; end;   { exit_group }
+    202: begin                                                  { futex -> _umtx_op }
+           f := a1 and 127;                                     { minus PRIVATE / CLOCK_REALTIME }
+           if f = 0 then                                        { FUTEX_WAIT }
+           begin
+             if (a1 and 128) <> 0 then f := 15 else f := 11;    { UMTX_OP_WAIT_UINT[_PRIVATE] }
+             if a3 <> 0 then r := FbSys(FB_UMTX_OP, a0, f, a2 and $FFFFFFFF, 16, a3, 0)
+             else r := FbSys(FB_UMTX_OP, a0, f, a2 and $FFFFFFFF, 0, 0, 0);
+             Result := Lx(r);
+           end
+           else if f = 1 then                                   { FUTEX_WAKE }
+           begin
+             if (a1 and 128) <> 0 then f := 16 else f := 3;     { UMTX_OP_WAKE[_PRIVATE] }
+             r := FbSys(FB_UMTX_OP, a0, f, a2, 0, 0, 0);
+             if r >= 0 then Result := 0 else Result := Lx(r);   { (Linux answers the count woken) }
+           end
+           else Result := -LX_ENOSYS;
+         end;
+    200: Result := Lx(FbSys(FB_THR_KILL, a0, FbSig(a1), 0, 0, 0, 0));    { tkill }
+    203, 204: begin                                             { sched_set/getaffinity -> cpuset_* }
+                { CPU_LEVEL_WHICH; pid 0 = the calling thread (CPU_WHICH_TID, -1),
+                  else that process. The mask bits agree (bit i = cpu i). Linux
+                  answers the mask size it copied; FreeBSD answers 0. }
+                for i := 0 to 15 do sb[i] := 0;                 { cpuset_t, 128 B }
+                if a0 = 0 then begin f := 1; r := -1; end else begin f := 2; r := a0; end;
+                if a1 > 128 then a1 := 128;
+                if nr = 203 then
+                begin
+                  for i := 0 to Integer(a1) - 1 do PByte(Int64(@sb[0]) + i)^ := PByte(a2 + i)^;
+                  Result := Lx(FbSys(488, 3, f, r, 128, Int64(@sb[0]), 0));
+                end
+                else
+                begin
+                  r := FbSys(487, 3, f, r, 128, Int64(@sb[0]), 0);
+                  if r < 0 then Result := Lx(r)
+                  else
+                  begin
+                    for i := 0 to Integer(a1) - 1 do PByte(a2 + i)^ := PByte(Int64(@sb[0]) + i)^;
+                    Result := a1;
+                  end;
+                end;
+              end;
+    234: Result := Lx(FbSys(FB_THR_KILL, a1, FbSig(a2), 0, 0, 0, 0));    { tgkill }
     61: Result := FbWait4(a0, a1, a2, a3);
     62: Result := Lx(FbSys(FB_KILL, a0, FbSig(a1), 0, 0, 0, 0));
     63: Result := FbUname(a0);
@@ -1275,6 +1740,7 @@ begin
     229: Result := Lx(FbSys(FB_CLOCK_GETRES, FbClock(a0), a1, 0, 0, 0, 0));
     230: Result := Lx(FbSys(FB_CLOCK_NANOSLEEP, FbClock(a0), a1, a2, a3, 0, 0));
     257: if PathIs(a1, ProcEnviron) then Result := FbProcEnviron
+         else if PathIs(a1, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a2), 0, 0, 0, 0, 0))
          else if PathIs(a1, ProcHostname) then Result := FbProcHostname
          else Result := Lx(FbSys(FB_OPENAT, a0, a1, FbOpenFlags(a2), a3, 0, 0));
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
@@ -1358,6 +1824,30 @@ begin
     266: Result := Lx(FbSys(FB_SYMLINKAT, a0, a1, a2, 0, 0, 0));
     268: Result := Lx(FbSys(FB_FCHMODAT, a0, a1, a2, FbAtFlags(a3), 0, 0));
     280: Result := FbUtimensat(a0, a1, a2, a3);
+    41: begin                                                   { socket }
+          f := FbAf(a0);
+          if f < 0 then Result := -LX_EAFNOSUPPORT
+          else Result := Lx(FbSys(FB_SOCKET, f, FbSockType(a1), a2, 0, 0, 0));
+        end;
+    42: Result := FbSockAddrCall(FB_CONNECT, a0, a1, a2);
+    43: Result := FbSockAddrOut(FB_ACCEPT4, a0, a1, a2, 0);
+    288: Result := FbSockAddrOut(FB_ACCEPT4, a0, a1, a2, a3);
+    44: Result := FbSendto(a0, a1, a2, a3, a4, a5);
+    45: Result := FbRecvfrom(a0, a1, a2, a3, a4, a5);
+    46: Result := FbMsg(True, a0, a1, a2);
+    47: Result := FbMsg(False, a0, a1, a2);
+    48: Result := Lx(FbSys(FB_SHUTDOWN, a0, a1, 0, 0, 0, 0));
+    49: Result := FbSockAddrCall(FB_BIND, a0, a1, a2);
+    50: Result := Lx(FbSys(FB_LISTEN, a0, a1, 0, 0, 0, 0));
+    51: Result := FbSockAddrOut(FB_GETSOCKNAME, a0, a1, a2, 0);
+    52: Result := FbSockAddrOut(FB_GETPEERNAME, a0, a1, a2, 0);
+    53: begin                                                   { socketpair }
+          f := FbAf(a0);
+          if f < 0 then Result := -LX_EAFNOSUPPORT
+          else Result := Lx(FbSys(FB_SOCKETPAIR, f, FbSockType(a1), a2, a3, 0, 0));
+        end;
+    54: Result := FbSockopt(False, a0, a1, a2, a3, a4);
+    55: Result := FbSockopt(True, a0, a1, a2, a3, a4);
     213, 291: begin                                             { epoll_create, epoll_create1 }
                 r := FbSys(FB_KQUEUE, 0, 0, 0, 0, 0, 0);
                 if (r >= 0) and (nr = 291) and ((a0 and $80000) <> 0) then

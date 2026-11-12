@@ -65,7 +65,7 @@ procedure EmitHeapLockStubs; forward;   { the reentrant owner+depth layer; plant
 procedure EmitDiv0Stub; forward;
 procedure EmitFpcFloatErrStub; forward;
 procedure EmitFpcMemErrStub; forward;
-procedure EmitCodeAbsToRdx(targetOff: Integer); forward;   { ir_codegen.inc is included AFTER this file, and the FPC seed build (only it) enforces that — bug-a-fpc-seed-drift-emitasmx64-forward }
+{ EmitCodeAbsToRdx's forward is in thread_emit.inc, which is included before this file and calls it (--os=freebsd thr_new leg). }
 procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;

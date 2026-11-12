@@ -49,7 +49,12 @@ run)
   envs=$(env | grep '^PXX_TEST_[A-Za-z0-9_]*=' | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/" | tr '\n' ' ')
   # Linux's default 8 MB stack, not FreeBSD's 512 MB: a stack-overflow test
   # then takes the same path in the same time on both kernels.
-  ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 && $envs /tmp/pxxbin $*"
+  # PXX_VM_PTY=1 runs it on a pty (script(1)), CRs and script's echoed ^D stripped.
+  if [ -n "$PXX_VM_PTY" ]; then
+    ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 && $envs script -q /dev/null /tmp/pxxbin $* </dev/null | tr -d '\r\010' | sed 's/^\^D//'"
+  else
+    ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 && $envs /tmp/pxxbin $*"
+  fi
   ;;
 stop)
   ssh $SSHO -p "$PORT" root@127.0.0.1 "shutdown -p now" 2>/dev/null || true

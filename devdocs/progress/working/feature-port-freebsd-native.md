@@ -321,3 +321,65 @@ Measured by diffing existing tests between the two kernels (Linux build vs
 - **Next:** sockets (sockaddr has sin_len on BSD, AF_INET6 10 vs 28,
   SOL_SOCKET 1 vs 0xffff, SO_*/MSG_* renumbered, SOCK_NONBLOCK/CLOEXEC bits)
   -- test_asyncecho / test_asyncudp fail today. Then termios, then threads.
+
+## 2026-11-12 (pxx2-bsd) — sockets
+
+- socket/socketpair (AF_INET6 10 -> 28; SOCK_NONBLOCK/CLOEXEC 0x800/0x80000
+  -> 0x20000000/0x10000000), bind/connect (sockaddr rewritten into a local
+  copy: u16 family -> u8 len + u8 family; sun_path 108 -> 104), accept/
+  accept4/getsockname/getpeername/recvfrom (rewritten in place on the way
+  out), sendto, listen, shutdown.
+- setsockopt/getsockopt: SOL_SOCKET 1 -> 0xffff and every SO_* renumbered;
+  TCP_KEEPIDLE/INTVL/CNT, IP_TOS/TTL/MULTICAST_*/ADD|DROP_MEMBERSHIP, IPV6_
+  V6ONLY/UNICAST_HOPS/MULTICAST_*/JOIN|LEAVE_GROUP renumbered; anything else
+  is ENOPROTOOPT. getsockopt(SO_ERROR) maps the errno VALUE it returns;
+  SO_DOMAIN maps the family.
+- sendmsg/recvmsg: msghdr 56 -> 48 B (size_t iovlen/controllen -> 32-bit);
+  cmsghdr rewritten in place (data stays at 16 on both, CMSG_LEN identical;
+  SOL_SOCKET level renumbered, SCM_RIGHTS 1 on both); MSG_* flags both ways.
+- 22 network tests diffed identical (Pascal lib_net*, lib_http_*, lib_ipv6,
+  async echo/udp, crtl sock_flags/cmsg/inet6/getaddrinfo, NilPy socket);
+  12 of them joined `make test-freebsd`.
+- Not done: SCM_CREDENTIALS (FreeBSD SCM_CREDS is a different struct),
+  abstract unix sockets (Linux-only), sendmmsg/recvmmsg.
+- **Next:** termios, then threads (thr_new, _umtx_op).
+
+## 2026-11-12 (pxx2-bsd) — termios, ptys, threads
+
+- **termios**: TCGETS/TCSETS/W/F translate the 36-byte Linux struct to
+  FreeBSD's 44-byte one -- almost every flag bit and every c_cc index differs,
+  CSIZE sits at another shift, the line speed is a CBAUD code on Linux and a
+  number on FreeBSD, and a disabled control char is 0 vs 0xff. Both tables
+  measured from headers (Linux asm/termbits.h on the host, FreeBSD in the VM).
+  Plus TCFLSH (TIOCFLUSH FREAD/FWRITE), TCSBRK-drain, TCXONC, TIOCS/CBRK.
+  `test/c_os_freebsd_termios.c` runs on a pty (script(1)) on both kernels --
+  `PXX_VM_PTY=1 tools/vm/freebsd.sh run` -- and matches native FreeBSD cc too.
+- **ptys**: open("/dev/ptmx") -> posix_openpt (FreeBSD has no /dev/ptmx
+  without the compat module), TIOCGPTN via FIODGNAME ("pts/N"), TIOCSPTLCK a
+  no-op. c_pty_family, cisatty, lib_termio_isatty identical.
+- **threads** (x86-64 clone stub, thread_emit.inc, gated on KERNEL_FREEBSD):
+  clone -> thr_new. thr_new starts a thread at a function; a small entry
+  ahead of the stub sets rsp to the stage area and falls into the unchanged
+  child path, so the child continues exactly as a clone child would. The
+  child's raw arch_prctl becomes sysarch(AMD64_SET_GSBASE), sigaltstack uses
+  FreeBSD's stack_t order. CLONE_PARENT_SETTID: the parent stores the tid
+  after thr_new returns. CLONE_CHILD_CLEARTID by hand at both thread exits
+  (the stub's and the translator's SYS_exit): wait until the parent's tid
+  store has landed, zero the word, _umtx_op WAKE (shared and private), then
+  thr_exit. ctidptr travels in the child's TLS slot 14 (i386's FS_ENTRY slot,
+  unused on x86-64) -- a first version kept it at stage-8, which is the
+  child's first push slot, and the exit path read 1 and faulted.
+- Translator: futex WAIT/WAKE -> _umtx_op WAIT_UINT[_PRIVATE]/WAKE[_PRIVATE]
+  (relative timeout as uaddr=16, uaddr2=ts); tkill/tgkill -> thr_kill;
+  sched_get/setaffinity -> cpuset_get/setaffinity (parallel-for sized its pool
+  from a fallback 4 on a 2-CPU VM); SYS_exit ends the process only on the
+  main thread (the first thread to enter the translator), thr_exit elsewhere.
+- 12 thread tests in `make test-freebsd` under --threadsafe: threadvar,
+  errno-per-thread, pthread detach/join, thread_local, recursive mutex,
+  TThread, FPC thread surface, critsec once, mutex, parallel for (capture,
+  private). Linux --threadsafe output byte-identical to the previous compiler.
+- Not covered: the glibc-pthread route (test_multithreading,
+  lib_thread_handle_reports_exit_on_both_routes link libc);
+  test_a_joined_thread_leaves_the_pal_reap_table reads /proc/self/maps.
+- **Next:** arm64 (aarch64 FreeBSD) would need its own translator entry and
+  ABI note; OpenBSD/NetBSD remain the libc-family ticket.

@@ -51,6 +51,36 @@ For ESP32 targets, start with the board-specific examples under
 `examples/esp32/`; the peripheral units are in
 [ESP32 peripherals](../library/esp.md).
 
+## FreeBSD
+
+`--os=freebsd` writes a native FreeBSD/amd64 executable from Pascal, C or
+Nil Python (x86-64 only):
+
+```sh
+./pxx --os=freebsd hello.pas hello.fbsd
+```
+
+The program needs no libc, like a Linux build. The runtime is unchanged:
+every system call goes to a small Linux-to-FreeBSD translator compiled into
+the program. It maps the call numbers, flags, structs, signals and errno
+values. Measured on FreeBSD 15.1; FreeBSD 14 or newer is needed (timerfd).
+
+What works, each checked against the Linux build of the same test (`make
+test-freebsd`, which needs the VM from `tools/vm/freebsd.sh`): files and
+directories, environment and arguments, processes and `wait`, signals
+(including turning a crash into an exception), `select`/`poll`, the
+async scheduler (epoll is emulated on kqueue), sockets (IPv4, IPv6, Unix),
+terminals and ptys, and `--threadsafe` threads.
+
+Not supported:
+
+- threads created through glibc's `pthread_create`
+- Linux-only `/proc` files other than `/proc/self/environ`, `/proc/self/exe`,
+  `/proc/self/fd/N` and `/proc/sys/kernel/hostname`
+- `SCM_CREDENTIALS`, abstract Unix sockets, and other Linux-only interfaces
+
+Anything the translator does not know returns `ENOSYS`.
+
 ## What each target supports
 
 Measured with **pin v445** (compiler sha256 `caf21ac399f1…`) on 2026-09-27;
