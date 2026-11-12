@@ -1241,6 +1241,25 @@ begin
   else Result := TypeSigned(tk) or (TypeSlotSize(tk) < 4);
 end;
 
+{ Emit a node whose consumer keeps only a2: an address (load/store target,
+  field or index base), an array index, or a value stored through memory into
+  at most 4 bytes. Pointer arithmetic written through Int64 --
+  `PByte(Int64(p) + k)^`, all over the RTL's heap and string code -- is then
+  one add instead of the pair add. riscv32's EmitLow32RISCV32, f09ac07a51. }
+procedure EmitLow32Xtensa(node: Integer);
+begin
+  XtLow32Demand := True;
+  IREmitNodeXtensa(node);
+end;
+
+function XtWordOperand(n: Integer; k: TTypeKind): Boolean;
+{ n's low word is computed by the 32-bit arm: an integer, a pointer or class
+  reference, or a constant. }
+begin
+  Result := TypeIsMachineInt(k) or (k = tyPointer) or (k = tyClass) or
+            (IRKind[n] = IR_CONST_INT);
+end;
+
 function XtNarrowBinop(node: Integer): Integer;
 { 0 = keep the 64-bit path; 1 = the generic 32-bit arm (+ - * and or xor);
   2 = 32-bit signed div/mod; 3 = 32-bit unsigned div/mod. }
@@ -1252,14 +1271,21 @@ begin
   if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
   lk := IRValueKind(IRA[node]);
   rk := IRValueKind(IRB[node]);
-  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
-          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
   if IsFloatXtensa(lk) or IsFloatXtensa(rk) then Exit;
   op := IRC[node];
   if (op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
      (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor)) then
-    Result := 1
-  else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    { a pointer or class operand is one word as well: `Int64(p) + k` is how
+      the RTL spells pointer arithmetic, and its low word is p's low word plus
+      k's, whatever the high words }
+    if XtWordOperand(IRA[node], lk) and XtWordOperand(IRB[node], rk) then
+      Result := 1;
+    Exit;
+  end;
+  if not ((TypeIsMachineInt(lk) or (IRKind[IRA[node]] = IR_CONST_INT)) and
+          (TypeIsMachineInt(rk) or (IRKind[IRB[node]] = IR_CONST_INT))) then Exit;
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
   begin
     if XtExact32(IRA[node], False) and XtExact32(IRB[node], False) then Result := 2
     else if XtExact32(IRA[node], True) and XtExact32(IRB[node], True) then Result := 3;
@@ -2638,7 +2664,7 @@ begin
 
     IR_FIELD:
       begin
-        IREmitNodeXtensa(IRA[node]);
+        EmitLow32Xtensa(IRA[node]);
         if Integer(IRIVal[node]) <> 0 then
         begin
           EmitLoadConstXtensa(reg_xtensa_a3, Integer(IRIVal[node]));
@@ -2653,7 +2679,7 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
 
-        IREmitNodeXtensa(left);               { base: handle (read) / slot addr (write) }
+        EmitLow32Xtensa(left);               { base: handle (read) / slot addr (write) }
         { Managed-string index. THREE base shapes reach here and xtensa handled
           only the write half of one of them:
 
@@ -2707,7 +2733,7 @@ begin
           wild. Same reset x86-64 has always done (b355). }
         savedLVW := InLValueWrite;
         InLValueWrite := False;
-        IREmitNodeXtensa(right);
+        EmitLow32Xtensa(right);
         InLValueWrite := savedLVW;
         if lo <> 0 then
         begin
@@ -2735,7 +2761,7 @@ begin
 
     IR_LOAD_MEM:
       begin
-        IREmitNodeXtensa(IRA[node]);
+        EmitLow32Xtensa(IRA[node]);
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
@@ -3008,7 +3034,7 @@ begin
           XtensaPush64;
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeXtensa(IRA[node]);              { a2 = dest addr }
+          EmitLow32Xtensa(IRA[node]);              { a2 = dest addr }
           InLValueWrite := savedLVW;
           XtensaPop64ToA4A5;                        { a4:a5 = value lo:hi }
           if XtensaAddrIsRagged(IRA[node]) then
@@ -3024,11 +3050,13 @@ begin
         end
         else
         begin
-          IREmitNodeXtensa(IRB[node]);
+          { the value is stored in at most 4 bytes (the 64-bit arm above took
+            the rest, floats left earlier), so only its low word is kept }
+          EmitLow32Xtensa(IRB[node]);
           XtensaPushA2;
           savedLVW := InLValueWrite;
           InLValueWrite := True;
-          IREmitNodeXtensa(IRA[node]);
+          EmitLow32Xtensa(IRA[node]);
           InLValueWrite := savedLVW;
           XtensaPopA3;
           if XtensaAddrIsRagged(IRA[node]) then
