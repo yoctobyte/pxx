@@ -72,6 +72,8 @@
 #               sanity check, not a comparison: the full differential is this
 #               script without --build-only.
 #   --keep      leave the work directory in place and print it
+#   --usage     build in applet usage text (SHOW_USAGE, FEATURE_VERBOSE_USAGE);
+#               off by default because it is size. A root filesystem wants it.
 #   --targets   space-separated target list (default: x86_64 aarch64)
 #   --applets   space-separated applet list (default: cat echo -- rung 2).
 #               A single applet reproduces rung 1 exactly.
@@ -243,6 +245,7 @@ while [ $# -gt 0 ]; do
     --function-sections) OBJFLAGS="$OBJFLAGS --function-sections"; FSECT=1; shift ;;
     --build-only) BUILDONLY=1; shift ;;
     --out)     BOOUT="$2"; shift 2 ;;
+    --usage)   USAGE=1; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -559,9 +562,15 @@ REQUIRED_ON="USE_BB_CRYPT"
 #          initramfs cannot hand /dev and /proc over to switch_root;
 #   stat   FEATURE_STAT_FILESYSTEM -- `stat -f';
 #   sh     SH_IS_ASH -- /bin/sh, without which every #!/bin/sh script fails.
-for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM sh:SH_IS_ASH; do
+#   stat   also FEATURE_STAT_FORMAT -- `stat -c FORMAT', which scripts lean on.
+# --usage adds SHOW_USAGE + FEATURE_VERBOSE_USAGE: an applet's usage text,
+# which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Gibux's
+# switch_root "NEW_ROOT must be a mountpoint" was invisible). Opt-in, for a
+# root-filesystem build, because it is size.
+for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH; do
   printf '%s\n' $APPLETS | grep -qx "${_pair%%:*}" && REQUIRED_ON="$REQUIRED_ON ${_pair#*:}"
 done
+[ "${USAGE:-0}" = 1 ] && REQUIRED_ON="$REQUIRED_ON SHOW_USAGE FEATURE_VERBOSE_USAGE"
 required_knobs_ok() {
   local f
   [ -f "$BB/.config" ] || return 1

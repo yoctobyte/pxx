@@ -519,6 +519,32 @@ static char *put_num(char *p, char *end, int v, int width, int *trunc) {
   return p;
 }
 
+/* Space-padded, for %e %k %l: glibc writes " 3", not "3" or "03". */
+static char *put_spnum(char *p, char *end, int v, int width, int *trunc) {
+  char tmp[16];
+  int n = 0;
+  unsigned u = v < 0 ? 0u : (unsigned)v;
+  do { tmp[n++] = (char)('0' + u % 10); u /= 10; } while (u);
+  while (n < width) tmp[n++] = ' ';
+  while (n > 0) {
+    if (p < end) *p++ = tmp[--n];
+    else { *trunc = 1; return p; }
+  }
+  return p;
+}
+
+/* A conversion that is shorthand for a longer format (%T %D %F %R %r %c %x
+   %X): expanded through strftime itself into a scratch buffer, then copied. */
+static char *put_fmt(char *p, char *end, const char *f, const struct tm *tm, int *trunc) {
+  char tmp[64];
+  if (strftime(tmp, sizeof tmp, f, tm) == 0 && *f) { *trunc = 1; return p; }
+  return put_str(p, end, tmp, trunc);
+}
+
+/* ISO 8601 weekday 1..7 and the Sunday/Monday-based week numbers. */
+static int wk_sun(const struct tm *tm) { return (tm->tm_yday + 7 - (tm->tm_wday & 7)) / 7; }
+static int wk_mon(const struct tm *tm) { return (tm->tm_yday + 7 - ((tm->tm_wday + 6) % 7)) / 7; }
+
 size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm) {
   char *p = s;
   char *end = s + (max ? max - 1 : 0);
@@ -537,7 +563,44 @@ size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm) {
       case 'b': case 'h': p = put_str(p, end, mon_abbr[mo], &trunc); break;
       case 'B': p = put_str(p, end, mon_full[mo], &trunc); break;
       case 'd': p = put_num(p, end, tm->tm_mday, 2, &trunc); break;
-      case 'e': p = put_num(p, end, tm->tm_mday, 0, &trunc); break;
+      case 'e': p = put_spnum(p, end, tm->tm_mday, 2, &trunc); break;
+      case 'k': p = put_spnum(p, end, tm->tm_hour, 2, &trunc); break;
+      case 'l': { int h = tm->tm_hour % 12; if (!h) h = 12;
+                  p = put_spnum(p, end, h, 2, &trunc); } break;
+      case 'C': p = put_num(p, end, (tm->tm_year + 1900) / 100, 2, &trunc); break;
+      case 'u': p = put_num(p, end, wd == 0 ? 7 : wd, 0, &trunc); break;
+      case 'U': p = put_num(p, end, wk_sun(tm), 2, &trunc); break;
+      case 'W': p = put_num(p, end, wk_mon(tm), 2, &trunc); break;
+      case 'P': p = put_str(p, end, tm->tm_hour < 12 ? "am" : "pm", &trunc); break;
+      case 'n': if (p < end) *p++ = '\n'; else trunc = 1; break;
+      case 't': if (p < end) *p++ = '\t'; else trunc = 1; break;
+      case 'T': p = put_fmt(p, end, "%H:%M:%S", tm, &trunc); break;
+      case 'X': p = put_fmt(p, end, "%H:%M:%S", tm, &trunc); break;
+      case 'R': p = put_fmt(p, end, "%H:%M", tm, &trunc); break;
+      case 'r': p = put_fmt(p, end, "%I:%M:%S %p", tm, &trunc); break;
+      case 'D': p = put_fmt(p, end, "%m/%d/%y", tm, &trunc); break;
+      case 'x': p = put_fmt(p, end, "%m/%d/%y", tm, &trunc); break;
+      case 'F': p = put_fmt(p, end, "%Y-%m-%d", tm, &trunc); break;
+      case 'c': p = put_fmt(p, end, "%a %b %e %H:%M:%S %Y", tm, &trunc); break;
+      /* The zone, from the struct tm itself (localtime/gmtime fill both), as
+         glibc does. busybox `date' printed a literal "%Z" before. */
+      case 'Z': p = put_str(p, end, tm->tm_zone ? tm->tm_zone : "", &trunc); break;
+      case 'z': { long off = tm->tm_gmtoff; int hh, mm;
+                  if (p < end) *p++ = off < 0 ? '-' : '+'; else { trunc = 1; break; }
+                  if (off < 0) off = -off;
+                  hh = (int)(off / 3600); mm = (int)((off / 60) % 60);
+                  p = put_num(p, end, hh, 2, &trunc);
+                  if (!trunc) p = put_num(p, end, mm, 2, &trunc); } break;
+      /* glibc: mktime() of the fields, in the local zone, NOT adjusted by
+         tm_gmtoff. crtl's local zone is UTC (no zone database), so this is
+         timegm; the gcc oracle agrees under TZ=UTC. */
+      case 's': { struct tm c = *tm;
+                  long long t = (long long)timegm(&c);
+                  char tmp[24]; int n = 0, neg = t < 0;
+                  unsigned long long u = neg ? (unsigned long long)(-t) : (unsigned long long)t;
+                  do { tmp[n++] = (char)('0' + u % 10); u /= 10; } while (u);
+                  if (neg) tmp[n++] = '-';
+                  while (n > 0 && !trunc) { if (p < end) *p++ = tmp[--n]; else trunc = 1; } } break;
       case 'H': p = put_num(p, end, tm->tm_hour, 2, &trunc); break;
       case 'I': { int h = tm->tm_hour % 12; if (!h) h = 12;
                   p = put_num(p, end, h, 2, &trunc); } break;

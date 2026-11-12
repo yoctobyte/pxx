@@ -80,6 +80,8 @@ __sighandler_t signal(int sig, __sighandler_t func);
 typedef __sighandler_t sighandler_t;
 int raise(int sig);
 int kill(int pid, int sig);
+/* POSIX puts pthread_kill here; a pxx pthread_t is a long (the kernel tid). */
+int pthread_kill(long thread, int sig);
 
 /* POSIX signal surface — TYPES are Linux/glibc-shaped; sigaction/sigprocmask/
    sigaltstack are LINK-ONLY STUBS for now (no rt_sigaction PAL bridge yet), so

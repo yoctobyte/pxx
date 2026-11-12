@@ -21,6 +21,8 @@
 #include <errno.h>
 #include <stddef.h>   /* size_t */
 #include <time.h>
+#include <unistd.h>       /* getpid, syscall (pthread_kill) */
+#include <sys/syscall.h>
 
 extern int __pxx_kill(int pid, int sig);
 extern int __pxx_sigprocmask(int how, void *set, void *oldset, int setSize);
@@ -215,6 +217,24 @@ int kill(int pid, int sig) {
   int r = __pxx_kill(pid, sig);
   if (r < 0) { errno = -r; return -1; }
   return 0;
+}
+
+/* pthread_kill(3): a pxx pthread_t IS the kernel tid (PalThreadSelf is
+   SYS_gettid), so this is tgkill(getpid(), tid, sig), which is what glibc's
+   comes down to. Like every pthread_* call it returns the error number rather
+   than setting errno. Was missing under --threadsafe ("call to undeclared
+   function: pthread_kill"; Gibux's userland). */
+int pthread_kill(long thread, int sig) {
+#ifdef SYS_tgkill
+  long r;
+  int saved = errno;
+  r = syscall(SYS_tgkill, (long)getpid(), thread, (long)sig, 0L, 0L, 0L);
+  if (r < 0) { r = errno; errno = saved; return (int)r; }
+  return 0;
+#else
+  (void)thread; (void)sig;
+  return ENOSYS;
+#endif
 }
 
 /* strsignal() lived here and now lives in string.c, beside the header that

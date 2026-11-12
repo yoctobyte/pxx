@@ -19135,6 +19135,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_crtl_chroot_reaches_the_kernel.c $(TESTTMP)/cchroot > /dev/null
 	gcc -o $(TESTTMP)/cchroot_gcc test/c_crtl_chroot_reaches_the_kernel.c
 	tools/expect_same.sh cchroot "$$($(TESTTMP)/cchroot)" "$$($(TESTTMP)/cchroot_gcc)"
+	# strftime's %Z/%z/%T/%F.. and pthread_kill; gcc is the oracle, run under
+	# TZ=UTC because glibc's %s is mktime in the local zone and crtl's is UTC.
+	./$(COMPILER) --threadsafe test/c_crtl_strftime_zone_and_pthread_kill.c $(TESTTMP)/cstrfz > /dev/null
+	gcc -pthread -o $(TESTTMP)/cstrfz_gcc test/c_crtl_strftime_zone_and_pthread_kill.c
+	tools/expect_same.sh cstrfz "$$($(TESTTMP)/cstrfz)" "$$(TZ=UTC $(TESTTMP)/cstrfz_gcc)"
 	# A 2-D array of function pointers (Gibux irq.c), both spellings, both scopes.
 	./$(COMPILER) test/c_two_dimensional_function_pointer_array.c $(TESTTMP)/c2dfp > /dev/null
 	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
