@@ -1898,6 +1898,18 @@ begin
     arena := need;
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
+    { A refused map is retried at half the size, down to 64 KiB and never
+      below `need`. Linux's default overcommit heuristic refuses one mapping
+      larger than RAM + swap, so on a 256 MB OpenWrt router (no swap) the
+      first 256 MiB chunk failed and every program died at its first
+      allocation, with nearly all memory free (measured 2026-11-12, OpenWrt
+      25.12.6 x86-64 in QEMU). A machine that maps the full chunk never
+      enters the loop. }
+    while HeapMmapFailed(HeapPtr) and (arena div 2 >= need) and (arena div 2 >= 65536) do
+    begin
+      arena := arena div 2;
+      HeapPtr := HeapMmap(arena);
+    end;
     { The check the ticket is about. Without it the -errno BECOMES the heap base
       and the `PMachineWord(base)^ := size` below faults on it. }
     if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;

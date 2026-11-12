@@ -18728,11 +18728,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_managed_exception_cleanup26
 	ulimit -v 800000; tools/expect_same.sh test_managed_exception_cleanup26 "$$($(TESTTMP)/test_managed_exception_cleanup26)" "1"
 	# an arena mmap that FAILS is reported, not faulted through (bug-a-pxxalloc-does-not-check-the-mmap-return).
-	# Cap is below HEAP_ARENA (256M) so the FIRST request is refused deterministically. Assert BOTH the exit
+	# Cap is below HEAP_ARENA (256M): the first chunk is refused and retried at half size, and the program's
+	# doubling string then outgrows the cap, so it still ends in a refused map. Assert BOTH the exit
 	# code and the message: either alone passes for the wrong reason. Pre-fix this segfaulted with exit 139.
 	./$(COMPILER) test/test_heap_oom_reports.pas $(TESTTMP)/test_heap_oom_reports26
 	bash -c 'ulimit -v 200000; $(TESTTMP)/test_heap_oom_reports26 > $(TESTTMP)/test_heap_oom_reports.log 2>&1; test $$? -eq 203'
 	grep -q "out of memory" $(TESTTMP)/test_heap_oom_reports.log
+	# ...and a SMALL program under the same cap runs: a refused 256 MiB chunk is retried at half size
+	# (a 256 MB OpenWrt router refused the first chunk and every program died at its first allocation).
+	./$(COMPILER) test/test_heap_small_address_space.pas $(TESTTMP)/test_heap_small_address_space26
+	tools/expect_same.sh test_heap_small_address_space26 "$$(bash -c 'ulimit -v 200000; $(TESTTMP)/test_heap_small_address_space26')" "small heap ok 2045965"
 	./$(COMPILER) test/test_default_keyword.pas $(TESTTMP)/test_default_keyword26
 	tools/expect_same.sh test_default_keyword26 "$$($(TESTTMP)/test_default_keyword26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_op_record_result.pas $(TESTTMP)/test_op_record_result26
