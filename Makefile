@@ -36311,6 +36311,37 @@ test-xtensa: $(COMPILER)
 	! ./$(COMPILER) --target=esp32s2 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_s2_atomic.o >$(TESTTMP)/test_xt_s2_atomic.out 2>&1
 	grep -q "esp32s2 has no atomic instruction" $(TESTTMP)/test_xt_s2_atomic.out
 	./$(COMPILER) --target=esp32 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_e32_sched.o
+	@# LOW-32 DEMAND ON XTENSA (2026-11-12): integer binops, addresses and one-word
+	@# casts whose low word alone is kept run in 32 bits. The three riscv32
+	@# programs that pinned the same design, on both ABIs at -O0 and -O2,
+	@# against the x86-64 oracle. The ESP rows in test-esp-idf cover S3 under IDF.
+	./$(COMPILER) test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_xtlow32_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O0 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_xtlow32_wo0
+	tools/expect_same.sh xtensa-windowed/xtlow32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtlow32_wo0)" "$$($(TESTTMP)/test_xtlow32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O2 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_xtlow32_wo2
+	tools/expect_same.sh xtensa-windowed/xtlow32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtlow32_wo2)" "$$($(TESTTMP)/test_xtlow32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O0 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_xtlow32_co0
+	tools/expect_same.sh xtensa-call0/xtlow32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtlow32_co0)" "$$($(TESTTMP)/test_xtlow32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_low32_narrowing_keeps_64bit_answers.pas $(TESTTMP)/test_xtlow32_co2
+	tools/expect_same.sh xtensa-call0/xtlow32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtlow32_co2)" "$$($(TESTTMP)/test_xtlow32_x64)"
+	./$(COMPILER) test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_xtptr32_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O0 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_xtptr32_wo0
+	tools/expect_same.sh xtensa-windowed/xtptr32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtptr32_wo0)" "$$($(TESTTMP)/test_xtptr32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O2 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_xtptr32_wo2
+	tools/expect_same.sh xtensa-windowed/xtptr32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtptr32_wo2)" "$$($(TESTTMP)/test_xtptr32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O0 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_xtptr32_co0
+	tools/expect_same.sh xtensa-call0/xtptr32-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtptr32_co0)" "$$($(TESTTMP)/test_xtptr32_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_pointer_math_through_int64_is_32_bit.pas $(TESTTMP)/test_xtptr32_co2
+	tools/expect_same.sh xtensa-call0/xtptr32-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtptr32_co2)" "$$($(TESTTMP)/test_xtptr32_x64)"
+	./$(COMPILER) test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O0 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_wo0
+	tools/expect_same.sh xtensa-windowed/xtow-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_wo0)" "$$($(TESTTMP)/test_xtow_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -O2 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_wo2
+	tools/expect_same.sh xtensa-windowed/xtow-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_wo2)" "$$($(TESTTMP)/test_xtow_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O0 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_co0
+	tools/expect_same.sh xtensa-call0/xtow-O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_co0)" "$$($(TESTTMP)/test_xtow_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls -O2 test/test_rv32_one_word_cast_keeps_the_low_word.pas $(TESTTMP)/test_xtow_co2
+	tools/expect_same.sh xtensa-call0/xtow-O2 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtow_co2)" "$$($(TESTTMP)/test_xtow_x64)"
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)
