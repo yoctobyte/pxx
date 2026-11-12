@@ -170,14 +170,21 @@ The work log, with the reasons behind each choice, is in
 
 These are not supported yet, and `--os=openbsd` is an unknown option.
 
-They need a different approach. OpenBSD only accepts system calls made from
-its own libc, so a program cannot call the kernel directly as the FreeBSD
-build does. NetBSD and Minix are planned the same way, through the system C
-library, so all three share one plan. `--rtl-libc` alone is not enough: it
-still passes Linux syscall numbers to libc.
+OpenBSD only lets a program make a system call from an address it has
+declared in advance (pinsyscalls). The base system's static binaries do this
+with a table in the executable. A test on 2026-11-12 showed that a hand-patched
+pxx hello-world with such a table runs on OpenBSD 8.0 without libc. So OpenBSD
+could work like FreeBSD, with its own translator, and would not need to go
+through libc. The cost is that OpenBSD's system call numbers can change between
+releases, so each binary would be tied to one release. Which way to go has not
+been decided.
 
-The plan, and the first thing to check (OpenBSD's execute-only code sections),
-are in `devdocs/progress/working/feature-port-libc-family-openbsd-netbsd-minix.md`.
+`--rtl-libc` alone is not enough on any of them: it passes Linux system call
+numbers to libc's `syscall()`, which OpenBSD's libc does not even export.
+NetBSD and Minix have stable system call numbers.
+
+The measurements and the plan are in
+`devdocs/progress/working/feature-port-libc-family-openbsd-netbsd-minix.md`.
 
 DragonFly BSD is close to FreeBSD and should be nearly free, but nobody has
 tried it.
