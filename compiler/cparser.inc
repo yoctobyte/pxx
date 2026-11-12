@@ -13017,25 +13017,27 @@ begin
     { i386 does its double arithmetic in SSE but keeps x87 for the int64
       conversions and Round, so BOTH control words take the mode, as glibc
       does: x87 RC is bits [11:10] (the FE value itself), MXCSR RC [14:13]. }
-    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);              { mov ecx, [esp+4] }
-    EmitB($81); EmitB($E1); EmitB($00); EmitB($0C); EmitB($00); EmitB($00); { and ecx, 0xC00 }
-    EmitB($50);                                                  { push eax (a slot) }
-    EmitB($D9); EmitB($3C); EmitB($24);                          { fnstcw [esp] }
-    EmitB($8B); EmitB($04); EmitB($24);                          { mov eax, [esp] }
-    EmitB($25); EmitB($FF); EmitB($F3); EmitB($FF); EmitB($FF);  { and eax, ~0xC00 }
-    EmitB($09); EmitB($C8);                                      { or eax, ecx }
-    EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
-    EmitB($D9); EmitB($2C); EmitB($24);                          { fldcw [esp] }
-    EmitB($0F); EmitB($AE); EmitB($1C); EmitB($24);              { stmxcsr [esp] }
-    EmitB($8B); EmitB($04); EmitB($24);                          { mov eax, [esp] }
-    EmitB($25); EmitB($FF); EmitB($9F); EmitB($FF); EmitB($FF);  { and eax, ~0x6000 }
-    EmitB($C1); EmitB($E1); EmitB($03);                          { shl ecx, 3 }
-    EmitB($09); EmitB($C8);                                      { or eax, ecx }
-    EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
-    EmitB($0F); EmitB($AE); EmitB($14); EmitB($24);              { ldmxcsr [esp] }
-    EmitB($58);                                                  { pop eax }
-    EmitB($31); EmitB($C0);                                      { xor eax, eax }
-    EmitB($C3);                                                  { ret }
+    EmitAsm386([
+      'mov ecx, [esp+4]',
+      'and ecx, 3072',
+      'push eax',                        { a slot }
+      'fnstcw word [esp]',               { fnstcw [esp] }
+      'mov eax, [esp]',
+      'and eax, 0xfffff3ff',             { and eax, ~0xC00 }
+      'or eax, ecx',
+      'mov [esp], eax',
+      'fldcw word [esp]',                { fldcw [esp] }
+      'stmxcsr dword [esp]',             { stmxcsr [esp] }
+      'mov eax, [esp]',
+      'and eax, 0xffff9fff',             { and eax, ~0x6000 }
+      'shl ecx, 3',
+      'or eax, ecx',
+      'mov [esp], eax',
+      'ldmxcsr dword [esp]',             { ldmxcsr [esp] }
+      'pop eax',
+      'xor eax, eax',
+      'ret'
+    ]);
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
@@ -13089,12 +13091,14 @@ begin
   end
   else if TargetArch = TARGET_I386 then
   begin
-    EmitB($50);                                                  { push eax (a slot) }
-    EmitB($0F); EmitB($AE); EmitB($1C); EmitB($24);              { stmxcsr [esp] }
-    EmitB($58);                                                  { pop eax }
-    EmitB($25); EmitB($00); EmitB($60); EmitB($00); EmitB($00);  { and eax, 0x6000 }
-    EmitB($C1); EmitB($E8); EmitB($03);                          { shr eax, 3 }
-    EmitB($C3);                                                  { ret }
+    EmitAsm386([
+      'push eax',                        { a slot }
+      'stmxcsr dword [esp]',             { stmxcsr [esp] }
+      'pop eax',
+      'and eax, 0x6000',
+      'shr eax, 3',
+      'ret'
+    ]);
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
@@ -13149,15 +13153,17 @@ begin
   begin
     { cdecl: env at [esp+4]. Layout: [0]=ebx [4]=esi [8]=edi [12]=ebp
       [16]=caller-esp(post-ret) [20]=return-addr. }
-    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);   { mov ecx, [esp+4] (env) }
+    EmitAsm386('mov ecx, [esp+4]');  { env }
     EmitB($89); EmitB($59); EmitB($00);               { mov [ecx+0], ebx }
-    EmitB($89); EmitB($71); EmitB($04);               { mov [ecx+4], esi }
-    EmitB($89); EmitB($79); EmitB($08);               { mov [ecx+8], edi }
-    EmitB($89); EmitB($69); EmitB($0C);               { mov [ecx+12], ebp }
-    EmitB($8D); EmitB($44); EmitB($24); EmitB($04);   { lea eax, [esp+4] (esp after ret) }
-    EmitB($89); EmitB($41); EmitB($10);               { mov [ecx+16], eax }
-    EmitB($8B); EmitB($04); EmitB($24);               { mov eax, [esp] (return addr) }
-    EmitB($89); EmitB($41); EmitB($14);               { mov [ecx+20], eax }
+    EmitAsm386([
+      'mov [ecx+4], esi',
+      'mov [ecx+8], edi',
+      'mov [ecx+12], ebp',
+      'lea eax, [esp+4]',                { esp after ret }
+      'mov [ecx+16], eax',
+      'mov eax, [esp]',                  { return addr }
+      'mov [ecx+20], eax'
+    ]);
     EmitAsmX64([
       'xor eax, eax',
       'ret']);
@@ -13252,18 +13258,24 @@ begin
       (setjmp's single env arg lands at [esp+4] either way, so only 2-arg longjmp
       needs the swapped offsets; the old code read env from [esp+4]=val and
       crashed dereferencing 7 as a jmp_buf pointer.) }
-    EmitB($8B); EmitB($4C); EmitB($24); EmitB($08);   { mov ecx, [esp+8] (env) }
-    EmitB($8B); EmitB($54); EmitB($24); EmitB($04);   { mov edx, [esp+4] (val) }
+    EmitAsm386([
+      'mov ecx, [esp+8]',                { env }
+      'mov edx, [esp+4]'                 { val }
+    ]);
     EmitB($8B); EmitB($59); EmitB($00);               { mov ebx, [ecx+0] }
-    EmitB($8B); EmitB($71); EmitB($04);               { mov esi, [ecx+4] }
-    EmitB($8B); EmitB($79); EmitB($08);               { mov edi, [ecx+8] }
-    EmitB($8B); EmitB($69); EmitB($0C);               { mov ebp, [ecx+12] }
-    EmitAsmX64([
-      'mov eax, edx',                        { (val) }
-      'test eax, eax']);
-    EmitB($75); EmitB($01);                           { jnz +1 }
-    EmitB($40);                                       { inc eax (0 -> 1) }
-    EmitB($8B); EmitB($61); EmitB($10);               { mov esp, [ecx+16] }
+    EmitAsm386([
+      'mov esi, [ecx+4]',
+      'mov edi, [ecx+8]',
+      'mov ebp, [ecx+12]'
+    ]);
+    EmitAsm386([
+      'mov eax, edx',                    { val }
+      'test eax, eax',
+      'jnz short .nz',
+      'inc eax',                         { 0 -> 1 }
+      '.nz:',
+      'mov esp, [ecx+16]'
+    ]);
     EmitB($FF); EmitB($61); EmitB($14);               { jmp [ecx+20] }
   end;
   TARGET_AARCH64:
@@ -13992,7 +14004,7 @@ begin
     end;
     TARGET_I386:
     begin
-      EmitB($89); EmitB($E0);                                  { mov eax, esp }
+      EmitAsm386('mov eax, esp');
       EmitMovGlobAcc($A3, BSS_INITIAL_RSP);                { mov [initial_sp], eax }
       { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
         argument registers, which is what makes the ordering constraint vanish:
@@ -14004,12 +14016,12 @@ begin
         stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
       if needInit then
       begin
-        EmitB($50);                                            { push eax (arg1 = initial sp) }
+        EmitAsm386('push eax');  { arg1 = initial sp }
         EmitB($E8); initPatch := CodeLen; EmitI32(0);          { call __pxx_run_initializers }
-        EmitB($83); EmitB($C4); EmitB($04);                    { add esp, 4 (cdecl caller-pops) }
+        EmitAsm386('add esp, 4');  { cdecl caller-pops }
         EmitMovGlobAcc($A1, BSS_INITIAL_RSP);              { mov eax, [initial_sp] (call clobbered eax) }
       end;
-      EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
+      EmitAsm386('lea ecx, [eax+4]');  { argv }
       { PLAIN SysV cdecl: rightmost pushed FIRST, so argc ends up at [ebp+8] and
         argv at [ebp+12] in main's frame.
 
@@ -14037,8 +14049,10 @@ begin
         reached through; `main` is reached through this stub and is a cdecl C
         function, so this is the arm that had to change.
         bug-a-i386-c-main-gets-argc-and-argv-swapped }
-      EmitB($51);                                              { push ecx        (arg2 = argv) }
-      EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
+      EmitAsm386([
+        'push ecx',                        { arg2 = argv }
+        'push dword [eax]'                 { push [eax]      (arg1 = argc) }
+      ]);
       EmitB($E8); callPatch := CodeLen; EmitI32(0);            { call main }
       { Run registered finalizers before exiting, so a plain `return` from main
         is not a silent skip. The stub is `call main; exit_group(retval)`, so
@@ -14050,12 +14064,14 @@ begin
         (EmitFinalizerRunnerBody below emits the body); only saving main's
         return value across the call is per-target.
         feature-c-entry-stub-must-run-finalizers }
-      EmitB($50);                        { push eax (main's return value) }
+      EmitAsm386('push eax');  { main's return value }
       EmitCallProc(GetFiniRunnerProc);
-      EmitB($58);                        { pop eax }
-      EmitB($89); EmitB($C3);            { mov ebx, eax }
-      EmitB($B8); EmitI32(252);          { mov eax, 252 (exit_group) }
-      EmitB($CD); EmitB($80);            { int 0x80 }
+      EmitAsm386([
+        'pop eax',
+        'mov ebx, eax',
+        'mov eax, 252',                    { exit_group }
+        'int 128'
+      ]);
     end;
     TARGET_ARM32:
     begin

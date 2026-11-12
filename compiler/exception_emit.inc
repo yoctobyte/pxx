@@ -276,33 +276,37 @@ begin
   else if TargetArch = TARGET_I386 then
   begin
     ExcSetJmpAddr := CodeLen;
-    EmitB($89); EmitB($18);                                     { mov [eax], ebx }
-    EmitB($89); EmitB($70); EmitB($04);                         { mov [eax+4], esi }
-    EmitB($89); EmitB($78); EmitB($08);                         { mov [eax+8], edi }
-    EmitB($89); EmitB($68); EmitB($0C);                         { mov [eax+12], ebp }
-    EmitB($8D); EmitB($4C); EmitB($24); EmitB($04);             { lea ecx, [esp+4] }
-    EmitB($89); EmitB($48); EmitB($10);                         { mov [eax+16], ecx }
-    EmitB($8B); EmitB($0C); EmitB($24);                         { mov ecx, [esp] }
-    EmitB($89); EmitB($48); EmitB($14);                         { mov [eax+20], ecx }
-    EmitB($31); EmitB($C0);                                     { xor eax, eax }
-    EmitB($C3);                                                 { ret }
+    EmitAsm386([
+      'mov [eax], ebx',
+      'mov [eax+4], esi',
+      'mov [eax+8], edi',
+      'mov [eax+12], ebp',
+      'lea ecx, [esp+4]',
+      'mov [eax+16], ecx',
+      'mov ecx, [esp]',
+      'mov [eax+20], ecx',
+      'xor eax, eax',
+      'ret'
+    ]);
 
     ExcLongJmpAddr := CodeLen;
-    EmitB($8B); EmitB($18);                                     { mov ebx, [eax] }
-    EmitB($8B); EmitB($70); EmitB($04);                         { mov esi, [eax+4] }
-    EmitB($8B); EmitB($78); EmitB($08);                         { mov edi, [eax+8] }
-    EmitB($8B); EmitB($68); EmitB($0C);                         { mov ebp, [eax+12] }
-    EmitB($8B); EmitB($60); EmitB($10);                         { mov esp, [eax+16] }
-    EmitB($8B); EmitB($48); EmitB($14);                         { mov ecx, [eax+20] }
-    EmitB($B8); EmitI32(1);                                     { mov eax, 1 }
+    EmitAsm386([
+      'mov ebx, [eax]',
+      'mov esi, [eax+4]',
+      'mov edi, [eax+8]',
+      'mov ebp, [eax+12]',
+      'mov esp, [eax+16]',
+      'mov ecx, [eax+20]',
+      'mov eax, 1'
+    ]);
     EmitB($FF); EmitB($E1);                                     { jmp ecx }
 
     ExcRaiseAddr := CodeLen;
     { raise site = the return address the `call` pushed (see the x86-64 note) }
-    EmitB($8B); EmitB($04); EmitB($24);                         { mov eax, [esp] }
+    EmitAsm386('mov eax, [esp]');
     EmitMovGlobAcc($A3, BSS_EXC_ADDR);                      { mov [BSS_EXC_ADDR], eax }
     EmitMovGlobAcc($A1, BSS_EXC_TOP);                        { mov eax, [BSS_EXC_TOP] }
-    EmitB($85); EmitB($C0);                                     { test eax, eax }
+    EmitAsm386('test eax, eax');
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
     EmitB($8D); EmitB($40); EmitB(EXC_JMP_OFFSET_386);          { lea eax, [eax+EXC_JMP_OFFSET_386] }
     EmitB($E9); EmitI32(ExcLongJmpAddr - (CodeLen + 4));        { jmp longjmp }
@@ -311,11 +315,15 @@ begin
     if not NoUnhandledHandler then
     begin
       si := InternStr('Unhandled exception');
-      EmitB($B8); EmitI32(4);                                   { mov eax, 4 (write) }
-      EmitB($BB); EmitI32(2);                                   { mov ebx, 2 (stderr) }
+      EmitAsm386([
+        'mov eax, 4',                      { write }
+        'mov ebx, 2'                       { stderr }
+      ]);
       EmitB($B9); EmitDataRef(Strs[si].Offset + 8);             { mov ecx, msg }
-      EmitB($BA); EmitI32(Strs[si].Len);                        { mov edx, len }
-      EmitB($CD); EmitB($80);                                   { int 0x80 }
+      EmitAsm386([
+        'mov edx, %', Strs[si].Len,        { mov edx, len }
+        'int 128'
+      ]);
 
       EmitB($B8); EmitI32(4);
       EmitB($BB); EmitI32(2);

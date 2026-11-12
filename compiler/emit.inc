@@ -1564,16 +1564,18 @@ begin
   begin
     { mmap2(192): ebx=addr ecx=len edx=prot esi=flags edi=fd ebp=pgoffset.
       ebp is a callee-saved register the entry stub does not own -- save it. }
-    EmitB($31); EmitB($DB);                { xor ebx, ebx        (addr = NULL) }
-    EmitB($B9); EmitI32(len);              { mov ecx, len }
-    EmitB($BA); EmitI32(3);                { mov edx, PROT_READ|PROT_WRITE }
-    EmitB($BE); EmitI32($22);              { mov esi, MAP_PRIVATE|MAP_ANONYMOUS }
-    EmitB($BF); EmitI32(-1);               { mov edi, -1         (fd) }
-    EmitB($55);                            { push ebp }
-    EmitB($31); EmitB($ED);                { xor ebp, ebp        (pgoffset = 0) }
-    EmitB($B8); EmitI32(192);              { mov eax, __NR_mmap2 }
-    EmitB($CD); EmitB($80);                { int 0x80            -> eax = base }
-    EmitB($5D);                            { pop ebp }
+    EmitAsm386([
+      'xor ebx, ebx',                    { addr = NULL }
+      'mov ecx, %', len,                 { mov ecx, len }
+      'mov edx, 3',                      { PROT_READ|PROT_WRITE }
+      'mov esi, 0x22',                   { MAP_PRIVATE|MAP_ANONYMOUS }
+      'mov edi, -1',                     { fd }
+      'push ebp',
+      'xor ebp, ebp',                    { pgoffset = 0 }
+      'mov eax, 192',                    { mov eax, __NR_mmap2 }
+      'int 128',                         { -> eax = base }
+      'pop ebp'
+    ]);
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
@@ -1816,9 +1818,11 @@ begin
   end;
   if TargetArch = TARGET_I386 then
   begin
-    EmitB($89); EmitB($C3);                          { mov ebx, eax }
-    EmitB($B8); EmitI32(252);                        { mov eax, 252 (exit_group) }
-    EmitB($CD); EmitB($80);                          { int 0x80 }
+    EmitAsm386([
+      'mov ebx, eax',
+      'mov eax, 252',                    { exit_group }
+      'int 128'
+    ]);
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then

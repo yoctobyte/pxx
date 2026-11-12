@@ -256,11 +256,13 @@ begin
     CloneStubAddr := CodeLen;
     { after the 3 saves: [esp+16]=ctidptr [esp+20]=arg [esp+24]=entry
       [esp+28]=childStack [esp+32]=flags (ret addr at [esp+12]) }
-    EmitB($53);                                       { push ebx }
-    EmitB($56);                                       { push esi }
-    EmitB($57);                                       { push edi }
-    EmitB($8B); EmitB($5C); EmitB($24); EmitB($20);   { mov ebx, [esp+32]  (flags) }
-    EmitB($8B); EmitB($4C); EmitB($24); EmitB($1C);   { mov ecx, [esp+28]  (childStack) }
+    EmitAsm386([
+      'push ebx',
+      'push esi',
+      'push edi',
+      'mov ebx, [esp+32]',               { flags }
+      'mov ecx, [esp+28]'                { childStack }
+    ]);
     { carve the hidden-destination scratch off the top first — see
       CLONE_RETBUF_SIZE. i386 carries that pointer in ecx. }
     EmitB($81); EmitB($E9); EmitI32(CLONE_RETBUF_SIZE); { sub ecx, CLONE_RETBUF_SIZE }
@@ -268,25 +270,30 @@ begin
       do, zeroed for the same reasons (see the x86-64 leg). eax, edx and edi
       are free here: edx and edi are loaded below, edi was saved above. ---- }
     EmitB($81); EmitB($E9); EmitI32(TlsBlockSize);    { sub ecx, TlsBlockSize }
-    EmitB($89); EmitB($CF);                           { mov edi, ecx }
-    EmitB($31); EmitB($C0);                           { xor eax, eax }
-    EmitB($BA); EmitI32(TlsBlockSize div 4);          { mov edx, dword count }
-    EmitB($89); EmitB($07);                           { .z: mov [edi], eax }
-    EmitB($83); EmitB($C7); EmitB($04);               { add edi, 4 }
-    EmitB($4A);                                       { dec edx }
-    EmitB($75); EmitB($F8);                           { jnz .z }
-    EmitB($89); EmitB($09);                           { mov [ecx], ecx  (slot 0 = self) }
-    EmitB($83); EmitB($E9); EmitB($08);               { sub ecx, 8         (stage area) }
-    EmitB($8B); EmitB($44); EmitB($24); EmitB($18);   { mov eax, [esp+24]  (entry) }
-    EmitB($89); EmitB($01);                           { mov [ecx], eax }
-    EmitB($8B); EmitB($44); EmitB($24); EmitB($14);   { mov eax, [esp+20]  (arg) }
-    EmitB($89); EmitB($41); EmitB($04);               { mov [ecx+4], eax }
-    EmitB($8B); EmitB($54); EmitB($24); EmitB($10);   { mov edx, [esp+16]  (parent_tid = ctidptr) }
-    EmitB($8B); EmitB($7C); EmitB($24); EmitB($10);   { mov edi, [esp+16]  (child_tid  = ctidptr) }
-    EmitB($31); EmitB($F6);                           { xor esi, esi       (tls = NULL) }
-    EmitB($B8); EmitB($78); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 120  (SYS_clone) }
-    EmitB($CD); EmitB($80);                           { int 0x80 }
-    EmitB($85); EmitB($C0);                           { test eax, eax }
+    EmitAsm386([
+      'mov edi, ecx',
+      'xor eax, eax',
+      'mov edx, %', TlsBlockSize div 4,  { dword count }
+      '.z:',
+      'mov [edi], eax',
+      'add edi, 4',
+      'dec edx',
+      'jnz short .z'
+    ]);
+    EmitAsm386([
+      'mov [ecx], ecx',                  { slot 0 = self }
+      'sub ecx, 8',                      { stage area }
+      'mov eax, [esp+24]',               { entry }
+      'mov [ecx], eax',
+      'mov eax, [esp+20]',               { arg }
+      'mov [ecx+4], eax',
+      'mov edx, [esp+16]',               { parent_tid = ctidptr }
+      'mov edi, [esp+16]',               { child_tid  = ctidptr }
+      'xor esi, esi',                    { tls = NULL }
+      'mov eax, 120',                    { SYS_clone }
+      'int 128',
+      'test eax, eax'
+    ]);
     { jnz .parent -- COMPUTED, like the x86-64 leg above. The 12 was correct,
       but a hand-counted displacement here is the arm that stays wrong the day
       someone edits the child sequence and only looks at one leg. }
@@ -301,8 +308,10 @@ begin
       (the TLS entries are per task). fs = 0 means nothing installed a block
       (a --shared/--emit-obj host, which has no pxx entry point), and then
       nothing here may touch fs. }
-    EmitB($8C); EmitB($E0);                           { mov eax, fs }
-    EmitB($25); EmitI32($FFFF);                       { and eax, $FFFF }
+    EmitAsm386([
+      'mov eax, fs',
+      'and eax, 0xffff'
+    ]);
     EmitB($74); pNoInst := CodeLen; EmitB(0);         { jz .noinst }
     { esi = the PARENT's init-image pointer, read through fs BEFORE the
       install; see the x86-64 leg. }
@@ -310,51 +319,65 @@ begin
     begin
       EmitB($64); EmitB($8B); EmitB($35); EmitI32(8 * TLS_SLOT_INIT_IMAGE);  { mov esi, fs:[8*slot] }
     end;
-    EmitB($8D); EmitB($54); EmitB($24); EmitB($08);   { lea edx, [esp+8]  (the block) }
-    EmitB($C1); EmitB($E8); EmitB($03);               { shr eax, 3  (entry number) }
+    EmitAsm386([
+      'lea edx, [esp+8]',                { the block }
+      'shr eax, 3'                       { entry number }
+    ]);
     EmitB($89); EmitB($82); EmitI32(8 * TLS_SLOT_FS_ENTRY);  { mov [edx+8*slot], eax }
-    EmitB($83); EmitB($EC); EmitB($10);               { sub esp, 16  (user_desc) }
-    EmitB($89); EmitB($04); EmitB($24);               { mov [esp], eax     (entry_number) }
-    EmitB($89); EmitB($54); EmitB($24); EmitB($04);   { mov [esp+4], edx   (base_addr) }
+    EmitAsm386([
+      'sub esp, 16',                     { user_desc }
+      'mov [esp], eax',                  { entry_number }
+      'mov [esp+4], edx'                 { base_addr }
+    ]);
     EmitB($C7); EmitB($44); EmitB($24); EmitB($08); EmitI32($FFFFF);  { limit, in pages }
     EmitB($C7); EmitB($44); EmitB($24); EmitB($0C); EmitI32($51);     { flags; see EmitTlsMainInstall }
-    EmitB($89); EmitB($E3);                           { mov ebx, esp }
-    EmitB($B8); EmitI32(243);                         { mov eax, 243 (set_thread_area) }
-    EmitB($CD); EmitB($80);                           { int 0x80 }
-    EmitB($83); EmitB($C4); EmitB($10);               { add esp, 16 }
+    EmitAsm386([
+      'mov ebx, esp',
+      'mov eax, 243',                    { set_thread_area }
+      'int 128',
+      'add esp, 16'
+    ]);
     { Reload fs so its cached descriptor is the new base. Linux already does
       this for a selector that names the modified entry, but the reload is two
       instructions and makes that a fact of this stub. }
-    EmitB($8C); EmitB($E0);                           { mov eax, fs }
-    EmitB($8E); EmitB($E0);                           { mov fs, eax }
+    EmitAsm386([
+      'mov eax, fs',
+      'mov fs, eax'
+    ]);
     if TlsUserBytes > 0 then
     begin
-      EmitB($85); EmitB($F6);                         { test esi, esi }
+      EmitAsm386('test esi, esi');
       EmitB($74); pCopy := CodeLen; EmitB(0);         { jz .nocopy }
       { the slot BEFORE the copy: rep movsb advances esi past the image }
       EmitB($89); EmitB($B2); EmitI32(8 * TLS_SLOT_INIT_IMAGE);  { mov [edx+8*slot], esi }
       EmitB($8D); EmitB($BA); EmitI32(TLS_USER_FIRST_OFF);  { lea edi, [edx+user] }
-      EmitB($B9); EmitI32(TlsUserBytes);              { mov ecx, TlsUserBytes }
-      EmitB($FC);                                     { cld }
+      EmitAsm386([
+        'mov ecx, %', TlsUserBytes,        { mov ecx, TlsUserBytes }
+        'cld'
+      ]);
       EmitB($F3); EmitB($A4);                         { rep movsb }
       PatchRel8(pCopy);                               { .nocopy: }
     end;
     PatchRel8(pNoInst);                               { .noinst: }
-    EmitB($58);                                       { pop eax  (entry; arg stays at [esp]) }
+    EmitAsm386('pop eax');  { entry; arg stays at [esp] }
     { ecx = the hidden-destination scratch. esp now points at arg; the TLS
       block sits between it and the scratch, so the scratch base is
       esp+4+TlsBlockSize. }
     EmitB($8D); EmitB($8C); EmitB($24); EmitI32(4 + TlsBlockSize);  { lea ecx, [esp+4+TlsBlockSize] }
     EmitB($FF); EmitB($D0);                           { call eax (entry(arg), caller-cleans convention) }
-    EmitB($31); EmitB($DB);                           { xor ebx, ebx  (exit code 0) }
-    EmitB($B8); EmitB($01); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 1  (SYS_exit) }
-    EmitB($CD); EmitB($80);                           { int 0x80  (thread exits here) }
+    EmitAsm386([
+      'xor ebx, ebx',                    { exit code 0 }
+      'mov eax, 1',                      { SYS_exit }
+      'int 128'                          { thread exits here }
+    ]);
     { ---- .parent: eax = child tid ---- }
     Patch32(pParent, CodeLen - (pParent + 4));
-    EmitB($5F);                                       { pop edi }
-    EmitB($5E);                                       { pop esi }
-    EmitB($5B);                                       { pop ebx }
-    EmitB($C3);                                       { ret }
+    EmitAsm386([
+      'pop edi',
+      'pop esi',
+      'pop ebx',
+      'ret'
+    ]);
     Patch32(jmpOver, CodeLen - (jmpOver + 4));
   end;
   if TargetArch = TARGET_AARCH64 then

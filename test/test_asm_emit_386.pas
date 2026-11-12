@@ -1,16 +1,43 @@
 program test_asm_emit_386;
 {$mode objfpc}{$H+}
 
+{ Standalone oracle harness for the i386 text assembler (asmtext_386.inc).
+  It runs the SHIPPED parser and encoder: the same environment as
+  test_asm_emit_x64.pas (asmregs.inc, x64enc.inc, asmtext.inc) with
+  asmtext_386.inc on top, so AsmTextOperand, EncModRMMem and the scope labels
+  under test are the ones the compiler runs. Until 2026-11-12 this file carried
+  its own copies of the operand parser and ModRM encoder, which had drifted
+  (no index register, no accumulator forms) from what the compiler uses.
+  Expected bytes are GNU as --32 (Intel syntax). }
+
 uses SysUtils;
 
-{ Mock environment to satisfy the includes for tests }
 var
   Code: array[0..65535] of Byte;
+  { Mocked because the declaration lives in defs.inc, which this harness does
+    not include -- EmitGlobRef needs it to know whether the ModRM/SIB bytes it
+    is about to rewrite went into Code or into AsmBytes. See
+    tools/standalone_inc_harnesses.sh for why this file has to carry it. }
+  EncToAsmBuffer: Boolean = False;
+  { Same reason as EncToAsmBuffer above: declared in defs.inc, which this
+    harness does not include. EncPrefixAndREX reads it to decide whether the
+    instruction names a HIGH-byte register (%ah/%ch/%dh/%bh), which must be
+    encoded with no REX prefix -- the same numbers 4..7 WITH a prefix are
+    spl/bpl/sil/dil. False here matches every non-inline-asm caller.
+    bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+  AsmHigh8Operand: Boolean = False;
+  { Backs the mocked PICRefsAreRipRelative below. A VARIABLE, not a constant
+    True: `mov reg, @glob` has two encodings and pinning the mock to one
+    would leave the other untested here -- and the absolute arm is the one
+    every non-x86-64 target and every inline-asm buffer takes. }
+  PICRipMock: Boolean = True;
   CodeLen: Integer = 0;
   Fixups: array[0..1023] of record CodePos, DataOff: Integer; end;
   FixCount: Integer = 0;
   GlobFix: array[0..1023] of record CodePos, BSSoff: Integer; end;
   GlobFixCount: Integer = 0;
+  CallFixCount: Integer = 0;      { read by asmtext.inc's whole-call memo guard }
+  ProcAddrFixCount: Integer = 0;
 
 procedure EmitB(b: Byte);
 begin
@@ -18,49 +45,35 @@ begin
   Inc(CodeLen);
 end;
 
-procedure EncB(b: Byte);
+procedure EmitI32(v: Int64);
 begin
-  EmitB(b);
+  EmitB(v and $FF); EmitB((v shr 8) and $FF);
+  EmitB((v shr 16) and $FF); EmitB((v shr 24) and $FF);
 end;
 
-procedure EncI16(v: Int64);
+procedure EmitI64(v: Int64);
 begin
-  EmitB(v and $FF);
-  EmitB((v shr 8) and $FF);
+  EmitI32(v and $FFFFFFFF); EmitI32((v shr 32) and $FFFFFFFF);
 end;
 
-procedure EncI32(v: Int64);
-begin
-  EmitB(v and $FF);
-  EmitB((v shr 8) and $FF);
-  EmitB((v shr 16) and $FF);
-  EmitB((v shr 24) and $FF);
-end;
-
-procedure EncI64(v: Int64);
-begin
-  EncI32(v and $FFFFFFFF);
-  EncI32((v shr 32) and $FFFFFFFF);
-end;
+{ Inline-asm-buffer sink — never reached (EncToAsmBuffer stays False) but the
+  encoder references them. }
+procedure AsmB(b: Byte); begin EmitB(b); end;
+procedure AsmI16(v: Int64); begin EmitB(v and $FF); EmitB((v shr 8) and $FF); end;
+procedure AsmI32(v: Int64); begin EmitI32(v); end;
+procedure AsmI64(v: Int64); begin EmitI64(v); end;
 
 procedure Patch32(pos: Integer; v: Int64);
 begin
-  Code[pos] := v and $FF;
-  Code[pos+1] := (v shr 8) and $FF;
-  Code[pos+2] := (v shr 16) and $FF;
-  Code[pos+3] := (v shr 24) and $FF;
+  Code[pos] := v and $FF; Code[pos+1] := (v shr 8) and $FF;
+  Code[pos+2] := (v shr 16) and $FF; Code[pos+3] := (v shr 24) and $FF;
 end;
 
 procedure Error(const msg: AnsiString);
 begin
-  writeln(StdErr, 'ERROR: ', msg);
-  Halt(1);
+  writeln(StdErr, 'ERROR: ', msg); Halt(1);
 end;
 
-const
-  ASM_MAX_HOLES = 8;
-
-{ Mock CaseEqual }
 function CaseEqual(const a, b: AnsiString): Boolean;
 begin
   Result := LowerCase(a) = LowerCase(b);
@@ -68,106 +81,15 @@ end;
 
 function AppendChar(var s: AnsiString; c: Char): Integer;
 begin
-  s := s + c;
-  Result := Length(s);
+  s := s + c; Result := Length(s);
 end;
 
-function AsmTextCStr(p: Pointer): AnsiString;
+{ Mocked: the real predicate is in emit.inc and reads TargetArch +
+  EncToAsmBuffer, neither of which exists in this harness. asmtext.inc calls
+  it to choose between `lea r64,[rip+disp32]` and `mov r32,imm32`. }
+function PICRefsAreRipRelative: Boolean;
 begin
-  if p = nil then Result := '' else Result := PChar(p);
-end;
-
-function AsmTextIsSpace(c: Char): Boolean;
-begin
-  Result := (c = ' ') or (c = #9) or (c = #10) or (c = #13);
-end;
-
-function AsmTextCharAt(const s: AnsiString; idx: Integer): Char;
-begin
-  if (idx < 1) or (idx > Length(s)) then
-    Result := #0
-  else
-    Result := s[idx];
-end;
-
-function AsmTextLower(c: Char): Char;
-begin
-  if (c >= 'A') and (c <= 'Z') then
-    Result := Char(Ord(c) + 32)
-  else
-    Result := c;
-end;
-
-function AsmTextSlice(const s: AnsiString; from, len: Integer): AnsiString;
-var
-  i: Integer;
-begin
-  Result := '';
-  for i := from to from + len - 1 do
-    if (i >= 1) and (i <= Length(s)) then
-      Result := Result + s[i];
-end;
-
-function AsmTextParseInt(const s: AnsiString): Int64;
-var
-  val: Int64;
-  i: Integer;
-  neg: Boolean;
-begin
-  val := 0;
-  i := 1;
-  neg := False;
-  if AsmTextCharAt(s, i) = '-' then
-  begin
-    neg := True;
-    Inc(i);
-  end
-  else if AsmTextCharAt(s, i) = '+' then
-  begin
-    Inc(i);
-  end;
-  
-  if (AsmTextCharAt(s, i) = '$') then
-  begin
-    Inc(i);
-    while i <= Length(s) do
-    begin
-      if (s[i] >= '0') and (s[i] <= '9') then
-        val := val * 16 + (Ord(s[i]) - Ord('0'))
-      else if (LowerCase(s[i]) >= 'a') and (LowerCase(s[i]) <= 'f') then
-        val := val * 16 + (Ord(LowerCase(s[i])) - Ord('a') + 10)
-      else
-        break;
-      Inc(i);
-    end;
-  end
-  else if (AsmTextCharAt(s, i) = '0') and (AsmTextCharAt(s, i+1) = 'x') then
-  begin
-    i := i + 2;
-    while i <= Length(s) do
-    begin
-      if (s[i] >= '0') and (s[i] <= '9') then
-        val := val * 16 + (Ord(s[i]) - Ord('0'))
-      else if (LowerCase(s[i]) >= 'a') and (LowerCase(s[i]) <= 'f') then
-        val := val * 16 + (Ord(LowerCase(s[i])) - Ord('a') + 10)
-      else
-        break;
-      Inc(i);
-    end;
-  end
-  else
-  begin
-    while i <= Length(s) do
-    begin
-      if (s[i] >= '0') and (s[i] <= '9') then
-        val := val * 10 + (Ord(s[i]) - Ord('0'))
-      else
-        break;
-      Inc(i);
-    end;
-  end;
-  if neg then val := -val;
-  Result := val;
+  Result := PICRipMock;
 end;
 
 procedure EmitDataRef(dataOff: Integer);
@@ -175,194 +97,63 @@ begin
   if FixCount >= 1024 then Error('fixup overflow');
   Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
   Inc(FixCount);
-  EncI32(0);
+  EmitI32(0);   { i386 data refs are absolute 4-byte }
 end;
 
 procedure EmitGlobRef(bssOff: Integer);
 begin
   if GlobFixCount >= 1024 then Error('global fixup overflow');
-  GlobFix[GlobFixCount].CodePos := CodeLen;
-  GlobFix[GlobFixCount].BSSoff  := bssOff;
+  GlobFix[GlobFixCount].CodePos := CodeLen; GlobFix[GlobFixCount].BSSoff := bssOff;
   Inc(GlobFixCount);
-  EncI32(0);
+  EmitI32(0);   { BSS is low 4G → 4-byte }
 end;
 
-{ Mock functions from compiler/asmenc.inc & compiler/x64enc.inc }
 { the REAL register resolver, not a mock table }
 {$include ../compiler/asmregs.inc}
 
-procedure EncModRMReg(regField, rmReg: Integer);
-begin
-  EncB($C0 or ((regField and 7) shl 3) or (rmReg and 7));
-end;
+{ --- the environment asmtext.inc reaches into defs.inc for --------------------
+  This harness supplies its own environment rather than {$include}ing defs.inc,
+  which is the whole reason it stays small enough to maintain. The cost is that
+  a NEW reference from asmtext.inc into defs.inc surfaces HERE, as `undefined
+  variable`, while the compiler itself builds fine -- so the error names this
+  file's configuration, not a defect in the declaration.
 
-procedure EncModRMMem(regField: Integer; baseReg: Integer; disp: Integer; force32: Boolean);
+  Both symbols below arrived with the a.asmmemo memoisation
+  (asmtext.inc:1040-1076) and are mocked, not forwarded.
+
+  MEASURED, because "why here and not elsewhere" is the question that matters:
+  asmtext.inc has exactly TWO including configurations -- compiler.pas:113,
+  which includes defs.inc, and this file, which does not. That is the entire
+  difference. lexer.inc calls PxxDbgWants at four sites and never complains
+  because its own standalone harness, test/manual/test_pylexer.pas, includes
+  compiler/defs.inc at line 9 before including lexer.inc at line 10. So this is
+  not a visibility quirk to be silenced with a forward declaration; it is a
+  harness that owns its environment and was missing two pieces of it.
+  regression-test-asm-test-asm-emit-x64-2 }
+
 var
-  modVal, rmVal, sibVal: Integer;
-  needsSIB: Boolean;
-begin
-  needsSIB := (baseReg and 7) = 4;
-  if needsSIB then
-  begin
-    rmVal := 4;
-    sibVal := $24;
-  end
-  else
-  begin
-    rmVal := baseReg and 7;
-    sibVal := -1;
-  end;
+  { asmtext.inc's memo poisons an entry when emitting a line moves a counter.
+    Nothing in this harness lowers a libc syscall, so this stays 0 and the
+    check correctly never fires -- 0 is the honest value here, not a placeholder. }
+  LibcSyscallCallCount: Integer = 0;
+  MemoRound: Integer;   { loop counter for the whole-call memo test }
 
-  if force32 then
-  begin
-    modVal := 2;
-    EncB((modVal shl 6) or ((regField and 7) shl 3) or rmVal);
-    if needsSIB then EncB(sibVal);
-    EncI32(disp);
-  end
-  else
-  begin
-    if (disp = 0) and ((baseReg and 7) <> 5) then
-    begin
-      modVal := 0;
-      EncB((modVal shl 6) or ((regField and 7) shl 3) or rmVal);
-      if needsSIB then EncB(sibVal);
-    end
-    else if (disp >= -128) and (disp <= 127) then
-    begin
-      modVal := 1;
-      EncB((modVal shl 6) or ((regField and 7) shl 3) or rmVal);
-      if needsSIB then EncB(sibVal);
-      EncB(disp and $FF);
-    end
-    else
-    begin
-      modVal := 2;
-      EncB((modVal shl 6) or ((regField and 7) shl 3) or rmVal);
-      if needsSIB then EncB(sibVal);
-      EncI32(disp);
-    end;
-  end;
+{ PXXDBG channel selector. Always False here: this harness asserts exact byte
+  sequences, so a debug line on stdout would be noise in the thing being
+  measured. }
+function AIntToStr(v: Int64): AnsiString;
+begin
+  Result := IntToStr(v);
 end;
 
-function AsmTextTrim(const s: AnsiString): AnsiString;
-var i, n: Integer;
+function PxxDbgWants(const prefix, name: AnsiString): Boolean;
 begin
-  Result := '';
-  n := Length(s);
-  i := 1;
-  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(s, i)) do Inc(i);
-  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(s, n)) do Dec(n);
-  while i <= n do begin AppendChar(Result, s[i]); Inc(i); end;
+  Result := False;
 end;
 
-function AsmTextSizeKeyword(const w: AnsiString): Integer;
-begin
-  if CaseEqual(w, 'byte') then Result := 1
-  else if CaseEqual(w, 'word') then Result := 2
-  else if CaseEqual(w, 'dword') then Result := 4
-  else Result := 0;
-end;
-
-function AsmTextOperand(const opIn: AnsiString;
-  const holes: array of Int64; var holeCur: Integer;
-  var regNum, regSize, memBase, memDisp: Integer; var immVal: Int64): Integer;
-var op, inner, baseStr, dispStr, firstWord: AnsiString;
-    i, n, dummySize, memSize, p: Integer; sign: Integer;
-begin
-  op := '';
-  n := Length(opIn);
-  i := 1;
-  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(opIn, i)) do Inc(i);
-  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(opIn, n)) do Dec(n);
-  while i <= n do begin AppendChar(op, opIn[i]); Inc(i); end;
-
-  if Length(op) = 0 then Error('EmitAsmX64: empty operand');
-
-  firstWord := ''; p := 1;
-  while (p <= Length(op)) and not AsmTextIsSpace(AsmTextCharAt(op, p)) do
-    begin AppendChar(firstWord, AsmTextLower(op[p])); Inc(p); end;
-  memSize := AsmTextSizeKeyword(firstWord);
-  if memSize > 0 then
-  begin
-    while (p <= Length(op)) and AsmTextIsSpace(AsmTextCharAt(op, p)) do Inc(p);
-    op := AsmTextSlice(op, p, Length(op) - p + 1);
-  end;
-
-  if AsmTextCharAt(op, 1) = '[' then
-  begin
-    inner := '';
-    i := 2;
-    while (i <= Length(op)) and (AsmTextCharAt(op, i) <> ']') do begin AppendChar(inner, op[i]); Inc(i); end;
-    baseStr := ''; dispStr := ''; sign := 1;
-    i := 1;
-    while (i <= Length(inner)) and (AsmTextCharAt(inner, i) <> '+') and (AsmTextCharAt(inner, i) <> '-') do
-      begin AppendChar(baseStr, inner[i]); Inc(i); end;
-    if i <= Length(inner) then
-    begin
-      if AsmTextCharAt(inner, i) = '-' then sign := -1;
-      Inc(i);
-      while i <= Length(inner) do begin AppendChar(dispStr, inner[i]); Inc(i); end;
-    end;
-    while AsmTextIsSpace(AsmTextCharAt(baseStr, Length(baseStr))) do
-      baseStr := AsmTextSlice(baseStr, 1, Length(baseStr) - 1);
-    if not AsmRegNum(baseStr, memBase, dummySize) then
-      Error('EmitAsmX64: bad memory base register');
-    while AsmTextIsSpace(AsmTextCharAt(dispStr, 1)) do
-      dispStr := AsmTextSlice(dispStr, 2, Length(dispStr) - 1);
-    if Length(dispStr) = 0 then
-      memDisp := 0
-    else if AsmTextCharAt(dispStr, 1) = '%' then
-    begin
-      memDisp := Integer(holes[holeCur]) * sign; Inc(holeCur);
-    end
-    else
-      memDisp := Integer(AsmTextParseInt(dispStr)) * sign;
-    regSize := memSize;
-    Result := 2;
-    Exit;
-  end;
-
-  if AsmRegNum(op, regNum, regSize) then
-  begin
-    Result := 0;
-    Exit;
-  end;
-
-  if AsmTextCharAt(op, 1) = '%' then
-  begin
-    immVal := holes[holeCur]; Inc(holeCur);
-  end
-  else
-    immVal := AsmTextParseInt(op);
-  Result := 1;
-end;
-
-function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean;
-begin
-  Result := True;
-  if CaseEqual(m, 'jo') then cc := 0
-  else if CaseEqual(m, 'jno') then cc := 1
-  else if CaseEqual(m, 'jb') or CaseEqual(m, 'jc') or CaseEqual(m, 'jnae') then cc := 2
-  else if CaseEqual(m, 'jae') or CaseEqual(m, 'jnb') or CaseEqual(m, 'jnc') then cc := 3
-  else if CaseEqual(m, 'je') or CaseEqual(m, 'jz') then cc := 4
-  else if CaseEqual(m, 'jne') or CaseEqual(m, 'jnz') then cc := 5
-  else if CaseEqual(m, 'jbe') or CaseEqual(m, 'jna') then cc := 6
-  else if CaseEqual(m, 'ja') or CaseEqual(m, 'jnbe') then cc := 7
-  else if CaseEqual(m, 'js') then cc := 8
-  else if CaseEqual(m, 'jns') then cc := 9
-  else if CaseEqual(m, 'jp') then cc := 10
-  else if CaseEqual(m, 'jnp') then cc := 11
-  else if CaseEqual(m, 'jl') or CaseEqual(m, 'jnge') then cc := 12
-  else if CaseEqual(m, 'jge') or CaseEqual(m, 'jnl') then cc := 13
-  else if CaseEqual(m, 'jle') or CaseEqual(m, 'jng') then cc := 14
-  else if CaseEqual(m, 'jg') or CaseEqual(m, 'jnle') then cc := 15
-  else Result := False;
-end;
-
-{ Use the real shipped emitter — same file the compiler includes. }
-type PHoleI64 = ^Int64;  { mock: real def lives in asmtext.inc }
-
+{$include ../compiler/rel8.inc}   { CheckRel8: the assembler's short-jump range check }
+{$include ../compiler/x64enc.inc}
+{$include ../compiler/asmtext.inc}
 { Mock inline-asm line pool. The real definitions are in compiler/defs.inc; the
   emitter's Asm<arch>ProcessInlineLine REPLAYS a parse-time-captured line from
   this pool, and nothing in this harness captures one — so an empty pool is the
@@ -380,6 +171,11 @@ var
   InlineAsmHoleVal: array[0..MOCK_INLINE_ASM_HOLES-1] of Int64;
 
 {$include ../compiler/asmtext_386.inc}
+
+{ Resolves x64enc.inc's `AsmRecordGlobalFixup` forward decl (the real body
+  lives in compiler/asmenc.inc, not included here) — never reached since
+  EncToAsmBuffer stays False in this harness. }
+procedure AsmRecordGlobalFixup(bssOff: Integer); begin EmitGlobRef(bssOff); end;
 
 { Test runner }
 procedure AssertBytes(const name: AnsiString; const expected: array of Byte);
@@ -592,5 +388,81 @@ begin
   ResetCode; EmitAsm386('sbb eax, ebx'); AssertBytes('sbb eax,ebx', [$19,$D8]);
   ResetCode; EmitAsm386('sbb edi, [esp + 4]'); AssertBytes('sbb edi,[esp+4]', [$1B,$7C,$24,$04]);
 
+  { jump forms shared with EmitAsmX64: short/near, constant rel8, @code, and
+    scope labels that live across calls (asmscope.inc) }
+  ResetCode; EmitAsm386(['jz short l', 'nop', 'l:']); AssertBytes('jz short fwd', [$74,$01,$90]);
+  ResetCode; EmitAsm386(['jmp short l', 'l:']); AssertBytes('jmp short fwd', [$EB,$00]);
+  ResetCode; EmitAsm386(['jz l', 'l:']); AssertBytes('jz near fwd (default)', [$0F,$84,0,0,0,0]);
+  ResetCode; EmitAsm386(['l:', 'nop', 'jmp near l']); AssertBytes('jmp near back', [$90,$E9,$FA,$FF,$FF,$FF]);
+  ResetCode; EmitAsm386(['l:', 'nop', 'jnz l']); AssertBytes('jnz back short', [$90,$75,$FD]);
+  ResetCode; EmitAsm386('jnz +5'); AssertBytes('jnz +5', [$75,$05]);
+  ResetCode; EmitAsm386('jmp -3'); AssertBytes('jmp -3', [$EB,$FD]);
+  ResetCode; EmitB($90); EmitAsm386(['jmp @code', 0]); AssertBytes('jmp @code', [$90,$E9,$FA,$FF,$FF,$FF]);
+  ResetCode; EmitB($90); EmitAsm386(['call @code', 0]); AssertBytes('call @code', [$90,$E8,$FA,$FF,$FF,$FF]);
+  ResetCode; EmitB($90); EmitAsm386(['jc short @code', 0]); AssertBytes('jc short @code', [$90,$72,$FD]);
+  ResetCode; AsmScopeBegin; EmitAsm386('jz short done'); EmitB($90); EmitAsm386('done:'); AsmScopeEnd;
+  AssertBytes('scope label across calls', [$74,$01,$90]);
+  ResetCode; AsmScopeBegin; EmitAsm386('top:'); EmitB($90); EmitAsm386('jmp near top'); AsmScopeEnd;
+  AssertBytes('scope back edge', [$90,$E9,$FA,$FF,$FF,$FF]);
+  ResetCode; AsmScopeBegin; EmitAsm386('jmp short x'); AsmScopeBegin; EmitAsm386(['jmp short x', 'x:']); AsmScopeEnd;
+  EmitB($90); EmitAsm386('x:'); AsmScopeEnd;
+  AssertBytes('nested scope', [$EB,$03, $EB,$00, $90]);
+  { the inline-asm replay keeps a dotless label local even inside a scope }
+  ResetCode; AsmScopeBegin; Asm386BlockBegin; Asm386ProcessLine('jmp short q', [], 0); Asm386ProcessLine('q:', [], 0);
+  Asm386BlockResolve; AsmScopeEnd; AssertBytes('inline replay label stays local', [$EB,$00]);
+
+
+  { 2026-11-12 additions (raw i386 bytes -> EmitAsm386), bytes from GNU as --32:
+    push imm, x87 memory forms, cld/std/frndint, imul r,[m], xchg, rotates,
+    movd xmm<->r32, shld/shrd, 32-bit immediates read modulo 2^32, index regs }
+  ResetCode; EmitAsm386('push 1'); AssertBytes('push 1', [$6A, $01]);
+  ResetCode; EmitAsm386('push -1'); AssertBytes('push -1', [$6A, $FF]);
+  ResetCode; EmitAsm386('push 0x41f00000'); AssertBytes('push 0x41f00000', [$68, $00, $00, $F0, $41]);
+  ResetCode; EmitAsm386('push 200'); AssertBytes('push 200', [$68, $C8, $00, $00, $00]);
+  ResetCode; EmitAsm386('fld qword [esp]'); AssertBytes('fld qword [esp]', [$DD, $04, $24]);
+  ResetCode; EmitAsm386('fstp qword [esp]'); AssertBytes('fstp qword [esp]', [$DD, $1C, $24]);
+  ResetCode; EmitAsm386('fst dword [ebp-8]'); AssertBytes('fst dword [ebp-8]', [$D9, $55, $F8]);
+  ResetCode; EmitAsm386('fld dword [eax]'); AssertBytes('fld dword [eax]', [$D9, $00]);
+  ResetCode; EmitAsm386('fild qword [esp]'); AssertBytes('fild qword [esp]', [$DF, $2C, $24]);
+  ResetCode; EmitAsm386('fild dword [esp+4]'); AssertBytes('fild dword [esp+4]', [$DB, $44, $24, $04]);
+  ResetCode; EmitAsm386('fistp qword [esp]'); AssertBytes('fistp qword [esp]', [$DF, $3C, $24]);
+  ResetCode; EmitAsm386('fistp dword [esp]'); AssertBytes('fistp dword [esp]', [$DB, $1C, $24]);
+  ResetCode; EmitAsm386('fisttp qword [esp]'); AssertBytes('fisttp qword [esp]', [$DD, $0C, $24]);
+  ResetCode; EmitAsm386('fisttp dword [esp]'); AssertBytes('fisttp dword [esp]', [$DB, $0C, $24]);
+  ResetCode; EmitAsm386('fldcw word [esp+8]'); AssertBytes('fldcw word [esp+8]', [$D9, $6C, $24, $08]);
+  ResetCode; EmitAsm386('fnstcw word [esp+10]'); AssertBytes('fnstcw word [esp+10]', [$D9, $7C, $24, $0A]);
+  ResetCode; EmitAsm386('frndint'); AssertBytes('frndint', [$D9, $FC]);
+  ResetCode; EmitAsm386('cld'); AssertBytes('cld', [$FC]);
+  ResetCode; EmitAsm386('std'); AssertBytes('std', [$FD]);
+  ResetCode; EmitAsm386('imul eax, [esp+4]'); AssertBytes('imul eax, [esp+4]', [$0F, $AF, $44, $24, $04]);
+  ResetCode; EmitAsm386('imul ecx, [esp]'); AssertBytes('imul ecx, [esp]', [$0F, $AF, $0C, $24]);
+  ResetCode; EmitAsm386('xchg edx, eax'); AssertBytes('xchg edx, eax', [$92]);
+  ResetCode; EmitAsm386('xchg eax, ecx'); AssertBytes('xchg eax, ecx', [$91]);
+  ResetCode; EmitAsm386('xchg ebx, ecx'); AssertBytes('xchg ebx, ecx', [$87, $CB]);
+  ResetCode; EmitAsm386('xchg [ecx], eax'); AssertBytes('xchg [ecx], eax', [$87, $01]);
+  ResetCode; EmitAsm386('xchg eax, [ecx]'); AssertBytes('xchg eax, [ecx]', [$87, $01]);
+  ResetCode; EmitAsm386('rcl esi, 1'); AssertBytes('rcl esi, 1', [$D1, $D6]);
+  ResetCode; EmitAsm386('rcr edx, cl'); AssertBytes('rcr edx, cl', [$D3, $DA]);
+  ResetCode; EmitAsm386('rol eax, 3'); AssertBytes('rol eax, 3', [$C1, $C0, $03]);
+  ResetCode; EmitAsm386('ror ebx, 1'); AssertBytes('ror ebx, 1', [$D1, $CB]);
+  ResetCode; EmitAsm386('movd xmm0, eax'); AssertBytes('movd xmm0, eax', [$66, $0F, $6E, $C0]);
+  ResetCode; EmitAsm386('movd eax, xmm1'); AssertBytes('movd eax, xmm1', [$66, $0F, $7E, $C8]);
+  ResetCode; EmitAsm386('shld edx, eax, cl'); AssertBytes('shld edx, eax, cl', [$0F, $A5, $C2]);
+  ResetCode; EmitAsm386('shrd eax, edx, cl'); AssertBytes('shrd eax, edx, cl', [$0F, $AD, $D0]);
+  ResetCode; EmitAsm386('shld edx, eax, 4'); AssertBytes('shld edx, eax, 4', [$0F, $A4, $C2, $04]);
+  ResetCode; EmitAsm386('shrd eax, edx, 31'); AssertBytes('shrd eax, edx, 31', [$0F, $AC, $D0, $1F]);
+  ResetCode; EmitAsm386('and eax, 0xfffffff0'); AssertBytes('and eax, 0xfffffff0', [$83, $E0, $F0]);
+  ResetCode; EmitAsm386('and esp, 0xfffffff0'); AssertBytes('and esp, 0xfffffff0', [$83, $E4, $F0]);
+  ResetCode; EmitAsm386('cmp ecx, 0x80000000'); AssertBytes('cmp ecx, 0x80000000', [$81, $F9, $00, $00, $00, $80]);
+  ResetCode; EmitAsm386('cmp byte [esi+ecx], 0'); AssertBytes('cmp byte [esi+ecx], 0', [$80, $3C, $0E, $00]);
+  ResetCode; EmitAsm386('movzx edx, byte [ecx+edx]'); AssertBytes('movzx edx, byte [ecx+edx]', [$0F, $B6, $14, $11]);
+  { an indexed operand must not leak its index into the next line
+    (EncMemIndex was never reset on the i386 path) }
+  ResetCode; EmitAsm386(['movzx edx, byte [ecx+edx]', 'mov ecx, [ebp+8]']);
+  AssertBytes('index does not leak', [$0F,$B6,$14,$11, $8B,$4D,$08]);
+  ResetCode; EmitAsm386('cmp byte [esi+ecx], 0'); EmitAsm386('mov eax, [ebp+8]');
+  AssertBytes('index does not leak across calls', [$80,$3C,$0E,$00, $8B,$45,$08]);
+
   writeln('ALL I386 ASM EMIT TESTS PASSED');
+
 end.

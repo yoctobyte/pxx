@@ -125,6 +125,25 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
   later EmitAsmX64 call. }
 procedure AsmScopeBegin; forward;
 procedure AsmScopeEnd; forward;
+{ The i386 regions of emit.inc, symtab.inc, cparser.inc and the runtime stub
+  emitters (exception/coroutine/thread_emit.inc) write through EmitAsm386,
+  defined in asmtext_386.inc further down: same FPC-seed reason as
+  EmitAsmX64 above. A -dPXX_NO_I386 build has no i386 assembler, and those
+  regions are unreachable there (--target=i386 is refused), so it gets two
+  refusing stubs instead. }
+{$ifndef PXX_NO_I386}
+procedure EmitAsm386(const items: array of const); overload; forward;
+procedure EmitAsm386(const s: AnsiString); overload; forward;
+{$else}
+procedure EmitAsm386(const items: array of const); overload;
+begin
+  Error('EmitAsm386: this compiler was built without the i386 backend (-dPXX_NO_I386)');
+end;
+procedure EmitAsm386(const s: AnsiString); overload;
+begin
+  Error('EmitAsm386: this compiler was built without the i386 backend (-dPXX_NO_I386)');
+end;
+{$endif}
 {$include emit.inc}
 {$include rel8.inc}   { range-checked rel8 displacements — after emit.inc: EmitRel8 calls EmitB }
 procedure AsmB(b: Integer); forward;

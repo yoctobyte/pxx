@@ -15003,15 +15003,17 @@ begin
   end
   else if TargetArch = TARGET_I386 then
   begin
-    EmitB($53);                                     { push ebx }
-    EmitB($56);                                     { push esi }
-    EmitB($57);                                     { push edi }
-    EmitB($55);                                     { push ebp }
+    EmitAsm386([
+      'push ebx',
+      'push esi',
+      'push edi',
+      'push ebp'
+    ]);
     { i386 SysV: the caller aligned esp to 16 before the call, so at entry esp
       is 12 mod 16. Four pushes move it by 16 and leave it 12 mod 16, so 12 more
       makes a call site 16-aligned. Same reasoning as the x86-64 arm, different
       arithmetic -- do not copy the constant. }
-    EmitB($83); EmitB($EC); EmitB($0C);             { sub esp, 12 }
+    EmitAsm386('sub esp, 12');
   end
   else
     ErrorNoPos('internal: no init/fini thunk prologue for --target=' +
@@ -15034,12 +15036,14 @@ begin
   end
   else if TargetArch = TARGET_I386 then
   begin
-    EmitB($83); EmitB($C4); EmitB($0C);             { add esp, 12 }
-    EmitB($5D);                                     { pop ebp }
-    EmitB($5F);                                     { pop edi }
-    EmitB($5E);                                     { pop esi }
-    EmitB($5B);                                     { pop ebx }
-    EmitB($C3);                                     { ret }
+    EmitAsm386([
+      'add esp, 12',
+      'pop ebp',
+      'pop edi',
+      'pop esi',
+      'pop ebx',
+      'ret'
+    ]);
   end
   else
     ErrorNoPos('internal: no init/fini thunk epilogue for --target=' +
@@ -15965,8 +15969,10 @@ begin
       Error('compiler error: i386 procedure nesting deeper than the callee-saved spill stack');
     I386CsSaveOff[I386CsSaveTop] := -FrameSize;
     Inc(I386CsSaveTop);
-    EmitB($55);                          { push ebp }
-    EmitB($89); EmitB($E5);              { mov ebp, esp }
+    EmitAsm386([
+      'push ebp',
+      'mov ebp, esp'
+    ]);
     EmitB($81); EmitB($EC);              { sub esp, imm32 }
     Result := CodeLen; EmitI32(0);
     EmitB($89); EmitB($9D); EmitI32(-FrameSize);       { mov [ebp+off+0], ebx }
@@ -17178,7 +17184,7 @@ begin
   if TargetArch = TARGET_I386 then
   begin
     EmitB($8D); EmitB($85); EmitI32(frameOff);   { lea eax, [ebp+off] }
-    EmitB($50);                                  { push dest (param 0, deepest) }
+    EmitAsm386('push eax');  { push dest (param 0, deepest) }
     EmitB($68); EmitI32(nBytes);                 { push count }
     EmitCallProc(helperPi);
     EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
@@ -17422,7 +17428,7 @@ begin
             end;
           end;
           EmitB($8B); EmitB($85); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov eax, [ebp+destOff] }
-          EmitB($50);                                { push eax (arg0 recAddr) }
+          EmitAsm386('push eax');  { arg0 recAddr }
           EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE))); { push desc }
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
@@ -17430,10 +17436,10 @@ begin
           EmitB($81); EmitB($C4); EmitI32(8);        { add esp, 8 }
         end;
         EmitB($8B); EmitB($BD); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov edi, [ebp+destOff] }
-        EmitB($89); EmitB($F8);                                  { mov eax, edi (return value) }
+        EmitAsm386('mov eax, edi');  { return value }
         EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea esi, [ebp+resultOff] }
         sz := AggRetCopySize(retSymIdx);
-        EmitB($B9); EmitI32(sz);                                 { mov ecx, sz }
+        EmitAsm386(['mov ecx, %', sz]);  { mov ecx, sz }
         EmitAsmX64(['rep movsb']);
       end
       else if Syms[retSymIdx].TypeKind = tyString then
@@ -17511,15 +17517,20 @@ begin
     begin
       if Syms[retSymIdx].TypeKind = tySingle then
       begin
-        EmitB($50);                                            { push eax }
-        EmitB($D9); EmitB($04); EmitB($24);                    { fld dword [esp] }
-        EmitB($83); EmitB($C4); EmitB($04);                    { add esp, 4 }
+        EmitAsm386([
+          'push eax',
+          'fld dword [esp]',
+          'add esp, 4'
+        ]);
       end
       else
       begin
-        EmitB($52); EmitB($50);                                { push edx / push eax }
-        EmitB($DD); EmitB($04); EmitB($24);                    { fld qword [esp] }
-        EmitB($83); EmitB($C4); EmitB($08);                    { add esp, 8 }
+        EmitAsm386([
+          'push edx',                        { push edx / push eax }
+          'push eax',
+          'fld qword [esp]',
+          'add esp, 8'
+        ]);
       end;
     end;
     { Reload the callee-saved trio before tearing the frame down. Reads the top
@@ -17531,7 +17542,10 @@ begin
       EmitB($8B); EmitB($B5); EmitI32(I386CsSaveOff[I386CsSaveTop - 1] + 4);
       EmitB($8B); EmitB($BD); EmitI32(I386CsSaveOff[I386CsSaveTop - 1] + 8);
     end;
-    EmitB($C9); EmitB($C3);                                    { leave; ret }
+    EmitAsm386([
+      'leave',                           { leave; ret }
+      'ret'
+    ]);
     Exit;
   end;
 {$ifndef PXX_NO_ARM32}

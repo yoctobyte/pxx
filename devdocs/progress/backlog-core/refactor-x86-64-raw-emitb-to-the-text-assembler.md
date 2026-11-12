@@ -228,4 +228,67 @@ byte +1 is reported).
   an `Exit` between AsmScopeBegin and AsmScopeEnd.
 - computed opcode bytes (`EmitB($E0 + reg)`): register holes.
 - comments that are not assembly, or disagree with their bytes.
-- i386 (EmitAsm386 needs the same label/@code additions), arm32, aarch64.
+- i386: the rest, below. arm32, aarch64.
+
+## i386 (2026-11-12)
+
+**Labels first.** EmitAsm386 now has the x86-64 jump forms:
+- scope labels, sharing AsmScopeBegin/AsmScopeEnd. The scope code moved out of
+  asmtext.inc into compiler/asmscope.inc so both assemblers and both test
+  harnesses use one copy.
+- `short` / `near`, `jmp|jcc|call @code`, and constant `jcc +N`.
+- The inline-asm replay keeps every label local to its asm block, even
+  inside an open scope (Asm386ProcessLineEx's allowScope).
+
+**The i386 test now runs the shipped code.** test_asm_emit_386 carried its
+own mock AsmTextOperand and EncModRMMem, and they had drifted from the real
+ones. It now includes asmregs/x64enc/asmtext like the x64 harness. That
+exposed a real bug: an indexed operand leaked its index register into the
+next memory operand
+(done/bug-an-indexed-i386-asm-operand-leaks-its-index-into-the-next-memory-operand.md).
+
+**Assembler additions** (each pinned in test_asm_emit_386 with GNU as --32
+bytes):
+- `push imm` and `push dword [mem]`
+- x87 fld/fst/fstp/fild/fistp/fisttp dword|qword, fldcw/fnstcw, frndint
+- cld/std, stmxcsr/ldmxcsr
+- `imul r, [mem]`, xchg (90+r with eax), rol/ror/rcl/rcr
+- `movd xmm<->r32`, shld/shrd with cl or imm8, `mov r32, sreg` / `mov sreg, r32`
+- accumulator short forms (04/05+8*op, A8/A9), as GNU as picks them
+- 32-bit immediates read modulo 2^32 (`and eax, 0xfffffff0` takes imm8)
+
+**Batch i1 (ir_codegen386.inc, 915 lines) and batch i2 (172 lines in the i386
+regions of thread/exception/coroutine_emit, cparser, symtab, emit).** Method:
+- objdump decodes the line's bytes (a sentinel in the EmitI32 hole).
+- The comment's first word must name the first decoded instruction.
+- GNU as must reassemble the proposed text to the same bytes.
+- A harness built on the shipped parser and encoder must produce those bytes
+  for SEVEN hole values (0, +-8, +-200, 0x12345, the sentinel). This rejects
+  every line whose raw form forced a wide encoding (`[ebp+disp32]`, `81 /op
+  imm32`), so the output stays byte-identical.
+- Mixed files convert only inside `if TargetArch = TARGET_I386` bodies,
+  `TARGET_I386:` case arms and *386 routines. Bytes alone cannot tell them
+  apart: `50` is push eax and push rax. Brace comments nest in this codebase,
+  which the region scanner had to learn.
+- Consecutive lines merge into one EmitAsm386([...]). A line under a bare
+  then/else/do is never merged.
+
+12 hand-counted short jumps that now spanned EmitAsm386 calls became local
+labels, 11 forward ones (rel8 lint) and the thread stub's backward
+`jnz .z`, which the lint does not check.
+
+Verified:
+- fixedpoint after every step.
+- A/B against the pre-i386 compiler over 795 --target=i386 sources (every
+  Makefile i386 row, every 6th Pascal test, compiler.pas): 688 SAME, 0 DIFF,
+  107 fail to compile with both compilers.
+- A 159-file x86-64 sample: 137 SAME, 0 DIFF.
+
+Remaining raw `EmitB($` lines: ir_codegen386 598, symtab 116, emit 45,
+cparser 36, thread_emit 15, exception_emit 10. Mostly:
+- forced-wide hole forms. Converting them shrinks code; that is a decision,
+  not a cleanup.
+- patch-list jumps (`p := CodeLen; EmitI32(0)` ... Patch32), which want
+  scope labels.
+- computed ModRM bytes, which want register holes.
+- uncommented lines.

@@ -44,15 +44,17 @@ begin
     here; out of range yields nil and each loop below tests for it.
     bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
   EmitB($8B); EmitB($0D); EmitGlobRef(BSS_INITIAL_RSP); { mov ecx, [initial_sp] }
-  EmitB($3B); EmitB($01);                    { cmp eax, [ecx] (argc) }
+  EmitAsm386('cmp eax, [ecx]');  { argc }
   EmitB($72); inRange := CodeLen; EmitB(0);  { jb in_range }
-  EmitB($31); EmitB($C0);                    { xor eax, eax (nil) }
+  EmitAsm386('xor eax, eax');  { nil }
   EmitB($EB); outDone := CodeLen; EmitB(0);  { jmp done }
   PatchRel8(inRange);
-  EmitB($C1); EmitB($E0); EmitB($02);        { shl eax, 2 }
-  EmitB($83); EmitB($C1); EmitB($04);        { add ecx, 4 (argv base) }
-  EmitB($01); EmitB($C8);                    { add eax, ecx }
-  EmitB($8B); EmitB($00);                    { mov eax, [eax] }
+  EmitAsm386([
+    'shl eax, 2',
+    'add ecx, 4',                      { argv base }
+    'add eax, ecx',
+    'mov eax, [eax]'
+  ]);
   PatchRel8(outDone);
 end;
 
@@ -61,20 +63,24 @@ procedure EmitArgvToAnsiString386;
 var loopStart, donePos, procIdx, nilPos: Integer;
 begin
   EmitLoadArgvPtr386;                        { eax = src, nil when out of range }
-  EmitB($89); EmitB($C6);                    { mov esi, eax (src) }
-  EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  EmitAsm386([
+    'mov esi, eax',                    { src }
+    'xor ecx, ecx'                     { len }
+  ]);
   { a nil src must not enter the loop -- the compare below would fault }
-  EmitB($85); EmitB($F6);                    { test esi, esi }
+  EmitAsm386('test esi, esi');
   EmitB($0F); EmitB($84); nilPos := CodeLen; EmitI32(0);   { jz done }
   loopStart := CodeLen;
-  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
+  EmitAsm386('cmp byte [esi+ecx], 0');
   EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
-  EmitB($41);                                { inc ecx }
+  EmitAsm386('inc ecx');
   EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
   Patch32(donePos, CodeLen - (donePos + 4));
   Patch32(nilPos, CodeLen - (nilPos + 4));
-  EmitB($51);                                { push len }
-  EmitB($56);                                { push src }
+  EmitAsm386([
+    'push ecx',                        { push len }
+    'push esi'                         { push src }
+  ]);
   procIdx := FindProc('PXXStrFromLit');
   if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
   EmitCallProc(procIdx);
@@ -121,7 +127,7 @@ begin
   si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
   if (Strs[si].Len = 0) and (not isNilPy) then
   begin
-    EmitB($31); EmitB($C0);                      { xor eax, eax — Pascal '' is nil }
+    EmitAsm386('xor eax, eax');  { Pascal '' is nil }
   end
   else
   begin
@@ -267,15 +273,17 @@ procedure EmitArgvToFixedString386(dstIdx: Integer);
 var loopStart, donePos, capDone, copyLoop, copyDone, nilPos: Integer;
 begin
   EmitLoadArgvPtr386;                        { eax = src, nil when out of range }
-  EmitB($89); EmitB($C6);                    { mov esi, eax }
-  EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  EmitAsm386([
+    'mov esi, eax',
+    'xor ecx, ecx'                     { len }
+  ]);
   { a nil src must not enter the loop -- the compare below would fault }
-  EmitB($85); EmitB($F6);                    { test esi, esi }
+  EmitAsm386('test esi, esi');
   EmitB($0F); EmitB($84); nilPos := CodeLen; EmitI32(0);   { jz done }
   loopStart := CodeLen;
-  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
+  EmitAsm386('cmp byte [esi+ecx], 0');
   EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
-  EmitB($41);                                { inc ecx }
+  EmitAsm386('inc ecx');
   EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
   Patch32(donePos, CodeLen - (donePos + 4));
   Patch32(nilPos, CodeLen - (nilPos + 4));
@@ -286,7 +294,7 @@ begin
     256 here, 255 on the other three. }
   EmitB($81); EmitB($F9); EmitI32(FROZEN_CSTR_CAP);  { cmp ecx, cap }
   EmitB($0F); EmitB($8E); capDone := CodeLen; EmitI32(0); { jle cap_done }
-  EmitB($B9); EmitI32(FROZEN_CSTR_CAP);      { mov ecx, cap }
+  EmitAsm386(['mov ecx, %', FROZEN_CSTR_CAP]);  { mov ecx, cap }
   Patch32(capDone, CodeLen - (capDone + 4));
   if Syms[dstIdx].Kind = skGlobal then
     begin EmitB($BF); EmitGlobRef(Syms[dstIdx].Offset); end
@@ -295,13 +303,15 @@ begin
   EmitStoreStrLen386(1, 7, Syms[dstIdx].TypeKind);  { [edi] := ecx at the dest's width }
   EmitLeaStrData386(7, Syms[dstIdx].TypeKind);      { edi = chars }
   copyLoop := CodeLen;
-  EmitB($85); EmitB($C9);                    { test ecx, ecx }
+  EmitAsm386('test ecx, ecx');
   EmitB($0F); EmitB($84); copyDone := CodeLen; EmitI32(0);
-  EmitB($8A); EmitB($06);                    { mov al, [esi] }
-  EmitB($88); EmitB($07);                    { mov [edi], al }
-  EmitB($46);                                { inc esi }
-  EmitB($47);                                { inc edi }
-  EmitB($49);                                { dec ecx }
+  EmitAsm386([
+    'mov al, [esi]',
+    'mov [edi], al',
+    'inc esi',
+    'inc edi',
+    'dec ecx'
+  ]);
   EmitB($E9); EmitI32(copyLoop - (CodeLen + 4));
   Patch32(copyDone, CodeLen - (copyDone + 4));
 end;
@@ -311,7 +321,7 @@ var i: Integer;
 begin
   for i := 1 to count do
   begin
-    EmitB($8B); EmitB($04); EmitB($24);                  { mov eax, [esp] }
+    EmitAsm386('mov eax, [esp]');
     EmitMovGlobAcc($A3, BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
     EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE_386);   { add esp, 32 }
   end;
@@ -342,7 +352,7 @@ var popPos: Integer;
 begin
   EmitB($E8); EmitI32(0);                  { call +0  (pushes the next insn's addr) }
   popPos := CodeLen;
-  EmitB($58);                              { pop eax  (eax = popPos's runtime addr) }
+  EmitAsm386('pop eax');  { eax = popPos's runtime addr }
   EmitB($05);                              { add eax, imm32 }
   RecordCodeRefFull(CodeLen, targetOff, 0, popPos);
   EmitI32(targetOff - popPos);
@@ -388,8 +398,10 @@ begin
       so the pop supplied the missing 4. The rt frame + sys_rt_sigreturn have no
       such skew. glibc's two i386 restorers differ in exactly this way: the
       non-rt one opens with `popl %eax`, the rt one is the bare syscall. }
-  EmitB($B8); EmitI32(173);                       { mov eax, 173  (rt_sigreturn) }
-  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitAsm386([
+    'mov eax, 173',                    { rt_sigreturn }
+    'int 128'
+  ]);
 
   { --- dispatch (SA_SIGINFO rt frame, args ON THE STACK: after the frame
         pointer is set, [ebp+8] = sig, [ebp+12] = siginfo_t*, [ebp+16] =
@@ -397,8 +409,10 @@ begin
         void*)` rather than in registers) --- }
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
-  EmitB($55);                                     { push ebp }
-  EmitB($89); EmitB($E5);                         { mov ebp, esp }
+  EmitAsm386([
+    'push ebp',
+    'mov ebp, esp'
+  ]);
 
   { Park si_code / si_addr / ucontext* before anything else — the hook is a
     parameterless Pascal proc (unchanged ABI), so the slots are how it learns
@@ -407,40 +421,50 @@ begin
     is NOT padded and si_addr is at **12**, not 16 as on the 64-bit targets.
     __pxxSigCode is typed Integer (the field's true width), so one dword is the
     whole value. The siginfo pointer being nil is defensive only. }
-  EmitB($8B); EmitB($45); EmitB($08);             { mov eax, [ebp+8]   sig }
+  EmitAsm386('mov eax, [ebp+8]');  { sig }
   EmitMovGlobAcc($A3, BSS_SIG_NUM);           { mov [num], eax }
-  EmitB($8B); EmitB($45); EmitB($10);             { mov eax, [ebp+16]  ucontext* }
+  EmitAsm386('mov eax, [ebp+16]');  { ucontext* }
   EmitMovGlobAcc($A3, BSS_SIG_CTX);           { mov [ctx], eax }
-  EmitB($8B); EmitB($45); EmitB($0C);             { mov eax, [ebp+12]  siginfo* }
-  EmitB($85); EmitB($C0);                         { test eax, eax }
+  EmitAsm386([
+    'mov eax, [ebp+12]',               { siginfo* }
+    'test eax, eax'
+  ]);
   EmitB($0F); EmitB($84); jNoSi := CodeLen; EmitI32(0);   { jz .nosi }
-  EmitB($8B); EmitB($50); EmitB($08);             { mov edx, [eax+8]   si_code }
-  EmitB($8B); EmitB($48); EmitB($0C);             { mov ecx, [eax+12]  si_addr }
+  EmitAsm386([
+    'mov edx, [eax+8]',                { si_code }
+    'mov ecx, [eax+12]'                { si_addr }
+  ]);
   EmitB($E9); jSt := CodeLen; EmitI32(0);         { jmp .st }
   { .nosi }
   Patch32(jNoSi, CodeLen - (jNoSi + 4));
-  EmitB($31); EmitB($D2);                         { xor edx, edx }
-  EmitB($31); EmitB($C9);                         { xor ecx, ecx }
+  EmitAsm386([
+    'xor edx, edx',
+    'xor ecx, ecx'
+  ]);
   { .st }
   Patch32(jSt, CodeLen - (jSt + 4));
   EmitB($89); EmitB($15); EmitGlobRef(BSS_SIG_CODE);  { mov [code], edx }
   EmitB($89); EmitB($0D); EmitGlobRef(BSS_SIG_ADDR);  { mov [addr], ecx }
 
-  EmitB($8B); EmitB($4D); EmitB($08);             { mov ecx, [ebp+8]  (sig) }
-  EmitB($83); EmitB($F9); EmitB($01);             { cmp ecx, 1 }
+  EmitAsm386([
+    'mov ecx, [ebp+8]',                { sig }
+    'cmp ecx, 1'
+  ]);
   EmitB($0F); EmitB($8C); jOut1 := CodeLen; EmitI32(0);   { jl .out }
-  EmitB($83); EmitB($F9); EmitB($40);             { cmp ecx, 64 }
+  EmitAsm386('cmp ecx, 64');
   EmitB($0F); EmitB($8F); jOut2 := CodeLen; EmitI32(0);   { jg .out }
-  EmitB($8D); EmitB($51); EmitB($FF);             { lea edx, [ecx-1] }
+  EmitAsm386('lea edx, [ecx-1]');
   EmitB($8B); EmitB($04); EmitB($D5); EmitGlobRef(BSS_SIG_HOOKS);  { mov eax, [hooks + edx*8] }
-  EmitB($85); EmitB($C0);                         { test eax, eax }
+  EmitAsm386('test eax, eax');
   EmitB($0F); EmitB($84); jDfl := CodeLen; EmitI32(0);    { jz .dfl }
   EmitB($FF); EmitB($D0);                         { call eax  (Pascal hook; returning resumes) }
   { .out }
   outAt := CodeLen;
-  EmitB($89); EmitB($EC);                         { mov esp, ebp }
-  EmitB($5D);                                     { pop ebp }
-  EmitB($C3);                                     { ret -> restorer -> sigreturn }
+  EmitAsm386([
+    'mov esp, ebp',
+    'pop ebp',
+    'ret'                              { ret -> restorer -> sigreturn }
+  ]);
   Patch32(jOut1, outAt - (jOut1 + 4));
   Patch32(jOut2, outAt - (jOut2 + 4));
   { .dfl: no hook — revert to SIG_DFL and re-raise. }
@@ -450,34 +474,40 @@ begin
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 8, 0);  { restorer = 0 }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 12, 0);  { mask lo  (i386: mask at +12) }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 16, 0);  { mask hi }
-  EmitB($8B); EmitB($5D); EmitB($08);             { mov ebx, [ebp+8]   sig }
+  EmitAsm386('mov ebx, [ebp+8]');  { sig }
   EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch  act }
-  EmitB($31); EmitB($D2);                         { xor edx, edx       oldact }
-  EmitB($BE); EmitI32(8);                         { mov esi, 8         sigsetsize }
-  EmitB($B8); EmitI32(174);                       { mov eax, 174       rt_sigaction }
-  EmitB($CD); EmitB($80);                         { int 0x80 }
-  EmitB($B8); EmitI32(20);                        { mov eax, 20        getpid }
-  EmitB($CD); EmitB($80);                         { int 0x80  -> eax = pid }
-  EmitB($89); EmitB($C3);                         { mov ebx, eax       pid }
-  EmitB($8B); EmitB($4D); EmitB($08);             { mov ecx, [ebp+8]   sig }
-  EmitB($B8); EmitI32(37);                        { mov eax, 37        kill }
-  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitAsm386([
+    'xor edx, edx',                    { oldact }
+    'mov esi, 8',                      { sigsetsize }
+    'mov eax, 174',                    { rt_sigaction }
+    'int 128',
+    'mov eax, 20',                     { getpid }
+    'int 128',                         { -> eax = pid }
+    'mov ebx, eax',                    { pid }
+    'mov ecx, [ebp+8]',                { sig }
+    'mov eax, 37',                     { kill }
+    'int 128'
+  ]);
   EmitB($E9); jEnd := CodeLen; EmitI32(0);
   Patch32(jEnd, outAt - (jEnd + 4));              { -> shared epilogue }
 
   { --- sethook (cdecl-ish: eax = sig, edx = handler), falls into install --- }
   SigSetHookAddr := CodeLen;
-  EmitB($50);                                     { push eax  (keep sig for install) }
-  EmitB($48);                                     { dec eax }
-  EmitB($83); EmitB($E0); EmitB($3F);             { and eax, 63   keep the store in-table }
-  EmitB($92);                                     { xchg eax, edx  (edx = slot, eax = handler) }
+  EmitAsm386([
+    'push eax',                        { keep sig for install }
+    'dec eax',
+    'and eax, 63',                     { keep the store in-table }
+    'xchg edx, eax'                    { xchg eax, edx  (edx = slot, eax = handler) }
+  ]);
   EmitB($89); EmitB($04); EmitB($D5); EmitGlobRef(BSS_SIG_HOOKS);  { mov [hooks + edx*8], eax }
-  EmitB($58);                                     { pop eax   (sig back) }
+  EmitAsm386('pop eax');  { sig back }
 
   { --- install (eax = sig) --- }
   SigInstallAddr := CodeLen;
-  EmitB($53);                                     { push ebx }
-  EmitB($89); EmitB($C3);                         { mov ebx, eax        sig }
+  EmitAsm386([
+    'push ebx',
+    'mov ebx, eax'                     { sig }
+  ]);
   { sigaltstack(2) FIRST, then SA_ONSTACK in the flags below — neither works
     alone. Without both, a stack-overflow SIGSEGV is unhandleable: the fault
     happens BECAUSE there is no stack left, so the kernel cannot push a signal
@@ -490,16 +520,18 @@ begin
     argument and where the signal number is parked, so it has to go on the
     stack across this call — the one place this differs from the other three
     ports. }
-  EmitB($53);                                     { push ebx }
+  EmitAsm386('push ebx');
   EmitB($BB); EmitGlobRef(BSS_SIG_ALTSS);         { mov ebx, &ss }
   EmitB($B8); EmitGlobRef(BSS_SIG_ALTSTK);        { mov eax, base of the buffer }
-  EmitB($89); EmitB($03);                         { mov [ebx], eax        ss_sp }
+  EmitAsm386('mov [ebx], eax');  { ss_sp }
   EmitB($C7); EmitB($43); EmitB(4); EmitI32(0);   { mov dword [ebx+4], 0  ss_flags }
   EmitB($C7); EmitB($43); EmitB(8); EmitI32(SIG_ALTSTACK_SIZE); { [ebx+8] = ss_size }
-  EmitB($31); EmitB($C9);                         { xor ecx, ecx          old = nil }
-  EmitB($B8); EmitI32(186);                       { mov eax, 186          sigaltstack }
-  EmitB($CD); EmitB($80);                         { int 0x80 }
-  EmitB($5B);                                     { pop ebx               sig back }
+  EmitAsm386([
+    'xor ecx, ecx',                    { old = nil }
+    'mov eax, 186',                    { sigaltstack }
+    'int 128',
+    'pop ebx'                          { sig back }
+  ]);
   EmitCodeAbsToEax386(dispatchAt);                { eax = &dispatch (absolute) }
   EmitMovGlobAcc($A3, BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* — the
@@ -512,12 +544,14 @@ begin
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 12, 0);  { mask lo }
   EmitMovGlobImm32(BSS_SIG_SCRATCH + 16, 0);  { mask hi }
   EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch   act }
-  EmitB($31); EmitB($D2);                         { xor edx, edx        oldact }
-  EmitB($BE); EmitI32(8);                         { mov esi, 8          sigsetsize }
-  EmitB($B8); EmitI32(174);                       { mov eax, 174        rt_sigaction }
-  EmitB($CD); EmitB($80);                         { int 0x80 }
-  EmitB($5B);                                     { pop ebx }
-  EmitB($C3);                                     { ret }
+  EmitAsm386([
+    'xor edx, edx',                    { oldact }
+    'mov esi, 8',                      { sigsetsize }
+    'mov eax, 174',                    { rt_sigaction }
+    'int 128',
+    'pop ebx',
+    'ret'
+  ]);
 
   Patch32(jmpOver, CodeLen - (jmpOver + 4));
 end;
@@ -532,9 +566,11 @@ procedure EmitIoLockStubs386;
 var spinStart, pOurs, pGot, pNested: Integer;
 begin
   IOLockAddr := CodeLen;
-  EmitB($B8); EmitI32(224);                          { mov eax, 224 (gettid) }
-  EmitB($CD); EmitB($80);                            { int 0x80 }
-  EmitB($89); EmitB($C6);                            { mov esi, eax }
+  EmitAsm386([
+    'mov eax, 224',                    { gettid }
+    'int 128',
+    'mov esi, eax'
+  ]);
   EmitB($39); EmitB($35); EmitGlobRef(BSS_IO_OWNER); { cmp [IO_OWNER], esi }
   { PATCHED, NOT COUNTED. Every one of the three jumps in these two stubs used
     to carry a hand-counted literal displacement over a span containing an
@@ -557,22 +593,24 @@ begin
     bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils }
   EmitB($74); pOurs := CodeLen; EmitB(0);            { je (already ours -> depth bump, over the spin block) }
   spinStart := CodeLen;
-  EmitB($31); EmitB($C0);                            { xor eax, eax (expect free) }
-  EmitB($89); EmitB($F1);                            { mov ecx, esi (take with our tid) }
+  EmitAsm386([
+    'xor eax, eax',                    { expect free }
+    'mov ecx, esi'                     { take with our tid }
+  ]);
   EmitB($F0); EmitB($0F); EmitB($B1); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { lock cmpxchg [IO_OWNER], ecx }
   EmitB($74); pGot := CodeLen; EmitB(0);             { je (got it -> depth bump) }
   EmitB($EB); EmitRel8(spinStart);                   { jmp back to the spin retry }
   PatchRel8(pOurs); PatchRel8(pGot);
   EmitB($FF); EmitB($05); EmitGlobRef(BSS_IO_DEPTH); { inc dword [IO_DEPTH] }
-  EmitB($C3);                                        { ret }
+  EmitAsm386('ret');
 
   IOUnlockAddr := CodeLen;
   EmitB($FF); EmitB($0D); EmitGlobRef(BSS_IO_DEPTH); { dec dword [IO_DEPTH] }
   EmitB($75); pNested := CodeLen; EmitB(0);          { jnz (still nested: keep ownership, over the clear) }
-  EmitB($31); EmitB($C9);                            { xor ecx, ecx }
+  EmitAsm386('xor ecx, ecx');
   EmitB($89); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { mov [IO_OWNER], ecx (release) }
   PatchRel8(pNested);
-  EmitB($C3);                                        { ret }
+  EmitAsm386('ret');
 end;
 
 procedure EmitHeapAllocLocked386;
@@ -581,38 +619,46 @@ procedure EmitHeapAllocLocked386;
   internal ABI: push args left-to-right (arg0 deepest), caller pops. }
 var procIdx: Integer;
 begin
-  EmitB($51);                         { push ecx (caller-saved) }
-  EmitB($52);                         { push edx }
-  EmitB($50);                         { push eax = arg0 (size) }
-  EmitB($6A); EmitB($08);             { push 8  = arg1 (align) }
+  EmitAsm386([
+    'push ecx',                        { caller-saved }
+    'push edx',
+    'push eax',                        { push eax = arg0 (size) }
+    'push 8'                           { = arg1 (align) }
+  ]);
   procIdx := FindProc('PXXAlloc');
   if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
   EmitCallProc(procIdx);                   { eax = pointer }
   EmitB($81); EmitB($C4); EmitI32(8); { add esp, 8 (pop args) }
-  EmitB($5A);                         { pop edx }
-  EmitB($59);                         { pop ecx }
+  EmitAsm386([
+    'pop edx',
+    'pop ecx'
+  ]);
 end;
 
 procedure EmitHeapFreeLocked386;
 { eax = payload pointer. Delegate to Pascal PXXFree(p). nil is ignored inside. }
 var procIdx: Integer;
 begin
-  EmitB($51);                         { push ecx }
-  EmitB($52);                         { push edx }
-  EmitB($50);                         { push eax = arg0 (p) }
+  EmitAsm386([
+    'push ecx',
+    'push edx',
+    'push eax'                         { push eax = arg0 (p) }
+  ]);
   procIdx := FindProc('PXXFree');
   if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
   EmitCallProc(procIdx);
   EmitB($81); EmitB($C4); EmitI32(4); { add esp, 4 }
-  EmitB($5A);                         { pop edx }
-  EmitB($59);                         { pop ecx }
+  EmitAsm386([
+    'pop edx',
+    'pop ecx'
+  ]);
 end;
 
 procedure EmitStrIncRef386;
 { eax = managed-string handle. Retain (calls Pascal PXXStrIncRef). eax clobbered. }
 var procIdx: Integer;
 begin
-  EmitB($50);                         { push eax (arg0 = p) }
+  EmitAsm386('push eax');  { arg0 = p }
   procIdx := FindProc('PXXStrIncRef');
   if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
   EmitCallProc(procIdx);
@@ -623,7 +669,7 @@ procedure EmitStrDecRef386;
 { eax = managed-string handle. Release (calls Pascal PXXStrDecRef). eax clobbered. }
 var procIdx: Integer;
 begin
-  EmitB($50);                         { push eax (arg0 = p) }
+  EmitAsm386('push eax');  { arg0 = p }
   procIdx := FindProc('PXXStrDecRef');
   if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
   EmitCallProc(procIdx);
@@ -635,169 +681,219 @@ procedure EmitwriteInt386;
   symtab.inc EmitwriteInt to 32-bit registers and the int 0x80 write. }
 var jnsOff, loopStart: Integer;
 begin
-  EmitB($85); EmitB($C0);                          { test eax, eax }
+  EmitAsm386('test eax, eax');
   EmitB($79); jnsOff := CodeLen; EmitB(0);         { jns .positive }
-  EmitB($F7); EmitB($D8);                          { neg eax }
-  EmitB($50);                                      { push eax }
+  EmitAsm386([
+    'neg eax',
+    'push eax'
+  ]);
   EmitwriteSyscall(MINUS_OFFSET, 1);               { clobbers eax..edx }
-  EmitB($58);                                      { pop eax }
+  EmitAsm386('pop eax');
   PatchRel8(jnsOff);
-  EmitB($31); EmitB($C9);                          { xor ecx, ecx  (digit count) }
-  EmitB($BB); EmitI32(10);                         { mov ebx, 10 }
+  EmitAsm386([
+    'xor ecx, ecx',                    { digit count }
+    'mov ebx, 10'
+  ]);
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE); { mov edi, buf end }
   loopStart := CodeLen;
-  EmitB($31); EmitB($D2);                          { xor edx, edx }
-  EmitB($F7); EmitB($F3);                          { div ebx }
-  EmitB($80); EmitB($C2); EmitB($30);              { add dl, '0' }
-  EmitB($4F);                                      { dec edi }
-  EmitB($88); EmitB($17);                          { mov [edi], dl }
-  EmitB($41);                                      { inc ecx }
-  EmitB($85); EmitB($C0);                          { test eax, eax }
+  EmitAsm386([
+    'xor edx, edx',
+    'div ebx',
+    'add dl, 48',                      { add dl, '0' }
+    'dec edi',
+    'mov [edi], dl',
+    'inc ecx',
+    'test eax, eax'
+  ]);
   EmitB($75); EmitRel8(loopStart); { jnz .loop }
   { write(1, edi, ecx): eax=4, ebx=1, ecx=buf, edx=len }
-  EmitB($89); EmitB($CA);                          { mov edx, ecx }
-  EmitB($89); EmitB($F9);                          { mov ecx, edi }
-  EmitB($BB); EmitI32(CurWriteFd);                     { mov ebx, fd }
-  EmitB($B8); EmitI32(4);                          { mov eax, 4 }
-  EmitB($CD); EmitB($80);                          { int 0x80 }
+  EmitAsm386([
+    'mov edx, ecx',
+    'mov ecx, edi',
+    'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+    'mov eax, 4',
+    'int 128'
+  ]);
 end;
 
 procedure EmitwriteChar386;
 { eax = char byte value -> write 1 byte to stdout }
 begin
   EmitB($BF); EmitDataRef(INTBUF_OFFSET);            { mov edi, INTBUF_OFFSET }
-  EmitB($88); EmitB($07);                            { mov [edi], al }
-  EmitB($B8); EmitI32(4);                            { mov eax, 4 (write) }
-  EmitB($BB); EmitI32(CurWriteFd);                       { mov ebx, fd }
+  EmitAsm386([
+    'mov [edi], al',
+    'mov eax, 4',                      { write }
+    'mov ebx, %', CurWriteFd           { mov ebx, fd }
+  ]);
   EmitB($B9); EmitDataRef(INTBUF_OFFSET);            { mov ecx, INTBUF_OFFSET }
-  EmitB($BA); EmitI32(1);                            { mov edx, 1 }
-  EmitB($CD); EmitB($80);                            { int 0x80 }
+  EmitAsm386([
+    'mov edx, 1',
+    'int 128'
+  ]);
 end;
 
 procedure EmitWriteCStr386;
 { eax = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors the x86-64
   EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
 begin
-  EmitB($89); EmitB($C6);                 { mov esi, eax (buffer) }
-  EmitB($31); EmitB($C9);                 { xor ecx, ecx (length) }
-  { scan: }
-  EmitB($80); EmitB($38); EmitB($00);     { cmp byte [eax], 0 }
-  EmitB($74); EmitB($04);                 { je done (+4) }
-  EmitB($40);                             { inc eax }
-  EmitB($41);                             { inc ecx }
-  EmitB($EB); EmitB($F7);                 { jmp scan (-9) }
-  { done: }
-  EmitB($89); EmitB($CA);                 { mov edx, ecx (count) }
-  EmitB($89); EmitB($F1);                 { mov ecx, esi (buf) }
-  EmitB($BB); EmitI32(CurWriteFd);            { mov ebx, fd }
-  EmitB($B8); EmitI32(4);                 { mov eax, 4 (write) }
-  EmitB($CD); EmitB($80);                 { int 0x80 }
+  EmitAsm386([
+    'mov esi, eax',                    { buffer }
+    'xor ecx, ecx'                     { length }
+  ]);
+  EmitAsm386([
+    '.scan:',
+    'cmp byte [eax], 0',
+    'jz short .done',
+    'inc eax',
+    'inc ecx',
+    'jmp short .scan',
+    '.done:',
+    'mov edx, ecx',                    { count }
+    'mov ecx, esi',                    { buf }
+    'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+    'mov eax, 4',                      { write }
+    'int 128'
+  ]);
 end;
 
 procedure EmitwriteUInt386;
 { eax = unsigned 32-bit int -> decimal on stdout }
 var loopStart: Integer;
 begin
-  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
-  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitAsm386([
+    'xor ecx, ecx',
+    'mov ebx, 10'
+  ]);
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
   loopStart := CodeLen;
-  EmitB($31); EmitB($D2);                                { xor edx, edx }
-  EmitB($F7); EmitB($F3);                                { div ebx }
-  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
-  EmitB($4F);                                            { dec edi }
-  EmitB($88); EmitB($17);                                { mov [edi], dl }
-  EmitB($41);                                            { inc ecx }
-  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitAsm386([
+    'xor edx, edx',
+    'div ebx',
+    'add dl, 48',                      { add dl, '0' }
+    'dec edi',
+    'mov [edi], dl',
+    'inc ecx',
+    'test eax, eax'
+  ]);
   EmitB($75); EmitRel8(loopStart);    { jnz loop }
-  EmitB($89); EmitB($CA);                                { mov edx, ecx }
-  EmitB($89); EmitB($F9);                                { mov ecx, edi }
-  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'mov edx, ecx',
+    'mov ecx, edi',
+    'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+    'mov eax, 4',
+    'int 128'
+  ]);
 end;
 
 procedure EmitwriteIntW386(width: Integer);
 { eax = signed 32-bit int -> right-aligned in field of min width chars }
 var jnsOff, jleOff, jzOff, loopStart: Integer;
 begin
-  EmitB($31); EmitB($F6);                                { xor esi, esi }
-  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitAsm386([
+    'xor esi, esi',
+    'test eax, eax'
+  ]);
   EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
-  EmitB($F7); EmitB($D8);                                { neg eax }
-  EmitB($46);                                            { inc esi }
+  EmitAsm386([
+    'neg eax',
+    'inc esi'
+  ]);
   PatchRel8(jnsOff);
-  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
-  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitAsm386([
+    'xor ecx, ecx',
+    'mov ebx, 10'
+  ]);
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
   loopStart := CodeLen;
-  EmitB($31); EmitB($D2);                                { xor edx, edx }
-  EmitB($F7); EmitB($F3);                                { div ebx }
-  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
-  EmitB($4F);                                            { dec edi }
-  EmitB($88); EmitB($17);                                { mov [edi], dl }
-  EmitB($41);                                            { inc ecx }
-  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitAsm386([
+    'xor edx, edx',
+    'div ebx',
+    'add dl, 48',                      { add dl, '0' }
+    'dec edi',
+    'mov [edi], dl',
+    'inc ecx',
+    'test eax, eax'
+  ]);
   EmitB($75); EmitRel8(loopStart);    { jnz loop }
-  EmitB($57);                                            { push edi }
-  EmitB($51);                                            { push ecx }
-  EmitB($B8); EmitI32(width);                            { mov eax, width }
-  EmitB($29); EmitB($C8);                                { sub eax, ecx }
-  EmitB($29); EmitB($F0);                                { sub eax, esi }
+  EmitAsm386([
+    'push edi',
+    'push ecx',
+    'mov eax, %', width,               { mov eax, width }
+    'sub eax, ecx',
+    'sub eax, esi'
+  ]);
   EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
   EnsureSpaces;
-  EmitB($50);                                            { push eax }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
+  EmitAsm386([
+    'push eax',
+    'mov eax, 4',
+    'mov ebx, %', CurWriteFd           { mov ebx, fd }
+  ]);
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
-  EmitB($5A);                                            { pop edx }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'pop edx',
+    'int 128'
+  ]);
   PatchRel8(jleOff);
-  EmitB($85); EmitB($F6);                                { test esi, esi }
+  EmitAsm386('test esi, esi');
   EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
   EmitwriteSyscall(MINUS_OFFSET, 1);
   PatchRel8(jzOff);
-  EmitB($5A);                                            { pop edx }
-  EmitB($59);                                            { pop ecx }
-  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'pop edx',
+    'pop ecx',
+    'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+    'mov eax, 4',
+    'int 128'
+  ]);
 end;
 
 procedure EmitwriteUIntW386(width: Integer);
 { eax = unsigned 32-bit int -> right-aligned in field of min width chars }
 var jleOff, loopStart: Integer;
 begin
-  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
-  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitAsm386([
+    'xor ecx, ecx',
+    'mov ebx, 10'
+  ]);
   EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
   loopStart := CodeLen;
-  EmitB($31); EmitB($D2);                                { xor edx, edx }
-  EmitB($F7); EmitB($F3);                                { div ebx }
-  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
-  EmitB($4F);                                            { dec edi }
-  EmitB($88); EmitB($17);                                { mov [edi], dl }
-  EmitB($41);                                            { inc ecx }
-  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitAsm386([
+    'xor edx, edx',
+    'div ebx',
+    'add dl, 48',                      { add dl, '0' }
+    'dec edi',
+    'mov [edi], dl',
+    'inc ecx',
+    'test eax, eax'
+  ]);
   EmitB($75); EmitRel8(loopStart);    { jnz loop }
-  EmitB($57);                                            { push edi }
-  EmitB($51);                                            { push ecx }
-  EmitB($B8); EmitI32(width);                            { mov eax, width }
-  EmitB($29); EmitB($C8);                                { sub eax, ecx }
+  EmitAsm386([
+    'push edi',
+    'push ecx',
+    'mov eax, %', width,               { mov eax, width }
+    'sub eax, ecx'
+  ]);
   EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
   EnsureSpaces;
-  EmitB($50);                                            { push eax }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
+  EmitAsm386([
+    'push eax',
+    'mov eax, 4',
+    'mov ebx, %', CurWriteFd           { mov ebx, fd }
+  ]);
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
-  EmitB($5A);                                            { pop edx }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'pop edx',
+    'int 128'
+  ]);
   PatchRel8(jleOff);
-  EmitB($5A);                                            { pop edx }
-  EmitB($59);                                            { pop ecx }
-  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'pop edx',
+    'pop ecx',
+    'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+    'mov eax, 4',
+    'int 128'
+  ]);
 end;
 
 { ---- Float support (SSE2). Value model: float-typed IR nodes leave their
@@ -825,8 +921,10 @@ procedure EmitFloatCallWriter386(const name: AnsiString; a1: Integer; a2: Intege
 var procIdx: Integer;
 begin
   EmitFloatSpill386;
-  EmitB($89); EmitB($E0);                       { mov eax, esp (slot addr) }
-  EmitB($50);                                   { push eax = arg0 (p) }
+  EmitAsm386([
+    'mov eax, esp',                    { slot addr }
+    'push eax'                         { push eax = arg0 (p) }
+  ]);
   { Fixed takes (p, decimals, width) and Sci now takes (p, fracdigits,
     expdigits); Nat takes p alone. `passArgs` says which, EXPLICITLY — this used
     to be inferred from `decs >= 0`, which happened to work only because Nat and
@@ -851,11 +949,11 @@ procedure EmitVarHelperCall386(const name: AnsiString);
 { eax = variant slot address; call helper(name)(eax), preserve eax. }
 var procIdx: Integer;
 begin
-  EmitB($50);                                   { push eax (arg0 = v) }
+  EmitAsm386('push eax');  { arg0 = v }
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: variant helper not found');
   EmitCallProc(procIdx);
-  EmitB($58);                                   { pop eax (restore addr) }
+  EmitAsm386('pop eax');  { restore addr }
 end;
 
 procedure EmitLoadVariantAddr386(node: Integer);
@@ -913,33 +1011,43 @@ procedure EmitVariantFill386(tag: Integer; payloadTk: TTypeKind);
   high dword. bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32 }
 begin
   EmitVarHelperCall386('PXXVarClear');
-  EmitB($C7); EmitB($00); EmitI32(tag);             { mov dword [eax], tag }
-  EmitB($C7); EmitB($40); EmitB($04); EmitI32(0);   { mov dword [eax+4], 0 }
+  EmitAsm386([
+    'mov dword [eax], %', tag,         { mov dword [eax], tag }
+    'mov dword [eax+4], 0'
+  ]);
   if TypeIsFloat(payloadTk) then
   begin
-    EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);  { movsd xmm0, [esp] }
-    EmitB($83); EmitB($C4); EmitB($08);                          { add esp, 8 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($40); EmitB($08);  { movsd [eax+8], xmm0 }
+    EmitAsm386([
+      'movsd xmm0, [esp]',
+      'add esp, 8',
+      'movsd [eax+8], xmm0'
+    ]);
   end
   else if Is64Bit386(payloadTk) then
   begin
-    EmitB($59);                                     { pop ecx (payload lo) }
-    EmitB($89); EmitB($48); EmitB($08);             { mov [eax+8], ecx }
-    EmitB($59);                                     { pop ecx (payload hi) }
-    EmitB($89); EmitB($48); EmitB($0C);             { mov [eax+12], ecx }
+    EmitAsm386([
+      'pop ecx',                         { payload lo }
+      'mov [eax+8], ecx',
+      'pop ecx',                         { payload hi }
+      'mov [eax+12], ecx'
+    ]);
   end
   else
   begin
-    EmitB($59);                                     { pop ecx (payload) }
-    EmitB($89); EmitB($48); EmitB($08);             { mov [eax+8], ecx }
+    EmitAsm386([
+      'pop ecx',                         { payload }
+      'mov [eax+8], ecx'
+    ]);
     if TypeSigned(payloadTk) then
     begin
       { sign-extend the 32-bit payload into the high dword }
-      EmitB($50);                                   { push eax (slot addr) }
-      EmitB($89); EmitB($C8);                       { mov eax, ecx }
-      EmitB($99);                                   { cdq (edx = sign) }
-      EmitB($58);                                   { pop eax }
-      EmitB($89); EmitB($50); EmitB($0C);           { mov [eax+12], edx }
+      EmitAsm386([
+        'push eax',                        { slot addr }
+        'mov eax, ecx',
+        'cdq',                             { edx = sign }
+        'pop eax',
+        'mov [eax+12], edx'
+      ]);
     end
     else
       begin EmitB($C7); EmitB($40); EmitB($0C); EmitI32(0); end; { mov dword [eax+12], 0 }
@@ -1042,20 +1150,26 @@ var pHi, pLo, pNaN, pNeg, pEnd: Integer;
 begin
   EmitB($81); EmitB($FA); EmitI32(Int32($80000000));   { cmp edx, INT64_MIN>>32 }
   EmitB($75); pHi := CodeLen; EmitB(0);                { jne .done }
-  EmitB($85); EmitB($C0);                              { test eax, eax }
+  EmitAsm386('test eax, eax');
   EmitB($75); pLo := CodeLen; EmitB(0);                { jne .done }
-  EmitB($31); EmitB($C0);                              { xor eax, eax }
-  EmitB($31); EmitB($D2);                              { xor edx, edx  (NaN -> 0) }
-  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C0);      { ucomisd xmm0, xmm0 }
+  EmitAsm386([
+    'xor eax, eax',
+    'xor edx, edx',                    { NaN -> 0 }
+    'ucomisd xmm0, xmm0'
+  ]);
   EmitB($7A); pNaN := CodeLen; EmitB(0);               { jp .done (NaN) }
-  EmitB($66); EmitB($0F); EmitB($57); EmitB($C9);      { xorpd xmm1, xmm1 }
-  EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);      { comisd xmm0, xmm1 }
+  EmitAsm386([
+    'xorpd xmm1, xmm1',
+    'comisd xmm0, xmm1'
+  ]);
   EmitB($76); pNeg := CodeLen; EmitB(0);               { jbe .neg }
-  EmitB($B8); EmitI32(Int32(-1));                      { mov eax, $FFFFFFFF }
-  EmitB($BA); EmitI32(Int32($7FFFFFFF));               { mov edx, $7FFFFFFF (INT64_MAX) }
+  EmitAsm386([
+    'mov eax, %', Int32(-1),           { mov eax, $FFFFFFFF }
+    'mov edx, %', Int32($7FFFFFFF)     { mov edx, $7FFFFFFF (INT64_MAX) }
+  ]);
   EmitB($EB); pEnd := CodeLen; EmitB(0);               { jmp .done }
   PatchRel8(pNeg);            { .neg: eax already 0 }
-  EmitB($BA); EmitI32(Int32($80000000));               { mov edx, $80000000 (INT64_MIN) }
+  EmitAsm386(['mov edx, %', Int32($80000000)]);  { mov edx, $80000000 (INT64_MIN) }
   PatchRel8(pHi);
   PatchRel8(pLo);
   PatchRel8(pNaN);
@@ -1077,19 +1191,23 @@ procedure EmitTruncToIntegral386;
   x87 register is wider than a double. Clobbers eax; the 16-byte scratch holds
   the double at [esp+0] and the saved/modified control words at [esp+8]/[esp+10]. }
 begin
-  EmitB($83); EmitB($EC); EmitB($10);                        { sub esp, 16 }
-  EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
-  EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
-  EmitB($D9); EmitB($7C); EmitB($24); EmitB($08);            { fnstcw [esp+8] }
-  EmitB($66); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov ax, [esp+8] }
+  EmitAsm386([
+    'sub esp, 16',
+    'movsd [esp], xmm0',
+    'fld qword [esp]',
+    'fnstcw word [esp+8]',             { fnstcw [esp+8] }
+    'mov ax, [esp+8]'
+  ]);
   EmitB($66); EmitB($0D); EmitB($00); EmitB($0C);            { or ax, 0x0C00 (RC = truncate) }
-  EmitB($66); EmitB($89); EmitB($44); EmitB($24); EmitB($0A); { mov [esp+10], ax }
-  EmitB($D9); EmitB($6C); EmitB($24); EmitB($0A);            { fldcw [esp+10] }
-  EmitB($D9); EmitB($FC);                                    { frndint }
-  EmitB($D9); EmitB($6C); EmitB($24); EmitB($08);            { fldcw [esp+8] (restore) }
-  EmitB($DD); EmitB($1C); EmitB($24);                        { fstp qword [esp] }
-  EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
-  EmitB($83); EmitB($C4); EmitB($10);                        { add esp, 16 }
+  EmitAsm386([
+    'mov [esp+10], ax',
+    'fldcw word [esp+10]',             { fldcw [esp+10] }
+    'frndint',
+    'fldcw word [esp+8]',              { fldcw [esp+8] (restore) }
+    'fstp qword [esp]',
+    'movsd xmm0, [esp]',
+    'add esp, 16'
+  ]);
 end;
 
 function Is64Bit386(tk: TTypeKind): Boolean;
@@ -1150,16 +1268,20 @@ procedure EmitwriteInt64_386;
 { edx:eax = signed 64-bit value -> decimal on stdout. }
 var jnsOff: Integer;
 begin
-  EmitB($85); EmitB($D2);                          { test edx, edx }
+  EmitAsm386('test edx, edx');
   EmitB($79); jnsOff := CodeLen; EmitB(0);         { jns .positive }
-  EmitB($F7); EmitB($D8);                          { neg eax }
-  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
-  EmitB($F7); EmitB($DA);                          { neg edx }
-  EmitB($52);                                      { push edx (save value) }
-  EmitB($50);                                      { push eax }
+  EmitAsm386([
+    'neg eax',
+    'adc edx, 0',
+    'neg edx',
+    'push edx',                        { save value }
+    'push eax'
+  ]);
   EmitwriteSyscall(MINUS_OFFSET, 1);               { clobbers eax..edx }
-  EmitB($58);                                      { pop eax }
-  EmitB($5A);                                      { pop edx }
+  EmitAsm386([
+    'pop eax',
+    'pop edx'
+  ]);
   PatchRel8(jnsOff);
   EmitwriteUInt64_386;
 end;
@@ -1181,14 +1303,16 @@ begin
   if dzProc < 0 then Exit;
   if divisorInECX then
   begin
-    EmitB($85); EmitB($C9);                        { test ecx, ecx }
+    EmitAsm386('test ecx, ecx');
   end
   else
   begin
-    EmitB($53);                                    { push ebx }
-    EmitB($89); EmitB($C3);                        { mov ebx, eax }
-    EmitB($09); EmitB($D3);                        { or ebx, edx  (zero iff both halves are) }
-    EmitB($5B);                                    { pop ebx  (flags survive pop) }
+    EmitAsm386([
+      'push ebx',
+      'mov ebx, eax',
+      'or ebx, edx',                     { zero iff both halves are }
+      'pop ebx'                          { flags survive pop }
+    ]);
   end;
   EmitB($75); jOff := CodeLen; EmitB(0);           { jnz .ok }
   EmitCallProc(dzProc);                            { never returns }
@@ -1206,39 +1330,49 @@ begin
   { One guard covers BOTH 64-bit cores: the signed one negates the divisor and
     then calls this, and a zero divisor is still zero after negation. }
   EmitDivZeroCheck386(False);
-  EmitB($52);                                      { push edx (D.hi) }
-  EmitB($50);                                      { push eax (D.lo) }
+  EmitAsm386([
+    'push edx',                        { D.hi }
+    'push eax'                         { D.lo }
+  ]);
   { stack: [esp]=D.lo [esp+4]=D.hi [esp+8]=N.lo [esp+12]=N.hi }
-  EmitB($8B); EmitB($44); EmitB($24); EmitB($08);  { mov eax, [esp+8] (NQ.lo) }
-  EmitB($8B); EmitB($54); EmitB($24); EmitB($0C);  { mov edx, [esp+12] (NQ.hi) }
-  EmitB($31); EmitB($F6);                          { xor esi, esi (R.lo) }
-  EmitB($31); EmitB($FF);                          { xor edi, edi (R.hi) }
-  EmitB($B9); EmitI32(64);                         { mov ecx, 64 }
+  EmitAsm386([
+    'mov eax, [esp+8]',                { NQ.lo }
+    'mov edx, [esp+12]',               { NQ.hi }
+    'xor esi, esi',                    { R.lo }
+    'xor edi, edi',                    { R.hi }
+    'mov ecx, 64'
+  ]);
   loopOff := CodeLen;
-  EmitB($D1); EmitB($E0);                          { shl eax, 1 }
-  EmitB($D1); EmitB($D2);                          { rcl edx, 1 }
-  EmitB($D1); EmitB($D6);                          { rcl esi, 1 }
-  EmitB($D1); EmitB($D7);                          { rcl edi, 1 }
+  EmitAsm386([
+    'shl eax, 1',
+    'rcl edx, 1',
+    'rcl esi, 1',
+    'rcl edi, 1'
+  ]);
   EmitB($8B); EmitB($DF);                          { mov ebx, edi (R.hi) }
-  EmitB($3B); EmitB($5C); EmitB($24); EmitB($04);  { cmp ebx, [esp+4] (D.hi) }
+  EmitAsm386('cmp ebx, [esp+4]');  { D.hi }
   EmitB($72); skip1 := CodeLen; EmitB(0);          { jb .skip }
   EmitB($77); jaOff := CodeLen; EmitB(0);          { ja .sub }
   EmitB($8B); EmitB($DE);                          { mov ebx, esi (R.lo) }
-  EmitB($3B); EmitB($1C); EmitB($24);              { cmp ebx, [esp] (D.lo) }
+  EmitAsm386('cmp ebx, [esp]');  { D.lo }
   EmitB($72); skip2 := CodeLen; EmitB(0);          { jb .skip }
   PatchRel8(jaOff);       { .sub: }
-  EmitB($2B); EmitB($34); EmitB($24);              { sub esi, [esp] }
-  EmitB($1B); EmitB($7C); EmitB($24); EmitB($04);  { sbb edi, [esp+4] }
-  EmitB($83); EmitB($C8); EmitB($01);              { or eax, 1 (set quotient bit) }
+  EmitAsm386([
+    'sub esi, [esp]',
+    'sbb edi, [esp+4]',
+    'or eax, 1'                        { set quotient bit }
+  ]);
   PatchRel8(skip1);       { .skip: }
   PatchRel8(skip2);
-  EmitB($49);                                      { dec ecx }
+  EmitAsm386('dec ecx');
   EmitB($75); EmitRel8(loopOff); { jnz .loop }
-  EmitB($83); EmitB($C4); EmitB($10);              { add esp, 16 (pop D + N) }
+  EmitAsm386('add esp, 16');  { pop D + N }
   if wantMod then
   begin
-    EmitB($89); EmitB($F0);                        { mov eax, esi (rem lo) }
-    EmitB($89); EmitB($FA);                        { mov edx, edi (rem hi) }
+    EmitAsm386([
+      'mov eax, esi',                    { rem lo }
+      'mov edx, edi'                     { rem hi }
+    ]);
   end;
 end;
 
@@ -1250,25 +1384,33 @@ procedure EmitIDivMod64Core_386(wantMod: Boolean);
   state is stashed in INTBUF (free during arithmetic, single-threaded). }
 var dpos, npos, doneOff: Integer;
 begin
-  EmitB($31); EmitB($DB);                          { xor ebx, ebx (flags) }
-  EmitB($85); EmitB($D2);                          { test edx, edx (divisor sign) }
+  EmitAsm386([
+    'xor ebx, ebx',                    { flags }
+    'test edx, edx'                    { divisor sign }
+  ]);
   EmitB($79); dpos := CodeLen; EmitB(0);           { jns .dpos }
-  EmitB($F7); EmitB($D8);                          { neg eax }
-  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
-  EmitB($F7); EmitB($DA);                          { neg edx (abs divisor) }
-  EmitB($83); EmitB($CB); EmitB($01);              { or ebx, 1 (quotient negate) }
+  EmitAsm386([
+    'neg eax',
+    'adc edx, 0',
+    'neg edx',                         { abs divisor }
+    'or ebx, 1'                        { quotient negate }
+  ]);
   PatchRel8(dpos);         { .dpos: }
-  EmitB($8B); EmitB($34); EmitB($24);              { mov esi, [esp] (N.lo) }
-  EmitB($8B); EmitB($7C); EmitB($24); EmitB($04);  { mov edi, [esp+4] (N.hi) }
-  EmitB($85); EmitB($FF);                          { test edi, edi (dividend sign) }
+  EmitAsm386([
+    'mov esi, [esp]',                  { N.lo }
+    'mov edi, [esp+4]',                { N.hi }
+    'test edi, edi'                    { dividend sign }
+  ]);
   EmitB($79); npos := CodeLen; EmitB(0);           { jns .npos }
-  EmitB($F7); EmitB($DE);                          { neg esi }
-  EmitB($83); EmitB($D7); EmitB($00);              { adc edi, 0 }
-  EmitB($F7); EmitB($DF);                          { neg edi (abs dividend) }
-  EmitB($89); EmitB($34); EmitB($24);              { mov [esp], esi }
-  EmitB($89); EmitB($7C); EmitB($24); EmitB($04);  { mov [esp+4], edi }
-  EmitB($83); EmitB($CB); EmitB($02);              { or ebx, 2 (remainder negate) }
-  EmitB($83); EmitB($F3); EmitB($01);              { xor ebx, 1 (flip quotient negate) }
+  EmitAsm386([
+    'neg esi',
+    'adc edi, 0',
+    'neg edi',                         { abs dividend }
+    'mov [esp], esi',
+    'mov [esp+4], edi',
+    'or ebx, 2',                       { remainder negate }
+    'xor ebx, 1'                       { flip quotient negate }
+  ]);
   PatchRel8(npos);         { .npos: }
   EmitB($88); EmitB($1D); EmitDataRef(INTBUF_OFFSET); { mov [INTBUF], bl (stash flags) }
   EmitUDivMod64Core_386(wantMod);                  { result in edx:eax }
@@ -1278,9 +1420,11 @@ begin
   else
     begin EmitB($F6); EmitB($C3); EmitB($01); end; { test bl, 1 }
   EmitB($74); doneOff := CodeLen; EmitB(0);        { jz .done }
-  EmitB($F7); EmitB($D8);                          { neg eax }
-  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
-  EmitB($F7); EmitB($DA);                          { neg edx (apply sign) }
+  EmitAsm386([
+    'neg eax',
+    'adc edx, 0',
+    'neg edx'                          { apply sign }
+  ]);
   PatchRel8(doneOff);   { .done: }
 end;
 
@@ -1292,50 +1436,64 @@ procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean;
 var skipOff, pMulSkip, pMulProc: Integer;
 begin
   EmitNode64_386(left);
-  EmitB($52);                                      { push edx (left hi) }
-  EmitB($50);                                      { push eax (left lo) }
+  EmitAsm386([
+    'push edx',                        { left hi }
+    'push eax'                         { left lo }
+  ]);
   EmitNode64_386(right);                           { right -> edx:eax }
 
   if op = Ord(tkPlus) then
   begin
-    EmitB($03); EmitB($04); EmitB($24);            { add eax, [esp] }
-    EmitB($13); EmitB($54); EmitB($24); EmitB($04);{ adc edx, [esp+4] }
+    EmitAsm386([
+      'add eax, [esp]',
+      'adc edx, [esp+4]'
+    ]);
     { {$Q+}: the hi-word adc's flags carry the 64-bit verdict; check BEFORE
       the flag-clobbering add esp (feature-overflow-checks-cross-and-intrinsics). }
     if qchk then EmitOvfCheckX64(qchkUns);
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386('add esp, 8');
   end
   else if op = Ord(tkMinus) then
   begin
-    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
-    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
-    EmitB($29); EmitB($C1);                        { sub ecx, eax }
-    EmitB($19); EmitB($D3);                        { sbb ebx, edx }
+    EmitAsm386([
+      'mov ecx, [esp]',                  { left lo }
+      'mov ebx, [esp+4]',                { left hi }
+      'sub ecx, eax',
+      'sbb ebx, edx'
+    ]);
     { {$Q+}: hi-word sbb flags = 64-bit verdict (movs below preserve flags,
       but check here before anything clobbers). Checked MUL is not ported to
       the 32-bit pairs yet — add/sub only, like the ticket records. }
     if qchk then EmitOvfCheckX64(qchkUns);
-    EmitB($89); EmitB($C8);                        { mov eax, ecx }
-    EmitB($89); EmitB($DA);                        { mov edx, ebx }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'mov eax, ecx',
+      'mov edx, ebx',
+      'add esp, 8'
+    ]);
   end
   else if op = Ord(tkAnd) then
   begin
-    EmitB($23); EmitB($04); EmitB($24);            { and eax, [esp] }
-    EmitB($23); EmitB($54); EmitB($24); EmitB($04);{ and edx, [esp+4] }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'and eax, [esp]',
+      'and edx, [esp+4]',
+      'add esp, 8'
+    ]);
   end
   else if op = Ord(tkOr) then
   begin
-    EmitB($0B); EmitB($04); EmitB($24);            { or eax, [esp] }
-    EmitB($0B); EmitB($54); EmitB($24); EmitB($04);{ or edx, [esp+4] }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'or eax, [esp]',
+      'or edx, [esp+4]',
+      'add esp, 8'
+    ]);
   end
   else if op = Ord(tkXor) then
   begin
-    EmitB($33); EmitB($04); EmitB($24);            { xor eax, [esp] }
-    EmitB($33); EmitB($54); EmitB($24); EmitB($04);{ xor edx, [esp+4] }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'xor eax, [esp]',
+      'xor edx, [esp+4]',
+      'add esp, 8'
+    ]);
   end
   else if op = Ord(tkStar) then
   begin
@@ -1346,55 +1504,64 @@ begin
         Overflow iff both hi words non-zero, either cross product's high
         half non-zero, or the result-hi sum carries out. Signed checked mul
         stays deferred on the 32-bit pairs. }
-      EmitB($31); EmitB($FF);                      { xor edi, edi }
-      EmitB($8B); EmitB($4C); EmitB($24); EmitB($04); { mov ecx, [esp+4] (Ahi) }
-      EmitB($85); EmitB($C9);                      { test ecx, ecx }
-      EmitB($74); EmitB($07);                      { jz +7 (skip both-hi) }
-      EmitB($85); EmitB($D2);                      { test edx, edx (Bhi) }
-      EmitB($74); EmitB($03);                      { jz +3 }
-      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
-      EmitB($50);                                  { push eax (Blo) }
-      EmitB($52);                                  { push edx (Bhi) -- [esp]=Bhi [esp+4]=Blo [esp+8]=Alo [esp+12]=Ahi }
-      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
-      EmitB($F7); EmitB($24); EmitB($24);          { mul dword [esp] (Alo*Bhi) }
-      EmitB($85); EmitB($D2);                      { test edx, edx (high half) }
-      EmitB($74); EmitB($03);                      { jz +3 }
-      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
-      EmitB($8B); EmitB($44); EmitB($24); EmitB($0C); { mov eax, [esp+12] (Ahi) }
-      EmitB($F7); EmitB($64); EmitB($24); EmitB($04); { mul dword [esp+4] (Ahi*Blo) }
-      EmitB($85); EmitB($D2);                      { test edx, edx }
-      EmitB($74); EmitB($03);                      { jz +3 }
-      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
-      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
-      EmitB($F7); EmitB($64); EmitB($24); EmitB($04); { mul dword [esp+4] (Alo*Blo) }
-      EmitB($89); EmitB($D6);                      { mov esi, edx (mulhu(Alo,Blo)) }
-      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
-      EmitB($0F); EmitB($AF); EmitB($04); EmitB($24); { imul eax, [esp] (lo(Alo*Bhi)) }
-      EmitB($01); EmitB($C6);                      { add esi, eax }
-      EmitB($73); EmitB($03);                      { jnc +3 }
-      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
-      EmitB($8B); EmitB($44); EmitB($24); EmitB($0C); { mov eax, [esp+12] (Ahi) }
-      EmitB($0F); EmitB($AF); EmitB($44); EmitB($24); EmitB($04); { imul eax, [esp+4] (lo(Ahi*Blo)) }
-      EmitB($01); EmitB($C6);                      { add esi, eax }
-      EmitB($73); EmitB($03);                      { jnc +3 }
-      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
-      EmitB($5A);                                  { pop edx (Bhi restored) }
-      EmitB($58);                                  { pop eax (Blo restored) }
+      EmitAsm386([
+        'xor edi, edi',
+        'mov ecx, [esp+4]',                { Ahi }
+        'test ecx, ecx',
+        'jz short .bothhi',                { Ahi = 0: not both hi }
+        'test edx, edx',                   { Bhi }
+        'jz short .bothhi',
+        'or edi, 1',
+        '.bothhi:',
+        'push eax',                        { Blo }
+        'push edx',                        { push edx (Bhi) -- [esp]=Bhi [esp+4]=Blo [esp+8]=Alo [esp+12]=Ahi }
+        'mov eax, [esp+8]',                { Alo }
+        'mul dword [esp]',                 { Alo*Bhi }
+        'test edx, edx',                   { high half }
+        'jz short .x1',
+        'or edi, 1',
+        '.x1:',
+        'mov eax, [esp+12]',               { Ahi }
+        'mul dword [esp+4]',               { Ahi*Blo }
+        'test edx, edx',
+        'jz short .x2',
+        'or edi, 1',
+        '.x2:',
+        'mov eax, [esp+8]',                { Alo }
+        'mul dword [esp+4]',               { Alo*Blo }
+        'mov esi, edx',                    { mulhu(Alo,Blo) }
+        'mov eax, [esp+8]',                { Alo }
+        'imul eax, [esp]',                 { lo(Alo*Bhi) }
+        'add esi, eax',
+        'jnc short .c1',
+        'or edi, 1',
+        '.c1:',
+        'mov eax, [esp+12]',               { Ahi }
+        'imul eax, [esp+4]',               { lo(Ahi*Blo) }
+        'add esi, eax',
+        'jnc short .c2',
+        'or edi, 1',
+        '.c2:',
+        'pop edx',                         { Bhi restored }
+        'pop eax'                          { Blo restored }
+      ]);
     end;
     { A=left ([esp]=Alo,[esp+4]=Ahi), B=right (eax=Blo, edx=Bhi).
       result.lo:hi = Alo*Blo + ((Ahi*Blo + Alo*Bhi) << 32) (low 64). }
-    EmitB($89); EmitB($D1);                        { mov ecx, edx (Bhi) }
-    EmitB($0F); EmitB($AF); EmitB($0C); EmitB($24);{ imul ecx, [esp] (Bhi*Alo) }
-    EmitB($89); EmitB($C3);                        { mov ebx, eax (Blo) }
-    EmitB($0F); EmitB($AF); EmitB($44); EmitB($24); EmitB($04); { imul eax,[esp+4] (Blo*Ahi) }
-    EmitB($01); EmitB($C1);                        { add ecx, eax (cross terms) }
-    EmitB($89); EmitB($D8);                        { mov eax, ebx (Blo) }
-    EmitB($F7); EmitB($24); EmitB($24);            { mul dword [esp] (Blo*Alo -> edx:eax) }
-    EmitB($01); EmitB($CA);                        { add edx, ecx }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'mov ecx, edx',                    { Bhi }
+      'imul ecx, [esp]',                 { Bhi*Alo }
+      'mov ebx, eax',                    { Blo }
+      'imul eax, [esp+4]',               { Blo*Ahi }
+      'add ecx, eax',                    { cross terms }
+      'mov eax, ebx',                    { Blo }
+      'mul dword [esp]',                 { Blo*Alo -> edx:eax }
+      'add edx, ecx',
+      'add esp, 8'
+    ]);
     if qchk and qchkUns then
     begin
-      EmitB($85); EmitB($FF);                      { test edi, edi }
+      EmitAsm386('test edi, edi');
       EmitB($74); pMulSkip := CodeLen; EmitB(0);   { jz skip (no overflow) }
       pMulProc := FindProc('PXXOverflow');
       if pMulProc < 0 then
@@ -1406,9 +1573,11 @@ begin
   else if (op = Ord(tkShl)) or (op = Ord(tkShrLogical)) or (op = Ord(tkShr)) then
   begin
     { shift count in eax (right.lo) -> cl; value = left from stack. }
-    EmitB($89); EmitB($C1);                        { mov ecx, eax (count) }
-    EmitB($58);                                    { pop eax (lo) }
-    EmitB($5A);                                    { pop edx (hi) }
+    EmitAsm386([
+      'mov ecx, eax',                    { count }
+      'pop eax',                         { lo }
+      'pop edx'                          { hi }
+    ]);
     { A <8-byte LEFT operand reaches this pair path SIGN-EXTENDED by the
       64-bit promotion, but Pascal `shr`/`shl` operate at the OPERAND's width:
       `longint($80000000) shr 9` is a 32-bit LOGICAL shift (4194304), not a
@@ -1418,16 +1587,20 @@ begin
       --wide --cross pasmith run (seed 60). }
     if (op = Ord(tkShrLogical)) and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) then
     begin
-      EmitB($31); EmitB($D2);                      { xor edx, edx (32-bit operand: zero-extend) }
+      EmitAsm386('xor edx, edx');  { 32-bit operand: zero-extend }
     end;
     if op = Ord(tkShl) then
     begin
-      EmitB($0F); EmitB($A5); EmitB($C2);          { shld edx, eax, cl }
-      EmitB($D3); EmitB($E0);                      { shl eax, cl }
-      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitAsm386([
+        'shld edx, eax, cl',
+        'shl eax, cl',
+        'test cl, 32'
+      ]);
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
-      EmitB($89); EmitB($C2);                      { mov edx, eax }
-      EmitB($31); EmitB($C0);                      { xor eax, eax }
+      EmitAsm386([
+        'mov edx, eax',
+        'xor eax, eax'
+      ]);
       PatchRel8(skipOff);
       if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
       begin
@@ -1435,35 +1608,45 @@ begin
           (longint(1) shl 31 = -2147483648, matching FPC and x86-64). }
         if TypeSigned(IntToTypeKind(IRTk[left])) then
         begin
-          EmitB($89); EmitB($C2);                  { mov edx, eax }
-          EmitB($C1); EmitB($FA); EmitB($1F);      { sar edx, 31 (sign-extend) }
+          EmitAsm386([
+            'mov edx, eax',
+            'sar edx, 31'                      { sign-extend }
+          ]);
         end
         else
         begin
-          EmitB($31); EmitB($D2);                  { xor edx, edx (zero-extend) }
+          EmitAsm386('xor edx, edx');  { zero-extend }
         end;
       end;
     end
     else if (op = Ord(tkShr)) and signedOp then
     begin
       { C signed '>>' — arithmetic (sign-propagating) shift right }
-      EmitB($0F); EmitB($AD); EmitB($D0);          { shrd eax, edx, cl }
-      EmitB($D3); EmitB($FA);                      { sar edx, cl }
-      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitAsm386([
+        'shrd eax, edx, cl',
+        'sar edx, cl',
+        'test cl, 32'
+      ]);
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
-      EmitB($89); EmitB($D0);                      { mov eax, edx }
-      EmitB($C1); EmitB($FA); EmitB($1F);          { sar edx, 31 (sign-fill) }
+      EmitAsm386([
+        'mov eax, edx',
+        'sar edx, 31'                      { sign-fill }
+      ]);
       PatchRel8(skipOff);
     end
     else
     begin
       { Pascal 'shr' (tkIdent) or C unsigned '>>' — logical shift right }
-      EmitB($0F); EmitB($AD); EmitB($D0);          { shrd eax, edx, cl }
-      EmitB($D3); EmitB($EA);                      { shr edx, cl }
-      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitAsm386([
+        'shrd eax, edx, cl',
+        'shr edx, cl',
+        'test cl, 32'
+      ]);
       EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
-      EmitB($89); EmitB($D0);                      { mov eax, edx }
-      EmitB($31); EmitB($D2);                      { xor edx, edx }
+      EmitAsm386([
+        'mov eax, edx',
+        'xor edx, edx'
+      ]);
       PatchRel8(skipOff);
     end;
   end
@@ -1475,17 +1658,19 @@ begin
   end
   else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
   begin
-    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
-    EmitB($31); EmitB($C1);                        { xor ecx, eax }
-    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
-    EmitB($31); EmitB($D3);                        { xor ebx, edx }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 (before the flag-setting or) }
-    EmitB($09); EmitB($D9);                        { or ecx, ebx (zero iff equal) }
+    EmitAsm386([
+      'mov ecx, [esp]',                  { left lo }
+      'xor ecx, eax',
+      'mov ebx, [esp+4]',                { left hi }
+      'xor ebx, edx',
+      'add esp, 8',                      { before the flag-setting or }
+      'or ecx, ebx'                      { zero iff equal }
+    ]);
     if op = Ord(tkEq) then
       begin EmitB($0F); EmitB($94); EmitB($C0); end   { sete al }
     else
       begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne al }
-    EmitB($0F); EmitB($B6); EmitB($C0);            { movzx eax, al }
+    EmitAsm386('movzx eax, al');
   end
   else if (op = Ord(tkLt)) or (op = Ord(tkLe)) or
           (op = Ord(tkGt)) or (op = Ord(tkGe)) then
@@ -1493,18 +1678,24 @@ begin
     { Compute left - right (or right - left) via (sub lo, sbb hi); the flags of
       the final sbb give the full 64-bit ordered comparison. setl/setb yields
       "first operand < second"; <= and >= are derived by negating. }
-    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
-    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
-    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    EmitAsm386([
+      'mov ecx, [esp]',                  { left lo }
+      'mov ebx, [esp+4]',                { left hi }
+      'add esp, 8'
+    ]);
     if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
     begin
-      EmitB($29); EmitB($C8);                      { sub eax, ecx (right.lo-left.lo) }
-      EmitB($19); EmitB($DA);                      { sbb edx, ebx (right.hi-left.hi) }
+      EmitAsm386([
+        'sub eax, ecx',                    { right.lo-left.lo }
+        'sbb edx, ebx'                     { right.hi-left.hi }
+      ]);
     end
     else
     begin
-      EmitB($29); EmitB($C1);                      { sub ecx, eax (left.lo-right.lo) }
-      EmitB($19); EmitB($D3);                      { sbb ebx, edx (left.hi-right.hi) }
+      EmitAsm386([
+        'sub ecx, eax',                    { left.lo-right.lo }
+        'sbb ebx, edx'                     { left.hi-right.hi }
+      ]);
     end;
     if signedOp then
       begin EmitB($0F); EmitB($9C); EmitB($C0); end   { setl al }
@@ -1512,7 +1703,7 @@ begin
       begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb al }
     if (op = Ord(tkLe)) or (op = Ord(tkGe)) then
       begin EmitB($34); EmitB($01); end;           { xor al, 1 }
-    EmitB($0F); EmitB($B6); EmitB($C0);            { movzx eax, al }
+    EmitAsm386('movzx eax, al');
   end
   else
     Error('target i386: 64-bit binop operator not yet supported');
@@ -1545,38 +1736,45 @@ procedure EmitIntToXmm386(dst: Integer; srcTk: TTypeKind);
 begin
   if (srcTk = tyInt64) or (srcTk = tyUInt64) then
   begin
-    EmitB($68); EmitI32($41F00000);                    { push 0x41F00000 (2^32 hi) }
-    EmitB($6A); EmitB($00);                            { push 0 (2^32 lo) }
-    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax (lo, signed) }
-    EmitB($85); EmitB($C0);                            { test eax, eax }
-    EmitB($79); EmitB($05);                            { jns +5 (lo >= 0) }
-    EmitB($F2); EmitB($0F); EmitB($58); EmitB($04 or (dst shl 3)); EmitB($24); { addsd dst, [esp] (+2^32) }
-    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($FA);    { cvtsi2sd xmm7, edx (hi, signed) }
+    EmitAsm386([
+      'push 0x41f00000',                 { 2^32 hi }
+      'push 0',                          { 2^32 lo }
+      'cvtsi2sd %xmm, eax', dst,         { lo, signed }
+      'test eax, eax',
+      'jns short .lo',
+      'addsd %xmm, [esp]', dst,          { +2^32 }
+      '.lo:',
+      'cvtsi2sd xmm7, edx'               { hi, signed }
+    ]);
     if srcTk = tyUInt64 then
-    begin
-      EmitB($85); EmitB($D2);                          { test edx, edx }
-      EmitB($79); EmitB($05);                          { jns +5 }
-      EmitB($F2); EmitB($0F); EmitB($58); EmitB($3C); EmitB($24); { addsd xmm7, [esp] }
-    end;
-    EmitB($F2); EmitB($0F); EmitB($59); EmitB($3C); EmitB($24);   { mulsd xmm7, [esp] (*2^32) }
-    EmitB($F2); EmitB($0F); EmitB($58); EmitB($C7 or (dst shl 3)); { addsd dst, xmm7 }
-    EmitB($83); EmitB($C4); EmitB($08);                { add esp, 8 }
+      EmitAsm386([
+        'test edx, edx',
+        'jns short .hi',
+        'addsd xmm7, [esp]',
+        '.hi:'
+      ]);
+    EmitAsm386([
+      'mulsd xmm7, [esp]',               { *2^32 }
+      'addsd %xmm, xmm7', dst,
+      'add esp, 8'
+    ]);
   end
   else if (srcTk = tyUInt32) or (srcTk = tyNativeUInt) then
   begin
     { unsigned 32-bit: the signed cvtsi2sd read cardinal >= 2^31 negative. }
-    EmitB($68); EmitI32($41F00000);                    { push 0x41F00000 (2^32 hi) }
-    EmitB($6A); EmitB($00);                            { push 0 (2^32 lo) }
-    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax }
-    EmitB($85); EmitB($C0);                            { test eax, eax }
-    EmitB($79); EmitB($05);                            { jns +5 }
-    EmitB($F2); EmitB($0F); EmitB($58); EmitB($04 or (dst shl 3)); EmitB($24); { addsd dst, [esp] (+2^32) }
-    EmitB($83); EmitB($C4); EmitB($08);                { add esp, 8 }
+    EmitAsm386([
+      'push 0x41f00000',                 { 2^32 hi }
+      'push 0',                          { 2^32 lo }
+      'cvtsi2sd %xmm, eax', dst,
+      'test eax, eax',
+      'jns short .pos',
+      'addsd %xmm, [esp]', dst,          { +2^32 }
+      '.pos:',
+      'add esp, 8'
+    ]);
   end
   else
-  begin
-    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax }
-  end;
+    EmitAsm386(['cvtsi2sd %xmm, eax', dst]);
 end;
 
 procedure EmitClampEcxToStrCap386(cap: Integer);
@@ -1585,9 +1783,12 @@ procedure EmitClampEcxToStrCap386(cap: Integer);
   (bug-pascal-shortstring-no-truncation-buffer-overrun). }
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
-  EmitB($81); EmitB($F9); EmitI32(cap);   { cmp ecx, cap }
-  EmitB($7E); EmitB($05);                 { jle +5 (keep) }
-  EmitB($B9); EmitI32(cap);               { mov ecx, cap }
+  EmitB($81); EmitB($F9); EmitI32(cap);   { cmp ecx, cap (imm32 even when small) }
+  EmitAsm386([
+    'jle short .keep',
+    'mov ecx, %', cap,
+    '.keep:'
+  ]);
 end;
 
 
@@ -1605,13 +1806,15 @@ procedure EmitAnsiStrAppendToSym386(symIdx, rhs: Integer);
 var procIdx: Integer;
 begin
   IREmitNode386(rhs);                             { eax = handle, or char code }
-  EmitB($89); EmitB($C1);                         { mov ecx, eax }
+  EmitAsm386('mov ecx, eax');
   if Syms[symIdx].Kind = skGlobal then
     begin EmitB($B8); EmitGlobRef(Syms[symIdx].Offset); end        { mov eax, &slot }
   else
     begin EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end; { lea eax, [ebp+off] }
-  EmitB($50);                                     { push eax (arg0 = strSlot) }
-  EmitB($51);                                     { push ecx (arg1 = srcH/chCode) }
+  EmitAsm386([
+    'push eax',                        { arg0 = strSlot }
+    'push ecx'                         { arg1 = srcH/chCode }
+  ]);
   if IntToTypeKind(IRTk[rhs]) = tyChar then
     procIdx := FindProc('PXXStrAppendChar')
   else
@@ -1686,13 +1889,15 @@ begin
         if Is64Bit386(IntToTypeKind(IRTk[node])) then
         begin
           { Full 64-bit literal -> edx:eax. }
-          EmitB($B8); EmitI32(Integer(IRIVal[node] and $FFFFFFFF));   { mov eax, lo }
-          EmitB($BA); EmitI32(Integer(IRIVal[node] shr 32));          { mov edx, hi }
+          EmitAsm386([
+            'mov eax, %', Integer(IRIVal[node] and $FFFFFFFF), { mov eax, lo }
+            'mov edx, %', Integer(IRIVal[node] shr 32) { mov edx, hi }
+          ]);
           Exit;
         end;
         { Ordinary ordinals use the low-dword scalar model; keep constants
           consistent with the matching load/store paths. }
-        EmitB($B8); EmitI32(IRIVal[node]);           { mov eax, imm32 }
+        EmitAsm386(['mov eax, %', IRIVal[node]]);  { mov eax, imm32 }
       end;
 
     IR_CONST_STR:
@@ -1726,7 +1931,7 @@ begin
     IR_FRAME:
       { get_frame: ebp is the frame pointer (push ebp; mov ebp, esp). }
       begin
-        EmitB($89); EmitB($E8);   { mov eax, ebp }
+        EmitAsm386('mov eax, ebp');
       end;
 
     IR_ALLOCA:
@@ -1752,24 +1957,28 @@ begin
           the base-relative conversion at the park and the restore.
           feature-a-port-alloca-to-i386-arm32-and-riscv32 }
         IREmitNode386(IRA[node]);
-        EmitB($83); EmitB($C0); EmitB($0F);            { add eax, 15 }
-        EmitB($83); EmitB($E0); EmitB($F0);            { and eax, -16 }
+        EmitAsm386([
+          'add eax, 15',
+          'and eax, 0xfffffff0'              { and eax, -16 }
+        ]);
         if X386AllocaBaseOff = 0 then
           Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
               + 'IREmitMachineCode386''s body-entry scan did not see this node');
-        EmitB($29); EmitB($C4);                        { sub esp, eax }
+        EmitAsm386('sub esp, eax');
         EmitB($89); EmitB($8D); EmitI32(X386AllocaBaseOff + 4);   { mov [ebp+s0], ecx }
         EmitB($89); EmitB($B5); EmitI32(X386AllocaBaseOff + 8);   { mov [ebp+s1], esi }
         EmitB($89); EmitB($BD); EmitI32(X386AllocaBaseOff + 12);  { mov [ebp+s2], edi }
         EmitB($8B); EmitB($8D); EmitI32(X386AllocaBaseOff);       { mov ecx, [ebp+base] }
-        EmitB($29); EmitB($C1);                        { sub ecx, eax  (base -= size) }
+        EmitAsm386('sub ecx, eax');  { base -= size }
         EmitB($89); EmitB($8D); EmitI32(X386AllocaBaseOff);       { mov [ebp+base], ecx }
-        EmitB($89); EmitB($E7);                        { mov edi, esp  (dst) }
-        EmitB($89); EmitB($E6);                        { mov esi, esp }
-        EmitB($01); EmitB($C6);                        { add esi, eax  (src = the old esp) }
-        EmitB($29); EmitB($F9);                        { sub ecx, edi  (byte count) }
-        EmitB($C1); EmitB($E9); EmitB($02);            { shr ecx, 2    (dword count) }
-        EmitB($FC);                                    { cld }
+        EmitAsm386([
+          'mov edi, esp',                    { dst }
+          'mov esi, esp',
+          'add esi, eax',                    { src = the old esp }
+          'sub ecx, edi',                    { byte count }
+          'shr ecx, 2',                      { dword count }
+          'cld'
+        ]);
         EmitB($F3); EmitB($A5);                        { rep movsd }
         EmitB($8B); EmitB($85); EmitI32(X386AllocaBaseOff);       { mov eax, [ebp+base]  (the hole) }
         EmitB($8B); EmitB($BD); EmitI32(X386AllocaBaseOff + 12);  { mov edi, [ebp+s2] }
@@ -1856,8 +2065,10 @@ begin
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);      { mov eax, [ebp+off] (addr) }
-            EmitB($8B); EmitB($50); EmitB($04);                    { mov edx, [eax+4] }
-            EmitB($8B); EmitB($00);                                { mov eax, [eax] }
+            EmitAsm386([
+              'mov edx, [eax+4]',
+              'mov eax, [eax]'
+            ]);
           end
           else
           begin
@@ -1959,13 +2170,13 @@ begin
             Intrinsic results (IRA < 0) keep the conservative retain. }
           if not IRNodeOwnsFreshCallResult(IRB[node]) then
           begin
-            EmitB($50);                                 { push eax (arg0) }
+            EmitAsm386('push eax');  { arg0 }
             procIdx := FindProc('PXXDynArrayIncRef');
             if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
             EmitCallProc(procIdx);
-            EmitB($58);                                 { pop eax (restore + unwind) }
+            EmitAsm386('pop eax');  { restore + unwind }
           end;
-          EmitB($50);                                   { push eax — keep new }
+          EmitAsm386('push eax');  { keep new }
           { edx = the slot's own ADDRESS (global / frame local / by-ref param). }
           if Syms[si].Kind = skGlobal then
             begin EmitB($BA); EmitGlobRef(Syms[si].Offset); end       { mov edx, slot addr }
@@ -1973,16 +2184,18 @@ begin
             begin EmitB($8B); EmitB($95); EmitI32(Syms[si].Offset); end { mov edx,[ebp+off] = &caller_slot }
           else
             begin EmitB($8D); EmitB($95); EmitI32(Syms[si].Offset); end; { lea edx,[ebp+off] }
-          EmitB($8B); EmitB($02);                       { mov eax, [edx] = old handle }
-          EmitB($8B); EmitB($0C); EmitB($24);           { mov ecx, [esp] = new }
-          EmitB($89); EmitB($0A);                       { mov [edx], ecx — publish new }
-          EmitB($50);                                   { push arg0 = old }
+          EmitAsm386([
+            'mov eax, [edx]',                  { mov eax, [edx] = old handle }
+            'mov ecx, [esp]',                  { mov ecx, [esp] = new }
+            'mov [edx], ecx',                  { publish new }
+            'push eax'                         { push arg0 = old }
+          ]);
           EmitPushDataAddr(GetOrAllocSymRTTI(si)); { push arg1 = desc }
           procIdx := FindProc('PXXDynArrayRelease');
           if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
           EmitCallProc(procIdx);                        { release(old, desc) — nil-safe }
           EmitB($81); EmitB($C4); EmitI32(8);           { add esp, 8 }
-          EmitB($58);                                   { pop eax = new (stmt value) }
+          EmitAsm386('pop eax');  { pop eax = new (stmt value) }
           Exit;
         end;
         if Syms[si].TypeKind = tyAnsiString then
@@ -2025,73 +2238,79 @@ begin
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
             IREmitNode386(valNode);                     { eax = char code }
-            EmitB($50);                                 { push eax (char code) }
-            EmitB($6A); EmitB($01);                     { push 1 (len) }
-            EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
-            EmitB($50);                                 { push eax (src) }
+            EmitAsm386([
+              'push eax',                        { char code }
+              'push 1',                          { len }
+              'lea eax, [esp+4]',                { ptr to char code }
+              'push eax'                         { src }
+            ]);
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-            EmitB($59);                                 { pop ecx (restore stack) }
+            EmitAsm386('pop ecx');  { restore stack }
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNode386(valNode);                     { eax = inline string buffer address }
-            EmitB($50);                                 { push eax }
+            EmitAsm386('push eax');
             EmitLoadStrLen386(1, 0, IRStrTkOf(valNode));   { ecx = len }
             EmitLeaStrData386(0, IRStrTkOf(valNode));      { eax = chars }
-            EmitB($51);                                 { push ecx (len) }
-            EmitB($50);                                 { push eax (src) }
+            EmitAsm386([
+              'push ecx',                        { len }
+              'push eax'                         { src }
+            ]);
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-            EmitB($59);                                 { pop ecx }
+            EmitAsm386('pop ecx');
           end
           else
           begin
             IREmitNode386(valNode);                     { eax = source handle }
             if not IRNodeOwnsManagedStr(valNode) then
             begin
-              EmitB($50);                               { push eax (arg0) }
+              EmitAsm386('push eax');  { arg0 }
               procIdx := FindProc('PXXStrIncRef');
               if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
               EmitCallProc(procIdx);
-              EmitB($58);                               { pop eax }
+              EmitAsm386('pop eax');
             end;
           end;
 
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
-            EmitB($50);                                           { push eax (new handle) }
+            EmitAsm386('push eax');  { new handle }
             EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset);    { mov ecx, [ebp+off] (caller slot addr) }
-            EmitB($8B); EmitB($01);                               { mov eax, [ecx] (old) }
-            EmitB($50);                                           { push eax (old) }
-            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);       { mov eax, [esp+4] (new) }
-            EmitB($89); EmitB($01);                               { mov [ecx], eax }
-            EmitB($58);                                           { pop eax (old) }
-            EmitB($50);                                           { push eax (arg0 = old) }
+            EmitAsm386([
+              'mov eax, [ecx]',                  { old }
+              'push eax',                        { old }
+              'mov eax, [esp+4]',                { new }
+              'mov [ecx], eax',
+              'pop eax',                         { old }
+              'push eax'                         { arg0 = old }
+            ]);
             procIdx := FindProc('PXXStrDecRef');
             if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);                   { add esp, 4 }
-            EmitB($58);                                           { pop eax (new handle, discard) }
+            EmitAsm386('pop eax');  { new handle, discard }
           end
           else
           begin
-            EmitB($50);                                   { push new handle }
+            EmitAsm386('push eax');  { push new handle }
             { eax = old handle from slot }
             if Syms[si].Kind = skGlobal then
               begin EmitMovGlobAcc($A1, Syms[si].Offset); end   { mov eax, [slot] }
             else
               begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
-            EmitB($50);                                   { push eax (arg0 = old) }
+            EmitAsm386('push eax');  { arg0 = old }
             procIdx := FindProc('PXXStrDecRef');
             if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
-            EmitB($58);                                   { pop eax (new handle) }
+            EmitAsm386('pop eax');  { new handle }
             if Syms[si].Kind = skGlobal then
               begin EmitMovGlobAcc($A3, Syms[si].Offset); end   { mov [slot], eax }
             else
@@ -2106,20 +2325,22 @@ begin
             dropped the source ADDRESS into s's slot, clobbering [len]. }
           valNode := IRB[node];
           IREmitNode386(valNode);                     { eax = source string addr (or char ordinal) }
-          EmitB($50);                                 { push source/char }
+          EmitAsm386('push eax');  { push source/char }
           if Syms[si].Kind = skGlobal then
             begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, globaddr }
           else if Syms[si].Kind = skParam then
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { mov eax, [ebp+off] (forwarded ptr) }
           else
             begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
-          EmitB($89); EmitB($C7);                     { mov edi, eax (dst) }
-          EmitB($5E);                                 { pop esi (src/char) }
+          EmitAsm386([
+            'mov edi, eax',                    { dst }
+            'pop esi'                          { src/char }
+          ]);
           if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
             { esi = char ordinal -> [len=1][char], at the DESTINATION's width }
             EmitStoreStrLenImm386(1, 7, Syms[si].TypeKind);
-            EmitB($89); EmitB($F0);                   { mov eax, esi }
+            EmitAsm386('mov eax, esi');
             EmitStoreCharAtStrData386(0, 7, Syms[si].TypeKind);
             Exit;
           end;
@@ -2127,12 +2348,12 @@ begin
           begin
             { Managed source -> frozen sym (s := managedStr): esi = handle
               (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
-            EmitB($85); EmitB($F6);                   { test esi, esi }
+            EmitAsm386('test esi, esi');
             EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
             { The SOURCE here is the managed header and stays 8 -- [esi-8] is
               an AnsiString's own length word, not a frozen prefix. Only the
               frozen DESTINATION follows its kind. }
-            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+            EmitAsm386('mov ecx, [esi-8]');  { len }
             EmitClampEcxToStrCap386(SymStrCap[si]);   { truncate to string[N] capacity }
             EmitStoreStrLen386(1, 7, Syms[si].TypeKind);
             EmitLeaStrData386(7, Syms[si].TypeKind);
@@ -2215,8 +2436,10 @@ begin
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset);          { mov ecx, [ebp+off] (addr) }
-            EmitB($89); EmitB($01);                                    { mov [ecx], eax }
-            EmitB($89); EmitB($51); EmitB($04);                        { mov [ecx+4], edx }
+            EmitAsm386([
+              'mov [ecx], eax',
+              'mov [ecx+4], edx'
+            ]);
           end
           else
           begin
@@ -2251,13 +2474,15 @@ begin
               2: begin EmitB($0F); EmitB($BF); EmitB($C8); end  { movsx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
             end;
-            EmitB($31); EmitB($C1);                             { xor ecx, eax (lo diff) }
+            EmitAsm386('xor ecx, eax');  { lo diff }
             if Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) then
             begin
-              EmitB($89); EmitB($C3);                           { mov ebx, eax }
-              EmitB($C1); EmitB($FB); EmitB($1F);               { sar ebx, 31 (expected hi) }
-              EmitB($31); EmitB($D3);                           { xor ebx, edx (hi diff) }
-              EmitB($09); EmitB($D9);                           { or ecx, ebx }
+              EmitAsm386([
+                'mov ebx, eax',
+                'sar ebx, 31',                     { expected hi }
+                'xor ebx, edx',                    { hi diff }
+                'or ecx, ebx'
+              ]);
             end;
           end
           else
@@ -2267,11 +2492,11 @@ begin
               2: begin EmitB($0F); EmitB($B7); EmitB($C8); end  { movzx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
             end;
-            EmitB($31); EmitB($C1);                             { xor ecx, eax (lo diff) }
+            EmitAsm386('xor ecx, eax');  { lo diff }
             if Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) then
               begin EmitB($09); EmitB($D1); end;                { or ecx, edx (hi must be 0) }
           end;
-          EmitB($85); EmitB($C9);                               { test ecx, ecx }
+          EmitAsm386('test ecx, ecx');
           EmitOvfCheckNarrow386Trap;                            { jz skip / trap }
         end;
         sz := TypeSlotSize(tk);
@@ -2288,9 +2513,9 @@ begin
         begin
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
-            EmitB($50);                                         { push eax }
+            EmitAsm386('push eax');
             EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
-            EmitB($59);                                         { pop ecx }
+            EmitAsm386('pop ecx');
             if sz = 1 then
               begin EmitB($88); EmitB($08); end
             else if sz = 2 then
@@ -2427,7 +2652,7 @@ begin
           InLValueWrite := True;
           IREmitNode386(IRA[node]);    { eax = slot address }
           InLValueWrite := savedLValueWrite;
-          EmitB($50);                  { push slot addr }
+          EmitAsm386('push eax');  { push slot addr }
           procIdx := FindProc('PXXReadVarStrM');
           if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found');
           EmitCallProc(procIdx);
@@ -2445,9 +2670,11 @@ begin
         else if TypeIsOrdinal(tk) then
         begin
           IREmitNode386(IRA[node]);    { eax = target address }
-          EmitB($50);                  { push dst }
-          EmitB($B8); EmitI32(TypeSlotSize(tk));    { mov eax, size }
-          EmitB($50);                  { push sz }
+          EmitAsm386([
+            'push eax',                        { push dst }
+            'mov eax, %', TypeSlotSize(tk),    { mov eax, size }
+            'push eax'                         { push sz }
+          ]);
           procIdx := FindProc('PXXReadVarInt');
           if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
           EmitCallProc(procIdx);
@@ -2464,9 +2691,9 @@ begin
           param field needs no symbol reconstruction. Same push order as the
           symbol path above. }
         IREmitNode386(IRA[node]);      { eax = slot address }
-        EmitB($50);                    { push slot addr }
+        EmitAsm386('push eax');  { push slot addr }
         IREmitNode386(IRB[node]);      { eax = new length }
-        EmitB($50);                    { push n }
+        EmitAsm386('push eax');  { push n }
         procIdx := FindProc('PXXStrSetLen');
         if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
         EmitCallProc(procIdx);
@@ -2482,9 +2709,9 @@ begin
         InLValueWrite := True;
         IREmitNode386(IRA[node]);              { eax = slot addr }
         InLValueWrite := savedLValueWrite;
-        EmitB($50);                            { push slot addr }
+        EmitAsm386('push eax');  { push slot addr }
         IREmitNode386(IRB[node]);              { eax = new length }
-        EmitB($50);                            { push n }
+        EmitAsm386('push eax');  { push n }
         EmitPushDataAddr(GetOrAllocNodeDynDesc(node)); { push desc }
         procIdx := FindProc('PXXDynSetLen');
         if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
@@ -2506,7 +2733,7 @@ begin
           x86-64 and i386 both COW'd, so `i386 output == x64 output` PASSED while
           both were wrong. Track T caught it the moment x86-64 became right. }
         IREmitNode386(IRA[node]);              { eax = slot addr }
-        EmitB($8B); EmitB($00);                { mov eax, [eax] = data pointer }
+        EmitAsm386('mov eax, [eax]');  { mov eax, [eax] = data pointer }
       end;
 
     IR_BINOP:
@@ -2524,13 +2751,16 @@ begin
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
           { ---- srcB / lenB from rhs at [esp] -> esi/edi ---- }
-          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] (rhs) }
+          EmitAsm386('mov edx, [esp]');  { rhs }
           if IntToTypeKind(IRTk[right]) = tyAnsiString then
           begin
-            EmitB($31); EmitB($C9);                    { xor ecx, ecx }
-            EmitB($85); EmitB($D2);                    { test edx, edx }
-            EmitB($74); EmitB($03);                    { jz +3 }
-            EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
+            EmitAsm386([
+              'xor ecx, ecx',
+              'test edx, edx',
+              'jz short .nil',
+              'mov ecx, [edx-8]',                { length }
+              '.nil:'
+            ]);
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
@@ -2539,19 +2769,26 @@ begin
           end
           else
           begin
-            EmitB($8D); EmitB($14); EmitB($24);        { lea edx, [esp] (char byte) }
-            EmitB($B9); EmitI32(1);                    { mov ecx, 1 }
+            EmitAsm386([
+              'lea edx, [esp]',                  { char byte }
+              'mov ecx, 1'
+            ]);
           end;
-          EmitB($89); EmitB($D6);                      { mov esi, edx (srcB) }
-          EmitB($89); EmitB($CF);                      { mov edi, ecx (lenB) }
+          EmitAsm386([
+            'mov esi, edx',                    { srcB }
+            'mov edi, ecx'                     { lenB }
+          ]);
           { ---- srcA / lenA from lhs at [esp+4] -> edx/ecx ---- }
-          EmitB($8B); EmitB($54); EmitB($24); EmitB($04); { mov edx, [esp+4] (lhs) }
+          EmitAsm386('mov edx, [esp+4]');  { lhs }
           if IntToTypeKind(IRTk[left]) = tyAnsiString then
           begin
-            EmitB($31); EmitB($C9);                    { xor ecx, ecx }
-            EmitB($85); EmitB($D2);                    { test edx, edx }
-            EmitB($74); EmitB($03);                    { jz +3 }
-            EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
+            EmitAsm386([
+              'xor ecx, ecx',
+              'test edx, edx',
+              'jz short .nil',
+              'mov ecx, [edx-8]',                { length }
+              '.nil:'
+            ]);
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
@@ -2560,31 +2797,35 @@ begin
           end
           else
           begin
-            EmitB($8D); EmitB($54); EmitB($24); EmitB($04); { lea edx, [esp+4] }
-            EmitB($B9); EmitI32(1);                    { mov ecx, 1 }
+            EmitAsm386([
+              'lea edx, [esp+4]',
+              'mov ecx, 1'
+            ]);
           end;
           { push PXXStrConcat(lenA=ecx, srcA=edx, srcB=esi, lenB=edi) }
-          EmitB($51);                                  { push ecx (lenA) }
-          EmitB($52);                                  { push edx (srcA) }
-          EmitB($56);                                  { push esi (srcB) }
-          EmitB($57);                                  { push edi (lenB) }
+          EmitAsm386([
+            'push ecx',                        { lenA }
+            'push edx',                        { srcA }
+            'push esi',                        { srcB }
+            'push edi'                         { lenB }
+          ]);
           procIdx := FindProc('PXXStrConcat');
           if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
           EmitCallProc(procIdx);                            { eax = result }
           EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
           { release fresh BINOP operand temporaries; [esp]=rhs, [esp+4]=lhs }
-          EmitB($50);                                  { push eax (save result) }
+          EmitAsm386('push eax');  { save result }
           if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
-            EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (lhs) }
+            EmitAsm386('mov eax, [esp+8]');  { lhs }
             EmitStrDecRef386;
           end;
           if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
-            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (rhs) }
+            EmitAsm386('mov eax, [esp+4]');  { rhs }
             EmitStrDecRef386;
           end;
-          EmitB($58);                                  { pop eax (result) }
+          EmitAsm386('pop eax');  { result }
           EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 (drop lhs,rhs) }
           Exit;
         end;
@@ -2604,8 +2845,10 @@ begin
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
 
-          EmitB($81); EmitB($EC); EmitI32(272);         { sub esp, 272 }
-          EmitB($89); EmitB($E3);                      { mov ebx, esp }
+          EmitAsm386([
+            'sub esp, 272',
+            'mov ebx, esp'
+          ]);
 
           if TypeIsFrozenString(lhsTk) then
           begin
@@ -2623,11 +2866,13 @@ begin
             EmitB($74); pNilLhs := CodeLen; EmitB(0);
             { loop: }
             pLoopLhs := CodeLen;
-            EmitB($8A); EmitB($06);                    { mov al, [esi] }
-            EmitB($88); EmitB($07);                    { mov [edi], al }
-            EmitB($46);                                { inc esi }
-            EmitB($47);                                { inc edi }
-            EmitB($49);                                { dec ecx }
+            EmitAsm386([
+              'mov al, [esi]',
+              'mov [edi], al',
+              'inc esi',
+              'inc edi',
+              'dec ecx'
+            ]);
             EmitB($75); EmitRel8(pLoopLhs);
             PatchRel8(pNilLhs);
           end
@@ -2646,7 +2891,7 @@ begin
             { mov eax, [ebx+272] (rhs) }
             EmitB($8B); EmitB($83); EmitI32(272);
             EmitLoadStrLen386(1, 0, rhsTk);            { ecx = rhs length }
-            EmitB($51);                                { push ecx }
+            EmitAsm386('push ecx');
             EmitLeaStrDataTo386(6, 0, rhsTk);          { esi = rhs chars }
             { lea edi, [ebx+8] }
             EmitB($8D); EmitB($7B); EmitB($08);
@@ -2658,14 +2903,16 @@ begin
             EmitB($74); pNilRhs := CodeLen; EmitB(0);
             { loop: }
             pLoopRhs := CodeLen;
-            EmitB($8A); EmitB($06);                    { mov al, [esi] }
-            EmitB($88); EmitB($07);                    { mov [edi], al }
-            EmitB($46);                                { inc esi }
-            EmitB($47);                                { inc edi }
-            EmitB($49);                                { dec ecx }
+            EmitAsm386([
+              'mov al, [esi]',
+              'mov [edi], al',
+              'inc esi',
+              'inc edi',
+              'dec ecx'
+            ]);
             EmitB($75); EmitRel8(pLoopRhs);
             PatchRel8(pNilRhs);
-            EmitB($59);                                { pop ecx }
+            EmitAsm386('pop ecx');
           end
           else
           begin
@@ -2839,7 +3086,7 @@ begin
           begin
             { Standard string equality: decompose each operand into (len, src) and call PXXStrEq }
             { rhs at [esp] -> esi=srcB, edi=lenB }
-            EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
+            EmitAsm386('mov edx, [esp]');
             if IntToTypeKind(IRTk[right]) = tyAnsiString then
             begin
               EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
@@ -2853,8 +3100,10 @@ begin
               EmitLoadStrLen386(1, 2, IRStrTkOf(right));   { ecx = len }
               EmitLeaStrData386(2, IRStrTkOf(right));      { edx = chars }
             end;
-            EmitB($89); EmitB($D6);                      { mov esi, edx }
-            EmitB($89); EmitB($CF);                      { mov edi, ecx }
+            EmitAsm386([
+              'mov esi, edx',
+              'mov edi, ecx'
+            ]);
             { lhs at [esp+4] -> edx=srcA, ecx=lenA }
             EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
             if IntToTypeKind(IRTk[left]) = tyAnsiString then
@@ -2870,10 +3119,12 @@ begin
               EmitLoadStrLen386(1, 2, IRStrTkOf(left));   { ecx = len }
               EmitLeaStrData386(2, IRStrTkOf(left));      { edx = chars }
             end;
-            EmitB($51);                                  { push ecx (lenA) }
-            EmitB($52);                                  { push edx (srcA) }
-            EmitB($57);                                  { push edi (lenB) }
-            EmitB($56);                                  { push esi (srcB) }
+            EmitAsm386([
+              'push ecx',                        { lenA }
+              'push edx',                        { srcA }
+              'push edi',                        { lenB }
+              'push esi'                         { srcB }
+            ]);
             procIdx := FindProc('PXXStrEq');
             if procIdx < 0 then Error('compiler error: PXXStrEq not found');
             EmitCallProc(procIdx);                            { eax = 1/0 }
@@ -2882,7 +3133,7 @@ begin
               begin EmitB($83); EmitB($F0); EmitB($01); end; { xor eax, 1 }
           end;
 
-          EmitB($50);                                  { push result }
+          EmitAsm386('push eax');  { push result }
           if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
@@ -2891,7 +3142,7 @@ begin
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
           end;
-          EmitB($58);                                  { pop result }
+          EmitAsm386('pop eax');  { pop result }
           EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
           Exit;
         end;
@@ -2918,7 +3169,7 @@ begin
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
           { rhs at [esp] -> esi=srcB, edi=lenB }
-          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
+          EmitAsm386('mov edx, [esp]');
           if rhsTk = tyAnsiString then
           begin
             EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
@@ -2932,8 +3183,10 @@ begin
             EmitLoadStrLen386(1, 2, rhsTk);   { ecx = len }
             EmitLeaStrData386(2, rhsTk);      { edx = chars }
           end;
-          EmitB($89); EmitB($D6);                      { mov esi, edx }
-          EmitB($89); EmitB($CF);                      { mov edi, ecx }
+          EmitAsm386([
+            'mov esi, edx',
+            'mov edi, ecx'
+          ]);
           { lhs at [esp+4] -> edx=srcA, ecx=lenA }
           EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
           if lhsTk = tyAnsiString then
@@ -2949,22 +3202,24 @@ begin
             EmitLoadStrLen386(1, 2, lhsTk);   { ecx = len }
             EmitLeaStrData386(2, lhsTk);      { edx = chars }
           end;
-          EmitB($51);                                  { push ecx (lenA) }
-          EmitB($52);                                  { push edx (srcA) }
-          EmitB($57);                                  { push edi (lenB) }
-          EmitB($56);                                  { push esi (srcB) }
+          EmitAsm386([
+            'push ecx',                        { lenA }
+            'push edx',                        { srcA }
+            'push edi',                        { lenB }
+            'push esi'                         { srcB }
+          ]);
           procIdx := FindProc('PXXStrCmp3');
           if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
           EmitCallProc(procIdx);                       { eax = -1/0/1 }
           EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
-          EmitB($83); EmitB($F8); EmitB($00);          { cmp eax, 0 }
+          EmitAsm386('cmp eax, 0');
           if op = Ord(tkLt) then begin EmitB($0F); EmitB($9C); EmitB($C0); end       { setl  al }
           else if op = Ord(tkLe) then begin EmitB($0F); EmitB($9E); EmitB($C0); end  { setle al }
           else if op = Ord(tkGt) then begin EmitB($0F); EmitB($9F); EmitB($C0); end  { setg  al }
           else begin EmitB($0F); EmitB($9D); EmitB($C0); end;                        { setge al }
-          EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
+          EmitAsm386('movzx eax, al');
 
-          EmitB($50);                                  { push result }
+          EmitAsm386('push eax');  { push result }
           if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
@@ -2973,7 +3228,7 @@ begin
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
           end;
-          EmitB($58);                                  { pop result }
+          EmitAsm386('pop eax');  { pop result }
           EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
           Exit;
         end;
@@ -3008,7 +3263,7 @@ begin
           else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                   (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
           begin
-            EmitB($66); EmitB($0F); EmitB($2E); EmitB($C1);              { ucomisd xmm0, xmm1 }
+            EmitAsm386('ucomisd xmm0, xmm1');
             EmitSetccFloat(op);                                          { NaN-correct (PF) }
           end
           else
@@ -3060,17 +3315,22 @@ begin
           edx and emitting the right operand clobbers it. }
         if (op = Ord(tkIn)) and Is64Bit386(lhsTk) then
         begin
-          EmitB($85); EmitB($D2);                    { test edx, edx }
-          EmitB($74); EmitB($05);                    { jz +5 (over the mov) }
-          EmitB($B8); EmitI32(256);                  { mov eax, 256 }
+          EmitAsm386([
+            'test edx, edx',
+            'jz short .lo',
+            'mov eax, 256',
+            '.lo:'
+          ]);
         end;
-        EmitB($50);                                  { push eax }
+        EmitAsm386('push eax');
         IREmitNode386(right);
-        EmitB($89); EmitB($C1);                      { mov ecx, eax }
-        EmitB($58);                                  { pop eax }
+        EmitAsm386([
+          'mov ecx, eax',
+          'pop eax'
+        ]);
         if op = Ord(tkPlus) then
         begin
-          EmitB($01); EmitB($C8);                    { add eax, ecx }
+          EmitAsm386('add eax, ecx');
           { {$Q+}: on ILP32 the 32-bit op IS the full width, so its flags carry
             the exact verdict (OF signed / CF unsigned) — the x86-64 backend
             checks at the narrowing store instead, but here the wrap already
@@ -3082,13 +3342,13 @@ begin
         end
         else if op = Ord(tkMinus) then
         begin
-          EmitB($29); EmitB($C8);                    { sub eax, ecx }
+          EmitAsm386('sub eax, ecx');
           if IRIVal[node] = 1 then
             EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
         end
         else if op = Ord(tkStar) then
         begin
-          EmitB($0F); EmitB($AF); EmitB($C1);        { imul eax, ecx }
+          EmitAsm386('imul eax, ecx');
           { imul's OF is the SIGNED 32-bit verdict; unsigned checked mul stays
             deferred here, like the 64-bit pair path records. }
           if (IRIVal[node] = 1) and TypeSigned(IntToTypeKind(IRTk[node])) then
@@ -3110,7 +3370,7 @@ begin
             begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
           else
             begin EmitB($99); EmitB($F7); EmitB($F9); end;            { cdq; idiv ecx }
-          EmitB($89); EmitB($D0);                    { mov eax, edx }
+          EmitAsm386('mov eax, edx');
         end
         else if op = Ord(tkAnd) then begin EmitB($21); EmitB($C8); end   { and eax, ecx }
         else if op = Ord(tkOr) then begin EmitB($09); EmitB($C8); end    { or eax, ecx }
@@ -3121,7 +3381,7 @@ begin
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
-          EmitB($39); EmitB($C8);                    { cmp eax, ecx }
+          EmitAsm386('cmp eax, ecx');
           { Unsigned operands (Cardinal/LongWord, C unsigned int) need unsigned
             setcc — mirrors the x86-64 cmpUnsigned path. Was hardcoded signed, so
             an inline `LongWord > 0` / C `(a-10u) > 0` compared signed. }
@@ -3133,19 +3393,21 @@ begin
             bit = element and 7. Result (0/1) -> eax. }
           EmitB($3D); EmitI32(255);                  { cmp eax, 255 }
           EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out-of-range }
-          EmitB($89); EmitB($C2);                    { mov edx, eax }
-          EmitB($C1); EmitB($EA); EmitB($03);        { shr edx, 3 (byte index) }
-          EmitB($0F); EmitB($B6); EmitB($14); EmitB($11); { movzx edx, byte [ecx+edx] }
-          EmitB($83); EmitB($E0); EmitB($07);        { and eax, 7 (bit index) }
-          EmitB($89); EmitB($C1);                    { mov ecx, eax }
-          EmitB($B8); EmitI32(1);                    { mov eax, 1 }
-          EmitB($D3); EmitB($E0);                    { shl eax, cl }
-          EmitB($85); EmitB($D0);                    { test eax, edx }
-          EmitB($0F); EmitB($95); EmitB($C0);        { setnz al }
-          EmitB($0F); EmitB($B6); EmitB($C0);        { movzx eax, al }
+          EmitAsm386([
+            'mov edx, eax',
+            'shr edx, 3',                      { byte index }
+            'movzx edx, byte [ecx+edx]',
+            'and eax, 7',                      { bit index }
+            'mov ecx, eax',
+            'mov eax, 1',
+            'shl eax, cl',
+            'test eax, edx',
+            'setne al',                        { setnz al }
+            'movzx eax, al'
+          ]);
           EmitB($E9); falseJmp := CodeLen; EmitI32(0); { jmp done }
           Patch32(nextJmp, CodeLen - (nextJmp + 4));
-          EmitB($B8); EmitI32(0);                    { mov eax, 0 }
+          EmitAsm386('mov eax, 0');
           Patch32(falseJmp, CodeLen - (falseJmp + 4));
         end
         else
@@ -3175,7 +3437,7 @@ begin
           p1 := IRResolveCtorProc(node, classIdx);   { overload-resolved ctor }
           if p1 < 0 then
             Exit;                        { no ctor: instance pointer in eax }
-          EmitB($50);                    { push eax (Self = param 0, deepest) }
+          EmitAsm386('push eax');  { Self = param 0, deepest }
           argBytes := 4;
           nArgs := 1;                    { parameter index; Self is 0 }
           argNode := IRB[node];          { size arg }
@@ -3201,23 +3463,27 @@ begin
               for i := 7 downto 0 do
               begin
                 EmitB($8B); EmitB($50); EmitB(i * 4);   { mov edx, [eax+i*4] }
-                EmitB($52);                             { push edx }
+                EmitAsm386('push edx');
               end;
             end
             else if argCls = A32_DOUBLE then
             begin
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
                 EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
-              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
-              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+              EmitAsm386([
+                'sub esp, 8',
+                'movsd [esp], xmm0'
+              ]);
             end
             else if argCls = A32_SINGLE then
             begin
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
                 EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
-              EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
-              EmitB($83); EmitB($EC); EmitB($04);                         { sub esp, 4 }
-              EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
+              EmitAsm386([
+                'cvtsd2ss xmm0, xmm0',
+                'sub esp, 4',
+                'movss [esp], xmm0'
+              ]);
             end
             else if (argCls = A32_PAIR64) or (argCls = A32_RECORD) then
             begin
@@ -3230,11 +3496,13 @@ begin
                 if TypeSigned(IntToTypeKind(IRTk[IRA[argNode]])) then EmitB($99)  { cdq }
                 else begin EmitB($31); EmitB($D2); end;                           { xor edx, edx }
               end;
-              EmitB($52);                { push edx (hi) }
-              EmitB($50);                { push eax (lo) }
+              EmitAsm386([
+                'push edx',                        { hi }
+                'push eax'                         { lo }
+              ]);
             end
             else
-              EmitB($50);                { push eax }
+              EmitAsm386('push eax');
             Inc(argBytes, Arg32Words(argCls, p1, nArgs) * 4);
             Inc(nArgs);
             argNode := IRB[argNode];
@@ -3274,9 +3542,9 @@ begin
               begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end
             else
               begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end;
-            EmitB($50);                    { push slot addr }
+            EmitAsm386('push eax');  { push slot addr }
             IREmitNode386(IRA[valNode]);   { eax = new length }
-            EmitB($50);                    { push n }
+            EmitAsm386('push eax');  { push n }
             procIdx := FindProc('PXXStrSetLen');
             if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
             EmitCallProc(procIdx);
@@ -3297,9 +3565,9 @@ begin
             begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, slot addr }
           else
             begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
-          EmitB($50);                    { push slot addr }
+          EmitAsm386('push eax');  { push slot addr }
           IREmitNode386(IRA[valNode]);   { eax = new length }
-          EmitB($50);                    { push n }
+          EmitAsm386('push eax');  { push n }
           EmitPushDataAddr(GetOrAllocSymRTTI(si)); { push desc }
           procIdx := FindProc('PXXDynSetLen');
           if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
@@ -3330,9 +3598,9 @@ begin
             if not IRNodeIsFrozenStrAddr(left) then
               Error('target i386: SetLength expects a string variable');
             IREmitNode386(left);           { eax = buffer address }
-            EmitB($50);                    { push eax }
+            EmitAsm386('push eax');
             IREmitNode386(IRA[valNode]);   { eax = new length }
-            EmitB($59);                    { pop ecx = buffer address }
+            EmitAsm386('pop ecx');  { pop ecx = buffer address }
             EmitStoreStrLen386(0, 1, IRFrozenKindOfAddr(left));
             Exit;
           end;
@@ -3380,10 +3648,13 @@ begin
              ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
               Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
               not Syms[IRA[valNode]].IsArray) then
-            begin EmitB($8B); EmitB($00); end;  { mov eax, [eax] (deref slot/&handle to handle) }
-          EmitB($85); EmitB($C0);        { test eax, eax }
-          EmitB($74); EmitB($03);        { jz +3 }
-          EmitB($8B); EmitB($40); EmitB($F8); { mov eax, [eax-8] }
+            EmitAsm386('mov eax, [eax]');  { deref slot/&handle to handle }
+          EmitAsm386([
+            'test eax, eax',
+            'jz short .nil',
+            'mov eax, [eax-8]',            { length }
+            '.nil:'
+          ]);
           Exit;
         end;
         if procIdx = -100 then
@@ -3399,12 +3670,12 @@ begin
             Error('target i386: LoadFile expects a managed-string destination');
           si := IRA[right];
           IREmitNode386(left);           { eax = path handle }
-          EmitB($50);                    { push path }
+          EmitAsm386('push eax');  { push path }
           procIdx := FindProc('PXXStrLoadFile');
           if procIdx < 0 then Error('compiler error: PXXStrLoadFile not found');
           EmitCallProc(procIdx);              { eax = new handle }
           EmitB($81); EmitB($C4); EmitI32(4);
-          EmitB($50);                    { push new }
+          EmitAsm386('push eax');  { push new }
           if Syms[si].Kind = skGlobal then
             begin EmitMovGlobAcc($A1, Syms[si].Offset); end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -3416,10 +3687,10 @@ begin
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitB($50);                    { push old }
+          EmitAsm386('push eax');  { push old }
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(4);
-          EmitB($58);                    { pop new }
+          EmitAsm386('pop eax');  { pop new }
           if Syms[si].Kind = skGlobal then
             begin EmitMovGlobAcc($A3, Syms[si].Offset); end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -3447,8 +3718,10 @@ begin
           if j = Ord(tkArgCount) then
           begin
             EmitMovGlobAcc($A1, BSS_INITIAL_RSP); { mov eax, [initial_sp] }
-            EmitB($8B); EmitB($00);                   { mov eax, [eax] argc }
-            EmitB($83); EmitB($E8); EmitB($01);       { sub eax, 1 }
+            EmitAsm386([
+              'mov eax, [eax]',                  { mov eax, [eax] argc }
+              'sub eax, 1'
+            ]);
             Exit;
           end
           else if j = Ord(tkArgStr) then
@@ -3470,7 +3743,7 @@ begin
             begin
               si := IRA[valNode];
               EmitArgvToAnsiString386;         { eax (index) -> eax = new handle }
-              EmitB($50);                      { push new }
+              EmitAsm386('push eax');  { push new }
               if Syms[si].Kind = skGlobal then
                 begin EmitMovGlobAcc($A1, Syms[si].Offset); end
               else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -3482,10 +3755,10 @@ begin
                 begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
               procIdx := FindProc('PXXStrDecRef');
               if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-              EmitB($50);                      { push old }
+              EmitAsm386('push eax');  { push old }
               EmitCallProc(procIdx);
               EmitB($81); EmitB($C4); EmitI32(4);
-              EmitB($58);                      { pop new }
+              EmitAsm386('pop eax');  { pop new }
               if Syms[si].Kind = skGlobal then
                 begin EmitMovGlobAcc($A3, Syms[si].Offset); end
               else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -3510,14 +3783,16 @@ begin
             if IntToTypeKind(IRTk[valNode]) = tyVariant then
             begin
               EmitLoadVariantAddr386(valNode);            { eax = slot addr }
-              EmitB($8B); EmitB($08);                     { mov ecx, [eax] (tag low) }
+              EmitAsm386('mov ecx, [eax]');  { tag low }
               EmitB($83); EmitB($F9); EmitB(VT_DOUBLE);   { cmp ecx, VT_DOUBLE }
               EmitB($75); nextJmp := CodeLen; EmitB(0);   { jne .not_double }
-              EmitB($F2); EmitB($0F); EmitB($10); EmitB($40); EmitB($08); { movsd xmm0,[eax+8] }
-              EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);             { cvttsd2si eax, xmm0 }
+              EmitAsm386([
+                'movsd xmm0, [eax+8]',
+                'cvttsd2si eax, xmm0'
+              ]);
               EmitB($EB); nextJmp2 := CodeLen; EmitB(0);  { jmp .done }
               PatchRel8(nextJmp);
-              EmitB($8B); EmitB($40); EmitB($08);         { mov eax, [eax+8] (payload low) }
+              EmitAsm386('mov eax, [eax+8]');  { payload low }
               PatchRel8(nextJmp2);
               Exit;
             end;
@@ -3540,26 +3815,30 @@ begin
                   (no 64-bit GPR); cdq-extending it overflows any |x|>=2^31 to the
                   0x80000000 sentinel (breaks e.g. sqlite's double->u64 in %f
                   formatting). Do a true 64-bit truncating convert via x87 fisttp. }
-                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
-                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
-                EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
-                EmitB($DD); EmitB($0C); EmitB($24);                        { fisttp qword [esp] (truncate) }
-                EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
-                EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
-                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+                EmitAsm386([
+                  'sub esp, 8',
+                  'movsd [esp], xmm0',
+                  'fld qword [esp]',
+                  'fisttp qword [esp]',              { truncate }
+                  'mov eax, [esp]',
+                  'mov edx, [esp+4]',
+                  'add esp, 8'
+                ]);
                 EmitF2ISaturate386;
               end
               else if j = 204 then
               begin
                 { Round -> Int64 via x87 fistp (uses the default round-to-nearest
                   control word), full 64-bit result in edx:eax. }
-                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
-                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
-                EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
-                EmitB($DF); EmitB($3C); EmitB($24);                        { fistp qword [esp] (round) }
-                EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
-                EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
-                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+                EmitAsm386([
+                  'sub esp, 8',
+                  'movsd [esp], xmm0',
+                  'fld qword [esp]',
+                  'fistp qword [esp]',               { round }
+                  'mov eax, [esp]',
+                  'mov edx, [esp+4]',
+                  'add esp, 8'
+                ]);
                 EmitF2ISaturate386;
               end
               else if j = 205 then
@@ -3567,13 +3846,17 @@ begin
                 { Frac = x - Int(x), both in the float domain (see
                   EmitTruncToIntegral386 — the old 32-bit round trip made Frac
                   wrong for every |x| >= 2^31 too). }
-                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
-                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 (keep x) }
+                EmitAsm386([
+                  'sub esp, 8',
+                  'movsd [esp], xmm0'                { keep x }
+                ]);
                 EmitTruncToIntegral386;                                    { xmm0 = Int(x) }
-                EmitB($F2); EmitB($0F); EmitB($10); EmitB($0C); EmitB($24); { movsd xmm1, [esp] (x) }
-                EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C8);            { subsd xmm1, xmm0 }
-                EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1);            { movsd xmm0, xmm1 }
-                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+                EmitAsm386([
+                  'movsd xmm1, [esp]',               { x }
+                  'subsd xmm1, xmm0',
+                  'movsd xmm0, xmm1',
+                  'add esp, 8'
+                ]);
               end
               else
               begin
@@ -3606,7 +3889,7 @@ begin
               (IR_BLOCK, lo in IRA, hi in IRB). Accumulate membership in edx. }
             argNode := IRB[node];          { arg1 = test value }
             IREmitNode386(IRA[argNode]);   { eax = test value (edx:eax if 64-bit) }
-            EmitB($89); EmitB($C1);        { mov ecx, eax }
+            EmitAsm386('mov ecx, eax');
             { A 64-bit element compared against 32-bit constants. x86-64 gets
               this right for free -- its `cmp rcx, imm32` is REX.W and the
               immediate is sign-extended to 64 bits, so 2^32+1 does not equal 1.
@@ -3620,14 +3903,16 @@ begin
               bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
             if Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) then
             begin
-              EmitB($89); EmitB($C8);                { mov eax, ecx }
-              EmitB($C1); EmitB($F8); EmitB($1F);    { sar eax, 31 (sign-extend lo) }
-              EmitB($39); EmitB($D0);                { cmp eax, edx }
-              EmitB($0F); EmitB($94); EmitB($C0);    { sete al  (1 = representable) }
-              EmitB($0F); EmitB($B6); EmitB($C0);    { movzx eax, al }
-              EmitB($50);                            { push eax (the fits flag) }
+              EmitAsm386([
+                'mov eax, ecx',
+                'sar eax, 31',                     { sign-extend lo }
+                'cmp eax, edx',
+                'sete al',                         { 1 = representable }
+                'movzx eax, al',
+                'push eax'                         { the fits flag }
+              ]);
             end;
-            EmitB($31); EmitB($D2);        { xor edx, edx (result) }
+            EmitAsm386('xor edx, edx');  { result }
             argNode := IRB[argNode];       { first set item }
             while argNode <> -1 do
             begin
@@ -3640,7 +3925,7 @@ begin
                 EmitB($0F); EmitB($8C); p1 := CodeLen; EmitI32(0); { jl skip }
                 EmitB($81); EmitB($F9); EmitI32(hi);       { cmp ecx, hi }
                 EmitB($0F); EmitB($8F); p2 := CodeLen; EmitI32(0); { jg skip }
-                EmitB($BA); EmitI32(1);                    { mov edx, 1 }
+                EmitAsm386('mov edx, 1');
                 Patch32(p1, CodeLen - (p1 + 4));
                 Patch32(p2, CodeLen - (p2 + 4));
               end
@@ -3648,17 +3933,21 @@ begin
               begin
                 lo := Integer(IRIVal[itemNode]);
                 EmitB($81); EmitB($F9); EmitI32(lo);       { cmp ecx, lo }
-                EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
-                EmitB($0F); EmitB($B6); EmitB($C0);        { movzx eax, al }
-                EmitB($09); EmitB($C2);                    { or edx, eax }
+                EmitAsm386([
+                  'sete al',
+                  'movzx eax, al',
+                  'or edx, eax'
+                ]);
               end;
               argNode := IRB[argNode];
             end;
-            EmitB($89); EmitB($D0);        { mov eax, edx }
+            EmitAsm386('mov eax, edx');
             if Is64Bit386(IntToTypeKind(IRTk[IRA[IRB[node]]])) then
             begin
-              EmitB($59);                            { pop ecx (the fits flag) }
-              EmitB($21); EmitB($C8);                { and eax, ecx }
+              EmitAsm386([
+                'pop ecx',                         { the fits flag }
+                'and eax, ecx'
+              ]);
             end;
             Exit;
           end
@@ -3669,12 +3958,14 @@ begin
             if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
               Error('target i386: SysOpen expects a managed AnsiString path');
             IREmitNode386(valNode);          { eax = path }
-            EmitB($50);                      { push path }
+            EmitAsm386('push eax');  { push path }
             argNode := IRB[argNode];
             IREmitNode386(IRA[argNode]);     { eax = flags }
-            EmitB($89); EmitB($C1);          { mov ecx, eax }
-            EmitB($5B);                      { pop ebx path }
-            EmitB($31); EmitB($D2);          { xor edx, edx mode }
+            EmitAsm386([
+              'mov ecx, eax',
+              'pop ebx',                         { pop ebx path }
+              'xor edx, edx'                     { xor edx, edx mode }
+            ]);
             EmitB($B8); EmitI32(5);          { __NR_open }
             EmitB($CD); EmitB($80);
             Exit;
@@ -3689,9 +3980,11 @@ begin
             EmitB($50);
             argNode := IRB[argNode];
             IREmitNode386(IRA[argNode]);     { count }
-            EmitB($89); EmitB($C2);          { mov edx, eax }
-            EmitB($59);                      { pop ecx buf }
-            EmitB($5B);                      { pop ebx fd }
+            EmitAsm386([
+              'mov edx, eax',
+              'pop ecx',                         { pop ecx buf }
+              'pop ebx'                          { pop ebx fd }
+            ]);
             EmitB($B8); EmitI32(3);          { __NR_read }
             EmitB($CD); EmitB($80);
             Exit;
@@ -3706,9 +3999,11 @@ begin
             EmitB($50);
             argNode := IRB[argNode];
             IREmitNode386(IRA[argNode]);     { count }
-            EmitB($89); EmitB($C2);          { mov edx, eax }
-            EmitB($59);                      { pop ecx buf }
-            EmitB($5B);                      { pop ebx fd }
+            EmitAsm386([
+              'mov edx, eax',
+              'pop ecx',                         { pop ecx buf }
+              'pop ebx'                          { pop ebx fd }
+            ]);
             EmitB($B8); EmitI32(4);          { __NR_write }
             EmitB($CD); EmitB($80);
             Exit;
@@ -3717,7 +4012,7 @@ begin
           begin
             argNode := IRB[node];
             IREmitNode386(IRA[argNode]);     { fd }
-            EmitB($89); EmitB($C3);          { mov ebx, eax }
+            EmitAsm386('mov ebx, eax');
             EmitB($B8); EmitI32(6);          { __NR_close }
             EmitB($CD); EmitB($80);
             Exit;
@@ -3729,8 +4024,10 @@ begin
             EmitB($50);
             argNode := IRB[argNode];
             IREmitNode386(IRA[argNode]);     { mode }
-            EmitB($89); EmitB($C1);          { mov ecx, eax }
-            EmitB($5B);                      { pop ebx fd }
+            EmitAsm386([
+              'mov ecx, eax',
+              'pop ebx'                          { pop ebx fd }
+            ]);
             EmitB($B8); EmitI32(94);         { __NR_fchmod }
             EmitB($CD); EmitB($80);
             Exit;
@@ -3848,7 +4145,7 @@ begin
             Error('target i386: external call argument count mismatch');
           { Reserve a 16-rounded frame: arg block + 4-byte saved-esp slot. }
           base := ((argBytes + 4 + 15) div 16) * 16;
-          EmitB($89); EmitB($E1);                        { mov ecx, esp }
+          EmitAsm386('mov ecx, esp');
           { Park esp as a DELTA from this body's alloca base, not as an absolute.
             The argument sub-expressions below can contain an alloca, which
             relocates this slot's bytes and leaves an absolute value pointing at
@@ -3859,7 +4156,7 @@ begin
           begin
             EmitB($2B); EmitB($8D); EmitI32(X386AllocaBaseOff);  { sub ecx, [ebp+base] }
           end;
-          EmitB($83); EmitB($E4); EmitB($F0);            { and esp, -16 }
+          EmitAsm386('and esp, 0xfffffff0');  { and esp, -16 }
           EmitB($81); EmitB($EC); EmitI32(base);         { sub esp, base }
           EmitB($89); EmitB($8C); EmitB($24); EmitI32(argBytes); { mov [esp+argBytes], ecx }
           argNode := IRB[node];
@@ -3935,7 +4232,7 @@ begin
               IREmitNode386(IRA[argNode]);               { -> xmm0 (double) }
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
                 EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }
-              EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+              EmitAsm386('cvtsd2ss xmm0, xmm0');
               EmitB($F3); EmitB($0F); EmitB($11); EmitB($84); EmitB($24); EmitI32(sz); { movss [esp+off], xmm0 }
               Inc(sz, 4);
             end
@@ -3973,7 +4270,7 @@ begin
           if ABIRetViaHiddenDestProc(procIdx) then
           begin
             IREmitNode386(IRC[node]);                { eax = hidden destination }
-            EmitB($89); EmitB($C1);                  { mov ecx, eax }
+            EmitAsm386('mov ecx, eax');
           end;
           if ProcExternal[procIdx] then
             EmitExternalIndirectCall(RegisterExternal(procIdx)) { call dword [GOT slot] }
@@ -3990,22 +4287,26 @@ begin
               free here whatever the callee returned. }
             EmitB($8B); EmitB($8C); EmitB($24); EmitI32(argBytes); { mov ecx, [esp+argBytes] }
             EmitB($03); EmitB($8D); EmitI32(X386AllocaBaseOff);    { add ecx, [ebp+base] }
-            EmitB($89); EmitB($CC);                                { mov esp, ecx }
+            EmitAsm386('mov esp, ecx');
           end;
           if Procs[procIdx].RetType = tySingle then
           begin
-            EmitB($83); EmitB($EC); EmitB($04);          { sub esp, 4 }
+            EmitAsm386('sub esp, 4');
             EmitB($D9); EmitB($5C); EmitB($24); EmitB($00); { fstp dword [esp] }
-            EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movss xmm0, [esp] }
-            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
-            EmitB($83); EmitB($C4); EmitB($04);          { add esp, 4 }
+            EmitAsm386([
+              'movss xmm0, [esp]',
+              'cvtss2sd xmm0, xmm0',
+              'add esp, 4'
+            ]);
           end
           else if TypeIsFloat(Procs[procIdx].RetType) then
           begin
-            EmitB($83); EmitB($EC); EmitB($08);          { sub esp, 8 }
+            EmitAsm386('sub esp, 8');
             EmitB($DD); EmitB($5C); EmitB($24); EmitB($00); { fstp qword [esp] }
-            EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
-            EmitB($83); EmitB($C4); EmitB($08);          { add esp, 8 }
+            EmitAsm386([
+              'movsd xmm0, [esp]',
+              'add esp, 8'
+            ]);
           end;
           Exit;
         end;
@@ -4070,7 +4371,7 @@ begin
             for i := 7 downto 0 do
             begin
               EmitB($8B); EmitB($50); EmitB(i * 4);    { mov edx, [eax+i*4] }
-              EmitB($52);                              { push edx }
+              EmitAsm386('push edx');
             end;
             Inc(argBytes, TypeSlotSize(tySet));
             Inc(nArgs);
@@ -4093,8 +4394,10 @@ begin
               the caller still pushes an address is a silent disagreement about
               what the slot contains, which is worse than the refusal.
               feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build }
-            EmitB($52);                                { push edx (hi) }
-            EmitB($50);                                { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
             Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
             Inc(nArgs);
             Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
@@ -4114,8 +4417,10 @@ begin
               if TypeSigned(tk) then EmitB($99)              { cdq }
               else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
             end;
-            EmitB($52);                                { push edx (hi) }
-            EmitB($50);                                { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
             Inc(argBytes, 8);
             Inc(nArgs);
             Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
@@ -4130,13 +4435,17 @@ begin
             vaTk := IntToTypeKind(IRTk[IRA[argNode]]);
             if vaTk = tyDouble then
             begin
-              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
-              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+              EmitAsm386([
+                'sub esp, 8',
+                'movsd [esp], xmm0'
+              ]);
             end
             else
             begin
-              EmitB($52);                              { push edx (hi) }
-              EmitB($50);                              { push eax (lo) }
+              EmitAsm386([
+                'push edx',                        { hi }
+                'push eax'                         { lo }
+              ]);
             end;
             Inc(argBytes, 8);
             Inc(nArgs);
@@ -4177,9 +4486,11 @@ begin
                 { xmm0 holds the value as DOUBLE bits; narrow to single before
                   pushing 4 bytes (movss alone would store the low dword of the
                   double bits = garbage). }
-                EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0); { cvtsd2ss xmm0, xmm0 }
-                EmitB($83); EmitB($EC); EmitB($04);             { sub esp, 4 }
-                EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
+                EmitAsm386([
+                  'cvtsd2ss xmm0, xmm0',
+                  'sub esp, 4',
+                  'movss [esp], xmm0'
+                ]);
                 Inc(argBytes, 4);
               end
               else
@@ -4195,15 +4506,17 @@ begin
             begin
               if IntToTypeKind(IRTk[argNode]) = tyChar then
               begin
-                EmitB($50);                                 { push eax (char code) }
-                EmitB($6A); EmitB($01);                     { push 1 (len) }
-                EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
-                EmitB($50);                                 { push eax (src) }
+                EmitAsm386([
+                  'push eax',                        { char code }
+                  'push 1',                          { len }
+                  'lea eax, [esp+4]',                { ptr to char code }
+                  'push eax'                         { src }
+                ]);
                 j := FindProc('PXXStrFromLit');
                 if j < 0 then Error('compiler error: PXXStrFromLit not found');
                 EmitCallProc(j);
                 EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-                EmitB($59);                                 { pop ecx }
+                EmitAsm386('pop ecx');
               end
               else if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) and
                       EmitStaticLitHandle386(IRA[argNode]) then
@@ -4231,20 +4544,22 @@ begin
                   CLAUDE.md warns about, and why x86-64's suite showed nothing.
                   xtensa already spelled it IRA[argNode]; riscv32 did not.
                   bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode }
-                EmitB($50);                                 { push eax }
+                EmitAsm386('push eax');
                 EmitLoadStrLen386(1, 0, IRStrTkOf(IRA[argNode]));   { ecx = len }
                 EmitLeaStrData386(0, IRStrTkOf(IRA[argNode]));      { eax = chars }
-                EmitB($51);                                 { push ecx (len) }
-                EmitB($50);                                 { push eax (src) }
+                EmitAsm386([
+                  'push ecx',                        { len }
+                  'push eax'                         { src }
+                ]);
                 j := FindProc('PXXStrFromLit');
                 if j < 0 then Error('compiler error: PXXStrFromLit not found');
                 EmitCallProc(j);
                 EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-                EmitB($59);                                 { pop ecx }
+                EmitAsm386('pop ecx');
               end;
             end;
           end;
-          EmitB($50);                                { push eax }
+          EmitAsm386('push eax');
           Inc(argBytes, 4);
           Inc(nArgs);
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
@@ -4262,7 +4577,7 @@ begin
             (args already pushed; computing the address only touches eax). The
             callee copies Result there and returns the pointer in eax. }
           IREmitNode386(IRC[node]);                  { eax = hidden destination }
-          EmitB($89); EmitB($C1);                    { mov ecx, eax }
+          EmitAsm386('mov ecx, eax');
         end;
         EmitCallProc(procIdx);                            { E8 rel32 + fixup, same as x86-64 }
         if argBytes > 0 then
@@ -4273,15 +4588,19 @@ begin
           for the SSE value model. A Single (eax) is widened to double. }
         if Procs[procIdx].RetType = tySingle then
         begin
-          EmitB($66); EmitB($0F); EmitB($6E); EmitB($C0); { movd xmm0, eax }
-          EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
+          EmitAsm386([
+            'movd xmm0, eax',
+            'cvtss2sd xmm0, xmm0'
+          ]);
         end
         else if TypeIsFloat(Procs[procIdx].RetType) then
         begin
-          EmitB($52);                                     { push edx (hi) }
-          EmitB($50);                                     { push eax (lo) }
-          EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
-          EmitB($83); EmitB($C4); EmitB($08);             { add esp, 8 }
+          EmitAsm386([
+            'push edx',                        { hi }
+            'push eax',                        { lo }
+            'movsd xmm0, [esp]',
+            'add esp, 8'
+          ]);
         end;
       end;
 
@@ -4359,7 +4678,7 @@ begin
             for i := recDw386 - 1 downto 0 do
             begin
               EmitB($8B); EmitB($90); EmitI32(i * 4);  { mov edx, [eax+i*4] }
-              EmitB($52);                              { push edx }
+              EmitAsm386('push edx');
             end;
             Inc(argBytes, recDw386 * 4);
           end
@@ -4369,8 +4688,10 @@ begin
               in edx:eax, pushed hi then lo so lo lands lower -- the A32_PAIR64
               emission. NOT the set arm's address copy just below.
               bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
-            EmitB($52);                              { push edx (hi) }
-            EmitB($50);                              { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
           end
           else if argCls = A32_SET then
           begin
@@ -4378,7 +4699,7 @@ begin
             for i := 7 downto 0 do
             begin
               EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
-              EmitB($52);                            { push edx }
+              EmitAsm386('push edx');
             end;
           end
           else if argCls = A32_PAIR64 then
@@ -4390,8 +4711,10 @@ begin
               if TypeSigned(tk) then EmitB($99)              { cdq }
               else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
             end;
-            EmitB($52);                              { push edx (hi) }
-            EmitB($50);                              { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
           end
           else if argCls = A32_DOUBLE then
           begin
@@ -4404,12 +4727,14 @@ begin
           begin
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));  { int -> xmm0 (64-bit/unsigned aware) }
-            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
-            EmitB($83); EmitB($EC); EmitB($04);                          { sub esp, 4 }
-            EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movss [esp], xmm0 }
+            EmitAsm386([
+              'cvtsd2ss xmm0, xmm0',
+              'sub esp, 4',
+              'movss [esp], xmm0'
+            ]);
           end
           else
-            EmitB($50);                              { push eax }
+            EmitAsm386('push eax');
           if not argIsRec386 then
             Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
@@ -4421,10 +4746,12 @@ begin
             in ecx (the pxx indirect-result reg, what EmitAggregateDestStash
             reads). The callee address is already in eax and the dest IR_LEA also
             lands in eax, so park the callee on the stack across it. }
-          EmitB($50);                                { push eax (callee) }
+          EmitAsm386('push eax');  { callee }
           IREmitNode386(IRCallDest[node]);           { eax = hidden destination }
-          EmitB($89); EmitB($C1);                    { mov ecx, eax }
-          EmitB($58);                                { pop eax (callee) }
+          EmitAsm386([
+            'mov ecx, eax',
+            'pop eax'                          { callee }
+          ]);
         end;
         EmitB($FF); EmitB($D0);                      { call eax }
         if argBytes > 0 then
@@ -4440,18 +4767,22 @@ begin
         begin
           if Procs[procIdx].RetType = tySingle then
           begin
-            EmitB($83); EmitB($EC); EmitB($04);          { sub esp, 4 }
+            EmitAsm386('sub esp, 4');
             EmitB($D9); EmitB($5C); EmitB($24); EmitB($00); { fstp dword [esp] }
-            EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movss xmm0, [esp] }
-            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
-            EmitB($83); EmitB($C4); EmitB($04);          { add esp, 4 }
+            EmitAsm386([
+              'movss xmm0, [esp]',
+              'cvtss2sd xmm0, xmm0',
+              'add esp, 4'
+            ]);
           end
           else if TypeIsFloat(Procs[procIdx].RetType) then
           begin
-            EmitB($83); EmitB($EC); EmitB($08);          { sub esp, 8 }
+            EmitAsm386('sub esp, 8');
             EmitB($DD); EmitB($5C); EmitB($24); EmitB($00); { fstp qword [esp] }
-            EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
-            EmitB($83); EmitB($C4); EmitB($08);          { add esp, 8 }
+            EmitAsm386([
+              'movsd xmm0, [esp]',
+              'add esp, 8'
+            ]);
           end;
         end;
       end;
@@ -4500,8 +4831,10 @@ begin
             { By-value record of 5..8 bytes: VALUE in edx:eax, hi then lo. See
               the indirect path's identical arm.
               bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
-            EmitB($52);                              { push edx (hi) }
-            EmitB($50);                              { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
           end
           else if argCls = A32_SET then
           begin
@@ -4513,7 +4846,7 @@ begin
             for i := 7 downto 0 do
             begin
               EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
-              EmitB($52);                            { push edx }
+              EmitAsm386('push edx');
             end;
           end
           else if argCls = A32_PAIR64 then
@@ -4524,8 +4857,10 @@ begin
               if TypeSigned(tk) then EmitB($99)              { cdq }
               else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
             end;
-            EmitB($52);                              { push edx (hi) }
-            EmitB($50);                              { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
           end
           else if argCls = A32_DOUBLE then
           begin
@@ -4543,12 +4878,14 @@ begin
               (movss alone would store the low dword of the double = garbage). }
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
-            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
-            EmitB($83); EmitB($EC); EmitB($04);                         { sub esp, 4 }
-            EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
+            EmitAsm386([
+              'cvtsd2ss xmm0, xmm0',
+              'sub esp, 4',
+              'movss [esp], xmm0'
+            ]);
           end
           else
-            EmitB($50);                              { push eax }
+            EmitAsm386('push eax');
           Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
           Inc(nArgs);
           argNode := IRB[argNode];
@@ -4559,10 +4896,10 @@ begin
             into ecx BEFORE the Self fetch — the dest IR_LEA lands in eax, which
             the VMT dispatch below then reuses for Self. }
           IREmitNode386(IRCallDest[node]);           { eax = hidden destination }
-          EmitB($89); EmitB($C1);                    { mov ecx, eax }
+          EmitAsm386('mov ecx, eax');
         end;
         EmitB($8B); EmitB($84); EmitB($24); EmitI32(argBytes - 4); { mov eax, [esp+disp] (Self) }
-        EmitB($8B); EmitB($00);                      { mov eax, [eax] (VMT ptr) }
+        EmitAsm386('mov eax, [eax]');  { VMT ptr }
         EmitB($FF); EmitB($90); EmitI32(j * 8);      { call dword [eax + slot*8] }
         if argBytes > 0 then
         begin
@@ -4576,9 +4913,9 @@ begin
         if NoSignals then
           Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
         IREmitNode386(IRB[node]);                    { eax = handler address }
-        EmitB($50);                                  { push eax }
+        EmitAsm386('push eax');
         IREmitNode386(IRA[node]);                    { eax = signal number }
-        EmitB($5A);                                  { pop edx   (handler) }
+        EmitAsm386('pop edx');  { handler }
         IREmitCodeCall(SigSetHookAddr);                        { call sethook }
       end;
 
@@ -4597,7 +4934,7 @@ begin
           This form needs no relocation and works the same in an executable and
           in an --emit-obj object. }
         EmitB($E8); EmitI32(0);                      { call .+5 }
-        EmitB($58);                                  { pop eax }
+        EmitAsm386('pop eax');
         EmitB($05);                                  { add eax, imm32 }
         if LabelAddrFixCount >= MAX_IR then Error('label address fixup overflow');
         LabelAddrFixPos[LabelAddrFixCount] := CodeLen;
@@ -4655,10 +4992,10 @@ begin
           drop the two args. }
         argNode := IRB[IRA[node]];                   { IR_ARG for pto }
         IREmitNode386(IRA[argNode]);                 { eax = pto }
-        EmitB($50);                                  { push pto }
+        EmitAsm386('push eax');  { push pto }
         argNode := IRA[node];                        { IR_ARG for pfrom }
         IREmitNode386(IRA[argNode]);                 { eax = pfrom }
-        EmitB($50);                                  { push pfrom }
+        EmitAsm386('push eax');  { push pfrom }
         IREmitCodeCall(CoSwitchAddr);                      { call CoSwitch }
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
       end;
@@ -4682,13 +5019,13 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
-          EmitB($50);                                { push eax }
+          EmitAsm386('push eax');
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         IREmitCodeCall(CloneStubAddr);                       { call clone stub }
         EmitB($81); EmitB($C4); EmitI32(nArgs * 4);  { add esp, nArgs*4 }
-        EmitB($99);                                  { cdq (eax -> edx:eax) }
+        EmitAsm386('cdq');  { eax -> edx:eax }
       end;
 
     IR_ATOMIC:
@@ -4703,32 +5040,38 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
-          EmitB($50);                                { push eax }
+          EmitAsm386('push eax');
           argNode := IRB[argNode];
         end;
         case IRIVal[node] of
           ATOMIC_CAS:
             begin
               { stack (top..bottom): newval, expected, addr }
-              EmitB($5A);                            { pop edx  (newval) }
-              EmitB($58);                            { pop eax  (expected) }
-              EmitB($59);                            { pop ecx  (addr) }
+              EmitAsm386([
+                'pop edx',                         { newval }
+                'pop eax',                         { expected }
+                'pop ecx'                          { addr }
+              ]);
               EmitB($F0); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [ecx], edx }
             end;                                     { eax = old *addr }
           ATOMIC_ADD:
             begin
-              EmitB($58);                            { pop eax  (delta) }
-              EmitB($59);                            { pop ecx  (addr) }
+              EmitAsm386([
+                'pop eax',                         { delta }
+                'pop ecx'                          { addr }
+              ]);
               EmitB($F0); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [ecx], eax }
             end;                                     { eax = old *addr }
           else { ATOMIC_XCHG }
             begin
-              EmitB($58);                            { pop eax  (val) }
-              EmitB($59);                            { pop ecx  (addr) }
-              EmitB($87); EmitB($01);                { xchg [ecx], eax  (implicitly locked) }
+              EmitAsm386([
+                'pop eax',                         { val }
+                'pop ecx',                         { addr }
+                'xchg [ecx], eax'                  { implicitly locked }
+              ]);
             end;                                     { eax = old *addr }
         end;
-        EmitB($99);                                  { cdq (eax -> edx:eax) }
+        EmitAsm386('cdq');  { eax -> edx:eax }
       end;
 
     IR_FIELD:
@@ -4759,13 +5102,13 @@ begin
             array's own handle to use as a base; the real write happens at the
             computed element address further down. Deref once more (v1: no
             COW here either, matching the rest of this backend). }
-          EmitB($8B); EmitB($00);                     { mov eax, [eax] = data ptr }
+          EmitAsm386('mov eax, [eax]');  { mov eax, [eax] = data ptr }
         end
         else if IRIndexNeedsStrCOW(left, elemSize) then
         begin
           if InLValueWrite then
           begin
-            EmitB($50);                               { push slot addr }
+            EmitAsm386('push eax');  { push slot addr }
             procIdx := FindProc('PXXStrUnique');
             if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
             EmitCallProc(procIdx);                         { eax = unique handle }
@@ -4777,7 +5120,7 @@ begin
           else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
             begin EmitB($8B); EmitB($00); end;        { mov eax, [slot] = handle }
         end;
-        EmitB($50);                                   { push eax }
+        EmitAsm386('push eax');
         { The INDEX expression is a READ even when the whole IR_INDEX is a write
           target (`b[Length(b)] := c`): left set, IR_LEA(b) inside the index
           kept the slot address and Length read garbage — the store landed
@@ -4796,8 +5139,10 @@ begin
           begin EmitB($C1); EmitB($E0); EmitB($01); end          { shl eax, 1 }
         else if elemSize <> 1 then
           begin EmitB($69); EmitB($C0); EmitI32(elemSize); end;  { imul eax, eax, elemSize }
-        EmitB($59);                                   { pop ecx (base) }
-        EmitB($01); EmitB($C8);                       { add eax, ecx }
+        EmitAsm386([
+          'pop ecx',                         { base }
+          'add eax, ecx'
+        ]);
       end;
 
     IR_LOAD_MEM:
@@ -4808,8 +5153,10 @@ begin
         begin
           if tk = tySingle then
           begin
-            EmitB($F3); EmitB($0F); EmitB($10); EmitB($00);   { movss xmm0, [eax] }
-            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0);   { cvtss2sd xmm0, xmm0 }
+            EmitAsm386([
+              'movss xmm0, [eax]',
+              'cvtss2sd xmm0, xmm0'
+            ]);
           end
           else
             begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0, [eax] }
@@ -4822,7 +5169,7 @@ begin
             pointer-width (4-byte) load, not the TypeSlotSize(tyString)=8 path (which
             classified it 64-bit and loaded edx:eax, diverging from x86-64).
             bug-cross-gate-masked-failures. }
-          EmitB($8B); EmitB($00);                    { mov eax, [eax] (pointer width) }
+          EmitAsm386('mov eax, [eax]');  { pointer width }
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
@@ -4835,8 +5182,10 @@ begin
             is still valid for the low load). tyRecord: TypeSlotSize=8, so mirror the
             x86-64 8-byte `mov rax,[rax]` (a small by-value struct used as a
             scalar; over-read high bytes are ignored, same as x86-64). }
-          EmitB($8B); EmitB($50); EmitB($04);        { mov edx, [eax+4] }
-          EmitB($8B); EmitB($00);                    { mov eax, [eax] }
+          EmitAsm386([
+            'mov edx, [eax+4]',
+            'mov eax, [eax]'
+          ]);
           Exit;
         end;
         sz := TypeSlotSize(tk);
@@ -4853,7 +5202,7 @@ begin
         end
         else
         begin
-          EmitB($8B); EmitB($00);                    { mov eax, [eax] (4-, low dword of 8-byte) }
+          EmitAsm386('mov eax, [eax]');  { 4-, low dword of 8-byte }
         end;
       end;
 
@@ -4886,25 +5235,27 @@ begin
         IREmitNode386(IRB[node]);             { eax = new handle }
         if not IRNodeOwnsFreshCallResult(IRB[node]) then
         begin
-          EmitB($50);                         { push eax (arg0) }
+          EmitAsm386('push eax');  { arg0 }
           procIdx := FindProc('PXXDynArrayIncRef');
           if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
           EmitCallProc(procIdx);
-          EmitB($58);                         { pop eax }
+          EmitAsm386('pop eax');
         end;
-        EmitB($50);                           { push eax — keep new }
+        EmitAsm386('push eax');  { keep new }
         IREmitNode386(IRA[node]);             { eax = slot address }
-        EmitB($89); EmitB($C2);               { mov edx, eax (slot) }
-        EmitB($8B); EmitB($02);               { mov eax, [edx] = old handle }
-        EmitB($8B); EmitB($0C); EmitB($24);   { mov ecx, [esp] = new }
-        EmitB($89); EmitB($0A);               { mov [edx], ecx — publish new }
-        EmitB($50);                           { push arg0 = old }
+        EmitAsm386([
+          'mov edx, eax',                    { slot }
+          'mov eax, [edx]',                  { mov eax, [edx] = old handle }
+          'mov ecx, [esp]',                  { mov ecx, [esp] = new }
+          'mov [edx], ecx',                  { publish new }
+          'push eax'                         { push arg0 = old }
+        ]);
         EmitPushDataAddr(GetOrAllocNodeDynDesc(node));  { push arg1 = desc }
         procIdx := FindProc('PXXDynArrayRelease');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
         EmitCallProc(procIdx);
         EmitB($81); EmitB($C4); EmitI32(8);   { add esp, 8 }
-        EmitB($58);                           { pop eax = new (statement value) }
+        EmitAsm386('pop eax');  { pop eax = new (statement value) }
       end;
 
     IR_STORE_MEM:
@@ -4924,13 +5275,15 @@ begin
           memFrozenTk386 := IRFrozenKindOfAddr(IRA[node]);
           srcFrozenTk386 := IRStrTkOf(valNode);
           IREmitNode386(valNode);                     { eax = source string addr }
-          EmitB($50);                                 { push eax (source) }
+          EmitAsm386('push eax');  { source }
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
           IREmitNode386(IRA[node]);                   { eax = dest addr }
           InLValueWrite := savedLValueWrite;
-          EmitB($89); EmitB($C7);                     { mov edi, eax }
-          EmitB($5E);                                 { pop esi }
+          EmitAsm386([
+            'mov edi, eax',
+            'pop esi'
+          ]);
           if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
             { esi = char ordinal -> [len=1][char]. The same sequence the
@@ -4938,7 +5291,7 @@ begin
               dest/char here, so the two paths lower one concept identically.
               `mov eax, esi` is not convention -- 32-bit mode has no `sil`. }
             EmitStoreStrLenImm386(1, 7, memFrozenTk386);
-            EmitB($89); EmitB($F0);                   { mov eax, esi }
+            EmitAsm386('mov eax, esi');
             EmitStoreCharAtStrData386(0, 7, memFrozenTk386);
             Exit;
           end;
@@ -4946,9 +5299,9 @@ begin
           begin
             { Managed source -> frozen dest (r.s := managedStr): esi = handle
               (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
-            EmitB($85); EmitB($F6);                   { test esi, esi }
+            EmitAsm386('test esi, esi');
             EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
-            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+            EmitAsm386('mov ecx, [esi-8]');  { len }
             EmitClampEcxToStrCap386(Integer(IRIVal[node]));
             EmitStoreStrLen386(1, 7, memFrozenTk386);
             EmitLeaStrData386(7, memFrozenTk386);
@@ -4998,29 +5351,33 @@ begin
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
             IREmitNode386(valNode);                     { eax = char code }
-            EmitB($50);                                 { push eax (char code) }
-            EmitB($6A); EmitB($01);                     { push 1 (len) }
-            EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
-            EmitB($50);                                 { push eax (src) }
+            EmitAsm386([
+              'push eax',                        { char code }
+              'push 1',                          { len }
+              'lea eax, [esp+4]',                { ptr to char code }
+              'push eax'                         { src }
+            ]);
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-            EmitB($59);                                 { pop ecx (restore stack) }
+            EmitAsm386('pop ecx');  { restore stack }
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNode386(valNode);                     { eax = inline string buffer address }
-            EmitB($50);                                 { push eax }
+            EmitAsm386('push eax');
             EmitLoadStrLen386(1, 0, IRStrTkOf(valNode));   { ecx = len }
             EmitLeaStrData386(0, IRStrTkOf(valNode));      { eax = chars }
-            EmitB($51);                                 { push ecx (len) }
-            EmitB($50);                                 { push eax (src) }
+            EmitAsm386([
+              'push ecx',                        { len }
+              'push eax'                         { src }
+            ]);
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
-            EmitB($59);                                 { pop ecx }
+            EmitAsm386('pop ecx');
           end
           else
           begin
@@ -5029,29 +5386,31 @@ begin
               (concat result, or a user-function result). }
             if not IRNodeOwnsManagedStr(valNode) then
             begin
-              EmitB($50);                               { push eax (arg0 = p) }
+              EmitAsm386('push eax');  { arg0 = p }
               procIdx := FindProc('PXXStrIncRef');
               if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
               EmitCallProc(procIdx);
-              EmitB($58);                               { pop eax (restore handle) }
+              EmitAsm386('pop eax');  { restore handle }
             end;
           end;
-          EmitB($50);                                   { push eax (new handle) }
+          EmitAsm386('push eax');  { new handle }
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
           IREmitNode386(IRA[node]);                     { eax = slot address }
           InLValueWrite := savedLValueWrite;
-          EmitB($89); EmitB($C7);                       { mov edi, eax }
-          EmitB($8B); EmitB($37);                       { mov esi, [edi] (old) }
-          EmitB($8B); EmitB($04); EmitB($24);           { mov eax, [esp] (new) }
-          EmitB($89); EmitB($07);                       { mov [edi], eax }
-          EmitB($89); EmitB($F0);                       { mov eax, esi (old) }
+          EmitAsm386([
+            'mov edi, eax',
+            'mov esi, [edi]',                  { old }
+            'mov eax, [esp]',                  { new }
+            'mov [edi], eax',
+            'mov eax, esi'                     { old }
+          ]);
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitB($50);                                   { push eax (arg0 = old) }
+          EmitAsm386('push eax');  { arg0 = old }
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
-          EmitB($58);                                   { pop eax (new, discard) }
+          EmitAsm386('pop eax');  { new, discard }
           Exit;
         end;
         if TypeIsFloat(tk) then
@@ -5064,8 +5423,10 @@ begin
           EmitFloatUnspill386;
           if tk = tySingle then
           begin
-            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
-            EmitB($F3); EmitB($0F); EmitB($11); EmitB($00);              { movss [eax], xmm0 }
+            EmitAsm386([
+              'cvtsd2ss xmm0, xmm0',
+              'movss [eax], xmm0'
+            ]);
           end
           else
             begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($00); end;   { movsd [eax], xmm0 }
@@ -5077,16 +5438,20 @@ begin
         if Is64Bit386(tk) then
         begin
           EmitNode64_386(IRB[node]);                 { value -> edx:eax }
-          EmitB($52);                                { push edx (value hi) }
-          EmitB($50);                                { push eax (value lo) }
+          EmitAsm386([
+            'push edx',                        { value hi }
+            'push eax'                         { value lo }
+          ]);
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
           IREmitNode386(IRA[node]);                  { address -> eax }
           InLValueWrite := savedLValueWrite;
-          EmitB($59);                                { pop ecx (value lo) }
-          EmitB($5A);                                { pop edx (value hi) }
-          EmitB($89); EmitB($08);                    { mov [eax], ecx }
-          EmitB($89); EmitB($50); EmitB($04);        { mov [eax+4], edx }
+          EmitAsm386([
+            'pop ecx',                         { value lo }
+            'pop edx',                         { value hi }
+            'mov [eax], ecx',
+            'mov [eax+4], edx'
+          ]);
           Exit;
         end;
         IREmitNode386(IRB[node]);                    { value -> eax (or xmm0 if float) }
@@ -5094,12 +5459,12 @@ begin
           truncates (cvttsd2si) before the store. Mirrors IR_STORE_SYM. }
         if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
           begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end;   { cvttsd2si eax, xmm0 }
-        EmitB($50);                                  { push eax }
+        EmitAsm386('push eax');
         savedLValueWrite := InLValueWrite;
         InLValueWrite := True;
         IREmitNode386(IRA[node]);                    { address -> eax }
         InLValueWrite := savedLValueWrite;
-        EmitB($59);                                  { pop ecx (value) }
+        EmitAsm386('pop ecx');  { value }
         sz := TypeSlotSize(tk);
         if sz = 1 then begin EmitB($88); EmitB($08); end       { mov [eax], cl }
         else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($08); end { mov [eax], cx }
@@ -5110,11 +5475,13 @@ begin
       begin
         { rep movsb IRIVal bytes from src (IRB) to dest (IRA). }
         IREmitNode386(IRB[node]);                    { eax = source }
-        EmitB($50);                                  { push eax }
+        EmitAsm386('push eax');
         IREmitNode386(IRA[node]);                    { eax = dest }
-        EmitB($89); EmitB($C7);                      { mov edi, eax }
-        EmitB($5E);                                  { pop esi (src) }
-        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitAsm386([
+          'mov edi, eax',
+          'pop esi',                         { src }
+          'mov ecx, %', IRIVal[node]         { mov ecx, count }
+        ]);
         EmitB($F3); EmitB($A4);                      { rep movsb }
       end;
 
@@ -5131,9 +5498,9 @@ begin
           because the softlock lives in the helpers such an arm would replace.
           bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july }
         IREmitNode386(IRB[node]);                    { eax = src }
-        EmitB($50);                                  { push src  ([esp+4]) }
+        EmitAsm386('push eax');  { push src  ([esp+4]) }
         IREmitNode386(IRA[node]);                    { eax = dest }
-        EmitB($50);                                  { push dest ([esp])  }
+        EmitAsm386('push eax');  { push dest ([esp]) }
         { COM interface members: their own pass, source retained before the
           destination is released so `a := a` nets zero.
           bug-a-a-record-copy-does-not-retain-an-interface-field }
@@ -5142,7 +5509,7 @@ begin
           procIdx := FindProc('PXXRecordRetainIntf');
           if procIdx >= 0 then
           begin
-            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
+            EmitAsm386('mov eax, [esp+4]');  { src }
             EmitB($50);
             EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
             EmitCallProc(procIdx);
@@ -5151,7 +5518,7 @@ begin
           procIdx := FindProc('PXXRecordReleaseIntf');
           if procIdx >= 0 then
           begin
-            EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
+            EmitAsm386('mov eax, [esp]');  { dest }
             EmitB($50);
             EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
             EmitCallProc(procIdx);
@@ -5160,21 +5527,27 @@ begin
         end;
         procIdx := FindProc('PXXRecordRetain');
         if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
-        EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
-        EmitB($50);                                  { push eax (arg0 recAddr) }
+        EmitAsm386([
+          'mov eax, [esp+4]',                { src }
+          'push eax'                         { arg0 recAddr }
+        ]);
         EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
         EmitCallProc(procIdx);
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
         procIdx := FindProc('PXXRecordRelease');
         if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
-        EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
-        EmitB($50);                                  { push eax (arg0 recAddr) }
+        EmitAsm386([
+          'mov eax, [esp]',                  { dest }
+          'push eax'                         { arg0 recAddr }
+        ]);
         EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
         EmitCallProc(procIdx);
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
-        EmitB($5F);                                  { pop edi (dest) }
-        EmitB($5E);                                  { pop esi (src) }
-        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitAsm386([
+          'pop edi',                         { dest }
+          'pop esi',                         { src }
+          'mov ecx, %', IRIVal[node]         { mov ecx, count }
+        ]);
         EmitB($F3); EmitB($A4);                      { rep movsb }
       end;
 
@@ -5183,20 +5556,24 @@ begin
         IREmitNode386(IRA[node]);                    { eax = destination }
         if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
         begin
-          EmitB($50);                                { push dest }
+          EmitAsm386('push eax');  { push dest }
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
-          EmitB($8B); EmitB($04); EmitB($24);        { mov eax, [esp] (dest) }
-          EmitB($50);                                { push eax (arg0) }
+          EmitAsm386([
+            'mov eax, [esp]',                  { dest }
+            'push eax'                         { arg0 }
+          ]);
           EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(8);        { add esp, 8 }
-          EmitB($5F);                                { pop edi (dest) }
+          EmitAsm386('pop edi');  { dest }
         end
         else
           begin EmitB($89); EmitB($C7); end;         { mov edi, eax }
-        EmitB($31); EmitB($C0);                      { xor eax, eax }
-        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitAsm386([
+          'xor eax, eax',
+          'mov ecx, %', IRIVal[node]         { mov ecx, count }
+        ]);
         EmitB($F3); EmitB($AA);                      { rep stosb }
       end;
 
@@ -5213,11 +5590,13 @@ begin
       begin
         { Copy the full 32-byte set from src (IRB) to dest (IRA). }
         IREmitNode386(IRB[node]);                    { eax = source addr }
-        EmitB($50);                                  { push src }
+        EmitAsm386('push eax');  { push src }
         IREmitNode386(IRA[node]);                    { eax = dest addr }
-        EmitB($89); EmitB($C7);                      { mov edi, eax }
-        EmitB($5E);                                  { pop esi }
-        EmitB($B9); EmitI32(32);                     { mov ecx, 32 }
+        EmitAsm386([
+          'mov edi, eax',
+          'pop esi',
+          'mov ecx, 32'
+        ]);
         EmitB($F3); EmitB($A4);                      { rep movsb }
       end;
 
@@ -5226,10 +5605,12 @@ begin
         { Set +/-/* over 32 bytes = 8 dwords, into the BSS scratch (IRIVal).
           eax holds [lhs+i], ecx holds [rhs+i]; result -> [scratch+i]. }
         IREmitNode386(IRA[node]);                    { lhs addr }
-        EmitB($50);                                  { push lhs }
+        EmitAsm386('push eax');  { push lhs }
         IREmitNode386(IRB[node]);                    { eax = rhs addr }
-        EmitB($89); EmitB($C6);                      { mov esi, eax (rhs) }
-        EmitB($5A);                                  { pop edx (lhs) }
+        EmitAsm386([
+          'mov esi, eax',                    { rhs }
+          'pop edx'                          { lhs }
+        ]);
         EmitB($BF); EmitGlobRef(IRIVal[node]);       { mov edi, scratch }
         for i := 0 to 7 do
         begin
@@ -5237,8 +5618,10 @@ begin
           EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
           if IntToTokenKind(IRC[node]) = tkMinus then
           begin
-            EmitB($F7); EmitB($D1);                  { not ecx }
-            EmitB($21); EmitB($C8);                  { and eax, ecx }
+            EmitAsm386([
+              'not ecx',
+              'and eax, ecx'
+            ]);
           end
           else if IntToTokenKind(IRC[node]) = tkPlus then
             begin EmitB($09); EmitB($C8); end        { or eax, ecx }
@@ -5255,64 +5638,82 @@ begin
       begin
         { Compare two 32-byte sets (8 dwords). ebx accumulates subset
           violations, edx accumulates differences (any set bit => unequal). }
-        EmitB($53);                                  { push ebx }
+        EmitAsm386('push ebx');
         IREmitNode386(IRA[node]);                    { lhs addr }
-        EmitB($50);                                  { push lhs }
+        EmitAsm386('push eax');  { push lhs }
         IREmitNode386(IRB[node]);                    { eax = rhs addr }
-        EmitB($89); EmitB($C6);                      { mov esi, eax (rhs) }
-        EmitB($5F);                                  { pop edi (lhs) }
-        EmitB($31); EmitB($DB);                      { xor ebx, ebx (violations) }
-        EmitB($31); EmitB($D2);                      { xor edx, edx (differences) }
+        EmitAsm386([
+          'mov esi, eax',                    { rhs }
+          'pop edi',                         { lhs }
+          'xor ebx, ebx',                    { violations }
+          'xor edx, edx'                     { differences }
+        ]);
         for i := 0 to 7 do
         begin
           EmitB($8B); EmitB($47); EmitB(i * 4);      { mov eax, [edi+i*4] (lhs) }
           EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
           { differences: edx |= (lhs xor rhs) — preserve the lhs dword in eax }
-          EmitB($50);                                { push eax (save lhs dword) }
-          EmitB($31); EmitB($C8);                    { xor eax, ecx }
-          EmitB($09); EmitB($C2);                    { or edx, eax }
-          EmitB($58);                                { pop eax (lhs dword) }
+          EmitAsm386([
+            'push eax',                        { save lhs dword }
+            'xor eax, ecx',
+            'or edx, eax',
+            'pop eax'                          { lhs dword }
+          ]);
           if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
           begin
             { lhs subset of rhs: lhs and not rhs must be 0 }
-            EmitB($F7); EmitB($D1);                  { not ecx }
-            EmitB($21); EmitB($C8);                  { and eax, ecx }
-            EmitB($09); EmitB($C3);                  { or ebx, eax }
+            EmitAsm386([
+              'not ecx',
+              'and eax, ecx',
+              'or ebx, eax'
+            ]);
           end
           else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
           begin
             { rhs subset of lhs: rhs and not lhs must be 0 }
-            EmitB($F7); EmitB($D0);                  { not eax }
-            EmitB($21); EmitB($C1);                  { and ecx, eax }
-            EmitB($09); EmitB($CB);                  { or ebx, ecx }
+            EmitAsm386([
+              'not eax',
+              'and ecx, eax',
+              'or ebx, ecx'
+            ]);
           end;
         end;
         { Build the Boolean result in eax from edx (differences) / ebx (viol). }
         if IRC[node] = Ord(tkEq) then
         begin
-          EmitB($85); EmitB($D2);                    { test edx, edx }
-          EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
+          EmitAsm386([
+            'test edx, edx',
+            'sete al'
+          ]);
         end
         else if IRC[node] = Ord(tkNeq) then
         begin
-          EmitB($85); EmitB($D2);                    { test edx, edx }
-          EmitB($0F); EmitB($95); EmitB($C0);        { setne al }
+          EmitAsm386([
+            'test edx, edx',
+            'setne al'
+          ]);
         end
         else if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkGe)) then
         begin
-          EmitB($85); EmitB($DB);                    { test ebx, ebx }
-          EmitB($0F); EmitB($94); EmitB($C0);        { sete al (subset/superset) }
+          EmitAsm386([
+            'test ebx, ebx',
+            'sete al'                          { subset/superset }
+          ]);
         end
         else { tkLt / tkGt: proper subset = subset AND unequal }
         begin
-          EmitB($85); EmitB($DB);                    { test ebx, ebx }
-          EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
-          EmitB($85); EmitB($D2);                    { test edx, edx }
-          EmitB($0F); EmitB($95); EmitB($C1);        { setne cl }
-          EmitB($20); EmitB($C8);                    { and al, cl }
+          EmitAsm386([
+            'test ebx, ebx',
+            'sete al',
+            'test edx, edx',
+            'setne cl',
+            'and al, cl'
+          ]);
         end;
-        EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
-        EmitB($5B);                                  { pop ebx }
+        EmitAsm386([
+          'movzx eax, al',
+          'pop ebx'
+        ]);
       end;
 
     IR_RTTI_REG:
@@ -5331,14 +5732,14 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
-          EmitB($50);                                { push eax }
+          EmitAsm386('push eax');
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         base := 0;
         if nArgs = 7 then
         begin
-          EmitB($55);                                { push ebp (save frame ptr) }
+          EmitAsm386('push ebp');  { save frame ptr }
           base := 4;
         end;
         for i := 0 to nArgs - 1 do
@@ -5353,9 +5754,9 @@ begin
           EmitB($8B); EmitB($44 + (j shl 3)); EmitB($24);
           EmitB(base + (nArgs - 1 - i) * 4);         { mov reg, [esp+disp8] }
         end;
-        EmitB($CD); EmitB($80);                      { int 0x80 }
+        EmitAsm386('int 128');
         if nArgs = 7 then
-          EmitB($5D);                                { pop ebp (restore frame ptr) }
+          EmitAsm386('pop ebp');  { restore frame ptr }
         if nArgs > 0 then
         begin
           EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
@@ -5368,11 +5769,15 @@ begin
           bit31 set) zero-extends to a positive value. edx is dead after the
           trap, so this is unconditional (harmless for 32-bit consumers). }
         EmitB($3D); EmitI32(Integer($FFFFF000));    { cmp eax, 0xFFFFF000 }
-        EmitB($77); EmitB($04);                     { ja .err (unsigned: error range) }
-        EmitB($31); EmitB($D2);                     { xor edx, edx (zero-extend) }
-        EmitB($EB); EmitB($02);                     { jmp .done }
-        EmitB($99);                                 { .err: cdq (sign-extend) }
-        EmitB($90);                                 { .done: nop (pad to jmp target) }
+        EmitAsm386([
+          'ja short .err',                    { unsigned: error range }
+          'xor edx, edx',                     { zero-extend }
+          'jmp short .done',
+          '.err:',
+          'cdq',                              { sign-extend }
+          'nop',                              { never executed: the jmp lands past it }
+          '.done:'
+        ]);
       end;
 
     IR_NEG:
@@ -5391,17 +5796,21 @@ begin
         begin
           { flip the sign bit: xmm0 ^= 0x8000000000000000 }
           EmitB($68); EmitI32(Integer($80000000));   { push hi }
-          EmitB($6A); EmitB($00);                    { push 0 (lo) }
-          EmitB($F2); EmitB($0F); EmitB($10); EmitB($0C); EmitB($24);  { movsd xmm1, [esp] }
-          EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
-          EmitB($66); EmitB($0F); EmitB($57); EmitB($C1);              { xorpd xmm0, xmm1 }
+          EmitAsm386([
+            'push 0',                          { lo }
+            'movsd xmm1, [esp]',
+            'add esp, 8',
+            'xorpd xmm0, xmm1'
+          ]);
         end
         else if Is64Bit386(IntToTypeKind(IRTk[node])) then
         begin
           { negate edx:eax: neg eax; adc edx,0; neg edx }
-          EmitB($F7); EmitB($D8);                    { neg eax }
-          EmitB($83); EmitB($D2); EmitB($00);        { adc edx, 0 }
-          EmitB($F7); EmitB($DA);                    { neg edx }
+          EmitAsm386([
+            'neg eax',
+            'adc edx, 0',
+            'neg edx'
+          ]);
         end
         else
           begin EmitB($F7); EmitB($D8); end;         { neg eax }
@@ -5417,17 +5826,19 @@ begin
           IREmitNode386(IRA[node]);
         if Is64Bit386(IntToTypeKind(IRTk[node])) then
         begin
-          EmitB($F7); EmitB($D0);                    { not eax }
-          EmitB($F7); EmitB($D2);                    { not edx }
+          EmitAsm386([
+            'not eax',
+            'not edx'
+          ]);
         end
         else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
            (IntToTypeKind(IRTk[node]) <> tyBoolean) then
         begin
-          EmitB($F7); EmitB($D0);                    { not eax }
+          EmitAsm386('not eax');
         end
         else
         begin
-          EmitB($83); EmitB($F0); EmitB($01);        { xor eax, 1 }
+          EmitAsm386('xor eax, 1');
         end;
       end;
 
@@ -5463,7 +5874,7 @@ begin
           else if tk = tyVariant then
           begin
             EmitLoadVariantAddr386(valNode);             { eax = slot addr }
-            EmitB($50);                                  { push eax (arg0 = v) }
+            EmitAsm386('push eax');  { arg0 = v }
             procIdx := FindProc(WriteVariantHelperName);
             if procIdx < 0 then Error('compiler error: ' + WriteVariantHelperName + ' not found');
             EmitCallProc(procIdx);
@@ -5522,8 +5933,10 @@ begin
                 riscv32 has routed every width write through it all along.
                 Args push left-to-right, a 64-bit one as hi then lo.
                 bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 }
-              EmitB($52);                            { push edx (hi) }
-              EmitB($50);                            { push eax (lo) }
+              EmitAsm386([
+                'push edx',                        { hi }
+                'push eax'                         { lo }
+              ]);
               if tk = tyUInt64 then begin EmitB($68); EmitI32(1); end
               else begin EmitB($68); EmitI32(0); end;   { push uns }
               EmitB($68); EmitI32(wid);              { push width }
@@ -5559,17 +5972,21 @@ begin
                 while the string-LITERAL arm above honoured it.
                 bug-a-three-backends-drop-the-field-width-on-a-string-variable }
               IREmitNode386(valNode);                    { eax = handle }
-              EmitB($50);                                { push eax (preserve) }
-              EmitB($50);                                { push eax (arg0 = p) }
+              EmitAsm386([
+                'push eax',                        { preserve }
+                'push eax'                         { arg0 = p }
+              ]);
               EmitB($68); EmitI32(wid);                  { push wid (arg1) }
               procIdx := FindProc('PXXWriteStrMW');
               if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
               EmitCallProc(procIdx);
-              EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
-              EmitB($58);                                { pop eax (handle) }
+              EmitAsm386([
+                'add esp, 8',
+                'pop eax'                          { handle }
+              ]);
               if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
               begin
-                EmitB($50);                              { push eax (arg0) }
+                EmitAsm386('push eax');  { arg0 }
                 procIdx := FindProc('PXXStrDecRef');
                 if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
                 EmitCallProc(procIdx);
@@ -5581,18 +5998,20 @@ begin
               { write(1, data, [data-8]); nil handle -> skip. len is the low
                 dword of the 8-byte length header. }
               IREmitNode386(valNode);                      { eax = handle }
-              EmitB($85); EmitB($C0);                      { test eax, eax }
+              EmitAsm386('test eax, eax');
               EmitB($74); j := CodeLen; EmitB(0);          { jz done }
-              EmitB($50);                                  { push eax (preserve) }
-              EmitB($8B); EmitB($50); EmitB($F8);          { mov edx, [eax-8] (len) }
-              EmitB($89); EmitB($C1);                      { mov ecx, eax (buf) }
-              EmitB($BB); EmitI32(CurWriteFd);                 { mov ebx, fd }
-              EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
-              EmitB($CD); EmitB($80);                      { int 0x80 }
-              EmitB($58);                                  { pop eax (handle) }
+              EmitAsm386([
+                'push eax',                        { preserve }
+                'mov edx, [eax-8]',                { len }
+                'mov ecx, eax',                    { buf }
+                'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+                'mov eax, 4',                      { write }
+                'int 128',
+                'pop eax'                          { handle }
+              ]);
               if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
               begin
-                EmitB($50);                                { push eax (arg0) }
+                EmitAsm386('push eax');  { arg0 }
                 procIdx := FindProc('PXXStrDecRef');
                 if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
                 EmitCallProc(procIdx);
@@ -5630,7 +6049,7 @@ begin
                 for exactly that reason. The acceptance rows carry a nonzero
                 width deliberately. }
               IREmitNode386(valNode);                    { eax = address }
-              EmitB($50);                                { push eax (arg0 = p) }
+              EmitAsm386('push eax');  { arg0 = p }
               EmitB($68); EmitI32(wid);                  { push wid (arg1) }
               if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
                 procIdx := FindProc('PXXWriteFrozenBW')
@@ -5638,7 +6057,7 @@ begin
                 procIdx := FindProc('PXXWriteFrozenW');
               if procIdx < 0 then Error('compiler error: PXXWriteFrozen[B]W not found');
               EmitCallProc(procIdx);
-              EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
+              EmitAsm386('add esp, 8');
             end
             else
             begin
@@ -5647,12 +6066,14 @@ begin
                 never reaches, and the one that was still reading a wide prefix
                 after every other site was converted. }
               IREmitNode386(valNode);                      { eax = address }
-              EmitB($89); EmitB($C1);                      { mov ecx, eax }
+              EmitAsm386('mov ecx, eax');
               EmitLeaStrData386(1, IRStrTkOf(valNode));    { ecx = chars }
               EmitLoadStrLen386(2, 0, IRStrTkOf(valNode)); { edx = len }
-              EmitB($BB); EmitI32(CurWriteFd);                 { mov ebx, fd }
-              EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
-              EmitB($CD); EmitB($80);                      { int 0x80 }
+              EmitAsm386([
+                'mov ebx, %', CurWriteFd,          { mov ebx, fd }
+                'mov eax, 4',                      { write }
+                'int 128'
+              ]);
             end;
           end
           else
@@ -5696,16 +6117,18 @@ begin
             release makes self-assignment safe). }
           EmitLoadVariantAddr386(IRB[node]);         { eax = src addr }
           EmitVarHelperCall386('PXXVarRetain');
-          EmitB($50);                                { push src addr }
+          EmitAsm386('push eax');  { push src addr }
           IREmitNode386(IRA[node]);                  { eax = dest addr }
           { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and
             when src and dest alias that wipes what the copy below is about to
             read — `v := v` came back Empty.
             bug-a-a-variant-assigned-to-itself-becomes-empty }
           EmitVarHelperCall386('PXXVarReleasePayload');
-          EmitB($89); EmitB($C7);                    { mov edi, eax }
-          EmitB($5E);                                { pop esi (src) }
-          EmitB($B9); EmitI32(16);                   { mov ecx, 16 }
+          EmitAsm386([
+            'mov edi, eax',
+            'pop esi',                         { src }
+            'mov ecx, 16'
+          ]);
           EmitB($F3); EmitB($A4);                    { rep movsb }
         end
         else
@@ -5725,17 +6148,21 @@ begin
           else if tk = tyString then
           begin
             IREmitNode386(IRB[node]);                { eax = inline string buffer }
-            EmitB($50);                              { push eax }
+            EmitAsm386('push eax');
             EmitLoadStrLen386(1, 0, IRStrTkOf(IRB[node]));   { ecx = len }
             EmitLeaStrData386(0, IRStrTkOf(IRB[node]));      { eax = chars }
-            EmitB($51);                              { push ecx (len) }
-            EmitB($50);                              { push eax (src) }
+            EmitAsm386([
+              'push ecx',                        { len }
+              'push eax'                         { src }
+            ]);
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(procIdx);                        { eax = new AnsiString }
             EmitB($81); EmitB($C4); EmitI32(8);      { add esp, 8 }
-            EmitB($59);                              { pop ecx (drop buffer) }
-            EmitB($50);                              { push payload }
+            EmitAsm386([
+              'pop ecx',                         { drop buffer }
+              'push eax'                         { push payload }
+            ]);
           end
           else if tk = tyAnsiString then
           begin
@@ -5748,13 +6175,13 @@ begin
               fix; it asks the shared predicate now. }
             if not IRNodeOwnsManagedStr(IRB[node]) then
             begin
-              EmitB($50);                            { push eax (arg0) }
+              EmitAsm386('push eax');  { arg0 }
               procIdx := FindProc('PXXStrIncRef');
               if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
               EmitCallProc(procIdx);
-              EmitB($58);                            { pop eax }
+              EmitAsm386('pop eax');
             end;
-            EmitB($50);                              { push payload }
+            EmitAsm386('push eax');  { push payload }
           end
           else if tk = tyClass then
           begin
@@ -5767,13 +6194,13 @@ begin
               predicate as x86-64's; see IRNodeOwnsManagedObj. }
             if not IRNodeOwnsManagedObj(IRB[node]) then
             begin
-              EmitB($50);                            { push eax (arg0) }
+              EmitAsm386('push eax');  { arg0 }
               procIdx := FindProc('PXXObjRetain');
               if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
               EmitCallProc(procIdx);
-              EmitB($58);                            { pop eax }
+              EmitAsm386('pop eax');
             end;
-            EmitB($50);                              { push payload }
+            EmitAsm386('push eax');  { push payload }
           end
           else
           begin
@@ -5791,13 +6218,15 @@ begin
             else if Is64Bit386(tk) then
             begin
               EmitNode64_386(IRB[node]);             { full value -> edx:eax }
-              EmitB($52);                            { push edx (hi) }
-              EmitB($50);                            { push eax (lo) }
+              EmitAsm386([
+                'push edx',                        { hi }
+                'push eax'                         { lo }
+              ]);
             end
             else
             begin
               IREmitNode386(IRB[node]);              { scalar -> eax }
-              EmitB($50);                            { push payload }
+              EmitAsm386('push eax');  { push payload }
             end;
           end;
           IREmitNode386(IRA[node]);                  { eax = dest addr }
@@ -5822,14 +6251,18 @@ begin
           EmitB($50);
           EmitLoadStrLen386(1, 0, IRStrTkOf(IRB[node]));   { ecx = len }
           EmitLeaStrData386(0, IRStrTkOf(IRB[node]));      { eax = chars }
-          EmitB($51);                                { push ecx (len) }
-          EmitB($50);                                { push eax (src) }
+          EmitAsm386([
+            'push ecx',                        { len }
+            'push eax'                         { src }
+          ]);
           procIdx := FindProc('PXXStrFromLit');
           if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(8);
-          EmitB($59);                                { pop ecx (drop buffer) }
-          EmitB($50);                                { push payload }
+          EmitAsm386([
+            'pop ecx',                         { drop buffer }
+            'push eax'                         { push payload }
+          ]);
         end
         else if tk = tyAnsiString then
         begin
@@ -5839,17 +6272,19 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
           EmitCallProc(procIdx);
           EmitB($58);
-          EmitB($50);                                { push payload }
+          EmitAsm386('push eax');  { push payload }
         end
         else if tk = tyClass then
         begin
           IREmitNode386(IRB[node]);                  { eax = instance pointer }
-          EmitB($50);                                { push eax (arg0) }
+          EmitAsm386('push eax');  { arg0 }
           procIdx := FindProc('PXXObjRetain');
           if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
           EmitCallProc(procIdx);
-          EmitB($58);                                { pop eax }
-          EmitB($50);                                { push payload }
+          EmitAsm386([
+            'pop eax',
+            'push eax'                         { push payload }
+          ]);
         end
         else
         begin
@@ -5862,13 +6297,15 @@ begin
           else if Is64Bit386(tk) then
           begin
             EmitNode64_386(IRB[node]);               { full value -> edx:eax }
-            EmitB($52);                              { push edx (hi) }
-            EmitB($50);                              { push eax (lo) }
+            EmitAsm386([
+              'push edx',                        { hi }
+              'push eax'                         { lo }
+            ]);
           end
           else
           begin
             IREmitNode386(IRB[node]);
-            EmitB($50);                              { push payload }
+            EmitAsm386('push eax');  { push payload }
           end;
         end;
         IREmitNode386(IRA[node]);                    { eax = temp addr }
@@ -5886,9 +6323,9 @@ begin
           begin EmitB($6A); EmitB($00); end          { push 0 (dest unused) }
         else
           begin EmitPushGlobAddr(Integer(IRIVal[node])); end; { push dest temp }
-        EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (left) }
+        EmitAsm386('mov eax, [esp+8]');  { left }
         EmitB($50);
-        EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (right) }
+        EmitAsm386('mov eax, [esp+8]');  { right }
         EmitB($50);
         EmitB($68); EmitI32(IRC[node]);              { push opTk }
         if sgn then
@@ -5979,7 +6416,7 @@ begin
   begin
     EmitB($E8); EmitI32(0);        { call .L  (displacement 0 = the next insn) }
     X386PicAnchor := CodeLen;      { .L is HERE: the address `call` pushed }
-    EmitB($5E);                    { pop esi }
+    EmitAsm386('pop esi');
     { Park it in the frame, and stop relying on esi immediately. Carved the
       same way the alloca base is, so PatchProcPrologue sizes the frame. }
     FrameSize := AlignTo(FrameSize + 4, 4);
@@ -6016,7 +6453,7 @@ begin
           { Managed-record temp: zero the full record (PXXMemZero) so every
             managed field starts nil, not just the first pointer-sized slot. }
           EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);          { lea eax, [ebp+off] }
-          EmitB($50);                                               { push dest }
+          EmitAsm386('push eax');  { push dest }
           EmitB($68); EmitI32(RecSize(SymTR[i].RecId));            { push count }
           procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'i386');
           EmitCallProc(procIdx);
@@ -6077,9 +6514,9 @@ begin
             `or eax, edx` sets ZF iff BOTH halves are zero. }
           if Is64Bit386(IntToTypeKind(IRTk[IRB[i]])) then
           begin
-            EmitB($09); EmitB($D0);                  { or eax, edx }
+            EmitAsm386('or eax, edx');
           end;
-          EmitB($85); EmitB($C0);                    { test eax, eax }
+          EmitAsm386('test eax, eax');
           EmitB($0F); EmitB($84);                    { jz rel32 }
           if LabelPositions[lblId] <> -1 then
             EmitI32(LabelPositions[lblId] - (CodeLen + 4))
@@ -6115,12 +6552,14 @@ begin
           lblId := IRA[i];
           EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE_386); { sub esp, 32 }
           EmitMovGlobAcc($A1, BSS_EXC_TOP);                { mov eax, [BSS_EXC_TOP] }
-          EmitB($89); EmitB($04); EmitB($24);                  { mov [esp], eax }
-          EmitB($89); EmitB($E0);                              { mov eax, esp }
+          EmitAsm386([
+            'mov [esp], eax',
+            'mov eax, esp'
+          ]);
           EmitMovGlobAcc($A3, BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
           EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386); { lea eax, [esp+EXC_JMP_OFFSET_386] }
           IREmitCodeCall(ExcSetJmpAddr);                      { call ExcSetJmpAddr }
-          EmitB($85); EmitB($C0);                              { test eax, eax }
+          EmitAsm386('test eax, eax');
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($85);                            { jnz rel32 }
@@ -6222,7 +6661,7 @@ begin
 
       IR_EXC_CLEAR:
         begin
-          EmitB($31); EmitB($C0); { xor eax, eax }
+          EmitAsm386('xor eax, eax');
           EmitMovGlobAcc($A3, BSS_EXC_OBJ);
           EmitMovGlobAcc($A3, BSS_EXC_CLS);
           EmitMovGlobAcc($A3, BSS_EXC_ADDR);
@@ -6245,8 +6684,10 @@ begin
             else if sz > 0 then
             begin
               EmitB($8D); EmitB($BD); EmitI32(Syms[si].Offset);  { lea edi, [ebp+off] }
-              EmitB($31); EmitB($C0);                            { xor eax, eax }
-              EmitB($B9); EmitI32(sz);                           { mov ecx, sz }
+              EmitAsm386([
+                'xor eax, eax',
+                'mov ecx, %', sz                   { mov ecx, sz }
+              ]);
               EmitB($F3); EmitB($AA);                            { rep stosb }
             end;
           end;
