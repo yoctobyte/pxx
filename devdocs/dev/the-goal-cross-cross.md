@@ -437,8 +437,9 @@ The owner, after sizing the through-libc port: *"quite a lot of work, but no
 real bears on the road ... let's write ourself a ticket with the plan, and
 let's start working."* `feature-port-libc-family-openbsd-netbsd-minix` is
 priced at **60** and is not to be re-demoted from the section below. wasm's
-demotion is unchanged. FreeBSD (raw-syscall family) is not covered by this
-ruling until the owner says so.
+demotion is unchanged. FreeBSD (raw-syscall family) is covered too, from the
+same day: *"i thought freebsd was the easiest one?"* and *"continue working on
+BSD / other kernel support"* -- `feature-port-freebsd-native` is claimed.
 
 ## CURRENT FOCUS, 2026-09-01: LINUX ONLY — BSD and wasm are demoted
 

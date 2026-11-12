@@ -2,8 +2,8 @@
 summary: "FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand"
 type: feature
 prio: 25
-status: blocked
-blocked-by: [feature-t-freebsd-image-and-runner]
+status: working
+blocked-by: []
 track: A
 ---
 
@@ -11,7 +11,7 @@ track: A
 
 - **Type:** feature (Track A — backend/ABI/ELF/syscall emission). Portability campaign.
 - **Status:** blocked on [[feature-t-freebsd-image-and-runner]] — no FreeBSD kernel is reachable from plexus (no qemu, no image), and this ticket's own plan puts a linuxulator smoke test FIRST, before any code. The compiler work is ready to start the moment a kernel is.
-- **Owner:** —
+- **Owner:** pxx2-bsd
 - **Opened:** 2026-07-17, OS-portability mapping session. Full map in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).
 - **Related:** [[feature-port-rtl-over-libc]] (NOT needed here — FreeBSD keeps raw
@@ -117,3 +117,28 @@ or confirmation of where the existing qcow2 lives. That is Track T-shaped
 infrastructure work (per `portability-axes.md`, the per-OS image/runner harness
 may live in a Track T clone); the compiler work here is ready to start the
 moment a kernel is reachable.
+
+## 2026-11-12 (pxx2-bsd) — claimed; the kernel exists now, and the linuxulator smoke passes
+
+Owner, 2026-11-12, on being asked which port to take: *"i thought freebsd was
+the easiest one?"* -- and then *"continue working on BSD / other kernel support"*.
+Taken as lifting the 2026-09-01 BSD demotion for this ticket too (recorded in
+`the-goal-cross-cross.md` beside the libc-family note).
+
+**Infra (unblocks this; does the job of `feature-t-freebsd-image-and-runner`):**
+FreeBSD 15.1-RELEASE amd64, the official BASIC-CLOUDINIT ufs qcow2, under
+qemu/KVM on plexus in `/data/vm/freebsd` (root is 99% full -- never on `/`).
+`start.sh` boots it headless with ssh on 127.0.0.1:2223; `run.sh <bin> [args]`
+copies a binary in and relays stdout/stderr/exit. The cloud-init seed did NOT
+install the key (no nuageinit output on the console); `setup.py` does it once
+over the serial console (root has no console password on these images, and
+FreeBSD's sshd needs `PermitRootLogin prohibit-password`).
+
+**Smoke (a) — linuxulator, PASSES.** `kldload linux64`; then
+`test/test_rtl_libc_torture.pas` built by the Linux compiler (default, raw
+syscalls) prints byte-identical output and exits 0 on FreeBSD -- but only after
+`brandelf -t Linux`. Unbranded it is `Exec format error`: pxx writes
+`EI_OSABI = 0` (SVR4) and no ABI note, so FreeBSD's static-binary brand
+fallback does not pick Linux. Setting `EI_OSABI = 3` (ELFOSABI_LINUX) on Linux
+output would make Linux pxx binaries run under linuxulator with no user step.
+
