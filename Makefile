@@ -35967,11 +35967,16 @@ test-xtensa: $(COMPILER)
 	# one forward jump, over a body big enough to cross the bound. 6000 lines
 	# since 2026-11-12: xtensa's low-32 demand made `s := s + 1` ~31 bytes
 	# (was ~59), and 3000 fell to 143676B, under 128 KiB, so the relaxation
-	# control below went red as it is meant to.
+	# control below went red as it is meant to. Each line adds a DISTINCT
+	# constant outside movi range since the same day: xtensa -O2 now shares a
+	# repeated literal within a body, and `+ 1` everywhere let the generated
+	# block shrink under the bound again. A distinct value per line keeps one
+	# fresh literal per line whatever sharing does (192 KiB windowed, 216 KiB
+	# Call0, measured).
 	# bug-a-xtensa-cannot-widen-a-forward-jump-so-the-compiler-still-will-not-build
 	@awk 'BEGIN{print "program fwdjump;"; print "var n, s: Integer;"; \
 	  print "begin"; print "  n := 0; s := 0;"; print "  if n = 0 then"; print "  begin"; \
-	  for(k=0;k<6000;k++) print "    s := s + 1;"; \
+	  for(k=0;k<6000;k++) print "    s := s + " (100000+k) ";"; \
 	  print "  end;"; print "  Writeln(\"s=\", s);"; print "end."}' \
 	  | tr '"' "'" > $(TESTTMP)/xt_fwdjump.pas
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_fwdjump.pas $(TESTTMP)/xt_fwdjump

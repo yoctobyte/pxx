@@ -48,30 +48,73 @@ begin
     xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, delta);
 end;
 
+function XtLitReuse(rd, kind: Integer; v: Int32): Boolean;
+{ An L32R back to a literal of the same kind and value already emitted in
+  this body, when one is in reach (L32R reaches 256 KiB back from the aligned
+  pc). Not inside XtensaWideBegin/End: a reused load is 3 bytes where a fresh
+  one is 7..10, and wide code counts bytes. }
+var i, base, off: Integer;
+begin
+  Result := False;
+  if (not XtLitOn) or (XtensaWideDepth > 0) then Exit;
+  base := (CodeLen + 3) and (not 3);
+  for i := XtLitCount - 1 downto 0 do
+    if (XtLitKind[i] = kind) and (XtLitVal[i] = v) then
+    begin
+      off := XtLitPos[i] - base;
+      if off < -262144 then Exit;
+      xtensa_l32r(rd, (off div 4) and $FFFF);
+      Result := True;
+      Exit;
+    end;
+end;
+
+procedure XtLitNote(kind: Integer; v: Int32; litPos: Integer);
+begin
+  if XtLitOn and (XtLitCount <= High(XtLitPos)) then
+  begin
+    XtLitKind[XtLitCount] := kind;
+    XtLitVal[XtLitCount] := v;
+    XtLitPos[XtLitCount] := litPos;
+    Inc(XtLitCount);
+  end;
+end;
+
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32);
+var litPos: Integer;
 begin
   if (v >= -2048) and (v <= 2047) then
     xtensa_movi(rd, v)
-  else
+  else if not XtLitReuse(rd, 0, v) then
   begin
     XtensaEmitLitHeader;
+    litPos := CodeLen;
     EmitI32(v);
     xtensa_l32r(rd, $FFFF);
+    XtLitNote(0, v, litPos);
   end;
 end;
 
 procedure EmitLoadDataRefXtensa(rd: Integer; dataOff: Integer);
+var litPos: Integer;
 begin
+  if XtLitReuse(rd, 1, dataOff) then Exit;
   XtensaEmitLitHeader;
+  litPos := CodeLen;
   EmitDataRef(dataOff);
   xtensa_l32r(rd, $FFFF);
+  XtLitNote(1, dataOff, litPos);
 end;
 
 procedure EmitLoadGlobAddrXtensa(rd: Integer; bssOff: Integer);
+var litPos: Integer;
 begin
+  if XtLitReuse(rd, 2, bssOff) then Exit;
   XtensaEmitLitHeader;
+  litPos := CodeLen;
   EmitGlobRef(bssOff);
   xtensa_l32r(rd, $FFFF);
+  XtLitNote(2, bssOff, litPos);
 end;
 
 function XtRegName(r: Integer): AnsiString;
@@ -6500,6 +6543,8 @@ begin
   XtSpillDepth := saveSpillDepth;
   XtSpillMax := saveSpillMax;
   XtCallOverflowMax := 0;
+  XtLitCount := 0;
+  XtLitOn := OptLevel >= 2;
 
   { Nil-init hidden owning locals synthesised during IR lowering (see the
     riscv32/x86-64 walkers) — the epilogue's scope-exit DecRef would otherwise
@@ -6817,6 +6862,8 @@ begin
     needRetry := True;
   end;
   until not needRetry;
+  XtLitOn := False;
+  XtLitCount := 0;
 
   { CurProc is -1 for the program's MAIN body, which is exactly the body a
     generated far-forward-jump repro puts everything in -- so a `CurProc >= 0`

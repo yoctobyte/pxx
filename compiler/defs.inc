@@ -6776,6 +6776,21 @@ var
     instruction is emitted in its 3-byte form. For hand-written sequences that
     branch by a fixed byte count over the instructions in between. }
   XtensaWideDepth : Integer;
+  { Literal reuse inside one Xtensa body (-O2). EmitLoadConstXtensa,
+    EmitLoadDataRefXtensa and EmitLoadGlobAddrXtensa record each inline
+    literal they emit here, and a later load of the same (kind, value) in the
+    same body is one L32R back to it instead of a jump, padding and a fresh
+    word. XtLitOn is set per relaxation attempt of IREmitMachineCodeXtensa and
+    cleared on its exit, so a literal is only reached from code emitted in
+    the same contiguous pass: DCE removes whole bodies, and a rewound attempt
+    or another body never sees a stale position. Literals patched after
+    emission (frame size, alloca reserve, label deltas) do not go through the
+    three helpers and are never shared. }
+  XtLitOn : Boolean;
+  XtLitCount : Integer;
+  XtLitKind : array[0..255] of Byte;
+  XtLitVal : array[0..255] of Int32;
+  XtLitPos : array[0..255] of Integer;
   { --rv32-long-calls: keep the eight-byte auipc+jalr form at every FORWARD
     jump and every internal call on --platform=esp. Without it those sites are
     one four-byte JAL (+-1 MiB), and a site whose target turns out to be
