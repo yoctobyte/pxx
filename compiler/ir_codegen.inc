@@ -6306,6 +6306,29 @@ begin
   EmitStaticLitHandle := True;
 end;
 
+function EmitStaticCharHandle(node: Integer): Boolean;
+{ A constant CHAR made into an AnsiString (`s := 'x'`, a 'x' argument to a
+  string parameter): the parser types a one-char literal as tyChar, an
+  IR_CONST_INT, so EmitStaticLitHandle never sees it and the conversion used to
+  call PXXStrFromLit -- a heap block per evaluation for a string that never
+  changes. Intern the one-char string and hand out its static block, under the
+  same -O2 gate and the same no-retain rule as EmitStaticLitHandle. Emits
+  nothing and returns False for anything else, so the caller's runtime arm
+  stays the only other path. A caller that already ran IREmitNode leaves its
+  dead `mov rax, imm` standing (see EmitAnsiStrFromInlineStringOf). }
+var si: Integer;
+begin
+  EmitStaticCharHandle := False;
+  if OptLevel < 2 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_INT then Exit;
+  if IntToTypeKind(IRTk[node]) <> tyChar then Exit;
+  if (IRIVal[node] < 0) or (IRIVal[node] > 255) then Exit;
+  si := InternStr(Chr(Integer(IRIVal[node])));
+  EmitAsmX64(['mov rax, @data', Strs[si].Offset + 8]);
+  EmitStaticCharHandle := True;
+end;
+
 procedure EmitAnsiStrFromInlineStringOf(node: Integer);
 { EmitAnsiStrFromInlineStringTk, but told WHICH NODE produced the address in
   rax rather than which kind, so it can both take a literal's static block and
@@ -9094,12 +9117,15 @@ begin
             IREmitNode(valueNode);
             if IntToTypeKind(IRTk[valueNode]) = tyChar then
             begin
-              EmitAsmX64([
-                'push rax',                            { (char code) }
-                'mov rsi, rsp',
-                'mov rdi, 1']);
-              IREmitCodeCall(AnsiStrFromLiteralAddr);
-              EmitAsmX64(['pop rcx']); { (restore stack) }
+              if not EmitStaticCharHandle(valueNode) then
+              begin
+                EmitAsmX64([
+                  'push rax',                            { (char code) }
+                  'mov rsi, rsp',
+                  'mov rdi, 1']);
+                IREmitCodeCall(AnsiStrFromLiteralAddr);
+                EmitAsmX64(['pop rcx']); { (restore stack) }
+              end;
             end
             else if TypeIsFrozenString(IntToTypeKind(IRTk[valueNode])) then
             begin
@@ -9827,12 +9853,15 @@ begin
             IREmitNode(valueNode);
             if IntToTypeKind(IRTk[valueNode]) = tyChar then
             begin
-              EmitAsmX64([
-                'push rax',                            { (char code) }
-                'mov rsi, rsp',
-                'mov rdi, 1']);
-              IREmitCodeCall(AnsiStrFromLiteralAddr);
-              EmitAsmX64(['pop rcx']); { (restore stack) }
+              if not EmitStaticCharHandle(valueNode) then
+              begin
+                EmitAsmX64([
+                  'push rax',                            { (char code) }
+                  'mov rsi, rsp',
+                  'mov rdi, 1']);
+                IREmitCodeCall(AnsiStrFromLiteralAddr);
+                EmitAsmX64(['pop rcx']); { (restore stack) }
+              end;
             end
             else if TypeIsFrozenString(IntToTypeKind(IRTk[valueNode])) then
             begin
@@ -11912,12 +11941,15 @@ begin
                       EmitAnsiStrFromInlineStringOf(IRA[argNodeArr[i]])
                     else if IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar then
                     begin
-                      EmitAsmX64([
-                        'push rax',                            { (char code) }
-                        'mov rsi, rsp',
-                        'mov rdi, 1']);
-                      IREmitCodeCall(AnsiStrFromLiteralAddr);
-                      EmitAsmX64(['pop rcx']); { (restore stack) }
+                      if not EmitStaticCharHandle(IRA[argNodeArr[i]]) then
+                      begin
+                        EmitAsmX64([
+                          'push rax',                            { (char code) }
+                          'mov rsi, rsp',
+                          'mov rdi, 1']);
+                        IREmitCodeCall(AnsiStrFromLiteralAddr);
+                        EmitAsmX64(['pop rcx']); { (restore stack) }
+                      end;
                     end;
                   end;
                   if i <> lastOrd then EmitAsmX64(['push rax']);
@@ -11992,12 +12024,15 @@ begin
                     EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
-                    EmitAsmX64([
-                      'push rax',                            { (char code) }
-                      'mov rsi, rsp',
-                      'mov rdi, 1']);
-                    IREmitCodeCall(AnsiStrFromLiteralAddr);
-                    EmitAsmX64(['pop rcx']); { (restore stack) }
+                    if not EmitStaticCharHandle(IRA[argNode]) then
+                    begin
+                      EmitAsmX64([
+                        'push rax',                            { (char code) }
+                        'mov rsi, rsp',
+                        'mov rdi, 1']);
+                      IREmitCodeCall(AnsiStrFromLiteralAddr);
+                      EmitAsmX64(['pop rcx']); { (restore stack) }
+                    end;
                   end;
                 end;
               end;
@@ -12273,12 +12308,15 @@ begin
                     EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
-                    EmitAsmX64([
-                      'push rax',                            { (char code) }
-                      'mov rsi, rsp',
-                      'mov rdi, 1']);
-                    IREmitCodeCall(AnsiStrFromLiteralAddr);
-                    EmitAsmX64(['pop rcx']); { (restore stack) }
+                    if not EmitStaticCharHandle(IRA[argNode]) then
+                    begin
+                      EmitAsmX64([
+                        'push rax',                            { (char code) }
+                        'mov rsi, rsp',
+                        'mov rdi, 1']);
+                      IREmitCodeCall(AnsiStrFromLiteralAddr);
+                      EmitAsmX64(['pop rcx']); { (restore stack) }
+                    end;
                   end;
                 end;
                 EmitAsmX64(['push rax']);
@@ -14158,12 +14196,15 @@ begin
               EmitAnsiStrFromInlineStringOf(IRA[argNode])
             else if IntToTypeKind(IRTk[argNode]) = tyChar then
             begin
-              EmitAsmX64([
-                'push rax',                            { (char code) }
-                'mov rsi, rsp',
-                'mov rdi, 1']);
-              IREmitCodeCall(AnsiStrFromLiteralAddr);
-              EmitAsmX64(['pop rcx']); { (restore stack) }
+              if not EmitStaticCharHandle(IRA[argNode]) then
+              begin
+                EmitAsmX64([
+                  'push rax',                            { (char code) }
+                  'mov rsi, rsp',
+                  'mov rdi, 1']);
+                IREmitCodeCall(AnsiStrFromLiteralAddr);
+                EmitAsmX64(['pop rcx']); { (restore stack) }
+              end;
             end;
           end;
           { -O2 (promoted from -O3 2026-07-11): last arg's push/pop pair collapses to one mov (same as the

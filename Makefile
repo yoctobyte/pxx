@@ -15691,6 +15691,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_bvparam26 "$$($(TESTTMP)/test_bvparam26)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
 	./$(COMPILER) -Fulib/rtl -dPXX_ALLOC_CENSUS test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_bvparamc26
 	tools/assert_no_leak.sh by_value_param_owned 200 $(TESTTMP)/test_bvparamc26 5000
+	@# A ONE-CHAR LITERAL MADE A STRING takes the static literal block at -O2
+	@# (EmitStaticCharHandle) instead of a heap block per evaluation. A write
+	@# into the string copies first, so the literal reads the same next time.
+	@# Output is fpc's, byte for byte; the census row is the leak half.
+	./$(COMPILER) test/test_a_char_literal_made_a_string_is_a_static_block.pas $(TESTTMP)/test_chrlit26
+	tools/expect_same.sh test_chrlit26 "$$($(TESTTMP)/test_chrlit26)" "$$(cat test/test_a_char_literal_made_a_string_is_a_static_block.expected)"
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_a_char_literal_made_a_string_is_a_static_block.pas $(TESTTMP)/test_chrlitc26
+	tools/assert_no_leak.sh char_literal_static_block 200 $(TESTTMP)/test_chrlitc26
 	@# An interface RETURNED by a function, and the flush boundary that hid it.
 	@# TWO defects, neither fix working alone (measured by building each on its
 	@# own): the sret temp had no owner, and a loop whose body is not a BEGIN/END
