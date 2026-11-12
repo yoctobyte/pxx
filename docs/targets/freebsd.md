@@ -276,10 +276,20 @@ Sockets, `ppoll`/`pselect6` and epoll work too.
 `lib_asyncnet6` (coroutines over epoll) give the same output on OpenBSD as on
 Linux.
 
+termios and the tty ioctls use FreeBSD's tables, with OpenBSD's few
+differences: there is no `IUTF8`, `OCRNL`/`ONOCR`/`ONLRET` are
+`0x10`/`0x40`/`0x80`, and `CRTSCTS` is `0x10000`. `c_os_freebsd_termios` gives
+the same output as on Linux when run on a real terminal. Under OpenBSD's
+`script(1)` with stdin redirected from `/dev/null`, the pty starts with every
+flag at 0, because `script` copies the settings of a terminal it does not
+have.
+
 Not done yet:
 
 - `/proc/self/maps` and the rest of `/proc`, apart from `environ` and `exe`.
-- termios beyond the `isatty` check, eventfd and timerfd.
+- Pseudo-terminals: OpenBSD has no `/dev/ptmx` (its ptys come from
+  `/dev/ptm`), so `posix_openpt` fails with ENOENT.
+- eventfd and timerfd.
 - Debug info: `-g` is refused, because the debug data would go where the pin
   table is.
 

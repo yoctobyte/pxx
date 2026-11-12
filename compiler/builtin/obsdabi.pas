@@ -30,7 +30,7 @@ unit obsdabi;
   rlimits, /proc/self/environ and /proc/self/exe, isatty, signals (handlers,
   masks, the alt stack, kill/tgkill, itimers), threads (clone -> __tfork,
   thread exit, futex), sockets, ppoll/pselect6, epoll (over kqueue).
-  NOT YET: termios beyond TCGETS, eventfd/timerfd.
+  termios and the tty ioctls. NOT YET: eventfd/timerfd, ptys.
   Anything unmapped answers -ENOSYS. }
 
 interface
@@ -1380,6 +1380,99 @@ begin
   Result := n;
 end;
 
+{ ---- termios -----------------------------------------------------------------
+  Linux's kernel struct termios is 36 bytes (4 flag words, c_line, c_cc[19]),
+  with the line speed coded into c_cflag (CBAUD); OpenBSD's is 44 (4 flag
+  words, c_cc[20], c_ispeed, c_ospeed as plain numbers). Almost every flag bit
+  and every c_cc index differs; a disabled control char is 0 on Linux and
+  0xff (_POSIX_VDISABLE) on OpenBSD. fbsdabi's tables, with what OpenBSD 8.0
+  measures differently: no IUTF8 (dropped), OCRNL/ONOCR/ONLRET at
+  $10/$40/$80, CRTSCTS $10000. The c_cc indices and the ioctl numbers are
+  FreeBSD's. }
+const
+  TIflLx: array[0..13] of Int64 = ($1,$2,$4,$8,$10,$20,$40,$80,$100,$400,$1000,$800,$2000,$4000);
+  TIflOb: array[0..13] of Int64 = ($1,$2,$4,$8,$10,$20,$40,$80,$100,$200,$400,$800,$2000,0);   { no IUTF8 }
+  TOflLx: array[0..5] of Int64 = ($1,$4,$1800,$8,$10,$20);
+  TOflOb: array[0..5] of Int64 = ($1,$2,$4,$10,$40,$80);
+  TCflLx: array[0..6] of Int64 = ($40,$80,$100,$200,$400,$800,$80000000);
+  TCflOb: array[0..6] of Int64 = ($400,$800,$1000,$2000,$4000,$8000,$10000);
+  TLflLx: array[0..13] of Int64 = ($1,$2,$8,$10,$20,$40,$80,$100,$200,$400,$800,$1000,$4000,$8000);
+  TLflOb: array[0..13] of Int64 = ($80,$100,$8,$2,$4,$10,$80000000,$400000,$40,$20,$1,$800000,$20000000,$400);
+  { Linux c_cc index -> FreeBSD index (-1: VSWTC, none) }
+  TCcMap: array[0..16] of Integer = (8,9,3,5,0,17,16,-1,12,13,10,1,6,15,4,14,2);
+  { Linux CBAUD codes 0..15 and $1001..$100F as line speeds }
+  TBaudLo: array[0..15] of Integer = (0,50,75,110,134,150,200,300,600,1200,1800,2400,4800,9600,19200,38400);
+  TBaudHi: array[1..15] of Integer = (57600,115200,230400,460800,500000,576000,921600,
+                                      1000000,1152000,1500000,2000000,2500000,3000000,3500000,4000000);
+
+function MapBits(v: Int64; const src, dst: array of Int64): Int64;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(src) do
+    if (src[i] <> 0) and ((v and src[i]) = src[i]) then Result := Result or dst[i];   { 0 = no counterpart }
+end;
+
+function SpeedToLx(n: Int64): Int64;
+var i: Integer;
+begin
+  for i := 0 to 15 do if TBaudLo[i] = n then begin Result := i; Exit; end;
+  for i := 1 to 15 do if TBaudHi[i] = n then begin Result := $1000 or i; Exit; end;
+  Result := 15;                                                 { unknown: B38400 }
+end;
+
+function SpeedToOb(c: Int64): Int64;
+begin
+  c := c and $100F;
+  if c <= 15 then Result := TBaudLo[Integer(c)]
+  else if (c and $F) >= 1 then Result := TBaudHi[Integer(c and $F)]
+  else Result := 38400;
+end;
+
+procedure TermiosToLx(fb, lx: Int64);
+var i, ix: Integer; c: Byte; cf: Int64;
+begin
+  for i := 0 to 35 do PByte(lx + i)^ := 0;
+  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, TIflOb, TIflLx));
+  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, TOflOb, TOflLx));
+  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, TCflOb, TCflLx);
+  cf := cf or (((PInteger(fb + 8)^ shr 8) and 3) shl 4);        { CSIZE }
+  cf := cf or SpeedToLx(PInteger(fb + 40)^);                    { c_ospeed -> CBAUD }
+  PInteger(lx + 8)^ := Integer(cf);
+  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, TLflOb, TLflLx));
+  for i := 0 to 16 do
+  begin
+    ix := TCcMap[i];
+    if ix < 0 then Continue;
+    c := PByte(fb + 16 + ix)^;
+    if (c = $FF) and (i <> 5) and (i <> 6) then c := 0;         { VTIME/VMIN are numbers }
+    PByte(lx + 17 + i)^ := c;
+  end;
+end;
+
+procedure TermiosToOb(lx, fb: Int64);
+var i, ix: Integer; c: Byte; cf, sp: Int64;
+begin
+  for i := 0 to 43 do PByte(fb + i)^ := 0;
+  for i := 0 to 19 do PByte(fb + 16 + i)^ := $FF;
+  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, TIflLx, TIflOb));
+  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, TOflLx, TOflOb));
+  cf := PInteger(lx + 8)^ and $FFFFFFFF;
+  PInteger(fb + 8)^ := Integer(MapBits(cf, TCflLx, TCflOb) or (((cf shr 4) and 3) shl 8));
+  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, TLflLx, TLflOb));
+  for i := 0 to 16 do
+  begin
+    ix := TCcMap[i];
+    if ix < 0 then Continue;
+    c := PByte(lx + 17 + i)^;
+    if (c = 0) and (i <> 5) and (i <> 6) then c := $FF;
+    PByte(fb + 16 + ix)^ := c;
+  end;
+  sp := SpeedToOb(cf);
+  PInteger(fb + 36)^ := Integer(sp);
+  PInteger(fb + 40)^ := Integer(sp);
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
@@ -1415,20 +1508,57 @@ begin
     10: Result := Lx(ObSys(OB_MPROTECT, a0, a1, a2, 0, 0, 0));
     11: Result := Lx(ObSys(OB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := ObBrk(a0);
-    16: begin                                                   { ioctl }
-          case a1 of
-            $5401: begin                                        { TCGETS: isatty and a plain struct }
-                     r := ObSys(OB_IOCTL, a0, OB_TIOCGETA, Int64(@sb[0]), 0, 0, 0);
-                     if r = 0 then
-                       for i := 0 to 59 do PByte(a2 + i)^ := 0;
-                     Result := Lx(r);
+    16: case Integer(a1) of                                              { ioctl }
+          $5401: begin                                          { TCGETS -> TIOCGETA }
+                   r := ObSys(OB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
+                   if (r = 0) and (a2 <> 0) then TermiosToLx(Int64(@sb[0]), a2);
+                   Result := Lx(r);
+                 end;
+          $5402, $5403, $5404: begin                            { TCSETS/W/F -> TIOCSETA/W/F }
+                   TermiosToOb(a2, Int64(@sb[0]));
+                   Result := Lx(ObSys(OB_IOCTL, a0, $802C7414 + (a1 - $5402), Int64(@sb[0]), 0, 0, 0));
+                 end;
+          $540B: begin                                          { TCFLSH -> TIOCFLUSH(FREAD/FWRITE) }
+                   if (a2 < 0) or (a2 > 2) then Result := -LX_EINVAL
+                   else
+                   begin
+                     t[0] := a2 + 1;
+                     Result := Lx(ObSys(OB_IOCTL, a0, $80047410, Int64(@t[0]), 0, 0, 0));
                    end;
-            $5413: Result := Lx(ObSys(OB_IOCTL, a0, OB_TIOCGWINSZ, a2, 0, 0, 0));
-            $541B: Result := Lx(ObSys(OB_IOCTL, a0, OB_FIONREAD, a2, 0, 0, 0));
-            $5421: Result := Lx(ObSys(OB_IOCTL, a0, OB_FIONBIO, a2, 0, 0, 0));
-          else
-            Result := -LX_ENOTTY;
-          end;
+                 end;
+          $5409: if a2 <> 0 then Result := Lx(ObSys(OB_IOCTL, a0, $2000745E, 0, 0, 0, 0))  { TCSBRK: drain }
+                 else Result := 0;                              { (the 0.25 s break is not sent) }
+          $540A: case Integer(a2) of                            { TCXONC }
+                   0: Result := Lx(ObSys(OB_IOCTL, a0, $2000746F, 0, 0, 0, 0));   { TCOOFF -> TIOCSTOP }
+                   1: Result := Lx(ObSys(OB_IOCTL, a0, $2000746E, 0, 0, 0, 0));   { TCOON -> TIOCSTART }
+                 else Result := 0;
+                 end;
+          $5427: Result := Lx(ObSys(OB_IOCTL, a0, $2000747B, 0, 0, 0, 0));   { TIOCSBRK }
+          $5428: Result := Lx(ObSys(OB_IOCTL, a0, $2000747A, 0, 0, 0, 0));   { TIOCCBRK }
+          $5413: Result := Lx(ObSys(OB_IOCTL, a0, $40087468, a2, 0, 0, 0));  { TIOCGWINSZ }
+          $541B: Result := Lx(ObSys(OB_IOCTL, a0, $4004667F, a2, 0, 0, 0));  { FIONREAD }
+          $540E: Result := Lx(ObSys(OB_IOCTL, a0, $20007461, 0, 0, 0, 0));   { TIOCSCTTY }
+          $540F, $5410: begin                                   { TIOCGPGRP / TIOCSPGRP }
+                   { tty only: BSD pipes and sockets also accept these
+                     (as the SIGIO owner), Linux answers ENOTTY }
+                   r := ObSys(OB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
+                   if r = -25 then Result := -LX_ENOTTY
+                   else if r < 0 then Result := Lx(r)
+                   else if a1 = $540F then Result := Lx(ObSys(OB_IOCTL, a0, $40047477, a2, 0, 0, 0))
+                   else Result := Lx(ObSys(OB_IOCTL, a0, $80047476, a2, 0, 0, 0));
+                 end;
+          $5411: Result := Lx(ObSys(OB_IOCTL, a0, $40047473, a2, 0, 0, 0));  { TIOCOUTQ }
+          $5414: Result := Lx(ObSys(OB_IOCTL, a0, $80087467, a2, 0, 0, 0));  { TIOCSWINSZ }
+          $5421: Result := Lx(ObSys(OB_IOCTL, a0, $8004667E, a2, 0, 0, 0));  { FIONBIO }
+          $5422: Result := Lx(ObSys(OB_IOCTL, a0, $20007471, 0, 0, 0, 0));   { TIOCNOTTY }
+          $5429: Result := Lx(ObSys(OB_IOCTL, a0, $40047463, a2, 0, 0, 0));  { TIOCGSID }
+          $5450: Result := Lx(ObSys(OB_IOCTL, a0, $20006602, 0, 0, 0, 0));   { FIONCLEX }
+          $5451: Result := Lx(ObSys(OB_IOCTL, a0, $20006601, 0, 0, 0, 0));   { FIOCLEX }
+          $5452: Result := Lx(ObSys(OB_IOCTL, a0, $8004667D, a2, 0, 0, 0));  { FIOASYNC }
+        else
+          { unmapped: a bad fd is still EBADF, as the kernel would say first }
+          if ObSys(OB_FCNTL, a0, 1, 0, 0, 0, 0) < 0 then Result := -9
+          else Result := -LX_ENOTTY;
         end;
     17: Result := Lx(ObSys(OB_PREAD, a0, a1, a2, a3, 0, 0));
     18: Result := Lx(ObSys(OB_PWRITE, a0, a1, a2, a3, 0, 0));

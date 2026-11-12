@@ -285,3 +285,18 @@ Next: sockets.
   IPv6 sockets are always v6-only.
 
 Next: termios, eventfd/timerfd (OpenBSD has neither natively), and /proc.
+
+### 2026-11-12: `--os=openbsd` termios
+
+- fbsdabi's termios tables and tty ioctls were ported. Differences measured
+  on 8.0: no IUTF8, OCRNL/ONOCR/ONLRET $10/$40/$80, CRTSCTS $10000. The
+  c_cc indices and ioctl numbers are FreeBSD's.
+- MapBits now skips a 0 source entry. Without that, "no counterpart"
+  (IUTF8) would match every value.
+- `c_os_freebsd_termios` matches Linux on a real tty (ssh -tt).
+- Still open:
+  - ptys: OpenBSD has /dev/ptm with PTMGET instead of /dev/ptmx, and its
+    slaves are /dev/ttypN, not /dev/pts/N.
+  - eventfd and timerfd: OpenBSD has neither; they would need emulating
+    with a pipe or kqueue EVFILT_TIMER.
+  - /proc/self/maps.
