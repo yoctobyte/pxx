@@ -383,3 +383,41 @@ Measured by diffing existing tests between the two kernels (Linux build vs
   test_a_joined_thread_leaves_the_pal_reap_table reads /proc/self/maps.
 - **Next:** arm64 (aarch64 FreeBSD) would need its own translator entry and
   ABI note; OpenBSD/NetBSD remain the libc-family ticket.
+
+## 2026-11-12 (pxx2-bsd) — sweep of the lib_ Pascal and c_ C tests
+
+Every lib_*.pas (157) and c_*.c (224) test built for both kernels and
+compared (default flags; the --threadsafe ones were covered earlier).
+lib_: one real gap, socket()/socketpair() check order (a bad type word is
+EINVAL before the family is looked at, as on Linux). c_: 154 identical; fixed
+here -- sched_* (renumbered; policies OTHER/FIFO/RR are 0/1/2 vs 2/1/3, and
+SCHED_OTHER's priority reads 0 as on Linux), mlock/munlock, fallocate mode 0 ->
+posix_fallocate (the error comes back as the value), personality emulated,
+swapon/swapoff, unshare(0), prctl PR_SET/GET_NAME (thr_set_name + a kept copy;
+unknown options EINVAL), open O_NOFOLLOW on a symlink EMLINK -> ELOOP.
+lib_sockets and five crtl tests joined `make test-freebsd`.
+
+Left as is, with the reason:
+- acct: deliberately unmapped -- the VM runs as root and a mapped call would
+  switch process accounting on.
+- klogctl, sysv ipc, xattr, inotify, timex, mtd/kd ioctls: Linux-only.
+- c_asm_fixed_reg_tie: raw `syscall` in inline asm bypasses the translator
+  (39 is getpid on Linux, getppid on FreeBSD); not fixable in the translator.
+- c_stat_rdev_decodes: real device numbers differ (/dev/null is 0:20).
+- environment only: the VM runs as root (ioresult EACCES skip), no
+  /etc/localtime, /bin/sh wording, argv[0] path, random ports, stdout/stderr
+  interleave over ssh.
+- tests that link libc or need a second object (c_abi_*_main, c_obj_*,
+  c_import_extern_vars_def, c_implicit_libc_import_warning) do not run
+  standalone on Linux either.
+- **Thread-exit race (fixed):** `make test-freebsd` failed once on
+  lib_fpc_thread_surface (OK printed, then SIGSEGV; ~1 run in 80). Core: both
+  threads at the instruction after `syscall` in FbRawA, rsi=3 (UMTX_OP_WAKE).
+  The translator's SYS_exit path for a non-main thread cleared the
+  CLEARTID word and then woke the joiner from Pascal, on the exiting thread's
+  own stack -- the joiner could unmap that stack between the clear and the
+  store after the wake. Linux has no window because the kernel clears the
+  word after the thread is gone. Now FbClearTidExit (assembler) does clear +
+  both wakes + thr_exit in registers only. The clone stub's own exit path was
+  already register-only. 150 runs clean afterwards (not proof at that rate;
+  the evidence is the core plus the code shape).

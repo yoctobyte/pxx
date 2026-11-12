@@ -72,14 +72,11 @@ directories, environment and arguments, processes and `wait`, signals
 async scheduler (epoll is emulated on kqueue), sockets (IPv4, IPv6, Unix),
 terminals and ptys, and `--threadsafe` threads.
 
-Not supported:
-
-- threads created through glibc's `pthread_create`
-- Linux-only `/proc` files other than `/proc/self/environ`, `/proc/self/exe`,
-  `/proc/self/fd/N` and `/proc/sys/kernel/hostname`
-- `SCM_CREDENTIALS`, abstract Unix sockets, and other Linux-only interfaces
-
-Anything the translator does not know returns `ENOSYS`.
+Not supported: other CPUs, `--shared`, `--emit-obj` and `--rtl-libc` (all
+refused at compile time), threads through glibc's `pthread_create`, and
+Linux-only interfaces. Anything the translator does not know returns `ENOSYS`.
+The details, how to test in the VM, and the plan for OpenBSD and NetBSD are in
+[FreeBSD and the BSDs](./freebsd.md).
 
 ## What each target supports
 
@@ -121,6 +118,7 @@ writer; it is the ESP-IDF route.
 
 ## Pages
 
+- [FreeBSD and the BSDs](./freebsd.md)
 - [Cross-compilation](./cross-compilation.md)
 - [Cross languages](./cross-languages.md)
 - [C Frontend](./c-frontend.md)

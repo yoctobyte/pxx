@@ -3116,6 +3116,22 @@ begin
   { A .so output name implies shared-library emission (same as --shared). }
   if (n >= 3) and (outFile[n] = 'o') and (outFile[n-1] = 's') and (outFile[n-2] = '.') then
     EmitSharedMode := True;
+  { --os=freebsd is measured for one shape only: an x86-64 executable through
+    the raw-syscall translator. Refuse the rest in words rather than build
+    something nobody has run (aarch64 used to die on "PXXFbsdSyscall not
+    found"; --shared wrote a .so never loaded on FreeBSD; --rtl-libc would hand
+    FreeBSD's libc Linux syscall numbers). docs/targets/freebsd.md }
+  if TargetKernel = KERNEL_FREEBSD then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      ErrorNoPos('--os=freebsd is x86-64 only; FreeBSD on other CPUs is not supported yet');
+    if EmitSharedMode then
+      ErrorNoPos('--os=freebsd: shared-library output (--shared, .so) is not supported; build an executable');
+    if EmitObjMode then
+      ErrorNoPos('--os=freebsd: object output (--emit-obj, .o) is not supported; build an executable');
+    if RtlOverLibc then
+      ErrorNoPos('--os=freebsd: --rtl-libc is not supported; the FreeBSD build calls the kernel directly');
+  end;
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');

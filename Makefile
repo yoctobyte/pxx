@@ -10839,7 +10839,7 @@ test-freebsd: $(COMPILER)
 	  for t in test/test_rtl_libc_torture.pas test/test_signal_pc_rewrite.pas test/test_signal_sp_rewrite.pas \
 	           test/test_stack_overflow_raise.pas test/test_float_exception_mask.pas test/lib_signals_fpc.pas \
 	           test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas test/test_scheduler.pas test/test_async.pas \
-	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_net.pas test/lib_net6.pas test/lib_http_serve.pas \
+	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_net.pas test/lib_sockets.pas test/lib_net6.pas test/lib_http_serve.pas \
 	           test/lib_platform_net_sockopt.pas test/lib_sock_closedpeer.pas; do \
 	    n=$$(basename $$t .pas); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/$$n.fb >/dev/null && \
@@ -10853,7 +10853,7 @@ test-freebsd: $(COMPILER)
 	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
-	           test/c_crtl_utimensat.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
+	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
 	           test/test_nilpy_file_oserrors.npy test/test_nilpy_os_access_pathsep_gethostname.npy \
 	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy \
 	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \

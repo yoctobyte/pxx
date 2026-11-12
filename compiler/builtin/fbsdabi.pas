@@ -77,6 +77,10 @@ const
   FB_PREADV = 289; FB_PWRITEV = 290; FB_SELECT = 93; FB_PSELECT = 522;
   FB_PPOLL = 545; FB_STATFS = 555; FB_FSTATFS = 556; FB_POSIX_OPENPT = 504;
   FB_THR_EXIT = 431; FB_THR_KILL = 433; FB_UMTX_OP = 454;
+  FB_MLOCK = 203; FB_MUNLOCK = 204; FB_SCHED_SETPARAM = 327; FB_SCHED_GETPARAM = 328;
+  FB_SCHED_SETSCHEDULER = 329; FB_SCHED_GETSCHEDULER = 330; FB_SCHED_GET_PRIORITY_MAX = 332;
+  FB_SCHED_GET_PRIORITY_MIN = 333; FB_SCHED_RR_GET_INTERVAL = 334; FB_SWAPON = 85;
+  FB_SWAPOFF = 582; FB_THR_SET_NAME = 464; FB_POSIX_FALLOCATE = 530;
   FB_KQUEUE = 362; FB_KEVENT = 560; FB_TIMERFD_CREATE = 585;
   FB_TIMERFD_GETTIME = 586; FB_TIMERFD_SETTIME = 587; FB_SPECIALFD = 577;
   FB_EVFILT_READ = -1; FB_EVFILT_WRITE = -2;
@@ -145,6 +149,37 @@ asm
   xor rax, rcx
   sub rax, rcx
   pop r12
+end;
+
+{ The last steps of a non-main thread's SYS_exit: zero the CLONE_CHILD_CLEARTID
+  word at ctid, wake its waiters on both umtx queues, thr_exit. Registers
+  only, never the stack: the moment the word is zero the joiner may unmap
+  this thread's stack, and a Pascal FbSys storing its result there after the
+  wake segfaulted (1 run in ~80 of lib_fpc_thread_surface, 2026-11-12). On
+  Linux the kernel clears the word after the thread is gone. Does not return. }
+procedure FbClearTidExit(ctid: Int64); assembler;
+{$asmMode intel}
+asm
+  mov r12, ctid
+  xor eax, eax
+  mov [r12], eax
+  mov rdi, r12
+  mov esi, 3
+  mov edx, $7FFFFFFF
+  xor r10d, r10d
+  xor r8d, r8d
+  mov eax, 454
+  syscall
+  mov rdi, r12
+  mov esi, 16
+  mov edx, $7FFFFFFF
+  xor r10d, r10d
+  xor r8d, r8d
+  mov eax, 454
+  syscall
+  xor edi, edi
+  mov eax, 431
+  syscall
 end;
 
 var
@@ -1440,6 +1475,72 @@ begin
   PInteger(fb + 40)^ := Integer(sp);
 end;
 
+{ ---- Scheduler, process odds and ends -------------------------------------- }
+
+{ Policies: Linux OTHER 0 / FIFO 1 / RR 2, FreeBSD FIFO 1 / OTHER 2 / RR 3.
+  Linux's SCHED_RESET_ON_FORK ($40000000) has no FreeBSD twin and is dropped. }
+function FbPolicy(p: Int64): Int64;
+begin
+  case p and $3FFFFFFF of
+    0: Result := 2; 1: Result := 1; 2: Result := 3;
+  else Result := -1;
+  end;
+end;
+
+function LxPolicy(p: Int64): Int64;
+begin
+  case p of
+    2: Result := 0; 1: Result := 1; 3: Result := 2;
+  else Result := p;
+  end;
+end;
+
+{ open/openat: a symlink met under O_NOFOLLOW is EMLINK on FreeBSD (POSIX
+  allows either) and ELOOP on Linux. }
+function FbOpenAt(dirfd, path, flags, mode: Int64): Int64;
+begin
+  Result := Lx(FbSys(FB_OPENAT, dirfd, path, FbOpenFlags(flags), mode, 0, 0));
+  if (Result = -31) and ((flags and $20000) <> 0) then Result := -40;
+end;
+
+var
+  FbPersona: Int64;                         { personality(2): Linux's default PER_LINUX }
+  FbCommSet: Boolean;
+  FbComm: array[0..15] of Byte;             { PR_SET_NAME's copy: FreeBSD can set a thread name but not read one back cheaply }
+
+{ prctl: PR_SET_NAME (15) -> thr_set_name on this thread, PR_GET_NAME (16)
+  answers the last name set, else the executable's basename as Linux's comm
+  would (15 chars). Any other option is EINVAL, as an unknown one is on Linux. }
+function FbPrctl(op, arg: Int64): Int64;
+var tid: Int64; i, n, s: Integer; tmp: array[0..1023] of Byte;
+begin
+  case op of
+    15: begin
+          for i := 0 to 15 do FbComm[i] := 0;
+          i := 0;
+          while (i < 15) and (PByte(arg + i)^ <> 0) do begin FbComm[i] := PByte(arg + i)^; i := i + 1; end;
+          FbCommSet := True;
+          tid := 0;
+          FbSys(FB_THR_SELF, Int64(@tid), 0, 0, 0, 0, 0);
+          FbSys(FB_THR_SET_NAME, tid, Int64(@FbComm[0]), 0, 0, 0, 0);
+          Result := 0;
+        end;
+    16: begin
+          if not FbCommSet then begin
+            n := Integer(FbProcExe(Int64(@tmp[0]), 1024));
+            s := 0;
+            for i := 0 to n - 1 do if tmp[i] = 47 then s := i + 1;
+            for i := 0 to 15 do FbComm[i] := 0;
+            i := 0;
+            while (i < 15) and (s + i < n) do begin FbComm[i] := tmp[s + i]; i := i + 1; end;
+          end;
+          for i := 0 to 15 do PByte(arg + i)^ := FbComm[i];
+          Result := 0;
+        end;
+  else Result := -LX_EINVAL;               { Linux's answer to an option it does not know }
+  end;
+end;
+
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
@@ -1463,7 +1564,7 @@ begin
     2: if PathIs(a0, ProcEnviron) then Result := FbProcEnviron
        else if PathIs(a0, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a1), 0, 0, 0, 0, 0))
        else if PathIs(a0, ProcHostname) then Result := FbProcHostname
-       else Result := Lx(FbSys(FB_OPENAT, FB_AT_FDCWD, a0, FbOpenFlags(a1), a2, 0, 0));
+       else Result := FbOpenAt(FB_AT_FDCWD, a0, a1, a2);
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
     4: Result := FbStatAt(FB_AT_FDCWD, a0, a1, 0);              { stat }
     5: begin                                                    { fstat }
@@ -1594,9 +1695,7 @@ begin
             if r <> 0 then
             begin
               while PInteger(r)^ = 0 do FbSys(FB_SCHED_YIELD, 0, 0, 0, 0, 0, 0);
-              PInteger(r)^ := 0;
-              FbSys(FB_UMTX_OP, r, 3, $7FFFFFFF, 0, 0, 0);
-              FbSys(FB_UMTX_OP, r, 16, $7FFFFFFF, 0, 0, 0);
+              FbClearTidExit(r);                                { no stack use after the clear }
             end;
             FbSys(FB_THR_EXIT, 0, 0, 0, 0, 0, 0);
           end;
@@ -1742,7 +1841,7 @@ begin
     257: if PathIs(a1, ProcEnviron) then Result := FbProcEnviron
          else if PathIs(a1, DevPtmx) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a2), 0, 0, 0, 0, 0))
          else if PathIs(a1, ProcHostname) then Result := FbProcHostname
-         else Result := Lx(FbSys(FB_OPENAT, a0, a1, FbOpenFlags(a2), a3, 0, 0));
+         else Result := FbOpenAt(a0, a1, a2, a3);
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
     262: Result := FbStatAt(a0, a1, a2, a3);                    { newfstatat }
     263: begin                                                  { unlinkat }
@@ -1825,8 +1924,12 @@ begin
     268: Result := Lx(FbSys(FB_FCHMODAT, a0, a1, a2, FbAtFlags(a3), 0, 0));
     280: Result := FbUtimensat(a0, a1, a2, a3);
     41: begin                                                   { socket }
+          { Linux's check order (__sys_socket[pair], __sock_create): stray
+            flag bits in the type word, then the family, then the type. }
           f := FbAf(a0);
-          if f < 0 then Result := -LX_EAFNOSUPPORT
+          if (a1 and not Int64($8080F)) <> 0 then Result := -LX_EINVAL   { type 0..15, SOCK_CLOEXEC $80000, SOCK_NONBLOCK $800 }
+          else if f < 0 then Result := -LX_EAFNOSUPPORT
+          else if (a1 and $F) >= 11 then Result := -LX_EINVAL            { SOCK_MAX = 11 }
           else Result := Lx(FbSys(FB_SOCKET, f, FbSockType(a1), a2, 0, 0, 0));
         end;
     42: Result := FbSockAddrCall(FB_CONNECT, a0, a1, a2);
@@ -1842,8 +1945,12 @@ begin
     51: Result := FbSockAddrOut(FB_GETSOCKNAME, a0, a1, a2, 0);
     52: Result := FbSockAddrOut(FB_GETPEERNAME, a0, a1, a2, 0);
     53: begin                                                   { socketpair }
+          { Linux's check order (__sys_socket[pair], __sock_create): stray
+            flag bits in the type word, then the family, then the type. }
           f := FbAf(a0);
-          if f < 0 then Result := -LX_EAFNOSUPPORT
+          if (a1 and not Int64($8080F)) <> 0 then Result := -LX_EINVAL   { type 0..15, SOCK_CLOEXEC $80000, SOCK_NONBLOCK $800 }
+          else if f < 0 then Result := -LX_EAFNOSUPPORT
+          else if (a1 and $F) >= 11 then Result := -LX_EINVAL            { SOCK_MAX = 11 }
           else Result := Lx(FbSys(FB_SOCKETPAIR, f, FbSockType(a1), a2, a3, 0, 0));
         end;
     54: Result := FbSockopt(False, a0, a1, a2, a3, a4);
@@ -1879,6 +1986,46 @@ begin
            r := FbSys(FB_FSTATAT, a0, a1, Int64(@sb[0]), FbAtFlags(a2), 0, 0);
            if r = 0 then StatToStatx(@sb[0], Pointer(a4));
            Result := Lx(r);
+         end;
+    135: begin                                                  { personality }
+           Result := FbPersona;
+           if a0 <> $FFFFFFFF then FbPersona := a0 and $FFFFFFFF;
+         end;
+    142: Result := Lx(FbSys(FB_SCHED_SETPARAM, a0, a1, 0, 0, 0, 0));
+    143: begin                                                  { sched_getparam }
+           Result := Lx(FbSys(FB_SCHED_GETPARAM, a0, a1, 0, 0, 0, 0));
+           { SCHED_OTHER's priority is always 0 on Linux; FreeBSD reports its
+             internal timeshare priority there }
+           if (Result = 0) and (FbSys(FB_SCHED_GETSCHEDULER, a0, 0, 0, 0, 0, 0) = 2) then
+             PInteger(a1)^ := 0;
+         end;
+    144: begin                                                  { sched_setscheduler }
+           f := FbPolicy(a1);
+           if f < 0 then Result := -LX_EINVAL
+           else Result := Lx(FbSys(FB_SCHED_SETSCHEDULER, a0, f, a2, 0, 0, 0));
+         end;
+    145: begin                                                  { sched_getscheduler }
+           r := FbSys(FB_SCHED_GETSCHEDULER, a0, 0, 0, 0, 0, 0);
+           if r < 0 then Result := Lx(r) else Result := LxPolicy(r);
+         end;
+    146, 147: begin                                             { sched_get_priority_max/min }
+           f := FbPolicy(a0);
+           if f < 0 then Result := -LX_EINVAL
+           else if nr = 146 then Result := Lx(FbSys(FB_SCHED_GET_PRIORITY_MAX, f, 0, 0, 0, 0, 0))
+           else Result := Lx(FbSys(FB_SCHED_GET_PRIORITY_MIN, f, 0, 0, 0, 0, 0));
+         end;
+    148: Result := Lx(FbSys(FB_SCHED_RR_GET_INTERVAL, a0, a1, 0, 0, 0, 0));
+    149: Result := Lx(FbSys(FB_MLOCK, a0, a1, 0, 0, 0, 0));
+    150: Result := Lx(FbSys(FB_MUNLOCK, a0, a1, 0, 0, 0, 0));
+    157: Result := FbPrctl(a0, a1);
+    167: Result := Lx(FbSys(FB_SWAPON, a0, 0, 0, 0, 0, 0));
+    168: Result := Lx(FbSys(FB_SWAPOFF, a0, 0, 0, 0, 0, 0));
+    272: if a0 = 0 then Result := 0 else Result := -LX_EINVAL;  { unshare: nothing to unshare is a success on Linux too }
+    285: if a1 <> 0 then Result := -95                          { fallocate: only mode 0 (EOPNOTSUPP otherwise) }
+         else begin
+           { posix_fallocate hands its error back as the return VALUE }
+           r := FbSys(FB_POSIX_FALLOCATE, a0, a2, a3, 0, 0, 0);
+           if r > 0 then Result := Lx(-r) else Result := Lx(r);
          end;
   else
     Result := -LX_ENOSYS;
