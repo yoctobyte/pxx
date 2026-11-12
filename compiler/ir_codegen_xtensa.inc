@@ -273,6 +273,29 @@ begin
   Result := True;
 end;
 
+function XtFrameFar(off, sz, rd: Integer; var adj: Integer): Boolean;
+{ For a windowed frame slot more than 128 bytes below the biased a7, where
+  XtFrameDirect says no: emit `addmi rd, a7, H` (H a multiple of 256) and
+  return True with adj = the remainder, 0..255, for the access immediate.
+  That is 3 bytes plus the access, where the generic path is a movi, an add
+  and the access at 0 (7 bytes for a word). Slots from -128 to -1 stay on the
+  generic path: there an addi plus an access at 0 is already 5 bytes. Emits
+  nothing when it returns False. sz = 8 checks both words. }
+var a, h, rem: Integer;
+begin
+  Result := False;
+  if XtensaABI <> XTENSA_ABI_WINDOWED then Exit;
+  if not ((sz = 1) or (sz = 2) or (sz = 4) or (sz = 8)) then Exit;
+  a := off + XT_FP_BIAS;
+  if (a >= -128) or (a < -32768) then Exit;
+  h := -(((-a) + 255) div 256) * 256;
+  rem := a - h;
+  if (sz >= 2) and ((rem mod (sz - (sz div 8) * 4)) <> 0) then Exit;
+  xtensa_addmi(rd, reg_xtensa_a7, h);
+  adj := rem;
+  Result := True;
+end;
+
 procedure EmitSizedLoadOffXtensa(rd, rs, off: Integer; sz: Integer; sgn: Boolean);
 { rd := [rs + off]; off already checked by XtFrameDirect. rd must not be a9. }
 begin
@@ -485,6 +508,15 @@ begin
   else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
           XtFrameDirect(Syms[idx].Offset, sz, adj) then
     EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a7, adj, sz, sgn)
+  else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
+          XtFrameFar(Syms[idx].Offset, 4, reg_xtensa_a8, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, adj);
+    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+  end
+  else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+          XtFrameFar(Syms[idx].Offset, sz, reg_xtensa_a8, adj) then
+    EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a8, adj, sz, sgn)
   else
   begin
     EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
@@ -522,6 +554,15 @@ begin
   else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
           XtFrameDirect(Syms[idx].Offset, sz, adj) then
     EmitSizedStoreOffXtensa(reg_xtensa_a2, reg_xtensa_a7, adj, sz)
+  else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
+          XtFrameFar(Syms[idx].Offset, 4, reg_xtensa_a8, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, adj);
+    EmitSizedStoreXtensa(reg_xtensa_a2, reg_xtensa_a8, sz);
+  end
+  else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+          XtFrameFar(Syms[idx].Offset, sz, reg_xtensa_a8, adj) then
+    EmitSizedStoreOffXtensa(reg_xtensa_a2, reg_xtensa_a8, adj, sz)
   else
   begin
     EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
@@ -840,6 +881,8 @@ var adj: Integer;
 begin
   if XtFrameDirect(off, 4, adj) then
     xtensa_l32i(rd, reg_xtensa_a7, adj)
+  else if XtFrameFar(off, 4, rd, adj) then
+    xtensa_l32i(rd, rd, adj)
   else
   begin
     EmitFrameAddrXtensa(rd, off);
@@ -1438,6 +1481,14 @@ begin
     xtensa_l32i(reg_xtensa_a3, reg_xtensa_a7, adj + 4);   { hi }
     Exit;
   end;
+  if (Syms[idx].Kind <> skGlobal) and
+     not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+     XtFrameFar(Syms[idx].Offset, 8, reg_xtensa_a8, adj) then
+  begin
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_a8, adj);       { lo }
+    xtensa_l32i(reg_xtensa_a3, reg_xtensa_a8, adj + 4);   { hi }
+    Exit;
+  end;
   EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);
   xtensa_l32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { lo }
   xtensa_l32i(reg_xtensa_a3, reg_xtensa_a8, 4);   { hi }
@@ -1452,6 +1503,14 @@ begin
   begin
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_a7, adj);       { lo }
     xtensa_s32i(reg_xtensa_a3, reg_xtensa_a7, adj + 4);   { hi }
+    Exit;
+  end;
+  if (Syms[idx].Kind <> skGlobal) and
+     not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
+     XtFrameFar(Syms[idx].Offset, 8, reg_xtensa_a8, adj) then
+  begin
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, adj);       { lo }
+    xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, adj + 4);   { hi }
     Exit;
   end;
   EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);       { value in a2:a3; addr in a8 }

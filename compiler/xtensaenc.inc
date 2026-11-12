@@ -90,6 +90,21 @@ begin
   Result := (((imm div 256) and $FF) shl 16) or ((($D shl 4) or s) shl 8) or ((t shl 4) or 2);
 end;
 
+procedure xtensa_addmi(t, s, imm: Integer);
+{ Emitted form, for the far frame slots (XtFrameFar). Byte layout checked
+  against xtensa-esp32s3-elf-as: `addmi a8, a7, -256` = 82 d7 ff,
+  `addmi a9, a15, 512` = 92 df 02. }
+var val: Integer;
+begin
+  if (imm mod 256) <> 0 then
+    Error('internal: addmi immediate ' + AIntToStr(imm) + ' is not a multiple of 256');
+  XtensaRelCheck(imm div 256, -128, 127, 'addmi immediate');
+  val := EncodeXtensaAddmi(t, s, imm);
+  EmitB(val and $FF);
+  EmitB((val shr 8) and $FF);
+  EmitB((val shr 16) and $FF);
+end;
+
 function XtensaNarrowOK: Boolean;
 { True when an encoder may pick the 2-byte density form (ADDI.N, ADD.N, MOV.N,
   MOVI.N, L32I.N, S32I.N; byte layouts checked against xtensa-esp32s3-elf-as).
