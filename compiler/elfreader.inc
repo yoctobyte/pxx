@@ -994,8 +994,9 @@ begin
 end;
 
 { ---- stage 4: relocation application, and the image it lands in ------------
-  THE THREE TYPES THE EMITTER WRITES, AND ONLY THOSE: R_X86_64_64 (1, S+A into
-  8 bytes), R_X86_64_PC32 (2, S+A-P into a signed 32-bit field) and
+  THE TYPES THE EMITTERS WRITE, AND ONLY THOSE: R_X86_64_64 (1, S+A into
+  8 bytes), R_X86_64_PC32 (2, S+A-P into a signed 32-bit field), R_X86_64_PLT32
+  (4, the .asm frontend's extern references; resolved as PC32, no PLT) and
   R_X86_64_32S (11, S+A into a signed 32-bit field). The busybox census saw two
   of them; the third is in writeELFRelX64General for globals addressed
   absolutely and simply did not occur there. Anything else is refused BY NAME
@@ -1227,11 +1228,11 @@ begin
     rtype := info and $FFFFFFFF;
     si := (info shr 32) and $FFFFFFFF;
     if rtype = 1 then width := 8
-    else if (rtype = 2) or (rtype = 11) then width := 4
+    else if (rtype = 2) or (rtype = 4) or (rtype = 11) then width := 4
     else
     begin
       ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfRdSecName(target)
-                + ' -- pxx emits R_X86_64_64, R_X86_64_PC32 and R_X86_64_32S only';
+                + ' -- pxx emits R_X86_64_64, R_X86_64_PC32, R_X86_64_PLT32 and R_X86_64_32S only';
       Exit;
     end;
     if (off < 0) or (off + width > secSize) then
@@ -1243,7 +1244,10 @@ begin
     S := ElfLnkSymS(obj, nsec, stOff, strTab, si, ok);
     if not ok then Exit;
     P := ElfLnkSecAddr[slot] + off;
-    if rtype = 2 then v := S + add - P else v := S + add;
+    { R_X86_64_PLT32 (4): L + A - P, and in a static image with no PLT the
+      target L is the symbol itself, so it is PC32 -- as GNU ld resolves it.
+      pxx's own .asm frontend writes it for every extern reference. }
+    if (rtype = 2) or (rtype = 4) then v := S + add - P else v := S + add;
     if (width = 4) and ((v < -2147483648) or (v > 2147483647)) then
     begin
       ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target)

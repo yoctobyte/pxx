@@ -403,13 +403,22 @@ PXXDBG="a.objlink:$W/big.lst" "$COMPILER" > "$W/big.out" 2>&1
 grep -q 'R_X86_64_32S at .text+3 does not fit in 32 bits (value 0x0000000100000000)' "$W/big.out" \
   || { cat "$W/big.out"; fail "a 32S that does not fit was not refused by name with its true value"; }
 grep -q 'ELFLINK-OK' "$W/big.out" && fail "the linker printed its OK line after refusing a relocation"
-# A type pxx does not emit.
+# R_X86_64_PLT32 is what pxx's own .asm frontend writes for an extern call,
+# so --link must take it, resolved as PC32 (no PLT in a static image), which
+# is what ld does with the same object.
 printf '\t.text\n\t.globl main\nmain:\tcall\tmain@PLT\n\tret\n' > "$W/plt.s"
 as -o "$W/plt.o" "$W/plt.s" || fail "as could not assemble the PLT32 control"
 printf '%s\n' "$W/plt.o" > "$W/plt.lst"
 PXXDBG="a.objlink:$W/plt.lst" "$COMPILER" > "$W/plt.out" 2>&1
-grep -q 'R_X86_64_PLT32 in .text -- pxx emits' "$W/plt.out" \
-  || { cat "$W/plt.out"; fail "an R_X86_64_PLT32 was not refused by name"; }
+grep -q 'ELFLINK-OK' "$W/plt.out" \
+  || { cat "$W/plt.out"; fail "an R_X86_64_PLT32 (the .asm frontend's extern call) was not linked"; }
+# A type pxx does not emit: refused by name.
+printf '\t.text\n\t.globl main\nmain:\tmovl\t$main, %%eax\n\tret\n' > "$W/r32.s"
+as -o "$W/r32.o" "$W/r32.s" || fail "as could not assemble the R_X86_64_32 control"
+printf '%s\n' "$W/r32.o" > "$W/r32.lst"
+PXXDBG="a.objlink:$W/r32.lst" "$COMPILER" > "$W/r32.out" 2>&1
+grep -q 'in .text -- pxx emits' "$W/r32.out" \
+  || { cat "$W/r32.out"; fail "an R_X86_64_32 was not refused by name"; }
 
 # ---- stage 5: --link, and the entry contract ---------------------------------
 # The linker supplies _start (ElfLnkPutStub), with the contract of
@@ -558,6 +567,6 @@ ta=$(secs "$W/efs_all" | awk '$1==".text" {print $5}')
   || fail "--link kept 0x$tg bytes of .text against 0x$ta without GC -- less than half should survive two copies of crtl"
 echo "elf-gc: --link drops the same $ngc sections ld --gc-sections drops (f.o's weak printf, not e.o's), the kept bytes match ld's ($gdiff differ, all in padding), and the program runs as without GC in $((0x$tg)) of $((0x$ta)) bytes of .text"
 
-echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and a PLT32 are refused by name; --link's own _start runs the program as ld+pxxcrt does (argv, environ via .init_array, exit code)"
+echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and an R_X86_64_32 are refused by name, a PLT32 links as PC32; --link's own _start runs the program as ld+pxxcrt does (argv, environ via .init_array, exit code)"
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"
