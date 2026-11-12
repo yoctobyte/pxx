@@ -64,6 +64,26 @@ const
   FB_OPENAT = 499; FB_READLINKAT = 500; FB_RENAMEAT = 501; FB_UNLINKAT = 503;
   FB_PIPE2 = 542; FB_FSTAT = 551; FB_FSTATAT = 552; FB_GETDIRENTRIES = 554;
   FB_GETRANDOM = 563; FB_SIGALTSTACK = 53; FB_SHM_OPEN2 = 571;
+  FB_LINK = 9; FB_FCHDIR = 13; FB_CHOWN = 16; FB_SETUID = 23; FB_SYMLINK = 57;
+  FB_GETPGRP = 81; FB_SETPGID = 82; FB_SETITIMER = 83; FB_GETITIMER = 86;
+  FB_SETPRIORITY = 96; FB_GETPRIORITY = 100; FB_GETRUSAGE = 117;
+  FB_FCHOWN = 123; FB_FCHMOD = 124; FB_SETREUID = 126; FB_SETREGID = 127;
+  FB_FLOCK = 131; FB_UTIMES = 138; FB_SETGID = 181; FB_GETPGID = 207;
+  FB_CLOCK_SETTIME = 233; FB_LCHOWN = 254; FB_GETSID = 310; FB_TRUNCATE = 479;
+  FB_FCHMODAT = 490; FB_FCHOWNAT = 491; FB_LINKAT = 495; FB_SYMLINKAT = 502;
+  FB_FUTIMENS = 546; FB_UTIMENSAT = 547; FB_FDATASYNC = 550; FB_MKNODAT = 559;
+  FB_GETGROUPS = 595; FB_SETGROUPS = 596;
+  FB_PREADV = 289; FB_PWRITEV = 290; FB_SELECT = 93; FB_PSELECT = 522;
+  FB_PPOLL = 545; FB_STATFS = 555; FB_FSTATFS = 556;
+  FB_KQUEUE = 362; FB_KEVENT = 560; FB_TIMERFD_CREATE = 585;
+  FB_TIMERFD_GETTIME = 586; FB_TIMERFD_SETTIME = 587; FB_SPECIALFD = 577;
+  FB_EVFILT_READ = -1; FB_EVFILT_WRITE = -2;
+  FB_EV_ADD = $1; FB_EV_DELETE = $2; FB_EV_ENABLE = $4; FB_EV_ONESHOT = $10;
+  FB_EV_CLEAR = $20; FB_EV_ERROR = $4000; FB_EV_EOF = $8000;
+  LX_EPOLLIN = $1; LX_EPOLLPRI = $2; LX_EPOLLOUT = $4; LX_EPOLLERR = $8;
+  LX_EPOLLHUP = $10; LX_EPOLLRDHUP = $2000;
+  EP_MAX = 64;                    { kevents fetched per epoll_wait }
+  FB_F_GETFD = 1; FB_F_KINFO = 22; FB_KINFO_FILE_SIZE = 1392; FB_KF_PATH = 368;
 
   FB_AT_FDCWD = -100;            { same value as Linux }
   FB_AT_EACCESS = $100; FB_AT_SYMLINK_NOFOLLOW = $200; FB_AT_SYMLINK_FOLLOW = $400;
@@ -97,7 +117,7 @@ const
 var
   FbBrkBase, FbBrkCur, FbBrkTop: Int64;    { brk emulation, see FbBrk }
 
-{ The kernel entry. args -> [nr, a0..a5, rdx-out]. FreeBSD reports an error
+{ The kernel entry. args -> [nr, a0..a5, rdx-out, cf-out]. FreeBSD reports an error
   with CF set and the positive errno in rax; this returns -errno instead (the
   sbb/xor/sub trio negates rax exactly when CF is set), so the rest of the
   unit speaks one convention. rdx is written back because fork() answers in
@@ -118,6 +138,7 @@ asm
   syscall
   mov [r12+56], rdx
   sbb rcx, rcx
+  mov [r12+64], rcx
   xor rax, rcx
   sub rax, rcx
   pop r12
@@ -125,14 +146,17 @@ end;
 
 var
   FbRdx: Int64;
+  FbErr: Boolean;    { CF of the last FbSys: the only way to tell a negative
+                       RESULT (getpriority's nice) from a -errno }
 
 function FbSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
-var a: array[0..7] of Int64;
+var a: array[0..8] of Int64;
 begin
   a[0] := nr; a[1] := a0; a[2] := a1; a[3] := a2;
-  a[4] := a3; a[5] := a4; a[6] := a5; a[7] := 0;
+  a[4] := a3; a[5] := a4; a[6] := a5; a[7] := 0; a[8] := 0;
   Result := FbRawA(@a[0]);
   FbRdx := a[7];
+  FbErr := a[8] <> 0;
 end;
 
 { -FreeBSD errno -> -Linux errno; anything else unchanged. }
@@ -413,10 +437,37 @@ const
                                        101,110,118,105,114,111,110);   { /proc/self/environ }
   ProcExe: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,
                                    101,120,101);                        { /proc/self/exe }
+  ProcHostname: array[0..24] of Byte = (47,112,114,111,99,47,115,121,115,47,107,101,114,
+                                        110,101,108,47,104,111,115,116,110,97,109,101);  { /proc/sys/kernel/hostname }
 
 { An anonymous shared-memory fd holding kern.proc.env, rewound: reads see
   what /proc/self/environ would hold. The buffer is a scratch mapping, not
   the heap -- this can run before the heap exists. }
+function FbShmFile(buf, len: Int64): Int64;
+{ An anonymous shm fd holding len bytes at buf, rewound -- how this unit
+  answers an open() of a /proc file FreeBSD does not have. }
+var fd: Int64;
+begin
+  fd := FbSys(FB_SHM_OPEN2, 1, 2 or $100000, 384, 0, 0, 0);   { SHM_ANON, O_RDWR|O_CLOEXEC, 0600 }
+  if (fd >= 0) and (len > 0) then
+  begin
+    FbSys(FB_FTRUNCATE, fd, len, 0, 0, 0, 0);   { a shm object does not grow on write }
+    FbSys(FB_WRITE, fd, buf, len, 0, 0, 0);
+    FbSys(FB_LSEEK, fd, 0, 0, 0, 0, 0);
+  end;
+  if fd < 0 then Result := Lx(fd) else Result := fd;
+end;
+
+{ /proc/sys/kernel/hostname: kern.hostname and a newline. }
+function FbProcHostname: Int64;
+var b: array[0..299] of Byte; n: Int64;
+begin
+  SysctlStr(1, 10, Int64(@b[0]), 256);
+  n := StrLen0(Int64(@b[0]));
+  b[n] := 10;
+  Result := FbShmFile(Int64(@b[0]), n + 1);
+end;
+
 function FbProcEnviron: Int64;
 var mib: array[0..3] of Integer; len, buf, size, fd, r: Int64;
 begin
@@ -430,15 +481,9 @@ begin
   if buf < 0 then begin Result := -LX_ENOMEM; Exit; end;
   len := size;
   r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, buf, Int64(@len), 0, 0);
-  fd := FbSys(FB_SHM_OPEN2, 1, 2 or $100000, 384, 0, 0, 0);   { SHM_ANON, O_RDWR|O_CLOEXEC, 0600 }
-  if (r >= 0) and (fd >= 0) and (len > 0) then
-  begin
-    FbSys(FB_FTRUNCATE, fd, len, 0, 0, 0, 0);   { a shm object does not grow on write }
-    FbSys(FB_WRITE, fd, buf, len, 0, 0, 0);
-    FbSys(FB_LSEEK, fd, 0, 0, 0, 0, 0);
-  end;
+  if r < 0 then len := 0;
+  Result := FbShmFile(buf, len);
   FbSys(FB_MUNMAP, buf, size, 0, 0, 0, 0);
-  if fd < 0 then Result := Lx(fd) else Result := fd;
 end;
 
 { readlink("/proc/self/exe"): kern.proc.pathname. Linux semantics: no NUL,
@@ -738,6 +783,302 @@ begin
   Result := Lx(r);
 end;
 
+
+{ utimensat / futimens: Linux UTIME_NOW/UTIME_OMIT are (1<<30)-1 / -2,
+  FreeBSD's are -1 / -2. A nil path means "the fd itself" on Linux only. }
+function FbUtimensat(dirfd, path, times, flags: Int64): Int64;
+var ts: array[0..3] of Int64;
+    tp, i: Int64;
+begin
+  tp := 0;
+  if times <> 0 then
+  begin
+    for i := 0 to 3 do ts[i] := PInt64(times + i * 8)^;
+    for i := 0 to 1 do
+      if ts[i * 2 + 1] = $3FFFFFFF then ts[i * 2 + 1] := -1
+      else if ts[i * 2 + 1] = $3FFFFFFE then ts[i * 2 + 1] := -2;
+    tp := Int64(@ts[0]);
+  end;
+  if path = 0 then Result := Lx(FbSys(FB_FUTIMENS, dirfd, tp, 0, 0, 0, 0))
+  else Result := Lx(FbSys(FB_UTIMENSAT, dirfd, path, tp, FbAtFlags(flags), 0, 0));
+end;
+
+{ times(): no FreeBSD syscall. struct tms (4 x clock_t = long) in Linux's
+  USER_HZ (100) from getrusage; the result is a monotonic tick count. }
+function FbTimes(buf: Int64): Int64;
+var ru: array[0..17] of Int64;     { struct rusage, 144 B on both }
+    ts: array[0..1] of Int64;
+begin
+  if buf <> 0 then
+  begin
+    FbSys(FB_GETRUSAGE, 0, Int64(@ru[0]), 0, 0, 0, 0);
+    PInt64(buf)^ := ru[0] * 100 + ru[1] div 10000;         { utime }
+    PInt64(buf + 8)^ := ru[2] * 100 + ru[3] div 10000;     { stime }
+    FbSys(FB_GETRUSAGE, -1, Int64(@ru[0]), 0, 0, 0, 0);
+    PInt64(buf + 16)^ := ru[0] * 100 + ru[1] div 10000;    { cutime }
+    PInt64(buf + 24)^ := ru[2] * 100 + ru[3] div 10000;    { cstime }
+  end;
+  FbSys(FB_CLOCK_GETTIME, 4, Int64(@ts[0]), 0, 0, 0, 0);
+  Result := ts[0] * 100 + ts[1] div 10000000;
+end;
+
+{ alarm(): no FreeBSD syscall; ITIMER_REAL, answering the seconds left. }
+function FbAlarm(secs: Int64): Int64;
+var nv, ov: array[0..3] of Int64;  { struct itimerval: interval, value }
+begin
+  nv[0] := 0; nv[1] := 0; nv[2] := secs; nv[3] := 0;
+  ov[2] := 0; ov[3] := 0;
+  FbSys(FB_SETITIMER, 0, Int64(@nv[0]), Int64(@ov[0]), 0, 0, 0);
+  Result := ov[2];
+  if ov[3] >= 500000 then Inc(Result);
+  if (Result = 0) and ((ov[2] <> 0) or (ov[3] <> 0)) then Result := 1;
+end;
+
+
+{ /proc/self/fd/N -> the fd's path, via fcntl(F_KINFO) (FreeBSD 13.1+).
+  Answers -1 when p is not that shape, else the fd number. }
+function ProcFdNum(p: Int64): Int64;
+const pre: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,102,100,47); { /proc/self/fd/ }
+var i: Integer; c: Byte;
+begin
+  Result := -1;
+  if p = 0 then Exit;
+  for i := 0 to 13 do
+    if PByte(p + i)^ <> pre[i] then Exit;
+  i := 14;
+  c := PByte(p + i)^;
+  if (c < 48) or (c > 57) then Exit;
+  Result := 0;
+  while (c >= 48) and (c <= 57) do
+  begin
+    Result := Result * 10 + (c - 48);
+    Inc(i);
+    c := PByte(p + i)^;
+  end;
+  if c <> 0 then Result := -1;
+end;
+
+function FbProcFd(fd, buf, cap: Int64): Int64;
+var kf: array[0..173] of Int64;     { struct kinfo_file, 1392 B }
+    n, i, r: Int64;
+begin
+  for i := 0 to 173 do kf[i] := 0;
+  PInteger(@kf[0])^ := FB_KINFO_FILE_SIZE;
+  r := FbSys(FB_FCNTL, fd, FB_F_KINFO, Int64(@kf[0]), 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := StrLen0(Int64(@kf[0]) + FB_KF_PATH);
+  if n = 0 then begin Result := -LX_ENOENT; Exit; end;
+  if n > cap then n := cap;
+  for i := 0 to n - 1 do PByte(buf + i)^ := PByte(Int64(@kf[0]) + FB_KF_PATH + i)^;
+  Result := n;
+end;
+
+{ FreeBSD struct statfs (2344 B) -> Linux struct statfs (120 B). }
+function FbStatfs(nr, arg, lx: Int64): Int64;
+var fs: array[0..292] of Int64;
+    r, fl, ty, i: Int64;
+    nm: Int64;
+begin
+  r := FbSys(nr, arg, Int64(@fs[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  for i := 0 to 14 do PInt64(lx + i * 8)^ := 0;
+  nm := Int64(@fs[0]) + 280;                                  { f_fstypename }
+  ty := 0;
+  case PByte(nm)^ of                                          { Linux f_type magics }
+    117: ty := $00011954;                                     { ufs }
+    122: ty := $2FC12FC1;                                     { zfs }
+    116: ty := $01021994;                                     { tmpfs }
+    100: ty := $1373;                                         { devfs }
+    112: ty := $9FA0;                                         { procfs }
+    110: ty := $6969;                                         { nfs }
+    109: ty := $4D44;                                         { msdosfs }
+    99:  ty := $9660;                                         { cd9660 }
+  end;
+  PInt64(lx)^ := ty;
+  PInt64(lx + 8)^ := fs[2];                                   { f_bsize }
+  for i := 0 to 4 do PInt64(lx + 16 + i * 8)^ := fs[4 + i];   { blocks bfree bavail files ffree }
+  PInt64(lx + 56)^ := fs[24];                                 { f_fsid }
+  PInt64(lx + 64)^ := PInteger(Int64(@fs[0]) + 184)^;         { f_namelen }
+  PInt64(lx + 72)^ := fs[2];                                  { f_frsize }
+  fl := fs[1];
+  r := 0;
+  if (fl and $1) <> 0 then r := r or 1;                       { ST_RDONLY }
+  if (fl and $8) <> 0 then r := r or 2;                       { ST_NOSUID }
+  if (fl and $4) <> 0 then r := r or 8;                       { ST_NOEXEC }
+  if (fl and $2) <> 0 then r := r or 16;                      { ST_SYNCHRONOUS }
+  if (fl and $10000000) <> 0 then r := r or 1024;             { ST_NOATIME }
+  PInt64(lx + 80)^ := r;
+  Result := 0;
+end;
+
+{ poll event bits: the low six agree; WRNORM, WRBAND and RDHUP do not.
+  Rewritten in place around the call and restored after. }
+function PollBitsToFb(e: Integer): Integer;
+begin
+  Result := e and $FF;
+  if (e and $100) <> 0 then Result := Result or $4;           { POLLWRNORM = POLLOUT }
+  if (e and $200) <> 0 then Result := Result or $100;         { POLLWRBAND }
+  if (e and $2000) <> 0 then Result := Result or $4000;       { POLLRDHUP }
+end;
+
+function PollBitsToLx(e, asked: Integer): Integer;
+begin
+  Result := e and $FF;
+  if ((e and $4) <> 0) and ((asked and $100) <> 0) then Result := Result or $100;
+  if (e and $100) <> 0 then Result := Result or $200;
+  if (e and $4000) <> 0 then Result := Result or $2000;
+end;
+
+function FbPoll(fds, n, ts, mask: Int64; isPpoll: Boolean): Int64;
+var i, r: Int64;
+    m: array[0..1] of Int64;
+    orig: array[0..63] of Integer;   { the caller's events, restored exactly }
+    asked: Integer;
+begin
+  for i := 0 to n - 1 do
+  begin
+    asked := PSmallInt(fds + i * 8 + 4)^ and $FFFF;
+    if i < 64 then orig[i] := asked;
+    PSmallInt(fds + i * 8 + 4)^ := SmallInt(PollBitsToFb(asked));
+  end;
+  if not isPpoll then r := FbSys(FB_POLL, fds, n, ts, 0, 0, 0)
+  else if mask <> 0 then
+  begin
+    MaskToFb(PInt64(mask)^, Int64(@m[0]));
+    r := FbSys(FB_PPOLL, fds, n, ts, Int64(@m[0]), 0, 0);
+  end
+  else r := FbSys(FB_PPOLL, fds, n, ts, 0, 0, 0);
+  for i := 0 to n - 1 do
+  begin
+    if i < 64 then asked := orig[i]
+    else asked := PollBitsToLx(PSmallInt(fds + i * 8 + 4)^ and $FFFF, $FFFF);
+    PSmallInt(fds + i * 8 + 4)^ := SmallInt(asked);
+    PSmallInt(fds + i * 8 + 6)^ := SmallInt(PollBitsToLx(PSmallInt(fds + i * 8 + 6)^ and $FFFF, asked));
+  end;
+  Result := Lx(r);
+end;
+
+
+{ ---- epoll over kqueue ------------------------------------------------------
+  FreeBSD has no epoll. An epoll instance IS a kqueue; an interest in an fd is
+  up to two kevent filters (READ for EPOLLIN/PRI/RDHUP, WRITE for EPOLLOUT)
+  carrying the caller's epoll_data as udata. EPOLLET -> EV_CLEAR, EPOLLONESHOT
+  -> EV_ONESHOT. epoll_wait folds the READ and WRITE kevents of one fd back
+  into one epoll_event, as Linux reports it. struct epoll_event is PACKED on
+  x86-64: u32 events at 0, u64 data at 4, 12 bytes. }
+
+function FbKev1(kq, ident, filter, flags, udata: Int64): Int64;
+var kv: array[0..7] of Int64;     { struct kevent, 64 B }
+    i: Integer;
+begin
+  for i := 0 to 7 do kv[i] := 0;
+  kv[0] := ident;
+  PSmallInt(Int64(@kv[0]) + 8)^ := SmallInt(filter);
+  PWord(Int64(@kv[0]) + 10)^ := Word(flags);
+  kv[3] := udata;
+  Result := FbSys(FB_KEVENT, kq, Int64(@kv[0]), 1, 0, 0, 0);
+end;
+
+function FbEpollCtl(kq, op, fd, ev: Int64): Int64;
+var e, data, fl, r: Int64;
+begin
+  if (op = 2) or (ev = 0) then                                 { EPOLL_CTL_DEL }
+  begin
+    r := FbKev1(kq, fd, FB_EVFILT_READ, FB_EV_DELETE, 0);
+    if FbKev1(kq, fd, FB_EVFILT_WRITE, FB_EV_DELETE, 0) = 0 then r := 0;
+    Result := Lx(r);
+    Exit;
+  end;
+  e := PInteger(ev)^ and $FFFFFFFF;
+  data := PInt64(ev + 4)^;
+  fl := FB_EV_ADD or FB_EV_ENABLE;
+  if (e and $80000000) <> 0 then fl := fl or FB_EV_CLEAR;      { EPOLLET }
+  if (e and $40000000) <> 0 then fl := fl or FB_EV_ONESHOT;    { EPOLLONESHOT }
+  r := 0;
+  if (e and (LX_EPOLLIN or LX_EPOLLPRI or LX_EPOLLRDHUP)) <> 0 then
+    r := FbKev1(kq, fd, FB_EVFILT_READ, fl, data)
+  else if op = 3 then FbKev1(kq, fd, FB_EVFILT_READ, FB_EV_DELETE, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if (e and LX_EPOLLOUT) <> 0 then
+    r := FbKev1(kq, fd, FB_EVFILT_WRITE, fl, data)
+  else if op = 3 then FbKev1(kq, fd, FB_EVFILT_WRITE, FB_EV_DELETE, 0);
+  Result := Lx(r);
+end;
+
+function FbEpollWait(kq, evs, maxev, ms: Int64): Int64;
+var kv: array[0..EP_MAX * 8 - 1] of Int64;
+    ts: array[0..1] of Int64;
+    tp, r, i, j, n, e, fl, ident: Int64;
+    base: Int64;
+begin
+  if maxev <= 0 then begin Result := -LX_EINVAL; Exit; end;
+  if maxev > EP_MAX then maxev := EP_MAX;
+  tp := 0;
+  if ms >= 0 then
+  begin
+    ts[0] := ms div 1000; ts[1] := (ms mod 1000) * 1000000;
+    tp := Int64(@ts[0]);
+  end;
+  r := FbSys(FB_KEVENT, kq, 0, 0, Int64(@kv[0]), maxev, tp);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  for i := 0 to r - 1 do
+  begin
+    base := Int64(@kv[0]) + i * 64;
+    ident := PInt64(base)^;
+    fl := PWord(base + 10)^;
+    e := 0;
+    if PSmallInt(base + 8)^ = FB_EVFILT_READ then e := LX_EPOLLIN
+    else e := LX_EPOLLOUT;
+    if (fl and FB_EV_EOF) <> 0 then
+    begin
+      e := e or LX_EPOLLHUP;
+      if PSmallInt(base + 8)^ = FB_EVFILT_READ then e := e or LX_EPOLLRDHUP;
+      if PInteger(base + 12)^ <> 0 then e := e or LX_EPOLLERR;  { fflags = socket error }
+    end;
+    if (fl and FB_EV_ERROR) <> 0 then e := LX_EPOLLERR;
+    { fold into an earlier event for the same fd; kv[] holds ident, the
+      output array holds only data -- so match on the kevent list }
+    j := 0;
+    while j < i do
+    begin
+      if PInt64(Int64(@kv[0]) + j * 64)^ = ident then Break;
+      Inc(j);
+    end;
+    if j < i then
+    begin
+      { the earlier kevent j was emitted at output slot PInteger(kv j .data)^ }
+      j := PInt64(Int64(@kv[0]) + j * 64 + 16)^;
+      PInteger(evs + j * 12)^ := PInteger(evs + j * 12)^ or Integer(e);
+      PInt64(base + 16)^ := j;
+    end
+    else
+    begin
+      PInteger(evs + n * 12)^ := Integer(e);
+      PInt64(evs + n * 12 + 4)^ := PInt64(base + 24)^;
+      PInt64(base + 16)^ := n;                                 { remember the slot }
+      Inc(n);
+    end;
+  end;
+  Result := n;
+end;
+
+{ TFD_* / EFD_* NONBLOCK and CLOEXEC are the O_* bits on both kernels. }
+function FbFdFlags(f: Int64): Int64;
+begin
+  Result := f and 3;                                           { EFD_SEMAPHORE / TFD_TIMER_* }
+  if (f and $800) <> 0 then Result := Result or 4;
+  if (f and $80000) <> 0 then Result := Result or $100000;
+end;
+
+function FbEventfd(initval, flags: Int64): Int64;
+var a: array[0..1] of Integer;
+begin
+  a[0] := Integer(initval);
+  a[1] := Integer(FbFdFlags(flags));
+  Result := Lx(FbSys(FB_SPECIALFD, 1, Int64(@a[0]), 8, 0, 0, 0));   { SPECIALFD_EVENTFD }
+end;
+
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
@@ -745,9 +1086,16 @@ var sb: array[0..27] of Int64;
     i: Integer;
 begin
   case Integer(nr) of
-    0: Result := Lx(FbSys(FB_READ, a0, a1, a2, 0, 0, 0));
+    0: begin
+         { a 0-byte read of a directory is EISDIR on Linux (pylib's open()
+           uses it as the directory probe) and 0 on FreeBSD }
+         if (a2 = 0) and (FbSys(FB_FSTAT, a0, Int64(@sb[0]), 0, 0, 0, 0) = 0) and
+            ((PWord(Int64(@sb[0]) + 24)^ and $F000) = $4000) then Result := -21
+         else Result := Lx(FbSys(FB_READ, a0, a1, a2, 0, 0, 0));
+       end;
     1: Result := Lx(FbSys(FB_WRITE, a0, a1, a2, 0, 0, 0));
     2: if PathIs(a0, ProcEnviron) then Result := FbProcEnviron
+       else if PathIs(a0, ProcHostname) then Result := FbProcHostname
        else Result := Lx(FbSys(FB_OPENAT, FB_AT_FDCWD, a0, FbOpenFlags(a1), a2, 0, 0));
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
     4: Result := FbStatAt(FB_AT_FDCWD, a0, a1, 0);              { stat }
@@ -757,7 +1105,7 @@ begin
          Result := Lx(r);
        end;
     6: Result := FbStatAt(FB_AT_FDCWD, a0, a1, $100);           { lstat }
-    7: Result := Lx(FbSys(FB_POLL, a0, a1, a2, 0, 0, 0));
+    7: Result := FbPoll(a0, a1, a2, 0, False);
     8: Result := Lx(FbSys(FB_LSEEK, a0, a1, a2, 0, 0, 0));
     9: Result := Lx(FbSys(FB_MMAP, a0, a1, a2, FbMmapFlags(a3), a4, a5));
     10: Result := Lx(FbSys(FB_MPROTECT, a0, a1, a2, 0, 0, 0));
@@ -785,13 +1133,34 @@ begin
           $5402, $5403, $5404: Result := 0;                     { TCSETS*: not yet }
           $5413: Result := Lx(FbSys(FB_IOCTL, a0, $40087468, a2, 0, 0, 0));  { TIOCGWINSZ }
           $541B: Result := Lx(FbSys(FB_IOCTL, a0, $4004667F, a2, 0, 0, 0));  { FIONREAD }
+          $540E: Result := Lx(FbSys(FB_IOCTL, a0, $20007461, 0, 0, 0, 0));   { TIOCSCTTY }
+          $540F, $5410: begin                                   { TIOCGPGRP / TIOCSPGRP }
+                   { tty only: FreeBSD pipes and sockets also accept these
+                     (as the SIGIO owner), Linux answers ENOTTY }
+                   r := FbSys(FB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
+                   if r = -25 then Result := -LX_ENOTTY
+                   else if r < 0 then Result := Lx(r)
+                   else if a1 = $540F then Result := Lx(FbSys(FB_IOCTL, a0, $40047477, a2, 0, 0, 0))
+                   else Result := Lx(FbSys(FB_IOCTL, a0, $80047476, a2, 0, 0, 0));
+                 end;
+          $5411: Result := Lx(FbSys(FB_IOCTL, a0, $40047473, a2, 0, 0, 0));  { TIOCOUTQ }
+          $5414: Result := Lx(FbSys(FB_IOCTL, a0, $80087467, a2, 0, 0, 0));  { TIOCSWINSZ }
+          $5421: Result := Lx(FbSys(FB_IOCTL, a0, $8004667E, a2, 0, 0, 0));  { FIONBIO }
+          $5422: Result := Lx(FbSys(FB_IOCTL, a0, $20007471, 0, 0, 0, 0));   { TIOCNOTTY }
+          $5429: Result := Lx(FbSys(FB_IOCTL, a0, $40047463, a2, 0, 0, 0));  { TIOCGSID }
+          $5450: Result := Lx(FbSys(FB_IOCTL, a0, $20006602, 0, 0, 0, 0));   { FIONCLEX }
+          $5451: Result := Lx(FbSys(FB_IOCTL, a0, $20006601, 0, 0, 0, 0));   { FIOCLEX }
+          $5452: Result := Lx(FbSys(FB_IOCTL, a0, $8004667D, a2, 0, 0, 0));  { FIOASYNC }
         else
-          Result := -LX_ENOTTY;
+          { unmapped: a bad fd is still EBADF, as the kernel would say first }
+          if FbSys(FB_FCNTL, a0, FB_F_GETFD, 0, 0, 0, 0) < 0 then Result := -9
+          else Result := -LX_ENOTTY;
         end;
     17: Result := Lx(FbSys(FB_PREAD, a0, a1, a2, a3, 0, 0));
     18: Result := Lx(FbSys(FB_PWRITE, a0, a1, a2, a3, 0, 0));
     19: Result := Lx(FbSys(FB_READV, a0, a1, a2, 0, 0, 0));
     20: Result := Lx(FbSys(FB_WRITEV, a0, a1, a2, 0, 0, 0));
+    23: Result := Lx(FbSys(FB_SELECT, a0, a1, a2, a3, a4, 0));  { fd_set, timeval identical }
     21: Result := Lx(FbSys(FB_ACCESS, a0, a1, 0, 0, 0, 0));
     22: Result := Lx(FbSys(FB_PIPE2, a0, 0, 0, 0, 0, 0));
     24: Result := Lx(FbSys(FB_SCHED_YIELD, 0, 0, 0, 0, 0, 0));
@@ -840,6 +1209,7 @@ begin
     84: Result := Lx(FbSys(FB_RMDIR, a0, 0, 0, 0, 0, 0));
     87: Result := Lx(FbSys(FB_UNLINK, a0, 0, 0, 0, 0, 0));
     89: if PathIs(a0, ProcExe) then Result := FbProcExe(a1, a2)
+        else if ProcFdNum(a0) >= 0 then Result := FbProcFd(ProcFdNum(a0), a1, a2)
         else Result := Lx(FbSys(FB_READLINK, a0, a1, a2, 0, 0, 0));
     90: Result := Lx(FbSys(FB_CHMOD, a0, a1, 0, 0, 0, 0));
     95: Result := FbSys(FB_UMASK, a0, 0, 0, 0, 0, 0);
@@ -905,6 +1275,7 @@ begin
     229: Result := Lx(FbSys(FB_CLOCK_GETRES, FbClock(a0), a1, 0, 0, 0, 0));
     230: Result := Lx(FbSys(FB_CLOCK_NANOSLEEP, FbClock(a0), a1, a2, a3, 0, 0));
     257: if PathIs(a1, ProcEnviron) then Result := FbProcEnviron
+         else if PathIs(a1, ProcHostname) then Result := FbProcHostname
          else Result := Lx(FbSys(FB_OPENAT, a0, a1, FbOpenFlags(a2), a3, 0, 0));
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
     262: Result := FbStatAt(a0, a1, a2, a3);                    { newfstatat }
@@ -915,6 +1286,7 @@ begin
          end;
     264: Result := Lx(FbSys(FB_RENAMEAT, a0, a1, a2, a3, 0, 0));
     267: if PathIs(a1, ProcExe) then Result := FbProcExe(a2, a3)
+         else if ProcFdNum(a1) >= 0 then Result := FbProcFd(ProcFdNum(a1), a2, a3)
          else Result := Lx(FbSys(FB_READLINKAT, a0, a1, a2, a3, 0, 0));
     269: begin                                                  { faccessat }
            f := 0;
@@ -937,6 +1309,82 @@ begin
            Result := r;
          end;
     318: Result := Lx(FbSys(FB_GETRANDOM, a0, a1, a2, 0, 0, 0));
+    34: begin                                                   { pause }
+          t[0] := 0; t[1] := 0;
+          FbSys(FB_SIGPROCMASK, 1, 0, Int64(@t[0]), 0, 0, 0);
+          Result := Lx(FbSys(FB_SIGSUSPEND, Int64(@t[0]), 0, 0, 0, 0, 0));
+        end;
+    36: Result := Lx(FbSys(FB_GETITIMER, a0, a1, 0, 0, 0, 0));
+    37: Result := FbAlarm(a0);
+    38: Result := Lx(FbSys(FB_SETITIMER, a0, a1, a2, 0, 0, 0));
+    58: begin                                                   { vfork: as fork -- a shared-memory child }
+          r := FbSys(FB_FORK, 0, 0, 0, 0, 0, 0);                { would return through this frame }
+          if (r >= 0) and (FbRdx <> 0) then r := 0;
+          Result := Lx(r);
+        end;
+    73: Result := Lx(FbSys(FB_FLOCK, a0, a1, 0, 0, 0, 0));
+    75: Result := Lx(FbSys(FB_FDATASYNC, a0, 0, 0, 0, 0, 0));
+    76: Result := Lx(FbSys(FB_TRUNCATE, a0, a1, 0, 0, 0, 0));
+    81: Result := Lx(FbSys(FB_FCHDIR, a0, 0, 0, 0, 0, 0));
+    86: Result := Lx(FbSys(FB_LINK, a0, a1, 0, 0, 0, 0));
+    88: Result := Lx(FbSys(FB_SYMLINK, a0, a1, 0, 0, 0, 0));
+    91: Result := Lx(FbSys(FB_FCHMOD, a0, a1, 0, 0, 0, 0));
+    92: Result := Lx(FbSys(FB_CHOWN, a0, a1, a2, 0, 0, 0));
+    93: Result := Lx(FbSys(FB_FCHOWN, a0, a1, a2, 0, 0, 0));
+    94: Result := Lx(FbSys(FB_LCHOWN, a0, a1, a2, 0, 0, 0));
+    98: Result := Lx(FbSys(FB_GETRUSAGE, a0, a1, 0, 0, 0, 0));  { struct rusage identical }
+    100: Result := FbTimes(a0);
+    105: Result := Lx(FbSys(FB_SETUID, a0, 0, 0, 0, 0, 0));
+    106: Result := Lx(FbSys(FB_SETGID, a0, 0, 0, 0, 0, 0));
+    109: Result := Lx(FbSys(FB_SETPGID, a0, a1, 0, 0, 0, 0));
+    111: Result := FbSys(FB_GETPGRP, 0, 0, 0, 0, 0, 0);
+    113: Result := Lx(FbSys(FB_SETREUID, a0, a1, 0, 0, 0, 0));
+    114: Result := Lx(FbSys(FB_SETREGID, a0, a1, 0, 0, 0, 0));
+    115: Result := Lx(FbSys(FB_GETGROUPS, a0, a1, 0, 0, 0, 0));
+    116: Result := Lx(FbSys(FB_SETGROUPS, a0, a1, 0, 0, 0, 0));
+    121: Result := Lx(FbSys(FB_GETPGID, a0, 0, 0, 0, 0, 0));
+    124: Result := Lx(FbSys(FB_GETSID, a0, 0, 0, 0, 0, 0));
+    140: begin                                                  { getpriority: Linux answers 20 - nice }
+           r := FbSys(FB_GETPRIORITY, a0, a1, 0, 0, 0, 0);
+           if FbErr then Result := Lx(r) else Result := 20 - r;
+         end;
+    141: Result := Lx(FbSys(FB_SETPRIORITY, a0, a1, a2, 0, 0, 0));
+    162: begin FbSys(FB_SYNC, 0, 0, 0, 0, 0, 0); Result := 0; end;
+    227: Result := Lx(FbSys(FB_CLOCK_SETTIME, FbClock(a0), a1, 0, 0, 0, 0));
+    235: Result := Lx(FbSys(FB_UTIMES, a0, a1, 0, 0, 0, 0));
+    259: Result := Lx(FbSys(FB_MKNODAT, a0, a1, a2, a3, 0, 0));
+    260: Result := Lx(FbSys(FB_FCHOWNAT, a0, a1, a2, a3, FbAtFlags(a4), 0));
+    265: Result := Lx(FbSys(FB_LINKAT, a0, a1, a2, a3, FbAtFlags(a4), 0));
+    266: Result := Lx(FbSys(FB_SYMLINKAT, a0, a1, a2, 0, 0, 0));
+    268: Result := Lx(FbSys(FB_FCHMODAT, a0, a1, a2, FbAtFlags(a3), 0, 0));
+    280: Result := FbUtimensat(a0, a1, a2, a3);
+    213, 291: begin                                             { epoll_create, epoll_create1 }
+                r := FbSys(FB_KQUEUE, 0, 0, 0, 0, 0, 0);
+                if (r >= 0) and (nr = 291) and ((a0 and $80000) <> 0) then
+                  FbSys(FB_FCNTL, r, 2, 1, 0, 0, 0);            { F_SETFD FD_CLOEXEC }
+                Result := Lx(r);
+              end;
+    233: Result := FbEpollCtl(a0, a1, a2, a3);
+    232, 281: Result := FbEpollWait(a0, a1, a2, a3);            { epoll_pwait: mask not applied }
+    283: Result := Lx(FbSys(FB_TIMERFD_CREATE, FbClock(a0), FbFdFlags(a1), 0, 0, 0, 0));
+    286: Result := Lx(FbSys(FB_TIMERFD_SETTIME, a0, a1, a2, a3, 0, 0));
+    287: Result := Lx(FbSys(FB_TIMERFD_GETTIME, a0, a1, 0, 0, 0, 0));
+    284: Result := FbEventfd(a0, 0);
+    290: Result := FbEventfd(a0, a1);
+    137: Result := FbStatfs(FB_STATFS, a0, a1);
+    138: Result := FbStatfs(FB_FSTATFS, a0, a1);
+    270: begin                                                  { pselect6: a5 -> (sigset*, size) }
+           f := 0;
+           if (a5 <> 0) and (PInt64(a5)^ <> 0) then
+           begin
+             MaskToFb(PInt64(PInt64(a5)^)^, Int64(@t[0]));
+             f := Int64(@t[0]);
+           end;
+           Result := Lx(FbSys(FB_PSELECT, a0, a1, a2, a3, a4, f));
+         end;
+    271: Result := FbPoll(a0, a1, a2, a3, True);              { ppoll }
+    295: Result := Lx(FbSys(FB_PREADV, a0, a1, a2, a3, 0, 0));
+    296: Result := Lx(FbSys(FB_PWRITEV, a0, a1, a2, a3, 0, 0));
     332: begin                                                  { statx }
            r := FbSys(FB_FSTATAT, a0, a1, Int64(@sb[0]), FbAtFlags(a2), 0, 0);
            if r = 0 then StatToStatx(@sb[0], Pointer(a4));

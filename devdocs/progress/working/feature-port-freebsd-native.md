@@ -278,3 +278,46 @@ fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
   getsid, get/setpriority, fchmod/fchown(at), linkat, symlinkat, mknodat,
   fdatasync, sync, truncate, get/setitimer, utimensat, get/setgroups, times,
   vfork, clock_settime). Then threads (thr_new, _umtx_op).
+
+## 2026-11-12 (pxx2-bsd) — syscall coverage: process, fs, poll, epoll/timerfd/eventfd
+
+Measured by diffing existing tests between the two kernels (Linux build vs
+`--os=freebsd` build in the VM), then translating what differed:
+
+- Pass-through or near: getrusage, getpgid/setpgid/getpgrp/getsid,
+  setpriority, getpriority (Linux answers 20-nice; FbSys now also reports CF
+  so a negative nice is not mistaken for -errno), fchmod/fchown/lchown/chown,
+  fchmodat/fchownat/linkat/symlinkat/mknodat, link/symlink, fchdir, flock,
+  fdatasync, sync, truncate, get/setitimer, setuid/setgid/setreuid/setregid,
+  get/setgroups, clock_settime, utimes, select, preadv/pwritev.
+- Emulated: times (getrusage, USER_HZ 100), alarm (ITIMER_REAL), pause
+  (sigsuspend on the current mask), vfork (as fork: a shared-memory child
+  would return through the translator's frame).
+- utimensat/futimens (UTIME_NOW/OMIT differ; nil path = the fd),
+  statfs/fstatfs (2344-byte FreeBSD struct -> Linux's; f_type from
+  f_fstypename, ST_* flags), pselect6/ppoll (sigmask), poll event bits
+  (WRNORM/WRBAND/RDHUP differ; caller's events restored exactly).
+- ioctl: TIOCGPGRP/TIOCSPGRP (tty only -- FreeBSD pipes accept them as the
+  SIGIO owner), TIOCSCTTY, TIOCNOTTY, TIOCOUTQ, TIOCSWINSZ, TIOCGSID, FIONBIO,
+  FIOCLEX/FIONCLEX, FIOASYNC; an unmapped request on a bad fd is EBADF.
+- `/proc/self/fd/N` (readlink) via fcntl(F_KINFO); `/proc/sys/kernel/hostname`
+  (open) via kern.hostname, through a shared FbShmFile.
+- A 0-byte read of a directory answers EISDIR (pylib's open() probe).
+- **epoll over kqueue**: an epoll fd is a kqueue; EPOLLIN/OUT -> EVFILT_READ/
+  WRITE with epoll_data as udata, ET -> EV_CLEAR, ONESHOT -> EV_ONESHOT;
+  epoll_wait folds an fd's two kevents into one event. **timerfd** native
+  (FreeBSD 14+), **eventfd** via __specialfd. The scheduler's reactor runs
+  unchanged.
+- `make test-freebsd` grows: fileio, sysutils_datetime, reactor, scheduler,
+  async (Pascal); select, uio, tempfile_and_unlocked, tcpgrp_statfs,
+  utimensat, wait, mount_and_prio, bits_and_fdatasync (crtl); file_oserrors,
+  os_access_pathsep_gethostname, subprocess_pipes, time_and_listdir (NilPy).
+  All identical to the Linux build.
+- Not in the suite: test_timer (correct, but a freshly uploaded binary's first
+  run in the VM takes ~0.4 s and the test's margin is 50 ms);
+  test_nilpy_os_stat_owner_and_ids (stats /proc/self, which FreeBSD lacks);
+  c_crtl_flock_klog_swap_personality rows 5-7 (personality/syslog/swapon,
+  Linux-only APIs).
+- **Next:** sockets (sockaddr has sin_len on BSD, AF_INET6 10 vs 28,
+  SOL_SOCKET 1 vs 0xffff, SO_*/MSG_* renumbered, SOCK_NONBLOCK/CLOEXEC bits)
+  -- test_asyncecho / test_asyncudp fail today. Then termios, then threads.

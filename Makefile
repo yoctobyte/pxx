@@ -10837,7 +10837,8 @@ test-freebsd: $(COMPILER)
 	@d=$(TESTTMP)/os_freebsd_run26; mkdir -p $$d && \
 	  tools/vm/freebsd.sh start && \
 	  for t in test/test_rtl_libc_torture.pas test/test_signal_pc_rewrite.pas test/test_signal_sp_rewrite.pas \
-	           test/test_stack_overflow_raise.pas test/test_float_exception_mask.pas test/lib_signals_fpc.pas; do \
+	           test/test_stack_overflow_raise.pas test/test_float_exception_mask.pas test/lib_signals_fpc.pas \
+	           test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas test/test_scheduler.pas test/test_async.pas; do \
 	    n=$$(basename $$t .pas); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/$$n.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_$$n "$$(tools/vm/freebsd.sh run $$d/$$n.fb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
@@ -10848,7 +10849,11 @@ test-freebsd: $(COMPILER)
 	    tools/expect_same.sh freebsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fb one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  done; \
 	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py \
-	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c; do \
+	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
+	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
+	           test/c_crtl_utimensat.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
+	           test/test_nilpy_file_oserrors.npy test/test_nilpy_os_access_pathsep_gethostname.npy \
+	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/fe.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/fe.fb one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./fe.lx one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; echo "test-freebsd: OK"
