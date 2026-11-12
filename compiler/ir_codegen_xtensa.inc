@@ -2775,6 +2775,40 @@ begin
           end;
           Exit;
         end;
+        { A 4-byte frame-local index (windowed, in l32i reach) loads straight
+          into a3 after the base: no spill of the base around it (riscv32's
+          af239c24d7). }
+        if (IRKind[right] = IR_LOAD_SYM) and (Syms[IRA[right]].Kind <> skGlobal) and
+           not ((Syms[IRA[right]].Kind = skParam) and Syms[IRA[right]].IsRef) and
+           (not Syms[IRA[right]].IsArray) and
+           TypeIsMachineInt(Syms[IRA[right]].TypeKind) and
+           (TypeSlotSize(Syms[IRA[right]].TypeKind) = 4) and
+           XtFrameDirect(Syms[IRA[right]].Offset, 4, imm) and
+           (lo >= -2048) and (lo <= 2047) then
+        begin
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a7, imm);
+          if lo <> 0 then
+          begin
+            if (lo >= -127) and (lo <= 128) then
+              xtensa_addi(reg_xtensa_a3, reg_xtensa_a3, -lo)
+            else
+            begin
+              xtensa_movi(reg_xtensa_a4, lo);
+              xtensa_sub(reg_xtensa_a3, reg_xtensa_a3, reg_xtensa_a4);
+            end;
+          end;
+          if elemSize = 1 then
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+          else if (elemSize = 2) or (elemSize = 4) or (elemSize = 8) then
+            xtensa_addx(elemSize, reg_xtensa_a2, reg_xtensa_a3, reg_xtensa_a2)
+          else
+          begin
+            EmitLoadConstXtensa(reg_xtensa_a4, elemSize);
+            xtensa_mull(reg_xtensa_a3, reg_xtensa_a3, reg_xtensa_a4);
+            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end;
+          Exit;
+        end;
         XtensaPushA2;
 
         { The INDEX expression is a READ even when the whole IR_INDEX is a write
@@ -2793,20 +2827,20 @@ begin
 
         if (elemSize = 2) or (elemSize = 4) or (elemSize = 8) then
         begin
-          xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
-          if elemSize >= 4 then
-            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
-          if elemSize = 8 then
-            xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a2);
+          { scale and add the base in one ADDX2/4/8 }
+          XtensaPopA3;
+          xtensa_addx(elemSize, reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end
-        else if elemSize <> 1 then
+        else
         begin
-          EmitLoadConstXtensa(reg_xtensa_a3, elemSize);
-          xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          if elemSize <> 1 then
+          begin
+            EmitLoadConstXtensa(reg_xtensa_a3, elemSize);
+            xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end;
+          XtensaPopA3;
+          xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end;
-
-        XtensaPopA3;
-        xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
       end;
 
     IR_LOAD_MEM:

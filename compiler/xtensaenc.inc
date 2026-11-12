@@ -342,6 +342,27 @@ begin
   EmitB((8 shl 4) or 0);
 end;
 
+procedure xtensa_addx(scale, r, s, t: Integer);
+{ ADDX2/ADDX4/ADDX8 ar, as, at: ar := (as shl k) + at for scale 2/4/8 -- one
+  instruction for an array element address. Same RRR layout as ADD, op2 = 9/A/B;
+  bytes checked against xtensa-esp32s3-elf-as (addx2 a2,a3,a2 = 20 23 90). }
+var op2: Integer;
+begin
+  case scale of
+    2: op2 := 9;
+    4: op2 := 10;
+    8: op2 := 11;
+  else
+    begin
+      Error('compiler error: xtensa_addx scale ' + AIntToStr(scale));
+      op2 := 0;
+    end;
+  end;
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB((op2 shl 4) or 0);
+end;
+
 procedure xtensa_sub(r, s, t: Integer);
 begin
   EmitB((t shl 4) or 0);
