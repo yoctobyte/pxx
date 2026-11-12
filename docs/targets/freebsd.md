@@ -297,6 +297,13 @@ Some things OpenBSD lacks are emulated:
 - **`readlink("/proc/self/fd/N")`** works for a directory: the translator
   changes into it, reads the cwd and changes back. crtl's `fchdir` relies on
   this. For any other fd the answer is ENOENT.
+- **Pseudo-terminals.** Opening `/dev/ptmx` opens `/dev/ptm` and asks it
+  for a pair with `PTMGET`. The master is kept and the slave is closed.
+  `TIOCGPTN` answers the master's minor number N, and opening `/dev/pts/N`
+  opens OpenBSD's slave of that number, `/dev/tty` + `pqrstuvwxyzPQRST`[N div
+  62] + `0-9a-zA-Z`[N mod 62] (so `/dev/pts/0` is `/dev/ttyp0`). A stock
+  `/dev` only has the 62 `p` ptys, so a 63rd pair fails with ENOENT.
+  `unlockpt` succeeds, because OpenBSD ptys have no lock.
 - **`fallocate`** mode 0 grows a short file with `ftruncate`. OpenBSD cannot
   preallocate.
 - **Scheduling.** OpenBSD has no POSIX scheduling policies, so the
@@ -305,13 +312,11 @@ Some things OpenBSD lacks are emulated:
 
 `make test-openbsd` runs about 90 programs on the VM and compares their
 output and exit code with the Linux build. It covers files, signals, threads,
-sockets, async I/O, timers, termios (on a pty), and the C and NilPy runtimes.
+sockets, async I/O, timers, termios (on a pty), ptys, and the C and NilPy runtimes.
 
 Not done yet:
 
 - `/proc/self/maps` and the rest of `/proc`, apart from the files above.
-- Pseudo-terminals: OpenBSD has no `/dev/ptmx` (its ptys come from
-  `/dev/ptm`), so `posix_openpt` fails with ENOENT.
 - eventfd.
 - A thread stack mapped by the program itself for a raw `__pxxclone` call
   must have `MAP_STACK`.

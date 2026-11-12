@@ -329,7 +329,6 @@ that could be fixed:
 
 Left out of the target, because OpenBSD cannot do them:
 
-- c_pty_family, cisatty and lib_termio_isatty (no /dev/ptmx).
 - lib_net_v6only (no dual-stack IPv6).
 - test_a_joined_thread_leaves_the_pal_reap_table (/proc/self/maps).
 - test_thread_clone (raw stack without MAP_STACK).
@@ -337,3 +336,18 @@ Left out of the target, because OpenBSD cannot do them:
 Hazard found: a test opening /dev/full for writing as root on OpenBSD
 created a regular file there. It was removed, and the translator now
 intercepts that path.
+
+### 2026-11-12: `--os=openbsd` ptys
+
+- /dev/ptmx is emulated with /dev/ptm and PTMGET (0x40287401; struct ptmget
+  is 40 bytes: cfd, sfd, cn[16], sn[16]). The master is kept and the slave
+  closed.
+- TIOCGPTN answers the master's minor (st_rdev at offset 28; masters are
+  major 6, slaves major 5). Anything else gives ENOTTY, as on Linux.
+- /dev/pts/N opens /dev/tty + "pqrstuvwxyzPQRST"[N div 62] +
+  "0-9a-zA-Z"[N mod 62]. Measured on 8.0 with PTMGET in a loop: minor 61 is
+  ttypZ, and the 63rd PTMGET fails with ENOENT, because the stock /dev has no
+  ttyq*.
+- TIOCSPTLCK succeeds on a master: OpenBSD ptys have no lock.
+- c_pty_family, cisatty and lib_termio_isatty match Linux and are now in
+  `make test-openbsd`.

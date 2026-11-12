@@ -10886,9 +10886,8 @@ test-freebsd: $(COMPILER)
 # --os=openbsd (EXPERIMENTAL) on a real OpenBSD 8.0 kernel (qemu VM,
 # tools/vm/openbsd.sh; the image lives under $PXX_VM_DIR, default /data/vm).
 # NOT in `test`: it needs the VM. Output and exit code must be byte-identical
-# to the Linux build. test-freebsd's lists minus what OpenBSD cannot do (ptys:
-# no /dev/ptmx; /proc/self/maps; dual-stack IPv6; a raw __pxxclone stack
-# without MAP_STACK). feature-port-libc-family-openbsd-netbsd-minix
+# to the Linux build. test-freebsd's lists minus what OpenBSD cannot do
+# (/proc/self/maps; dual-stack IPv6; a raw __pxxclone stack without MAP_STACK). feature-port-libc-family-openbsd-netbsd-minix
 test-openbsd: $(COMPILER)
 	@d=$(TESTTMP)/os_openbsd_run26; mkdir -p $$d && \
 	  tools/vm/openbsd.sh start && \
@@ -10913,7 +10912,8 @@ test-openbsd: $(COMPILER)
 	           test/test_nilpy_file_oserrors.npy test/test_nilpy_os_access_pathsep_gethostname.npy \
 	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy \
 	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
-	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy test/c_termios_no_tty.c; do \
+	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy test/c_termios_no_tty.c \
+	           test/c_pty_family.c test/cisatty.c test/lib_termio_isatty.pas; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=openbsd $$t $$d/fe.ob >/dev/null && \
 	    tools/expect_same.sh openbsd_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/fe.ob one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./fe.lx one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \

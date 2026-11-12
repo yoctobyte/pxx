@@ -1801,11 +1801,83 @@ begin
   Result := n;
 end;
 
+{ ---- ptys ----------------------------------------------------------------
+  Linux: open /dev/ptmx, TIOCGPTN gives N, the slave is /dev/pts/N.
+  OpenBSD: open /dev/ptm and PTMGET (_IOR('t',1,struct ptmget), 40 bytes:
+  cfd, sfd, cn[16], sn[16]) hands back BOTH ends already open. The master is
+  kept and the slave closed, so the slave is opened later by name as on Linux.
+  N is the master's minor; OpenBSD's slave for minor m is /dev/tty +
+  "pqrstuvwxyzPQRST"[m div 62] + "0-9a-zA-Z"[m mod 62] (measured on 8.0:
+  minor 61 is ttypZ, and the stock /dev has only the 62 p-ptys). }
+const
+  DevPtmx: array[0..8] of Byte = (47,100,101,118,47,112,116,109,120);   { /dev/ptmx }
+  DevPtm: array[0..8] of Byte = (47,100,101,118,47,112,116,109,0);      { /dev/ptm, NUL-terminated }
+  DevPts: array[0..8] of Byte = (47,100,101,118,47,112,116,115,47);     { /dev/pts/ }
+  PtyLetters: array[0..15] of Byte = (112,113,114,115,116,117,118,119,120,121,122,80,81,82,83,84);
+
+function ObPtmx(flags: Int64): Int64;
+var m, r: Int64; pg: array[0..4] of Int64;
+begin
+  m := ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@DevPtm[0]), 2 or $10000, 0, 0, 0);   { O_RDWR|O_CLOEXEC }
+  if m < 0 then begin Result := Lx(m); Exit; end;
+  r := ObSys(OB_IOCTL, m, $40287401, Int64(@pg[0]), 0, 0, 0);              { PTMGET }
+  ObSys(OB_CLOSE, m, 0, 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  ObSys(OB_CLOSE, (pg[0] shr 32) and $FFFFFFFF, 0, 0, 0, 0, 0);            { sfd }
+  Result := pg[0] and $FFFFFFFF;                                            { cfd }
+  if (ObOpenFlags(flags) and 4) <> 0 then ObSys(OB_FCNTL, Result, 4, 4, 0, 0, 0);   { O_NONBLOCK }
+  if (flags and $80000) <> 0 then ObSys(OB_FCNTL, Result, 2, 1, 0, 0, 0);          { O_CLOEXEC }
+end;
+
+{ The pty number of a master fd, or -ENOTTY for anything else. A master is a
+  character device of major 6 (pty; the slaves are 5, tty). }
+function ObPtyMinor(fd: Int64): Int64;
+var st: array[0..15] of Int64; r, rdev: Int64;
+begin
+  r := ObSys(OB_FSTAT, fd, Int64(@st[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  rdev := (st[3] shr 32) and $FFFFFFFF;                                     { st_rdev @28 }
+  if ((st[0] and $F000) <> $2000) or (((rdev shr 8) and $FF) <> 6) then
+    Result := -LX_ENOTTY
+  else
+    Result := (rdev and $FF) or ((rdev and $FFFF0000) shr 8);
+end;
+
+{ "/dev/pts/N" -> "/dev/ttyXY" in name (11 bytes, NUL-terminated); False if
+  the path is not of that form. }
+function ObPtsName(path, name: Int64): Boolean;
+var i, n, c: Int64;
+begin
+  Result := False;
+  if path = 0 then Exit;
+  for i := 0 to 8 do
+    if PByte(path + i)^ <> DevPts[i] then Exit;
+  n := 0; i := 9;
+  if (PByte(path + i)^ < 48) or (PByte(path + i)^ > 57) then Exit;
+  while (PByte(path + i)^ >= 48) and (PByte(path + i)^ <= 57) and (n < 100000) do
+  begin
+    n := n * 10 + PByte(path + i)^ - 48; i := i + 1;
+  end;
+  if (PByte(path + i)^ <> 0) or (n >= 16 * 62) then Exit;
+  for i := 0 to 7 do PByte(name + i)^ := DevPtm[i];                         { /dev/pt }
+  PByte(name + 5)^ := 116; PByte(name + 6)^ := 116; PByte(name + 7)^ := 121;  { tty }
+  PByte(name + 8)^ := PtyLetters[n div 62];
+  c := n mod 62;
+  if c < 10 then c := c + 48 else if c < 36 then c := c - 10 + 97 else c := c - 36 + 65;
+  PByte(name + 9)^ := c;
+  PByte(name + 10)^ := 0;
+  Result := True;
+end;
+
 { open/openat with the paths OpenBSD lacks. /dev/full is /dev/zero whose
   writes fail with ENOSPC (bit 3 of ObTfd marks the fd). }
 function ObOpenAt(dirfd, path, flags, mode: Int64): Int64;
+var nm: array[0..15] of Byte;
 begin
   if PathIs(path, ProcEnviron) then Result := ObProcEnviron
+  else if PathIs(path, DevPtmx) then Result := ObPtmx(flags)
+  else if ObPtsName(path, Int64(@nm[0])) then
+    Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@nm[0]), ObOpenFlags(flags), 0, 0, 0))
   else if PathIs(path, ProcHostname) then Result := ObProcHostname
   else if PathIs(path, DevFull) then
   begin
@@ -1880,6 +1952,15 @@ begin
                  else Result := 0;
                  end;
           $5427: Result := Lx(ObSys(OB_IOCTL, a0, $2000747B, 0, 0, 0, 0));   { TIOCSBRK }
+          -2147199952: begin                                    { $80045430 TIOCGPTN (the case is on Integer) }
+                   r := ObPtyMinor(a0);
+                   if r >= 0 then begin PInteger(a2)^ := Integer(r); Result := 0; end
+                   else Result := r;
+                 end;
+          $40045431: begin                                      { TIOCSPTLCK: OpenBSD ptys have no lock }
+                   r := ObPtyMinor(a0);
+                   if r >= 0 then Result := 0 else Result := r;
+                 end;
           $5428: Result := Lx(ObSys(OB_IOCTL, a0, $2000747A, 0, 0, 0, 0));   { TIOCCBRK }
           $5413: Result := Lx(ObSys(OB_IOCTL, a0, $40087468, a2, 0, 0, 0));  { TIOCGWINSZ }
           $541B: Result := Lx(ObSys(OB_IOCTL, a0, $4004667F, a2, 0, 0, 0));  { FIONREAD }
