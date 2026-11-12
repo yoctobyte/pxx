@@ -153,3 +153,42 @@ grep -rhoE "\bSYS_[A-Z_0-9]+" compiler/*.inc compiler/*.pas | sort | uniq -c
   (`install.py` = unattended autoinstall over serial; the stock ISO is used
   as-is — remastering it with xorriso moves `cdboot` and `cdbr` can no longer
   find it).
+- 2026-11-12 — **Spike result: a libc-free pxx binary runs on OpenBSD 8.0.**
+  Measured on the VM (OpenBSD 8.0 GENERIC.MP amd64, libc.so.104.0):
+  - A plain Linux pxx ELF is ENOEXEC (no ident note); the shell then tries it
+    as a script ("NUL byte unexpected").
+  - libc.so.104.0 exports neither `syscall` nor `__syscall` -- confirmed, so
+    today's `--rtl-libc` cannot work there.
+  - Hand-patched `--os=freebsd` hello-world: FreeBSD ABI note renamed to
+    `OpenBSD\0` (same 8-byte name, type 1, desc set to 0) -> exec accepted;
+    then SEGV_ACCERR at the first `call`, because the FreeBSD entry's
+    `mov rsp, rdi` does not apply (OpenBSD starts with argc at [rsp], like
+    Linux). NOP'd -> runs until the first syscall made from pxx's code:
+    `PINS getrlimit, addr 4003b7` + SIGABRT. Pinsyscalls IS enforced for a
+    static binary.
+  - Added a `PT_OPENBSD_SYSCALLS` (0x65a3dbe9) table of
+    {u32 vaddr, u32 sysno} pairs at the end of the file (GNU_STACK phdr
+    reused): every number 1..330 pinned to the ONE generic syscall site,
+    direct sites pinned to their own number -> **"hello from pxx", exit 0**,
+    with the base system's execute-only text in force (`/bin/ls` maps its
+    text `E` only).
+  - Loader rules, from sys/kern/exec_elf.c (elf_read_pintable): the whole
+    table is DISCARDED if any entry has sysno <= 0 or >= SYS_MAXSYSCALL (331
+    on 8.0) or an offset past the text end, or if it is larger than
+    SYS_MAXSYSCALL*2 entries; a number listed twice becomes "allowed
+    anywhere"; offsets are vaddrs for ET_EXEC (exe_base 0); the table is
+    read only when there is no PT_INTERP.
+  - **Consequence for the plan:** OpenBSD can be a raw-syscall port like
+    FreeBSD -- an OpenBSD translator (numbers/structs/errno) behind the one
+    syscall site, the ident note, a pin table from the ELF writer, no
+    FreeBSD entry fixup. No libc, no PLT, no ld.so. Cost: syscall numbers are
+    not a stable ABI on OpenBSD, so binaries would be tied to a release, as
+    the base system's own static binaries are. (The libc route is tied too:
+    a libc major bump also breaks old binaries without compat libs.)
+    Owner decision needed: raw-syscall OpenBSD vs the libc route in this
+    ticket. NetBSD/Minix keep their stable syscall tables either way.
+  - Still open: does pxx ever READ its own text (jump tables, constants
+    placed in code)? Hello-world reads only the R segment. IBT/BTCFI not
+    tested (needs a CPU with IBT; qemu without it proves nothing).
+  - Spike scripts (not committed): note rename + entry NOP + pin table
+    builder, each ~40 lines of Python; recipe above is enough to redo them.
