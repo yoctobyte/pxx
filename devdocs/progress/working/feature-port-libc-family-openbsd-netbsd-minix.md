@@ -192,3 +192,26 @@ grep -rhoE "\bSYS_[A-Z_0-9]+" compiler/*.inc compiler/*.pas | sort | uniq -c
     tested (needs a CPU with IBT; qemu without it proves nothing).
   - Spike scripts (not committed): note rename + entry NOP + pin table
     builder, each ~40 lines of Python; recipe above is enough to redo them.
+
+### 2026-11-12, later: `--os=openbsd` built as an EXPERIMENTAL direct-syscall target
+
+The spike result has been turned into a compiler option. It is additive and
+can be reverted. The owner's earlier ruling ("OpenBSD goes the libc route")
+still stands until they confirm the direct route. Doing it this way made the
+FreeBSD sites generic (`KernelTranslated`, `KernelAbiUnit`, `KernelAbiProc`,
+`TlsSegPrefix` in defs.inc), and that work is needed whichever route wins.
+
+- The translator is `compiler/builtin/obsdabi.pas` (phase 1): files,
+  directories, memory (brk emulated), time, process basics, TLS via
+  `__set_tcb` with fs-prefixed accesses, uname, rlimits,
+  `/proc/self/environ` and `/proc/self/exe`.
+- The ELF writer adds the OpenBSD ident note and a `PT_OPENBSD_SYSCALLS`
+  table that pins numbers 1..330 to the one `syscall` in `ObRawA`.
+- Refused for now: `--threadsafe`, `-g`, plus FreeBSD's refusals.
+- Verified: hello world and a file/directory/environment/time program give
+  output identical to Linux on OpenBSD 8.0. Linux, FreeBSD, aarch64, arm32,
+  i386, `--threadsafe` and `-g` binaries are byte-identical to a control
+  compiler built at the parent commit.
+- Next: signals (sigaction, 16 B struct, SA_SIGINFO 0x40; the
+  siginfo/ucontext layouts still need measuring), then threads (`__tfork`),
+  then sockets.

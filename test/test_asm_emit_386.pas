@@ -151,6 +151,14 @@ begin
   Result := False;
 end;
 
+{ The TLS block's segment-override byte (defs.inc). gs ($65) on every target
+  this harness models; only --os=openbsd answers fs ($64), and the harness
+  never selects a kernel. }
+function TlsSegPrefix: Integer;
+begin
+  Result := $65;
+end;
+
 {$include ../compiler/rel8.inc}   { CheckRel8: the assembler's short-jump range check }
 {$include ../compiler/x64enc.inc}
 {$include ../compiler/asmtext.inc}

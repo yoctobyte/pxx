@@ -2434,6 +2434,19 @@ const
     posix or bare. See devdocs/progress/*/feature-platform-abstraction-layer.md. }
   KERNEL_LINUX   = 0;
   KERNEL_FREEBSD = 1;
+  { --os=openbsd (EXPERIMENTAL, feature-port-libc-family-openbsd-netbsd-minix):
+    the FreeBSD shape -- raw syscalls through an in-program Linux-ABI
+    translator (compiler/builtin/obsdabi.pas) -- plus an OpenBSD ident note
+    and a PT_OPENBSD_SYSCALLS pin table pointing every number at that
+    translator's one `syscall` (elfwriter.inc, ElfOpenbsdPinTable). }
+  KERNEL_OPENBSD = 2;
+  { The OpenBSD ident note: 12-byte header + "OpenBSD\0" + a 4-byte zero. Same
+    size as the FreeBSD one, so it takes the same slot. }
+  OB_IDENT_NOTE_SIZE = 24;
+  PT_OPENBSD_SYSCALLS = $65A3DBE9;
+  { The kernel discards the WHOLE pin table if any entry has sysno <= 0 or >=
+    SYS_MAXSYSCALL (sys/kern/exec_elf.c, elf_read_pintable). 331 on 8.0. }
+  OB_SYS_MAXSYSCALL = 331;
   { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
     12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
     oldest release the translator's constants were measured against. }
@@ -6686,6 +6699,8 @@ var
     (compiler/builtin/fbsdabi.pas), which translates the Linux call to the
     FreeBSD one. x86-64 only. feature-port-freebsd-native }
   TargetKernel : Integer;
+  { The in-program translator's proc (PXXFbsdSyscall or PXXObsdSyscall) when
+    TargetKernel is not Linux. The name is historical: FreeBSD came first. }
   FbsdSyscallProcIdx : Integer;
   LibcSyscallProcIdx : Integer;
   LibcErrnoProcIdx : Integer;
@@ -9043,6 +9058,44 @@ var
     several callers and only the UMeth index knows the slot; every caller sets it immediately
     before calling, and the builder consumes and clears it. }
   GenVirtSlot : Integer;
+
+{ A kernel whose every entry goes through an in-program Linux-ABI translator
+  (x86-64 only; the --os refusals in compiler.pas keep it there). }
+function KernelTranslated: Boolean;
+begin
+  KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD);
+end;
+
+{ The translator's unit and entry proc, and the --os spelling for messages. }
+function KernelAbiUnit: AnsiString;
+begin
+  if TargetKernel = KERNEL_OPENBSD then KernelAbiUnit := 'obsdabi'
+  else KernelAbiUnit := 'fbsdabi';
+end;
+
+function KernelAbiProc: AnsiString;
+begin
+  if TargetKernel = KERNEL_OPENBSD then KernelAbiProc := 'PXXObsdSyscall'
+  else KernelAbiProc := 'PXXFbsdSyscall';
+end;
+
+{ The segment-override byte of pxx's x86-64 TLS block: gs ($65) everywhere,
+  because glibc owns fs -- except --os=openbsd, where userland cannot set the
+  GS base at all (no sysarch for it) but __set_tcb sets FS, and a pxx
+  OpenBSD binary links no libc to own it. The translator turns
+  arch_prctl(ARCH_SET_GS) into __set_tcb, and every gs: access is emitted
+  as fs: -- the assembler's `gs:` operands and the hand-written bytes alike. }
+function TlsSegPrefix: Integer;
+begin
+  if TargetKernel = KERNEL_OPENBSD then TlsSegPrefix := $64 else TlsSegPrefix := $65;
+end;
+
+function KernelOsName: AnsiString;
+begin
+  if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
+  else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
+  else KernelOsName := 'linux';
+end;
 
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;

@@ -18731,14 +18731,14 @@ begin
   EmitAsmX64(['mov [rsp+8], r10']);
   EmitB($4C); EmitB($89); EmitB($5C); EmitB($24); EmitB($00); { mov [rsp], r11 }
   EmitAsmX64(['xor eax, eax']);
-  if TargetKernel = KERNEL_FREEBSD then
+  if KernelTranslated then
   begin
-    { --os=freebsd: a direct rel32 call to the Linux-ABI translator, which
+    { --os=freebsd/openbsd: a direct rel32 call to the Linux-ABI translator, which
       already answers in the raw -errno convention. This runs after DCE, so
       BodyAddr is final; DceRun kept the proc alive through RecordEntryRoot.
       feature-port-freebsd-native }
     if (FbsdSyscallProcIdx < 0) or (Procs[FbsdSyscallProcIdx].BodyAddr < 0) then
-      ErrorNoPos('internal: --os=freebsd but PXXFbsdSyscall has no code');
+      ErrorNoPos('internal: --os=' + KernelOsName + ' but ' + KernelAbiProc + ' has no code');
     EmitB($E8);
     EmitI32(Procs[FbsdSyscallProcIdx].BodyAddr - (CodeLen + 4));
   end
@@ -18748,7 +18748,7 @@ begin
   { -1 means "consult errno"; every other value is already the raw answer.
     Not under --os=freebsd: the translator answers -errno itself, and -1 is
     a real result there (-EPERM). }
-  if TargetKernel <> KERNEL_FREEBSD then
+  if not KernelTranslated then
   begin
   EmitAsmX64(['cmp rax, -1']);
   AsmScopeBegin;

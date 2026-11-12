@@ -6,7 +6,7 @@ order: 62
 # FreeBSD and the BSDs
 
 PXX writes native **FreeBSD/amd64** executables from Pascal, C and Nil
-Python. The other BSDs are not supported yet; [their plan](#openbsd-netbsd-and-minix)
+Python. OpenBSD is experimental and the other BSDs are not supported yet; [their plan](#openbsd-netbsd-and-minix)
 is at the end of this page.
 
 ```sh
@@ -168,16 +168,63 @@ The work log, with the reasons behind each choice, is in
 
 ## OpenBSD, NetBSD and Minix
 
-These are not supported yet, and `--os=openbsd` is an unknown option.
+NetBSD and Minix are not supported yet. OpenBSD has an EXPERIMENTAL
+`--os=openbsd` (since 2026-11-12) that may still be withdrawn in favour of
+going through libc; the choice has not been made.
+
+### `--os=openbsd` (experimental)
 
 OpenBSD only lets a program make a system call from an address it has
 declared in advance (pinsyscalls). The base system's static binaries do this
-with a table in the executable. A test on 2026-11-12 showed that a hand-patched
-pxx hello-world with such a table runs on OpenBSD 8.0 without libc. So OpenBSD
-could work like FreeBSD, with its own translator, and would not need to go
-through libc. The cost is that OpenBSD's system call numbers can change between
-releases, so each binary would be tied to one release. Which way to go has not
-been decided.
+with a table in the executable, and that is what pxx writes. The design is the
+FreeBSD one: the program is built against Linux, and
+`compiler/builtin/obsdabi.pas` translates every system call at run time.
+
+What is different from FreeBSD:
+
+- **The pin table.** A `PT_OPENBSD_SYSCALLS` program header (in the slot
+  `PT_GNU_STACK` uses on Linux) points to a table after the data. The table
+  pins every system call number, 1 to 330, to the single `syscall`
+  instruction in `ObRawA`. A raw `syscall` anywhere else in the program is
+  killed with SIGABRT, and ktrace shows a `PINS` line. The kernel ignores the
+  whole table if any entry is out of range, and it reads the table only when
+  the program has no `PT_INTERP`.
+- **The ident note.** The note is named "OpenBSD", type 1, description 0. It
+  sits where the FreeBSD note goes. Without it OpenBSD answers ENOEXEC.
+- **TLS uses fs.** OpenBSD userland cannot set the GS base; `__set_tcb` sets
+  FS. Under `--os=openbsd` the compiler writes pxx's TLS accesses with the
+  fs prefix instead of gs (`TlsSegPrefix` in `compiler/defs.inc`), and the
+  translator turns `arch_prctl(ARCH_SET_GS)` into `__set_tcb`.
+- **No brk.** OpenBSD has no brk call, so the translator emulates it with a
+  1 GiB `PROT_NONE` reservation that it opens up with `mprotect`.
+- **`/proc` files.** `/proc/self/environ` is built from
+  `sysctl kern.proc.args.<pid>.env`. It is served through a pipe if it fits
+  in 16 KiB, or through an unlinked file in `/tmp` if not (OpenBSD has no
+  anonymous shared memory). `/proc/self/exe` is `argv[0]` made absolute. That
+  is right when the program was started by a path, and it gives ENOENT when the
+  program was found through a `PATH` search.
+- **Release-bound.** OpenBSD's system call numbers are not a stable ABI. The
+  numbers in `obsdabi.pas` are 8.0's, measured from its `/usr/include`, and a
+  binary is tied to that release.
+
+Tested on 2026-11-12 on OpenBSD 8.0 amd64: hello world, and text-file
+reading and writing, `FindFirst`, directory creation and removal, the
+environment, the current directory, `ParamStr(0)` and the clock. The output
+was identical to Linux.
+
+Not done yet:
+
+- Signals: `rt_sigaction` answers ENOSYS, so a crash is not turned into an
+  exception.
+- Threads: `--threadsafe` is refused.
+- Sockets, termios beyond the `isatty` check, and epoll.
+- Debug info: `-g` is refused, because the debug data would go where the pin
+  table is.
+
+Anything that is not mapped answers ENOSYS.
+
+To try it, run `tools/vm/openbsd.sh start`, then
+`tools/vm/openbsd.sh run <binary>`.
 
 `--rtl-libc` alone is not enough on any of them: it passes Linux system call
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.

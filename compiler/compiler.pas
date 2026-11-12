@@ -1199,6 +1199,8 @@ begin
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --os=freebsd          FreeBSD/amd64 output (experimental): raw syscalls via an');
   WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
+  WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 output (EXPERIMENTAL, single-threaded,');
+  WriteLn('                        no signals yet): the same design plus a syscall pin table');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1852,6 +1854,14 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if option = '--os=openbsd' then
+    begin
+      { EXPERIMENTAL: see KERNEL_OPENBSD in defs.inc. }
+      TargetKernel := KERNEL_OPENBSD;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if (option = '--os=freebsd') or (option = '--platform=freebsd') then
@@ -3121,16 +3131,26 @@ begin
     something nobody has run (aarch64 used to die on "PXXFbsdSyscall not
     found"; --shared wrote a .so never loaded on FreeBSD; --rtl-libc would hand
     FreeBSD's libc Linux syscall numbers). docs/targets/freebsd.md }
-  if TargetKernel = KERNEL_FREEBSD then
+  if KernelTranslated then
   begin
     if TargetArch <> TARGET_X86_64 then
-      ErrorNoPos('--os=freebsd is x86-64 only; FreeBSD on other CPUs is not supported yet');
+      ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only; other CPUs are not supported yet');
     if EmitSharedMode then
-      ErrorNoPos('--os=freebsd: shared-library output (--shared, .so) is not supported; build an executable');
+      ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
     if EmitObjMode then
-      ErrorNoPos('--os=freebsd: object output (--emit-obj, .o) is not supported; build an executable');
+      ErrorNoPos('--os=' + KernelOsName + ': object output (--emit-obj, .o) is not supported; build an executable');
     if RtlOverLibc then
-      ErrorNoPos('--os=freebsd: --rtl-libc is not supported; the FreeBSD build calls the kernel directly');
+      ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly');
+  end;
+  { OpenBSD (experimental) is single-threaded for now: the clone stub has no
+    __tfork leg, and OpenBSD cannot set the GS base pxx's TLS uses. -g would
+    place debug data where the pin table goes. }
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    if ThreadSafeMode then
+      ErrorNoPos('--os=openbsd: --threadsafe is not supported yet (experimental target, single-threaded)');
+    if DebugInfo then
+      ErrorNoPos('--os=openbsd: -g is not supported yet (experimental target)');
   end;
 
   n := Length(inFile);
@@ -3661,11 +3681,12 @@ begin
   { --os=freebsd: the syscall thunk calls PXXFbsdSyscall, but the thunk is
     emitted after DCE, so no CallFix can say so -- root it by hand.
     feature-port-freebsd-native }
-  if TargetKernel = KERNEL_FREEBSD then
+  if KernelTranslated then
   begin
-    FbsdSyscallProcIdx := FindProc('PXXFbsdSyscall');
+    FbsdSyscallProcIdx := FindProc(KernelAbiProc);
     if FbsdSyscallProcIdx < 0 then
-      ErrorNoPos('--os=freebsd: PXXFbsdSyscall not found (compiler/builtin/fbsdabi.pas was not pulled)');
+      ErrorNoPos('--os=' + KernelOsName + ': ' + KernelAbiProc + ' not found (compiler/builtin/'
+        + KernelAbiUnit + '.pas was not pulled)');
     RecordEntryRoot(FbsdSyscallProcIdx);
   end;
   DceRun;

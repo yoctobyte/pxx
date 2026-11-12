@@ -294,7 +294,7 @@ procedure EmitHeapMagTlsBase;
   IR_TLSBASE reads. Not EmitAsmX64: the text assembler has no segment override,
   and this is the same five bytes IR_TLSBASE and EmitIoOwner already emit. }
 begin
-  EmitB($65); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(0);
+  EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(0);
 end;
 
 procedure EmitHeapMagTakeGuard;
@@ -1080,7 +1080,7 @@ begin
     { mov <dst>, gs:[0] -- the block's own address, the self-pointer convention
       IR_TLSBASE reads. The BASE is needed here, not a slot, so this is the one
       place that still pays the extra load. }
-    EmitB($65);
+    EmitB(TlsSegPrefix);
     if useR8 then EmitB($4C) else EmitB($48);
     EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);
     if useR8 then EmitAsmX64(['add r8, %', 8 * t])
@@ -1335,7 +1335,7 @@ begin
       IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
       with --emit-obj/--shared there is no ELF entry, nothing installed a base,
       and this load would take address 0 rather than return one. }
-    EmitB($65); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
     EmitAsmX64([
       'mov rcx, rsp',
       'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,
@@ -4483,7 +4483,7 @@ begin
       IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
       with --emit-obj/--shared nothing installed a base and this load takes
       address 0 rather than returning one. }
-    EmitB($65); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
     EmitAsmX64([
       'mov rcx, rsp',
       'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,

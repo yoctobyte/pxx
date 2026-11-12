@@ -533,7 +533,7 @@ begin
     k0 := AsmTextSegAt(rest);
     if k0 > 0 then
     begin
-      if AsmTextLower(rest[k0]) = 'g' then EncB($65) else EncB($64);
+      if AsmTextLower(rest[k0]) = 'g' then EncB(TlsSegPrefix) else EncB($64);   { gs = the TLS block's segment (fs under --os=openbsd) }
       rest := AsmTextSlice(rest, 1, k0 - 1) + AsmTextSlice(rest, k0 + 3, Length(rest) - k0 - 2);
     end;
   end;

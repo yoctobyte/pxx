@@ -14002,7 +14002,7 @@ begin
       EmitAsmX64(['mov eax, 231']); { (exit_group) }
       { --os=freebsd: through the translator like every other kernel entry
         (FreeBSD's 231 is not exit). feature-port-freebsd-native }
-      if TargetKernel = KERNEL_FREEBSD then EmitSyscall
+      if KernelTranslated then EmitSyscall
       else begin EmitB($0F); EmitB($05); end;            { syscall }
     end;
     TARGET_I386:

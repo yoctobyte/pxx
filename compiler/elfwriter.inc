@@ -2110,6 +2110,27 @@ begin
   if TargetKernel = KERNEL_FREEBSD then ElfOsAbi := 9 else ElfOsAbi := 0;
 end;
 
+{ --os=openbsd: the address of the ONE `syscall` instruction every kernel
+  entry goes through -- the first 0F 05 in obsdabi's ObRawA. OpenBSD kills a
+  syscall made from any address its PT_OPENBSD_SYSCALLS table does not pin
+  for that number (pinsyscalls), so the table pins every number to this one
+  site, and any other raw `syscall` left in an image dies loudly (SIGABRT,
+  "PINS" in ktrace) instead of passing unnoticed. }
+function ObsdPinVA(codeOffset: Integer): Int64;
+var p, a, lim: Integer;
+begin
+  p := FindProc('ObRawA');
+  if (p < 0) or (Procs[p].BodyAddr < 0) then
+    ErrorNoPos('internal: --os=openbsd but ObRawA has no code');
+  a := Procs[p].BodyAddr;
+  lim := a + 96;
+  if lim > CodeLen - 1 then lim := CodeLen - 1;
+  while (a < lim) and not ((Code[a] = $0F) and (Code[a + 1] = $05)) do Inc(a);
+  if a >= lim then
+    ErrorNoPos('internal: --os=openbsd: no syscall instruction in ObRawA');
+  ObsdPinVA := ImageBase + codeOffset + a;
+end;
+
 procedure ApplyImageFixups(codeVA, dataBase, bssBase, entry: Int64);
 { Resolve every code and data fixup against the addresses an IMAGE will have.
   One copy, because there were two and they had already drifted: writeELF is
@@ -2321,6 +2342,14 @@ begin
     Inc(phCount);
     noteLen := FB_ABI_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_OPENBSD then
+  begin
+    { The OpenBSD ident note, same size and slot as FreeBSD's. Without it
+      OpenBSD answers ENOEXEC. }
+    Inc(phCount);
+    noteLen := OB_IDENT_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
     so the constant and the header count are one fact spelled twice and drift
@@ -2439,11 +2468,24 @@ begin
     writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
     writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,8);
   end;
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    { OpenBSD takes this slot for PT_OPENBSD_SYSCALLS (it ignores
+      PT_GNU_STACK). The table is written after the data: entries 1..
+      OB_SYS_MAXSYSCALL-1, 8 bytes each. }
+    writeU32(f,PT_OPENBSD_SYSCALLS);writeU32(f,4);
+    writeU64(f,codeOffset + CodeLen + DataFileLen);
+    writeU64(f,0);writeU64(f,0);
+    writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+  end
+  else
+  begin
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
     stack request, else newer kernels refuse to load the image entirely
     (bug-elf-missing-pt-gnu-stack) }
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
+  end;
   if noteLen > 0 then
   begin
     writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
@@ -2455,7 +2497,14 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if noteLen > 0 then
+  if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
+  begin
+    writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_OPENBSD_IDENT }
+    writeU8(f,79);writeU8(f,112);writeU8(f,101);writeU8(f,110);   { "OpenBSD", NUL }
+    writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
+    writeU32(f,0);
+  end
+  else if noteLen > 0 then
   begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
     writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
@@ -2465,6 +2514,14 @@ begin
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    addr := ObsdPinVA(codeOffset);
+    for i := 1 to OB_SYS_MAXSYSCALL - 1 do
+    begin
+      writeU32(f, addr); writeU32(f, i);   { {vaddr, sysno} }
+    end;
+  end;
   if doDebug then
   begin
     if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
@@ -2523,6 +2580,14 @@ begin
   begin
     Inc(phCount);
     noteLen := FB_ABI_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_OPENBSD then
+  begin
+    { The OpenBSD ident note, same size and slot as FreeBSD's. Without it
+      OpenBSD answers ENOEXEC. }
+    Inc(phCount);
+    noteLen := OB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
@@ -2653,11 +2718,24 @@ begin
     writeU64(f,ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
     writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,LDSO_DYNAMIC_SIZE);writeU64(f,8);
   end;
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    { OpenBSD takes this slot for PT_OPENBSD_SYSCALLS (it ignores
+      PT_GNU_STACK). The table is written after the data: entries 1..
+      OB_SYS_MAXSYSCALL-1, 8 bytes each. }
+    writeU32(f,PT_OPENBSD_SYSCALLS);writeU32(f,4);
+    writeU64(f,codeOffset + CodeLen + DataFileLen);
+    writeU64(f,0);writeU64(f,0);
+    writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+  end
+  else
+  begin
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
     stack request, else newer kernels refuse to load the image entirely
     (bug-elf-missing-pt-gnu-stack) }
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
+  end;
   if noteLen > 0 then
   begin
     writeU32(f,4);writeU32(f,4);           { PT_NOTE, R }
@@ -2669,7 +2747,14 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if noteLen > 0 then
+  if (noteLen > 0) and (TargetKernel = KERNEL_OPENBSD) then
+  begin
+    writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_OPENBSD_IDENT }
+    writeU8(f,79);writeU8(f,112);writeU8(f,101);writeU8(f,110);   { "OpenBSD", NUL }
+    writeU8(f,66);writeU8(f,83);writeU8(f,68);writeU8(f,0);
+    writeU32(f,0);
+  end
+  else if noteLen > 0 then
   begin
     writeU32(f,8);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_FREEBSD_ABI_TAG }
     writeU8(f,70);writeU8(f,114);writeU8(f,101);writeU8(f,101);   { "FreeBSD", NUL }
@@ -2679,6 +2764,14 @@ begin
 
   if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
+  if TargetKernel = KERNEL_OPENBSD then
+  begin
+    addr := ObsdPinVA(codeOffset);
+    for i := 1 to OB_SYS_MAXSYSCALL - 1 do
+    begin
+      writeU32(f, addr); writeU32(f, i);   { {vaddr, sysno} }
+    end;
+  end;
   if doDebug then
   begin
     if DbgLen > 0 then OutWrite(f, DbgBuf, 0, DbgLen);
