@@ -10840,6 +10840,11 @@ test-freebsd: $(COMPILER)
 	    n=$$(basename $$t .pas); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/$$n.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_$$n "$$(tools/vm/freebsd.sh run $$d/$$n.fb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=freebsd test/test_os_env.pas $$d/env.fb >/dev/null && \
+	  cp $$d/env.lx $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value ./pxxbin one two; echo exit=$$?)" && \
+	  for k in 1 2 3 4 5 6 7 8; do \
+	    tools/expect_same.sh freebsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fb one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  done; echo "test-freebsd: OK"
 
 test-asm: $(COMPILER)

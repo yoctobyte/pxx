@@ -3279,6 +3279,15 @@ begin
     the cap in pasparser_decl.inc and the fold are target-independent and would
     read a zero. }
   ApplyTlsUserBytesOption;
+  { FreeBSD/amd64 hands the argc/argv/envp block in rdi and starts rsp at
+    ((block - 8) & ~15) + 8 -- 8 BELOW argc whenever the randomised block
+    address is 16-aligned, so ParamCount read -1 on about half of all runs.
+    Making rsp the block pointer gives every later entry stage the Linux
+    layout ([rsp] = argc). First instruction of the image, before anything
+    clobbers rdi (the TLS install below makes syscalls).
+    feature-port-freebsd-native }
+  if (not isAsm) and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_X86_64) then
+    EmitAsmX64(['mov rsp, rdi']);
   if not isAsm then EmitTlsMainInstall;
 
   { Before ANY frontend runs -- see ResetDeclScopeSentinels. Only ParseProgram

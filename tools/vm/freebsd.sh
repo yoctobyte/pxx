@@ -43,7 +43,9 @@ start)
 run)
   shift; bin="$1"; shift
   scp $SSHO -P "$PORT" "$bin" root@127.0.0.1:/tmp/pxxbin >/dev/null || exit 125
-  ssh $SSHO -p "$PORT" root@127.0.0.1 "chmod +x /tmp/pxxbin && cd /tmp && /tmp/pxxbin $*"
+  # PXX_TEST_* variables are forwarded, so a test can compare env-dependent output.
+  envs=$(env | grep '^PXX_TEST_[A-Za-z0-9_]*=' | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/" | tr '\n' ' ')
+  ssh $SSHO -p "$PORT" root@127.0.0.1 "chmod +x /tmp/pxxbin && cd /tmp && $envs /tmp/pxxbin $*"
   ;;
 stop)
   ssh $SSHO -p "$PORT" root@127.0.0.1 "shutdown -p now" 2>/dev/null || true

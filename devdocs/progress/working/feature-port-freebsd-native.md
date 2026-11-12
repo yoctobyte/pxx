@@ -192,12 +192,32 @@ fetch|start|run|stop` (image under `$PXX_VM_DIR`, default `/data/vm`).
   (no SA_RESTORER), and the handler reading FreeBSD's `ucontext`/`siginfo`
   layout. The `rt_sigreturn` raw stub must then go (Linux 15 = FreeBSD chmod).
 - **Threads:** `clone` -> ENOSYS. Needs `thr_new` + `_umtx_op` for futex.
-- **Environment:** the RTL's `GetEnvironmentVariable` reads `/proc/self/environ`;
-  FreeBSD has no `/proc` by default, so it returns '' (the torture test's tmp
-  path silently falls back to /tmp). RTL fix: read `envp` from the initial stack.
+- ~~**Environment:**~~ resolved below (translator answers `/proc/self/environ`).
 - **termios:** only `isatty` (TCGETS); TCSETS* is a no-op.
 - **Not yet:** sockets, file locks, futex, `pidfd`, `epoll`/`timerfd` (kqueue).
   Unmapped calls answer -ENOSYS.
 - **Other frontends:** only the Pascal frontend pulls `fbsdabi`; C / NilPy
   drivers do not yet (same shape as `bug-a-a-frontend-cannot-see-that-a-backend-
   calls-library-routines-it-never-mentions`).
+
+## 2026-11-12 (pxx2-bsd) — environment works; an intermittent argc bug found and fixed
+
+- **Environment: resolved** (was a phase-1 limit above). Four readers (sysutils,
+  crtl, pylib, the compiler's own PxxEnvLoad) all read `/proc/self/environ`.
+  Rather than teach each about FreeBSD, the translator answers that path like
+  linprocfs would: `open`/`openat` of it returns an anonymous shm fd
+  (`shm_open2(SHM_ANON)`, `ftruncate`d -- a shm object does not grow on write)
+  holding `sysctl kern.proc.env`, which is already in /proc's NUL-separated
+  format. `readlink("/proc/self/exe")` answers from `kern.proc.pathname`.
+- **Entry stack, found by running ParamStr 60 times:** FreeBSD passes the
+  argc/argv/envp block in `rdi` and starts `rsp` at `((block-8) & ~15) + 8`,
+  i.e. 8 BELOW argc whenever the randomised block address is 16-aligned.
+  `ParamCount` read -1 on about half of all runs; the torture test never
+  noticed because it reads no argv. Fixed with `mov rsp, rdi` as the image's
+  first instruction under `--os=freebsd` (compiler.pas, before the TLS install,
+  which clobbers rdi), giving every entry stage the Linux layout. 60/60 runs
+  correct after. Moving only the BSS_INITIAL_RSP store to rdi does NOT work:
+  the TLS install runs first and its syscalls clobber rdi.
+- `test/test_os_env.pas` (env value, unset var, count, argv0, argc + args) is in
+  `make test-freebsd`, run 8 times against the Linux build's output.
+  `tools/vm/freebsd.sh run` forwards `PXX_TEST_*` variables.

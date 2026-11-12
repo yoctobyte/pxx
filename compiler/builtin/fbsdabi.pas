@@ -29,7 +29,7 @@ unit fbsdabi;
   the assembler routine FbRawA, whose `syscall` the thunk hook never sees.
 
   PHASE 1 SCOPE (feature-port-freebsd-native): files, memory, time, process
-  basics, TLS. NOT YET: signal handler installation (rt_sigaction is accepted
+  basics, TLS, and the two /proc files the runtime reads (environ, exe). NOT YET: signal handler installation (rt_sigaction is accepted
   and ignored, so a hardware fault kills the process instead of raising), the
   signal mask, threads (clone -> ENOSYS), futex, sockets, file locks, and
   termios beyond isatty. Anything unmapped answers -ENOSYS. }
@@ -64,7 +64,7 @@ const
   FB_LSEEK = 478; FB_FTRUNCATE = 480; FB_FACCESSAT = 489; FB_MKDIRAT = 496;
   FB_OPENAT = 499; FB_READLINKAT = 500; FB_RENAMEAT = 501; FB_UNLINKAT = 503;
   FB_PIPE2 = 542; FB_FSTAT = 551; FB_FSTATAT = 552; FB_GETDIRENTRIES = 554;
-  FB_GETRANDOM = 563; FB_SIGALTSTACK = 53;
+  FB_GETRANDOM = 563; FB_SIGALTSTACK = 53; FB_SHM_OPEN2 = 571;
 
   FB_AT_FDCWD = -100;            { same value as Linux }
   FB_AT_EACCESS = $100; FB_AT_SYMLINK_NOFOLLOW = $200; FB_AT_SYMLINK_FOLLOW = $400;
@@ -389,6 +389,75 @@ begin
   Result := Lx(r);
 end;
 
+{ ---- the two /proc files the runtime reads ------------------------------
+  FreeBSD has no /proc by default. The RTL, the C runtime, NilPy's runtime
+  and the compiler itself all read the environment from /proc/self/environ,
+  and pyos/sysutils resolve their own path through /proc/self/exe. Rather
+  than teach four readers about FreeBSD, the translator answers those two
+  paths the way linuxulator's linprocfs would: from sysctl, which hands back
+  the environment in exactly /proc's NUL-separated format. }
+
+{ Does the C string at p equal the bytes in w? }
+function PathIs(p: Int64; const w: array of Byte): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if p = 0 then Exit;
+  for i := 0 to High(w) do
+    if PByte(p + i)^ <> w[i] then Exit;
+  Result := PByte(p + Length(w))^ = 0;
+end;
+
+const
+  ProcEnviron: array[0..17] of Byte = (47,112,114,111,99,47,115,101,108,102,47,
+                                       101,110,118,105,114,111,110);   { /proc/self/environ }
+  ProcExe: array[0..13] of Byte = (47,112,114,111,99,47,115,101,108,102,47,
+                                   101,120,101);                        { /proc/self/exe }
+
+{ An anonymous shared-memory fd holding kern.proc.env, rewound: reads see
+  what /proc/self/environ would hold. The buffer is a scratch mapping, not
+  the heap -- this can run before the heap exists. }
+function FbProcEnviron: Int64;
+var mib: array[0..3] of Integer; len, buf, size, fd, r: Int64;
+begin
+  mib[0] := 1; mib[1] := 14; mib[2] := 35;
+  mib[3] := Integer(FbSys(FB_GETPID, 0, 0, 0, 0, 0, 0));
+  len := 0;
+  r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, 0, Int64(@len), 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  size := (len + 4096 + $FFF) and (not Int64($FFF));
+  buf := FbSys(FB_MMAP, 0, size, 3, $1002, -1, 0);
+  if buf < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  len := size;
+  r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, buf, Int64(@len), 0, 0);
+  fd := FbSys(FB_SHM_OPEN2, 1, 2 or $100000, 384, 0, 0, 0);   { SHM_ANON, O_RDWR|O_CLOEXEC, 0600 }
+  if (r >= 0) and (fd >= 0) and (len > 0) then
+  begin
+    FbSys(FB_FTRUNCATE, fd, len, 0, 0, 0, 0);   { a shm object does not grow on write }
+    FbSys(FB_WRITE, fd, buf, len, 0, 0, 0);
+    FbSys(FB_LSEEK, fd, 0, 0, 0, 0, 0);
+  end;
+  FbSys(FB_MUNMAP, buf, size, 0, 0, 0, 0);
+  if fd < 0 then Result := Lx(fd) else Result := fd;
+end;
+
+{ readlink("/proc/self/exe"): kern.proc.pathname. Linux semantics: no NUL,
+  truncate silently, return the byte count. }
+function FbProcExe(buf, cap: Int64): Int64;
+var mib: array[0..3] of Integer; len, r: Int64;
+    tmp: array[0..1023] of Byte;
+    i: Integer;
+begin
+  mib[0] := 1; mib[1] := 14; mib[2] := 12; mib[3] := -1;
+  len := 1024;
+  r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, Int64(@tmp[0]), Int64(@len), 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if (len > 0) and (tmp[len - 1] = 0) then len := len - 1;
+  if len > cap then len := cap;
+  for i := 0 to Integer(len) - 1 do PByte(buf + i)^ := tmp[i];
+  Result := len;
+end;
+
 function PXXFbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 var sb: array[0..27] of Int64;
     t: array[0..5] of Int64;
@@ -398,7 +467,8 @@ begin
   case Integer(nr) of
     0: Result := Lx(FbSys(FB_READ, a0, a1, a2, 0, 0, 0));
     1: Result := Lx(FbSys(FB_WRITE, a0, a1, a2, 0, 0, 0));
-    2: Result := Lx(FbSys(FB_OPENAT, FB_AT_FDCWD, a0, FbOpenFlags(a1), a2, 0, 0));
+    2: if PathIs(a0, ProcEnviron) then Result := FbProcEnviron
+       else Result := Lx(FbSys(FB_OPENAT, FB_AT_FDCWD, a0, FbOpenFlags(a1), a2, 0, 0));
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
     4: Result := FbStatAt(FB_AT_FDCWD, a0, a1, 0);              { stat }
     5: begin                                                    { fstat }
@@ -484,7 +554,8 @@ begin
     83: Result := Lx(FbSys(FB_MKDIR, a0, a1, 0, 0, 0, 0));
     84: Result := Lx(FbSys(FB_RMDIR, a0, 0, 0, 0, 0, 0));
     87: Result := Lx(FbSys(FB_UNLINK, a0, 0, 0, 0, 0, 0));
-    89: Result := Lx(FbSys(FB_READLINK, a0, a1, a2, 0, 0, 0));
+    89: if PathIs(a0, ProcExe) then Result := FbProcExe(a1, a2)
+        else Result := Lx(FbSys(FB_READLINK, a0, a1, a2, 0, 0, 0));
     90: Result := Lx(FbSys(FB_CHMOD, a0, a1, 0, 0, 0, 0));
     95: Result := FbSys(FB_UMASK, a0, 0, 0, 0, 0, 0);
     96: Result := Lx(FbSys(FB_GETTIMEOFDAY, a0, a1, 0, 0, 0, 0));
@@ -548,7 +619,8 @@ begin
     228: Result := Lx(FbSys(FB_CLOCK_GETTIME, FbClock(a0), a1, 0, 0, 0, 0));
     229: Result := Lx(FbSys(FB_CLOCK_GETRES, FbClock(a0), a1, 0, 0, 0, 0));
     230: Result := Lx(FbSys(FB_CLOCK_NANOSLEEP, FbClock(a0), a1, a2, a3, 0, 0));
-    257: Result := Lx(FbSys(FB_OPENAT, a0, a1, FbOpenFlags(a2), a3, 0, 0));
+    257: if PathIs(a1, ProcEnviron) then Result := FbProcEnviron
+         else Result := Lx(FbSys(FB_OPENAT, a0, a1, FbOpenFlags(a2), a3, 0, 0));
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
     262: Result := FbStatAt(a0, a1, a2, a3);                    { newfstatat }
     263: begin                                                  { unlinkat }
@@ -557,7 +629,8 @@ begin
            Result := Lx(FbSys(FB_UNLINKAT, a0, a1, f, 0, 0, 0));
          end;
     264: Result := Lx(FbSys(FB_RENAMEAT, a0, a1, a2, a3, 0, 0));
-    267: Result := Lx(FbSys(FB_READLINKAT, a0, a1, a2, a3, 0, 0));
+    267: if PathIs(a1, ProcExe) then Result := FbProcExe(a2, a3)
+         else Result := Lx(FbSys(FB_READLINKAT, a0, a1, a2, a3, 0, 0));
     269: begin                                                  { faccessat }
            f := 0;
            if (a3 and $200) <> 0 then f := FB_AT_EACCESS;
