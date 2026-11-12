@@ -393,6 +393,26 @@ begin
                         (IRC[addrNode] = 1);
 end;
 
+function XtFieldOffFits(addrNode, sz: Integer; var off: Integer): Boolean;
+{ Is addrNode a constant-offset field access whose offset fits the l8ui/l16*/
+  l32i (and s8i/s16i/s32i) immediate for an access of sz bytes, so the offset
+  can ride in the load or store instead of being added to the base first
+  (riscv32's 0464cc9378)? sz = 8 is the two-word pair, both within l32i reach.
+  A RAGGED field is never folded: it takes the unaligned byte path. }
+begin
+  Result := False;
+  if (addrNode < 0) or (IRKind[addrNode] <> IR_FIELD) then Exit;
+  if IRC[addrNode] = 1 then Exit;               { ragged: XtensaAddrIsRagged }
+  if (IRIVal[addrNode] < 0) or (IRIVal[addrNode] > 1020) then Exit;
+  off := Integer(IRIVal[addrNode]);
+  case sz of
+    1: Result := off <= 255;
+    2: Result := (off <= 510) and ((off and 1) = 0);
+    4: Result := (off and 3) = 0;
+    8: Result := ((off and 3) = 0) and (off + 4 <= 1020);
+  end;
+end;
+
 procedure EmitLoadVarXtensa(idx: Integer);
 var tk: TTypeKind; sz, adj: Integer; sgn: Boolean;
 begin
@@ -2845,10 +2865,26 @@ begin
 
     IR_LOAD_MEM:
       begin
-        EmitLow32Xtensa(IRA[node]);
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
+        { a field at a constant offset: the offset rides in the load }
+        if (tk <> tyRecord) and
+           ((((sz = 1) or (sz = 2) or (sz = 4)) and not ((sz = 8) and Is64BitXtensa(tk))) or
+            ((sz = 8) and Is64BitXtensa(tk))) and
+           XtFieldOffFits(IRA[node], sz, imm) then
+        begin
+          EmitLow32Xtensa(IRA[IRA[node]]);            { the field's base }
+          if sz = 8 then
+          begin
+            xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, imm + 4);   { hi first }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, imm);
+          end
+          else
+            EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a2, imm, sz, sgn);
+          Exit;
+        end;
+        EmitLow32Xtensa(IRA[node]);
         if (sz = 8) and Is64BitXtensa(tk) then
         begin
           { 64-bit load through memory (Int64/Double field/element): two words
@@ -3140,6 +3176,15 @@ begin
           XtensaPushA2;
           savedLVW := InLValueWrite;
           InLValueWrite := True;
+          if ((sz = 1) or (sz = 2) or (sz = 4)) and XtFieldOffFits(IRA[node], sz, imm) then
+          begin
+            { a field at a constant offset: the offset rides in the store }
+            EmitLow32Xtensa(IRA[IRA[node]]);
+            InLValueWrite := savedLVW;
+            XtensaPopA3;
+            EmitSizedStoreOffXtensa(reg_xtensa_a3, reg_xtensa_a2, imm, sz);
+            Exit;
+          end;
           EmitLow32Xtensa(IRA[node]);
           InLValueWrite := savedLVW;
           XtensaPopA3;
