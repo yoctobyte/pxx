@@ -26,11 +26,11 @@ unit obsdabi;
   CONTEXT RULES are fbsdabi's: no managed types, no heap, no exceptions, no
   RTL calls; ObRawA is the only kernel entry.
 
-  PHASE 1: files, directories, memory, time, process basics, TLS, uname,
-  rlimits, /proc/self/environ and /proc/self/exe, isatty. NOT YET: signals
-  (rt_sigaction answers -ENOSYS, so a crash is not turned into an
-  exception), sockets, termios beyond TCGETS, epoll, threads (the compiler
-  refuses --threadsafe). Anything unmapped answers -ENOSYS. }
+  DONE: files, directories, memory, time, process basics, TLS, uname,
+  rlimits, /proc/self/environ and /proc/self/exe, isatty, signals (handlers,
+  masks, the alt stack, kill/tgkill, itimers). NOT YET: sockets, termios
+  beyond TCGETS, epoll, threads (the compiler refuses --threadsafe).
+  Anything unmapped answers -ENOSYS. }
 
 interface
 
@@ -68,6 +68,9 @@ const
   OB_FCHOWNAT = 315; OB_LINKAT = 317; OB_MKDIRAT = 318; OB_OPENAT = 321;
   OB_READLINKAT = 322; OB_RENAMEAT = 323; OB_SYMLINKAT = 324; OB_UNLINKAT = 325;
   OB_SET_TCB = 329; OB_GET_TCB = 330;
+  OB_SIGACTION = 46; OB_SIGPROCMASK = 48; OB_SIGPENDING = 52;
+  OB_GETITIMER = 70; OB_SETITIMER = 69; OB_SIGSUSPEND = 111; OB_THRKILL = 119;
+  OB_SIGALTSTACK = 288;
 
   OB_AT_FDCWD = -100;             { same value as Linux }
   OB_AT_EACCESS = $01; OB_AT_SYMLINK_NOFOLLOW = $02; OB_AT_SYMLINK_FOLLOW = $04;
@@ -533,6 +536,303 @@ begin
   Result := n;
 end;
 
+{ ---- Signals ----------------------------------------------------------------
+  fbsdabi's design (read its Signals header): the program's handler speaks
+  the Linux SA_SIGINFO ABI and may REWRITE the saved RIP/RSP in the Linux
+  ucontext it is given (the fault-to-raise path), so rt_sigaction installs
+  ObSigEntry instead. ObSigEntry builds a Linux siginfo/ucontext, calls the
+  program's handler, copies the registers back into OpenBSD's struct
+  sigcontext (the handler's third argument on amd64; ucontext_t IS
+  sigcontext there), and returns to the kernel's sigcode, which does
+  sigreturn. The sigcontext's sc_cookie is never touched.
+
+  What differs from FreeBSD:
+  - sigset_t is ONE 32-bit word, and sigprocmask/sigpending/sigsuspend pass
+    it by value in a register (the old mask comes back in rax).
+  - siginfo is signo, CODE, errno (Linux: signo, errno, code). si_code values
+    agree with Linux for faults (FPE_INTDIV 1, FPE_INTOVF 2 -- no FreeBSD
+    swap); the user codes are 0, -1 (LWP), -2 (QUEUE), -3 (TIMER).
+  - THE ALT STACK MUST BE MAP_STACK. OpenBSD kills a process that makes a
+    syscall (or takes a page fault) with rsp outside a MAP_STACK mapping, and
+    pxx's alt stack is 32 KiB of BSS. So sigaltstack never hands OpenBSD the
+    program's buffer: the first call maps ObAltStack (MAP_STACK) and
+    registers that, and a read reports what the program asked for.
+  Offsets measured with offsetof() on OpenBSD 8.0 (2026-11-12). }
+
+const
+  OB_SA_ONSTACK = $1; OB_SA_RESTART = $2; OB_SA_RESETHAND = $4;
+  OB_SA_NOCLDSTOP = $8; OB_SA_NODEFER = $10; OB_SA_NOCLDWAIT = $20;
+  OB_SA_SIGINFO = $40;
+  LX_SA_NOCLDSTOP = $1; LX_SA_NOCLDWAIT = $2; LX_SA_SIGINFO = $4;
+  LX_SA_ONSTACK = $08000000; LX_SA_RESTART = $10000000;
+  LX_SA_NODEFER = $40000000; LX_SA_RESETHAND = $80000000;
+  { Linux gregs[0..17] (R8 R9 R10 R11 R12 R13 R14 R15 RDI RSI RBP RBX RDX RAX
+    RCX RSP RIP EFL) -> offset in OpenBSD struct sigcontext. }
+  ObGregOff: array[0..17] of Integer = (
+    32, 40, 48, 56, 64, 72, 80, 88, 0, 8, 96, 104, 16, 112, 24, 192, 168, 184);
+  OB_SC_TRAPNO = 152; OB_SC_ERR = 160; OB_SC_FPSTATE = 208; OB_SC_MASK = 220;
+  LX_UC_GREGS = 40;
+  LX_UC_SIGMASK = 296;
+  OB_ALTSTACK_SIZE = 65536;          { over OpenBSD's MINSIGSTKSZ (12288) }
+
+var
+  ObLxHandler: array[0..32] of Int64;   { by OpenBSD signal number }
+  ObAltStack: Int64;                    { our MAP_STACK alt stack, 0 = not mapped }
+  ObAltSet: Boolean;                    { the program registered one }
+  ObAltSp, ObAltSize, ObAltFlags: Int64; { what it registered, for reads }
+
+function LxSig(s: Int64): Int64;
+var i: Integer;
+begin
+  for i := 1 to 31 do
+    if SigMap[i] = s then begin Result := i; Exit; end;
+  Result := s;
+end;
+
+{ Linux 64-bit mask -> OpenBSD 32-bit mask. Signals with no OpenBSD
+  equivalent (16, 30, the real-time range) drop out. }
+function MaskToOb(lx: Int64): Int64;
+var s, b: Int64;
+begin
+  Result := 0;
+  for s := 1 to 31 do
+    if ((lx shr (s - 1)) and 1) <> 0 then
+    begin
+      b := SigMap[Integer(s)];
+      if (b >= 1) and (b <= 32) then Result := Result or (Int64(1) shl (b - 1));
+    end;
+end;
+
+function MaskToLx(ob: Int64): Int64;
+var b, s: Int64;
+begin
+  Result := 0;
+  for b := 1 to 32 do
+    if ((ob shr (b - 1)) and 1) <> 0 then
+    begin
+      s := LxSig(b);
+      if (s >= 1) and (s <= 64) then Result := Result or (Int64(1) shl (s - 1));
+    end;
+end;
+
+function SaFlagsToOb(f: Int64): Int64;
+begin
+  Result := 0;
+  if (f and LX_SA_NOCLDSTOP) <> 0 then Result := Result or OB_SA_NOCLDSTOP;
+  if (f and LX_SA_NOCLDWAIT) <> 0 then Result := Result or OB_SA_NOCLDWAIT;
+  if (f and LX_SA_SIGINFO) <> 0 then Result := Result or OB_SA_SIGINFO;
+  if (f and LX_SA_ONSTACK) <> 0 then Result := Result or OB_SA_ONSTACK;
+  if (f and LX_SA_RESTART) <> 0 then Result := Result or OB_SA_RESTART;
+  if (f and LX_SA_NODEFER) <> 0 then Result := Result or OB_SA_NODEFER;
+  if (f and LX_SA_RESETHAND) <> 0 then Result := Result or OB_SA_RESETHAND;
+end;
+
+function SaFlagsToLx(f: Int64): Int64;
+begin
+  Result := 0;
+  if (f and OB_SA_NOCLDSTOP) <> 0 then Result := Result or LX_SA_NOCLDSTOP;
+  if (f and OB_SA_NOCLDWAIT) <> 0 then Result := Result or LX_SA_NOCLDWAIT;
+  if (f and OB_SA_SIGINFO) <> 0 then Result := Result or LX_SA_SIGINFO;
+  if (f and OB_SA_ONSTACK) <> 0 then Result := Result or LX_SA_ONSTACK;
+  if (f and OB_SA_RESTART) <> 0 then Result := Result or LX_SA_RESTART;
+  if (f and OB_SA_NODEFER) <> 0 then Result := Result or LX_SA_NODEFER;
+  if (f and OB_SA_RESETHAND) <> 0 then Result := Result or LX_SA_RESETHAND;
+end;
+
+{ OpenBSD si_code -> Linux si_code. Fault codes (> 0) agree. }
+function LxSiCode(c: Int64): Int64;
+begin
+  case c of
+    -1: Result := -6;          { SI_LWP -> SI_TKILL }
+    -2: Result := -1;          { SI_QUEUE }
+    -3: Result := -2;          { SI_TIMER }
+  else
+    Result := c;
+  end;
+end;
+
+{ OpenBSD siginfo_t (ob) -> Linux siginfo_t (lx, 128 bytes). }
+procedure SiginfoToLx(ob, lx: Int64);
+var i: Integer; c: Int64;
+begin
+  for i := 0 to 15 do PInt64(lx + i * 8)^ := 0;
+  PInteger(lx)^ := Integer(LxSig(PInteger(ob)^));             { si_signo }
+  PInteger(lx + 4)^ := PInteger(ob + 8)^;                     { si_errno }
+  c := PInteger(ob + 4)^;
+  PInteger(lx + 8)^ := Integer(LxSiCode(c));                  { si_code }
+  if c <= 0 then
+  begin
+    PInteger(lx + 16)^ := PInteger(ob + 16)^;                 { si_pid }
+    PInteger(lx + 20)^ := PInteger(ob + 20)^;                 { si_uid }
+  end
+  else
+    PInt64(lx + 16)^ := PInt64(ob + 16)^;                     { si_addr }
+end;
+
+type
+  TObLxHandler = procedure(sig, info, uc: Int64); cdecl;
+
+{ The handler OpenBSD actually calls (SA_SIGINFO: rdi, rsi, rdx = sigcontext). }
+procedure ObSigEntry(sig, info, sc: Int64); cdecl;
+var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
+    lu: array[0..63] of Int64;        { Linux ucontext_t through uc_sigmask }
+    i: Integer;
+    h, ls: Int64;
+begin
+  if (sig < 1) or (sig > 32) then Exit;
+  h := ObLxHandler[Integer(sig)];
+  if h = 0 then Exit;
+  ls := LxSig(sig);
+  for i := 0 to 63 do lu[i] := 0;
+  if info <> 0 then SiginfoToLx(info, Int64(@li[0]))
+  else
+  begin
+    for i := 0 to 15 do li[i] := 0;
+    PInteger(@li[0])^ := Integer(ls);
+  end;
+  if sc <> 0 then
+  begin
+    for i := 0 to 17 do
+      lu[LX_UC_GREGS div 8 + i] := PInt64(sc + ObGregOff[i])^;
+    lu[LX_UC_GREGS div 8 + 19] := PInt64(sc + OB_SC_ERR)^;              { ERR }
+    lu[LX_UC_GREGS div 8 + 20] := PInt64(sc + OB_SC_TRAPNO)^;           { TRAPNO }
+    if (info <> 0) and (PInteger(info + 4)^ > 0) then
+      lu[LX_UC_GREGS div 8 + 22] := PInt64(info + 16)^;                 { CR2 = fault address }
+    lu[LX_UC_SIGMASK div 8] := MaskToLx(PLongWord(sc + OB_SC_MASK)^);
+    { An SSE floating-point trap: OpenBSD 8.0 reports FPE_FLTINV whatever the
+      cause, and leaves sc_trapno 0 (both measured with
+      test_float_exception_mask). Linux names the cause from the saved MXCSR,
+      the flags that are set AND unmasked, in this priority order -- and
+      FPC-style runtime errors depend on it. So a FLTINV with a saved FPU
+      state is re-derived the Linux way; no set-and-unmasked flag leaves it. }
+    if (sig = 8) and (info <> 0) and (PInteger(info + 4)^ = 7)
+       and (PInt64(sc + OB_SC_FPSTATE)^ <> 0) then
+    begin
+      h := PLongWord(PInt64(sc + OB_SC_FPSTATE)^ + 24)^;          { fx_mxcsr }
+      h := h and (not (h shr 7)) and $3F;
+      if (h and $01) <> 0 then PInteger(Int64(@li[0]) + 8)^ := 7          { FPE_FLTINV }
+      else if (h and $04) <> 0 then PInteger(Int64(@li[0]) + 8)^ := 3     { FPE_FLTDIV }
+      else if (h and $08) <> 0 then PInteger(Int64(@li[0]) + 8)^ := 4     { FPE_FLTOVF }
+      else if (h and $12) <> 0 then PInteger(Int64(@li[0]) + 8)^ := 5     { FPE_FLTUND }
+      else if (h and $20) <> 0 then PInteger(Int64(@li[0]) + 8)^ := 6;    { FPE_FLTRES }
+      h := ObLxHandler[Integer(sig)];
+    end;
+  end;
+  if info <> 0 then TObLxHandler(h)(ls, Int64(@li[0]), Int64(@lu[0]))
+  else TObLxHandler(h)(ls, 0, Int64(@lu[0]));
+  if sc <> 0 then
+    for i := 0 to 17 do
+      PInt64(sc + ObGregOff[i])^ := lu[LX_UC_GREGS div 8 + i];
+end;
+
+function ObRtSigaction(sig, act, oact: Int64): Int64;
+var oa, oo: array[0..1] of Int64;     { OpenBSD struct sigaction, 16 B }
+    os, h, oldh, r: Int64;
+begin
+  os := ObSig(sig);
+  if (os < 1) or (os > 32) then begin Result := -LX_EINVAL; Exit; end;
+  oldh := ObLxHandler[Integer(os)];
+  oa[0] := 0; oa[1] := 0; oo[0] := 0; oo[1] := 0;
+  if act <> 0 then
+  begin
+    h := PInt64(act)^;
+    PLongWord(Int64(@oa[0]) + 8)^ := LongWord(MaskToOb(PInt64(act + 24)^));
+    PInteger(Int64(@oa[0]) + 12)^ := Integer(SaFlagsToOb(PInt64(act + 8)^));
+    if (h = 0) or (h = 1) then oa[0] := h                 { SIG_DFL / SIG_IGN }
+    else
+    begin
+      ObLxHandler[Integer(os)] := h;
+      oa[0] := Int64(@ObSigEntry);
+      PInteger(Int64(@oa[0]) + 12)^ := PInteger(Int64(@oa[0]) + 12)^ or OB_SA_SIGINFO;
+    end;
+    r := ObSys(OB_SIGACTION, os, Int64(@oa[0]), Int64(@oo[0]), 0, 0, 0);
+    if r <> 0 then ObLxHandler[Integer(os)] := oldh
+    else if (h = 0) or (h = 1) then ObLxHandler[Integer(os)] := 0;
+  end
+  else
+    r := ObSys(OB_SIGACTION, os, 0, Int64(@oo[0]), 0, 0, 0);
+  if (r = 0) and (oact <> 0) then
+  begin
+    if oo[0] = Int64(@ObSigEntry) then PInt64(oact)^ := oldh
+    else PInt64(oact)^ := oo[0];
+    PInt64(oact + 8)^ := SaFlagsToLx(PInteger(Int64(@oo[0]) + 12)^);
+    PInt64(oact + 16)^ := 0;
+    PInt64(oact + 24)^ := MaskToLx(PLongWord(Int64(@oo[0]) + 8)^);
+  end;
+  Result := Lx(r);
+end;
+
+{ The current mask, without changing it: SIG_BLOCK with an empty set. }
+function ObCurMask: Int64;
+begin
+  Result := ObSys(OB_SIGPROCMASK, 1, 0, 0, 0, 0, 0) and $FFFFFFFF;
+end;
+
+function ObRtSigprocmask(how, nset, oset: Int64): Int64;
+var r: Int64;
+begin
+  if (how < 0) or (how > 2) then begin Result := -LX_EINVAL; Exit; end;
+  if nset <> 0 then r := ObSys(OB_SIGPROCMASK, how + 1, MaskToOb(PInt64(nset)^), 0, 0, 0, 0)
+  else r := ObSys(OB_SIGPROCMASK, 1, 0, 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if oset <> 0 then PInt64(oset)^ := MaskToLx(r and $FFFFFFFF);
+  Result := 0;
+end;
+
+{ sigaltstack: Linux stack_t is sp, flags(int), size; OpenBSD's is sp, size,
+  flags; SS_DISABLE is 2 on Linux and 4 on OpenBSD. See the header for why
+  the program's buffer is never registered. }
+function ObSigaltstack(ss, oss: Int64): Int64;
+var t: array[0..2] of Int64; r, f: Int64;
+begin
+  if oss <> 0 then
+  begin
+    if ObAltSet then
+    begin
+      PInt64(oss)^ := ObAltSp;
+      PInteger(oss + 8)^ := Integer(ObAltFlags);
+      PInt64(oss + 16)^ := ObAltSize;
+    end
+    else
+    begin
+      PInt64(oss)^ := 0; PInteger(oss + 8)^ := 2; PInt64(oss + 16)^ := 0;   { SS_DISABLE }
+    end;
+  end;
+  Result := 0;
+  if ss = 0 then Exit;
+  f := PInteger(ss + 8)^;
+  if (f and 2) <> 0 then
+  begin
+    t[0] := 0; t[1] := 0; t[2] := 4;
+    r := ObSys(OB_SIGALTSTACK, Int64(@t[0]), 0, 0, 0, 0, 0);
+    if r = 0 then ObAltSet := False;
+    Result := Lx(r); Exit;
+  end;
+  if ObAltStack = 0 then
+  begin
+    r := ObSys(OB_MMAP, 0, OB_ALTSTACK_SIZE, 3, 2 or OB_MAP_ANON or OB_MAP_STACK, -1, 0);
+    if r < 0 then begin Result := -LX_ENOMEM; Exit; end;
+    ObAltStack := r;
+  end;
+  t[0] := ObAltStack; t[1] := OB_ALTSTACK_SIZE; t[2] := 0;
+  r := ObSys(OB_SIGALTSTACK, Int64(@t[0]), 0, 0, 0, 0, 0);
+  if r = 0 then
+  begin
+    ObAltSet := True;
+    ObAltSp := PInt64(ss)^; ObAltFlags := 0; ObAltSize := PInt64(ss + 16)^;
+  end;
+  Result := Lx(r);
+end;
+
+function ObThrKill(tid, sig: Int64): Int64;
+var os: Int64;
+begin
+  os := ObSig(sig);
+  if (os = 0) and (sig <> 0) then begin Result := -LX_EINVAL; Exit; end;
+  if tid = ObSys(OB_GETTHRID, 0, 0, 0, 0, 0, 0) then tid := 0;   { 0 = this thread }
+  Result := Lx(ObSys(OB_THRKILL, tid, os, 0, 0, 0, 0));
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
@@ -765,6 +1065,33 @@ begin
            end;
            Result := n;
          end;
+    13: Result := ObRtSigaction(a0, a1, a2);
+    14: Result := ObRtSigprocmask(a0, a1, a2);
+    127: begin                                                  { rt_sigpending }
+           r := ObSys(OB_SIGPENDING, 0, 0, 0, 0, 0, 0);
+           if r < 0 then Result := Lx(r)
+           else begin PInt64(a0)^ := MaskToLx(r and $FFFFFFFF); Result := 0; end;
+         end;
+    130: Result := Lx(ObSys(OB_SIGSUSPEND, MaskToOb(PInt64(a0)^), 0, 0, 0, 0, 0));
+    34: Result := Lx(ObSys(OB_SIGSUSPEND, ObCurMask, 0, 0, 0, 0, 0));   { pause }
+    131: Result := ObSigaltstack(a0, a1);
+    200: Result := ObThrKill(a0, a1);                           { tkill }
+    234: if (a0 <> ObSys(OB_GETPID, 0, 0, 0, 0, 0, 0)) and (a0 > 0) then
+           Result := -3                                         { ESRCH: not our process }
+         else Result := ObThrKill(a1, a2);                      { tgkill }
+    36: Result := Lx(ObSys(OB_GETITIMER, a0, a1, 0, 0, 0, 0)); { struct itimerval: same }
+    38: Result := Lx(ObSys(OB_SETITIMER, a0, a1, a2, 0, 0, 0));
+    37: begin                                                   { alarm }
+          for i := 0 to 3 do t[i] := 0;
+          t[2] := a0;
+          for i := 0 to 3 do sb[i] := 0;
+          r := ObSys(OB_SETITIMER, 0, Int64(@t[0]), Int64(@sb[0]), 0, 0, 0);
+          if r < 0 then Result := Lx(r)
+          else begin
+            Result := sb[2];
+            if sb[3] > 0 then Result := Result + 1;
+          end;
+        end;
   else
     Result := -LX_ENOSYS;
   end;

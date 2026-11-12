@@ -212,10 +212,26 @@ reading and writing, `FindFirst`, directory creation and removal, the
 environment, the current directory, `ParamStr(0)` and the clock. The output
 was identical to Linux.
 
+Signals work the FreeBSD way: the translator installs its own entry point,
+which hands the program's handler a Linux-shaped siginfo and ucontext and
+copies the registers back. Three OpenBSD details matter:
+
+- The signal mask is a single 32-bit word, passed by value.
+- pxx's alternate signal stack is 32 KiB of BSS, but OpenBSD kills a process
+  that makes a system call while its stack pointer is outside a `MAP_STACK`
+  mapping. So the translator registers its own 64 KiB `MAP_STACK` region and
+  reports the program's own values back when they are read.
+- OpenBSD 8.0 reports every SSE floating-point trap as `FPE_FLTINV` and
+  leaves the trap number 0. The translator works out the real cause from the
+  saved MXCSR, the way Linux does.
+
+`test_signal_num`, `test_signal_sp_rewrite`, `test_stack_overflow_raise`,
+`test_signal_bss_alias`, `test_signal_handler_callback_b336`,
+`test_float_exception_mask` and an `--fpc-mem-errors` nil write give the same
+output on OpenBSD as on Linux (2026-11-12).
+
 Not done yet:
 
-- Signals: `rt_sigaction` answers ENOSYS, so a crash is not turned into an
-  exception.
 - Threads: `--threadsafe` is refused.
 - Sockets, termios beyond the `isatty` check, and epoll.
 - Debug info: `-g` is refused, because the debug data would go where the pin

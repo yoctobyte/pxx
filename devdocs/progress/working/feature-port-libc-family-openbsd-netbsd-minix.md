@@ -215,3 +215,26 @@ FreeBSD sites generic (`KernelTranslated`, `KernelAbiUnit`, `KernelAbiProc`,
 - Next: signals (sigaction, 16 B struct, SA_SIGINFO 0x40; the
   siginfo/ucontext layouts still need measuring), then threads (`__tfork`),
   then sockets.
+
+### 2026-11-12: `--os=openbsd` signals
+
+Signals are done the way fbsdabi does them, in `ObSigEntry`/`ObRtSigaction`.
+Also handled: rt_sigprocmask, rt_sigpending, rt_sigsuspend, pause,
+sigaltstack, tkill/tgkill (via thrkill), getitimer/setitimer and alarm.
+Things measured on 8.0:
+
+- `struct sigcontext` is the handler's third argument. Its fields:
+  rdi@0 … rax@112, trapno@152, err@160, rip@168, rflags@184, rsp@192,
+  fpstate@208, mask@220, cookie@224.
+- siginfo is laid out signo@0, code@4, errno@8, then pid/addr@16.
+- sigset_t is a u32. sigprocmask takes the mask by value and returns the
+  old mask in rax.
+- OpenBSD kills a syscall made while rsp is outside a MAP_STACK region, so
+  pxx's BSS alt stack is never handed to it. The translator registers its
+  own 64 KiB MAP_STACK region.
+- An SSE trap arrives as FPE_FLTINV with trapno 0. The real cause is
+  re-derived from fx_mxcsr (at fpstate+24), the way Linux does it.
+
+Six signal tests and an `--fpc-mem-errors` nil write match Linux byte for
+byte. Next: threads (`__tfork`, and thread stacks need MAP_STACK too), then
+sockets.
