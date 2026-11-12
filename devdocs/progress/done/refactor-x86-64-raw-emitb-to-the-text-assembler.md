@@ -1,7 +1,7 @@
 # x86-64 codegen: raw `EmitB($..)` bytes to the text assembler
 
 - **Type:** refactor
-- **Status:** in progress (2026-11-11)
+- **Status:** done (2026-11-12, owner: "we can declare that as completed")
 - **Prio:** owner 2026-11-11 named it "the big elephant in the room"
 - **Opened:** 2026-11-11
 
@@ -292,3 +292,19 @@ cparser 36, thread_emit 15, exception_emit 10. Mostly:
   scope labels.
 - computed ModRM bytes, which want register holes.
 - uncommented lines.
+
+## Closed (2026-11-12)
+
+The owner declared the work complete on 2026-11-12: "anything left raw has a
+function". The raw `EmitB($..)` lines that remain are deliberate:
+- forced-wide encodings (`[ebp+disp32]`, `81 /op imm32`, `C7` moves), where
+  the width is part of what the code relies on;
+- jumps patched from several places (patch lists, if/else arms);
+- bytes computed at emit time (`EmitB($C0 or (dst shl 3))`, register-number
+  ModRM);
+- fragments: a lone prefix or ModRM byte in a case arm.
+
+A future cleanup should start from that list and convert a category only
+with a reason specific to it. The method and tooling above still apply
+(byte identity, disassembly with instruction-offset targets, rel8 lint,
+i386-region filter, FPC seed canary).
