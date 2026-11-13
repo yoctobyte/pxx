@@ -85,7 +85,7 @@ Local targets are relocated through their section symbol.
 ## Not done
 
 - No rel8 relaxation, so code is a few bytes bigger than gas's.
-- No `.irp`, `.if`, `.code16` or Intel syntax.
+- No `.irp`, `.if` or Intel syntax (`.code16` came later: [[feature-gas-frontend-code16]]).
 - Indirect branches only through a register (`jmp *%rax`).
 - x86-64 only.
 - Hosted `pascal26 --link` still refuses `.rodata`; only

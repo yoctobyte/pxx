@@ -50,4 +50,30 @@ echo "$out" | grep -q 'REX' || fail "the .code32 REX refusal does not say why: $
 printf '\t.code32\n\tmovl x(%%rip), %%eax\n' > "$W"_rip.s
 out=$("$PXX" --emit-obj "$W"_rip.s "$W"_rip.o 2>&1) && fail "rip addressing under .code32 was accepted"
 echo "$out" | grep -q 'rip' || fail "the .code32 rip refusal does not say why: $out"
+# 4. test/gas_frontend_code16.s: the .code16 region (up to t16b) must be
+#    BYTE-IDENTICAL to gas's, with the same relocations; the .code16
+#    branches (.text.br) must match as instruction text (gas relaxes them to
+#    rel8, pxx keeps rel16). The .code32/.code64 tail is check 2's ground.
+"$PXX" --emit-obj test/gas_frontend_code16.s "$W"_16p.o > "$W"_16p.log 2>&1 || { cat "$W"_16p.log; fail "pxx could not assemble test/gas_frontend_code16.s"; }
+as test/gas_frontend_code16.s -o "$W"_16g.o || fail "gas could not assemble test/gas_frontend_code16.s"
+symoff() { nm "$1" | awk -v s="$2" '$3 == s {print $1}'; }
+n16=$(symoff "$W"_16g.o t16b)
+[ -n "$n16" ] && [ "$n16" = "$(symoff "$W"_16p.o t16b)" ] || fail ".code16: t16b is at $(symoff "$W"_16p.o t16b) in pxx's object, $n16 in gas's"
+n16=$((16#$n16))
+[ "$n16" -gt 150 ] || fail "the .code16 region is too short to mean anything"
+for t in p g; do objcopy -O binary -j .text "$W"_16$t.o "$W"_16$t.bin; head -c "$n16" "$W"_16$t.bin > "$W"_16$t.r16; done
+cmp "$W"_16p.r16 "$W"_16g.r16 || {
+  objdump -d -M i8086,suffix -j .text "$W"_16p.o | head -120 > "$W"_16p.lst
+  objdump -d -M i8086,suffix -j .text "$W"_16g.o | head -120 > "$W"_16g.lst
+  diff "$W"_16p.lst "$W"_16g.lst; fail ".code16 bytes differ from gas"; }
+# offsets are 16 hex digits, so a string compare is a numeric one (mawk has no strtonum)
+rel16() { readelf -rW "$1" | awk -v n="$(printf '%016x' "$n16")" '/R_X86_64/ && $1 < n {print $1, $3, $5, $6, $7}'; }
+diff <(rel16 "$W"_16p.o) <(rel16 "$W"_16g.o) || fail ".code16 relocations differ from gas"
+[ "$(rel16 "$W"_16g.o | wc -l)" -ge 2 ] || fail "the .code16 region has too few relocations to mean anything"
+br16() { objdump -d -M i8086,suffix -j .text.br "$1" | sed -n '/^ *[0-9a-f]*:/p' | cut -f3 |
+         sed -E -e 's/ +[0-9a-f]+ <.*>$//' -e 's/[[:space:]]+$//' -e 's/^jmpw$/jmp/'; }
+diff <(br16 "$W"_16p.o) <(br16 "$W"_16g.o) || fail ".code16 branches differ from gas"
+printf '\t.code16\n\tmovw (%%bx), %%ax\n' > "$W"_bx.s
+out=$("$PXX" --emit-obj "$W"_bx.s "$W"_bx.o 2>&1) && fail "16-bit addressing under .code16 was accepted"
+echo "$out" | grep -q '16-bit addressing' || fail "the .code16 (%bx) refusal does not say why: $out"
 echo "check_gas_frontend: OK"

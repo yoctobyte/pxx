@@ -27,6 +27,10 @@
     - no REX prefix appears (it is inc/dec in 32-bit mode) -- refused here.
   ljmp/lcall (EA/9A ptr16:32) exist only in 32-bit mode and are encoded here.
 
+  `.code16` rides on `.code32`: the instruction is encoded as 32-bit code and
+  GasCode16Fix rewrites the operand size (66), the address size (absolute ->
+  disp16, a 32-bit register -> 67) and a few short forms, in gas's byte order.
+
   Branches (jmp/call/jcc/loop) are encoded here: rel32 always (no relaxation
   to rel8 -- correct, a few bytes bigger than gas), loop/jecxz rel8 and local
   only. A target in the same section is resolved here; anything else becomes
@@ -56,6 +60,7 @@ var
   GasSecAlign: array of Integer;
   GasSecCount, GasCur, GasPrev: Integer;
   GasCode32: Boolean;
+  GasCode16: Boolean;     { .code16: GasCode32 is set too (see GasCode16Fix) }
 
   GasSymName: array of AnsiString;
   GasSymSec: array of Integer;       { -1 undefined, -2 an equate's constant }
@@ -101,6 +106,8 @@ var
   GasRipC: Int64;
   GasRipP, GasRipM: Integer;
   GasHaveRip: Boolean;
+  GasPhMem: array[0..1] of Boolean;   { .code16: the placeholder is an absolute address }
+  GasNeed67: Boolean;                 { .code16: a memory operand names a 32-bit register }
 
   GasOut: array of Byte;
   GasOutLen: Integer;
@@ -856,13 +863,156 @@ end;
 
 { ---- instructions ---- }
 
+{ .code16: the operand size an instruction names -- its suffix, or the widest
+  general register it writes (1, 2 or 4; 0 for none). }
+function GasOpSize16(const mn, ops: AnsiString): Integer;
+var base, o: AnsiString; k, n, num, sz: Integer;
+begin
+  Result := 0;
+  if AttSplitMnemonic(mn, base, sz) and (sz <= 4) then Result := sz;
+  n := GasSplitCount(ops);
+  for k := 0 to n - 1 do
+  begin
+    o := GasTrim(GasSplitItem(ops, k));
+    if (Length(o) >= 3) and (o[1] = '%') and (Pos('(', o) = 0) and (Pos(':', o) = 0) then
+      if AsmRegNum(Copy(o, 2, Length(o) - 1), num, sz) and (sz <= 4) and (sz > Result) then
+        Result := sz;
+  end;
+end;
+
+procedure GasDelByte(var n: Integer; at: Integer);
+var i: Integer;
+begin
+  for i := at to n - 2 do AsmBytes[i] := AsmBytes[i + 1];
+  Dec(n);
+end;
+
+procedure GasInsByte(var n: Integer; at, b: Integer);
+var i: Integer;
+begin
+  for i := n downto at + 1 do AsmBytes[i] := AsmBytes[i - 1];
+  AsmBytes[at] := b;
+  Inc(n);
+end;
+
+{ .code16 from the .code32 encoding (GasTakeBytes has refused REX and 0x67).
+  Both modes share every opcode; what differs is the DEFAULT size:
+    - operand size: a 16-bit operation loses its 0x66 and a 32-bit one gains
+      it, except mov to/from a control or debug register (0F 20-23) and mov
+      to a segment register (8E), which have no operand size;
+    - address size: an absolute address becomes 16-bit (ModRM rm=110,
+      disp16, R_X86_64_16), with gas's moffs A0-A3 form for the accumulator;
+      a 32-bit register in the address keeps the 32-bit form behind 0x67;
+    - inc/dec of a register take gas's one-byte 40+r/48+r form.
+  Prefixes go in gas's order: 67, then 66, then the opcode. The disp16 of
+  each absolute operand is left at GasPh16Pos[k] for GasTakeBytes. }
+var GasPh16Pos: array[0..1] of Integer;
+procedure GasCode16Fix(const mn, ops, what: AnsiString; var n: Integer);
+var pfx, opc, i, k, sz, pos, modrm: Integer; has66, add66, noSize: Boolean; v: Int64;
+begin
+  pfx := 0;
+  while (pfx < n) and ((AsmBytes[pfx] = $66) or (AsmBytes[pfx] = $F0) or (AsmBytes[pfx] = $F2) or
+        (AsmBytes[pfx] = $F3) or (AsmBytes[pfx] = $2E) or (AsmBytes[pfx] = $36) or
+        (AsmBytes[pfx] = $3E) or (AsmBytes[pfx] = $26) or (AsmBytes[pfx] = $64) or
+        (AsmBytes[pfx] = $65)) do Inc(pfx);
+  if pfx >= n then GasError('.code16: internal: ' + what + ' encoded no opcode');
+  sz := GasOpSize16(mn, ops);
+  has66 := False;
+  for i := 0 to pfx - 1 do if AsmBytes[i] = $66 then has66 := True;
+  noSize := (AsmBytes[pfx] = $8E) or
+            ((AsmBytes[pfx] = $0F) and (pfx + 1 < n) and (AsmBytes[pfx + 1] >= $20) and (AsmBytes[pfx + 1] <= $23));
+  add66 := (sz = 4) and not has66 and not noSize;
+  if (sz = 2) and has66 then
+  begin
+    i := 0;
+    while AsmBytes[i] <> $66 do Inc(i);
+    GasDelByte(n, i);
+    Dec(pfx);
+  end;
+  opc := pfx;
+  { inc/dec %r16/%r32: FF /0, FF /1 with a register -> 40+r, 48+r }
+  if (AsmBytes[opc] = $FF) and (opc + 1 < n) and ((AsmBytes[opc + 1] and $F0) = $C0) and
+     ((sz = 2) or (sz = 4)) then
+  begin
+    AsmBytes[opc] := $40 or (AsmBytes[opc + 1] and $0F);
+    GasDelByte(n, opc + 1);
+  end;
+  { gas's short forms, which the encoder does not pick: 81 /r with an
+    immediate that fits a signed byte becomes 83 /r ib, and a shift or rotate
+    by 1 (C1 /r 01) becomes D1 /r. The immediate is the instruction's last
+    field; a symbolic one (a placeholder) is never shortened. }
+  if (AsmBytes[opc] = $81) and (GasPhCount = 0) then
+  begin
+    if (sz = 2) or ((sz = 0) and has66) then k := 2 else k := 4;
+    v := 0;
+    for i := 0 to k - 1 do v := v or (Int64(AsmBytes[n - k + i]) shl (8 * i));
+    if (k = 2) and (v >= $8000) then v := v - $10000;
+    if (k = 4) and (v >= $80000000) then v := v - $100000000;
+    if (v >= -128) and (v <= 127) then
+    begin
+      AsmBytes[opc] := $83;
+      for i := 1 to k - 1 do GasDelByte(n, n - 1);
+    end;
+  end;
+  if (AsmBytes[opc] = $C1) and (AsmBytes[n - 1] = 1) and (GasPhCount = 0) then
+  begin
+    AsmBytes[opc] := $D1;
+    GasDelByte(n, n - 1);
+  end;
+  for k := 0 to GasPhCount - 1 do
+  begin
+    GasPh16Pos[k] := -1;
+    if not GasPhMem[k] then Continue;
+    if k = 0 then v := GAS_PH0 else v := GAS_PH1;
+    pos := -1;
+    for i := 2 to n - 4 do
+      if (AsmBytes[i] = (v and $FF)) and (AsmBytes[i+1] = ((v shr 8) and $FF)) and
+         (AsmBytes[i+2] = ((v shr 16) and $FF)) and (AsmBytes[i+3] = ((v shr 24) and $FF)) then
+        pos := i;
+    if (pos < 0) or (AsmBytes[pos - 1] <> $25) or ((AsmBytes[pos - 2] and $C7) <> $04) then
+      GasError('.code16: internal: ' + what + ': the absolute address did not encode as SIB disp32');
+    modrm := (AsmBytes[pos - 2] and $38) or $06;
+    AsmBytes[pos - 2] := modrm;
+    GasDelByte(n, pos + 3);
+    GasDelByte(n, pos + 2);
+    GasDelByte(n, pos - 1);
+    pos := pos - 1;
+    AsmBytes[pos] := 0; AsmBytes[pos + 1] := 0;
+    { mov between al/ax/eax and an absolute address: gas's moffs form }
+    if (modrm = $06) and (pos - 2 = opc) and (AsmBytes[opc] >= $88) and (AsmBytes[opc] <= $8B) then
+    begin
+      case AsmBytes[opc] of
+        $8A: AsmBytes[opc] := $A0;
+        $8B: AsmBytes[opc] := $A1;
+        $88: AsmBytes[opc] := $A2;
+        $89: AsmBytes[opc] := $A3;
+      end;
+      GasDelByte(n, opc + 1);
+      pos := pos - 1;
+    end;
+    GasPh16Pos[k] := pos;
+  end;
+  if add66 then
+  begin
+    GasInsByte(n, opc, $66);
+    for k := 0 to GasPhCount - 1 do if GasPh16Pos[k] >= 0 then Inc(GasPh16Pos[k]);
+  end;
+  if GasNeed67 then
+  begin
+    GasInsByte(n, opc, $67);
+    for k := 0 to GasPhCount - 1 do if GasPh16Pos[k] >= 0 then Inc(GasPh16Pos[k]);
+  end;
+end;
+
 procedure GasLineStmt(const stmtIn: AnsiString); forward;
 
 { The bytes AttEncodeOne left in AsmBytes become this section's, with their
   placeholders turned into fixups. }
-procedure GasTakeBytes(const what: AnsiString);
+procedure GasTakeBytes(const mn, ops: AnsiString);
 var i, j, k, n, pfx, found, base, ripPos: Integer; v: Int64; insnEnd: Int64; kind: Integer;
+    what: AnsiString;
 begin
+  what := mn + ' ' + ops;
   n := AsmBytesCount;
   if GasCode32 then
   begin
@@ -876,6 +1026,7 @@ begin
     if (pfx < n) and (AsmBytes[pfx] >= $40) and (AsmBytes[pfx] <= $4F) then
       GasError('.code32: ' + what + ' needs a REX prefix (a 64-bit operand or r8-r15),'
                + ' which 32-bit code cannot encode');
+    if GasCode16 then GasCode16Fix(mn, ops, what, n);
   end;
   { `sym(%rip)` was encoded as the absolute placeholder -- ModRM(mod=00,
     rm=100), SIB 0x25, disp32. Deleting the SIB byte and setting rm=101 makes
@@ -904,6 +1055,11 @@ begin
   insnEnd := base + n;
   for k := 0 to GasPhCount - 1 do
   begin
+    if GasCode16 and GasPhMem[k] then
+    begin
+      GasAddFix(GasCur, base + GasPh16Pos[k], 2, GFK_ABS, GasPhC[k], GasPhP[k], GasPhM[k], insnEnd);
+      Continue;
+    end;
     if k = 0 then v := GAS_PH0 else v := GAS_PH1;
     found := -1;
     for i := 0 to n - 4 do
@@ -928,7 +1084,7 @@ end;
 { Rewrite one operand: a symbolic part becomes a placeholder (or the rip
   label form), a constant one its decimal value. }
 function GasRewriteOperand(const opIn: AnsiString): AnsiString;
-var op, disp, spec: AnsiString; i, depth, open: Integer; c: Int64; p, m: Integer;
+var op, disp, spec, t: AnsiString; i, depth, open: Integer; c: Int64; p, m: Integer;
 begin
   op := GasTrim(opIn);
   Result := op;
@@ -947,6 +1103,7 @@ begin
     if (p < 0) and (m < 0) then begin Result := '$' + AIntToStr(c); Exit; end;
     if GasPhCount >= 2 then GasError('more than two symbolic operands in one instruction');
     GasPhC[GasPhCount] := c; GasPhP[GasPhCount] := p; GasPhM[GasPhCount] := m;
+    GasPhMem[GasPhCount] := False;
     if GasPhCount = 0 then Result := '$' + AIntToStr(GAS_PH0) else Result := '$' + AIntToStr(GAS_PH1);
     Inc(GasPhCount);
     Exit;
@@ -987,15 +1144,26 @@ begin
     Result := AIntToStr(GAS_PHR);
     Exit;
   end;
+  { .code16: a register in the address makes it a 32-bit address (gas puts
+    0x67 in front); the 16-bit forms (%bx), (%bp,%si), ... have no encoder. }
+  if GasCode16 and (spec <> '') then
+  begin
+    t := GasLower(spec);
+    if (Pos('%bx', t) > 0) or (Pos('%bp', t) > 0) or (Pos('%si', t) > 0) or (Pos('%di', t) > 0) then
+      GasError('.code16: 16-bit addressing ' + op + ' is not supported; use a 32-bit register'
+               + ' (gas adds the 0x67 prefix)');
+    GasNeed67 := True;
+  end;
   if disp = '' then begin Result := spec; Exit; end;
   GasEval(disp, c, p, m);
-  if (p < 0) and (m < 0) then
+  if (p < 0) and (m < 0) and not (GasCode16 and (spec = '')) then
   begin
     Result := AIntToStr(c) + spec;
     Exit;
   end;
   if GasPhCount >= 2 then GasError('more than two symbolic operands in one instruction');
   GasPhC[GasPhCount] := c; GasPhP[GasPhCount] := p; GasPhM[GasPhCount] := m;
+  GasPhMem[GasPhCount] := spec = '';
   if GasPhCount = 0 then Result := AIntToStr(GAS_PH0) + spec else Result := AIntToStr(GAS_PH1) + spec;
   Inc(GasPhCount);
 end;
@@ -1017,6 +1185,7 @@ var text, mn, o: AnsiString; k, n: Integer; hasCr: Boolean;
 begin
   GasPhCount := 0;
   GasHaveRip := False;
+  GasNeed67 := False;
   mn := mnIn;
   n := GasSplitCount(ops);
   hasCr := False;
@@ -1047,7 +1216,7 @@ begin
   AttEncodeOne;
   AttGasMode := False;
   AttGasCode32 := False;
-  GasTakeBytes(mn + ' ' + ops);
+  GasTakeBytes(mn, ops);
 end;
 
 function GasRegNum64(const r: AnsiString; var num: Integer): Boolean;
@@ -1093,6 +1262,15 @@ begin
   if (mn = 'loop') or (mn = 'loopl') or (mn = 'loopq') or (mn = 'loope') or (mn = 'loopz') or
      (mn = 'loopne') or (mn = 'loopnz') or (mn = 'jecxz') or (mn = 'jrcxz') or (mn = 'jcxz') then
   begin
+    { the counter is cx, ecx or rcx by the ADDRESS size: 0x67 picks the
+      other one (ecx in 16- and 64-bit code, cx in 32-bit code) }
+    if GasCode16 and ((mn = 'loopl') or (mn = 'jecxz')) then GasEmitByte($67);
+    if (mn = 'jcxz') and not GasCode16 then
+    begin
+      if not GasCode32 then GasError('64-bit code has no jcxz');
+      GasEmitByte($67);
+    end;
+    if (mn = 'loopq') and GasCode32 then GasError('only 64-bit code has loopq');
     if (mn = 'loop') or (mn = 'loopl') or (mn = 'loopq') then GasEmitByte($E2)
     else if (mn = 'loope') or (mn = 'loopz') then GasEmitByte($E1)
     else if (mn = 'loopne') or (mn = 'loopnz') then GasEmitByte($E0)
@@ -1108,6 +1286,8 @@ begin
     Exit;
   end;
   kind := GFK_PLT;
+  { .code16: E8/E9/0F 8x take a rel16; `calll`/`jmpl` keep rel32 behind 0x66 }
+  if GasCode16 and ((mn = 'calll') or (mn = 'jmpl')) then GasEmitByte($66);
   if isCall then GasEmitByte($E8)
   else if isJmp then GasEmitByte($E9)
   else
@@ -1118,6 +1298,12 @@ begin
     GasEmitByte($80 or cc);
   end;
   pos0 := GasCurOff;
+  if GasCode16 and (mn <> 'calll') and (mn <> 'jmpl') then
+  begin
+    GasEmitLE(0, 2);
+    GasAddFix(GasCur, pos0, 2, kind, c, p, m, pos0 + 2);
+    Exit;
+  end;
   GasEmitLE(0, 4);
   GasAddFix(GasCur, pos0, 4, kind, c, p, m, pos0 + 4);
 end;
@@ -1156,6 +1342,19 @@ begin
   else if mn = 'stosb' then b := #$AA else if mn = 'stosq' then b := #$48#$AB else if mn = 'stosl' then b := #$AB
   else if mn = 'lodsb' then b := #$AC else if mn = 'lodsq' then b := #$48#$AD
   else if mn = 'cmpsb' then b := #$A6 else if mn = 'scasb' then b := #$AE;
+  { the 16-bit spellings: the default under .code16, 0x66 elsewhere }
+  if b = '' then
+  begin
+    if mn = 'movsw' then b := #$A5 else if mn = 'stosw' then b := #$AB
+    else if mn = 'lodsw' then b := #$AD else if mn = 'lodsl' then b := #$AD
+    else if (mn = 'cbtw') or (mn = 'cbw') then b := #$98 else if (mn = 'cwtd') or (mn = 'cwd') then b := #$99
+    else if mn = 'pushfw' then b := #$9C else if mn = 'popfw' then b := #$9D;
+    if (b <> '') and (not GasCode16) and (mn <> 'lodsl') then b := #$66 + b;
+  end
+  else if GasCode16 and ((mn = 'pushfl') or (mn = 'popfl') or (mn = 'movsl') or (mn = 'stosl') or
+          (mn = 'cltd') or (mn = 'cdq') or (mn = 'cwtl') or (mn = 'cwde') or (mn = 'leavel')) then
+    b := #$66 + b;
+  if GasCode16 and (mn = 'lodsl') then b := #$66 + b;
   Result := b <> '';
   if not Result then Exit;
   if GasCode32 and (b[1] = #$48) then GasError('.code32 has no ' + mn);
@@ -1183,21 +1382,26 @@ begin
   if (mn = 'jmp') or (mn = 'jmpq') or (mn = 'jmpl') or (mn = 'call') or (mn = 'callq') or
      (mn = 'calll') or (GasJccCode(mn) >= 0) or (mn = 'loop') or (mn = 'loopl') or
      (mn = 'loopq') or (mn = 'loope') or (mn = 'loopz') or (mn = 'loopne') or
-     (mn = 'loopnz') or (mn = 'jecxz') or (mn = 'jrcxz') then
+     (mn = 'loopnz') or (mn = 'jecxz') or (mn = 'jrcxz') or (mn = 'jcxz') then
   begin
     GasBranch(mn, ops);
     Exit;
   end;
-  if (mn = 'ljmp') or (mn = 'ljmpl') or (mn = 'lcall') or (mn = 'lcalll') then
+  { ljmp/lcall $sel, $off: EA/9A ptr16:16 or ptr16:32 by the operand size.
+    Plain ljmp is the mode's default (16-bit under .code16, gas's ljmpw);
+    the l/w suffix picks one, with 0x66 when it is not the default. }
+  if (mn = 'ljmp') or (mn = 'ljmpl') or (mn = 'ljmpw') or (mn = 'lcall') or (mn = 'lcalll') or (mn = 'lcallw') then
   begin
-    if not GasCode32 then GasError(mn + ' $sel, $off exists only in 32-bit code (use lretq or an indirect ljmp)');
+    if not GasCode32 then GasError(mn + ' $sel, $off exists only in 16- and 32-bit code (use lretq or an indirect ljmp)');
     if GasSplitCount(ops) <> 2 then GasError(mn + ' takes $selector, $offset');
     a0 := GasSplitItem(ops, 0); a1 := GasSplitItem(ops, 1);
     if (a0 = '') or (a0[1] <> '$') or (a1 = '') or (a1[1] <> '$') then
       GasError(mn + ' takes $selector, $offset');
     sel := GasEvalConst(Copy(a0, 2, Length(a0) - 1));
-    if (mn = 'ljmp') or (mn = 'ljmpl') then GasEmitByte($EA) else GasEmitByte($9A);
-    GasEmitValue(Copy(a1, 2, Length(a1) - 1), 4);
+    if (mn = 'ljmpw') or (mn = 'lcallw') or (GasCode16 and ((mn = 'ljmp') or (mn = 'lcall'))) then r := 2 else r := 4;
+    if GasCode16 <> (r = 2) then GasEmitByte($66);
+    if (mn = 'ljmp') or (mn = 'ljmpl') or (mn = 'ljmpw') then GasEmitByte($EA) else GasEmitByte($9A);
+    GasEmitValue(Copy(a1, 2, Length(a1) - 1), r);
     GasEmitLE(sel, 2);
     Exit;
   end;
@@ -1213,6 +1417,13 @@ begin
     GasEmitValue(Copy(a0, 2, Length(a0) - 1), 8);
     Exit;
   end;
+  { .code16: the l forms are the 32-bit ones (0x66); the w forms are the
+    16-bit ones, which need 0x66 everywhere else }
+  if GasCode16 and ((mn = 'retl') or (mn = 'lretl') or (mn = 'iretl')) then GasEmitByte($66);
+  if (not GasCode16) and ((mn = 'retw') or (mn = 'lretw') or (mn = 'iretw')) then GasEmitByte($66);
+  if mn = 'retw' then mn := 'ret';
+  if mn = 'lretw' then mn := 'lret';
+  if mn = 'iretw' then mn := 'iret';
   if (mn = 'ret') or (mn = 'retq') or (mn = 'retl') then
   begin
     if ops <> '' then
@@ -1426,9 +1637,9 @@ begin
     k := GasCur; GasCur := GasPrev; GasPrev := k;
     Exit;
   end;
-  if dir = '.code32' then begin GasCode32 := True; Exit; end;
-  if dir = '.code64' then begin GasCode32 := False; Exit; end;
-  if dir = '.code16' then GasError('.code16 is not supported');
+  if dir = '.code32' then begin GasCode32 := True; GasCode16 := False; Exit; end;
+  if dir = '.code64' then begin GasCode32 := False; GasCode16 := False; Exit; end;
+  if dir = '.code16' then begin GasCode32 := True; GasCode16 := True; Exit; end;
   if (dir = '.intel_syntax') then GasError('.intel_syntax is not supported; this frontend reads AT&T');
   if (dir = '.att_syntax') or (dir = '.file') or (dir = '.ident') or (dir = '.loc') or
      (dir = '.hidden') or (dir = '.protected') or (dir = '.internal') or (dir = '.size') or
@@ -1787,6 +1998,10 @@ begin
             begin
               if (d < -128) or (d > 127) then GasError('a rel8 branch (loop/jecxz) out of range: ' + AIntToStr(d));
             end
+            else if GasFixSize[i] = 2 then
+            begin
+              if (d < -32768) or (d > 32767) then GasError('a .code16 rel16 branch out of range: ' + AIntToStr(d));
+            end
             else if (d < -2147483648) or (d > 2147483647) then GasError('a branch out of range');
             GasPatch(GasFixSec[i], GasFixPos[i], d, GasFixSize[i]);
             Continue;
@@ -1795,12 +2010,15 @@ begin
           add := c - (GasFixEnd[i] - GasFixPos[i]);
           GasRelTarget(p, sym, add);
           if GasFixKind[i] = GFK_PLT then typ := 4 else typ := 2;
+          if GasFixSize[i] = 2 then typ := 13;   { R_X86_64_PC16: a .code16 branch }
           GasAddRel(GasFixSec[i], GasFixPos[i], typ, sym, add);
         end;
     else
       begin
         if p < 0 then
         begin
+          if (GasFixSize[i] = 2) and ((c < -32768) or (c > 65535)) then
+            GasError('value ' + AIntToStr(c) + ' does not fit in 16 bits (a .code16 address or a .word)');
           GasPatch(GasFixSec[i], GasFixPos[i], c, GasFixSize[i]);
           Continue;
         end;
@@ -2042,6 +2260,7 @@ begin
   GasRelCount := 0; GasTmpCount := 0;
   for i := 0 to GAS_SYM_HASH - 1 do GasSymHead[i] := -1;
   GasCode32 := False;
+  GasCode16 := False;
   GasAddSec('.text', 1, 6);
   GasAddSec('.data', 1, 3);
   GasAddSec('.bss', 8, 3);
