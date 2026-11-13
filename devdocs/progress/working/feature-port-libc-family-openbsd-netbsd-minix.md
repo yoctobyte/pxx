@@ -518,3 +518,41 @@ direct route, and it would be withdrawn with it.
   an msr to s3_0_c1_c2_0). So the effect is read from the source. What was
   measured is that the header is harmless: test-openbsd and
   test-openbsd-arm64 pass with it.
+
+### 2026-11-13: Minix 3 spike (VM, ABI, first measurements)
+
+- VM: minix_R3.4.0rc6-d5e4fc0.iso (sha1 checked) installed with `setup`
+  (defaults, em0 by DHCP) over the VGA console via qemu monitor sendkey;
+  openssh-7.3.1 from pkgin (the repository still answers), a root key,
+  sshd from /etc/rc.local. tools/vm/minix.sh start/run/ssh/stop, port 2232,
+  /data/vm/minix. Runs under TCG: under KVM the install stalled for 10+
+  minutes extracting minix-base and the disk stopped growing; under TCG it
+  went through. qemu-system-i386 only: Minix 3.4 is i386 (and earm).
+- The kernel ABI, from the 3.4 sources (minix/lib/libc/arch/i386/sys/_ipc.S,
+  minix/include/arch/i386/include/interrupt.h, minix/include/minix/ipc.h,
+  callnr.h, com.h): every POSIX call is a SENDREC to a server -- `int $0x21`
+  (IPC_VECTOR_ORIG = 33) with eax = endpoint (PM 0, VFS 1), ebx = the message,
+  ecx = 3. A message is 64 bytes: m_source @0, m_type @4 (the call number:
+  PM_BASE 0x000 + n, VFS_BASE 0x100 + n; NR_PM_CALLS 48, NR_VFS_CALLS 64),
+  then a 56-byte payload whose layout is per call (ipc.h has 256 of them;
+  e.g. mess_lc_vfs_readwrite = fd, buf, len, cum_io). The reply comes back in
+  the same buffer; m_type < 0 is -errno.
+- The loader (minix/lib/libexec/exec_elf.c) wants a sane 32-bit ELF with the
+  program headers inside the first 512 bytes. No note, no OS/ABI byte, no
+  pin table.
+- Measured on the VM:
+  - a 300-byte hand-assembled ELF (no libc) doing VFS_WRITE then PM_EXIT(7)
+    through `int $0x21` prints its line and exits 7. The raw-IPC route works
+    for a static binary, exactly like the BSDs' raw-syscall route.
+  - pxx's Linux i386 output (`--target=i386`) loads and dies with SIGSEGV at
+    its first `int $0x80` (the vector is not open to user mode).
+- So `--os=minix` is the same design as the BSD ports, with two things they
+  did not need: (1) the i386 backend reaches the kernel from about a dozen
+  sites with an inline `int $0x80` (emit.inc, ir_codegen386.inc,
+  ir_codegen.inc, thread_emit.inc, symtab.inc); they have to go through a
+  thunk, as EmitSyscall/EmitSvcA64 do on x86-64/aarch64, and a translator unit
+  has to build for i386; (2) the translator builds a message per call instead
+  of renumbering, so its size follows the ~100 calls pxx uses, each with its
+  ipc.h layout. Minix has no kernel threads (no clone): --threadsafe would be
+  refused. Not started: it is the biggest of the ports so far, for an OS
+  with no release since 2017.

@@ -477,6 +477,13 @@ with TCG) against the Linux aarch64 build under `qemu-aarch64`. It passes.
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.
 NetBSD and Minix have stable system call numbers.
 
+**Minix 3.4** (i386) is measured but not ported. Its POSIX calls are
+messages: `int $0x21` sends a 64-byte message to the process manager or the
+file server and gets the reply back in the same buffer. A static binary with
+no libc can do that (measured on a VM, `tools/vm/minix.sh`), so `--os=minix`
+would follow the same design as the BSD ports. pxx's Linux i386 executables
+load on Minix and die at their first `int $0x80`.
+
 The measurements and the plan are in
 `devdocs/progress/working/feature-port-libc-family-openbsd-netbsd-minix.md`.
 
