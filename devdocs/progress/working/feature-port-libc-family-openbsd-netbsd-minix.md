@@ -728,3 +728,38 @@ direct route, and it would be withdrawn with it.
   its own; a later exiter could, once the exit lock shows the previous one is
   past __threxit). One block per thread leaks.
 - 15/15 of test-openbsd's thread list pass; the target runs them now.
+
+### 2026-11-13: libc is the OpenBSD default; arm64 libc mode
+
+- Owner: "making it default on openbsd is a sane choice ... it's the correct
+  path to walk". `--os=openbsd` now builds the libc executable on amd64 and
+  arm64; `--rtl-raw` (new) gives the static pin-table build; the two flags
+  contradict. test-openbsd / test-openbsd-arm64 pass --rtl-raw; with it the
+  output is byte-identical to the previous default.
+- arm64 libc mode (TLS variant I, measured): the pxx block is PT_TLS at
+  tpidr_el0 + 16 on every thread (defs.inc TLS_A64_LIBC_OFF, obsdabi
+  OB_A64_TLS_OFF); IR_TLSBASE is `mrs; add #16`; the main install makes that
+  block a pxx block; the clone child copies its staged block in inline (no
+  arch_prctl on aarch64). `_dl_allocate_tib` returns the TIB, and on arm64
+  TIB_TO_TCB adds 40 (offsetof tib_dtv, <tib.h>); x86-64's TIB is its TCB.
+- Bug found on the way: pxx's aarch64 assembler encodes `mov sp, xN` as
+  `orr xzr, xzr, xN` (register 31 is xzr in ORR). Fixed in the assembler the
+  same day (below).
+- obsdabi: the libc bottom is shared by both CPUs (ObBlockOf, ObTcbOfTib,
+  ObMyBlock and ObChildTramp per arch); the raw ObRawA/ObTforkA only in
+  --rtl-raw builds.
+- make test-openbsd-arm64-libc (new): OK, all of test-openbsd-arm64's lists.
+- Closed: feature-port-openbsd-libc (superseded), and
+  decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (answered).
+- Thread-block leak fixed (both CPUs): ObExitRaw, the libc build's exit-path
+  ObRawA, frees the previous exiter's TIB at its own __threxit, under the exit
+  lock (the previous holder is past __threxit, since the kernel released the
+  lock). ld.so's malloc is not thread-safe without libc's pthread callbacks:
+  the first try died in ld.so with "aligned_alloc(): error: recursive call"
+  (main allocating the next TIB while an exiter freed one), so both calls take
+  ObTibLock (ObXchg spin lock). Measured with 3000 create+join: peak RSS
+  31,300 KB before, 1,020 KB after. New test
+  c_pthread_create_join_does_not_grow.c in the OpenBSD thread lists.
+- pxx's aarch64 assembler now encodes `mov sp, xN` / `mov xN, sp` as
+  `add rd, rn, #0` (it emitted ORR, which writes xzr); nothing in the tree
+  used it before, so no output changes. ObChildTramp uses it.

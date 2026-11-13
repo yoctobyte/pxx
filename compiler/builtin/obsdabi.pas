@@ -126,106 +126,6 @@ const
     written on x86-64. fbsdabi uses the same slot for the same purpose. }
   OB_TLS_SLOT_CTID = 14;
 
-{$ifdef CPU_AARCH64}
-{ OpenBSD/arm64 (measured from sys/arch/arm64/arm64/syscall.c): the number
-  in x8, arguments x0..x7, C set = error with the positive errno in x0. The
-  kernel resumes 8 bytes past the svc -- libc's `dsb nsh; isb` speculation
-  barrier -- so the same two words follow every svc here (on ERESTART it
-  backs up 12, onto the svc). Only x0 comes back: no second result
-  register, so a[7] stays 0 (a fork child gets x0 = 0 directly). }
-function ObRawA(args: Pointer): Int64; assembler;
-asm
-  mov x9, x0
-  ldr x8, [x9]
-  ldr x0, [x9, 8]
-  ldr x1, [x9, 16]
-  ldr x2, [x9, 24]
-  ldr x3, [x9, 32]
-  ldr x4, [x9, 40]
-  ldr x5, [x9, 48]
-  svc 0
-  inst $D503379F
-  inst $D5033FDF
-  mov x10, 0
-  b.cc obrawok
-  mov x10, 1
-  sub x0, xzr, x0
-obrawok:
-  str x10, [x9, 64]
-end;
-
-{ __tfork(param, psize) with the child sent to cont, as the x86-64 one. The
-  child resumes past the barrier with the parent's registers (x9 = cont),
-  x0 = 0, sp = tf_stack and tpidr_el0 = tf_tcb. }
-function ObTforkA(param, psize, cont: Int64): Int64; assembler;
-asm
-  mov x9, x2
-  mov x8, 8
-  svc 0
-  inst $D503379F
-  inst $D5033FDF
-  b.cs obtf_fail
-  cbz x0, obtf_child
-  b obtf_done
-obtf_child:
-  br x9
-obtf_fail:
-  sub x0, xzr, x0
-obtf_done:
-end;
-
-{ The x86-64 routine's steps (read it): the spin lock on the shared exit
-  stack, then clear and wake through ObRawA by address, then __threxit with
-  the lock as its notdead word. x19..x22 are never given back: this does not
-  return. }
-procedure ObThreadExitA(ctid, lock, top, raw: Int64); assembler;
-asm
-  mov x19, x0
-  mov x20, x1
-  mov x21, x2
-  mov x22, x3
-  mov w10, 1
-obte_spin:
-  inst $885FFE8B
-  cbnz w11, obte_spin
-  inst $880C7E8A
-  cbnz w12, obte_spin
-  inst $910002BF
-  str wzr, [x19]
-  inst $D10143FF
-  mov x10, 83
-  str x10, [sp]
-  str x19, [sp, 8]
-  mov x10, 2
-  str x10, [sp, 16]
-  mov x10, 2147483647
-  str x10, [sp, 24]
-  str xzr, [sp, 32]
-  str xzr, [sp, 40]
-  str xzr, [sp, 48]
-  inst $910003E0
-  blr x22
-  mov x10, 83
-  str x10, [sp]
-  str x19, [sp, 8]
-  mov x10, 130
-  str x10, [sp, 16]
-  mov x10, 2147483647
-  str x10, [sp, 24]
-  str xzr, [sp, 32]
-  str xzr, [sp, 40]
-  str xzr, [sp, 48]
-  inst $910003E0
-  blr x22
-  mov x10, 302
-  str x10, [sp]
-  str x20, [sp, 8]
-  inst $910003E0
-  blr x22
-end;
-{ The inst words: dsb nsh; isb; ldaxr w11, [x20]; stxr w12, w10, [x20];
-  mov sp, x21; sub sp, sp, #80; mov x0, sp. }
-{$else}
 {$ifdef PXX_OBSD_LIBC}
 { --os=openbsd --rtl-libc: no kernel entry in this program at all. Each
   OpenBSD call goes to libc's wrapper of the same name (OpenBSD 8.0's
@@ -383,23 +283,119 @@ function Lc_dl_allocate_tib(extra: Int64): Int64; cdecl; external 'libc.so.104.0
 
 function ObSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; forward;
 
-{ The bytes ld.so reserves below fs for the pxx block: defs.inc's
+{ The bytes of the executable's PT_TLS (the pxx block and a 16-byte scratch): defs.inc's
   TlsLibcSpan, which the compiler's TLS displacements use. }
 function ObTlsSpan: Int64;
 begin
   Result := (__pxxTlsBlockSize + 16 + 15) and (not Int64(15));
 end;
 
-{ The calling thread's pxx block: its PT_TLS area, right below libc's TCB. }
+{$ifdef CPU_AARCH64}
+{ tpidr_el0: libc's TCB (variant I: {dtv, private}), with the executable's
+  PT_TLS block right above it. Measured on OpenBSD 8.0/arm64. }
+const
+  OB_A64_TLS_OFF = 16;
+  { <tib.h> variant I: libc's struct tib ends in the TCB {dtv, thread}, so
+    TIB_TO_TCB(tib) = tib + offsetof(struct tib, tib_dtv) = tib + 40 (no
+    TCB_OFFSET on arm64). _dl_allocate_tib returns the TIB. }
+  OB_A64_TIBO_TCB = 40;
+
+{ The TCB (tf_tcb, tpidr_el0) of the thread block _dl_allocate_tib gave. }
+function ObTcbOfTib(tib: Int64): Int64;
+begin
+  Result := tib + OB_A64_TIBO_TCB;
+end;
+
+function ObTp: Int64; assembler;
+asm
+  inst $D53BD040
+end;
+{ The inst word: mrs x0, tpidr_el0. }
+
+{ The pxx block of the thread whose libc TCB is tcb. }
+function ObBlockOf(tcb: Int64): Int64;
+begin
+  Result := tcb + OB_A64_TLS_OFF;
+end;
+
 function ObMyBlock: Int64;
 begin
-  Result := Lc_get_tcb(0, 0, 0, 0, 0, 0) - ObTlsSpan;
+  Result := ObBlockOf(ObTp);
 end;
+
+function ObMyTcb: Int64;
+begin
+  Result := ObTp;
+end;
+
+function ObTibOfTcb(tcb: Int64): Int64;
+begin
+  Result := tcb - OB_A64_TIBO_TCB;
+end;
+{$else}
+{ Variant II: the TIB is the TCB (fs:0 points at it). }
+function ObTcbOfTib(tib: Int64): Int64;
+begin
+  Result := tib;
+end;
+
+{ The pxx block of the thread whose libc TCB is tcb: its PT_TLS area,
+  right below the TCB (variant II). }
+function ObBlockOf(tcb: Int64): Int64;
+begin
+  Result := tcb - ObTlsSpan;
+end;
+
+function ObMyBlock: Int64;
+begin
+  Result := ObBlockOf(Lc_get_tcb(0, 0, 0, 0, 0, 0));
+end;
+
+function ObMyTcb: Int64;
+begin
+  Result := Lc_get_tcb(0, 0, 0, 0, 0, 0);
+end;
+
+function ObTibOfTcb(tcb: Int64): Int64;
+begin
+  Result := tcb;
+end;
+{$endif}
 
 { The child's first code. __tfork_thread calls fn(arg) on the new stack;
   a pxx clone child must instead resume at the stub's child entry with rsp =
   the stage area, so arg is a record {resume, stage} in the 16-byte scratch
   past the child's block (see ObTforkA), read whatever frame this has. }
+{$ifdef CPU_AARCH64}
+{ Atomically: old := p^; p^ := v; Result := old (32-bit word). }
+function ObXchg(p, v: Int64): Int64; assembler;
+asm
+  mov x9, x0
+obx_again:
+  inst $885FFD2A
+  inst $880BFD21
+  cbnz w11, obx_again
+  mov w0, w10
+end;
+{ The inst words: ldaxr w10, [x9]; stlxr w11, w1, [x9]. }
+
+function ObChildTramp(rec: Int64): Int64; assembler;
+asm
+  ldr x9, [x0]
+  ldr x10, [x0, 8]
+  mov sp, x10
+  br x9
+end;
+{$else}
+{ Atomically: old := p^; p^ := v; Result := old (32-bit word). }
+function ObXchg(p, v: Int64): Int64; assembler;
+{$asmMode intel}
+asm
+  mov rax, v
+  mov rdx, p
+  xchg [rdx], eax
+end;
+
 function ObChildTramp(rec: Int64): Int64; assembler;
 {$asmMode intel}
 asm
@@ -409,6 +405,27 @@ asm
   push rax
   ret
 end;
+{$endif}
+
+var
+  { ld.so's allocator, behind _dl_allocate_tib and _dl_free_tib, is not
+    thread-safe by itself: libc's pthread serialises it through callbacks
+    it registers, and a pxx program does not use libc's pthread. So every
+    call of those two goes under this spin lock (ObTibLock/ObTibUnlock).
+    Measured: without it, a thread freeing its predecessor's block while
+    the main thread allocated the next one stopped in ld.so with
+    "aligned_alloc(): error: recursive call". }
+  ObTibLockWord: Integer;
+
+procedure ObTibLock;
+begin
+  while ObXchg(Int64(@ObTibLockWord), 1) <> 0 do ;
+end;
+
+procedure ObTibUnlock;
+begin
+  ObXchg(Int64(@ObTibLockWord), 0);
+end;
 
 { __tfork with the child sent to cont, as the raw ObTforkA does, through
   libc's __tfork_thread. tf_tcb (param[0]) is a thread block from ld.so's
@@ -417,7 +434,7 @@ end;
 function ObTforkA(param, psize, cont: Int64): Int64;
 var rec: Int64; r: Int64; e: PInteger;
 begin
-  rec := PInt64(param)^ - ObTlsSpan + __pxxTlsBlockSize;
+  rec := ObBlockOf(PInt64(param)^) + __pxxTlsBlockSize;
   PInt64(rec)^ := cont;
   PInt64(rec + 8)^ := PInt64(param + 16)^;
   e := PInteger(Lc_errno);
@@ -434,6 +451,141 @@ begin
   a := PInt64(args);
   Result := ObSys(a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
 end;
+
+function Lc_dl_free_tib(tib, extra: Int64): Int64; cdecl; external 'libc.so.104.0' name '_dl_free_tib';
+
+var
+  ObDeadTib: Int64;   { the last exited thread's libc thread block, not yet freed }
+
+{ ObRawA for a thread's exit, which also frees thread blocks. A thread
+  cannot free its own: it runs on it (errno, through every libc call) until
+  __threxit. So at its __threxit each exiting thread frees the previous
+  exiter's block and leaves its own for the next. This runs under the exit
+  lock, which the kernel releases only once the thread holding it is past
+  __threxit (ObThreadExitA), so the previous exiter is gone by now. At most
+  one block stays allocated: the last thread's, until the process ends. }
+function ObExitRaw(args: Pointer): Int64;
+var a: PInt64;
+begin
+  a := PInt64(args);
+  if a[0] = OB_THREXIT then
+  begin
+    ObTibLock;
+    if ObDeadTib <> 0 then Lc_dl_free_tib(ObDeadTib, 0);
+    ObTibUnlock;
+    ObDeadTib := ObTibOfTcb(ObMyTcb);
+  end;
+  Result := ObSys(a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+end;
+{$endif}
+
+{$ifdef CPU_AARCH64}
+{$ifdef PXX_OBSD_LIBC}
+{ (the libc bottom: above) }
+{$else}
+{ OpenBSD/arm64 (measured from sys/arch/arm64/arm64/syscall.c): the number
+  in x8, arguments x0..x7, C set = error with the positive errno in x0. The
+  kernel resumes 8 bytes past the svc -- libc's `dsb nsh; isb` speculation
+  barrier -- so the same two words follow every svc here (on ERESTART it
+  backs up 12, onto the svc). Only x0 comes back: no second result
+  register, so a[7] stays 0 (a fork child gets x0 = 0 directly). }
+function ObRawA(args: Pointer): Int64; assembler;
+asm
+  mov x9, x0
+  ldr x8, [x9]
+  ldr x0, [x9, 8]
+  ldr x1, [x9, 16]
+  ldr x2, [x9, 24]
+  ldr x3, [x9, 32]
+  ldr x4, [x9, 40]
+  ldr x5, [x9, 48]
+  svc 0
+  inst $D503379F
+  inst $D5033FDF
+  mov x10, 0
+  b.cc obrawok
+  mov x10, 1
+  sub x0, xzr, x0
+obrawok:
+  str x10, [x9, 64]
+end;
+
+{ __tfork(param, psize) with the child sent to cont, as the x86-64 one. The
+  child resumes past the barrier with the parent's registers (x9 = cont),
+  x0 = 0, sp = tf_stack and tpidr_el0 = tf_tcb. }
+function ObTforkA(param, psize, cont: Int64): Int64; assembler;
+asm
+  mov x9, x2
+  mov x8, 8
+  svc 0
+  inst $D503379F
+  inst $D5033FDF
+  b.cs obtf_fail
+  cbz x0, obtf_child
+  b obtf_done
+obtf_child:
+  br x9
+obtf_fail:
+  sub x0, xzr, x0
+obtf_done:
+end;
+
+{$endif}
+
+{ The x86-64 routine's steps (read it): the spin lock on the shared exit
+  stack, then clear and wake through ObRawA by address, then __threxit with
+  the lock as its notdead word. x19..x22 are never given back: this does not
+  return. }
+procedure ObThreadExitA(ctid, lock, top, raw: Int64); assembler;
+asm
+  mov x19, x0
+  mov x20, x1
+  mov x21, x2
+  mov x22, x3
+  mov w10, 1
+obte_spin:
+  inst $885FFE8B
+  cbnz w11, obte_spin
+  inst $880C7E8A
+  cbnz w12, obte_spin
+  inst $910002BF
+  str wzr, [x19]
+  inst $D10143FF
+  mov x10, 83
+  str x10, [sp]
+  str x19, [sp, 8]
+  mov x10, 2
+  str x10, [sp, 16]
+  mov x10, 2147483647
+  str x10, [sp, 24]
+  str xzr, [sp, 32]
+  str xzr, [sp, 40]
+  str xzr, [sp, 48]
+  inst $910003E0
+  blr x22
+  mov x10, 83
+  str x10, [sp]
+  str x19, [sp, 8]
+  mov x10, 130
+  str x10, [sp, 16]
+  mov x10, 2147483647
+  str x10, [sp, 24]
+  str xzr, [sp, 32]
+  str xzr, [sp, 40]
+  str xzr, [sp, 48]
+  inst $910003E0
+  blr x22
+  mov x10, 302
+  str x10, [sp]
+  str x20, [sp, 8]
+  inst $910003E0
+  blr x22
+end;
+{ The inst words: dsb nsh; isb; ldaxr w11, [x20]; stxr w12, w10, [x20];
+  mov sp, x21; sub sp, sp, #80; mov x0, sp. }
+{$else}
+{$ifdef PXX_OBSD_LIBC}
+{ (the libc bottom: above, before the CPU split) }
 {$else}
 { The ONE kernel entry, and the one address the pin table names. args ->
   [nr, a0..a5, rdx-out, cf-out]. OpenBSD reports an error with CF set and the
@@ -1519,10 +1671,13 @@ begin
     block below it (PT_TLS). Its init-image slot starts as the parent's, as
     the stub's read through gs expects; the child's arch_prctl copies the
     staged block in (ObSetBlock). Not freed when the thread ends (the thread
-    cannot free its own; a leak of one block per thread). }
+    cannot free its own; the next exiting thread does, see ObExitRaw). }
+  ObTibLock;
   p[0] := Lc_dl_allocate_tib(0);
+  ObTibUnlock;
   if p[0] = 0 then begin Result := -LX_ENOMEM; Exit; end;
-  PInt64(p[0] - ObTlsSpan + 8 * 13)^ := PInt64(ObMyBlock + 8 * 13)^;   { TLS_SLOT_INIT_IMAGE }
+  p[0] := ObTcbOfTib(p[0]);
+  PInt64(ObBlockOf(p[0]) + 8 * 13)^ := PInt64(ObMyBlock + 8 * 13)^;   { TLS_SLOT_INIT_IMAGE }
 {$else}
   p[0] := stack + 16;                                     { tf_tcb = the TLS block }
 {$endif}
@@ -1544,7 +1699,11 @@ begin
   { The kernel stores the tid through tf_tid; wait until it has, or the
     clear below would be undone and the joiner would wait for a dead thread. }
   while PInteger(ctid)^ = 0 do ObSys(OB_SCHED_YIELD, 0, 0, 0, 0, 0, 0);
+{$ifdef PXX_OBSD_LIBC}
+  ObThreadExitA(ctid, Int64(@ObExitLock), ObExitStack + OB_EXIT_STACK_SIZE, Int64(@ObExitRaw));
+{$else}
   ObThreadExitA(ctid, Int64(@ObExitLock), ObExitStack + OB_EXIT_STACK_SIZE, Int64(@ObRawA));
+{$endif}
 end;
 
 { futex: Linux WAIT 0, WAKE 1, REQUEUE 3, WAIT_BITSET 9, WAKE_BITSET 10;
@@ -2901,12 +3060,16 @@ var
   Threads get theirs from __tfork's tf_tcb. }
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 begin
+{$ifdef PXX_OBSD_LIBC}
+  { libc owns tpidr_el0 (ld.so set it); the pxx block is the PT_TLS above it. }
+{$else}
   if not ObTlsSet then
     if Int64(__pxxTlsBase) <> 0 then
     begin
       ObTlsSet := True;
       ObSys(OB_SET_TCB, Int64(__pxxTlsBase), 0, 0, 0, 0, 0);
     end;
+{$endif}
   Result := LxA64Front(nr, a0, a1, a2, a3, a4, a5);
 end;
 {$endif}

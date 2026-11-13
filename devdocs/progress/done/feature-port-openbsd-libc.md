@@ -1,8 +1,9 @@
 ---
 summary: "OpenBSD/amd64 target — route RTL through libc.so. The LOWERING landed (feature-port-rtl-over-libc, 3a0ed43fb); what remains is the target. Re-blocked 2026-08-31 on decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, because this ticket's own item 3 says its acceptance criterion ('no raw syscall') is WRONG and must be settled first: the measured residual is 1 instruction non-threaded and 4 threaded, each irreducible. It had been sitting at the head of Track A's ready queue on a satisfied blocker, offering an unstartable job to every idle agent — it also needs an OpenBSD VM built by qemu autoinstall, which is infrastructure nobody has stood up."
 type: feature
+status: done
 prio: 25
-blocked-by: [decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]
+blocked-by: []
 track: A
 ---
 
@@ -146,3 +147,15 @@ new, and that is the point of saying so.
 No scope change. The fork stays
 [[decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]], and the VM is still
 unbuilt.
+
+## Closed 2026-11-13: done another way
+
+Superseded by [[feature-port-libc-family-openbsd-netbsd-minix]]. OpenBSD is
+now a target on amd64 and arm64, and the default build goes through libc:
+the Linux-to-OpenBSD translator (compiler/builtin/obsdabi.pas) calls libc's
+wrapper of each call's own name, not `syscall(2)` (which OpenBSD removed), and
+the output is a dynamic executable on /usr/libexec/ld.so and libc.so.104.0.
+`--rtl-raw` keeps the static direct-syscall build. The VM this ticket lacked
+exists (tools/vm/openbsd.sh, images under /data/vm). Tests: make
+test-openbsd-libc, test-openbsd-arm64-libc (and test-openbsd /
+test-openbsd-arm64 for --rtl-raw).

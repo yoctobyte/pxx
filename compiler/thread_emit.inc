@@ -718,6 +718,20 @@ begin
       binary, whose first word is the dtv pointer. Taking the register in the
       second case would break glibc on this thread, and TargetHasTlsBlock says
       why that binary never reads the block anyway. }
+    if KernelLibc then
+    begin
+      { --os=openbsd --rtl-libc: tpidr_el0 is the thread block ObClone got
+        from ld.so, and the real pxx block (x10) is the PT_TLS above it, whose
+        init-image slot ObClone seeded from the parent's. The staged block
+        (x9) is filled as below, then copied into the real one. }
+      pNoInst := -1; pNoInst2 := -1;
+      EmitI32($D53BD04A);               { mrs  x10, tpidr_el0 }
+      EmitI32($91000000 or (TLS_A64_LIBC_OFF shl 10) or (10 shl 5) or 10);   { add x10, x10, #off }
+      EmitI32($F9400000 or (TLS_SLOT_INIT_IMAGE shl 10) or (10 shl 5) or 11);  { ldr x11, [x10, #8*slot] }
+      EmitI32($910043E9);               { add  x9, sp, #16        (the staged block) }
+    end
+    else
+    begin
     EmitI32($D53BD049);                 { mrs  x9, tpidr_el0 }
     pNoInst := CodeLen; EmitI32($B4000009);   { cbz  x9, .noinst (patched) }
     EmitI32($F940012A);                 { ldr  x10, [x9] }
@@ -727,6 +741,7 @@ begin
     EmitI32($F9400000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { ldr x11, [x9, #8*slot] }
     EmitI32($910043E9);                 { add  x9, sp, #16        (the block) }
     EmitI32($D51BD049);                 { msr  tpidr_el0, x9 }
+    end;
     if TlsUserBytes > 0 then
     begin
       if (TLS_USER_FIRST_OFF > 4095) or (TlsUserBytes mod 8 <> 0) then
@@ -742,8 +757,25 @@ begin
       EmitI32($F9000000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { str x11, [x9, #8*slot] }
       Patch32(pCopy, $B400000B or ((((CodeLen - pCopy) div 4) and $7FFFF) shl 5));
     end;
+    if KernelLibc then
+    begin
+      { staged block (x9) -> real block (x10), then slot 0 = the real one }
+      if TlsBlockSize mod 8 <> 0 then
+        Error('compiler error: the aarch64 libc clone leg copies the block in 8-byte steps');
+      EmitI32($AA0903EC);               { mov  x12, x9 }
+      EmitI32($AA0A03ED);               { mov  x13, x10 }
+      EmitLoadImmA64(14, TlsBlockSize); { x14 = count }
+      EmitI32($F840858F);               { .b: ldr x15, [x12], #8 }
+      EmitI32($F80085AF);               { str  x15, [x13], #8 }
+      EmitI32($F10021CE);               { subs x14, x14, #8 }
+      EmitI32($54FFFFA1);               { b.ne .b }
+      EmitI32($F900014A);               { str  x10, [x10]         (slot 0 = self) }
+    end
+    else
+    begin
     Patch32(pNoInst, $B4000009 or ((((CodeLen - pNoInst) div 4) and $7FFFF) shl 5));
     Patch32(pNoInst2, $54000001 or ((((CodeLen - pNoInst2) div 4) and $7FFFF) shl 5));
+    end;
     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
     EmitI32($F94007E0);                 { ldr  x0, [sp, #8]       (arg -> x0) }
     { x8 = the hidden-destination scratch (AAPCS XR, which is also what this

@@ -1220,6 +1220,9 @@ begin
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
   WriteLn('                        rt_sigreturn and clone''s child stub stay raw.');
+  WriteLn('  --rtl-raw             --os=openbsd: a static executable calling the');
+  WriteLn('                        kernel directly instead of the default dynamic');
+  WriteLn('                        one through libc');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
   WriteLn('  --link [-o <out>] <obj>... [<out>]');
   WriteLn('                        link x86-64 objects that pxx --emit-obj wrote into a');
@@ -1579,6 +1582,7 @@ begin
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
   RtlOverLibc := False;
+  RtlRawExplicit := False;
   KernelLibc := False;
   TargetKernel := KERNEL_LINUX;
   FbsdSyscallProcIdx := -1;
@@ -1899,6 +1903,14 @@ begin
       SocExplicit := True;   { NAMED, not derived — see TargetDisplayName }
       if SocIsXtensa(TargetSoc) then TargetArch := TARGET_XTENSA
       else TargetArch := TARGET_RISCV32;
+      Inc(i);
+    end
+    else if option = '--rtl-raw' then
+    begin
+      { --os=openbsd: the static build with the kernel called directly (the
+        translator's raw syscall), not the default libc one. Elsewhere raw is
+        already the default and this changes nothing. }
+      RtlRawExplicit := True;
       Inc(i);
     end
     else if option = '--rtl-libc' then
@@ -2822,9 +2834,16 @@ begin
   { --rv32-rvc: only meaningful once the target is settled }
   if not RvcOptExplicit then RvcOptRequested := TargetPlatform = PLATFORM_ESP;
   RvcOn := RvcOptRequested and (TargetArch = TARGET_RISCV32);
-  { --os=openbsd --rtl-libc, decided before the defines: obsdabi selects its
-    libc bottom with PXX_OBSD_LIBC. The refusals below say the rest. }
-  if RtlOverLibc and (TargetKernel = KERNEL_OPENBSD) and (TargetArch = TARGET_X86_64) then
+  { --os=openbsd goes through libc by default, on x86-64 and arm64 (OpenBSD
+    supports only libc as its system-call interface); --rtl-raw keeps the static
+    direct-syscall build. Decided before the defines: obsdabi selects its libc
+    bottom with PXX_OBSD_LIBC. The refusals below say the rest. }
+  if RtlRawExplicit and RtlOverLibc then
+    ErrorNoPos('--rtl-raw and --rtl-libc contradict each other');
+  if (TargetKernel = KERNEL_OPENBSD) and not RtlRawExplicit then
+    RtlOverLibc := True;
+  if RtlOverLibc and (TargetKernel = KERNEL_OPENBSD) and
+     ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)) then
   begin
     KernelLibc := True;
     RtlOverLibc := False;
@@ -3259,7 +3278,7 @@ begin
     end
     else if RtlOverLibc then
       ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly' +
-        ' (only --os=openbsd on x86-64 takes it)');
+        ' (only --os=openbsd takes it)');
   end;
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');

@@ -18560,7 +18560,7 @@ begin
     links a shared library. A single-threaded program is exactly right with
     one copy, so it gets no warning.
     bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
-  if (ExternalCount > 0) and TlsBaseUsed and (TargetArch <> TARGET_X86_64) then
+  if (ExternalCount > 0) and TlsBaseUsed and (TargetArch <> TARGET_X86_64) and not KernelLibc then
   begin
     if TlsStrictUsed then
       ErrorNoPos('this program uses `threadvar` or __pxxTlsBase AND links a '

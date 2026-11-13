@@ -4,7 +4,7 @@ title: Does OpenBSD's pinsyscalls permit our one irreducible raw syscall (rt_sig
 track: U
 type: decide
 prio: 25
-status: backlog
+status: done
 found: 2026-08-31
 found-by: frank-rust
 owner: unassigned
@@ -190,3 +190,19 @@ instruction". True, and true only for the population I had measured — which th
 body said explicitly and the summary did not carry. **The summary is the part
 everyone reads**, so a scope caveat that lives only in the body is a caveat that
 does not exist. Both figures are now in the summary.
+
+## Answered 2026-11-13 (measured on OpenBSD 8.0, amd64 and arm64)
+
+Neither residual blocks OpenBSD:
+
+- **Static build (`--rtl-raw`):** the ELF carries a `PT_OPENBSD_SYSCALLS` pin
+  table naming the translator's one raw `syscall`/`svc` (ObRawA) for every
+  number, as OpenBSD's own static binaries do. The kernel reads it only
+  without PT_INTERP.
+- **libc build (the default):** the program makes no system calls; ld.so pins
+  libc's. The one raw instruction left is the Linux `rt_sigreturn` stub, which
+  is never reached on OpenBSD (the translator installs handlers through
+  sigaction with OpenBSD's own trampoline). The clone-stub raw calls are
+  thunked into the translator, which calls libc (`__tfork_thread`).
+
+See [[feature-port-libc-family-openbsd-netbsd-minix]].

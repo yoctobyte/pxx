@@ -2029,7 +2029,24 @@ begin
     BSSSize := (BSSSize + 15) and (not 15);
     BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize);
     EmitTlsInitImageAlloc;
-    if TargetArch = TARGET_AARCH64 then
+    if (TargetArch = TARGET_AARCH64) and KernelLibc then
+    begin
+      { --os=openbsd --rtl-libc: ld.so set tpidr_el0 to libc's TCB and put
+        this thread's block (PT_TLS, zero-filled) right above it. Make it a
+        pxx block: slot 0 = self, slot 13 = the init image. BSS_TLS_MAIN
+        stays allocated (and unused) so the layout matches the other builds. }
+      EmitI32($D53BD049);                       { mrs  x9, tpidr_el0 }
+      EmitI32($91000000 or (TLS_A64_LIBC_OFF shl 10) or (9 shl 5) or 9);   { add x9, x9, #off }
+      EmitI32($F9000129);                       { str  x9, [x9]    (slot 0 = self) }
+      if BSS_TLS_IMAGE >= 0 then
+      begin
+        EmitI32($1800004A);                     { ldr  w10, [pc+8] }
+        EmitI32($14000002);                     { b    [pc+8] }
+        EmitGlobRef(BSS_TLS_IMAGE);
+        EmitI32($F9000000 or ((TLS_SLOT_INIT_IMAGE) shl 10) or (9 shl 5) or 10);  { str x10, [x9, #8*slot] }
+      end;
+    end
+    else if TargetArch = TARGET_AARCH64 then
     begin
       { slot 13 = the init image, BEFORE the dynamic-binary skip: in a dynamic
         binary this block is the fallback every thread-local read lands on,

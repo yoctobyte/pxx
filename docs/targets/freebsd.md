@@ -206,11 +206,14 @@ The work log, with the reasons behind each choice, is in
 OpenBSD, NetBSD, DragonFly and Minix have EXPERIMENTAL
 `--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64),
 `--os=dragonfly` (since 2026-11-13, x86-64 only) and `--os=minix`
-(since 2026-11-13, i386 only, phase 1). The OpenBSD one may
-still be withdrawn in favour of going through libc; the choice has not been
-made.
+(since 2026-11-13, i386 only, phase 1).
 
-### `--os=openbsd` (experimental)
+On OpenBSD the default (since 2026-11-13, x86-64 and arm64) goes through
+libc, OpenBSD's only supported system-call interface: see
+[through libc](#--osopenbsd-the-default-through-libc) below. `--rtl-raw`
+gives the static build described next instead.
+
+### `--os=openbsd --rtl-raw` (experimental): the static build
 
 OpenBSD only lets a program make a system call from an address it has
 declared in advance (pinsyscalls). The base system's static binaries do this
@@ -396,10 +399,11 @@ the stock `miniroot80.img` installed unattended into
 in `tools/vm/openbsd.sh`) against the Linux aarch64 build under `qemu-aarch64`.
 It passes.
 
-### `--os=openbsd --rtl-libc` (experimental): through libc
+### `--os=openbsd`, the default: through libc
 
-OpenBSD's supported interface is libc, not the system calls. With
-`--rtl-libc`, the translator above still turns each Linux call into the
+OpenBSD's supported interface is libc, not the system calls, so this is
+what `--os=openbsd` builds (`--rtl-libc` says the same thing
+explicitly; `--rtl-raw` asks for the static build above). The translator above still turns each Linux call into the
 OpenBSD one, but its last step calls libc's function of the same name
 (`read`, `openat`, `kevent`, ... 142 of them) instead of executing `syscall`.
 The output is an ordinary dynamic executable:
@@ -431,12 +435,31 @@ The output is an ordinary dynamic executable:
   this mode the stub fills the staged block's thread-locals first. Thread
   exit is the static build's (clear the tid word, wake the joiners, then
   `__threxit` on the shared exit stack), with its calls through libc. A
-  finished thread's libc thread block is not freed (a thread cannot free
-  its own): a small leak per thread.
+  thread cannot free its own libc thread block (it uses it until
+  `__threxit`), so each exiting thread frees the previous exiter's, under the
+  exit lock the kernel releases only once that thread is gone; at most one
+  block is left over. ld.so's allocator is not thread-safe by itself (libc's
+  pthread normally serialises it), so `_dl_allocate_tib` and `_dl_free_tib`
+  run under a lock of the translator's own.
 
-x86-64 only.
+**arm64** (`--target=aarch64`) works the same way, with TLS variant I:
+`tpidr_el0` points at libc's two-word TCB and the executable's `PT_TLS` (the
+pxx block) starts 16 bytes above it, on every thread, so every pxx
+thread-local access is `tpidr_el0 + 16 + slot` (`TLS_A64_LIBC_OFF`). The main
+thread makes that block a pxx block (self-pointer, init image) instead of
+installing one. `_dl_allocate_tib` returns the TIB, which on arm64 sits below
+the TCB: `tf_tcb` is the TIB plus 40 (`TIB_TO_TCB`, measured from
+`<tib.h>`). A new thread's stub copies its staged block into the real one
+inline. `make test-openbsd-arm64-libc` runs `test-openbsd-arm64`'s lists
+this way; it passes.
 
-`make test-openbsd-libc` runs test-openbsd's lists: 57 programs, the 15
+Why libc is the default: OpenBSD does not keep old system calls once libc
+stops using them, so a static binary that calls the kernel directly can stop
+working on a later release with no warning. A binary on libc fails at load
+time instead, naming the missing `libc.so`, and a rebuild fixes it. The
+static build stays for systems without ld.so or for comparison.
+
+`make test-openbsd` and `make test-openbsd-arm64` test the static build (`--rtl-raw`); `make test-openbsd-libc` runs test-openbsd's lists: 57 programs, the 15
 thread programs, and the environment and `-g` legs. It passes.
 
 ### `--os=netbsd` (experimental)

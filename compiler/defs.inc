@@ -6779,6 +6779,7 @@ var
     DT_NEEDED and PLT slot with no elfwriter change. -1 = not yet created.
     feature-port-rtl-over-libc }
   RtlOverLibc : Boolean;
+  RtlRawExplicit : Boolean;     { --rtl-raw: --os=openbsd without libc }
   { --os=openbsd --rtl-libc: the translator's bottom calls libc's wrappers
     instead of making syscalls (PXX_OBSD_LIBC in obsdabi.pas), and the output
     is a dynamic executable on ld.so. The pxx TLS block is the executable's
@@ -9229,6 +9230,13 @@ function TlsLibcSpan: Integer;
 begin
   TlsLibcSpan := (TlsBlockSize + 16 + 15) and (not 15);
 end;
+
+{ --os=openbsd --target=aarch64 --rtl-libc: the pxx block's offset from
+  tpidr_el0. OpenBSD/arm64 is TLS variant I: tpidr_el0 points to libc's
+  2-word TCB {dtv, private} and the executable's PT_TLS (16-aligned) starts
+  right after it, on every thread. obsdabi's OB_A64_TLS_OFF is the same. }
+const
+  TLS_A64_LIBC_OFF = 16;
 
 { What every TLS-segment displacement is shifted by: the block starts at
   fs - TlsLibcSpan under KernelLibc, at the segment base everywhere else. }

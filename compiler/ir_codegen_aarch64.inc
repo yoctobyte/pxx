@@ -2509,6 +2509,15 @@ begin
         copy, which is what every thread-local was before this target had a
         block, and never a write into glibc's TCB. The ELF writer then refuses
         or warns (TlsBaseUsed, TlsStrictUsed). x9 is scratch. }
+      if KernelLibc then
+      begin
+        { --os=openbsd --rtl-libc: tpidr_el0 is libc's TCB on every thread,
+          and the pxx block is the PT_TLS right above it. }
+        TlsBaseUsed := True;
+        EmitI32($D53BD040);               { mrs  x0, tpidr_el0 }
+        EmitI32($91000000 or (TLS_A64_LIBC_OFF shl 10));   { add x0, x0, #off }
+      end
+      else
       begin
         TlsBaseUsed := True;
         EmitI32($D53BD040);               { mrs  x0, tpidr_el0 }
