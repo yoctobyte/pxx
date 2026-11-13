@@ -20960,8 +20960,19 @@ begin
         base kind had a case here and a call did not, so this fell to REC_NONE,
         the field lookup found nothing, and the `.field` was applied at OFFSET 0:
         `MkR[1].b` and `MkR[1].c` both answered `MkR[1].a`, silently.
-        bug-a-indexing-a-function-call-result-drops-the-field-selector }
-      Result := ResolveNodeRec(idxBase)
+        bug-a-indexing-a-function-call-result-drops-the-field-selector
+        A C call returning a POINTER to struct is the other half:
+        `index_of(h)[i].leaf_lo` indexes the POINTEE, whose record is
+        ProcRetPtrElemRec, and the call's own record is none -- so the member
+        read at offset 0 (Gibux fs/ext2.c, ext4 files past 4 extents).
+        bug-c-a-member-of-an-indexed-pointer-returning-call-reads-offset-0 }
+      if ((ASTKind[idxBase] = AN_CALL) or (ASTKind[idxBase] = AN_CALL_IND)) and
+         (Integer(ASTIVal[idxBase]) >= 0) and
+         (Procs[Integer(ASTIVal[idxBase])].RetType = tyPointer) and
+         (ProcRetPtrElemRec[Integer(ASTIVal[idxBase])] > 0) then
+        Result := ProcRetPtrElemRec[Integer(ASTIVal[idxBase])]
+      else
+        Result := ResolveNodeRec(idxBase)
     else if ASTKind[idxBase] = AN_ADDR then
       { `(&X)[i]` indexes a pointer to X, so the element record is X's own record. }
       Result := ResolveNodeRec(ASTLeft[idxBase])

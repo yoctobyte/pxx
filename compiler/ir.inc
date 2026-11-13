@@ -4424,9 +4424,13 @@ begin
     Exit;
   end
   else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-          (ASTKind[node] = AN_INTF_CALL) then
+          (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
   begin
-    { All three carry the Procs[] index in IVal — see IsNodePChar's arm 4 for why
+    { AN_CALL_IND (a call through a C function pointer) carries its SIGNATURE
+      proc in IVal, which records the same result facts: without this arm
+      `fp()[2]` stepped by the 1-byte default, so `fi()[2]` on an `int *`
+      result read bytes 2..5. bug-c-a-member-of-an-indexed-pointer-returning-call-reads-offset-0
+      All three carry the Procs[] index in IVal — see IsNodePChar's arm 4 for why
       the virtual/interface shapes belong in every one of these enumerations. }
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then

@@ -6524,7 +6524,12 @@ begin
   begin
     ProcRetPtrElemTk[fpSig] := fpRetElemTk;
     ProcRetPtrElemRec[fpSig] := fpRetElemRec;
-  end;
+  end
+  else if fpRet = tyPointer then
+    { ...and a SCALAR pointee's element type, which IRPointerStride reads to
+      step `fp()[i]`: without it an `int *(*)(void)` result was indexed by
+      bytes. bug-c-a-member-of-an-indexed-pointer-returning-call-reads-offset-0 }
+    ProcRetPtrElemTk[fpSig] := fpRetElemTk;
   { ...AND A STRUCT RETURNED BY VALUE (`struct S (*)()`) carries its OWN record,
     for exactly the same reason. This is the sibling of the arm directly above
     and it was missing, so the two spellings of "a callback that hands back a

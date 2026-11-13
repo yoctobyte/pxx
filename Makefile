@@ -19212,6 +19212,11 @@ test-core: $(COMPILER)
 	gcc -w -o $(TESTTMP)/c_cfold_gcc test/c_const_fold_types.c
 	./$(COMPILER) test/c_const_fold_types.c $(TESTTMP)/c_cfold > /dev/null
 	tools/expect_same.sh c_const_fold_types "$$($(TESTTMP)/c_cfold)" "$$($(TESTTMP)/c_cfold_gcc)"
+	# `f(x)[i].member` on a pointer-returning call, direct and through a function
+	# pointer: the member offset and the element stride (Gibux fs/ext2.c).
+	gcc -w -o $(TESTTMP)/c_idxcall_gcc test/c_index_of_a_pointer_returning_call.c
+	./$(COMPILER) test/c_index_of_a_pointer_returning_call.c $(TESTTMP)/c_idxcall > /dev/null
+	tools/expect_same.sh c_index_of_a_pointer_returning_call "$$($(TESTTMP)/c_idxcall)" "$$($(TESTTMP)/c_idxcall_gcc)"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
