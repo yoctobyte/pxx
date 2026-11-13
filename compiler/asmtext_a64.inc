@@ -385,7 +385,12 @@ begin
     if AsmA64RegNum(op1, r1, is64_1) then
     begin
       if not CaseEqual(mnem, 'mov') then Error('EmitAsmA64: movz/movk require immediate operand');
-      if is64_0 then EmitI32($AA0003E0 or (r1 shl 16) or r0)
+      { Register 31 is sp here but xzr in ORR, so a move to or from sp is
+        `add rd, rn, #0`, as the architecture's own MOV (to/from SP) alias
+        is. It was ORR: `mov sp, x10` wrote xzr and left sp alone. }
+      if CaseEqual(op0, 'sp') or CaseEqual(op1, 'sp') then
+        EmitI32($91000000 or (r1 shl 5) or r0)
+      else if is64_0 then EmitI32($AA0003E0 or (r1 shl 16) or r0)
       else EmitI32($2A0003E0 or (r1 shl 16) or r0);
     end
     else
