@@ -294,7 +294,7 @@ procedure EmitHeapMagTlsBase;
   IR_TLSBASE reads. Not EmitAsmX64: the text assembler has no segment override,
   and this is the same five bytes IR_TLSBASE and EmitIoOwner already emit. }
 begin
-  EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(0);
+  EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(TlsSegDispBias);
 end;
 
 procedure EmitHeapMagTakeGuard;
@@ -1082,7 +1082,7 @@ begin
       place that still pays the extra load. }
     EmitB(TlsSegPrefix);
     if useR8 then EmitB($4C) else EmitB($48);
-    EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);
+    EmitB($8B); EmitB($04); EmitB($25); EmitI32(TlsSegDispBias);
     if useR8 then EmitAsmX64(['add r8, %', 8 * t])
     else EmitAsmX64(['add rax, %', 8 * t]);
   end
@@ -1335,7 +1335,7 @@ begin
       IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
       with --emit-obj/--shared there is no ELF entry, nothing installed a base,
       and this load would take address 0 rather than return one. }
-    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(TlsSegDispBias);
     EmitAsmX64([
       'mov rcx, rsp',
       'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,
@@ -1965,6 +1965,21 @@ begin
   BSS_TLS_IMAGE := BSSSize; Inc(BSSSize, TlsUserBytes);
 end;
 
+{ r9 = the main thread's block. Normally the BSS reservation; under
+  --os=openbsd --rtl-libc the block ld.so placed below fs (the executable's
+  PT_TLS), found from libc's thread pointer: fs:0 is libc's TCB self-pointer,
+  i.e. the fs base, and the block is TlsLibcSpan below it. }
+procedure EmitTlsMainR9;
+begin
+  if KernelLibc then
+  begin
+    EmitB($64); EmitB($4C); EmitB($8B); EmitB($0C); EmitB($25); EmitI32(0);   { mov r9, fs:[0] }
+    EmitAsmX64(['sub r9, %', TlsLibcSpan]);
+  end
+  else
+    EmitAsmX64(['mov r9, @glob', BSS_TLS_MAIN]);
+end;
+
 procedure EmitTlsMainInstall;
 { The MAIN thread's TLS block. Cloned threads get theirs from the clone stub
   (thread_emit.inc); the main thread passes through no stub, and a static pxx
@@ -2128,8 +2143,9 @@ begin
     { hi = the stack pointer at process entry. Every later frame is BELOW it, so
       it is a conservative high bound and needs no rounding. Captured first:
       everything after this clobbers registers, not rsp. }
-    'mov r8, rsp',
-    'mov r9, @glob', BSS_TLS_MAIN,
+    'mov r8, rsp']);
+  EmitTlsMainR9;
+  EmitAsmX64([
     { getrlimit(RLIMIT_STACK, &scratch) -- the KERNEL's own statement of how far
       down the main stack may grow, which is also how far down it guarantees
       nothing else is mapped (mmap_base is placed below that gap). Deriving the
@@ -2159,18 +2175,23 @@ begin
     'mov [r9], r9',                            { slot 0 = self }
     'mov [r9+%], rax', 8 * TLS_SLOT_TID,
     'mov [r9+%], r10', 8 * TLS_SLOT_STACK_LO,
-    'mov [r9+%], r8', 8 * TLS_SLOT_STACK_HI,   { HI LAST -- see the slot map }
-    'mov rsi, r9',
-    'mov edi, 0x1001',                       { ARCH_SET_GS -- NOT fs, see below }
-    'mov eax, 158',                         { arch_prctl }
-    'syscall'
+    'mov [r9+%], r8', 8 * TLS_SLOT_STACK_HI   { HI LAST -- see the slot map }
   ]);
-  if BSS_TLS_IMAGE >= 0 then
+  if not KernelLibc then                     { there, ld.so already put the block under fs }
     EmitAsmX64([
-      'mov r9, @glob', BSS_TLS_MAIN,
+      'mov rsi, r9',
+      'mov edi, 0x1001',                       { ARCH_SET_GS -- NOT fs, see below }
+      'mov eax, 158',                         { arch_prctl }
+      'syscall'
+    ]);
+  if BSS_TLS_IMAGE >= 0 then
+  begin
+    EmitTlsMainR9;
+    EmitAsmX64([
       'mov rax, @glob', BSS_TLS_IMAGE,
       'mov [r9+%], rax', 8 * TLS_SLOT_INIT_IMAGE
     ]);
+  end;
 end;
 
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);
@@ -4503,7 +4524,7 @@ begin
       IR_TLSBASE reads. Guarded by TlsMainInstalled and not by a runtime test:
       with --emit-obj/--shared nothing installed a base and this load takes
       address 0 rather than returning one. }
-    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(0);
+    EmitB(TlsSegPrefix); EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitI32(TlsSegDispBias);
     EmitAsmX64([
       'mov rcx, rsp',
       'cmp rcx, [rsi+%]', 8 * TLS_SLOT_STACK_LO,

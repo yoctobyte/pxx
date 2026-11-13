@@ -686,3 +686,27 @@ direct route, and it would be withdrawn with it.
   gives one CPU, mlock* answer 0, unshare(0) answers 0.
 - test-minix: 55 programs (+c_pty_family, c_crtl_busybox_394_gaps,
   c_crtl_sched_and_fs_ioctls, c_crtl_telnet_and_prctl).
+
+### 2026-11-13: `--os=openbsd --rtl-libc` (both modes for OpenBSD, as the owner asked)
+
+- OpenBSD 8.0's libc exports no syscall(2), so the translator's bottom
+  (`ObSys`) dispatches each OpenBSD number to libc's wrapper of that name
+  (142, generated from the OB_ constants, every one checked present in
+  libc.so.104.0). Differences from the raw calls: sigprocmask/sigpending/
+  sigsuspend (pointers vs values), getcwd (returns the buffer), fork (no rdx).
+  errno through __errno(), cleared first.
+- TLS: libc's tib is at fs:0 and its fields overlap pxx slots 1..8, so pxx
+  cannot own fs. The pxx block is the executable's PT_TLS (measured: ld.so
+  puts an 8-byte PT_TLS at fs-8, static and dynamic alike; OpenBSD's cc uses
+  emulated TLS by default, so measure with -fno-emulated-tls). Every TLS
+  displacement gets -span (`TlsSegDispBias`): AsmEncAbsRM kind 5 under a gs:
+  operand, and the four raw sites in ir_codegen.inc.
+- ELF: interp /usr/libexec/ld.so, PT_TLS in the pin-table slot, PT_PHDR
+  (without it AT_PHDR is 0 and ld.so faults at address 0 right after
+  "ld.so loading").
+- 57/57 of test-openbsd's non-thread lists pass on the first full run, plus
+  env/argv and -g: `make test-openbsd-libc`.
+- Next: threads (libc's __tfork_thread + ld.so's _dl_allocate_tib, or
+  pthread_create), arm64, then whether libc becomes OpenBSD's default.
+- The pinsyscalls-vs-rt_sigreturn decide ticket is answered both ways now:
+  static pins the one translator syscall, libc mode pins none.

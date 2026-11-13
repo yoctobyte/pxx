@@ -11087,6 +11087,46 @@ test-openbsd: $(COMPILER)
 	    tools/expect_same.sh openbsd_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/openbsd.sh run $$d/fe.ob 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
 	  done; echo "test-openbsd: OK"
 
+# --os=openbsd --rtl-libc (EXPERIMENTAL): the same translator, but its last
+# step calls OpenBSD's libc (libc.so.104.0, OpenBSD 8.0) instead of the
+# kernel, so the program is a dynamic executable on ld.so and makes no
+# system calls of its own. test-openbsd's lists minus the threads (refused
+# in this mode for now) and the pty-console row.
+test-openbsd-libc: $(COMPILER)
+	@d=$(TESTTMP)/os_openbsd_libc_run26; mkdir -p $$d && \
+	  tools/vm/openbsd.sh start && \
+	  for t in test/test_rtl_libc_torture.pas test/test_signal_pc_rewrite.pas \
+	            test/test_signal_sp_rewrite.pas test/test_stack_overflow_raise.pas \
+	            test/test_float_exception_mask.pas test/lib_signals_fpc.pas test/test_signal_num.pas \
+	            test/test_signal_bss_alias.pas test/test_signal_handler_callback_b336.pas \
+	            test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas \
+	            test/test_scheduler.pas test/test_async.pas test/test_timer.pas test/test_asyncecho.pas \
+	            test/test_asyncudp.pas test/lib_net.pas test/lib_sockets.pas test/lib_net6.pas \
+	            test/lib_net_timeout.pas test/lib_asyncnet6.pas test/lib_dns_tcp.pas \
+	            test/lib_dns_async.pas test/lib_http_serve.pas test/lib_platform_net_sockopt.pas \
+	            test/lib_sock_closedpeer.pas test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py \
+	            test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c test/c_crtl_select.c \
+	            test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
+	            test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c \
+	            test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c \
+	            test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c \
+	            test/c_crtl_bits_and_fdatasync.c test/test_nilpy_file_oserrors.npy \
+	            test/test_nilpy_os_access_pathsep_gethostname.npy test/test_nilpy_subprocess_pipes.npy \
+	            test/test_nilpy_time_and_listdir.npy test/c_crtl_sock_flags.c \
+	            test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c test/csocket_loopback_b88.c \
+	            test/lib_mimic_socket.npy test/c_termios_no_tty.c test/c_pty_family.c test/cisatty.c \
+	            test/lib_termio_isatty.pas; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=openbsd --rtl-libc $$t $$d/$$n.ob >/dev/null && \
+	    tools/expect_same.sh openbsd_libc_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/$$n.ob one 2>&1; echo exit=$$?)" "$$(cd $$d && cp $$n.lx pxxbin && PXX_TEST_PROBE=probe-value ./pxxbin one 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=openbsd --rtl-libc test/test_os_env.pas $$d/env.ob >/dev/null && \
+	  cp $$d/env.lx $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value ./pxxbin one two; echo exit=$$?)" && \
+	  tools/expect_same.sh openbsd_libc_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.ob one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
+	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=openbsd --rtl-libc test/fileio.pas $$d/g.ob >/dev/null && \
+	  tools/expect_same.sh openbsd_libc_debug_info "$$(tools/vm/openbsd.sh run $$d/g.ob 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  echo "test-openbsd-libc: OK"
+
 # --os=netbsd (EXPERIMENTAL) on a real NetBSD 11.1 kernel (qemu VM under
 # OVMF, tools/vm/netbsd.sh; the image lives under $PXX_VM_DIR, default
 # /data/vm). NOT in `test`: it needs the VM. Output and exit code must be

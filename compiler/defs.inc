@@ -6779,6 +6779,13 @@ var
     DT_NEEDED and PLT slot with no elfwriter change. -1 = not yet created.
     feature-port-rtl-over-libc }
   RtlOverLibc : Boolean;
+  { --os=openbsd --rtl-libc: the translator's bottom calls libc's wrappers
+    instead of making syscalls (PXX_OBSD_LIBC in obsdabi.pas), and the output
+    is a dynamic executable on ld.so. The pxx TLS block is the executable's
+    PT_TLS, so ld.so places it at fs - TlsLibcSpan (variant II) and libc
+    keeps fs:0 for its own thread block. RtlOverLibc itself is cleared: the
+    Linux syscall(3) thunk is not used. x86-64 only, no --threadsafe yet. }
+  KernelLibc : Boolean;
   { The kernel the output runs on (KERNEL_*), independent of TargetPlatform,
     which picks the RTL's PAL directory. KERNEL_FREEBSD keeps the posix PAL and
     the Linux-ABI RTL unchanged: every kernel entry goes through the same
@@ -9214,6 +9221,23 @@ end;
   OpenBSD binary links no libc to own it. The translator turns
   arch_prctl(ARCH_SET_GS) into __set_tcb, and every gs: access is emitted
   as fs: -- the assembler's `gs:` operands and the hand-written bytes alike. }
+{ --os=openbsd --rtl-libc: the bytes ld.so reserves below fs for the pxx
+  block (its PT_TLS memsz): the block plus the 16-byte rlimit scratch
+  EmitTlsMainInstall uses past its end, 16-aligned so that the variant-II
+  offset roundup(memsz, align) is exactly this. }
+function TlsLibcSpan: Integer;
+begin
+  TlsLibcSpan := (TlsBlockSize + 16 + 15) and (not 15);
+end;
+
+{ What every TLS-segment displacement is shifted by: the block starts at
+  fs - TlsLibcSpan under KernelLibc, at the segment base everywhere else. }
+function TlsSegDispBias: Integer;
+begin
+  if KernelLibc then TlsSegDispBias := -TlsLibcSpan
+  else TlsSegDispBias := 0;
+end;
+
 function TlsSegPrefix: Integer;
 begin
   if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then TlsSegPrefix := $64

@@ -377,7 +377,9 @@ begin
   ResolveSynthImportLibraries;
   roMark := RoRangeCount;
   DynamicInterpOff := DataLen;
-  if TargetArch = TARGET_AARCH64 then
+  if TargetKernel = KERNEL_OPENBSD then
+    DataPutZ('/usr/libexec/ld.so')           { --os=openbsd --rtl-libc }
+  else if TargetArch = TARGET_AARCH64 then
     DataPutZ('/lib/ld-linux-aarch64.so.1')
   else
     DataPutZ('/lib64/ld-linux-x86-64.so.2');
@@ -2387,6 +2389,13 @@ begin
     Inc(phCount, 2);
     noteLen := OB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + 2 * PROG_HEADER_SIZE + noteLen;
+    if KernelLibc then
+    begin
+      { PT_PHDR: OpenBSD's kernel passes AT_PHDR only from this header (Linux
+        computes it), and ld.so reads the executable's headers through it. }
+      Inc(phCount);
+      codeOffset := codeOffset + PROG_HEADER_SIZE;
+    end;
   end
   else if TargetKernel = KERNEL_NETBSD then
   begin
@@ -2452,7 +2461,7 @@ begin
     DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
-    if TargetKernel = KERNEL_OPENBSD then   { past the pin table, written after the data }
+    if (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then   { past the pin table, written after the data }
       dbgFileBase := dbgFileBase + (OB_SYS_MAXSYSCALL - 1) * 8;
     shoff := dbgFileBase + DbgLen;
     padN := (8 - (shoff mod 8)) mod 8;
@@ -2480,6 +2489,13 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
+  if KernelLibc then
+  begin
+    writeU32(f,6);writeU32(f,4);  { PT_PHDR, R -- first, as the spec asks }
+    writeU64(f,ELF_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE);writeU64(f,ImageBase + ELF_HEADER_SIZE);
+    writeU64(f,phCount * PROG_HEADER_SIZE);writeU64(f,phCount * PROG_HEADER_SIZE);writeU64(f,8);
+  end;
   { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
     segment is zero-filled at load, the page pad is real bytes in the file. }
   writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
@@ -2527,6 +2543,18 @@ begin
   end;
   if TargetKernel = KERNEL_OPENBSD then
   begin
+    if KernelLibc then
+    begin
+      { --rtl-libc: no syscalls here to pin (ld.so pins libc's). The slot
+        carries PT_TLS instead: TlsLibcSpan zero bytes, which ld.so places
+        right below fs for every thread -- the pxx block (TlsSegDispBias). }
+      writeU32(f,7);writeU32(f,4);             { PT_TLS, R }
+      writeU64(f,codeOffset + CodeLen);
+      writeU64(f,dataBase);writeU64(f,dataBase);
+      writeU64(f,0);writeU64(f,TlsLibcSpan);writeU64(f,16);
+    end
+    else
+    begin
     { OpenBSD takes this slot for PT_OPENBSD_SYSCALLS (it ignores
       PT_GNU_STACK). The table is written after the data: entries 1..
       OB_SYS_MAXSYSCALL-1, 8 bytes each. }
@@ -2534,6 +2562,7 @@ begin
     writeU64(f,codeOffset + CodeLen + DataFileLen);
     writeU64(f,0);writeU64(f,0);
     writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+    end;
     writeU32(f,PT_OPENBSD_NOBTCFI);writeU32(f,0);   { no branch-target CFI: see the phCount note }
     writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);
   end
@@ -2589,7 +2618,7 @@ begin
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
-  if TargetKernel = KERNEL_OPENBSD then
+  if (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then
   begin
     addr := ObsdPinVA(codeOffset, 'ObRawA');
     for i := 1 to OB_SYS_MAXSYSCALL - 1 do
@@ -2669,6 +2698,13 @@ begin
     Inc(phCount, 2);
     noteLen := OB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + 2 * PROG_HEADER_SIZE + noteLen;
+    if KernelLibc then
+    begin
+      { PT_PHDR: OpenBSD's kernel passes AT_PHDR only from this header (Linux
+        computes it), and ld.so reads the executable's headers through it. }
+      Inc(phCount);
+      codeOffset := codeOffset + PROG_HEADER_SIZE;
+    end;
   end
   else if TargetKernel = KERNEL_NETBSD then
   begin
@@ -2744,7 +2780,7 @@ begin
     DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
-    if TargetKernel = KERNEL_OPENBSD then   { past the pin table, written after the data }
+    if (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then   { past the pin table, written after the data }
       dbgFileBase := dbgFileBase + (OB_SYS_MAXSYSCALL - 1) * 8;
     shoff := dbgFileBase + DbgLen;
     padN := (8 - (shoff mod 8)) mod 8;
@@ -2773,6 +2809,13 @@ begin
     writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
   end;
 
+  if KernelLibc then
+  begin
+    writeU32(f,6);writeU32(f,4);  { PT_PHDR, R -- first, as the spec asks }
+    writeU64(f,ELF_HEADER_SIZE);
+    writeU64(f,ImageBase + ELF_HEADER_SIZE);writeU64(f,ImageBase + ELF_HEADER_SIZE);
+    writeU64(f,phCount * PROG_HEADER_SIZE);writeU64(f,phCount * PROG_HEADER_SIZE);writeU64(f,8);
+  end;
   { PT_LOAD #1 -- headers + code, R+X. p_filesz = p_memsz: nothing in this
     segment is zero-filled at load, the page pad is real bytes in the file. }
   writeU32(f,1);writeU32(f,5);  { PT_LOAD, R+X }
@@ -2820,6 +2863,18 @@ begin
   end;
   if TargetKernel = KERNEL_OPENBSD then
   begin
+    if KernelLibc then
+    begin
+      { --rtl-libc: no syscalls here to pin (ld.so pins libc's). The slot
+        carries PT_TLS instead: TlsLibcSpan zero bytes, which ld.so places
+        right below fs for every thread -- the pxx block (TlsSegDispBias). }
+      writeU32(f,7);writeU32(f,4);             { PT_TLS, R }
+      writeU64(f,codeOffset + CodeLen);
+      writeU64(f,dataBase);writeU64(f,dataBase);
+      writeU64(f,0);writeU64(f,TlsLibcSpan);writeU64(f,16);
+    end
+    else
+    begin
     { OpenBSD takes this slot for PT_OPENBSD_SYSCALLS (it ignores
       PT_GNU_STACK). The table is written after the data: entries 1..
       OB_SYS_MAXSYSCALL-1, 8 bytes each. }
@@ -2827,6 +2882,7 @@ begin
     writeU64(f,codeOffset + CodeLen + DataFileLen);
     writeU64(f,0);writeU64(f,0);
     writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+    end;
     writeU32(f,PT_OPENBSD_NOBTCFI);writeU32(f,0);   { no branch-target CFI: see the phCount note }
     writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);
   end
@@ -2882,7 +2938,7 @@ begin
 
   if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
-  if TargetKernel = KERNEL_OPENBSD then
+  if (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then
   begin
     addr := ObsdPinVA(codeOffset, 'ObRawA');
     for i := 1 to OB_SYS_MAXSYSCALL - 1 do

@@ -226,6 +226,173 @@ end;
 { The inst words: dsb nsh; isb; ldaxr w11, [x20]; stxr w12, w10, [x20];
   mov sp, x21; sub sp, sp, #80; mov x0, sp. }
 {$else}
+{$ifdef PXX_OBSD_LIBC}
+{ --os=openbsd --rtl-libc: no kernel entry in this program at all. Each
+  OpenBSD call goes to libc's wrapper of the same name (OpenBSD 8.0's
+  libc.so.104.0; ld.so pins libc's syscalls, so pinsyscalls is satisfied by
+  construction). Every wrapper takes the raw call's arguments, except the
+  three signal-mask calls, which take pointers in libc and values in the
+  kernel; ObSys converts those. Threads are refused at compile time for now:
+  OpenBSD threads in a libc program are libc's, not __tfork's. }
+function Lc_exit(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '_exit';
+function Lc_fork(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fork';
+function Lc_read(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'read';
+function Lc_write(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'write';
+function Lc_close(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'close';
+function Lc_getentropy(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getentropy';
+function Lc_link(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'link';
+function Lc_unlink(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'unlink';
+function Lc_wait4(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'wait4';
+function Lc_chdir(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'chdir';
+function Lc_fchdir(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fchdir';
+function Lc_mknod(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mknod';
+function Lc_chmod(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'chmod';
+function Lc_chown(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'chown';
+function Lc_getrusage(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getrusage';
+function Lc_getpid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getpid';
+function Lc_setuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setuid';
+function Lc_getuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getuid';
+function Lc_geteuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'geteuid';
+function Lc_recvmsg(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'recvmsg';
+function Lc_sendmsg(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sendmsg';
+function Lc_recvfrom(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'recvfrom';
+function Lc_accept(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'accept';
+function Lc_getpeername(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getpeername';
+function Lc_getsockname(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getsockname';
+function Lc_sync(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sync';
+function Lc_getppid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getppid';
+function Lc_dup(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'dup';
+function Lc_fstatat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fstatat';
+function Lc_getegid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getegid';
+function Lc_sigaction(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sigaction';
+function Lc_getgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getgid';
+function Lc_sigprocmask(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sigprocmask';
+function Lc_mmap(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mmap';
+function Lc_sigpending(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sigpending';
+function Lc_fstat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fstat';
+function Lc_ioctl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'ioctl';
+function Lc_symlink(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'symlink';
+function Lc_readlink(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'readlink';
+function Lc_execve(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'execve';
+function Lc_umask(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'umask';
+function Lc_statfs(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'statfs';
+function Lc_fstatfs(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fstatfs';
+function Lc_gettimeofday(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'gettimeofday';
+function Lc_setitimer(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setitimer';
+function Lc_getitimer(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getitimer';
+function Lc_select(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'select';
+function Lc_kevent(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'kevent';
+function Lc_munmap(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'munmap';
+function Lc_mprotect(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mprotect';
+function Lc_madvise(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'madvise';
+function Lc_utimes(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'utimes';
+function Lc_getgroups(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getgroups';
+function Lc_setgroups(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setgroups';
+function Lc_getpgrp(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getpgrp';
+function Lc_setpgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setpgid';
+function Lc_futex(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'futex';
+function Lc_utimensat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'utimensat';
+function Lc_futimens(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'futimens';
+function Lc_clock_gettime(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'clock_gettime';
+function Lc_clock_settime(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'clock_settime';
+function Lc_clock_getres(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'clock_getres';
+function Lc_dup2(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'dup2';
+function Lc_nanosleep(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'nanosleep';
+function Lc_fcntl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fcntl';
+function Lc_accept4(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'accept4';
+function Lc_fsync(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fsync';
+function Lc_setpriority(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setpriority';
+function Lc_socket(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'socket';
+function Lc_connect(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'connect';
+function Lc_getdents(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getdents';
+function Lc_getpriority(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getpriority';
+function Lc_pipe2(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'pipe2';
+function Lc_dup3(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'dup3';
+function Lc_bind(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'bind';
+function Lc_setsockopt(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setsockopt';
+function Lc_listen(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'listen';
+function Lc_ppoll(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'ppoll';
+function Lc_pselect(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'pselect';
+function Lc_sigsuspend(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sigsuspend';
+function Lc_getsockopt(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getsockopt';
+function Lc_thrkill(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'thrkill';
+function Lc_readv(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'readv';
+function Lc_writev(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'writev';
+function Lc_kill(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'kill';
+function Lc_fchown(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fchown';
+function Lc_fchmod(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fchmod';
+function Lc_setreuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setreuid';
+function Lc_setregid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setregid';
+function Lc_rename(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'rename';
+function Lc_flock(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'flock';
+function Lc_sendto(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sendto';
+function Lc_shutdown(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'shutdown';
+function Lc_socketpair(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'socketpair';
+function Lc_mkdir(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mkdir';
+function Lc_rmdir(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'rmdir';
+function Lc_getthrname(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getthrname';
+function Lc_setthrname(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setthrname';
+function Lc_setsid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setsid';
+function Lc_lseek(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'lseek';
+function Lc_truncate(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'truncate';
+function Lc_ftruncate(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'ftruncate';
+function Lc_pread(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'pread';
+function Lc_pwrite(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'pwrite';
+function Lc_preadv(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'preadv';
+function Lc_pwritev(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'pwritev';
+function Lc_setgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setgid';
+function Lc_getrlimit(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getrlimit';
+function Lc_setrlimit(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setrlimit';
+function Lc_sysctl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sysctl';
+function Lc_mlock(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mlock';
+function Lc_munlock(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'munlock';
+function Lc_getpgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getpgid';
+function Lc_poll(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'poll';
+function Lc_lchown(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'lchown';
+function Lc_getsid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getsid';
+function Lc_kqueue(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'kqueue';
+function Lc_mlockall(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mlockall';
+function Lc_munlockall(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'munlockall';
+function Lc_getresuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getresuid';
+function Lc_setresuid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setresuid';
+function Lc_getresgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getresgid';
+function Lc_setresgid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setresgid';
+function Lc_sigaltstack(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sigaltstack';
+function Lc_sched_yield(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'sched_yield';
+function Lc_getthrid(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getthrid';
+function Lc_threxit(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '__threxit';
+function Lc_thrsigdivert(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '__thrsigdivert';
+function Lc_getcwd(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getcwd';
+function Lc_faccessat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'faccessat';
+function Lc_fchmodat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fchmodat';
+function Lc_fchownat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fchownat';
+function Lc_linkat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'linkat';
+function Lc_mkdirat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mkdirat';
+function Lc_mknodat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mknodat';
+function Lc_openat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'openat';
+function Lc_readlinkat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'readlinkat';
+function Lc_renameat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'renameat';
+function Lc_symlinkat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'symlinkat';
+function Lc_unlinkat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'unlinkat';
+function Lc_set_tcb(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '__set_tcb';
+function Lc_get_tcb(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '__get_tcb';
+function Lc_errno: Int64; cdecl; external 'libc.so.104.0' name '__errno';
+
+function ObTforkA(param, psize, cont: Int64): Int64;
+begin
+  Result := -78;                                      { OpenBSD ENOSYS }
+end;
+
+procedure ObThreadExitA(ctid, lock, top, raw: Int64);
+begin
+  Lc_exit(0, 0, 0, 0, 0, 0);
+end;
+
+function ObRawA(args: Pointer): Int64;
+begin
+  Result := -78;
+end;
+{$else}
 { The ONE kernel entry, and the one address the pin table names. args ->
   [nr, a0..a5, rdx-out, cf-out]. OpenBSD reports an error with CF set and the
   positive errno in rax; the sbb/xor/sub trio negates rax exactly then. }
@@ -333,10 +500,184 @@ obte_got:
   call obte_raw
 end;
 {$endif}
+{$endif}
 
 var
   ObRdx: Int64;
 
+{$ifdef PXX_OBSD_LIBC}
+{ The raw call's contract (result, or -OpenBSD errno) over libc's (-1 and
+  errno). errno is cleared first: a few calls (getpriority) may answer -1. }
+function ObSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
+var r, m, o: Int64; e: PInteger;
+begin
+  ObRdx := 0;
+  e := PInteger(Lc_errno);
+  e^ := 0;
+  case nr of
+    OB_SIGPROCMASK: begin                             { kernel: mask by value, old mask returned }
+                      m := a1; o := 0;
+                      r := Int64(LongInt(Lc_sigprocmask(a0, Int64(@m), Int64(@o), 0, 0, 0)));
+                      if r = 0 then r := o and $FFFFFFFF;
+                    end;
+    OB_SIGPENDING:  begin
+                      o := 0;
+                      r := Int64(LongInt(Lc_sigpending(Int64(@o), 0, 0, 0, 0, 0)));
+                      if r = 0 then r := o and $FFFFFFFF;
+                    end;
+    OB_SIGSUSPEND:  begin
+                      m := a0;
+                      r := Int64(LongInt(Lc_sigsuspend(Int64(@m), 0, 0, 0, 0, 0)));
+                    end;
+    OB_GETCWD:      begin                             { libc answers the buffer, or NULL }
+                      r := Lc_getcwd(a0, a1, 0, 0, 0, 0);
+                      if r = 0 then r := -1 else r := 0;
+                    end;
+    OB_EXIT: r := Int64(LongInt(Lc_exit(a0, a1, a2, a3, a4, a5)));
+    OB_FORK: r := Int64(LongInt(Lc_fork(a0, a1, a2, a3, a4, a5)));
+    OB_READ: r := Lc_read(a0, a1, a2, a3, a4, a5);
+    OB_WRITE: r := Lc_write(a0, a1, a2, a3, a4, a5);
+    OB_CLOSE: r := Int64(LongInt(Lc_close(a0, a1, a2, a3, a4, a5)));
+    OB_GETENTROPY: r := Int64(LongInt(Lc_getentropy(a0, a1, a2, a3, a4, a5)));
+    OB_LINK: r := Int64(LongInt(Lc_link(a0, a1, a2, a3, a4, a5)));
+    OB_UNLINK: r := Int64(LongInt(Lc_unlink(a0, a1, a2, a3, a4, a5)));
+    OB_WAIT4: r := Int64(LongInt(Lc_wait4(a0, a1, a2, a3, a4, a5)));
+    OB_CHDIR: r := Int64(LongInt(Lc_chdir(a0, a1, a2, a3, a4, a5)));
+    OB_FCHDIR: r := Int64(LongInt(Lc_fchdir(a0, a1, a2, a3, a4, a5)));
+    OB_MKNOD: r := Int64(LongInt(Lc_mknod(a0, a1, a2, a3, a4, a5)));
+    OB_CHMOD: r := Int64(LongInt(Lc_chmod(a0, a1, a2, a3, a4, a5)));
+    OB_CHOWN: r := Int64(LongInt(Lc_chown(a0, a1, a2, a3, a4, a5)));
+    OB_GETRUSAGE: r := Int64(LongInt(Lc_getrusage(a0, a1, a2, a3, a4, a5)));
+    OB_GETPID: r := Int64(LongInt(Lc_getpid(a0, a1, a2, a3, a4, a5)));
+    OB_SETUID: r := Int64(LongInt(Lc_setuid(a0, a1, a2, a3, a4, a5)));
+    OB_GETUID: r := Int64(LongInt(Lc_getuid(a0, a1, a2, a3, a4, a5)));
+    OB_GETEUID: r := Int64(LongInt(Lc_geteuid(a0, a1, a2, a3, a4, a5)));
+    OB_RECVMSG: r := Lc_recvmsg(a0, a1, a2, a3, a4, a5);
+    OB_SENDMSG: r := Lc_sendmsg(a0, a1, a2, a3, a4, a5);
+    OB_RECVFROM: r := Lc_recvfrom(a0, a1, a2, a3, a4, a5);
+    OB_ACCEPT: r := Int64(LongInt(Lc_accept(a0, a1, a2, a3, a4, a5)));
+    OB_GETPEERNAME: r := Int64(LongInt(Lc_getpeername(a0, a1, a2, a3, a4, a5)));
+    OB_GETSOCKNAME: r := Int64(LongInt(Lc_getsockname(a0, a1, a2, a3, a4, a5)));
+    OB_SYNC: r := Int64(LongInt(Lc_sync(a0, a1, a2, a3, a4, a5)));
+    OB_GETPPID: r := Int64(LongInt(Lc_getppid(a0, a1, a2, a3, a4, a5)));
+    OB_DUP: r := Int64(LongInt(Lc_dup(a0, a1, a2, a3, a4, a5)));
+    OB_FSTATAT: r := Int64(LongInt(Lc_fstatat(a0, a1, a2, a3, a4, a5)));
+    OB_GETEGID: r := Int64(LongInt(Lc_getegid(a0, a1, a2, a3, a4, a5)));
+    OB_SIGACTION: r := Int64(LongInt(Lc_sigaction(a0, a1, a2, a3, a4, a5)));
+    OB_GETGID: r := Int64(LongInt(Lc_getgid(a0, a1, a2, a3, a4, a5)));
+    OB_MMAP: r := Lc_mmap(a0, a1, a2, a3, a4, a5);
+    OB_FSTAT: r := Int64(LongInt(Lc_fstat(a0, a1, a2, a3, a4, a5)));
+    OB_IOCTL: r := Int64(LongInt(Lc_ioctl(a0, a1, a2, a3, a4, a5)));
+    OB_SYMLINK: r := Int64(LongInt(Lc_symlink(a0, a1, a2, a3, a4, a5)));
+    OB_READLINK: r := Lc_readlink(a0, a1, a2, a3, a4, a5);
+    OB_EXECVE: r := Int64(LongInt(Lc_execve(a0, a1, a2, a3, a4, a5)));
+    OB_UMASK: r := Int64(LongInt(Lc_umask(a0, a1, a2, a3, a4, a5)));
+    OB_STATFS: r := Int64(LongInt(Lc_statfs(a0, a1, a2, a3, a4, a5)));
+    OB_FSTATFS: r := Int64(LongInt(Lc_fstatfs(a0, a1, a2, a3, a4, a5)));
+    OB_GETTIMEOFDAY: r := Int64(LongInt(Lc_gettimeofday(a0, a1, a2, a3, a4, a5)));
+    OB_SETITIMER: r := Int64(LongInt(Lc_setitimer(a0, a1, a2, a3, a4, a5)));
+    OB_GETITIMER: r := Int64(LongInt(Lc_getitimer(a0, a1, a2, a3, a4, a5)));
+    OB_SELECT: r := Int64(LongInt(Lc_select(a0, a1, a2, a3, a4, a5)));
+    OB_KEVENT: r := Int64(LongInt(Lc_kevent(a0, a1, a2, a3, a4, a5)));
+    OB_MUNMAP: r := Int64(LongInt(Lc_munmap(a0, a1, a2, a3, a4, a5)));
+    OB_MPROTECT: r := Int64(LongInt(Lc_mprotect(a0, a1, a2, a3, a4, a5)));
+    OB_MADVISE: r := Int64(LongInt(Lc_madvise(a0, a1, a2, a3, a4, a5)));
+    OB_UTIMES: r := Int64(LongInt(Lc_utimes(a0, a1, a2, a3, a4, a5)));
+    OB_GETGROUPS: r := Int64(LongInt(Lc_getgroups(a0, a1, a2, a3, a4, a5)));
+    OB_SETGROUPS: r := Int64(LongInt(Lc_setgroups(a0, a1, a2, a3, a4, a5)));
+    OB_GETPGRP: r := Int64(LongInt(Lc_getpgrp(a0, a1, a2, a3, a4, a5)));
+    OB_SETPGID: r := Int64(LongInt(Lc_setpgid(a0, a1, a2, a3, a4, a5)));
+    OB_FUTEX: r := Int64(LongInt(Lc_futex(a0, a1, a2, a3, a4, a5)));
+    OB_UTIMENSAT: r := Int64(LongInt(Lc_utimensat(a0, a1, a2, a3, a4, a5)));
+    OB_FUTIMENS: r := Int64(LongInt(Lc_futimens(a0, a1, a2, a3, a4, a5)));
+    OB_CLOCK_GETTIME: r := Int64(LongInt(Lc_clock_gettime(a0, a1, a2, a3, a4, a5)));
+    OB_CLOCK_SETTIME: r := Int64(LongInt(Lc_clock_settime(a0, a1, a2, a3, a4, a5)));
+    OB_CLOCK_GETRES: r := Int64(LongInt(Lc_clock_getres(a0, a1, a2, a3, a4, a5)));
+    OB_DUP2: r := Int64(LongInt(Lc_dup2(a0, a1, a2, a3, a4, a5)));
+    OB_NANOSLEEP: r := Int64(LongInt(Lc_nanosleep(a0, a1, a2, a3, a4, a5)));
+    OB_FCNTL: r := Int64(LongInt(Lc_fcntl(a0, a1, a2, a3, a4, a5)));
+    OB_ACCEPT4: r := Int64(LongInt(Lc_accept4(a0, a1, a2, a3, a4, a5)));
+    OB_FSYNC: r := Int64(LongInt(Lc_fsync(a0, a1, a2, a3, a4, a5)));
+    OB_SETPRIORITY: r := Int64(LongInt(Lc_setpriority(a0, a1, a2, a3, a4, a5)));
+    OB_SOCKET: r := Int64(LongInt(Lc_socket(a0, a1, a2, a3, a4, a5)));
+    OB_CONNECT: r := Int64(LongInt(Lc_connect(a0, a1, a2, a3, a4, a5)));
+    OB_GETDENTS: r := Int64(LongInt(Lc_getdents(a0, a1, a2, a3, a4, a5)));
+    OB_GETPRIORITY: r := Int64(LongInt(Lc_getpriority(a0, a1, a2, a3, a4, a5)));
+    OB_PIPE2: r := Int64(LongInt(Lc_pipe2(a0, a1, a2, a3, a4, a5)));
+    OB_DUP3: r := Int64(LongInt(Lc_dup3(a0, a1, a2, a3, a4, a5)));
+    OB_BIND: r := Int64(LongInt(Lc_bind(a0, a1, a2, a3, a4, a5)));
+    OB_SETSOCKOPT: r := Int64(LongInt(Lc_setsockopt(a0, a1, a2, a3, a4, a5)));
+    OB_LISTEN: r := Int64(LongInt(Lc_listen(a0, a1, a2, a3, a4, a5)));
+    OB_PPOLL: r := Int64(LongInt(Lc_ppoll(a0, a1, a2, a3, a4, a5)));
+    OB_PSELECT: r := Int64(LongInt(Lc_pselect(a0, a1, a2, a3, a4, a5)));
+    OB_GETSOCKOPT: r := Int64(LongInt(Lc_getsockopt(a0, a1, a2, a3, a4, a5)));
+    OB_THRKILL: r := Int64(LongInt(Lc_thrkill(a0, a1, a2, a3, a4, a5)));
+    OB_READV: r := Lc_readv(a0, a1, a2, a3, a4, a5);
+    OB_WRITEV: r := Lc_writev(a0, a1, a2, a3, a4, a5);
+    OB_KILL: r := Int64(LongInt(Lc_kill(a0, a1, a2, a3, a4, a5)));
+    OB_FCHOWN: r := Int64(LongInt(Lc_fchown(a0, a1, a2, a3, a4, a5)));
+    OB_FCHMOD: r := Int64(LongInt(Lc_fchmod(a0, a1, a2, a3, a4, a5)));
+    OB_SETREUID: r := Int64(LongInt(Lc_setreuid(a0, a1, a2, a3, a4, a5)));
+    OB_SETREGID: r := Int64(LongInt(Lc_setregid(a0, a1, a2, a3, a4, a5)));
+    OB_RENAME: r := Int64(LongInt(Lc_rename(a0, a1, a2, a3, a4, a5)));
+    OB_FLOCK: r := Int64(LongInt(Lc_flock(a0, a1, a2, a3, a4, a5)));
+    OB_SENDTO: r := Lc_sendto(a0, a1, a2, a3, a4, a5);
+    OB_SHUTDOWN: r := Int64(LongInt(Lc_shutdown(a0, a1, a2, a3, a4, a5)));
+    OB_SOCKETPAIR: r := Int64(LongInt(Lc_socketpair(a0, a1, a2, a3, a4, a5)));
+    OB_MKDIR: r := Int64(LongInt(Lc_mkdir(a0, a1, a2, a3, a4, a5)));
+    OB_RMDIR: r := Int64(LongInt(Lc_rmdir(a0, a1, a2, a3, a4, a5)));
+    OB_GETTHRNAME: r := Int64(LongInt(Lc_getthrname(a0, a1, a2, a3, a4, a5)));
+    OB_SETTHRNAME: r := Int64(LongInt(Lc_setthrname(a0, a1, a2, a3, a4, a5)));
+    OB_SETSID: r := Int64(LongInt(Lc_setsid(a0, a1, a2, a3, a4, a5)));
+    OB_LSEEK: r := Lc_lseek(a0, a1, a2, a3, a4, a5);
+    OB_TRUNCATE: r := Int64(LongInt(Lc_truncate(a0, a1, a2, a3, a4, a5)));
+    OB_FTRUNCATE: r := Int64(LongInt(Lc_ftruncate(a0, a1, a2, a3, a4, a5)));
+    OB_PREAD: r := Lc_pread(a0, a1, a2, a3, a4, a5);
+    OB_PWRITE: r := Lc_pwrite(a0, a1, a2, a3, a4, a5);
+    OB_PREADV: r := Lc_preadv(a0, a1, a2, a3, a4, a5);
+    OB_PWRITEV: r := Lc_pwritev(a0, a1, a2, a3, a4, a5);
+    OB_SETGID: r := Int64(LongInt(Lc_setgid(a0, a1, a2, a3, a4, a5)));
+    OB_GETRLIMIT: r := Int64(LongInt(Lc_getrlimit(a0, a1, a2, a3, a4, a5)));
+    OB_SETRLIMIT: r := Int64(LongInt(Lc_setrlimit(a0, a1, a2, a3, a4, a5)));
+    OB_SYSCTL: r := Int64(LongInt(Lc_sysctl(a0, a1, a2, a3, a4, a5)));
+    OB_MLOCK: r := Int64(LongInt(Lc_mlock(a0, a1, a2, a3, a4, a5)));
+    OB_MUNLOCK: r := Int64(LongInt(Lc_munlock(a0, a1, a2, a3, a4, a5)));
+    OB_GETPGID: r := Int64(LongInt(Lc_getpgid(a0, a1, a2, a3, a4, a5)));
+    OB_POLL: r := Int64(LongInt(Lc_poll(a0, a1, a2, a3, a4, a5)));
+    OB_LCHOWN: r := Int64(LongInt(Lc_lchown(a0, a1, a2, a3, a4, a5)));
+    OB_GETSID: r := Int64(LongInt(Lc_getsid(a0, a1, a2, a3, a4, a5)));
+    OB_KQUEUE: r := Int64(LongInt(Lc_kqueue(a0, a1, a2, a3, a4, a5)));
+    OB_MLOCKALL: r := Int64(LongInt(Lc_mlockall(a0, a1, a2, a3, a4, a5)));
+    OB_MUNLOCKALL: r := Int64(LongInt(Lc_munlockall(a0, a1, a2, a3, a4, a5)));
+    OB_GETRESUID: r := Int64(LongInt(Lc_getresuid(a0, a1, a2, a3, a4, a5)));
+    OB_SETRESUID: r := Int64(LongInt(Lc_setresuid(a0, a1, a2, a3, a4, a5)));
+    OB_GETRESGID: r := Int64(LongInt(Lc_getresgid(a0, a1, a2, a3, a4, a5)));
+    OB_SETRESGID: r := Int64(LongInt(Lc_setresgid(a0, a1, a2, a3, a4, a5)));
+    OB_SIGALTSTACK: r := Int64(LongInt(Lc_sigaltstack(a0, a1, a2, a3, a4, a5)));
+    OB_SCHED_YIELD: r := Int64(LongInt(Lc_sched_yield(a0, a1, a2, a3, a4, a5)));
+    OB_GETTHRID: r := Int64(LongInt(Lc_getthrid(a0, a1, a2, a3, a4, a5)));
+    OB_THREXIT: r := Int64(LongInt(Lc_threxit(a0, a1, a2, a3, a4, a5)));
+    OB_THRSIGDIVERT: r := Int64(LongInt(Lc_thrsigdivert(a0, a1, a2, a3, a4, a5)));
+    OB_FACCESSAT: r := Int64(LongInt(Lc_faccessat(a0, a1, a2, a3, a4, a5)));
+    OB_FCHMODAT: r := Int64(LongInt(Lc_fchmodat(a0, a1, a2, a3, a4, a5)));
+    OB_FCHOWNAT: r := Int64(LongInt(Lc_fchownat(a0, a1, a2, a3, a4, a5)));
+    OB_LINKAT: r := Int64(LongInt(Lc_linkat(a0, a1, a2, a3, a4, a5)));
+    OB_MKDIRAT: r := Int64(LongInt(Lc_mkdirat(a0, a1, a2, a3, a4, a5)));
+    OB_MKNODAT: r := Int64(LongInt(Lc_mknodat(a0, a1, a2, a3, a4, a5)));
+    OB_OPENAT: r := Int64(LongInt(Lc_openat(a0, a1, a2, a3, a4, a5)));
+    OB_READLINKAT: r := Lc_readlinkat(a0, a1, a2, a3, a4, a5);
+    OB_RENAMEAT: r := Int64(LongInt(Lc_renameat(a0, a1, a2, a3, a4, a5)));
+    OB_SYMLINKAT: r := Int64(LongInt(Lc_symlinkat(a0, a1, a2, a3, a4, a5)));
+    OB_UNLINKAT: r := Int64(LongInt(Lc_unlinkat(a0, a1, a2, a3, a4, a5)));
+    OB_SET_TCB: r := Int64(LongInt(Lc_set_tcb(a0, a1, a2, a3, a4, a5)));
+    OB_GET_TCB: r := Lc_get_tcb(a0, a1, a2, a3, a4, a5);
+  else
+    r := -1; e^ := 78;                                { ENOSYS }
+  end;
+  if (r = -1) and (e^ <> 0) then r := -e^;
+  Result := r;
+end;
+{$else}
 function ObSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 var a: array[0..8] of Int64;
 begin
@@ -345,6 +686,7 @@ begin
   Result := ObRawA(@a[0]);
   ObRdx := a[7];
 end;
+{$endif}
 
 { -OpenBSD errno -> -Linux errno; anything else unchanged. }
 function Lx(r: Int64): Int64;

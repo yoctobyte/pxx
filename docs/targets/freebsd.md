@@ -396,6 +396,40 @@ the stock `miniroot80.img` installed unattended into
 in `tools/vm/openbsd.sh`) against the Linux aarch64 build under `qemu-aarch64`.
 It passes.
 
+### `--os=openbsd --rtl-libc` (experimental): through libc
+
+OpenBSD's supported interface is libc, not the system calls. With
+`--rtl-libc`, the translator above still turns each Linux call into the
+OpenBSD one, but its last step calls libc's function of the same name
+(`read`, `openat`, `kevent`, ... 142 of them) instead of executing `syscall`.
+The output is an ordinary dynamic executable:
+
+- `PT_INTERP` is `/usr/libexec/ld.so` and `DT_NEEDED` is `libc.so.104.0`
+  (OpenBSD 8.0). OpenBSD bumps libc's major number when its ABI changes and
+  expects programs to be rebuilt; a binary for one release is not promised to
+  run on the next. All imports are bound at load time (`GLOB_DAT`, no PLT).
+- No pin table: ld.so pins libc's system calls, and the program makes none.
+  (One raw `syscall` byte pair remains, the Linux `rt_sigreturn` stub, which
+  is never reached on OpenBSD; the static build carries it too.)
+- A `PT_PHDR` header: OpenBSD's kernel gives ld.so the program headers'
+  address only through it.
+- libc owns `fs` (its thread block is at `fs:0`, errno at `fs:32`). pxx's TLS
+  block is the executable's `PT_TLS` instead, so ld.so places it right below
+  `fs`, and every pxx TLS access is `fs:[slot - span]`, where span is the
+  block size rounded to 16 (`TlsSegDispBias` in `defs.inc`). The main-thread
+  install takes the block from `fs:0 - span` and makes no `__set_tcb` call.
+- errno comes from `__errno()`, cleared before each call so a legitimate -1
+  (getpriority) is not taken for an error. `sigprocmask`, `sigpending` and
+  `sigsuspend` take pointers in libc and values in the kernel; the
+  translator converts them.
+
+x86-64 only, and `--threadsafe` is refused for now: threads in a libc
+program must be libc's (`__tfork_thread` with a thread block ld.so
+allocates), which is the next step.
+
+`make test-openbsd-libc` runs test-openbsd's lists without the threads
+(57 programs, plus the environment and `-g` legs). It passes.
+
 ### `--os=netbsd` (experimental)
 
 The FreeBSD design again: the program is built against Linux, and

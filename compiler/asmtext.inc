@@ -250,11 +250,15 @@ end;
   `gs:[8*k]` thread-block slots address memory this way, relative to the
   segment base and with nothing to relocate. kind 3 = glob (BSS), 4 = data. The r/m form
   the atomic mutex slot and zeroing store use ([@glob]). }
+var
+  AsmSegTls: Boolean;   { this line's operand carries the TLS segment (gs:) }
+
 procedure AsmEncAbsRM(regField, kind, off: Integer);
 begin
   EncB(((regField and 7) shl 3) or 4);
   EncB($25);
-  if kind = 5 then EncI32(off)
+  if (kind = 5) and AsmSegTls then EncI32(off + TlsSegDispBias)   { fs - span under --os=openbsd --rtl-libc }
+  else if kind = 5 then EncI32(off)
   else if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
 end;
 
@@ -528,12 +532,14 @@ begin
     and the operand is then parsed without it, so every form that takes memory
     takes a segment for free. One per line; the bytes are what `mov rax,
     gs:[%]` has always been by hand: 65 48 8B 04 25 disp32. }
+  AsmSegTls := False;
   if haveOps then
   begin
     k0 := AsmTextSegAt(rest);
     if k0 > 0 then
     begin
-      if AsmTextLower(rest[k0]) = 'g' then EncB(TlsSegPrefix) else EncB($64);   { gs = the TLS block's segment (fs under --os=openbsd) }
+      AsmSegTls := AsmTextLower(rest[k0]) = 'g';
+      if AsmSegTls then EncB(TlsSegPrefix) else EncB($64);   { gs = the TLS block's segment (fs under --os=openbsd) }
       rest := AsmTextSlice(rest, 1, k0 - 1) + AsmTextSlice(rest, k0 + 3, Length(rest) - k0 - 2);
     end;
   end;

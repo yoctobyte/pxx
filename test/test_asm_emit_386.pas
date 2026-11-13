@@ -165,6 +165,11 @@ begin
   Result := $65;
 end;
 
+function TlsSegDispBias: Integer;   { 0: no --os=openbsd --rtl-libc in the harness }
+begin
+  Result := 0;
+end;
+
 {$include ../compiler/rel8.inc}   { CheckRel8: the assembler's short-jump range check }
 {$include ../compiler/x64enc.inc}
 {$include ../compiler/asmtext.inc}

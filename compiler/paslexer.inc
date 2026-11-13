@@ -1266,6 +1266,11 @@ begin
   begin
     name := 'PXX_OS_OPENBSD';
     PasDefine(name);
+    if KernelLibc then
+    begin
+      name := 'PXX_OBSD_LIBC';
+      PasDefine(name);
+    end;
   end;
 end;
 

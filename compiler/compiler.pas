@@ -1579,6 +1579,7 @@ begin
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
   RtlOverLibc := False;
+  KernelLibc := False;
   TargetKernel := KERNEL_LINUX;
   FbsdSyscallProcIdx := -1;
   LibcSyscallProcIdx := -1;
@@ -2821,6 +2822,13 @@ begin
   { --rv32-rvc: only meaningful once the target is settled }
   if not RvcOptExplicit then RvcOptRequested := TargetPlatform = PLATFORM_ESP;
   RvcOn := RvcOptRequested and (TargetArch = TARGET_RISCV32);
+  { --os=openbsd --rtl-libc, decided before the defines: obsdabi selects its
+    libc bottom with PXX_OBSD_LIBC. The refusals below say the rest. }
+  if RtlOverLibc and (TargetKernel = KERNEL_OPENBSD) and (TargetArch = TARGET_X86_64) then
+  begin
+    KernelLibc := True;
+    RtlOverLibc := False;
+  end;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   { AFTER PasApplyTargetDefines and after the target is settled: the compiler
@@ -3245,8 +3253,15 @@ begin
       ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
     if EmitObjMode then
       ErrorNoPos('--os=' + KernelOsName + ': object output (--emit-obj, .o) is not supported; build an executable');
-    if RtlOverLibc then
-      ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly');
+    if KernelLibc then
+    begin
+      { The translator calls OpenBSD's libc instead of the kernel. }
+      if ThreadSafeMode then
+        ErrorNoPos('--os=openbsd --rtl-libc: --threadsafe is not supported yet');
+    end
+    else if RtlOverLibc then
+      ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly' +
+        ' (only --os=openbsd on x86-64 takes it)');
   end;
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
