@@ -1919,6 +1919,12 @@ begin
         x86-64 case reads through gs. fs selects the GDT TLS entry
         EmitTlsMainInstall or the clone leg pointed at this thread's block. }
       begin
+        if TargetKernel = KERNEL_MINIX then
+        begin
+          { --os=minix: one thread, and no fs to select its block }
+          EmitB($B8); EmitGlobRef(BSS_TLS_MAIN);       { mov eax, block }
+        end
+        else begin
         if IRIVal[node] = 1 then
         begin
           { __pxxTlsFsReload: refresh fs's cached base first }
@@ -1926,6 +1932,7 @@ begin
           EmitB($8E); EmitB($E0);                      { mov fs, eax }
         end;
         EmitB($64); EmitB($A1); EmitI32(0);            { mov eax, fs:[0] }
+        end;
       end;
 
     IR_FRAME:

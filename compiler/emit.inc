@@ -638,7 +638,20 @@ end;
   feature-port-libc-family-openbsd-netbsd-minix }
 procedure EmitInt80;
 begin
-  EmitB($CD); EmitB($80);
+  if KernelTranslated then
+  begin
+    { --os=minix: a 5-byte call to the shared thunk (EmitLibcSyscallThunk's
+      i386 arm) in place of the 2-byte int. Every site was written for int
+      $0x80's contract -- eax = nr, ebx..ebp = arguments, everything but eax
+      kept -- and the thunk keeps it. }
+    if LibcSyscallCallCount >= MAX_CALLFIX then
+      Error('too many --os=' + KernelOsName + ' syscall sites');
+    EmitB($E8);
+    LibcSyscallCallPos[LibcSyscallCallCount] := CodeLen;
+    Inc(LibcSyscallCallCount);
+    EmitI32(0);                                   { patched by EmitLibcSyscallThunk }
+  end
+  else begin EmitB($CD); EmitB($80); end;
 end;
 
 function PICRefsAreRipRelative: Boolean;

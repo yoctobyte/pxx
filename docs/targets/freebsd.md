@@ -6,7 +6,7 @@ order: 62
 # FreeBSD and the BSDs
 
 PXX writes native **FreeBSD/amd64** and **FreeBSD/arm64** executables from
-Pascal, C and Nil Python. OpenBSD, NetBSD and DragonFly BSD are experimental and Minix is not supported yet;
+Pascal, C and Nil Python. OpenBSD, NetBSD, DragonFly BSD and Minix are experimental;
 [their notes](#openbsd-netbsd-and-minix) are at the end of this page.
 
 ```sh
@@ -203,9 +203,10 @@ The work log, with the reasons behind each choice, is in
 
 ## OpenBSD, NetBSD and Minix
 
-Minix is not supported yet. OpenBSD, NetBSD and DragonFly have EXPERIMENTAL
-`--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64) and
-`--os=dragonfly` (since 2026-11-13, x86-64 only). The OpenBSD one may
+OpenBSD, NetBSD, DragonFly and Minix have EXPERIMENTAL
+`--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64),
+`--os=dragonfly` (since 2026-11-13, x86-64 only) and `--os=minix`
+(since 2026-11-13, i386 only, phase 1). The OpenBSD one may
 still be withdrawn in favour of going through libc; the choice has not been
 made.
 
@@ -477,15 +478,54 @@ with TCG) against the Linux aarch64 build under `qemu-aarch64`. It passes.
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.
 NetBSD and Minix have stable system call numbers.
 
-**Minix 3.4** (i386) is measured but not ported. Its POSIX calls are
-messages: `int $0x21` sends a 64-byte message to the process manager or the
-file server and gets the reply back in the same buffer. A static binary with
-no libc can do that (measured on a VM, `tools/vm/minix.sh`), so `--os=minix`
-would follow the same design as the BSD ports. pxx's Linux i386 executables
-load on Minix and die at their first `int $0x80`.
-
 The measurements and the plan are in
 `devdocs/progress/working/feature-port-libc-family-openbsd-netbsd-minix.md`.
+
+### `--os=minix` (experimental, phase 1)
+
+```sh
+./pxx --target=i386 --os=minix hello.pas hello
+```
+
+Minix 3.4 has no system calls in the Unix sense. A process sends a 64-byte
+message to a server (PM for processes and time, VFS for files, VM for
+memory, MIB for sysctl) with `int $0x21` and gets the answer back in the
+same buffer. `compiler/builtin/minixabi.pas` turns each Linux i386 call into
+such a message: under `--os=minix` every `int $0x80` pxx emits is a call to
+the shared thunk, which passes the Linux number and arguments to the
+translator. Each message layout comes from Minix's own libc wrapper for the
+call. The executable needs no note.
+
+What the translator does that Minix does not:
+
+- **getcwd** walks up through `..`, as Minix's libc does (VFS has no getcwd).
+- **`O_DIRECTORY` and `O_NOFOLLOW`** are accepted by Minix and ignored, so
+  the translator checks the file itself; a 0-byte `read` on a directory
+  answers `EISDIR` as Linux does.
+- **`execve`** builds the new process's stack in the caller, as Minix's libc
+  does, and PM copies it in.
+- **No `*at` calls**: a directory fd other than `AT_FDCWD` works only with an
+  absolute path.
+- **`/proc`**: `/proc/self/environ` comes from the initial stack (the entry
+  code passes it to the translator), `/proc/self/exe` from the aux vector,
+  `/proc/self/fd/N` only for directories, `/proc/sys/kernel/hostname` from
+  sysctl.
+- **TLS**: Minix cannot point `fs` at a block, so the TLS base is the main
+  block's address. That works because Minix has no kernel threads:
+  `--threadsafe` is refused.
+
+Phase 1 covers files, directories, memory, time, fork/exec/wait, pipes and
+the environment. Not yet: signal delivery (handler installs succeed and do
+nothing), sockets, `select`/`poll`, `readv`/`writev`, `statfs`, `utimensat`
+and priorities. Minix itself has no `/dev/full` and no job control (SIGSTOP
+ends the process).
+
+`make test-minix` runs 17 programs (Pascal, C and Nil Python) on a Minix VM and
+compares their output and exit code with the Linux i386 build. It passes.
+The VM is the stock `minix_R3.4.0rc6` ISO installed under `/data/vm/minix`
+with openssh from pkgin. It runs under TCG, because the install stalled
+under KVM. Run `tools/vm/minix.sh start`, then `tools/vm/minix.sh run <binary>`;
+it listens on port 2232.
 
 ### `--os=dragonfly` (experimental)
 

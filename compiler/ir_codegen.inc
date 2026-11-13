@@ -2089,6 +2089,14 @@ begin
       EmitB($C7); EmitB($81); EmitI32(8 * TLS_SLOT_INIT_IMAGE);
         EmitGlobRef(BSS_TLS_IMAGE);                     { mov dword [ecx+8*slot], image }
     end;
+    if TargetKernel = KERNEL_MINIX then
+    begin
+      { No segment to point at it: __pxxTlsBase is this block's address
+        (ir_codegen386's IR_TLSBASE), and --threadsafe is refused. }
+      EmitB($59);                                       { pop ecx }
+      EmitB($5B);                                       { pop ebx }
+      Exit;
+    end;
     EmitB($83); EmitB($EC); EmitB($10);                 { sub esp, 16  (user_desc) }
     EmitB($C7); EmitB($04); EmitB($24); EmitI32(-1);    { mov dword [esp], -1  (entry_number) }
     EmitB($89); EmitB($4C); EmitB($24); EmitB($04);     { mov [esp+4], ecx     (base_addr) }
@@ -3573,6 +3581,14 @@ begin
     { mov [BSS_INITIAL_RSP], esp -- see EmitMovGlobEsp32 for why this one
       instruction cannot go through the generic store conversion. }
     EmitMovGlobEsp32(BSS_INITIAL_RSP);
+    if TargetKernel = KERNEL_MINIX then
+    begin
+      { Tell the translator where the initial stack is (envp for
+        /proc/self/environ). Clobbers eax and ebx only, which nothing reads. }
+      EmitB($89); EmitB($E3);                    { mov ebx, esp }
+      EmitB($B8); EmitI32(MX_PXX_INITSP);        { mov eax, MX_PXX_INITSP }
+      EmitInt80;                                 { call the thunk }
+    end;
     if withHeapArena then
     begin
       EmitMmapArena(HEAP_ARENA_SIZE);          { -> eax = base }

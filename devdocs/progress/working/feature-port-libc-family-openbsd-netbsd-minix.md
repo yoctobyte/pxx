@@ -556,3 +556,51 @@ direct route, and it would be withdrawn with it.
   ipc.h layout. Minix has no kernel threads (no clone): --threadsafe would be
   refused. Not started: it is the biggest of the ports so far, for an OS
   with no release since 2017.
+
+### 2026-11-13: `--os=minix` phase 1 (i386, Minix 3.4)
+
+- The seam: EmitInt80 (one emitter for every i386 int $0x80 since
+  3cec6b6a0b) emits `call rel32` to the shared thunk under a translated
+  kernel and records the site; EmitLibcSyscallThunk's i386 arm is pushad,
+  push ebp/edi/esi/edx/ecx/ebx/eax, call PXXMinixSyscall (cdecl), write the
+  answer over pushad's eax, popad, ret. So every site keeps int $0x80's
+  contract. The kernel-ABI unit pull is now gated on KernelTranslated only
+  (the --os refusals bound the CPUs).
+- TLS: Minix cannot select a block with fs (no set_thread_area, no LDT for
+  users), and has no kernel threads. So --threadsafe is refused,
+  EmitTlsMainInstall skips set_thread_area, and IR_TLSBASE under minix is
+  `mov eax, BSS_TLS_MAIN` (i386's only fs: access was that one read).
+- The entry stub passes the initial sp to the translator through a private
+  pseudo-call (MX_PXX_INITSP, $7F000001): Minix has no /proc/self/environ,
+  and the initial stack is Linux's shape (argc, argv, NULL, envp, NULL, auxv
+  with AT_SUN_EXECNAME 2014 for /proc/self/exe).
+- compiler/builtin/minixabi.pas: MxIpc (int $0x21 SENDREC) is the only kernel
+  entry; each Linux call fills the payload its Minix libc wrapper fills
+  (layouts from ipc.h, read in minix/lib/libc/sys/*.c). Measured on the VM
+  with cc: struct stat (124 B), dirent, termios size, SELF = 31742,
+  minix_get_user_sp() = 0xF0000000, PATH_MAX 1024, F_DUPFD_CLOEXEC 12. errno
+  are NetBSD's.
+- Done in phase 1: read/write/open(at)/close/lseek/_llseek, statx (stat,
+  lstat, fstat), getdents64 (records rewritten), mmap2/munmap (anonymous; an
+  address above 2 GiB is a negative LongInt -- only -4095..-1 are errors),
+  brk answers 0, mprotect/madvise no-ops, unlink/mkdir/rmdir/chdir/fchdir/
+  access/chmod/rename/link/symlink/readlink and their *at forms (AT_FDCWD or
+  an absolute path only), getcwd (walks "..", as Minix's libc), fork/vfork,
+  wait4/waitpid (status signal numbers mapped back), execve (the new stack is
+  built in the caller, stack_utils.c's layout, and PM copies it), kill,
+  dup/dup2/dup3/fcntl/pipe/pipe2, ioctl TCGETS/TIOCGWINSZ, clock_gettime/
+  getres, uname (sysctl through MIB, endpoint 7), getpid/getppid/get*id,
+  /proc/self/environ, /proc/self/exe, /proc/self/fd/N (directories only, via
+  fchdir+getcwd), /proc/sys/kernel/hostname. Minix ignores O_DIRECTORY and
+  O_NOFOLLOW: checked by fstat/lstat around the open. A 0-byte read of a
+  directory answers EISDIR (NilPy's open() probe).
+- Signal installs answer 0 and are not made: no delivery yet. So the signal
+  tests, the stack-overflow test (needs SIGSEGV on the altstack), and the
+  async/socket tests are out.
+- Not yet (seen failing in the test lists): select/poll, readv/writev,
+  statfs, utimensat, fallocate, get/setpriority, a few fs ioctls. Minix has
+  no /dev/full (a test made it a regular file; removed) and no job control
+  (SIGSTOP terminates; c_crtl_wait's stopped/continued legs cannot match).
+- The test-minix target: 15 programs plus the argv/env and -g checks, against
+  the Linux i386 build run natively. Byte identity: 190/190 (the usual 145
+  plus dragonfly, openbsd-arm64, i386 --threadsafe, i386 -g).

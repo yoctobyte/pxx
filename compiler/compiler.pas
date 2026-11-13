@@ -1214,6 +1214,8 @@ begin
   WriteLn('                        the same design');
   WriteLn('  --os=dragonfly        DragonFly BSD 6.4/x86-64 output (EXPERIMENTAL):');
   WriteLn('                        the same design');
+  WriteLn('  --os=minix            Minix 3.4/i386 output (EXPERIMENTAL): the same');
+  WriteLn('                        design over Minix message passing; no threads');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1905,6 +1907,14 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if option = '--os=minix' then
+    begin
+      { EXPERIMENTAL: see KERNEL_MINIX in defs.inc. }
+      TargetKernel := KERNEL_MINIX;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if option = '--os=dragonfly' then
@@ -3218,7 +3228,14 @@ begin
     FreeBSD's libc Linux syscall numbers). docs/targets/freebsd.md }
   if KernelTranslated then
   begin
-    if (TargetArch <> TARGET_X86_64) and
+    if TargetKernel = KERNEL_MINIX then
+    begin
+      if TargetArch <> TARGET_I386 then
+        ErrorNoPos('--os=minix is i386 only (--target=i386)');
+      if ThreadSafeMode then
+        ErrorNoPos('--os=minix: --threadsafe is not supported (Minix has no kernel threads)');
+    end
+    else if (TargetArch <> TARGET_X86_64) and
        not ((TargetArch = TARGET_AARCH64) and
             ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_NETBSD)
              or (TargetKernel = KERNEL_OPENBSD))) then

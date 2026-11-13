@@ -11188,6 +11188,29 @@ test-dragonfly: $(COMPILER)
 	    tools/expect_same.sh dragonfly_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/dragonfly.sh run $$d/fe.df 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
 	  done; echo "test-dragonfly: OK"
 
+test-minix: $(COMPILER)
+	# --os=minix (EXPERIMENTAL): Minix 3.4 i386 on the VM against the Linux
+	# i386 build run here. Phase 1: no signal delivery, no sockets, no
+	# threads, so only the lists' file/process/environment programs.
+	@d=$(TESTTMP)/os_minix_run26; mkdir -p $$d && \
+	  tools/vm/minix.sh start && \
+	  for t in test/fileio.pas test/test_sysutils_datetime.pas test/test_rtl_libc_torture.pas \
+	           test/lib_termio_isatty.pas test/test_nilpy_time_and_listdir.npy \
+	           test/test_nilpy_os_access_pathsep_gethostname.npy test/test_nilpy_subprocess_pipes.npy \
+	           test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/cisatty.c \
+	           test/c_crtl_tempfile_and_unlocked.c test/c_crtl_open_flags_arch.c \
+	           test/c_crtl_bits_and_fdatasync.c test/c_termios_no_tty.c; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
+	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) --target=i386 test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix test/test_os_env.pas $$d/env.mx >/dev/null && \
+	  cp $$d/env.lx $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value ./pxxbin one two; echo exit=$$?)" && \
+	  tools/expect_same.sh minix_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/env.mx one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
+	  ./$(COMPILER) --target=i386 -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) --target=i386 -g --os=minix test/fileio.pas $$d/g.mx >/dev/null && \
+	  tools/expect_same.sh minix_debug_info "$$(tools/vm/minix.sh run $$d/g.mx 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  echo "test-minix: OK"
+
 test-asm: $(COMPILER)
 	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 3 -------------
 	# The five text-assembler oracle harnesses: each mocks the byte sink, then

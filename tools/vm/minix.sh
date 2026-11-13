@@ -1,6 +1,6 @@
 #!/bin/sh
 # Minix 3.4/i386 test VM (feature-port-libc-family-openbsd-netbsd-minix).
-# There is no --os=minix yet; this VM is for that port's measurements.
+# The test VM for --os=minix (EXPERIMENTAL).
 #
 #   tools/vm/minix.sh start     boot headless (ssh on 127.0.0.1:$PXX_MINIX_PORT)
 #   tools/vm/minix.sh run BIN [ARGS...]   copy BIN in, run it, relay stdout/stderr/exit
@@ -38,7 +38,10 @@ case "$1" in
   run)
     shift; b="$1"; shift
     scp $SSHO -P "$PORT" "$b" root@127.0.0.1:/tmp/pxxbin.new >/dev/null || exit 125
-    ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && /tmp/pxxbin $*" ;;
+    # PXX_TEST_* variables are forwarded, as tools/vm/freebsd.sh does. stderr is
+    # merged on the VM: two ssh channels would race (TCG makes Minix slow).
+    envs=$(env | grep '^PXX_TEST_[A-Za-z0-9_]*=' | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/" | tr '\n' ' ')
+    ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && $envs /tmp/pxxbin $* 2>&1" ;;
   ssh)
     shift; exec ssh $SSHO -p "$PORT" root@127.0.0.1 "$@" ;;
   stop)

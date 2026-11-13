@@ -2479,6 +2479,19 @@ const
   KERNEL_DRAGONFLY = 4;
   DF_IDENT_NOTE_SIZE = 40;
   DF_OS_VERSION = 600401;       { 6.4, measured: what /bin/ls on 6.4.2 carries }
+  { --os=minix (EXPERIMENTAL, feature-port-libc-family-openbsd-netbsd-minix):
+    Minix 3.4 i386. The same translator design, but Minix has no system calls
+    in the Unix sense: compiler/builtin/minixabi.pas turns each Linux int $0x80
+    into a 64-byte message sent to a server (PM, VFS, VM) by int $0x21
+    SENDREC. Every i386 kernel entry goes through EmitInt80, which under this
+    kernel calls the shared thunk instead. No note: Minix's loader wants none.
+    No threads (refused), and no TLS segment: Minix cannot point fs at a block,
+    so __pxxTlsBase is the main block's address (one thread, one block). }
+  KERNEL_MINIX = 5;
+  { The private pseudo-call the Minix entry stub makes with ebx = the initial
+    stack pointer, so the translator can find envp (Minix has no
+    /proc/self/environ). Far outside Linux's numbering. }
+  MX_PXX_INITSP = $7F000001;
   { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
     12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
     oldest release the translator's constants were measured against. }
@@ -9172,7 +9185,8 @@ var
 function KernelTranslated: Boolean;
 begin
   KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD)
-                      or (TargetKernel = KERNEL_NETBSD) or (TargetKernel = KERNEL_DRAGONFLY);
+                      or (TargetKernel = KERNEL_NETBSD) or (TargetKernel = KERNEL_DRAGONFLY)
+                      or (TargetKernel = KERNEL_MINIX);
 end;
 
 { The translator's unit and entry proc, and the --os spelling for messages. }
@@ -9181,6 +9195,7 @@ begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiUnit := 'obsdabi'
   else if TargetKernel = KERNEL_NETBSD then KernelAbiUnit := 'nbsdabi'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiUnit := 'dfbsdabi'
+  else if TargetKernel = KERNEL_MINIX then KernelAbiUnit := 'minixabi'
   else KernelAbiUnit := 'fbsdabi';
 end;
 
@@ -9189,6 +9204,7 @@ begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiProc := 'PXXObsdSyscall'
   else if TargetKernel = KERNEL_NETBSD then KernelAbiProc := 'PXXNbsdSyscall'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiProc := 'PXXDfbsdSyscall'
+  else if TargetKernel = KERNEL_MINIX then KernelAbiProc := 'PXXMinixSyscall'
   else KernelAbiProc := 'PXXFbsdSyscall';
 end;
 
@@ -9209,6 +9225,7 @@ begin
   if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
   else if TargetKernel = KERNEL_NETBSD then KernelOsName := 'netbsd'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelOsName := 'dragonfly'
+  else if TargetKernel = KERNEL_MINIX then KernelOsName := 'minix'
   else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
   else KernelOsName := 'linux';
 end;

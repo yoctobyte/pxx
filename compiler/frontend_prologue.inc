@@ -175,7 +175,7 @@ procedure PullKernelAbiUnit;
   exit like the rest of this file's pulls. Without it a C or NilPy program
   stopped with "PXXFbsdSyscall not found". feature-port-freebsd-native }
 begin
-  if KernelTranslated and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)) then
+  if KernelTranslated then   { the --os refusals in compiler.pas bound the CPUs }
     ParseUsesUnitAmbient(KernelAbiUnit);
 end;
 

@@ -18822,6 +18822,30 @@ begin
     EmitLibcSyscallThunkA64;
     Exit;
   end;
+  if TargetArch = TARGET_I386 then
+  begin
+    { --os=minix: int $0x80's contract around a cdecl call of the translator.
+      pushad keeps every register (the translator's result is written over
+      the saved eax); the seven arguments are pushed again as the call's own,
+      because a callee may write its parameter slots. }
+    LibcSyscallThunkAddr := CodeLen;
+    if (FbsdSyscallProcIdx < 0) or (Procs[FbsdSyscallProcIdx].BodyAddr < 0) then
+      ErrorNoPos('internal: --os=' + KernelOsName + ' but ' + KernelAbiProc + ' has no code');
+    EmitB($60);                                   { pushad }
+    EmitB($55); EmitB($57); EmitB($56);           { push ebp, edi, esi   (a5, a4, a3) }
+    EmitB($52); EmitB($51); EmitB($53);           { push edx, ecx, ebx   (a2, a1, a0) }
+    EmitB($50);                                   { push eax             (nr) }
+    EmitB($E8);
+    EmitI32(Procs[FbsdSyscallProcIdx].BodyAddr - (CodeLen + 4));
+    EmitB($83); EmitB($C4); EmitB(28);            { add esp, 28 }
+    EmitB($89); EmitB($44); EmitB($24); EmitB(28);  { mov [esp+28], eax  (pushad's eax) }
+    EmitB($61);                                   { popad }
+    EmitB($C3);                                   { ret }
+    for i := 0 to LibcSyscallCallCount - 1 do
+      Patch32(LibcSyscallCallPos[i],
+              LibcSyscallThunkAddr - (LibcSyscallCallPos[i] + 4));
+    Exit;
+  end;
   LibcSyscallThunkAddr := CodeLen;
   { save the raw-convention argument registers }
   EmitAsmX64([
