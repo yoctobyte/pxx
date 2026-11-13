@@ -10274,6 +10274,31 @@ begin
     Result := Integer(Syms[idx].ConstVal);
 end;
 
+var CBraceDesignatorEnd: Integer;   { CBraceDesignatorExprIdx: token index of the `]` }
+
+{ Fold a `[expr]` designator index starting at token tokIdx with the constant
+  folder, without moving the parser: a non-negative constant below 2^16 whose
+  expression ends exactly at a `]`, else -1. A range (`...`) or a name that is
+  not a constant answers -1, so the caller keeps its old refusal. }
+function CBraceDesignatorExprIdx(tokIdx: Integer): Integer;
+var savePos: Integer; saveNonConst: Boolean; v: Int64;
+begin
+  Result := -1;
+  savePos := TokPos;
+  saveNonConst := CConstExprSawNonConst;
+  CConstExprSawNonConst := False;
+  TokPos := tokIdx; Next;
+  v := CEvalConstExpr;
+  if (CurTok.Kind = tkRBrack) and (not CConstExprSawNonConst) and
+     (v >= 0) and (v < $10000) then
+  begin
+    Result := Integer(v);
+    CBraceDesignatorEnd := TokPos - 1;
+  end;
+  CConstExprSawNonConst := saveNonConst;
+  TokPos := savePos - 1; Next;
+end;
+
 function CBraceFlatIntInitCountAt(openIdx: Integer; allowFloat: Boolean): Integer;
 var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
 begin
@@ -10322,6 +10347,19 @@ begin
             if dIdx < 0 then begin Result := -1; Exit; end;
             ei := dIdx;
             Inc(j, 2);   { land on ']'; the loop's Inc(j) steps past it }
+          end
+          else if depth = 1 then
+          begin
+            { Any other index EXPRESSION -- `[sizeof(short)] =`, busybox od's
+              integral_type_size table. The bail below sent the whole list to
+              a path that kept none of its values, so the table read all 0 and
+              `od -to2` said "2-byte integral type is not supported". Fold it
+              with the real constant folder (rewind, fold, restore: the VLA
+              site's idiom) when it is one constant ending at the `]`. }
+            dIdx := CBraceDesignatorExprIdx(j + 1);
+            if dIdx < 0 then begin Result := -1; Exit; end;
+            ei := dIdx;
+            j := CBraceDesignatorEnd;   { land on ']' }
           end
           else begin Result := -1; Exit; end;
         end;

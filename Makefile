@@ -19268,6 +19268,11 @@ test-core: $(COMPILER)
 	gcc -w -o $(TESTTMP)/c_idxcall_gcc test/c_index_of_a_pointer_returning_call.c
 	./$(COMPILER) test/c_index_of_a_pointer_returning_call.c $(TESTTMP)/c_idxcall > /dev/null
 	tools/expect_same.sh c_index_of_a_pointer_returning_call "$$($(TESTTMP)/c_idxcall)" "$$($(TESTTMP)/c_idxcall_gcc)"
+	# `[sizeof(short)] =` and other expression designators keep their values
+	# (busybox od's integral_type_size table read all 0).
+	gcc -w -o $(TESTTMP)/c_desig_gcc test/c_designator_index_expression.c
+	./$(COMPILER) test/c_designator_index_expression.c $(TESTTMP)/c_desig > /dev/null
+	tools/expect_same.sh c_designator_index_expression "$$($(TESTTMP)/c_desig)" "$$($(TESTTMP)/c_desig_gcc)"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
