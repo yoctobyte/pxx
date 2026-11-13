@@ -78,6 +78,42 @@ never filed. This is that ticket.
    localhost with throwaway keys and a non-privileged port.
 5. Then aarch64 (under qemu-aarch64), as busybox did.
 
+## Progress (2026-11-13)
+
+Acceptance 1-4 are met on x86-64 (`make test-dropbear`, i.e.
+`tools/dropbear_pxx.py`: 38 rows, 0 failed, compiler e83c4d047aa1 built
+from b1b534c3c6 plus the tool fixes):
+
+- gcc and pxx both build dropbear, dbclient, dropbearkey and scp from the
+  same configure (`CFLAGS=-Os -W -Wall -DMP_32BIT`, because pxx has no
+  128-bit type for libtommath's 64-bit digits; see
+  [[feature-c-int128-and-attribute-mode]]). That's 230 TUs.
+- dropbearkey makes ed25519, ecdsa and rsa keys that ssh-keygen reads.
+- Stock OpenSSH logs in to the pxx dropbear by public key. Tested:
+  chacha20-poly1305, aes256/128-ctr, hmac-sha2-256, kex sntrup761,
+  mlkem768, curve25519, ecdh p256/384/521 and dh group14, host keys
+  ed25519/ecdsa/rsa, 1 MiB up and down intact, `ssh -tt` pty, and scp both
+  ways via the pxx scp.
+- The pxx dbclient logs in to stock sshd (three ciphers).
+
+pxx gaps found and fixed on the way, each with a test and a done ticket:
+literal comparisons not folding, zero-size extern slots, a definition after
+an incomplete extern, mode(TI) silently 64-bit (now refused), static vs
+external functions of the same name, big structs by value, member of a
+ternary, "+r"/array asm operands, an empty TU's object, lock/cmpxchg/xadd/
+bsf/cmov/descriptor reads in inline asm, and the crtl surface (crypt, shadow,
+pty, utmp, setuid family).
+
+Test-environment traps (not miscompiles; the gcc build shows them too):
+- dropbear refuses authorized_keys if any path component is group- or
+  world-writable, so the `-D` dir lives under `~/.cache/dropbear-pxx`, not
+  /tmp.
+- With `-tt` and stdin at EOF, dropbear closes the pty master on the
+  client's channel EOF and the shell dies of SIGHUP. The tool keeps stdin
+  open.
+
+Left: acceptance 5 (aarch64 under qemu-aarch64).
+
 ## Follow-ups (other sessions)
 
 - gibux: replace Alpine's dropbear with the pxx-built one (gibux session).

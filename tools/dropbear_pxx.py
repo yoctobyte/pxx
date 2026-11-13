@@ -285,10 +285,42 @@ def ssh_base(t, port, key):
             "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20"]
 
 
+def private_authdir():
+    """dropbear's -D dir for authorized_keys. dropbear (svr-authpubkey.c)
+    refuses the keys when ANY component of the path is group- or
+    world-writable, so /tmp (1777) can never hold it. Use a fresh dir under
+    ~/.cache and check every component up front, so a failure says why
+    instead of 'Permission denied (publickey)'."""
+    base = os.path.join(os.path.expanduser("~"), ".cache", "dropbear-pxx")
+    os.makedirs(base, mode=0o700, exist_ok=True)
+    d = tempfile.mkdtemp(prefix="auth-", dir=base)
+    AUTHDIRS.append(d)
+    p = d
+    while True:
+        st = os.stat(p)
+        if st.st_mode & 0o022 or st.st_uid not in (0, os.getuid()):
+            die("%s is group/world-writable or foreign-owned; dropbear would refuse "
+                "authorized_keys under %s" % (p, d))
+        if p == "/":
+            break
+        p = os.path.dirname(p)
+    return d
+
+
+AUTHDIRS = []
+
+
 def tests(work, bindir, port0):
     t = os.path.join(work, "t")
     home = os.path.join(t, "home")
     os.makedirs(home)
+    # dropbear, like sshd's StrictModes, refuses an authorized_keys path with
+    # a group- or world-writable component, and the caller's umask (002 here)
+    # would leave t/ as drwxrwxr-x: "must be owned by user or root, and not
+    # writable by group or others", then Permission denied. Every directory
+    # the server or client walks is made 0700.
+    for d in (t, home):
+        os.chmod(d, 0o700)
     env = dict(os.environ, HOME=home)
     user = subprocess.run(["id", "-un"], stdout=subprocess.PIPE).stdout.decode().strip()
     dbk = os.path.join(bindir, "dropbearkey")
@@ -317,8 +349,7 @@ def tests(work, bindir, port0):
     # client key (OpenSSH) and the server's authorized_keys dir
     ckey = os.path.join(t, "client_ed25519")
     run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", ckey, "-C", "dropbear-pxx-test"])
-    authdir = os.path.join(t, "auth")
-    os.makedirs(authdir, mode=0o700)
+    authdir = private_authdir()
     shutil.copy(ckey + ".pub", os.path.join(authdir, "authorized_keys"))
     os.chmod(os.path.join(authdir, "authorized_keys"), 0o600)
 
@@ -384,7 +415,24 @@ def tests(work, bindir, port0):
         row("1 MiB down the channel arrives intact", rc == 0 and hashlib.sha256(out).hexdigest() == want,
             err.decode(errors="replace").strip()[-200:])
 
-        rc, out, err = run(base + ["-tt", dest, "tty; echo PTY-DONE"], env=env, timeout=120)
+        # stdin stays OPEN until ssh exits: with -tt and stdin at EOF, OpenSSH
+        # sends channel EOF at once, dropbear (unlike sshd) answers by closing
+        # the pty master, and the child dies of SIGHUP before it prints. The
+        # gcc build does exactly the same, so it is the test, not a miscompile.
+        rfd, wfd = os.pipe()
+        try:
+            p = subprocess.Popen(base + ["-tt", dest, "tty; echo PTY-DONE"], env=env, stdin=rfd,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            os.close(rfd)
+            try:
+                out, err = p.communicate(timeout=120)
+                rc = p.returncode
+            except subprocess.TimeoutExpired:
+                p.kill()
+                out, err = p.communicate()
+                rc = -9
+        finally:
+            os.close(wfd)
         text = out.decode(errors="replace")
         row("interactive pty session (ssh -tt)", rc == 0 and "/dev/pts/" in text and "PTY-DONE" in text,
             (text + err.decode(errors="replace")).strip()[-200:])
@@ -443,11 +491,13 @@ def dbclient_to_sshd(t, bindir, env, user, dbk):
         if not row("stock sshd listens on 127.0.0.1:%d" % port, wait_port(port, srv),
                    "see %s/sshd.log" % t):
             return
-        # dbclient's known_hosts: the sshd host key, in HOME/.ssh (HOME = work dir)
-        os.makedirs(os.path.join(env["HOME"], ".ssh"), exist_ok=True)
+        # dbclient's known_hosts: the sshd host key, in HOME/.ssh. dropbear
+        # matches the bare host name and ignores the port (cli-kex.c
+        # checkhostkey), so this is its format, not OpenSSH's [host]:port.
+        os.makedirs(os.path.join(env["HOME"], ".ssh"), mode=0o700, exist_ok=True)
         hpub = open(hk + ".pub").read().split()
         open(os.path.join(env["HOME"], ".ssh", "known_hosts"), "w").write(
-            "[127.0.0.1]:%d %s %s\n" % (port, hpub[0], hpub[1]))
+            "127.0.0.1 %s %s\n" % (hpub[0], hpub[1]))
         db = [os.path.join(bindir, "dbclient"), "-i", ck, "-p", str(port), "-l", user]
         rc, out, err = run(db + ["127.0.0.1", "echo hello-from-dbclient"], env=env, timeout=120)
         row("pxx dbclient logs in to stock sshd and runs a command",
@@ -514,6 +564,8 @@ def main():
             say("kept %s" % work)
         else:
             shutil.rmtree(work, ignore_errors=True)
+        for d in AUTHDIRS:
+            shutil.rmtree(d, ignore_errors=True)
     bad = [r for r in results if not r[1]]
     say("%d rows, %d failed" % (len(results), len(bad)))
     print("DROPBEAR-PXX-COMPLETE %s" % ("GREEN" if not bad else "RED"))

@@ -140,6 +140,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: pxx-debug
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
+.PHONY: test-dropbear
 .PHONY: derefshape
 
 # Per-shape x per-arm control for `p^[i]` (bug-a-p-caret-index-...-plain-identifier
@@ -38214,6 +38215,13 @@ test-cjson: $(COMPILER)
 FUZZ_ITERS ?= 100
 fuzz-csmith: $(COMPILER)
 	tools/csmith_fuzz.py --iters $(FUZZ_ITERS)
+
+# dropbear (library_candidates/dropbear) built by gcc AND pxx, then OpenSSH ->
+# pxx dropbear (pubkey, cipher/mac/kex/hostkey matrix, 1 MiB both ways, pty,
+# scp) and pxx dbclient -> stock sshd, on localhost with throwaway keys.
+# Opt-in, NOT in `test`: needs openssh-client/server installed, ~5 min.
+test-dropbear: $(COMPILER)
+	nice -n 15 python3 tools/dropbear_pxx.py
 
 test-c-conformance: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER)
