@@ -1,5 +1,6 @@
 AN_ADDR Left ASTLeft[node]
 AN_ADDR Left AllocNode(AN_GUIDCONST)
+AN_ADDR Left CAsmOps[CAsmOpCount].Expr
 AN_ADDR Left CurASTNode
 AN_ADDR Left ParseLValueAST(sa1, sa2)
 AN_ADDR Left PyMakeIdent(ClassVarSym[i])
@@ -964,6 +965,7 @@ AN_FIELD Left PyMakeIdent(selfSym)
 AN_FIELD Left PyMakeIdent(symIdx)
 AN_FIELD Left RMakeIdent(scrutSym)
 AN_FIELD Left RMakeIdent(targetSym)
+AN_FIELD Left arm
 AN_FIELD Left atRecv
 AN_FIELD Left baseFld
 AN_FIELD Left baseNode
@@ -1122,6 +1124,7 @@ AN_PAIR Left WriteLit('true')
 AN_PAIR Left ZFieldNode(RMakeIdent(symIdx), '__val', elemTk)
 AN_PAIR Left arm
 AN_PAIR Left armN
+AN_PAIR Left arms[0]
 AN_PAIR Left arms[i].BodyNode
 AN_PAIR Left asgN
 AN_PAIR Left asgn
@@ -1180,6 +1183,7 @@ AN_PAIR Right Result
 AN_PAIR Right WriteLit('false')
 AN_PAIR Right addrNode
 AN_PAIR Right argNode
+AN_PAIR Right arms[1]
 AN_PAIR Right atDflt
 AN_PAIR Right bodyN
 AN_PAIR Right bodyNode
@@ -1275,6 +1279,7 @@ AN_STR_FROM_CHAR Left node
 AN_STR_FROM_CHAR Right icRd
 AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
+AN_TERNARY Left ASTLeft[tern]
 AN_TERNARY Left CCondOf(left)
 AN_TERNARY Left bfIsCall
 AN_TERNARY Left clsCondCall
@@ -1299,6 +1304,7 @@ AN_TERNARY Right clsPairN
 AN_TERNARY Right dynFbPair
 AN_TERNARY Right flPair2
 AN_TERNARY Right flPairNode
+AN_TERNARY Right np
 AN_TERNARY Right pair
 AN_TERNARY Right pairN
 AN_TERNARY Right pairNode

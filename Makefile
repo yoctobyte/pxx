@@ -19326,6 +19326,11 @@ test-core: $(COMPILER)
 	# difference, not a semantic one. --self-check is the positive control:
 	# swapping an operand order must change what pxx encodes.
 	python3 tools/casm_att_diff.py --self-check test/casm_att_template.att
+	# The same oracle over the instructions Gibux SMP (lock + cmpxchg/xadd/inc/
+	# dec/or/and, str, sldt, sgdt, sidt, rdtscp, rdpid) and dropbear's
+	# sntrup761.c (bsf/bsr) needed; the prefix ORDER (F0 before REX, F3
+	# before REX) is what the disassembly would show going wrong.
+	python3 tools/casm_att_diff.py --self-check test/casm_att_atomics_sysregs.att
 	# Operands, against gcc on the same source. add8, mul1 and submod are the
 	# x86-64 arms of busybox networking/tls_sp_c32.c verbatim -- the file this
 	# whole feature exists for, whose refusal took a 400-object link down with
@@ -19453,6 +19458,16 @@ test-core: $(COMPILER)
 	# values are gcc -O0's on the same source.
 	./$(COMPILER) test/casm_rotate_and_shift.c $(TESTTMP)/casmrot26
 	tools/expect_same.sh casmrot26 "$$($(TESTTMP)/casmrot26)" "$$(printf 'rol 248 ror 65011712\nrolc 496 rorc 32505856\nrol64 248 ror64 279223176896970752\nrol64c 7936 ror64c 8725724278030336\nshifts 4010247807 shl64 8192')"
+	# "+r" read-write operands (sntrup761.c's crypto_int16 helpers verbatim)
+	# and an array passed to an "r" input (libtomcrypt's STORE32H/STORE64H),
+	# both from dropbear. Expected values are gcc -O0's.
+	./$(COMPILER) test/casm_plus_r_and_array_operand.c $(TESTTMP)/casmplusr26
+	tools/expect_same.sh casmplusr26 "$$($(TESTTMP)/casmplusr26)" "$$(printf 'negmask -1 0\ntopbit 1 0\nbottombit 1 0\nshrmod -4096 128\nadd_into 42\nbump 43 pad 7\nstore32h 01 02 03 04 seqno 01020304\nstore64h 11 22 33 44 55 66 77 88')"
+	# What those instructions do at run time, against gcc -O0: Gibux's
+	# lock cmpxchg shape (both arms), `lock;`, lock xadd's old value, lock
+	# inc/dec/or/and, and sntrup761's bsfw + cmovew bottom-bit idiom.
+	./$(COMPILER) test/casm_lock_cmpxchg_xadd_bsf.c $(TESTTMP)/casmlock26
+	tools/expect_same.sh casmlock26 "$$($(TESTTMP)/casmlock26)" "$$(printf 'cas ok 5 now 9\ncas miss 9 now 9\ncas64 100 now -7\ncas64 miss -7 now -7\nxadd old 9 now 13\nrmw 270 -8\nbsf 9 bsr 12 bsrq 63\nbottombit 3 15 16')"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,
@@ -20702,6 +20717,71 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_struct_member_of_array_typedef.c $(TESTTMP)/c_smemarrtd26
 	gcc -std=gnu99 -o $(TESTTMP)/c_smemarrtd_gcc test/c_struct_member_of_array_typedef.c
 	tools/expect_same.sh c_smemarrtd26 "$$($(TESTTMP)/c_smemarrtd26)" "$$($(TESTTMP)/c_smemarrtd_gcc)"
+	# A member of a struct-valued conditional, (c ? a : b).f, read as
+	# c ? a.f : b.f -- libcrux's Eurydice_range_iter_next(...).tag (dropbear's
+	# mlkem768.c). Only the selected arm runs. Diffed against gcc.
+	./$(COMPILER) test/c_struct_ternary_member.c $(TESTTMP)/c_sternmem26
+	gcc -std=gnu99 -o $(TESTTMP)/c_sternmem_gcc test/c_struct_ternary_member.c
+	tools/expect_same.sh c_sternmem26 "$$($(TESTTMP)/c_sternmem26)" "$$($(TESTTMP)/c_sternmem_gcc)"
+	# crypt(3) SHA-crypt (SHA-256 and SHA-512 schemes) in lib/crtl/src/crypt.c, for dropbear's
+	# password check. The expected file is libxcrypt's output on the same
+	# source (gcc -lcrypt), checked in so the row needs no libcrypt-dev; the
+	# first row is the spec's own published vector.
+	./$(COMPILER) test/c_crypt_sha.c $(TESTTMP)/c_cryptsha26
+	$(TESTTMP)/c_cryptsha26 | diff -u test/c_crypt_sha.expected -
+	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,
+	# explicit_bzero, <shadow.h>, <pty.h>, <utmp.h> sizes, timer macros,
+	# getusershell, the set*id calls that were ENOSYS stubs, sockaddr_storage).
+	# The expected file is glibc's output on the same source, run as non-root.
+	./$(COMPILER) test/c_crtl_dropbear_surface.c $(TESTTMP)/c_crtldb26
+	$(TESTTMP)/c_crtldb26 | diff -u test/c_crtl_dropbear_surface.expected -
+	# A >1 KiB struct by value (libcrux's 2400-byte MlKemPrivateKey, dropbear's
+	# mlkem768.c) through a direct call and a function pointer, and cmov<cc>
+	# with a w suffix (sntrup761.c). Diffed against gcc -O0.
+	./$(COMPILER) test/c_big_struct_by_value_and_cmov.c $(TESTTMP)/c_bigsbv26
+	gcc -O0 -o $(TESTTMP)/c_bigsbv_gcc test/c_big_struct_by_value_and_cmov.c
+	tools/expect_same.sh c_bigsbv26 "$$($(TESTTMP)/c_bigsbv26)" "$$($(TESTTMP)/c_bigsbv_gcc)"
+	# Extern objects declared while their struct is still incomplete
+	# (dropbear's algo.h) all sized 0 and shared one .bss offset, so the object
+	# writer relocated `&nohash` to `nocipher` and turned an unused declaration
+	# into an UND symbol. Two objects, linked, as dropbear does it; the nm row
+	# says the unused `client_only` is not asked of the linker.
+	./$(COMPILER) --emit-obj test/c_incomplete_extern_distinct_a.c $(TESTTMP)/cincext_a.o > /dev/null
+	./$(COMPILER) --emit-obj test/c_incomplete_extern_distinct_b.c $(TESTTMP)/cincext_b.o > /dev/null
+	tools/expect_same.sh cincext_und "$$(nm $(TESTTMP)/cincext_a.o | grep -c ' U client_only')" "0"
+	./$(COMPILER) --link -o $(TESTTMP)/cincext26 $(TESTTMP)/cincext_a.o $(TESTTMP)/cincext_b.o > /dev/null
+	tools/expect_same.sh cincext26 "$$($(TESTTMP)/cincext26)" "$$(printf 'none-cipher 0\nnone-mode\nnone-hash 20\ndistinct 1 1')"
+	# ...and the DEFINITION that follows such a declaration (dropbear's
+	# common-algo.c): it reused the 1-byte slot, so a const initialiser was
+	# dropped (blocksize read 0) and a non-const one overran its neighbours.
+	./$(COMPILER) test/c_definition_after_incomplete_extern.c $(TESTTMP)/cdefinc26
+	tools/expect_same.sh cdefinc26 "$$($(TESTTMP)/cdefinc26)" "$$(printf 'none 16 8\nmut 6 2 2\nnohash 20 x\n11111111 22222222\ndistinct 1 sizes 16 56')"
+	# libtommath's MP_HAS(x) && ...: a comparison of two literals must fold so
+	# the && short-circuit drops the arm calling a configured-out function.
+	# The gone_* functions are never defined, so a surviving call cannot link
+	# (or load). Expected output is gcc -O0's.
+	./$(COMPILER) test/c_literal_compare_folds_in_and_chain.c $(TESTTMP)/clitcmp26
+	tools/expect_same.sh clitcmp26 "$$($(TESTTMP)/clitcmp26)" "$$(printf '1008 1022 1007\nhas 1 0')"
+	# A `static` in one module and an EXTERNAL function of the same name in
+	# another are two functions. They shared one row and the static won, so
+	# crtl crypt.c's private sha512_init captured dropbear's calls to
+	# libtomcrypt's. Both declaration orders; the expected line is gcc's
+	# multi-TU build (see the file). The object row wants one LOCAL and one
+	# GLOBAL `tag`, as gcc emits for the separate-TU build.
+	./$(COMPILER) test/c_static_vs_external_same_name.c $(TESTTMP)/cstaticext26 > /dev/null
+	tools/expect_same.sh cstaticext26 "$$($(TESTTMP)/cstaticext26)" "10 1005 1007 14 10"
+	./$(COMPILER) -dSTATIC_FIRST test/c_static_vs_external_same_name.c $(TESTTMP)/cstaticext26b > /dev/null
+	tools/expect_same.sh cstaticext26b "$$($(TESTTMP)/cstaticext26b)" "10 1005 1007 14 10"
+	./$(COMPILER) --emit-obj --function-sections test/c_static_vs_external_same_name.c $(TESTTMP)/cstaticext26.o > /dev/null
+	tools/expect_same.sh cstaticext26.o "$$(readelf -sW $(TESTTMP)/cstaticext26.o | awk '$$4 == "FUNC" && $$8 == "tag" {print $$5}' | sort | tr '\n' ' ')" "GLOBAL LOCAL "
+	# __attribute__((mode(TI))) is a 128-bit integer pxx does not have. It was
+	# skipped, so libtommath's mp_word became 64 bits and every product lost its
+	# high half (dropbear's RSA keygen never terminated). Refused by name now;
+	# the narrower modes and a `nomode_` identifier still compile.
+	./$(COMPILER) test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26 > /dev/null
+	@./$(COMPILER) -dMODE_TI_ROW test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26b 2>&1 \
+	  | grep -qF 'mode(TI))) asks for a 128-bit type' \
+	  || { echo 'c_attribute_mode_ti_is_refused: FAIL - mode(TI) was accepted, or refused without naming itself'; exit 1; }
 	# `&x` POINTS AT THE WHOLE OBJECT. `&x + 1` stepped one byte for every x,
 	# `&a` of an array had no pointer-to-array type (`sizeof *&a` the element),
 	# `&m[1]` of a row stepped an element, `sizeof((m[0]))` answered a pointer,

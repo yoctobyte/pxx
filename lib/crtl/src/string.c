@@ -189,6 +189,45 @@ char *strncat(char *dest, const char *src, size_t n)
     return dest;
 }
 
+/* strlcpy / strlcat: OpenBSD's contract. The result is always NUL-terminated
+   when size > 0, and the return value is strlen(src) (strlcpy) or
+   min(strlen(dst), size) + strlen(src) (strlcat): the length the caller asked
+   for, so a truncation is detectable as `ret >= size'. strlcat with no NUL in
+   the first `size' bytes of dst writes nothing and still returns
+   size + strlen(src); that is OpenBSD's and glibc's answer too. */
+size_t strlcpy(char *dst, const char *src, size_t size)
+{
+    size_t n = strlen(src);
+    if (size > 0) {
+        size_t k = n < size - 1 ? n : size - 1;
+        memcpy(dst, src, k);
+        dst[k] = '\0';
+    }
+    return n;
+}
+
+size_t strlcat(char *dst, const char *src, size_t size)
+{
+    size_t d = 0;
+    while (d < size && dst[d] != '\0')
+        d++;
+    if (d == size)
+        return size + strlen(src);
+    return d + strlcpy(dst + d, src, size - d);
+}
+
+/* explicit_bzero: every byte is written through a volatile pointer, so no
+   optimiser (pxx's or a future one) may treat the wipe as a dead store just
+   because the buffer is freed or goes out of scope right after. */
+void explicit_bzero(void *s, size_t n)
+{
+    volatile unsigned char *p = (volatile unsigned char *)s;
+    while (n > 0) {
+        *p++ = 0;
+        n--;
+    }
+}
+
 size_t strspn(const char *s, const char *accept)
 {
     size_t n = 0;

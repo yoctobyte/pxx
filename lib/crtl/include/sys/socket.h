@@ -18,6 +18,17 @@ struct sockaddr {
   char sa_data[14];
 };
 
+/* struct sockaddr_storage: big enough and aligned enough for ANY address
+   family, for code that does not know in advance which one accept() will
+   return (dropbear's tcp-accept.c and svr-main.c). 128 bytes, aligned like a
+   long, with ss_family first: glibc's layout and the kernel's
+   __kernel_sockaddr_storage. */
+struct sockaddr_storage {
+  sa_family_t ss_family;
+  char __ss_padding[128 - sizeof(sa_family_t) - sizeof(unsigned long)];
+  unsigned long __ss_align;
+};
+
 /* listen() backlog ceiling; glibc's value. enet's unix.c uses it. */
 #define SOMAXCONN 4096
 
@@ -31,6 +42,8 @@ struct sockaddr {
 #define AF_PACKET 17
 
 #define PF_UNSPEC AF_UNSPEC
+#define PF_UNIX AF_UNIX
+#define PF_LOCAL AF_LOCAL
 #define PF_INET AF_INET
 #define PF_INET6 AF_INET6
 #define PF_NETLINK AF_NETLINK

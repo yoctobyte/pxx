@@ -18,6 +18,14 @@ char *strcpy(char *dest, const char *src);
 char *strncpy(char *dest, const char *src, size_t n);
 char *strcat(char *dest, const char *src);
 char *strncat(char *dest, const char *src, size_t n);
+/* BSD's bounded copies (glibc 2.38+ has them too, which is why dropbear's
+   configure says HAVE_STRLCPY on this host). Both return the length of the
+   string they TRIED to create, so `ret >= size' means truncated. */
+size_t strlcpy(char *dst, const char *src, size_t size);
+size_t strlcat(char *dst, const char *src, size_t size);
+/* memset that the compiler may not delete as a dead store: for wiping keys
+   and passwords (dropbear's m_burn). */
+void explicit_bzero(void *s, size_t n);
 char *strchr(const char *s, int c);
 
 /* The assumed-libc batch (feature-crtl-libc-gap-batch-2026-08). stpcpy returns

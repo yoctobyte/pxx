@@ -974,6 +974,13 @@ begin
          or CaseEqual(b,'push') or CaseEqual(b,'pop')
          or CaseEqual(b,'lgdt') or CaseEqual(b,'lidt') or CaseEqual(b,'ltr')
          or CaseEqual(b,'invlpg')
+         { Gibux SMP: the atomic read-modify-writes (with `lock`, below) and
+           the descriptor-register reads. rdtscp takes no operands, so it
+           never reaches this list (the zero-operand arm passes it on). }
+         or CaseEqual(b,'cmpxchg') or CaseEqual(b,'xadd')
+         or CaseEqual(b,'bsf') or CaseEqual(b,'bsr')
+         or CaseEqual(b,'str') or CaseEqual(b,'sldt')
+         or CaseEqual(b,'sgdt') or CaseEqual(b,'sidt') or CaseEqual(b,'rdpid')
          or CaseEqual(b,'fxsave64') or CaseEqual(b,'fxrstor64')
          or CaseEqual(b,'fxsave') or CaseEqual(b,'fxrstor')
          or CaseEqual(b,'ldmxcsr') or CaseEqual(b,'stmxcsr')
@@ -983,7 +990,12 @@ begin
          or CaseEqual(b,'xsaveopt') or CaseEqual(b,'xsavec')
          or CaseEqual(b,'rdrand') or CaseEqual(b,'rdseed')
          { set<cc> r/m8 (`rdrand %0; setc %1`); the shared encoder has it. }
-         or (AsmStartsWith(b, 'set') and (Length(b) > 3) and (AsmCC(AsmTail(b, 3)) >= 0));
+         or (AsmStartsWith(b, 'set') and (Length(b) > 3) and (AsmCC(AsmTail(b, 3)) >= 0))
+         { cmov<cc> r, r/m (sntrup761.c's constant-time compares: `cmovnew`).
+           The shared encoder has these too. `cmovl` is cmov-if-less, not
+           cmov with an l suffix, which is gas's reading as well: the whole word
+           is tried as a base before a suffix is split off. }
+         or (AsmStartsWith(b, 'cmov') and (Length(b) > 4) and (AsmCC(AsmTail(b, 4)) >= 0));
 end;
 
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.
@@ -1088,6 +1100,24 @@ begin
   mn := AttReadWord;
   if mn = '' then Error('C: inline asm template expected an instruction');
   AttSkipSpace;
+  { `lock` is a PREFIX, F0, emitted ahead of the instruction it qualifies:
+    `lock cmpxchgl %2,(%1)` on one line, or `lock;` / `lock` alone with the
+    instruction after the separator (both gas spellings, both in real
+    kernels). F0 is a legacy prefix, so it precedes the 66 and REX bytes the
+    instruction emits itself. The i386 path renders text lines and has no
+    prefix support, so it refuses by name. Gibux SMP: futex and spinlock
+    read-modify-writes that race other CPUs. }
+  if CaseEqual(mn, 'lock') then
+  begin
+    if AttSinkText then
+      Error('C: inline asm lock prefix is not supported on the i386 path');
+    AsmB($F0);
+    if AttPeek = ';' then begin Inc(AttPos); Exit; end;
+    if AttAtSeparator then Exit;
+    mn := AttReadWord;
+    if mn = '' then Error('C: inline asm template expected an instruction after lock');
+    AttSkipSpace;
+  end;
   if (not AttAtSeparator) and (AttPeek = ':') and AttIsDigit(mn[1]) and
      (Length(mn) <= 9) and (AttReadLabelNum(mn) >= 0) then
   begin

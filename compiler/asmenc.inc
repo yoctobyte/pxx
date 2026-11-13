@@ -695,6 +695,63 @@ begin
     if CaseEqual(mn,'iretq')   then begin AsmB($48); AsmB($CF); Exit; end;
     if CaseEqual(mn,'lretq')   then begin AsmB($48); AsmB($CB); Exit; end;
     if CaseEqual(mn,'sysretq') then begin AsmB($48); AsmB($0F); AsmB($07); Exit; end;
+    { rdtscp: edx:eax = TSC, ecx = IA32_TSC_AUX (Linux puts the CPU number
+      there). 0F 01 F9. }
+    if CaseEqual(mn,'rdtscp')  then begin AsmB($0F); AsmB($01); AsmB($F9); Exit; end;
+  end;
+
+  { rdpid r64: F3 (REX.B) 0F C7 /7, register only. The F3 is a mandatory
+    prefix and must come BEFORE the REX byte, so it is emitted first. }
+  if CaseEqual(mn,'rdpid') and (nops = 1) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: rdpid takes a register');
+    AsmB($F3);
+    if AsmOpReg[0] >= 8 then AsmB($41);
+    AsmB($0F); AsmB($C7);
+    AsmB($C0 or (7 shl 3) or (AsmOpReg[0] and 7));
+    Exit;
+  end;
+
+  { str / sldt: 0F 00 /1 and /0. A 16-bit register destination takes 66; a
+    32- or 64-bit one takes no width prefix at all, because the selector is
+    zero-extended into the full register either way -- gas encodes `str %rax`
+    as `str %eax` (0F 00 C8, no REX.W), and so does this. A memory destination
+    is always 16 bits and takes no prefix.
+    sgdt / sidt: 0F 01 /0 and /1, memory only (the 10-byte pseudo-descriptor
+    in long mode). Gibux reads its TSS selector with `str` to find the CPU. }
+  ext := -1;
+  if CaseEqual(mn,'sldt') then ext := 0
+  else if CaseEqual(mn,'str') then ext := 1;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if AsmOpKind[0] = AOP_REG then
+    begin
+      sz := AsmOpSize[0];
+      if sz = 2 then AsmB($66);
+      if AsmOpReg[0] >= 8 then AsmB($41);
+      AsmB($0F); AsmB($00);
+      AsmB($C0 or (ext shl 3) or (AsmOpReg[0] and 7));
+    end
+    else
+    begin
+      AsmPrefixAndREX(0, ext, 0, 0);
+      AsmB($0F); AsmB($00);
+      AsmModRM(ext, 0);
+    end;
+    Exit;
+  end;
+  ext := -1;
+  if CaseEqual(mn,'sgdt') then ext := 0
+  else if CaseEqual(mn,'sidt') then ext := 1;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    AsmPrefixAndREX(0, ext, 0, 0);
+    AsmB($0F); AsmB($01);
+    AsmModRM(ext, 0);
+    Exit;
   end;
 
   { in/out. Intel order (slot 0 = destination): `in al, dx` / `out dx, al`.
@@ -1150,6 +1207,27 @@ begin
     Error('asm: xchg needs a register operand');
   end;
 
+  { ---- cmpxchg r/m, r (0F B0/B1) and xadd r/m, r (0F C0/C1) ----
+    Intel order: slot 0 is the r/m destination, slot 1 the register source.
+    With a `lock` prefix (asmatt.inc emits the F0) these are the atomic
+    read-modify-writes a kernel's futex and spinlock code is built from
+    (Gibux SMP). The implicit accumulator of cmpxchg is never named. }
+  if (CaseEqual(mn,'cmpxchg') or CaseEqual(mn,'xadd')) and (nops = 2) then
+  begin
+    if AsmOpKind[1] <> AOP_REG then
+      Error('asm: ' + mn + ' source must be a register');
+    opSize := AsmOpSize[1];
+    rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, 0);
+    AsmB($0F);
+    if CaseEqual(mn,'cmpxchg') then
+    begin if opSize = 1 then AsmB($B0) else AsmB($B1); end
+    else
+    begin if opSize = 1 then AsmB($C0) else AsmB($C1); end;
+    AsmModRM(rf, 0);
+    Exit;
+  end;
+
   { lea reg, mem/global/memr }
   if CaseEqual(mn,'lea') then
   begin
@@ -1160,6 +1238,23 @@ begin
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
     AsmPrefixAndREX(opSize, rf, rh, 1);
     AsmB($8D);
+    AsmModRM(rf, 1);
+    Exit;
+  end;
+
+  { bsf / bsr reg, r/m  (0F BC / 0F BD). sntrup761.c's crypto_int16/32
+    bottom-bit helpers: `bsfw %0,%0; cmovew %1,%0`. The destination is
+    undefined when the source is zero, which is why that idiom follows it
+    with a cmove on ZF. }
+  if (CaseEqual(mn,'bsf') or CaseEqual(mn,'bsr')) and (nops = 2) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: ' + mn + ' dest must be register');
+    opSize := AsmOpSize[0];
+    if opSize = 1 then Error('asm: ' + mn + ' has no 8-bit form');
+    rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, 1);
+    AsmB($0F);
+    if CaseEqual(mn,'bsf') then AsmB($BC) else AsmB($BD);
     AsmModRM(rf, 1);
     Exit;
   end;

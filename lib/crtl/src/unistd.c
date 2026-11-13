@@ -341,10 +341,78 @@ pid_t fork(void) {
 pid_t vfork(void) {
   return fork();
 }
+/* The id-changing calls, through the raw syscall bridge (as chroot is). They
+   were ENOSYS stubs until dropbear (feature-c-dropbear-builds-with-pxx): a
+   server started as root must drop to the user before it runs their shell,
+   and a stub there is a login that fails, or worse, a caller that ignores the
+   -1 and runs the shell as root. dropbear checks; not every program does.
+
+   ONE THREAD, NOT ALL OF THEM. Linux applies these to the CALLING THREAD only.
+   glibc and musl signal every other thread to make the same call (the "setxid"
+   broadcast), so POSIX's process-wide semantics hold. That broadcast is not
+   here: in a multi-threaded program the other threads keep the old ids. Every
+   caller so far (dropbear, busybox's login/su) is single-threaded when it
+   drops privileges.
+
+   The *32 numbers come first where they exist (i386, arm32): there the plain
+   numbers are the 16-bit-uid legacy calls and would truncate uid 65536. */
+#if defined(SYS_setuid32)
+#define CRTL_SYS_SETUID    SYS_setuid32
+#define CRTL_SYS_SETGID    SYS_setgid32
+#define CRTL_SYS_SETRESUID SYS_setresuid32
+#define CRTL_SYS_SETRESGID SYS_setresgid32
+#define CRTL_SYS_SETREUID  SYS_setreuid32
+#define CRTL_SYS_SETREGID  SYS_setregid32
+#define CRTL_SYS_GETRESUID SYS_getresuid32
+#define CRTL_SYS_GETRESGID SYS_getresgid32
+#elif defined(SYS_setuid)
+#define CRTL_SYS_SETUID    SYS_setuid
+#define CRTL_SYS_SETGID    SYS_setgid
+#define CRTL_SYS_SETRESUID SYS_setresuid
+#define CRTL_SYS_SETRESGID SYS_setresgid
+#define CRTL_SYS_SETREUID  SYS_setreuid
+#define CRTL_SYS_SETREGID  SYS_setregid
+#define CRTL_SYS_GETRESUID SYS_getresuid
+#define CRTL_SYS_GETRESGID SYS_getresgid
+#endif
+
+#ifdef CRTL_SYS_SETUID
+int setuid(uid_t uid) { return (int)syscall(CRTL_SYS_SETUID, (long)uid, 0L, 0L, 0L, 0L, 0L); }
+int setgid(gid_t gid) { return (int)syscall(CRTL_SYS_SETGID, (long)gid, 0L, 0L, 0L, 0L, 0L); }
+int setresuid(uid_t r, uid_t e, uid_t s) {
+  return (int)syscall(CRTL_SYS_SETRESUID, (long)r, (long)e, (long)s, 0L, 0L, 0L);
+}
+int setresgid(gid_t r, gid_t e, gid_t s) {
+  return (int)syscall(CRTL_SYS_SETRESGID, (long)r, (long)e, (long)s, 0L, 0L, 0L);
+}
+int setreuid(uid_t r, uid_t e) {
+  return (int)syscall(CRTL_SYS_SETREUID, (long)r, (long)e, 0L, 0L, 0L, 0L);
+}
+int setregid(gid_t r, gid_t e) {
+  return (int)syscall(CRTL_SYS_SETREGID, (long)r, (long)e, 0L, 0L, 0L, 0L);
+}
+int getresuid(uid_t *r, uid_t *e, uid_t *s) {
+  return (int)syscall(CRTL_SYS_GETRESUID, (long)r, (long)e, (long)s, 0L, 0L, 0L);
+}
+int getresgid(gid_t *r, gid_t *e, gid_t *s) {
+  return (int)syscall(CRTL_SYS_GETRESGID, (long)r, (long)e, (long)s, 0L, 0L, 0L);
+}
+/* seteuid/setegid change only the effective id, which is setres*id with the
+   other two left alone (-1), the way glibc and musl implement them. */
+int seteuid(uid_t uid) { return setresuid((uid_t)-1, uid, (uid_t)-1); }
+int setegid(gid_t gid) { return setresgid((gid_t)-1, gid, (gid_t)-1); }
+#else
 int setuid(uid_t uid)          { (void)uid; errno = ENOSYS; return -1; }
 int setgid(gid_t gid)          { (void)gid; errno = ENOSYS; return -1; }
 int seteuid(uid_t uid)         { (void)uid; errno = ENOSYS; return -1; }
 int setegid(gid_t gid)         { (void)gid; errno = ENOSYS; return -1; }
+int setresuid(uid_t r, uid_t e, uid_t s) { (void)r; (void)e; (void)s; errno = ENOSYS; return -1; }
+int setresgid(gid_t r, gid_t e, gid_t s) { (void)r; (void)e; (void)s; errno = ENOSYS; return -1; }
+int setreuid(uid_t r, uid_t e) { (void)r; (void)e; errno = ENOSYS; return -1; }
+int setregid(gid_t r, gid_t e) { (void)r; (void)e; errno = ENOSYS; return -1; }
+int getresuid(uid_t *r, uid_t *e, uid_t *s) { (void)r; (void)e; (void)s; errno = ENOSYS; return -1; }
+int getresgid(gid_t *r, gid_t *e, gid_t *s) { (void)r; (void)e; (void)s; errno = ENOSYS; return -1; }
+#endif
 
 /* setgroups(2) IS REAL NOW -- PalSetGroups sits on setgroups32 where the target
    needs it (i386, arm32), which is the same *32 choice getgroups already makes.
@@ -1396,4 +1464,135 @@ int nice(int inc)
   got = getpriority(PRIO_PROCESS, 0);
   if (got == -1 && errno != 0) return -1;
   return got;
+}
+
+
+/* ---- getusershell / daemon / getpass / fexecve -----------------------------
+ * Found building dropbear (feature-c-dropbear-builds-with-pxx).
+ */
+#include <stdio.h>
+#include <fcntl.h>
+#include <termios.h>
+
+/* getusershell: the login shells listed in /etc/shells, one per call, skipping
+   comments and blank lines. With no /etc/shells it answers /bin/sh and then
+   /bin/csh, which is glibc's and the BSDs' fallback. dropbear uses it to
+   refuse logins whose shell is not listed. */
+static FILE *us_fp;
+static int us_fallback;
+static char us_line[256];
+
+void setusershell(void) {
+  if (us_fp) { fclose(us_fp); us_fp = 0; }
+  us_fallback = 0;
+  us_fp = fopen("/etc/shells", "r");
+  if (!us_fp) us_fallback = 1;
+}
+
+void endusershell(void) {
+  if (us_fp) { fclose(us_fp); us_fp = 0; }
+  us_fallback = 0;
+}
+
+char *getusershell(void) {
+  if (!us_fp && !us_fallback) setusershell();
+  if (us_fallback) {
+    static const char *const dflt[] = { "/bin/sh", "/bin/csh" };
+    if (us_fallback > 2) return 0;
+    strcpy(us_line, dflt[us_fallback - 1]);
+    us_fallback++;
+    return us_line;
+  }
+  while (fgets(us_line, (int)sizeof us_line, us_fp)) {
+    char *p = us_line, *e;
+    if (!strchr(us_line, '\n') && !feof(us_fp)) {
+      int c;   /* over-long line: skip all of it */
+      while ((c = fgetc(us_fp)) != '\n' && c != EOF) { }
+      continue;
+    }
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '#' || *p == '\n' || *p == '\0') continue;
+    e = p;
+    while (*e && *e != '\n' && *e != ' ' && *e != '\t' && *e != '#') e++;
+    *e = '\0';
+    return p;
+  }
+  return 0;
+}
+
+/* daemon(3): detach from the controlling terminal and run in the background.
+   The parent exits with 0, and the child becomes a session leader. Unless told
+   otherwise it moves to / and points stdin/stdout/stderr at /dev/null. One fork,
+   as glibc and musl do; the double-fork idiom is the caller's to add. */
+int daemon(int nochdir, int noclose) {
+  pid_t pid = fork();
+  if (pid < 0) return -1;
+  if (pid > 0) _exit(0);
+  if (setsid() < 0) return -1;
+  if (!nochdir && chdir("/") != 0) return -1;
+  if (!noclose) {
+    int fd = open("/dev/null", O_RDWR);
+    if (fd < 0) return -1;
+    dup2(fd, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    if (fd > 2) close(fd);
+  }
+  return 0;
+}
+
+/* getpass(3): prompt on the terminal and read one line with echo off. It reads
+   /dev/tty when there is one (falling back to stdin/stderr), restores the
+   terminal afterwards, and strips the newline. The buffer is static and holds
+   up to 127 characters; the rest of a longer line is read and dropped, as
+   glibc's fixed buffer does. Obsolete in POSIX, still what ssh clients call. */
+char *getpass(const char *prompt) {
+  static char buf[128];
+  struct termios old, noecho;
+  int fd, own = 0, restore = 0;
+  size_t n = 0;
+  char c;
+
+  fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+  if (fd >= 0) own = 1; else fd = 0;
+  if (tcgetattr(fd, &old) == 0) {
+    noecho = old;
+    noecho.c_lflag &= ~(tcflag_t)(ECHO | ECHONL | ECHOE | ECHOK);
+    noecho.c_lflag |= ICANON;
+    if (tcsetattr(fd, TCSAFLUSH, &noecho) == 0) restore = 1;
+  }
+  if (prompt) write(own ? fd : 2, prompt, strlen(prompt));
+  while (read(fd, &c, 1) == 1 && c != '\n' && c != '\r') {
+    if (n < sizeof buf - 1) buf[n++] = c;
+  }
+  buf[n] = '\0';
+  if (restore) {
+    tcsetattr(fd, TCSAFLUSH, &old);
+    write(own ? fd : 2, "\n", 1);
+  }
+  if (own) close(fd);
+  return buf;
+}
+
+/* fexecve(3): execute the program open on fd. execveat(fd, "", ...,
+   AT_EMPTY_PATH) does it without /proc. The /proc/self/fd path is glibc's
+   fallback, for a kernel or target without execveat. dropbear's server
+   re-executes itself this way for every connection (DROPBEAR_REEXEC). */
+int fexecve(int fd, char *const argv[], char *const envp[]) {
+  char path[40];
+  char digits[16];
+  int i = 0, k;
+  unsigned int v;
+#ifdef SYS_execveat
+  syscall(SYS_execveat, (long)fd, (long)"", (long)argv, (long)envp, 0x1000L, 0L);
+  if (errno != ENOSYS) return -1;
+#endif
+  if (fd < 0) { errno = EBADF; return -1; }
+  v = (unsigned int)fd;
+  do { digits[i++] = (char)('0' + v % 10); v /= 10; } while (v);
+  strcpy(path, "/proc/self/fd/");
+  k = (int)strlen(path);
+  while (i > 0) path[k++] = digits[--i];
+  path[k] = '\0';
+  return execve(path, argv, envp);
 }

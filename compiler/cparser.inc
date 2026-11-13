@@ -46,6 +46,27 @@ begin
   Result := True;
 end;
 
+{ The row of a C function `name` with EXTERNAL linkage in this unit, or -1. A
+  `static` row in some module and a non-static row of the same name are two
+  functions (C 6.2.2), and since 2026-11-13 they are two rows; see
+  CFindProcFromModule and RUNG X in ParseCSubroutine. }
+function CFindExternalProcRow(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if (Procs[i].Name = name) and (not ProcCStaticLink[i]) and
+       (ProcUnitIdx[i] = CurrentUnitIdx) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
 function CFindProcFromModule(const name: AnsiString): Integer;
 { Resolve a C function name FROM THE MODULE THAT IS ASKING.
 
@@ -68,7 +89,8 @@ function CFindProcFromModule(const name: AnsiString): Integer;
   parser reads the signature to tell an open-array constructor from a SET).
   A C-module preference has no meaning there.
   feature-c-two-same-named-file-scope-statics-share-one-procs-row }
-var i, mine, myMod: Integer;
+var i, mine, myMod, pub: Integer;
+    foreignStatic: Boolean;
 begin
   Result := FindProc(name);
   if Result < 0 then Exit;
@@ -77,6 +99,21 @@ begin
     map costs a backward scan -- so answer the common case from the row we
     already have and never walk at all. }
   myMod := CModuleOfTok(TokPos - 1);
+  { ANOTHER MODULE'S `static` IS NEVER THE ANSWER from outside it. When the
+    first-registered row is one, the caller gets its own module's static if it
+    has one (the walk below), else the row with EXTERNAL linkage. Before, the
+    static won: crtl's crypt.c `static void sha512_init(sha512_ctx *)` captured
+    dropbear's calls to libtomcrypt's `int sha512_init(hash_state *)` from
+    every file that included <crypt.h>, and ed25519 signed garbage.
+    bug-c-a-static-function-captured-calls-to-an-external-one-of-the-same-name }
+  foreignStatic := ProcCStaticLink[Result] and
+                   (ProcCModule[Result] >= 0) and (ProcCModule[Result] <> myMod);
+  if foreignStatic and (myMod < 0) then
+  begin
+    pub := CFindExternalProcRow(name);
+    if pub >= 0 then Result := pub;
+    Exit;
+  end;
   if myMod < 0 then Exit;                  { the main source owns no statics }
   if ProcCModule[Result] = myMod then Exit;
   mine := -1;
@@ -84,12 +121,17 @@ begin
   while i >= 0 do
   begin
     if (Procs[i].Name = name) and ProcCStaticLink[i] and
-       CProcHasLocalDef[i] and (ProcCModule[i] = myMod) and
+       (ProcCModule[i] = myMod) and
        (ProcUnitIdx[i] = CurrentUnitIdx) then
       begin mine := i; Break; end;
     i := ProcHashNext[i];
   end;
-  if mine >= 0 then Result := mine;
+  if mine >= 0 then Result := mine
+  else if foreignStatic then
+  begin
+    pub := CFindExternalProcRow(name);
+    if pub >= 0 then Result := pub;
+  end;
 end;
 
 function CFindSymFromModule(const name: AnsiString): Integer;
@@ -1076,7 +1118,7 @@ begin
 end;
 
 function CMakeBinop(cTok, l, r: Integer): Integer;
-var node, ivalOp, bfPrec: Integer; bfSigned: Boolean; cv: Int64;
+var node, ivalOp, bfPrec: Integer; bfSigned: Boolean; cv, cv2: Int64;
 begin
   { Both operands undergo the integer promotions before the usual arithmetic
     conversions (6.3.1.8), so a plain char sign-extends HERE on a signed-char
@@ -1120,6 +1162,33 @@ begin
   else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }
   { tkPlus/tkMinus/tkStar/tkMod/tkShl/tkXor/tkAnd(&&)/tkOr(||)/comparisons map
     straight through. }
+  { A COMPARISON OF TWO INTEGER LITERALS IS A LITERAL. Without this the result
+    is an AN_BINOP, so the `&&`/`||` short-circuit below (which asks
+    CConstIntLit about its LEFT operand) cannot see it, and the dead right arm
+    survives. That is libtommath's whole configuration mechanism:
+    `MP_HAS(x)` is `(sizeof(""#BN_x_C"") == 1u)`, and `if (MP_HAS(S_MP_TOOM_MUL)
+    && min_len >= cutoff) err = s_mp_toom_mul(...)` must drop the call when the
+    algorithm is configured out, because its definition is then compiled out
+    too. pxx kept four such calls in dropbear's mp_mul/mp_sqr and the link
+    failed with `undefined reference to s_mp_toom_mul`. gcc drops them at -O0.
+    A bare `if (sizeof("ab") == 1u)` was already pruned later by the IR's
+    constant branch fold; only the && chain reached the linker.
+    Only NON-NEGATIVE operands are folded, so the signed/unsigned conversion
+    rules cannot change the answer (a negative literal against an unsigned
+    one stays a runtime compare, with the CTrunc32 handling below).
+    bug-c-a-literal-comparison-did-not-fold-so-and-kept-its-dead-arm }
+  if ((cTok = Ord(tkEq)) or (cTok = Ord(tkNeq)) or (cTok = Ord(tkLt)) or
+      (cTok = Ord(tkLe)) or (cTok = Ord(tkGt)) or (cTok = Ord(tkGe))) and
+     CConstIntLit(l, cv) and CConstIntLit(r, cv2) and (cv >= 0) and (cv2 >= 0) then
+  begin
+    if cTok = Ord(tkEq) then CMakeBinop := CBoolLit(cv = cv2)
+    else if cTok = Ord(tkNeq) then CMakeBinop := CBoolLit(cv <> cv2)
+    else if cTok = Ord(tkLt) then CMakeBinop := CBoolLit(cv < cv2)
+    else if cTok = Ord(tkLe) then CMakeBinop := CBoolLit(cv <= cv2)
+    else if cTok = Ord(tkGt) then CMakeBinop := CBoolLit(cv > cv2)
+    else CMakeBinop := CBoolLit(cv >= cv2);
+    Exit;
+  end;
   if (cTok = Ord(tkAnd)) or (cTok = Ord(tkOr)) then       { logical && / || }
   begin
     { SHORT-CIRCUIT ON A CONSTANT LEFT OPERAND, and it is LOWERING, not an
@@ -1270,6 +1339,7 @@ end;
 function ParseCUnary: Integer; forward;
 function ParseCPostfix: Integer; forward;
 function ParseCPostfixTail(node: Integer): Integer; forward;
+function CFieldOfTernary(tern, fldOff, fldLen, tk: Integer): Integer; forward;
 
 { Build the shared-IR AN_INCDEC value node (master shape): Left = the lvalue
   (address computed once at lowering), ASTIVal = +1/-1 (the lowering scales by
@@ -5864,6 +5934,15 @@ begin
       end
       else
         ASTTk[fnode] := Ord(tyInteger);
+      { A member of a struct-valued CONDITIONAL: `(c ? a : b).f` is
+        `c ? a.f : b.f` exactly -- the same condition, only the selected arm
+        evaluated, and each arm a struct of the same type. The lowering stores
+        a ternary's result into a scalar temp, which a struct does not fit
+        (IR_UNSUPPORTED kind 67), so the member is taken INSIDE each arm
+        instead. Recursive for a nested conditional arm. Found building
+        dropbear: libcrux's Eurydice_range_iter_next(...).tag in mlkem768.c. }
+      if (ASTKind[baseFld] = AN_TERNARY) and (not CNodeIsPointer(baseFld)) then
+        fnode := CFieldOfTernary(baseFld, fldOff, fldLen, ASTTk[fnode]);
       Next;   { consume field name }
       { fn-pointer field call: `rec.field(args)` / `p->field(args)` lowers to an
         indirect call through the field value (callee = AN_FIELD node). }
@@ -7279,6 +7358,35 @@ begin
   grown := AllocArray('', elemTk, 0, newLen - 1);
   Syms[idx].Offset := Syms[grown].Offset;
   Syms[idx].ArrLen := newLen;
+end;
+
+{ The record twin of CGrowGlobalArray. `extern const struct T x;` while T is
+  still incomplete reserves a slot of the incomplete size (1 byte); the
+  definition `const struct T x = {...};` after T is complete reuses the row,
+  and nothing resized it. The object therefore had 1 byte of storage, a
+  non-const initialiser overran into its neighbours, and a const one was
+  dropped entirely: dropbear's `dropbear_nocipher = {NULL, 16, 8}` read back
+  as zeros and its first packet divided by blocksize 0. A fresh slot of the
+  complete size replaces the old one, as the array arm does: offsets are
+  read from the row when code is generated, so moving it here is safe.
+  bug-c-a-definition-after-an-incomplete-extern-kept-the-1-byte-slot }
+procedure CGrowGlobalRecord(idx, recId, align: Integer);
+var grown, sz: Integer;
+begin
+  if (idx < 0) or (recId < 0) then Exit;
+  if Syms[idx].Kind <> skGlobal then Exit;
+  if Syms[idx].IsArray then Exit;
+  if Syms[idx].TypeKind <> tyRecord then Exit;
+  if CRecMissingFieldKind(recId) = 1 then Exit;   { still incomplete }
+  sz := RecSize(recId);
+  if sz <= SymAllocSize[idx] then Exit;
+  AllocMinAlign := align;
+  if align > ReqBssAlign then ReqBssAlign := align;
+  grown := AllocRecVar('', recId);
+  AllocMinAlign := 0;
+  Syms[idx].Offset := Syms[grown].Offset;
+  Syms[idx].RecName := recId;
+  SymAllocSize[idx] := SymAllocSize[grown];
 end;
 
 { Wrap a static-local declaration's initializer chain (AN_SEQ head) in a
@@ -8818,12 +8926,61 @@ begin
   Result := v;
 end;
 
+{ `(c ? a : b).f` as `c ? a.f : b.f`, the member taken in each arm. tern is
+  an AN_TERNARY whose arms are struct values of one type; fldOff/fldLen name
+  the member and tk is its type. See the call site in the postfix parser. }
+function CFieldOfTernary(tern, fldOff, fldLen, tk: Integer): Integer;
+var pair, arm, side, f, np: Integer;
+    arms: array[0..1] of Integer;
+begin
+  pair := ASTRight[tern];
+  for side := 0 to 1 do
+  begin
+    if side = 0 then arm := ASTLeft[pair] else arm := ASTRight[pair];
+    if ASTKind[arm] = AN_TERNARY then
+      arms[side] := CFieldOfTernary(arm, fldOff, fldLen, tk)
+    else
+    begin
+      f := AllocNode(AN_FIELD);
+      ASTLeft[f] := arm;
+      ASTSOffset[f] := fldOff;
+      ASTSLen[f] := fldLen;
+      ASTTk[f] := tk;
+      arms[side] := f;
+    end;
+  end;
+  np := AllocNode(AN_PAIR);
+  ASTLeft[np] := arms[0];
+  ASTRight[np] := arms[1];
+  Result := AllocNode(AN_TERNARY);
+  ASTLeft[Result] := ASTLeft[tern];
+  ASTRight[Result] := np;
+  ASTTk[Result] := tk;
+end;
+
+{ True when evaluating `n` twice is the same as evaluating it once: no call,
+  no assignment, no ++/--. Used for a "+r" operand, whose lvalue is read
+  before the asm and written after it. Conservative: anything it does not
+  recognise counts as impure. }
+function CAsmLvalueIsPure(n: Integer): Boolean;
+begin
+  Result := True;
+  if n < 0 then Exit;
+  case ASTKind[n] of
+    AN_IDENT, AN_INT_LIT: Exit;
+    AN_FIELD, AN_DEREF, AN_INDEX, AN_ADDR, AN_BINOP, AN_NEG:
+      Result := CAsmLvalueIsPure(ASTLeft[n]) and CAsmLvalueIsPure(ASTRight[n]);
+  else
+    Result := False;
+  end;
+end;
+
 { One `[sym] "constraint" ( expr )` list, comma-separated, up to the next colon
   or the closing paren. }
 procedure CAsmParseOperandSection(isOutSection: Boolean);
 var raw, cls, sym: AnsiString;
     isOut, isInOut, early: Boolean;
-    tied, immHi: Integer;
+    tied, immHi, addrN: Integer;
 begin
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
         (CurTok.Kind <> tkEOF) do
@@ -8901,7 +9058,24 @@ begin
               + AIntToStr(ASTIVal[CAsmOps[CAsmOpCount].Expr]));
     end
     else
+    begin
       CAsmOps[CAsmOpCount].Expr := ParseCExpr;
+      { An ARRAY as a non-memory operand decays to a pointer to its first
+        element, as it does everywhere else in an rvalue: libtomcrypt's
+        STORE32H passes "r"(seqbuf) for an unsigned char[4] and indexes
+        (%1). Sized by the array, it got a 32-bit register ("needs a 64-bit
+        base register"); copied, it would have carried the bytes, not the
+        address. An "m" operand keeps the array itself: that is its slot. }
+      if (cls <> 'm') and (not isOutSection) and (not isOut)
+         and CNodeDecaysToPointer(CAsmOps[CAsmOpCount].Expr)
+         and (not CNodeIsPointer(CAsmOps[CAsmOpCount].Expr)) then
+      begin
+        addrN := AllocNode(AN_ADDR);
+        ASTLeft[addrN] := CAsmOps[CAsmOpCount].Expr;
+        ASTTk[addrN] := Ord(tyPointer);
+        CAsmOps[CAsmOpCount].Expr := addrN;
+      end;
+    end;
     Inc(CAsmOpCount);
     Expect(tkRParen, ')');
     if CurTok.Kind = tkComma then Next else Break;
@@ -9622,7 +9796,7 @@ end;
 
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
-    asmSections, asmStart, asmLen: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
     localSawExtern: Boolean;   { a block-scope `extern`, likewise -- the declaration is parsed and DISCARDED; see the arm below }
@@ -9939,6 +10113,38 @@ begin
     end;
     Expect(tkRParen, ')');
     Eat(tkSemicolon);
+    { "+r": a read-write operand is an output plus an input TIED to it, which
+      is what gcc does internally too. The hidden input goes AFTER every
+      explicit operand, so the %N numbering the template uses is unchanged;
+      gcc numbers it the same way, as an extra operand nobody names. The
+      lvalue is evaluated twice (once to load, once to store), so an
+      operand with side effects, `"+r"(*p++)`, would be wrong; that is
+      refused rather than duplicated. "+m" stays refused: a memory output
+      has no carrier here at all. "+&r" is "+r": every operand already has
+      a register of its own, so the earlyclobber promise holds anyway.
+      Found building dropbear: sntrup761.c's crypto_int16 helpers. }
+    for asmI := 0 to CAsmOutCount - 1 do
+      if CAsmOps[asmI].IsInOut and (CAsmOps[asmI].Cons <> 'm') then
+      begin
+        if CAsmOpCount >= MAX_CASM_OPERANDS then
+          Error('C: inline asm has more than ' + AIntToStr(MAX_CASM_OPERANDS)
+                + ' operands once each "+" operand gets its input');
+        if not CAsmLvalueIsPure(CAsmOps[asmI].Expr) then
+          Error('C: inline asm read-write operand "' + CAsmOps[asmI].Raw
+                + '" names an lvalue with side effects, which a load and a'
+                + ' store would evaluate twice');
+        CAsmOps[CAsmOpCount].Cons := AIntToStr(asmI);
+        CAsmOps[CAsmOpCount].Raw := AIntToStr(asmI);
+        CAsmOps[CAsmOpCount].IsOut := False;
+        CAsmOps[CAsmOpCount].IsInOut := False;
+        CAsmOps[CAsmOpCount].Early := False;
+        CAsmOps[CAsmOpCount].SymName := '';
+        CAsmOps[CAsmOpCount].TiedTo := asmI;
+        CAsmOps[CAsmOpCount].Expr := CloneAST(CAsmOps[asmI].Expr);
+        Inc(CAsmOpCount);
+        CAsmOps[asmI].IsInOut := False;
+        CAsmOps[asmI].Early := False;
+      end;
     { The refusals run MOST SPECIFIC FIRST, so the message names the thing that
       is actually missing rather than the outermost fact about it. A reader who
       is told "asm goto" knows what to build; one told "non-empty template"
@@ -12462,7 +12668,9 @@ begin
         idx := AllocVar(name, baseTk);
       AllocMinAlign := 0;
     end
-    else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
+    else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen)
+    else if (baseTk = tyRecord) and (gStars = 0) then
+      CGrowGlobalRecord(idx, recId, gAlign);
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     CApplyThreadLocalStorage(idx, declSawThread);
     { An initialised C global goes to .data now, before any code can capture
@@ -16163,14 +16371,54 @@ begin
     rungs above this one are careful about. Measure that before arming it.
     feature-c-two-same-named-file-scope-statics-share-one-procs-row }
   if (procIdx >= 0) and CProgramMode and procSawStatic
-     and CProcHasLocalDef[procIdx] and ProcCStaticLink[procIdx]
+     and ProcCStaticLink[procIdx]
      and (ProcUnitIdx[procIdx] = CurrentUnitIdx)
      and (ProcCModule[procIdx] >= 0)
      and (ProcCModule[procIdx] <> CModuleOfTok(TokPos - 1)) then
     procIdx := -1;
+  { RUNG X -- A `static` AND AN EXTERNAL FUNCTION OF THE SAME NAME ARE TWO ROWS.
+    RUNG S above splits two statics. This splits the other mixed pair, which
+    C 6.2.2 also makes two functions and which gcc rejects outright inside one
+    real translation unit ("static declaration follows non-static"), so in
+    this single buffer it can only mean two modules:
+
+    (a) a `static` declaration reaching a C row with external linkage. That row
+        stays the external function's, and the static gets its own.
+    (b) a non-static declaration reaching another module's `static` row. It
+        takes the external row if one exists, else a fresh one.
+
+    dropbear: crtl's crypt.c defines `static void sha512_init(sha512_ctx *)`
+    and libtomcrypt declares `int sha512_init(hash_state *)`. They shared one
+    row, the static body won, and every dropbear call to libtomcrypt's
+    sha512_init from a file that included <crypt.h> ran crtl's helper on a
+    hash_state.
+    Pascal rows are untouched (ProcCdecl), so a crtl override of a Pascal
+    builtin binds exactly as before.
+    bug-c-a-static-function-captured-calls-to-an-external-one-of-the-same-name }
+  if (procIdx >= 0) and CProgramMode and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
+  begin
+    if procSawStatic and ProcCdecl[procIdx] and (not ProcCStaticLink[procIdx]) then
+      procIdx := -1
+    else if (not procSawStatic) and ProcCStaticLink[procIdx]
+            and (ProcCModule[procIdx] >= 0)
+            and (ProcCModule[procIdx] <> CModuleOfTok(TokPos - 1)) then
+      procIdx := CFindExternalProcRow(name);
+  end;
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  { A `static` PROTOTYPE already gives the name internal linkage (C 6.2.2p3).
+    It was recorded only at the definition, so RUNG X (a) took the forward
+    `static int sp_parse(...);` for an external row and split the definition
+    away from it: calls written in between bound to a bodyless row. }
+  { ...and it belongs to THIS module from the prototype on, so the module walk
+    in CFindProcFromModule finds it for calls written before the body and the
+    definition lands on the same row. }
+  if procSawStatic and CProgramMode then
+  begin
+    ProcCStaticLink[procIdx] := True;
+    if not CProcHasLocalDef[procIdx] then ProcCModule[procIdx] := CModuleOfTok(TokPos - 1);
+  end;
   { A C extern can bind by name to an existing PASCAL proc (case-insensitive
     FindProc): lua's <math.h> `sqrt`/`exp`/`sin`/... resolve to the RTL math
     routines. Such a proc keeps its Pascal internal calling convention — marking

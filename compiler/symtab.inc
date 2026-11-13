@@ -7012,6 +7012,19 @@ begin
     if (CurProc < 0) or AllocStaticLocal then
     begin
       if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
+      { A C GLOBAL OF SIZE 0 STILL GETS ITS OWN ADDRESS. `extern const struct T
+        x;` before T is complete sizes to 0, so a run of such declarations all
+        sat at ONE offset. The object writer names an import by its offset
+        (ObjDataSymIndexForOff, exact match, first wins), so `&second` was
+        relocated to the FIRST name: dropbear's algo.h declares
+        dropbear_nocipher, dropbear_mode_none and dropbear_nohash that way, and
+        `&dropbear_nohash` linked to dropbear_nocipher. The same offset made
+        every one of them "referenced", so unused declarations became UND
+        symbols and the server's link asked for the client-only clichansess.
+        C 6.5.9 requires distinct objects to compare unequal anyway. Pascal is
+        left alone: a byte here would move its layouts for nothing.
+        bug-c-zero-size-extern-declarations-shared-one-slot-and-one-relocation }
+      if (sz = 0) and IsCFrontend then sz := 1;
       BSSSize := AlignTo(BSSSize, align);
       Syms[SymCount].Kind   := skGlobal;
       Syms[SymCount].Offset := BSSSize;

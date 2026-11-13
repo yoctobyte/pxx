@@ -5804,7 +5804,12 @@ begin
       strSize := strSize + Length(Syms[i].Name) + 1;
       Inc(numImportData);
     end;
-  if (numExportProcs = 0) and (numExportData = 0) then
+  { A C translation unit that preprocesses to nothing is ordinary C, not a
+    mistake: gcc emits an empty object for it, and libraries switch whole
+    files off that way (libtomcrypt's error_to_string.c, dropbear's
+    progressmeter.c). The refusal is for Pascal, where an object that exports
+    nothing means a unit forgot cdecl/cvar/public. }
+  if (numExportProcs = 0) and (numExportData = 0) and (not IsCFrontend) then
     ErrorNoPos('--emit-obj: this object would define no linkable symbol, so nothing '
         + 'could ever link against it. A pxx object exports the routines '
         + 'declared with the C convention -- Pascal `cdecl`, or any function of '

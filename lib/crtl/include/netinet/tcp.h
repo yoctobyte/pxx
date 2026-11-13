@@ -11,4 +11,8 @@
 #define TCP_KEEPINTVL 5
 #define TCP_KEEPCNT 6
 
+/* The TCP protocol level for setsockopt, the same number as IPPROTO_TCP.
+   glibc defines it here. dropbear's netio.c sets TCP_NODELAY with it. */
+#define SOL_TCP 6
+
 #endif

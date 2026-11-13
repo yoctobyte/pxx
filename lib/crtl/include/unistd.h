@@ -191,6 +191,15 @@ int fchdir(int fd);
 int ttyname_r(int fd, char *buf, size_t buflen);
 char *ttyname(int fd);
 
+/* Found building dropbear (feature-c-dropbear-builds-with-pxx). glibc
+   declares all of these here. */
+char *getusershell(void);
+void setusershell(void);
+void endusershell(void);
+int daemon(int nochdir, int noclose);
+char *getpass(const char *prompt);
+int fexecve(int fd, char *const argv[], char *const envp[]);
+
 /* Declared and defined, but every one of them FAILS with ENOSYS. They exist so
    that a program carrying a code path it never takes can still LINK — see the
    note in the sibling unistd.c. A caller that does take the path gets
@@ -207,6 +216,12 @@ int setuid(uid_t uid);
 int setgid(gid_t gid);
 int seteuid(uid_t uid);
 int setegid(gid_t gid);
+int setresuid(uid_t ruid, uid_t euid, uid_t suid);
+int setresgid(gid_t rgid, gid_t egid, gid_t sgid);
+int setreuid(uid_t ruid, uid_t euid);
+int setregid(gid_t rgid, gid_t egid);
+int getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
+int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 int setgroups(size_t n, const gid_t *list);
 
 /* getopt — POSIX 2018 declares it here, and that is where every program that

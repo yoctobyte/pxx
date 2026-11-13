@@ -1,0 +1,14 @@
+strlcpy 11 'hello w'
+strlcat 10 'hello w'
+strlcat2 4 'abcd'
+strlcat_nonul 6
+bzero 0
+spwd alice $6$x$y 19000 -1 99999 7 -1 -1
+openpty ok pts istty=1
+sizeof utmp 384 lastlog 292
+timeradd 2.100000 set=1 lt=1
+shells>0 1
+getresuid 0 same=1
+setuid(self) 0
+setuid(0) -1 eperm=1
+sockaddr_storage 128 align 8 family@0

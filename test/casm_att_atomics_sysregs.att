@@ -1,0 +1,42 @@
+# AT&T instructions added for Gibux SMP (a pxx-built kernel) and for dropbear's
+# sntrup761.c, checked against GNU as by tools/casm_att_diff.py -- the same
+# oracle as test/casm_att_template.att, a separate file so each list keeps the
+# reason its rows exist.
+#
+#   lock + rmw        F0 is a LEGACY prefix and must come before 66/REX; a
+#                     lock emitted after REX is a different (invalid) stream
+#   cmpxchg / xadd    r/m destination, register source: the order reverses
+#   r8-r15            REX.R / REX.B on both sides of each new opcode
+#   str/sldt reg      the register form takes its width (66, REX.W); the
+#                     memory form is always 16 bits and takes none
+#   sgdt/sidt         memory only
+#   rdpid             F3 is a MANDATORY prefix and must precede the REX byte
+#   bsf/bsr           w/l/q; sntrup761's `bsfw %0,%0`
+
+lock cmpxchgl %edx, (%rcx)
+lock cmpxchgq %r9, (%r10)
+cmpxchgq %rdx, 8(%rcx)
+lock xaddl %eax, (%rdx)
+lock xaddq %r8, (%r11)
+xaddq %rax, (%rdx)
+lock incl (%rax)
+lock decq 16(%rbx)
+lock orl %ecx, (%rax)
+lock andq %r8, (%r9)
+str %ax
+str %eax
+str %rax
+str %r9
+str (%rax)
+sldt %ax
+sldt (%r8)
+sgdt (%rax)
+sidt 8(%rcx)
+rdtscp
+rdpid %rax
+rdpid %r10
+bsfw %ax, %cx
+bsfl %eax, %edx
+bsfq %r8, %rax
+bsrl (%rcx), %eax
+bsrq %rax, %r11

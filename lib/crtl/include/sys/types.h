@@ -82,6 +82,28 @@ typedef unsigned long long ino_t;
    One typedef clears both TUs. */
 typedef long long loff_t;
 
+/* suseconds_t / useconds_t: the microsecond types, `long' and `unsigned int'
+   as in glibc. suseconds_t is struct timeval's tv_usec (sys/time.h spells
+   that member `long', the same type). dropbear's loginrec.h declares its own
+   timeval-shaped struct with them. */
+typedef long suseconds_t;
+typedef unsigned int useconds_t;
+
+/* The BSD short names. glibc publishes them from <sys/types.h> by default
+   (__USE_MISC), and dropbear's scp.c/scpmisc.h, configure's HAVE_U_INT8_T
+   and friends all assume they are there. */
+typedef unsigned char u_char;
+typedef unsigned short u_short;
+typedef unsigned int u_int;
+typedef unsigned long u_long;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef unsigned long ulong;
+typedef uint8_t u_int8_t;
+typedef uint16_t u_int16_t;
+typedef uint32_t u_int32_t;
+typedef uint64_t u_int64_t;
+
 /* <sys/select.h> AT THE END, as glibc's <sys/types.h> does (line 179 of the
    host's copy). fd_set and the FD_* macros are reached that way far more often
    than by including <sys/select.h> directly -- busybox's telnetd.c gets them

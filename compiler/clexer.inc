@@ -109,6 +109,41 @@ begin
   end;
 end;
 
+{ The machine mode named by `mode(X)` / `__mode__(__X__)` in a lowercased
+  attribute text, without underscores ('ti', 'di', 'word', ...), or '' when
+  there is none. The word must stand alone: `mode` preceded by an identifier
+  character (`nomode`, `__mode__` counts as standalone once underscores go) is
+  not it. }
+function CAttrModeName(const s: AnsiString): AnsiString;
+var i, j: Integer; r: AnsiString;
+begin
+  Result := '';
+  i := 1;
+  while i + 3 <= Length(s) do
+  begin
+    if (s[i] = 'm') and (s[i+1] = 'o') and (s[i+2] = 'd') and (s[i+3] = 'e') and
+       ((i = 1) or not (s[i-1] in ['a'..'z','0'..'9'])) then
+    begin
+      j := i + 4;
+      while (j <= Length(s)) and (s[j] = '_') do Inc(j);
+      while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
+      if (j <= Length(s)) and (s[j] = '(') then
+      begin
+        Inc(j);
+        r := '';
+        while (j <= Length(s)) and (s[j] <> ')') do
+        begin
+          if s[j] in ['a'..'z','0'..'9'] then AppendChar(r, s[j]);
+          Inc(j);
+        end;
+        Result := r;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure CSkipSpace;
 var done, idDone: Boolean;
     p, depth, nameLen: Integer;
@@ -162,6 +197,22 @@ begin
             end;
             Inc(SrcPos);
           end;
+          { mode(TI) and wider: a type pxx cannot represent. The attribute was
+            skipped like any other, so `typedef unsigned long w
+            __attribute__((mode(TI)));` silently became a 64-bit type and every
+            product stored in it lost its high half. That is libtommath's
+            mp_word under MP_64BIT, which it selects for any __GNUC__ x86-64
+            compiler, and dropbear's RSA key generation then never found a
+            prime. Refused by name. The narrower modes (QI/HI/SI/DI) are still
+            skipped; see feature-c-int128-and-attribute-mode.
+            bug-c-attribute-mode-ti-was-ignored-and-made-a-64-bit-type }
+          if (CAttrModeName(attrText) = 'ti') or (CAttrModeName(attrText) = 'oi') or
+             (CAttrModeName(attrText) = 'tf') or (CAttrModeName(attrText) = 'xf') or
+             (CAttrModeName(attrText) = 'kf') then
+            Error('C: __attribute__((mode(' + UpCase(CAttrModeName(attrText)) +
+                  '))) asks for a 128-bit type, and pxx has none (no __int128). ' +
+                  'Ignoring it would make the type 64 bits wide. For libtommath, ' +
+                  'build with -DMP_32BIT');
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
           if CStrContains(attrText, 'aligned') then

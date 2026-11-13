@@ -8805,6 +8805,25 @@ begin
             end;
             ABISysVArgPlace(aggTk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
                             sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);
+            { A MEMORY-class aggregate takes ONE slot, however big it is. The
+              stack loop below already pushes every eightbyte of an aggregate from
+              its highest slot (slotSrcOff says how many), so the per-eightbyte
+              slots only ever counted toward MAX_CALL_ARGS. A 2400-byte struct
+              (libcrux's MlKemPrivateKey, dropbear's mlkem768.c) needs 300 and
+              was refused. One slot, mStack advanced by the full eightbyte count:
+              the same pushes in the same order, so the bytes do not change. }
+            if apMem and apAgg and (sysvSlots > 1) then
+            begin
+              if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
+              slotArg[nSlots] := i;
+              slotIsAgg[nSlots] := True;
+              slotSrcOff[nSlots] := (sysvSlots - 1) * 8;
+              slotIsSse[nSlots] := False;
+              slotIsStack[nSlots] := True;
+              mStack := mStack + sysvSlots;
+              Inc(nSlots);
+            end
+            else
             for aggK := 0 to sysvSlots - 1 do
             begin
               if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
@@ -11713,6 +11732,25 @@ begin
               end;
               ABISysVArgPlace(tk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
                               sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);
+              { A MEMORY-class aggregate takes ONE slot, however big it is. The
+                stack loop below already pushes every eightbyte of an aggregate from
+                its highest slot (slotSrcOff says how many), so the per-eightbyte
+                slots only ever counted toward MAX_CALL_ARGS. A 2400-byte struct
+                (libcrux's MlKemPrivateKey, dropbear's mlkem768.c) needs 300 and
+                was refused. One slot, mStack advanced by the full eightbyte count:
+                the same pushes in the same order, so the bytes do not change. }
+              if apMem and apAgg and (sysvSlots > 1) then
+              begin
+                if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
+                slotArg[nSlots] := i;
+                slotIsAgg[nSlots] := True;
+                slotSrcOff[nSlots] := (sysvSlots - 1) * 8;
+                slotIsSse[nSlots] := False;
+                slotIsStack[nSlots] := True;
+                mStack := mStack + sysvSlots;
+                Inc(nSlots);
+              end
+              else
               for aggK := 0 to sysvSlots - 1 do
               begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');

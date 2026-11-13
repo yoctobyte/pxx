@@ -33,6 +33,9 @@ struct sockaddr_in {
 #define IPPROTO_UDP 17
 
 #define INADDR_ANY 0x00000000U
+
+/* Ports below this need privilege to bind. */
+#define IPPORT_RESERVED 1024
 #define INADDR_LOOPBACK 0x7F000001U
 #define INADDR_BROADCAST 0xFFFFFFFFU
 #define INADDR_NONE 0xFFFFFFFFU

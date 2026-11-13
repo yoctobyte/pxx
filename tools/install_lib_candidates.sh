@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab|micropython-drivers|micropython-net] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|dropbear|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab|micropython-drivers|micropython-net] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -37,6 +37,13 @@ ZLIB_URL="https://github.com/madler/zlib"
 ZLIB_COMMIT="51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"   # v1.3.1 release tag
 BUSYBOX_URL="https://git.busybox.net/busybox"
 BUSYBOX_COMMIT="1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4"   # 1.36.1 release
+
+# dropbear: a release tarball, signed by the author. The signature was checked
+# once by hand (2026-11-13, key F7347EF2EE2E07A267628CA944931494F29C6773, "Good
+# signature") and the sha256 below pins what was checked.
+DROPBEAR_VERSION="2026.94"
+DROPBEAR_URL="https://matt.ucc.asn.au/dropbear/releases/dropbear-${DROPBEAR_VERSION}.tar.bz2"
+DROPBEAR_SHA256="e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81"
 
 TCC_URL="https://github.com/TinyCC/tinycc"
 TCC_COMMIT="a338258d309c888bde96b2d1f206299231a54ddf"   # mob, 2026-07 snapshot
@@ -180,6 +187,32 @@ SHA256: ${LUA_SHA256}
 Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
 EOF
   say "lua -> $DEST/lua"
+}
+
+fetch_dropbear() {
+  if present dropbear; then say "dropbear present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  command -v curl >/dev/null 2>&1 || die "curl required for dropbear"
+  command -v sha256sum >/dev/null 2>&1 || die "sha256sum required for dropbear (the pin IS the hash)"
+  say "fetching dropbear-${DROPBEAR_VERSION}"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$DROPBEAR_URL" -o "$tmp/dropbear.tar.bz2"
+  got="$(sha256sum "$tmp/dropbear.tar.bz2" | cut -d' ' -f1)"
+  [ "$got" = "$DROPBEAR_SHA256" ] || die "dropbear sha256 mismatch: got $got want $DROPBEAR_SHA256"
+  rm -rf "$DEST/dropbear"; mkdir -p "$DEST/dropbear"
+  tar -xjf "$tmp/dropbear.tar.bz2" -C "$tmp"
+  cp -a "$tmp/dropbear-${DROPBEAR_VERSION}/." "$DEST/dropbear/"
+  rm -rf "$tmp"
+  cat > "$DEST/dropbear/PROVENANCE.md" <<EOF
+# dropbear Candidate
+Upstream: https://matt.ucc.asn.au/dropbear/dropbear.html
+Version: dropbear-${DROPBEAR_VERSION} (${DROPBEAR_URL})
+SHA256: ${DROPBEAR_SHA256}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT-style (see LICENSE); bundles libtomcrypt and libtommath (public domain / Unlicense).
+Used by: tools/dropbear_pxx.sh -- builds dropbear, dbclient, dropbearkey and scp
+with pxx from these UNMODIFIED sources and logs in with a stock OpenSSH client.
+EOF
+  say "dropbear -> $DEST/dropbear"
 }
 
 # Shallow-fetch one upstream commit into $2, optionally sparse to remaining paths.
@@ -808,6 +841,7 @@ EOF
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
     busybox)       fetch_busybox ;;
+    dropbear)      fetch_dropbear ;;
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
@@ -822,7 +856,7 @@ EOF
     tinycss2)      fetch_tinycss2 ;;
     html5lib)      fetch_html5lib ;;
     nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|dropbear|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
   esac
 done
 if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
