@@ -604,3 +604,27 @@ direct route, and it would be withdrawn with it.
 - The test-minix target: 15 programs plus the argv/env and -g checks, against
   the Linux i386 build run natively. Byte identity: 190/190 (the usual 145
   plus dragonfly, openbsd-arm64, i386 --threadsafe, i386 -g).
+
+### 2026-11-13: `--os=minix` signals
+
+- Minix delivers a signal by building struct sigframe_sigcontext on the
+  CURRENT stack (kernel/system/do_sigsend.c) and entering the handler as
+  handler(signo, code, scp) with the return address the `ret` given to
+  PM_SIGACTION; libc's __sigreturn then sends PM_SIGRETURN (mask, ctx) from a
+  static message. No SA_SIGINFO, no sigaltstack, code 0, no fault address.
+- minixabi: rt_sigaction installs MxSigEntry (cdecl) for real handlers, with
+  ret = MxSigRet; MxSigEntry builds the Linux i386 siginfo/ucontext (gregs at
+  20, sigmask at 108) from the sigcontext (offsets measured: eip 44, esp 56,
+  sc_mask 80, size 620), calls the program's handler, copies gregs back
+  (not UESP). MxSigRet takes the innermost sigcontext from a small stack and
+  sends PM_SIGRETURN. Masks map through SigMap (NetBSD numbers) into the
+  first sigset word; sigprocmask without a set is SIG_INQUIRE (10).
+- rt_sigtimedwait has no Minix call: poll PM_SIGPENDING, take a pending
+  signal by setting SIG_IGN and putting the action back, else sleep 10 ms
+  (select with a timeout, as Minix's libc sleeps). nanosleep likewise.
+  gettid = getpid; tkill/tgkill = kill.
+- Now matching Linux: lib_signals_fpc, test_signal_num, test_signal_bss_alias,
+  test_signal_sp_rewrite, test_signal_handler_callback_b336,
+  c_crtl_signal_and_wait, c_crtl_signal_dispositions, test_scheduler. Not:
+  test_signal_pc_rewrite (wants si_code/si_addr of a SEGV),
+  test_stack_overflow_raise (no altstack), test_timer (timerfd/epoll: spins).

@@ -11190,8 +11190,9 @@ test-dragonfly: $(COMPILER)
 
 test-minix: $(COMPILER)
 	# --os=minix (EXPERIMENTAL): Minix 3.4 i386 on the VM against the Linux
-	# i386 build run here. Phase 1: no signal delivery, no sockets, no
-	# threads, so only the lists' file/process/environment programs.
+	# i386 build run here. No sockets, epoll/timerfd or threads yet, and
+	# handlers run on the interrupted stack (no sigaltstack), so the lists'
+	# file/process/environment/signal programs.
 	@d=$(TESTTMP)/os_minix_run26; mkdir -p $$d && \
 	  tools/vm/minix.sh start && \
 	  for t in test/fileio.pas test/test_sysutils_datetime.pas test/test_rtl_libc_torture.pas \
@@ -11199,7 +11200,10 @@ test-minix: $(COMPILER)
 	           test/test_nilpy_os_access_pathsep_gethostname.npy test/test_nilpy_subprocess_pipes.npy \
 	           test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/cisatty.c \
 	           test/c_crtl_tempfile_and_unlocked.c test/c_crtl_open_flags_arch.c \
-	           test/c_crtl_bits_and_fdatasync.c test/c_termios_no_tty.c; do \
+	           test/c_crtl_bits_and_fdatasync.c test/c_termios_no_tty.c \
+	           test/lib_signals_fpc.pas test/test_signal_num.pas test/test_signal_bss_alias.pas \
+	           test/test_signal_sp_rewrite.pas test/test_signal_handler_callback_b336.pas \
+	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c test/test_scheduler.pas; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \

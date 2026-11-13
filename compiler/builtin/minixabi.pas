@@ -65,7 +65,7 @@ const
   VFS_RENAME = $111; VFS_RMDIR = $112; VFS_STAT = $115; VFS_FSTAT = $116;
   VFS_LSTAT = $117; VFS_IOCTL = $118; VFS_FCNTL = $119; VFS_UMASK = $11B;
   VFS_GETDENTS = $11D; VFS_FCHDIR = $11F; VFS_FSYNC = $120;
-  VFS_FTRUNCATE = $122; VFS_SYMLINK = $113; VFS_READLINK = $114;
+  VFS_FTRUNCATE = $122; VFS_SELECT = $11E; VFS_SYMLINK = $113; VFS_READLINK = $114;
   VFS_PIPE2 = $11A;
   PM_FORK = 2; PM_WAIT4 = 3; PM_EXEC = 14;
   MX_MIB = 7; MIB_SYSCTL = $1800;
@@ -467,6 +467,281 @@ begin
   Result := 0;
 end;
 
+
+
+function SigToLinux(n: LongInt): LongInt; forward;
+
+{ ---- signals ---------------------------------------------------------------------
+  The program's handlers speak Linux i386's SA_SIGINFO ABI (sig, siginfo*,
+  ucontext*) and may rewrite the saved eip/esp (the fault-to-raise path).
+  Minix calls a handler as handler(signum, code, struct sigcontext *) on
+  the CURRENT stack (no sigaltstack), with the return address set to the
+  `ret` routine given at sigaction time. So rt_sigaction installs
+  MxSigEntry, which builds Linux's siginfo/ucontext from the sigcontext,
+  calls the program's handler and copies the registers back; it returns to
+  MxSigRet, which sends PM_SIGRETURN for that sigcontext, as Minix's libc
+  __sigreturn does. Measured with offsetof() on Minix 3.4 (2026-11-13):
+  struct sigcontext (620 B) gs 0 fs 4 es 8 ds 12 edi 16 esi 20 ebp 24 ebx 28
+  edx 32 ecx 36 eax 40 eip 44 cs 48 eflags 52 esp 56 ss 60, sc_mask 80
+  (sigset_t, 16 B); struct sigaction handler 0, mask 4, flags 20; SA_ONSTACK
+  1, SA_RESTART 2, SA_RESETHAND 4, SA_NODEFER $10; no SA_SIGINFO. }
+
+const
+  PM_SIGACTION = 20; PM_SIGSUSPEND = 21; PM_SIGPENDING = 22;
+  PM_SIGPROCMASK = 23; PM_SIGRETURN = 24;
+  MX_SIG_INQUIRE = 10;
+  MX_SC_MASK = 80;
+  LX_SA_RESTART = $10000000; LX_SA_NODEFER = $40000000; LX_SA_RESETHAND = $80000000;
+  LX_UC_GREGS = 20;           { Linux i386 ucontext: uc_mcontext.gregs[19] }
+  LX_UC_SIGMASK = 108;
+  { Linux gregs (GS FS ES DS EDI ESI EBP ESP EBX EDX ECX EAX TRAPNO ERR EIP CS
+    EFL UESP SS) -> offset in Minix's sigcontext; -1 = none. }
+  MxGregOff: array[0..18] of Integer = (
+    0, 4, 8, 12, 16, 20, 24, 56, 28, 32, 36, 40, -1, -1, 44, 48, 52, 56, 60);
+  MX_SIG_NEST = 16;
+
+type
+  TMxLxHandler = procedure(sig, info, uc: LongInt); cdecl;
+
+var
+  MxLxHandler: array[0..31] of LongInt;   { by Linux signal number }
+  MxScStack: array[0..15] of LongInt;     { the sigcontexts of the handlers running }
+  MxScDepth: LongInt;
+  MxSigMsg: TMxMsg;                       { NOT on the stack: see MxSigRet }
+
+{ Linux 64-bit mask (two words) <-> Minix's first sigset word. }
+function MaskToMx(lo, hi: LongInt): LongInt;
+var s, b: Integer;
+begin
+  Result := 0;
+  for s := 1 to 31 do
+    if ((lo shr (s - 1)) and 1) <> 0 then
+    begin
+      b := SigMap[s];
+      if (b >= 1) and (b <= 32) then Result := Result or (1 shl (b - 1));
+    end;
+end;
+
+function MaskToLx(mx: LongInt): LongInt;
+var b, s: Integer;
+begin
+  Result := 0;
+  for b := 1 to 32 do
+    if ((mx shr (b - 1)) and 1) <> 0 then
+    begin
+      s := SigToLinux(b);
+      if (s >= 1) and (s <= 31) then Result := Result or (1 shl (s - 1));
+    end;
+end;
+
+{ Where Minix sends a handler back: PM_SIGRETURN restores the sigcontext
+  MxSigEntry was given (the innermost running one). Entered by `ret`, never
+  returns; the message is a global because this stack is about to go. }
+procedure MxSigRet;
+var sc, i: LongInt;
+begin
+  MxScDepth := MxScDepth - 1;
+  sc := MxScStack[MxScDepth];
+  for i := 0 to 15 do MxSigMsg[i] := 0;
+  MxSigMsg[2] := 3;                                   { how: SIG_SETMASK }
+  MxSigMsg[3] := sc;                                  { ctx }
+  for i := 0 to 3 do MxSigMsg[4 + i] := PLongInt(sc + MX_SC_MASK + 4 * i)^;   { set }
+  MxSigMsg[1] := PM_SIGRETURN;
+  MxIpc(MX_PM, @MxSigMsg[0]);
+end;
+
+{ The handler Minix calls. }
+procedure MxSigEntry(signum, code, sc: LongInt); cdecl;
+var li: array[0..31] of LongInt;      { Linux siginfo_t, 128 B }
+    lu: array[0..63] of LongInt;      { Linux ucontext_t through uc_sigmask }
+    i, ls, h: LongInt;
+begin
+  ls := SigToLinux(signum);
+  if (ls < 1) or (ls > 31) then h := 0 else h := MxLxHandler[ls];
+  if MxScDepth < MX_SIG_NEST then
+  begin
+    MxScStack[MxScDepth] := sc;
+    MxScDepth := MxScDepth + 1;
+  end;
+  if h = 0 then Exit;
+  for i := 0 to 31 do li[i] := 0;
+  for i := 0 to 63 do lu[i] := 0;
+  li[0] := ls;
+  for i := 0 to 18 do
+    if MxGregOff[i] >= 0 then lu[LX_UC_GREGS div 4 + i] := PLongInt(sc + MxGregOff[i])^;
+  lu[LX_UC_SIGMASK div 4] := MaskToLx(PLongInt(sc + MX_SC_MASK)^);
+  TMxLxHandler(h)(ls, LongInt(@li[0]), LongInt(@lu[0]));
+  for i := 0 to 18 do
+    if (MxGregOff[i] >= 0) and (i <> 17) then
+      PLongInt(sc + MxGregOff[i])^ := lu[LX_UC_GREGS div 4 + i];
+end;
+
+{ rt_sigaction(sig, act, oact): Linux i386's kernel struct is handler 0,
+  flags 4, restorer 8, mask 12 (8 B). }
+function MxRtSigaction(sig, act, oact: LongInt): LongInt;
+var m: TMxMsg; na, oa: array[0..5] of LongInt; ms, h, oldh, f, i: LongInt;
+begin
+  if (sig < 1) or (sig > 31) then begin Result := -LX_EINVAL; Exit; end;
+  ms := SigMap[sig];
+  if ms = 0 then
+  begin
+    { no Minix equivalent: accept, as nothing can send it }
+    if oact <> 0 then for i := 0 to 4 do PLongInt(oact + 4 * i)^ := 0;
+    Result := 0; Exit;
+  end;
+  oldh := MxLxHandler[sig];
+  for i := 0 to 5 do begin na[i] := 0; oa[i] := 0; end;
+  MxClear(m);
+  m[3] := ms;                                         { mess_lc_pm_sig: pid 8, nr 12, act 16, oact 20, ret 24 }
+  m[5] := LongInt(@oa[0]);
+  m[6] := LongInt(@MxSigRet);
+  h := 0;
+  if act <> 0 then
+  begin
+    h := PLongInt(act)^;
+    f := PLongInt(act + 4)^;
+    na[1] := MaskToMx(PLongInt(act + 12)^, PLongInt(act + 16)^);
+    if (f and LX_SA_RESTART) <> 0 then na[5] := na[5] or 2;
+    if (f and LX_SA_RESETHAND) <> 0 then na[5] := na[5] or 4;
+    if (f and LX_SA_NODEFER) <> 0 then na[5] := na[5] or $10;
+    if (h = 0) or (h = 1) then na[0] := h               { SIG_DFL / SIG_IGN }
+    else na[0] := LongInt(@MxSigEntry);
+    m[4] := LongInt(@na[0]);
+    MxLxHandler[sig] := h;
+  end;
+  Result := Lx(MxCall(MX_PM, PM_SIGACTION, m));
+  if Result < 0 then begin MxLxHandler[sig] := oldh; Exit; end;
+  if (act <> 0) and ((h = 0) or (h = 1)) then MxLxHandler[sig] := 0;
+  if oact <> 0 then
+  begin
+    if oa[0] = LongInt(@MxSigEntry) then PLongInt(oact)^ := oldh
+    else PLongInt(oact)^ := oa[0];
+    f := $04000004;                                   { SA_RESTORER | SA_SIGINFO, as set }
+    if (oa[5] and 2) <> 0 then f := f or LX_SA_RESTART;
+    if (oa[5] and 4) <> 0 then f := f or LX_SA_RESETHAND;
+    if (oa[5] and $10) <> 0 then f := f or LX_SA_NODEFER;
+    if (oa[0] = 0) or (oa[0] = 1) then f := 0;
+    PLongInt(oact + 4)^ := f;
+    PLongInt(oact + 8)^ := 0;
+    PLongInt(oact + 12)^ := MaskToLx(oa[1]);
+    PLongInt(oact + 16)^ := 0;
+  end;
+  Result := 0;
+end;
+
+{ rt_sigprocmask(how, set, oset): mess_lc_pm_sigset how 8, ctx 12, set 16;
+  the old mask comes back at 8 (mess_pm_lc_sigset). }
+function MxRtSigprocmask(how, nset, oset: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  if (how < 0) or (how > 2) then begin Result := -LX_EINVAL; Exit; end;
+  MxClear(m);
+  if nset <> 0 then
+  begin
+    m[2] := how + 1;
+    m[4] := MaskToMx(PLongInt(nset)^, PLongInt(nset + 4)^);
+  end
+  else m[2] := MX_SIG_INQUIRE;
+  Result := Lx(MxCall(MX_PM, PM_SIGPROCMASK, m));
+  if Result < 0 then Exit;
+  if oset <> 0 then
+  begin
+    PLongInt(oset)^ := MaskToLx(m[2]);
+    PLongInt(oset + 4)^ := 0;
+  end;
+  Result := 0;
+end;
+
+function MxRtSigpending(set_: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  Result := Lx(MxCall(MX_PM, PM_SIGPENDING, m));
+  if Result < 0 then Exit;
+  PLongInt(set_)^ := MaskToLx(m[2]);
+  PLongInt(set_ + 4)^ := 0;
+  Result := 0;
+end;
+
+function MxRtSigsuspend(set_: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[4] := MaskToMx(PLongInt(set_)^, PLongInt(set_ + 4)^);
+  MxCall(MX_PM, PM_SIGSUSPEND, m);
+  Result := -4;                                       { EINTR, always }
+end;
+
+
+{ ---- sleeping and waiting for a signal ---------------------------------------------
+
+  Minix's libc sleeps with select(0, ..., timeout); so does this.
+  mess_lc_vfs_select: nfds 8, readfds 12, writefds 16, errorfds 20,
+  timeout 24 (struct timeval: tv_sec 0/8, tv_usec 8/4; measured). }
+function MxSleepUs(sec, usec: LongInt): LongInt;
+var m: TMxMsg; tv: array[0..3] of LongInt;
+begin
+  tv[0] := sec; tv[1] := 0; tv[2] := usec; tv[3] := 0;
+  MxClear(m);
+  m[6] := LongInt(@tv[0]);
+  Result := Lx(MxCall(MX_VFS, VFS_SELECT, m));
+end;
+
+{ nanosleep(req, rem): a Linux i386 timespec is two 32-bit words. }
+function MxNanosleep(req, rem: LongInt): LongInt;
+var sec, ns: LongInt;
+begin
+  if req = 0 then begin Result := -LX_EFAULT; Exit; end;
+  sec := PLongInt(req)^; ns := PLongInt(req + 4)^;
+  if (sec < 0) or (ns < 0) or (ns > 999999999) then begin Result := -LX_EINVAL; Exit; end;
+  Result := MxSleepUs(sec, (ns + 999) div 1000);
+  if Result > 0 then Result := 0;
+  if rem <> 0 then begin PLongInt(rem)^ := 0; PLongInt(rem + 4)^ := 0; end;
+end;
+
+{ rt_sigtimedwait(set, info, timeout): Minix has none. A blocked signal stays
+  pending, so: look at the pending set; take one that is in `set` by
+  setting its action to SIG_IGN (which discards it, POSIX) and putting the
+  action back; otherwise sleep 10 ms and look again, until the timeout. }
+function MxRtSigtimedwait(set_, info, ts: LongInt): LongInt;
+var m: TMxMsg; pend, want, s, waited, limit, i: LongInt;
+    na, oa: array[0..5] of LongInt;
+begin
+  want := PLongInt(set_)^;
+  waited := 0;
+  if ts <> 0 then limit := PLongInt(ts)^ * 1000 + PLongInt(ts + 4)^ div 1000000
+  else limit := -1;
+  while True do
+  begin
+    MxClear(m);
+    if MxCall(MX_PM, PM_SIGPENDING, m) < 0 then begin Result := -LX_EINVAL; Exit; end;
+    pend := MaskToLx(m[2]) and want;
+    if pend <> 0 then
+    begin
+      s := 1;
+      while ((pend shr (s - 1)) and 1) = 0 do s := s + 1;
+      for i := 0 to 5 do begin na[i] := 0; oa[i] := 0; end;
+      na[0] := 1;                                     { SIG_IGN }
+      MxClear(m);
+      m[3] := SigMap[s]; m[4] := LongInt(@na[0]); m[5] := LongInt(@oa[0]);
+      m[6] := LongInt(@MxSigRet);
+      MxCall(MX_PM, PM_SIGACTION, m);
+      MxClear(m);
+      m[3] := SigMap[s]; m[4] := LongInt(@oa[0]); m[6] := LongInt(@MxSigRet);
+      MxCall(MX_PM, PM_SIGACTION, m);
+      if info <> 0 then
+      begin
+        for i := 0 to 31 do PLongInt(info + 4 * i)^ := 0;
+        PLongInt(info)^ := s;
+      end;
+      Result := s;
+      Exit;
+    end;
+    if (limit >= 0) and (waited >= limit) then begin Result := -11; Exit; end;   { EAGAIN }
+    MxSleepUs(0, 10000);
+    waited := waited + 10;
+  end;
+end;
 
 { ---- links -------------------------------------------------------------------- }
 
@@ -1048,10 +1323,19 @@ begin
     305: Result := MxReadlinkAny(a0, a1, a2, a3);
     183: Result := MxGetcwd(a0, a1);
     122: Result := MxUname(a0);
-    { Signals: not delivered in phase 1. The runtime's handler installs
-      succeed and leave nothing behind; an old action or stack reads as none. }
-    174: begin if a2 <> 0 then for i := 0 to 4 do PLongInt(a2 + i * 4)^ := 0; Result := 0; end;
-    175: begin if a2 <> 0 then begin PLongInt(a2)^ := 0; PLongInt(a2 + 4)^ := 0; end; Result := 0; end;
+    174: Result := MxRtSigaction(a0, a1, a2);
+    175: Result := MxRtSigprocmask(a0, a1, a2);
+    176: Result := MxRtSigpending(a0);
+    179: Result := MxRtSigsuspend(a0);
+    177: Result := MxRtSigtimedwait(a0, a1, a2);
+    162: Result := MxNanosleep(a0, a1);
+    267: if a1 <> 0 then Result := -LX_EINVAL           { clock_nanosleep: relative only }
+         else Result := MxNanosleep(a2, a3);
+    224: begin MxClear(m); Result := Lx(MxCall(MX_PM, PM_GETPID, m)); end;   { gettid: one thread }
+    238: begin MxClear(m); Result := MxKill(MxCall(MX_PM, PM_GETPID, m), a1); end;   { tkill(tid, sig) }
+    270: Result := MxKill(a0, a2);                                           { tgkill(tgid, tid, sig) }
+    { sigaltstack: Minix runs every handler on the current stack. A request
+      succeeds and changes nothing; the old stack reads as disabled. }
     186: begin if a1 <> 0 then begin PLongInt(a1)^ := 0; PLongInt(a1 + 4)^ := 2; PLongInt(a1 + 8)^ := 0; end;
            Result := 0; end;
     243: Result := -LX_ENOSYS;                        { set_thread_area: never emitted for minix }
