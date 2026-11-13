@@ -628,6 +628,19 @@ begin
     EmitI32($D4000001);                       { svc #0 }
 end;
 
+{ The i386 kernel entry: `int 0x80`, Linux's convention (eax = nr, ebx ecx
+  edx esi edi ebp). ONE emitter so a translated --os can turn every raw site
+  into a call to its thunk, as EmitSyscall and EmitSvcA64 do for x86-64 and
+  aarch64. The text-assembler sites (`int 128` in EmitAsm386 strings) come
+  here too, from that assembler's `int`. Checked 2026-11-13 by making this
+  emit `int 0x81` for a build: 29 i386 programs (plain, --threadsafe, -g) then
+  had no CD 80 pair left except one inside a call's rel32.
+  feature-port-libc-family-openbsd-netbsd-minix }
+procedure EmitInt80;
+begin
+  EmitB($CD); EmitB($80);
+end;
+
 function PICRefsAreRipRelative: Boolean;
 { Will a global/data reference emitted right now become rip-relative? ONE
   predicate because two readers must agree: EmitGlobRef, which rewrites the
@@ -1561,7 +1574,7 @@ begin
     EmitB($BB); EmitI32(CurWriteFd);
     EmitB($B9); EmitDataRef(dataOff);
     EmitB($BA); EmitI32(len);
-    EmitB($CD); EmitB($80);
+    EmitInt80;
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
@@ -1732,7 +1745,7 @@ begin
     { i386 int 0x80 ABI: eax=252 (exit_group), ebx=code }
     EmitB($B8); EmitI32(252);
     EmitB($BB); EmitI32(code);
-    EmitB($CD); EmitB($80);
+    EmitInt80;
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then

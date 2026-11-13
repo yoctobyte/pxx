@@ -200,6 +200,10 @@ begin
   begin
     if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 1 then
       Error('EmitAsm386: int expects an immediate');
+    { the compiler's own kernel entries (`int 128`) go through the one i386
+      emitter, EmitInt80, so a translated --os can redirect them; inline asm
+      a user wrote (EncToAsmBuffer) keeps its bytes. }
+    if (imm0 = 128) and (not EncToAsmBuffer) then begin EmitInt80; Exit; end;
     EncB($CD);
     EncB(Integer(imm0) and $FF);
     Exit;

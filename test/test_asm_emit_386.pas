@@ -56,6 +56,12 @@ begin
   EmitI32(v and $FFFFFFFF); EmitI32((v shr 32) and $FFFFFFFF);
 end;
 
+{ emit.inc's i386 kernel entry, which asmtext_386.inc's `int 128` calls. }
+procedure EmitInt80;
+begin
+  EmitB($CD); EmitB($80);
+end;
+
 { Inline-asm-buffer sink — never reached (EncToAsmBuffer stays False) but the
   encoder references them. }
 procedure AsmB(b: Byte); begin EmitB(b); end;

@@ -329,7 +329,7 @@ begin
       EmitB($BB); EmitI32(2);
       EmitB($B9); EmitDataRef(NEWLINE_OFFSET);
       EmitB($BA); EmitI32(1);
-      EmitB($CD); EmitB($80);
+      EmitInt80;
     end;
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end

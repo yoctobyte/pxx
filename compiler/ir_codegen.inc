@@ -2096,7 +2096,7 @@ begin
     EmitB($C7); EmitB($44); EmitB($24); EmitB($0C); EmitI32($51);     { flags }
     EmitB($89); EmitB($E3);                             { mov ebx, esp }
     EmitB($B8); EmitI32(243);                           { mov eax, 243 (set_thread_area) }
-    EmitB($CD); EmitB($80);                             { int 0x80 }
+    EmitInt80;                             { int 0x80 }
     EmitB($85); EmitB($C0);                             { test eax, eax }
     EmitB($75); pSkip := CodeLen; EmitB(0);             { jnz .skip }
     EmitB($8B); EmitB($04); EmitB($24);                 { mov eax, [esp]  (the entry it chose) }

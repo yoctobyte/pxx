@@ -3967,7 +3967,7 @@ begin
               'xor edx, edx'                     { xor edx, edx mode }
             ]);
             EmitB($B8); EmitI32(5);          { __NR_open }
-            EmitB($CD); EmitB($80);
+            EmitInt80;
             Exit;
           end
           else if j = Ord(tkSysRead) then
@@ -3986,7 +3986,7 @@ begin
               'pop ebx'                          { pop ebx fd }
             ]);
             EmitB($B8); EmitI32(3);          { __NR_read }
-            EmitB($CD); EmitB($80);
+            EmitInt80;
             Exit;
           end
           else if j = Ord(tkSyswrite) then
@@ -4005,7 +4005,7 @@ begin
               'pop ebx'                          { pop ebx fd }
             ]);
             EmitB($B8); EmitI32(4);          { __NR_write }
-            EmitB($CD); EmitB($80);
+            EmitInt80;
             Exit;
           end
           else if j = Ord(tkSysClose) then
@@ -4014,7 +4014,7 @@ begin
             IREmitNode386(IRA[argNode]);     { fd }
             EmitAsm386('mov ebx, eax');
             EmitB($B8); EmitI32(6);          { __NR_close }
-            EmitB($CD); EmitB($80);
+            EmitInt80;
             Exit;
           end
           else if j = Ord(tkSysFchmod) then
@@ -4029,7 +4029,7 @@ begin
               'pop ebx'                          { pop ebx fd }
             ]);
             EmitB($B8); EmitI32(94);         { __NR_fchmod }
-            EmitB($CD); EmitB($80);
+            EmitInt80;
             Exit;
           end
           else if j = 210 then
@@ -5857,7 +5857,7 @@ begin
             EmitB($BB); EmitI32(CurWriteFd);
             EmitB($B9); EmitDataRef(SpacesOffset);
             EmitB($BA); EmitI32(wid - Strs[si].Len);
-            EmitB($CD); EmitB($80);
+            EmitInt80;
           end;
           if Strs[si].Len > 0 then
             EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
@@ -5903,7 +5903,7 @@ begin
               EmitB($BB); EmitI32(CurWriteFd);
               EmitB($B9); EmitDataRef(SpacesOffset);
               EmitB($BA); EmitI32(wid - 1);
-              EmitB($CD); EmitB($80);
+              EmitInt80;
               EmitB($58);
             end;
             EmitwriteChar386;
