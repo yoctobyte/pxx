@@ -459,3 +459,47 @@ intercepts that path.
 - The test-dragonfly target: test-netbsd's lists minus lib_net_v6only. Passes.
   lib_fpc_thread_surface and test_parallel_for_private ran 40 times each with
   no failure.
+
+### 2026-11-13: `--os=openbsd --target=aarch64`
+
+Done as the next step after DragonFly. It does not prejudge the open
+libc-or-direct decision for OpenBSD: everything new is the arm64 half of the
+direct route, and it would be withdrawn with it.
+
+- VM: OpenBSD 8.0 arm64 miniroot80.img (sha256 checked) booted under AAVMF
+  (qemu -M virt, cortex-a72, TCG) with an empty obsd.qcow2 as sd0, installed
+  unattended by /data/vm/openbsd-arm64/install.py (autoinstall over serial,
+  install.conf served from the host, sets from cdn.openbsd.org). Port 2231;
+  tools/vm/openbsd.sh takes PXX_OBSD_ARCH=aarch64. The first boot does the
+  kernel relink and rc.firsttime; tests run then time out on ssh.
+- Read from the 8.0 sources: syscall in x8, args x0..x7, C = error; the
+  kernel adds 8 to elr (skips libc's dsb nsh; isb), so ObRawA/ObTforkA put
+  the same two words after svc. pin_check compares pc - (sigcoderet -
+  sigcodecall) = the svc address, so ObsdPinVA finds the first svc #0.
+  cpu_switchto loads tpidr_el0 from pcb_tcb and never saves it: the
+  dispatcher calls __set_tcb(main block) once (the NetBSD _lwp_setprivate
+  pattern); __tfork's tf_tcb covers threads. struct sigcontext: mask 4, sp 8,
+  lr 16, elr 24, spsr 32, x0..x29 at 40, no FP. exec_elf honours PF_R, so the
+  aarch64 backend's literal pools in the R E segment are readable.
+- Compiler: the refusal lifted for OpenBSD on aarch64; the aarch64 clone stub
+  takes NetBSD's leg (Linux clone through the thunk, child entry in x5);
+  ObClone/ObTforkA send the child there with sp = tf_stack.
+- The aarch64 text assembler gained br, blr and `.inst` (a raw word; written
+  `inst` in a Pascal asm block, whose tokenizer drops the dot). Its `mov`
+  kept only the low 16 bits of a wider immediate and said nothing; it now
+  emits movz plus the movk words needed. That changed one instruction in
+  FreeBSD/arm64's and NetBSD/arm64's thread-exit futex wake (65535 -> INT_MAX
+  waiters); every other target is byte-identical to the parent commit.
+- obsdabi's MapBits/PathIs take pointer + count (nbsdabi did the same): a
+  const open-array argument is copied with PXXMemMove on aarch64, missing
+  from a small program.
+- test-openbsd-arm64: test-netbsd-arm64's lists minus lib_net_v6only and
+  crtl_pthread_recursive_mutex. The latter is correct but OpenBSD's futex path
+  under TCG makes it ~400 s (a 10 000-iteration copy matched in 40 s, twice);
+  test-openbsd covers it under KVM. lib_sockets stays out as on NetBSD/arm64
+  (qemu-user gets the errno wrong; the VM's answer is the right one). It
+  passes. lib_fpc_thread_surface ran 40 times and test_parallel_for_private 60
+  times with no wrong output (3 runs lost the ssh connection while another
+  TCG VM was booting; tools/vm/openbsd.sh run now retries the copy once).
+  After the mov fix, the 13 arm64 thread tests match on the NetBSD/arm64 and
+  FreeBSD/arm64 VMs, and test-openbsd (amd64) passes.

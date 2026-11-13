@@ -126,6 +126,106 @@ const
     written on x86-64. fbsdabi uses the same slot for the same purpose. }
   OB_TLS_SLOT_CTID = 14;
 
+{$ifdef CPU_AARCH64}
+{ OpenBSD/arm64 (measured from sys/arch/arm64/arm64/syscall.c): the number
+  in x8, arguments x0..x7, C set = error with the positive errno in x0. The
+  kernel resumes 8 bytes past the svc -- libc's `dsb nsh; isb` speculation
+  barrier -- so the same two words follow every svc here (on ERESTART it
+  backs up 12, onto the svc). Only x0 comes back: no second result
+  register, so a[7] stays 0 (a fork child gets x0 = 0 directly). }
+function ObRawA(args: Pointer): Int64; assembler;
+asm
+  mov x9, x0
+  ldr x8, [x9]
+  ldr x0, [x9, 8]
+  ldr x1, [x9, 16]
+  ldr x2, [x9, 24]
+  ldr x3, [x9, 32]
+  ldr x4, [x9, 40]
+  ldr x5, [x9, 48]
+  svc 0
+  inst $D503379F
+  inst $D5033FDF
+  mov x10, 0
+  b.cc obrawok
+  mov x10, 1
+  sub x0, xzr, x0
+obrawok:
+  str x10, [x9, 64]
+end;
+
+{ __tfork(param, psize) with the child sent to cont, as the x86-64 one. The
+  child resumes past the barrier with the parent's registers (x9 = cont),
+  x0 = 0, sp = tf_stack and tpidr_el0 = tf_tcb. }
+function ObTforkA(param, psize, cont: Int64): Int64; assembler;
+asm
+  mov x9, x2
+  mov x8, 8
+  svc 0
+  inst $D503379F
+  inst $D5033FDF
+  b.cs obtf_fail
+  cbz x0, obtf_child
+  b obtf_done
+obtf_child:
+  br x9
+obtf_fail:
+  sub x0, xzr, x0
+obtf_done:
+end;
+
+{ The x86-64 routine's steps (read it): the spin lock on the shared exit
+  stack, then clear and wake through ObRawA by address, then __threxit with
+  the lock as its notdead word. x19..x22 are never given back: this does not
+  return. }
+procedure ObThreadExitA(ctid, lock, top, raw: Int64); assembler;
+asm
+  mov x19, x0
+  mov x20, x1
+  mov x21, x2
+  mov x22, x3
+  mov w10, 1
+obte_spin:
+  inst $885FFE8B
+  cbnz w11, obte_spin
+  inst $880C7E8A
+  cbnz w12, obte_spin
+  inst $910002BF
+  str wzr, [x19]
+  inst $D10143FF
+  mov x10, 83
+  str x10, [sp]
+  str x19, [sp, 8]
+  mov x10, 2
+  str x10, [sp, 16]
+  mov x10, 2147483647
+  str x10, [sp, 24]
+  str xzr, [sp, 32]
+  str xzr, [sp, 40]
+  str xzr, [sp, 48]
+  inst $910003E0
+  blr x22
+  mov x10, 83
+  str x10, [sp]
+  str x19, [sp, 8]
+  mov x10, 130
+  str x10, [sp, 16]
+  mov x10, 2147483647
+  str x10, [sp, 24]
+  str xzr, [sp, 32]
+  str xzr, [sp, 40]
+  str xzr, [sp, 48]
+  inst $910003E0
+  blr x22
+  mov x10, 302
+  str x10, [sp]
+  str x20, [sp, 8]
+  inst $910003E0
+  blr x22
+end;
+{ The inst words: dsb nsh; isb; ldaxr w11, [x20]; stxr w12, w10, [x20];
+  mov sp, x21; sub sp, sp, #80; mov x0, sp. }
+{$else}
 { The ONE kernel entry, and the one address the pin table names. args ->
   [nr, a0..a5, rdx-out, cf-out]. OpenBSD reports an error with CF set and the
   positive errno in rax; the sbb/xor/sub trio negates rax exactly then. }
@@ -232,6 +332,7 @@ obte_got:
   mov rdi, rsp
   call obte_raw
 end;
+{$endif}
 
 var
   ObRdx: Int64;
@@ -504,14 +605,14 @@ end;
 
 { ---- /proc files the runtime reads ------------------------------------- }
 
-function PathIs(p: Int64; const w: array of Byte): Boolean;
+function PathIs(p: Int64; w: PByte; n: Integer): Boolean;   { pointer + count: see MapBits }
 var i: Integer;
 begin
   Result := False;
   if p = 0 then Exit;
-  for i := 0 to High(w) do
+  for i := 0 to n - 1 do
     if PByte(p + i)^ <> w[i] then Exit;
-  Result := PByte(p + Length(w))^ = 0;
+  Result := PByte(p + n)^ = 0;
 end;
 
 const
@@ -688,6 +789,7 @@ const
   OB_SC_TRAPNO = 152; OB_SC_ERR = 160; OB_SC_FPSTATE = 208; OB_SC_MASK = 220;
   LX_UC_GREGS = 40;
   LX_UC_SIGMASK = 296;
+  LX_UC_SIGMASK_A64 = 40;
 
 var
   ObLxHandler: array[0..32] of Int64;   { by OpenBSD signal number }
@@ -783,6 +885,57 @@ end;
 type
   TObLxHandler = procedure(sig, info, uc: Int64); cdecl;
 
+{$ifdef CPU_AARCH64}
+const
+  { OpenBSD/arm64 struct sigcontext (sys/arch/arm64/include/signal.h): mask
+    at 4, sp 8, lr 16, elr 24, spsr 32, x0..x29 at 40, cookie 280; no FP
+    registers. Linux arm64's mcontext is at 176 in its ucontext:
+    fault_address, x0..x30, sp, pc, pstate. }
+  OB_A64_SC_MASK = 4; OB_A64_SC_SP = 8; OB_A64_SC_LR = 16;
+  OB_A64_SC_ELR = 24; OB_A64_SC_SPSR = 32; OB_A64_SC_X = 40;
+  LX_A64_MC = 176;
+
+{ The handler OpenBSD calls (x0 sig, x1 siginfo, x2 sigcontext); it returns
+  to the kernel's sigcode, which does sigreturn. }
+procedure ObSigEntry(sig, info, sc: Int64); cdecl;
+var li: array[0..15] of Int64;
+    lu: array[0..63] of Int64;
+    i, m: Integer;
+    h, ls: Int64;
+begin
+  if (sig < 1) or (sig > 32) then Exit;
+  h := ObLxHandler[Integer(sig)];
+  if h = 0 then Exit;
+  ls := LxSig(sig);
+  for i := 0 to 63 do lu[i] := 0;
+  if info <> 0 then SiginfoToLx(info, Int64(@li[0]))
+  else
+  begin
+    for i := 0 to 15 do li[i] := 0;
+    PInteger(@li[0])^ := Integer(ls);
+  end;
+  m := LX_A64_MC div 8;
+  if sc <> 0 then
+  begin
+    for i := 0 to 29 do lu[m + 1 + i] := PInt64(sc + OB_A64_SC_X + 8 * i)^;
+    lu[m + 31] := PInt64(sc + OB_A64_SC_LR)^;
+    lu[m + 32] := PInt64(sc + OB_A64_SC_SP)^;
+    lu[m + 33] := PInt64(sc + OB_A64_SC_ELR)^;
+    lu[m + 34] := PInt64(sc + OB_A64_SC_SPSR)^;
+    if (info <> 0) and (PInteger(info + 4)^ > 0) then lu[m] := PInt64(info + 16)^;
+    lu[LX_UC_SIGMASK_A64 div 8] := MaskToLx(PLongWord(sc + OB_A64_SC_MASK)^);
+  end;
+  if info <> 0 then TObLxHandler(h)(ls, Int64(@li[0]), Int64(@lu[0]))
+  else TObLxHandler(h)(ls, 0, Int64(@lu[0]));
+  if sc <> 0 then
+  begin
+    for i := 0 to 29 do PInt64(sc + OB_A64_SC_X + 8 * i)^ := lu[m + 1 + i];
+    PInt64(sc + OB_A64_SC_LR)^ := lu[m + 31];
+    PInt64(sc + OB_A64_SC_SP)^ := lu[m + 32];
+    PInt64(sc + OB_A64_SC_ELR)^ := lu[m + 33];
+  end;
+end;
+{$else}
 { The handler OpenBSD actually calls (SA_SIGINFO: rdi, rsi, rdx = sigcontext). }
 procedure ObSigEntry(sig, info, sc: Int64); cdecl;
 var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
@@ -835,6 +988,7 @@ begin
     for i := 0 to 17 do
       PInt64(sc + ObGregOff[i])^ := lu[LX_UC_GREGS div 8 + i];
 end;
+{$endif}
 
 function ObRtSigaction(sig, act, oact: Int64): Int64;
 var oa, oo: array[0..1] of Int64;     { OpenBSD struct sigaction, 16 B }
@@ -1426,11 +1580,14 @@ const
   TBaudHi: array[1..15] of Integer = (57600,115200,230400,460800,500000,576000,921600,
                                       1000000,1152000,1500000,2000000,2500000,3000000,3500000,4000000);
 
-function MapBits(v: Int64; const src, dst: array of Int64): Int64;
+{ pointer + count, not open arrays: on aarch64 a const open-array argument
+  is copied with PXXMemMove, which a program that never moves memory does
+  not have (fbsdabi's PathIs says the same). }
+function MapBits(v: Int64; src, dst: PInt64; n: Integer): Int64;
 var i: Integer;
 begin
   Result := 0;
-  for i := 0 to High(src) do
+  for i := 0 to n - 1 do
     if (src[i] <> 0) and ((v and src[i]) = src[i]) then Result := Result or dst[i];   { 0 = no counterpart }
 end;
 
@@ -1454,13 +1611,13 @@ procedure TermiosToLx(fb, lx: Int64);
 var i, ix: Integer; c: Byte; cf: Int64;
 begin
   for i := 0 to 35 do PByte(lx + i)^ := 0;
-  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, TIflOb, TIflLx));
-  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, TOflOb, TOflLx));
-  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, TCflOb, TCflLx);
+  PInteger(lx)^ := Integer(MapBits(PInteger(fb)^, @TIflOb[0], @TIflLx[0], Length(TIflOb)));
+  PInteger(lx + 4)^ := Integer(MapBits(PInteger(fb + 4)^, @TOflOb[0], @TOflLx[0], Length(TOflOb)));
+  cf := MapBits(PInteger(fb + 8)^ and $FFFFFFFF, @TCflOb[0], @TCflLx[0], Length(TCflOb));
   cf := cf or (((PInteger(fb + 8)^ shr 8) and 3) shl 4);        { CSIZE }
   cf := cf or SpeedToLx(PInteger(fb + 40)^);                    { c_ospeed -> CBAUD }
   PInteger(lx + 8)^ := Integer(cf);
-  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, TLflOb, TLflLx));
+  PInteger(lx + 12)^ := Integer(MapBits(PInteger(fb + 12)^ and $FFFFFFFF, @TLflOb[0], @TLflLx[0], Length(TLflOb)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1476,11 +1633,11 @@ var i, ix: Integer; c: Byte; cf, sp: Int64;
 begin
   for i := 0 to 43 do PByte(fb + i)^ := 0;
   for i := 0 to 19 do PByte(fb + 16 + i)^ := $FF;
-  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, TIflLx, TIflOb));
-  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, TOflLx, TOflOb));
+  PInteger(fb)^ := Integer(MapBits(PInteger(lx)^, @TIflLx[0], @TIflOb[0], Length(TIflLx)));
+  PInteger(fb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, @TOflLx[0], @TOflOb[0], Length(TOflLx)));
   cf := PInteger(lx + 8)^ and $FFFFFFFF;
-  PInteger(fb + 8)^ := Integer(MapBits(cf, TCflLx, TCflOb) or (((cf shr 4) and 3) shl 8));
-  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, TLflLx, TLflOb));
+  PInteger(fb + 8)^ := Integer(MapBits(cf, @TCflLx[0], @TCflOb[0], Length(TCflLx)) or (((cf shr 4) and 3) shl 8));
+  PInteger(fb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, @TLflLx[0], @TLflOb[0], Length(TLflLx)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1874,12 +2031,12 @@ end;
 function ObOpenAt(dirfd, path, flags, mode: Int64): Int64;
 var nm: array[0..15] of Byte;
 begin
-  if PathIs(path, ProcEnviron) then Result := ObProcEnviron
-  else if PathIs(path, DevPtmx) then Result := ObPtmx(flags)
+  if PathIs(path, @ProcEnviron[0], Length(ProcEnviron)) then Result := ObProcEnviron
+  else if PathIs(path, @DevPtmx[0], Length(DevPtmx)) then Result := ObPtmx(flags)
   else if ObPtsName(path, Int64(@nm[0])) then
     Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@nm[0]), ObOpenFlags(flags), 0, 0, 0))
-  else if PathIs(path, ProcHostname) then Result := ObProcHostname
-  else if PathIs(path, DevFull) then
+  else if PathIs(path, @ProcHostname[0], Length(ProcHostname)) then Result := ObProcHostname
+  else if PathIs(path, @DevFull[0], Length(DevFull)) then
   begin
     Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@DevZero[0]), ObOpenFlags(flags) and not Int64($E00), 0, 0, 0));
     if (Result >= 0) and (Result < OB_TFD_MAX) then ObTfd[Integer(Result)] := 8;
@@ -1889,7 +2046,11 @@ end;
 
 { ---- the dispatcher ------------------------------------------------------- }
 
+{$ifdef CPU_AARCH64}
+function LxX64Call(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
+{$else}
 function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+{$endif}
 var sb: array[0..15] of Int64; t: array[0..3] of Int64; r, f, i, n: Int64;
 begin
   case nr of
@@ -2077,12 +2238,12 @@ begin
          end;
     88: Result := Lx(ObSys(OB_SYMLINK, a0, a1, 0, 0, 0, 0));
     266: Result := Lx(ObSys(OB_SYMLINKAT, a0, a1, a2, 0, 0, 0));
-    89: if PathIs(a0, ProcExe) then Result := ObProcExe(a1, a2)
+    89: if PathIs(a0, @ProcExe[0], Length(ProcExe)) then Result := ObProcExe(a1, a2)
         else begin
           Result := ObProcFdLink(a0, a1, a2);
           if Result = -4096 then Result := Lx(ObSys(OB_READLINK, a0, a1, a2, 0, 0, 0));
         end;
-    267: if PathIs(a1, ProcExe) then Result := ObProcExe(a2, a3)
+    267: if PathIs(a1, @ProcExe[0], Length(ProcExe)) then Result := ObProcExe(a2, a3)
          else begin
            Result := ObProcFdLink(a1, a2, a3);
            if Result = -4096 then Result := Lx(ObSys(OB_READLINKAT, a0, a1, a2, a3, 0, 0));
@@ -2308,5 +2469,30 @@ begin
     Result := -LX_ENOSYS;
   end;
 end;
+
+{$ifdef CPU_AARCH64}
+{$I lxa64front.inc}
+
+var
+  ObTlsSet: Boolean;
+
+{ The main thread's thread pointer is written with msr by the compiler's
+  entry code. OpenBSD/arm64 does not save tpidr_el0 when it switches a
+  thread out; it reloads it from pcb_tcb, which stays 0 until __set_tcb.
+  So the first call after the entry code ran tells the kernel, once, as
+  nbsdabi does with _lwp_setprivate. (A switch between the entry's msr and
+  this call would lose the register; the window is a few instructions.)
+  Threads get theirs from __tfork's tf_tcb. }
+function PXXObsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+begin
+  if not ObTlsSet then
+    if Int64(__pxxTlsBase) <> 0 then
+    begin
+      ObTlsSet := True;
+      ObSys(OB_SET_TCB, Int64(__pxxTlsBase), 0, 0, 0, 0, 0);
+    end;
+  Result := LxA64Front(nr, a0, a1, a2, a3, a4, a5);
+end;
+{$endif}
 
 end.

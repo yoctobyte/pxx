@@ -10987,6 +10987,57 @@ test-netbsd-arm64: $(COMPILER)
 	    tools/expect_same.sh netbsd_arm64_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/netbsd.sh run $$d/fe.na 2>&1)" "$$(script -qec "qemu-aarch64 $$d/fe.la" /dev/null </dev/null | tr -d '\r')" || exit 1; \
 	  done; echo "test-netbsd-arm64: OK"
 
+# --os=openbsd --target=aarch64 (EXPERIMENTAL) on a real OpenBSD 8.0/arm64
+# kernel (qemu-system-aarch64 -M virt under TCG, PXX_OBSD_ARCH=aarch64, port
+# 2231, image under $PXX_VM_DIR/openbsd-arm64), against the Linux aarch64 build
+# under qemu-aarch64. NOT in `test`: it needs the VM. test-netbsd-arm64's lists
+# minus lib_net_v6only (OpenBSD has no IPv4-mapped IPv6) and
+# crtl_pthread_recursive_mutex (correct, but 400k contended futex rounds take
+# about 400 s under TCG; test-openbsd runs it under KVM).
+# feature-port-libc-family-openbsd-netbsd-minix
+test-openbsd-arm64: $(COMPILER)
+	@d=$(TESTTMP)/os_openbsd_arm64_run26; mkdir -p $$d && export PXX_OBSD_ARCH=aarch64 && \
+	  tools/vm/openbsd.sh start && \
+	  for t in test/test_rtl_libc_torture.pas test/test_signal_pc_rewrite.pas test/test_signal_sp_rewrite.pas \
+	           test/test_stack_overflow_raise.pas test/lib_signals_fpc.pas test/test_signal_num.pas \
+	           test/test_signal_bss_alias.pas test/test_signal_handler_callback_b336.pas test/test_timer.pas \
+	           test/fileio.pas test/test_sysutils_datetime.pas test/test_reactor.pas test/test_scheduler.pas test/test_async.pas \
+	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_net.pas test/lib_net6.pas test/lib_http_serve.pas \
+	           test/lib_platform_net_sockopt.pas test/lib_sock_closedpeer.pas \
+	           test/lib_asyncnet6.pas test/lib_net_timeout.pas test/lib_dns_async.pas test/lib_dns_tcp.pas; do \
+	    n=$$(basename $$t .pas); \
+	    ./$(COMPILER) --target=aarch64 $$t $$d/$$n.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $$t $$d/$$n.oa >/dev/null && \
+	    tools/expect_same.sh openbsd_arm64_$$n "$$(tools/vm/openbsd.sh run $$d/$$n.oa 2>&1; echo exit=$$?)" "$$(cd /tmp && qemu-aarch64 $$d/$$n.la 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 test/test_os_env.pas $$d/env.oa >/dev/null && \
+	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
+	  tools/expect_same.sh openbsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.oa one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py \
+	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
+	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
+	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
+	           test/test_nilpy_file_oserrors.npy test/test_nilpy_os_access_pathsep_gethostname.npy \
+	           test/test_nilpy_subprocess_pipes.npy test/test_nilpy_time_and_listdir.npy \
+	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
+	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
+	           test/c_pty_family.c test/cisatty.c test/lib_termio_isatty.pas test/c_termios_no_tty.c; do \
+	    ./$(COMPILER) --target=aarch64 $$t $$d/fe.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $$t $$d/fe.oa >/dev/null && \
+	    tools/expect_same.sh openbsd_arm64_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/fe.oa one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./fe.la one 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
+	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c \
+	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
+	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas test/test_cross_futex_through_the_pal.pas; do \
+	    ./$(COMPILER) --threadsafe --target=aarch64 $$t $$d/th.la >/dev/null && ./$(COMPILER) --threadsafe --os=openbsd --target=aarch64 $$t $$d/th.oa >/dev/null && \
+	    tools/expect_same.sh openbsd_arm64_threads_$$(basename $$t) "$$(tools/vm/openbsd.sh run $$d/th.oa 2>&1; echo exit=$$?)" "$$(cd /tmp && qemu-aarch64 $$d/th.la 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) -g --target=aarch64 test/fileio.pas $$d/g.la >/dev/null && ./$(COMPILER) -g --os=openbsd --target=aarch64 test/fileio.pas $$d/g.oa >/dev/null && \
+	  tools/expect_same.sh openbsd_arm64_debug_info "$$(tools/vm/openbsd.sh run $$d/g.oa 2>&1; echo exit=$$?)" "$$(cd /tmp && qemu-aarch64 $$d/g.la 2>&1; echo exit=$$?)" || exit 1; \
+	  for t in test/c_os_freebsd_termios.c; do \
+	    ./$(COMPILER) --target=aarch64 $$t $$d/fe.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $$t $$d/fe.oa >/dev/null && \
+	    tools/expect_same.sh openbsd_arm64_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/openbsd.sh run $$d/fe.oa 2>&1)" "$$(script -qec "qemu-aarch64 $$d/fe.la" /dev/null </dev/null | tr -d '\r')" || exit 1; \
+	  done; echo "test-openbsd-arm64: OK"
+
 # --os=openbsd (EXPERIMENTAL) on a real OpenBSD 8.0 kernel (qemu VM,
 # tools/vm/openbsd.sh; the image lives under $PXX_VM_DIR, default /data/vm).
 # NOT in `test`: it needs the VM. Output and exit code must be byte-identical

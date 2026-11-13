@@ -2126,6 +2126,16 @@ begin
   a := Procs[p].BodyAddr;
   lim := a + 96;
   if lim > CodeLen - 1 then lim := CodeLen - 1;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { arm64: the first `svc #0` (D4000001), on an instruction boundary. The
+      kernel checks the svc's own address (it subtracts the sigcode's
+      svc-to-return distance, 12, from the pc it resumes at). }
+    lim := lim - 3;
+    while (a < lim) and not ((Code[a] = $01) and (Code[a + 1] = $00) and
+                             (Code[a + 2] = $00) and (Code[a + 3] = $D4)) do Inc(a, 4);
+  end
+  else
   while (a < lim) and not ((Code[a] = $0F) and (Code[a + 1] = $05)) do Inc(a);
   if a >= lim then
     ErrorNoPos('internal: --os=openbsd: no syscall instruction in ' + procName);

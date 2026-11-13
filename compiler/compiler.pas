@@ -1208,9 +1208,9 @@ begin
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --os=freebsd          FreeBSD/amd64 output (experimental): raw syscalls via an');
   WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
-  WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 output (EXPERIMENTAL):');
+  WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 or arm64 output (EXPERIMENTAL):');
   WriteLn('                        the same design plus a syscall pin table');
-  WriteLn('  --os=netbsd           NetBSD 11.1/amd64 output (EXPERIMENTAL):');
+  WriteLn('  --os=netbsd           NetBSD 11.1/amd64 or arm64 output (EXPERIMENTAL):');
   WriteLn('                        the same design');
   WriteLn('  --os=dragonfly        DragonFly BSD 6.4/x86-64 output (EXPERIMENTAL):');
   WriteLn('                        the same design');
@@ -3214,9 +3214,10 @@ begin
   begin
     if (TargetArch <> TARGET_X86_64) and
        not ((TargetArch = TARGET_AARCH64) and
-            ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_NETBSD))) then
+            ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_NETBSD)
+             or (TargetKernel = KERNEL_OPENBSD))) then
       ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only' +
-        ' (FreeBSD and NetBSD also take --target=aarch64); other CPUs are not supported yet');
+        ' (FreeBSD, NetBSD and OpenBSD also take --target=aarch64); other CPUs are not supported yet');
     if EmitSharedMode then
       ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
     if EmitObjMode then

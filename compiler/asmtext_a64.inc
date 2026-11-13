@@ -261,6 +261,29 @@ begin
     Exit;
   end;
 
+  { br / blr xN -- register-indirect jump and call (obsdabi's thread start
+    and exit path, feature-port-libc-family-openbsd-netbsd-minix) }
+  if CaseEqual(mnem, 'br') then
+  begin
+    EmitI32($D61F0000 or (AsmA64RegOp(op0) shl 5));
+    Exit;
+  end;
+  if CaseEqual(mnem, 'blr') then
+  begin
+    EmitI32($D63F0000 or (AsmA64RegOp(op0) shl 5));
+    Exit;
+  end;
+
+  { .inst word -- one raw instruction word, for the few encodings this
+    assembler does not spell (exclusive loads/stores, barriers). The source
+    names the instruction in a comment beside it. A Pascal asm block reaches
+    here as `inst` (its tokenizer drops the dot). }
+  if CaseEqual(mnem, '.inst') or CaseEqual(mnem, 'inst') then
+  begin
+    EmitI32(LongWord(AsmA64Int(op0, holes, holeCur) and $FFFFFFFF));
+    Exit;
+  end;
+
   { b.cond or conditional branches }
   if (Length(mnem) > 2) and (AsmTextSlice(mnem, 1, 2) = 'b.') then
   begin
@@ -389,6 +412,22 @@ begin
       begin
         if is64_0 then EmitI32($F2800000 or ((sh div 16) shl 21) or ((imm and $FFFF) shl 5) or r0)
         else EmitI32($72800000 or ((sh div 16) shl 21) or ((imm and $FFFF) shl 5) or r0);
+      end
+      else if CaseEqual(mnem, 'mov') and (sh = 0) and ((imm < 0) or (imm > $FFFF)) then
+      begin
+        { mov with a wider immediate: movz for the low half-word, then a movk
+          for each other nonzero one (4 for an x register, 2 for a w). It
+          used to keep the low 16 bits and say nothing: `mov x2, 2147483647`
+          assembled as 65535. }
+        if is64_0 then N_bit := 4 else N_bit := 2;
+        if is64_0 then EmitI32($D2800000 or ((imm and $FFFF) shl 5) or r0)
+        else EmitI32($52800000 or ((imm and $FFFF) shl 5) or r0);
+        for sh := 1 to N_bit - 1 do
+          if ((imm shr (16 * sh)) and $FFFF) <> 0 then
+          begin
+            if is64_0 then EmitI32($F2800000 or (sh shl 21) or (((imm shr (16 * sh)) and $FFFF) shl 5) or r0)
+            else EmitI32($72800000 or (sh shl 21) or (((imm shr (16 * sh)) and $FFFF) shl 5) or r0);
+          end;
       end
       else
       begin

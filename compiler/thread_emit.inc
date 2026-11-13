@@ -663,11 +663,13 @@ begin
       Patch32(pFbB, $14000000 or (((CodeLen - pFbB) div 4) and $03FFFFFF));
       pParent := -1;
     end
-    else if TargetKernel = KERNEL_NETBSD then
+    else if (TargetKernel = KERNEL_NETBSD) or (TargetKernel = KERNEL_OPENBSD) then
     begin
       { --os=netbsd: Linux clone through the translator, which starts an LWP
         from a ucontext (nbsdabi's NbClone) with pc = x5, the child entry
         below, sp = the stage area and the thread pointer = the new block.
+        --os=openbsd takes the same leg: obsdabi's ObClone runs __tfork with
+        tf_tcb = the new block, and ObTforkA sends the child to x5.
         As with thr_new the child does not inherit the parent's thread
         pointer, so the init-image slot is copied into the new block first.
         The kernel call is a `bl` into the shared thunk and this stub `ret`s

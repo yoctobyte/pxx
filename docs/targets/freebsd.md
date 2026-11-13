@@ -204,7 +204,7 @@ The work log, with the reasons behind each choice, is in
 ## OpenBSD, NetBSD and Minix
 
 Minix is not supported yet. OpenBSD, NetBSD and DragonFly have EXPERIMENTAL
-`--os=openbsd`, `--os=netbsd` (since 2026-11-12; NetBSD also on arm64) and
+`--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64) and
 `--os=dragonfly` (since 2026-11-13, x86-64 only). The OpenBSD one may
 still be withdrawn in favour of going through libc; the choice has not been
 made.
@@ -363,6 +363,31 @@ Anything that is not mapped answers ENOSYS.
 To try it, run `tools/vm/openbsd.sh start`, then
 `tools/vm/openbsd.sh run <binary>`. Set `PXX_VM_PTY=1` to run the binary on a
 real terminal. `PXX_TEST_*` environment variables are passed through.
+
+**OpenBSD/arm64.** `--os=openbsd --target=aarch64` (since 2026-11-13) uses the
+arm64 front layer (`compiler/builtin/lxa64front.inc`) that FreeBSD and NetBSD
+use, so `obsdabi.pas` keeps one translator for both CPUs. What is arm64's own:
+
+- the system call: number in x8, arguments in x0..x7, carry set on error.
+  The kernel resumes 8 bytes past the `svc` (libc's `dsb nsh; isb` barrier),
+  so the same two instructions follow every `svc` in the translator. The pin
+  table names the `svc` itself.
+- the signal frame is a `struct sigcontext` (x0..x29, lr, sp, elr, spsr; no
+  FP registers), converted to Linux's arm64 ucontext and back.
+- the kernel does not save `tpidr_el0` when it switches threads; it reloads
+  it from the value given to `__set_tcb`. The translator hands it the main
+  thread's TLS block on the first system call; `__tfork` gives each thread
+  its own.
+- text is mapped readable, as the program header asks, so the backend's
+  literal pools in the code segment work. BTI (`BTCFI`) is enforced only on
+  CPUs that have it; qemu's cortex-a72 does not, so a green VM run says
+  nothing about BTI hardware, as on amd64 with IBT.
+
+`make test-openbsd-arm64` runs about 85 programs on an arm64 VM (port 2231,
+the stock `miniroot80.img` installed unattended into
+`/data/vm/openbsd-arm64`, emulated with TCG; `PXX_OBSD_ARCH=aarch64` selects it
+in `tools/vm/openbsd.sh`) against the Linux aarch64 build under `qemu-aarch64`.
+It passes.
 
 ### `--os=netbsd` (experimental)
 
