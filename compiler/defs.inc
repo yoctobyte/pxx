@@ -10013,7 +10013,7 @@ const
   MAX_WS_STACK = 64;   { Whitespace frontend compile-time expression stack }
 
 var
-  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol, isErl: Boolean;
+  isC, isBasic, isNilPy, isAsm, isGas, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol, isErl: Boolean;
   { NOT one of the above — i.e. the source is Pascal. Spelled ONCE, in
     compiler.pas beside the extension tests, because the hand-written
     negation chain was maintained in three places and had already drifted:

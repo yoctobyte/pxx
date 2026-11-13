@@ -3679,6 +3679,11 @@ begin
   end;
 end;
 
+{ True while gasfront.inc preprocesses a `.S` file: gcc's
+  -x assembler-with-cpp defines __ASSEMBLER__, which headers shared between C
+  and assembly (Gibux's layout.h) test to hide their C declarations. }
+var CPAsmSource: Boolean;
+
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
 var i: Integer; cmdInc: AnsiString;
 begin
@@ -3693,7 +3698,8 @@ begin
   CPActiveMacroCount := 0;
   CPPushCount := 0;
   CPAddLiteral('__linux__', '01');
-  CPAddLiteral('__unix__', '01');   { bug-c-line-file-func-and-predefined-macros-missing:
+  CPAddLiteral('__unix__', '01');
+  if CPAsmSource then CPAddLiteral('__ASSEMBLER__', '1');   { bug-c-line-file-func-and-predefined-macros-missing:
                                       the most commonly tested of the missing config
                                       macros; every currently-supported target is a
                                       hosted-Linux or bare-metal POSIX-shaped build,
@@ -3938,4 +3944,73 @@ begin
   if CPCondCount <> 0 then Error('unterminated C conditional');
   SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }
   src := CPrepOut;
+end;
+
+
+{ ---- the bit builtins under --freestanding -------------------------------
+
+  cparser renames __builtin_ctzll and friends to __pxx_builtin_* functions that
+  live in crtl (declared in stdlib.h, bodies auto-pulled from stdlib.c). A
+  --freestanding object has neither: no stdlib.h on its include path and no
+  crtl to link -- so Gibux's first __builtin_ctzll (fs/event.c) was "call to
+  undeclared function". Here the translation unit gets its own copy instead:
+  for each builtin it MENTIONS, a static prototype prefixed to line 1 (so no
+  diagnostic's line number moves) and a static body appended at the end. A
+  unit that mentions none is untouched. Same bodies as crtl's. }
+function CFsBuiltinBody(const nm: AnsiString): AnsiString;
+begin
+  Result := '';
+  if nm = 'clz32' then Result := 'int __pxx_builtin_clz32(unsigned int x){int n=0;if(x==0u)return 32;while(!(x&0x80000000u)){x<<=1;n++;}return n;}'
+  else if nm = 'clz64' then Result := 'int __pxx_builtin_clz64(unsigned long long x){int n=0;if(x==0ull)return 64;while(!(x&0x8000000000000000ull)){x<<=1;n++;}return n;}'
+  else if nm = 'ctz32' then Result := 'int __pxx_builtin_ctz32(unsigned int x){int n=0;if(x==0u)return 32;while(!(x&1u)){x>>=1;n++;}return n;}'
+  else if nm = 'ctz64' then Result := 'int __pxx_builtin_ctz64(unsigned long long x){int n=0;if(x==0ull)return 64;while(!(x&1ull)){x>>=1;n++;}return n;}'
+  else if nm = 'popcount32' then Result := 'int __pxx_builtin_popcount32(unsigned int x){int n=0;while(x){n+=(int)(x&1u);x>>=1;}return n;}'
+  else if nm = 'popcount64' then Result := 'int __pxx_builtin_popcount64(unsigned long long x){int n=0;while(x){n+=(int)(x&1ull);x>>=1;}return n;}'
+  else if nm = 'ffs32' then Result := 'int __pxx_builtin_ffs32(unsigned int x){int n=1;if(x==0u)return 0;while(!(x&1u)){x>>=1;n++;}return n;}'
+  else if nm = 'ffs64' then Result := 'int __pxx_builtin_ffs64(unsigned long long x){int n=1;if(x==0ull)return 0;while(!(x&1ull)){x>>=1;n++;}return n;}'
+  else if nm = 'parity32' then Result := 'int __pxx_builtin_parity32(unsigned int x){int n=0;while(x){n^=(int)(x&1u);x>>=1;}return n;}'
+  else if nm = 'parity64' then Result := 'int __pxx_builtin_parity64(unsigned long long x){int n=0;while(x){n^=(int)(x&1ull);x>>=1;}return n;}'
+  else if nm = 'bswap16' then Result := 'unsigned short __pxx_builtin_bswap16(unsigned short x){return (unsigned short)((x>>8)|(x<<8));}'
+  else if nm = 'bswap32' then Result := 'unsigned int __pxx_builtin_bswap32(unsigned int x){return (x>>24)|((x>>8)&0xff00u)|((x<<8)&0xff0000u)|(x<<24);}'
+  else if nm = 'bswap64' then Result := 'unsigned long long __pxx_builtin_bswap64(unsigned long long x){return ((unsigned long long)__pxx_builtin_bswap32((unsigned int)x)<<32)|__pxx_builtin_bswap32((unsigned int)(x>>32));}';
+end;
+
+procedure CAddFreestandingBuiltins(var src: AnsiString);
+var fams: array[0..5] of AnsiString; f, w, k: Integer; nm, body, protos, bodies, lw: AnsiString;
+    want: array[0..12] of Boolean; names: array[0..12] of AnsiString;
+begin
+  if Pos('__builtin_', src) = 0 then Exit;
+  names[0] := 'clz32'; names[1] := 'clz64'; names[2] := 'ctz32'; names[3] := 'ctz64';
+  names[4] := 'popcount32'; names[5] := 'popcount64'; names[6] := 'ffs32'; names[7] := 'ffs64';
+  names[8] := 'parity32'; names[9] := 'parity64'; names[10] := 'bswap16'; names[11] := 'bswap32';
+  names[12] := 'bswap64';
+  for k := 0 to 12 do want[k] := False;
+  fams[0] := 'clz'; fams[1] := 'ctz'; fams[2] := 'popcount'; fams[3] := 'ffs'; fams[4] := 'parity';
+  fams[5] := 'bswap';
+  lw := CLongWidthSuffix;
+  for f := 0 to 4 do
+  begin
+    if Pos('__builtin_' + fams[f] + '(', src) > 0 then want[f * 2] := True;
+    if Pos('__builtin_' + fams[f] + 'll', src) > 0 then want[f * 2 + 1] := True;
+    if Pos('__builtin_' + fams[f] + 'l(', src) > 0 then
+    begin
+      if lw = '64' then want[f * 2 + 1] := True else want[f * 2] := True;
+    end;
+  end;
+  if Pos('__builtin_bswap16', src) > 0 then want[10] := True;
+  if Pos('__builtin_bswap32', src) > 0 then want[11] := True;
+  if Pos('__builtin_bswap64', src) > 0 then begin want[11] := True; want[12] := True; end;
+  protos := '';
+  bodies := '';
+  for k := 0 to 12 do
+    if want[k] then
+    begin
+      body := CFsBuiltinBody(names[k]);
+      w := Pos('{', body);
+      protos := protos + 'static ' + Copy(body, 1, w - 1) + '; ';
+      bodies := bodies + 'static ' + body + #10;
+    end;
+  if protos = '' then Exit;
+  src := protos + src + #10 + bodies;
+  nm := '';
 end;

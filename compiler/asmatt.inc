@@ -63,6 +63,12 @@ var
   AttFixFwd : array[0..ATT_MAX_LABELS-1] of Boolean;
   AttPendLblNum : Integer;     { label of the AOP_RIPLBL operand being encoded }
   AttPendLblFwd : Boolean;
+  { The GNU as frontend (gasfront.inc) reads instructions through this same
+    reader, with three liberties an inline-asm template never needs: a bare
+    absolute address, a memory operand with no base, and -- under `.code32` --
+    32-bit address registers. Off for every inline-asm statement. }
+  AttGasMode   : Boolean;
+  AttGasCode32 : Boolean;
 
 { Clear every binding. Called on its own for an operand-free template, so a
   stale binding from an earlier statement can never satisfy a `%N`. }
@@ -562,20 +568,34 @@ end;
   read here, and both refuse by name below rather than encoding something
   plausible. }
 procedure AttParseMemory(slot: Integer; disp: Int64; sawDisp: Boolean);
-var num, size, idxNum, idxSize: Integer; scale: Int64;
+var num, size, idxNum, idxSize, addrSize: Integer; scale: Int64;
 begin
   { AttPos is on '(' }
   Inc(AttPos);
   AttSkipSpace;
-  AttParseBaseOrOperand(slot);
-  num := AsmOpReg[slot];
-  size := AsmOpSize[slot];
+  { An address register is as wide as an address: 8 on x86-64, 4 on i386 --
+    and 4 under the GNU as frontend's `.code32`, where the register's NUMBER
+    encodes exactly as the 64-bit one with no 0x67 prefix. }
+  addrSize := TARGET_PTR_SIZE;
+  if AttGasMode then
+    if AttGasCode32 then addrSize := 4 else addrSize := 8;
+  if AttGasMode and (AttPeek = ',') then
+  begin
+    num := -1;               { `disp(,%idx,s)`: no base }
+    size := addrSize;
+  end
+  else
+  begin
+    AttParseBaseOrOperand(slot);
+    num := AsmOpReg[slot];
+    size := AsmOpSize[slot];
+  end;
   { An address register is as wide as an address. That is 8 on x86-64 and 4 on
     i386, and it is not a matter of taste: `(%eax)` in 64-bit mode is a
     different, address-size-prefixed encoding, and `(%rax)` does not exist in
     32-bit mode at all. }
-  if size <> TARGET_PTR_SIZE then
-    Error('C: inline asm template needs a ' + AIntToStr(TARGET_PTR_SIZE * 8)
+  if size <> addrSize then
+    Error('C: inline asm template needs a ' + AIntToStr(addrSize * 8)
           + '-bit base register inside ( )');
   idxNum := -1; scale := 1;
   AttSkipSpace;
@@ -586,7 +606,9 @@ begin
     AttParseBaseOrOperand(slot);
     idxNum := AsmOpReg[slot];
     idxSize := AsmOpSize[slot];
-    if idxSize <> 8 then
+    if AttGasMode and (idxSize <> addrSize) then
+      Error('asm: needs a ' + AIntToStr(addrSize * 8) + '-bit index register inside ( )');
+    if (not AttGasMode) and (idxSize <> 8) then
       Error('C: inline asm template needs a 64-bit index register inside ( )');
     AttSkipSpace;
     if AttPeek = ',' then
@@ -888,6 +910,16 @@ begin
     disp := 0;
     if AttPeek <> '(' then disp := AttParseAddExpr;
     AttSkipSpace;
+    if (AttPeek <> '(') and AttGasMode then
+    begin
+      AsmOpKind[slot] := AOP_MEMR;
+      AsmOpReg[slot] := -1;
+      AsmOpIndex[slot] := -1;
+      AsmOpScale[slot] := 1;
+      AsmOpVal[slot] := disp;
+      AsmOpSize[slot] := 0;
+      Exit;
+    end;
     if AttPeek <> '(' then
       Error('C: inline asm template has an absolute memory address,'
             + ' which is not supported');

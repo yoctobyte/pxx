@@ -151,7 +151,11 @@ begin
   if m.MemIndex = 4 then
   begin LastError := 'asmcore_x64: rsp cannot be a SIB index register'; Exit; end;
 
-  noBase := (m.MemBase = -1) and (m.MemIndex <> -1);
+  { No base register: `disp(,%idx,s)`, and with no index either the plain
+    absolute `disp` (SIB index=100 base=101), which decodes the same in 32- and
+    64-bit mode -- the GNU as frontend's absolute operands and `.code32` lean
+    on that. Base -1 with no index used to fall through to `MemBase and 7`. }
+  noBase := m.MemBase = -1;
   needSib := noBase or (m.MemIndex <> -1) or ((m.MemBase and 7) = 4);  { index present, or rsp/r12 base }
 
   if needSib then rmField := 4 else rmField := m.MemBase and 7;

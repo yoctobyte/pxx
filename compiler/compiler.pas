@@ -333,6 +333,7 @@ function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
 {$include resources_emit.inc}
 {$ifndef PXX_NO_CFRONT}{$include cpreproc.inc}{$endif}
 {$include asmfront.inc}
+{$include gasfront.inc}   { GNU as sources (.S/.s) -> ET_REL; reads instructions through asmatt.inc }
 
 { ===== Toolchain CLI: --version / --where / --list-targets / --list-libraries
         / --doctor / --help =====
@@ -3219,6 +3220,7 @@ begin
   isNilPy := ((n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.'))
              or ((n >= 3) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = '.'));
   isAsm := (n >= 4) and (inFile[n] = 'm') and (inFile[n-1] = 's') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
+  isGas := (n >= 2) and ((inFile[n] = 'S') or (inFile[n] = 's')) and (inFile[n-1] = '.');
   isRust := (n >= 3) and (inFile[n] = 's') and (inFile[n-1] = 'r') and (inFile[n-2] = '.');
   isAda := (n >= 4) and (inFile[n] = 'b') and (inFile[n-1] = 'd') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isZig := (n >= 4) and (inFile[n] = 'g') and (inFile[n-1] = 'i') and (inFile[n-2] = 'z') and (inFile[n-3] = '.');
@@ -3229,7 +3231,7 @@ begin
   isErl := (n >= 5) and (inFile[n] = 'l') and (inFile[n-1] = 'r') and (inFile[n-2] = 'e') and (inFile[n-3] = '.');
   { The ONE spelling of "this source is Pascal". See defs.inc for what the
     hand-copied negation chains cost. }
-  IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isRust or isAda
+  IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isGas or isRust or isAda
                            or isZig or isLol or isWs or isF90 or isAlgol or isErl);
   IsCFrontend := isC;
   IsNilPyFrontend := isNilPy;
@@ -3296,6 +3298,16 @@ begin
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
+  { A GNU as source is assembled straight to an object and nothing else runs:
+    there is no program to compile, only sections and symbols to write. }
+  if isGas then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      ErrorNoPos('.S/.s sources are x86-64 only');
+    GasAssemble(Source, inFile, outFile, SourceFileDir, inFile[Length(inFile)] = 'S');
+    writeln('ok: ', outFile, '  [GNU as object]');
+    Halt(0);
+  end;
   CurUnitDir := SourceFileDir;
   CurSrcBaseName := GetFileBaseName(inFile);
   exePath := ParamStr(0);              { copy to a local; ParamStr result does not match the param overload directly }
@@ -3521,6 +3533,7 @@ begin
 {$else}
     AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
     CPreprocess(Source, SourceFileDir);
+    if FreestandingMode then CAddFreestandingBuiltins(Source);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }

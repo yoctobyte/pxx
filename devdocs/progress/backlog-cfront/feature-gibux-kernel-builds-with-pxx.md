@@ -84,7 +84,9 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    Note that pxx's C code is already position-agnostic: only PC32 and
    R_X86_64_64 relocations, measured on every kernel object. It needs no
    code-model work for the higher half.
-5. **The .S frontend.** boot.S and entry.S are GAS (AT&T) assembly run
+5. **DONE 2026-11-13** ([[feature-gas-frontend-assembles-dot-s-files]]): `pascal26 --emit-obj
+   boot.S boot.o`; the whole kernel now builds with pxx alone and boots.
+   **The .S frontend.** boot.S and entry.S are GAS (AT&T) assembly run
    through the C preprocessor. They need:
    - `.code32`/`.code64`;
    - `.section`, `.globl`, `.balign`, `.skip`;

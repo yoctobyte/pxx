@@ -19201,6 +19201,12 @@ test-core: $(COMPILER)
 	tools/check_link_freestanding.sh ./$(COMPILER) $(TESTTMP)/clf
 	# An extern-only array reserves no .bss in the declaring object (Gibux item 6).
 	tools/check_extern_bss.sh ./$(COMPILER) $(TESTTMP)/ceb
+	# GNU as sources: .S/.s -> ET_REL, checked against GNU as (Gibux item 5).
+	tools/check_gas_frontend.sh ./$(COMPILER) $(TESTTMP)/cgas
+	# The bit builtins in a --freestanding object carry their own helpers.
+	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_bit_builtins.c $(TESTTMP)/c_fs_bits.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/c_fs_bits test/c_freestanding_bit_builtins_main.c $(TESTTMP)/c_fs_bits.o
+	tools/expect_same.sh c_fs_bits "$$($(TESTTMP)/c_fs_bits)" "bits ok 195"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
