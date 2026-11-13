@@ -1151,7 +1151,7 @@ begin
   else if (mn = 'popfl') or ((mn = 'popf') and GasCode32) then b := #$9D
   else if (mn = 'cltq') or (mn = 'cdqe') then b := #$48#$98 else if (mn = 'cqto') or (mn = 'cqo') then b := #$48#$99
   else if (mn = 'cltd') or (mn = 'cdq') then b := #$99 else if (mn = 'cwtl') or (mn = 'cwde') then b := #$98
-  else if mn = 'xgetbv' then b := #$0F#$01#$D0 else if mn = 'fninit' then b := #$DB#$E3
+  else if mn = 'xgetbv' then b := #$0F#$01#$D0 else if mn = 'xsetbv' then b := #$0F#$01#$D1 else if mn = 'fninit' then b := #$DB#$E3
   else if mn = 'movsb' then b := #$A4 else if mn = 'movsq' then b := #$48#$A5 else if mn = 'movsl' then b := #$A5
   else if mn = 'stosb' then b := #$AA else if mn = 'stosq' then b := #$48#$AB else if mn = 'stosl' then b := #$AB
   else if mn = 'lodsb' then b := #$AC else if mn = 'lodsq' then b := #$48#$AD

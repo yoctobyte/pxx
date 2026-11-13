@@ -970,7 +970,14 @@ begin
          or CaseEqual(b,'invlpg')
          or CaseEqual(b,'fxsave64') or CaseEqual(b,'fxrstor64')
          or CaseEqual(b,'fxsave') or CaseEqual(b,'fxrstor')
-         or CaseEqual(b,'ldmxcsr') or CaseEqual(b,'stmxcsr');
+         or CaseEqual(b,'ldmxcsr') or CaseEqual(b,'stmxcsr')
+         or CaseEqual(b,'xsave64') or CaseEqual(b,'xrstor64')
+         or CaseEqual(b,'xsaveopt64') or CaseEqual(b,'xsavec64')
+         or CaseEqual(b,'xsave') or CaseEqual(b,'xrstor')
+         or CaseEqual(b,'xsaveopt') or CaseEqual(b,'xsavec')
+         or CaseEqual(b,'rdrand') or CaseEqual(b,'rdseed')
+         { set<cc> r/m8 (`rdrand %0; setc %1`); the shared encoder has it. }
+         or (AsmStartsWith(b, 'set') and (Length(b) > 3) and (AsmCC(AsmTail(b, 3)) >= 0));
 end;
 
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.

@@ -8854,6 +8854,11 @@ begin
     if (Length(cls) > 1) and (Pos('N', cls) > 0) then
       Delete(cls, Pos('N', cls), 1);
     if cls = 'n' then cls := 'i';
+    { "qm" / "Qm": a byte register OR memory, the usual spelling for a setcc
+      result (`rdrand %0; setc %1`). The register is always one of the
+      allowed choices, the same reading that honours "rm" as a register. }
+    if (cls = 'qm') or (cls = 'mq') then cls := 'q';
+    if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
     { A digit constraint names an earlier operand's location. It is only legal
       in the INPUT section -- an output tied to an output has no meaning -- and
       it must name an operand that already exists. }

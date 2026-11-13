@@ -569,6 +569,7 @@ begin
     copy — same instructions, two encoders (feature-inline-asm-xmm-operands). }
   if CaseEqual(mnem, 'cpuid')  then begin EncB($0F); EncB($A2); Exit; end;
   if CaseEqual(mnem, 'xgetbv') then begin EncB($0F); EncB($01); EncB($D0); Exit; end;
+  if CaseEqual(mnem, 'xsetbv') then begin EncB($0F); EncB($01); EncB($D1); Exit; end;
   if CaseEqual(mnem, 'rdtsc')  then begin EncB($0F); EncB($31); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
   if CaseEqual(mnem, 'cdqe') then begin EncB($48); EncB($98); Exit; end;

@@ -751,6 +751,50 @@ begin
     Exit;
   end;
 
+  { rdrand /6, rdseed /7: 0F C7 with a REGISTER operand (mod=11); CF=1 means
+    the value is valid. Width from the register: 66 for 16-bit, REX.W for
+    64-bit. Gibux's kernel entropy source. }
+  if (CaseEqual(mn,'rdrand') or CaseEqual(mn,'rdseed')) and (nops = 1) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: ' + mn + ' needs a register operand');
+    if not ((AsmOpSize[0] = 2) or (AsmOpSize[0] = 4) or (AsmOpSize[0] = 8)) then
+      Error('asm: ' + mn + ' needs a 16-, 32- or 64-bit register');
+    if AsmOpSize[0] = 2 then AsmB($66);
+    if (AsmOpSize[0] = 8) or (AsmOpReg[0] >= 8) then
+      AsmB($40 or (Ord(AsmOpSize[0] = 8) shl 3) or Ord(AsmOpReg[0] >= 8));
+    AsmB($0F); AsmB($C7);
+    if CaseEqual(mn,'rdrand') then AsmB($C0 or (6 shl 3) or (AsmOpReg[0] and 7))
+    else AsmB($C0 or (7 shl 3) or (AsmOpReg[0] and 7));
+    Exit;
+  end;
+
+  { XSAVE family (Gibux: per-process xsave areas). xsave /4, xrstor /5,
+    xsaveopt /6 are 0F AE; xsavec is 0F C7 /4. The 64 spellings add REX.W,
+    which only changes the layout of the x87 FIP/FDP words in the legacy area.
+    The component bitmap is edx:eax, so the template's only operand is the
+    area; the constraints put the mask in eax/edx, as with gcc. }
+  ext := -1;
+  if CaseEqual(mn,'xsave64') then ext := 4 + 16
+  else if CaseEqual(mn,'xrstor64') then ext := 5 + 16
+  else if CaseEqual(mn,'xsaveopt64') then ext := 6 + 16
+  else if CaseEqual(mn,'xsavec64') then ext := 4 + 16 + 32
+  else if CaseEqual(mn,'xsave') then ext := 4
+  else if CaseEqual(mn,'xrstor') then ext := 5
+  else if CaseEqual(mn,'xsaveopt') then ext := 6
+  else if CaseEqual(mn,'xsavec') then ext := 4 + 32;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    if (ext and 16) <> 0 then AsmPrefixAndREX(8, ext and 7, 0, 0)
+    else AsmPrefixAndREX(0, ext and 7, 0, 0);
+    AsmB($0F);
+    if (ext and 32) <> 0 then AsmB($C7) else AsmB($AE);
+    AsmModRM(ext and 7, 0);
+    Exit;
+  end;
+
   { 0F 01 /2 lgdt, /3 lidt, /7 invlpg: a memory operand only. 0F 00 /3 ltr
     takes r/m16; a register is accepted at any width, as gas does. }
   ext := -1;
@@ -862,6 +906,8 @@ begin
     the reason is written down. }
   if CaseEqual(mn,'cpuid')   then begin AsmB($0F); AsmB($A2); Exit; end;
   if CaseEqual(mn,'xgetbv')  then begin AsmB($0F); AsmB($01); AsmB($D0); Exit; end;
+  { xsetbv writes XCR<ecx> := edx:eax (ring 0; a kernel enables AVX state with it). }
+  if CaseEqual(mn,'xsetbv')  then begin AsmB($0F); AsmB($01); AsmB($D1); Exit; end;
   if CaseEqual(mn,'rdtsc')   then begin AsmB($0F); AsmB($31); Exit; end;
 
   if CaseEqual(mn,'int') then

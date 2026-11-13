@@ -17,7 +17,7 @@ gcc -O1 -fno-stack-protector -c "$SRC" -o "$T/sys_gcc.o" || exit 1
 
 pick() {
   objdump -d --no-show-raw-insn "$1" > "$T/$2.noraw"
-  objdump -d "$1" | awk -v RE='^(cli|sti|hlt|swapgs|iretq|sysretq|out|in|rdmsr|wrmsr|invlpg|lgdt|lidt|ltr|mov|fxsave64|fxrstor64|fninit|ldmxcsr)$' '
+  objdump -d "$1" | awk -v RE='^(cli|sti|hlt|swapgs|iretq|sysretq|out|in|rdmsr|wrmsr|invlpg|lgdt|lidt|ltr|mov|fxsave64|fxrstor64|fninit|ldmxcsr|xsave|xsave64|xrstor|xrstor64|xsaveopt|xsaveopt64|xsavec|xsavec64|xsetbv|rdrand|rdseed|setb)$' '
     /^[0-9a-f]+ </ { fn = ($2 ~ /^<k_/) ? $2 : ""; next }
     /^ +[0-9a-f]+:\t/ {
       n = split($0, f, "\t"); if (n < 3) next
