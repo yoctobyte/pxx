@@ -21122,6 +21122,13 @@ test-core: $(COMPILER)
 	# is kept only as row 3's pair. Row 5 states the claim: two functions, two
 	# addresses.
 	# feature-c-two-same-named-file-scope-statics-share-one-procs-row
+	# A struct-returning function in ANOTHER object is called through the GOT;
+	# the caller must still pass the hidden result pointer in r10.
+	# bug-c-a-struct-return-across-objects-passes-no-hidden-destination
+	./$(COMPILER) --emit-obj test/c_struct_return_across_objects_def.c $(TESTTMP)/csret_x_def.o > /dev/null
+	./$(COMPILER) --emit-obj test/c_struct_return_across_objects_use.c $(TESTTMP)/csret_x_use.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/csret_x $(TESTTMP)/csret_x_def.o $(TESTTMP)/csret_x_use.o > /dev/null
+	tools/expect_same.sh csret_x "$$($(TESTTMP)/csret_x)" "$$(printf 'var 5 1\narg 5\nbig 7 14 21 28\nfield 12')"
 	./$(COMPILER) test/cstatic_two_modules_distinct.c $(TESTTMP)/cstatic_distinct26 > $(TESTTMP)/cstatic_distinct.log 2>&1
 	tools/expect_same.sh cstatic_distinct.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_distinct.log)" "0"
 	tools/expect_same.sh cstatic_distinct26 "$$($(TESTTMP)/cstatic_distinct26)" "$$(printf '1 1\n2 2\n3 1\n4 2\n5 1')"

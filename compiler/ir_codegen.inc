@@ -11836,13 +11836,19 @@ begin
                     5: begin EmitAsmX64(['pop r9']); end;
                   end;
               end;
-            { Internal C function returning an aggregate (struct/union by value):
-              pass the caller's hidden destination in r10, matching the pxx
+            { C function returning an aggregate (struct/union by value): pass
+              the caller's hidden destination in r10, matching the pxx
               indirect-result convention its prologue stashes (EmitAggregateDestStash)
-              and epilogue fills. External libc aggregate returns (true SysV sret)
-              are not modelled here. Evaluate the dest into r10 before AL is set
-              and the call is made; arg registers are already loaded above. }
-            if (not ProcExternal[procIdx]) and ABIRetViaHiddenDestProc(procIdx) then
+              and epilogue fills. This holds for EXTERNAL calls too: under
+              --emit-obj a function defined in another pxx object is
+              ProcExternal and called through the GOT, and its body still reads
+              r10. Skipping r10 there crashed Gibux (procfs -> fs_ipath).
+              test/c_struct_return_across_objects_*.c. A gcc-compiled callee
+              ignores r10 (a scratch register in SysV); true SysV sret (rdi,
+              and rax:rdx for 16 bytes or less) is still not modelled.
+              Evaluate the dest into r10 before AL is set and the call is made;
+              arg registers are already loaded above. }
+            if ABIRetViaHiddenDestProc(procIdx) then
             begin
               IREmitNode(IRC[node]);                  { rax = hidden destination }
               EmitAsmX64(['mov r10, rax']);
