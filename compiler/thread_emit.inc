@@ -659,6 +659,28 @@ begin
       Patch32(pFbB, $14000000 or (((CodeLen - pFbB) div 4) and $03FFFFFF));
       pParent := -1;
     end
+    else if TargetKernel = KERNEL_NETBSD then
+    begin
+      { --os=netbsd: Linux clone through the translator, which starts an LWP
+        from a ucontext (nbsdabi's NbClone) with pc = x5, the child entry
+        below, sp = the stage area and the thread pointer = the new block.
+        As with thr_new the child does not inherit the parent's thread
+        pointer, so the init-image slot is copied into the new block first.
+        The kernel call is a `bl` into the shared thunk and this stub `ret`s
+        through x30, hence the Leaf form. }
+      EmitI32($D53BD04A);               { mrs  x10, tpidr_el0 }
+      EmitI32($B400006A);               { cbz  x10, +3 }
+      EmitI32($F940014A or (TLS_SLOT_INIT_IMAGE shl 10));          { ldr x10, [x10, #8*slot] }
+      EmitI32($F900002A or ((2 + TLS_SLOT_INIT_IMAGE) shl 10));    { str x10, [x1, #16+8*slot] }
+      EmitI32($AA0403E2);               { mov  x2, x4             (parent_tid = ctidptr) }
+      EmitI32($D2800003);               { mov  x3, #0             (tls) }
+      pFbB := CodeLen; EmitI32($10000005);   { adr  x5, .child (patched) }
+      EmitI32($D2801B88);               { mov  x8, #220           (SYS_clone) }
+      EmitSvcA64Leaf;
+      pParent := CodeLen; EmitI32($B5000000);   { cbnz x0, .parent (patched) }
+      imm := CodeLen - pFbB;
+      Patch32(pFbB, $10000000 or ((imm and 3) shl 29) or (((imm div 4) and $7FFFF) shl 5) or 5);
+    end
     else
     begin
     EmitI32($AA0403E2);                 { mov  x2, x4             (parent_tid = ctidptr) }

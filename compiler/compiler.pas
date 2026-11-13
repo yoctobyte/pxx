@@ -3202,9 +3202,10 @@ begin
   if KernelTranslated then
   begin
     if (TargetArch <> TARGET_X86_64) and
-       not ((TargetArch = TARGET_AARCH64) and (TargetKernel = KERNEL_FREEBSD)) then
+       not ((TargetArch = TARGET_AARCH64) and
+            ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_NETBSD))) then
       ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only' +
-        ' (FreeBSD also takes --target=aarch64); other CPUs are not supported yet');
+        ' (FreeBSD and NetBSD also take --target=aarch64); other CPUs are not supported yet');
     if EmitSharedMode then
       ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
     if EmitObjMode then

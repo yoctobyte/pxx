@@ -122,6 +122,71 @@ var
   offset after its PAD); the word under it stands where a call's return
   address would. CF set = error, rax the positive errno: turned into -errno
   here. CF is captured before the stack is restored, since add changes it. }
+{$ifdef CPU_AARCH64}
+{ NetBSD/arm64 encodes the number in svc's immediate; svc 0 is SYS_syscall,
+  which takes it from x17 (measured). Arguments x0..x6, so the seventh
+  (mmap's offset after its PAD) is a register here. C set = error, x0 the
+  positive errno. }
+function NbRawA(args: Pointer): Int64; assembler;
+asm
+  mov x9, x0
+  ldr x17, [x9]
+  ldr x0, [x9, 8]
+  ldr x1, [x9, 16]
+  ldr x2, [x9, 24]
+  ldr x3, [x9, 32]
+  ldr x4, [x9, 40]
+  ldr x5, [x9, 48]
+  ldr x6, [x9, 56]
+  svc 0
+  str x1, [x9, 64]
+  mov x10, 0
+  b.cc nbrawok
+  mov x10, 1
+  sub x0, xzr, x0
+nbrawok:
+  str x10, [x9, 72]
+end;
+
+{ setcontext(uc), uc in x28 as libc's __sigtramp_siginfo_2 has it. }
+procedure NbSigTramp; assembler;
+asm
+  mov x0, x28
+  mov x17, 308
+  svc 0
+  mov x0, 70
+  mov x17, 1
+  svc 0
+end;
+
+{ As the x86-64 one, without the stack move: __futex's seventh argument is
+  x6 here, so nothing reads the stack. }
+procedure NbClearTidExitA(ctid, area: Int64); assembler;
+asm
+  mov x9, x0
+  str wzr, [x9]
+  mov x0, x9
+  mov x1, 1
+  mov x2, 2147483647
+  mov x3, 0
+  mov x4, 0
+  mov x5, 0
+  mov x6, 0
+  mov x17, 166
+  svc 0
+  mov x0, x9
+  mov x1, 129
+  mov x2, 2147483647
+  mov x3, 0
+  mov x4, 0
+  mov x5, 0
+  mov x6, 0
+  mov x17, 166
+  svc 0
+  mov x17, 310
+  svc 0
+end;
+{$else}
 function NbRawA(args: Pointer): Int64; assembler;
 {$asmMode intel}
 asm
@@ -196,6 +261,7 @@ asm
   mov eax, 310
   syscall
 end;
+{$endif}
 
 var
   NbRdx: Int64;
@@ -509,14 +575,14 @@ end;
   environment and the executable's path come from sysctl kern.proc_args; an
   open() of such a file answers a memfd holding what Linux would serve. }
 
-function PathIs(p: Int64; const w: array of Byte): Boolean;
+function PathIs(p: Int64; w: PByte; n: Integer): Boolean;   { pointer + count: see fbsdabi's PathIs }
 var i: Integer;
 begin
   Result := False;
   if p = 0 then Exit;
-  for i := 0 to High(w) do
+  for i := 0 to n - 1 do
     if PByte(p + i)^ <> w[i] then Exit;
-  Result := PByte(p + Length(w))^ = 0;
+  Result := PByte(p + n)^ = 0;
 end;
 
 const
@@ -724,6 +790,43 @@ end;
 
 { The handler NetBSD calls (rdi sig, rsi siginfo, rdx ucontext). It resumes
   the interrupted context with setcontext, as the trampoline would. }
+{$ifdef CPU_AARCH64}
+const
+  { NetBSD/arm64: uc_sigmask at 16, uc_mcontext at 64 = __gregs[35]: x0..x30,
+    sp, pc, spsr, tpidr -- Linux arm64's regs/sp/pc/pstate in the same order
+    (its sigcontext at 176: fault_address, then those). Measured. }
+  NB_A64_MC = 64;
+  LX_A64_MC = 176;
+
+procedure NbSigEntry(sig, info, uc: Int64); cdecl;
+var li: array[0..15] of Int64;
+    lu: array[0..63] of Int64;
+    i: Integer;
+    h, ls: Int64;
+begin
+  if (sig >= 0) and (sig <= 127) then h := NbLxHandler[Integer(sig)] else h := 0;
+  if h <> 0 then
+  begin
+    ls := LxSig(sig);
+    for i := 0 to 15 do li[i] := 0;
+    for i := 0 to 63 do lu[i] := 0;
+    if info <> 0 then SiginfoToLx(info, Int64(@li[0]))
+    else PInteger(@li[0])^ := Integer(ls);
+    if uc <> 0 then
+    begin
+      for i := 0 to 33 do
+        lu[LX_A64_MC div 8 + 1 + i] := PInt64(uc + NB_A64_MC + 8 * i)^;
+      if info <> 0 then lu[LX_A64_MC div 8] := PInt64(info + 16)^;   { fault_address = si_addr }
+      lu[5] := MaskToLx(uc + NB_UC_SIGMASK);                          { uc_sigmask at 40 }
+    end;
+    TNbLxHandler(h)(ls, Int64(@li[0]), Int64(@lu[0]));
+    if uc <> 0 then
+      for i := 0 to 32 do
+        PInt64(uc + NB_A64_MC + 8 * i)^ := lu[LX_A64_MC div 8 + 1 + i];
+  end;
+  if uc <> 0 then NbSys(NB_SETCONTEXT, uc, 0, 0, 0, 0, 0);
+end;
+{$else}
 procedure NbSigEntry(sig, info, uc: Int64); cdecl;
 var li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
     lu: array[0..63] of Int64;        { Linux ucontext_t through uc_sigmask }
@@ -756,6 +859,7 @@ begin
   end;
   if uc <> 0 then NbSys(NB_SETCONTEXT, uc, 0, 0, 0, 0, 0);
 end;
+{$endif}
 
 function NbRtSigaction(sig, act, oact: Int64): Int64;
 var na, no: array[0..3] of Int64;     { NetBSD struct sigaction: handler, mask[16], flags }
@@ -1287,11 +1391,11 @@ const
   TBaudHi: array[1..15] of Integer = (57600,115200,230400,460800,500000,576000,921600,
                                       1000000,1152000,1500000,2000000,2500000,3000000,3500000,4000000);
 
-function MapBits(v: Int64; const src, dst: array of Int64): Int64;
+function MapBits(v: Int64; src, dst: PInt64; n: Integer): Int64;
 var i: Integer;
 begin
   Result := 0;
-  for i := 0 to High(src) do
+  for i := 0 to n - 1 do
     if (src[i] <> 0) and (dst[i] <> 0) and ((v and src[i]) = src[i]) then Result := Result or dst[i];
 end;
 
@@ -1315,13 +1419,13 @@ procedure TermiosToLx(nb, lx: Int64);
 var i, ix: Integer; c: Byte; cf: Int64;
 begin
   for i := 0 to 35 do PByte(lx + i)^ := 0;
-  PInteger(lx)^ := Integer(MapBits(PInteger(nb)^, TIflNb, TIflLx));
-  PInteger(lx + 4)^ := Integer(MapBits(PInteger(nb + 4)^, TOflNb, TOflLx));
-  cf := MapBits(PInteger(nb + 8)^ and $FFFFFFFF, TCflNb, TCflLx);
+  PInteger(lx)^ := Integer(MapBits(PInteger(nb)^, @TIflNb[0], @TIflLx[0], Length(TIflNb)));
+  PInteger(lx + 4)^ := Integer(MapBits(PInteger(nb + 4)^, @TOflNb[0], @TOflLx[0], Length(TOflNb)));
+  cf := MapBits(PInteger(nb + 8)^ and $FFFFFFFF, @TCflNb[0], @TCflLx[0], Length(TCflNb));
   cf := cf or (((PInteger(nb + 8)^ shr 8) and 3) shl 4);        { CSIZE }
   cf := cf or SpeedToLx(PInteger(nb + 40)^);
   PInteger(lx + 8)^ := Integer(cf);
-  PInteger(lx + 12)^ := Integer(MapBits(PInteger(nb + 12)^ and $FFFFFFFF, TLflNb, TLflLx));
+  PInteger(lx + 12)^ := Integer(MapBits(PInteger(nb + 12)^ and $FFFFFFFF, @TLflNb[0], @TLflLx[0], Length(TLflNb)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1337,11 +1441,11 @@ var i, ix: Integer; c: Byte; cf, sp: Int64;
 begin
   for i := 0 to 43 do PByte(nb + i)^ := 0;
   for i := 0 to 19 do PByte(nb + 16 + i)^ := $FF;
-  PInteger(nb)^ := Integer(MapBits(PInteger(lx)^, TIflLx, TIflNb));
-  PInteger(nb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, TOflLx, TOflNb));
+  PInteger(nb)^ := Integer(MapBits(PInteger(lx)^, @TIflLx[0], @TIflNb[0], Length(TIflLx)));
+  PInteger(nb + 4)^ := Integer(MapBits(PInteger(lx + 4)^, @TOflLx[0], @TOflNb[0], Length(TOflLx)));
   cf := PInteger(lx + 8)^ and $FFFFFFFF;
-  PInteger(nb + 8)^ := Integer(MapBits(cf, TCflLx, TCflNb) or (((cf shr 4) and 3) shl 8));
-  PInteger(nb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, TLflLx, TLflNb));
+  PInteger(nb + 8)^ := Integer(MapBits(cf, @TCflLx[0], @TCflNb[0], Length(TCflLx)) or (((cf shr 4) and 3) shl 8));
+  PInteger(nb + 12)^ := Integer(MapBits(PInteger(lx + 12)^, @TLflLx[0], @TLflNb[0], Length(TLflLx)));
   for i := 0 to 16 do
   begin
     ix := TCcMap[i];
@@ -1468,8 +1572,8 @@ end;
 
 function NbOpenAt(dirfd, path, flags, mode: Int64): Int64;
 begin
-  if PathIs(path, ProcEnviron) then Result := NbProcEnviron
-  else if PathIs(path, ProcHostname) then Result := NbProcHostname
+  if PathIs(path, @ProcEnviron[0], Length(ProcEnviron)) then Result := NbProcEnviron
+  else if PathIs(path, @ProcHostname[0], Length(ProcHostname)) then Result := NbProcHostname
   else
   begin
     Result := NbSys(NB_OPENAT, dirfd, path, NbOpenFlags(flags), mode, 0, 0);
@@ -1495,7 +1599,7 @@ end;
   reaps a pxx thread, as on Linux. CHILD_CLEARTID: the ctid pointer is parked
   in the child's TLS block and acted on by its exit. }
 function NbClone(flags, stack, ptid, ctid, cont: Int64): Int64;
-var uc: array[0..97] of Int64;          { ucontext_t, 784 B }
+var uc: array[0..117] of Int64;         { ucontext_t: 784 B on amd64, 944 on arm64 }
     lid, r, mc: Int64;
 begin
   if ((flags and $100) = 0) or (stack = 0) or (cont = 0) then
@@ -1508,11 +1612,19 @@ begin
     PInt64(stack + 16 + 8 * NB_TLS_SLOT_CTID)^ := ctid
   else
     PInt64(stack + 16 + 8 * NB_TLS_SLOT_CTID)^ := 0;
+{$ifdef CPU_AARCH64}
+  mc := Int64(@uc[0]) + 64;
+  PInt64(mc + 32 * 8)^ := cont;                           { _REG_PC }
+  PInt64(mc + 31 * 8)^ := stack;                          { _REG_SP }
+  PInt64(mc)^ := 0;                                       { _REG_X0 }
+  PInt64(mc + 34 * 8)^ := stack + 16;                     { _REG_TPIDR }
+{$else}
   mc := Int64(@uc[0]) + NB_UC_MCONTEXT;
   PInt64(mc + 21 * 8)^ := cont;                           { _REG_RIP }
   PInt64(mc + 24 * 8)^ := stack;                          { _REG_RSP }
   PInt64(mc + 14 * 8)^ := 0;                              { _REG_RAX }
   PInt64(mc + 208)^ := stack + 16;                        { _mc_tlsbase }
+{$endif}
   PInteger(@uc[0])^ := PInteger(@uc[0])^ or NB_UC_TLSBASE;
   uc[1] := 0;                                             { uc_link }
   lid := 0;
@@ -1547,7 +1659,11 @@ end;
 
 { ---- the dispatcher ------------------------------------------------------- }
 
+{$ifdef CPU_AARCH64}
+function LxX64Call(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
+{$else}
 function PXXNbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+{$endif}
 var sb: array[0..18] of Int64;
     t: array[0..5] of Int64;
     r, f: Int64;
@@ -1764,10 +1880,10 @@ begin
     86: Result := Lx(NbSys(NB_LINK, a0, a1, 0, 0, 0, 0));
     87: Result := Lx(NbSys(NB_UNLINK, a0, 0, 0, 0, 0, 0));
     88: Result := Lx(NbSys(NB_SYMLINK, a0, a1, 0, 0, 0, 0));
-    89: if PathIs(a0, ProcExe) then Result := NbProcExe(a1, a2)
+    89: if PathIs(a0, @ProcExe[0], Length(ProcExe)) then Result := NbProcExe(a1, a2)
         else if ProcFdNum(a0) >= 0 then Result := NbProcFd(ProcFdNum(a0), a1, a2)
         else Result := Lx(NbSys(NB_READLINK, a0, a1, a2, 0, 0, 0));
-    267: if PathIs(a1, ProcExe) then Result := NbProcExe(a2, a3)
+    267: if PathIs(a1, @ProcExe[0], Length(ProcExe)) then Result := NbProcExe(a2, a3)
          else if ProcFdNum(a1) >= 0 then Result := NbProcFd(ProcFdNum(a1), a2, a3)
          else Result := Lx(NbSys(NB_READLINKAT, a0, a1, a2, a3, 0, 0));
     90: Result := Lx(NbSys(NB_CHMOD, a0, a1, 0, 0, 0, 0));
@@ -1926,5 +2042,28 @@ begin
     Result := -LX_ENOSYS;
   end;
 end;
+
+{$ifdef CPU_AARCH64}
+{$I lxa64front.inc}
+
+var
+  NbTlsSet: Boolean;
+
+{ The main thread's thread pointer is written with msr by the compiler's
+  entry code, which NetBSD does not see: its copy (l_private) stays 0, and
+  the setcontext that ends every signal handler would restore that 0. So the
+  first call after the entry code ran tells the kernel, once. Threads get
+  theirs from _lwp_create's ucontext. }
+function PXXNbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+begin
+  if not NbTlsSet then
+    if Int64(__pxxTlsBase) <> 0 then
+    begin
+      NbTlsSet := True;
+      NbSys(NB_LWP_SETPRIVATE, Int64(__pxxTlsBase), 0, 0, 0, 0, 0);
+    end;
+  Result := LxA64Front(nr, a0, a1, a2, a3, a4, a5);
+end;
+{$endif}
 
 end.

@@ -404,3 +404,32 @@ intercepts that path.
   test_thread_clone all match Linux; lib_fpc_thread_surface and
   test_parallel_for_private ran 60 times each with no failure.
 
+### 2026-11-13: `--os=netbsd --target=aarch64`
+
+- VM: NetBSD-11.1 evbarm-aarch64 gzimg/arm64.img (sha512 checked) as
+  /data/vm/netbsd-arm64/nb.qcow2, AAVMF, qemu TCG, port 2229, set up over the
+  serial console (root key; sshd is already on in this image). Its root comes
+  up noatime from somewhere other than /etc/fstab: tools/vm/netbsd.sh start
+  remounts it with atime (c_crtl_utimensat read back "now" otherwise, for
+  native code too).
+- Measured: svc's immediate is the syscall number; svc 0 is SYS_syscall with
+  the number in x17 (C carry = error, as on amd64). __sigtramp_siginfo_2 is
+  `mov x0, x28; svc SYS_setcontext`. ucontext 944 B: sigmask at 16,
+  mcontext at 64 = __gregs[35] (x0..x30, sp, pc, spsr, tpidr), Linux's order.
+- The arm64 front moved out of fbsdabi into compiler/builtin/lxa64front.inc
+  (LxA64Front calling the unit's LxX64Call); non-fork clones go to the x86
+  dispatch's clone with ctid/tls swapped back and a5 (the child entry) kept.
+- nbsdabi under CPU_AARCH64: NbRawA/NbSigTramp/NbClearTidExitA in aarch64
+  assembler (no stack move: __futex's 7th argument is x6), NbSigEntry builds
+  Linux's arm64 ucontext, NbClone sets _REG_PC/_REG_SP/_REG_X0/_REG_TPIDR.
+  PXXNbsdSyscall reports the main thread's tpidr_el0 once with
+  _lwp_setprivate. PathIs/MapBits take pointer + count, as in fbsdabi.
+- Compiler: the aarch64 clone stub's NetBSD leg calls Linux clone through
+  the thunk (EmitSvcA64Leaf) with the child entry in x5, after copying the
+  parent's init-image slot into the new block.
+- make test-netbsd-arm64: test-netbsd's lists minus test_float_exception_mask,
+  test_signal_num_threads_race, test_signal_threads, test_thread_clone (x86-64
+  only) and lib_sockets (qemu-user's errno). All match.
+  lib_fpc_thread_surface and test_parallel_for_private ran 40 times each with
+  no failure.
+

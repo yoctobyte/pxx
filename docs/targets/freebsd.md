@@ -81,7 +81,7 @@ translator bug was fixed. The rest are listed under
 
 `--os=freebsd --target=aarch64` uses the same translator. On arm64 the
 runtime speaks Linux's generic system call table, so the translator has a
-front layer (under `CPU_AARCH64` in `fbsdabi.pas`) that maps those numbers
+front layer (`compiler/builtin/lxa64front.inc`, shared with NetBSD) that maps those numbers
 onto the x86-64 ones the rest of it understands and converts the four things
 that differ between Linux's two 64-bit ABIs:
 
@@ -204,7 +204,7 @@ The work log, with the reasons behind each choice, is in
 ## OpenBSD, NetBSD and Minix
 
 Minix is not supported yet. OpenBSD and NetBSD have EXPERIMENTAL
-`--os=openbsd` and `--os=netbsd` (since 2026-11-12). The OpenBSD one may
+`--os=openbsd` and `--os=netbsd` (since 2026-11-12; NetBSD also on arm64). The OpenBSD one may
 still be withdrawn in favour of going through libc; the choice has not been
 made.
 
@@ -419,6 +419,27 @@ The VM is the stock `NetBSD-11.1-amd64-live.img`, booted under OVMF with
 `consdev=com0` in `/EFI/NetBSD/boot.cfg` on its EFI partition, and set up over
 the serial console (sshd, dhcpcd, a root key). Run `tools/vm/netbsd.sh start`,
 then `tools/vm/netbsd.sh run <binary>`; it listens on port 2227.
+
+**NetBSD/arm64.** `--os=netbsd --target=aarch64` works the same way and shares
+FreeBSD/arm64's pieces: the compiler's `svc` thunk and the translator front
+in `compiler/builtin/lxa64front.inc`, which maps Linux's arm64 system calls
+onto the x86-64 ones `nbsdabi.pas` translates. What is NetBSD's own on arm64:
+
+- the system call number is encoded in `svc`'s immediate; a translator
+  computes numbers, so it uses `svc 0` (`SYS_syscall`) with the number in
+  `x17`;
+- the main thread's thread pointer is written by the program's entry code,
+  which the kernel does not see, so the first system call after it reports it
+  with `_lwp_setprivate` (otherwise the `setcontext` that ends a signal
+  handler would reset it to 0);
+- threads are LWPs created from a `ucontext` whose `_REG_TPIDR` is the new
+  thread's TLS block;
+- the signal frame's registers (`x0`..`x30`, `sp`, `pc`, `spsr`) are in Linux's
+  order.
+
+`make test-netbsd-arm64` runs about 75 programs on an arm64 VM (port 2229,
+the stock `evbarm-aarch64` `arm64.img` under `/data/vm/netbsd-arm64`, emulated
+with TCG) against the Linux aarch64 build under `qemu-aarch64`. It passes.
 
 `--rtl-libc` alone is not enough on any of them: it passes Linux system call
 numbers to libc's `syscall()`, which OpenBSD's libc does not even export.
