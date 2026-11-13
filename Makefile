@@ -19441,6 +19441,11 @@ test-core: $(COMPILER)
 	# bswapl/bswapq/pause -- the rest of what SDL2's headers ask the x86-64
 	# inline assembler for, censused from those headers rather than found one
 	# rebuild at a time. Values are gcc's on identical source.
+	# roll/rorl/rolq/rorq by %cl and by an "I"/"J" immediate, and the AT&T
+	# shifts -- libtomcrypt's ROL/ROLc/ROL64c verbatim (dropbear). Expected
+	# values are gcc -O0's on the same source.
+	./$(COMPILER) test/casm_rotate_and_shift.c $(TESTTMP)/casmrot26
+	tools/expect_same.sh casmrot26 "$$($(TESTTMP)/casmrot26)" "$$(printf 'rol 248 ror 65011712\nrolc 496 rorc 32505856\nrol64 248 ror64 279223176896970752\nrol64c 7936 ror64c 8725724278030336\nshifts 4010247807 shl64 8192')"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,

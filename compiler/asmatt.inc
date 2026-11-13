@@ -233,7 +233,8 @@ begin
     or CaseEqual(mn,'idiv') or CaseEqual(mn,'neg') or CaseEqual(mn,'not')
     or CaseEqual(mn,'inc') or CaseEqual(mn,'dec')
     or CaseEqual(mn,'shl') or CaseEqual(mn,'sal') or CaseEqual(mn,'shr')
-    or CaseEqual(mn,'sar') or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
+    or CaseEqual(mn,'sar') or CaseEqual(mn,'rol') or CaseEqual(mn,'ror')
+    or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
     or CaseEqual(mn,'movzx') or CaseEqual(mn,'movsx')
     or CaseEqual(mn,'nop') or CaseEqual(mn,'cdq') or CaseEqual(mn,'leave')
     or CaseEqual(mn,'ret') or CaseEqual(mn,'cpuid');
@@ -961,6 +962,11 @@ begin
            takes no operands, so it never reaches the suffix split -- the
            zero-operand arm passes it to AttEmitInstr unchanged. }
          or CaseEqual(b,'bswap') or CaseEqual(b,'int')
+         { shifts and rotates (libtomcrypt's ROL/ROR/ROLc/ROL64c, dropbear).
+           AsmDispatch has encoded all six since the Intel path got them; only
+           this list kept the AT&T spelling out. }
+         or CaseEqual(b,'shl') or CaseEqual(b,'sal') or CaseEqual(b,'shr')
+         or CaseEqual(b,'sar') or CaseEqual(b,'rol') or CaseEqual(b,'ror')
          { kernel code (Gibux): port I/O, the stack ops a far return is
            built from, and the descriptor-table and TLB instructions.
            AsmSystemOp encodes them; the i386 sink refuses them by name. }
@@ -1219,6 +1225,15 @@ begin
         wrong size. A register that disagrees is still an error below --
         a register NAMES its width, a frame slot does not. }
       if AsmOpKind[i] = AOP_MEM then AsmOpSize[i] := size;
+      { A shift or rotate COUNT is %cl whatever the suffix says (`roll %cl,
+        %0`): the count register has no width of its own to agree with.
+        After the reversal above it is slot 1. }
+      if (i = 1) and (AsmOpKind[i] = AOP_REG) and (AsmOpReg[i] = 1)
+         and (AsmOpSize[i] = 1)
+         and (CaseEqual(base,'shl') or CaseEqual(base,'sal')
+              or CaseEqual(base,'shr') or CaseEqual(base,'sar')
+              or CaseEqual(base,'rol') or CaseEqual(base,'ror')) then
+        Continue;
       if (AsmOpKind[i] = AOP_REG) and (AsmOpSize[i] <> size) then
         Error('C: inline asm template writes ' + mn + ' with a '
               + AIntToStr(AsmOpSize[i] * 8) + '-bit register');

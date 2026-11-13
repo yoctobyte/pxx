@@ -8823,7 +8823,7 @@ end;
 procedure CAsmParseOperandSection(isOutSection: Boolean);
 var raw, cls, sym: AnsiString;
     isOut, isInOut, early: Boolean;
-    tied: Integer;
+    tied, immHi: Integer;
 begin
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
         (CurTok.Kind <> tkEOF) do
@@ -8854,6 +8854,13 @@ begin
     if (Length(cls) > 1) and (Pos('N', cls) > 0) then
       Delete(cls, Pos('N', cls), 1);
     if cls = 'n' then cls := 'i';
+    { "I" and "J" are x86's ranged immediates: a constant in 0..31 (a 32-bit
+      shift or rotate count) and in 0..63 (a 64-bit one). libtomcrypt's ROLc
+      and ROL64c spell their counts this way. They are an "i" whose value gcc
+      range-checks, and so do we, below. }
+    immHi := -1;
+    if cls = 'I' then begin cls := 'i'; immHi := 31; end
+    else if cls = 'J' then begin cls := 'i'; immHi := 63; end;
     { "qm" / "Qm": a byte register OR memory, the usual spelling for a setcc
       result (`rdrand %0; setc %1`). The register is always one of the
       allowed choices, the same reading that honours "rm" as a register. }
@@ -8887,6 +8894,11 @@ begin
       CAsmOps[CAsmOpCount].Expr := AllocNode(AN_INT_LIT);
       ASTIVal[CAsmOps[CAsmOpCount].Expr] := CEvalConstExpr;
       ASTTk[CAsmOps[CAsmOpCount].Expr] := Ord(tyInt64);
+      if (immHi >= 0) and ((ASTIVal[CAsmOps[CAsmOpCount].Expr] < 0) or
+         (ASTIVal[CAsmOps[CAsmOpCount].Expr] > immHi)) then
+        Error('C: inline asm constraint "' + raw + '" needs a constant in 0..'
+              + AIntToStr(immHi) + ', got '
+              + AIntToStr(ASTIVal[CAsmOps[CAsmOpCount].Expr]));
     end
     else
       CAsmOps[CAsmOpCount].Expr := ParseCExpr;
@@ -9216,7 +9228,7 @@ begin
       Error('C: inline asm constraint "' + CAsmOps[i].Raw
             + '" is not supported — this frontend reads "r", "rm", "m", "g",'
             + ' the byte-addressable classes Q and q, the fixed-register'
-            + ' letters a b c d S D, and the immediates i n');
+            + ' letters a b c d S D, and the immediates i n I J');
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
