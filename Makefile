@@ -19273,6 +19273,10 @@ test-core: $(COMPILER)
 	gcc -w -o $(TESTTMP)/c_desig_gcc test/c_designator_index_expression.c
 	./$(COMPILER) test/c_designator_index_expression.c $(TESTTMP)/c_desig > /dev/null
 	tools/expect_same.sh c_designator_index_expression "$$($(TESTTMP)/c_desig)" "$$($(TESTTMP)/c_desig_gcc)"
+	# sizeof("a" "b") counts every adjacent piece (busybox od's address format).
+	gcc -w -o $(TESTTMP)/c_szcat_gcc test/c_sizeof_adjacent_string_literals.c
+	./$(COMPILER) test/c_sizeof_adjacent_string_literals.c $(TESTTMP)/c_szcat > /dev/null
+	tools/expect_same.sh c_sizeof_adjacent_string_literals "$$($(TESTTMP)/c_szcat)" "$$($(TESTTMP)/c_szcat_gcc)"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

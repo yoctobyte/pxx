@@ -3796,7 +3796,8 @@ begin
 end;
 
 function ParseCSizeof: Integer;
-var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
+var szK, szN: Integer; szWide: Boolean;
+    node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym, cRest, cD: Integer;
     szTdI: Integer;   { walks an array typedef's inherent dims for a type-name operand }
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
@@ -4047,7 +4048,30 @@ begin
         registered under a 7-char garbage name and every `self` reference inside
         the body resolved to a nil global. The string token carries its decoded
         length in SLen (escapes already folded). }
-      if Tokens[TokPos - 1].IVal = 1 then
+      { ADJACENT literals are ONE array: `sizeof("%0n" OFF_FMT "xc")` is 7,
+        not the first piece's 4. busybox od sizes its address format with
+        exactly that; the 4-byte buffer then lost the `xc` tail and every
+        address printed as `0`. Count every piece; one NUL; any wide piece
+        makes the whole literal wide (C11 6.4.5).
+        bug-c-sizeof-of-adjacent-string-literals-counts-only-the-first }
+      szK := TokPos - 1; szN := 0; szWide := False;
+      while (szK < TokCount) and (Tokens[szK].Kind = tkString) do
+      begin
+        if Tokens[szK].IVal = 1 then
+        begin
+          szWide := True;
+          szN := szN + CWideCodepointCount(Tokens[szK].SOffset, Tokens[szK].SLen);
+        end
+        else
+          szN := szN + Tokens[szK].SLen;
+        Inc(szK);
+      end;
+      if szK > TokPos then
+      begin
+        if szWide then sz := (szN + 1) * TypeSlotSize(tyInteger)
+        else sz := szN + 1;
+      end
+      else if Tokens[TokPos - 1].IVal = 1 then
         { `sizeof(L"lit")` — wide: (codepoints + 1 NUL) * sizeof(wchar_t). Byte
           SLen is the wrong unit for a wide literal (bug-c-wide-string-literal-
           narrow-in-value-context) — count UTF-8-decoded codepoints instead, the
