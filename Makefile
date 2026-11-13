@@ -19145,6 +19145,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
 	# --link --freestanding: a kernel image at the kernel-half base (Gibux item 4).
 	tools/check_link_freestanding.sh ./$(COMPILER) $(TESTTMP)/clf
+	# An extern-only array reserves no .bss in the declaring object (Gibux item 6).
+	tools/check_extern_bss.sh ./$(COMPILER) $(TESTTMP)/ceb
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

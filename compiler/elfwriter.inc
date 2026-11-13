@@ -5101,10 +5101,124 @@ begin
   if SymOffIsData(Syms[i].Offset) then ObjDataShndx := 3 else ObjDataShndx := 5;
 end;
 
+{ ---- an import reserves no .bss in an object --------------------------------
+  `extern struct proc procs[128];` in a header gave EVERY object that included
+  it a private 420 KB slot: the parser allocates storage for the declaration
+  before anyone knows it will stay extern-only, and the object writer then
+  names the import's UND symbol for every reference (ObjDataSymIndexForOff), so
+  the slot is never addressed -- just carried. Ten Gibux objects carried 5.5 MB
+  of .bss that way.
+
+  The x86-64 object writer punches those slots out at write time, the shape of
+  BssDropOff/BssRemap: stored offsets stay in ORIGINAL coordinates and are
+  remapped where an offset leaves the compiler (a .bss-relative relocation
+  addend, a .bss symbol's st_value, the section size). A hole is the import's
+  slot rounded DOWN to the section alignment, so everything above it keeps its
+  alignment. Small imports (an `extern int`) are left alone: under one
+  alignment unit there is nothing to save.
+
+  SAFE BY REFUSAL: an import is referenced only at its exact base offset, and
+  that reference goes through its symbol. If any section-relative reference
+  falls inside a hole anyway, the plan is abandoned and the object is written
+  as before -- a bigger .bss, never a wrong address. Every other writer sees
+  ObjBssHoleCount = 0, the identity. Gibux item 6. }
+function ObjDataSymIndexForOff(bssOff: Integer): Integer; forward;
+function ObjSecAlign(req: Integer): Integer; forward;
+
+var
+  ObjBssHoleS, ObjBssHoleL: array of Integer;
+  ObjBssHoleCount: Integer;
+  ObjBssDropTotal: Integer;
+
+function ObjBssRemap(o: Integer): Integer;
+var k, d: Integer;
+begin
+  d := 0;
+  for k := 0 to ObjBssHoleCount - 1 do
+    if o >= ObjBssHoleS[k] + ObjBssHoleL[k] then d := d + ObjBssHoleL[k]
+    else if o > ObjBssHoleS[k] then
+      ErrorNoPos('internal: .bss offset ' + AIntToStr(o) + ' is inside a dropped import slot ['
+                 + AIntToStr(ObjBssHoleS[k]) + ',' + AIntToStr(ObjBssHoleS[k] + ObjBssHoleL[k])
+                 + ') -- ObjBssPlanImportDrops should have abandoned the plan');
+  ObjBssRemap := o - d;
+end;
+
+function ObjBssInHole(o: Integer): Boolean;
+var k: Integer;
+begin
+  ObjBssInHole := False;
+  for k := 0 to ObjBssHoleCount - 1 do
+    if (o > ObjBssHoleS[k]) and (o < ObjBssHoleS[k] + ObjBssHoleL[k]) then
+    begin
+      ObjBssInHole := True;
+      Exit;
+    end;
+end;
+
+procedure ObjBssPlanImportDrops;
+var i, k, a, len, t: Integer;
+    ok: Boolean;
+begin
+  ObjBssHoleCount := 0;
+  ObjBssDropTotal := 0;
+  a := ObjSecAlign(ReqBssAlign);
+  for i := 0 to SymCount - 1 do
+    if ObjDataIsImport(i) and (not SymOffIsData(Syms[i].Offset)) and
+       (SymAllocSize[i] >= a) then
+    begin
+      len := (SymAllocSize[i] div a) * a;
+      if ObjBssHoleCount >= Length(ObjBssHoleS) then
+      begin
+        SetLength(ObjBssHoleS, ObjBssHoleCount * 2 + 8);
+        SetLength(ObjBssHoleL, ObjBssHoleCount * 2 + 8);
+      end;
+      { insertion by start offset }
+      k := ObjBssHoleCount;
+      while (k > 0) and (ObjBssHoleS[k - 1] > Syms[i].Offset) do
+      begin
+        ObjBssHoleS[k] := ObjBssHoleS[k - 1];
+        ObjBssHoleL[k] := ObjBssHoleL[k - 1];
+        Dec(k);
+      end;
+      ObjBssHoleS[k] := Syms[i].Offset;
+      ObjBssHoleL[k] := len;
+      Inc(ObjBssHoleCount);
+    end;
+  if ObjBssHoleCount = 0 then Exit;
+  { overlapping slots (two names, one storage) would be counted twice }
+  ok := True;
+  for k := 1 to ObjBssHoleCount - 1 do
+    if ObjBssHoleS[k] < ObjBssHoleS[k - 1] + ObjBssHoleL[k - 1] then ok := False;
+  { every section-relative .bss reference must miss the holes }
+  for i := 0 to GlobFixCount - 1 do
+    if ok and (not SymOffIsData(GlobFix[i].BSSoff)) and
+       (ObjDataSymIndexForOff(GlobFix[i].BSSoff) < 0) and ObjBssInHole(GlobFix[i].BSSoff) then
+      ok := False;
+  for i := 0 to SymCount - 1 do
+    if ok and ObjDataIsCandidate(i) and (not ObjDataIsImport(i)) and
+       (not SymOffIsData(Syms[i].Offset)) and ObjBssInHole(Syms[i].Offset) then
+      ok := False;
+  for i := 0 to CDRCount - 1 do
+    if ok and (CDRKind[i] = CDR_SYM) then
+    begin
+      t := CDRTarget[i];
+      if (not ObjDataIsImport(t)) and (not SymOffIsData(Syms[t].Offset)) and
+         ObjBssInHole(Syms[t].Offset + Integer(CDRAddend[i])) then
+        ok := False;
+    end;
+  if not ok then
+  begin
+    ObjBssHoleCount := 0;
+    Exit;
+  end;
+  for k := 0 to ObjBssHoleCount - 1 do
+    ObjBssDropTotal := ObjBssDropTotal + ObjBssHoleL[k];
+end;
+
 function ObjDataValue(i: Integer): Integer;
 begin
   if SymOffIsData(Syms[i].Offset) then ObjDataValue := SymOffDataPart(Syms[i].Offset)
-  else ObjDataValue := Syms[i].Offset;
+  else ObjDataValue := ObjBssRemap(Syms[i].Offset);
 end;
 
 function ObjSecAlign(req: Integer): Integer;
@@ -5692,12 +5806,12 @@ begin
                     SymOffDataPart(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i])
       else
         ObjRelPush(GlobFix[i].CodePos, 3, 2,
-                    GlobFix[i].BSSoff - 4 - GlobFixTrail[i]);
+                    ObjBssRemap(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i]);
     end
     else if SymOffIsData(GlobFix[i].BSSoff) then
       ObjRelPush(GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
     else
-      ObjRelPush(GlobFix[i].CodePos, 3, 11, GlobFix[i].BSSoff);
+      ObjRelPush(GlobFix[i].CodePos, 3, 11, ObjBssRemap(GlobFix[i].BSSoff));
   end;
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
@@ -5934,7 +6048,7 @@ begin
         else
         begin
           sym := 3;
-          addend := addend + Syms[p].Offset;
+          addend := addend + ObjBssRemap(Syms[p].Offset);
         end;
       end;
     end;
@@ -5982,6 +6096,7 @@ var
 {$endif}
 begin
   CRegisterCDataImports;   { before anything counts ExternalCount }
+  ObjBssPlanImportDrops;   { before any .bss offset is written out }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
     here with TargetArch = TARGET_X86_64, and the refusal a user sees is the
     TargetHasObjectWriter one beside that dispatch. It still has to name the
@@ -6348,7 +6463,7 @@ begin
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqDataAlign), 0);
   writeShdrA64(f, 24, 4, $40, relaDataOff, relaDataCount*24);
   writeShdrB64(f, 6, 3, 8, 24);
-  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, BSSSize);
+  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, BSSSize - ObjBssDropTotal);
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqBssAlign), 0);
   writeShdrA64(f, 40, 2, 0, symOff, numSyms*24);
   writeShdrB64(f, 7, firstGlobal, 8, 24);

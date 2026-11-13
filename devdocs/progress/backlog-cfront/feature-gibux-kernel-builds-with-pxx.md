@@ -114,7 +114,10 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    Each of these still has to be checked against what pxx's x86-64 code
    generator emits.
 
-6. **`extern T big[N];` reserves .bss in every object** that includes the
+6. **DONE 2026-11-13** ([[bug-c-an-extern-array-reserves-bss-in-every-declaring-object]]):
+   the x86-64 object writer drops the import slots; the kernel image's .bss
+   went from 5.6 MB to 3.7 MB.
+   **`extern T big[N];` reserves .bss in every object** that includes the
    declaration. The symbol is correctly emitted UND, but the slot it was
    allocated is never released. proc.h's `extern struct proc procs[128]` is
    about 420 KB in each of about ten kernel objects. This is waste, not
