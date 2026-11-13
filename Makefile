@@ -11190,9 +11190,9 @@ test-dragonfly: $(COMPILER)
 
 test-minix: $(COMPILER)
 	# --os=minix (EXPERIMENTAL): Minix 3.4 i386 on the VM against the Linux
-	# i386 build run here. No sockets, epoll/timerfd or threads yet, and
-	# handlers run on the interrupted stack (no sigaltstack), so the lists'
-	# file/process/environment/signal programs.
+	# i386 build run here. No threads (Minix has none), and handlers run on
+	# the interrupted stack (no sigaltstack), so test-netbsd's lists minus
+	# the thread, stack-overflow, fault-address and pty programs.
 	@d=$(TESTTMP)/os_minix_run26; mkdir -p $$d && \
 	  tools/vm/minix.sh start && \
 	  for t in test/fileio.pas test/test_sysutils_datetime.pas test/test_rtl_libc_torture.pas \
@@ -11205,7 +11205,13 @@ test-minix: $(COMPILER)
 	           test/test_signal_sp_rewrite.pas test/test_signal_handler_callback_b336.pas \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c test/test_scheduler.pas \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tcpgrp_statfs.c test/c_crtl_utimensat.c \
-	           test/c_crtl_fallocate.c test/c_crtl_mount_and_prio.c; do \
+	           test/c_crtl_fallocate.c test/c_crtl_mount_and_prio.c \
+	           test/csocket_loopback_b88.c test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c \
+	           test/c_crtl_inet6.c test/lib_sockets.pas test/lib_net.pas test/lib_net6.pas \
+	           test/lib_platform_net_sockopt.pas test/lib_sock_closedpeer.pas test/lib_mimic_socket.npy \
+	           test/lib_net_timeout.pas test/lib_dns_tcp.pas test/test_timer.pas test/test_reactor.pas \
+	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_http_serve.pas test/test_async.pas \
+	           test/lib_asyncnet6.pas test/lib_dns_async.pas; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \

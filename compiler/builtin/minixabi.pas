@@ -982,6 +982,761 @@ begin
   else Result := Lx(MxCall(MX_PM, PM_SETPRIORITY, m));
 end;
 
+
+{ ---- sockets -------------------------------------------------------------------------
+  VFS calls since Minix 3.4 (VFS_SOCKET $131 .. VFS_SHUTDOWN $13F), served by
+  the lwip/uds services. The numbers are NetBSD's, measured on the VM:
+  sockaddr starts with a length byte, AF_INET6 24, SOL_SOCKET $FFFF,
+  SOCK_CLOEXEC $10000000, SOCK_NONBLOCK $20000000, MSG_DONTWAIT $80,
+  MSG_NOSIGNAL $400, IPV6_V6ONLY 27, TCP_KEEPIDLE 3 -- nbsdabi's tables.
+  msghdr and cmsghdr have Linux i386's layout (all 32-bit fields); only
+  cmsg_level SOL_SOCKET differs. Linux i386 reaches sockets through
+  socketcall(102) and the direct calls 359..373; both arrive here.
+  Messages: mess_lc_vfs_socket domain 8, type 12, protocol 16;
+  mess_lc_vfs_sockaddr fd 8, addr 12, addr_len 16; mess_lc_vfs_sendrecv fd
+  8, buf 12, len 16, flags 20, addr 24, addr_len 28; mess_lc_vfs_sockmsg fd 8,
+  msgbuf 12, flags 16; mess_lc_vfs_sockopt fd 8, level 12, name 16, buf 20,
+  len 24; listen and shutdown fd 8, arg 12. A length comes back at 8. }
+
+const
+  VFS_SOCKET = $131; VFS_SOCKETPAIR = $132; VFS_BIND = $133; VFS_CONNECT = $134;
+  VFS_LISTEN = $135; VFS_ACCEPT = $136; VFS_SENDTO = $137; VFS_SENDMSG = $138;
+  VFS_RECVFROM = $139; VFS_RECVMSG = $13A; VFS_SETSOCKOPT = $13B;
+  VFS_GETSOCKOPT = $13C; VFS_GETSOCKNAME = $13D; VFS_GETPEERNAME = $13E;
+  VFS_SHUTDOWN = $13F;
+  LX_EAFNOSUPPORT = 97; LX_ENOPROTOOPT = 92;
+
+function MxAf(a: LongInt): LongInt;
+begin
+  case a of
+    0, 1, 2: Result := a;
+    10: Result := 24;
+  else Result := -1;
+  end;
+end;
+
+function LxAf(a: LongInt): LongInt;
+begin
+  if a = 24 then Result := 10 else Result := a;
+end;
+
+function MxSockType(t: LongInt): LongInt;
+begin
+  Result := t and $FF;
+  if (t and $800) <> 0 then Result := Result or $20000000;
+  if (t and $80000) <> 0 then Result := Result or $10000000;
+end;
+
+function MxMsgFlags(f: LongInt): LongInt;
+begin
+  Result := f and $7;                                          { OOB PEEK DONTROUTE }
+  if (f and $8) <> 0 then Result := Result or $20;             { CTRUNC }
+  if (f and $20) <> 0 then Result := Result or $10;            { TRUNC }
+  if (f and $40) <> 0 then Result := Result or $80;            { DONTWAIT }
+  if (f and $80) <> 0 then Result := Result or $8;             { EOR }
+  if (f and $100) <> 0 then Result := Result or $40;           { WAITALL }
+  if (f and $4000) <> 0 then Result := Result or $400;         { NOSIGNAL }
+end;
+
+function LxMsgFlags(f: LongInt): LongInt;
+begin
+  Result := f and $7;
+  if (f and $20) <> 0 then Result := Result or $8;
+  if (f and $10) <> 0 then Result := Result or $20;
+  if (f and $80) <> 0 then Result := Result or $40;
+  if (f and $8) <> 0 then Result := Result or $80;
+  if (f and $40) <> 0 then Result := Result or $100;
+end;
+
+{ A Linux sockaddr (family word) -> Minix's (length byte, family byte). }
+function SaToMx(src, len, dst: LongInt): LongInt;
+var i, af: LongInt;
+begin
+  if (src = 0) or (len < 2) then begin Result := -LX_EINVAL; Exit; end;
+  if len > 128 then len := 128;
+  for i := 0 to len - 1 do PByte(dst + i)^ := PByte(src + i)^;
+  af := MxAf(PWord(src)^);
+  if af < 0 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  if (af = 1) and (len > 106) then len := 106;                  { sun_path 108 -> 104 }
+  PByte(dst)^ := len;
+  PByte(dst + 1)^ := af;
+  Result := len;
+end;
+
+procedure SaToLx(p, lenp: LongInt);
+begin
+  if (p = 0) or (lenp = 0) or (PLongInt(lenp)^ < 2) then Exit;
+  PWord(p)^ := LxAf(PByte(p + 1)^);
+end;
+
+procedure SockOptToMx(var level, name: LongInt);
+begin
+  case level of
+    1: begin                                                    { SOL_SOCKET }
+         level := $FFFF;
+         case name of
+           1: name := $1; 2: name := $4; 3: name := $1008; 4: name := $1007;
+           5: name := $10; 6: name := $20; 7: name := $1001; 8: name := $1002;
+           9: name := $8; 10: name := $100; 13: name := $80; 15: name := $200;
+           18: name := $1004; 19: name := $1003; 20: name := $100C; 21: name := $100B;
+           30: name := $2;
+         else level := -1;
+         end;
+       end;
+    6: case name of                                             { IPPROTO_TCP }
+         1, 2, 5, 6: ;
+         4: name := 3;
+       else level := -1;
+       end;
+    0: case name of                                             { IPPROTO_IP }
+         1: name := 3; 2: name := 4;
+         32: name := 9; 33: name := 10; 34: name := 11; 35: name := 12; 36: name := 13;
+       else level := -1;
+       end;
+    41: case name of                                            { IPPROTO_IPV6 }
+          26: name := 27; 16: name := 4; 17: name := 9; 18: name := 10;
+          19: name := 11; 20: name := 12; 21: name := 13;
+        else level := -1;
+        end;
+  else
+    if level <> 17 then level := -1;
+  end;
+end;
+
+{ SO_RCVTIMEO/SO_SNDTIMEO carry a timeval: Linux i386's is two words,
+  Minix's is a 64-bit second and a 32-bit microsecond (12 B). }
+function MxSockopt(isGet: Boolean; fd, level, name, val, lenp: LongInt): LongInt;
+var m: TMxMsg; lv, nm, e, len: LongInt; tv: array[0..3] of LongInt; tvo: Boolean;
+begin
+  lv := level; nm := name;
+  SockOptToMx(lv, nm);
+  if lv < 0 then begin Result := -LX_ENOPROTOOPT; Exit; end;
+  tvo := (lv = $FFFF) and ((nm = $100C) or (nm = $100B));
+  MxClear(m);
+  m[2] := fd; m[3] := lv; m[4] := nm; m[5] := val;
+  if not isGet then
+  begin
+    m[6] := lenp;                                       { setsockopt: the length itself }
+    if tvo and (val <> 0) and (lenp >= 8) then
+    begin
+      tv[0] := PLongInt(val)^; tv[1] := 0; if tv[0] < 0 then tv[1] := -1;
+      tv[2] := PLongInt(val + 4)^; tv[3] := 0;
+      m[5] := LongInt(@tv[0]); m[6] := 12;
+    end;
+    Result := Lx(MxCall(MX_VFS, VFS_SETSOCKOPT, m));
+    Exit;
+  end;
+  if lenp = 0 then begin Result := -LX_EFAULT; Exit; end;
+  len := PLongInt(lenp)^;
+  if tvo then begin m[5] := LongInt(@tv[0]); m[6] := 12; end
+  else m[6] := len;
+  Result := Lx(MxCall(MX_VFS, VFS_GETSOCKOPT, m));
+  if Result < 0 then Exit;
+  if tvo then
+  begin
+    if (val <> 0) and (len >= 8) then
+    begin
+      PLongInt(val)^ := tv[0]; PLongInt(val + 4)^ := tv[2];
+    end;
+    PLongInt(lenp)^ := 8;
+  end
+  else
+  begin
+    PLongInt(lenp)^ := m[2];
+    if (lv = $FFFF) and (nm = $1007) and (val <> 0) then        { SO_ERROR: an errno }
+    begin
+      e := PLongInt(val)^;
+      if (e >= 35) and (e <= 96) then PLongInt(val)^ := ErrMap[e];
+    end;
+  end;
+  Result := 0;
+end;
+
+function MxSocket(dom, typ, proto: LongInt): LongInt;
+var m: TMxMsg; d: LongInt;
+begin
+  if (typ and not ($FF or $800 or $80000)) <> 0 then begin Result := -LX_EINVAL; Exit; end;   { Linux checks the flags first }
+  d := MxAf(dom);
+  if d < 0 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  MxClear(m);
+  m[2] := d; m[3] := MxSockType(typ); m[4] := proto;
+  Result := Lx(MxCall(MX_VFS, VFS_SOCKET, m));
+end;
+
+function MxSocketpair(dom, typ, proto, sv: LongInt): LongInt;
+var m: TMxMsg; d: LongInt;
+begin
+  if (typ and not ($FF or $800 or $80000)) <> 0 then begin Result := -LX_EINVAL; Exit; end;   { Linux checks the flags first }
+  d := MxAf(dom);
+  if d < 0 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  MxClear(m);
+  m[2] := d; m[3] := MxSockType(typ); m[4] := proto;
+  Result := Lx(MxCall(MX_VFS, VFS_SOCKETPAIR, m));
+  if Result >= 0 then
+  begin
+    PLongInt(sv)^ := m[2]; PLongInt(sv + 4)^ := m[3];
+    Result := 0;
+  end;
+end;
+
+{ bind, connect: an address in }
+function MxSockAddrIn(typ, fd, sa, len: LongInt): LongInt;
+var m: TMxMsg; b: array[0..31] of LongInt; n: LongInt;
+begin
+  n := SaToMx(sa, len, LongInt(@b[0]));
+  if n < 0 then begin Result := n; Exit; end;
+  MxClear(m);
+  m[2] := fd; m[3] := LongInt(@b[0]); m[4] := n;
+  Result := Lx(MxCall(MX_VFS, typ, m));
+end;
+
+{ accept4, getsockname, getpeername: an address out. accept's flags are
+  set afterwards with fcntl (Minix's accept takes none). }
+function MxSockAddrOut(typ, fd, sa, lenp, flags: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := fd; m[3] := sa;
+  if (sa <> 0) and (lenp <> 0) then m[4] := PLongInt(lenp)^;
+  Result := Lx(MxCall(MX_VFS, typ, m));
+  if Result < 0 then Exit;
+  if (sa <> 0) and (lenp <> 0) then
+  begin
+    PLongInt(lenp)^ := m[2];
+    SaToLx(sa, lenp);
+  end;
+  if typ = VFS_ACCEPT then
+  begin
+    if (flags and $80000) <> 0 then MxFcntlRaw(Result, 2, 1);          { FD_CLOEXEC }
+    if (flags and $800) <> 0 then MxFcntlRaw(Result, 4, $4);           { O_NONBLOCK }
+  end
+  else Result := 0;
+end;
+
+function MxSendto(fd, buf, len, flags, sa, salen: LongInt): LongInt;
+var m: TMxMsg; b: array[0..31] of LongInt; n: LongInt;
+begin
+  MxClear(m);
+  m[2] := fd; m[3] := buf; m[4] := len; m[5] := MxMsgFlags(flags);
+  if sa <> 0 then
+  begin
+    n := SaToMx(sa, salen, LongInt(@b[0]));
+    if n < 0 then begin Result := n; Exit; end;
+    m[6] := LongInt(@b[0]); m[7] := n;
+  end;
+  Result := Lx(MxCall(MX_VFS, VFS_SENDTO, m));
+end;
+
+function MxRecvfrom(fd, buf, len, flags, sa, lenp: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := fd; m[3] := buf; m[4] := len; m[5] := MxMsgFlags(flags);
+  m[6] := sa;
+  if (sa <> 0) and (lenp <> 0) then m[7] := PLongInt(lenp)^;
+  Result := Lx(MxCall(MX_VFS, VFS_RECVFROM, m));
+  if (Result >= 0) and (sa <> 0) and (lenp <> 0) then
+  begin
+    PLongInt(lenp)^ := m[2];
+    SaToLx(sa, lenp);
+  end;
+end;
+
+{ cmsg_level SOL_SOCKET 1 <-> $FFFF, in place (headers: len, level, type). }
+procedure CmsgLevels(ctl, clen: LongInt; toMx: Boolean);
+var p, l: LongInt;
+begin
+  p := ctl;
+  while (ctl <> 0) and (p + 12 <= ctl + clen) do
+  begin
+    l := PLongInt(p)^;
+    if l < 12 then Exit;
+    if toMx and (PLongInt(p + 4)^ = 1) then PLongInt(p + 4)^ := $FFFF
+    else if (not toMx) and (PLongInt(p + 4)^ = $FFFF) then PLongInt(p + 4)^ := 1;
+    p := p + ((l + 3) and (not 3));
+  end;
+end;
+
+{ sendmsg/recvmsg on a private copy of the msghdr (name, namelen, iov,
+  iovlen, control, controllen, flags), so the name can be converted. }
+function MxSockMsg(isSend: Boolean; fd, lm, flags: LongInt): LongInt;
+var m: TMxMsg; h: array[0..6] of LongInt; b: array[0..31] of LongInt; n, i: LongInt;
+begin
+  for i := 0 to 6 do h[i] := PLongInt(lm + 4 * i)^;
+  if isSend and (h[0] <> 0) then
+  begin
+    n := SaToMx(h[0], h[1], LongInt(@b[0]));
+    if n < 0 then begin Result := n; Exit; end;
+    h[0] := LongInt(@b[0]); h[1] := n;
+  end;
+  if isSend then CmsgLevels(h[4], h[5], True);
+  MxClear(m);
+  m[2] := fd; m[3] := LongInt(@h[0]); m[4] := MxMsgFlags(flags);
+  if isSend then
+  begin
+    Result := Lx(MxCall(MX_VFS, VFS_SENDMSG, m));
+    CmsgLevels(PLongInt(lm + 16)^, PLongInt(lm + 20)^, False);
+  end
+  else
+  begin
+    Result := Lx(MxCall(MX_VFS, VFS_RECVMSG, m));
+    if Result >= 0 then
+    begin
+      if h[0] <> 0 then
+      begin
+        PWord(h[0])^ := LxAf(PByte(h[0] + 1)^);
+        PLongInt(lm + 4)^ := h[1];
+      end;
+      CmsgLevels(h[4], h[5], False);
+      PLongInt(lm + 20)^ := h[5];
+      PLongInt(lm + 24)^ := LxMsgFlags(h[6]);
+    end;
+  end;
+end;
+
+function MxSockCall(nr, a0, a1, a2, a3, a4, a5: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  case nr of
+    1: Result := MxSocket(a0, a1, a2);
+    2: Result := MxSockAddrIn(VFS_BIND, a0, a1, a2);
+    3: Result := MxSockAddrIn(VFS_CONNECT, a0, a1, a2);
+    4: begin MxClear(m); m[2] := a0; m[3] := a1; Result := Lx(MxCall(MX_VFS, VFS_LISTEN, m)); end;
+    5: Result := MxSockAddrOut(VFS_ACCEPT, a0, a1, a2, 0);
+    6: Result := MxSockAddrOut(VFS_GETSOCKNAME, a0, a1, a2, 0);
+    7: Result := MxSockAddrOut(VFS_GETPEERNAME, a0, a1, a2, 0);
+    8: Result := MxSocketpair(a0, a1, a2, a3);
+    9: Result := MxSendto(a0, a1, a2, a3, 0, 0);         { send }
+    10: Result := MxRecvfrom(a0, a1, a2, a3, 0, 0);      { recv }
+    11: Result := MxSendto(a0, a1, a2, a3, a4, a5);
+    12: Result := MxRecvfrom(a0, a1, a2, a3, a4, a5);
+    13: begin MxClear(m); m[2] := a0; m[3] := a1; Result := Lx(MxCall(MX_VFS, VFS_SHUTDOWN, m)); end;
+    14: Result := MxSockopt(False, a0, a1, a2, a3, a4);
+    15: Result := MxSockopt(True, a0, a1, a2, a3, a4);
+    16: Result := MxSockMsg(True, a0, a1, a2);
+    17: Result := MxSockMsg(False, a0, a1, a2);
+    18: Result := MxSockAddrOut(VFS_ACCEPT, a0, a1, a2, a3);   { accept4 }
+  else
+    Result := -LX_EINVAL;
+  end;
+end;
+
+{ socketcall(call, args): the arguments are an array of longs. }
+function MxSocketcall(call, args: LongInt): LongInt;
+var a: array[0..5] of LongInt; i: Integer;
+begin
+  if (call < 1) or (call > 20) or (args = 0) then begin Result := -LX_EINVAL; Exit; end;
+  for i := 0 to 5 do a[i] := 0;
+  for i := 0 to 5 do
+    if (call <> 1) or (i < 3) then a[i] := PLongInt(args + 4 * i)^;
+  Result := MxSockCall(call, a[0], a[1], a[2], a[3], a[4], a[5]);
+end;
+
+
+{ ---- epoll, timerfd, eventfd ----------------------------------------------------------
+  Minix has none of the three. Each is a real descriptor (opened on
+  /dev/null, so close/dup/exec behave) whose state lives here, found by fd:
+  FdKind 1 = epoll, 2 = timerfd, 3 = eventfd. epoll_wait selects on the real
+  descriptors of its interest list, works out the emulated ones itself (a
+  timer that has expired, an eventfd with a count), and wakes for the
+  nearest timer deadline. Level-triggered only (EPOLLET is taken as level;
+  EPOLLONESHOT disarms). close() of a watched fd drops it from every list,
+  as closing the last reference does on Linux. The state is per process: a
+  fork child gets a copy, which is what Linux gives it for timerfd/eventfd
+  counts too. Linux i386's epoll_event is packed: events 0/4, data 4/8. }
+
+const
+  FK_EPOLL = 1; FK_TIMER = 2; FK_EVENT = 3;
+  EP_N = 8; EP_E = 64; TF_N = 16; EF_N = 16;
+  DevNull: array[0..9] of Byte = (47,100,101,118,47,110,117,108,108,0);   { /dev/null }
+
+var
+  FdKind, FdSlot, FdNonblock: array[0..255] of Byte;
+  EpUsed: array[0..EP_N - 1] of Boolean;
+  EpCnt: array[0..EP_N - 1] of LongInt;
+  EpFd, EpEv: array[0..EP_N - 1, 0..EP_E - 1] of LongInt;
+  EpData: array[0..EP_N - 1, 0..EP_E - 1] of Int64;
+  TfUsed: array[0..TF_N - 1] of Boolean;
+  TfClock: array[0..TF_N - 1] of LongInt;
+  TfDeadline, TfInterval, TfExp: array[0..TF_N - 1] of Int64;   { ns on the monotonic clock; 0 = disarmed }
+  EfUsed: array[0..EF_N - 1] of Boolean;
+  EfCount: array[0..EF_N - 1] of Int64;
+  EfSema: array[0..EF_N - 1] of Boolean;
+
+function ClockNs(id: LongInt): Int64;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  if id = 0 then m[4] := 0 else m[4] := 3;
+  m[5] := 1;
+  if MxCall(MX_PM, PM_CLOCK_GETTIME, m) < 0 then begin Result := 0; Exit; end;
+  Result := PInt64(@m[2])^ * 1000000000 + m[4];
+end;
+
+{ A descriptor for an emulated object: kind and slot recorded. }
+function FakeFd(kind, slot, flags: LongInt): LongInt;
+begin
+  Result := MxOpen0(LongInt(@DevNull[0]), 2 or (flags and $80000), 0);
+  if Result < 0 then Exit;
+  if Result > 255 then begin MxFdCall(VFS_CLOSE, Result); Result := -24; Exit; end;   { EMFILE }
+  FdKind[Result] := kind; FdSlot[Result] := slot;
+  if (flags and $800) <> 0 then FdNonblock[Result] := 1 else FdNonblock[Result] := 0;
+end;
+
+function IsKind(fd, kind: LongInt): Boolean;
+begin
+  Result := (fd >= 0) and (fd <= 255) and (FdKind[fd] = kind);
+end;
+
+{ Bring a timer's expiration count up to now. }
+procedure TfUpdate(t: LongInt);
+var now, late: Int64;
+begin
+  if TfDeadline[t] = 0 then Exit;
+  now := ClockNs(1);
+  if now < TfDeadline[t] then Exit;
+  late := now - TfDeadline[t];
+  if TfInterval[t] > 0 then
+  begin
+    TfExp[t] := TfExp[t] + 1 + late div TfInterval[t];
+    TfDeadline[t] := TfDeadline[t] + (1 + late div TfInterval[t]) * TfInterval[t];
+  end
+  else
+  begin
+    TfExp[t] := TfExp[t] + 1;
+    TfDeadline[t] := 0;
+  end;
+end;
+
+{ What an emulated fd is ready for right now (EPOLLIN 1, EPOLLOUT 4). }
+function FakeReady(fd: LongInt): LongInt;
+begin
+  Result := 0;
+  case FdKind[fd] of
+    FK_TIMER: begin
+                TfUpdate(FdSlot[fd]);
+                if TfExp[FdSlot[fd]] > 0 then Result := 1;
+              end;
+    FK_EVENT: begin
+                Result := 4;
+                if EfCount[FdSlot[fd]] > 0 then Result := Result or 1;
+              end;
+  end;
+end;
+
+procedure DropFd(fd: LongInt);
+var i, j, k: LongInt;
+begin
+  for i := 0 to EP_N - 1 do
+    if EpUsed[i] then
+    begin
+      j := 0;
+      while j < EpCnt[i] do
+        if EpFd[i, j] = fd then
+        begin
+          for k := j to EpCnt[i] - 2 do
+          begin
+            EpFd[i, k] := EpFd[i, k + 1]; EpEv[i, k] := EpEv[i, k + 1]; EpData[i, k] := EpData[i, k + 1];
+          end;
+          EpCnt[i] := EpCnt[i] - 1;
+        end
+        else j := j + 1;
+    end;
+end;
+
+function MxClose(fd: LongInt): LongInt;
+begin
+  if (fd >= 0) and (fd <= 255) then
+  begin
+    case FdKind[fd] of
+      FK_EPOLL: EpUsed[FdSlot[fd]] := False;
+      FK_TIMER: TfUsed[FdSlot[fd]] := False;
+      FK_EVENT: EfUsed[FdSlot[fd]] := False;
+    end;
+    FdKind[fd] := 0;
+    DropFd(fd);
+  end;
+  Result := MxFdCall(VFS_CLOSE, fd);
+end;
+
+function MxEpollCreate(flags: LongInt): LongInt;
+var i: LongInt;
+begin
+  for i := 0 to EP_N - 1 do
+    if not EpUsed[i] then
+    begin
+      Result := FakeFd(FK_EPOLL, i, flags);
+      if Result >= 0 then begin EpUsed[i] := True; EpCnt[i] := 0; end;
+      Exit;
+    end;
+  Result := -24;                                        { EMFILE }
+end;
+
+function MxEpollCtl(ep, op, fd, ev: LongInt): LongInt;
+var e, j: LongInt; found: LongInt;
+begin
+  if not IsKind(ep, FK_EPOLL) then begin Result := -LX_EINVAL; Exit; end;
+  if (fd = ep) or (fd < 0) or (fd > 255) then begin Result := -LX_EINVAL; Exit; end;
+  if MxFcntlRaw(fd, 3, 0) < 0 then begin Result := -LX_EBADF; Exit; end;
+  e := FdSlot[ep];
+  found := -1;
+  for j := 0 to EpCnt[e] - 1 do if EpFd[e, j] = fd then found := j;
+  case op of
+    1: begin                                            { EPOLL_CTL_ADD }
+         if found >= 0 then begin Result := -17; Exit; end;             { EEXIST }
+         if EpCnt[e] >= EP_E then begin Result := -LX_ENOMEM; Exit; end;
+         found := EpCnt[e]; EpCnt[e] := EpCnt[e] + 1;
+         EpFd[e, found] := fd;
+         EpEv[e, found] := PLongInt(ev)^; EpData[e, found] := PInt64(ev + 4)^;
+       end;
+    2: begin                                            { EPOLL_CTL_DEL }
+         if found < 0 then begin Result := -LX_ENOENT; Exit; end;
+         for j := found to EpCnt[e] - 2 do
+         begin
+           EpFd[e, j] := EpFd[e, j + 1]; EpEv[e, j] := EpEv[e, j + 1]; EpData[e, j] := EpData[e, j + 1];
+         end;
+         EpCnt[e] := EpCnt[e] - 1;
+       end;
+    3: begin                                            { EPOLL_CTL_MOD }
+         if found < 0 then begin Result := -LX_ENOENT; Exit; end;
+         EpEv[e, found] := PLongInt(ev)^; EpData[e, found] := PInt64(ev + 4)^;
+       end;
+  else
+    begin Result := -LX_EINVAL; Exit; end;
+  end;
+  Result := 0;
+end;
+
+type
+  TFdBits = array[0..31] of LongInt;       { a Linux fd_set: MxSelectUs writes all 128 bytes back }
+
+{ The select sets for epoll instance e's real descriptors; anyFake when an
+  emulated one is ready now; next = the nearest timer deadline (0: none). }
+function EpPrepare(e: LongInt; var rd, wr, ex: TFdBits; var anyFake: Boolean;
+                   var next: Int64): LongInt;
+var j, fd, want: LongInt;
+begin
+  for j := 0 to 31 do begin rd[j] := 0; wr[j] := 0; ex[j] := 0; end;
+  Result := -1; anyFake := False; next := 0;
+  for j := 0 to EpCnt[e] - 1 do
+  begin
+    fd := EpFd[e, j]; want := EpEv[e, j];
+    if (want and $7) <> 0 then
+    begin
+      if FdKind[fd] <> 0 then
+      begin
+        if (FakeReady(fd) and want) <> 0 then anyFake := True;
+        if (FdKind[fd] = FK_TIMER) and (TfDeadline[FdSlot[fd]] > 0) then
+          if (next = 0) or (TfDeadline[FdSlot[fd]] < next) then next := TfDeadline[FdSlot[fd]];
+      end
+      else
+      begin
+        if fd > Result then Result := fd;
+        if (want and $1) <> 0 then rd[fd shr 5] := rd[fd shr 5] or (1 shl (fd and 31));
+        if (want and $4) <> 0 then wr[fd shr 5] := wr[fd shr 5] or (1 shl (fd and 31));
+        if (want and $2) <> 0 then ex[fd shr 5] := ex[fd shr 5] or (1 shl (fd and 31));
+      end;
+    end;
+  end;
+end;
+
+{ Fill evs from what select (r > 0) and the emulated fds report. }
+function EpCollect(e, evs, maxev, r: LongInt; var rd, wr, ex: TFdBits): LongInt;
+var j, fd, want, got: LongInt;
+begin
+  Result := 0;
+  j := 0;
+  while (j < EpCnt[e]) and (Result < maxev) do
+  begin
+    fd := EpFd[e, j]; want := EpEv[e, j];
+    got := 0;
+    if FdKind[fd] <> 0 then got := FakeReady(fd) and want
+    else if r > 0 then
+    begin
+      if ((rd[fd shr 5] shr (fd and 31)) and 1) <> 0 then got := got or (want and $1);
+      if ((wr[fd shr 5] shr (fd and 31)) and 1) <> 0 then got := got or (want and $4);
+      if ((ex[fd shr 5] shr (fd and 31)) and 1) <> 0 then got := got or (want and $2);
+    end;
+    if got <> 0 then
+    begin
+      PLongInt(evs + 12 * Result)^ := got;
+      PInt64(evs + 12 * Result + 4)^ := EpData[e, j];
+      Result := Result + 1;
+      if (want and $40000000) <> 0 then EpEv[e, j] := 0;   { EPOLLONESHOT }
+    end;
+    j := j + 1;
+  end;
+end;
+
+{ How long select may wait, in ms (-1: no limit). }
+function EpWaitMs(ms: LongInt; start, next: Int64; anyFake: Boolean): LongInt;
+var now, d: Int64;
+begin
+  if anyFake then begin Result := 0; Exit; end;
+  now := ClockNs(1);
+  if ms < 0 then Result := -1
+  else
+  begin
+    d := Int64(ms) - (now - start) div 1000000;
+    if d < 0 then d := 0;
+    Result := LongInt(d);
+  end;
+  if next > 0 then
+  begin
+    d := (next - now + 999999) div 1000000;
+    if d < 0 then d := 0;
+    if (Result < 0) or (d < Result) then Result := LongInt(d);
+  end;
+end;
+
+function MxEpollWait(ep, evs, maxev, ms: LongInt): LongInt;
+var e, hi, r, w: LongInt; rd, wr, ex: TFdBits;
+    start, next: Int64; anyFake, done: Boolean;
+begin
+  if not IsKind(ep, FK_EPOLL) then begin Result := -LX_EINVAL; Exit; end;
+  if maxev <= 0 then begin Result := -LX_EINVAL; Exit; end;
+  e := FdSlot[ep];
+  start := ClockNs(1);
+  Result := 0;
+  done := False;
+  repeat
+    hi := EpPrepare(e, rd, wr, ex, anyFake, next);
+    w := EpWaitMs(ms, start, next, anyFake);
+    if w < 0 then r := MxSelectUs(hi + 1, LongInt(@rd[0]), LongInt(@wr[0]), LongInt(@ex[0]), 0, 0, True)
+    else r := MxSelectUs(hi + 1, LongInt(@rd[0]), LongInt(@wr[0]), LongInt(@ex[0]),
+                         w div 1000, (w mod 1000) * 1000, False);
+    if r < 0 then begin Result := r; done := True; end
+    else
+    begin
+      Result := EpCollect(e, evs, maxev, r, rd, wr, ex);
+      if Result > 0 then done := True
+      else if (ms >= 0) and ((ClockNs(1) - start) div 1000000 >= ms) then done := True;
+    end;
+  until done;
+end;
+
+function MxTimerfdCreate(clock, flags: LongInt): LongInt;
+var i: LongInt;
+begin
+  if (clock <> 0) and (clock <> 1) and (clock <> 7) then begin Result := -LX_EINVAL; Exit; end;
+  for i := 0 to TF_N - 1 do
+    if not TfUsed[i] then
+    begin
+      Result := FakeFd(FK_TIMER, i, flags);
+      if Result >= 0 then
+      begin
+        TfUsed[i] := True; TfClock[i] := clock;
+        TfDeadline[i] := 0; TfInterval[i] := 0; TfExp[i] := 0;
+      end;
+      Exit;
+    end;
+  Result := -24;
+end;
+
+procedure TsPut(p: LongInt; ns: Int64);
+begin
+  if ns < 0 then ns := 0;
+  PLongInt(p)^ := LongInt(ns div 1000000000);
+  PLongInt(p + 4)^ := LongInt(ns mod 1000000000);
+end;
+
+function TsGet(p: LongInt): Int64;
+begin
+  Result := Int64(PLongInt(p)^) * 1000000000 + PLongInt(p + 4)^;
+end;
+
+procedure TfGet(t, cur: LongInt);
+begin
+  TfUpdate(t);
+  TsPut(cur, TfInterval[t]);
+  if TfDeadline[t] = 0 then TsPut(cur + 8, 0)
+  else TsPut(cur + 8, TfDeadline[t] - ClockNs(1));
+end;
+
+{ timerfd_settime(fd, flags, new, old): itimerspec = interval, value (two
+  Linux i386 timespecs). TFD_TIMER_ABSTIME (1): value is on the timer's
+  clock; kept as a monotonic deadline. }
+function MxTimerfdSettime(fd, flags, nv, ov: LongInt): LongInt;
+var t: LongInt; v: Int64;
+begin
+  if not IsKind(fd, FK_TIMER) then begin Result := -LX_EINVAL; Exit; end;
+  t := FdSlot[fd];
+  if ov <> 0 then TfGet(t, ov);
+  TfExp[t] := 0;
+  TfInterval[t] := TsGet(nv);
+  v := TsGet(nv + 8);
+  if v = 0 then TfDeadline[t] := 0
+  else if (flags and 1) <> 0 then
+    TfDeadline[t] := ClockNs(1) + (v - ClockNs(TfClock[t]))
+  else TfDeadline[t] := ClockNs(1) + v;
+  if (TfDeadline[t] <= 0) and (v <> 0) then TfDeadline[t] := 1;   { already passed }
+  Result := 0;
+end;
+
+function MxEventfd(initval, flags: LongInt): LongInt;
+var i: LongInt;
+begin
+  for i := 0 to EF_N - 1 do
+    if not EfUsed[i] then
+    begin
+      Result := FakeFd(FK_EVENT, i, flags);
+      if Result >= 0 then
+      begin
+        EfUsed[i] := True; EfCount[i] := LongWord(initval);
+        EfSema[i] := (flags and 1) <> 0;                 { EFD_SEMAPHORE }
+      end;
+      Exit;
+    end;
+  Result := -24;
+end;
+
+{ read/write on an emulated fd; kind is known to be non-zero. A blocking
+  read of an empty eventfd cannot be woken (no other thread): EAGAIN. }
+function FakeRw(isRead: Boolean; fd, buf, len: LongInt): LongInt;
+var t: LongInt; d: Int64;
+begin
+  Result := -LX_EINVAL;
+  case FdKind[fd] of
+    FK_EPOLL: Exit;
+    FK_TIMER:
+      begin
+        if not isRead then Exit;
+        if len < 8 then Exit;
+        t := FdSlot[fd];
+        while True do
+        begin
+          TfUpdate(t);
+          if TfExp[t] > 0 then Break;
+          if (FdNonblock[fd] <> 0) or (TfDeadline[t] = 0) then begin Result := -11; Exit; end;
+          d := (TfDeadline[t] - ClockNs(1) + 999) div 1000;
+          if d < 0 then d := 0;
+          MxSleepUs(LongInt(d div 1000000), LongInt(d mod 1000000));
+        end;
+        PInt64(buf)^ := TfExp[t];
+        TfExp[t] := 0;
+        Result := 8;
+      end;
+    FK_EVENT:
+      begin
+        if len < 8 then Exit;
+        t := FdSlot[fd];
+        if isRead then
+        begin
+          if EfCount[t] = 0 then begin Result := -11; Exit; end;
+          if EfSema[t] then begin PInt64(buf)^ := 1; EfCount[t] := EfCount[t] - 1; end
+          else begin PInt64(buf)^ := EfCount[t]; EfCount[t] := 0; end;
+        end
+        else
+        begin
+          d := PInt64(buf)^;
+          if d = -1 then Exit;
+          EfCount[t] := EfCount[t] + d;
+        end;
+        Result := 8;
+      end;
+  end;
+end;
+
 { ---- links -------------------------------------------------------------------- }
 
 { mess_lc_vfs_link: name1 8, name2 12, len1 16, len2 20 (rename, symlink) }
@@ -1031,7 +1786,11 @@ begin
          Result := MxFcntlRaw(fd, 3, 0);
          if Result >= 0 then Result := FlToLinux(Result);
        end;
-    4: Result := MxFcntlRaw(fd, 4, MxOpenFlags(arg) and $C);   { F_SETFL: NONBLOCK, APPEND }
+    4: begin                                            { F_SETFL: NONBLOCK, APPEND }
+         if (fd >= 0) and (fd <= 255) and (FdKind[fd] <> 0) then
+           if (arg and $800) <> 0 then FdNonblock[fd] := 1 else FdNonblock[fd] := 0;
+         Result := MxFcntlRaw(fd, 4, MxOpenFlags(arg) and $C);
+       end;
   else
     Result := -LX_EINVAL;
   end;
@@ -1470,14 +2229,13 @@ begin
         MxCall(MX_PM, PM_EXIT, m);
         Result := 0;
       end;
-    3: Result := MxRead(a0, a1, a2);
-    4: Result := MxRw(VFS_WRITE, a0, a1, a2);
+    3: if (a0 >= 0) and (a0 <= 255) and (FdKind[a0] <> 0) then Result := FakeRw(True, a0, a1, a2)
+       else Result := MxRead(a0, a1, a2);
+    4: if (a0 >= 0) and (a0 <= 255) and (FdKind[a0] <> 0) then Result := FakeRw(False, a0, a1, a2)
+       else Result := MxRw(VFS_WRITE, a0, a1, a2);
     5: Result := MxOpenAt(LX_AT_FDCWD, a0, a1, a2);   { open }
     295: Result := MxOpenAt(a0, a1, a2, a3);          { openat }
-    6: begin                                          { close (mess_lc_vfs_close: fd, nblock) }
-         MxClear(m); m[2] := a0;
-         Result := Lx(MxCall(MX_VFS, VFS_CLOSE, m));
-       end;
+    6: Result := MxClose(a0);
     19: begin                                         { lseek }
           if a1 < 0 then i := -1 else i := 0;
           Result := MxLseek(a0, a1, i, a2, pos);
@@ -1567,6 +2325,33 @@ begin
     176: Result := MxRtSigpending(a0);
     179: Result := MxRtSigsuspend(a0);
     177: Result := MxRtSigtimedwait(a0, a1, a2);
+    254: Result := MxEpollCreate(0);                     { epoll_create }
+    329: Result := MxEpollCreate(a0);                    { epoll_create1 }
+    255: Result := MxEpollCtl(a0, a1, a2, a3);
+    256: Result := MxEpollWait(a0, a1, a2, a3);          { epoll_wait }
+    319: Result := MxEpollWait(a0, a1, a2, a3);          { epoll_pwait (mask ignored) }
+    322: Result := MxTimerfdCreate(a0, a1);
+    325: Result := MxTimerfdSettime(a0, a1, a2, a3);
+    326: if IsKind(a0, FK_TIMER) then begin TfGet(FdSlot[a0], a1); Result := 0; end
+         else Result := -LX_EINVAL;                      { timerfd_gettime }
+    323: Result := MxEventfd(a0, 0);                     { eventfd }
+    328: Result := MxEventfd(a0, a1);                    { eventfd2 }
+    102: Result := MxSocketcall(a0, a1);
+    359: Result := MxSockCall(1, a0, a1, a2, 0, 0, 0);    { socket }
+    360: Result := MxSockCall(8, a0, a1, a2, a3, 0, 0);   { socketpair }
+    361: Result := MxSockCall(2, a0, a1, a2, 0, 0, 0);    { bind }
+    362: Result := MxSockCall(3, a0, a1, a2, 0, 0, 0);    { connect }
+    363: Result := MxSockCall(4, a0, a1, 0, 0, 0, 0);     { listen }
+    364: Result := MxSockCall(18, a0, a1, a2, a3, 0, 0);  { accept4 }
+    365: Result := MxSockCall(15, a0, a1, a2, a3, a4, 0); { getsockopt }
+    366: Result := MxSockCall(14, a0, a1, a2, a3, a4, 0); { setsockopt }
+    367: Result := MxSockCall(6, a0, a1, a2, 0, 0, 0);    { getsockname }
+    368: Result := MxSockCall(7, a0, a1, a2, 0, 0, 0);    { getpeername }
+    369: Result := MxSockCall(11, a0, a1, a2, a3, a4, a5);{ sendto }
+    370: Result := MxSockCall(16, a0, a1, a2, 0, 0, 0);   { sendmsg }
+    371: Result := MxSockCall(12, a0, a1, a2, a3, a4, a5);{ recvfrom }
+    372: Result := MxSockCall(17, a0, a1, a2, 0, 0, 0);   { recvmsg }
+    373: Result := MxSockCall(13, a0, a1, 0, 0, 0, 0);    { shutdown }
     145: Result := MxRwv(VFS_READ, a0, a1, a2);         { readv }
     146: Result := MxRwv(VFS_WRITE, a0, a1, a2);        { writev }
     180: Result := MxPrw(VFS_READ, a0, a1, a2, a3, a4, False);   { pread64 }

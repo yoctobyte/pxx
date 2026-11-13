@@ -642,3 +642,29 @@ direct route, and it would be withdrawn with it.
   getsid, sched_yield, TIOCGPGRP/TIOCSPGRP, EBADF before ENOTTY for an
   unknown ioctl on a bad fd.
 - test-minix: six more crtl programs, 31 in all.
+
+### 2026-11-13: `--os=minix` sockets and epoll/timerfd/eventfd
+
+- Sockets: Minix 3.4's VFS calls ($131..$13F; layouts from ipc.h and the libc
+  wrappers). Constants measured on the VM are NetBSD's, so nbsdabi's
+  sockaddr/sockopt/MSG tables carry over; msghdr/cmsghdr are Linux i386's
+  layout already (only cmsg_level SOL_SOCKET differs); SO_RCVTIMEO/SNDTIMEO
+  timevals are converted (Minix's is 12 B). socketcall(102) and the direct
+  calls 359..373 both arrive. accept4's flags are set with fcntl afterwards.
+  Linux checks socket()'s type flags before the family (EINVAL first).
+- epoll/timerfd/eventfd emulated over select: each is a real fd opened on
+  /dev/null (so close/dup/exec behave), state in translator tables by fd;
+  epoll_wait selects on the real fds of the interest list, computes the
+  emulated ones (expired timer, eventfd count), and wakes at the nearest
+  timer deadline. Level-triggered; EPOLLONESHOT disarms; close() drops the fd
+  from every interest list.
+- A bug found on the way: MxSelectUs writes a whole Linux fd_set (128 B)
+  back, and the first epoll_wait passed 32-byte sets: a stack overrun that
+  crashed every event-loop program after its first wait.
+- A crashed run can leave its listening port held (EADDRINUSE on the next
+  run, which then waits forever); a clean VM state passes.
+- test-minix: 51 programs (test-netbsd's lists minus threads, pty, stack
+  overflow, the fault-address and the float-mask programs, plus the crtl
+  ones that pass).
+- Next idea from the owner: for OpenBSD support BOTH direct syscalls and
+  libc (and maybe a libc mode as the general fallback for every kernel).

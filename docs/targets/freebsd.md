@@ -524,12 +524,21 @@ What the translator does that Minix does not:
 
 Phase 1 covers files, directories, memory, time, fork/exec/wait, pipes,
 signals, select/poll, vectored and positioned I/O, statfs, utimensat,
-priorities and the environment. `select`, `poll` and `ppoll` are Minix's
-select (descriptors up to 254). `readv`, `writev` and `pread`/`pwrite` loop
-and seek as Minix's libc does. Not yet: sockets and epoll/timerfd. Minix
-itself has no `/dev/full` and no job control (SIGSTOP ends the process).
+priorities, sockets, epoll/timerfd/eventfd and the environment. `select`,
+`poll` and `ppoll` are Minix's select (descriptors up to 254). `readv`,
+`writev` and `pread`/`pwrite` loop and seek as Minix's libc does.
+- **Sockets** are Minix's own VFS socket calls (TCP, UDP, IPv6, Unix
+  domain), with NetBSD's constants: the same conversions as `--os=netbsd`.
+- **epoll, timerfd and eventfd** do not exist on Minix. Each is a real
+  descriptor (on `/dev/null`) whose state the translator keeps;
+  `epoll_wait` selects on the real descriptors and wakes for the nearest
+  timer. Level-triggered only (`EPOLLET` acts as level), and the state is per
+  process.
 
-`make test-minix` runs 31 programs (Pascal, C and Nil Python) on a Minix VM and
+Minix itself has no `/dev/full`, no job control (SIGSTOP ends the process)
+and no threads.
+
+`make test-minix` runs 51 programs (Pascal, C and Nil Python) on a Minix VM and
 compares their output and exit code with the Linux i386 build. It passes.
 The VM is the stock `minix_R3.4.0rc6` ISO installed under `/data/vm/minix`
 with openssh from pkgin. It runs under TCG, because the install stalled
