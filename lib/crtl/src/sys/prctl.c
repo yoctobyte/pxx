@@ -10,10 +10,21 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <stdarg.h>
 
-int prctl(int option, unsigned long arg2, unsigned long arg3,
-          unsigned long arg4, unsigned long arg5)
+/* Variadic, as glibc's: four longs are read whatever the caller passed, and
+ * the kernel looks only at the ones the option defines (glibc does the
+ * same). */
+int prctl(int option, ...)
 {
+  va_list ap;
+  unsigned long arg2, arg3, arg4, arg5;
+  va_start(ap, option);
+  arg2 = va_arg(ap, unsigned long);
+  arg3 = va_arg(ap, unsigned long);
+  arg4 = va_arg(ap, unsigned long);
+  arg5 = va_arg(ap, unsigned long);
+  va_end(ap);
 #ifdef SYS_prctl
   return (int)syscall(SYS_prctl, (long)option, (long)arg2, (long)arg3,
                       (long)arg4, (long)arg5);

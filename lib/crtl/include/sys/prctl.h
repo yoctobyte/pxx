@@ -9,11 +9,14 @@
  * capability bounding set and the ambient set -- plus the values those
  * operations need for their own arguments.
  *
- * prctl IS VARIADIC IN GLIBC AND FIXED-ARITY HERE, five longs after the
- * option. That is the same shape glibc's variadic wrapper passes to the
- * kernel, and every caller in the corpus passes fewer and relies on the rest
- * being ignored -- which the kernel does, per option. A variadic declaration
- * would be closer to glibc's spelling and would buy nothing a caller can see.
+ * prctl IS VARIADIC, as in glibc: `int prctl(int option, ...)`, and the
+ * body reads four longs after the option, which is what glibc's wrapper
+ * hands the kernel. Callers pass however many the option needs: dropbear's
+ * svr-main.c calls prctl(PR_SET_NAME, name, 0, 0), four arguments. This
+ * header used to declare five FIXED longs, on the theory that a variadic
+ * declaration "would buy nothing a caller can see". On x86-64 the short call
+ * compiled with no diagnostic. On aarch64, i386 and arm32 the call
+ * marshalling counts arguments against the prototype and refused it.
  *
  * Found attempting busybox on i386: libbb/vfork_daemon_rexec.c (PR_SET_NAME)
  * and util-linux/setpriv.c (the capability and no-new-privs operations).
@@ -48,7 +51,6 @@
 #define PR_CAP_AMBIENT_LOWER       3
 #define PR_CAP_AMBIENT_CLEAR_ALL   4
 
-int prctl(int option, unsigned long arg2, unsigned long arg3,
-          unsigned long arg4, unsigned long arg5);
+int prctl(int option, ...);
 
 #endif

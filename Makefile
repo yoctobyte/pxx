@@ -28416,6 +28416,11 @@ test-core: $(COMPILER)
 	done
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
+	# ... and on aarch64, where the call marshalling counts arguments against
+	# the prototype: prctl must be variadic (glibc's declaration) for the
+	# 4- and 2-argument calls (dropbear's svr-main.c) to compile at all.
+	./$(COMPILER) --target=aarch64 test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26_a64
+	tools/expect_same.sh c_telprctl26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_telprctl26_a64)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26
 	tools/expect_same.sh c_nethdr26 "$$($(TESTTMP)/c_nethdr26)" "$$(printf '1 8 28 8\n2 1234 5678 8 beef\n3 a0b c0d\n4 8 14 18 24\n5 102 6 6 14 64 1518\n6 001122334455 0:11:22:33:44:55\n7 000102030405 0:1:2:3:4:5\n8 aabbccddeeff aa:bb:cc:dd:ee:ff\n9 001122334455 0:11:22:33:44:55\n10 NULL\n11 NULL\n12 NULL')"
 	# <sched.h> (5 TUs) and <linux/fs.h> (6), found the same way. A WRONG IOCTL

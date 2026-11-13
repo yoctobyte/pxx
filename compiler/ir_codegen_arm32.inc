@@ -3245,7 +3245,8 @@ begin
             the same rules as a named argument, so nothing else changes. }
           if (nArgs < Procs[procIdx].ParamCount) or
              ((nArgs > Procs[procIdx].ParamCount) and not ProcVariadic[procIdx]) then
-            Error('target arm32: external call argument count mismatch');
+            Error('target arm32: call to ' + Procs[procIdx].Name + ' passes ' + AIntToStr(nArgs)
+                  + ' arguments, but it takes ' + AIntToStr(Procs[procIdx].ParamCount));
           { Load r0..r3 from the block (one word each; padding words are
             harmless). BOUNDED AT FOUR: without the bound an over-16-byte block
             walked on into r4, a callee-SAVED register, and the old `sz > 16`

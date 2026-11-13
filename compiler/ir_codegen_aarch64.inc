@@ -3776,7 +3776,8 @@ begin
             argNode := IRB[argNode];
           end;
           if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
-            Error('target aarch64: external call argument count mismatch');
+            Error('target aarch64: call to ' + Procs[procIdx].Name + ' passes ' + AIntToStr(nArgs)
+                  + ' arguments, but it takes ' + AIntToStr(Procs[procIdx].ParamCount));
           { AAPCS64 placement, register and STACK halves, both from the shared
             oracle so the callee's prologue cannot disagree
             (EmitParamSpillsForTarget's ProcCdecl arm asks the same function).

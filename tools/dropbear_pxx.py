@@ -75,6 +75,12 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.environ.get("PXX_DROPBEAR_DIR", os.path.join(ROOT, "library_candidates", "dropbear"))
 PROGRAMS = ["dropbear", "dbclient", "dropbearkey", "scp"]
+# --target: the pxx build's CPU. The gcc reference (and so config.h and the
+# compile lines) stays the host's: no cross gcc is needed, and the pxx crtl,
+# not glibc, is the C library either way. A non-host binary runs through the
+# kernel's binfmt_misc qemu handler, which the tests need anyway: dropbear
+# execs the pxx scp itself.
+TARGET = "x86_64"
 CONFIGURE = ["--disable-zlib", "--disable-utmp", "--disable-utmpx", "--disable-wtmp",
              "--disable-wtmpx", "--disable-lastlog", "--disable-pututline",
              "--disable-pututxline", "--disable-loginfunc"]
@@ -228,6 +234,21 @@ def link_plan(tree, prog, mapfile, have):
     return out
 
 
+def target_flags():
+    return [] if TARGET == "x86_64" else ["--target=" + TARGET]
+
+
+def binfmt_ready(target):
+    """A foreign binary must run by plain exec (dropbear execs scp and the
+    tests exec dropbear), so qemu-user has to be registered with binfmt_misc."""
+    if target == "x86_64":
+        return True
+    try:
+        return open("/proc/sys/fs/binfmt_misc/qemu-" + target).read().startswith("enabled")
+    except OSError:
+        return False
+
+
 def pxx_build(work, tree, log, maps, compiler, jobs):
     objdir = os.path.join(work, "obj")
     bindir = os.path.join(work, "bin")
@@ -245,8 +266,11 @@ def pxx_build(work, tree, log, maps, compiler, jobs):
     def one(t):
         cwd, src, flags = units[t]
         o = os.path.join(objdir, t + ".o")
-        rc, out, err = run(["nice", "-n", "15", compiler, "--emit-obj", "--function-sections"]
-                           + flags + [src, o], cwd=cwd, timeout=1200)
+        # --function-sections (dead-code GC at link) is x86-64 only: the
+        # aarch64 object writer has no R_AARCH64_CALL26 for cross-section calls.
+        fs = ["--function-sections"] if TARGET == "x86_64" else []
+        rc, out, err = run(["nice", "-n", "15", compiler, "--emit-obj"] + fs
+                           + target_flags() + flags + [src, o], cwd=cwd, timeout=1200)
         text = (out + err).decode(errors="replace")
         open(os.path.join(objdir, t + ".log"), "w").write(text)
         ok = rc == 0 and os.path.exists(o)
@@ -263,7 +287,8 @@ def pxx_build(work, tree, log, maps, compiler, jobs):
         return None
     for p in PROGRAMS:
         objs = [os.path.join(objdir, t + ".o") for t in plans[p]]
-        rc, out, err = run(["nice", "-n", "15", compiler, "--link", "-o", os.path.join(bindir, p)] + objs,
+        rc, out, err = run(["nice", "-n", "15", compiler, "--link"] + target_flags()
+                           + ["-o", os.path.join(bindir, p)] + objs,
                            timeout=1200)
         text = (out + err).decode(errors="replace")
         open(os.path.join(work, "link-%s.log" % p), "w").write(text)
@@ -526,7 +551,13 @@ def main():
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--out")
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--target", default="x86_64", choices=["x86_64", "aarch64"])
     a = ap.parse_args()
+    global TARGET
+    TARGET = a.target
+    if not a.build_only and not binfmt_ready(TARGET):
+        die("--target=%s needs qemu-%s registered with binfmt_misc (see /proc/sys/fs/binfmt_misc)"
+            % (TARGET, TARGET))
 
     if not os.path.isfile(os.path.join(SRC, "configure")):
         die("no dropbear tree at %s -- run: tools/install_lib_candidates.sh dropbear" % SRC)
@@ -547,6 +578,7 @@ def main():
     try:
         say("source %s" % SRC)
         say("compiler %s sha256=%s" % (compiler, csha[:12]))
+        say("target %s" % TARGET)
         say("work %s" % work)
         tree, log, maps = gcc_reference(work, a.jobs)
         row("gcc reference builds %s" % " ".join(PROGRAMS), True)

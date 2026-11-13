@@ -4149,7 +4149,8 @@ begin
             bug-c-a-c-function-s-calling-convention-depends-on-the-target }
           if (nArgs < Procs[procIdx].ParamCount) or
              ((nArgs > Procs[procIdx].ParamCount) and not ProcVariadic[procIdx]) then
-            Error('target i386: external call argument count mismatch');
+            Error('target i386: call to ' + Procs[procIdx].Name + ' passes ' + AIntToStr(nArgs)
+                  + ' arguments, but it takes ' + AIntToStr(Procs[procIdx].ParamCount));
           { Reserve a 16-rounded frame: arg block + 4-byte saved-esp slot. }
           base := ((argBytes + 4 + 15) div 16) * 16;
           EmitAsm386('mov ecx, esp');

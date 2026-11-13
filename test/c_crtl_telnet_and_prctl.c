@@ -72,10 +72,14 @@ int main(void)
   printf("8 not-glibc\n");
 #endif
 
-  /* prctl actually issued: set the name, then read it back. */
+  /* prctl actually issued: set the name, then read it back. prctl is
+     variadic (glibc's declaration), so the calls pass what the option needs:
+     four arguments is dropbear's svr-main.c, two is the plain spelling. On
+     aarch64, i386 and arm32 these used to be refused, because the
+     declaration was five fixed longs. */
   memset(nm, 0, sizeof nm);
-  rc = prctl(PR_SET_NAME, (unsigned long)(size_t)"pxxprobe", 0, 0, 0);
-  if (rc == 0) rc = prctl(PR_GET_NAME, (unsigned long)(size_t)nm, 0, 0, 0);
+  rc = prctl(PR_SET_NAME, (unsigned long)(size_t)"pxxprobe", 0, 0);
+  if (rc == 0) rc = prctl(PR_GET_NAME, (unsigned long)(size_t)nm);
   printf("9 %d %s\n", rc, rc == 0 ? nm : "(failed)");
   return 0;
 }
