@@ -535,10 +535,16 @@ priorities, sockets, epoll/timerfd/eventfd and the environment. `select`,
   timer. Level-triggered only (`EPOLLET` acts as level), and the state is per
   process.
 
+- **ptys** are Minix's own `/dev/ptmx` and `/dev/pts/N`. `unlockpt` is Minix's
+  `TIOCGRANTPT`, and `TIOCGPTN` reads the number from `TIOCPTSNAME`.
+- **`alarm` and `setitimer`** are PM's interval timers. `prctl` keeps the
+  task name for `PR_GET_NAME`. The `sched_*` calls report one CPU and
+  SCHED_OTHER. `mlock` and `unshare(0)` succeed and do nothing.
+
 Minix itself has no `/dev/full`, no job control (SIGSTOP ends the process)
 and no threads.
 
-`make test-minix` runs 51 programs (Pascal, C and Nil Python) on a Minix VM and
+`make test-minix` runs 55 programs (Pascal, C and Nil Python) on a Minix VM and
 compares their output and exit code with the Linux i386 build. It passes.
 The VM is the stock `minix_R3.4.0rc6` ISO installed under `/data/vm/minix`
 with openssh from pkgin. It runs under TCG, because the install stalled

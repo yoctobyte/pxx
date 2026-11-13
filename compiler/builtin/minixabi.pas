@@ -404,6 +404,25 @@ end;
 
 function MxFcntlRaw(fd, cmd, arg: LongInt): LongInt; forward;
 
+{ TIOCGPTN: Minix (NetBSD) names the slave through TIOCPTSNAME, which fills
+  struct ptmget (cfd, sfd, cn[1024], sn[1024]; measured: $48087448, 2056 B). }
+function MxPtyNumber(fd, arg: LongInt): LongInt;
+var m: TMxMsg; pg: array[0..513] of LongInt; p, n, k: LongInt;
+begin
+  MxClear(m);
+  m[2] := fd; m[3] := $48087448; m[4] := LongInt(@pg[0]);
+  Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
+  if Result < 0 then Exit;
+  p := LongInt(@pg[0]) + 8 + 1024;
+  k := StrLen0(p);
+  n := 0;
+  while (k > 0) and (PByte(p + k - 1)^ >= 48) and (PByte(p + k - 1)^ <= 57) do k := k - 1;
+  while (PByte(p + k)^ >= 48) and (PByte(p + k)^ <= 57) do
+  begin n := n * 10 + PByte(p + k)^ - 48; k := k + 1; end;
+  if arg <> 0 then PLongInt(arg)^ := n;
+  Result := 0;
+end;
+
 function MxIoctl(fd, req, arg: LongInt): LongInt;
 var m: TMxMsg; t: array[0..15] of LongInt; i: Integer;
 begin
@@ -421,6 +440,14 @@ begin
     m[3] := MX_TIOCGWINSZ; m[4] := arg;
     Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
   end
+  else if req = $40045431 then                         { TIOCSPTLCK (unlockpt): Minix's grantpt unlocks }
+  begin
+    m[3] := $20007447;                                  { TIOCGRANTPT }
+    Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
+    if Result > 0 then Result := 0;
+  end
+  else if req = LongInt($80045430) then                        { TIOCGPTN: the number at the end of the slave's name }
+    Result := MxPtyNumber(fd, arg)
   else if (req = $540F) or (req = $5410) then          { TIOCGPGRP / TIOCSPGRP: an int both ways }
   begin
     if req = $540F then m[3] := $40047477 else m[3] := $80047476;
@@ -2215,6 +2242,72 @@ begin
   else Result := MxReadlink(path, buf, cap);
 end;
 
+var
+  MxTaskName: array[0..15] of Byte;   { prctl(PR_SET_NAME): nothing on Minix to tell }
+
+function MxPrctl(op, a1: LongInt): LongInt;
+var i: Integer;
+begin
+  case op of
+    15: begin                                           { PR_SET_NAME }
+          for i := 0 to 15 do MxTaskName[i] := 0;
+          i := 0;
+          while (i < 15) and (PByte(a1 + i)^ <> 0) do begin MxTaskName[i] := PByte(a1 + i)^; i := i + 1; end;
+          Result := 0;
+        end;
+    16: begin                                           { PR_GET_NAME }
+          for i := 0 to 15 do PByte(a1 + i)^ := MxTaskName[i];
+          Result := 0;
+        end;
+  else
+    Result := -LX_EINVAL;
+  end;
+end;
+
+{ pause: sigsuspend with the mask as it is. }
+function MxPause: LongInt;
+var m: TMxMsg; cur: LongInt;
+begin
+  MxClear(m);
+  m[2] := MX_SIG_INQUIRE;
+  MxCall(MX_PM, PM_SIGPROCMASK, m);
+  cur := m[2];
+  MxClear(m);
+  m[4] := cur;
+  MxCall(MX_PM, PM_SIGSUSPEND, m);
+  Result := -4;                                         { EINTR }
+end;
+
+{ setitimer/getitimer: PM_ITIMER (mess_lc_pm_itimer: which 8, value 12,
+  ovalue 16). Minix's itimerval is two 12-byte timevals (int64 sec, int usec);
+  Linux i386's is four longs. getitimer is a setitimer with no new value. }
+function MxItimer(which, nv, ov: LongInt): LongInt;
+var m: TMxMsg; a, b: array[0..5] of LongInt; i: Integer;
+begin
+  MxClear(m);
+  m[2] := which;
+  if nv <> 0 then
+  begin
+    for i := 0 to 1 do
+    begin
+      a[3 * i] := PLongInt(nv + 8 * i)^;
+      if a[3 * i] < 0 then a[3 * i + 1] := -1 else a[3 * i + 1] := 0;
+      a[3 * i + 2] := PLongInt(nv + 8 * i + 4)^;
+    end;
+    m[3] := LongInt(@a[0]);
+  end;
+  m[4] := LongInt(@b[0]);
+  Result := Lx(MxCall(MX_PM, 17, m));                 { PM_ITIMER }
+  if Result < 0 then Exit;
+  if ov <> 0 then
+    for i := 0 to 1 do
+    begin
+      PLongInt(ov + 8 * i)^ := b[3 * i];
+      PLongInt(ov + 8 * i + 4)^ := b[3 * i + 2];
+    end;
+  Result := 0;
+end;
+
 { ---- the entry --------------------------------------------------------------- }
 
 function PXXMinixSyscall(nr, a0, a1, a2, a3, a4, a5: LongInt): LongInt; cdecl;
@@ -2376,7 +2469,21 @@ begin
     97: Result := MxPriority(False, a0, a1, a2);
     147: begin MxClear(m); m[2] := a0; Result := Lx(MxCall(MX_PM, PM_GETSID, m)); end;
     158: Result := 0;                                    { sched_yield: the scheduler is PM's }
-    159, 160: Result := 0;                              { sched_get_priority_max/min: SCHED_OTHER }
+    159: if (a0 = 1) or (a0 = 2) then Result := 99 else Result := 0;   { sched_get_priority_max }
+    160: if (a0 = 1) or (a0 = 2) then Result := 1 else Result := 0;    { sched_get_priority_min }
+    157: Result := 0;                                    { sched_getscheduler: SCHED_OTHER }
+    155: begin if a1 <> 0 then PLongInt(a1)^ := 0; Result := 0; end;   { sched_getparam }
+    156: if a1 = 0 then Result := 0 else Result := -1;   { sched_setscheduler: OTHER only (EPERM) }
+    242: begin                                           { sched_getaffinity: one CPU }
+           if a1 < 4 then Result := -LX_EINVAL
+           else begin for i := 0 to a1 div 4 - 1 do PLongInt(a2 + 4 * i)^ := 0; PLongInt(a2)^ := 1; Result := 4; end;
+         end;
+    310: if a0 = 0 then Result := 0 else Result := -LX_EINVAL;   { unshare: nothing to unshare }
+    150, 151, 152, 153: Result := 0;                    { mlock family: Minix does not page out to disk by itself }
+    29: Result := MxPause;
+    104: Result := MxItimer(a0, a1, a2);
+    105: Result := MxItimer(a0, 0, a1);
+    172: Result := MxPrctl(a0, a1);
     162: Result := MxNanosleep(a0, a1);
     267: if a1 <> 0 then Result := -LX_EINVAL           { clock_nanosleep: relative only }
          else Result := MxNanosleep(a2, a3);

@@ -668,3 +668,21 @@ direct route, and it would be withdrawn with it.
   ones that pass).
 - Next idea from the owner: for OpenBSD support BOTH direct syscalls and
   libc (and maybe a libc mode as the general fallback for every kernel).
+
+### 2026-11-13: `--os=minix` ptys, itimers, sched, prctl
+
+- ptys: Minix 3.4 has NetBSD's /dev/ptmx and /dev/pts (checked natively on the
+  VM). TIOCSPTLCK -> TIOCGRANTPT ($20007447); TIOCGPTN -> TIOCPTSNAME
+  ($48087448, struct ptmget 2056 B, sn at 1032), and the number is parsed off
+  the name.
+- A trap on the way: `req = $80045430` never matched, because the literal is
+  positive and the LongInt argument is negative. Compare with
+  `LongInt($8...)` for any request with the top bit set.
+- setitimer/getitimer (104/105) over PM_ITIMER (17). Minix's itimerval is two
+  12-byte timevals. alarm() in pxx is setitimer, so this also fixes pause().
+- pause (29) is sigsuspend with the current mask. prctl PR_SET/GET_NAME keeps
+  the name in the translator. sched_getscheduler/getparam/setscheduler say
+  SCHED_OTHER, get_priority_max/min give 99/1 for FIFO/RR, sched_getaffinity
+  gives one CPU, mlock* answer 0, unshare(0) answers 0.
+- test-minix: 55 programs (+c_pty_family, c_crtl_busybox_394_gaps,
+  c_crtl_sched_and_fs_ioctls, c_crtl_telnet_and_prctl).
