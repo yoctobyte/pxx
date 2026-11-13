@@ -503,3 +503,18 @@ direct route, and it would be withdrawn with it.
   TCG VM was booting; tools/vm/openbsd.sh run now retries the copy once).
   After the mov fix, the 13 arm64 thread tests match on the NetBSD/arm64 and
   FreeBSD/arm64 VMs, and test-openbsd (amd64) passes.
+
+### 2026-11-13: `--os=openbsd`: `PT_OPENBSD_NOBTCFI`
+
+- OpenBSD enforces branch-target CFI on CPUs that have it (amd64 IBT, arm64
+  BTI): setregs sets the guarded-page bit unless the image carries
+  PT_OPENBSD_NOBTCFI (exec_elf.c elf_os_pt_note). pxx emits no endbr64/bti
+  landing pads, so on such hardware every indirect branch would fault.
+  The ELF writer now adds the header (one more phdr after the pin table's;
+  both writer copies).
+- Not measurable here: the host (Xeon E5-2620 v2) has no IBT, and
+  OpenBSD/arm64 under qemu does not boot on a BTI-capable model (-cpu max
+  hangs in AAVMF even with pauth-impdef=on; cortex-a710 panics in cpu_init on
+  an msr to s3_0_c1_c2_0). So the effect is read from the source. What was
+  measured is that the header is harmless: test-openbsd and
+  test-openbsd-arm64 pass with it.

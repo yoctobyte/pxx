@@ -24,13 +24,16 @@ if [ "${PXX_OBSD_ARCH:-amd64}" = aarch64 ]; then
     -drive if=pflash,format=raw,readonly=on,file=$FW
     -drive if=pflash,format=raw,file=$VMDIR/vars.fd"
   WAIT=300
+  # A loaded TCG guest can take longer than 5 s to send the ssh banner.
+  CTO=30
 else
   VMDIR="${PXX_VM_DIR:-/data/vm}/openbsd"
   PORT="${PXX_OBSD_PORT:-2222}"
   QEMU="qemu-system-x86_64 -enable-kvm -m 2048 -smp 2"
   WAIT=90
+  CTO=5
 fi
-SSHO="-q -i $VMDIR/id_vm -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=$VMDIR/known_hosts -o ConnectTimeout=5"
+SSHO="-q -i $VMDIR/id_vm -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=$VMDIR/known_hosts -o ConnectTimeout=$CTO"
 
 case "$1" in
   start)

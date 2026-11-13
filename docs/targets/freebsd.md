@@ -226,6 +226,13 @@ What is different from FreeBSD:
   killed with SIGABRT, and ktrace shows a `PINS` line. The kernel ignores the
   whole table if any entry is out of range, and it reads the table only when
   the program has no `PT_INTERP`.
+- **No branch-target CFI.** On a CPU with IBT (amd64) or BTI (arm64),
+  OpenBSD faults an indirect branch that does not land on an `endbr64` or
+  `bti` instruction, and pxx emits neither. The executable carries a
+  `PT_OPENBSD_NOBTCFI` program header, the kernel's opt-out, as ports
+  built without landing pads do. The VMs have neither feature (the build
+  host has no IBT, and OpenBSD/arm64 does not boot on qemu's BTI-capable CPU
+  models), so this part is read from the kernel source, not measured.
 - **The ident note.** The note is named "OpenBSD", type 1, description 0. It
   sits where the FreeBSD note goes. Without it OpenBSD answers ENOEXEC.
 - **TLS uses fs.** OpenBSD userland cannot set the GS base; `__set_tcb` sets
@@ -379,9 +386,8 @@ use, so `obsdabi.pas` keeps one translator for both CPUs. What is arm64's own:
   thread's TLS block on the first system call; `__tfork` gives each thread
   its own.
 - text is mapped readable, as the program header asks, so the backend's
-  literal pools in the code segment work. BTI (`BTCFI`) is enforced only on
-  CPUs that have it; qemu's cortex-a72 does not, so a green VM run says
-  nothing about BTI hardware, as on amd64 with IBT.
+  literal pools in the code segment work. BTI is switched off by the
+  `PT_OPENBSD_NOBTCFI` header (see above).
 
 `make test-openbsd-arm64` runs about 85 programs on an arm64 VM (port 2231,
 the stock `miniroot80.img` installed unattended into

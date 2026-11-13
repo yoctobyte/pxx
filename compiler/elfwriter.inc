@@ -2380,10 +2380,13 @@ begin
   else if TargetKernel = KERNEL_OPENBSD then
   begin
     { The OpenBSD ident note, same size and slot as FreeBSD's. Without it
-      OpenBSD answers ENOEXEC. }
-    Inc(phCount);
+      OpenBSD answers ENOEXEC. Plus PT_OPENBSD_NOBTCFI: on a CPU with BTI
+      (arm64) or IBT (amd64) OpenBSD faults every indirect branch that does
+      not land on a bti/endbr64, and pxx emits neither; this header is the
+      kernel's opt-out (setregs clears the guarded-page bit). }
+    Inc(phCount, 2);
     noteLen := OB_IDENT_NOTE_SIZE;
-    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+    codeOffset := codeOffset + 2 * PROG_HEADER_SIZE + noteLen;
   end
   else if TargetKernel = KERNEL_NETBSD then
   begin
@@ -2531,6 +2534,8 @@ begin
     writeU64(f,codeOffset + CodeLen + DataFileLen);
     writeU64(f,0);writeU64(f,0);
     writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+    writeU32(f,PT_OPENBSD_NOBTCFI);writeU32(f,0);   { no branch-target CFI: see the phCount note }
+    writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);
   end
   else
   begin
@@ -2657,10 +2662,13 @@ begin
   else if TargetKernel = KERNEL_OPENBSD then
   begin
     { The OpenBSD ident note, same size and slot as FreeBSD's. Without it
-      OpenBSD answers ENOEXEC. }
-    Inc(phCount);
+      OpenBSD answers ENOEXEC. Plus PT_OPENBSD_NOBTCFI: on a CPU with BTI
+      (arm64) or IBT (amd64) OpenBSD faults every indirect branch that does
+      not land on a bti/endbr64, and pxx emits neither; this header is the
+      kernel's opt-out (setregs clears the guarded-page bit). }
+    Inc(phCount, 2);
     noteLen := OB_IDENT_NOTE_SIZE;
-    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+    codeOffset := codeOffset + 2 * PROG_HEADER_SIZE + noteLen;
   end
   else if TargetKernel = KERNEL_NETBSD then
   begin
@@ -2819,6 +2827,8 @@ begin
     writeU64(f,codeOffset + CodeLen + DataFileLen);
     writeU64(f,0);writeU64(f,0);
     writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,(OB_SYS_MAXSYSCALL - 1) * 8);writeU64(f,4);
+    writeU32(f,PT_OPENBSD_NOBTCFI);writeU32(f,0);   { no branch-target CFI: see the phCount note }
+    writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);writeU64(f,0);
   end
   else
   begin

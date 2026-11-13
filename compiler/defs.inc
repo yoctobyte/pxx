@@ -2456,6 +2456,7 @@ const
     size as the FreeBSD one, so it takes the same slot. }
   OB_IDENT_NOTE_SIZE = 24;
   PT_OPENBSD_SYSCALLS = $65A3DBE9;
+  PT_OPENBSD_NOBTCFI = $65A3DBE8;
   { The kernel discards the WHOLE pin table if any entry has sysno <= 0 or >=
     SYS_MAXSYSCALL (sys/kern/exec_elf.c, elf_read_pintable). 331 on 8.0. }
   OB_SYS_MAXSYSCALL = 331;
