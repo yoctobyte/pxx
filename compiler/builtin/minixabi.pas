@@ -65,7 +65,9 @@ const
   VFS_RENAME = $111; VFS_RMDIR = $112; VFS_STAT = $115; VFS_FSTAT = $116;
   VFS_LSTAT = $117; VFS_IOCTL = $118; VFS_FCNTL = $119; VFS_UMASK = $11B;
   VFS_GETDENTS = $11D; VFS_FCHDIR = $11F; VFS_FSYNC = $120;
-  VFS_FTRUNCATE = $122; VFS_SELECT = $11E; VFS_SYMLINK = $113; VFS_READLINK = $114;
+  VFS_FTRUNCATE = $122; VFS_SELECT = $11E; VFS_UTIMENS = $125;
+  VFS_STATVFS1 = $128; VFS_FSTATVFS1 = $129;
+  PM_GETPRIORITY = 26; PM_SETPRIORITY = 27; PM_GETSID = 32; VFS_SYMLINK = $113; VFS_READLINK = $114;
   VFS_PIPE2 = $11A;
   PM_FORK = 2; PM_WAIT4 = 3; PM_EXEC = 14;
   MX_MIB = 7; MIB_SYSCTL = $1800;
@@ -400,6 +402,8 @@ begin
   Result := o;
 end;
 
+function MxFcntlRaw(fd, cmd, arg: LongInt): LongInt; forward;
+
 function MxIoctl(fd, req, arg: LongInt): LongInt;
 var m: TMxMsg; t: array[0..15] of LongInt; i: Integer;
 begin
@@ -417,6 +421,13 @@ begin
     m[3] := MX_TIOCGWINSZ; m[4] := arg;
     Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
   end
+  else if (req = $540F) or (req = $5410) then          { TIOCGPGRP / TIOCSPGRP: an int both ways }
+  begin
+    if req = $540F then m[3] := $40047477 else m[3] := $80047476;
+    m[4] := arg;
+    Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
+  end
+  else if MxFcntlRaw(fd, 3, 0) < 0 then Result := -LX_EBADF   { a bad fd says so first }
   else Result := -LX_ENOTTY;
 end;
 
@@ -741,6 +752,234 @@ begin
     MxSleepUs(0, 10000);
     waited := waited + 10;
   end;
+end;
+
+
+{ ---- vectored and positioned I/O ---------------------------------------------------
+  Minix has no readv/writev or pread/pwrite calls; its libc loops and
+  seeks. So does this (positioned I/O is not atomic against another
+  process sharing the descriptor). A Linux iovec is base, len. }
+
+function MxRwv(typ, fd, iov, cnt: LongInt): LongInt;
+var i, r, len: LongInt;
+begin
+  if (cnt < 0) or (cnt > 1024) then begin Result := -LX_EINVAL; Exit; end;
+  Result := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    len := PLongInt(iov + 8 * i + 4)^;
+    if len = 0 then Continue;
+    r := MxRw(typ, fd, PLongInt(iov + 8 * i)^, len);
+    if r < 0 then
+    begin
+      if Result = 0 then Result := r;
+      Exit;
+    end;
+    Result := Result + r;
+    if r < len then Exit;
+  end;
+end;
+
+{ Seek to (lo, hi), run the transfer, put the position back. iov = 0: one
+  buffer (buf, len); else cnt iovecs at buf. }
+function MxPrw(typ, fd, buf, len, lo, hi: LongInt; vec: Boolean): LongInt;
+var save, pos: Int64; r: LongInt;
+begin
+  r := MxLseek(fd, 0, 0, 1, save);
+  if r < 0 then begin Result := r; Exit; end;
+  r := MxLseek(fd, lo, hi, 0, pos);
+  if r < 0 then begin Result := r; Exit; end;
+  if vec then Result := MxRwv(typ, fd, buf, len)
+  else Result := MxRw(typ, fd, buf, len);
+  MxLseek(fd, LongInt(save), LongInt(save shr 32), 0, pos);
+end;
+
+{ ---- select and poll -----------------------------------------------------------------
+  Minix's fd_set is 32 bytes (FD_SETSIZE 255; Linux's is 128): the first
+  32 bytes are passed and come back, the rest is cleared. poll and ppoll
+  are select, as in Minix's libc (no POLLHUP/POLLNVAL). us < 0: no timeout. }
+
+function MxSelectUs(n, rd, wr, ex, sec, usec: LongInt; forever: Boolean): LongInt;
+var m: TMxMsg; tv: array[0..3] of LongInt;
+    sr, sw, se: array[0..7] of LongInt; i: Integer;
+begin
+  if (n < 0) or (n > 255) then begin Result := -LX_EINVAL; Exit; end;
+  for i := 0 to 7 do
+  begin
+    if rd <> 0 then sr[i] := PLongInt(rd + 4 * i)^ else sr[i] := 0;
+    if wr <> 0 then sw[i] := PLongInt(wr + 4 * i)^ else sw[i] := 0;
+    if ex <> 0 then se[i] := PLongInt(ex + 4 * i)^ else se[i] := 0;
+  end;
+  tv[0] := sec; tv[1] := 0; tv[2] := usec; tv[3] := 0;
+  MxClear(m);
+  m[2] := n;
+  if rd <> 0 then m[3] := LongInt(@sr[0]);
+  if wr <> 0 then m[4] := LongInt(@sw[0]);
+  if ex <> 0 then m[5] := LongInt(@se[0]);
+  if not forever then m[6] := LongInt(@tv[0]);
+  Result := Lx(MxCall(MX_VFS, VFS_SELECT, m));
+  if Result < 0 then Exit;
+  for i := 0 to 31 do
+  begin
+    if rd <> 0 then if i < 8 then PLongInt(rd + 4 * i)^ := sr[i] else PLongInt(rd + 4 * i)^ := 0;
+    if wr <> 0 then if i < 8 then PLongInt(wr + 4 * i)^ := sw[i] else PLongInt(wr + 4 * i)^ := 0;
+    if ex <> 0 then if i < 8 then PLongInt(ex + 4 * i)^ := se[i] else PLongInt(ex + 4 * i)^ := 0;
+  end;
+end;
+
+{ poll(fds, n, ms): pollfd is fd 0/4, events 4/2, revents 6/2. POLLIN 1,
+  POLLPRI 2, POLLOUT 4 (Linux's and Minix's). }
+function MxPoll(fds, nfds, sec, usec: LongInt; forever: Boolean): LongInt;
+var rd, wr, ex: array[0..31] of LongInt; i, fd, ev, rev, hi, r: LongInt;
+begin
+  for i := 0 to 31 do begin rd[i] := 0; wr[i] := 0; ex[i] := 0; end;
+  hi := -1;
+  for i := 0 to nfds - 1 do
+  begin
+    PWord(fds + 8 * i + 6)^ := 0;
+    fd := PLongInt(fds + 8 * i)^;
+    if fd < 0 then Continue;
+    if fd > 254 then begin Result := -LX_EINVAL; Exit; end;
+    if fd > hi then hi := fd;
+    ev := PWord(fds + 8 * i + 4)^;
+    if (ev and $41) <> 0 then rd[fd shr 5] := rd[fd shr 5] or (1 shl (fd and 31));   { POLLIN|POLLRDNORM }
+    if (ev and $304) <> 0 then wr[fd shr 5] := wr[fd shr 5] or (1 shl (fd and 31));  { POLLOUT|WRNORM|WRBAND }
+    if (ev and $82) <> 0 then ex[fd shr 5] := ex[fd shr 5] or (1 shl (fd and 31));   { POLLPRI|RDBAND }
+  end;
+  r := MxSelectUs(hi + 1, LongInt(@rd[0]), LongInt(@wr[0]), LongInt(@ex[0]), sec, usec, forever);
+  if r <= 0 then begin Result := r; Exit; end;
+  Result := 0;
+  for i := 0 to nfds - 1 do
+  begin
+    fd := PLongInt(fds + 8 * i)^;
+    if fd < 0 then Continue;
+    ev := PWord(fds + 8 * i + 4)^;
+    rev := 0;
+    if ((rd[fd shr 5] shr (fd and 31)) and 1) <> 0 then rev := rev or (ev and $41);
+    if ((wr[fd shr 5] shr (fd and 31)) and 1) <> 0 then rev := rev or (ev and $304);
+    if ((ex[fd shr 5] shr (fd and 31)) and 1) <> 0 then rev := rev or (ev and $82);
+    PWord(fds + 8 * i + 6)^ := rev;
+    if rev <> 0 then Result := Result + 1;
+  end;
+end;
+
+{ ---- file times, filesystems, priorities ------------------------------------------------ }
+
+{ utimensat(dirfd, path, times, flags): mess_vfs_utimens atime 8/8, mtime
+  16/8, ansec 24, mnsec 28, len 32, name 36, fd 40, flags 44. UTIME_NOW and
+  UTIME_OMIT are the same numbers on both. path NULL = futimens(dirfd). }
+function MxUtimensat(dirfd, path, times, flags: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  if times = 0 then
+  begin
+    m[6] := $3FFFFFFF; m[7] := $3FFFFFFF;               { UTIME_NOW }
+  end
+  else
+  begin
+    m[2] := PLongInt(times)^; if m[2] < 0 then m[3] := -1;
+    m[6] := PLongInt(times + 4)^;
+    m[4] := PLongInt(times + 8)^; if m[4] < 0 then m[5] := -1;
+    m[7] := PLongInt(times + 12)^;
+  end;
+  if path = 0 then
+    m[10] := dirfd
+  else
+  begin
+    if PByte(path)^ = 0 then begin Result := -LX_ENOENT; Exit; end;
+    if not DirOk(dirfd, path) then begin Result := -LX_ENOSYS; Exit; end;
+    m[8] := StrLen0(path) + 1; m[9] := path;
+  end;
+  if (flags and $100) <> 0 then m[11] := $200;          { AT_SYMLINK_NOFOLLOW }
+  Result := Lx(MxCall(MX_VFS, VFS_UTIMENS, m));
+end;
+
+{ statfs/fstatfs (Linux i386 struct statfs, 32-bit counts) and the 64 forms,
+  from Minix's statvfs (measured: flag 0, bsize 4, frsize 8, blocks 16/8,
+  bfree 24/8, bavail 32/8, files 48/8, ffree 56/8, fsid 120, namemax 124,
+  fstypename 148/32; 2228 B). f_type is 0: Minix names a filesystem, it
+  has no magic number. mess_lc_vfs_statvfs1: fd 8, flags 12, len 16,
+  name 20, buf 24. }
+function MxStatfs(fd, path, buf: LongInt; wide: Boolean): LongInt;
+var m: TMxMsg; sv: array[0..559] of LongInt; i: Integer; r: LongInt;
+begin
+  MxClear(m);
+  m[3] := 1;                                            { ST_WAIT }
+  m[6] := LongInt(@sv[0]);
+  if path <> 0 then
+  begin
+    m[4] := StrLen0(path) + 1; m[5] := path;
+    r := MxCall(MX_VFS, VFS_STATVFS1, m);
+  end
+  else
+  begin
+    m[2] := fd;
+    r := MxCall(MX_VFS, VFS_FSTATVFS1, m);
+  end;
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  if wide then
+  begin
+    for i := 0 to 20 do PLongInt(buf + 4 * i)^ := 0;
+    PLongInt(buf + 4)^ := sv[1];                        { f_bsize }
+    PInt64(buf + 8)^ := PInt64(@sv[4])^;                { f_blocks }
+    PInt64(buf + 16)^ := PInt64(@sv[6])^;               { f_bfree }
+    PInt64(buf + 24)^ := PInt64(@sv[8])^;               { f_bavail }
+    PInt64(buf + 32)^ := PInt64(@sv[12])^;              { f_files }
+    PInt64(buf + 40)^ := PInt64(@sv[14])^;              { f_ffree }
+    PLongInt(buf + 48)^ := sv[30];                      { f_fsid }
+    PLongInt(buf + 56)^ := sv[31];                      { f_namelen }
+    PLongInt(buf + 60)^ := sv[2];                       { f_frsize }
+  end
+  else
+  begin
+    for i := 0 to 15 do PLongInt(buf + 4 * i)^ := 0;
+    PLongInt(buf + 4)^ := sv[1];
+    PLongInt(buf + 8)^ := sv[4];
+    PLongInt(buf + 12)^ := sv[6];
+    PLongInt(buf + 16)^ := sv[8];
+    PLongInt(buf + 20)^ := sv[12];
+    PLongInt(buf + 24)^ := sv[14];
+    PLongInt(buf + 28)^ := sv[30];
+    PLongInt(buf + 36)^ := sv[31];
+    PLongInt(buf + 40)^ := sv[2];
+  end;
+  Result := 0;
+end;
+
+{ fallocate(fd, mode 0, offset, len): Minix has none; grow the file with
+  ftruncate when offset+len passes its end (no blocks are reserved). }
+function MxFallocate(fd, mode, offLo, offHi, lenLo, lenHi: LongInt): LongInt;
+var m: TMxMsg; st: array[0..31] of LongInt; want: Int64;
+begin
+  if mode <> 0 then begin Result := -95; Exit; end;    { EOPNOTSUPP }
+  want := (Int64(offHi) shl 32) + LongWord(offLo) + (Int64(lenHi) shl 32) + LongWord(lenLo);
+  if ((lenLo = 0) and (lenHi = 0)) or (lenHi < 0) or (offHi < 0) then begin Result := -LX_EINVAL; Exit; end;
+  MxClear(m);
+  m[2] := fd; m[3] := LongInt(@st[0]);
+  Result := Lx(MxCall(MX_VFS, VFS_FSTAT, m));
+  if Result < 0 then Exit;
+  if (st[2] and $F000) <> $8000 then begin Result := -19; Exit; end;   { ENODEV: not a file }
+  if want <= PInt64(@st[22])^ then begin Result := 0; Exit; end;
+  MxClear(m);
+  m[2] := LongInt(want); m[3] := LongInt(want shr 32); m[4] := fd;
+  Result := Lx(MxCall(MX_VFS, VFS_FTRUNCATE, m));
+end;
+
+{ get/setpriority: mess_lc_pm_priority which 8, who 12, prio 16. PM
+  answers getpriority with nice + 20 (Minix's libc subtracts PRIO_MAX);
+  Linux's system call answers 20 - nice. }
+function MxPriority(get: Boolean; which, who, prio: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := which; m[3] := who; m[4] := prio;
+  if get then
+  begin
+    Result := Lx(MxCall(MX_PM, PM_GETPRIORITY, m));
+    if Result >= 0 then Result := 40 - Result;
+  end
+  else Result := Lx(MxCall(MX_PM, PM_SETPRIORITY, m));
 end;
 
 { ---- links -------------------------------------------------------------------- }
@@ -1328,6 +1567,31 @@ begin
     176: Result := MxRtSigpending(a0);
     179: Result := MxRtSigsuspend(a0);
     177: Result := MxRtSigtimedwait(a0, a1, a2);
+    145: Result := MxRwv(VFS_READ, a0, a1, a2);         { readv }
+    146: Result := MxRwv(VFS_WRITE, a0, a1, a2);        { writev }
+    180: Result := MxPrw(VFS_READ, a0, a1, a2, a3, a4, False);   { pread64 }
+    181: Result := MxPrw(VFS_WRITE, a0, a1, a2, a3, a4, False);  { pwrite64 }
+    333: Result := MxPrw(VFS_READ, a0, a1, a2, a3, a4, True);    { preadv }
+    334: Result := MxPrw(VFS_WRITE, a0, a1, a2, a3, a4, True);   { pwritev }
+    142: if a4 = 0 then Result := MxSelectUs(a0, a1, a2, a3, 0, 0, True)        { _newselect }
+         else Result := MxSelectUs(a0, a1, a2, a3, PLongInt(a4)^, PLongInt(a4 + 4)^, False);
+    308: if a4 = 0 then Result := MxSelectUs(a0, a1, a2, a3, 0, 0, True)        { pselect6 (mask ignored) }
+         else Result := MxSelectUs(a0, a1, a2, a3, PLongInt(a4)^, (PLongInt(a4 + 4)^ + 999) div 1000, False);
+    168: if a2 < 0 then Result := MxPoll(a0, a1, 0, 0, True)                   { poll }
+         else Result := MxPoll(a0, a1, a2 div 1000, (a2 mod 1000) * 1000, False);
+    309: if a2 = 0 then Result := MxPoll(a0, a1, 0, 0, True)                   { ppoll (mask ignored) }
+         else Result := MxPoll(a0, a1, PLongInt(a2)^, (PLongInt(a2 + 4)^ + 999) div 1000, False);
+    320: Result := MxUtimensat(a0, a1, a2, a3);
+    99: Result := MxStatfs(0, a0, a1, False);           { statfs }
+    100: Result := MxStatfs(a0, 0, a1, False);          { fstatfs }
+    268: Result := MxStatfs(0, a0, a2, True);           { statfs64(path, size, buf) }
+    269: Result := MxStatfs(a0, 0, a2, True);           { fstatfs64 }
+    324: Result := MxFallocate(a0, a1, a2, a3, a4, a5);
+    96: Result := MxPriority(True, a0, a1, 0);
+    97: Result := MxPriority(False, a0, a1, a2);
+    147: begin MxClear(m); m[2] := a0; Result := Lx(MxCall(MX_PM, PM_GETSID, m)); end;
+    158: Result := 0;                                    { sched_yield: the scheduler is PM's }
+    159, 160: Result := 0;                              { sched_get_priority_max/min: SCHED_OTHER }
     162: Result := MxNanosleep(a0, a1);
     267: if a1 <> 0 then Result := -LX_EINVAL           { clock_nanosleep: relative only }
          else Result := MxNanosleep(a2, a3);

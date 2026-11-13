@@ -628,3 +628,17 @@ direct route, and it would be withdrawn with it.
   c_crtl_signal_and_wait, c_crtl_signal_dispositions, test_scheduler. Not:
   test_signal_pc_rewrite (wants si_code/si_addr of a SEGV),
   test_stack_overflow_raise (no altstack), test_timer (timerfd/epoll: spins).
+
+### 2026-11-13: `--os=minix` I/O batch
+
+- select (_newselect, pselect6), poll and ppoll over VFS_SELECT (Minix's
+  fd_set is 32 bytes, FD_SETSIZE 255; its timeval is 12 bytes: 64-bit sec).
+  poll is select as in Minix's libc (minix/lib/libc/sys/poll.c).
+- readv/writev loop; pread64/pwrite64/preadv/pwritev seek, transfer, seek
+  back (not atomic, as Minix's libc).
+- utimensat/futimens (VFS_UTIMENS; UTIME_NOW/OMIT are the same numbers),
+  statfs/fstatfs and the 64 forms from statvfs (measured, 2228 B; f_type 0),
+  fallocate as a growing ftruncate, get/setpriority (PM answers nice + 20),
+  getsid, sched_yield, TIOCGPGRP/TIOCSPGRP, EBADF before ENOTTY for an
+  unknown ioctl on a bad fd.
+- test-minix: six more crtl programs, 31 in all.

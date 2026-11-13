@@ -11203,7 +11203,9 @@ test-minix: $(COMPILER)
 	           test/c_crtl_bits_and_fdatasync.c test/c_termios_no_tty.c \
 	           test/lib_signals_fpc.pas test/test_signal_num.pas test/test_signal_bss_alias.pas \
 	           test/test_signal_sp_rewrite.pas test/test_signal_handler_callback_b336.pas \
-	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c test/test_scheduler.pas; do \
+	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c test/test_scheduler.pas \
+	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tcpgrp_statfs.c test/c_crtl_utimensat.c \
+	           test/c_crtl_fallocate.c test/c_crtl_mount_and_prio.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \

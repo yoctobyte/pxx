@@ -523,11 +523,13 @@ What the translator does that Minix does not:
   is `select` with a timeout, as in Minix's libc.
 
 Phase 1 covers files, directories, memory, time, fork/exec/wait, pipes,
-signals and the environment. Not yet: sockets, epoll/timerfd, `select`/`poll`,
-`readv`/`writev`, `statfs`, `utimensat` and priorities. Minix itself has no
-`/dev/full` and no job control (SIGSTOP ends the process).
+signals, select/poll, vectored and positioned I/O, statfs, utimensat,
+priorities and the environment. `select`, `poll` and `ppoll` are Minix's
+select (descriptors up to 254). `readv`, `writev` and `pread`/`pwrite` loop
+and seek as Minix's libc does. Not yet: sockets and epoll/timerfd. Minix
+itself has no `/dev/full` and no job control (SIGSTOP ends the process).
 
-`make test-minix` runs 25 programs (Pascal, C and Nil Python) on a Minix VM and
+`make test-minix` runs 31 programs (Pascal, C and Nil Python) on a Minix VM and
 compares their output and exit code with the Linux i386 build. It passes.
 The VM is the stock `minix_R3.4.0rc6` ISO installed under `/data/vm/minix`
 with openssh from pkgin. It runs under TCG, because the install stalled
