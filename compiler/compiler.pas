@@ -1541,6 +1541,7 @@ begin
   XtensaSoftMulHigh := False;
   XtensaLongCalls := False;
   XtensaNoDensity := False;
+  XtensaNoFpRebias := False;
   XtensaWideDepth := 0;
   Rv32LongCalls := False;
   Rv32ShortCalls := False;
@@ -2032,6 +2033,11 @@ begin
         CALL0's range. This is the answer the forward-call error names.
         bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build }
       XtensaLongCalls := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-no-fp-rebias' then
+    begin
+      XtensaNoFpRebias := True;
       Inc(i);
     end
     else if option = '--xtensa-no-density' then

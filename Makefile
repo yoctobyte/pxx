@@ -35204,6 +35204,10 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/dcfields "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dcfields_xtw)" "$$(cat test/test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_escaping_closure_many_captures.npy $(TESTTMP)/test_closurecaps_xtw
 	tools/expect_same.sh xtensa-windowed/closurecaps "$$(tools/run_target.sh xtensa $(TESTTMP)/test_closurecaps_xtw)" "$$(printf '843\n952\n1173\n1398\n2217\n1181\n1 2 3 108')"
+	@# a raise through the cleanup pad of a body whose a7 was re-biased: the
+	@# pad's jmpbuf predates the move, so the pad has to move a7 again
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_raise_through_a_deep_frame_cleanup_pad.pas $(TESTTMP)/test_deeppad_xtw
+	tools/expect_same.sh xtensa-windowed/deeppad "$$(tools/run_target.sh xtensa $(TESTTMP)/test_deeppad_xtw)" "$$(cat test/test_a_raise_through_a_deep_frame_cleanup_pad.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through

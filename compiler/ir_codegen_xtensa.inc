@@ -230,13 +230,31 @@ begin
     XtensaMarshalReg4 := reg_xtensa_a7;
 end;
 
+{ Note one frame-slot access for XtChooseFpBias (first pass only). }
+procedure XtFpNote(off, sz: Integer);
+begin
+  if not XtFpRec then Exit;
+  if XtFpN >= Length(XtFpOff) then
+  begin
+    if XtFpN >= 65536 then begin XtFpRec := False; XtFpN := -1; Exit; end;
+    SetLength(XtFpOff, XtFpN * 2 + 256);
+    SetLength(XtFpSz, XtFpN * 2 + 256);
+  end;
+  XtFpOff[XtFpN] := off;
+  XtFpSz[XtFpN] := sz;
+  Inc(XtFpN);
+end;
+
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer);
 var fp: Integer;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
     fp := reg_xtensa_a7;
-    off := off + XT_FP_BIAS;
+    { a fallback after XtFrameDirect said no is the SAME access, already noted }
+    if off <> XtFpLastProbe then XtFpNote(off, 0);
+    XtFpLastProbe := Low(Integer);
+    off := off + XtFpBias;
   end
   else
     fp := reg_xtensa_a15;
@@ -258,7 +276,9 @@ var lim: Integer;
 begin
   Result := False;
   if XtensaABI <> XTENSA_ABI_WINDOWED then Exit;
-  adj := off + XT_FP_BIAS;
+  XtFpNote(off, sz);
+  XtFpLastProbe := off;
+  adj := off + XtFpBias;
   if adj < 0 then Exit;
   case sz of
     1: lim := 255;
@@ -286,7 +306,7 @@ begin
   Result := False;
   if XtensaABI <> XTENSA_ABI_WINDOWED then Exit;
   if not ((sz = 1) or (sz = 2) or (sz = 4) or (sz = 8)) then Exit;
-  a := off + XT_FP_BIAS;
+  a := off + XtFpBias;
   if (a >= -128) or (a < -32768) then Exit;
   h := -(((-a) + 255) div 256) * 256;
   rem := a - h;
@@ -6547,6 +6567,68 @@ begin
   Inc(fixCount);
 end;
 
+{ Bytes one noted frame access costs with a7 = base - b (the emitter's own
+  forms: l32i.n/s32i.n reach 0..60, the 3-byte loads 0..1020 / 255 / 510,
+  addi+access within -128, addmi+access below, a literal add beyond). }
+function XtFpAccessCost(off, sz, b: Integer): Integer;
+var a, lim: Integer;
+begin
+  a := off + b;
+  if sz = 0 then
+  begin
+    if (a >= -128) and (a <= 127) then Result := 3 else Result := 6;
+    Exit;
+  end;
+  if sz = 8 then
+  begin
+    Result := XtFpAccessCost(off, 4, b) + XtFpAccessCost(off + 4, 4, b);
+    Exit;
+  end;
+  if sz = 4 then lim := 1020 else if sz = 2 then lim := 510 else lim := 255;
+  if (a >= 0) and (a <= lim) then
+  begin
+    if (sz = 4) and (a <= 60) then Result := 2 else Result := 3;
+  end
+  else if (a < 0) and (a >= -128) then
+  begin
+    if sz = 4 then Result := 5 else Result := 6;
+  end
+  else if (a < -128) and (a >= -32768) then
+    Result := 6
+  else
+    Result := 7;
+end;
+
+{ The a7 bias that makes this body's noted frame accesses cheapest, or
+  XT_FP_BIAS when no other pays for the 3-byte `addi a7, a7, ..` at body
+  start. Only biases one addi (or one addmi) away are considered. A deep
+  frame's slots sit below base - 64, where every access was an addi plus the
+  access (5 bytes for 2 or 3); moving a7 down to them is the whole win. }
+function XtChooseFpBias: Integer;
+var b, d, i, cost, best, bestB: Integer;
+begin
+  Result := XT_FP_BIAS;
+  if XtFpN <= 0 then Exit;
+  best := 0;
+  for i := 0 to XtFpN - 1 do
+    best := best + XtFpAccessCost(XtFpOff[i], XtFpSz[i], XT_FP_BIAS);
+  bestB := XT_FP_BIAS;
+  d := -64;
+  while d <= 956 do
+  begin
+    b := XT_FP_BIAS + d;
+    if (d <> 0) and ((d <= 124) or ((d mod 256) = 0)) then
+    begin
+      cost := 3;
+      for i := 0 to XtFpN - 1 do
+        cost := cost + XtFpAccessCost(XtFpOff[i], XtFpSz[i], b);
+      if cost < best then begin best := cost; bestB := b; end;
+    end;
+    if d < 124 then Inc(d, 4) else d := ((d div 256) + 1) * 256;
+  end;
+  Result := bestB;
+end;
+
 procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
 { Rewrite the branch at `pos` to skip everything emitted since. r is the branch
   flavour's own field: 9 = BNE, 1 = BEQ, matching xtensa_bne/xtensa_beq. }
@@ -6570,7 +6652,7 @@ procedure IREmitMachineCodeXtensa;
 
   RE-EMITTING IS ONLY SAFE BECAUSE OF WHAT THE BODY APPENDS TO, and that was
   enumerated rather than assumed. Every table an Xtensa body writes -- CodeRef,
-  Fixups, GlobFix, CallFix, DynCall, IramCallFix -- is a pure `T[Count] := x;
+  Fixups, GlobFix, CallFix, DynCall, IramCallFix, ProcAddrFix -- is a pure `T[Count] := x;
   Inc(Count)` append, so restoring the count makes the second pass overwrite the
   first's entries in place. RegisterExternal is idempotent (it looks the proc up
   in ExternalProc and returns the existing index), the Xtensa emitter never
@@ -6579,8 +6661,9 @@ procedure IREmitMachineCodeXtensa;
   too, or the discarded pass leaves relocations pointing into overwritten code. }
 var i, lblId, pos, f, procIdx, skipPos, si, sz: Integer;
     LabelFixupCount: Integer;
+    fpChosen: Integer;
     saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
-    saveCallFix, saveDynCall, saveIramFix: Integer;
+    saveCallFix, saveDynCall, saveIramFix, saveProcAddrFix: Integer;
     saveSpillDepth, saveSpillMax, attempt: Integer;
     needRetry: Boolean;
 begin
@@ -6591,6 +6674,7 @@ begin
   saveCallFix := CallFixCount;
   saveDynCall := DynCallCount;
   saveIramFix := IramCallFixCount;
+  saveProcAddrFix := ProcAddrFixCount;
   saveSpillDepth := XtSpillDepth;
   saveSpillMax := XtSpillMax;
   for i := 0 to IRLabelCount - 1 do
@@ -6614,6 +6698,7 @@ begin
           XtAllocaBaseOff := -FrameSize;
         end;
   attempt := 0;
+  fpChosen := XT_FP_BIAS;
 
   repeat
   Inc(attempt);
@@ -6624,11 +6709,36 @@ begin
   CallFixCount := saveCallFix;
   DynCallCount := saveDynCall;
   IramCallFixCount := saveIramFix;
+  { ProcAddrFix too (IR_PROC_ADDR, a closure's code address): it was missing
+    from this list, which held only while a retry re-emitted the SAME bytes
+    (a forward-jump relaxation of a >128 KiB body that took no proc address).
+    The per-body a7 bias moves code on its second pass, and the stale pass-1
+    entry then patched an address into the middle of an instruction. }
+  ProcAddrFixCount := saveProcAddrFix;
   XtSpillDepth := saveSpillDepth;
   XtSpillMax := saveSpillMax;
   XtCallOverflowMax := 0;
   XtLitCount := 0;
   XtLitOn := OptLevel >= 2;
+  { The frame-pointer bias (see XtChooseFpBias): pass 1 notes the slots at
+    the prologue's bias; a later pass that found a cheaper one moves a7 first
+    thing, and every slot helper after it reads XtFpBias. The epilogue and
+    anything else emitted after the body run with the moved a7 too. The
+    exception path restores the try frame's own saved a4..a7, so a landing
+    pad sees the moved value it saved. Not the MAIN body: its frame is the
+    fixed region its own prologue documents. }
+  XtFpBias := XT_FP_BIAS;
+  XtFpLastProbe := Low(Integer);
+  XtFpRec := (attempt = 1) and (XtensaABI = XTENSA_ABI_WINDOWED) and (CurProc >= 0);
+  XtFpN := 0;
+  if fpChosen <> XT_FP_BIAS then
+  begin
+    if (fpChosen - XT_FP_BIAS >= -128) and (fpChosen - XT_FP_BIAS <= 127) then
+      xtensa_addi(reg_xtensa_a7, reg_xtensa_a7, XT_FP_BIAS - fpChosen)
+    else
+      xtensa_addmi(reg_xtensa_a7, reg_xtensa_a7, XT_FP_BIAS - fpChosen);
+    XtFpBias := fpChosen;
+  end;
 
   { Nil-init hidden owning locals synthesised during IR lowering (see the
     riscv32/x86-64 walkers) — the epilogue's scope-exit DecRef would otherwise
@@ -6945,6 +7055,15 @@ begin
     if saveSpillMax < XtOutargRegion then saveSpillMax := XtOutargRegion;
     needRetry := True;
   end;
+  if XtFpRec then
+  begin
+    XtFpRec := False;
+    if (OptLevel >= 1) and not XtensaNoFpRebias then
+    begin
+      fpChosen := XtChooseFpBias;
+      if fpChosen <> XT_FP_BIAS then needRetry := True;
+    end;
+  end;
   until not needRetry;
   XtLitOn := False;
   XtLitCount := 0;
@@ -6961,8 +7080,11 @@ begin
     same program a byte-pattern count and an objdump mnemonic count disagreed,
     and each was right for one ABI. `PXXDBG=a.xtrelax:*` asks the emitter --
     note the `:*`, without which PxxDbgWants reads the topic as empty and this
-    can never print, which is not distinguishable from "it did not fire". }
-  if (attempt > 1) and
+    can never print, which is not distinguishable from "it did not fire".
+    A body whose frame-pointer bias moved takes exactly one extra pass for
+    that alone (chosen once, after pass 1), which is not a relaxation, so it
+    is not counted here. }
+  if (attempt > 1 + Ord(fpChosen <> XT_FP_BIAS)) and
      PxxDbgWants('a.xtrelax', XtRelaxBodyName) then
   begin
     pos := 0;

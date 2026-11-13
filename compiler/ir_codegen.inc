@@ -3180,7 +3180,10 @@ begin
       end;
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
       xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -XT_FP_BIAS);
+      XtFpBias := XT_FP_BIAS;
+    end;
   end
   else
   if ProcCdecl[procIdx] and (TargetArch = TARGET_X86_64) then
@@ -3752,6 +3755,7 @@ begin
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 8);
       xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 12);
       xtensa_addi(reg_xtensa_a7, reg_xtensa_sp, -XT_FP_BIAS);
+      XtFpBias := XT_FP_BIAS;
       XtOutargRegion := XT_OUTARG_REGION;
       XtSpillDepth := XtOutargRegion;
       XtSpillMax := XtSpillDepth;
@@ -17473,6 +17477,20 @@ var skipPatch: Integer;
 begin
   EmitProcCleanupFrameSkipForTarget(skipPatch);
   EmitProcCleanupFramePatchLanding(landPatch);
+  { Xtensa windowed, per-body frame-pointer bias (XtChooseFpBias): the cleanup
+    frame's setjmp runs in the PROLOGUE, before the body moves a7, so a raise
+    lands here with the prologue's a7 restored from the jmpbuf while
+    everything emitted from here on addresses slots at the moved bias. Move
+    it again. A try inside the body needs nothing: its setjmp runs after the
+    move and the jmpbuf holds the moved value. }
+  if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) and
+     (XtFpBias <> XT_FP_BIAS) then
+  begin
+    if (XT_FP_BIAS - XtFpBias >= -128) and (XT_FP_BIAS - XtFpBias <= 127) then
+      xtensa_addi(reg_xtensa_a7, reg_xtensa_a7, XT_FP_BIAS - XtFpBias)
+    else
+      xtensa_addmi(reg_xtensa_a7, reg_xtensa_a7, XT_FP_BIAS - XtFpBias);
+  end;
   EmitProcCleanupFrameLeaveForTarget;
   InUnwindCleanupPad := True;
   EmitManagedLocalCleanupForTarget(-1);

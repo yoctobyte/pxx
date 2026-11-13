@@ -16025,6 +16025,8 @@ end;
 function EmitProcPrologue: Integer;
 { Returns patch position for sub rsp/esp imm32 }
 begin
+  { every procedure starts at the fixed bias; only its own body may move it }
+  XtFpBias := XT_FP_BIAS;
   if TargetArch = TARGET_I386 then
   begin
     { i386 psABI: ebx, esi and edi are CALLEE-saved. This backend writes all

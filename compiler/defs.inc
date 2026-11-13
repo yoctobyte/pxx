@@ -6845,6 +6845,10 @@ var
     LX7) has the option. The switch exists for A/B size measurements and to
     rule density out when chasing a miscompile. }
   XtensaNoDensity : Boolean;
+  { --xtensa-no-fp-rebias: keep every windowed body at the fixed a7 bias
+    (XT_FP_BIAS) instead of the per-body choice (XtChooseFpBias). For A/B size
+    measurements and for ruling the re-bias out of a miscompile. }
+  XtensaNoFpRebias : Boolean;
   { Nesting depth of XtensaWideBegin/XtensaWideEnd: while > 0 every
     instruction is emitted in its 3-byte form. For hand-written sequences that
     branch by a fixed byte count over the instructions in between. }
@@ -6930,6 +6934,17 @@ var
     (test_nilpy_sort_is_stable_and_n_log_n, windowed) segfaulted in
     pybound_pair_call_kw. }
   XtOutargRegion : Integer;
+  { The windowed a7 bias IN FORCE at the current emission point: XT_FP_BIAS
+    from the prologue, or the body's own choice once its start has moved a7
+    (IREmitBodyXtensa, XtChooseFpBias). Every frame-slot helper reads this,
+    never the constant. }
+  XtFpBias : Integer;
+  { First-pass record of the frame slots a body touches, for XtChooseFpBias:
+    symbol offset and access width (0 = an address). }
+  XtFpRec : Boolean;
+  XtFpN : Integer;
+  XtFpOff, XtFpSz : array of Integer;
+  XtFpLastProbe : Integer;
   { Overflow argument words (past six) of the widest windowed call emitted in
     the current pass of the body. }
   XtCallOverflowMax : Integer;
