@@ -11090,8 +11090,8 @@ test-openbsd: $(COMPILER)
 # --os=openbsd --rtl-libc (EXPERIMENTAL): the same translator, but its last
 # step calls OpenBSD's libc (libc.so.104.0, OpenBSD 8.0) instead of the
 # kernel, so the program is a dynamic executable on ld.so and makes no
-# system calls of its own. test-openbsd's lists minus the threads (refused
-# in this mode for now) and the pty-console row.
+# system calls of its own. test-openbsd's lists minus the pty-console row.
+# Threads start through libc's __tfork_thread on a thread block from ld.so.
 test-openbsd-libc: $(COMPILER)
 	@d=$(TESTTMP)/os_openbsd_libc_run26; mkdir -p $$d && \
 	  tools/vm/openbsd.sh start && \
@@ -11125,6 +11125,14 @@ test-openbsd-libc: $(COMPILER)
 	  tools/expect_same.sh openbsd_libc_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.ob one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=openbsd --rtl-libc test/fileio.pas $$d/g.ob >/dev/null && \
 	  tools/expect_same.sh openbsd_libc_debug_info "$$(tools/vm/openbsd.sh run $$d/g.ob 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
+	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
+	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
+	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas test/test_cross_futex_through_the_pal.pas \
+	           test/test_signal_threads.pas test/test_signal_num_threads_race.pas; do \
+	    ./$(COMPILER) --threadsafe $$t $$d/th.lx >/dev/null && ./$(COMPILER) --threadsafe --os=openbsd --rtl-libc $$t $$d/th.ob >/dev/null && \
+	    tools/expect_same.sh openbsd_libc_threads_$$(basename $$t) "$$(tools/vm/openbsd.sh run $$d/th.ob 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/th.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
 	  echo "test-openbsd-libc: OK"
 
 # --os=netbsd (EXPERIMENTAL) on a real NetBSD 11.1 kernel (qemu VM under

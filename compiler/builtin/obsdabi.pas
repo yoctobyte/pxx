@@ -378,19 +378,61 @@ function Lc_set_tcb(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc
 function Lc_get_tcb(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name '__get_tcb';
 function Lc_errno: Int64; cdecl; external 'libc.so.104.0' name '__errno';
 
+function Lc_tfork_thread(param, psize, fn, arg: Int64): Int64; cdecl; external 'libc.so.104.0' name '__tfork_thread';
+function Lc_dl_allocate_tib(extra: Int64): Int64; cdecl; external 'libc.so.104.0' name '_dl_allocate_tib';
+
+function ObSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; forward;
+
+{ The bytes ld.so reserves below fs for the pxx block: defs.inc's
+  TlsLibcSpan, which the compiler's TLS displacements use. }
+function ObTlsSpan: Int64;
+begin
+  Result := (__pxxTlsBlockSize + 16 + 15) and (not Int64(15));
+end;
+
+{ The calling thread's pxx block: its PT_TLS area, right below libc's TCB. }
+function ObMyBlock: Int64;
+begin
+  Result := Lc_get_tcb(0, 0, 0, 0, 0, 0) - ObTlsSpan;
+end;
+
+{ The child's first code. __tfork_thread calls fn(arg) on the new stack;
+  a pxx clone child must instead resume at the stub's child entry with rsp =
+  the stage area, so arg is a record {resume, stage} in the 16-byte scratch
+  past the child's block (see ObTforkA), read whatever frame this has. }
+function ObChildTramp(rec: Int64): Int64; assembler;
+{$asmMode intel}
+asm
+  mov rdi, rec
+  mov rax, [rdi]
+  mov rsp, [rdi+8]
+  push rax
+  ret
+end;
+
+{ __tfork with the child sent to cont, as the raw ObTforkA does, through
+  libc's __tfork_thread. tf_tcb (param[0]) is a thread block from ld.so's
+  _dl_allocate_tib, set up by ObClone; the record for ObChildTramp goes in
+  its pxx block's scratch, which nothing else uses on a child. }
 function ObTforkA(param, psize, cont: Int64): Int64;
+var rec: Int64; r: Int64; e: PInteger;
 begin
-  Result := -78;                                      { OpenBSD ENOSYS }
+  rec := PInt64(param)^ - ObTlsSpan + __pxxTlsBlockSize;
+  PInt64(rec)^ := cont;
+  PInt64(rec + 8)^ := PInt64(param + 16)^;
+  e := PInteger(Lc_errno);
+  e^ := 0;
+  r := Int64(LongInt(Lc_tfork_thread(param, psize, Int64(@ObChildTramp), rec)));
+  if (r = -1) and (e^ <> 0) then r := -e^;
+  Result := r;
 end;
 
-procedure ObThreadExitA(ctid, lock, top, raw: Int64);
-begin
-  Lc_exit(0, 0, 0, 0, 0, 0);
-end;
-
+{ ObThreadExitA's kernel entry, by address: [nr, a0..a5]. }
 function ObRawA(args: Pointer): Int64;
+var a: PInt64;
 begin
-  Result := -78;
+  a := PInt64(args);
+  Result := ObSys(a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
 end;
 {$else}
 { The ONE kernel entry, and the one address the pin table names. args ->
@@ -443,6 +485,8 @@ obtf_fail:
   neg rax
 obtf_done:
 end;
+
+{$endif}
 
 { The last steps of a non-main thread's exit: the CLONE_CHILD_CLEARTID work
   Linux's kernel does, which OpenBSD's does not (its __threxit clears a word
@@ -499,7 +543,6 @@ obte_got:
   mov rdi, rsp
   call obte_raw
 end;
-{$endif}
 {$endif}
 
 var
@@ -1437,6 +1480,22 @@ end;
   TLS block itself (tf_tcb = the same block, so fs is right from the first
   instruction). }
 
+{$ifdef PXX_OBSD_LIBC}
+{ arch_prctl(SET_GS, block) under libc: the thread's block cannot move (it
+  is where ld.so put it, below fs), so the given one is copied in, and its
+  self-pointer (slot 0) names the real place. }
+function ObSetBlock(blk: Int64): Int64;
+var dst, i: Int64;
+begin
+  dst := ObMyBlock;
+  if blk <> dst then
+    for i := 0 to __pxxTlsBlockSize div 8 - 1 do
+      PInt64(dst + 8 * i)^ := PInt64(blk + 8 * i)^;
+  PInt64(dst)^ := dst;
+  Result := 0;
+end;
+{$endif}
+
 function ObClone(flags, stack, ptid, ctid, cont: Int64): Int64;
 var p: array[0..2] of Int64;
 begin
@@ -1455,7 +1514,18 @@ begin
     PInt64(stack + 16 + 8 * OB_TLS_SLOT_CTID)^ := ctid
   else
     PInt64(stack + 16 + 8 * OB_TLS_SLOT_CTID)^ := 0;
+{$ifdef PXX_OBSD_LIBC}
+  { libc owns fs: the child's fs is a thread block from ld.so, with the pxx
+    block below it (PT_TLS). Its init-image slot starts as the parent's, as
+    the stub's read through gs expects; the child's arch_prctl copies the
+    staged block in (ObSetBlock). Not freed when the thread ends (the thread
+    cannot free its own; a leak of one block per thread). }
+  p[0] := Lc_dl_allocate_tib(0);
+  if p[0] = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  PInt64(p[0] - ObTlsSpan + 8 * 13)^ := PInt64(ObMyBlock + 8 * 13)^;   { TLS_SLOT_INIT_IMAGE }
+{$else}
   p[0] := stack + 16;                                     { tf_tcb = the TLS block }
+{$endif}
   if (flags and $00100000) <> 0 then p[1] := ptid         { CLONE_PARENT_SETTID }
   else p[1] := 0;
   p[2] := stack;                                          { tf_stack }
@@ -2632,7 +2702,11 @@ begin
     141: Result := Lx(ObSys(OB_SETPRIORITY, a0, a1, a2, 0, 0, 0));
     158: begin                                                  { arch_prctl }
            case a0 of
+{$ifdef PXX_OBSD_LIBC}
+             $1001, $1002: Result := ObSetBlock(a1);
+{$else}
              $1001, $1002: Result := Lx(ObSys(OB_SET_TCB, a1, 0, 0, 0, 0, 0));   { SET_GS / SET_FS -> FS }
+{$endif}
              $1003, $1004: begin                                { GET_FS / GET_GS }
                              PInt64(a1)^ := ObSys(OB_GET_TCB, 0, 0, 0, 0, 0, 0);
                              Result := 0;

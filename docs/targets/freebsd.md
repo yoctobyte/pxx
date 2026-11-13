@@ -423,12 +423,21 @@ The output is an ordinary dynamic executable:
   `sigsuspend` take pointers in libc and values in the kernel; the
   translator converts them.
 
-x86-64 only, and `--threadsafe` is refused for now: threads in a libc
-program must be libc's (`__tfork_thread` with a thread block ld.so
-allocates), which is the next step.
+- **Threads** start the way libc's own `pthread_create` starts them:
+  `_dl_allocate_tib` gives the new thread a libc thread block with its pxx
+  block below it, and `__tfork_thread` starts it at a trampoline that
+  resumes the clone stub's child entry on the stage area. The child's
+  `arch_prctl(ARCH_SET_GS)` copies the staged block into the real one, so in
+  this mode the stub fills the staged block's thread-locals first. Thread
+  exit is the static build's (clear the tid word, wake the joiners, then
+  `__threxit` on the shared exit stack), with its calls through libc. A
+  finished thread's libc thread block is not freed (a thread cannot free
+  its own): a small leak per thread.
 
-`make test-openbsd-libc` runs test-openbsd's lists without the threads
-(57 programs, plus the environment and `-g` legs). It passes.
+x86-64 only.
+
+`make test-openbsd-libc` runs test-openbsd's lists: 57 programs, the 15
+thread programs, and the environment and `-g` legs. It passes.
 
 ### `--os=netbsd` (experimental)
 

@@ -311,7 +311,7 @@ begin
         'mov eax, 165',                 { sysarch }
         'syscall_raw',
         'add rsp, 8'])
-    else
+    else if not KernelLibc then
     EmitAsmX64([
       'mov edi, 0x1001',              { ARCH_SET_GS }
       'lea rsi, [rsp+16]',
@@ -335,6 +335,17 @@ begin
         'mov [rsp+%], r12', 16 + 8 * TLS_SLOT_INIT_IMAGE,
       'nocopy:']);
     end;
+    { --os=openbsd --rtl-libc: the install comes AFTER the image copy. The
+      child's block is where ld.so put it (below fs, already live), and the
+      translator's arch_prctl copies the staged block there, so the staged
+      block must be complete first. r12's read above already went to that
+      block, whose init-image slot ObClone seeded from the parent's. }
+    if KernelLibc then
+      EmitAsmX64([
+        'mov edi, 0x1001',              { ARCH_SET_GS }
+        'lea rsi, [rsp+16]',
+        'mov eax, 158',                 { arch_prctl }
+        ChildSys]);
     { ---- register the alt stack carved above, on THIS thread ---- }
     { The stack_t is built on the child's own stack rather than in BSS for the
       same reason the buffer is per-thread: a shared struct is a race between

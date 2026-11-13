@@ -710,3 +710,21 @@ direct route, and it would be withdrawn with it.
   pthread_create), arm64, then whether libc becomes OpenBSD's default.
 - The pinsyscalls-vs-rt_sigreturn decide ticket is answered both ways now:
   static pins the one translator syscall, libc mode pins none.
+
+### 2026-11-13: `--os=openbsd --rtl-libc --threadsafe`
+
+- Threads as libc's pthread_create makes them: ObClone takes the child's
+  tf_tcb from ld.so's `_dl_allocate_tib(0)` (libc's weak copy is overridden
+  by ld.so's), seeds the new pxx block's init-image slot from the parent's
+  (the stub reads it through gs), and `__tfork_thread` starts the child at
+  ObChildTramp, which resumes the clone stub's child entry with rsp = the
+  stage area (record {resume, stage} in the block's 16-byte scratch).
+- arch_prctl(SET_GS) in this mode copies the staged block under fs
+  (ObSetBlock) and fixes slot 0; so the stub, under KernelLibc only, installs
+  AFTER copying the init image into the staged block.
+- Thread exit: ObThreadExitA is now shared by both x86-64 modes (it makes no
+  syscall itself); in libc mode its `raw` is a Pascal ObRawA over ObSys.
+- Known gap: a finished thread's tib is never _dl_free_tib'd (it cannot free
+  its own; a later exiter could, once the exit lock shows the previous one is
+  past __threxit). One block per thread leaks.
+- 15/15 of test-openbsd's thread list pass; the target runs them now.

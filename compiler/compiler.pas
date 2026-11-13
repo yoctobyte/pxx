@@ -3256,8 +3256,6 @@ begin
     if KernelLibc then
     begin
       { The translator calls OpenBSD's libc instead of the kernel. }
-      if ThreadSafeMode then
-        ErrorNoPos('--os=openbsd --rtl-libc: --threadsafe is not supported yet');
     end
     else if RtlOverLibc then
       ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly' +
