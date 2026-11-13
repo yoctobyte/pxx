@@ -17213,11 +17213,114 @@ begin
   end;
 end;
 
+{ The constant folder's TYPE: C's usual arithmetic conversions over the four
+  integer types a constant expression actually meets -- int, unsigned int,
+  long (64-bit), unsigned long. CConstUns/CConstWide describe the value the
+  last CEvalConst* call returned; every binary arm converts both operands to
+  the common type and wraps the result to its width, the way C does.
+  Without it the folder was untyped Int64: `-17 >> 2` in a file-scope `long`
+  initialiser shifted in zeros (4611686018427387899, gcc -5), `~0u` was -1,
+  and `-1 < 0u` was true.
+  bug-c-a-file-scope-constant-right-shift-of-a-negative-value-is-logical }
+function CConstWrap(v: Int64; uns, wide: Boolean): Int64;
+begin
+  Result := v;
+  if not wide then
+  begin
+    Result := v and $FFFFFFFF;
+    if (not uns) and (Result >= $80000000) then Result := Result - $100000000;
+  end;
+end;
+
+{ The common type of (lu,lw) and (ru,rw) into CConstUns/CConstWide. A wider
+  signed long holds every unsigned int, so mixed widths take the wide side's
+  signedness. }
+procedure CConstConv(lu, lw, ru, rw: Boolean);
+begin
+  if lw = rw then begin CConstWide := lw; CConstUns := lu or ru; end
+  else if lw then begin CConstWide := True; CConstUns := lu; end
+  else begin CConstWide := True; CConstUns := ru; end;
+end;
+
+{ a < b in the current common type: unsigned 64-bit compares as unsigned (an
+  unsigned 32-bit value is already wrapped non-negative). }
+function CConstLess(a, b: Int64): Boolean;
+begin
+  if CConstUns and CConstWide and ((a < 0) <> (b < 0)) then Result := b < 0
+  else Result := a < b;
+end;
+
+{ `(type)expr` in a constant expression: read the cast's type words and
+  convert the value. Only the scalar spellings are recognised -- the
+  keywords, a pointer, and the <stdint.h>/<stddef.h> names; anything else
+  (a struct, float, an unknown typedef, plain char whose signedness is per
+  target) leaves the value and type as the operand had them, which is what
+  the folder did for every cast before. Leaves CurTok after the `)`. }
+procedure CConstCast(out known, uns, wide: Boolean; out bits: Integer);
+var sawU, sawS, sawChar, sawBool, sawPtr, sawOther: Boolean; longs, shorts: Integer;
+    nm: AnsiString;
+begin
+  sawU := False; sawS := False; sawChar := False; sawBool := False; sawPtr := False;
+  sawOther := False; longs := 0; shorts := 0; bits := 0;
+  while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+  begin
+    case CurTok.Kind of
+      tkCUnsigned: sawU := True;
+      tkCSigned: sawS := True;
+      tkCLong: Inc(longs);
+      tkCShort: Inc(shorts);
+      tkChar_T: sawChar := True;
+      tkCBool: sawBool := True;
+      tkInteger_T: ;
+      tkStar: sawPtr := True;
+      tkConst: ;
+      tkIdent:
+      begin
+        nm := CurTok.SVal;
+        if (nm = 'const') or (nm = 'volatile') then
+        else if (nm = 'uint8_t') then begin sawU := True; bits := 8; end
+        else if (nm = 'int8_t') then begin sawS := True; bits := 8; end
+        else if (nm = 'uint16_t') then begin sawU := True; bits := 16; end
+        else if (nm = 'int16_t') then begin sawS := True; bits := 16; end
+        else if (nm = 'uint32_t') then begin sawU := True; bits := 32; end
+        else if (nm = 'int32_t') then begin sawS := True; bits := 32; end
+        else if (nm = 'uint64_t') or (nm = 'uintmax_t') then begin sawU := True; bits := 64; end
+        else if (nm = 'int64_t') or (nm = 'intmax_t') then begin sawS := True; bits := 64; end
+        else if (nm = 'size_t') or (nm = 'uintptr_t') then begin sawU := True; bits := TARGET_PTR_SIZE * 8; end
+        else if (nm = 'ssize_t') or (nm = 'intptr_t') or (nm = 'ptrdiff_t') then begin sawS := True; bits := TARGET_PTR_SIZE * 8; end
+        else sawOther := True;
+      end;
+    else
+      sawOther := True;
+    end;
+    Next;
+  end;
+  if CurTok.Kind = tkRParen then Next;
+  known := not sawOther;
+  uns := sawU; wide := False;
+  if not known then Exit;
+  if sawPtr then begin uns := True; bits := TARGET_PTR_SIZE * 8; end
+  else if sawBool then bits := 1
+  else if bits = 0 then
+  begin
+    if sawChar then
+    begin
+      if not (sawU or sawS) then known := False;   { plain char: per target }
+      bits := 8;
+    end
+    else if shorts > 0 then bits := 16
+    else if (longs >= 2) or ((longs = 1) and (TARGET_PTR_SIZE = 8)) then bits := 64
+    else bits := 32;
+  end;
+  wide := bits = 64;
+end;
+
 function CEvalConstPrimary: Int64;
-var idx, callDepth: Integer; wasCall: Boolean;
+var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW: Boolean;
 begin
   wasCall := False;
   Result := 0;
+  CConstUns := False; CConstWide := False;
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -17228,9 +17331,28 @@ begin
         cast type tokens to the matching `)`, then fold the operand. NOTE the `()`
         on the recursive call: bare `CEvalConstPrimary` would read this function's
         own Result, not recurse. }
-      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
-      if CurTok.Kind = tkRParen then Next;
+      CConstCast(castKnown, castU, castW, castBits);
       Result := CEvalConstPrimary();
+      if castKnown then
+      begin
+        { the value converts to the cast type; what the expression then
+          carries is that type after integer promotion (int for anything
+          narrower than int). }
+        if castBits = 1 then begin if Result <> 0 then Result := 1; end
+        else if castBits = 8 then
+        begin
+          Result := Result and $FF;
+          if (not castU) and (Result >= $80) then Result := Result - $100;
+        end
+        else if castBits = 16 then
+        begin
+          Result := Result and $FFFF;
+          if (not castU) and (Result >= $8000) then Result := Result - $10000;
+        end;
+        if castBits < 32 then begin CConstUns := False; CConstWide := False; end
+        else begin CConstUns := castU; CConstWide := castW; end;
+        Result := CConstWrap(Result, CConstUns, CConstWide);
+      end;
     end
     else
     begin
@@ -17238,9 +17360,9 @@ begin
       if CurTok.Kind = tkRParen then Next;
     end;
   end
-  else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
+  else if CurTok.Kind = tkMinus then begin Next; Result := CConstWrap(-CEvalConstPrimary(), CConstUns, CConstWide); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
-  else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
+  else if CurTok.Kind = tkNot then begin Next; Result := CConstWrap(CEvalConstPrimary() xor (-1), CConstUns, CConstWide); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
   { `!` : logical NOT. The unary chain had `-`, `+`, `~` and `&` and not this
     one, so a constant expression containing `!` was not folded at all -- and an
     array DIMENSION is the place that shows, because the bracket then hit a
@@ -17263,9 +17385,34 @@ begin
   begin
     Next;
     if CEvalConstPrimary() = 0 then Result := 1 else Result := 0;
+    CConstUns := False; CConstWide := False;
   end
-  else if CurTok.Kind = tkAmp then begin Next; Result := CEvalConstOffsetofAddress(); end
-  else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkAmp then
+  begin
+    Next; Result := CEvalConstOffsetofAddress();
+    CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;
+  end
+  else if CurTok.Kind = tkInteger then
+  begin
+    { the literal's type, by the same ladder ParseCPrimary uses (C99 6.4.4.1) }
+    Result := CurTok.IVal;
+    fl := CAttrFlags[TokPos - 1];
+    if (fl and 4) <> 0 then
+    begin
+      CConstUns := True;
+      CConstWide := (Result < 0) or (Result > $FFFFFFFF);
+    end
+    else if (Result < 0) then begin CConstUns := True; CConstWide := True; end
+    else if (Result > $FFFFFFFF) or (((fl and 8) = 0) and (Result > 2147483647)) then
+      CConstWide := True
+    else if Result > 2147483647 then CConstUns := True;   { hex/octal: unsigned int }
+    if ((fl and 32) <> 0) or (((fl and 16) <> 0) and (TARGET_PTR_SIZE = 8)) then
+    begin
+      { the suffix re-runs the ladder: a value that fits long IS long }
+      if not CConstWide then begin CConstWide := True; CConstUns := (fl and 4) <> 0; end;
+    end;
+    Next;
+  end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
     { `sizeof(type|expr)` in a constant expression (e.g. array dimension
@@ -17279,11 +17426,16 @@ begin
       Error('C: sizeof of a variable-length array is not a constant expression'
             + ' — its value is only known at run time');
     Result := ASTIVal[Result];
+    CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
   end
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
-    if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then
+    begin
+      Result := Syms[idx].ConstVal;
+      CConstWide := (Result > 2147483647) or (Result < -2147483648);
+    end
     else if idx >= 0 then
       { DECLARED but not a compile-time constant. It contributes 0, and the
         caller cannot tell that from a genuine zero. In an array DIMENSION that
@@ -17358,86 +17510,134 @@ begin
 end;
 
 function CEvalConstMul: Int64;
-var rhs: Int64;
+var rhs: Int64; lu, lw: Boolean; op: TTokenKind;
 begin
   Result := CEvalConstPrimary;
   while (CurTok.Kind = tkStar) or (CurTok.Kind = tkSlash) or (CurTok.Kind = tkMod) do
   begin
-    if CurTok.Kind = tkStar then begin Next; Result := Result * CEvalConstPrimary; end
-    else if CurTok.Kind = tkSlash then
+    op := CurTok.Kind; lu := CConstUns; lw := CConstWide;
+    Next; rhs := CEvalConstPrimary;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    Result := CConstWrap(Result, CConstUns, CConstWide);
+    rhs := CConstWrap(rhs, CConstUns, CConstWide);
+    if op = tkStar then Result := Result * rhs
+    else if rhs = 0 then Result := 0   { e.g. sizeof(a)/sizeof(a[0]) }
+    else if CConstUns and CConstWide then
     begin
-      Next; rhs := CEvalConstPrimary;
-      if rhs <> 0 then Result := Result div rhs else Result := 0;   { e.g. sizeof(a)/sizeof(a[0]) }
+      if op = tkSlash then Result := Int64(QWord(Result) div QWord(rhs))
+      else Result := Int64(QWord(Result) mod QWord(rhs));
     end
-    else
-    begin
-      Next; rhs := CEvalConstPrimary;
-      if rhs <> 0 then Result := Result mod rhs else Result := 0;
-    end;
+    else if op = tkSlash then Result := Result div rhs
+    else Result := Result mod rhs;
+    Result := CConstWrap(Result, CConstUns, CConstWide);
   end;
 end;
 
 function CEvalConstAdd: Int64;
+var rhs: Int64; lu, lw, isAdd: Boolean;
 begin
   Result := CEvalConstMul;
   while (CurTok.Kind = tkPlus) or (CurTok.Kind = tkMinus) do
   begin
-    if CurTok.Kind = tkPlus then begin Next; Result := Result + CEvalConstMul; end
-    else begin Next; Result := Result - CEvalConstMul; end;
+    isAdd := CurTok.Kind = tkPlus; lu := CConstUns; lw := CConstWide;
+    Next; rhs := CEvalConstMul;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    if isAdd then Result := Result + rhs else Result := Result - rhs;
+    Result := CConstWrap(Result, CConstUns, CConstWide);
   end;
 end;
 
+{ A shift's type is its promoted LEFT operand's; `>>` of a signed value is
+  arithmetic (what gcc does), of an unsigned one logical. }
 function CEvalConstShift: Int64;
+var n: Int64; lu, lw, isShl: Boolean;
 begin
   Result := CEvalConstAdd;
   while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
   begin
-    if CurTok.Kind = tkShl then begin Next; Result := Result shl CEvalConstAdd; end
-    else begin Next; Result := Result shr CEvalConstAdd; end;
+    isShl := CurTok.Kind = tkShl; lu := CConstUns; lw := CConstWide;
+    Next; n := CEvalConstAdd;
+    CConstUns := lu; CConstWide := lw;
+    if isShl then Result := Result shl n
+    else if lu or (Result >= 0) then Result := Result shr n
+    else Result := not ((not Result) shr n);
+    Result := CConstWrap(Result, CConstUns, CConstWide);
   end;
 end;
 
 function CEvalConstRelational: Int64;
-var r: Int64;
+var r: Int64; lu, lw: Boolean; op: TTokenKind;
 begin
   Result := CEvalConstShift;
   while (CurTok.Kind = tkLt) or (CurTok.Kind = tkLe) or
         (CurTok.Kind = tkGt) or (CurTok.Kind = tkGe) do
   begin
-    if CurTok.Kind = tkLt then begin Next; r := CEvalConstShift; if Result < r then Result := 1 else Result := 0; end
-    else if CurTok.Kind = tkLe then begin Next; r := CEvalConstShift; if Result <= r then Result := 1 else Result := 0; end
-    else if CurTok.Kind = tkGt then begin Next; r := CEvalConstShift; if Result > r then Result := 1 else Result := 0; end
-    else begin Next; r := CEvalConstShift; if Result >= r then Result := 1 else Result := 0; end;
+    op := CurTok.Kind; lu := CConstUns; lw := CConstWide;
+    Next; r := CEvalConstShift;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    Result := CConstWrap(Result, CConstUns, CConstWide);
+    r := CConstWrap(r, CConstUns, CConstWide);
+    if op = tkLt then begin if CConstLess(Result, r) then Result := 1 else Result := 0; end
+    else if op = tkLe then begin if not CConstLess(r, Result) then Result := 1 else Result := 0; end
+    else if op = tkGt then begin if CConstLess(r, Result) then Result := 1 else Result := 0; end
+    else begin if not CConstLess(Result, r) then Result := 1 else Result := 0; end;
+    CConstUns := False; CConstWide := False;
   end;
 end;
 
 function CEvalConstEquality: Int64;
-var r: Int64;
+var r: Int64; lu, lw, isEq: Boolean;
 begin
   Result := CEvalConstRelational;
   while (CurTok.Kind = tkEq) or (CurTok.Kind = tkNeq) do
   begin
-    if CurTok.Kind = tkEq then begin Next; r := CEvalConstRelational; if Result = r then Result := 1 else Result := 0; end
-    else begin Next; r := CEvalConstRelational; if Result <> r then Result := 1 else Result := 0; end;
+    isEq := CurTok.Kind = tkEq; lu := CConstUns; lw := CConstWide;
+    Next; r := CEvalConstRelational;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    if (CConstWrap(Result, CConstUns, CConstWide) = CConstWrap(r, CConstUns, CConstWide)) = isEq then
+      Result := 1
+    else Result := 0;
+    CConstUns := False; CConstWide := False;
   end;
 end;
 
 function CEvalConstAnd: Int64;
+var r: Int64; lu, lw: Boolean;
 begin
   Result := CEvalConstEquality;
-  while CurTok.Kind = tkAmp do begin Next; Result := Result and CEvalConstEquality; end;
+  while CurTok.Kind = tkAmp do
+  begin
+    lu := CConstUns; lw := CConstWide;
+    Next; r := CEvalConstEquality;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    Result := CConstWrap(CConstWrap(Result, CConstUns, CConstWide) and CConstWrap(r, CConstUns, CConstWide), CConstUns, CConstWide);
+  end;
 end;
 
 function CEvalConstXor: Int64;
+var r: Int64; lu, lw: Boolean;
 begin
   Result := CEvalConstAnd;
-  while CurTok.Kind = tkXor do begin Next; Result := Result xor CEvalConstAnd; end;
+  while CurTok.Kind = tkXor do
+  begin
+    lu := CConstUns; lw := CConstWide;
+    Next; r := CEvalConstAnd;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    Result := CConstWrap(CConstWrap(Result, CConstUns, CConstWide) xor CConstWrap(r, CConstUns, CConstWide), CConstUns, CConstWide);
+  end;
 end;
 
 function CEvalConstBitOr: Int64;
+var r: Int64; lu, lw: Boolean;
 begin
   Result := CEvalConstXor;
-  while CurTok.Kind = tkPipe do begin Next; Result := Result or CEvalConstXor; end;
+  while CurTok.Kind = tkPipe do
+  begin
+    lu := CConstUns; lw := CConstWide;
+    Next; r := CEvalConstXor;
+    CConstConv(lu, lw, CConstUns, CConstWide);
+    Result := CConstWrap(CConstWrap(Result, CConstUns, CConstWide) or CConstWrap(r, CConstUns, CConstWide), CConstUns, CConstWide);
+  end;
 end;
 
 function CEvalConstLogAnd: Int64;
@@ -17448,6 +17648,7 @@ begin
   begin
     Next; r := CEvalConstBitOr;
     if (Result <> 0) and (r <> 0) then Result := 1 else Result := 0;
+    CConstUns := False; CConstWide := False;
   end;
 end;
 
@@ -17459,20 +17660,24 @@ begin
   begin
     Next; r := CEvalConstLogAnd;
     if (Result <> 0) or (r <> 0) then Result := 1 else Result := 0;
+    CConstUns := False; CConstWide := False;
   end;
 end;
 
 function CEvalConstTernary: Int64;
-var t, e: Int64;
+var t, e: Int64; tu, tw: Boolean;
 begin
   Result := CEvalConstLogOr;
   if CurTok.Kind = tkQuestion then
   begin
     Next;
     t := CEvalConstExpr;            { then-branch is a full expression }
+    tu := CConstUns; tw := CConstWide;
     if CurTok.Kind = tkColon then Next;
     e := CEvalConstExpr;            { else-branch }
+    CConstConv(tu, tw, CConstUns, CConstWide);
     if Result <> 0 then Result := t else Result := e;
+    Result := CConstWrap(Result, CConstUns, CConstWide);
   end;
 end;
 

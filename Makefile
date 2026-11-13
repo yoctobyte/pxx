@@ -19207,6 +19207,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_bit_builtins.c $(TESTTMP)/c_fs_bits.o > /dev/null
 	gcc -no-pie -o $(TESTTMP)/c_fs_bits test/c_freestanding_bit_builtins_main.c $(TESTTMP)/c_fs_bits.o
 	tools/expect_same.sh c_fs_bits "$$($(TESTTMP)/c_fs_bits)" "bits ok 195"
+	# File-scope constant initialisers fold with C's integer types (signed >>,
+	# ~0u, mixed comparisons, scalar casts), against the same file built by gcc.
+	gcc -w -o $(TESTTMP)/c_cfold_gcc test/c_const_fold_types.c
+	./$(COMPILER) test/c_const_fold_types.c $(TESTTMP)/c_cfold > /dev/null
+	tools/expect_same.sh c_const_fold_types "$$($(TESTTMP)/c_cfold)" "$$($(TESTTMP)/c_cfold_gcc)"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

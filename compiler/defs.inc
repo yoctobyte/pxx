@@ -6156,6 +6156,8 @@ var
     array DIMENSION above all — check it and reject, instead of silently taking
     the 0 the evaluator contributes (bug-cfront-vla-stack-corruption). }
   CConstExprSawNonConst : Boolean;
+  { The C constant folder's current value type (cparser CConstConv). }
+  CConstUns, CConstWide : Boolean;
   { Set ONLY around an array DIMENSION's fold (ParseCDecl's VLA site). A
     declared FUNCTION in a constant expression is a hard error everywhere else
     -- gcc's "initializer element is not constant" -- but in a dimension it is
