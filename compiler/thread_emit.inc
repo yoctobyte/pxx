@@ -85,7 +85,8 @@ var
   sit below the stage area, on the thread's stack. }
 function ChildSys: AnsiString;
 begin
-  if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then ChildSys := 'syscall'
+  if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
+     or (TargetKernel = KERNEL_DRAGONFLY) then ChildSys := 'syscall'
   else ChildSys := 'syscall_raw';
 end;
 
@@ -118,7 +119,8 @@ begin
       does, but that syscall is inside the translator (obsdabi's ObTforkA),
       so ObTforkA sends the child here instead, with rsp = the stage area. }
     obChild := 0;
-    if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then
+    if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
+       or (TargetKernel = KERNEL_DRAGONFLY) then
     begin
       obChild := CodeLen;
       EmitAsmX64(['jmp child']);
@@ -246,11 +248,13 @@ begin
         'jmp parent',
       'child:']);
     end
-    else if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD) then
+    else if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
+            or (TargetKernel = KERNEL_DRAGONFLY) then
     begin
       { Linux clone through the translator, with the child's resume address
         in r9 (clone's unused sixth argument). The translator maps it to
-        __tfork (OpenBSD) or _lwp_create (NetBSD); the parent returns here
+        __tfork (OpenBSD), _lwp_create (NetBSD) or lwp_create2 (DragonFly,
+        started at a resume routine); the parent returns here
         with the tid, the child never does. }
       EmitCodeAbsToRdx(obChild);
       EmitAsmX64([

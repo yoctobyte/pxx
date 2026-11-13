@@ -433,3 +433,29 @@ intercepts that path.
   lib_fpc_thread_surface and test_parallel_for_private ran 40 times each with
   no failure.
 
+### 2026-11-13: `--os=dragonfly` (experimental, x86-64)
+
+- VM: dfly-x86_64-6.4.2_REL.img (md5 checked) as /data/vm/dragonfly/dfly.qcow2,
+  SeaBIOS, IDE + e1000, port 2230, set up over the VGA console with qemu
+  monitor sendkey: root key, console="comconsole", sshd + DHCP, noatime off,
+  root's shell /bin/sh. tools/vm/dragonfly.sh start/run/ssh/stop.
+- compiler/builtin/dfbsdabi.pas, started from obsdabi and rewritten against
+  the VM's /usr/include and kernel sources; constants checked with a C probe
+  on the VM. KERNEL_DRAGONFLY = 4, ident note "DragonFly" type 1 version
+  600401 plus an empty 12-byte note. Entry: argc pointer in rdi (as FreeBSD).
+- Differences from FreeBSD that cost time: AT_FDCWD is -328243; lseek,
+  truncate, ftruncate and mmap keep the pad argument (mmap's offset is the
+  7th argument, read from [rsp+8]); pread/pwrite are extpread/extpwrite;
+  pipe2 returns rax/rdx; getdents is getdirentries; dup3 is F_DUP2FD.
+- Threads: lwp_create2 (546) with a start stub that loads rsp/rip from the
+  params block. LWP ids are small and reused immediately, which broke
+  ctid-based joins, so tids are virtual: lwpid + gen<<16, gen kept in TLS
+  slot 14 bits 48..63. Exit: spin lock on a shared exit stack, clear ctid,
+  umtx_wakeup, extexit(EXTEXIT_LWP). Futex = umtx_sleep/umtx_wakeup;
+  EWOULDBLOCK means a timeout slice, so loop to the deadline; REQUEUE wakes all.
+- Signals: FreeBSD-shaped ucontext with DragonFly's gregs order; SIGFPE
+  si_code is re-derived from MXCSR when the kernel reports 0.
+- Not fixable: lib_net_v6only (IPV6_V6ONLY is forced on).
+- The test-dragonfly target: test-netbsd's lists minus lib_net_v6only. Passes.
+  lib_fpc_thread_surface and test_parallel_for_private ran 40 times each with
+  no failure.

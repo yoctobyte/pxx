@@ -1212,6 +1212,8 @@ begin
   WriteLn('                        the same design plus a syscall pin table');
   WriteLn('  --os=netbsd           NetBSD 11.1/amd64 output (EXPERIMENTAL):');
   WriteLn('                        the same design');
+  WriteLn('  --os=dragonfly        DragonFly BSD 6.4/x86-64 output (EXPERIMENTAL):');
+  WriteLn('                        the same design');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1902,6 +1904,14 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if option = '--os=dragonfly' then
+    begin
+      { EXPERIMENTAL: see KERNEL_DRAGONFLY in defs.inc. }
+      TargetKernel := KERNEL_DRAGONFLY;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if option = '--os=netbsd' then
@@ -3452,8 +3462,9 @@ begin
     layout ([rsp] = argc). First instruction of the image, before anything
     clobbers rdi (the TLS install below makes syscalls).
     feature-port-freebsd-native }
-  if (not isAsm) and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_X86_64) then
-    EmitAsmX64(['mov rsp, rdi']);
+  if (not isAsm) and ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_DRAGONFLY))
+     and (TargetArch = TARGET_X86_64) then
+    EmitAsmX64(['mov rsp, rdi']);   { DragonFly's exec_setregs is FreeBSD's: rdi = the argc block }
   { FreeBSD/arm64 does the same with x0 and sp = x0 & ~15, and sp must stay
     16-aligned, so the block comes down to sp instead: when x0 = sp + 8, the
     argc word, argv[] and envp[] with their NULLs and the auxv pairs up to

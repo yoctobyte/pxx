@@ -2381,6 +2381,13 @@ begin
     Inc(phCount);
     noteLen := NB_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_DRAGONFLY then
+  begin
+    { DragonFly's .note.tag, then an empty note so the code stays 8-aligned. }
+    Inc(phCount);
+    noteLen := DF_IDENT_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
     so the constant and the header count are one fact spelled twice and drift
@@ -2534,7 +2541,16 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
+  if (noteLen > 0) and (TargetKernel = KERNEL_DRAGONFLY) then
+  begin
+    writeU32(f,10);writeU32(f,4);writeU32(f,1);  { namesz, descsz, NT_VERSION }
+    writeU8(f,68);writeU8(f,114);writeU8(f,97);writeU8(f,103);    { "DragonFly", NUL, pad }
+    writeU8(f,111);writeU8(f,110);writeU8(f,70);writeU8(f,108);
+    writeU8(f,121);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+    writeU32(f,DF_OS_VERSION);
+    writeU32(f,0);writeU32(f,0);writeU32(f,0);   { an empty note: padding }
+  end
+  else if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
   begin
     writeU32(f,7);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_NETBSD_IDENT }
     writeU8(f,78);writeU8(f,101);writeU8(f,116);writeU8(f,66);   { "NetBSD", NUL, pad }
@@ -2641,6 +2657,13 @@ begin
     { The NetBSD ident note, same size and slot. }
     Inc(phCount);
     noteLen := NB_IDENT_NOTE_SIZE;
+    codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
+  end
+  else if TargetKernel = KERNEL_DRAGONFLY then
+  begin
+    { DragonFly's .note.tag, then an empty note so the code stays 8-aligned. }
+    Inc(phCount);
+    noteLen := DF_IDENT_NOTE_SIZE;
     codeOffset := codeOffset + PROG_HEADER_SIZE + noteLen;
   end;
   { Code starts immediately after the program headers (and the FreeBSD note),
@@ -2806,7 +2829,16 @@ begin
     FreeBSD note, which ends where the code starts. }
   if ldsoBlock > 0 then
     WriteLdsoBlock(f, ImageBase + ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE);
-  if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
+  if (noteLen > 0) and (TargetKernel = KERNEL_DRAGONFLY) then
+  begin
+    writeU32(f,10);writeU32(f,4);writeU32(f,1);  { namesz, descsz, NT_VERSION }
+    writeU8(f,68);writeU8(f,114);writeU8(f,97);writeU8(f,103);    { "DragonFly", NUL, pad }
+    writeU8(f,111);writeU8(f,110);writeU8(f,70);writeU8(f,108);
+    writeU8(f,121);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+    writeU32(f,DF_OS_VERSION);
+    writeU32(f,0);writeU32(f,0);writeU32(f,0);   { an empty note: padding }
+  end
+  else if (noteLen > 0) and (TargetKernel = KERNEL_NETBSD) then
   begin
     writeU32(f,7);writeU32(f,4);writeU32(f,1);   { namesz, descsz, NT_NETBSD_IDENT }
     writeU8(f,78);writeU8(f,101);writeU8(f,116);writeU8(f,66);   { "NetBSD", NUL, pad }

@@ -6,7 +6,7 @@ order: 62
 # FreeBSD and the BSDs
 
 PXX writes native **FreeBSD/amd64** and **FreeBSD/arm64** executables from
-Pascal, C and Nil Python. OpenBSD and NetBSD are experimental and Minix is not supported yet;
+Pascal, C and Nil Python. OpenBSD, NetBSD and DragonFly BSD are experimental and Minix is not supported yet;
 [their notes](#openbsd-netbsd-and-minix) are at the end of this page.
 
 ```sh
@@ -203,8 +203,9 @@ The work log, with the reasons behind each choice, is in
 
 ## OpenBSD, NetBSD and Minix
 
-Minix is not supported yet. OpenBSD and NetBSD have EXPERIMENTAL
-`--os=openbsd` and `--os=netbsd` (since 2026-11-12; NetBSD also on arm64). The OpenBSD one may
+Minix is not supported yet. OpenBSD, NetBSD and DragonFly have EXPERIMENTAL
+`--os=openbsd`, `--os=netbsd` (since 2026-11-12; NetBSD also on arm64) and
+`--os=dragonfly` (since 2026-11-13, x86-64 only). The OpenBSD one may
 still be withdrawn in favour of going through libc; the choice has not been
 made.
 
@@ -448,8 +449,47 @@ NetBSD and Minix have stable system call numbers.
 The measurements and the plan are in
 `devdocs/progress/working/feature-port-libc-family-openbsd-netbsd-minix.md`.
 
-DragonFly BSD is close to FreeBSD and should be nearly free, but nobody has
-tried it.
+### `--os=dragonfly` (experimental)
+
+`compiler/builtin/dfbsdabi.pas` translates every system call to DragonFly BSD
+6.4. The executable carries a DragonFly ident note. DragonFly forked from
+FreeBSD 4, so the system call numbers, errno 1..92, the signal frame and
+`stat` are close to FreeBSD's but not the same. It is x86-64 only: DragonFly
+has no other CPU. What is DragonFly's own:
+
+- **Padded calls.** `lseek`, `truncate`, `ftruncate` and `mmap` still take
+  the old pad argument before the 64-bit offset; `pread`/`pwrite` and their
+  `v` forms go to `extpread`/`extpwrite`. mmap's offset is the seventh
+  argument and is read from the user stack.
+- **`AT_FDCWD`** is -328243, not -100.
+- **Threads** are `lwp_create2`. The kernel gives each new LWP a small id that
+  is reused at once, so pxx hands out `lwpid + generation << 16` as the tid
+  and keeps the generation in the thread's TLS. Thread exit clears the
+  child-tid word, wakes it with `umtx_wakeup` and leaves with `extexit`, on a
+  shared exit stack under a spin lock. Futexes are `umtx_sleep` and
+  `umtx_wakeup`; `umtx_sleep` has no requeue, so `FUTEX_REQUEUE` wakes all.
+- **TLS** is `set_tls_area` on `%gs`, as on Linux.
+- **`pipe2`** returns both descriptors in registers.
+- **`getdents64`** is `getdirentries`; `/proc/self/exe` and
+  `/proc/self/environ` come from sysctl (`kern.proc.pathname`,
+  `kern.ps_strings`).
+- **Signals.** The ucontext is FreeBSD's shape (mcontext at 64) with
+  DragonFly's register order. A SIGFPE's `si_code` is worked out again
+  from MXCSR when the kernel leaves it at 0.
+- **`dup3`** is `fcntl(F_DUP2FD[_CLOEXEC])`; `fallocate` is `ftruncate`;
+  `prctl(PR_SET_NAME)` is `lwp_setname`.
+- **IPv6** sockets are always v6-only: `IPV6_V6ONLY` cannot be cleared, so a
+  `::` listener does not take IPv4 connections.
+- ptys are `/dev/ptmx` and `/dev/pts/N`; the pty number comes from
+  `FIODNAME`.
+
+`make test-dragonfly` runs about 90 programs on the VM (the lists of
+`make test-netbsd` minus `lib_net_v6only`) and compares their output and
+exit code with the Linux build. It passes. The VM is the stock
+`dfly-x86_64-6.4.2_REL.img` under `/data/vm/dragonfly`, booted by SeaBIOS
+with a serial console and set up from its console (sshd, DHCP, a root key,
+root's shell `/bin/sh`, `noatime` off). Run `tools/vm/dragonfly.sh start`,
+then `tools/vm/dragonfly.sh run <binary>`; it listens on port 2230.
 
 ## Next
 

@@ -2468,6 +2468,16 @@ const
   KERNEL_NETBSD = 3;
   NB_IDENT_NOTE_SIZE = 24;
   NB_OS_VERSION = 1101000000;   { 11.1, measured: sys/param.h __NetBSD_Version__ }
+  { --os=dragonfly (EXPERIMENTAL, feature-port-libc-family-openbsd-netbsd-minix):
+    the FreeBSD shape again -- raw syscalls through an in-program Linux-ABI
+    translator (compiler/builtin/dfbsdabi.pas) -- with DragonFly's .note.tag
+    (namesz 10 "DragonFly\0" padded to 12, type 1, the 4-byte
+    __DragonFly_version), 28 bytes, and a 12-byte empty note that keeps the
+    code after it 8-aligned. x86-64 only; TLS stays on gs (set_tls_area can
+    set the GS base). }
+  KERNEL_DRAGONFLY = 4;
+  DF_IDENT_NOTE_SIZE = 40;
+  DF_OS_VERSION = 600401;       { 6.4, measured: what /bin/ls on 6.4.2 carries }
   { The NT_FREEBSD_ABI_TAG note --os=freebsd images carry (elfwriter.inc):
     12-byte header + "FreeBSD\0" + a 4-byte osreldate. 1500000 = 15.0, the
     oldest release the translator's constants were measured against. }
@@ -9146,7 +9156,7 @@ var
 function KernelTranslated: Boolean;
 begin
   KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD)
-                      or (TargetKernel = KERNEL_NETBSD);
+                      or (TargetKernel = KERNEL_NETBSD) or (TargetKernel = KERNEL_DRAGONFLY);
 end;
 
 { The translator's unit and entry proc, and the --os spelling for messages. }
@@ -9154,6 +9164,7 @@ function KernelAbiUnit: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiUnit := 'obsdabi'
   else if TargetKernel = KERNEL_NETBSD then KernelAbiUnit := 'nbsdabi'
+  else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiUnit := 'dfbsdabi'
   else KernelAbiUnit := 'fbsdabi';
 end;
 
@@ -9161,6 +9172,7 @@ function KernelAbiProc: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelAbiProc := 'PXXObsdSyscall'
   else if TargetKernel = KERNEL_NETBSD then KernelAbiProc := 'PXXNbsdSyscall'
+  else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiProc := 'PXXDfbsdSyscall'
   else KernelAbiProc := 'PXXFbsdSyscall';
 end;
 
@@ -9180,6 +9192,7 @@ function KernelOsName: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
   else if TargetKernel = KERNEL_NETBSD then KernelOsName := 'netbsd'
+  else if TargetKernel = KERNEL_DRAGONFLY then KernelOsName := 'dragonfly'
   else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
   else KernelOsName := 'linux';
 end;
