@@ -529,7 +529,9 @@ enabled_applets() {
 
 # `busybox' is the multiplexer, not an applet entry -- comparing with it in
 # reports a phantom missing applet on every multi-applet run.
-requested_applets() { printf '%s\n' $APPLETS | grep -vx busybox | LC_ALL=C sort -u; }
+# IMPLIED_APPLETS: names a REQUIRED_ON knob adds to the table by itself (`[`
+# and `[[` come with test's TEST1/TEST2), so the table check expects them.
+requested_applets() { printf '%s\n' $APPLETS $IMPLIED_APPLETS | grep -vx busybox | LC_ALL=C sort -u; }
 
 # Does the built table hold exactly what was asked for? This replaces both the
 # NUM_APPLETS equality and applets_ok: it answers the same question about the
@@ -563,13 +565,23 @@ REQUIRED_ON="USE_BB_CRYPT"
 #   stat   FEATURE_STAT_FILESYSTEM -- `stat -f';
 #   sh     SH_IS_ASH -- /bin/sh, without which every #!/bin/sh script fails.
 #   stat   also FEATURE_STAT_FORMAT -- `stat -c FORMAT', which scripts lean on.
+#   dd     FEATURE_DD_IBS_OBS -- conv= (notrunc, sync, noerror), iflag=/oflag=,
+#          ibs=/obs=; without it `dd ... conv=notrunc' exits 1 before any I/O
+#          (Gibux's sparse-file disk test, 2026-11-13).
+#   test   TEST1 TEST2 FEATURE_TEST_64 -- the `[' and `[[' spellings, which
+#          scripts use far more than `test' itself, and 64-bit comparisons.
+#   od     DESKTOP -- the POSIX od (-A, -t, -N, -j); without it od is the
+#          old fixed-format one and `od -An -tx1' fails. DESKTOP is global
+#          (it also widens ps, cpio, ...), so it rides on od being asked for.
 # --usage adds SHOW_USAGE + FEATURE_VERBOSE_USAGE: an applet's usage text,
 # which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Gibux's
 # switch_root "NEW_ROOT must be a mountpoint" was invisible). Opt-in, for a
 # root-filesystem build, because it is size.
-for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH; do
+for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP; do
   printf '%s\n' $APPLETS | grep -qx "${_pair%%:*}" && REQUIRED_ON="$REQUIRED_ON ${_pair#*:}"
 done
+IMPLIED_APPLETS=""
+printf '%s\n' $APPLETS | grep -qx test && IMPLIED_APPLETS='[ [['
 [ "${USAGE:-0}" = 1 ] && REQUIRED_ON="$REQUIRED_ON SHOW_USAGE FEATURE_VERBOSE_USAGE"
 required_knobs_ok() {
   local f
