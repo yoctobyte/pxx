@@ -2052,6 +2052,7 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
+  asmBlk, asmK: Integer;    { IR_ASM: the C inline-asm binding block, and a cursor }
   pNilStr: Integer;   { cbz patch over the nil-handle write; NOT `wid`, which
                         this arm used to reuse as a code offset }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -2101,8 +2102,34 @@ begin
     IR_NOP, IR_BLOCK: ;
 
     IR_ASM:
+      if IRIVal[node] > 0 then
       begin
-        { Inline asm block: replay the parse-time-captured text lines
+        { GNU C inline asm (casm_a64.inc): IRIVal is its binding block + 1.
+          The words were encoded at parse time with every operand pinned to
+          x10..x15. Here each input is loaded from its temporary into its
+          register, the words are copied, and each output is stored back. The
+          helpers use only x0, x1, x9 and d0, so a register loaded for one
+          operand survives the next load. The procedure has no register
+          residency: the residency passes skip any body with IR_ASM. }
+        asmBlk := Integer(IRIVal[node]) - 1;
+        for asmK := CAsmA64BlkFirst[asmBlk] to CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] - 1 do
+          EmitLoadVarA64Dest(CAsmA64BindSym[asmK], CAsmA64BindReg[asmK]);
+        asmK := 0;
+        while asmK < IRB[node] do
+        begin
+          EmitB(AsmBytes[IRA[node] + asmK]);
+          Inc(asmK);
+        end;
+        for asmK := CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] to
+                    CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] + CAsmA64BlkOut[asmBlk] - 1 do
+        begin
+          EmitI32($AA0003E0 or (CAsmA64BindReg[asmK] shl 16));   { mov x0, x(reg) }
+          EmitStoreVarA64(CAsmA64BindSym[asmK]);
+        end;
+      end
+      else
+      begin
+        { A Pascal asm block: replay the parse-time-captured text lines
           (AsmParseBodyTextA64, asmenc.inc) through the aarch64 text engine.
           Emitting here, at final code positions, makes label fixups and
           @glob relocations natively correct. Labels are block-scoped. }

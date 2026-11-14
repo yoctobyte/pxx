@@ -7155,6 +7155,16 @@ var
   CAsmClobCC   : Boolean;    { "cc" }
   CAsmClobRegs : AnsiString; { the register clobbers, space-separated }
   CAsmIsGoto   : Boolean;    { `asm goto` — a 4th section of label names }
+  { aarch64 C inline asm (casm_a64.inc): what each block's codegen must move.
+    An AN_ASM node with ASTIVal = b + 1 (IR_ASM with IRIVal = b + 1) is block
+    b. Its bindings are CAsmA64Bind*[First .. First + In + Out): the first In
+    are loaded from their temporary into the register before the words, the
+    next Out stored from the register after them. ASTIVal 0 is a block
+    with no bindings (and every x86 AN_ASM). }
+  CAsmA64BindSym, CAsmA64BindReg: array of Integer;
+  CAsmA64BindCount: Integer;
+  CAsmA64BlkFirst, CAsmA64BlkIn, CAsmA64BlkOut: array of Integer;
+  CAsmA64BlkCount: Integer;
   { Inline asm on cross targets (riscv32 first): the parser cannot encode at
     parse time like x86-64's AsmBytes path (the per-target EmitAsmXxx engines
     emit at CodeLen, where EmitGlobRef/EmitDataRef fixups are natively

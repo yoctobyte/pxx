@@ -188,6 +188,7 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
 {$include asmtext_rv32.inc}
 {$ifndef PXX_NO_AARCH64}{$include asmtext_a64.inc}{$endif}
+{$ifndef PXX_NO_AARCH64}{$include casm_a64.inc}{$endif}   { GNU C inline asm templates for aarch64 }
 {$ifndef PXX_NO_ARM32}{$include asmtext_arm32.inc}{$endif}
 {$include asmtext_xtensa.inc}
 {$include asmtext_wasm.inc}

@@ -19469,6 +19469,17 @@ test-core: $(COMPILER)
 	# inc/dec/or/and, and sntrup761's bsfw + cmovew bottom-bit idiom.
 	./$(COMPILER) test/casm_lock_cmpxchg_xadd_bsf.c $(TESTTMP)/casmlock26
 	tools/expect_same.sh casmlock26 "$$($(TESTTMP)/casmlock26)" "$$(printf 'cas ok 5 now 9\ncas miss 9 now 9\ncas64 100 now -7\ncas64 miss -7 now -7\nxadd old 9 now 13\nrmw 270 -8\nbsf 9 bsr 12 bsrq 63\nbottombit 3 15 16')"
+	# GNU C inline asm on aarch64 (compiler/casm_a64.inc). Encodings: every line of
+	# test/casm_a64_encodings.s against llvm-mc, byte for byte (SKIPs without
+	# llvm-mc). Operands: dropbear's sntrup761.c helper templates (=r, +r, +&r, =&r,
+	# tied, 16/32/64-bit, a three-output block, a named operand, an "i") checked
+	# against their portable C over an input sweep -- the aarch64 build runs the asm,
+	# the x86-64 build the portable arms, and both must print gcc's numbers.
+	tools/check_casm_a64_encodings.sh ./$(COMPILER) $(TESTTMP)/casma64enc
+	./$(COMPILER) --target=aarch64 test/casm_a64_operands.c $(TESTTMP)/casma64op_a64
+	tools/expect_same.sh casma64op_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/casma64op_a64)" "$$(printf '16 unary bad=0 sum=69\n64 unary bad=0 sum=49697999\nbinary bad=0 sum=72585166')"
+	./$(COMPILER) test/casm_a64_operands.c $(TESTTMP)/casma64op_x64
+	tools/expect_same.sh casma64op_x64 "$$($(TESTTMP)/casma64op_x64)" "$$(printf '16 unary bad=0 sum=69\n64 unary bad=0 sum=49697999\nbinary bad=0 sum=72585166')"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,

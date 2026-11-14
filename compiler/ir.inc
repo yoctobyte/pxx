@@ -12745,7 +12745,8 @@ begin
     end;
 
     AN_ASM:
-      Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, 0, Ord(tyUnknown));
+      { IRIVal carries the aarch64 binding block (casm_a64.inc); 0 elsewhere }
+      Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, ASTIVal[node], Ord(tyUnknown));
 
     AN_IDENT:
     begin

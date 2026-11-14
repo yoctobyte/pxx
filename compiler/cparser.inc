@@ -9706,6 +9706,160 @@ begin
   Result := blk;
 end;
 
+{$ifndef PXX_NO_AARCH64}
+{ GNU C inline asm on aarch64 (casm_a64.inc has the design). Operands are
+  pinned to x10..x15 -- caller-saved, and untouched by the codegen helpers
+  that fill and drain them (EmitLoadVarA64Dest/EmitStoreVarA64 use x0, x1,
+  x9, d0) -- the template is encoded now, and codegen moves the values. Every
+  operand gets a register of its own (a tied input shares its output's), so
+  "&" holds by construction, as on x86. }
+function CAsmBuildBlockA64: Integer;
+var
+  i, j, reg, tk, sz, poolNext, startOff, blkLen, b, first, nIn, nOut: Integer;
+  used: array[0..31] of Boolean;
+  opReg, tmpSym: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  rest, nm, cls: AnsiString;
+  is64: Boolean;
+  immV: Int64;
+  head, tail, nd, idn, asn, sq, blk: Integer;
+begin
+  for i := 0 to 31 do used[i] := False;
+  { clobbers: x0..x17 may be named (nothing lives in them across a
+    statement); a callee-saved register would need saving and is refused }
+  rest := CAsmClobRegs;
+  while rest <> '' do
+  begin
+    i := Pos(' ', rest);
+    if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
+    else begin nm := rest; rest := ''; end;
+    if nm = '' then Continue;
+    if not CA64RegOf(nm, reg, is64) then
+      Error('C: aarch64 inline asm clobbers "' + nm + '", which is not a general register');
+    if reg > 17 then
+      Error('C: aarch64 inline asm clobbers "' + nm + '", a callee-saved register, which'
+            + ' this frontend does not save around the block -- x0..x17 may be clobbered');
+    used[reg] := True;
+  end;
+
+  poolNext := 10;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    opReg[i] := -1;
+    tmpSym[i] := -1;
+    if CAsmOps[i].TiedTo >= 0 then Continue;
+    cls := CAsmOps[i].Cons;
+    if cls = 'i' then Continue;
+    if (cls <> 'r') and (cls <> 'g') and (cls <> 'rm') and (cls <> 'mr') then
+      Error('C: aarch64 inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
+            + ' -- this target reads "r" (and "g"/"rm" as a register) and the immediate "i"');
+    while (poolNext <= 15) and used[poolNext] do Inc(poolNext);
+    if poolNext > 15 then
+      Error('C: aarch64 inline asm needs more registers than this frontend pins'
+            + ' (x10..x15, less any clobbered)');
+    opReg[i] := poolNext;
+    used[poolNext] := True;
+  end;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+
+  { a temporary per register operand, the width of its C type }
+  CA64OpCount := CAsmOpCount;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    tk := ASTTk[CAsmOps[i].Expr];
+    sz := TypeSlotSize(IntToTypeKind(tk));
+    CA64OpName[i] := CAsmOps[i].SymName;
+    CA64OpSz[i] := sz;
+    CA64OpReg[i] := opReg[i];
+    CA64OpImm[i] := 0;
+    if opReg[i] < 0 then
+    begin
+      if not CAsmImmValue(CAsmOps[i].Expr, immV) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant');
+      CA64OpImm[i] := immV;
+      Continue;
+    end;
+    if (IntToTypeKind(tk) = tyDouble) or (IntToTypeKind(tk) = tySingle) then
+      Error('C: aarch64 inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
+            + ' only general registers are supported');
+    if (sz <> 1) and (sz <> 2) and (sz <> 4) and (sz <> 8) then
+      Error('C: inline asm operand is ' + AIntToStr(sz) + ' bytes wide, which does not fit a register');
+    tmpSym[i] := AllocVar('', IntToTypeKind(tk));
+  end;
+
+  startOff := AsmBytesCount;
+  CA64EncodeTemplate(CAsmTemplate);
+  blkLen := AsmBytesCount - startOff;
+
+  { the bindings codegen replays: inputs (tied ones included: a "+r" input
+    loads the output's register), then outputs }
+  b := CAsmA64BlkCount;
+  Inc(CAsmA64BlkCount);
+  SetLength(CAsmA64BlkFirst, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkIn, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkOut, CAsmA64BlkCount);
+  first := CAsmA64BindCount;
+  nIn := 0; nOut := 0;
+  for j := 0 to 1 do
+    for i := 0 to CAsmOpCount - 1 do
+    begin
+      if opReg[i] < 0 then Continue;
+      if (j = 0) and (i < CAsmOutCount) then Continue;
+      if (j = 1) and (i >= CAsmOutCount) then Continue;
+      Inc(CAsmA64BindCount);
+      SetLength(CAsmA64BindSym, CAsmA64BindCount);
+      SetLength(CAsmA64BindReg, CAsmA64BindCount);
+      CAsmA64BindSym[CAsmA64BindCount - 1] := tmpSym[i];
+      CAsmA64BindReg[CAsmA64BindCount - 1] := opReg[i];
+      if j = 0 then Inc(nIn) else Inc(nOut);
+    end;
+  CAsmA64BlkFirst[b] := first;
+  CAsmA64BlkIn[b] := nIn;
+  CAsmA64BlkOut[b] := nOut;
+
+  { tmp = expr for each input, the block, expr = tmp for each output }
+  head := -1; tail := -1;
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+  begin
+    if tmpSym[i] < 0 then Continue;
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := CAsmOps[i].Expr;
+    ASTTk[asn] := ASTTk[idn];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    if head < 0 then head := sq else ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  nd := AllocNode(AN_ASM);
+  ASTLeft[nd] := startOff;
+  ASTRight[nd] := blkLen;
+  ASTIVal[nd] := b + 1;
+  sq := AllocNode(AN_SEQ);
+  ASTLeft[sq] := nd; ASTRight[sq] := -1;
+  if head < 0 then head := sq else ASTRight[tail] := sq;
+  tail := sq;
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := CAsmOps[i].Expr; ASTRight[asn] := idn;
+    ASTTk[asn] := ASTTk[CAsmOps[i].Expr];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;
+  Result := blk;
+end;
+{$endif}
+
 procedure CWarnFuncScopeThreadLocal(sawStatic: Boolean);
 { The sixth reason, and the only one that is not an answer from the allocator.
 
@@ -10164,6 +10318,13 @@ begin
       { x86-64 encodes bytes here; i386 renders the same parse as text lines for
         asmtext_386.inc (AttSinkText). Every other target has no reader for
         this syntax at all and says so. }
+      {$ifndef PXX_NO_AARCH64}
+      if TargetArch = TARGET_AARCH64 then
+      begin
+        Result := CAsmBuildBlockA64;
+        Exit;
+      end;
+      {$endif}
       if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
       begin
         { inside a routine of an IMPORTED HEADER: accept and poison (see
@@ -10173,13 +10334,13 @@ begin
         begin
           if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
           ProcAsmPoison[CurProc] := 'its body holds C inline asm, which is only supported on'
-              + ' x86-64 and i386, not ' + TargetArchName(TargetArch);
+              + ' x86-64, i386 and aarch64, not ' + TargetArchName(TargetArch);
           node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
           Result := node;
           Exit;
         end;
         Error('C: inline asm with a non-empty template is only supported on'
-              + ' x86-64 and i386, not ' + TargetArchName(TargetArch));
+              + ' x86-64, i386 and aarch64, not ' + TargetArchName(TargetArch));
       end;
       if CAsmOpCount > 0 then
       begin

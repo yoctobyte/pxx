@@ -441,6 +441,7 @@ AN_ASSIGN Right ASTLeft[pairNode]
 AN_ASSIGN Right ASTRight[pairNode]
 AN_ASSIGN Right AllocNode(AN_BINOP)
 AN_ASSIGN Right AllocNode(AN_INT_LIT)
+AN_ASSIGN Right CAsmOps[i].Expr
 AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[left]), ASTRight[node])
 AN_ASSIGN Right CConvertAsIfAssigned(declTk, ASTRight[asn])
 AN_ASSIGN Right CLIArrElem[cliBase + ei]
