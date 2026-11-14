@@ -1275,6 +1275,29 @@ begin
     name := 'PXX_OS_WINDOWS';
     PasDefine(name);
   end;
+  { The other kernels get one too, for the same narrow use -- above all the
+    compiler's own NativeKernel (defs.inc), which is how a compiler built for
+    a BSD makes programs for that BSD by default. }
+  if TargetKernel = KERNEL_FREEBSD then
+  begin
+    name := 'PXX_OS_FREEBSD';
+    PasDefine(name);
+  end;
+  if TargetKernel = KERNEL_NETBSD then
+  begin
+    name := 'PXX_OS_NETBSD';
+    PasDefine(name);
+  end;
+  if TargetKernel = KERNEL_DRAGONFLY then
+  begin
+    name := 'PXX_OS_DRAGONFLY';
+    PasDefine(name);
+  end;
+  if TargetKernel = KERNEL_MINIX then
+  begin
+    name := 'PXX_OS_MINIX';
+    PasDefine(name);
+  end;
   if TargetKernel = KERNEL_OPENBSD then
   begin
     name := 'PXX_OS_OPENBSD';

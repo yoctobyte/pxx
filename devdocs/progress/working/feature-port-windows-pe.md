@@ -451,3 +451,20 @@ overflow cannot run a handler). Next: threads, then sockets.
   the execute bit). Cosmetic: --version says host linux, cannot hash
   /proc/self/exe, and the UTF-8 em dash shows as mojibake on the ReactOS
   console (OEM code page).
+
+### 2026-11-14: native mode, and --os=nt
+
+- Without --target/--os the compiler now builds for its own CPU and OS
+  (NativeArch/NativeKernel in defs.inc, from the PXX_OS_* and CPU defines;
+  ApplyNativeKernel in compiler.pas). A Windows-built pascal26.exe writes
+  hello.exe by default; --version prints `host: x86-64 nt` and hashes its own
+  file. `--os=nt` is the name, `--os=windows` the alias (owner's call: report
+  NT, not an NT version).
+- winabi: /proc/self/exe = GetModuleFileNameW, other /proc paths ENOENT (Wine's
+  Z: exposed Linux /proc, and the output guard read the wrong fdinfo).
+- OutOpen creates with mode 0755 by raw openat (SysOpen passes mode 0, which
+  winabi turned into a read-only file the next compile could not reopen).
+- Checked: Wine (repeat compiles, --os=linux, --target=aarch64 from Windows),
+  ReactOS (CD layout D:\pxx), FreeBSD VM (pascal26 built --os=freebsd compiles
+  hello natively, twice). Linux output byte-identical to HEAD for 551 sampled
+  tests.

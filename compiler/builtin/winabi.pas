@@ -517,6 +517,27 @@ begin
     Result := 0;
     Exit;
   end;
+  { /proc/self/exe is this program's own file (so it can be opened and
+    hashed, as the compiler's --version does). Any other /proc path does not
+    exist, as on Windows -- under Wine drive Z: is the Unix root, and
+    /proc/self/... there is the WINE process's, which answered for ours
+    (the compiler's output guard read Wine's fdinfo and refused every
+    rebuild of an existing .exe). /proc/self/environ is served before this. }
+  if PathIs(path, @ProcExe[0], Length(ProcExe)) then
+  begin
+    n := W_GetModuleFileNameW(0, dst, WPATH);
+    if (n = 0) or (n >= WPATH) then begin Result := -LX_ENOENT; Exit; end;
+    PWord(dst + 2 * n)^ := 0;
+    Result := 0;
+    Exit;
+  end;
+  if (PByte(path)^ = 47) and (PByte(path + 1)^ = 112) and (PByte(path + 2)^ = 114)
+     and (PByte(path + 3)^ = 111) and (PByte(path + 4)^ = 99)
+     and ((PByte(path + 5)^ = 47) or (PByte(path + 5)^ = 0)) then       { /proc, /proc/... }
+  begin
+    Result := -LX_ENOENT;
+    Exit;
+  end;
   pre := 0;
   if (PByte(path)^ <> 47) and (dirfd <> LX_AT_FDCWD) then
   begin

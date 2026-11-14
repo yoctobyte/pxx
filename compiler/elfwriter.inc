@@ -8150,7 +8150,13 @@ begin
   lastSlash := 0;
   for i := 1 to Length(path) do
   begin
+{$ifdef PXX_OS_WINDOWS}
+    { a compiler built for Windows: argv[0] and typed paths use '\' too
+      (D:\pxx\compiler\pascal26.exe), and its ExeDir finds lib/ through it }
+    if (path[i] = '/') or (path[i] = '\') then
+{$else}
     if path[i] = '/' then
+{$endif}
       lastSlash := i;
   end;
   Result := '';
@@ -8170,7 +8176,11 @@ begin
   lastSlash := 0; lastDot := 0;
   for i := 1 to Length(path) do
   begin
+{$ifdef PXX_OS_WINDOWS}
+    if (path[i] = '/') or (path[i] = '\') then lastSlash := i;
+{$else}
     if path[i] = '/' then lastSlash := i;
+{$endif}
     if path[i] = '.' then lastDot := i;
   end;
   if lastDot <= lastSlash then lastDot := Length(path) + 1;

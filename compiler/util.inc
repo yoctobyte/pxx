@@ -376,11 +376,37 @@ end;
   old file is unlinked and the open retried; this is what ld does. Before
   this, the -26 came back as a descriptor, every write failed, and the
   report blamed the disk. Under FPC fpOpen answers -1 and leaves the code
-  in errno; the self-hosted sysopen answers -errno. }
+  in errno; the self-hosted sysopen answers -errno.
+  The file is created with mode 0755 (openat, raw): the SysOpen intrinsic
+  passes mode 0, which Linux turns into a mode-0 file until the writers'
+  fchmod 0755, but Windows (--os=windows, winabi) into a READ-ONLY file
+  that fchmod cannot change there -- and the next compile could not open
+  its own previous output. }
+{$ifndef FPC}
+function OutOpenRaw(const path: AnsiString): Integer;
+begin
+{$if defined(CPUX86_64)}
+  OutOpenRaw := __pxxrawsyscall(257, -100, Int64(PChar(path)), 577, 493, 0, 0);
+{$elseif defined(CPUAARCH64) or defined(CPU_RISCV32)}
+  OutOpenRaw := __pxxrawsyscall(56, -100, Int64(PChar(path)), 577, 493, 0, 0);
+{$elseif defined(CPU_ARM32)}
+  OutOpenRaw := __pxxrawsyscall(322, -100, Int64(PChar(path)), 577, 493, 0, 0);
+{$elseif defined(CPU_I386)}
+  OutOpenRaw := __pxxrawsyscall(295, -100, Int64(PChar(path)), 577, 493, 0, 0);
+{$else}
+  OutOpenRaw := sysopen(path, 577);
+{$endif}
+end;
+{$endif}
+
 function OutOpen(const path: AnsiString): Integer;
 var busy: Boolean; rc: Int64;
 begin
+{$ifdef FPC}
   Result := sysopen(path, 577);
+{$else}
+  Result := OutOpenRaw(path);
+{$endif}
 {$ifdef FPC}
   busy := (Result < 0) and (fpGetErrno = ESysETXTBSY);
   if busy then
@@ -402,7 +428,7 @@ begin
 {$elseif defined(CPU_I386)}
     rc := __pxxrawsyscall(301, -100, Int64(PChar(path)), 0, 0, 0, 0);
 {$endif}
-    Result := sysopen(path, 577);
+    Result := OutOpenRaw(path);
   end;
 {$endif}
 end;

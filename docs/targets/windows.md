@@ -5,8 +5,8 @@ order: 62
 
 # Windows (experimental)
 
-`--os=windows` writes a Windows x64 console executable (PE32+) from Pascal,
-C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux.
+`--os=windows` (or its other name `--os=nt`) writes a Windows x64 console
+executable (PE32+) from Pascal, C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux.
 
 ```sh
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
@@ -55,9 +55,13 @@ three ReactOS behaviours:
 
 The compiler itself builds for Windows (`--os=windows compiler/compiler.pas`)
 and works there: under Wine and inside ReactOS it compiled `hello.pas` to a
-Windows `.exe` that runs. Give it `--os=windows` (its default output is
-still a Linux ELF) and set `PXX_HOME` to a directory holding `lib/` and
-`compiler/builtin/` (where `winabi` lives).
+Windows `.exe` that runs. A compiler built this way makes Windows
+programs by default (`pascal26 hello.pas` writes `hello.exe`; `--os=linux`
+still gives a Linux ELF), and `--version` reports `host: x86-64 nt` (NT, whichever
+system provides it: Windows, ReactOS or Wine).
+It finds `lib/` and `compiler/builtin/` (where `winabi` lives) the usual
+way: installed as `<root>/compiler/pascal26.exe` beside `<root>/lib`, or
+through `PXX_HOME`.
 
 Known differences there:
 

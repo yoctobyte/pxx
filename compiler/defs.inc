@@ -6817,6 +6817,7 @@ var
     overrides. Set explicitly = PlatformExplicit True (suppresses derivation). }
   TargetPlatform : Integer;
   PlatformExplicit : Boolean;
+  KernelExplicit : Boolean;   { an --os= was given; else the native OS applies (ApplyNativeKernel) }
   { RTL-over-libc lowering mode (--rtl-libc). Routes IR_SYSCALL through libc's
     syscall(3) instead of emitting the raw `syscall` instruction, so the binary
     reaches the kernel only through the system C library -- the supported
@@ -9332,15 +9333,74 @@ begin
   TlsViaTeb := TargetKernel = KERNEL_WINDOWS;
 end;
 
+{ The platform THIS compiler binary was built for: what a compile targets
+  when no --target / --os says otherwise ("native mode"), and what
+  --version reports. Decided by the defines the build of the compiler had,
+  so a compiler built with --os=windows makes Windows programs by default
+  and one built with --target=aarch64 makes aarch64 ones. The Linux x86-64
+  build (and an FPC-built seed) answers what it always did. }
+function NativeArch: Integer;
+begin
+{$ifdef CPUAARCH64}
+  NativeArch := TARGET_AARCH64;
+{$else}
+{$ifdef CPUI386}
+  NativeArch := TARGET_I386;
+{$else}
+{$ifdef CPUARM}
+  NativeArch := TARGET_ARM32;
+{$else}
+  NativeArch := TARGET_X86_64;
+{$endif}
+{$endif}
+{$endif}
+end;
+
+function NativeKernel: Integer;
+begin
+  NativeKernel := KERNEL_LINUX;
+{$ifdef PXX_OS_WINDOWS}
+  NativeKernel := KERNEL_WINDOWS;
+{$endif}
+{$ifdef PXX_OS_FREEBSD}
+  NativeKernel := KERNEL_FREEBSD;
+{$endif}
+{$ifdef PXX_OS_NETBSD}
+  NativeKernel := KERNEL_NETBSD;
+{$endif}
+{$ifdef PXX_OS_OPENBSD}
+  NativeKernel := KERNEL_OPENBSD;
+{$endif}
+{$ifdef PXX_OS_DRAGONFLY}
+  NativeKernel := KERNEL_DRAGONFLY;
+{$endif}
+{$ifdef PXX_OS_MINIX}
+  NativeKernel := KERNEL_MINIX;
+{$endif}
+end;
+
+function ArchName(a: Integer): AnsiString;
+begin
+  if a = TARGET_I386 then ArchName := 'i386'
+  else if a = TARGET_AARCH64 then ArchName := 'aarch64'
+  else if a = TARGET_ARM32 then ArchName := 'arm32'
+  else ArchName := 'x86-64';
+end;
+
+function KernelOsNameOf(k: Integer): AnsiString;
+begin
+  if k = KERNEL_OPENBSD then KernelOsNameOf := 'openbsd'
+  else if k = KERNEL_NETBSD then KernelOsNameOf := 'netbsd'
+  else if k = KERNEL_DRAGONFLY then KernelOsNameOf := 'dragonfly'
+  else if k = KERNEL_MINIX then KernelOsNameOf := 'minix'
+  else if k = KERNEL_WINDOWS then KernelOsNameOf := 'nt'
+  else if k = KERNEL_FREEBSD then KernelOsNameOf := 'freebsd'
+  else KernelOsNameOf := 'linux';
+end;
+
 function KernelOsName: AnsiString;
 begin
-  if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
-  else if TargetKernel = KERNEL_NETBSD then KernelOsName := 'netbsd'
-  else if TargetKernel = KERNEL_DRAGONFLY then KernelOsName := 'dragonfly'
-  else if TargetKernel = KERNEL_MINIX then KernelOsName := 'minix'
-  else if TargetKernel = KERNEL_WINDOWS then KernelOsName := 'windows'
-  else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
-  else KernelOsName := 'linux';
+  KernelOsName := KernelOsNameOf(TargetKernel);
 end;
 
 {$ifdef FPC}

@@ -347,6 +347,18 @@ function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
   They answer before any source file is required — `pxx --where` with no
   arguments is exactly the case someone reaches for when units are not found. }
 
+procedure ApplyNativeKernel;
+{ Native mode: with no --os=, a hosted build for this compiler's own CPU
+  targets this compiler's own OS -- the compiler built for Windows makes
+  .exe files, the one built for FreeBSD makes FreeBSD programs. Another
+  --target= (or an ESP/WASI platform) keeps Linux, the cross default. On
+  the Linux build NativeKernel is KERNEL_LINUX and this changes nothing. }
+begin
+  if KernelExplicit then Exit;
+  if (TargetPlatform = PLATFORM_POSIX) and (TargetArch = NativeArch) then
+    TargetKernel := NativeKernel;
+end;
+
 procedure DeriveTargetPlatform;
 { Settle TargetPlatform from the target, unless --platform= set it explicitly.
 
@@ -690,9 +702,11 @@ procedure PrintBuildIdentity(const indent: AnsiString);
 var sha, dir, root, text, line, ver, src, rel: AnsiString; i, n: Integer; found: Boolean;
 begin
   sha := BidFileSha256('/proc/self/exe');
+  if sha = '' then sha := BidFileSha256(ParamStr(0));
+  if sha = '' then sha := BidFileSha256(ParamStr(0) + '.exe');
   if sha = '' then
   begin
-    WriteLn(indent, 'build:       (cannot read /proc/self/exe to hash it)');
+    WriteLn(indent, 'build:       (cannot find this binary to hash it: no /proc/self/exe, and argv[0] is not a path to it)');
     Exit;
   end;
   WriteLn(indent, 'build:       sha256 ', Copy(sha, 1, 12), '   (sha256sum of this binary, first 12)');
@@ -760,7 +774,8 @@ begin
   WriteLn('pxx (pascal26) — self-hosting Pascal-dialect compiler');
   WriteLn('  generation:  ', PXX_GENERATION, '   (the value {$IF PXX_VERSION >= n} tests)');
   WriteLn('  frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace');
-  WriteLn('  host arch:   x86-64 linux');
+  WriteLn('  host:        ', ArchName(NativeArch), ' ', KernelOsNameOf(NativeKernel),
+          '   (what this binary runs on, and the default target)');
   PrintBuildIdentity('  ');
 end;
 
@@ -771,7 +786,10 @@ procedure PrintTargetList;
 var i: Integer;
 begin
   WriteLn('target                  runs on this host   notes');
-  WriteLn('x86_64 (default)        yes                 native');
+  if NativeArch = TARGET_X86_64 then
+    WriteLn('x86_64 (default)        yes                 native')
+  else
+    WriteLn('x86_64                  on an x86-64 host');
 {$ifdef PXX_NO_I386}
   WriteLn('i386                    (not built)         backend compiled out (-dPXX_NO_I386)');
 {$else}
@@ -786,6 +804,9 @@ begin
   WriteLn('riscv32                 via qemu-riscv32');
   WriteLn('xtensa                  no                  ESP32/S2/S3 — flash it');
   WriteLn('wasm32                  via wasmtime        WebAssembly (WASI): Pascal, C and Nil Python');
+  WriteLn;
+  WriteLn('default: ', ArchName(NativeArch), ' ', KernelOsNameOf(NativeKernel),
+          ' (this compiler''s own platform; --target= and --os= choose another)');
   WriteLn;
   WriteLn('ESP SoC names (imply their arch, and --platform=esp):');
   Write('  ');
@@ -897,6 +918,7 @@ begin
     before the main body's derivation, so without this it reports the PAL
     of a pre-derivation default rather than the one a compile would use. }
   DeriveTargetPlatform;
+  ApplyNativeKernel;
   AddDefaultPasUnitDirs;
   WriteLn('Pascal unit search roots, in order (-Fu goes in FRONT of these):');
   if PasUnitDirCount = 0 then
@@ -1205,13 +1227,16 @@ begin
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');
   WriteLn('  -g                    DWARF line info (x86-64)');
-  WriteLn('  --target=<t>          cross-compile; see --list-targets');
+  WriteLn('  --target=<t>          cross-compile; see --list-targets. Without');
+  WriteLn('                        --target/--os: this compiler''s own CPU and OS');
+  WriteLn('                        (--version shows it as host:)');
   WriteLn('  -Fu<dir>              add a Pascal unit search root');
   WriteLn('  -Fi<dir>              add a {$I} include search root');
   WriteLn('  -I<dir>               add a C include search root');
   WriteLn('  -include <file>       preprocess <file> before the primary C source');
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
+  WriteLn('  --os=linux            Linux output (the default of the Linux build)');
   WriteLn('  --os=freebsd          FreeBSD/amd64 or arm64 output (EXPERIMENTAL): raw');
   WriteLn('                        syscalls via an in-program Linux-ABI translator;');
   WriteLn('                        alias --platform=freebsd');
@@ -1223,8 +1248,9 @@ begin
   WriteLn('                        the same design');
   WriteLn('  --os=minix            Minix 3.4/i386 output (EXPERIMENTAL): the same');
   WriteLn('                        design over Minix message passing; no threads');
-  WriteLn('  --os=windows          Windows x64 console .exe (EXPERIMENTAL): the same');
-  WriteLn('                        design over kernel32 and ws2_32');
+  WriteLn('  --os=nt, --os=windows Windows x64 console .exe (EXPERIMENTAL): the same');
+  WriteLn('                        design over kernel32 and ws2_32; the default');
+  WriteLn('                        output name gets .exe');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1587,7 +1613,7 @@ begin
   WarnIgnoredDirectives := False;
   UsesEdgeCount := 0;
   DumpRTTI := False;
-  TargetArch := TARGET_X86_64;
+  TargetArch := NativeArch;   { native mode: this compiler's own CPU unless --target= }
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
   XtensaSoftMulHigh := False;
@@ -1632,7 +1658,8 @@ begin
   RtlOverLibc := False;
   RtlRawExplicit := False;
   KernelLibc := False;
-  TargetKernel := KERNEL_LINUX;
+  TargetKernel := KERNEL_LINUX;   { ApplyNativeKernel settles it after the options }
+  KernelExplicit := False;
   FbsdSyscallProcIdx := -1;
   LibcSyscallProcIdx := -1;
   LibcErrnoProcIdx := -1;
@@ -1978,10 +2005,12 @@ begin
       RtlOverLibc := True;
       Inc(i);
     end
-    else if option = '--os=windows' then
+    else if (option = '--os=nt') or (option = '--os=windows') then
     begin
-      { EXPERIMENTAL: see KERNEL_WINDOWS in defs.inc. }
+      { EXPERIMENTAL: see KERNEL_WINDOWS in defs.inc. 'nt' is the name
+        --version reports; 'windows' is the alias people search for. }
       TargetKernel := KERNEL_WINDOWS;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -1990,6 +2019,7 @@ begin
     begin
       { EXPERIMENTAL: see KERNEL_MINIX in defs.inc. }
       TargetKernel := KERNEL_MINIX;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -1998,6 +2028,7 @@ begin
     begin
       { EXPERIMENTAL: see KERNEL_DRAGONFLY in defs.inc. }
       TargetKernel := KERNEL_DRAGONFLY;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -2006,6 +2037,7 @@ begin
     begin
       { EXPERIMENTAL: see KERNEL_NETBSD in defs.inc. }
       TargetKernel := KERNEL_NETBSD;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -2014,6 +2046,7 @@ begin
     begin
       { EXPERIMENTAL: see KERNEL_OPENBSD in defs.inc. }
       TargetKernel := KERNEL_OPENBSD;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -2024,6 +2057,7 @@ begin
         translator (compiler/builtin/fbsdabi.pas). The PAL stays posix.
         feature-port-freebsd-native }
       TargetKernel := KERNEL_FREEBSD;
+      KernelExplicit := True;
       TargetPlatform := PLATFORM_POSIX;
       PlatformExplicit := True;
       Inc(i);
@@ -2031,6 +2065,7 @@ begin
     else if option = '--os=linux' then
     begin
       TargetKernel := KERNEL_LINUX;
+      KernelExplicit := True;
       Inc(i);
     end
     else if option = '--platform=posix' then
@@ -2872,6 +2907,7 @@ begin
     posix. The platform axis stays independent: an explicit --platform overrides
     this (e.g. a hosted RTOS on xtensa later). }
   DeriveTargetPlatform;
+  ApplyNativeKernel;
   { A NAMED xtensa chip (--target=esp32 / esp32s2 / esp32s3) on the IDF
     platform means WINDOWED unless --xtensa-abi says otherwise. ESP-IDF on
     every xtensa chip enters app_main with CALLX8 and expects RETW, so the Call0
@@ -3232,6 +3268,7 @@ begin
     Never the input itself — that overwrote the source with the binary. }
   outFile := GetFilePath(inFile) + GetFileBaseName(inFile);
 {$endif}
+  if TargetKernel = KERNEL_WINDOWS then outFile := outFile + '.exe';
   if ParamCount >= i + 1 then
   begin
     { An OUTPUT PATH that starts with `-` is a mistyped flag, not a filename.
