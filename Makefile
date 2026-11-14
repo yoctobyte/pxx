@@ -19595,6 +19595,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_overaligned.c $(TESTTMP)/c_fs_ovalign.o > /dev/null
 	gcc -no-pie -o $(TESTTMP)/c_fs_ovalign test/c_freestanding_overaligned_main.c $(TESTTMP)/c_fs_ovalign.o
 	tools/expect_same.sh c_fs_ovalign "$$($(TESTTMP)/c_fs_ovalign)" "mods 0"
+	# The heap arena is mapped MAP_NORESERVE (VmFlags `nr`), so a small guest does
+	# not refuse a 256 MiB reservation that is never touched.
+	# bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program
+	./$(COMPILER) test/heap_arena_noreserve.pas $(TESTTMP)/heap_arena_nr26 > /dev/null
+	tools/expect_same.sh heap_arena_nr26 "$$($(TESTTMP)/heap_arena_nr26)" "arena TRUE noreserve TRUE xy"
+	./$(COMPILER) --target=i386 test/heap_arena_noreserve.pas $(TESTTMP)/heap_arena_nr_i386 > /dev/null
+	tools/expect_same.sh heap_arena_nr_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/heap_arena_nr_i386)" "arena TRUE noreserve TRUE xy"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,

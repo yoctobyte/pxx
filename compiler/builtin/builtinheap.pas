@@ -1420,17 +1420,23 @@ begin
     frames under EnsureTokCapacity, before this. }
   Result := WasmArenaBase(len);
 {$elseif defined(CPUX86_64)}
-  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
+  { flags = MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE = $4022. NORESERVE because
+    the arena is a reservation, not usage: without it Linux's overcommit
+    heuristic accounts the whole 256 MiB at map time, and a small guest or a
+    swapless router refuses it (the halving retry in PXXAlloc then catches
+    it, at the cost of smaller arenas). The BSD, Minix and Windows
+    translators drop the bit. bug-a-the-heap-arena-reserves-256-mib-... }
+  Result := __pxxrawsyscall(9, 0, len, 3, $4022, -1, 0);
 {$elseif defined(CPUAARCH64)}
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+  Result := __pxxrawsyscall(222, 0, len, 3, $4022, -1, 0);
 {$elseif defined(CPU_ARM32)}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+  Result := __pxxrawsyscall(192, 0, len, 3, $4022, -1, 0);
 {$elseif defined(CPU_I386)}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+  Result := __pxxrawsyscall(192, 0, len, 3, $4022, -1, 0);
 {$elseif defined(CPU_RISCV32)}
   { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
-    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE. }
+  Result := __pxxrawsyscall(222, 0, len, 3, $4022, -1, 0);
 {$elseif defined(CPU_XTENSA)}
   { hosted linux (qemu-user). TWO numbers differ from every arm above and BOTH
     were measured under qemu-xtensa 10.2.1, not read off a table:

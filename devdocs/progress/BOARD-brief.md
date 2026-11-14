@@ -5,79 +5,84 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:17 blocked:9 backlog:60 backlog-umbrella:14 backlog-core:166 backlog-nilpy:177 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:2 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4172 rejected:90`
+`working:3 unfinished:51 blocked:8 backlog:4 backlog_new:1 backlog-umbrella:14 backlog-core:165 backlog-nilpy:99 backlog-tools:72 backlog-pascal:14 backlog-decide:48 backlog-libs:28 backlog-cfront:17 backlog-web:9 backlog-windows:3 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4398 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions` [A] — owner: frankb-8e
-- `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
-- `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
-- `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
-- `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
-- `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
-- `bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand` [P] — owner: frankH
-- `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
-- `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
-- `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
-- `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
-- `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
-- `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
-- `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
-- `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
-- `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A] — owner: frankb-8e
-- `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
-- `feature-n-a-non-allocating-restricted-thunk-for-an-isr` [N] — owner: frankh-c0
-- `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
-- `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
-- `feature-pal-esp-posix-fd-semantics` [B+S] — owner: frankS
-- `feature-pascal-corpus-expansion` [P] — owner: frankD
-- `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankS
-- `feature-pascal-corpus-generics` [P] — owner: frankS
-- `feature-pascal-corpus-oop` [P] — owner: frank-rust
-- `feature-pascal-management-operators-copy-and-addref` [P] — owner: frankA
-- `feature-pascal-management-operators-nested-and-array` [P] — owner: frankA
-- `feature-tls-provider-abstraction` [B] — owner: frankH
-- `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A] — owner: frank-subcoord
-- `perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program` [N] — owner: franks-5b
-- `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
-- `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
-- `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
+- `feature-port-freebsd-native` [A] — owner: pxx2-bsd
+- `feature-port-libc-family-openbsd-netbsd-minix` [A] — owner: pxx2-bsd
+- `feature-port-windows-pe` [M] — owner: the kernels session (BSD/Minix/OpenBSD ports)
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (51) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions` [A]
+- `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
+- `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
+- `bug-n-os-environ-and-os-sep-are-not-values` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
+- `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P]
+- `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P]
+- `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P]
+- `bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand` [P]
+- `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — blocked-by: bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct
+- `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P]
+- `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P]
+- `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T]
 - `docs-devnotes-ai-assisted-build` [D]
+- `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — blocked-by: refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- `feature-a-dynamic-array-of-frozen-strings` [A] — blocked-by: decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
+- `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A]
+- `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A]
+- `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A]
+- `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S]
 - `feature-b-buffered-text-io-and-settextbuf` [B]
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C]
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-dynamic-compiler-tables` [A]
+- `feature-n-a-non-allocating-restricted-thunk-for-an-isr` [N]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-opt-heap-per-thread-cache` [A+O]
+- `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O]
+- `feature-pal-esp-posix-fd-semantics` [B+S]
+- `feature-pascal-corpus-expansion` [P]
+- `feature-pascal-corpus-fpc-testsuite` [P]
+- `feature-pascal-corpus-generics` [P] — blocked-by: bug-a-a-hand-built-com-interface-cannot-be-called, bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
+- `feature-pascal-corpus-oop` [P]
+- `feature-pascal-management-operators-copy-and-addref` [P]
+- `feature-pascal-management-operators-nested-and-array` [P]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
+- `feature-tls-provider-abstraction` [B]
+- `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A]
+- `perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program` [N]
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P]
+- `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A]
+- `refactor-a-one-program-driver-prologue-for-every-frontend` [A]
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
+- `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — blocked-by: decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 - `feature-n-import-threading-should-imply-threadsafe` [N] — blocked-by: decide-should-a-python-program-that-imports-threading-compile-as-written
-- `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 581, ranked
+## Ready — top 30 of 488, ranked
 
+- `[p 95] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones (unblocks 1)
+- `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
+- `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
@@ -86,27 +91,24 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
-- `[p 80] [N]` bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw
+- `[p 80] [A]` feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross (unblocks 1)
+- `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
+- `[p 75] [A]` bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 (unblocks 1)
+- `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
+- `[p 75] [P]` feature-pascal-management-operators-copy-and-addref (unblocks 1)
+- `[p 75] [P]` feature-pascal-management-operators-nested-and-array (unblocks 1)
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
-- `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
-- `[p 75] [N]` bug-n-an-unused-import-edge-makes-a-method-receive-an-instance-of-the-wrong-class
-- `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
+- `[p 75] [P]` feature-pascal-corpus-expansion
+- `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
+- `[p 70] [A]` feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident (unblocks 2)
+- `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
+- `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
-- `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
-- `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
-- `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
-- `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
-- `[p 70] [N]` bug-n-a-staticmethod-called-through-cls-raises-attributeerror
-- `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
-- `[p 70] [N]` bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
-- `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- `[p 70] [N]` bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 
-_551 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_458 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

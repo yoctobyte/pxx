@@ -1,0 +1,1766 @@
+---
+track: P
+prio: 65
+owner: unassigned
+blocked-by: [bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope, bug-a-a-hand-built-com-interface-cannot-be-called]
+status: unfinished
+type: feature
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` COMPILES AND RUNS as of 2026-09-09 (it printed `defaults ok`, rc 0, at binary 4b5ee0c8e11e) but COMPILING IS NOT WORKING: `TComparer<LongInt>.Default` answers **nil** where fpc answers a live comparer (-1/1/0), because a `static` class function's ADDRESS still carries pxx's hidden Self, so rtl-generics' dispatch through a plain function pointer shifts every argument by one -- the static-Self ABI was ONE wall and it is FIXED (bug-p-a-static-class-functions-address-carries-a-hidden-self, done, b0d53c73a) and it did NOT clear the nil. The wall actually under it is measured and filed: bug-a-a-hand-built-com-interface-cannot-be-called -- pxx's interface value is the INSTANCE with the IMT recovered from its RTTI blob, FPC's value IS the IMT pointer, and rtl-generics reaches every comparer through a hand-built table. 60-line repro, and the positive control is the exact mirror: `IFoo(Pointer(anObject))` works under pxx and dies with RTE 216 under fpc -- the wall was a record's static class function registering Self differently at its declaration and its implementation, so the impl minted a second proc row and a specialized body bound to the bodyless one; `uses Generics.Collections` NOW reaches `unknown type: PT` at collections.pas:120/123 (872 mints -> 203) since the runaway was fixed; before that it reached `too many deferred specializations`, with `TEnumerator$PT` minted 55 times. THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and `p.nspec` naming the pump: rung N+1's substitution IS rung N's alias. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. FIXED (bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves, done): the cycle was a nested class's method impl matched by the LAST component of its qualified path, so specializing the unit-level TEnumerator<T> scanned TQueue's nested body and minted a TQueue nobody asked for. The wall left is frankZ's unresolved PT. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
+---
+
+# rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
+
+- **Type:** feature (compat — generics × classes × interfaces)
+- **Track:** P — tag: compat
+- **Status:** claimed (frankS). Not blocked. Two walls, one per driver —
+  `unresolved forward: TInstance.CreateSelector` (Defaults) and `too many
+  deferred specializations` (Collections). Rungs 1+2 green.
+- **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
+  [[feature-pascal-corpus-oop]].
+
+## Why this rung
+~9.5k LOC (generics.collections/defaults/hashes/helpers/memoryexpanders): generic
+classes, `IComparer<T>`/`IEqualityComparer<T>` interface constraints, class
+constraints — the generics × classes × interfaces intersection nothing else
+touches. Stage dir prepared: /tmp/generics-stage (symlinks + inc/), driver g1.pp
+(TList<Integer> smoke).
+
+## Walls cleared during recon (b329 batch, landed)
+1. `{$I inc\file.inc}` backslash include paths (ExpandIncludes translates).
+2. `rtlconsts` unit (minimal FPC-compat message consts, lib/rtl/rtlconsts.pas).
+3. `array[Byte] of X` — small ordinal type as a whole index range.
+4. PUInt8/PInt8/PUInt16/PInt16/PUInt32/PInt32 builtin pointer names.
+5. LOCAL var-section initializers `var a: UInt32 = 1;` (ordinal/float consts via
+   the LocalInit prologue machinery; STRING literals still unsupported there —
+   they take a different decl path, small follow-up).
+6. Compound-assign STATEMENTS `a += e;` (expression side + IR already existed
+   for the C frontend).
+
+## The current wall
+`{$MACRO ON}` + `{$define mix_abc := <multi-line statement text>}` —
+FPC compile-time TEXT MACROS, used by generics.hashes' bottom-up Jenkins mixer
+(`mix_abc;` / `final_abc;` splice statement blocks). A lexer-level feature:
+store the replacement text at `{$define name := ...}`, splice it when the bare
+identifier appears. FPC also allows parameterless value macros. Scope carefully:
+macros interact with the include expander and the token pre-scan.
+
+## After that
+Unknown — generics themselves. pxx has "generic class in program" support; a
+full `TList<T>` with specialization-per-instantiation across UNITS is the real
+test. Expect walls in: `generic TList<T> = class` header syntax, `specialize`
+vs Delphi-mode implicit specialization, nested generic types
+(TDictionary<K,V>.TPair), interface constraints, TArray<T> = array of T.
+
+## Gate
+Suite: rtl-generics has FPC tests (packages/rtl-generics/tests). Same recipe as
+fpjson: stage dir + driver + tjrun-style walker once it compiles.
+
+## Recon continued (same night) — b330 landed
+7. `{$MACRO ON}` text macros: ExpandPasMacros textual pre-pass (elfwriter.inc,
+   runs after ExpandIncludes; guarded so only value-define sources pay). Bodies
+   flatten to one line, directives blank to spaces — line numbers preserved.
+8. Int8/Int16/Int32 as value-cast names (OrdinalNameToTk).
+9. RolDWord/RorDWord/RolQWord/RorQWord System rotates (__pxx soft-alias
+   helpers in builtin, UpCase/Pos pattern; prescan pull).
+
+## The NEXT wall (where this rung actually starts costing)
+`type TValueAnsiStringHelper = record helper for AnsiString` — TYPE HELPERS
+(generics.helpers.pas). A real language feature: helper method dispatch on
+plain types, `Self` = the value. After that: the generic classes themselves
+(TList<T>/TDictionary<K,V> across units, specialize, interface constraints).
+Both are full sessions, not walls.
+
+## Next-wall inventory (generics.defaults) — methods NAMED after TYPE KEYWORDS
+`class function Integer(constref ALeft, ARight: Integer): Integer;` etc — ~30
+each in TCompare/TEquals/THashFactory. Needs: member-NAME position accepting
+type-keyword tokens (tkInteger_T/tkLongWord_T/...; NOTE their SVal is empty —
+read via GetTokenStr, the class-body property path already does), impl headers
+`class function TCompare.Integer(...)`, and call sites `TCompare.Integer(a,b)`
+(selector paths guard on CurTok.Kind = tkIdent). Plus UNTYPED constref params
+(`constref ALeft, ARight): Integer`). Type helpers are DONE through statics
+(b331 v1+v2, see feature-pascal-type-helpers).
+
+## Recon round 3 (b332 landed) — and THE architectural wall
+10. `&keyword` escaped identifiers (lexer: '&'+letter = plain tkIdent, no
+    keyword lookup; '&777' stays octal).
+11. Methods NAMED after type keywords (`class function Integer(...)`) —
+    IsMethodNameTok at decl/impl/call-site name positions; names via
+    GetTokenStr (keyword tokens carry no SVal).
+12. `class of` FORWARD references mint a forward class row.
+13. PVariant builtin pointer name.
+
+**The wall recon stops at: generics.defaults selects comparers through RTTI**
+— PTypeInfo/PTypeData over TypeInfo(T), incl. TypeInfo of GENERIC PARAMS.
+pxx's TypeInfo() is enum-only today. NOT a decision — see the plan below; no
+fork, no byte-layout cloning.
+
+## 2026-07-14 — NO DECISION NEEDED. Settled approach: facade typinfo over our own blobs
+
+The apparent fork-or-clone dilemma dissolves on inspection. **Nothing real reads
+FPC's RTTI bytes directly.** Consumers — generics.defaults, fpjsonrtti,
+LFM/`TPersistent` streaming, mORMot-style serializers, the script embeds — reach
+RTTI through the `typinfo` UNIT's record declarations and accessors
+(`GetTypeData`, `GetPropInfo`, `GetEnumName`, `PropType`), and **those
+declarations live inside typinfo itself**. So we supply typinfo.
+
+Consequences:
+- **No byte-layout parity.** We are free to keep our own blob layout.
+- **No fork of Generics.Defaults.** The vendor source compiles unmodified
+  against our typinfo.
+- Layout only leaks if a library does pointer arithmetic PAST the published API.
+  Rare; deal with it if a corpus target actually does, not before.
+
+### The work (two items, both ordinary)
+1. **Widen `TypeInfo(T)`** beyond enums: emit a per-TYPE info blob for scalars,
+   strings, records, classes and (the one that matters here) GENERIC PARAMETERS
+   at specialization time. This is the real compiler gap and the only
+   interesting part. Track A/P.
+2. **`lib/rtl/typinfo.pas` facade**: declare FPC's `TTypeKind`/`PTypeInfo`/
+   `PTypeData`/`PPropInfo` API SHAPES and fill them from our blobs. Track B.
+   (The existing typinfo already does exactly this for enums — GetEnumName /
+   GetEnumValue / GetEnumNameCount — so this is growing a proven pattern, not a
+   new one.)
+
+Same facade unblocks [[feature-embed-dwscript-rtti]] and the RTTI->streaming->LFM
+line, which is why it is worth doing properly rather than shimming per corpus.
+
+## 2026-08-01 — item 1+2 LANDED: TypeInfo(T) widened + typinfo.pas facade
+
+Both halves of the settled plan above are done and verified (self-host
+fixedpoint + `testmgr --tier quick` green; `make test` running as the fuller
+confirm since this touches shared RTTI emission).
+
+**Compiler side (Track A/P, `compiler/defs.inc`, `symtab.inc`, `parser.inc`,
+`ir.inc`, `rtti_emit.inc`, `compiler.pas`):**
+- `TypeInfo(T)` now accepts scalars (Integer/Boolean/Char/Int64/QWord/Single/
+  Double/Extended/...), `string`/`AnsiString`/`ShortString`, any user CLASS,
+  and any user RECORD — not just enums. Enum `TypeInfo(TEnum)` is byte-for-byte
+  UNCHANGED (still yields the bare `PEnumRTTI` address) specifically so
+  fpjson's `GetEnumName`/`GetEnumNameCount` gate stays untouched — verified by
+  a regression check in the smoke test below.
+- New machinery: `RegisterTypeInfoReq` dedups each distinct (category, key)
+  `TypeInfo(T)` use at parse time; `EmitTypeInfoHeaders` (rtti_emit.inc) runs
+  right after `EmitRTTI` and builds one uniform 24-byte "PTypeInfo" header per
+  request — `{Kind:Int64; NamePtr:PString; DataPtr:Pointer}` — with `Kind`
+  mapped onto FPC's actual `TTypeKind` ordinals (`PxxTkToFPCKind`, kept
+  faithful to FPC's declared order on purpose, even though no byte-layout
+  parity is required — costs nothing, avoids surprises). `DataPtr` is nil for
+  scalars, and for class/record points at the ALREADY-existing `UClsRTTIOff[ci]`
+  blob (the same `TClassRTTI` / layout-descriptor typinfo already read via
+  `AN_CLASSREF`) — no new class/record blob format, pure reuse.
+- New sentinel base `TYPEINFO_REQ_DATAREF_BASE = 500000` (most negative of the
+  data-ref sentinel family, tested first in `compiler.pas`'s post-EmitRTTI
+  fixup pass — same pre-link-fixup convention as `CLASSREF_DATAREF_BASE` /
+  `RECORD_RTTI_DATAREF_BASE` / `ENUM_RTTI_DATAREF_BASE`).
+- **Generic parameters needed NO special handling.** pxx generics specialize
+  by literal TOKEN-STREAM substitution (`SpecializeStream` in parser.inc) —
+  `T` inside a template body is textually replaced by the concrete type's
+  spelling before the parser ever sees the specialized body. So `TypeInfo(T)`
+  inside `TBox<Integer>` is just `TypeInfo(Integer)` by the time the widened
+  TypeInfo() parsing runs. Verified end-to-end with a hand-written generic
+  class (see smoke test below): `TBox<Integer>.KindOfT` and
+  `TBox<AnsiString>.KindOfT` each report the correct FPC `TTypeKind` ordinal
+  for their specialization.
+
+**Library side (Track B, `lib/rtl/typinfo.pas`):**
+- Added `TTypeKind` (FPC's own 30-member enum, same declared order — cheap
+  fidelity, not required by the "no parity" decision but avoids surprises for
+  any vendor code doing `array[TTypeKind] of X` or a raw `Ord()` compare).
+- Added `TTypeInfoHdr` / `PTypeInfo` / `PTypeData` (`PTypeData = PTypeInfo`
+  for now — one header, no separate TTypeData split yet; see "Known gaps"
+  below) matching the compiler's new header layout exactly.
+- `GetEnumName`/`GetEnumNameCount`/the whole existing enum facade is
+  UNTOUCHED — enum `TypeInfo()` still returns a bare `PEnumRTTI`, not this new
+  header, on purpose (see compiler-side note above).
+
+**Verified with hand-written smoke tests** (not yet checked into `test/` —
+follow-up, see below):
+```pascal
+TypeInfo(Integer)  -> Kind=1  (tkInteger),  NamePtr^='Integer'
+TypeInfo(Boolean)  -> Kind=18 (tkBool),     NamePtr^='Boolean'
+TypeInfo(TAnimal)  -> Kind=15 (tkClass),    DataPtr -> the class's real TClassRTTI (GetClassName works through it)
+TypeInfo(TPoint)   -> Kind=13 (tkRecord)
+TypeInfo(TColor)   -> unchanged PEnumRTTI path, GetEnumName/GetEnumNameCount still work (regression check)
+generic TBox<T>.KindOfT calling TypeInfo(T):
+  TBox<Integer>.KindOfT    = 1  (tkInteger)
+  TBox<AnsiString>.KindOfT = 9  (tkAString)
+```
+
+**Process note:** briefly mis-suspected `case x of Ord(EnumConst): ...` was
+broken in this compiler and reflexively rewrote two functions to if/elseif
+chains as a "workaround" without testing the actual claim first. Caught (by
+the user) before it shipped: a 4-line repro proved `case`/`Ord()` labels work
+completely correctly, and the real error was an unrelated `const`-declared-
+inside-a-`var`-block syntax mistake in `defs.inc`. Reverted to the natural
+`case` form. No compiler bug here, no ticket needed — noted only so the
+mistake (reasoning instead of measuring) isn't repeated.
+
+### Known gaps / natural follow-ups (not blocking, noted for the next session)
+- **No `TTypeData` fields beyond `DataPtr`.** `GetTypeData` doesn't exist yet
+  as an FPC-shaped function (min/max/ordinal size for scalars, `PropCount`
+  etc for classes read straight off the class blob today). Add when a real
+  corpus target reads a specific field FPC's `TTypeData` has and ours
+  doesn't.
+- **generics.defaults itself not yet retried.** This session's remaining
+  budget went to verifying the widening in isolation (hand-written smoke
+  tests + the generic-specialization check above) rather than restaging
+  `/tmp/generics-stage` (which no longer exists — `find` on this box turned
+  up nothing) and re-running the vendor tree. generics.defaults expects
+  `ATypeInfo.Kind` as a DIRECT field read (confirmed by reading
+  `packages/rtl-generics/src/generics.defaults.pas` from a local FPC source
+  checkout) plus `array[TTypeKind] of TInstance` lookup tables and
+  `GetTypeData(ATypeInfo)` for extra fields (e.g. ordinal size) — the `Kind`
+  field and the `array[TTypeKind]` shape are both now supported by this
+  landing; `GetTypeData` beyond `DataPtr` is the likely next wall. Re-stage
+  per `tools/install_lib_candidates.sh` and retry as the next step.
+- **No `test/test_typeinfo_widen*.pas` checked in yet.** The smoke tests
+  above were hand-run from `/tmp` scratch, not committed as a gated regression
+  test. Should land as a real `test/` file wired into `testmgr` before this
+  ticket is considered done, so the widening itself is gated going forward
+  (not just fpjson's enum-only regression).
+- `test-fpjson` SKIPped locally (no fcl-json tree staged on this box —
+  `tools/install_lib_candidates.sh fcl-json` was not re-run this session) so
+  the "fpjson stays green" claim above rests on the unchanged-enum-codepath
+  argument + the regression check in the smoke test, not a fresh fpjson run.
+  Track T's watcher (or the next session, if it re-stages fcl-json) should
+  confirm.
+
+
+## 2026-08-16 — the ungated claim is now gated
+
+The "Known gaps" entry above said the widen test was never checked in. Half
+right, and the wrong half was the dangerous one: the file **was** committed with
+the feature (`95007e237`) — it was wired into **no target**, so nothing had run
+it for two weeks. A file in `test/` is not gated until a line in the Makefile
+runs it; `test-core` enumerates its tests explicitly, it does not glob them.
+
+Wired into `test-core` beside its enum sibling (`test_typeinfo_enum_b288`), same
+`-Fulib/rtl -Fulib/rtl/platform/posix` flags. The test is self-checking — it
+`Halt(1)`s on the first wrong `Kind` and prints `test_typeinfo_widen: OK`
+otherwise — so the assertion is one line. Verified green under both HEAD and the
+pinned binary; `gate.sh quick` GREEN.
+
+So the widening claim now rests on a gated test rather than on an
+unchanged-codepath argument. **`test-fpjson` is still SKIPped on this box** (no
+fcl-json tree staged), which is the remaining half of that gap — it needs
+`tools/install_lib_candidates.sh fcl-json` re-run here, or Track T's watcher to
+confirm it elsewhere.
+
+## 2026-08-16 — recon round 4: generics.defaults, four constant-initializer walls cleared
+
+Re-staged rtl-generics (symlinked from the local FPC checkout; the script has no
+rtl-generics target — it comes from `/home/rene/src/fpc-source`) and drove
+`uses generics.defaults` until the wall moved. It moved four times.
+
+**The ticket's stated wall was wrong, and cheaply so.** It named `{$MACRO ON}`
+text macros as what generics.defaults dies on. The macros expand correctly. A
+13-line repro with no macros in it fails identically — the real wall was that a
+typed record constant accepted ordinals and `nil` and nothing else.
+
+The misleading part is the diagnostic. `expected field name in record constant`
+points at the VALUE, one field past the actual gap, because ConstEval can neither
+evaluate nor CONSUME a string literal or an `@`, so the field loop desyncs by one
+and blames whatever token it lands on. It reads as a bug in the field-list parser
+and is nothing of the kind.
+
+### Cleared (landed, each with a differential test vs fpc 3.2.2)
+
+| # | wall | commit |
+| --- | --- | --- |
+| 14 | string / `@var` / `@proc` as a record-constant field value | `406a40dfa` |
+| 15 | `@TClass.Method` — method code address via the type name | `6e87c872e` |
+| 16 | (regression from 14) string arm must key on the field TYPE | `9cf91cf8d` |
+| 17 | `@` forms in a SCALAR const and an ARRAY-of-record element | `a43bd4d21` |
+
+Line 379 → 388 → 411 → 445 → 525.
+
+**Item 14's real content: the emitter was never the gap.** Init kinds 1
+(AN_STR_LIT), 2 (AN_PROCADDR) and 4 (AN_ADDR of an ident) were already
+implemented and already exercised — by `cparser.inc`, for C struct initializers.
+Same shared emitter, one frontend wired to it and the other not, so C could put a
+function address in a struct initializer while Pascal could not put one in a
+record constant. The fix was parser-side only.
+
+**And it is FOUR parse paths, not one.** Scalar record field, array-of-record
+field, scalar typed const, plus the routine-local twins — each had to be told
+separately, and fixing the first did not make the others work. The corpus found
+each by moving the wall; I did not predict any of them. All four now route
+through one `TryParseInitValForm`, so the next value form is added once.
+
+**Item 15** was refused as `cannot call non-static method on class type
+directly` — a CALL error on an expression that never asked to call. A class type
+is not in the sym table, so `@TB.Method` fell past every arm of the `@` handler
+into the lvalue path; the `@` was still on the stack, unexamined. With no object
+there is nothing to dispatch on, so it yields the static address of that class's
+own body even for a virtual method, matching FPC — which is precisely what makes
+the idiom useful, since it is how a VMT is built by hand.
+
+**Method names that are type keywords** (`@TCompare.Single`) needed
+`IsMethodNameTokAt`, an index-addressed lookahead form of the existing
+`IsMethodNameTok` sharing its token set. Note the measurement mattered here:
+the failing member was `Single`, not the `Int8` the ticket's own inventory would
+have led me to fix — `Int8` already worked.
+
+### The current wall (525) — measured, and NOT what the message says
+
+```
+error: base type not found: THashService$TDelphiHashFactory
+  near: TDelphiHashFactory class >>> THashService$TDelphiHashFactory private
+```
+
+First read as "a class nested inside a class, used as a base type". That is
+wrong, and worth recording as a misread rather than quietly corrected: `$` is
+pxx's SPECIALIZATION mangling, not nesting. The construct is
+`THashService<T: THashFactory> = class(THashService)` — a generic class whose
+base is the same-named NON-generic class.
+
+Narrowed with controls: a constrained parameter works, generic inheritance from
+a differently-named base works, and the pair fails with **no inheritance at
+all**. So the wall is that a generic and a non-generic class cannot share a
+name — pxx keys a class by name with no arity component, so one row overwrites
+the other. Filed as
+[[bug-p-a-generic-and-a-non-generic-class-cannot-share-a-name]] (p50), with the
+scope note that the real shape is arity-overloaded class names (FPC's
+`TDictionary` / `TDictionary<K,V>`), not a guard for this one pair.
+
+**CLEARED 2026-08-17** in `eda43dea7` — and it was not a name table. Two
+unrelated defects wore one symptom: a bare `X.M` impl header was handed to the
+template on a name match, and `SpecializeStream` rewrote the base-class
+reference so the specialization inherited from itself. Two controls separated
+them; the filed name-table scope was an inference from the error text and wrong.
+See that ticket for the record.
+
+### The wall now (635)
+
+```
+error: unknown type: array
+  near: FEqualityComparer_Pointer_Instance Pointer FEqualityComparerInstances >>> array TTypeKind
+```
+
+An inline `array[TTypeKind] of ...` type in a class FIELD declaration —
+an anonymous array type where only a named one is accepted. Unrelated to
+generics. Not started.
+
+### Side finding, filed separately
+
+Calling straight through a procedural-type cast — `TSelfFn(V.Field)(o)` — is
+`unexpected token`; assigning the cast to a variable first works. Hit twice while
+writing these repros. Not folded in; see
+[[bug-p-cannot-call-directly-through-a-procedural-type-cast]].
+
+### Note on the fpcunit/fpjson claim
+
+Untouched by this session and still resting on the argument recorded above, not
+a fresh run: `test-fpjson` is still SKIPped on this box (no fcl-json staged).
+
+### Wall 18 (line 635) — HALF cleared 2026-08-20 (frank3)
+
+The ticket named the wall as `array[TTypeKind]` "in a class FIELD declaration".
+Varying the shape showed that is two separate gaps wearing one error, and only
+the first is fixed here.
+
+**Gap 1 — an ordinal TYPE as a whole array index in a FIELD. FIXED.**
+`var F: array[TKind] of Integer` already worked: the var section parses bounds
+through `ParseArrayDimBounds`, which accepts `tkBoolean_T`, `tkChar_T`, a small
+ordinal (`array[Byte]`) and an enum type name as the entire index range. The
+three FIELD sites each carried their own inline `loVal := ConstEval; Expect('..');
+hiVal := ConstEval` copy, so a shape the var section took happily answered
+`not a constant` in a record or class field. Exactly the double-case
+`devdocs/dev/normalise-dont-special-case.md` is about — except it was a
+*quadruple* case, and the first fix (the class-field site) left the record-field
+copy failing, which the new test caught.
+
+All three now call `ParseArrayDimBounds`, dim 1 and the comma dims alike:
+`parser.inc` class field ~28290, record field ~26291, and the N-D field site
+~26854. Test `test/test_field_array_ordinal_index_b388.pas` (self-checking, FPC
+3.2.2 as the oracle) covers `array[TKind]` / `array[Byte]` in a record and
+`array[TKind]` / `array[Char]` / `array[Boolean]` / `array[TKind, 0..1]` in a
+class; it is wired into `test-core` next to `test_typeinfo_widen`. Gate at this
+sha: `make compiler/pascal26` converged, `tools/gate.sh quick` GREEN.
+
+**Gap 2 — `class var` takes no array at all. NOT fixed, and one arm is silent.**
+The wall's real field is in a `private class var` section, and that branch
+(`parser.inc` ~27726) is just `fTk := ParseTypeKind; fRec := LastTypeRecId;`
+followed by `AllocVar`. Measured against the self-hosted binary from this tree:
+
+| class var form | today |
+| --- | --- |
+| `array[0..3] of Integer` (inline fixed) | `unknown type: array` |
+| `array of Integer` (inline dynamic) | `unknown type: array` |
+| `TA` where `TA = array[0..3] of Integer` | **compiles as a scalar**, fails later at the use site |
+| `TD` where `TD = array of Integer` | **compiles as a scalar**, fails later at the use site |
+
+The bottom two are the dangerous ones: a wrong TYPE accepted silently, with the
+diagnostic landing somewhere else entirely.
+
+This is deliberately NOT microfixed into a fifth copy of the bound parser. The
+class-var branch needs the var section's whole descriptor+alloc machinery
+(`isArr`/`isDyn`/`arrLo`/`arrHi`/`ndCnt`, named-alias resolution, then
+`AllocArray`/`AllocDynArray` instead of `AllocVar`) — that lives inline in
+`ParseVarSection` (`:24622`, alloc loop ~24925-24990) and wants extracting into a
+shared "parse a variable's type" + "allocate from the descriptor" pair, which is
+the overhaul, not this session. Banked here per
+`devdocs/dev/root-cause-over-microfix.md`; the wall at 635 has NOT moved yet.
+
+### Side findings measured here, not yet filed
+
+- `SizeOf(<record or class field that is a fixed array>)` returns the ELEMENT
+  size, not the array's: pinned v368 prints `4 4 12` where FPC 3.2.2 prints
+  `12 12 12`. Pre-existing, unrelated to the above, and a silent wrong value.
+- `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr
+  during the generics.defaults drive without stopping compilation.
+
+## Lock released — 2026-08-20 (hardware loss, not a decision about the work)
+
+The session holding this ticket (`frank3`) ran on the workstation **borg**,
+whose PSU failed on the morning of 2026-08-20 and took a household fuse with it.
+Borg is down for several days; its working tree — including anything uncommitted
+— is gone, so **nothing of this ticket is in flight anywhere**.
+
+Moved `working/` → `unfinished/` on the owner's instruction: *"any ticket
+claimed as 'working on' is now invalidated."*
+
+**Re-claiming this one needs a rebuild first:** the recon above stands on a stage
+directory at `/tmp/generics-stage` (symlinks + `inc/`, driver `g1.pp`) that lived
+on borg. It is gone twice over — dead machine, and `/tmp` besides. Recreate the
+stage before trusting any wall count, and re-verify the cleared walls against
+master, since the walls landed as pushed commits but the notes describe a tree
+that no longer exists.
+
+## Wall 18 cleared, then three more — 2026-08-20 (frank1-ACP)
+
+Stage rebuilt on plexus (no FPC source on this box): `packages/rtl-generics/src`
+only, 8 files / 12,487 lines, fetched at `release_3_2_2` from GitLab into the
+session scratchpad with a `PROVENANCE.md`. Driver unchanged in spirit — `g1.pp`
+is now `uses generics.defaults`, which is the first unit of the chain.
+
+Walls fell in a row once the stage was back. Each was measured by re-driving
+`g1.pp` after a `make compiler/pascal26`, so the line numbers below are the
+successive stopping points of the SAME compile:
+
+- **635 — `unknown type: array` on a class-var array** (wall 18, the one banked
+  above). Cleared by the `ParseDeclTypeDesc` / `AllocFromDeclTypeDesc` split;
+  see [[bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar]].
+- **769 — `too many generic templates`.** `MAX_TEMPLATES = 16` was a per-COMPILATION
+  counter, not per-unit, so every template a program transitively `uses` shared
+  it; generics.defaults alone declares well past 16. Raised to 128 (and the
+  specialization/pending/generic-func counters with it). Cost measured, not
+  guessed: BSS 211,128,564 -> 211,176,708 = **+48 KB**, because a template row is
+  `{name, tok start, tok count}` and the parameter names live in a parallel
+  string table. The megabyte-scale constant in that family is
+  `MAX_TEMPLATE_TOKENS`, which was left alone.
+- **985 — `base type not found: TOrdinalComparer`**, i.e. a generic inheriting a
+  generic with the parameters forwarded. This was the real feature gap and took
+  the rest of the session; write-up below.
+- **1270 (current) — `absolute: unknown variable Self`.** `var p: PFoo absolute
+  Self;` inside a method. New wall, in the implementation section — a different
+  and much smaller gap than the last one.
+
+### The feature: nested generic specializations
+
+`generic TDer<T> = class(specialize TBase<T>)` — and the same shape as a field
+type, and the mode-Delphi spelling `TDer<T> = class(TBase<T>)` — did not compile
+at all. Neither did the two-parameter or three-deep forms. Root cause, measured
+rather than reasoned (`--debug`'s `TEMPLATE`/`DGEN` traces, plus a new `SPEC`
+trace added alongside them):
+
+The generics machinery is token rewriting. A CONCRETE use inside a template
+(`specialize TBase<Integer>`) already resolved, because `DelphiRewriteGenericUses`
+sweeps the stream before the enclosing template captures it, mints `TBase$Integer`
+and inserts the alias declaration. The PARAMETER form cannot resolve there —
+`TBase$T` is not a type, and what `T` is only becomes known when the OUTER
+template is specialized. The old code said so explicitly and gave up:
+`{ specB paramform (inside a later generic body): leave untouched }`.
+
+So it is resolved at the moment it becomes knowable. `ParseSpecialization` now
+walks the template body for `specialize NAME<args>` groups, maps each argument
+through the substitution it is about to apply, and mints the same alias name the
+concrete path would have. Missing prerequisites mean the declaration cannot be
+bound yet — a parent must exist before its child — so the whole declaration is
+**deferred**: emit `TBase$Integer = specialize TBase<Integer>;` followed by a
+fresh copy of the declaration we were in the middle of, and hand back to the
+type-section loop. It parses the prerequisite (deferring again if THAT nests, so
+a chain unwinds), then re-parses ours, which now finds the alias registered.
+Termination is by construction: the retry mints the identical name and finds it.
+`SpecializeStream` then collapses each group to the single alias identifier, so
+the body it inserts speaks the ordinary non-generic surface.
+
+Per `devdocs/dev/normalise-dont-special-case.md`, the mode-Delphi surface got no
+resolver of its own: `TBase<T>` is rewritten INTO `specialize TBase<T>` and falls
+into the same path. That required correcting what the Delphi rewrite does with a
+parameter-spelled group, and the correction is the interesting part:
+
+- It used to strip the `<T>` unconditionally, which is right for a method
+  IMPLEMENTATION header (`function TBase<T>.Get`) and wrong everywhere else — a
+  type reference was left as a bare template name, which is exactly the
+  `base type not found` at 985. Now the strip is keyed on the group being
+  followed by `.`, the one place it means "this template's own methods".
+- The "is this group parameter-spelled?" test was ALL-or-nothing, so
+  rtl-generics' partial specialization
+  `TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)`
+  — which mixes a parameter and a concrete type in ONE group — took the concrete
+  path and minted the nonsense specialization `TGStringComparer$T$TDelphi...`,
+  whose body then reported `unknown type: T` from the far side of the unit. Now
+  ANY parameter name anywhere in the group makes the whole group deferred, and
+  the match is by name against any parameter rather than by position (`TBar<V, K>`
+  forwards the same names in the other order).
+- Template lookup by name is now ARITY-AWARE. Arity overloading (`TD`, `TD<K>`,
+  `TD<K,V>` — test_generic_name_overload.pas) used to work by parse-order
+  accident: a concrete use's alias declaration is inserted directly behind its
+  own template and so is parsed before the next arity is even captured. A nested
+  prerequisite is emitted much further down the stream, where every arity is
+  visible at once, and the name-only lookup took the last one.
+
+**Regressions:** `test/test_generic_inherit.pas` (objfpc) and
+`test/test_generic_inherit_delphi.pas` (mode Delphi) — a three-deep forwarded
+chain, a two-parameter generic base, a nested generic as a field type, and the
+method implementations of each. Output verified **identical under fpc 3.2.2**.
+Both registered in the Makefile.
+
+Gate: `make compiler/pascal26` converged in 1 round; `tools/gate.sh quick` GREEN.
+
+## Walls 19-21 cleared — 2026-08-20 (frank1-ACP)
+
+Wall progression this pass: **1270 → 46 → 964 → 2179**. Three fixes landed
+together, all found by driving `generics.defaults` with `$(PXX_STABLE)`; each
+reduced to a minimal repro and diffed against fpc 3.2.2 before the fix.
+
+### 19. a bodyless generic class swallowed the rest of the type section
+`ParseGenericTemplateNamed` opened the capture at `depth := 1` and counted down
+to a matching `end` — but a class declaration need not HAVE a body.
+rtl-generics' one-liner
+
+    TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>);
+
+has no `end` at all, so the capture ran on and took the next 126 source lines
+into the template (`--debug` showed `TEMPLATE TGStringComparer startTok=49657
+endTok=50397 endLine=1119` for a declaration that ends on line 993). The damage
+surfaced far downstream as `absolute: unknown variable Self` at line 1270 —
+which is why every isolated repro of *that* construct passed. Measured, not
+reasoned: the `TEMPLATE` trace named the real boundary in one run.
+
+Fix: detect the three bodyless forms up front — `class;`, `class(Parent);`,
+`class of T;` (and the same for `interface`) — and end the capture at the `;`.
+Only a real body goes through the depth count. The non-generic path already
+handled all three, so this was the generic path growing a second, worse copy of
+"where does a class declaration end". Regression:
+`test/test_generic_bodyless.pas`, with a following declaration as the canary.
+
+### 20. an interface method could not carry a directive
+The interface member loop had **no** directive handling — it read the signature,
+ate the `;`, and expected the next `procedure`/`function`/`end`. Generics.Defaults'
+very first declaration is `function Compare(constref Left, Right: T): Integer;
+overload;`, so the parse stopped on line 45 of a 2400-line unit.
+
+Fix: `EatIntfMethodDirective` — `overload`, a calling convention, and the hint
+directives, all parse-and-ignore (an interface method is abstract and virtual by
+definition; overload resolution is signature-keyed; pxx has one internal calling
+convention). Guarded like `IsCallConvDirectiveTok`: these words are not
+reserved, so one is recognised only where a `;` (or `deprecated`'s message
+string) follows.
+
+**And the root cause behind it** — this was the *fifth* place in `parser.inc`
+that spells out "consume a method directive", and they had drifted: the
+implementation-side loop knew `cdecl` and `register` but not `stdcall`, so
+`procedure TC.Poke; stdcall;` parsed in the class body and then died on its own
+body's header (`<scratchpad>/gen/rj.pas`). The class-body loop already used the
+shared `IsCallConvDirectiveTok`; the record-method loop, the routine pre-scan
+and `ParseSubroutine` each had their own list. All five now go through the one
+predicate, so adding a convention is a one-line change in one place.
+`normalise-dont-special-case`: three mechanisms for one concept was the design
+flaw, and the sibling arms were exactly where the bug was.
+
+### 21. a nested-generic prerequisite queued twice = duplicate class
+The defer-and-retry mechanism from wall 18 emits one alias declaration per
+prerequisite. rtl-generics reaches `TCustomComparer<string>` through **both**
+`TGStringComparer` and `TOrdinalComparer`, so two deferrals queued their own
+copy of the same alias and the second was diagnosed as a duplicate class.
+
+Fix: at `ParseSpecialization`, a name that already names a specialization of the
+**same template with the same arguments** is an exact re-statement — the alias
+name is minted from exactly those — so consume it as a no-op. A collision with a
+different template or different arguments still falls through to the ordinary
+duplicate-class error. Regression: `test/test_generic_nested_diamond.pas`.
+
+### Gate
+`make compiler/pascal26` converged in 1 round; `tools/gate.sh quick` GREEN
+(self-host fixedpoint 91s, testmgr quick 10s, FPC seed canary).
+
+### Filed while here (not fixed)
+- [[bug-p-interface-method-overload-picks-the-first-slot]] — an interface method
+  is selected by declaration slot, not by argument type, so a call to the wrong
+  same-named overload returns a silently wrong value. Found writing
+  `test_interface_directives.pas`; the test deliberately avoids two same-named
+  interface overloads so it does not freeze the wrong expectation.
+- [[feature-p-nested-type-method-implementation]] — the next wall (line 2179):
+  `class function TComparerService.TInstance.Create(...)`, a method
+  implementation qualified by outer class AND nested type. The declaration side
+  parses; the implementation header does not.
+
+## Walls 22-27 cleared — 2026-08-20 (frank1-ACP)
+
+Wall progression this segment: **1178 → 1272 → 1280 → 1371 → 1385 → 1397**
+(`generics.defaults.pas`). Six walls, two compiler fixes and one RTL batch.
+
+### 1. `System.` qualifier on a builtin TYPE (compiler, Track P)
+
+`System.Integer(ALeft)` (`TCompare.UInt8`) died as `undefined variable
+(System)` while `System.Move(...)` beside it worked. A builtin type lexes as a
+KEYWORD token, and the qualifier resolver's guard demanded a `.ident`, so the
+strip was never reached. `SizeOf(System.TMethod)` failed the same way five lines
+later, because SizeOf has its own hand-rolled type dispatch that had never
+learned the strip at all.
+
+Both now go through one function, **`EatSystemQualifier`** — the strip was
+inline in `ConsumeUnitQualifier`, which is exactly why the second dispatch could
+not reuse it. Two call sites, one rule.
+
+FPC divergence found while writing the regression and filed rather than
+mimicked: **FPC's `System.Integer` is SmallInt** (the 4-byte `Integer` comes
+from the mode, which shadows the system unit's). `SizeOf(System.Integer)` is
+`2 4` under FPC and `4 4` under pxx. See
+[[compat-p-system-integer-is-smallint-in-fpc]] (prio 15) — the test asserts the
+`System.LongWord` identities instead, which agree under both.
+
+### 2. A record's static called on the TYPE name returned GARBAGE (compiler, Track P)
+
+Chasing wall 22 ([[feature-p-nested-type-method-implementation]], now resolved)
+turned up a second bug the ticket's repro was hiding, and it had nothing to do
+with nesting: `TRec.MakeI(5)` — a plain record's `class function ... static`
+invoked on its type name — silently returned a garbage value, for any return
+type, at every call site. The parser arm claiming `TRec.Something(...)` is the
+record-CONSTRUCTOR arm (allocate a temp receiver, type the call `tyRecord`,
+yield the temp); it had been given the correct no-receiver shape for a TYPE
+HELPER only, keyed on `UClsHelperTk >= 0` instead of on `UMthIsStatic`. Both
+arms now share the static discriminator.
+
+Also from wall 22: class / record / interface type registration collapsed onto
+one **`AddClassLikeType`** — the record arm never called `AddNestedType`, so a
+nested record was invisible to `FindNestedType` while a nested class was not.
+
+Third `normalise-dont-special-case` catch in two sessions, and all three the
+same shape: an arm fixed, its sibling left behind.
+
+### 3. RTL names FPC code calls (Track B files, no B agent live)
+
+`lib/rtl/sysutils.pas`: `CompareMemRange` (unsigned byte compare — a PChar
+compare would sort `$FF` below `$01`), `DynArraySize` (Length() through an
+untyped pointer, reading the managed-block header at `p-8`), and the
+`WideCompareStr/Text` + `UnicodeCompareStr/Text` pairs (this RTL has one string
+model, so they ARE the Ansi ones). `lib/rtl/math.pas`: `CompareValue` ×4 plus
+`LessThanValue/EqualsValue/GreaterThanValue`. `lib/rtl/classes.pas`: the HRESULT
+constants. All are called by generics.defaults' default comparers.
+
+### Regressions
+
+- `test/test_record_static_method.pas` — ctor shape, static returning a scalar,
+  static returning the record. Matches fpc 3.2.2.
+- `test/test_nested_type_methods.pas` — nested record and nested class, both
+  method-implementation forms. Matches fpc 3.2.2.
+- `test/test_rtl_fpc_compat_helpers.pas` — the RTL batch, 15/15. Matches fpc
+  3.2.2 (with `cwstring` first in uses, which FPC needs for its widestring
+  manager and pxx does not).
+- `test/test_fpc_compat_batch.pas` — extended 11 → 14 with the `System.`-
+  qualified type forms.
+
+## Walls 28-33 — 1397 → 1865
+
+Line numbers are `generics.defaults.pas`, compiled with `$(PXX_STABLE)` against
+the vendored `release_3_2_2` tree (`PROVENANCE.md` in the staging dir). The last
+two are measured in a throwaway copy with `TObject.Equals` / `TObject.GetHashCode`
+stubbed out, to find how far the unit gets past the block described below.
+
+| line | wall | lane |
+| --- | --- | --- |
+| 1397 | `VarCompareValue` / `TVariantRelationship` / `EVariantError` | B (RTL) |
+| 1416 | `SizeOf(System.TMethod)` — SizeOf's private type table | P |
+| 1569 | `TObject.Equals` | **blocked**, see below |
+| 1655 | `HASH_FACTORY` undefined — the macro pre-pass mis-scanned a comment | P |
+| 1699 | `Math.Float` unknown, then `Frexp` / `Ldexp` missing | B (RTL) + P |
+| 1780 | `TObject.GetHashCode` | **blocked**, same |
+| 1865 | `PPExtendedEqualityComparerVMT(Self)^.__ClassRef.GetHashList(...)` | P |
+
+### Blocked on the TObject root-method slice
+
+Two of the six are the same missing thing — `TObject.Equals` and
+`TObject.GetHashCode`, the virtual root methods every default comparer
+overrides. That is [[feature-pascal-builtin-tobject-class]], and it is a real
+design fork rather than an omission: a parser intercept is cheap but the methods
+would not be VIRTUAL, and real root slots move every VMT index. Recorded as a
+`blocked-by:` edge; the walls past it were measured with both stubbed.
+
+### The macro pre-pass scanned Delphi-mode comments as nested (compiler, Track P)
+
+`HASH_FACTORY undefined` at 1655 pointed at nothing — the `{$define}` that
+introduces it is 90 lines earlier and plainly there. The cause is not macros at
+all: **comment nesting is MODE-dependent**, `{$MODE DELPHI}` turns it OFF, and
+`ExpandPasMacros` — which runs over the raw text BEFORE the lexer, so it scans
+comments itself — always nested them. One of the unit's banner comments contains
+a stray `{`, so the pre-pass swallowed everything to the next `}`, `{$define}`
+block included.
+
+`ExpandPasMacros` now tracks `{$MODE}` and `{$NESTEDCOMMENTS}` and mirrors
+`lexer.inc`'s nesting rule, seeded from the ambient `NestedComments` the caller
+just reset per unit. The two scanners agreeing is the invariant; they are
+separate because the pre-pass necessarily runs first.
+
+### A method at the end of a cast-deref chain evaluated to the RECEIVER (compiler, Track P)
+
+The one worth the writeup. `PRec(q)^.o.F(2)` **compiled, ran, and printed a heap
+address** — no crash, no diagnostic, a plausible wrong value far from the cause,
+which is the failure mode `devdocs/dev/debugging-playbook.md` exists for. It was
+found only because a stubbed-out probe made the surrounding code reachable.
+
+`ParseFactorCore`'s two cast-deref suffix loops (the record NAME cast
+`TRec(p)^…`, and the pointer-type ALIAS cast `PRec(p)^…` — two branches, the
+same hand-rolled walk) can only build `AN_FIELD`. A METHOD name therefore became
+a field, and `RecFieldType`'s miss returns the `tyInteger` default rather than a
+sentinel, so nothing downstream objected: the expression typed as an integer and
+evaluated to the receiver pointer.
+
+Fixed by delegation, not by teaching the loops to call methods — one resolver,
+not a second partial copy (`devdocs/dev/normalise-dont-special-case.md`):
+
+- name is not a field of the record → hand the rest of the chain to
+  **`ParseClassRecordSelectors`**, which is what resolves methods, properties
+  and default properties everywhere else;
+- the field is a METACLASS (`cr: TObjClass`) → **`ParseMetaclassMemberTail`**.
+  A `class of` field records `REC_NONE` (the class lives in `UFldPtrElemRec`),
+  so `RecFieldRecId` answers nothing and the first guard cannot fire. This is
+  the 1865 shape, `…^.__ClassRef.GetHashList(…)`.
+
+`ParseMetaclassMemberTail` is new and is the fourth-copy fix: constructor / class
+method / class-reference operation on a metaclass value existed three times over
+(`ParseLValueAST`'s suffix loop, `ApplyCallResultPtrSuffix`, pyparser's twin) and
+zero times in the cast loops. All three now call it. `NodeMetaclassCi` was
+already the shared "is this node a metaclass value" predicate, for the same
+reason — five spellings, one test.
+
+Statement position needed its own arm: a cast-led statement demanded `:=`, so
+`PRec(q)^.o.M(5);` was a parse error. `ParseStatementAST` now looks ahead for a
+depth-0 `:=` (`StatementIsAssignment`) and, when there is none, parses the whole
+thing as an expression inside `Inc/Dec(StmtCallDepth)` — the existing counter
+that stands the no-result-call check down for `(o as T).M;`.
+
+### RTL: Math.Float, Frexp, Ldexp; SizeOf through any unit qualifier
+
+`generics.defaults`' Extended comparer hashes `SizeOf(Float)` bytes after
+splitting the value with `Frexp`. Three separate gaps:
+
+- **`Math.Float`** did not exist. FPC's `Float` is "the widest float the target
+  supports"; this RTL has one wide float (Extended is aliased to Double), so
+  `Float = Double` here. `SizeOf` is 8 vs FPC's 10 — a representation
+  difference, and the only thing that observes it is the hash width, which is
+  implementation-defined anyway.
+- **`Frexp` / `Ldexp`** were missing. Both checked against FPC 3.2.2 including
+  the subnormal range, where the biased exponent field is 0 and the naive bit
+  extraction is silently wrong.
+- **`SizeOf(Math.Float)`** was a compile error even once the type existed:
+  SizeOf stripped a `System.` qualifier and no other unit's. It now calls
+  **`ConsumeUnitQualifier`**, the expression parser's own resolver, which
+  returns -1 without consuming when the leading name is not a unit — so
+  `SizeOf(TOuter.TInner)` still falls to the class-qualifier strip below it.
+  Same shape as wall 23's `EatSystemQualifier` extraction, one level out.
+
+### Regressions (this batch)
+
+- `test/test_pascal_cast_chain_method_call.pas` — 9/9, and every assertion is an
+  identity between the cast spelling and a plain pointer variable, so a silent
+  regression cannot pass by matching itself. Matches fpc 3.2.2, 9/9.
+- `test/test_rtl_math_float_frexp.pas` — 14/14. Runs unchanged under fpc 3.2.2,
+  also 14/14 (the `Float` width is asserted as `>=` for exactly that reason).
+- `test/test_pascal_macro_comment_nesting.pas` + `test/macronest_fpcmode.pas` —
+  the Delphi-mode and FPC-mode halves, the latter a separate unit because FPC
+  allows a mode switch only at the top of a compilation unit. Byte-identical
+  output under fpc 3.2.2.
+
+### Next wall
+
+`generics.defaults.pas:1569` — `TObject.Equals`, blocked on
+[[feature-pascal-builtin-tobject-class]]. With that and `GetHashCode` stubbed the
+unit reaches 1865, which this batch clears; the next measurement follows the
+TObject decision.
+
+## 2026-08-22 — UNBLOCKED (TObject root methods), and Gap 2 re-measured
+
+**The blocker is gone.** [[feature-pascal-builtin-tobject-class]] is out of
+`blocked/`: the decision it waited on was answered on 2026-08-21 (option C,
+reserved leading VMT slots) and implemented, and `Equals` / `GetHashCode` /
+`ToString` now dispatch VIRTUALLY through a static `TObject` receiver — verified
+against `fpc -Mobjfpc -O1` with a descendant overriding all three and called
+through `function EqRoot(const L, R: TObject)`. That is the exact shape of
+`generics.defaults.pas:1569` (`TEquals.&class`) and `:1780`
+(`THashFactory.&Class`), so both walls are clear. Only `UnitName` and
+`ClassInfo` are still missing from TObject, and neither is on this rung's path.
+
+**Gap 2 (`class var` takes no array at all) is also gone, but it was two
+defects.** The *parse* half is already fixed: the branch (now
+`pasparser_decl.inc`, `class var` at ~4120 — the file numbers in the entry above
+predate the `parser.inc` slice) calls `ParseDeclTypeDesc` +
+`AllocFromDeclTypeDesc`, the same pair the `var` section uses, and its comment
+records the extraction the entry above asked for. The four-row table there is
+stale: inline-fixed, named-fixed and named-dynamic all declare correctly now.
+
+What was left is a different mechanism, and it was the dangerous kind — a
+dynamic-array class var reached through the QUALIFIED spelling (`TC.V`) compiled
+clean and **segfaulted**, because `SetLength` resolves its own operand and the
+qualified name answers the CLASS, not the member. Filed and fixed as
+[[bug-p-setlength-on-a-qualified-class-var-writes-a-string-header]] (`New` had
+the same defect through its loud arm), with
+`test/test_class_var_of_a_managed_type.pas` in `test-core`.
+
+**So the wall at line 635 needs re-measuring, not re-fixing.** Both the reasons
+it was parked have been removed since; the next session on this rung should
+re-stage rtl-generics and drive `uses generics.defaults` until the line number
+moves, rather than starting from this entry's conclusions.
+
+## Recon 2026-08-25 — the wall moved 411 → 1569 → 1865, three bugs out
+
+Re-staged rtl-generics (FPC `release_3_2_2`) and drove `uses generics.defaults`
+as the entry above asked. The previous entry's "line 635" is gone: with today's
+compiler the first refusal is at **411**, and clearing walls moved the frontier
+twice more in one sitting. Three frontend defects fell out, all fixed and gated
+this session, all with fpc-derived regression tests in `test-core`:
+
+| wall | construct | ticket |
+| --- | --- | --- |
+| 411 | `const P: Pointer = @SiblingClassConst;` in a class body | [[bug-p-a-class-const-cannot-take-the-address-of-a-sibling-class-const]] |
+| 1569 | `t.ToString` referenced from inside a UNIT, not the program | [[bug-p-tobject-root-methods-are-invisible-inside-a-unit]] |
+| 1865 | a virtual CLASS method called as a statement | [[bug-p-a-virtual-class-method-cannot-be-called-as-a-statement]] |
+
+Note what the first two have in common with each other and with the rest of this
+rung's history: **a facility that works in the main program and is absent on the
+unit / class-body path.** Class consts live under a mangled key the `@` arm never
+asked the class registry for; the TObject root-method pre-scan ran over the main
+program's token range and no unit's. When the next wall here looks novel, check
+first whether it is the top-level path working and the nested one missing.
+
+### The current wall — `PPVmt(Self)^.__ClassRef` (line 1865+)
+
+Generics.Defaults reaches its factory VMT through
+`{$DEFINE EXTENDED_HASH_FACTORY := PPExtendedEqualityComparerVMT(Self)^.__ClassRef}`,
+spliced into roughly thirty call sites. Two independent defects sit under it —
+`pp^^` is refused outright, and the Delphi auto-deref spelling
+`PPVmt(x)^.field` resolves REC_NONE because `ResolveNodeRec`'s `AN_DEREF` branch
+has no `AN_PTR_CAST` arm. Measured, tabled against fpc, and filed as
+[[bug-p-a-pointer-to-a-pointer-to-a-record-cannot-be-dereferenced-twice]].
+
+**A partial fix was written and deliberately reverted** — adding the missing
+`ResolveNodeRec` arm makes the program compile and then SEGFAULT, because the
+lowering still emits one indirection where two are needed. Type resolution and
+address computation have to move together here; that ticket is this rung's next
+real blocker, and it is a bigger job than the three above.
+
+### …and it was not. Same day: two small fixes, wall 1865 → 2074
+
+The paragraph above is a good record of a wrong conclusion, so it stays. The
+segfault was not evidence that "the lowering emits one indirection where two are
+needed"; it was evidence that **the reader was the wrong end of the problem.**
+The pointer-alias TYPECAST in `ParseFactorCore` runs its own suffix walk over
+`^`, built on `NodePtrElem` (immediate pointee only), so the deref nodes never
+carried depth or base — patching `ResolveNodeRec` to invent a record the address
+computation did not share is what produced the crash. Pointing that walk at the
+shared `ResolveDerefShape` fixed types AND addresses together, with no lowering
+change at all:
+
+| | ticket |
+| --- | --- |
+| `PPRec(pp)^^.f` at offset 0, silently | [[bug-p-a-pointer-to-a-pointer-through-a-typecast-loses-its-depth]] |
+| forward `PPFwd = ^PFwd` refuses the second `^` | [[bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level]] |
+| `Result := New(PSpoof…)` — New's expression form | [[bug-p-new-as-a-function-over-a-pointer-type-is-undefined]] |
+
+### The current wall — RTTI, and it is Track B
+
+`generics.defaults.pas:2082` reads `ATypeData.OrdType` off a `PTypeData`.
+`lib/rtl/typinfo.pas` declares `PTypeData = PTypeInfo`, and that header carries
+no `OrdType` / `MinValue` / `FloatType` — so this is a LIBRARY gap, not a
+frontend one: [[gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo]].
+Generics.Defaults only reads `OrdType` and `FloatType`, so the first rung is
+small.
+
+While chasing this, note that the `in: <path>` line under a diagnostic named a
+707-line file for an error on line 2074 —
+[[bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file]]. Anyone driving
+a corpus unit reads that line to find the wall; trust the `near:` window over it
+until that is fixed.
+
+
+## 2026-08-28 (frankA) — `blocked-by:` edge cleared, and BOTH blockers checked by behaviour
+
+The frontmatter edge to `gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo`
+was stale: that gap is in `done/`. Nobody walked the edge when it closed, which
+is the missing-edge family — resolving a blocker is an event on the BLOCKER, and
+the edge lives on the DEPENDENT.
+
+**Checked by running code, not by the ticket's location**, because "filed as
+done" and "the capability works" are different claims:
+
+```pascal
+td := GetTypeData(TypeInfo(TSmall));     { TSmall = -128..127 }
+WriteLn(Ord(td^.OrdType), td^.MinValue, td^.MaxValue);   { 4, -128, 127 }
+```
+
+Correct for that subrange, so the gap really is delivered. Edge cleared.
+
+### The second blocker was recorded in PROSE only, and it is also satisfied
+
+The body's *"Blocked on the TObject root-method slice"* section says the edge to
+[[feature-pascal-builtin-tobject-class]] was *"recorded as a `blocked-by:` edge"*
+— **it never was**; frontmatter carried only the typinfo one. That is the same
+family pointing the other way: a prose claim about an edge, invisible to
+`progress.sh check`, which reads frontmatter.
+
+Measured too. What this rung needs is that `Equals`/`GetHashCode` be virtual and
+overridable, since every default comparer overrides them:
+
+```pascal
+type TFoo = class
+  function Equals(Obj: TObject): Boolean; override;
+  function GetHashCode: PtrInt; override;
+end;
+var o: TObject;  { o := TFoo.Create; o.GetHashCode -> 42 }
+```
+
+Compiles, and dispatches through the VMT to `TFoo` from a `TObject`-typed
+variable. So the capability is present and no edge is added.
+
+**Two honest limits on that check.** `feature-pascal-builtin-tobject-class`
+remains open in `backlog/` for its *wider* scope (`var o: TObject`,
+`TObject.Create`, the classinfo-blob decision) — this only establishes that the
+part this rung named is available. And **FPC rejected my override probe**, so
+there is no oracle behind it: signature parity with FPC (`PtrInt` vs `Integer`,
+mode) is unverified, and by the dead-oracle rule that probe proves the capability
+exists in pxx and nothing about whether it matches FPC. Anyone relying on parity
+should re-probe with a compiling FPC control first.
+
+> **SUPERSEDED 2026-08-28 (coordinator), by frankB's section below —
+> "One free result on the way".** The second limit is withdrawn: **FPC did not
+> reject the override, the PROBE did.** Under `{$mode objfpc}{$H+}` it compiles
+> and runs on FPC 3.2.2, and the oracle now exists as a five-row table. frankA's
+> *conclusion* stands and is no longer oracle-less; only the "unverified"
+> qualifier is dead. The **first** limit — `feature-pascal-builtin-tobject-class`
+> staying open for its wider scope — is unaffected and still holds.
+>
+> The paragraph above is left intact because it is an accurate record of what
+> that session ran and concluded. It is marked here rather than rewritten,
+> because a reader who stops at this section would otherwise act on a limit that
+> no longer exists — which is the same failure as a stall note outliving its
+> blocker, sixty lines earlier in the same file.
+
+## 2026-08-28 (frankB) — the wall moved 2082 → 3250, and the new one is reduced to 14 lines
+
+Picked up from frankA's edge-clearing. Verified the coordinator's framing against
+HEAD before starting, on its own instruction — `blocked-by: []`, both limits
+recorded as relayed, and nothing else claimed in `working/`.
+
+### Environment: this checkout had neither the corpus nor a compiler
+
+Recorded because the ticket's re-stage note has now been true three times and the
+next session will hit it again. `/tmp/generics-stage` was gone (a fourth
+machine), `library_candidates/rtl-generics` was absent, and this is a Track B
+checkout that had **never bootstrapped** — `make compiler/pascal26` answered
+*"self-hosted compiler seed missing. Run: make bootstrap"*. Fetched the corpus
+with `tools/install_lib_candidates.sh rtl-generics` (release_3_2_2, the same
+commit the previous drives used, so the line numbers below are comparable), then
+`make bootstrap` and `make compiler/pascal26` → **converged after 1 round**,
+sha `c786d570e173`, which differs from `pinned` `325b4479` — both halves of
+CLAUDE.md's fresh-tree check, since a copied-in seed makes that build a silent
+no-op.
+
+### The RTTI blocker really is cleared, by the corpus rather than by a probe
+
+frankA verified `GetTypeData` on a subrange directly. The corpus now agrees:
+driving `uses generics.defaults` no longer stops at **2082**, it stops at
+**3250**. A wall that moves is the strongest available evidence that the thing
+under it was the blocker.
+
+### The new wall, reduced
+
+`generics.defaults.pas:3250` — `FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create;`
+inside a generic class function. Filed as
+[[bug-p-a-generic-specialized-before-its-declaration-is-unresolvable]] with a
+14-line repro whose **only** difference from a compiling program is the order of
+two type declarations, and with fpc 3.2.2 accepting both orderings.
+
+Seven variations were ruled out one at a time (mode, inheritance, arity, arity
+overloading, `class var`, `class function`, statement nesting); the ticket lists
+them so the ladder is not re-walked. Two further measurements put the failure at
+**instantiation time**: with nothing instantiating the outer template it
+compiles, and with a concrete type argument in place of the parameter it
+compiles.
+
+The ticket's own standing advice paid off twice here. The `in:` line named
+`generics.defaults.pas` for a diagnostic whose `near:` window showed a token
+stream from elsewhere — trust `near:`, as the entry above says. And the wall
+looked novel and was the same family the entry above names: one path working and
+its sibling missing.
+
+### Parked, not blocked
+
+Handing this back to `unfinished/` with the diagnosis banked rather than
+microfixing it. The mechanism lives in `DelphiRewriteGenericUses`, delicate
+enough that its own comments record a previous runaway, and a wrong root cause
+written into a ticket is this rung's documented failure mode — the entry above
+this one is a corrected one. The next session on this rung should take the P
+bug first: the corpus cannot advance past 3250 until it is fixed, and it is now
+a 14-line problem rather than a 9,550-line one.
+
+**One free result on the way.** frankA recorded that FPC rejected its
+`Equals`/`GetHashCode` override probe, leaving that check without an oracle.
+That was a probe defect, not an FPC limitation — under `{$mode objfpc}{$H+}` the
+override compiles and runs on FPC 3.2.2. The oracle now exists:
+
+| probe | fpc 3.2.2 | pxx |
+| --- | --- | --- |
+| no `{$mode}` | rejected — `class` unavailable in default mode | — |
+| `GetHashCode: Integer; override` | **rejected** — *"no method in an ancestor class to be overridden: GetHashCode:LongInt"* | **compiles** |
+| `GetHashCode: PtrInt; override` (objfpc) | OK | compiles, prints 42 |
+| same under `{$mode delphi}` | OK | compiles |
+| `Equals(Obj: TObject): Boolean; override` | OK | compiles, prints TRUE |
+
+So the parity form matches the oracle exactly and frankA's conclusion stands —
+now with an oracle behind it. The one divergence is that pxx accepts the
+`Integer` return where FPC demands `PtrInt`; checked whether that is the silent
+kind, and it is not — a narrow override returning `-7` reads back as `-7`
+through a `TObject`-typed variable, so it is sign-extended rather than
+truncated. By CLAUDE.md's table that is *we accept a form FPC rejects* → not a
+defect, a line for the divergences doc.
+
+## Recon 2026-08-29 (frankA) — the 3341 wall reduced; three defects, one of them Track A
+
+The wall reached by the previous entry's fix is
+`AFactory.GetHashService.LookupEqualityComparer(ATypeInfo, ASize)` at
+`generics.defaults.pas:3341`, in `_LookupVtableInfoEx` — a **plain, non-generic,
+unit-level function**. First time this rung's frontier has not been generics
+machinery at all, which is the useful news: the next walls here are probably not
+more of the same.
+
+Reduced from 9,550 lines to 30, fpc-oracled. The sweep found **three distinct
+defects**, separated one variable at a time rather than folded into one:
+
+| # | defect | lane | state |
+| --- | --- | --- | --- |
+| 1 | `NodeMetaclassCi` doesn't know `AN_CLASS_VIRTUAL_CALL` | **A** (`symtab.inc`) | filed — [[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]]; **this is the 3341 wall** |
+| 2 | a class-method call keeps the RECEIVER's class | P | **fixed** — [[bug-p-a-class-method-call-keeps-the-receivers-class]] |
+| 3 | a call chained onto a class-method result via a class NAME is dropped | P | filed — [[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] |
+
+**#2 is the one worth reading even though it is not the wall.** It compiled
+`f.GetObjC.OnlyOnFactory(14)` — a member of the *receiver's* class, resolved
+against the *returned* object — and printed the receiver method's answer. FPC
+rejects the program. A silent wrong-dispatch, one missing `recName :=` line, and
+it was three hundred lines from a sibling arm that had it and documented why.
+
+**Parked here, blocked on #1**, which is Track A's file and not mine to edit.
+
+### Do not re-walk these
+
+- The obvious cause of #3 — the `Exit` in `ParseLValueAST`'s class-name arm where
+  both instance arms `Continue` — is **refuted**. Patching it left
+  `PXXDBG=a.ast` byte-identical; those tokens are consumed elsewhere. Reverted
+  rather than kept as a plausible no-op. Details in the ticket.
+- `virtual` is the entire variable for #1: non-virtual leaves the node `AN_CALL`
+  (8) and works, virtual rewrites it to `AN_CLASS_VIRTUAL_CALL` (88) and fails.
+- The stage dir is gone between sessions; `tools/install_lib_candidates.sh
+  rtl-generics` + symlinking `packages/rtl-generics/src/*.pas` and `inc/` into a
+  scratch dir with a `uses generics.defaults` driver reproduces in under a minute.
+
+## 2026-08-29 (frankA) — blocker cleared, wall past 3341, and it was three defects not one
+
+[[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]] is resolved,
+so the `blocked-by:` edge added an hour ago is cleared. The unit is past **3341**
+and now stops on `@TEquals.Class: the address of a routine with no body was
+taken` — a fourth distinct failure class on this rung, and again not generics
+machinery.
+
+**The ticket I filed named one missing row; there were three.** Two virtual
+spellings refused outright and the INTERFACE spelling was silently wrong,
+yielding the metaclass pointer instead of calling through it. Worth knowing
+because of *how* it was found: each shape had to be compiled in its own program.
+The compiler aborts on the first error, so a single file containing all six rows
+reports only the first and reads as "one bug" — which is exactly what the
+original ticket concluded.
+
+**One of the two was not a missing table row at all.** `AN_INTF_CALL` had to be
+added to `NodeMetaclassCi` *and* the interface arm in `pasparser_lval.inc` had to
+stop exiting the selector loop, because that arm never consulted the predicate —
+it dropped the trailing selector before anyone could ask. A predicate cannot
+answer a question nobody asks it, and "the enumeration is missing a row" would
+have fixed half the bug and looked complete.
+
+Still open from this sweep, and NOT blocking:
+[[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] — the class-NAME
+receiver (`TFactory.MakeC.Tag`) is still silently wrong, and its obvious cause is
+recorded as refuted.
+
+## 2026-08-29 (claude-N) — the recorded wall is GONE; the next two were one bug
+
+**Re-verified at HEAD before working, and the entry above is stale.** The wall it
+records — `@TEquals.Class: the address of a routine with no body was taken` — no
+longer occurs. `uses Generics.Defaults;` **compiles clean.** Whoever fixed it did
+not know it closed this rung's wall, which is the ordinary case and the reason to
+re-verify rather than resume from the note.
+
+The frontier is now two units further on. Current state, measured:
+
+| unit | compiles | runs |
+| --- | --- | --- |
+| `generics.strings` | yes | yes |
+| `generics.helpers` | yes | yes |
+| `generics.memoryexpanders` | yes | yes |
+| `generics.hashes` | yes | **SEGFAULT** before the first statement |
+| `generics.defaults` | yes | **SEGFAULT** (inherits it — `uses Generics.Hashes`) |
+| `generics.collections` | `unknown type: TKey` | — |
+
+### Both segfaults were one bug, and it is not generics machinery either
+
+[[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] — filed, not
+fixed here. **(It landed at `6cc4afc17`, 2026-08-29 22:32 — this paragraph is a
+record of that session, not a live blocker; see the 2026-08-30 note at the end.
+Marked here because a prose condition has no owner and nothing sweeps it the way
+frontmatter `blocked-by:` edges get swept.)** A cast written through a user-declared alias of an ordinal type does
+not narrow: with `A1 = byte` and `c = $12345678`, `byte(c)` gives 120 and
+`A1(c)` gives 305419896.
+
+`generics.hashes:976` declares **`type ToByte = byte;`** — on non-ARM it is an
+ALIAS, so `ToByte(x)` is a truncating cast rather than a call. (The
+`{$ifdef CPUARM}` arm five lines above is a real masking *function*; the unit
+uses the two forms interchangeably, which is what makes the alias load-bearing
+rather than incidental.) `InitializeCrc32ctab` then indexes
+`crc32ctab[0, ToByte(crc)]` with a full `cardinal`, so an unnarrowed index
+reaches ~4.3e9 into a `array[0..3, byte] of cardinal` and the unit's
+initialization writes off the end.
+
+Substituting **only** that alias for the unit's own ARM-path masking function
+makes `Generics.Hashes` run clean **and** `Generics.Defaults` compile and run.
+So this rung's next two walls are one frontend bug, and it is a general one —
+nothing about it is specific to generics, classes or interfaces.
+
+Third rung in a row where the frontier was not generics machinery. That is worth
+taking seriously as a signal rather than noting each time: this corpus is now
+finding ordinary Pascal defects, which is a fine result for a corpus but means
+the *rung's stated purpose* (generics × classes × interfaces) is not what it is
+currently testing.
+
+### Two traps in this unit, for whoever reduces here next
+
+- **`generics.hashes` has no `initialization` keyword.** Its init is FPC's
+  implicit form — a bare `begin ... end.` at the end of the unit. A `grep -n
+  '^initialization'` says the unit has none, which is how the crash first read
+  as "not in the unit's startup". It is.
+- **`{$define PUREPASCAL}` is set INSIDE the unit** (lines 59/72/75), so
+  `crc32ctab` really is `[0..3, byte]` and `high()` really is 3. A `SizeOf` of
+  4096 where 8192 was expected is correct here, not a defect — checked against
+  FPC before believing it.
+
+### Not re-walked
+
+`generics.collections`' `unknown type: TKey` is already re-diagnosed as
+cross-unit Delphi generics, not `TKey` (`81dffa9cb`). Left alone.
+
+### Still parked
+
+Blocked behind the alias-cast bug, which is Track P's file and was not fixed
+under this corpus dispatch (corpus work files defects into the owning lane, it
+does not fix them). Once it lands, resume at `generics.collections`.
+
+---
+
+## 2026-08-30 (frankA) — the wall MOVED TWICE. Both of this ticket's parking notes were stale
+
+### First: the two notes at the bottom of this file were both false when I read them
+
+| the note said | actual state 2026-08-30 |
+| --- | --- |
+| *"Still parked — blocked behind the alias-cast bug"* | [[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] landed at `6cc4afc17`, 2026-08-29 22:32. Unblocked for hours before I opened this. |
+| **PARK CONDITION SUPERSEDED** — this row is a RECORD, not a live gate | frankA established it on 2026-08-30 (section of that date below) and marked it in prose; the literal marker the checker reads did not exist until 2026-09-06, so a correct fix kept reading as an unfixed park. Marker added by frankD; no claim changed. |
+| *"`generics.collections`' `unknown type: TKey` is already re-diagnosed as cross-unit Delphi generics (`81dffa9cb`). Left alone."* | That re-diagnosis was FIXED at `625991d20` — and **the wall survived it unchanged**. The note sends the next holder to a closed ticket. |
+
+Same shape the umbrella [[feature-pascal-corpus-oop]] already documents: *a
+stalled-because note ages into a false claim, and it ages invisibly*, because
+resolving a blocker is an event on the **blocker**, not on the dependent. Two
+instances in one file.
+
+### The real cause of the `TKey` wall — measured, after three refuted hypotheses
+
+`unknown type: TKey` was raised while parsing `generics.defaults.pas`, a unit
+that compiles perfectly alone. The chain:
+
+1. `CollectSpecializationBoundNamesFromTokens` harvests type-parameter names so
+   a specialization spelled with one takes the *deferred* path instead of
+   minting an alias.
+2. It collected **96** names for this corpus and **`TKey` was not among them** —
+   though 583 `TKey` tokens sat in the stream.
+3. Not the 512-name cap (96 of 512 — refuted). Not the scan abandoning the
+   stream (instrumented for the runaway case; never fired — refuted). Not
+   ordering (the tokens were present the whole time — refuted).
+4. It was `CollectNestedTypeNames` mis-tracking nesting depth. A **bodiless
+   class** opens no body, but only the spelling `= class;` was recognised — the
+   code tested the single token after `class` for `;`, while its own comment
+   claimed `= class(TBase);` worked too. So
+   `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`
+   left depth at 1 and the scan ran to a *later* declaration's `end`:
+   **one jump swallowed 11,312 tokens**, and with them every parameter those
+   declarations bind.
+
+**Nothing reported any of this.** The names were simply absent; a specialization
+naming one then took the alias path and minted an alias into the TEMPLATE's
+unit, where the parameter does not exist. The error surfaced two units away
+from its cause.
+
+### The fix had a second arm, in the same shape one level down
+
+Handling only the outermost bodiless class was not enough — `TList` nests
+
+```pascal
+type
+  TEnumerator = class(TCustomListEnumerator<T>);
+```
+
+inside its own body, which inflated depth again and swallowed 10,864 tokens. A
+bodiless class opens no body at **any** nesting level, so the fix does not touch
+depth at all rather than special-casing the top. Exactly
+`normalise-dont-special-case`: the first patch was the second path, and the
+second path is the one that stays broken.
+
+### Result — bound names 96 → 293, and the frontier moved ~1200 lines
+
+| stage | bound names | where it stops |
+| --- | ---: | --- |
+| before | 96 (`TKey` absent) | `generics.defaults.pas:46` — `unknown type: TKey` |
+| + outermost bodiless fix | 112 | still `defaults:46` |
+| + nested arm (any depth) | **293** (`TKey` present) | `collections:1313` — `MAX_NESTED_SPECS` |
+| + `MAX_NESTED_SPECS` 24 → 96 | 293 | `collections:120` — `unknown type: PT` |
+
+`MAX_NESTED_SPECS` was a **genuine capacity limit, not a runaway** — confirmed
+by raising it and watching the frontier move rather than the compile explode
+(71s wall, 63 MB peak). Bumped with the measurement recorded at the constant.
+
+### Where rung 3 stands now, and what NOT to assume
+
+`generics.collections` still does not compile. The current wall is
+`unknown type: PT` at `collections:120`, which is the same *family* as the TKey
+one and **must not be assumed to be the same defect** — that assumption is what
+this ticket's stale note got wrong, and what I got wrong once already tonight.
+
+Filed on the way, both reachable only because the scan fix moved the frontier:
+
+- [[bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected]]
+  — the parser rejects `TD<T> = class abstract(TEnumBase<T>);` outright. All
+  three ingredients required; FPC compiles it. rtl-generics uses this shape.
+
+### PARKED 2026-08-30 (frankA) — released from `working/`
+
+The frontier moved twice and `generics.collections` still does not compile, so
+this rung is not done. Released rather than held: a lock over a ticket nobody is
+working reads as "someone is on it", which is the failure measured fleet-wide
+tonight (`decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).
+
+Everything is pushed; nothing is half-applied. **Re-measure before trusting the
+table above** — that is the rule this ticket has now taught twice in its own
+history, and this section is a snapshot like every other.
+
+## 2026-08-30 (frankA) — park cleared, frontmatter drift fixed, still unfinished
+
+`progress check` flagged this ticket as STALE-PARK-HELD: its prose names
+PARK CONDITION SUPERSEDED -- frankA established this on 2026-08-30 (see the section of that date below) and marked it in prose; the literal marker the checker reads did not exist until 2026-09-06, so a correct fix kept reading as an unfixed park. Marker added by frankD, no claim changed.
+`bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate` next to a blocking
+phrase, and that ticket is in `done/`. Confirmed — it landed at `6cc4afc17` on
+2026-08-29, and the entry above has been marked in place rather than rewritten,
+because it is an accurate record of what that session did and knew.
+
+Also fixed FM-STATUS-DRIFT: the frontmatter said `status: working` while the
+file sits in `unfinished/`, so it read as actively held to anyone who opened it.
+The location is the truth; the field now matches.
+
+**Nothing here is blocked any more.** The next session on this rung should do
+what the 2026-08-25 recon already asked for — re-stage rtl-generics and drive it
+until the wall moves — rather than starting from any conclusion recorded above,
+since the walls have moved three times and each recorded line number was
+superseded within a session or two.
+
+## 2026-09-04 (frankB) — re-claimed, and the four generics bugs are now EDGES
+
+Re-claimed rather than re-filed: this rung already carries the history. What was
+missing is the wiring — the four Track P generics bugs sat in
+`backlog-pascal/` with `prio:` values a human set (50/45/40/35) and nothing
+connecting them to the goal that ranks them, so the ranker could not inherit
+anything. The two still open are now `blocked-by:` edges above. Two are closed:
+
+- `bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected`
+  (50) — **already fixed** when I measured it. `TD<T> = class abstract(TEnumBase<T>);`
+  compiles, and so does this rung's own real shape,
+  `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`. Covered
+  by `test/test_generic_bodiless_class_modifier.pas`. Closed on measurement, not
+  on the test's existence — see its resolution.
+- `bug-p-a-generic-function-cannot-be-declared-in-a-unit` (40) — **fixed** at
+  `71deb21d4`.
+- `bug-p-a-different-specialization-of-the-same-template-inside-its-own-body`
+  (35) — **fixed** at `02a57e20e`; the parameter-SWAPPED half is split out as
+  [[bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself]]
+  (20), refused with an honest cycle diagnostic rather than mis-compiled.
+- `bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name`
+  (45) — **fixed here.**
+
+**The structural answer, since this rung keeps asking for it.** The concept "a
+generic and its specialisations" is served by two registries in the Pascal
+frontend — `Templates[]`/`Specializations[]` for classes and records,
+`GenericFuncs[]` for routines — and both are FLAT ARRAYS KEYED BY NAME with no
+unit scope at all (`compiler/defs.inc`). `IsGenericTemplateName` and
+`FindGenericFunc` are both first-match-by-name linear scans. That single fact is
+the whole of the shadowing bug, and it is not a bug in the lookups: they are
+answering the only question the representation can answer.
+
+**Measured: the four are NOT one cause, and the shape of the answer is worth
+keeping.** All four were fixed; here is where each actually lived.
+
+| ticket | mechanism | pass |
+| --- | --- | --- |
+| bodiless generic + abstract + generic parent | already fixed | parser |
+| generic function in a unit | three copies of the top-level declaration dispatcher, one had the arm | parser |
+| generic declaration does not shadow an import | the alias is minted at the USES CLAUSE, plus a duplicate test keyed on a template NAME | rewrite sweep + specialisation |
+| a different specialisation inside its own body | the mode-Delphi surface reaching neither sweep | capture |
+
+The name-keyed flat registry is real and it is the shadowing bug's second half —
+but `Templates[]`'s lookup already prefers the LAST arity-matching entry, i.e.
+the local declaration, and **it never got the chance to answer** because the
+alias had been minted and parsed at the uses clause first. Fixing the
+representation would not have fixed that ticket.
+
+**The structural finding that DOES hold: two mechanisms resolve a generic name
+to a specialisation, split by WHERE the use is.** Outside a template body, the
+token-stream sweep (`DelphiRewriteGenericUses`, driven from
+`DesugarImportedDelphiGenericUses` and from each template's own capture). Inside
+one, the arena substitution (`SpecializeToBuffer` + `ScanRangeForNestedSpecs`).
+Every one of the four defects sat on a case that belonged to neither — a
+dispatcher arm that did not exist, a sweep that ran too early, a surface that
+reached neither pass. Two is a smell; it is not yet three, and each fix here was
+made by routing the missing case INTO an existing mechanism rather than growing
+a third. The next person to add one should check that column first.
+
+## PARKED again 2026-09-04 (frankB) — the four rungs are done, the rung is not
+
+All four generics bugs are closed and every `blocked-by:` edge with them is
+therefore gone; the frontmatter is back to `[]` rather than pointing at `done/`
+entries. **That does not make this rung done.** The rung is
+`generics.collections` compiling, and nobody re-staged it today — my slice was
+the four bugs, not the corpus.
+
+Released rather than held, for the reason this ticket already recorded once: a
+lock over a ticket nobody is working reads as "someone is on it".
+
+**What the next session should NOT do:** conclude from the four green rows above
+that the wall has moved. It has not been measured. Re-stage rtl-generics and
+drive it, exactly as the 2026-08-25 recon asked; the four fixes may or may not
+be on its path, and only the attempt says which.
+
+## Parked 2026-09-04
+
+the four generics bugs it ranked are all closed; the rung itself (generics.collections compiling) was not attempted today and needs a re-stage, not a conclusion drawn from the four green rows
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-09 (frankS) — re-staged, re-driven, and the wall is one named bug
+
+The park asked for exactly this and warned against concluding anything from the
+four green rows: re-stage and drive. Done, at compiler `0f14028acc04`.
+
+**Staging.** `/tmp/generics-stage` was long gone (the 6h reaper). The corpus now
+lives at `library_candidates/rtl-generics`, which is gitignored wholesale — a
+per-checkout local tree, which is why five sibling checkouts had it and this one
+did not. Staged by copying a sibling rather than re-fetching: three independent
+copies hash identically over all 16 sources (`7314f4e13e39f7fd`) and carry the
+`PROVENANCE.md` from `tools/install_lib_candidates.sh` (FPCSource `0d122c49`,
+`release_3_2_2` tag). No network needed.
+
+**The old table in this file is not comparable to the new numbers, and I nearly
+read a regression out of it.** It records the wall at `collections:120`, and the
+first drive here stopped at `defaults:2729` — upstream in the uses chain, which
+looks exactly like a frontier that moved BACKWARD. It did not: that table was
+measured on a `/tmp` symlink stage built from a local FPC checkout, a different
+source set from the pinned `library_candidates` tree, so the line numbers are
+not the same coordinate system.
+
+**Measured against the SAME staging, the frontier moved FORWARD:**
+
+| compiler | stops at |
+| --- | --- |
+| pin v407 (`stable_pinned`) | `generics.defaults.pas:1178` — `expected ',' before ')'` |
+| HEAD `0f14028acc04` | `generics.defaults.pas:2729` — `no overload of Create matches` |
+
+That differential is the honest one, and it is the reason no regression ticket
+was filed.
+
+**The wall, reduced.** `Create(AEqualityComparison, GetHashCodeMethod,
+AExtendedHasher)` — a constructor delegating to a sibling overload, with
+`GetHashCodeMethod` passed where `TOnHasher<T> = function(constref AValue: T):
+UInt32 of object` is wanted. pxx reads the bare method name as a CALL and types
+the argument `Cardinal`, the method's own result. **It needs no generics at
+all**: a 14-line plain `{$mode delphi}` class reproduces it, and the assignment
+spelling of the same thing already works. Filed as
+[[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]]
+and wired as this rung's `blocked-by:`.
+
+A fix was written and **reverted** — it repairs the free-callee half and turns
+the method-callee half into a segfault, which is worse than the honest refusal
+that stands today. The measurements and the two facts a second attempt needs are
+on that ticket, not here.
+
+**Released rather than held**, for the reason this ticket has already recorded
+twice: a lock over a ticket nobody is working reads as "someone is on it".
+
+## Parked 2026-09-09
+
+blocked on bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced -- re-staged and re-driven 2026-09-09, wall reduced to that one bug; a fix was written and reverted (it turns the method-callee half into a segfault). Do not diff the old wall table against a library_candidates staging: different source sets.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-09 — the wall in the summary above is PAST; re-measured, and the new one MISREPORTS ITS LOCATION
+
+Measured at binary `4a6207c05ba2`, HEAD `a130f0689`, against the same
+`library_candidates/rtl-generics` staging (`0d122c49`) the summary names — not a
+`/tmp` symlink stage, so this IS comparable to the `2729` figure.
+
+**`generics.defaults` compiles and RUNS.** `program d1; uses Generics.Defaults;`
+→ compile rc=0, executes, prints `defaults ok`. The named blocker
+[[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]]
+is in `done/`, and `:2729` is past. This rung is **no longer blocked** by it.
+
+**The live wall, driving the real target** (`uses Generics.Defaults,
+Generics.Collections`, specializing `TList<LongInt>`):
+
+```
+error: generic template IEqualityComparer not found
+  in: .../generics.memoryexpanders.pas
+  near:  specialize IEqualityComparer  string  >>>  TOnEqualityComparison$string
+```
+
+**DO NOT AIM AT THAT FILE OR THAT LINE — the location is wrong, and it is wrong
+in exactly the way that produced the ticket rejected today.** Three checks, all
+cheap:
+
+- `grep -c IEqualityComparer generics.memoryexpanders.pas` → **0**. The file
+  never mentions the template.
+- Its entire uses clause is `Classes, SysUtils` — it cannot see
+  `Generics.Defaults` at all.
+- Line 67 there is `const MAX_LOAD_FACTOR = 1;`.
+
+`IEqualityComparer<T>` is declared at **`generics.defaults.pas:77`**, and the
+`$string` suffix in `TOnEqualityComparison$string` is our own mangled
+specialization name, so this fires during **instantiation**, not at a
+declaration. The filename and the line number come from different units. Whoever
+takes this rung: dump the AST rather than reading the caret —
+`PXXDBG=a.ast:<proc>` — and treat "which unit was the compiler REALLY in" as the
+first question, not a detail.
+
+*Retire this warning when the diagnostic carries a location that survives the
+three checks above.* Dated because a stale hazard block is obeyed silently
+(CLAUDE.md, "the most expensive stale row is a hazard block").
+
+**Not claimed.** frankH measured the frontier only to correct a summary that had
+gone stale in two places at once; the rung's implementation work is untouched
+and unowned.
+
+## 2026-09-09 (frankS, later) — a second driver, a second wall, and two corrections I owe this file
+
+The section above drives `uses Generics.Defaults, Generics.Collections` and
+specializes `TList<LongInt>`. Driving **`generics.collections.pas` itself** gives
+a different frontier, and both are real — the walls are per-driver, so quote the
+driver beside the number or the next reader will read one as a regression of the
+other.
+
+**Compiling a driver over the unit** (`uses Generics.Collections;` alone, DELPHI
+and objfpc alike, binary `4a6207c05ba2`) — the WHOLE output, three errors, in the
+order they are printed:
+
+```
+collections.pas:120: error: unknown type: PT
+  near: class abstract protected function DoGetCurrent : >>> PT ; virtual
+collections.pas:123: error: unknown type: PT
+  near: public property Current : >>> PT read DoGetCurrent
+collections.pas:119: error: duplicate class name TEnumerator$PT
+  near:  PT   class abstract >>> protected function DoGetCurrent
+```
+
+`generics.defaults.pas` compiles and runs on its own driver.
+
+**Attribution, because I nearly took credit for this.** Two fixes moved the rung
+and NEITHER IS MINE: frankH's `ad7c03b03` (a bare method name in argument
+position -- the `:2729` wall) and frankZ's `2242a5903` (a forward `^T` in a
+nested type section -- the latent weakness `ad7c03b03` exposed). I wrote a fix
+for that second one concurrently and it is DISCARDED: frankZ's landed first and
+is strictly better -- two lines onto the existing `ClassDeclaresTypeNamed` where
+mine added a predicate, three kinds mine did not cover, and a `%FAIL` row mine
+did not have.
+
+**AND I RETRACTED THE `:120` FIGURE FOR AN HOUR ON A `tail -3`.** I read this
+same output through `tail -3`, saw only the LAST error, and wrote that the
+frontier had moved to `:119 duplicate class name` -- "one line earlier and a
+different error" -- and that `:120 unknown type: PT` was not reproducible. It is
+the FIRST error and it never moved. `tail` did not lie about anything; it was
+correct about the last three lines. Rules file, "every instrument that lies, lies
+by being CORRECT ABOUT SOMETHING ELSE" -- and the instrument here is the one that
+sentence names by example. **Read the whole diagnostic stream on a corpus driver;
+the first error is the wall and the later ones are usually its wake.**
+
+### Correction 1 — the stagings ARE comparable, and I said they were not
+
+This morning I wrote that the old wall table "is NOT comparable to a
+library_candidates staging" because one was a `/tmp` symlink tree from a local
+FPC checkout and the other is the `install_lib_candidates.sh` tree at
+`0d122c49`, "so the line numbers are different coordinates". **The two stagings are the SAME FILE, byte for byte.**
+`md5sum` on `generics.collections.pas` from `library_candidates/rtl-generics`
+and from `/usr/share/fpcsrc/3.2.2` is `1010a887c20dc546215749ca46c5a773` in both,
+110423 bytes. Line numbers from the two stagings are therefore the same
+coordinates by construction, not by inference, and every wall figure in this file
+-- the 2026-08-30 table's `:120` included -- is directly comparable. One `md5sum`
+settles what I spent two claims and a retraction reasoning about.
+
+The caution was reasonable when I wrote it and it was doing real work — it
+stopped me reporting a regression off a staging difference. But it was a
+hypothesis stated as a fact, and it was the convenient one: it explained away a
+number I could not otherwise account for.
+
+### Correction 2 — so the :2729 wall was not a staging artefact either
+
+The honest history: the rung reached `collections:120` on 2026-08-30; something
+between then and 09-08 broke `generics.defaults` at `:2729` and MASKED that
+frontier; `ad7c03b03` removed it and `2242a5903` cleared the weakness behind it.
+The rung is back where it was in August with two fixes under it.
+
+**Next — two instruments already point at the mechanism, and neither reading is
+measured yet.**
+
+`PXXDBG=p.mint:*` on the driver: `TEnumerator$PT` is minted **four times**, every
+one of them `args=PT` -- the literal spelling. One sibling site in the same run
+mints `TEnumerator$TEnumerable$UInt32$PT`, i.e. the enclosing substitution IS
+carried there, so the machinery exists and some sites do not reach it.
+
+`PXXDBG=p.nspec:TEnumerator$PT` prints the substitution set in force at each
+registration. Three read `under=TCustomListWithPointers$UInt32 nsub=1
+subs=T->UInt32` -- `PT` is not in the set at all -- and the fourth reads
+`under=TPointersCollection nsub=2 subs=T->UInt32 PT->PT`, **PT mapped to
+itself**. That probe's own header says what such a line means: "an argument that
+comes out as a template PARAMETER name means the name was not in SpecSubNames
+here".
+
+**Hypothesis, NOT MEASURED:** the mangled specialization name takes the
+argument's SPELLING rather than its resolved identity, so a nested alias `PT` in
+one class, a type parameter `PT` in another and a second nested alias `PT` in
+`TCustomSet<T>` all mangle to `TEnumerator$PT`, and the second registration is
+the duplicate. frankZ reached the same hypothesis independently from a bisect and
+neither of us has separated it from "the body is resolved in the specializer's
+scope" -- both produce `unknown type: PT` at `TEnumerator<T>`'s own `:120`.
+**What would falsify it:** a narrowed trigger line that has nothing to do with a
+second `PT`.
+
+frankZ's bisect, same coordinates (see the md5 above): cut at 163 COMPILES --
+and 163 contains all four of the declarations everyone has been staring at,
+including `TEnumerable<T>`'s `PT = ^T` and both `TEnumerator<PT>` uses -- so the
+DECLARATION region is not the defect and something at 466-490 instantiates. Cuts
+at 200/300/400 are masked by a truncation artefact (`unexpected token in a unit
+interface section` at N+4) and must not be read as verdicts.
+
+The 2026-08-30 note warns this must not be assumed to be the same defect as the
+`TKey` one before it (`bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body`,
+in `done/`) -- whose fix installed the `p.nspec` probe above, for this exact
+symptom. Still unmeasured, still stands.
+
+
+## 2026-09-09 (frankS) — the wall moved twice more in one morning, and the second one is diagnosed
+
+`collections.pas:120 unknown type: PT` is **gone** at binary `417ee5636a72`.
+frankZ measured it first and I confirmed it here; the credit is `1c16d4523`
+(frankH) and `2242a5903` (frankZ), and none of the three walls closed today was
+mine.
+
+The wall is now **`generics.defaults.pas:3250`** and it is the same class of
+defect as everything else on this rung: a name standing in for an identity.
+Three sites attribute a generic method IMPLEMENTATION to a template by name
+alone, and `TGStringComparer` names two templates of different arity in one
+unit. Full diagnosis, the `p.nspec` line that says it in one row, and the
+30-line repro:
+[[bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]].
+
+**Filed rather than fixed, deliberately.** The first half is easy and makes some
+programs that compile today fail; both halves must land together. That is on the
+blocker, not here.
+
+**One thing for whoever attributes the next wall on this rung:** reverting
+`1c16d4523` makes `:3250` disappear, because the file then stops at `:120` and
+never reaches it. The commit is not the cause — the two name loops are dated
+2026-08-29 and 2026-08-20. An error vanishing under a revert is not an
+attribution; the code's age is.
+
+
+## 2026-09-09 (frankS) — `:3250` is through, and the next number needs attributing before anyone quotes it
+
+Fixed as [[bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]]
+(`3801a4d66`): name-vs-arity attribution at four sites, an ahead-buffered arena
+copy re-captured at flush time, and a "spliced but not parsed yet" list for the
+collapse arm. Conformance 423/0/42, identical to a control run at HEAD, so
+nothing in that corpus moved either way.
+
+**The frontier now, at binary `2f5a0b2ac8ec`:**
+
+| driver | wall |
+| --- | --- |
+| `uses Generics.Defaults` | `unresolved forward: TInstance.CreateSelector` |
+| `uses Generics.Collections` | `too many deferred specializations` |
+
+**Do not read the second as the older `PT` defect without measuring.**
+`PXXDBG=p.mint:*` counts **872 mints in the run and 55 of `TEnumerator$PT`
+alone**, against `MAX_SPECIALIZATIONS = 256`. `PT` is a nested type named as a
+specialization argument, which is
+[[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]]
+— but 55 mints of one alias is also exactly what a fix that makes more bodies
+stream correctly would produce, and I have not separated the two. The next seat's
+first question is which, and `p.mint` answers it in one run.
+
+**Four walls fell here today and three of them were peers'.** The rung's value
+was the attempt, not any one fix: driving the target named each bug in the order
+it actually mattered, and every one of them was a name standing in for an
+identity — a method name for a reference, a type name for a scope, a template
+name for an arity, a copy for the stream it came from.
+
+
+## 2026-09-09 (frankS) — the second wall is DIAGNOSED: a name that never reaches a fixpoint
+
+frankH asked the right question about the paragraph above — *"55 mints of one
+alias is either a dedup you have not wired yet or a fixpoint that is not
+converging, and those two look identical at the `too many deferred
+specializations` readout."* It is the second, and the experiment that separates
+them is one edit.
+
+**Raising the cap is the discriminator, and it answers loudly.** With
+`MAX_SPECIALIZATIONS = 1024` (binary `860aca3da02e`, reverted, never landed) the
+driver does not get further — it reaches
+`pascal26:30: error: token character pool overflow` with a single alias carrying
+~120 `TEnumerable$` and ~130 `$PT`. A missing dedup would have converged at a
+higher cap. This one just ran until a different pool gave out.
+
+**And the ladder is visible at the LANDED cap too — the experiment confirmed it,
+it did not reveal it.** `PXXDBG=p.mint:*` at binary `5e00cec21466`:
+
+| rungs (count of `TEnumerable$` in the alias) | aliases at that rung |
+| --- | --- |
+| 0 | 109 |
+| 1 … 54 | 10 each |
+| 55 | 3 |
+
+with `tmpl=TEnumerable args=TEnumerable$TEnumerable$UInt32$PT$PT` minting
+`alias=TEnumerable$TEnumerable$TEnumerable$UInt32$PT$PT`. **CORRECTION, same day, before anyone builds on it:** I wrote here and told
+both peers that 110 mints carry more `$PT` in the alias than in their `args=`,
+i.e. that the mangled name was not a function of the arguments. **That was a
+substring-counting artifact** — the alias spells the separator (`$PT`) and the
+argument does not (`PT`). All 872 mints satisfy
+`alias = tmpl + '$' + join('$', args)`, zero exceptions, so the mangler is not
+the site. The ladder is unaffected and is what `p.nspec` shows directly: the
+seed registers a TWO-argument reference with `nsub=1 subs=T->UInt32`, so the
+second argument enters the name as the unsubstituted parameter name `PT`, and
+each round's substitution is the previous round's alias. Full diagnosis, the
+per-rung `p.nspec` rows, and the two things not to do:
+[[bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]].
+
+**So `too many deferred specializations` was a MASK, and the 256 cap was the
+thing making it look like a capacity problem.** The `TEnumerator$PT` count I
+flagged as unattributed above is neither of the two readings I offered: it is 55
+because there are 55 rounds, one per rung of a ladder that has no top.
+
+`gate.sh quick` GREEN at the reverted tree; the 1024 edit is not in the tree and
+is not proposed.
+
+
+## 2026-09-09 (frankS) — the ladder is fixed; the wall left is the unresolved `PT`
+
+The runaway had a cause one level from `3801a4d66`'s: a NESTED class's method
+implementation matched by the LAST component of its qualified path.
+`constructor TQueue<T>.TEnumerator.Create` reads
+`constructor TQueue . TEnumerator . Create` after the `<T>` strip, and
+`ScanDelphiMethodImplsForNestedSpecs` tested the name without testing what
+precedes it — so specializing the unit-level `TEnumerator<T>` scanned TQueue's
+nested body and minted a `TQueue<...>` nobody asked for. That edge closes the
+cycle `TBase<X>` -> `TEnumerator<X.PT>` -> `TQueue<X.PT>` -> `TBase<X.PT>`, and
+the argument grows one segment per round.
+
+| | `uses Generics.Collections` | mints |
+| --- | --- | --- |
+| before | `too many deferred specializations` | 872 |
+| after | `unknown type: PT` at collections.pas:120/123 | 203 |
+
+**The new wall is not a regression and the control says so.** The pre-fix binary
+(`90aa9c2c1c10`) produces exactly one error and ZERO `unknown type: PT` — it
+aborts at the cap first — while its own `p.mint` log already carries
+`alias=TEnumerator$PT tmpl=TEnumerator args=PT` **55 times**. The unresolved
+argument was always there; the abort was in front of it. It is
+[[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]],
+frankZ's, who has a 17-line reduction that produces exactly this error with no
+corpus at all.
+
+`uses Generics.Defaults` is unchanged: `unresolved forward: TInstance.CreateSelector`.
+
+## 2026-09-09 (frankS) — the Defaults driver is THROUGH
+
+`uses Generics.Defaults` compiles and runs. `defaults ok`, rc 0, binary
+`4b5ee0c8e11e`.
+
+The wall was not generics at all, and the message named a file nobody wrote:
+`unresolved forward: TInstance.CreateSelector` in `compiler/builtin/builtinheap.pas`,
+raised by `ApplyCallFixups` at LINK time. `generics.defaults.pas` declares
+`TComparerService.TInstance` with two `static` class functions and calls them 62
+times from `class constructor THashService<T>.Create`. A record's static class
+function registered Self as the record BY REFERENCE at its declaration and as the
+bare class reference at its implementation, so the impl minted a SECOND proc row;
+a specialized body materialises early, binds to the declaration's bodyless row,
+and the diagnostic arrives at link time pointing at the appended builtin unit.
+[[bug-p-a-nested-records-static-class-function-has-no-body-when-it-is-called-from-a-specialized-body]].
+
+| driver | wall |
+| --- | --- |
+| `uses Generics.Defaults` | **none — compiles and runs** |
+| `uses Generics.Collections` | `unknown type: PT` at collections.pas:120/123 (frankZ's) |
+
+**Both of today's fixes on this rung were a rule living on ONE side of a
+declaration/implementation pair**, and so were two of frankZ's. All four are
+silent on arrival: nothing refuses, the two sides simply build different things
+and the diagnostic surfaces somewhere else entirely.
+
+## Next rung (2026-09-09, binary a312307dfea3)
+
+`uses Generics.Defaults` compiles and runs, and that is a weaker claim than it
+sounds: the FIRST thing a caller does with it — `TComparer<LongInt>.Default` —
+returns **nil**. fpc returns a comparer whose `Compare` gives -1/1/0.
+
+Reduced to three rows of one program, and the third row is the positive control
+because the two compilers are exactly INVERTED there:
+
+| spelling | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `TSvc.Pick(nil, 7)` direct | 107 | 107 |
+| through `function(A: Pointer; ASize: SizeInt)` | **119** | 107 |
+| through a cast with an EXPLICIT leading Self | 107 | **100** |
+
+So the routine is fine and its ARITY is one greater than the source says.
+`UMthIsStatic` is set from `isClassMethod` / `RecordMethodClassPrefix` — pxx's
+"static" means "class method" and never the `static` DIRECTIVE, which is parsed
+and never reaches the signature. `LookupComparer` dispatches through exactly
+that cast, which is why `Default` is nil and why calling it directly segfaults.
+
+**Landed after all** — [[bug-p-a-static-class-functions-address-carries-a-hidden-self]],
+`b0d53c73a`. `static` is its own flag now (`UMthNoSelf` / `ProcNoSelf`), read by
+lookahead in both declaration parsers, with the seven call sites corrected in one
+place inside `GenMakeStaticMethodCall`. All rows byte-match fpc.
+
+**And `Default` is still nil**, which is the part worth writing down: a correct
+fix to a real wall bought nothing visible at this level, because a second wall
+sat behind it the whole time. Chasing it down the chain — `_LookupVtableInfo`
+is live, `LookupComparer` is live, and the value dies on the way into the
+interface variable — gave [[bug-a-a-hand-built-com-interface-cannot-be-called]]:
+pxx's interface value is the INSTANCE and its IMT comes from the instance's RTTI
+blob; FPC's value IS the IMT. The IMT CONTENTS already agree. Only the route
+differs, and the two compilers are exact mirrors of each other — the positive
+control (`IFoo(Pointer(anObject))`, which pxx accepts and fpc kills with RTE 216)
+is what makes that a representation difference rather than a pxx bug at casts.
+That one is Track A ABI work and is NOT attempted here.
+
+Cleared on the way here: `@X` as a const-array ELEMENT (`5a9b9384f`) — the
+reduction needed a dispatch table and could not declare one.
