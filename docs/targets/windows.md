@@ -34,6 +34,33 @@ millisecond longer. Set `PXX_WINABI_PRE8=1` to use every fallback on a
 newer system; `make test-windows` runs a few time, socket and thread tests
 that way under Wine.
 
+### Tested on ReactOS
+
+The `make test-windows` programs were also run inside the ReactOS x64
+nightly live CD (kernel "0.4.16-amd64-dev", Build 20260429, under qemu with
+no network adapter): 78 of 83 give the same output as on Linux. The
+translator works around three ReactOS behaviours:
+
+- Its loader ignores the TLS directory's `SizeOfZeroFill` and allocates only
+  the raw template, so the image now carries the whole thread-local block as
+  zero bytes of raw data, as MSVC's linker does.
+- A non-blocking `accept` with nothing pending returns `INVALID_SOCKET`
+  zero-extended to `0x00000000FFFFFFFF` and sets no error; the translator
+  reads that as `EAGAIN`.
+- A refused non-blocking `connect` shows in Winsock's except set but leaves
+  `SO_ERROR` at 0; the translator reports `ECONNREFUSED`.
+
+Known differences there:
+
+- ReactOS has no IPv6: the IPv6 tests report that and skip.
+- A TCP listener bound to `0.0.0.0` does not get connections made to
+  `127.0.0.1` (seen with no network adapter); bind the listener to
+  `127.0.0.1` for local use. `test_asyncudp` waits for ever on this and is
+  left out.
+- A stack overflow ends the program (exit 128) instead of raising an
+  exception; see "Not supported yet".
+- With no page file, `sysinfo` reports no swap.
+
 ## How it works
 
 The design is the same as the BSD targets (see

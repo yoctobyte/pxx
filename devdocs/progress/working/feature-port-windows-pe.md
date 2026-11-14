@@ -407,3 +407,36 @@ overflow cannot run a handler). Next: threads, then sockets.
 - PXX_WINABI_PRE8=1 forces the fallbacks; test-windows reruns four
   time/socket tests and six thread tests that way (Wine's relay trace
   confirms no WaitOnAddress call then).
+
+### 2026-11-14: run inside ReactOS
+
+- Harness (session scratch, not committed): the x64 nightly live CD booted
+  once under qemu/KVM to the desktop with a StartUp script that polls every
+  drive for \run.cmd, then `savevm`. A batch resumes the snapshot, inserts
+  an ISO of test exes in a second CD drive, the script runs them with
+  output to a FAT32 data disk (qcow2, holds the snapshot) and powers off;
+  results are read back with qemu-img convert + mtools and diffed against
+  the Linux build. About 10 s plus the tests' own time; a cold boot is
+  3.5 min.
+- Found and fixed: (1) ReactOS's LdrpAllocateTls allocates End - Start of
+  the TLS directory and ignores SizeOfZeroFill, so our 8-byte template was
+  an 8-byte heap block that thread-locals and winabi's per-thread words
+  overran (every hello world exited 130 or 128 with no output: garbage
+  read as a pending signal). PreparePETls now emits the whole block plus
+  the 32-byte scratch as raw zero data, SizeOfZeroFill 0. (2) accept on a
+  non-blocking listener returns $00000000FFFFFFFF with no error: SockRet
+  treats low-32 all-ones as INVALID_SOCKET, and accept's no-error failure
+  is EAGAIN. (3) a refused non-blocking connect sets the except set but
+  SO_ERROR 0: OPT_CONNECTING marks a connect under way and SO_ERROR then
+  answers WSAECONNREFUSED. (4) sysinfo freeswap could exceed totalswap
+  with no page file.
+- Result over test-windows' 84 programs (83, test_asyncudp left out):
+  78 same as Linux. The rest: 3 IPv6 tests skip (no IPv6 in ReactOS),
+  test_stack_overflow_raise exits 128 (no room to dispatch the exception on
+  a fully committed stack -- Wine hides this by dispatching from its own
+  signal stack), c_errno_is_per_thread's positive control does not
+  interleave (the real assertion holds). test_asyncudp hangs: a listener on
+  INADDR_ANY never sees a 127.0.0.1 connect there (no NIC in the VM).
+- test_timer flaked once in ~8 runs right after a snapshot resume (two
+  timerfds expired in one wait and came back in registration order, where
+  Linux gives expiry order); not chased.

@@ -2774,6 +2774,10 @@ begin
   if PInt64(si + 64)^ < 0 then PInt64(si + 64)^ := 0;
   PInt64(si + 72)^ := ms[4] - ms[2];
   if PInt64(si + 72)^ < 0 then PInt64(si + 72)^ := 0;
+  { without a page file (ReactOS's live CD) the commit limit is below RAM:
+    totalswap clamps to 0 above while avail-commit minus avail-RAM can stay
+    positive; free never exceeds total }
+  if PInt64(si + 72)^ > PInt64(si + 64)^ then PInt64(si + 72)^ := PInt64(si + 64)^;
   PWord(si + 80)^ := 1;
   PLongWord(si + 104)^ := 1;
   Result := 0;
@@ -2800,6 +2804,7 @@ const
   SIO_UDP_CONNRESET = $9800000C;
   SOCKET_FLAGS = $81;                  { WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT }
   OPT_REUSEADDR = 1; OPT_REUSEPORT = 2;
+  OPT_CONNECTING = 4;                  { a non-blocking connect is under way (SO_ERROR below) }
 
 var
   WsaReady: Boolean;
@@ -2921,13 +2926,21 @@ begin
   Result := fd;
 end;
 
+{ A SOCKET result with INVALID_SOCKET as -1. ReactOS x64 (0.4.16-dev,
+  Build 20260429) returns it from accept zero-extended, $00000000FFFFFFFF,
+  so the low 32 bits decide; no real handle has them all set. }
+function SockRet(s: Int64): Int64;
+begin
+  if (s and $FFFFFFFF) = $FFFFFFFF then Result := -1 else Result := s;
+end;
+
 { A bare SOCKET of family waf, set the Linux way. -1 on failure. }
 function SockNew(waf, typ, proto: Int64): Int64;
 var z: LongWord;
     ret: LongWord;
 begin
   WsaInit;
-  Result := S_WSASocketW(waf, typ, proto, 0, 0, SOCKET_FLAGS);
+  Result := SockRet(S_WSASocketW(waf, typ, proto, 0, 0, SOCKET_FLAGS));
   if Result = -1 then Exit;
   z := 0;
   if waf = 23 then S_setsockopt(Result, 41, 27, Int64(@z), 4);       { IPV6_V6ONLY off }
@@ -2991,7 +3004,7 @@ begin
        or (S_getsockname(l, Int64(@sa[0]), Int64(@n)) <> 0) then
     begin Result := SockErr; S_closesocket(l); Exit; end;
     a := SockNew(2, 1, 6);
-    if (a <> -1) and (S_connect(a, Int64(@sa[0]), 16) = 0) then b := S_accept(l, 0, 0);
+    if (a <> -1) and (S_connect(a, Int64(@sa[0]), 16) = 0) then b := SockRet(S_accept(l, 0, 0));
     if b = -1 then Result := SockErr;
     S_closesocket(l);
     one := 1;
@@ -3049,9 +3062,14 @@ begin
   if Result < 0 then Exit;
   Result := SaIn(sa, len, Int64(@b[0]));
   if Result < 0 then Exit;
+  WinFdOpt[fd] := WinFdOpt[fd] and not OPT_CONNECTING;
   if S_connect(WinFd[fd], Int64(@b[0]), Result) = 0 then begin Result := 0; Exit; end;
   e := S_WSAGetLastError;
-  if e = 10035 then Result := -LX_EINPROGRESS            { WSAEWOULDBLOCK: started }
+  if e = 10035 then                                       { WSAEWOULDBLOCK: started }
+  begin
+    WinFdOpt[fd] := WinFdOpt[fd] or OPT_CONNECTING;
+    Result := -LX_EINPROGRESS;
+  end
   else Result := -SockErrno(e);
 end;
 
@@ -3087,8 +3105,15 @@ begin
   if Result < 0 then Exit;
   if (flags and not Int64($80800)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
   n := 128;
-  s := S_accept(WinFd[fd], Int64(@b[0]), Int64(@n));
-  if s = -1 then begin Result := SockErr; Exit; end;
+  s := SockRet(S_accept(WinFd[fd], Int64(@b[0]), Int64(@n)));
+  if s = -1 then
+  begin
+    Result := SockErr;
+    { ReactOS leaves no error for a non-blocking accept with nothing
+      pending; that is the one way accept fails without one }
+    if Result = 0 then Result := -LX_EAGAIN;
+    Exit;
+  end;
   WinLockAcquire;
   Result := SockFd(s, WinFdMem[fd], WinFdLen[fd], WinFdPos[fd], flags);
   WinLockRelease;
@@ -3388,7 +3413,19 @@ begin
     PLongInt(lenp)^ := 8;
   end
   else if (level = 1) and (name = 4) then                        { SO_ERROR holds a WSA code }
-    OptIntOut(val, lenp, SockErrno(t[0]))
+  begin
+    { ReactOS (0.4.16-dev x64) flags a refused non-blocking connect in the
+      except set but leaves SO_ERROR 0; a refusal is what that flag means
+      for a connect under way. }
+    if (WinFdOpt[fd] and OPT_CONNECTING) <> 0 then
+    begin
+      i := SockReady(fd);
+      if (t[0] = 0) and ((i and LX_POLLERR) <> 0) then t[0] := 10061;   { WSAECONNREFUSED }
+      if (i and (LX_POLLOUT or LX_POLLERR)) <> 0 then
+        WinFdOpt[fd] := WinFdOpt[fd] and not OPT_CONNECTING;
+    end;
+    OptIntOut(val, lenp, SockErrno(t[0]));
+  end
   else if n > 4 then
   begin
     if n > PLongInt(lenp)^ then n := PLongInt(lenp)^;
@@ -3430,7 +3467,7 @@ begin
     Result := SockErr;
     Exit;
   end;
-  s := S_WSASocketW(-1, -1, -1, Int64(@info[0]), 0, SOCKET_FLAGS);   { FROM_PROTOCOL_INFO }
+  s := SockRet(S_WSASocketW(-1, -1, -1, Int64(@info[0]), 0, SOCKET_FLAGS));   { FROM_PROTOCOL_INFO }
   if s = -1 then begin Result := SockErr; Exit; end;
   WinFd[nfd] := s;
   WinFdOpt[nfd] := WinFdOpt[fd];

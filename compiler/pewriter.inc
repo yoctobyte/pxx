@@ -21,7 +21,8 @@
 
   THREAD-LOCAL STORAGE is the PE TLS directory (PreparePETls): its data is
   the pxx TLS block plus a 32-byte scratch (getrlimit's at startup, then
-  winabi's per-thread words), all zero fill, so the loader
+  winabi's per-thread words), all zeros and all raw data (ReactOS's
+  loader ignores SizeOfZeroFill; see PreparePETls), so the loader
   hands every thread -- the main one, CreateThread's, and the ones Windows
   starts itself (the console control handler) -- a zeroed block of its own,
   reached through the TEB (TlsViaTeb in defs.inc).
@@ -45,6 +46,7 @@ var
 
 var
   PeTlsDirOff: Integer;                       { Data[] offset of IMAGE_TLS_DIRECTORY64, or -1 }
+  PeTlsTplSize: Integer;                      { bytes of TLS template (all raw data) }
 
 procedure PeRvaFixAdd(pos, tgt: Integer; wide: Boolean);
 begin
@@ -185,9 +187,16 @@ begin
 end;
 
 { IMAGE_TLS_DIRECTORY64 (40 bytes), then the index the loader writes, an
-  empty callback list and 8 bytes of template. The rest of the block is
-  SizeOfZeroFill. The four VAs are patched once dataBase is known. }
+  empty callback list and the template: the whole block plus winabi's
+  32-byte scratch, as zero bytes of RAW DATA with SizeOfZeroFill 0, the
+  way MSVC's link always emits it. ReactOS's loader (LdrpAllocateTls)
+  allocates and copies only End - Start and ignores SizeOfZeroFill, so a
+  zero-fill template there is an 8-byte heap block that the program's
+  thread-locals and winabi's per-thread words overrun (seen: a hello world
+  exiting 130, a stray "signal" from the heap bytes after it). The four
+  VAs are patched once dataBase is known. }
 procedure PreparePETls;
+var i: Integer;
 begin
   PeTlsDirOff := -1;
   if not TlsMainInstalled then Exit;
@@ -197,18 +206,19 @@ begin
   DataPutU64(0);                    { EndAddressOfRawData }
   DataPutU64(0);                    { AddressOfIndex }
   DataPutU64(0);                    { AddressOfCallBacks }
-  DataPutU32(TlsBlockSize + 32 - 8);   { SizeOfZeroFill: the block, then winabi's 32-byte scratch }
+  DataPutU32(0);                    { SizeOfZeroFill: none, see above }
   DataPutU32(0);                    { Characteristics }
   DataPutU64(0);                    { +40: the index (a DWORD, padded) }
   DataPutU64(0);                    { +48: the callback list's terminator }
-  DataPutU64(0);                    { +56: the raw template }
+  PeTlsTplSize := TlsBlockSize + 32;   { +56: the template: the block, then winabi's scratch }
+  for i := 1 to PeTlsTplSize do DataPutB(0);
 end;
 
 procedure PatchPETls(dataVa: Int64);
 begin
   if PeTlsDirOff < 0 then Exit;
   PatchDataU64(PeTlsDirOff, dataVa + PeTlsDirOff + 56);
-  PatchDataU64(PeTlsDirOff + 8, dataVa + PeTlsDirOff + 64);
+  PatchDataU64(PeTlsDirOff + 8, dataVa + PeTlsDirOff + 56 + PeTlsTplSize);
   PatchDataU64(PeTlsDirOff + 16, dataVa + PeTlsDirOff + 40);
   PatchDataU64(PeTlsDirOff + 24, dataVa + PeTlsDirOff + 48);
 end;
