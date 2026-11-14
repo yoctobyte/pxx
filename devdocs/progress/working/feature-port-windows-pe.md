@@ -205,3 +205,31 @@ Next, in order:
   gs:[0x58]; mov rax,[rax]`, since the exe's TLS index is 0) and
   CreateThread, and sockets (ws2_32).
 - **Later:** .reloc + ASLR, float args in the adapter, and arm64.
+
+### 2026-11-14: phase 2a, files and directories
+
+winabi's fd table holds three kinds of fd: a HANDLE, an in-memory file
+(/proc/self/environ, served from the envp strings WinArgBlock already
+built), and a directory (its UTF-16 path plus a FindFirstFileW enumeration,
+one page each). The calls added:
+
+- open/openat through CreateFileW. This is the 7-argument call, so the
+  adapter's stacked-argument path is now exercised.
+- read/write with O_APPEND, lseek, pread/pwrite (OVERLAPPED) and the vector
+  forms, the stat family (GetFileAttributesExW and
+  GetFileInformationByHandle into the Linux struct stat), getdents64, mkdir,
+  unlink and rmdir (and the *at forms with AT_REMOVEDIR), rename (also
+  renameat/renameat2), access, getcwd/chdir/fchdir, ftruncate,
+  fsync/fdatasync, dup/dup2/dup3/F_DUPFD, pipe/pipe2, fcntl, readlink
+  /proc/self/exe, and sysinfo.
+- The chmod/chown/umask/utime family answers 0.
+- GetLastError maps to errno (WinErr).
+
+Survey: 56/60 file-flavoured tests matched before preadv/pwritev and
+sysinfo were added, and both of those now pass. The remaining misses are
+a libc.so.6 printf and a socket. test-windows gained 13 file programs and
+test_os_env (environment + argv, argv0 filtered).
+
+Next: select/poll, then processes. The runtime forks and execs; Windows
+cannot fork, so that needs a CreateProcess path in lib/rtl/subprocess.pas
+and the crtl, not just the translator.

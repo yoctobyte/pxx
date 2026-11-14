@@ -6,8 +6,8 @@ order: 62
 # Windows (experimental)
 
 `--os=windows` writes a Windows x64 console executable (PE32+) from Pascal,
-C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux, and
-this is phase 1: one thread, no files yet.
+C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux. It
+is single-threaded, and it cannot start processes or open sockets yet.
 
 ```sh
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
@@ -61,14 +61,27 @@ test-windows` (run under Wine through `tools/vm/wine.sh`):
 - time and `Sleep`
 - command-line arguments (`ParamCount`/`ParamStr`, split by the Microsoft
   C runtime's quoting rules, and converted to UTF-8)
+- environment variables
 - exit codes and runtime errors
+- files: open/create/truncate/append, read and write, seek,
+  `pread`/`pwrite` and their vector forms, `stat`/`fstat`, rename, delete,
+  `ftruncate`, `fsync`, `dup`/`dup2`, and pipes
+- directories: create, remove, list (`getdents64` over `FindFirstFileW`),
+  the current directory, and the `*at` calls relative to a directory fd
+
+Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
+`/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken
+on the current drive. Under Wine that is drive `Z:`, the Unix root, so the
+path means what it means on Linux.
 
 ## Not supported yet
 
 - **Refused at compile time:** `--threadsafe`, `-g`, `--shared`,
   `--emit-obj`, `--rtl-libc`, and CPUs other than x86-64.
-- **Phase 2:** files and directories, environment variables (the runtime
-  reads `/proc/self/environ`), `select`/`poll`, and processes.
+- **Next:** `select`/`poll`, and starting processes (`fork` cannot be
+  emulated, so this needs a Windows path in the runtime's subprocess code).
+  Symbolic links, file modes (`chmod` succeeds and does nothing), and
+  `mmap` of a file are not supported either.
 - **Phase 3:** exceptions from hardware faults (no vectored exception handler
   yet), threads (through the PE TLS directory), and sockets.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
