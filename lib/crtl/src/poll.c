@@ -22,6 +22,9 @@
 
 #include <poll.h>
 #include <errno.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 extern int __pxx_poll(void *fds, int nfds, int timeout);
 
@@ -29,4 +32,23 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
   int r = __pxx_poll((void *)fds, (int)nfds, timeout);
   if (r < 0) { errno = -r; return -1; }
   return r;
+}
+
+/* ppoll(2): a timespec timeout and a signal mask held for the wait. The
+   kernel's own call where there is one (it writes back the time left, so it
+   gets a copy); elsewhere poll's millisecond timeout, without a mask. */
+int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout, const void *sigmask) {
+#if defined(SYS_ppoll)
+  struct timespec ts, *tp = 0;
+  if (timeout) {
+    ts = *timeout;
+    tp = &ts;
+  }
+  return (int)syscall(SYS_ppoll, (long)fds, (long)nfds, (long)tp, (long)sigmask, 8L /* the kernel's sigset: _NSIG/8 */);
+#else
+  long ms = -1;
+  if (sigmask) { errno = ENOSYS; return -1; }
+  if (timeout) ms = (long)timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000;
+  return poll(fds, nfds, (int)ms);
+#endif
 }

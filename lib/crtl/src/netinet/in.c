@@ -739,20 +739,6 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
   return r;
 }
 
-/* poll: the PAL has no readiness primitive yet, so this is a minimal
-   optimistic stub — it reports every requested fd as ready for the events the
-   caller asked about (POLLIN|POLLOUT), which lets a blocking-socket event loop
-   proceed (the following blocking send/recv is what actually waits). A real
-   readiness poll is a PAL feature (feature-dns-resolver-library / a PAL poll
-   ticket); until then non-blocking callers must not rely on this to gate. */
-int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
-  nfds_t i;
-  int ready = 0;
-  (void)timeout;
-  if (!fds) return 0;
-  for (i = 0; i < nfds; i++) {
-    fds[i].revents = (short)(fds[i].events & (POLLIN | POLLOUT));
-    if (fds[i].revents) ready++;
-  }
-  return ready;
-}
+/* (poll lives in poll.c, over the PAL's set poll. A second, "optimistic"
+   poll here reported every fd ready and ignored the timeout; whichever copy
+   a link took decided whether an event loop waited or spun.) */

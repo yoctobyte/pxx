@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  713 functions across 73 headers. }
+  715 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -114,16 +114,16 @@ begin
       ' lrand48:stdlib.h lremovexattr:sys/xattr.h lrint:math.h lround:math.h lseek:unistd.h ' +
       ' lsetxattr:sys/xattr.h lstat:sys/stat.h ';
     'm': Result :=
-      ' malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h mbrlen:wchar.h ' +
-      ' mbrtowc:wchar.h mbsinit:wchar.h memccpy:string.h memchr:string.h memcmp:string.h ' +
-      ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
-      ' memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
-      ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
-      ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
-      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
-      ' mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h ' +
-      ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
-      ' munmap:sys/mman.h ';
+      ' madvise:sys/mman.h malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h ' +
+      ' mbrlen:wchar.h mbrtowc:wchar.h mbsinit:wchar.h memccpy:string.h memchr:string.h ' +
+      ' memcmp:string.h memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h ' +
+      ' memrchr:string.h memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h ' +
+      ' mkfifo:sys/stat.h mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h ' +
+      ' mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h ' +
+      ' mlockall:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h ' +
+      ' mprotect:sys/mman.h mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h ' +
+      ' msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h ' +
+      ' munlockall:sys/mman.h munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
       ' nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h nrand48:stdlib.h ' +
@@ -140,10 +140,11 @@ begin
       ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
       ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
       ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_openpt:stdlib.h ' +
-      ' pow:math.h powf:math.h prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h printf:stdio.h ' +
-      ' prlimit:sys/resource.h pthread_kill:signal.h ptsname:stdlib.h ptsname_r:stdlib.h ' +
-      ' putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h ' +
-      ' putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h pwritev:sys/uio.h ';
+      ' pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h ' +
+      ' printf:stdio.h prlimit:sys/resource.h pthread_kill:signal.h ptsname:stdlib.h ' +
+      ' ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
+      ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h ' +
+      ' pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=

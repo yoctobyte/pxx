@@ -2,8 +2,7 @@
 #ifndef PXX_CRTL_SYS_MMAN_H
 #define PXX_CRTL_SYS_MMAN_H 1
 
-/* Minimal mmap surface for sqlite's optional memory-mapped I/O. Declarations
-   only; a `:memory:` database never maps a file. Flag values = Linux ABI. */
+/* The mapping calls; flag values = the Linux ABI (generic: x86, ARM, RISC-V). */
 
 #include <sys/types.h>
 
@@ -16,8 +15,42 @@
 #define MAP_PRIVATE   0x02
 #define MAP_FIXED     0x10
 #define MAP_ANONYMOUS 0x20
+#define MAP_ANON      MAP_ANONYMOUS
+#define MAP_SHARED_VALIDATE 0x03
+#define MAP_TYPE      0x0f
+#define MAP_GROWSDOWN 0x0100
+#define MAP_DENYWRITE 0x0800
+#define MAP_EXECUTABLE 0x1000
+#define MAP_LOCKED    0x2000
+#define MAP_NORESERVE 0x4000
+#define MAP_POPULATE  0x8000
+#define MAP_NONBLOCK  0x10000
+#define MAP_STACK     0x20000
+#define MAP_HUGETLB   0x40000
+#define MAP_SYNC      0x80000
+#define MAP_FIXED_NOREPLACE 0x100000
+#define MAP_HUGE_SHIFT 26
+#define MAP_HUGE_MASK  0x3f
+#define MAP_HUGE_2MB  (21 << MAP_HUGE_SHIFT)
+#define MAP_HUGE_1GB  (30 << MAP_HUGE_SHIFT)
 
 #define MAP_FAILED ((void *)-1)
+
+#define MADV_NORMAL     0
+#define MADV_RANDOM     1
+#define MADV_SEQUENTIAL 2
+#define MADV_WILLNEED   3
+#define MADV_DONTNEED   4
+#define MADV_FREE       8
+#define MADV_REMOVE     9
+#define MADV_DONTFORK   10
+#define MADV_DOFORK     11
+#define MADV_MERGEABLE  12
+#define MADV_UNMERGEABLE 13
+#define MADV_HUGEPAGE   14
+#define MADV_NOHUGEPAGE 15
+#define MADV_DONTDUMP   16
+#define MADV_DODUMP     17
 
 #define MS_ASYNC      1
 #define MS_INVALIDATE 2
@@ -27,6 +60,7 @@ extern void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t 
 extern int   munmap(void *addr, size_t length);
 extern int   mprotect(void *addr, size_t length, int prot);
 extern int   msync(void *addr, size_t length, int flags);
+extern int   madvise(void *addr, size_t length, int advice);
 /* mremap(2)'s flags. Linux ABI values, same as <linux/mman.h>.
 
    THE HEADER DECLARED mremap AND DEFINED NONE OF ITS FLAGS, which is not a
@@ -42,9 +76,7 @@ extern int   msync(void *addr, size_t length, int flags);
    arches (x86_64, i386, arm32, aarch64). Reproduced locally at HEAD against a
    corpus untouched since August, so it is the tree and not a box.
 
-   mremap itself is a stub that fails with ENOMEM and never reads flags, so
-   these are a COMPILE surface only. That is the right shape: sqlite passes the
-   flag, gets MAP_FAILED, and takes its own fallback. */
+   mremap is the real call now (where the target has syscall numbers). */
 #define MREMAP_MAYMOVE   1
 #define MREMAP_FIXED     2
 #define MREMAP_DONTUNMAP 4

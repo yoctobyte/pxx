@@ -100,6 +100,18 @@ off_t lseek(int fd, off_t offset, int whence) {
    pread() is. crtl's sqlite runs SQLITE_THREADSAFE=0 on a single fd, so the
    difference is unobservable there; anything relying on the atomicity wants a
    real syscall, which is noted on feature-crtl-implement-libc-assumptions. */
+#if defined(SYS_pread64) && defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+/* 64-bit targets: the real calls, atomic and thread-safe (the offset is one
+   register). The 32-bit ABIs split it over two, with per-arch padding, and
+   keep the seek-based emulation below. */
+ssize_t pread(int fd, void *buf, size_t count, off_t off) {
+  return (ssize_t)syscall(SYS_pread64, (long)fd, (long)buf, (long)count, (long)off);
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t off) {
+  return (ssize_t)syscall(SYS_pwrite64, (long)fd, (long)buf, (long)count, (long)off);
+}
+#else
 ssize_t pread(int fd, void *buf, size_t count, off_t off) {
   long long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
   long long s, r;
@@ -123,6 +135,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t off) {
   if (r < 0) { errno = (int)-r; return -1; }
   return (ssize_t)r;
 }
+#endif
 
 /* The PAL returns the raw kernel convention (0/positive, or a NEGATIVE errno).
    Most of this file already translates that to C's -1 + errno inline; the

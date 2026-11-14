@@ -1,3 +1,8 @@
+/*
+ * C runtime: sys/mman -- the kernel's mapping calls (mmap, munmap, mprotect,
+ * msync, mremap, madvise, mlock) as the syscalls themselves, where the target
+ * has syscall numbers; without them, anonymous memory over the PAL only.
+ */
 /* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: sys/mman — sqlite's memory-mapped I/O is OFF by default
@@ -13,32 +18,47 @@
 #include <errno.h>
 #include <unistd.h>      /* syscall() */
 #include <sys/syscall.h>
+#include <stdarg.h>
 
 extern void *__pxx_mmap_anon_prot(long length, int prot);
 extern int __pxx_mprotect(void *addr, long length, int prot);
 extern int __pxx_munmap(void *addr, long length);
 
-/* ANONYMOUS mappings are real now, over the PAL. That is what a JIT needs:
-   tcc -run maps pages, writes code into them and jumps in, which the old
-   MAP_FAILED stub made impossible.
+/* mmap(2) is the kernel's own call wherever there is one: every flag, the
+   address hint, the descriptor and the offset reach it unchanged. A driver
+   maps a device's registers (MAP_SHARED over a VFIO device fd, at an offset
+   past 4 GiB) and physically contiguous DMA memory (MAP_HUGETLB); dropping
+   any of that, as the anonymous-only stub did, gave such a program a private
+   zero page where it asked for a device -- or MAP_FAILED with no errno.
 
-   FILE-BACKED mmap is still refused with MAP_FAILED, deliberately. sqlite is
-   the only in-tree caller and its mmap I/O is off by default
-   (SQLITE_MAX_MMAP_SIZE = 0), so it falls back to ordinary read/write — which
-   also sidesteps the 32-bit mmap2 page-offset ABI. A wrong file mapping would
-   be a silent data bug; a refusal is a fallback. */
+   The 32-bit ABIs (i386, arm32) take mmap2, whose last argument is the offset
+   in 4096-byte units, so an offset that is not page aligned is EINVAL there
+   as it is on 64-bit kernels. Elsewhere (no syscall numbers: --os=windows) the
+   old anonymous-only path stays. sqlite is unaffected either way: its mmap
+   I/O is off by default (SQLITE_MAX_MMAP_SIZE = 0). */
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+#if defined(SYS_mmap2)
+  long r;
+  if ((unsigned long long)offset & 4095) { errno = EINVAL; return MAP_FAILED; }
+  r = syscall(SYS_mmap2, (long)addr, (long)length, (long)prot, (long)flags, (long)fd,
+              (long)((unsigned long long)offset >> 12));
+  return r == -1 ? MAP_FAILED : (void *)r;
+#elif defined(SYS_mmap)
+  long r = syscall(SYS_mmap, (long)addr, (long)length, (long)prot, (long)flags, (long)fd, (long)offset);
+  return r == -1 ? MAP_FAILED : (void *)r;
+#else
   void *p;
   (void)addr; (void)offset;
-  if (!(flags & MAP_ANONYMOUS) || fd != -1) return MAP_FAILED;
+  if (!(flags & MAP_ANONYMOUS) || fd != -1) { errno = ENODEV; return MAP_FAILED; }
   p = __pxx_mmap_anon_prot((long)length, prot);
   /* the raw syscall returns -errno in the top page on failure */
-  if ((unsigned long)p >= (unsigned long)-4095L) return MAP_FAILED;
+  if ((unsigned long)p >= (unsigned long)-4095L) { errno = (int)-(long)p; return MAP_FAILED; }
   return p;
+#endif
 }
 
-/* LFS alias: sqlite's os_unix.c imports mmap64 under _LARGEFILE64_SOURCE. Same
-   stub-fallback behaviour as mmap (mmap I/O is off by default). */
+/* LFS alias: sqlite's os_unix.c imports mmap64 under _LARGEFILE64_SOURCE;
+   off_t is 64 bits on every crtl target, so it is the same call. */
 void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
   return mmap(addr, length, prot, flags, fd, offset);
 }
@@ -56,28 +76,47 @@ int mprotect(void *addr, size_t length, int prot) {
   return __pxx_mprotect(addr, (long)length, prot) < 0 ? -1 : 0;
 }
 
-/* Flushing a mapping nothing ever created is vacuously done — no-op success,
-   the same answer munmap and mprotect give for the same reason.
-
-   These two were DECLARED in sys/mman.h with no body, which is the worse
-   failure: the C frontend's unresolved-extern fallback bound a caller to
-   libc.so.6, so the program kept working and quietly stopped being
-   self-contained (tools/crtl_decl_probe.sh exists to catch exactly that). A
-   stub that matches the rest of this file is honest; a silent DT_NEEDED is
-   not. */
+/* msync(2): with file mappings real, flushing one is real too. */
 int msync(void *addr, size_t length, int flags) {
+#ifdef SYS_msync
+  return (int)syscall(SYS_msync, (long)addr, (long)length, (long)flags);
+#else
   (void)addr; (void)length; (void)flags;
-  return 0;
+  return 0;                             /* (nothing but anonymous memory to flush) */
+#endif
 }
 
-/* mremap must return a POINTER, so it cannot pretend the way msync can: with
-   mmap stubbed out there is never a mapping to grow, and the caller has to see
-   that. Fails like mmap does. Linux-specific and variadic (the optional 5th
-   arg is new_address under MREMAP_FIXED); the varargs are simply not read. */
+/* mremap(2): Linux-specific and variadic -- the fifth argument, the new
+   address, is read only under MREMAP_FIXED, as glibc and musl do. sqlite
+   (HAVE_MREMAP under _GNU_SOURCE) grows its mappings with it. */
 void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...) {
+#ifdef SYS_mremap
+  va_list ap;
+  void *new_address = 0;
+  long r;
+  if (flags & MREMAP_FIXED) {
+    va_start(ap, flags);
+    new_address = va_arg(ap, void *);
+    va_end(ap);
+  }
+  r = syscall(SYS_mremap, (long)old_address, (long)old_size, (long)new_size, (long)flags, (long)new_address);
+  return r == -1 ? MAP_FAILED : (void *)r;
+#else
   (void)old_address; (void)old_size; (void)new_size; (void)flags;
   errno = ENOMEM;
   return MAP_FAILED;
+#endif
+}
+
+/* madvise(2): advice, so where there is no call it is accepted and ignored,
+   which POSIX allows (posix_madvise "may" act on it). */
+int madvise(void *addr, size_t length, int advice) {
+#ifdef SYS_madvise
+  return (int)syscall(SYS_madvise, (long)addr, (long)length, (long)advice);
+#else
+  (void)addr; (void)length; (void)advice;
+  return 0;
+#endif
 }
 
 /* mlock/munlock(2). The pair, not just mlock -- busybox's hdparm pins a timing
