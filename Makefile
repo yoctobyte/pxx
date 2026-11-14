@@ -20657,7 +20657,29 @@ test-core: $(COMPILER)
 	#    The fixture carries TWO block-scope thread-locals on purpose: a file with
 	#    one cannot tell those apart, and this family exists because a one-shot
 	#    flag reported a `__thread` array and suppressed a `__thread` struct.
-	@n=$$(grep -c 'function scope' $(TESTTMP)/c_fsthread26.err); 	  [ "$$n" = 1 ] 	  || { echo "c_func_scope_thread_local: FAIL - want exactly 1 warning for 2 declarations, got $$n"; exit 1; }
+	#    SINCE 2026-11-14 both declarations get real per-thread storage, so the
+	#    count is ZERO: the warning now fires only when a declaration falls back
+	#    to a shared copy, and that path is the area-full row below.
+	#    feature-c-a-function-scope-thread-local-gets-real-per-thread-storage
+	@n=$$(grep -c 'function scope' $(TESTTMP)/c_fsthread26.err); 	  [ "$$n" = 0 ] 	  || { echo "c_func_scope_thread_local: FAIL - want no warning for 2 placeable declarations, got $$n"; exit 1; }
+	# Real per-thread storage, against gcc, on the four block-installing targets:
+	# scalar, array and struct statics with initialisers (the once-guard is
+	# thread-local too, so each thread starts from the initial value).
+	./$(COMPILER) --threadsafe test/c_func_scope_thread_local_per_thread.c $(TESTTMP)/c_fstl26 > /dev/null
+	tools/expect_same.sh c_fstl26 "$$($(TESTTMP)/c_fstl26)" "$$(cat test/c_func_scope_thread_local_per_thread.expected)"
+	./$(COMPILER) --threadsafe --target=i386 test/c_func_scope_thread_local_per_thread.c $(TESTTMP)/c_fstl_i386 > /dev/null
+	tools/expect_same.sh i386/c_fstl_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_fstl_i386)" "$$(cat test/c_func_scope_thread_local_per_thread.expected)"
+	./$(COMPILER) --threadsafe --target=aarch64 test/c_func_scope_thread_local_per_thread.c $(TESTTMP)/c_fstl_a64 > /dev/null
+	tools/expect_same.sh aarch64/c_fstl_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_fstl_a64)" "$$(cat test/c_func_scope_thread_local_per_thread.expected)"
+	./$(COMPILER) --threadsafe --target=arm32 test/c_func_scope_thread_local_per_thread.c $(TESTTMP)/c_fstl_arm32 > /dev/null
+	tools/expect_same.sh arm32/c_fstl_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_fstl_arm32)" "$$(cat test/c_func_scope_thread_local_per_thread.expected)"
+	# A function-scope thread-local that does NOT fit degrades to the shared copy
+	# it always had, with a warning, and still compiles and runs correctly
+	# single-threaded -- unlike file scope, where area-full is an Error. The
+	# 2000-byte array does not fit a 1K area; the int beside it still does.
+	./$(COMPILER) -dPXX_TLS_USER_1K test/c_func_scope_thread_local_area_full.c $(TESTTMP)/c_fstl_full > $(TESTTMP)/c_fstl_full.log 2>&1
+	tools/expect_same.sh c_fstl_full_warns "$$(grep -c 'warning: __thread b: the per-thread variable area is full' $(TESTTMP)/c_fstl_full.log)" "1"
+	tools/expect_same.sh c_fstl_full_runs "$$($(TESTTMP)/c_fstl_full)" "6 8"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

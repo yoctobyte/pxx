@@ -7782,6 +7782,15 @@ begin
   end;
 end;
 
+procedure CNoteLocalThreadSym(sym: Integer);
+begin
+  if sym < 0 then Exit;
+  if CLocalThreadSymCount >= Length(CLocalThreadSyms) then
+    SetLength(CLocalThreadSyms, CLocalThreadSymCount * 2 + 8);
+  CLocalThreadSyms[CLocalThreadSymCount] := sym;
+  Inc(CLocalThreadSymCount);
+end;
+
 function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer;
 var savedCurProc: Integer;
 begin
@@ -7789,6 +7798,7 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocVar(name, tk);
   CurProc := savedCurProc;
+  if CLocalStaticDecl and CLocalThreadDecl then CNoteLocalThreadSym(Result);
   { Record whether a pointer variable's pointee is const-qualified (`const T *p`),
     for C11 _Generic lvalue-converted matching. CTypeBaseConst reflects the base
     type of the ParseCDeclType that just produced `tk`. }
@@ -7812,6 +7822,7 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocArray(name, elemType, lo, hi);
   CurProc := savedCurProc;
+  if CLocalStaticDecl and CLocalThreadDecl then CNoteLocalThreadSym(Result);
 end;
 
 { `extern T name[];` in a header, then `T name[] = { ... };` in the .c. The
@@ -7894,6 +7905,10 @@ begin
   CurProc := -1;                       { guard is a global (BSS) slot }
   gsym := AllocVar('$staticinit$' + MangleSuffix(SymCount), tyInteger);
   CurProc := savedCurProc;
+  { a thread-local's guard is thread-local too: each thread runs the
+    (constant) initialiser on its own first pass, so a new thread starts from
+    the initial value as gcc's .tdata gives it }
+  if CLocalThreadDecl then CNoteLocalThreadSym(gsym);
   { cond: guard == 0 }
   idn := AllocNode(AN_IDENT); ASTIVal[idn] := gsym; ASTTk[idn] := Ord(tyInteger);
   zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
@@ -10422,7 +10437,12 @@ end;
 {$endif}
 
 procedure CWarnFuncScopeThreadLocal(sawStatic: Boolean);
-{ The sixth reason, and the only one that is not an answer from the allocator.
+{ SUPERSEDED IN PART 2026-11-14: a `static __thread` now gets real per-thread
+  storage (CAssignLocalThreadStorage), and the area-sizing objection below is
+  answered there by an all-or-nothing rollback to the old shared copy. What is
+  left here is the no-`static` Error. The history is kept as written.
+
+  The sixth reason, and the only one that is not an answer from the allocator.
 
   A `static __thread int t;` inside a function body gets ONE shared object,
   exactly like the other five degraded shapes -- but unlike them it said NOTHING
@@ -10496,17 +10516,49 @@ begin
        + 'Add `static`, or move the declaration to file scope');
     Exit;
   end;
-  if CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] then Exit;
-  CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] := True;
-  Warn('__thread at function scope: a thread-local declared inside a function '
-     + 'body never reaches the thread-local allocator at all -- the storage '
-     + 'class is consumed with the other block-scope specifiers -- so it is '
-     + 'not refused for a reason, it is simply never asked for. '
-     + 'File-scope scalars are the shape that gets real per-thread storage. '
-     + '— this declaration therefore gets ONE copy shared by every thread, not '
-     + 'one per thread, exactly as it did before thread-local storage existed. '
-     + 'Single-threaded code is unaffected; threaded code will read and write '
-     + 'another thread''s value with no further warning');
+  { `static __thread` is given real storage by CAssignLocalThreadStorage,
+    which warns itself, per reason, when it cannot. Until 2026-11-14 this
+    warned unconditionally (TLSREFUSE_FUNCSCOPE) and changed no storage. }
+end;
+
+procedure CAssignLocalThreadStorage;
+{ Real per-thread storage for a function-scope `static __thread`: every symbol
+  the declaration made (the variables and the once-guard of its initialiser)
+  gets a slot, or NONE does. The area-sizing worry recorded at
+  CWarnFuncScopeThreadLocal is answered by the rollback: when any of them
+  cannot be placed -- the area is full, the build installs no block, the
+  target has none -- every slot taken here is handed back and the declaration
+  keeps the ONE shared copy it always had, with the warning it always had. So
+  no program that compiled before stops compiling, and an all-or-nothing rule
+  means a variable never ends up per-thread behind a shared guard.
+  feature-c-a-function-scope-thread-local-gets-real-per-thread-storage }
+var i, savedUsed, reason: Integer; why: AnsiString; ok: Boolean;
+begin
+  savedUsed := TlsUserUsed;
+  ok := True;
+  why := '';
+  reason := TLSREFUSE_NONE;
+  for i := 0 to CLocalThreadSymCount - 1 do
+    if SymTlsOffset[CLocalThreadSyms[i]] < 0 then
+      if not TryAssignThreadVarStorage(CLocalThreadSyms[i], '__thread', why, reason) then
+      begin
+        ok := False;
+        Break;
+      end;
+  if not ok then
+  begin
+    for i := 0 to CLocalThreadSymCount - 1 do SymTlsOffset[CLocalThreadSyms[i]] := -1;
+    TlsUserUsed := savedUsed;
+    if (reason >= 0) and (reason <= TLSREFUSE_MAX) and (not CTlsWarnedReason[reason]) then
+    begin
+      CTlsWarnedReason[reason] := True;
+      Warn(why + ' (at function scope) — this declaration therefore gets ONE copy '
+         + 'shared by every thread, not one per thread. Single-threaded code is '
+         + 'unaffected; threaded code will read and write another thread''s value '
+         + 'with no further warning');
+    end;
+  end;
+  CLocalThreadSymCount := 0;
 end;
 
 function ParseCStatementAST: Integer;
@@ -10696,8 +10748,12 @@ begin
     if IsCTypeTok then
     begin
       CLocalStaticDecl := True;
+      CLocalThreadDecl := localSawThread;
+      CLocalThreadSymCount := 0;
       Result := ParseCLocalDeclAST;
       CLocalStaticDecl := False;
+      CLocalThreadDecl := False;
+      if localSawThread then CAssignLocalThreadStorage;
       Exit;
     end;
   end;

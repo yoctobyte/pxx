@@ -5655,6 +5655,12 @@ var
   CGIArrTgt  : array of Integer;
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
+  CLocalThreadDecl : Boolean; { ...and `__thread` too: CAllocDeclVar/CAllocDeclArray and
+    CWrapStaticInitOnce record the symbols they make in CLocalThreadSyms, and
+    CAssignLocalThreadStorage gives them per-thread slots once the declaration
+    is complete. feature-c-a-function-scope-thread-local-gets-real-per-thread-storage }
+  CLocalThreadSyms : array of Integer;
+  CLocalThreadSymCount : Integer;
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   { The MAIN module's docstring, as a SPAN into the source buffer rather than a
     copied string — an AN_STR_LIT node carries exactly SOffset/SLen, so `__doc__`

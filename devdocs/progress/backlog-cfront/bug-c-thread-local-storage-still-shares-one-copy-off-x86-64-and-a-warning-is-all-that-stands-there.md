@@ -163,3 +163,10 @@ A C `__thread` array or struct (any non-managed record; C has no managed
 types) gets real per-thread storage, with initialisers, on all four targets:
 feature-c-thread-local-arrays. The (1) target, (2) dynamic-binary, (4)
 --emit-obj/--shared and (5) function-scope cases are unchanged.
+
+Also 2026-11-14: case (5), function scope, is closed. A `static __thread` in
+a function body gets per-thread storage, falling back to the shared copy with
+a warning only when it cannot be placed:
+feature-c-a-function-scope-thread-local-gets-real-per-thread-storage. Still
+open here: (1) targets with no block, (2) dynamic aarch64/arm32 binaries, and
+(4) --emit-obj/--shared.
