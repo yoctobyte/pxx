@@ -1,0 +1,6 @@
+off asq 4096 acq 8192 bounce 12288 size 77824
+ctrl 0 0 0 0 0
+hba 0 0 0 0
+init 5 9 1 0
+alignof 4096 1024 4 8 4096 4
+const 4

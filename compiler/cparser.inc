@@ -243,6 +243,7 @@ function CNodeIsPointer(node: Integer): Boolean; forward;
 { CNodeDecaysToPointer forward moved to forwards.inc (must sit above ir.inc:901,
   which calls it; this spot is below that use — too late for the FPC seed). }
 function CNodePtrElemRec(node: Integer): Integer; forward;
+function CRecAlign(rec: Integer): Integer; forward;
 function CAtomicIntrinsic(const name: AnsiString; argHead, argN: Integer): Integer; forward;
 function CAtomicRewrite(var name: AnsiString; var argHead: Integer; argN: Integer;
                         var retKind: Integer): Boolean; forward;
@@ -4138,6 +4139,48 @@ begin
   Result := sz > 0;
 end;
 
+{ C11 `_Alignof(type-name)`, and gcc's `__alignof__` / `__alignof`, which also
+  take an expression. CurTok is the keyword. A record answers its own
+  alignment (the largest member alignment, aligned(N) members included), a
+  pointer the pointer size, an array its element's. Gibux asked
+  2026-11-14 (_Alignof(struct ctrl) was "expected C expression").
+  bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment }
+function CParseAlignof: Integer;
+var tk: TTypeKind; node, rec: Integer; isType: Boolean;
+begin
+  Next;   { the keyword }
+  Expect(tkLParen, '(');
+  isType := IsCTypeTok;
+  if isType then
+  begin
+    tk := ParseCDeclType;
+    if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
+    else if tk = tyRecord then Result := CRecAlign(CTypeBaseRec)
+    else Result := TypeAlign(tk);
+    while CurTok.Kind = tkStar do begin Next; Result := TARGET_PTR_SIZE; end;
+    while CurTok.Kind = tkLBrack do
+    begin
+      { an array has its element's alignment: skip the dimension }
+      while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+      Expect(tkRBrack, ']');
+    end;
+  end
+  else
+  begin
+    node := ParseCExpr;
+    tk := IntToTypeKind(ASTTk[node]);
+    if tk = tyRecord then
+    begin
+      rec := ResolveNodeRec(node);
+      if rec >= 0 then Result := CRecAlign(rec) else Result := TARGET_PTR_SIZE;
+    end
+    else if tk = tyPointer then Result := TARGET_PTR_SIZE
+    else Result := TypeAlign(tk);
+  end;
+  if Result < 1 then Result := 1;
+  Expect(tkRParen, ')');
+end;
+
 function ParseCSizeof: Integer;
 var szK, szN: Integer; szWide: Boolean;
     node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
@@ -5138,6 +5181,15 @@ begin
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
     Result := ParseCSizeof();
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and ((CurTok.SVal = '_Alignof') or (CurTok.SVal = '__alignof__')
+     or (CurTok.SVal = '__alignof')) then
+  begin
+    node := CParseAlignof;
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := node;
+    ASTTk[Result] := Ord(tyInt64);   { as sizeof's literal }
     Exit;
   end;
   { cast: (type) unary -> reinterpret/retag the operand to the target type }
@@ -18198,6 +18250,12 @@ begin
       Error('C: sizeof of a variable-length array is not a constant expression'
             + ' — its value is only known at run time');
     Result := ASTIVal[Result];
+    CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
+  end
+  else if (CurTok.Kind = tkIdent) and ((CurTok.SVal = '_Alignof') or (CurTok.SVal = '__alignof__')
+          or (CurTok.SVal = '__alignof')) then
+  begin
+    Result := CParseAlignof;
     CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
   end
   else if CurTok.Kind = tkIdent then

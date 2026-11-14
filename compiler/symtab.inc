@@ -7012,6 +7012,14 @@ begin
     if (CurProc < 0) or AllocStaticLocal then
     begin
       if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
+      { THE SECTION MUST BE AT LEAST AS ALIGNED AS ITS MOST-ALIGNED SLOT. The
+        slot's offset honours a record's own alignment (a member's
+        aligned(4096) makes the struct 4096-aligned), but only an aligned(N)
+        written on the VARIABLE used to reach the writers, so .bss started 8-
+        or 16-aligned and a 4096-aligned struct sat at an offset that was a
+        multiple of 4096 from a base that was not. Gibux's NVMe queues.
+        bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment }
+      if align > ReqBssAlign then ReqBssAlign := align;
       { A C GLOBAL OF SIZE 0 STILL GETS ITS OWN ADDRESS. `extern const struct T
         x;` before T is complete sizes to 0, so a run of such declarations all
         sat at ONE offset. The object writer names an import by its offset
@@ -7659,6 +7667,13 @@ begin
   else if size >= 2 then align := 2
   else align := 1;
   if minAlign > align then align := minAlign;
+  { the record's own alignment, as the .bss slot had it }
+  if (Syms[symIdx].TypeKind = tyRecord) and (Syms[symIdx].RecName >= REC_UCLASS_BASE)
+     and (UClsAlign[Syms[symIdx].RecName - REC_UCLASS_BASE] > align) then
+    align := UClsAlign[Syms[symIdx].RecName - REC_UCLASS_BASE];
+  if Syms[symIdx].IsArray and (Syms[symIdx].ElemRecName >= REC_UCLASS_BASE)
+     and (UClsAlign[Syms[symIdx].ElemRecName - REC_UCLASS_BASE] > align) then
+    align := UClsAlign[Syms[symIdx].ElemRecName - REC_UCLASS_BASE];
   { An executable's read-only split moves RW data by a multiple of 16 only
     (RO_RESIDUE), so a larger aligned(N) would not survive it there: such a
     global stays in .bss with its stores. An object has no split. }
@@ -7897,6 +7912,7 @@ begin
   if (CurProc < 0) or AllocStaticLocal then
   begin
     if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
+    if align > ReqBssAlign then ReqBssAlign := align;    { see AllocVar }
     BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;

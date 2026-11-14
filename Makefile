@@ -19543,6 +19543,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_fs_atomics_undef "$$(nm $(TESTTMP)/c_fs_atomics.o | grep -c ' U ')" "0"
 	gcc -no-pie -pthread -o $(TESTTMP)/c_fs_atomics test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics.o
 	tools/expect_same.sh c_fs_atomics "$$($(TESTTMP)/c_fs_atomics)" "atomics ok"
+	# A global of an over-aligned STRUCT type (a member's aligned(4096)) sits on
+	# that alignment, .bss and .data, hosted and --freestanding; _Alignof works.
+	# bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment
+	./$(COMPILER) test/c_global_overaligned_struct.c $(TESTTMP)/cgovalign26
+	tools/expect_same.sh cgovalign26 "$$($(TESTTMP)/cgovalign26)" "$$(cat test/c_global_overaligned_struct.expected)"
+	./$(COMPILER) --target=aarch64 test/c_global_overaligned_struct.c $(TESTTMP)/cgovalign_a64
+	tools/expect_same.sh cgovalign_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cgovalign_a64)" "$$(cat test/c_global_overaligned_struct.expected)"
+	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_overaligned.c $(TESTTMP)/c_fs_ovalign.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/c_fs_ovalign test/c_freestanding_overaligned_main.c $(TESTTMP)/c_fs_ovalign.o
+	tools/expect_same.sh c_fs_ovalign "$$($(TESTTMP)/c_fs_ovalign)" "mods 0"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,
