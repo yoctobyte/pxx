@@ -1,0 +1,6 @@
+opts 2 optind 3
+helpers 1 2
+part writes to stdout
+made abc!
+env yes
+errno 1

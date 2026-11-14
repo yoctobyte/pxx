@@ -58,6 +58,9 @@ usage: tools/dropbear_pxx.py [--pinned] [--keep] [--jobs N] [--build-only]
   --jobs N      parallel compiles (default 6), each under nice -n 15
   --build-only  stop after linking; with --out, copy the four binaries there
   --port N      first TCP port to use (default: a free one from the kernel)
+  --self-contained  compile every unit with its own runtime (pxx's default
+                for a lone object) instead of --shared-runtime, which this
+                tool uses on x86-64: crtl compiled once, added by --link
 """
 import argparse
 import hashlib
@@ -81,6 +84,7 @@ PROGRAMS = ["dropbear", "dbclient", "dropbearkey", "scp"]
 # kernel's binfmt_misc qemu handler, which the tests need anyway: dropbear
 # execs the pxx scp itself.
 TARGET = "x86_64"
+SHARED_RT = True   # --shared-runtime on x86-64 unless --self-contained / --pinned
 CONFIGURE = ["--disable-zlib", "--disable-utmp", "--disable-utmpx", "--disable-wtmp",
              "--disable-wtmpx", "--disable-lastlog", "--disable-pututline",
              "--disable-pututxline", "--disable-loginfunc"]
@@ -269,6 +273,8 @@ def pxx_build(work, tree, log, maps, compiler, jobs):
         # --function-sections (dead-code GC at link) is x86-64 only: the
         # aarch64 object writer has no R_AARCH64_CALL26 for cross-section calls.
         fs = ["--function-sections"] if TARGET == "x86_64" else []
+        if SHARED_RT and TARGET == "x86_64":
+            fs.append("--shared-runtime")
         rc, out, err = run(["nice", "-n", "15", compiler, "--emit-obj"] + fs
                            + target_flags() + flags + [src, o], cwd=cwd, timeout=1200)
         text = (out + err).decode(errors="replace")
@@ -555,9 +561,12 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--target", default="x86_64", choices=["x86_64", "aarch64"])
+    ap.add_argument("--self-contained", action="store_true")
     a = ap.parse_args()
-    global TARGET
+    global TARGET, SHARED_RT
     TARGET = a.target
+    # the pinned compiler predates --shared-runtime
+    SHARED_RT = not (a.self_contained or a.pinned)
     if not a.build_only and not binfmt_ready(TARGET):
         die("--target=%s needs qemu-%s registered with binfmt_misc (see /proc/sys/fs/binfmt_misc)"
             % (TARGET, TARGET))

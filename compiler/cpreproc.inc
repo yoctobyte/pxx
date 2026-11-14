@@ -3042,6 +3042,14 @@ begin
     headers, the only one with an impl file. Gibux's kprintf.c. }
   if FreestandingMode then
     if not (CPCrtlHeaderName(hdrPath, hdrName) and (hdrName = 'stdarg')) then Exit;
+  { --shared-runtime: the runtime object supplies every crtl impl, once.
+    Except the two that are compiler support rather than library (gcc's
+    libgcc, not its libc): stdarg's __pxx_va_* and setjmp's __pxx_sigjmp_*
+    are called by code the compiler GENERATES, are stateless, and stay in
+    the object like the freestanding stdarg exception above. }
+  if SharedRuntime and EmitObjMode then
+    if not (CPCrtlHeaderName(hdrPath, hdrName) and
+            ((hdrName = 'stdarg') or (hdrName = 'setjmp'))) then Exit;
   if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
   if CPCrtlSrcPulled(src) then Exit;
@@ -3821,6 +3829,25 @@ begin
     too, or the macro becomes a name that is not the thing. }
   if TargetHasTlsBlock and not (EmitObjMode or EmitSharedMode) then
     CPAddLiteral('__pxx_thread_local__', '01');
+  { The shared-runtime marker (decide-a-is-a-pxx-object-a-self-contained-
+    runtime-or-a-translation-unit): one symbol per runtime VARIANT -- target,
+    and --threadsafe, which changes errno to a thread-local and adds pthread.
+    A --shared-runtime object references it (pxx/shared_runtime.h, forced in);
+    the runtime object defines it (pxx/runtime_all.h). pxx --link adds the
+    runtime when it is referenced and undefined; any other linker reports it
+    by this name, which says what is missing. }
+  if EmitObjMode then
+  begin
+    cmdInc := '__pxxrt_needed_' + TargetArchName(TargetArch);
+    for i := 1 to Length(cmdInc) do
+      if cmdInc[i] = '-' then cmdInc[i] := '_';
+    if ThreadSafeMode then
+    begin
+      cmdInc := cmdInc + '_ts';
+      CPAddLiteral('__PXXRT_THREADSAFE', '1');
+    end;
+    CPAddLiteral('__PXXRT_MARKER', cmdInc);
+  end;
   { gcc's own spelling of "plain char is unsigned here" (aarch64, arm32, riscv,
     or -funsigned-char), which limits.h reads for CHAR_MIN/CHAR_MAX. Without it
     aarch64 said CHAR_MIN = -128 while its chars compared unsigned.

@@ -85,6 +85,10 @@
 #               reaches. Measured on a 3-TU C program at 39c7042211a7: 624856 ->
 #               336016 linked, and the cost of separate compilation 242568 ->
 #               42176. Ignored outside --separate: there are no objects to prune.
+#   --shared-runtime  add --shared-runtime to each per-TU compile (with
+#               --pxx-link): crtl is compiled once, into a runtime object that
+#               pascal26 --link builds, caches and adds by itself, instead of
+#               into every unit. decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 #   --function-sections  add --function-sections to each per-TU compile, so every
 #               function is its own section and a linker can drop the unreached
 #               ones -- the crtl-per-object ticket's measurement switch. With
@@ -243,6 +247,7 @@ while [ $# -gt 0 ]; do
     --pxx-link) PXXLINK=1; FREESTANDING=1; SEPARATE=1; shift ;;
     --dce)     OBJFLAGS="$OBJFLAGS --dce"; shift ;;
     --function-sections) OBJFLAGS="$OBJFLAGS --function-sections"; FSECT=1; shift ;;
+    --shared-runtime) OBJFLAGS="$OBJFLAGS --shared-runtime"; shift ;;
     --build-only) BUILDONLY=1; shift ;;
     --out)     BOOUT="$2"; shift 2 ;;
     --usage)   USAGE=1; shift ;;

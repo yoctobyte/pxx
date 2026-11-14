@@ -14915,6 +14915,9 @@ begin
   if CUseSystemLibs or NoDefaultRtl then Exit;
   if TargetArch = TARGET_XTENSA then Exit;
   if (TargetArch = TARGET_RISCV32) and EspBareBoot then Exit;
+  { --shared-runtime: environ lives in the runtime object, whose own init
+    thunk fills it once; this unit only references it. }
+  if SharedRuntime and EmitObjMode then Exit;
   for i := 0 to TokCount - 1 do
     if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 7) and
        (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ') then

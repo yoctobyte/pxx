@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:51 blocked:8 backlog:4 backlog_new:1 backlog-umbrella:14 backlog-core:164 backlog-nilpy:99 backlog-tools:73 backlog-pascal:14 backlog-decide:47 backlog-libs:28 backlog-cfront:17 backlog-web:9 backlog-windows:3 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4424 rejected:90`
+`working:3 unfinished:51 blocked:8 backlog:4 backlog_new:1 backlog-umbrella:14 backlog-core:164 backlog-nilpy:99 backlog-tools:73 backlog-pascal:14 backlog-decide:46 backlog-libs:28 backlog-cfront:17 backlog-web:9 backlog-windows:3 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:154 done:4426 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
@@ -78,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 489, ranked
+## Ready — top 30 of 488, ranked
 
 - `[p 95] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones (unblocks 1)
 - `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
@@ -90,7 +90,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
-- `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
 - `[p 80] [A]` feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross (unblocks 1)
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -110,5 +109,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [N]` bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
+- `[p 70] [T]` bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead
 
-_459 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_458 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

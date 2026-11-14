@@ -1325,7 +1325,12 @@ begin
     i := 0;
     while i < ProcCount do
     begin
-      if ObjProcIsDefined(i) and ObjProcIsExported(i) then DceMark(i);
+      { ...except the Pascal runtime's weak copies: exported so that the
+        linker can keep ONE, not because anything outside calls them. A
+        helper this object never reaches is not this object's to provide
+        (ObjProcIsBuiltinRtl; toybox's objects went 15 MB -> 52 MB rooted). }
+      if ObjProcIsDefined(i) and ObjProcIsExported(i) and
+         not ObjProcIsBuiltinRtl(i) then DceMark(i);
       Inc(i);
     end;
   end;

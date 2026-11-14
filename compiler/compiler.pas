@@ -1189,6 +1189,10 @@ begin
   WriteLn('                        every cross-function reference a relocation, so a linker');
   WriteLn('                        can drop what the program never reaches (ld --gc-sections).');
   WriteLn('                        The object''s symbols and exports are unchanged.');
+  WriteLn('  --shared-runtime      --emit-obj (C): the object carries only its own code; the');
+  WriteLn('                        C runtime is compiled once into a runtime object that');
+  WriteLn('                        --link builds, caches (~/.cache/pxx) and adds itself. For');
+  WriteLn('                        multi-object projects; default objects are self-contained.');
   WriteLn('  --freestanding        --emit-obj (C): code with no runtime under it, a kernel.');
   WriteLn('                        No .init_array/.fini_array, no crtl implementation pulled');
   WriteLn('                        in by a header, no signal stack; implies --function-sections');
@@ -1552,6 +1556,7 @@ begin
   OptLevelExplicit := False;
   SourceOneToOne := False;
   FunctionSections := False;
+  SharedRuntime := False;
   FreestandingMode := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
@@ -1771,6 +1776,14 @@ begin
     else if option = '--function-sections' then
     begin
       FunctionSections := True;
+      Inc(i);
+    end
+    else if option = '--shared-runtime' then
+    begin
+      SharedRuntime := True;
+{$ifndef PXX_NO_CFRONT}
+      AddCmdInclude('pxx/shared_runtime.h');
+{$endif}
       Inc(i);
     end
     else if option = '--freestanding' then

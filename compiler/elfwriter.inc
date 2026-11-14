@@ -4445,6 +4445,38 @@ begin
   Result := (Procs[procIdx].BodyAddr >= 0) and (not ProcExternal[procIdx]);
 end;
 
+{ Is this routine the PASCAL runtime -- a body from one of the compiler's own
+  builtin units (heap, strings, interfaces, exceptions, ...), compiled into
+  every object the way crtl is?
+
+  The same argument ObjProcBind makes for crtl applies, and it was never
+  applied here: LOCAL copies mean one allocator AND ONE HEAP PER OBJECT for
+  Pascal-level allocation, and ~14 KB of identical helpers per object that no
+  linker may fold (toybox: 205 objects, 2.9 MB). WEAK keeps one copy, and that
+  copy carries its own state's addresses, so every caller reaches the same
+  heap. Only on the hosted x86-64/aarch64 object route; an ESP image keeps its
+  runtime private (ObjRuntimeIsPrivate), and nothing changes there.
+  decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit }
+function ObjRuntimeIsPrivate: Boolean; forward;
+function ObjProcIsBuiltinRtl(procIdx: Integer): Boolean;
+var u: AnsiString;
+begin
+  Result := False;
+  if not EmitObjMode or EmitSharedMode then Exit;
+  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then Exit;
+  if ObjRuntimeIsPrivate then Exit;
+  if (ProcUnitIdx[procIdx] < 0) or (ProcUnitIdx[procIdx] >= Length(Strs)) then Exit;
+  u := LowerCase(Strs[ProcUnitIdx[procIdx]].Text);
+  { the units every hosted object carries (measured on a C object: 1,540
+    builtinheap, 130 platform_backend, 124 platform, 122 pxxcio) }
+  Result := (u = 'builtinheap') or (u = 'platform') or (u = 'platform_backend') or
+            (u = 'pxxcio');
+  { a unit's own initialisation/finalisation stays per object: each object's
+    thunk runs its own, and a shared one would run N times }
+  if Result and ((Copy(Procs[procIdx].Name, 1, 7) = '__fini_') or
+                 (Copy(Procs[procIdx].Name, 1, 7) = '__init_')) then Result := False;
+end;
+
 function ObjProcIsExported(procIdx: Integer): Boolean;
 { Does this routine belong in the object's link-visible surface? Only if its
   NAME and its CONVENTION both mean something outside this compilation, which
@@ -4478,6 +4510,7 @@ begin
   Result := False;
   if ProcCStaticLink[procIdx] then Exit;
   if ProcCdecl[procIdx] then begin Result := True; Exit; end;
+  if ObjProcIsBuiltinRtl(procIdx) then begin Result := True; Exit; end;
   if not ProcConventionIsC(procIdx) then Exit;
   for i := 0 to ExportCount - 1 do
     if FindProc(ExportName[i]) = procIdx then begin Result := True; Exit; end;
@@ -4980,7 +5013,8 @@ function ObjProcBind(procIdx: Integer): Byte;
   exported weak alongside the code; see ObjDataIsRuntime.
   bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
 begin
-  if ProcObjRuntimeCopy[procIdx] then ObjProcBind := $20 else ObjProcBind := $10;
+  if ProcObjRuntimeCopy[procIdx] or ObjProcIsBuiltinRtl(procIdx) then ObjProcBind := $20
+  else ObjProcBind := $10;
 end;
 
 function ObjRuntimeIsPrivate: Boolean;
@@ -5064,8 +5098,13 @@ function ObjDataIsImport(i: Integer): Boolean;
   The answer is a private slot, which is what it had before this ticket, not an
   UND that the linker will resolve into a different runtime. }
 begin
+  { --shared-runtime is the exception, and the reason it exists: the runtime
+    object linked beside this one DOES own the definition, so the private slot
+    would be a second, never-initialised stdout (measured: toybox's xprintf
+    passed NULL to ferror). }
   ObjDataIsImport := ObjDataIsCandidate(i) and SymObjDataExternOnly[i] and
-                     (not SymCStaticLink[i]) and (not SymObjRuntimeCopy[i]);
+                     (not SymCStaticLink[i]) and
+                     ((not SymObjRuntimeCopy[i]) or SharedRuntime);
 end;
 
 function ObjDataIsLocal(i: Integer): Boolean;

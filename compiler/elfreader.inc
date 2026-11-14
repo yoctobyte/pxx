@@ -2053,6 +2053,275 @@ end;
 { --link <obj>... <out>, ParamStr(first..last) being the objects. If the set
   defines _start it is the entry, as it would be for ld; otherwise the linker
   supplies one (ElfLnkPutStub) that calls main. }
+{ ---- the shared runtime, added by --link --------------------------------
+  decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
+  (owner, 2026-11-14): an object compiled with --shared-runtime carries only
+  its translation unit and references __pxxrt_needed_<target>[_ts]. The
+  runtime object -- crtl compiled ONCE, lib/crtl/include/pxx/runtime_all.h --
+  defines it. When the marker is referenced and nothing defines it, --link
+  adds the runtime itself, building it on first use into
+  $XDG_CACHE_HOME/pxx (or ~/.cache/pxx), keyed by a hash of THIS compiler
+  binary, so a rebuilt compiler never reuses a stale runtime.
+
+  The build is this same binary run as a child (fork + execve of
+  /proc/self/exe), writing to a per-process temporary that is renamed into
+  place, so parallel links racing to build it are safe. }
+
+{ The process environment as a NUL-separated block -> PChar vector, for the
+  child (it needs PXX_HOME and friends to find lib/crtl like we did). }
+function ElfRtHashSelf: AnsiString;
+var buf, selfPath, hex: AnsiString; i: Integer; h: Int64;
+begin
+  hex := '0123456789abcdef';
+  selfPath := '/proc/self/exe';
+  LoadFile(selfPath, buf);
+  h := 2166136261;
+  for i := 1 to Length(buf) do
+    h := ((h xor Ord(buf[i])) * 16777619) and $FFFFFFFF;
+  Result := '';
+  for i := 7 downto 0 do
+    Result := Result + hex[((h shr (i * 4)) and 15) + 1];
+  Result := Result + '-' + AIntToStr(Length(buf));
+end;
+
+function ElfRtMkdir(const path: AnsiString): Integer;
+begin
+{$ifdef FPC}
+  Result := fpMkdir(path, &755);
+{$else}
+{$if defined(CPUX86_64)}
+  Result := __pxxrawsyscall(83, Int64(PChar(path)), 493, 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(34, -100, Int64(PChar(path)), 493, 0, 0, 0);
+{$else}
+  Result := -38;
+{$endif}
+{$endif}
+end;
+
+function ElfRtRename(const a, b: AnsiString): Integer;
+begin
+{$ifdef FPC}
+  Result := fpRename(a, b);
+{$else}
+{$if defined(CPUX86_64)}
+  Result := __pxxrawsyscall(82, Int64(PChar(a)), Int64(PChar(b)), 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(38, -100, Int64(PChar(a)), -100, Int64(PChar(b)), 0, 0);
+{$else}
+  Result := -38;
+{$endif}
+{$endif}
+end;
+
+function ElfRtUnlink(const path: AnsiString): Integer;
+begin
+{$ifdef FPC}
+  Result := fpUnlink(path);
+{$else}
+{$if defined(CPUX86_64)}
+  Result := __pxxrawsyscall(87, Int64(PChar(path)), 0, 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(35, -100, Int64(PChar(path)), 0, 0, 0, 0);
+{$else}
+  Result := -38;
+{$endif}
+{$endif}
+end;
+
+function ElfRtGetPid: Int64;
+begin
+{$ifdef FPC}
+  Result := fpGetPid;
+{$else}
+{$if defined(CPUX86_64)}
+  Result := __pxxrawsyscall(39, 0, 0, 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(172, 0, 0, 0, 0, 0, 0);
+{$else}
+  Result := 0;
+{$endif}
+{$endif}
+end;
+
+function ElfRtFileExists(const path: AnsiString): Boolean;
+var fd: Integer;
+begin
+  fd := sysopen(path, 0);
+  Result := fd >= 0;
+  if fd >= 0 then sysclose(fd);
+end;
+
+{ Run argv[0..n-1] (argv[0] is shown, /proc/self/exe is executed); True when
+  it exited 0. }
+function ElfRtRunSelf(const args: array of AnsiString): Boolean;
+var argv: array of PChar;
+    envv: array of PChar;
+    i, n, st: Integer;
+    pid, rc: Int64;
+    status: LongInt;
+    selfExe: AnsiString;
+begin
+  Result := False;
+  selfExe := '/proc/self/exe';
+  n := Length(args);
+  SetLength(argv, n + 1);
+  for i := 0 to n - 1 do argv[i] := PChar(args[i]);
+  argv[n] := nil;
+  PxxEnvLoad;
+  st := 0;
+  SetLength(envv, 1);
+  i := 1;
+  while i <= Length(PxxEnvBlock) do
+  begin
+    SetLength(envv, st + 2);
+    envv[st] := @PxxEnvBlock[i];
+    Inc(st);
+    while (i <= Length(PxxEnvBlock)) and (PxxEnvBlock[i] <> Chr(0)) do Inc(i);
+    Inc(i);
+  end;
+  envv[st] := nil;
+  status := 0;
+{$ifdef FPC}
+  pid := fpFork;
+  if pid = 0 then
+  begin
+    fpExecve(PChar(selfExe), @argv[0], @envv[0]);
+    fpExit(127);
+  end;
+  if pid < 0 then Exit;
+  rc := fpWaitPid(pid, @status, 0);
+{$else}
+{$if defined(CPUX86_64)}
+  pid := __pxxrawsyscall(57, 0, 0, 0, 0, 0, 0);
+  if pid = 0 then
+  begin
+    rc := __pxxrawsyscall(59, Int64(PChar(selfExe)), Int64(@argv[0]), Int64(@envv[0]), 0, 0, 0);
+    rc := __pxxrawsyscall(60, 127, 0, 0, 0, 0, 0);
+  end;
+  if pid < 0 then Exit;
+  rc := __pxxrawsyscall(61, pid, Int64(@status), 0, 0, 0, 0);
+{$elseif defined(CPUAARCH64)}
+  { no fork on aarch64: clone(SIGCHLD) is the same thing }
+  pid := __pxxrawsyscall(220, 17, 0, 0, 0, 0, 0);
+  if pid = 0 then
+  begin
+    rc := __pxxrawsyscall(221, Int64(PChar(selfExe)), Int64(@argv[0]), Int64(@envv[0]), 0, 0, 0);
+    rc := __pxxrawsyscall(93, 127, 0, 0, 0, 0, 0);
+  end;
+  if pid < 0 then Exit;
+  rc := __pxxrawsyscall(260, pid, Int64(@status), 0, 0, 0, 0);
+{$else}
+  WriteLn(StdErr, 'pascal26 --link: building the shared runtime needs an x86-64 or aarch64 host');
+  Exit;
+{$endif}
+{$endif}
+  if rc <> pid then Exit;
+  { exited normally with status 0 }
+  Result := (status and $FFFF) = 0;
+end;
+
+{ Find, or build, the runtime object for this marker. '' on failure. }
+function ElfRtProvide(const marker: AnsiString; threadSafe: Boolean): AnsiString;
+var dir, base, path, tmp, src, srcText: AnsiString;
+    srcBuf: array of Char;
+    fd, k: Integer;
+    args: array of AnsiString;
+    n: Integer;
+begin
+  Result := '';
+  dir := PxxGetEnv('XDG_CACHE_HOME');
+  if dir = '' then
+  begin
+    dir := PxxGetEnv('HOME');
+    if dir = '' then
+    begin
+      WriteLn(StdErr, 'pascal26 --link: no HOME or XDG_CACHE_HOME to keep the shared runtime in');
+      Exit;
+    end;
+    dir := dir + '/.cache';
+  end;
+  ElfRtMkdir(dir);
+  dir := dir + '/pxx';
+  ElfRtMkdir(dir);
+  base := dir + '/rt-' + ElfRtHashSelf + '-' + marker;
+  path := base + '.o';
+  if ElfRtFileExists(path) then begin Result := path; Exit; end;
+  tmp := base + '.tmp' + AIntToStr(ElfRtGetPid);
+  src := tmp + '.c';
+  srcText := '#include <pxx/runtime_all.h>' + Chr(10);
+  SetLength(srcBuf, Length(srcText));
+  for k := 1 to Length(srcText) do srcBuf[k - 1] := srcText[k];
+  AssignPath := src;
+  fd := OutOpen(src);
+  if fd < 0 then
+  begin
+    WriteLn(StdErr, 'pascal26 --link: cannot write ', src);
+    Exit;
+  end;
+  OutWriteChars(fd, srcBuf, 0, Length(srcBuf));
+  sysfchmod(fd, 420);  { 644: OutOpen leaves a new file mode 000 }
+  sysclose(fd);
+  WriteLn(StdErr, 'pascal26 --link: building the shared runtime (once per compiler): ', path);
+  n := 0;
+  SetLength(args, 8);
+  args[n] := ParamStr(0); Inc(n);
+  args[n] := '--emit-obj'; Inc(n);
+  { x86-64 only: the aarch64 object writer has no cross-section call reloc }
+  if TargetArch = TARGET_X86_64 then begin args[n] := '--function-sections'; Inc(n); end;
+  if threadSafe then begin args[n] := '--threadsafe'; Inc(n); end;
+  if TargetArch = TARGET_AARCH64 then begin args[n] := '--target=aarch64'; Inc(n); end;
+  args[n] := src; Inc(n);
+  args[n] := tmp; Inc(n);
+  SetLength(args, n);
+  if ElfRtRunSelf(args) then ElfRtUnlink(src)
+  else
+  begin
+    WriteLn(StdErr, 'pascal26 --link: building the shared runtime failed; to see why, run: ',
+            ParamStr(0), ' --emit-obj --function-sections ', src, ' ', tmp);
+    Exit;
+  end;
+  if ElfRtRename(tmp, path) <> 0 then
+  begin
+    WriteLn(StdErr, 'pascal26 --link: cannot move ', tmp, ' to ', path);
+    Exit;
+  end;
+  Result := path;
+end;
+
+{ After the inputs are loaded: add the runtime when an object asks for it.
+  False (with a message) when it is needed and cannot be had. }
+function ElfLnkAddSharedRuntime: Boolean;
+var arch, m, mts, path: AnsiString;
+    g, gts: Integer;
+    needPlain, needTs: Boolean;
+begin
+  Result := True;
+  if TargetArch = TARGET_AARCH64 then arch := 'aarch64' else arch := 'x86_64';
+  m := '__pxxrt_needed_' + arch;
+  mts := m + '_ts';
+  g := ElfLnkFind(m);
+  gts := ElfLnkFind(mts);
+  needPlain := (g >= 0) and (ElfLnkDefObj[g] < 0);
+  needTs := (gts >= 0) and (ElfLnkDefObj[gts] < 0);
+  if not (needPlain or needTs) then Exit;
+  if needPlain and needTs then
+  begin
+    WriteLn(StdErr, 'pascal26 --link: some objects were compiled with --threadsafe and some '
+            + 'without; with --shared-runtime they need different runtimes (errno is '
+            + 'thread-local in one). Compile them all the same way.');
+    Result := False;
+    Exit;
+  end;
+  if needTs then path := ElfRtProvide(mts, True) else path := ElfRtProvide(m, False);
+  if path = '' then begin Result := False; Exit; end;
+  if not ElfLnkAddObject(path) then
+  begin
+    WriteLn(StdErr, 'pascal26 --link: ', path, ': ', ElfRdErr);
+    Result := False;
+  end;
+end;
+
 function ElfLnkLinkArgs(first, last: Integer; const outPath: AnsiString; gc: Boolean): Boolean;
 var j, g: Integer;
     entryName: AnsiString;
@@ -2067,6 +2336,7 @@ begin
       WriteLn(StdErr, 'pascal26 --link: ', ParamStr(j), ': ', ElfRdErr);
       Exit;
     end;
+  if not ElfLnkAddSharedRuntime then Exit;
   g := ElfLnkFind('_start');
   if LinkEntryName <> '' then
   begin

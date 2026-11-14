@@ -306,3 +306,25 @@ it already advertises the C library's functions); the answer that makes an
 object a translation unit moves them into one runtime the link supplies.
 Either one gets the minimal busybox to roughly a megabyte. Details:
 `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes`.
+
+## DECIDED 2026-11-14 by the owner: BOTH, with self-contained as the default
+
+- **Default (B, "just works"):** an `--emit-obj` object stays a self-contained
+  runtime. Its embedded runtime (Pascal RTL helpers, crtl implementations, crtl
+  state and its init) is emitted MERGEABLE (weak/COMDAT), so linking many objects
+  with pxx `--link`, ld or gcc keeps ONE copy of the code AND one copy of the
+  state.
+- **Opt-in (A, optimised builds):** a flag (working name `--shared-runtime`)
+  emits only the translation unit. The runtime is built once per target as an
+  archive. The object carries a marker undefined symbol (working name
+  `__pxx_needs_libpxxrt_<arch>`), so `pxx --link` adds the archive by itself, and
+  an external link without it fails with a self-explaining name. pxx's own
+  project tools (busybox_diff, dropbear_pxx, toybox) use A.
+- **Autodetect** happens at LINK time (the marker), not at compile time: a
+  single `--emit-obj` cannot know who will link it.
+
+Why (measured on toybox 0.8.15 at b3c5f711ea, see
+feature-c-toybox-binary-is-13-mb): `false.c` compiles in 5.3 s against 0.5 s for
+a one-line file with no includes, so ~90% of every unit's compile is the
+runtime. The 205 objects come to 162 MB; the binary is 12.4 MB against gcc's
+475 KB. B fixes the output size; A also removes the repeated compile work.

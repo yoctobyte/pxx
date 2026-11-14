@@ -20723,6 +20723,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
 	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null
 	tools/expect_same.sh i386/c_alignsz_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_alignsz_i386)" "$$(cat test/c_aligned_attribute_sizeof_argument.i386.expected)"
+	# the object model (decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit):
+	# two units sharing runtime STATE by name, a static in both, malloc in one and
+	# free in the other. --shared-runtime: --link builds, caches (here, under
+	# TESTTMP) and adds the runtime itself. Default: self-contained objects whose
+	# runtime copies are weak, linked by pxx and by the host's gcc. Expected = gcc.
+	./$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_shared_runtime_main.c $(TESTTMP)/c_srt_m.o > /dev/null
+	./$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_shared_runtime_part.c $(TESTTMP)/c_srt_p.o > /dev/null
+	XDG_CACHE_HOME=$(TESTTMP)/c_srt_cache ./$(COMPILER) --link -o $(TESTTMP)/c_srt $(TESTTMP)/c_srt_m.o $(TESTTMP)/c_srt_p.o > /dev/null
+	tools/expect_same.sh c_srt "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	./$(COMPILER) --emit-obj --function-sections test/c_shared_runtime_main.c $(TESTTMP)/c_srt_dm.o > /dev/null
+	./$(COMPILER) --emit-obj --function-sections test/c_shared_runtime_part.c $(TESTTMP)/c_srt_dp.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_srt_d $(TESTTMP)/c_srt_dm.o $(TESTTMP)/c_srt_dp.o > /dev/null
+	tools/expect_same.sh c_srt_d "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_d -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	gcc -o $(TESTTMP)/c_srt_dg $(TESTTMP)/c_srt_dm.o $(TESTTMP)/c_srt_dp.o
+	tools/expect_same.sh c_srt_dg "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dg -a -b x)" "$$(cat test/c_shared_runtime.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

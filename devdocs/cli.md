@@ -31,6 +31,7 @@ Options come before the source path.
 | `--target=ARCH` | Cross-compile for `x86_64`/`i386`/`aarch64`/`arm32`/`riscv32`/`xtensa` (default `x86_64`). See [Targets](dialect/targets.md). |
 | `--xtensa-abi=…` | Xtensa call-ABI variant. |
 | `--emit-obj` | Emit a relocatable object instead of an executable (unstable). |
+| `--shared-runtime` | With `--emit-obj` (C): leave the C runtime out of the object. `--link` sees the object's `__pxxrt_needed_<target>[_ts]` reference, builds the runtime once per compiler binary into `$XDG_CACHE_HOME/pxx` (or `~/.cache/pxx`), and adds it. Linking with gcc/ld instead fails with that symbol name. Default objects stay self-contained, with weak runtime copies a linker merges. |
 | `--debug` | Print lexer/parser/preprocessor diagnostics. |
 | `--dump-ir` | Print lowered IR while still emitting the executable. |
 | `--dump-rtti` | Print generated RTTI tables while still emitting the executable. |
