@@ -16,5 +16,8 @@ else WINEPREFIX=$HOME/.wine-pxx
 fi
 export WINEPREFIX
 export WINEDEBUG=-all
+# A crash outside the program's own handling must end the process, not start
+# winedbg (which waits for a terminal and hangs the test until the timeout).
+export WINEDLLOVERRIDES="winedbg.exe=d${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
 command -v wine64 >/dev/null 2>&1 || { echo "wine.sh: wine64 is not installed" >&2; exit 125; }
 exec timeout 120 wine64 "$@"

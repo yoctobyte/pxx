@@ -264,3 +264,43 @@ and the crtl, not just the translator.
 Next is phase 3: hardware faults as exceptions (a vectored handler, with
 the reverse adapter), threads (the PE TLS directory plus CreateThread), and
 sockets (ws2_32).
+
+### 2026-11-14: phase 3a, signals
+
+- **Calls from Windows into pxx code:** MsToSysV writes an adapter per
+  target into an RWX page at run time (16 slots of 256 bytes). It saves
+  every Microsoft callee-saved register (rbx, rbp, rsi, rdi, r12-r15,
+  xmm6-15), since pxx code keeps none of rbx/r12-r15 for its caller,
+  moves rcx/rdx/r8/r9 to rdi/rsi/rdx/rcx, and calls the target. An
+  `assembler` routine cannot be the adapter: pxx frames it.
+  The first version saved only rsi/rdi/xmm; a handler that printed
+  clobbered a register ntdll still needed after the VEH returned, and the
+  continue faulted inside ntdll at address 10. Caught by
+  test_signal_pc_rewrite.
+- **Faults:** rt_sigaction for 4/5/7/8/11 with a handler installs one
+  vectored exception handler (WinVeh). It maps the exception code to the
+  Linux signal and si_code, builds a Linux siginfo and ucontext from the
+  Windows CONTEXT (gregs by offset table; fpregs points at the CONTEXT's
+  fxsave area; ERR/TRAPNO/CR2 filled), calls the handler, copies the
+  registers and MXCSR back, and continues. No handler: ExitProcess(128+sig).
+  tools/vm/wine.sh disables winedbg so an unhandled crash exits instead of
+  waiting in the debugger until the timeout.
+- **Software signals:** kill(self or 0), tkill and tgkill to our own
+  thread deliver synchronously (WinAct: SIG_IGN, default action, or the
+  handler with SI_USER/SI_TKILL, a zero register context, sa_mask and
+  SA_NODEFER/SA_RESETHAND honoured). rt_sigprocmask keeps a real mask,
+  blocked signals go pending and run on unblock; rt_sigpending,
+  rt_sigtimedwait, rt_sigsuspend and pause are mapped (sleep loops).
+- **Ctrl-C:** SetConsoleCtrlHandler (through the adapter), installed when
+  SIGINT/SIGQUIT/SIGHUP get a non-default disposition. Runs on Windows'
+  own thread. Checked by hand under Wine (pkill -INT the wine process:
+  the handler ran); not in the target because it is timing-dependent.
+- test-windows gains lib_signals_fpc, test_signal_num, _bss_alias,
+  _sp_rewrite, _pc_rewrite, _handler_callback_b336,
+  test_cross_signal_runtime_predicate, test_float_exception_mask,
+  test_stack_overflow_raise, and c_crtl_signal_and_wait /
+  c_crtl_signal_dispositions without their fork() rows.
+
+Not done: kill to another process still only terminates it; no
+sigaltstack (stack commit = reserve, so no guard page either: a real stack
+overflow cannot run a handler). Next: threads, then sockets.

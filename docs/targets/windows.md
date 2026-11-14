@@ -86,6 +86,24 @@ by `kill` reports that signal to `wait`, as on Linux. A C program's own
 `select` and `poll` wait in a short sleep loop: Windows has no one call that
 covers consoles, pipes and files.
 
+Signals:
+
+- **Hardware faults** (access violation, division by zero, floating-point
+  traps, illegal instruction) reach the program's handler as `SIGSEGV`,
+  `SIGFPE` and so on, with the same `siginfo` and register context as on
+  Linux. So a nil access or a call through a bad pointer becomes a Pascal
+  exception where it does on Linux. A fault with no handler ends the
+  process with exit code 128 + the signal number.
+- **`kill` and `raise` to the program itself** run the handler at once, or
+  apply the default action (end the process, or ignore for `SIGCHLD` and
+  the other signals Linux ignores). `sigprocmask` blocks for real, and
+  blocked signals stay pending for `sigtimedwait`, `sigwait`,
+  `sigsuspend` and `sigpending`.
+- **Ctrl-C** is `SIGINT`, Ctrl-Break `SIGQUIT` and closing the console
+  `SIGHUP`, once the program sets a handler (or `SIG_IGN`) for one of
+  them. Windows runs that handler on a thread of its own, so it really is
+  asynchronous. Checked by hand under Wine, not in the test target.
+
 Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
 `/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken
 on the current drive. Under Wine that is drive `Z:`, the Unix root, so the
@@ -97,8 +115,11 @@ path means what it means on Linux.
   `--emit-obj`, `--rtl-libc`, and CPUs other than x86-64.
 - **Not supported:** C's `fork()`, process groups, symbolic links, file
   modes (`chmod` succeeds and does nothing), and `mmap` of a file.
-- **Phase 3:** exceptions from hardware faults (no vectored exception handler
-  yet), threads (through the PE TLS directory), and sockets.
+- **Signals between processes:** `kill` on another program ends it
+  (`TerminateProcess`) whatever the signal; it cannot run that program's
+  handler. There is no alternate signal stack, and a stack overflow has no
+  room left to run a handler in.
+- **Still to come:** threads (through the PE TLS directory) and sockets.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
   libraries cannot work on Windows. `external 'user32.dll'` and other DLLs
   do work, without floating-point arguments.

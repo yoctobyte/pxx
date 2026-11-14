@@ -41,6 +41,8 @@ const
   LX_ENOTTY = 25;
   LX_ENOSYS = 38;
   LX_EIO = 5;
+  LX_EINTR = 4;
+  LX_EAGAIN = 11;
 
   STD_INPUT_HANDLE = -10;
   STD_OUTPUT_HANDLE = -11;
@@ -295,6 +297,8 @@ function W_CreateProcessW(app, cmd, pa, ta, inherit, flags, env, cwd, si, pi: In
 function W_GetExitCodeProcess(h, code: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetExitCodeProcess';
 function W_TerminateProcess(h, code: Int64): LongInt; cdecl; external 'kernel32.dll' name 'TerminateProcess';
 function W_WaitForMultipleObjects(n, hs, all, ms: Int64): LongWord; cdecl; external 'kernel32.dll' name 'WaitForMultipleObjects';
+function W_AddVectoredExceptionHandler(first, handler: Int64): Int64; cdecl; external 'kernel32.dll' name 'AddVectoredExceptionHandler';
+function W_SetConsoleCtrlHandler(handler, add: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleCtrlHandler';
 function W_GlobalMemoryStatusEx(st: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GlobalMemoryStatusEx';
 function W_GetTickCount64: Int64; cdecl; external 'kernel32.dll' name 'GetTickCount64';
 function W_DuplicateHandle(sp, h, dp, outH, access, inherit, opts: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DuplicateHandle';
@@ -1658,11 +1662,6 @@ begin
   slot := ChildSlot(pid);
   if slot < 0 then
   begin
-    if pid = W_GetCurrentProcessId then
-    begin
-      if sig = 0 then begin Result := 0; Exit; end;
-      W_ExitProcess(128 + sig);
-    end;
     Result := -LX_ESRCH;
     Exit;
   end;
@@ -1670,6 +1669,392 @@ begin
   if W_TerminateProcess(ChildH[slot], 128 + sig) = 0 then begin Result := WinErr; Exit; end;
   ChildSig[slot] := sig;
   Result := 0;
+end;
+
+{ ---- Calls from Windows into this program -----------------------------------
+  Windows calls back with the Microsoft x64 convention (rcx, rdx, r8, r9;
+  rbx, rbp, rsi, rdi, r12-r15 and xmm6-15 callee-saved), and everything pxx
+  compiles is SysV. MsToSysV writes a small adapter for one SysV target into
+  an executable page: save every register Windows expects back (pxx code does
+  not keep rbx/r12-r15 either, so all of them), move the four arguments over,
+  call, put everything back. Written as bytes at run time because the
+  target's address goes in as an immediate and an `assembler` routine gets a
+  frame around it. The page holds 16 adapters of 256 bytes (one is ~240). }
+var
+  ThunkPage, ThunkUsed: Int64;
+
+procedure TB(var p: Int64; b: Int64);
+begin
+  PByte(p)^ := b;
+  p := p + 1;
+end;
+
+procedure TD(var p: Int64; d: Int64);
+begin
+  PLongWord(p)^ := d and $FFFFFFFF;
+  p := p + 4;
+end;
+
+{ movups [rsp+disp32], xmmN (store) or movups xmmN, [rsp+disp32] (load). }
+procedure TXmm(var p: Int64; n, disp: Int64; load: Boolean);
+begin
+  if n >= 8 then TB(p, $44);
+  TB(p, $0F);
+  if load then TB(p, $10) else TB(p, $11);
+  TB(p, $84 or ((n and 7) shl 3));     { mod=10 reg=n rm=100 }
+  TB(p, $24);                          { SIB: base rsp }
+  TD(p, disp);
+end;
+
+function MsToSysV(target: Int64): Int64;
+var p, i: Int64;
+begin
+  Result := 0;
+  if ThunkPage = 0 then
+  begin
+    ThunkPage := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    if ThunkPage = 0 then Exit;
+  end;
+  if ThunkUsed >= 16 then Exit;
+  p := ThunkPage + 256 * ThunkUsed;
+  Result := p;
+  ThunkUsed := ThunkUsed + 1;
+  TB(p, $55);                                        { push rbp      (rsp = 0 mod 16) }
+  TB(p, $48); TB(p, $89); TB(p, $E5);                { mov rbp, rsp }
+  TB(p, $56); TB(p, $57); TB(p, $53);                { push rsi; push rdi; push rbx }
+  TB(p, $41); TB(p, $54); TB(p, $41); TB(p, $55);    { push r12; push r13 }
+  TB(p, $41); TB(p, $56); TB(p, $41); TB(p, $57);    { push r14; push r15 (8 mod 16) }
+  TB(p, $48); TB(p, $81); TB(p, $EC); TD(p, 168);    { sub rsp, 168  (0 mod 16) }
+  for i := 6 to 15 do TXmm(p, i, 16 * (i - 6), False);
+  TB(p, $48); TB(p, $89); TB(p, $CF);                { mov rdi, rcx }
+  TB(p, $48); TB(p, $89); TB(p, $D6);                { mov rsi, rdx }
+  TB(p, $4C); TB(p, $89); TB(p, $C2);                { mov rdx, r8 }
+  TB(p, $4C); TB(p, $89); TB(p, $C9);                { mov rcx, r9 }
+  TB(p, $48); TB(p, $B8);                            { mov rax, imm64 }
+  TD(p, target); TD(p, target shr 32);
+  TB(p, $FF); TB(p, $D0);                            { call rax }
+  for i := 6 to 15 do TXmm(p, i, 16 * (i - 6), True);
+  TB(p, $48); TB(p, $81); TB(p, $C4); TD(p, 168);    { add rsp, 168 }
+  TB(p, $41); TB(p, $5F); TB(p, $41); TB(p, $5E);    { pop r15; pop r14 }
+  TB(p, $41); TB(p, $5D); TB(p, $41); TB(p, $5C);    { pop r13; pop r12 }
+  TB(p, $5B); TB(p, $5F); TB(p, $5E); TB(p, $5D);    { pop rbx; pop rdi; pop rsi; pop rbp }
+  TB(p, $C3);                                        { ret }
+end;
+
+{ ---- Signals: hardware faults -------------------------------------------------
+  rt_sigaction records the program's handler (the compiler's fault-to-raise
+  stub, Linux SA_SIGINFO ABI) per Linux signal number. For the fault signals
+  a vectored exception handler is installed once; it turns the Windows
+  exception into the Linux signal, builds a Linux siginfo/ucontext from the
+  Windows CONTEXT (fpregs points at the CONTEXT's FltSave, which is the same
+  fxsave layout), calls the handler, copies the register file back, and
+  continues there -- the handler rewrites RIP/RSP to raise the exception, as
+  on Linux. An exception with no handler for its signal is left to Windows.
+  Asynchronous signals (Ctrl-C) are not here yet. }
+const
+  { Linux gregs[0..17] (R8..R15 RDI RSI RBP RBX RDX RAX RCX RSP RIP EFL)
+    -> offset in the Windows x64 CONTEXT. }
+  WinGregOff: array[0..17] of Integer = (
+    $B8, $C0, $C8, $D0, $D8, $E0, $E8, $F0, $B0, $A8, $A0, $90, $88, $78, $80, $98, $F8, $44);
+  LX_UC_GREGS = 40;
+  LX_UC_FPREGS = 40 + 23 * 8;
+  CTX_FLTSAVE = $100;
+  CTX_MXCSR = $34;
+
+  SIGBIT_UNBLOCKABLE = (1 shl 8) or (1 shl 18);     { SIGKILL, SIGSTOP }
+  LX_SI_USER = 0;
+  LX_SI_TKILL = -6;
+
+var
+  WinSigHandler: array[0..64] of Int64;
+  WinSigFlags: array[0..64] of Int64;
+  WinSigMask: array[0..64] of Int64;
+  WinSigBlocked, WinSigPending, WinSigHandled: Int64;
+  WinVehInstalled, WinCtrlInstalled: Boolean;
+
+type
+  TLxHandler = procedure(sig, info, uc: Int64); cdecl;
+
+function SigBit(sig: Int64): Int64;
+begin
+  Result := Int64(1) shl (sig - 1);
+end;
+
+{ The lowest signal in `avail', taken off the pending set, or 0. }
+function WinTakePendingRaw(avail: Int64): Int64;
+var sig: Int64;
+begin
+  Result := 0;
+  for sig := 1 to 64 do
+    if (avail and SigBit(sig)) <> 0 then
+    begin
+      WinSigPending := WinSigPending and not SigBit(sig);
+      Result := sig;
+      Exit;
+    end;
+end;
+
+{ ---- Signals sent in software ------------------------------------------------
+  kill/tkill/tgkill to ourselves, and Ctrl-C. Delivery is synchronous: a
+  blocked signal goes on the pending set, an unblocked one runs its
+  disposition now. A handler gets a Linux siginfo (SI_USER or SI_TKILL, our
+  pid) and a ucontext whose registers are zero -- there is no interrupted
+  instruction to resume or rewrite, the handler just returns to the caller.
+  The default action ends the process with 128 + sig, except for the
+  signals Linux ignores by default. }
+procedure WinAct(sig, code: Int64);
+var h, old, i: Int64;
+    li: array[0..15] of Int64;        { siginfo_t }
+    lu: array[0..63] of Int64;        { ucontext_t through uc_sigmask }
+    fx: array[0..65] of Int64;        { fxsave area, 16-aligned inside }
+begin
+  h := WinSigHandler[sig];
+  if h = 1 then Exit;                          { SIG_IGN }
+  if h = 0 then
+  begin
+    case sig of
+      17, 18, 20, 21, 22, 23, 28: Exit;        { CHLD CONT TSTP TTIN TTOU URG WINCH }
+    else
+      W_ExitProcess(128 + sig);
+    end;
+  end;
+  for i := 0 to 15 do li[i] := 0;
+  for i := 0 to 63 do lu[i] := 0;
+  for i := 0 to 65 do fx[i] := 0;
+  PLongInt(@li[0])^ := sig;
+  PLongInt(Int64(@li[0]) + 8)^ := code;
+  PLongInt(Int64(@li[0]) + 16)^ := W_GetCurrentProcessId;
+  i := (Int64(@fx[0]) + 15) and not 15;
+  PWord(i)^ := $37F;                           { FCW }
+  PLongWord(i + $18)^ := $1F80;                { MXCSR }
+  lu[LX_UC_FPREGS div 8] := i;
+  old := WinSigBlocked;
+  lu[LX_UC_FPREGS div 8 + 9] := old;           { uc_sigmask, offset 296 }
+  if (WinSigFlags[sig] and $40000000) = 0 then  { not SA_NODEFER }
+    WinSigBlocked := WinSigBlocked or SigBit(sig);
+  WinSigBlocked := (WinSigBlocked or WinSigMask[sig]) and not SIGBIT_UNBLOCKABLE;
+  if (WinSigFlags[sig] and $80000000) <> 0 then WinSigHandler[sig] := 0;   { SA_RESETHAND }
+  TLxHandler(h)(sig, Int64(@li[0]), Int64(@lu[0]));
+  WinSigHandled := WinSigHandled + 1;
+  WinSigBlocked := old;
+end;
+
+procedure WinRunPending;
+var sig: Int64;
+begin
+  repeat
+    sig := WinTakePendingRaw(WinSigPending and not WinSigBlocked);
+    if sig <> 0 then WinAct(sig, LX_SI_USER);
+  until sig = 0;
+end;
+
+function WinSignalSelf(sig, code: Int64): Int64;
+begin
+  if (sig < 0) or (sig > 64) then begin Result := -LX_EINVAL; Exit; end;
+  Result := 0;
+  if sig = 0 then Exit;
+  if (WinSigBlocked and SigBit(sig)) <> 0 then
+    WinSigPending := WinSigPending or SigBit(sig)
+  else
+  begin
+    WinAct(sig, code);
+    WinRunPending;
+  end;
+end;
+
+{ The console control handler (Microsoft ABI through MsToSysV, on a thread
+  Windows starts for it): Ctrl-C is SIGINT, Ctrl-Break SIGQUIT, closing the
+  console SIGHUP. TRUE says handled. }
+function WinCtrl(ev: Int64): Int64; cdecl;
+var sig: Int64;
+begin
+  case ev of
+    0: sig := 2;
+    1: sig := 3;
+    2: sig := 1;
+  else
+    begin Result := 0; Exit; end;
+  end;
+  WinSignalSelf(sig, 128);                     { SI_KERNEL }
+  Result := 1;
+end;
+
+{ The vectored handler, SysV side (MsToSysV adapts it). EXCEPTION_POINTERS:
+  the record, then the CONTEXT. -1 continues, 0 passes it on. }
+function WinVeh(ep: Int64): Int64; cdecl;
+var rec, ctx, code, sig, sc, addr, h, trap, err, i: Int64;
+    li: array[0..15] of Int64;        { Linux siginfo_t, 128 B }
+    lu: array[0..63] of Int64;        { Linux ucontext_t through uc_sigmask }
+begin
+  Result := 0;
+  rec := PInt64(ep)^;
+  ctx := PInt64(ep + 8)^;
+  code := PLongWord(rec)^;
+  addr := PInt64(rec + $10)^;                 { ExceptionAddress }
+  sc := 0; trap := 0; err := 0;
+  case code of
+    $C0000005, $C0000006:                     { access violation, in-page error }
+      begin
+        sig := 11; trap := 14;
+        if PLongWord(rec + $18)^ >= 2 then
+        begin
+          if PInt64(rec + $20)^ = 1 then err := 6 else err := 4;   { user, write/read }
+          addr := PInt64(rec + $28)^;
+        end;
+        sc := 1;                              { SEGV_MAPERR }
+      end;
+    $C00000FD: begin sig := 11; trap := 14; sc := 1; addr := PInt64(ctx + $98)^; end;   { stack overflow }
+    $C0000094: begin sig := 8; sc := 1; end;  { integer divide by zero: FPE_INTDIV }
+    $C0000095: begin sig := 8; sc := 2; end;  { integer overflow: FPE_INTOVF }
+    $C000008E: begin sig := 8; sc := 3; end;  { FPE_FLTDIV }
+    $C0000091: begin sig := 8; sc := 4; end;  { FPE_FLTOVF }
+    $C0000093: begin sig := 8; sc := 5; end;  { FPE_FLTUND }
+    $C000008F: begin sig := 8; sc := 6; end;  { FPE_FLTRES }
+    $C0000090, $C000008D, $C00002B4, $C00002B5: begin sig := 8; sc := 7; end;   { FPE_FLTINV }
+    $C000001D: begin sig := 4; sc := 1; trap := 6; end;   { illegal instruction: ILL_ILLOPC }
+    $C0000096: begin sig := 11; sc := 128; trap := 13; addr := 0; end;   { privileged: SIGSEGV, SI_KERNEL }
+    $80000002: begin sig := 7; sc := 1; end;  { misalignment: SIGBUS BUS_ADRALN }
+    $80000003, $80000004: begin sig := 5; sc := 1; end;   { breakpoint, single step: SIGTRAP }
+  else
+    Exit;
+  end;
+  h := WinSigHandler[sig];
+  { No handler: the process ends as Linux reports a fatal signal to a shell,
+    128 + sig, rather than with Windows' exception code and a crash dialog
+    (or, under Wine, a debugger). SIG_IGN on a fault would re-fault for ever
+    on Linux; it ends the same way here. }
+  if (h = 0) or (h = 1) then W_ExitProcess(128 + sig);
+  for i := 0 to 15 do li[i] := 0;
+  for i := 0 to 63 do lu[i] := 0;
+  PLongInt(@li[0])^ := sig;
+  PLongInt(Int64(@li[0]) + 8)^ := sc;
+  li[2] := addr;                              { si_addr }
+  for i := 0 to 16 do
+    lu[LX_UC_GREGS div 8 + i] := PInt64(ctx + WinGregOff[i])^;
+  lu[LX_UC_GREGS div 8 + 17] := PLongWord(ctx + WinGregOff[17])^;   { EFL is 32-bit there }
+  lu[LX_UC_GREGS div 8 + 19] := err;
+  lu[LX_UC_GREGS div 8 + 20] := trap;
+  if sig = 11 then lu[LX_UC_GREGS div 8 + 22] := addr;              { CR2 }
+  lu[LX_UC_FPREGS div 8] := ctx + CTX_FLTSAVE;
+  if (WinSigFlags[sig] and $80000000) <> 0 then                    { SA_RESETHAND }
+    WinSigHandler[sig] := 0;
+  TLxHandler(h)(sig, Int64(@li[0]), Int64(@lu[0]));
+  for i := 0 to 16 do
+    PInt64(ctx + WinGregOff[i])^ := lu[LX_UC_GREGS div 8 + i];
+  PLongWord(ctx + WinGregOff[17])^ := lu[LX_UC_GREGS div 8 + 17] and $FFFFFFFF;
+  PLongWord(ctx + CTX_MXCSR)^ := PLongWord(ctx + CTX_FLTSAVE + $18)^;   { fxsave's MXCSR }
+  Result := -1;                               { EXCEPTION_CONTINUE_EXECUTION }
+end;
+
+{ rt_sigaction: Linux struct sigaction is handler, flags, restorer, mask. }
+function WinRtSigaction(sig, act, oact: Int64): Int64;
+var t: Int64;
+begin
+  if (sig < 1) or (sig > 64) or (sig = 9) or (sig = 19) then begin Result := -LX_EINVAL; Exit; end;
+  if oact <> 0 then
+  begin
+    PInt64(oact)^ := WinSigHandler[sig];
+    PInt64(oact + 8)^ := WinSigFlags[sig];
+    PInt64(oact + 16)^ := 0;
+    PInt64(oact + 24)^ := WinSigMask[sig];
+  end;
+  if act <> 0 then
+  begin
+    WinSigHandler[sig] := PInt64(act)^;
+    WinSigFlags[sig] := PInt64(act + 8)^;
+    WinSigMask[sig] := PInt64(act + 24)^;
+    if (not WinVehInstalled) and (WinSigHandler[sig] > 1) and
+       ((sig = 4) or (sig = 5) or (sig = 7) or (sig = 8) or (sig = 11)) then
+    begin
+      t := MsToSysV(Int64(@WinVeh));
+      if t <> 0 then
+        if W_AddVectoredExceptionHandler(1, t) <> 0 then WinVehInstalled := True;
+    end;
+    if (not WinCtrlInstalled) and (WinSigHandler[sig] <> 0) and
+       ((sig = 1) or (sig = 2) or (sig = 3)) then
+    begin
+      t := MsToSysV(Int64(@WinCtrl));
+      if t <> 0 then
+        if W_SetConsoleCtrlHandler(t, 1) <> 0 then WinCtrlInstalled := True;
+    end;
+  end;
+  Result := 0;
+end;
+
+{ rt_sigprocmask(how, set, oset, size). SIGKILL and SIGSTOP cannot be
+  blocked. Unblocking runs whatever was pending, lowest number first. }
+function WinSigprocmask(how, setp, oset: Int64): Int64;
+var v: Int64;
+begin
+  if oset <> 0 then PInt64(oset)^ := WinSigBlocked;
+  if setp <> 0 then
+  begin
+    v := PInt64(setp)^;
+    case how of
+      0: WinSigBlocked := WinSigBlocked or v;
+      1: WinSigBlocked := WinSigBlocked and not v;
+      2: WinSigBlocked := v;
+    else
+      begin Result := -LX_EINVAL; Exit; end;
+    end;
+    WinSigBlocked := WinSigBlocked and not SIGBIT_UNBLOCKABLE;
+    WinRunPending;
+  end;
+  Result := 0;
+end;
+
+{ The lowest pending signal in `want', taken off the pending set, or 0. }
+function WinTakePending(want: Int64): Int64;
+begin
+  Result := WinTakePendingRaw(WinSigPending and want);
+end;
+
+{ rt_sigtimedwait(set, info, timeout, size): collect a pending signal from
+  `set' without running its handler. Only Ctrl-C arrives from outside, so
+  the wait is a sleep loop. }
+function WinSigtimedwait(setp, info, ts: Int64): Int64;
+var want, ms, i: Int64;
+begin
+  want := PInt64(setp)^;
+  ms := TsMs(ts);
+  repeat
+    Result := WinTakePending(want);
+    if Result <> 0 then
+    begin
+      if info <> 0 then
+      begin
+        for i := 0 to 127 do PByte(info + i)^ := 0;
+        PLongInt(info)^ := Result;
+        PLongInt(info + 16)^ := W_GetCurrentProcessId;
+      end;
+      Exit;
+    end;
+    if ms = 0 then begin Result := -LX_EAGAIN; Exit; end;
+    if ms > 0 then
+    begin
+      if ms < 10 then begin W_Sleep(ms); ms := 0; end
+      else begin W_Sleep(10); ms := ms - 10; end;
+    end
+    else W_Sleep(10);
+  until False;
+end;
+
+{ rt_sigsuspend(mask, size) and pause: wait with `mask' (or the current
+  mask) until some signal has been handled, then EINTR. }
+function WinSigsuspend(maskp: Int64): Int64;
+var old, n: Int64;
+begin
+  old := WinSigBlocked;
+  if maskp <> 0 then WinSigBlocked := PInt64(maskp)^ and not SIGBIT_UNBLOCKABLE;
+  n := WinSigHandled;
+  WinRunPending;
+  while WinSigHandled = n do
+  begin
+    W_Sleep(10);
+    WinRunPending;
+  end;
+  WinSigBlocked := old;
+  Result := -LX_EINTR;
 end;
 
 { sysinfo: uptime and memory (Linux struct sysinfo, 112 bytes, mem_unit 1). }
@@ -1700,7 +2085,17 @@ begin
     $7F000003: Result := WinSpawn(a0, a1, a2, a3);   { WIN_PXX_SPAWN: PalBackendVforkAndExec3 }
     57, 58: Result := -LX_ENOSYS;                    { fork, vfork: Windows cannot }
     61: Result := WinWait4(a0, a1, a2, a3);
-    62: Result := WinKill(a0, a1);
+    62: if (a0 = W_GetCurrentProcessId) or (a0 = 0) then Result := WinSignalSelf(a1, LX_SI_USER)
+        else Result := WinKill(a0, a1);
+    200: if a0 = W_GetCurrentThreadId then Result := WinSignalSelf(a1, LX_SI_TKILL)    { tkill }
+         else Result := -LX_ESRCH;
+    234: if a1 = W_GetCurrentThreadId then Result := WinSignalSelf(a2, LX_SI_TKILL)    { tgkill }
+         else Result := -LX_ESRCH;
+    14: Result := WinSigprocmask(a0, a1, a2);
+    127: begin PInt64(a0)^ := WinSigPending and WinSigBlocked; Result := 0; end;   { rt_sigpending }
+    128: Result := WinSigtimedwait(a0, a1, a2);
+    130: Result := WinSigsuspend(a0);
+    34: Result := WinSigsuspend(0);                                 { pause }
     0: Result := WinRead(a0, a1, a2);
     1: Result := WinWrite(a0, a1, a2);
     2: Result := WinOpenAt(LX_AT_FDCWD, a0, a1, a2);              { open }
@@ -1746,7 +2141,8 @@ begin
     10: Result := WinMprotect(a0, a1, a2);
     11: Result := WinMunmap(a0);
     12: Result := WinBrk(a0);
-    13, 14, 131: Result := 0;                   { rt_sigaction, rt_sigprocmask, sigaltstack }
+    13: Result := WinRtSigaction(a0, a1, a2);
+    131: Result := 0;                           { sigaltstack: faults run on the faulting stack }
     16: Result := -LX_ENOTTY;                   { ioctl }
     7: Result := WinPoll(a0, a1, a2);                             { poll }
     20: Result := WinWritev(a0, a1, a2);

@@ -11285,8 +11285,11 @@ test-windows: $(COMPILER)
 	# --os=windows (EXPERIMENTAL): a Windows x64 PE run under Wine
 	# (tools/vm/wine.sh) against the Linux build of the same source run here.
 	# The console, memory, time, exceptions, argv/environment, exit codes and
-	# (phase 2) files, directories, select/poll and starting processes; no
-	# threads, signals or sockets yet. feature-port-windows-pe
+	# (phase 2) files, directories, select/poll and starting processes,
+	# (phase 3) signals: faults turned into Pascal exceptions, kill/raise to
+	# ourselves, masks and sigtimedwait. No threads or sockets yet. The two C
+	# signal files drop their fork() rows: Windows has no fork.
+	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
 	           test/test_interfaces_multi_secondary.pas test/test_class_str.pas test/test_asm_cpuid.pas \
@@ -11304,10 +11307,20 @@ test-windows: $(COMPILER)
 	           test/c_crtl_uio.c test/c_crtl_ioctl_and_sysinfo.c \
 	           test/test_nilpy_time_and_listdir.npy test/test_nilpy_glob_module.npy \
 	           test/test_nilpy_file_io_and_comprehensions.npy \
-	           test/c_crtl_select.c test/crtl_poll_set.c; do \
+	           test/c_crtl_select.c test/crtl_poll_set.c \
+	           test/lib_signals_fpc.pas test/test_signal_num.pas test/test_signal_bss_alias.pas \
+	           test/test_signal_sp_rewrite.pas test/test_signal_pc_rewrite.pas \
+	           test/test_signal_handler_callback_b336.pas test/test_cross_signal_runtime_predicate.pas \
+	           test/test_float_exception_mask.pas test/test_stack_overflow_raise.pas; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in "test/c_crtl_signal_and_wait.c:^(1[4-9]|2[01]) " "test/c_crtl_signal_dispositions.c:^5 "; do \
+	    f=$${t%%:*}; x=$${t#*:}; n=$$(basename $$f); \
+	    ./$(COMPILER) $$f $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$f $$d/$$n.exe >/dev/null && \
+	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1 | grep -v -E "$$x"; echo exit=$$?)" \
+	      "$$($$d/$$n.lx 2>&1 | grep -v -E "$$x"; echo exit=$$?)" || exit 1; \
 	  done; \
 	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
 	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \
