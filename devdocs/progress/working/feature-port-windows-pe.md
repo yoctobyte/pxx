@@ -410,7 +410,8 @@ overflow cannot run a handler). Next: threads, then sockets.
 
 ### 2026-11-14: run inside ReactOS
 
-- Harness (session scratch, not committed): the x64 nightly live CD booted
+- Harness (tools/vm/reactos/: rossnap.sh once, then rosbatch.sh; rosinter.sh
+  and rtype.py for driving it by hand): the x64 nightly live CD booted
   once under qemu/KVM to the desktop with a StartUp script that polls every
   drive for \run.cmd, then `savevm`. A batch resumes the snapshot, inserts
   an ISO of test exes in a second CD drive, the script runs them with

@@ -39,7 +39,10 @@ that way under Wine.
 The `make test-windows` programs were also run inside the ReactOS x64
 nightly live CD (kernel "0.4.16-amd64-dev", Build 20260429, under qemu with
 no network adapter): 78 of 83 give the same output as on Linux. The
-translator works around three ReactOS behaviours:
+harness is in `tools/vm/reactos/`: `rossnap.sh` boots the live CD once and
+saves a qemu snapshot, `rosbatch.sh test...` then runs a batch from it in
+about ten seconds plus the programs' own time. The translator works around
+three ReactOS behaviours:
 
 - Its loader ignores the TLS directory's `SizeOfZeroFill` and allocates only
   the raw template, so the image now carries the whole thread-local block as
