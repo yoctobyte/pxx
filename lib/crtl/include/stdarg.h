@@ -13,13 +13,21 @@ typedef struct __pxx_va_elem {
   void *reg_save_area;
 } __pxx_va_elem;
 
-/* A plain struct, as the note above says, and spelled as one. It was written
-   `va_list[1]`, which pxx ignored while array typedefs of structs were not
-   modelled; modelling them would have made a va_list PARAMETER a pointer and
-   changed how every target passes one (abi.inc: AAPCS64 already passes this
-   24-byte class indirectly). A real array va_list is its own question:
+/* On x86-64 an ARRAY of one control block, as the SysV psABI and gcc have it
+   (`__va_list_tag[1]`): a va_list parameter is then a POINTER, `sizeof` of one
+   is 8, a callee's va_arg advances the caller's list, and the layout above is
+   the psABI's, so a va_list can be handed to a gcc-compiled v*() function.
+   The frontend takes the control block's address through CVaListAddr, which
+   reads an array local and a decayed pointer parameter alike.
+   Elsewhere a plain struct, as before: aarch64 gcc's va_list is a struct too
+   (with another layout), and pxx's AAPCS64 path passes this 24-byte class
+   indirectly already (abi.inc).
    bug-c-va-list-is-a-struct-not-an-array-of-one */
+#if defined(__x86_64__)
+typedef struct __pxx_va_elem va_list[1];
+#else
 typedef struct __pxx_va_elem va_list;
+#endif
 
 /* 176-byte register-save area. The variadic prologue stores the incoming arg
    registers here; one of these is declared as a hidden local in every variadic

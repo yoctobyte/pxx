@@ -2,7 +2,7 @@
 track: C
 prio: 30
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -24,3 +24,10 @@ operands fails alone; `sizeof f()` and `sizeof *f()` compile, and so does the
 parenthesised `sizeof(f()[1])`. Measured 2026-09-27 on HEAD (compiler
 848d33f2668a). A refusal, so no program gets a wrong answer; the postfix chain
 after a call inside the `sizeof` unary operand is what is not parsed.
+
+## Resolved 2026-11-14
+
+Fixed with bug-c-sizeof-of-a-parenthesised-deref-followed-by-a-subscript-is-refused
+(CSizeofOperandHasTrailingPostfix + CSizeofNodeBytes). `sizeof fi()[1]` = 4,
+`sizeof fh()->b` = 16 (a member array is the array), `sizeof fh()->a` = 4,
+as gcc (test/c_declarator_and_sizeof_shapes.c).

@@ -1701,8 +1701,13 @@ begin
     IRMarkStatementNode(IRA[irNode]);
     Exit;
   end;
+  { IR_ATOMIC too: a discarded `__pxx_atomic_xchg32(lock, 0)` (a spinlock
+    release, the fence helper's CAS) is a side effect with no statement root
+    of its own, and it was simply never emitted -- the 8-byte atomics' lock was
+    taken and never released, and __atomic_thread_fence did nothing.
+    feature-c-8-byte-atomics-on-32-bit-targets }
   if (IRKind[irNode] <> IR_BINOP) and (IRKind[irNode] <> IR_NEG) and
-     (IRKind[irNode] <> IR_NOT) then Exit;
+     (IRKind[irNode] <> IR_NOT) and (IRKind[irNode] <> IR_ATOMIC) then Exit;
   mkTk := IntToTypeKind(IRTk[irNode]);
   if TypeIsOrdinal(mkTk) or TypeIsFloat(mkTk) or (mkTk = tyPointer) then
   begin

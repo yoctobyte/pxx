@@ -5,7 +5,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`sizeof(x.zz)` compiles and evaluates to 4 when the struct or union has no member zz. gcc refuses it. Reading or assigning `x.zz` is refused correctly ('no member named'); only the sizeof operand skips the member lookup."
-status: open
+status: done
 owner: unassigned
 ---
 
@@ -31,3 +31,16 @@ Harm: a wrong size is silent where a configuration difference removes a
 member, as here. Fix it by making sizeof's operand typing reach the same
 lookup and refusing it. A regression test should cover the struct and the
 union cases (a refusal row).
+
+## Resolved 2026-11-14
+
+Fixed: the sizeof operand walkers (CSizeofDescriptorWalk, the `sizeof(*s.f)`
+arm, the `(expr)->f` arm) sized a member without the existence check the
+member-access parse makes. That check is now one routine, CRecMemberCheck
+(cparser.inc), called from all of them and from the access parse; it reports
+each bad member once even when a walker rewinds over the same tokens.
+CSizeofRecFieldBytes no longer sizes a member that does not exist.
+
+Test: test/c_sizeof_unknown_member_refused.c, five spellings (`sizeof(x.zz)`,
+`sizeof x.yy`, `sizeof(px->ww)`, `sizeof (*px->vv)`,
+`sizeof ((struct s *)0)->uu`), five refusals (row c_sizeof_unknown_member_refused).

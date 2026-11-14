@@ -2,7 +2,7 @@
 track: C
 prio: 25
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -21,3 +21,16 @@ bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead
 The walk is the `beFlat` brace pre-scan in the local path; a designator at
 depth `d` sets the flat cursor to `index * (product of the dims below d)`.
 File-scope arrays have not been measured.
+
+## Resolved 2026-11-14
+
+Fixed: the local multi-dim brace pre-scan has a designator arm. `[i]` at brace
+depth d moves the flat cursor to the start of the sub-aggregate that brace
+opened plus i times one element of dimension d-1; a chain `[i][j]` continues
+into the next dimension. An index past a sized dimension is refused. A
+braced value after a CHAINED designator (`[i][j] = {...}`) is refused by
+name; `[i] = {[j] = {...}}` is the supported spelling.
+
+Test: test/c_declarator_and_sizeof_shapes.c (`{{1}, [3] = {9}}`,
+`{[1][1] = 5, [0] = {1, 2}}`, a 3-D nest, an unsized outer dimension).
+File scope already worked (`static int g[2][2] = {[1] = {3, 4}}`).

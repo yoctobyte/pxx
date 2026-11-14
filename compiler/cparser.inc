@@ -1394,6 +1394,12 @@ end;
   already IS the control-block pointer — pass it as-is. }
 function CVaListAddr(apNode: Integer): Integer;
 begin
+  { a decayed parameter (x86-64 va_list is an array): the pointer itself }
+  if (apNode >= 0) and (IntToTypeKind(ASTTk[apNode]) = tyPointer) then
+  begin
+    Result := apNode;
+    Exit;
+  end;
   Result := AllocNode(AN_ADDR);
   ASTLeft[Result] := apNode;
   ASTIVal[Result] := ResolveNodeRec(apNode);
@@ -2453,10 +2459,16 @@ begin
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);       { &dest[0], ASTIVal = elem rec }
         a2 := CVaListAddr(valNode);            { &src[0] }
+        { the control block's record: an AN_ADDR carries it in ASTIVal; a
+          decayed parameter (CVaListAddr returned the pointer) is its pointee }
         a3 := AllocNode(AN_DEREF); ASTLeft[a3] := addrNode;
-        ASTTk[a3] := Ord(tyRecord); ASTIVal[a3] := ASTIVal[addrNode];
+        ASTTk[a3] := Ord(tyRecord);
+        if ASTKind[addrNode] = AN_ADDR then ASTIVal[a3] := ASTIVal[addrNode]
+        else ASTIVal[a3] := CNodePtrElemRec(addrNode);
         a4 := AllocNode(AN_DEREF); ASTLeft[a4] := a2;
-        ASTTk[a4] := Ord(tyRecord); ASTIVal[a4] := ASTIVal[a2];
+        ASTTk[a4] := Ord(tyRecord);
+        if ASTKind[a2] = AN_ADDR then ASTIVal[a4] := ASTIVal[a2]
+        else ASTIVal[a4] := CNodePtrElemRec(a2);
         node := AllocNode(AN_ASSIGN); ASTLeft[node] := a3; ASTRight[node] := a4;
         ASTTk[node] := Ord(tyRecord);
         Result := node; Exit;
@@ -3651,8 +3663,6 @@ begin
     Error(orig + ': the _n forms take an integer or pointer object, not a struct');
   if (n <> 1) and (n <> 2) and (n <> 4) and (n <> 8) then
     Error(orig + ': an atomic on a ' + AIntToStr(n) + '-byte object is not supported (1, 2, 4 or 8)');
-  if (n = 8) and (TARGET_PTR_SIZE < 8) then
-    Error(orig + ': an 8-byte atomic needs a 64-bit target');
   name := '__pxx_a_' + base + '_' + AIntToStr(n);
 end;
 
@@ -3798,6 +3808,37 @@ end;
   double case does not reach its sibling (devdocs/dev/normalise-dont-special-case.md).
   Both spellings now walk here.
   bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+{ Refuse a member the record does not have: `x.zz` with no zz. One check for
+  every place that names a member -- the member-access parse and the sizeof
+  operand walkers, which size a member without building the access node and
+  so answered 4 for a member that does not exist (gcc refuses it).
+  `keyPos` is the member token's index in Tokens: a walker that rewinds and
+  re-reads the same operand reports it once.
+  bug-c-an-unknown-member-name-compiles-as-int }
+var CMemberErrLastPos: Integer;   { 0 = none: token 0 is never a member name }
+function CRecMemberCheck(recId: Integer; const fieldName: AnsiString; keyPos: Integer): Boolean;
+var missKind: Integer;
+begin
+  Result := True;
+  if recId = REC_NONE then Exit;
+  if RecHasField(recId, fieldName) then Exit;
+  Result := False;
+  if (keyPos > 0) and (keyPos = CMemberErrLastPos) then Exit;
+  CMemberErrLastPos := keyPos;
+  missKind := CRecMissingFieldKind(recId);
+  if missKind = 1 then
+    ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
+      + ' -- the struct/union has no definition in scope, so its layout'
+      + ' is unknown and the member would read at offset 0')
+  else if missKind = 2 then
+    ErrorRecover('C: ''' + fieldName + ''' is unreachable -- pxx kept this'
+      + ' struct/union OPAQUE and dropped its layout, so no member of it'
+      + ' can be addressed (every one would read at offset 0)')
+  else
+    ErrorRecover('C: no member named ''' + fieldName + ''' in this'
+      + ' struct/union');
+end;
+
 function CSizeofDescriptorWalkDeref(si, derefs: Integer; var sz: Integer): Boolean;
 { `derefs` leading `*`s, applied AFTER the postfix chain because C's unary `*`
   binds looser than `[]`/`.`/`->`: `*a.m` is `*(a.m)`. Dereferencing an ARRAY
@@ -3987,6 +4028,7 @@ begin
       if recId = REC_NONE then begin cOK := False; Break; end;
       Next;   { consume '.' / '->' }
       fieldName := CurTok.SVal;
+      if not CRecMemberCheck(recId, fieldName, TokPos - 1) then begin cOK := False; Next; Break; end;
       Next;   { consume the field name }
       cTk := RecFieldType(recId, fieldName);
       cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
@@ -4077,6 +4119,7 @@ var arrLen: Integer; elemTk: TTypeKind;
 begin
   Result := False;
   if recId = REC_NONE then Exit;
+  if not RecHasField(recId, fieldName) then Exit;   { reported by the access parse }
   if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
   begin
     arrLen := RecFieldArrLen(recId, fieldName);
@@ -4181,6 +4224,74 @@ begin
   Expect(tkRParen, ')');
 end;
 
+{ The size of an already-parsed operand node, by the rules the parenthesised
+  general-expression arm of ParseCSizeof uses: a member is the member object,
+  a decayed row is the row, otherwise the result type. }
+function CSizeofNodeBytes(node: Integer): Integer;
+var rec: Integer; tk: TTypeKind;
+begin
+  Result := 4;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    rec := CNodePtrElemRec(ASTLeft[node]);
+    if rec = REC_NONE then rec := ResolveNodeRec(ASTLeft[node]);
+    if (rec <> REC_NONE) and CSizeofRecFieldBytes(rec, GetASTIdentName(node), Result) then Exit;
+  end;
+  if CSizeofDecayedDeref(node, Result) then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if tk = tyRecord then Result := RecSize(ResolveNodeRec(node))
+  else if tk = tyPointer then Result := TARGET_PTR_SIZE
+  else if TypeIsFloat(tk) then Result := TypeSlotSize(tk)
+  else if tk = tyBoolean then Result := 4
+  else if TypeIsOrdinal(tk) then Result := TypeSlotSize(tk)
+  else Result := 4;
+end;
+
+{ Does the unparenthesised sizeof operand at CurTok continue past a group
+  with a postfix the dedicated arms do not read? `sizeof (*p)[1]` (a
+  parenthesised expression, then a subscript) and `sizeof f()[1]` /
+  `sizeof h()->a` (a call, then a subscript or a member). Those arms stopped
+  at the group and left `[1]` / `->a` behind: "expected ')'". Such an operand
+  is parsed whole as a unary expression instead.
+  bug-c-sizeof-of-a-parenthesised-deref-followed-by-a-subscript-is-refused
+  bug-c-sizeof-without-parentheses-refuses-a-call-followed-by-a-subscript-or-arrow }
+function CSizeofOperandHasTrailingPostfix: Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := TokPos - 1;                        { CurTok }
+  if CurTok.Kind = tkIdent then
+  begin
+    if FindProc(CurTok.SVal) < 0 then Exit;
+    if CFindSymFromModule(CurTok.SVal) >= 0 then Exit;
+    Inc(k);
+    if (k >= TokCount) or (Tokens[k].Kind <> tkLParen) then Exit;
+  end
+  else if CurTok.Kind = tkLParen then
+  begin
+    if CIsCastAhead then Exit;            { `sizeof (T)` / a cast operand }
+    { `sizeof (v)[i]` of a variable has its own arm (the descriptor walk) }
+    if (k + 2 < TokCount) and (Tokens[k + 1].Kind = tkIdent) and (Tokens[k + 2].Kind = tkRParen) then Exit;
+  end
+  else
+    Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end;
+    Inc(k);
+  end;
+  if k + 1 >= TokCount then Exit;
+  if Tokens[k + 1].Kind = tkLBrack then Result := True
+  else if (CurTok.Kind = tkIdent) and (Tokens[k + 1].Kind = tkDot) then Result := True;
+end;
+
 function ParseCSizeof: Integer;
 var szK, szN: Integer; szWide: Boolean;
     node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
@@ -4195,6 +4306,12 @@ begin
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;
+  if CSizeofOperandHasTrailingPostfix then
+  begin
+    node := ParseCUnary;
+    sz := CSizeofNodeBytes(node);
+  end
+  else
   { `sizeof (t)->key` -- a PARENTHESISED IDENTIFIER followed by a postfix
     chain. The operand is the unary expression `(t)->key`, which is `t->key`;
     it was read as `sizeof(t)` and the `->key` left over was refused with
@@ -4393,6 +4510,7 @@ begin
             if Syms[si].IsArray then recId := Syms[si].ElemRecName
             else recId := Syms[si].RecName;
           end;
+          if not CRecMemberCheck(recId, fieldName, TokPos + 1) then recId := REC_NONE;
           if (recId <> REC_NONE) and (RecFieldType(recId, fieldName) = tyPointer) then
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
@@ -4607,7 +4725,8 @@ begin
       fieldName := CurTok.SVal;
       recId := CNodePtrElemRec(node);
       if recId = REC_NONE then recId := ResolveNodeRec(node);
-      if not CSizeofRecFieldBytes(recId, fieldName, sz) then ;   { False leaves the default }
+      if CRecMemberCheck(recId, fieldName, TokPos - 1) then
+        if not CSizeofRecFieldBytes(recId, fieldName, sz) then ;   { False leaves the default }
       Next;   { consume the field name }
     end;
   end
@@ -5832,7 +5951,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx, fldTokIdx: Integer;
     shTk: TTypeKind; shRec, shLen: Integer;       { pointer-to-array shape, copied from CPA* }
     shSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
@@ -6179,6 +6298,7 @@ begin
       if CurTok.Kind <> tkIdent then Error('field name expected after .');
       fldOff := Tokens[TokPos - 1].SOffset;
       fldLen := Tokens[TokPos - 1].SLen;
+      fldTokIdx := TokPos - 1;
       fieldName := CurTok.SVal;
       { On a pointer base this is C `->`: dereference, then take the field. }
       baseFld := node;
@@ -6228,21 +6348,7 @@ begin
         RECOVERING, not fatal: gcc reports every bad member in a file and so
         should we, and the node built below is well-formed either way.
         bug-c-an-undeclared-struct-type-compiles-and-reads-garbage }
-      if (recId <> REC_NONE) and (not RecHasField(recId, fieldName)) then
-      begin
-        missKind := CRecMissingFieldKind(recId);
-        if missKind = 1 then
-          ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
-            + ' -- the struct/union has no definition in scope, so its layout'
-            + ' is unknown and the member would read at offset 0')
-        else if missKind = 2 then
-          ErrorRecover('C: ''' + fieldName + ''' is unreachable -- pxx kept this'
-            + ' struct/union OPAQUE and dropped its layout, so no member of it'
-            + ' can be addressed (every one would read at offset 0)')
-        else
-          ErrorRecover('C: no member named ''' + fieldName + ''' in this'
-            + ' struct/union');
-      end;
+      if not CRecMemberCheck(recId, fieldName, fldTokIdx) then ;   { reports; the node stays well-formed }
       if recId <> REC_NONE then
       begin
         ASTTk[fnode] := Ord(RecFieldType(recId, fieldName));
@@ -6982,8 +7088,55 @@ begin
   Result := fpSig;
 end;
 
+{ `T (*name[N]..)[M]..` -- an ARRAY of pointers to arrays -- with the '(' at
+  token index lp: the index of the ')' when the shape matches and a '[' follows
+  it, else -1. The declaration paths (a local, a global) read this declarator
+  themselves, as the typedef spelling `vecM *name[N]` of the same type: they
+  set CDeclLeaveParenPtrArr before ParseCDeclType so that it stops at the '('.
+  bug-c-the-spelled-out-array-of-pointers-to-arrays-declarator-is-refused }
+var CDeclLeaveParenPtrArr: Boolean;
+function CParenPtrArrEnd(lp: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := -1;
+  if (lp < 0) or (lp + 4 >= TokCount) then Exit;
+  if (Tokens[lp].Kind <> tkLParen) or (Tokens[lp + 1].Kind <> tkStar) or
+     (Tokens[lp + 2].Kind <> tkIdent) or (Tokens[lp + 3].Kind <> tkLBrack) then Exit;
+  k := lp + 3;
+  while (k < TokCount) and (Tokens[k].Kind = tkLBrack) do
+  begin
+    depth := 0;
+    repeat
+      if Tokens[k].Kind = tkLBrack then Inc(depth)
+      else if Tokens[k].Kind = tkRBrack then Dec(depth)
+      else if Tokens[k].Kind in [tkSemicolon, tkEOF] then Exit;
+      Inc(k);
+    until (depth = 0) or (k >= TokCount);
+  end;
+  if (k + 1 < TokCount) and (Tokens[k].Kind = tkRParen) and (Tokens[k + 1].Kind = tkLBrack) then
+    Result := k;
+end;
+
+{ Read the pointee dims `[M]..` after the ')' of a CParenPtrArrEnd declarator
+  into tdDims (outermost first); answers their product. }
+function CReadPtrArrPointeeDims(var nd: Integer; var dims: array of Integer): Integer;
+begin
+  nd := 0;
+  Result := 1;
+  while CurTok.Kind = tkLBrack do
+  begin
+    Next;
+    if nd >= MAX_ARR_DIMS then Error('too many C array dimensions');
+    dims[nd] := CEvalConstExpr;
+    Expect(tkRBrack, ']');
+    Result := Result * dims[nd];
+    Inc(nd);
+  end;
+end;
+
 function ParseCDeclType: TTypeKind;
 var
+  leavePtrArr: Boolean;            { see CDeclLeaveParenPtrArr: read once, cleared for nested calls }
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
@@ -7013,6 +7166,8 @@ var
   fnRetPRecId, fnRetPProcSig: array[0..MAX_PROC_PARAMS-1] of Integer;
   fnRetIsFunc, fpVariadic: Boolean;
 begin
+  leavePtrArr := CDeclLeaveParenPtrArr;
+  CDeclLeaveParenPtrArr := False;
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
@@ -7370,7 +7525,8 @@ begin
     bytes. Detect `(` immediately followed by `*`, collapse to Pointer, and
     skip both the `(*name)` declarator group and the trailing `(params)`
     group so the caller's parameter loop resyncs on the next `,`/`)`. }
-  else if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
+  else if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+          not (leavePtrArr and (CParenPtrArrEnd(TokPos - 1) >= 0)) then
   begin
     fpRet := Result;                  { return type parsed above (before the '(') }
     { A function pointer whose POINTEE returns a function pointer:
@@ -7513,6 +7669,16 @@ begin
       callable function pointer; the dims were skipped, so `sizeof *f()` was 4
       and `(*f())[3]` read the wrong int.
       bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+    { `float (*q[2])[4]`: an ARRAY of pointers to arrays. A variable (local or
+      global) never gets here -- its declaration path reads the declarator
+      itself (CParenPtrArrEnd). A struct member or a parameter would, and
+      nothing on those paths carries the pointee shape of an array element,
+      so it is refused by name rather than laid out wrong.
+      bug-c-the-spelled-out-array-of-pointers-to-arrays-declarator-is-refused }
+    if (not fnRetIsFunc) and (fpNDims > 0) and (CurTok.Kind = tkLBrack) then
+      Error('C: ''' + fpName + ''': an array of pointers to arrays, T (*name[N])[M],'
+        + ' is supported for a variable but not as a struct member or parameter;'
+        + ' declare it through a typedef: typedef T rowM[M]; rowM *name[N];');
     fnRetArr := fnRetIsFunc and (CurTok.Kind = tkLBrack);
     if fnRetArr then
     begin
@@ -7766,7 +7932,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     fpLocNDims: Integer;
     fpLocDims: array[0..7] of Integer;
-    beFlat, beBelow: Integer;
+    beFlat, beBelow, beDim, beIdx, beChain: Integer;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     unsizedOuter: Boolean;   { `T a[][N] = {...}`: rows come from the braces }
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
@@ -7781,10 +7947,18 @@ var baseTk, declTk, scalarTk: TTypeKind;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
     lParenName: Boolean; lParenEnd: Integer;   { `T *(name[N])`, see CParenDeclNameEnd }
+    lParenPtrArr: Boolean;   { `T (*name[N])[M]`, see CParenPtrArrEnd }
+    CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry: Integer;
+    CTypeTypedefDimsAtEntry: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   cliOuterTop := CLIArrTop;
   cliBase := CLIArrTop;
+  CDeclLeaveParenPtrArr := True;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  lParenPtrArr := False;
+  CTypeTypedefArrLenAtEntry := CTypeTypedefArrLen;
+  CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
+  for di := 0 to MAX_ARR_DIMS - 1 do CTypeTypedefDimsAtEntry[di] := CTypeTypedefDims[di];
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
   tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
   for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDims[di];
@@ -8076,7 +8250,30 @@ begin
       arm's sibling (see CParenDeclNameEnd). A '(' after the ')' would make it
       a block-scope prototype `int (f)(void);`, which stays with the arm below. }
     lParenName := False;
-    if CurTok.Kind = tkLParen then
+    if lParenPtrArr then
+    begin
+      { the previous declarator borrowed the typedef-dims slots; a sibling
+        (`T (*q[2])[4], x;`) gets the declaration's own back }
+      tdArrLen := CTypeTypedefArrLenAtEntry; tdNDimsL := CTypeTypedefNDimsAtEntry;
+      for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDimsAtEntry[di];
+    end;
+    lParenPtrArr := False;
+    if (CurTok.Kind = tkLParen) and (declPtrDepth = 0) and (CParenPtrArrEnd(TokPos - 1) >= 0) then
+    begin
+      { `T (*name[N])[M]`: an array of N pointers to T[M], the type
+        `typedef T vecM[M]; vecM *name[N];` declares. Read as that spelling:
+        the element is a depth-1 pointer to the scalar, and the pointee dims
+        after the ')' take the typedef dims' place (tdDimsL, stamped on the
+        array after allocation). See CParenPtrArrEnd. }
+      Next; Next;                    { '(' '*' }
+      lParenName := True;
+      lParenPtrArr := True;
+      declTk := tyPointer; declPtrDepth := 1;
+      declElemTk := Ord(scalarTk); declElemRec := scalarRec;
+      declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
+      declProcSig := -1; declPtrElemSig := -1;
+    end
+    else if CurTok.Kind = tkLParen then
     begin
       lParenEnd := CParenDeclNameEnd(TokPos - 1);
       if (lParenEnd >= 0) and (lParenEnd + 1 < TokCount) and
@@ -8192,6 +8389,10 @@ begin
         Inc(dimCount);
       end;
       if lParenName then begin Expect(tkRParen, ')'); lParenName := False; end;
+      if lParenPtrArr then
+      begin
+        tdArrLen := CReadPtrArrPointeeDims(tdNDimsL, tdDimsL);
+      end;
       { Array typedef inherent dims fold UNDER any declarator-applied dims:
         `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init).
         ALL of them, in order: this appended exactly one, so `typedef int T[2][3]'
@@ -8265,6 +8466,7 @@ begin
         Next; Next;   { consume the assign then the open brace }
         brDepth := 1;
         beFlat := 0;
+        beStack[0] := 0;   { the outermost aggregate starts at 0 (designators) }
         while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
         begin
           if CurTok.Kind = tkBegin then
@@ -8298,6 +8500,40 @@ begin
           end
           else if CurTok.Kind = tkComma then
             Next
+          else if CurTok.Kind = tkLBrack then
+          begin
+            { An index designator (C99 6.7.8p6), `int e[4][3] = {{1}, [3] =
+              {9}}` or `{[1][2] = 5}`: `[i]` at brace depth d names element i
+              of dimension d-1 of the sub-aggregate that brace opened, so the
+              flat cursor moves to that aggregate's start plus i times the
+              size of one element. A chain `[i][j]` continues into the next
+              dimension. It was "expected C expression".
+              bug-c-an-array-designator-inside-a-multi-dimensional-initializer-is-refused }
+            beDim := brDepth - 1;
+            if beDim < MAX_ARR_DIMS then beFlat := beStack[beDim];
+            beChain := 0;
+            while CurTok.Kind = tkLBrack do
+            begin
+              Next;
+              beIdx := CEvalConstExpr;
+              Expect(tkRBrack, ']');
+              if beDim >= dimCount then
+                Error('C: array designator nests deeper than the dimensions of ' + name);
+              if (beIdx < 0) or ((dimSpan[beDim] > 0) and (beIdx >= dimSpan[beDim]) and
+                 not (unsizedOuter and (beDim = 0))) then
+                Error('C: array index in initializer exceeds array bounds');
+              beBelow := 1;
+              for di := beDim + 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+              if beBelow < 1 then beBelow := 1;
+              beFlat := beFlat + beIdx * beBelow;
+              Inc(beDim);
+              Inc(beChain);
+            end;
+            Expect(tkAssign, '=');
+            if (CurTok.Kind = tkBegin) and (beChain > 1) then
+              Error('C: a braced value after a chained array designator ([i][j] = {...})'
+                + ' is not supported in a local initializer; write [i] = {[j] = {...}}');
+          end
           else if (CurTok.Kind = tkString) and (declTk <> tyPointer) and
                   TypeIsOrdinal(declTk) and (TypeSlotSize(declTk) = 1) then
           begin
@@ -12396,6 +12632,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gFirstPtrBaseTk, gFirstPtrBaseRec, gFirstPtrElemSig: Integer;
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
     gParenName: Boolean;  { THIS declarator's name is in redundant parens }
+    gParenPtrArr: Boolean;  { THIS declarator is `(*name[N])[M]`, see CParenPtrArrEnd }
+    gTdArrLen0, gTdNDims0: Integer; gTdDims0: array[0..MAX_ARR_DIMS - 1] of Integer;
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
     declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
@@ -12411,6 +12649,7 @@ begin
   declSawExtern := CDeclSawExtern(TokPos - 1);
   declSawStatic := CDeclSawStatic(TokPos - 1);
   declSawThread := CDeclSawThreadLocal(TokPos - 1);
+  CDeclLeaveParenPtrArr := True;
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
@@ -12418,6 +12657,9 @@ begin
     ParseCDeclType, for the pointee stamp of `mat4 *g` / `mat4 *g[2]` }
   gTdNDims := CTypeTypedefNDims;
   for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims[gTdDi] := CTypeTypedefDims[gTdDi];
+  gParenPtrArr := False;
+  gTdArrLen0 := tdArrLen; gTdNDims0 := gTdNDims;
+  for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims0[gTdDi] := gTdDims[gTdDi];
   { POINTER-TO-ARRAY `elem (*name)[N]` at FILE SCOPE. Captured HERE, beside the
     other CType* reads, for the reason ParseCLocalDeclAST states at its own
     copy: an initializer can contain a cast, a cast re-runs ParseCDeclType, and
@@ -12848,9 +13090,34 @@ begin
         CTypePtrBaseRec := gFirstPtrBaseRec; CTypePtrElemProcSig := gFirstPtrElemSig;
       end;
     end;
+    if gParenPtrArr then
+    begin
+      { the previous declarator borrowed the typedef-dims slots }
+      tdArrLen := gTdArrLen0; gTdNDims := gTdNDims0;
+      for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims[gTdDi] := gTdDims0[gTdDi];
+      gParenPtrArr := False;
+    end;
+    if (CurTok.Kind = tkLParen) and (gStars = 0) and
+       not (gFirstDecl and (baseTk = tyPointer)) and (CParenPtrArrEnd(TokPos - 1) >= 0) then
+    begin
+      { `T (*name[N])[M]`: an array of pointers to T[M], read as the typedef
+        spelling `vecM *name[N]` -- the local path's twin, see CParenPtrArrEnd }
+      Next; Next;                    { '(' '*' }
+      gParenName := True;
+      gParenPtrArr := True;
+      gStars := 1;
+      baseTk := tyPointer; recId := gScalarRec;
+      CTypePtrDepth := 1;
+      CTypePtrBaseTk := Ord(gScalarTk); CTypePtrBaseRec := gScalarRec;
+      CTypeElemTk := Ord(gScalarTk); CTypeElemRec := gScalarRec;
+      CTypePtrElemProcSig := -1;
+    end
+    else
+    begin
     { `T *(name[N])`: the parens are redundant -- see CParenDeclNameEnd. }
     gParenName := (CurTok.Kind = tkLParen) and (CParenDeclNameEnd(TokPos - 1) >= 0);
     if gParenName then Next;
+    end;
     if CurTok.Kind <> tkIdent then Break;
     gNameTok := TokPos - 1;
     name := CurTok.SVal; Next;
@@ -12878,6 +13145,7 @@ begin
       if dimCount = 1 then arrLen := dimVal;
     end;
     if gParenName then Expect(tkRParen, ')');
+    if gParenPtrArr then tdArrLen := CReadPtrArrPointeeDims(gTdNDims, gTdDims);
     { Array typedef inherent dim folds UNDER any declarator dims: `v4 g` -> [4],
       `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init).
 
@@ -13822,9 +14090,12 @@ function CTopLevelIsFunc: Boolean;
 var savedPos, pe: Integer; hadName: Boolean;
 begin
   savedPos := TokPos - 1;          { index of the current token }
+  CDeclLeaveParenPtrArr := True;   { `T (*name[N])[M]` is a variable: see CParenPtrArrEnd }
   ParseCDeclType;
   if CTypeFnRetIsFunc then
     Result := True
+  else if CParenPtrArrEnd(TokPos - 1) >= 0 then
+    Result := False
   else
   begin
     hadName := CurTok.Kind = tkIdent;
@@ -16146,6 +16417,57 @@ begin
   Result := True;
 end;
 
+function CHoistBlockProto(k: Integer): Boolean;
+{ Token k starts a block-scope statement. When it is a function prototype
+  `[extern] T name(params);` for a name that is not yet a routine, register it
+  as a file-scope prototype would be and leave TokPos after its `;`; otherwise
+  rewind to k and answer False. See CHoistBlockScopeExterns. }
+var e, depth, nameTok, pd: Integer;
+begin
+  Result := False;
+  { the statement's extent: one top-level `(...)`, then `;` }
+  e := k; nameTok := -1; pd := 0;
+  while e < TokCount do
+  begin
+    if (pd = 0) and (Tokens[e].Kind in [tkSemicolon, tkBegin, tkEnd, tkAssign, tkComma]) then Break;
+    if Tokens[e].Kind = tkLParen then
+    begin
+      if (pd = 0) and (nameTok < 0) then
+      begin
+        if (e > k) and (Tokens[e - 1].Kind = tkIdent) then nameTok := e - 1
+        else Exit;   { `(*fp)(...)`, a cast, a call through a parenthesis }
+      end;
+      Inc(pd);
+    end
+    else if Tokens[e].Kind = tkRParen then
+    begin
+      Dec(pd);
+      if (pd = 0) and (nameTok >= 0) then
+      begin
+        { `;` ends the prototype; `,` begins another declarator of the same
+          statement (`int f(void), x;`), which pass 2 declares as usual }
+        if (e + 1 < TokCount) and (Tokens[e + 1].Kind in [tkSemicolon, tkComma]) then Break;
+        Exit;   { `f(x) + 1;`, a definition }
+      end;
+    end;
+    Inc(e);
+  end;
+  if (nameTok <= k) or (e >= TokCount) or (Tokens[e].Kind <> tkRParen) then Exit;
+  if FindProc(GetTokenStrFromRaw(Tokens[nameTok].SOffset, Tokens[nameTok].SLen)) >= 0 then Exit;
+  TokPos := k; Next;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'extern') then Next;
+  if IsCTypeTok and CTopLevelIsFunc then
+  begin
+    ParseCSubroutine;
+    { resume the caller's scan after the `;` / `,` (its k := TokPos - 2,
+      then Inc), wherever ParseCSubroutine stopped }
+    TokPos := e + 3;
+    Result := True;
+    Exit;
+  end;
+  TokPos := k; Next;
+end;
+
 procedure CHoistBlockScopeExterns;
 { Pass 1, at a function body's opening brace: register every block-scope
   `extern T name...;` OBJECT declaration whose name no file-scope declaration
@@ -16163,7 +16485,18 @@ procedure CHoistBlockScopeExterns;
   only for a name nothing else in the file declares; an extern object refers
   to the one definition with that name either way. A declarator with a
   parenthesis (a function, or a pointer to one) is left to the old path.
-  bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared }
+  bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared
+
+  FUNCTION PROTOTYPES TOO, with or without `extern`: `extern int f(int);` or
+  `int g(void);` at block scope declares f for the calls after it (C99
+  6.2.1). Pass 2 skips the declaration, so a function defined in another
+  translation unit -- nothing in this file declares it at file scope -- was
+  "call to undeclared function". A statement that starts with a type and
+  whose single declarator is `name(params)` followed by `;` is registered by
+  ParseCSubroutine, exactly as the same line at file scope. A name already
+  known as a routine is left alone. The mixed form `int f(void), x;` is not
+  hoisted.
+  bug-c-a-block-scope-function-prototype-is-not-a-declaration }
 var k, e, depth, savedPos, nameTok: Integer;
     hasParen: Boolean;
 begin
@@ -16202,7 +16535,14 @@ begin
         TokPos := k + 1; Next;     { CurTok = the type, `extern` just behind it }
         ParseCGlobalVarDecl;
         k := e;
-      end;
+      end
+      else if CHoistBlockProto(k) then k := TokPos - 2;
+    end
+    else if (k > savedPos) and
+            ((Tokens[k - 1].Kind = tkBegin) or (Tokens[k - 1].Kind = tkSemicolon) or
+             (Tokens[k - 1].Kind = tkEnd)) then
+    begin
+      if CHoistBlockProto(k) then k := TokPos - 2;
     end;
     Inc(k);
   end;

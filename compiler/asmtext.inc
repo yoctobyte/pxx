@@ -580,6 +580,9 @@ begin
     which is the check that actually matters. Kept in step with asmenc.inc's
     copy — same instructions, two encoders (feature-inline-asm-xmm-operands). }
   if CaseEqual(mnem, 'cpuid')  then begin EncB($0F); EncB($A2); Exit; end;
+  if CaseEqual(mnem, 'lfence') then begin EncB($0F); EncB($AE); EncB($E8); Exit; end;
+  if CaseEqual(mnem, 'mfence') then begin EncB($0F); EncB($AE); EncB($F0); Exit; end;
+  if CaseEqual(mnem, 'sfence') then begin EncB($0F); EncB($AE); EncB($F8); Exit; end;
   if CaseEqual(mnem, 'xgetbv') then begin EncB($0F); EncB($01); EncB($D0); Exit; end;
   if CaseEqual(mnem, 'xsetbv') then begin EncB($0F); EncB($01); EncB($D1); Exit; end;
   if CaseEqual(mnem, 'rdtsc')  then begin EncB($0F); EncB($31); Exit; end;

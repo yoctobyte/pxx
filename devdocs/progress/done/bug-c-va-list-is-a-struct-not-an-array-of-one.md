@@ -2,7 +2,7 @@
 track: C
 prio: 30
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -31,3 +31,17 @@ CVaListAddr, va_copy and the crtl v*printf family all assume a record. Do it
 only with every target's variadic tests (test-core's c_va_arg_every_target and
 the qemu jobs) and a caller-visible-consumption row per target, since the right
 answer differs by target (aarch64 gcc: a struct).
+
+
+## Resolution (2026-11-14)
+
+On x86-64 `lib/crtl/include/stdarg.h` now declares
+`typedef struct __pxx_va_elem va_list[1];` under `#if defined(__x86_64__)`, so
+a va_list parameter decays to a pointer as on gcc. `CVaListAddr` returns the
+node itself when it is pointer-typed, and va_copy copies through
+`CNodePtrElemRec` in that case. The probe gives `take=10 next=20 psz=8`,
+which equals gcc.
+
+Other targets keep the struct. aarch64 matches gcc there (gcc's own va_list
+is a struct). i386/arm32 gcc use a plain pointer, so `sizeof ap` still
+differs (24 vs 4), but va_arg semantics hold.

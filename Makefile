@@ -19584,7 +19584,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_a64
 	tools/expect_same.sh csyncat_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/csyncat_a64)" "$$(cat test/c_sync_atomic_builtins.expected)"
 	tools/expect_same.sh csyncat_a64_order "$$(od -An -tx1 -v $(TESTTMP)/csyncat_a64 | tr -d '\n' | grep -o '20 fc 5f 88 1f 00 02 6b 61 00 00 54 23 fc 04 88 84 ff ff 35 bf 3b 03 d5' | wc -l | tr -d ' ')" "3"
-	tools/expect_same.sh csyncat_i386_8 "$$(./$(COMPILER) --target=i386 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_i386 2>&1 | grep -c 'an 8-byte atomic needs a 64-bit target')" "1"
+	# 8-byte atomics on the ILP32 targets run under a spinlock (cpreproc.inc
+	# CAtomicWidthBodies), so is_lock_free(8) is 0 there (gcc -m32: 1, cmpxchg8b).
+	# feature-c-8-byte-atomics-on-32-bit-targets
+	./$(COMPILER) --target=i386 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_i386 > /dev/null
+	tools/expect_same.sh csyncat_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/csyncat_i386)" "$$(sed 's/^lockfree 1 1/lockfree 1 0/' test/c_sync_atomic_builtins.expected)"
+	./$(COMPILER) --target=arm32 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_arm32 > /dev/null
+	tools/expect_same.sh csyncat_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/csyncat_arm32)" "$$(sed 's/^lockfree 1 1/lockfree 1 0/' test/c_sync_atomic_builtins.expected)"
 	./$(COMPILER) test/c_stdatomic.c $(TESTTMP)/cstdatomic26
 	tools/expect_same.sh cstdatomic26 "$$($(TESTTMP)/cstdatomic26)" "$$(cat test/c_stdatomic.expected)"
 	./$(COMPILER) --target=aarch64 test/c_stdatomic.c $(TESTTMP)/cstdatomic_a64
@@ -19595,6 +19601,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_fs_atomics_undef "$$(nm $(TESTTMP)/c_fs_atomics.o | grep -c ' U ')" "0"
 	gcc -no-pie -pthread -o $(TESTTMP)/c_fs_atomics test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics.o
 	tools/expect_same.sh c_fs_atomics "$$($(TESTTMP)/c_fs_atomics)" "atomics ok"
+	# the same under contention on i386, where the 8-byte add takes the spinlock
+	./$(COMPILER) --target=i386 --emit-obj --freestanding test/c_freestanding_atomics.c $(TESTTMP)/c_fs_atomics_i386.o > /dev/null
+	gcc -m32 -no-pie -pthread -o $(TESTTMP)/c_fs_atomics_i386 test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics_i386.o
+	tools/expect_same.sh c_fs_atomics_i386 "$$($(TESTTMP)/c_fs_atomics_i386)" "atomics ok"
+	# lfence/mfence/sfence in C inline asm, both encoders (Gibux asked for mfence).
+	./$(COMPILER) test/c_inline_asm_fences.c $(TESTTMP)/c_asm_fences > /dev/null
+	tools/expect_same.sh c_asm_fences "$$($(TESTTMP)/c_asm_fences)" "fence 2"
+	./$(COMPILER) --target=i386 test/c_inline_asm_fences.c $(TESTTMP)/c_asm_fences_i386 > /dev/null
+	tools/expect_same.sh c_asm_fences_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asm_fences_i386)" "fence 2"
 	# A global of an over-aligned STRUCT type (a member's aligned(4096)) sits on
 	# that alignment, .bss and .data, hosted and --freestanding; _Alignof works.
 	# bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment
@@ -19612,6 +19627,26 @@ test-core: $(COMPILER)
 	tools/expect_same.sh heap_arena_nr26 "$$($(TESTTMP)/heap_arena_nr26)" "arena TRUE noreserve TRUE xy"
 	./$(COMPILER) --target=i386 test/heap_arena_noreserve.pas $(TESTTMP)/heap_arena_nr_i386 > /dev/null
 	tools/expect_same.sh heap_arena_nr_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/heap_arena_nr_i386)" "arena TRUE noreserve TRUE xy"
+	# C shapes that were refused: an index designator in a multi-dim initializer,
+	# sizeof of a group followed by a postfix, `T (*q[N])[M]` local and global, a
+	# block-scope prototype. Output equals gcc's.
+	./$(COMPILER) test/c_declarator_and_sizeof_shapes.c $(TESTTMP)/cdeclshape26 > /dev/null
+	tools/expect_same.sh cdeclshape26 "$$($(TESTTMP)/cdeclshape26)" "$$(cat test/c_declarator_and_sizeof_shapes.expected)"
+	./$(COMPILER) --target=aarch64 test/c_declarator_and_sizeof_shapes.c $(TESTTMP)/cdeclshape_a64 > /dev/null
+	tools/expect_same.sh cdeclshape_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cdeclshape_a64)" "$$(cat test/c_declarator_and_sizeof_shapes.expected)"
+	# A block-scope prototype of a function defined in another translation unit.
+	# bug-c-a-block-scope-function-prototype-is-not-a-declaration
+	./$(COMPILER) --emit-obj test/c_block_scope_prototype.c $(TESTTMP)/c_bsproto.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/c_bsproto test/c_block_scope_prototype_other.c $(TESTTMP)/c_bsproto.o
+	tools/expect_same.sh c_bsproto "$$($(TESTTMP)/c_bsproto)" "20 1 321"
+	# A sizeof operand naming a member the struct lacks is refused, five spellings.
+	# bug-c-an-unknown-member-name-compiles-as-int
+	@./$(COMPILER) test/c_sizeof_unknown_member_refused.c $(TESTTMP)/c_szmember26 \
+	   > $(TESTTMP)/c_szmember.log 2>&1; \
+	 test $$? -ne 0 && test "$$(grep -c 'no member named' $(TESTTMP)/c_szmember.log)" = 5 \
+	   || { echo 'c_sizeof_unknown_member_refused: FAIL - want 5 no-such-member refusals'; \
+	        cat $(TESTTMP)/c_szmember.log; exit 1; } \
+	   && echo "c_sizeof_unknown_member_refused: 5 refusals"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,

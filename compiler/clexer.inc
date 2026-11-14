@@ -144,6 +144,13 @@ begin
   end;
 end;
 
+{ `_Atomic(T)`: CSkipSpace drops `_Atomic(` and records the paren depth it
+  opened at; CLexOne drops the `)` that closes it, so the specifier reads as T
+  -- the same treatment as the `_Atomic T` qualifier. CLexParenDepth counts
+  the parens the lexer EMITS. }
+var CLexParenDepth, CLexAtomicTop: Integer;
+    CLexAtomicStack: array[0..63] of Integer;
+
 procedure CSkipSpace;
 var done, idDone: Boolean;
     p, depth, nameLen: Integer;
@@ -238,11 +245,18 @@ begin
           and the __atomic_* builtins and <stdatomic.h> do the accesses
           (feature-c-sync-and-atomic-builtins). A plain `x++` on one is
           therefore NOT atomic under pxx. The SPECIFIER form `_Atomic(T)` is
-          refused by name rather than misparsed. }
+          the same type as `_Atomic T` and is dropped the same way: the
+          `_Atomic(` here, its closing `)` in CLexOne (CLexAtomicStack). }
         SrcPos := p;
         while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
         if (SrcPos <= Length(Source)) and (Source[SrcPos] = '(') then
-          Error('the _Atomic(type) specifier is not supported yet; write the qualifier form `_Atomic type`');
+        begin
+          if CLexAtomicTop > High(CLexAtomicStack) then
+            Error('_Atomic(type) nested too deeply');
+          CLexAtomicStack[CLexAtomicTop] := CLexParenDepth;
+          Inc(CLexAtomicTop);
+          p := SrcPos + 1;
+        end;
         SrcPos := p;
         idDone := True;
       end
@@ -911,8 +925,18 @@ begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkModEq; end
            else CurTok.Kind := tkMod;
          end;
-    '(': CurTok.Kind := tkLParen;
-    ')': CurTok.Kind := tkRParen;
+    '(': begin CurTok.Kind := tkLParen; Inc(CLexParenDepth); end;
+    ')': begin
+           if (CLexAtomicTop > 0) and (CLexAtomicStack[CLexAtomicTop - 1] = CLexParenDepth) then
+           begin
+             { the `)` of an `_Atomic(T)` whose `_Atomic(` CSkipSpace dropped }
+             Dec(CLexAtomicTop);
+             CLexOne;
+             Exit;
+           end;
+           CurTok.Kind := tkRParen;
+           Dec(CLexParenDepth);
+         end;
     '[': CurTok.Kind := tkLBrack;
     ']': CurTok.Kind := tkRBrack;
     '{': CurTok.Kind := tkBegin;
@@ -989,6 +1013,7 @@ end;
 procedure CLexAll;
 var off, len, i: Integer; k: TTokenKind;
 begin
+  CLexParenDepth := 0; CLexAtomicTop := 0;
   CAttrPacked := False;
   CAttrAligned := False;
   CAttrAlignValue := 0;
@@ -1066,6 +1091,7 @@ begin
   Source := srcText;
   SrcPos := 1;
   SrcLine := 1;
+  CLexParenDepth := 0; CLexAtomicTop := 0;
 
   if (MainProgramTokCount = TOK_UNBOUNDED) and (TokCount > 0) and (Tokens[TokCount-1].Kind = tkEOF) then
   begin

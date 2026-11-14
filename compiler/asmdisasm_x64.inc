@@ -471,6 +471,13 @@ begin
       built out of the C7 F0 that follows — a wrong instruction reads as real
       output, an unknown byte does not. }
     if opc2 = $A2 then begin text := 'cpuid'; Result := (p + 2) - pos; Exit; end;
+    if (opc2 = $AE) and (p + 2 < len) and ((Code[p + 2] = $E8) or (Code[p + 2] = $F0) or (Code[p + 2] = $F8)) then
+    begin
+      if Code[p + 2] = $E8 then text := 'lfence'
+      else if Code[p + 2] = $F0 then text := 'mfence'
+      else text := 'sfence';
+      Result := (p + 3) - pos; Exit;
+    end;
     if opc2 = $C7 then
     begin
       if not DisParseModRM(p + 2, len, rexR, rexX, rexB, mrm) then begin text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit; end;

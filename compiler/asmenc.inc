@@ -966,6 +966,10 @@ begin
   { xsetbv writes XCR<ecx> := edx:eax (ring 0; a kernel enables AVX state with it). }
   if CaseEqual(mn,'xsetbv')  then begin AsmB($0F); AsmB($01); AsmB($D1); Exit; end;
   if CaseEqual(mn,'rdtsc')   then begin AsmB($0F); AsmB($31); Exit; end;
+  { The fences: 0F AE /5 /6 /7 with mod=11 (E8, F0, F8). }
+  if CaseEqual(mn,'lfence')  then begin AsmB($0F); AsmB($AE); AsmB($E8); Exit; end;
+  if CaseEqual(mn,'mfence')  then begin AsmB($0F); AsmB($AE); AsmB($F0); Exit; end;
+  if CaseEqual(mn,'sfence')  then begin AsmB($0F); AsmB($AE); AsmB($F8); Exit; end;
 
   if CaseEqual(mn,'int') then
   begin

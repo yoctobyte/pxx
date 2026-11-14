@@ -237,7 +237,8 @@ begin
     or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
     or CaseEqual(mn,'movzx') or CaseEqual(mn,'movsx')
     or CaseEqual(mn,'nop') or CaseEqual(mn,'cdq') or CaseEqual(mn,'leave')
-    or CaseEqual(mn,'ret') or CaseEqual(mn,'cpuid');
+    or CaseEqual(mn,'ret') or CaseEqual(mn,'cpuid')
+    or CaseEqual(mn,'lfence') or CaseEqual(mn,'mfence') or CaseEqual(mn,'sfence');
 end;
 
 { The one seam. Either the x86-64 byte encoder or the i386 text sink; the parse

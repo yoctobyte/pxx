@@ -68,6 +68,10 @@ begin
     four outputs ARE eax/ebx/ecx/edx -- which is also why that block needs the
     ebx save/restore pair the C frontend puts around it. }
   if CaseEqual(mnem, 'cpuid') then begin EncB($0F); EncB($A2); Exit; end;
+  { The fences (0F AE E8/F0/F8); SSE2, which every i386 target we run has. }
+  if CaseEqual(mnem, 'lfence') then begin EncB($0F); EncB($AE); EncB($E8); Exit; end;
+  if CaseEqual(mnem, 'mfence') then begin EncB($0F); EncB($AE); EncB($F0); Exit; end;
+  if CaseEqual(mnem, 'sfence') then begin EncB($0F); EncB($AE); EncB($F8); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin EncB($A4); Exit; end;
   if CaseEqual(mnem, 'cld') then begin EncB($FC); Exit; end;
   if CaseEqual(mnem, 'std') then begin EncB($FD); Exit; end;

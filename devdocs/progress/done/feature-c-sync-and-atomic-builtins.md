@@ -85,9 +85,11 @@ function: __sync_fetch_and_add").
 
 ## Not done
 
-- `_Atomic(T)` specifier; atomic semantics for plain operators on `_Atomic`.
-- 16-byte atomics; 8-byte atomics on i386 and arm32 (cmpxchg8b /
-  ldrexd).
+- Atomic semantics for plain operators on `_Atomic` (the `_Atomic(T)`
+  specifier itself parses since feature-c-atomic-type-specifier).
+- 16-byte atomics. 8-byte atomics on i386 and arm32 work under a spinlock
+  since feature-c-8-byte-atomics-on-32-bit-targets; a lock-free version
+  (cmpxchg8b / ldrexd) is still not done.
 - riscv32 and xtensa have no IR_ATOMIC
   (bug-a-riscv32-and-xtensa-have-no-atomic-codegen); the builtins refuse
   there by name.

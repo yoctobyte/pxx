@@ -4054,8 +4054,12 @@ end;
   word that contains the object. Every target with IR_ATOMIC is little-endian,
   which the shift assumes. All other operations are compare-and-swap loops
   over the core: <op> 0 add, 1 sub, 2 or, 3 and, 4 xor, 5 nand, 6 exchange,
-  7 load. The 8-byte set is left out on ILP32 targets, whose backends have no
-  64-bit IR_ATOMIC; cparser refuses an 8-byte object there by name. }
+  7 load. On ILP32 targets (i386, arm32), whose backends have no 64-bit
+  IR_ATOMIC, the 8-byte compare-and-swap runs under a spinlock taken with the
+  4-byte one -- one of 64, chosen by address, as libatomic does -- so 8-byte
+  operations are atomic with respect to each other, and
+  __atomic_is_lock_free(8) answers 0 there.
+  feature-c-8-byte-atomics-on-32-bit-targets }
 function CAtomSubst(const s, key, val: AnsiString): AnsiString;
 var i: Integer;
 begin
@@ -4094,6 +4098,17 @@ begin
           + 'n=(o+v)&@M;return retnew?n:o;}'
           + 'if(op==6){o=(unsigned int)__pxx_atomic_xchg32((void *)p,(long long)(unsigned int)v);'
           + 'return retnew?(v&@M):o;}';
+  end
+  else if (n = 8) and (TARGET_PTR_SIZE < 8) then
+  begin
+    core := 'volatile unsigned int *__pxx_a_lk8(volatile void *p)'
+          + '{static volatile unsigned int lk[64];return &lk[((unsigned long)p>>3)&63UL];}' + #10
+          + 'unsigned long long __pxx_a_cas_@N(volatile void *p, unsigned long long e, unsigned long long d)'
+          + '{volatile unsigned int *l=__pxx_a_lk8(p);unsigned long long o;'
+          + 'while((unsigned int)__pxx_atomic_cas32((void *)l,0,1)!=0){}'
+          + 'o=*(volatile unsigned long long *)p;if(o==e)*(volatile unsigned long long *)p=d;'
+          + '__pxx_atomic_xchg32((void *)l,0);return o;}';
+    fast := '';
   end
   else if n = 8 then
   begin
@@ -4153,7 +4168,7 @@ begin
   n := 1;
   while n <= 8 do
   begin
-    if (n < 8) or (TARGET_PTR_SIZE >= 8) then all := all + CAtomicWidthBodies(n);
+    all := all + CAtomicWidthBodies(n);
     n := n * 2;
   end;
   all := all
