@@ -6,8 +6,11 @@ order: 62
 # FreeBSD and the BSDs
 
 PXX writes native **FreeBSD/amd64** and **FreeBSD/arm64** executables from
-Pascal, C and Nil Python. OpenBSD, NetBSD, DragonFly BSD and Minix are experimental;
-[their notes](#openbsd-netbsd-and-minix) are at the end of this page.
+Pascal, C and Nil Python. Every kernel but Linux is EXPERIMENTAL, FreeBSD
+included: the label stays until PXX programs are in daily use on live
+systems across several test machines (GUI, userland, advanced networking).
+FreeBSD is the most complete of them; OpenBSD, NetBSD, DragonFly BSD and
+Minix have [their notes](#openbsd-netbsd-and-minix) at the end of this page.
 
 ```sh
 ./pxx --os=freebsd hello.pas hello      # copy hello to the FreeBSD box and run it

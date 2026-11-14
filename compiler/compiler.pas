@@ -1207,8 +1207,9 @@ begin
   WriteLn('  -include <file>       preprocess <file> before the primary C source');
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
-  WriteLn('  --os=freebsd          FreeBSD/amd64 or arm64 output: raw syscalls via an');
-  WriteLn('                        in-program Linux-ABI translator; alias --platform=freebsd');
+  WriteLn('  --os=freebsd          FreeBSD/amd64 or arm64 output (EXPERIMENTAL): raw');
+  WriteLn('                        syscalls via an in-program Linux-ABI translator;');
+  WriteLn('                        alias --platform=freebsd');
   WriteLn('  --os=openbsd          OpenBSD 8.0/amd64 or arm64 output (EXPERIMENTAL):');
   WriteLn('                        the same design plus a syscall pin table');
   WriteLn('  --os=netbsd           NetBSD 11.1/amd64 or arm64 output (EXPERIMENTAL):');
