@@ -313,19 +313,23 @@ var
                         in the first 8 KiB) and never collected, like
                         KEEP(*(.multiboot)) in a GNU script;
     .rodata .rodata.*   after .text, in the same RX segment;
-    R_X86_64_32         a zero-extended 32-bit absolute (32-bit boot code).
+    R_X86_64_32         a zero-extended 32-bit absolute (32-bit boot code);
+    .note .note.*       SHT_NOTE, after .rodata in the RX segment, never
+                        collected, and covered by a PT_NOTE program header
+                        (a PVH loader reads XEN_ELFNOTE_PHYS32_ENTRY there).
   Those inputs come from the kernel's .S files assembled by gas until pxx has
   its own .S frontend. }
 
 const
-  ELFLNK_NKIND  = 7;
+  ELFLNK_NKIND  = 8;
   ELFLNK_K_HEAD = 0;
   ELFLNK_K_TEXT = 1;
   ELFLNK_K_RODATA = 2;
-  ELFLNK_K_INIT = 3;
-  ELFLNK_K_FINI = 4;
-  ELFLNK_K_DATA = 5;
-  ELFLNK_K_BSS  = 6;
+  ELFLNK_K_NOTE = 3;
+  ELFLNK_K_INIT = 4;
+  ELFLNK_K_FINI = 5;
+  ELFLNK_K_DATA = 6;
+  ELFLNK_K_BSS  = 7;
   ELFLNK_K_ABS  = -1;           { a definition against SHN_ABS: its value is the address }
   { The image base is ImageBase: LOAD_ADDR ($400000, the static non-PIE base ld
     uses on x86-64) unless --image-base / --gibix moved it. }
@@ -359,8 +363,9 @@ var
   ElfLnkEdgeCount: Integer;
   ElfLnkGcOn     : Boolean;
   { the output sections, indexed by kind }
-  ElfLnkOutAddr  : array[0..6] of Int64;
-  ElfLnkOutSize  : array[0..6] of Int64;
+  ElfLnkOutAddr  : array[0..7] of Int64;
+  ElfLnkOutSize  : array[0..7] of Int64;
+  ElfLnkNoteAlign: Int64;             { the largest .note* input alignment: PT_NOTE's p_align }
   { the CHOSEN definition per global: object, kind, st_value, and whether it is
     weak (a later STRONG definition displaces a weak one; a later weak one does
     not -- the first weak definition in link order stands, as in ld). }
@@ -382,6 +387,7 @@ begin
     ELFLNK_K_HEAD: ElfLnkKindName := '.multiboot';
     ELFLNK_K_TEXT: ElfLnkKindName := '.text';
     ELFLNK_K_RODATA: ElfLnkKindName := '.rodata';
+    ELFLNK_K_NOTE: ElfLnkKindName := '.note';
     ELFLNK_K_INIT: ElfLnkKindName := '.init_array';
     ELFLNK_K_FINI: ElfLnkKindName := '.fini_array';
     ELFLNK_K_DATA: ElfLnkKindName := '.data';
@@ -513,7 +519,9 @@ begin
   else if FreestandingMode and (nm = '.multiboot') then
     begin k := ELFLNK_K_HEAD; wantTy := 1; wantFl := 2; end
   else if FreestandingMode and ((nm = '.rodata') or (Copy(nm, 1, 8) = '.rodata.')) then
-    begin k := ELFLNK_K_RODATA; wantTy := 1; wantFl := 2; end;
+    begin k := ELFLNK_K_RODATA; wantTy := 1; wantFl := 2; end
+  else if FreestandingMode and ((nm = '.note') or (Copy(nm, 1, 6) = '.note.')) then
+    begin k := ELFLNK_K_NOTE; wantTy := 7; wantFl := 2; end;
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
@@ -794,7 +802,7 @@ begin
   sp := 0;
   for s := 0 to ElfLnkSecCount - 1 do
     if (ElfLnkSecKindOf[s] = ELFLNK_K_INIT) or (ElfLnkSecKindOf[s] = ELFLNK_K_FINI)
-       or (ElfLnkSecKindOf[s] = ELFLNK_K_HEAD) then
+       or (ElfLnkSecKindOf[s] = ELFLNK_K_HEAD) or (ElfLnkSecKindOf[s] = ELFLNK_K_NOTE) then
     begin
       ElfLnkSecLive[s] := True;
       stack[sp] := s; Inc(sp);
@@ -879,6 +887,7 @@ begin
         maxAl := ElfLnkSecAlign[i];
     start := ElfLnkAlignUp(addr, maxAl);
     addr := start;
+    if k = ELFLNK_K_NOTE then ElfLnkNoteAlign := maxAl;
     { object order, then header order within an object -- which for a split
       object is code order, so a link that keeps every section reproduces the
       unsplit object's layout }
@@ -1069,6 +1078,7 @@ var
   ElfLnkRw   : array of Byte;   { the RW segment's file bytes }
   ElfLnkHd   : array of Byte;   { .multiboot's bytes (--link --freestanding) }
   ElfLnkRd   : array of Byte;   { .rodata's bytes (--link --freestanding) }
+  ElfLnkNt   : array of Byte;   { the .note* bytes (--link --freestanding) }
   ElfLnkTb   : array of Byte;   { one object's .text while it is relocated }
   ElfLnkB    : array of Byte;   { a small region assembled before it is written }
   ElfLnkBLen : Integer;
@@ -1541,6 +1551,8 @@ begin
   for i := 0 to Integer(ElfLnkOutSize[ELFLNK_K_HEAD]) - 1 do ElfLnkHd[i] := 0;
   SetLength(ElfLnkRd, ElfLnkOutSize[ELFLNK_K_RODATA]);
   for i := 0 to Integer(ElfLnkOutSize[ELFLNK_K_RODATA]) - 1 do ElfLnkRd[i] := 0;
+  SetLength(ElfLnkNt, ElfLnkOutSize[ELFLNK_K_NOTE]);
+  for i := 0 to Integer(ElfLnkOutSize[ELFLNK_K_NOTE]) - 1 do ElfLnkNt[i] := 0;
   for o := 0 to ElfLnkObjCount - 1 do
   begin
     LoadInput(ElfLnkObjPath[o], ElfRdBuf);
@@ -1564,7 +1576,8 @@ begin
     begin
       slot := ElfLnkObjSec0[o] + i;
       k := ElfLnkSecKindOf[slot];
-      if (not ElfLnkSecLive[slot]) or ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA)) then Continue;
+      if (not ElfLnkSecLive[slot])
+         or ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA) and (k <> ELFLNK_K_NOTE)) then Continue;
       sz := ElfLnkSecSize[slot];
       secOff := ElfRdShOffset(i);
       rel := ElfLnkSecAddr[slot] - ElfLnkOutAddr[k];
@@ -1572,6 +1585,15 @@ begin
       begin
         for t := 0 to Integer(sz) - 1 do ElfLnkHd[Integer(rel) + t] := Ord(ElfRdBuf[secOff + 1 + t]);
         if not ElfLnkRelocate(o, nsec, i, relaOf[i], ElfLnkHd, rel) then
+        begin
+          WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
+          Exit;
+        end;
+      end
+      else if k = ELFLNK_K_NOTE then
+      begin
+        for t := 0 to Integer(sz) - 1 do ElfLnkNt[Integer(rel) + t] := Ord(ElfRdBuf[secOff + 1 + t]);
+        if not ElfLnkRelocate(o, nsec, i, relaOf[i], ElfLnkNt, rel) then
         begin
           WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
           Exit;
@@ -1638,8 +1660,8 @@ var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
     relaOf: array of Integer;
     g, phCount, nOut, shstrLen: Integer;
-    outIdx: array[0..6] of Integer;
-    ldsoVA: Int64;
+    outIdx: array[0..7] of Integer;
+    ldsoVA, pa: Int64;
 const
   SHSTR = 68;   { see the blob below }
 begin
@@ -1695,9 +1717,14 @@ begin
 
   ElfLnkOpen(outPath);
 
-  { ehdr + 3 phdrs (4 with --ldso-runnable), padded to the first page }
+  { ehdr + 3 phdrs (+1 with --ldso-runnable, +1 PT_NOTE when a .note* input
+    is kept), padded to the first page }
   phCount := 3;
-  if LdsoRunnable then phCount := 4;
+  if LdsoRunnable then Inc(phCount);
+  if ElfLnkOutSize[ELFLNK_K_NOTE] > 0 then Inc(phCount);
+  { p_paddr = p_vaddr - LoadOffset (--load-offset, a kernel's physical load
+    address: what a PVH loader places a segment at); 0 means p_paddr = p_vaddr }
+  pa := -LoadOffset;
   ElfLnkBReset;
   ElfLnkBPut($464C457F, 4); ElfLnkBPut(2, 1); ElfLnkBPut(1, 1); ElfLnkBPut(1, 1);
   ElfLnkBPadTo(16);
@@ -1708,14 +1735,24 @@ begin
   ElfLnkBPut(64, 2); ElfLnkBPut(9, 2); ElfLnkBPut(8, 2);   { shentsize, shnum, shstrndx }
   { PT_LOAD R+X: the headers and .text }
   ElfLnkBPut(1, 4); ElfLnkBPut(5, 4); ElfLnkBPut(0, 8);
-  ElfLnkBPut(ImageBase, 8); ElfLnkBPut(ImageBase, 8);
+  ElfLnkBPut(ImageBase, 8); ElfLnkBPut(ImageBase + pa, 8);
   ElfLnkBPut(ElfLnkRxEnd, 8);
   ElfLnkBPut(ElfLnkRxEnd, 8);
   ElfLnkBPut(ELFLNK_PAGE, 8);
   { PT_LOAD R+W: .init_array .fini_array .data, then .bss as memsz }
   ElfLnkBPut(1, 4); ElfLnkBPut(6, 4); ElfLnkBPut(ElfLnkRwFile, 8);
-  ElfLnkBPut(rwStart, 8); ElfLnkBPut(rwStart, 8);
+  ElfLnkBPut(rwStart, 8); ElfLnkBPut(rwStart + pa, 8);
   ElfLnkBPut(rwLen, 8); ElfLnkBPut(rwMem, 8); ElfLnkBPut(ELFLNK_PAGE, 8);
+  { PT_NOTE R: the .note* inputs, which also lie inside the RX PT_LOAD }
+  if ElfLnkOutSize[ELFLNK_K_NOTE] > 0 then
+  begin
+    ElfLnkBPut(4, 4); ElfLnkBPut(4, 4);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_NOTE] - ImageBase, 8);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_NOTE], 8);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_NOTE] + pa, 8);
+    ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_NOTE], 8); ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_NOTE], 8);
+    ElfLnkBPut(ElfLnkNoteAlign, 8);
+  end;
   { PT_GNU_STACK RW: without it the kernel may map the stack executable }
   ElfLnkBPut($6474E551, 4); ElfLnkBPut(6, 4);
   for i := 1 to 5 do ElfLnkBPut(0, 8);
@@ -1757,11 +1794,12 @@ begin
   strOff := symOff + (nDef + 1) * 24;
   shstrOff := strOff + strSize;
   { Output section numbering: the five kinds every link has always written,
-    plus .multiboot and .rodata only when they have bytes, so an ordinary
-    link's headers are what they were. }
+    plus .multiboot, .rodata and .note only when they have bytes, so an
+    ordinary link's headers are what they were. }
   nOut := 0;
   for k := 0 to ELFLNK_NKIND - 1 do
-    if ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA)) or (ElfLnkOutSize[k] > 0) then
+    if ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA) and (k <> ELFLNK_K_NOTE))
+       or (ElfLnkOutSize[k] > 0) then
     begin
       Inc(nOut);
       outIdx[k] := nOut;
@@ -1770,6 +1808,7 @@ begin
   shstrLen := SHSTR;
   if outIdx[ELFLNK_K_HEAD] > 0 then shstrLen := shstrLen + 11;
   if outIdx[ELFLNK_K_RODATA] > 0 then shstrLen := shstrLen + 8;
+  if outIdx[ELFLNK_K_NOTE] > 0 then shstrLen := shstrLen + 6;
   shOff := Integer(ElfLnkAlignUp(shstrOff + shstrLen, 8));
   ElfLnkPutLE(ElfLnkB, 40, shOff, 8);
   ElfLnkPutLE(ElfLnkB, 60, nOut + 4, 2);   { e_shnum: null + kinds + 3 }
@@ -1779,7 +1818,8 @@ begin
   { .multiboot and .rodata (--link --freestanding) are assembled in memory
     first, because the stream below writes .text as it goes and .multiboot
     precedes it in the file. }
-  if (ElfLnkOutSize[ELFLNK_K_HEAD] > 0) or (ElfLnkOutSize[ELFLNK_K_RODATA] > 0) then
+  if (ElfLnkOutSize[ELFLNK_K_HEAD] > 0) or (ElfLnkOutSize[ELFLNK_K_RODATA] > 0)
+     or (ElfLnkOutSize[ELFLNK_K_NOTE] > 0) then
     if not ElfLnkFillRo(tag) then
     begin
       ElfLnkClose(outPath);
@@ -1820,7 +1860,7 @@ begin
       slot := ElfLnkObjSec0[o] + i;
       k := ElfLnkSecKindOf[slot];
       if (not ElfLnkSecLive[slot]) or (k = ELFLNK_K_BSS)
-         or (k = ELFLNK_K_HEAD) or (k = ELFLNK_K_RODATA) then Continue;
+         or (k = ELFLNK_K_HEAD) or (k = ELFLNK_K_RODATA) or (k = ELFLNK_K_NOTE) then Continue;
       sz := ElfLnkSecSize[slot];
       secOff := ElfRdShOffset(i);
       if k = ELFLNK_K_TEXT then
@@ -1871,7 +1911,15 @@ begin
   begin
     ElfLnkWriteZeros(ElfLnkOutAddr[ELFLNK_K_RODATA] - cur);
     ElfLnkWrite(ElfLnkRd, ElfLnkOutSize[ELFLNK_K_RODATA]);
+    cur := ElfLnkOutAddr[ELFLNK_K_RODATA] + ElfLnkOutSize[ELFLNK_K_RODATA];
   end;
+  if ElfLnkOutSize[ELFLNK_K_NOTE] > 0 then
+  begin
+    ElfLnkWriteZeros(ElfLnkOutAddr[ELFLNK_K_NOTE] - cur);
+    ElfLnkWrite(ElfLnkNt, ElfLnkOutSize[ELFLNK_K_NOTE]);
+    cur := ElfLnkOutAddr[ELFLNK_K_NOTE] + ElfLnkOutSize[ELFLNK_K_NOTE];
+  end;
+  ElfLnkWriteZeros(ImageBase + ElfLnkRxEnd - cur);
   ElfLnkWriteZeros(ElfLnkRwFile - ElfLnkRxEnd);
   ElfLnkWrite(ElfLnkRw, rwLen);
   ElfLnkWriteZeros(symOff - fileAt);
@@ -1913,6 +1961,7 @@ begin
   { appended, so the eight names above keep their offsets }
   if outIdx[ELFLNK_K_HEAD] > 0 then ElfLnkBStrZ('.multiboot');      { at SHSTR }
   if outIdx[ELFLNK_K_RODATA] > 0 then ElfLnkBStrZ('.rodata');       { at SHSTR or SHSTR+11 }
+  if outIdx[ELFLNK_K_NOTE] > 0 then ElfLnkBStrZ('.note');           { after those two }
   ElfLnkBPadTo(shOff - symOff);
   { null }
   for i := 1 to 64 do ElfLnkBPut(0, 1);
@@ -1928,6 +1977,13 @@ begin
           if outIdx[ELFLNK_K_HEAD] > 0 then ElfLnkBPut(SHSTR + 11, 4) else ElfLnkBPut(SHSTR, 4);
           ElfLnkBPut(1, 4); ElfLnkBPut(2, 8);
         end;
+      ELFLNK_K_NOTE:
+        begin
+          t := SHSTR;
+          if outIdx[ELFLNK_K_HEAD] > 0 then t := t + 11;
+          if outIdx[ELFLNK_K_RODATA] > 0 then t := t + 8;
+          ElfLnkBPut(t, 4); ElfLnkBPut(7, 4); ElfLnkBPut(2, 8);
+        end;
       ELFLNK_K_INIT: begin ElfLnkBPut(7, 4);  ElfLnkBPut(14, 4); ElfLnkBPut(3, 8); end;
       ELFLNK_K_FINI: begin ElfLnkBPut(19, 4); ElfLnkBPut(15, 4); ElfLnkBPut(3, 8); end;
       ELFLNK_K_DATA: begin ElfLnkBPut(31, 4); ElfLnkBPut(1, 4);  ElfLnkBPut(3, 8); end;
@@ -1942,6 +1998,7 @@ begin
     if k = ELFLNK_K_TEXT then ElfLnkBPut(16, 8)
     else if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8)
     else if (k = ELFLNK_K_HEAD) or (k = ELFLNK_K_RODATA) then ElfLnkBPut(1, 8)
+    else if k = ELFLNK_K_NOTE then ElfLnkBPut(ElfLnkNoteAlign, 8)
     else ElfLnkBPut(16, 8);
     if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8) else ElfLnkBPut(0, 8);
   end;

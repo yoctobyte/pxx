@@ -7001,6 +7001,10 @@ var
     writer) loads. LOAD_ADDR unless asked. Gibix needs >= 2^39: Ginux maps user
     memory only in [2^39, 2^40), and its ld.so already sits at 0x400000. }
   ImageBase      : Int64;
+  { --load-offset: --link --freestanding writes p_paddr = p_vaddr - LoadOffset
+    on every PT_LOAD and the PT_NOTE (GNU ld's AT(ADDR(sec) - KERNEL_VMA)), so
+    a PVH loader places a kernel-half image at its physical address. 0 = off. }
+  LoadOffset     : Int64;
   { --ldso-runnable: add the minimal PT_DYNAMIC (WriteLdsoBlock) so ld.so can
     start the static image as `ld.so prog args`. }
   LdsoRunnable   : Boolean;

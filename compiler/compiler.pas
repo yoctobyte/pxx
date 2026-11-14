@@ -1370,6 +1370,43 @@ begin
                + '(or in the kernel half, 0xFFFF800000000000 and up, for --link --freestanding): "' + s + '"');
 end;
 
+function ParseLoadOffsetOption(const s: AnsiString): Int64;
+{ --load-offset=<n>: 0x.. or $.. hex (all 64 bits, so 0xFFFFFFFF80000000 can be
+  written), or decimal; `_` ignored. Page-aligned. }
+var k, d: Integer; t: AnsiString; c: Char; hex: Boolean;
+begin
+  Result := 0; t := s; hex := False;
+  if (Length(t) > 2) and (t[1] = '0') and ((t[2] = 'x') or (t[2] = 'X')) then
+  begin t := Copy(t, 3, Length(t) - 2); hex := True; end
+  else if (Length(t) > 1) and (t[1] = '$') then
+  begin t := Copy(t, 2, Length(t) - 1); hex := True; end;
+  if t = '' then ErrorNoPos('--load-offset: no number in "' + s + '"');
+  for k := 1 to Length(t) do
+  begin
+    c := t[k];
+    d := -1;
+    if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
+    else if hex and (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
+    else if hex and (c >= 'A') and (c <= 'F') then d := Ord(c) - Ord('A') + 10
+    else if c <> '_' then ErrorNoPos('--load-offset: not a number: "' + s + '"');
+    if d >= 0 then
+    begin
+      if hex then
+      begin
+        if (Result shr 60) <> 0 then ErrorNoPos('--load-offset: too large: "' + s + '"');
+        Result := (Result shl 4) or d;
+      end
+      else
+      begin
+        if Result > ($7FFFFFFFFFFF div 10) then ErrorNoPos('--load-offset: too large: "' + s + '"');
+        Result := Result * 10 + d;
+      end;
+    end;
+  end;
+  if (Result and $FFF) <> 0 then
+    ErrorNoPos('--load-offset: must be page-aligned: "' + s + '"');
+end;
+
 procedure RequireOutputArtefact(const path: AnsiString);
 begin
   { `-o /dev/null` means "tell me whether it COMPILES" and is a legitimate
@@ -1560,6 +1597,7 @@ begin
   LinkOutPath := '';
   LinkEntryName := '';
   ImageBase := LOAD_ADDR;
+  LoadOffset := 0;
   LdsoRunnable := False;
   LinkGcSections := True;
   TlsMainInstalled := False;
@@ -2098,6 +2136,12 @@ begin
         Hex as 0x.. or $.., or decimal; page-aligned, below 2^47. Default
         LOAD_ADDR. feature-a-x86-64-image-base-option-and-musl-loadable-static-output-for-gibix }
       ImageBase := ParseImageBaseOption(Copy(option, 14, Length(option) - 13));
+      Inc(i);
+    end
+    else if Copy(option, 1, 14) = '--load-offset=' then
+    begin
+      { p_paddr = p_vaddr - <n> in a --link --freestanding image (PVH boot) }
+      LoadOffset := ParseLoadOffsetOption(Copy(option, 15, Length(option) - 14));
       Inc(i);
     end
     else if option = '--ldso-runnable' then
@@ -3115,6 +3159,12 @@ begin
     argument from there on is an object except the last. }
   if (ImageBase < 0) and not (LinkMode and FreestandingMode) then
     ErrorNoPos('--image-base: a kernel-half base is for --link --freestanding only');
+  if (LoadOffset <> 0) and not (LinkMode and FreestandingMode) then
+    ErrorNoPos('--load-offset: for --link --freestanding only');
+  { unsigned: the image base must not lie below the offset, or every p_paddr
+    wraps (both may be kernel-half, which is negative as an Int64) }
+  if (LoadOffset <> 0) and (ImageBase - LoadOffset < 0) then
+    ErrorNoPos('--load-offset: larger than --image-base, so p_paddr would wrap');
   if LinkMode then
   begin
     if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then

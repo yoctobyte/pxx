@@ -14,7 +14,9 @@
 #     _end and start32 minus KERNEL_VMA, with the linker-defined symbols where
 #     ld puts them (_edata = end of .data, _end past the largest .bss);
 #   - .rodata's R_X86_64_64 words are kmain and ktable;
-#   - kbanner (C static data) points at the string "kernel" in the image.
+#   - kbanner (C static data) points at the string "kernel" in the image;
+#   - .note.Xen (PVH entry) is kept, covered by a PT_NOTE inside the RX
+#     PT_LOAD; --load-offset=KERNEL_VMA sets p_paddr = p_vaddr - KERNEL_VMA.
 # Controls: the same link without --freestanding refuses .multiboot by name;
 # without -e it refuses for want of an entry; and a compile (not a link) with
 # a kernel-half --image-base is refused.
@@ -83,6 +85,35 @@ nrz=$(objdump -d --no-show-raw-insn "$W/k.elf" | grep -cE -- '-0x[0-9a-f]+\(%rsp
 [ "$nrz" = 0 ] || { objdump -d --no-show-raw-insn "$W/k.elf" | grep -E -- '-0x[0-9a-f]+\(%rsp' | head; \
   fail "$nrz access(es) below rsp in a --freestanding image"; }
 
+# The PVH entry note (.note.Xen): kept with nothing referencing it, inside the
+# RX PT_LOAD, covered by a PT_NOTE, its descriptor relocated to start32's
+# physical address. Without --load-offset every p_paddr equals p_vaddr.
+seg() { readelf -lW "$1" | awk -v t="$2" '$1==t {print $2, $3, $4, $5}'; }
+note=$(seg "$W/k.elf" NOTE)
+[ -n "$note" ] || fail "no PT_NOTE program header"
+set -- $note
+[ "$(( $2 ))" = "$(( 0x$(sym xen_note) ))" ] || fail "PT_NOTE is at $2, not at xen_note (0x$(sym xen_note))"
+[ "$(( $4 ))" = 24 ] || fail "PT_NOTE size is not 24 ($note)"
+[ "$(( $1 ))" = "$(( 0x$(sym xen_note) - BASE ))" ] || fail "PT_NOTE file offset $1 is not the note's"
+readelf -lW "$W/k.elf" | grep -qE '^ +00 +.*\.note' || fail "the note is not inside the first (RX) PT_LOAD"
+desc=$(x64 $(( 0x$(sym xen_note) - BASE + 16 )))
+[ "$(( 0x$desc ))" = "$(( 0x$(sym start32) - VMA ))" ] || fail "the note's entry is 0x$desc, want start32 - KERNEL_VMA"
+readelf -lW "$W/k.elf" | awk '$1=="LOAD" || $1=="NOTE" { if ($3 != $4) bad=1 } END { exit bad }' \
+  || fail "without --load-offset, a p_paddr differs from its p_vaddr"
+# --load-offset=KERNEL_VMA: every PT_LOAD and the PT_NOTE at p_vaddr - KERNEL_VMA
+# (GNU ld's AT(ADDR(sec) - KERNEL_VMA)); nothing else in the file changes.
+"$PXX" --link --freestanding --image-base=$BASE --load-offset=$VMA -e start32 -o "$W/kp.elf" \
+  "$W/kboot.o" "$W/kmain.o" > "$W/linkp.log" 2>&1 || { cat "$W/linkp.log"; fail "the --load-offset link failed"; }
+n=0; bad=0
+while read -r ty off va pa rest; do
+  case $ty in LOAD|NOTE) n=$((n + 1)); [ $(( pa )) = $(( va - VMA )) ] || bad=1 ;; esac
+done < <(readelf -lW "$W/kp.elf")
+np="$n $bad"
+[ "$np" = "3 0" ] || { readelf -lW "$W/kp.elf"; fail "with --load-offset, p_paddr is not p_vaddr - KERNEL_VMA on all 3 headers ($np)"; }
+[ "$(seg "$W/kp.elf" LOAD | head -1 | awk '{print $3}')" = 0x0000000000100000 ] || fail "the first PT_LOAD's p_paddr is not 0x100000"
+ndiff=$(cmp -l "$W/k.elf" "$W/kp.elf" | awk '$1 > 64 + 4 * 56 { n++ } END { print n + 0 }')
+[ "$ndiff" = 0 ] || fail "--load-offset changed $ndiff byte(s) outside the program headers"
+
 # ---- controls ------------------------------------------------------------------
 # A VLA's code borrows the red zone, so --freestanding refuses it by name
 # rather than emitting it.
@@ -100,4 +131,12 @@ grep -q "name the entry with -e" "$W/c2.log" \
 grep -q "kernel-half base is for --link --freestanding only" "$W/c3.log" \
   || { cat "$W/c3.log"; fail "a compile with a kernel-half --image-base was not refused"; }
 
-echo "link-freestanding: OK (entry start32, .multiboot first at 0x1000, R_X86_64_32 header words, __executable_start/_edata/_end, .rodata, C static data, no SSE/x87, no red zone)"
+"$PXX" --link --load-offset=0x1000 -o "$W/k5" "$W/kmain.o" > "$W/c4.log" 2>&1
+grep -q "load-offset: for --link --freestanding only" "$W/c4.log" \
+  || { cat "$W/c4.log"; fail "--load-offset without --freestanding was not refused"; }
+"$PXX" --link --freestanding --image-base=$BASE --load-offset=0xFFFFFFFF90000000 -e start32 -o "$W/k6.elf" \
+  "$W/kboot.o" "$W/kmain.o" > "$W/c5.log" 2>&1
+grep -q "larger than --image-base" "$W/c5.log" \
+  || { cat "$W/c5.log"; fail "a --load-offset above the image base was not refused"; }
+
+echo "link-freestanding: OK (entry start32, .multiboot first at 0x1000, R_X86_64_32 header words, __executable_start/_edata/_end, .rodata, .note.Xen + PT_NOTE, --load-offset p_paddr, C static data, no SSE/x87, no red zone)"
