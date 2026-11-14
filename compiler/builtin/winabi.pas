@@ -289,6 +289,12 @@ function W_FindNextFileW(h, data: Int64): LongInt; cdecl; external 'kernel32.dll
 function W_FindClose(h: Int64): LongInt; cdecl; external 'kernel32.dll' name 'FindClose';
 function W_GetModuleFileNameW(m, buf, n: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetModuleFileNameW';
 function W_CreatePipe(r, w, sa, size: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CreatePipe';
+function W_PeekNamedPipe(h, buf, size, read, avail, left: Int64): LongInt; cdecl; external 'kernel32.dll' name 'PeekNamedPipe';
+function W_WaitForSingleObject(h, ms: Int64): LongWord; cdecl; external 'kernel32.dll' name 'WaitForSingleObject';
+function W_CreateProcessW(app, cmd, pa, ta, inherit, flags, env, cwd, si, pi: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CreateProcessW';
+function W_GetExitCodeProcess(h, code: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetExitCodeProcess';
+function W_TerminateProcess(h, code: Int64): LongInt; cdecl; external 'kernel32.dll' name 'TerminateProcess';
+function W_WaitForMultipleObjects(n, hs, all, ms: Int64): LongWord; cdecl; external 'kernel32.dll' name 'WaitForMultipleObjects';
 function W_GlobalMemoryStatusEx(st: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GlobalMemoryStatusEx';
 function W_GetTickCount64: Int64; cdecl; external 'kernel32.dll' name 'GetTickCount64';
 function W_DuplicateHandle(sp, h, dp, outH, access, inherit, opts: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DuplicateHandle';
@@ -1257,6 +1263,415 @@ begin
   Result := blk;
 end;
 
+{ ---- poll / select ------------------------------------------------------
+  Windows has no readiness call that covers consoles, pipes and files at
+  once, so readiness is decided per fd and the wait is a short sleep loop:
+  a disk file, a memory file and a directory are always ready; a pipe is
+  readable when PeekNamedPipe shows bytes or the writer is gone (that read
+  answers end of file, as on Linux, and is reported with POLLHUP); a console
+  is readable when its handle is signalled. Writes are always ready. }
+const
+  LX_POLLIN = 1; LX_POLLPRI = 2; LX_POLLOUT = 4; LX_POLLHUP = $10; LX_POLLNVAL = $20;
+
+{ POLLIN, POLLIN|POLLHUP, 0 (not yet), or POLLNVAL. }
+function ReadReady(fd: Int64): LongInt;
+var h, avail: Int64;
+    t: LongWord;
+begin
+  case FdKind(fd) of
+    FK_NONE: begin Result := LX_POLLNVAL; Exit; end;
+    FK_MEM, FK_DIR: begin Result := LX_POLLIN; Exit; end;
+  end;
+  h := WinFd[fd];
+  t := W_GetFileType(h);
+  if t = 3 then                                    { FILE_TYPE_PIPE }
+  begin
+    avail := 0;
+    if W_PeekNamedPipe(h, 0, 0, 0, Int64(@avail), 0) = 0 then Result := LX_POLLIN or LX_POLLHUP
+    else if (avail and $FFFFFFFF) > 0 then Result := LX_POLLIN
+    else Result := 0;
+  end
+  else if t = 2 then                               { FILE_TYPE_CHAR: the console }
+  begin
+    if W_WaitForSingleObject(h, 0) = 0 then Result := LX_POLLIN else Result := 0;
+  end
+  else
+    Result := LX_POLLIN;
+end;
+
+{ One pass over a pollfd array; answers how many have revents set. }
+function PollPass(fds, n: Int64): Int64;
+var i, fd, ev, rv, r: Int64;
+begin
+  Result := 0;
+  for i := 0 to n - 1 do
+  begin
+    fd := PLongInt(fds + 8 * i)^;
+    ev := PWord(fds + 8 * i + 4)^;
+    rv := 0;
+    if fd >= 0 then
+    begin
+      r := ReadReady(fd);
+      if r = LX_POLLNVAL then rv := LX_POLLNVAL
+      else
+      begin
+        if (ev and LX_POLLIN) <> 0 then rv := rv or (r and LX_POLLIN);
+        rv := rv or (r and LX_POLLHUP);
+        if (ev and LX_POLLOUT) <> 0 then rv := rv or LX_POLLOUT;
+      end;
+    end;
+    PWord(fds + 8 * i + 6)^ := rv;
+    if rv <> 0 then Result := Result + 1;
+  end;
+end;
+
+{ ms < 0 waits for ever. }
+function WinPoll(fds, n, ms: Int64): Int64;
+var waited, step: Int64;
+begin
+  waited := 0;
+  step := 1;
+  while True do
+  begin
+    Result := PollPass(fds, n);
+    if Result > 0 then Exit;
+    if (ms >= 0) and (waited >= ms) then Exit;
+    W_Sleep(step);
+    waited := waited + step;
+    if step < 10 then step := step + 1;
+  end;
+end;
+
+{ select / pselect6 over fd_set bitmaps (an fd_set is 1024 bits). }
+function SelPass(n, rs, ws, es: Int64; var outR, outW: array of Int64): Int64;
+var fd, word, bit: Int64;
+    r: LongInt;
+begin
+  Result := 0;
+  for word := 0 to 15 do begin outR[word] := 0; outW[word] := 0; end;
+  for fd := 0 to n - 1 do
+  begin
+    word := fd shr 6;
+    bit := Int64(1) shl (fd and 63);
+    if (rs <> 0) and ((PInt64(rs + 8 * word)^ and bit) <> 0) then
+    begin
+      r := ReadReady(fd);
+      if r = LX_POLLNVAL then begin Result := -LX_EBADF; Exit; end;
+      if r <> 0 then begin outR[word] := outR[word] or bit; Result := Result + 1; end;
+    end;
+    if (ws <> 0) and ((PInt64(ws + 8 * word)^ and bit) <> 0) then
+    begin
+      if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+      outW[word] := outW[word] or bit;
+      Result := Result + 1;
+    end;
+  end;
+end;
+
+function WinSelect(n, rs, ws, es, ms: Int64): Int64;
+var outR, outW: array[0..15] of Int64;
+    waited, step, words, i: Int64;
+begin
+  if n > 1024 then n := 1024;
+  if n < 0 then begin Result := -LX_EINVAL; Exit; end;
+  waited := 0;
+  step := 1;
+  while True do
+  begin
+    Result := SelPass(n, rs, ws, es, outR, outW);
+    if Result < 0 then Exit;
+    if (Result > 0) or ((ms >= 0) and (waited >= ms)) then Break;
+    W_Sleep(step);
+    waited := waited + step;
+    if step < 10 then step := step + 1;
+  end;
+  words := (n + 63) shr 6;
+  for i := 0 to words - 1 do
+  begin
+    if rs <> 0 then PInt64(rs + 8 * i)^ := outR[i];
+    if ws <> 0 then PInt64(ws + 8 * i)^ := outW[i];
+    if es <> 0 then PInt64(es + 8 * i)^ := 0;
+  end;
+end;
+
+{ A timespec / timeval pointer as milliseconds, -1 for NULL (for ever). }
+function TsMs(ts: Int64): Int64;
+begin
+  if ts = 0 then Result := -1
+  else Result := PInt64(ts)^ * 1000 + (PInt64(ts + 8)^ + 999999) div 1000000;
+end;
+
+function TvMs(tv: Int64): Int64;
+begin
+  if tv = 0 then Result := -1
+  else Result := PInt64(tv)^ * 1000 + (PInt64(tv + 8)^ + 999) div 1000;
+end;
+
+{ ---- Processes -------------------------------------------------------------
+  Windows cannot fork, so the runtime's spawn primitive (platform_backend's
+  PalBackendVforkAndExec3 under PXX_OS_WINDOWS) hands the whole request over
+  in one call, WIN_PXX_SPAWN: path, argv, envp and the six fds it would have
+  dup2'd. CreateProcessW starts the program with the three std handles as
+  inheritable duplicates (and nothing else inheritable: CreatePipe makes
+  non-inheritable ends, so the parent's copies of a pipe never keep the
+  child's end open). The child's pid indexes a small table of process
+  handles that wait4 and kill use. }
+const
+  MAX_CHILD = 64;
+  LX_ECHILD = 10; LX_ESRCH = 3;
+var
+  ChildPid: array[0..MAX_CHILD-1] of Int64;
+  ChildH: array[0..MAX_CHILD-1] of Int64;
+  ChildSig: array[0..MAX_CHILD-1] of Int64;      { the signal kill() ended it with, or 0 }
+
+{ An inheritable copy of fd's handle (0 when the fd has none). }
+function InhDup(fd: Int64): Int64;
+var h: Int64;
+begin
+  Result := 0;
+  h := FdHandle(fd);
+  if h = 0 then Exit;
+  if W_DuplicateHandle(-1, h, -1, Int64(@Result), 0, 1, 2) = 0 then Result := 0;
+end;
+
+{ One argv string onto the UTF-8 command line at ArgOut, quoted so the
+  child's C runtime (and WinArgBlock) splits it back to the same bytes. }
+procedure QuoteArg(a: Int64);
+var p, n, i: Int64;
+    need: Boolean;
+begin
+  need := PByte(a)^ = 0;
+  p := a;
+  while PByte(p)^ <> 0 do
+  begin
+    if (PByte(p)^ = 32) or (PByte(p)^ = 9) or (PByte(p)^ = 34) then need := True;
+    p := p + 1;
+  end;
+  if not need then
+  begin
+    p := a;
+    while PByte(p)^ <> 0 do begin PutByte(PByte(p)^); p := p + 1; end;
+    Exit;
+  end;
+  PutByte(34);
+  p := a;
+  while True do
+  begin
+    n := 0;
+    while PByte(p)^ = 92 do begin n := n + 1; p := p + 1; end;
+    if PByte(p)^ = 0 then
+    begin
+      for i := 1 to 2 * n do PutByte(92);
+      Break;
+    end;
+    if PByte(p)^ = 34 then
+    begin
+      for i := 1 to 2 * n + 1 do PutByte(92);
+      PutByte(34);
+    end
+    else
+    begin
+      for i := 1 to n do PutByte(92);
+      PutByte(PByte(p)^);
+    end;
+    p := p + 1;
+  end;
+  PutByte(34);
+end;
+
+function WinSpawn(path, argv, envp, fds: Int64): Int64;
+var u8, w, envW, size, envSize, p, q, i, n, slot, inF, outF, errF: Int64;
+    si: array[0..12] of Int64;    { STARTUPINFOW, 104 bytes }
+    pi: array[0..2] of Int64;     { PROCESS_INFORMATION, 24 bytes }
+    appW: array[0..WPATH-1] of Word;
+    hIn, hOut, hErr, app: Int64;
+    ok: LongInt;
+    sep: Boolean;
+begin
+  slot := -1;
+  for i := 0 to MAX_CHILD - 1 do
+    if ChildH[i] = 0 then begin slot := i; Break; end;
+  if slot < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  { sizes: the command line and the environment, as UTF-8 then UTF-16 }
+  size := 16;
+  if argv <> 0 then
+  begin
+    i := 0;
+    while PInt64(argv + 8 * i)^ <> 0 do
+    begin
+      p := PInt64(argv + 8 * i)^;
+      n := 0;
+      while PByte(p + n)^ <> 0 do n := n + 1;
+      size := size + 2 * n + 3;
+      i := i + 1;
+    end;
+  end;
+  envSize := 2;
+  if envp <> 0 then
+  begin
+    i := 0;
+    while PInt64(envp + 8 * i)^ <> 0 do
+    begin
+      p := PInt64(envp + 8 * i)^;
+      n := 0;
+      while PByte(p + n)^ <> 0 do n := n + 1;
+      envSize := envSize + n + 1;
+      i := i + 1;
+    end;
+  end;
+  u8 := W_VirtualAlloc(0, size + 2 * size + 2 * envSize + 64,
+                       MEM_RESERVE or MEM_COMMIT, PAGE_READWRITE);
+  if u8 = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  w := u8 + size;
+  envW := w + 2 * size;
+  { the command line }
+  ArgOut := u8;
+  if argv <> 0 then
+  begin
+    i := 0;
+    while PInt64(argv + 8 * i)^ <> 0 do
+    begin
+      if i > 0 then PutByte(32);
+      QuoteArg(PInt64(argv + 8 * i)^);
+      i := i + 1;
+    end;
+  end;
+  PutByte(0);
+  Utf8ToW(u8, w, size);
+  { the environment block: NAME=VALUE strings, each NUL-ended, then a NUL }
+  if envp <> 0 then
+  begin
+    q := envW;
+    i := 0;
+    while PInt64(envp + 8 * i)^ <> 0 do
+    begin
+      n := Utf8ToW(PInt64(envp + 8 * i)^, q, envSize - (q - envW) div 2);
+      if n < 0 then Break;
+      q := q + 2 * (n + 1);
+      i := i + 1;
+    end;
+    PWord(q)^ := 0;
+    if i = 0 then begin PWord(q + 2)^ := 0; end;
+  end;
+  { the program: a path is given to CreateProcessW as is; a bare name is
+    left for it to search (the command line's first word) }
+  sep := False;
+  p := path;
+  while PByte(p)^ <> 0 do
+  begin
+    if (PByte(p)^ = 47) or (PByte(p)^ = 92) or (PByte(p)^ = 58) then sep := True;
+    p := p + 1;
+  end;
+  app := 0;
+  if sep then
+  begin
+    if WinPath(LX_AT_FDCWD, path, Int64(@appW[0])) < 0 then
+    begin
+      W_VirtualFree(u8, 0, MEM_RELEASE);
+      Result := -LX_ENOENT;
+      Exit;
+    end;
+    app := Int64(@appW[0]);
+  end;
+  { std handles: the redirections PalBackendVforkAndExec3 would have made }
+  inF := PLongInt(fds)^;
+  outF := PLongInt(fds + 12)^;
+  errF := PLongInt(fds + 20)^;
+  if inF <> -1 then hIn := InhDup(inF) else hIn := InhDup(0);
+  if outF <> -1 then hOut := InhDup(outF) else hOut := InhDup(1);
+  if errF = -2 then                               { stderr=STDOUT: follows the stdout pipe, if any }
+  begin
+    if outF <> -1 then hErr := InhDup(outF) else hErr := InhDup(1);
+  end
+  else if errF <> -1 then hErr := InhDup(errF)
+  else hErr := InhDup(2);
+  for i := 0 to 12 do si[i] := 0;
+  PLongWord(Int64(@si[0]))^ := 104;               { cb }
+  PLongWord(Int64(@si[0]) + 60)^ := $100;         { STARTF_USESTDHANDLES }
+  si[10] := hIn; si[11] := hOut; si[12] := hErr;
+  pi[0] := 0; pi[1] := 0; pi[2] := 0;
+  if envp <> 0 then
+    ok := W_CreateProcessW(app, w, 0, 0, 1, $400, envW, 0, Int64(@si[0]), Int64(@pi[0]))   { CREATE_UNICODE_ENVIRONMENT }
+  else
+    ok := W_CreateProcessW(app, w, 0, 0, 1, 0, 0, 0, Int64(@si[0]), Int64(@pi[0]));
+  if ok = 0 then Result := WinErr;
+  if hIn <> 0 then W_CloseHandle(hIn);
+  if hOut <> 0 then W_CloseHandle(hOut);
+  if hErr <> 0 then W_CloseHandle(hErr);
+  W_VirtualFree(u8, 0, MEM_RELEASE);
+  if ok = 0 then Exit;
+  W_CloseHandle(pi[1]);                           { the thread }
+  ChildH[slot] := pi[0];
+  ChildPid[slot] := PLongWord(Int64(@pi[0]) + 16)^;
+  ChildSig[slot] := 0;
+  Result := ChildPid[slot];
+end;
+
+function ChildSlot(pid: Int64): Int64;
+var i: Int64;
+begin
+  Result := -1;
+  for i := 0 to MAX_CHILD - 1 do
+    if (ChildH[i] <> 0) and (ChildPid[i] = pid) then begin Result := i; Exit; end;
+end;
+
+{ wait4: one child (pid > 0) or any (-1, 0 and the group forms alike; there
+  are no process groups to tell apart). WNOHANG is option bit 1. }
+function WinWait4(pid, status, options, rusage: Int64): Int64;
+var i, n, slot, r: Int64;
+    hs: array[0..MAX_CHILD-1] of Int64;
+    map: array[0..MAX_CHILD-1] of Int64;
+    code: LongWord;
+    ms: Int64;
+begin
+  if (options and 1) <> 0 then ms := 0 else ms := $FFFFFFFF;   { INFINITE }
+  n := 0;
+  for i := 0 to MAX_CHILD - 1 do
+    if (ChildH[i] <> 0) and ((pid <= 0) or (ChildPid[i] = pid)) then
+    begin
+      hs[n] := ChildH[i]; map[n] := i; n := n + 1;
+    end;
+  if n = 0 then begin Result := -LX_ECHILD; Exit; end;
+  r := W_WaitForMultipleObjects(n, Int64(@hs[0]), 0, ms);
+  if r = $102 then begin Result := 0; Exit; end;              { WAIT_TIMEOUT }
+  if (r < 0) or (r >= n) then begin Result := WinErr; Exit; end;
+  slot := map[r];
+  code := 0;
+  W_GetExitCodeProcess(ChildH[slot], Int64(@code));
+  if status <> 0 then
+  begin
+    if ChildSig[slot] <> 0 then PLongInt(status)^ := ChildSig[slot] and $7F
+    else PLongInt(status)^ := (code and $FF) shl 8;
+  end;
+  if rusage <> 0 then
+    for i := 0 to 143 do PByte(rusage + i)^ := 0;
+  W_CloseHandle(ChildH[slot]);
+  ChildH[slot] := 0;
+  Result := ChildPid[slot];
+end;
+
+{ kill: a child of ours is terminated and reported as killed by the
+  signal; signal 0 only asks whether it exists. }
+function WinKill(pid, sig: Int64): Int64;
+var slot: Int64;
+begin
+  slot := ChildSlot(pid);
+  if slot < 0 then
+  begin
+    if pid = W_GetCurrentProcessId then
+    begin
+      if sig = 0 then begin Result := 0; Exit; end;
+      W_ExitProcess(128 + sig);
+    end;
+    Result := -LX_ESRCH;
+    Exit;
+  end;
+  if sig = 0 then begin Result := 0; Exit; end;
+  if W_TerminateProcess(ChildH[slot], 128 + sig) = 0 then begin Result := WinErr; Exit; end;
+  ChildSig[slot] := sig;
+  Result := 0;
+end;
+
 { sysinfo: uptime and memory (Linux struct sysinfo, 112 bytes, mem_unit 1). }
 function WinSysinfo(si: Int64): Int64;
 var ms: array[0..7] of Int64;   { MEMORYSTATUSEX, 64 bytes }
@@ -1282,6 +1697,10 @@ function PXXWinSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 begin
   case nr of
     $7F000002: Result := WinArgBlock;             { WIN_PXX_ARGBLOCK: the entry stub }
+    $7F000003: Result := WinSpawn(a0, a1, a2, a3);   { WIN_PXX_SPAWN: PalBackendVforkAndExec3 }
+    57, 58: Result := -LX_ENOSYS;                    { fork, vfork: Windows cannot }
+    61: Result := WinWait4(a0, a1, a2, a3);
+    62: Result := WinKill(a0, a1);
     0: Result := WinRead(a0, a1, a2);
     1: Result := WinWrite(a0, a1, a2);
     2: Result := WinOpenAt(LX_AT_FDCWD, a0, a1, a2);              { open }
@@ -1329,7 +1748,11 @@ begin
     12: Result := WinBrk(a0);
     13, 14, 131: Result := 0;                   { rt_sigaction, rt_sigprocmask, sigaltstack }
     16: Result := -LX_ENOTTY;                   { ioctl }
+    7: Result := WinPoll(a0, a1, a2);                             { poll }
     20: Result := WinWritev(a0, a1, a2);
+    23: Result := WinSelect(a0, a1, a2, a3, TvMs(a4));             { select }
+    270: Result := WinSelect(a0, a1, a2, a3, TsMs(a4));            { pselect6 }
+    271: Result := WinPoll(a0, a1, TsMs(a2));                      { ppoll }
     24: begin W_SwitchToThread; Result := 0; end;   { sched_yield }
     28: Result := 0;                            { madvise }
     35: Result := WinNanosleep(a0);

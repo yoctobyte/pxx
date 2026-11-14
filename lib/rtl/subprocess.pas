@@ -178,6 +178,32 @@ var path, dir, cand: AnsiString;
 begin
   Result := prog;
   if prog = '' then pyos_raise_ioerror(2, prog, '');
+{$ifdef PXX_OS_WINDOWS}
+  { --os=windows: PATH is ';'-separated and holds drive paths, a program may
+    be named without its .exe, and a path may use '\' or a drive letter.
+    A bare name nothing on PATH supplies is left to CreateProcessW, which
+    also searches the program's own directory and the system directories,
+    and whose failure comes back as ENOENT. }
+  if (Pos('/', prog) > 0) or (Pos('\', prog) > 0) or (Pos(':', prog) > 0) then
+  begin
+    if PalAccess(PChar(prog), 0) = 0 then Exit;
+    if PalAccess(PChar(prog + '.exe'), 0) = 0 then begin Result := prog + '.exe'; Exit; end;
+    pyos_raise_ioerror(2, prog, '');
+  end;
+  path := GetEnvironmentVariable('PATH');
+  start := 1;
+  for i := 1 to Length(path) + 1 do
+    if (i > Length(path)) or (path[i] = ';') then
+    begin
+      dir := Copy(path, start, i - start);
+      start := i + 1;
+      if dir = '' then Continue;
+      cand := dir + '\' + prog;
+      if PalAccess(PChar(cand), 0) = 0 then begin Result := cand; Exit; end;
+      if PalAccess(PChar(cand + '.exe'), 0) = 0 then begin Result := cand + '.exe'; Exit; end;
+    end;
+  Exit;
+{$endif}
   if Pos('/', prog) > 0 then
   begin
     if PalAccess(PChar(prog), 0) <> 0 then pyos_raise_ioerror(2, prog, '');   { F_OK }

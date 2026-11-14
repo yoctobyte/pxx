@@ -11285,8 +11285,8 @@ test-windows: $(COMPILER)
 	# --os=windows (EXPERIMENTAL): a Windows x64 PE run under Wine
 	# (tools/vm/wine.sh) against the Linux build of the same source run here.
 	# The console, memory, time, exceptions, argv/environment, exit codes and
-	# (phase 2) files and directories; no threads, signals, sockets or
-	# processes yet. feature-port-windows-pe
+	# (phase 2) files, directories, select/poll and starting processes; no
+	# threads, signals or sockets yet. feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
 	           test/test_interfaces_multi_secondary.pas test/test_class_str.pas test/test_asm_cpuid.pas \
@@ -11303,7 +11303,8 @@ test-windows: $(COMPILER)
 	           test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas \
 	           test/c_crtl_uio.c test/c_crtl_ioctl_and_sysinfo.c \
 	           test/test_nilpy_time_and_listdir.npy test/test_nilpy_glob_module.npy \
-	           test/test_nilpy_file_io_and_comprehensions.npy; do \
+	           test/test_nilpy_file_io_and_comprehensions.npy \
+	           test/c_crtl_select.c test/crtl_poll_set.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
@@ -11311,6 +11312,15 @@ test-windows: $(COMPILER)
 	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
 	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \
 	    tools/expect_same.sh "windows_qplus_args_$$a" "$$(tools/vm/wine.sh $$d/q.exe $$a 2>&1; echo exit=$$?)" "$$($$d/q.lx $$a 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) test/test_nilpy_select_stdin_ready.npy $$d/sel.lx >/dev/null && ./$(COMPILER) --os=windows test/test_nilpy_select_stdin_ready.npy $$d/sel.exe >/dev/null && \
+	  tools/expect_same.sh windows_select_stdin "$$(tools/vm/wine.sh $$d/sel.exe < test/test_nilpy_select_stdin_ready.stdin 2>&1; echo exit=$$?)" \
+	    "$$($$d/sel.lx < test/test_nilpy_select_stdin_ready.stdin 2>&1; echo exit=$$?)" || exit 1; \
+	  ./$(COMPILER) test/os_spawn_child.pas $$d/child.lx >/dev/null && ./$(COMPILER) --os=windows test/os_spawn_child.pas $$d/child.exe >/dev/null && \
+	  for t in test/os_spawn_parent.pas test/os_spawn_parent.npy; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
+	    tools/expect_same.sh windows_spawn_$$n "$$(tools/vm/wine.sh $$d/$$n.exe $$d/child.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx $$d/child.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
 	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=windows test/test_os_env.pas $$d/env.exe >/dev/null && \
 	  tools/expect_same.sh windows_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/wine.sh $$d/env.exe one two 2>&1 | grep -v '^argv0='; echo exit=$$?)" \

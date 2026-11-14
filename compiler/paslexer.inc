@@ -1262,6 +1262,16 @@ begin
     (LINUX stays defined), but a few RTL mappings must carry MAP_STACK there:
     OpenBSD kills a syscall made with rsp outside a MAP_STACK region, so a
     thread's or a coroutine's stack has to be one. }
+  { --os=windows (experimental): also still built against Linux. The RTL
+    tests this only where a Linux mechanism has no translation at all --
+    starting a process (no fork on Windows) and PATH's shape. Deliberately
+    not WINDOWS/MSWINDOWS, which would switch on code written for the real
+    Win32 API. }
+  if TargetKernel = KERNEL_WINDOWS then
+  begin
+    name := 'PXX_OS_WINDOWS';
+    PasDefine(name);
+  end;
   if TargetKernel = KERNEL_OPENBSD then
   begin
     name := 'PXX_OS_OPENBSD';

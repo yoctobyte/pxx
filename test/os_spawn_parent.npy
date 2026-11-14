@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Zlib
+# subprocess.run/Popen with pipes against os_spawn_child (path in argv[1]),
+# and a missing program. test-windows.
+import subprocess
+import sys
+
+child = sys.argv[1]
+r = subprocess.run([child, "x", "y z"], capture_output=True, text=True)
+print("rc", r.returncode)
+print("out", r.stdout.strip())
+p = subprocess.Popen([child, "echo"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+p.stdin.write("line one\nline two\n")
+p.stdin.close()
+out = p.stdout.read()
+p.wait()
+print("echo:", out.replace("\n", "|"))
+print("rc2", p.returncode)
+try:
+    subprocess.run(["no_such_program_pxx"])
+except FileNotFoundError:
+    print("missing: FileNotFoundError")
+except OSError as e:
+    print("missing: OSError")

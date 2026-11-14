@@ -7,7 +7,7 @@ order: 62
 
 `--os=windows` writes a Windows x64 console executable (PE32+) from Pascal,
 C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux. It
-is single-threaded, and it cannot start processes or open sockets yet.
+is single-threaded, and it cannot open sockets yet.
 
 ```sh
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
@@ -69,6 +69,23 @@ test-windows` (run under Wine through `tools/vm/wine.sh`):
 - directories: create, remove, list (`getdents64` over `FindFirstFileW`),
   the current directory, and the `*at` calls relative to a directory fd
 
+- `select`, `poll` and their `p` forms, on the console, pipes and files
+- starting programs: `ExecuteProcess` and the other SysUtils process calls,
+  and Nil Python's `subprocess` (`run`, `Popen`, pipes in both directions,
+  return codes, `FileNotFoundError`), with `wait4` and `kill`
+
+Windows has no `fork`, so the runtime's one spawn routine
+(`PalBackendVforkAndExec3`) passes the whole request to the translator,
+which calls `CreateProcessW` instead of forking and `exec`ing. The argument
+list is quoted so that the child's C runtime splits it back into the same
+strings. A program named without a path is looked up on `PATH` (separated by
+`;`, with or without `.exe`), then by `CreateProcessW` itself. A child ended
+by `kill` reports that signal to `wait`, as on Linux. A C program's own
+`fork()` answers `ENOSYS`.
+
+`select` and `poll` wait in a short sleep loop: Windows has no one call that
+covers consoles, pipes and files.
+
 Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
 `/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken
 on the current drive. Under Wine that is drive `Z:`, the Unix root, so the
@@ -78,10 +95,8 @@ path means what it means on Linux.
 
 - **Refused at compile time:** `--threadsafe`, `-g`, `--shared`,
   `--emit-obj`, `--rtl-libc`, and CPUs other than x86-64.
-- **Next:** `select`/`poll`, and starting processes (`fork` cannot be
-  emulated, so this needs a Windows path in the runtime's subprocess code).
-  Symbolic links, file modes (`chmod` succeeds and does nothing), and
-  `mmap` of a file are not supported either.
+- **Not supported:** C's `fork()`, process groups, symbolic links, file
+  modes (`chmod` succeeds and does nothing), and `mmap` of a file.
 - **Phase 3:** exceptions from hardware faults (no vectored exception handler
   yet), threads (through the PE TLS directory), and sockets.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux

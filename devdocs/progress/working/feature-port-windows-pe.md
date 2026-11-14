@@ -233,3 +233,34 @@ test_os_env (environment + argv, argv0 filtered).
 Next: select/poll, then processes. The runtime forks and execs; Windows
 cannot fork, so that needs a CreateProcess path in lib/rtl/subprocess.pas
 and the crtl, not just the translator.
+
+### 2026-11-14: phase 2b, select/poll and processes
+
+- **poll/ppoll/select/pselect6:** readiness per fd (PeekNamedPipe for
+  pipes, with a gone writer reported as POLLIN|POLLHUP; WaitForSingleObject
+  for the console; files, memory and directory fds always ready), plus a
+  1-10 ms sleep loop for the timeout. Writes are always ready.
+- **Processes:** the one runtime spawn routine, PalBackendVforkAndExec3,
+  gets a `{$ifdef PXX_OS_WINDOWS}` branch (a new define, set by paslexer
+  for KERNEL_WINDOWS). It passes path, argv, envp and the six fds in one
+  private call, WIN_PXX_SPAWN ($7F000003). winabi's WinSpawn:
+  - quotes argv with msvcrt's rules (the inverse of WinArgBlock's split);
+  - builds a UTF-16 environment block;
+  - makes inheritable duplicates of the three std handles only (CreatePipe
+    ends are not inheritable, so no stray write end keeps a pipe open);
+  - calls CreateProcessW (10 arguments through the adapter) and keeps
+    pid -> process handle for wait4 (WaitForMultipleObjects, WNOHANG) and
+    kill (TerminateProcess, reported to wait as the signal).
+  subprocess.pas's ResolveProgram has a Windows branch: ';' PATH, an
+  optional .exe suffix, and a bare name left to CreateProcessW. C's own
+  fork()/vfork() answer ENOSYS.
+- New tests: test/os_spawn_child.pas, os_spawn_parent.pas (ExecuteProcess)
+  and os_spawn_parent.npy (run/Popen pipes, FileNotFoundError), in
+  test-windows against the Linux pair.
+- Found on the way, not Windows: `while not Eof(Input)` on a pipe loses the
+  first line and never ends, on Linux too
+  (backlog-pascal/bug-p-eof-of-input-on-a-pipe-loses-the-first-line-and-never-ends).
+
+Next is phase 3: hardware faults as exceptions (a vectored handler, with
+the reverse adapter), threads (the PE TLS directory plus CreateThread), and
+sockets (ws2_32).

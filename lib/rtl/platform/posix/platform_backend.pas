@@ -2136,7 +2136,21 @@ function PalBackendVforkAndExec3(path: PChar; argv, envp: Pointer; stdinReadFd, 
 var
   pid: Integer;
   res: Integer;
+{$ifdef PXX_OS_WINDOWS}
+  fds: array[0..5] of Integer;
+{$endif}
 begin
+{$ifdef PXX_OS_WINDOWS}
+  { --os=windows: there is no fork. The whole request goes to the translator
+    in one private call (winabi's WIN_PXX_SPAWN, $7F000003), which starts the
+    program with CreateProcessW and the three std fds this would have dup2'd.
+    The answer is the child's pid, or -errno. feature-port-windows-pe }
+  fds[0] := stdinReadFd; fds[1] := stdinWriteFd;
+  fds[2] := stdoutReadFd; fds[3] := stdoutWriteFd;
+  fds[4] := stderrReadFd; fds[5] := stderrWriteFd;
+  Result := Integer(__pxxrawsyscall($7F000003, Int64(path), Int64(argv), Int64(envp), Int64(@fds[0]), 0, 0));
+  Exit;
+{$endif}
 { Real fork (not vfork): the child gets its own copy-on-write address space, so
   it can safely run this Pascal child path (dup2/close/execve) without clobbering
   the parent's stack -- the shared-VM vfork hazard the ticket warned about. }
