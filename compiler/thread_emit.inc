@@ -86,7 +86,7 @@ var
 function ChildSys: AnsiString;
 begin
   if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
-     or (TargetKernel = KERNEL_DRAGONFLY) then ChildSys := 'syscall'
+     or (TargetKernel = KERNEL_DRAGONFLY) or (TargetKernel = KERNEL_WINDOWS) then ChildSys := 'syscall'
   else ChildSys := 'syscall_raw';
 end;
 
@@ -120,7 +120,7 @@ begin
       so ObTforkA sends the child here instead, with rsp = the stage area. }
     obChild := 0;
     if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
-       or (TargetKernel = KERNEL_DRAGONFLY) then
+       or (TargetKernel = KERNEL_DRAGONFLY) or (TargetKernel = KERNEL_WINDOWS) then
     begin
       obChild := CodeLen;
       EmitAsmX64(['jmp child']);
@@ -249,12 +249,13 @@ begin
       'child:']);
     end
     else if (TargetKernel = KERNEL_OPENBSD) or (TargetKernel = KERNEL_NETBSD)
-            or (TargetKernel = KERNEL_DRAGONFLY) then
+            or (TargetKernel = KERNEL_DRAGONFLY) or (TargetKernel = KERNEL_WINDOWS) then
     begin
       { Linux clone through the translator, with the child's resume address
         in r9 (clone's unused sixth argument). The translator maps it to
-        __tfork (OpenBSD), _lwp_create (NetBSD) or lwp_create2 (DragonFly,
-        started at a resume routine); the parent returns here
+        __tfork (OpenBSD), _lwp_create (NetBSD), lwp_create2 (DragonFly,
+        started at a resume routine) or CreateThread (Windows, which moves
+        the new thread onto this stack); the parent returns here
         with the tid, the child never does. }
       EmitCodeAbsToRdx(obChild);
       EmitAsmX64([
@@ -300,7 +301,15 @@ begin
       install replaces it. See TLS_SLOT_INIT_IMAGE. }
     if TlsUserBytes > 0 then
     begin
-      EmitAsmX64(['mov r12, gs:[%]', 8 * TLS_SLOT_INIT_IMAGE]);
+      if TlsViaTeb then
+      begin
+        { The thread's own loader block, whose image slot the translator
+          seeded from the parent's before sending the thread here. }
+        EmitTlsSelfLoad(12);
+        EmitMovRegBaseDisp32(12, 12, 8 * TLS_SLOT_INIT_IMAGE, False);
+      end
+      else
+        EmitAsmX64(['mov r12, gs:[%]', 8 * TLS_SLOT_INIT_IMAGE]);
     end;
     if TargetKernel = KERNEL_FREEBSD then
       EmitAsmX64([
@@ -311,7 +320,7 @@ begin
         'mov eax, 165',                 { sysarch }
         'syscall_raw',
         'add rsp, 8'])
-    else if not KernelLibc then
+    else if not (KernelLibc or TlsViaTeb) then
     EmitAsmX64([
       'mov edi, 0x1001',              { ARCH_SET_GS }
       'lea rsi, [rsp+16]',
@@ -340,7 +349,9 @@ begin
       translator's arch_prctl copies the staged block there, so the staged
       block must be complete first. r12's read above already went to that
       block, whose init-image slot ObClone seeded from the parent's. }
-    if KernelLibc then
+    { --os=windows likewise: the loader allocated this thread's block, and
+      winabi's arch_prctl copies the staged one into it. }
+    if KernelLibc or TlsViaTeb then
       EmitAsmX64([
         'mov edi, 0x1001',              { ARCH_SET_GS }
         'lea rsi, [rsp+16]',

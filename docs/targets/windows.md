@@ -7,14 +7,15 @@ order: 62
 
 `--os=windows` writes a Windows x64 console executable (PE32+) from Pascal,
 C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux. It
-is single-threaded, and it cannot open sockets yet.
+cannot open sockets yet.
 
 ```sh
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
 ```
 
-The program imports `kernel32.dll` and nothing else. It needs no C runtime
-(msvcrt or ucrt) and no installer.
+The program imports `kernel32.dll` (and `kernelbase.dll` for
+`WaitOnAddress`, which threads wait on) and nothing else. It needs no C
+runtime (msvcrt or ucrt) and no installer.
 
 ## How it works
 
@@ -42,9 +43,15 @@ Four things differ from the BSD ports:
   arguments are not converted yet (Windows assigns `xmm0`–`xmm3` by
   position).
 - **Thread-local storage.** A Windows program cannot point `fs` or `gs` at
-  its own block, because `gs` is the thread environment block. In phase 1
-  every thread-local access is therefore emitted as a rip-relative access
-  to the main thread's block. That is why `--threadsafe` is refused.
+  its own block, because `gs` is the thread environment block. The block
+  is the image's PE TLS data instead, which the loader allocates for every
+  thread. Code reaches it through the TEB (`gs:[0x58]`, then index 0),
+  which costs two loads where Linux needs none.
+- **Threads.** `clone` becomes `CreateThread`. The new thread moves onto
+  the stack the runtime gave it, so it starts exactly where a Linux clone
+  child would. `futex` becomes `WaitOnAddress` and `WakeByAddress*`, and
+  a thread's exit wakes its joiner as Linux's `CLONE_CHILD_CLEARTID` does.
+  Threads need `--threadsafe`, as on Linux.
 - **The stack.** The image commits its whole 8 MiB stack at load time.
   Windows grows a stack one guard page at a time, and pxx functions do not
   probe their frames, so a frame larger than 4 KiB would otherwise skip the
@@ -96,9 +103,14 @@ Signals:
   process with exit code 128 + the signal number.
 - **`kill` and `raise` to the program itself** run the handler at once, or
   apply the default action (end the process, or ignore for `SIGCHLD` and
-  the other signals Linux ignores). `sigprocmask` blocks for real, and
-  blocked signals stay pending for `sigtimedwait`, `sigwait`,
-  `sigsuspend` and `sigpending`.
+  the other signals Linux ignores). `sigprocmask` blocks for real, per
+  thread, and a new thread inherits its creator's mask. Blocked signals
+  stay pending for `sigtimedwait`, `sigwait`, `sigsuspend` and
+  `sigpending`.
+- **A signal sent to another thread** (`tkill`, `pthread_kill`) runs on
+  that thread when it next unblocks the signal or makes a system call.
+  Windows has no way to interrupt a thread with a handler, so a thread
+  that loops without system calls, or waits inside one, sees it late.
 - **Ctrl-C** is `SIGINT`, Ctrl-Break `SIGQUIT` and closing the console
   `SIGHUP`, once the program sets a handler (or `SIG_IGN`) for one of
   them. Windows runs that handler on a thread of its own, so it really is
@@ -111,15 +123,15 @@ path means what it means on Linux.
 
 ## Not supported yet
 
-- **Refused at compile time:** `--threadsafe`, `-g`, `--shared`,
-  `--emit-obj`, `--rtl-libc`, and CPUs other than x86-64.
+- **Refused at compile time:** `-g`, `--shared`, `--emit-obj`,
+  `--rtl-libc`, and CPUs other than x86-64.
 - **Not supported:** C's `fork()`, process groups, symbolic links, file
   modes (`chmod` succeeds and does nothing), and `mmap` of a file.
 - **Signals between processes:** `kill` on another program ends it
   (`TerminateProcess`) whatever the signal; it cannot run that program's
   handler. There is no alternate signal stack, and a stack overflow has no
   room left to run a handler in.
-- **Still to come:** threads (through the PE TLS directory) and sockets.
+- **Still to come:** sockets.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
   libraries cannot work on Windows. `external 'user32.dll'` and other DLLs
   do work, without floating-point arguments.

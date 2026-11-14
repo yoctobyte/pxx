@@ -304,3 +304,47 @@ sockets (ws2_32).
 Not done: kill to another process still only terminates it; no
 sigaltstack (stack commit = reserve, so no guard page either: a real stack
 overflow cannot run a handler). Next: threads, then sockets.
+
+### 2026-11-14: phase 3b, threads
+
+- **TLS through the TEB.** The image gets a PE TLS directory
+  (PreparePETls): an 8-byte template plus zero fill to TlsBlockSize + 32,
+  so the loader gives every thread (ours, and the ones Windows starts, such
+  as the console control handler's) a zeroed block. The exe's TLS index is
+  0 (winabi checks it at startup through the headers), so the block is
+  `mov r, gs:[0x58]; mov r, [r]`: EmitTlsSelfLoad, which emits exactly the
+  old `mov r, gs:[0]` bytes on every other target. The four self-pointer
+  sites, IR_TLSBASE, the main install (EmitTlsMainR9) and the clone stub's
+  init-image read use it; EmitStatusSlotX64 (the exception slots, a hot
+  path) does a third load, and its stores borrow rcx under a 128-byte red
+  zone skip. The text assembler refuses `gs:` under --os=windows rather
+  than reach the wrong memory. TlsSegAbsolute (phase 1's rip-relative main
+  block) is gone.
+- **clone** goes the BSD way (r9 = the child's resume address). WinClone
+  leaves cont, ctid, the init-image pointer and the signal mask just below
+  the stage area, CreateThread(suspended) at WinThreadStart (via MsToSysV),
+  stores the tid for PARENT_SETTID/CHILD_SETTID, resumes. WinThreadStart
+  keeps a spot on its Windows stack and the ctid in the block's scratch,
+  seeds the init-image slot, then jumps (a 7-byte helper in the thunk
+  page) onto the pxx stack at the stub's child leg. The stub's
+  arch_prctl(SET_GS) comes after the image copy, as under OpenBSD's libc,
+  and winabi copies the staged block into the loader's.
+- **exit** on a non-main thread switches back to the Windows stack (the
+  joiner frees the pxx one once ctid is 0), clears ctid, WakeByAddressAll,
+  ExitThread. The main thread's exit ends the process.
+- **futex** WAIT/WAKE (and the BITSET forms) over WaitOnAddress /
+  WakeByAddress* from kernelbase.dll; **sched_getaffinity** over
+  GetProcessAffinityMask.
+- **weakexternal** is no longer imported in a PE: palthread's
+  pthread_create/pthread_join pair made every --threadsafe exe need
+  libc.so.6, which Windows refuses to load. Each gets a zero slot.
+- **Signals per thread**: the mask and a thread-directed pending set live
+  in the block's scratch, a tid -> block registry serves tkill to another
+  thread, and pending bits move with `lock or`/`lock btr` helpers. A
+  thread runs what is pending and unblocked on unblock and at the end of
+  each syscall (no asynchronous interruption: documented).
+- An SRW lock serialises the syscalls that change winabi's tables (open,
+  close, dup*, pipe*, fcntl, brk, spawn).
+- test-windows gains, under --threadsafe: the twelve thread tests the
+  FreeBSD target runs, plus test_signal_threads,
+  test_signal_num_threads_race and test_thread_clone.

@@ -160,14 +160,13 @@ begin
   Result := 0;
 end;
 
-{ --os=windows reaches the TLS block rip-relative instead of through gs
-  (defs.inc); the harness never selects a kernel, so never. }
-function TlsSegAbsolute: Boolean;
+{ --os=windows reaches the TLS block through the TEB, and the text
+  assembler refuses a gs: operand there (defs.inc); the harness never
+  selects a kernel, so never. }
+function TlsViaTeb: Boolean;
 begin
   Result := False;
 end;
-
-const BSS_TLS_MAIN = 0;   { only read when TlsSegAbsolute }
 
 {$include ../compiler/rel8.inc}   { CheckRel8: the assembler's short-jump range check }
 {$include ../compiler/x64enc.inc}

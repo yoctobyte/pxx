@@ -91,6 +91,7 @@ var
   WinFd: array[0..MAX_FD-1] of Int64;   { Linux fd -> HANDLE (FK_HANDLE) }
   WinFdReady: Boolean;
   WinBrkBase, WinBrkCur, WinBrkTop: Int64;
+  WinMainTid: Int64;                    { the thread whose exit() ends the process }
   WinTrace: LongInt;                    { 0 = not asked yet, 1 = off, 2 = on }
 
 function FdHandle(fd: Int64): Int64; forward;
@@ -299,6 +300,15 @@ function W_TerminateProcess(h, code: Int64): LongInt; cdecl; external 'kernel32.
 function W_WaitForMultipleObjects(n, hs, all, ms: Int64): LongWord; cdecl; external 'kernel32.dll' name 'WaitForMultipleObjects';
 function W_AddVectoredExceptionHandler(first, handler: Int64): Int64; cdecl; external 'kernel32.dll' name 'AddVectoredExceptionHandler';
 function W_SetConsoleCtrlHandler(handler, add: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleCtrlHandler';
+function W_CreateThread(attr, stack, start, param, flags, tid: Int64): Int64; cdecl; external 'kernel32.dll' name 'CreateThread';
+function W_ResumeThread(h: Int64): LongWord; cdecl; external 'kernel32.dll' name 'ResumeThread';
+procedure W_ExitThread(code: Int64); cdecl; external 'kernel32.dll' name 'ExitThread';
+procedure W_AcquireSRWLockExclusive(lock: Int64); cdecl; external 'kernel32.dll' name 'AcquireSRWLockExclusive';
+procedure W_ReleaseSRWLockExclusive(lock: Int64); cdecl; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
+function W_WaitOnAddress(addr, cmp, size, ms: Int64): LongInt; cdecl; external 'kernelbase.dll' name 'WaitOnAddress';
+procedure W_WakeByAddressSingle(addr: Int64); cdecl; external 'kernelbase.dll' name 'WakeByAddressSingle';
+procedure W_WakeByAddressAll(addr: Int64); cdecl; external 'kernelbase.dll' name 'WakeByAddressAll';
+function W_GetProcessAffinityMask(proc, pmask, smask: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetProcessAffinityMask';
 function W_GlobalMemoryStatusEx(st: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GlobalMemoryStatusEx';
 function W_GetTickCount64: Int64; cdecl; external 'kernel32.dll' name 'GetTickCount64';
 function W_DuplicateHandle(sp, h, dp, outH, access, inherit, opts: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DuplicateHandle';
@@ -1162,11 +1172,28 @@ end;
   inside quotes is one literal quote. Environment entries that start with
   '=' (the per-drive current directories) are not variables and are left
   out. }
+{ Every TLS access assumes the executable's PE TLS index is 0 (TlsViaTeb in
+  the compiler). An EXE's always is -- the loader numbers it first -- but a
+  wrong guess would be silent corruption, so it is checked once: the TLS
+  directory is found through the headers at the fixed image base. }
+procedure WinTlsIndexCheck;
+var base, opt, rva: Int64;
+begin
+  base := $400000;
+  opt := base + PLongInt(base + $3C)^ + 24;
+  rva := PLongWord(opt + 112 + 8 * 9)^;
+  if rva <> 0 then
+    if PLongWord(PInt64(base + rva + 16)^)^ <> 0 then W_ExitProcess(126);
+end;
+
 function WinArgBlock: Int64;
 var cmd, env, p, q, blk, ptrs, total: Int64;
     cmdLen, envLen, nEnv, nPtr, argc, n, i: Int64;
     inQ: Boolean;
 begin
+  WinMainTid := W_GetCurrentThreadId;
+  WinTlsIndexCheck;
+  ThreadRegister(WinMainTid, Int64(__pxxTlsBase));
   cmd := W_GetCommandLineW;
   env := W_GetEnvironmentStringsW;
   cmdLen := 0;
@@ -1679,7 +1706,8 @@ end;
   not keep rbx/r12-r15 either, so all of them), move the four arguments over,
   call, put everything back. Written as bytes at run time because the
   target's address goes in as an immediate and an `assembler` routine gets a
-  frame around it. The page holds 16 adapters of 256 bytes (one is ~240). }
+  frame around it. The page holds 15 adapters of 256 bytes (one is ~240);
+  the last 256 bytes hold the stack-switch helpers (ThunkHelpers). }
 var
   ThunkPage, ThunkUsed: Int64;
 
@@ -1687,6 +1715,51 @@ procedure TB(var p: Int64; b: Int64);
 begin
   PByte(p)^ := b;
   p := p + 1;
+end;
+
+const
+  THUNK_HELPERS = 15 * 256;
+  H_JUMP = 0;          { (sp, target): rsp := sp; rax := 0; jmp target -- never returns }
+  H_SWITCHCALL = 16;   { (sp, fn, arg): rsp := sp; fn(arg) -- never returns }
+  H_LOCKOR = 32;       { (addr, bits): lock or [addr], bits }
+  H_LOCKBTR = 48;      { (addr, bit): lock btr [addr], bit; the old bit }
+
+type
+  THJump = procedure(sp, target: Int64); cdecl;
+  THSwitchCall = procedure(sp, fn, arg: Int64); cdecl;
+  THLockOr = procedure(addr, bits: Int64); cdecl;
+  THLockBtr = function(addr, bit: Int64): Int64; cdecl;
+
+{ The page, with the helpers written the first time. False if Windows
+  refused the page. }
+function ThunkPageReady: Boolean;
+var p: Int64;
+begin
+  if ThunkPage = 0 then
+  begin
+    ThunkPage := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    if ThunkPage <> 0 then
+    begin
+      p := ThunkPage + THUNK_HELPERS + H_JUMP;
+      TB(p, $48); TB(p, $89); TB(p, $FC);      { mov rsp, rdi }
+      TB(p, $31); TB(p, $C0);                  { xor eax, eax }
+      TB(p, $FF); TB(p, $E6);                  { jmp rsi }
+      p := ThunkPage + THUNK_HELPERS + H_SWITCHCALL;
+      TB(p, $48); TB(p, $89); TB(p, $FC);      { mov rsp, rdi }
+      TB(p, $48); TB(p, $89); TB(p, $D7);      { mov rdi, rdx }
+      TB(p, $FF); TB(p, $D6);                  { call rsi }
+      TB(p, $0F); TB(p, $0B);                  { ud2 }
+      p := ThunkPage + THUNK_HELPERS + H_LOCKOR;
+      TB(p, $F0); TB(p, $48); TB(p, $09); TB(p, $37);   { lock or [rdi], rsi }
+      TB(p, $C3);
+      p := ThunkPage + THUNK_HELPERS + H_LOCKBTR;
+      TB(p, $F0); TB(p, $48); TB(p, $0F); TB(p, $B3); TB(p, $37);   { lock btr [rdi], rsi }
+      TB(p, $0F); TB(p, $92); TB(p, $C0);      { setc al }
+      TB(p, $0F); TB(p, $B6); TB(p, $C0);      { movzx eax, al }
+      TB(p, $C3);
+    end;
+  end;
+  Result := ThunkPage <> 0;
 end;
 
 procedure TD(var p: Int64; d: Int64);
@@ -1706,16 +1779,24 @@ begin
   TD(p, disp);
 end;
 
+procedure LockOr(addr, bits: Int64);
+begin
+  if ThunkPageReady then THLockOr(ThunkPage + THUNK_HELPERS + H_LOCKOR)(addr, bits);
+end;
+
+function LockBtr(addr, bit: Int64): Boolean;
+begin
+  Result := False;
+  if ThunkPageReady then
+    Result := THLockBtr(ThunkPage + THUNK_HELPERS + H_LOCKBTR)(addr, bit) <> 0;
+end;
+
 function MsToSysV(target: Int64): Int64;
 var p, i: Int64;
 begin
   Result := 0;
-  if ThunkPage = 0 then
-  begin
-    ThunkPage := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    if ThunkPage = 0 then Exit;
-  end;
-  if ThunkUsed >= 16 then Exit;
+  if not ThunkPageReady then Exit;
+  if ThunkUsed >= 15 then Exit;
   p := ThunkPage + 256 * ThunkUsed;
   Result := p;
   ThunkUsed := ThunkUsed + 1;
@@ -1739,6 +1820,207 @@ begin
   TB(p, $41); TB(p, $5D); TB(p, $41); TB(p, $5C);    { pop r13; pop r12 }
   TB(p, $5B); TB(p, $5F); TB(p, $5E); TB(p, $5D);    { pop rbx; pop rdi; pop rsi; pop rbp }
   TB(p, $C3);                                        { ret }
+end;
+
+{ ---- Threads -------------------------------------------------------------------
+  The clone stub (thread_emit.inc) carves the child's stack, TLS block and
+  stage area exactly as on Linux and calls clone with the address to resume
+  the child at in r9, as for the BSDs. WinClone records what the child needs
+  just below the stage area (on the child's own stack, which nothing uses
+  before it runs), starts a suspended thread at WinThreadStart, stores the
+  tid for CLONE_PARENT_SETTID, and resumes it.
+
+  WinThreadStart runs on the Windows stack CreateThread gave it. Its TLS
+  block is the loader's (zeroed); it seeds the init-image slot from the
+  parent's, keeps a spot on this Windows stack and the CLEARTID word in the
+  block's 16-byte scratch, and jumps to the stub's child leg on the pxx
+  stack. The stub's arch_prctl(SET_GS, staged block) then copies the staged
+  block into the loader's (WinSetBlock).
+
+  exit() on such a thread goes back to the Windows stack first, because the
+  joiner frees the pxx stack once the CLEARTID word is 0 -- the order the
+  kernel keeps on Linux -- then clears the word, wakes the joiner, and ends
+  the thread. }
+var
+  WinStartThunk: Int64;
+  WinLock: Int64;               { an SRWLOCK, around the fd table, brk and spawn }
+
+{ Past each thread's block, in its 32-byte scratch: the saved Windows stack
+  (+0), the CLEARTID word (+8), the blocked-signal mask (+16) and the
+  signals sent to this thread alone (+24). The main thread's +0/+8 hold
+  getrlimit's answer from startup, which nothing reads after. }
+function ThreadWord(off: Int64): Int64;
+begin
+  Result := Int64(__pxxTlsBase) + __pxxTlsBlockSize + off;
+end;
+
+const
+  TW_SP = 0; TW_CTID = 8; TW_BLOCKED = 16; TW_PENDING = 24;
+  MAX_THREAD = 256;
+
+var
+  ThreadTid, ThreadBlk: array[0..MAX_THREAD-1] of Int64;   { for tkill to another thread }
+
+procedure ThreadRegister(tid, blk: Int64);
+var i: Integer;
+begin
+  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  for i := 0 to MAX_THREAD - 1 do
+    if ThreadTid[i] = 0 then
+    begin
+      ThreadBlk[i] := blk;
+      ThreadTid[i] := tid;
+      Break;
+    end;
+  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+end;
+
+procedure ThreadUnregister(tid: Int64);
+var i: Integer;
+begin
+  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  for i := 0 to MAX_THREAD - 1 do
+    if ThreadTid[i] = tid then begin ThreadTid[i] := 0; Break; end;
+  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+end;
+
+{ The scratch of thread `tid', or 0. }
+function ThreadScratch(tid: Int64): Int64;
+var i: Integer;
+begin
+  Result := 0;
+  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  for i := 0 to MAX_THREAD - 1 do
+    if ThreadTid[i] = tid then begin Result := ThreadBlk[i] + __pxxTlsBlockSize; Break; end;
+  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+end;
+
+function WinSetBlock(blk: Int64): Int64;
+var dst, i: Int64;
+begin
+  dst := Int64(__pxxTlsBase);
+  if blk <> dst then
+    for i := 0 to __pxxTlsBlockSize div 8 - 1 do
+      PInt64(dst + 8 * i)^ := PInt64(blk + 8 * i)^;
+  PInt64(dst)^ := dst;                         { slot 0 = self }
+  Result := 0;
+end;
+
+function WinThreadStart(stage: Int64): Int64; cdecl;
+var blk, mark: Int64;
+begin
+  blk := Int64(__pxxTlsBase);
+{$ifdef PXX_HAS_TLS_INIT_IMAGE}
+  PInt64(blk + __pxxTlsInitImageSlotOff)^ := PInt64(stage - 32)^;
+{$endif}
+  PInt64(blk + __pxxTlsBlockSize + TW_SP)^ := (Int64(@mark) - 512) and not Int64(15);
+  PInt64(blk + __pxxTlsBlockSize + TW_CTID)^ := PInt64(stage - 24)^;
+  PInt64(blk + __pxxTlsBlockSize + TW_BLOCKED)^ := PInt64(stage - 40)^;   { the mask is inherited }
+  ThreadRegister(W_GetCurrentThreadId, blk);
+  THJump(ThunkPage + THUNK_HELPERS + H_JUMP)(stage, PInt64(stage - 16)^);
+  Result := 0;
+end;
+
+procedure WinThreadFinal(ctid: Int64); cdecl;
+begin
+  ThreadUnregister(W_GetCurrentThreadId);
+  if ctid <> 0 then
+  begin
+    PLongInt(ctid)^ := 0;
+    W_WakeByAddressAll(ctid);
+  end;
+  W_ExitThread(0);
+end;
+
+{ exit() of one thread. The main thread's ends the process, as winabi did
+  before threads; a thread Windows started (no saved stack) just ends. }
+procedure WinThreadExit(code: Int64);
+var blk, sp: Int64;
+begin
+  if W_GetCurrentThreadId = WinMainTid then W_ExitProcess(code and $FF);
+  blk := Int64(__pxxTlsBase);
+  sp := PInt64(blk + __pxxTlsBlockSize + TW_SP)^;
+  if sp = 0 then W_ExitThread(code);
+  THSwitchCall(ThunkPage + THUNK_HELPERS + H_SWITCHCALL)(sp, Int64(@WinThreadFinal),
+    PInt64(blk + __pxxTlsBlockSize + TW_CTID)^);
+end;
+
+function WinClone(flags, stack, ptid, ctid, cont: Int64): Int64;
+var h: Int64;
+    tid: LongWord;
+begin
+  if ((flags and $100) = 0) or (stack = 0) or (cont = 0) then
+  begin
+    Result := -LX_EINVAL; Exit;                { only CLONE_VM threads }
+  end;
+  if WinStartThunk = 0 then WinStartThunk := MsToSysV(Int64(@WinThreadStart));
+  if WinStartThunk = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  PInt64(stack - 16)^ := cont;
+  if (flags and $200000) <> 0 then PInt64(stack - 24)^ := ctid   { CLONE_CHILD_CLEARTID }
+  else PInt64(stack - 24)^ := 0;
+  PInt64(stack - 32)^ := 0;
+  PInt64(stack - 40)^ := PInt64(ThreadWord(TW_BLOCKED))^;
+{$ifdef PXX_HAS_TLS_INIT_IMAGE}
+  PInt64(stack - 32)^ := PInt64(Int64(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
+{$endif}
+  tid := 0;
+  h := W_CreateThread(0, 256 * 1024, WinStartThunk, stack, 4, Int64(@tid));   { CREATE_SUSPENDED }
+  if h = 0 then begin Result := WinErr; Exit; end;
+  if ((flags and $100000) <> 0) and (ptid <> 0) then PLongInt(ptid)^ := tid;     { CLONE_PARENT_SETTID }
+  if ((flags and $1000000) <> 0) and (ctid <> 0) then PLongInt(ctid)^ := tid;    { CLONE_CHILD_SETTID }
+  W_ResumeThread(h);
+  W_CloseHandle(h);
+  Result := tid;
+end;
+
+{ sched_getaffinity(pid, size, mask): the process's affinity mask (the first
+  64 CPUs; one processor group). Linux answers with its mask's size. }
+function WinGetaffinity(size, mask: Int64): Int64;
+var pm, sm: Int64;
+begin
+  if size < 8 then begin Result := -LX_EINVAL; Exit; end;
+  pm := 0; sm := 0;
+  if W_GetProcessAffinityMask(-1, Int64(@pm), Int64(@sm)) = 0 then pm := 1;
+  PInt64(mask)^ := pm;
+  Result := 8;
+end;
+
+{ futex: WAIT and WAKE (and their BITSET forms, as plain ones) over
+  WaitOnAddress. A wake reports 0 woken: Windows does not say. }
+function WinFutex(uaddr, op, val, ts: Int64): Int64;
+var cmd, ms: Int64;
+    cmp: LongInt;
+    now: array[0..1] of Int64;
+begin
+  cmd := op and 127;
+  case cmd of
+    0, 9:
+      begin
+        if PLongInt(uaddr)^ <> LongInt(val) then begin Result := -LX_EAGAIN; Exit; end;
+        if ts = 0 then ms := $FFFFFFFF
+        else if cmd = 0 then ms := TsMs(ts)
+        else
+        begin
+          if (op and 256) <> 0 then WinClockGettime(0, Int64(@now[0]))   { FUTEX_CLOCK_REALTIME }
+          else WinClockGettime(1, Int64(@now[0]));
+          ms := (PInt64(ts)^ - now[0]) * 1000 + (PInt64(ts + 8)^ - now[1]) div 1000000;
+          if ms <= 0 then begin Result := -110; Exit; end;               { ETIMEDOUT }
+        end;
+        cmp := LongInt(val);
+        if W_WaitOnAddress(uaddr, Int64(@cmp), 4, ms) = 0 then
+        begin
+          if W_GetLastError = 1460 then begin Result := -110; Exit; end;  { ERROR_TIMEOUT }
+        end;
+        Result := 0;
+      end;
+    1, 10:
+      begin
+        if val = 1 then W_WakeByAddressSingle(uaddr) else W_WakeByAddressAll(uaddr);
+        Result := 0;
+      end;
+  else
+    Result := -LX_ENOSYS;
+  end;
 end;
 
 { ---- Signals: hardware faults -------------------------------------------------
@@ -1769,7 +2051,7 @@ var
   WinSigHandler: array[0..64] of Int64;
   WinSigFlags: array[0..64] of Int64;
   WinSigMask: array[0..64] of Int64;
-  WinSigBlocked, WinSigPending, WinSigHandled: Int64;
+  WinSigPending, WinSigHandled: Int64;   { WinSigPending: sent to the process }
   WinVehInstalled, WinCtrlInstalled: Boolean;
 
 type
@@ -1780,24 +2062,47 @@ begin
   Result := Int64(1) shl (sig - 1);
 end;
 
-{ The lowest signal in `avail', taken off the pending set, or 0. }
-function WinTakePendingRaw(avail: Int64): Int64;
+{ The lowest signal of `want' taken off the pending set at `addr', or 0.
+  Atomic: another thread may be setting bits, or taking the same one. }
+function WinTakeFrom(addr, want: Int64): Int64;
 var sig: Int64;
 begin
   Result := 0;
   for sig := 1 to 64 do
-    if (avail and SigBit(sig)) <> 0 then
-    begin
-      WinSigPending := WinSigPending and not SigBit(sig);
-      Result := sig;
-      Exit;
-    end;
+    if (PInt64(addr)^ and want and SigBit(sig)) <> 0 then
+      if LockBtr(addr, sig - 1) then
+      begin
+        Result := sig;
+        Exit;
+      end;
+end;
+
+{ This thread's own pending signals first, then the process's. }
+function WinTakePendingRaw(want: Int64): Int64;
+begin
+  Result := WinTakeFrom(ThreadWord(TW_PENDING), want);
+  if Result = 0 then Result := WinTakeFrom(Int64(@WinSigPending), want);
+end;
+
+function SigBlocked: Int64;
+begin
+  Result := PInt64(ThreadWord(TW_BLOCKED))^;
+end;
+
+procedure SetSigBlocked(v: Int64);
+begin
+  PInt64(ThreadWord(TW_BLOCKED))^ := v;
 end;
 
 { ---- Signals sent in software ------------------------------------------------
-  kill/tkill/tgkill to ourselves, and Ctrl-C. Delivery is synchronous: a
-  blocked signal goes on the pending set, an unblocked one runs its
-  disposition now. A handler gets a Linux siginfo (SI_USER or SI_TKILL, our
+  kill/tkill/tgkill, and Ctrl-C. The mask is per thread (inherited by a new
+  thread); a signal sent to the process or to this thread runs its
+  disposition now unless this thread blocks it, in which case it goes on the
+  process's or the thread's pending set. A signal sent to ANOTHER thread
+  goes on that thread's pending set, and that thread runs it when it next
+  unblocks it or finishes a syscall: Windows cannot interrupt a thread with
+  a handler the way a kernel signal does, so a thread spinning without
+  syscalls, or blocked in one, sees it late. A handler gets a Linux siginfo (SI_USER or SI_TKILL, our
   pid) and a ucontext whose registers are zero -- there is no interrupted
   instruction to resume or rewrite, the handler just returns to the caller.
   The default action ends the process with 128 + sig, except for the
@@ -1828,22 +2133,22 @@ begin
   PWord(i)^ := $37F;                           { FCW }
   PLongWord(i + $18)^ := $1F80;                { MXCSR }
   lu[LX_UC_FPREGS div 8] := i;
-  old := WinSigBlocked;
+  old := SigBlocked;
   lu[LX_UC_FPREGS div 8 + 9] := old;           { uc_sigmask, offset 296 }
   if (WinSigFlags[sig] and $40000000) = 0 then  { not SA_NODEFER }
-    WinSigBlocked := WinSigBlocked or SigBit(sig);
-  WinSigBlocked := (WinSigBlocked or WinSigMask[sig]) and not SIGBIT_UNBLOCKABLE;
+    SetSigBlocked(old or SigBit(sig));
+  SetSigBlocked((SigBlocked or WinSigMask[sig]) and not SIGBIT_UNBLOCKABLE);
   if (WinSigFlags[sig] and $80000000) <> 0 then WinSigHandler[sig] := 0;   { SA_RESETHAND }
   TLxHandler(h)(sig, Int64(@li[0]), Int64(@lu[0]));
   WinSigHandled := WinSigHandled + 1;
-  WinSigBlocked := old;
+  SetSigBlocked(old);
 end;
 
 procedure WinRunPending;
 var sig: Int64;
 begin
   repeat
-    sig := WinTakePendingRaw(WinSigPending and not WinSigBlocked);
+    sig := WinTakePendingRaw(not SigBlocked);
     if sig <> 0 then WinAct(sig, LX_SI_USER);
   until sig = 0;
 end;
@@ -1853,13 +2158,28 @@ begin
   if (sig < 0) or (sig > 64) then begin Result := -LX_EINVAL; Exit; end;
   Result := 0;
   if sig = 0 then Exit;
-  if (WinSigBlocked and SigBit(sig)) <> 0 then
-    WinSigPending := WinSigPending or SigBit(sig)
+  if (SigBlocked and SigBit(sig)) <> 0 then
+  begin
+    if code = LX_SI_TKILL then LockOr(ThreadWord(TW_PENDING), SigBit(sig))
+    else LockOr(Int64(@WinSigPending), SigBit(sig));
+  end
   else
   begin
     WinAct(sig, code);
     WinRunPending;
   end;
+end;
+
+{ tkill/tgkill: to this thread, or onto another one's pending set. }
+function WinSignalThread(tid, sig: Int64): Int64;
+var sc: Int64;
+begin
+  if tid = W_GetCurrentThreadId then begin Result := WinSignalSelf(sig, LX_SI_TKILL); Exit; end;
+  if (sig < 0) or (sig > 64) then begin Result := -LX_EINVAL; Exit; end;
+  sc := ThreadScratch(tid);
+  if sc = 0 then begin Result := -LX_ESRCH; Exit; end;
+  if sig <> 0 then LockOr(sc + TW_PENDING, SigBit(sig));
+  Result := 0;
 end;
 
 { The console control handler (Microsoft ABI through MsToSysV, on a thread
@@ -1986,18 +2306,18 @@ end;
 function WinSigprocmask(how, setp, oset: Int64): Int64;
 var v: Int64;
 begin
-  if oset <> 0 then PInt64(oset)^ := WinSigBlocked;
+  if oset <> 0 then PInt64(oset)^ := SigBlocked;
   if setp <> 0 then
   begin
     v := PInt64(setp)^;
     case how of
-      0: WinSigBlocked := WinSigBlocked or v;
-      1: WinSigBlocked := WinSigBlocked and not v;
-      2: WinSigBlocked := v;
+      0: v := SigBlocked or v;
+      1: v := SigBlocked and not v;
+      2: ;
     else
       begin Result := -LX_EINVAL; Exit; end;
     end;
-    WinSigBlocked := WinSigBlocked and not SIGBIT_UNBLOCKABLE;
+    SetSigBlocked(v and not SIGBIT_UNBLOCKABLE);
     WinRunPending;
   end;
   Result := 0;
@@ -2006,7 +2326,7 @@ end;
 { The lowest pending signal in `want', taken off the pending set, or 0. }
 function WinTakePending(want: Int64): Int64;
 begin
-  Result := WinTakePendingRaw(WinSigPending and want);
+  Result := WinTakePendingRaw(want);
 end;
 
 { rt_sigtimedwait(set, info, timeout, size): collect a pending signal from
@@ -2044,8 +2364,8 @@ end;
 function WinSigsuspend(maskp: Int64): Int64;
 var old, n: Int64;
 begin
-  old := WinSigBlocked;
-  if maskp <> 0 then WinSigBlocked := PInt64(maskp)^ and not SIGBIT_UNBLOCKABLE;
+  old := SigBlocked;
+  if maskp <> 0 then SetSigBlocked(PInt64(maskp)^ and not SIGBIT_UNBLOCKABLE);
   n := WinSigHandled;
   WinRunPending;
   while WinSigHandled = n do
@@ -2053,7 +2373,7 @@ begin
     W_Sleep(10);
     WinRunPending;
   end;
-  WinSigBlocked := old;
+  SetSigBlocked(old);
   Result := -LX_EINTR;
 end;
 
@@ -2078,7 +2398,7 @@ begin
   Result := 0;
 end;
 
-function PXXWinSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+function WinSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 begin
   case nr of
     $7F000002: Result := WinArgBlock;             { WIN_PXX_ARGBLOCK: the entry stub }
@@ -2087,12 +2407,13 @@ begin
     61: Result := WinWait4(a0, a1, a2, a3);
     62: if (a0 = W_GetCurrentProcessId) or (a0 = 0) then Result := WinSignalSelf(a1, LX_SI_USER)
         else Result := WinKill(a0, a1);
-    200: if a0 = W_GetCurrentThreadId then Result := WinSignalSelf(a1, LX_SI_TKILL)    { tkill }
-         else Result := -LX_ESRCH;
-    234: if a1 = W_GetCurrentThreadId then Result := WinSignalSelf(a2, LX_SI_TKILL)    { tgkill }
-         else Result := -LX_ESRCH;
+    200: Result := WinSignalThread(a0, a1);                     { tkill }
+    234: Result := WinSignalThread(a1, a2);                     { tgkill }
     14: Result := WinSigprocmask(a0, a1, a2);
-    127: begin PInt64(a0)^ := WinSigPending and WinSigBlocked; Result := 0; end;   { rt_sigpending }
+    127: begin                                                  { rt_sigpending }
+           PInt64(a0)^ := (WinSigPending or PInt64(ThreadWord(TW_PENDING))^) and SigBlocked;
+           Result := 0;
+         end;
     128: Result := WinSigtimedwait(a0, a1, a2);
     130: Result := WinSigsuspend(a0);
     34: Result := WinSigsuspend(0);                                 { pause }
@@ -2153,12 +2474,16 @@ begin
     28: Result := 0;                            { madvise }
     35: Result := WinNanosleep(a0);
     39: Result := W_GetCurrentProcessId;        { getpid }
-    60, 231: begin W_ExitProcess(a0 and $FF); Result := 0; end;   { exit, exit_group: one thread }
+    60: begin WinThreadExit(a0); Result := 0; end;
+    231: begin W_ExitProcess(a0 and $FF); Result := 0; end;      { exit_group }
+    56: Result := WinClone(a0, a1, a2, a3, a5);                   { clone: r9 = the child's resume address }
     63: Result := WinUname(a0);
     97: Result := WinGetrlimit(a0, a1);
-    158: Result := 0;                           { arch_prctl: the block is reached rip-relative }
+    158: if (a0 = $1001) or (a0 = $1002) then Result := WinSetBlock(a1)   { arch_prctl SET_GS/SET_FS }
+         else Result := -LX_EINVAL;
     186: Result := W_GetCurrentThreadId;        { gettid }
-    202: Result := 0;                           { futex: one thread, nothing to wait for }
+    202: Result := WinFutex(a0, a1, a2, a3);
+    204: Result := WinGetaffinity(a1, a2);                      { sched_getaffinity }
     218: Result := W_GetCurrentThreadId;        { set_tid_address }
     228: Result := WinClockGettime(a0, a1);
   else
@@ -2167,6 +2492,27 @@ begin
       Result := -LX_ENOSYS;
     end;
   end;
+end;
+
+{ The syscalls that change the translator's own tables (the fd table, brk,
+  the child table) run one at a time; the blocking ones (read, wait4, poll,
+  futex) are not among them. }
+function PXXWinSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
+begin
+  case nr of
+    2, 3, 12, 22, 32, 33, 72, 257, 292, 293, $7F000003:
+      begin
+        W_AcquireSRWLockExclusive(Int64(@WinLock));
+        Result := WinSys(nr, a0, a1, a2, a3, a4, a5);
+        W_ReleaseSRWLockExclusive(Int64(@WinLock));
+      end;
+  else
+    Result := WinSys(nr, a0, a1, a2, a3, a4, a5);
+  end;
+  { A signal another thread sent this one, or one sent to the process that
+    this thread does not block: run it now, on the way out. }
+  if ((WinSigPending or PInt64(ThreadWord(TW_PENDING))^) and not SigBlocked) <> 0 then
+    WinRunPending;
 end;
 
 end.

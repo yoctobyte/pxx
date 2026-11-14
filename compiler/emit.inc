@@ -1323,18 +1323,58 @@ begin
 end;
 
 { The TLS segment override and disp32 of a hand-encoded `gs:[disp]` operand
-  (ModRM rm=100 + SIB $25 already emitted for the disp half). Under
-  --os=windows (TlsSegAbsolute) there is no prefix and the operand becomes the
-  main block's own address plus disp, which EmitGlobRef turns rip-relative. }
+  (ModRM rm=100 + SIB $25 already emitted for the disp half). }
 procedure EmitTlsSegPrefix;
 begin
-  if not TlsSegAbsolute then EmitB(TlsSegPrefix);
+  EmitB(TlsSegPrefix);
 end;
 
 procedure EmitTlsSegDisp(disp: Integer);
 begin
-  if TlsSegAbsolute then EmitGlobRef(BSS_TLS_MAIN + disp)
-  else EmitI32(disp + TlsSegDispBias);
+  EmitI32(disp + TlsSegDispBias);
+end;
+
+{ mov <reg>, [<base> + disp32], or the store the other way round. 64-bit. }
+procedure EmitMovRegBaseDisp32(reg, base, disp: Integer; store: Boolean);
+var rex: Integer;
+begin
+  rex := $48;
+  if reg >= 8 then rex := rex or 4;
+  if base >= 8 then rex := rex or 1;
+  EmitB(rex);
+  if store then EmitB($89) else EmitB($8B);
+  EmitB($80 or ((reg and 7) shl 3) or (base and 7));
+  if (base and 7) = 4 then EmitB($24);
+  EmitI32(disp);
+end;
+
+{ <reg> = this thread's TLS block. Everywhere but --os=windows that is the
+  self-pointer in slot 0, `mov reg, gs:[0]` (fs under the BSDs that use it).
+  Under --os=windows (TlsViaTeb) it is the executable's PE TLS data:
+  `mov reg, gs:[0x58]` (the TEB's ThreadLocalStoragePointer), then
+  `mov reg, [reg]` (index 0). }
+procedure EmitTlsSelfLoad(reg: Integer);
+var rex, m: Integer;
+begin
+  rex := $48;
+  if reg >= 8 then rex := $4C;
+  m := ((reg and 7) shl 3) or 4;
+  if TlsViaTeb then
+  begin
+    EmitB($65); EmitB(rex); EmitB($8B); EmitB(m); EmitB($25); EmitI32($58);
+    if reg >= 8 then EmitB($4D) else EmitB($48);
+    EmitB($8B);
+    case reg and 7 of
+      4: begin EmitB($04 or ((reg and 7) shl 3)); EmitB($24); end;   { [rsp]/[r12] take a SIB }
+      5: begin EmitB($45 or ((reg and 7) shl 3)); EmitB(0); end;     { [rbp]/[r13] take a disp8 }
+    else
+      EmitB(((reg and 7) shl 3) or (reg and 7));
+    end;
+  end
+  else
+  begin
+    EmitTlsSegPrefix; EmitB(rex); EmitB($8B); EmitB(m); EmitB($25); EmitTlsSegDisp(0);
+  end;
 end;
 
 procedure EmitI386PicAddrOpen;

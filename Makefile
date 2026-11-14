@@ -11286,8 +11286,9 @@ test-windows: $(COMPILER)
 	# (tools/vm/wine.sh) against the Linux build of the same source run here.
 	# The console, memory, time, exceptions, argv/environment, exit codes and
 	# (phase 2) files, directories, select/poll and starting processes,
-	# (phase 3) signals: faults turned into Pascal exceptions, kill/raise to
-	# ourselves, masks and sigtimedwait. No threads or sockets yet. The two C
+	# (phase 3) signals: faults turned into Pascal exceptions, kill/raise,
+	# per-thread masks and sigtimedwait; and threads (--threadsafe: the PE TLS
+	# directory, CreateThread, WaitOnAddress). No sockets yet. The two C
 	# signal files drop their fork() rows: Windows has no fork.
 	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
@@ -11321,6 +11322,15 @@ test-windows: $(COMPILER)
 	    ./$(COMPILER) $$f $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$f $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1 | grep -v -E "$$x"; echo exit=$$?)" \
 	      "$$($$d/$$n.lx 2>&1 | grep -v -E "$$x"; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
+	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
+	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
+	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas \
+	           test/test_signal_threads.pas test/test_signal_num_threads_race.pas test/test_thread_clone.pas; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) --threadsafe $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --threadsafe --os=windows $$t $$d/$$n.exe >/dev/null && \
+	    tools/expect_same.sh windows_threads_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
 	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
 	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \

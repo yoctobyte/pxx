@@ -12,12 +12,19 @@
   it there or refuses it. An EXE is the first thing mapped into its process,
   so the address is free in practice. ASLR (a .reloc section) is later work.
 
-  IMPORTS: the GOT slots the x86-64 external call already reads through
+  IMPORTS (weak ones excepted, see PreparePEImports): the GOT slots the x86-64 external call already reads through
   (`call [rip+slot]`) become the Import Address Table. PreparePEImports
   appends the IAT, the lookup tables, the hint/name entries and the import
   descriptors to Data[] and points ExternalGotOff at the IAT slots, so
   PatchDynCallSites needs no change. The RVA fields inside the block are
   patched once dataBase is known (PatchPEImports).
+
+  THREAD-LOCAL STORAGE is the PE TLS directory (PreparePETls): its data is
+  the pxx TLS block plus a 32-byte scratch (getrlimit's at startup, then
+  winabi's per-thread words), all zero fill, so the loader
+  hands every thread -- the main one, CreateThread's, and the ones Windows
+  starts itself (the console control handler) -- a zeroed block of its own,
+  reached through the TEB (TlsViaTeb in defs.inc).
 
   THE STACK is committed whole (SizeOfStackCommit = SizeOfStackReserve).
   Windows grows a stack through a guard page one page at a time and pxx's
@@ -35,6 +42,9 @@ var
   PeRvaFixTgt: array of Integer;              { the Data[] offset each one names }
   PeRvaFixWide: array of Boolean;             { 8-byte (lookup/IAT entry) or 4-byte field }
   PeRvaFixCount: Integer;
+
+var
+  PeTlsDirOff: Integer;                       { Data[] offset of IMAGE_TLS_DIRECTORY64, or -1 }
 
 procedure PeRvaFixAdd(pos, tgt: Integer; wide: Boolean);
 begin
@@ -72,6 +82,9 @@ begin
   ResolveSynthImportLibraries;
   libCount := 0;
   for i := 0 to ExternalCount - 1 do
+  if ProcWeakExternal[ExternalProc[i]] then
+    libOfExt[i] := -1
+  else
   begin
     found := False;
     for j := 0 to libCount - 1 do
@@ -105,6 +118,16 @@ begin
     DataPutU64(0);
   end;
   PeIatSize := DataLen - PeIatOff;
+  { A `weakexternal` is not imported: Windows has no weak import, and a DLL
+    that is not there (libc.so.6 for palthread's pthread pair) stops the
+    program from loading at all. Its slot is a zero of its own, so `@f`
+    reads nil, as on a static Linux build. }
+  for i := 0 to ExternalCount - 1 do
+    if libOfExt[i] < 0 then
+    begin
+      ExternalGotOff[i] := DataLen;
+      DataPutU64(0);
+    end;
 
   { The import lookup tables: the same shape, never overwritten. }
   for l := 0 to libCount - 1 do
@@ -130,6 +153,7 @@ begin
 
   { Hint/name entries (hint 0: the loader then searches by name), 2-aligned. }
   for i := 0 to ExternalCount - 1 do
+  if libOfExt[i] >= 0 then
   begin
     PeDataAlign(2);
     hintOff[i] := DataLen;
@@ -158,6 +182,35 @@ begin
         Inc(iltPos, 8);
       end;
   end;
+end;
+
+{ IMAGE_TLS_DIRECTORY64 (40 bytes), then the index the loader writes, an
+  empty callback list and 8 bytes of template. The rest of the block is
+  SizeOfZeroFill. The four VAs are patched once dataBase is known. }
+procedure PreparePETls;
+begin
+  PeTlsDirOff := -1;
+  if not TlsMainInstalled then Exit;
+  PeDataAlign(16);
+  PeTlsDirOff := DataLen;
+  DataPutU64(0);                    { StartAddressOfRawData }
+  DataPutU64(0);                    { EndAddressOfRawData }
+  DataPutU64(0);                    { AddressOfIndex }
+  DataPutU64(0);                    { AddressOfCallBacks }
+  DataPutU32(TlsBlockSize + 32 - 8);   { SizeOfZeroFill: the block, then winabi's 32-byte scratch }
+  DataPutU32(0);                    { Characteristics }
+  DataPutU64(0);                    { +40: the index (a DWORD, padded) }
+  DataPutU64(0);                    { +48: the callback list's terminator }
+  DataPutU64(0);                    { +56: the raw template }
+end;
+
+procedure PatchPETls(dataVa: Int64);
+begin
+  if PeTlsDirOff < 0 then Exit;
+  PatchDataU64(PeTlsDirOff, dataVa + PeTlsDirOff + 56);
+  PatchDataU64(PeTlsDirOff + 8, dataVa + PeTlsDirOff + 64);
+  PatchDataU64(PeTlsDirOff + 16, dataVa + PeTlsDirOff + 40);
+  PatchDataU64(PeTlsDirOff + 24, dataVa + PeTlsDirOff + 48);
 end;
 
 procedure PatchPEImports(dataRva: Int64);
@@ -218,6 +271,7 @@ var
 begin
   DropWeakOnlyImports;
   PreparePEImports;
+  PreparePETls;
   RoLayoutPrepare(False, PAGE);    { one RW .data: no read-only split yet }
   codeOffset := PAGE;              { the headers' page }
   AlignCodeForData(codeOffset);
@@ -236,6 +290,7 @@ begin
 
   ApplyImageFixups(ImageBase + codeOffset, dataBase, bssBase, entry);
   PatchPEImports(dataRva);
+  PatchPETls(dataBase);
   RoPermuteData;
 
   dataRawLen := (DataFileLen + PAGE - 1) and (not (PAGE - 1));
@@ -284,6 +339,11 @@ begin
     PeHdrU32(hdr, p + 112 + 8 * 1 + 4, PeImportDirSize);
     PeHdrU32(hdr, p + 112 + 8 * 12, dataRva + PeIatOff);
     PeHdrU32(hdr, p + 112 + 8 * 12 + 4, PeIatSize);
+  end;
+  if PeTlsDirOff >= 0 then
+  begin
+    PeHdrU32(hdr, p + 112 + 8 * 9, dataRva + PeTlsDirOff);
+    PeHdrU32(hdr, p + 112 + 8 * 9 + 4, 40);
   end;
   Inc(p, OPT_SIZE);
   { Section table }

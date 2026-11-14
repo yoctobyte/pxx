@@ -1220,7 +1220,7 @@ begin
   WriteLn('  --os=minix            Minix 3.4/i386 output (EXPERIMENTAL): the same');
   WriteLn('                        design over Minix message passing; no threads');
   WriteLn('  --os=windows          Windows x64 console .exe (EXPERIMENTAL): the same');
-  WriteLn('                        design over kernel32; no threads yet');
+  WriteLn('                        design over kernel32; no sockets yet');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -3331,8 +3331,6 @@ begin
     begin
       if TargetArch <> TARGET_X86_64 then
         ErrorNoPos('--os=windows is x86-64 only for now');
-      if ThreadSafeMode then
-        ErrorNoPos('--os=windows: --threadsafe is not supported yet (phase 1 is single-threaded)');
       if DebugInfo then
         ErrorNoPos('--os=windows: -g is not supported (no PDB or COFF debug info yet)');
     end

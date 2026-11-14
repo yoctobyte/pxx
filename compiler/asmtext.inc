@@ -257,7 +257,8 @@ procedure AsmEncAbsRM(regField, kind, off: Integer);
 begin
   EncB(((regField and 7) shl 3) or 4);
   EncB($25);
-  if (kind = 5) and AsmSegTls and TlsSegAbsolute then EmitGlobRef(BSS_TLS_MAIN + off)   { --os=windows: the main block itself }
+  if (kind = 5) and AsmSegTls and TlsViaTeb then
+    Error('EmitAsmX64: a gs: operand cannot reach the TLS block under --os=windows (use EmitTlsSelfLoad)')
   else if (kind = 5) and AsmSegTls then EncI32(off + TlsSegDispBias)   { fs - span under --os=openbsd --rtl-libc }
   else if kind = 5 then EncI32(off)
   else if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
@@ -542,7 +543,7 @@ begin
       AsmSegTls := AsmTextLower(rest[k0]) = 'g';
       if AsmSegTls then
       begin
-        if not TlsSegAbsolute then EncB(TlsSegPrefix);   { gs = the TLS block's segment (fs under --os=openbsd) }
+        EncB(TlsSegPrefix);   { gs = the TLS block's segment (fs under --os=openbsd) }
       end
       else EncB($64);
       rest := AsmTextSlice(rest, 1, k0 - 1) + AsmTextSlice(rest, k0 + 3, Length(rest) - k0 - 2);

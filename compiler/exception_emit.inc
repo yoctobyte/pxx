@@ -56,10 +56,31 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean);
   The two encodings are otherwise identical -- same REX, same opcode, same
   modrm/SIB -- which is why this is one function with two tails instead of two
   functions. }
-var t: Integer;
+var t, sc: Integer;
 begin
   t := StatusSlotTlsIndex(bssSlot);
-  if t >= 0 then
+  if (t >= 0) and TlsViaTeb then
+  begin
+    { --os=windows: the block is two loads away (EmitTlsSelfLoad). A load
+      goes through its own register; a store borrows rcx (rdx when storing
+      rcx), pushed below the red zone the copy sequences park registers in. }
+    if not store then
+    begin
+      EmitTlsSelfLoad(reg);
+      EmitMovRegBaseDisp32(reg, reg, 8 * t, False);
+    end
+    else
+    begin
+      if reg = 1 then sc := 2 else sc := 1;
+      EmitAsmX64(['lea rsp, [rsp-128]']);
+      EmitB($50 or sc);                        { push rcx/rdx }
+      EmitTlsSelfLoad(sc);
+      EmitMovRegBaseDisp32(reg, sc, 8 * t, True);
+      EmitB($58 or sc);                        { pop }
+      EmitAsmX64(['lea rsp, [rsp+128]']);
+    end;
+  end
+  else if t >= 0 then
   begin
     if store then EmitAsmX64(['mov gs:[%], %r64', 8 * t, reg])
     else EmitAsmX64(['mov %r64, gs:[%]', reg, 8 * t]);

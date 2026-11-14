@@ -9281,14 +9281,16 @@ begin
   else TlsSegPrefix := $65;   { NetBSD: fs too -- setcontext restores the fs base (_mc_tlsbase) }
 end;
 
-{ --os=windows, phase 1: no segment register can be pointed at the block (gs
-  is the TEB, fs is not settable), so every `gs:[disp]` TLS operand is emitted
-  without the prefix as a rip-relative reference to the main thread's block
-  plus disp. One thread only; --threadsafe is refused until the block moves to
-  the PE TLS directory. }
-function TlsSegAbsolute: Boolean;
+{ --os=windows: no segment register can be pointed at the block (gs is the
+  TEB, fs is not settable). The block is the executable's PE TLS data
+  (pewriter.inc), which the loader allocates for every thread: the TEB's
+  ThreadLocalStoragePointer (gs:[0x58]) names the per-thread array, and an
+  executable's own index is 0 (winabi checks it at startup). So the block's
+  address is two loads (EmitTlsSelfLoad) and a slot a third, where Linux
+  needs one. A `gs:` operand in the text assembler is refused there. }
+function TlsViaTeb: Boolean;
 begin
-  TlsSegAbsolute := TargetKernel = KERNEL_WINDOWS;
+  TlsViaTeb := TargetKernel = KERNEL_WINDOWS;
 end;
 
 function KernelOsName: AnsiString;
