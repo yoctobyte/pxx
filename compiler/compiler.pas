@@ -322,6 +322,7 @@ function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
 {$ifndef PXX_NO_ALGOL}{$include gparser.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include eparser.inc}{$endif}
 {$include elfwriter.inc}
+{$include pewriter.inc}   { --os=windows: PE32+; uses writeELF's layout helpers and ApplyImageFixups }
 {$include elfreader.inc}   { reads an ELF64 relocatable object. AFTER elfwriter.inc: it uses LoadFile, whose body lives there, and AIntToStr from util.inc. Route 2 of feature-a-pxx-cannot-link-its-own-objects starts here -- the reader is the one stage whose correctness every later stage depends on and none can check. }
 {$include dce.inc}      { reachability-gated dead-code elimination — after every emitter, before the writer RUNS.
                           AFTER elfwriter.inc in DECLARATION order, which is a different thing: under --emit-obj
@@ -1218,6 +1219,8 @@ begin
   WriteLn('                        the same design');
   WriteLn('  --os=minix            Minix 3.4/i386 output (EXPERIMENTAL): the same');
   WriteLn('                        design over Minix message passing; no threads');
+  WriteLn('  --os=windows          Windows x64 console .exe (EXPERIMENTAL): the same');
+  WriteLn('                        design over kernel32; no threads yet');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
@@ -1960,6 +1963,14 @@ begin
         default because the libc-free Linux build is the identity the self-host
         gate rests on. feature-port-rtl-over-libc }
       RtlOverLibc := True;
+      Inc(i);
+    end
+    else if option = '--os=windows' then
+    begin
+      { EXPERIMENTAL: see KERNEL_WINDOWS in defs.inc. }
+      TargetKernel := KERNEL_WINDOWS;
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if option = '--os=minix' then
@@ -3316,6 +3327,15 @@ begin
       if ThreadSafeMode then
         ErrorNoPos('--os=minix: --threadsafe is not supported (Minix has no kernel threads)');
     end
+    else if TargetKernel = KERNEL_WINDOWS then
+    begin
+      if TargetArch <> TARGET_X86_64 then
+        ErrorNoPos('--os=windows is x86-64 only for now');
+      if ThreadSafeMode then
+        ErrorNoPos('--os=windows: --threadsafe is not supported yet (phase 1 is single-threaded)');
+      if DebugInfo then
+        ErrorNoPos('--os=windows: -g is not supported (no PDB or COFF debug info yet)');
+    end
     else if (TargetArch <> TARGET_X86_64) and
        not ((TargetArch = TARGET_AARCH64) and
             ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_NETBSD)
@@ -3330,6 +3350,8 @@ begin
     begin
       { The translator calls OpenBSD's libc instead of the kernel. }
     end
+    else if RtlOverLibc and (TargetKernel = KERNEL_WINDOWS) then
+      ErrorNoPos('--os=windows: --rtl-libc is not supported; the program already reaches Windows through kernel32')
     else if RtlOverLibc then
       ErrorNoPos('--os=' + KernelOsName + ': --rtl-libc is not supported; the build calls the kernel directly' +
         ' (only --os=openbsd takes it)');
@@ -3575,6 +3597,31 @@ begin
   if (not isAsm) and ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_DRAGONFLY))
      and (TargetArch = TARGET_X86_64) then
     EmitAsmX64(['mov rsp, rdi']);   { DragonFly's exec_setregs is FreeBSD's: rdi = the argc block }
+  { --os=windows: the entry is called like a function (rsp = 8 mod 16, [rsp] a
+    return address into kernel32) and there is no argc block at all. winabi
+    builds the Linux one -- argc, argv[], NULL, envp[], NULL, AT_NULL -- from
+    the command line and the environment block (the WIN_PXX_ARGBLOCK
+    pseudo-call answers its address; the first qword is how many follow, an
+    even number) and it is copied onto an aligned stack, so every later entry
+    stage reads what it reads on Linux. feature-port-windows-pe }
+  if (not isAsm) and (TargetKernel = KERNEL_WINDOWS) then
+    EmitAsmX64([
+      'mov eax, %', WIN_PXX_ARGBLOCK,
+      'syscall',
+      'mov rcx, [rax]',
+      'lea rsi, [rax+8]',
+      'and rsp, -16',
+      'mov rdx, rcx',
+      'shl rdx, 3',
+      'sub rsp, rdx',
+      'mov rdi, rsp',
+      '.wargs:',
+      'mov rdx, [rsi]',
+      'mov [rdi], rdx',
+      'add rsi, 8',
+      'add rdi, 8',
+      'dec rcx',
+      'jnz .wargs']);
   { FreeBSD/arm64 does the same with x0 and sp = x0 & ~15, and sp must stay
     16-aligned, so the block comes down to sp instead: when x0 = sp + 8, the
     argc word, argv[] and envp[] with their NULLs and the auxv pairs up to
@@ -4141,6 +4188,8 @@ begin
   else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)
+  else if TargetKernel = KERNEL_WINDOWS then
+    writePE(outFile)
   else
     writeELF(outFile);
 

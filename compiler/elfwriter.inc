@@ -2210,7 +2210,7 @@ begin
     displacement pointing at it was wrong.
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   PatchDynCallSites(dataBase, codeVA);
-  if ExternalCount > 0 then
+  if (ExternalCount > 0) and (TargetKernel <> KERNEL_WINDOWS) then   { PE: PatchPEImports }
     PatchDynamicData(dataBase);
 
   for i := 0 to MethodFixCount-1 do

@@ -2488,6 +2488,19 @@ const
     No threads (refused), and no TLS segment: Minix cannot point fs at a block,
     so __pxxTlsBase is the main block's address (one thread, one block). }
   KERNEL_MINIX = 5;
+  { --os=windows (EXPERIMENTAL, feature-port-windows-pe): Windows x64, a PE32+
+    console executable (pewriter.inc). The same translator design once more:
+    compiler/builtin/winabi.pas turns each Linux syscall into kernel32 calls,
+    which are the only stable way into NT (its syscall numbers change between
+    builds). Every external call uses the Microsoft x64 convention through a
+    call-site adapter (EmitExternalIndirectCall); the code itself stays SysV.
+    Phase 1: one thread, and the TLS block is the main thread's, reached
+    rip-relative instead of through gs (which is the TEB on Windows). }
+  KERNEL_WINDOWS = 6;
+  { The private pseudo-call the Windows entry stub makes: winabi answers the
+    address of a Linux-shaped argc/argv/envp/auxv block. Far outside Linux's
+    numbering, like MX_PXX_INITSP. }
+  WIN_PXX_ARGBLOCK = $7F000002;
   { The private pseudo-call the Minix entry stub makes with ebx = the initial
     stack pointer, so the translator can find envp (Minix has no
     /proc/self/environ). Far outside Linux's numbering. }
@@ -9208,7 +9221,7 @@ function KernelTranslated: Boolean;
 begin
   KernelTranslated := (TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_OPENBSD)
                       or (TargetKernel = KERNEL_NETBSD) or (TargetKernel = KERNEL_DRAGONFLY)
-                      or (TargetKernel = KERNEL_MINIX);
+                      or (TargetKernel = KERNEL_MINIX) or (TargetKernel = KERNEL_WINDOWS);
 end;
 
 { The translator's unit and entry proc, and the --os spelling for messages. }
@@ -9218,6 +9231,7 @@ begin
   else if TargetKernel = KERNEL_NETBSD then KernelAbiUnit := 'nbsdabi'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiUnit := 'dfbsdabi'
   else if TargetKernel = KERNEL_MINIX then KernelAbiUnit := 'minixabi'
+  else if TargetKernel = KERNEL_WINDOWS then KernelAbiUnit := 'winabi'
   else KernelAbiUnit := 'fbsdabi';
 end;
 
@@ -9227,6 +9241,7 @@ begin
   else if TargetKernel = KERNEL_NETBSD then KernelAbiProc := 'PXXNbsdSyscall'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelAbiProc := 'PXXDfbsdSyscall'
   else if TargetKernel = KERNEL_MINIX then KernelAbiProc := 'PXXMinixSyscall'
+  else if TargetKernel = KERNEL_WINDOWS then KernelAbiProc := 'PXXWinSyscall'
   else KernelAbiProc := 'PXXFbsdSyscall';
 end;
 
@@ -9266,12 +9281,23 @@ begin
   else TlsSegPrefix := $65;   { NetBSD: fs too -- setcontext restores the fs base (_mc_tlsbase) }
 end;
 
+{ --os=windows, phase 1: no segment register can be pointed at the block (gs
+  is the TEB, fs is not settable), so every `gs:[disp]` TLS operand is emitted
+  without the prefix as a rip-relative reference to the main thread's block
+  plus disp. One thread only; --threadsafe is refused until the block moves to
+  the PE TLS directory. }
+function TlsSegAbsolute: Boolean;
+begin
+  TlsSegAbsolute := TargetKernel = KERNEL_WINDOWS;
+end;
+
 function KernelOsName: AnsiString;
 begin
   if TargetKernel = KERNEL_OPENBSD then KernelOsName := 'openbsd'
   else if TargetKernel = KERNEL_NETBSD then KernelOsName := 'netbsd'
   else if TargetKernel = KERNEL_DRAGONFLY then KernelOsName := 'dragonfly'
   else if TargetKernel = KERNEL_MINIX then KernelOsName := 'minix'
+  else if TargetKernel = KERNEL_WINDOWS then KernelOsName := 'windows'
   else if TargetKernel = KERNEL_FREEBSD then KernelOsName := 'freebsd'
   else KernelOsName := 'linux';
 end;

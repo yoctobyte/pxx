@@ -3,14 +3,14 @@ summary: "Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testab
 type: feature
 track: M
 prio: 25
-blocked-by: [feature-port-rtl-over-libc]
+blocked-by: []
 ---
 
 # Windows native target (x64) — new PE format + MS x64 ABI
 
 - **Type:** feature (Track A — new object format + ABI + linking). Portability campaign.
-- **Status:** backlog (blocked on [[feature-port-rtl-over-libc]])
-- **Owner:** —
+- **Status:** working: phase 1 landed 2026-11-14 (console, heap, exceptions, argv; Wine)
+- **Owner:** the kernels session (BSD/Minix/OpenBSD ports)
 - **Opened:** 2026-07-17, OS-portability mapping session. Full map in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).
 
@@ -138,3 +138,70 @@ oracle is one command. **No code-signing needed** — Windows runs unsigned user
 
 Assume **Win64** only. Win32 (`stdcall`, `int 2e`) is out of scope unless a concrete
 need appears.
+
+## Log
+
+### 2026-11-14: phase 1, a console .exe that runs under Wine
+
+Spelled `--os=windows`, not `--platform=windows`: it is a kernel like
+`--os=freebsd`, and the platform axis stays POSIX. The design is the BSD
+ports' design, not the one above. **The full MS x64 codegen fork in the
+scout section turned out to be unnecessary:**
+
+- **Translator.** `compiler/builtin/winabi.pas` (KernelTranslated, so the
+  shared syscall thunk calls PXXWinSyscall). kernel32 only, no CRT. Covers
+  read/write/close/fstat on the std handles, writev, mmap (anonymous),
+  munmap, mprotect, brk (a reserved 1 GiB region committed on demand),
+  clock_gettime (precise FILETIME / unbiased interrupt time), nanosleep,
+  getpid/gettid, uname, getrlimit, exit, and no-ops for the signal, futex and
+  arch_prctl calls the startup makes. Anything else is -ENOSYS, named on
+  stderr under PXX_WINABI_TRACE=1. Constant divisors only: the translator
+  units have no divide-by-zero stub.
+- **Calling convention: an adapter at the call site, not a codegen fork.**
+  EmitExternalIndirectCall, under KERNEL_WINDOWS: `sub rsp,48`, args 5/6 to
+  [rsp+32]/[rsp+40], rdi/rsi/rdx/rcx -> rcx/rdx/r8/r9, call, `add rsp,48`.
+  SysV-stacked args 7+ land at [rsp+48], exactly Microsoft's slot, so any
+  arg count works. The callee-saved difference is harmless in this
+  direction (MS preserves a superset). Not done: float args (MS assigns
+  xmm0-3 by position), and calls FROM Windows into pxx code (thread start,
+  exception handler, window procedures). Those need the reverse adapter.
+- **PE writer.** `compiler/pewriter.inc`. FileAlignment = SectionAlignment
+  = 4096 makes file offset = RVA, so the ELF layout carries over: code at
+  RVA $1000 (codeOffset), data after the page-padded code, and the same
+  ApplyImageFixups. The x86-64 GOT slots become the IAT (PreparePEImports
+  appends IAT, ILT, descriptors, hint/name entries and DLL names to Data[]).
+  Fixed base $400000 with RELOCS_STRIPPED, so there is no .reloc and no ASLR.
+  Stack commit = reserve = 8 MiB, because pxx frames do not probe the guard
+  page.
+- **TLS.** gs is the TEB, so every `gs:[disp]` (four hand-encoded sites, all
+  the asmtext ones) is emitted unprefixed as a rip-relative reference to
+  BSS_TLS_MAIN + disp (EmitTlsSegPrefix/EmitTlsSegDisp, TlsSegAbsolute). One
+  thread only, so `--threadsafe` is refused.
+- **Entry.** Windows calls the entry point like a function, with no argc
+  block. The stub makes the WIN_PXX_ARGBLOCK pseudo-call. winabi builds the
+  Linux argc/argv/envp/auxv image from GetCommandLineW (msvcrt's quoting
+  rules) and GetEnvironmentStringsW, converted to UTF-8, and the stub copies
+  it onto an aligned stack.
+
+Verified:
+
+- `make test-windows` (new; tools/vm/wine.sh, prefix /data/vm/wine on
+  plexus): 22 Pascal/C/NilPy programs, plus the {$Q+} trap program at 0-5
+  arguments, against the Linux build of the same source.
+- Survey: 63/69 random Pascal tests, and 34/36 C and NilPy ones, already
+  matched. The failures were a libc.so.6 external, an sqlite one, a float
+  extern, pselect6 and files.
+- Byte identity: 449 builds (Linux default, --threadsafe, -O2, the four
+  BSDs, aarch64, Minix, --rtl-libc) are identical to HEAD.
+
+Next, in order:
+
+- **Phase 2:** files (openat/CreateFileW, which also exercises the 7-arg
+  call), stat, getdents64, /proc/self/environ and /proc/self/exe, cwd,
+  pselect6/poll on the std handles, processes (CreateProcess). Then the
+  survey list grows.
+- **Phase 3:** a vectored exception handler for hardware faults (the
+  reverse adapter), threads through the PE TLS directory (`mov rax,
+  gs:[0x58]; mov rax,[rax]`, since the exe's TLS index is 0) and
+  CreateThread, and sockets (ws2_32).
+- **Later:** .reloc + ASLR, float args in the adapter, and arm64.

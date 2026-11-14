@@ -18741,6 +18741,34 @@ begin
     disagree about. }
   DynCallPCRel[DynCallCount] := False;
   DynCallPicDelta[DynCallCount] := 0;
+  if (TargetArch = TARGET_X86_64) and (TargetKernel = KERNEL_WINDOWS) then
+  begin
+    { --os=windows: every import is a DLL export under the Microsoft x64
+      convention, and the arguments are already in SysV registers. Adapt at
+      the call site: 32 bytes of shadow space plus two slots for args 5 and 6,
+      then rdi/rsi/rdx/rcx -> rcx/rdx/r8/r9 (r9 and r8 move out first). Any
+      7th+ argument the caller pushed now sits at [rsp+48] -- exactly where
+      Microsoft's callee looks for it -- so this holds for every argument
+      count. rsp stays 16-aligned (48). Floating-point arguments are NOT
+      adapted: Microsoft assigns xmm0-3 by position, SysV by count.
+      feature-port-windows-pe }
+    EmitAsmX64([
+      'sub rsp, 48',
+      'mov [rsp+32], r8',
+      'mov [rsp+40], r9',
+      'mov r9, rcx',
+      'mov r8, rdx',
+      'mov rdx, rsi',
+      'mov rcx, rdi']);
+    EmitB($FF); EmitB($15);
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);
+    EmitAsmX64(['add rsp, 48']);
+    FloatPoolRestore;
+    Exit;
+  end;
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($FF); EmitB($15);

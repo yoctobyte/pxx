@@ -11281,6 +11281,33 @@ test-minix: $(COMPILER)
 	  tools/expect_same.sh minix_debug_info "$$(tools/vm/minix.sh run $$d/g.mx 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  echo "test-minix: OK"
 
+test-windows: $(COMPILER)
+	# --os=windows (EXPERIMENTAL, phase 1): a Windows x64 PE run under Wine
+	# (tools/vm/wine.sh) against the Linux build of the same source run here.
+	# Phase 1 is the console, memory, time, exceptions, argv and exit codes,
+	# so the lists are programs that need nothing else: no files, threads,
+	# signals or sockets yet. feature-port-windows-pe
+	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
+	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
+	           test/test_interfaces_multi_secondary.pas test/test_class_str.pas test/test_asm_cpuid.pas \
+	           test/test_stackless_generator_called_after_a_later_generator.pas \
+	           test/test_dynarray_of_fixed_array.pas test/test_promoint_minint64_div.pas \
+	           test/test_readln_line_longer_than_the_buffer.pas test/test_mgmt_operators_global_array.pas \
+	           test/test_paramstr_out_of_range.pas test/test_paramcount_for_limit.pas \
+	           test/c_alloca_in_call_argument.c test/c_big_struct_by_value_and_cmov.c \
+	           test/c_builtin_libc_names.c test/c_struct_fnptr_member_local.c test/c_asm_in_inline_body.c \
+	           test/test_nilpy_variant.npy test/test_nilpy_variant_operator_sweep.npy test/test_nilpy_dynattr.npy \
+	           test/test_nilpy_self_class_constructs.npy; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
+	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
+	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \
+	    tools/expect_same.sh "windows_qplus_args_$$a" "$$(tools/vm/wine.sh $$d/q.exe $$a 2>&1; echo exit=$$?)" "$$($$d/q.lx $$a 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  echo "test-windows: OK"
+
 test-asm: $(COMPILER)
 	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 3 -------------
 	# The five text-assembler oracle harnesses: each mocks the byte sink, then

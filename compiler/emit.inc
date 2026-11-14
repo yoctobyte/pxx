@@ -1322,6 +1322,21 @@ begin
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
 end;
 
+{ The TLS segment override and disp32 of a hand-encoded `gs:[disp]` operand
+  (ModRM rm=100 + SIB $25 already emitted for the disp half). Under
+  --os=windows (TlsSegAbsolute) there is no prefix and the operand becomes the
+  main block's own address plus disp, which EmitGlobRef turns rip-relative. }
+procedure EmitTlsSegPrefix;
+begin
+  if not TlsSegAbsolute then EmitB(TlsSegPrefix);
+end;
+
+procedure EmitTlsSegDisp(disp: Integer);
+begin
+  if TlsSegAbsolute then EmitGlobRef(BSS_TLS_MAIN + disp)
+  else EmitI32(disp + TlsSegDispBias);
+end;
+
 procedure EmitI386PicAddrOpen;
 { Open the address-as-IMMEDIATE rewrite: reserve a stack word for the result and
   leave `lea ecx,[ecx+disp32]` waiting for its displacement, which the caller

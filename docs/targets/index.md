@@ -53,8 +53,8 @@ For ESP32 targets, start with the board-specific examples under
 
 ## FreeBSD
 
-`--os=freebsd` writes a native FreeBSD/amd64 executable from Pascal, C or
-Nil Python (x86-64 only):
+`--os=freebsd` (EXPERIMENTAL, like every kernel but Linux) writes a native
+FreeBSD/amd64 executable from Pascal, C or Nil Python:
 
 ```sh
 ./pxx --os=freebsd hello.pas hello.fbsd
@@ -77,6 +77,14 @@ refused at compile time), threads through glibc's `pthread_create`, and
 Linux-only interfaces. Anything the translator does not know returns `ENOSYS`.
 The details, how to test in the VM, and the plan for OpenBSD and NetBSD are in
 [FreeBSD and the BSDs](./freebsd.md).
+
+## Windows
+
+`--os=windows` (EXPERIMENTAL, phase 1) writes a Windows x64 console `.exe`
+that imports only `kernel32.dll`. It uses the same translator design as the
+BSD targets, with kernel32 underneath. Phase 1 covers the console, the heap,
+exceptions, time and arguments. Files, threads and sockets come next. See
+[Windows](./windows.md).
 
 ## OpenWrt
 
