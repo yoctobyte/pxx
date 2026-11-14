@@ -387,3 +387,23 @@ overflow cannot run a handler). Next: threads, then sockets.
   minus lib_dns_tcp, which forks) and test_windows_dll_floats (msvcrt:
   pow, ldexp, _gcvt, atan2, powf, two sprintf rows with floats in
   registers and on the stack).
+
+### 2026-11-14: pre-Windows-8 (Windows 7, ReactOS)
+
+- Checked against the ReactOS x64 nightly's DLLs (iso.reactos.org livecd
+  0.4.17-dev-1354-g0db2415, whose kernel reports Build 20260429): 8 of a
+  threaded socket program's 78 imports were missing. Its kernel32 is the
+  Server 2003 set; the Vista+ calls sit in a private kernel32_vista.dll,
+  and there is no kernelbase.dll (the tree has one, the image does not).
+- The image now imports only XP/2003-level kernel32 and ws2_32 (checked by
+  test-windows with objdump). GetSystemTimePreciseAsFileTime,
+  QueryUnbiasedInterruptTime, GetTickCount64 and WaitOnAddress /
+  WakeByAddress* are looked up with GetProcAddress (ApiInit) and called
+  through a 23-byte MSCALL helper on the thunk page (SysV -> Microsoft, four
+  integer args), with fallbacks: GetSystemTimeAsFileTime,
+  QueryPerformanceCounter (shift divider, no divide stub), GetTickCount,
+  and a yield-then-Sleep(1) poll of the word with a no-op wake. WinLock is
+  a lock bts/btr spinlock instead of an SRW lock.
+- PXX_WINABI_PRE8=1 forces the fallbacks; test-windows reruns four
+  time/socket tests and six thread tests that way (Wine's relay trace
+  confirms no WaitOnAddress call then).

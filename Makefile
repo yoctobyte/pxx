@@ -11302,7 +11302,10 @@ test-windows: $(COMPILER)
 	# directory, CreateThread, WaitOnAddress); and sockets over ws2_32, with
 	# epoll, timerfd and eventfd emulated (the reactor and async tests); and
 	# floating-point arguments to a DLL (msvcrt here, libc/libm on Linux). The
-	# two C signal files drop their fork() rows: Windows has no fork.
+	# two C signal files drop their fork() rows: Windows has no fork. A pre-8
+	# pass reruns a few time, socket and thread tests with PXX_WINABI_PRE8=1
+	# (the fallbacks Windows 7 and ReactOS take), and the import table must
+	# name only kernel32 and ws2_32.
 	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
@@ -11353,6 +11356,16 @@ test-windows: $(COMPILER)
 	    ./$(COMPILER) --threadsafe $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --threadsafe --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_threads_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  for t in test/test_timer.pas test/test_sysutils_datetime.pas test/test_asyncecho.pas test/lib_net.pas; do \
+	    n=$$(basename $$t); \
+	    tools/expect_same.sh windows_pre8_$$n "$$(PXX_WINABI_PRE8=1 tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  for t in test/test_mutex.pas test/c_pthread_join_returns_value.c test/lib_classes_tthread.pas test/test_signal_threads.pas \
+	           test/test_parallel_for_capture.pas test/test_critsec_once.pas; do \
+	    n=$$(basename $$t); \
+	    tools/expect_same.sh windows_pre8_threads_$$n "$$(PXX_WINABI_PRE8=1 tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  tools/expect_same.sh windows_imports "$$(objdump -p $$d/lib_net.pas.exe | sed -n 's/.*DLL Name: //p' | sort | tr '\n' ' ')" "kernel32.dll ws2_32.dll " || exit 1; \
 	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
 	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \
 	    tools/expect_same.sh "windows_qplus_args_$$a" "$$(tools/vm/wine.sh $$d/q.exe $$a 2>&1; echo exit=$$?)" "$$($$d/q.lx $$a 2>&1; echo exit=$$?)" || exit 1; \

@@ -78,8 +78,12 @@ function W_VirtualFree(addr, size, typ: Int64): LongInt; cdecl; external 'kernel
 function W_VirtualProtect(addr, size, prot, old: Int64): LongInt; cdecl; external 'kernel32.dll' name 'VirtualProtect';
 function W_GetCurrentProcessId: LongWord; cdecl; external 'kernel32.dll' name 'GetCurrentProcessId';
 function W_GetCurrentThreadId: LongWord; cdecl; external 'kernel32.dll' name 'GetCurrentThreadId';
-procedure W_GetSystemTimePreciseAsFileTime(ft: Int64); cdecl; external 'kernel32.dll' name 'GetSystemTimePreciseAsFileTime';
-function W_QueryUnbiasedInterruptTime(p: Int64): LongInt; cdecl; external 'kernel32.dll' name 'QueryUnbiasedInterruptTime';
+procedure W_GetSystemTimeAsFileTime(ft: Int64); cdecl; external 'kernel32.dll' name 'GetSystemTimeAsFileTime';
+function W_QueryPerformanceCounter(p: Int64): LongInt; cdecl; external 'kernel32.dll' name 'QueryPerformanceCounter';
+function W_QueryPerformanceFrequency(p: Int64): LongInt; cdecl; external 'kernel32.dll' name 'QueryPerformanceFrequency';
+function W_GetTickCount: LongWord; cdecl; external 'kernel32.dll' name 'GetTickCount';
+function W_GetModuleHandleA(name: Int64): Int64; cdecl; external 'kernel32.dll' name 'GetModuleHandleA';
+function W_GetProcAddress(m, name: Int64): Int64; cdecl; external 'kernel32.dll' name 'GetProcAddress';
 procedure W_Sleep(ms: Int64); cdecl; external 'kernel32.dll' name 'Sleep';
 function W_SwitchToThread: LongInt; cdecl; external 'kernel32.dll' name 'SwitchToThread';
 function W_GetEnvironmentVariableA(name, buf, size: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetEnvironmentVariableA';
@@ -309,14 +313,8 @@ function W_SetConsoleCtrlHandler(handler, add: Int64): LongInt; cdecl; external 
 function W_CreateThread(attr, stack, start, param, flags, tid: Int64): Int64; cdecl; external 'kernel32.dll' name 'CreateThread';
 function W_ResumeThread(h: Int64): LongWord; cdecl; external 'kernel32.dll' name 'ResumeThread';
 procedure W_ExitThread(code: Int64); cdecl; external 'kernel32.dll' name 'ExitThread';
-procedure W_AcquireSRWLockExclusive(lock: Int64); cdecl; external 'kernel32.dll' name 'AcquireSRWLockExclusive';
-procedure W_ReleaseSRWLockExclusive(lock: Int64); cdecl; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
-function W_WaitOnAddress(addr, cmp, size, ms: Int64): LongInt; cdecl; external 'kernelbase.dll' name 'WaitOnAddress';
-procedure W_WakeByAddressSingle(addr: Int64); cdecl; external 'kernelbase.dll' name 'WakeByAddressSingle';
-procedure W_WakeByAddressAll(addr: Int64); cdecl; external 'kernelbase.dll' name 'WakeByAddressAll';
 function W_GetProcessAffinityMask(proc, pmask, smask: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetProcessAffinityMask';
 function W_GlobalMemoryStatusEx(st: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GlobalMemoryStatusEx';
-function W_GetTickCount64: Int64; cdecl; external 'kernel32.dll' name 'GetTickCount64';
 function W_DuplicateHandle(sp, h, dp, outH, access, inherit, opts: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DuplicateHandle';
 
 var
@@ -426,13 +424,29 @@ function EmuReady(fd: Int64): LongInt; forward;
 procedure DropFd(fd: Int64); forward;
 function ReadReady(fd: Int64): LongInt; forward;
 function WinSignalSelf(sig, code: Int64): Int64; forward;
+procedure WinPreciseTime(ft: Int64); forward;
+function WinUnbiased: Int64; forward;
+
+{ a div b for a >= 0, b > 0, by shifts: this unit has no divide stub. }
+function UDiv(a, b: Int64): Int64;
+var bit, d: Int64;
+begin
+  Result := 0;
+  d := b; bit := 1;
+  while (d <= a) and (d < $2000000000000000) do begin d := d shl 1; bit := bit shl 1; end;
+  while bit > 0 do
+  begin
+    if a >= d then begin a := a - d; Result := Result or bit; end;
+    d := d shr 1;
+    bit := bit shr 1;
+  end;
+end;
 
 { CLOCK_MONOTONIC in ns: the clock timerfd deadlines and waits run on. }
 function MonoNs: Int64;
 var t: Int64;
 begin
-  t := 0;
-  W_QueryUnbiasedInterruptTime(Int64(@t));
+  t := WinUnbiased;
   Result := t * 100;
 end;
 
@@ -1206,7 +1220,7 @@ begin
   if clk = 0 then
   begin
     ft := 0;
-    W_GetSystemTimePreciseAsFileTime(Int64(@ft));
+    WinPreciseTime(Int64(@ft));
     ft := ft - FILETIME_UNIX_EPOCH;
     PInt64(ts)^ := ft div 10000000;
     PInt64(ts + 8)^ := (ft mod 10000000) * 100;
@@ -1216,8 +1230,7 @@ begin
     { Monotonic, in 100 ns units, not counting sleep (Linux's MONOTONIC
       does not count suspend either). Constant divisors only: this unit has
       no divide-by-zero stub to call. }
-    ft := 0;
-    W_QueryUnbiasedInterruptTime(Int64(@ft));
+    ft := WinUnbiased;
     PInt64(ts)^ := ft div 10000000;
     PInt64(ts + 8)^ := (ft mod 10000000) * 100;
   end;
@@ -1914,12 +1927,15 @@ const
   H_SWITCHCALL = 16;   { (sp, fn, arg): rsp := sp; fn(arg) -- never returns }
   H_LOCKOR = 32;       { (addr, bits): lock or [addr], bits }
   H_LOCKBTR = 48;      { (addr, bit): lock btr [addr], bit; the old bit }
+  H_LOCKBTS = 64;      { (addr, bit): lock bts [addr], bit; the old bit }
+  H_MSCALL = 80;       { (fn, a, b, c, d): fn(a, b, c, d) under the Microsoft convention }
 
 type
   THJump = procedure(sp, target: Int64); cdecl;
   THSwitchCall = procedure(sp, fn, arg: Int64); cdecl;
   THLockOr = procedure(addr, bits: Int64); cdecl;
   THLockBtr = function(addr, bit: Int64): Int64; cdecl;
+  THMsCall = function(fn, a, b, c, d: Int64): Int64; cdecl;
 
 { The page, with the helpers written the first time. False if Windows
   refused the page. }
@@ -1947,6 +1963,20 @@ begin
       TB(p, $F0); TB(p, $48); TB(p, $0F); TB(p, $B3); TB(p, $37);   { lock btr [rdi], rsi }
       TB(p, $0F); TB(p, $92); TB(p, $C0);      { setc al }
       TB(p, $0F); TB(p, $B6); TB(p, $C0);      { movzx eax, al }
+      TB(p, $C3);
+      p := ThunkPage + THUNK_HELPERS + H_LOCKBTS;
+      TB(p, $F0); TB(p, $48); TB(p, $0F); TB(p, $AB); TB(p, $37);   { lock bts [rdi], rsi }
+      TB(p, $0F); TB(p, $92); TB(p, $C0);      { setc al }
+      TB(p, $0F); TB(p, $B6); TB(p, $C0);      { movzx eax, al }
+      TB(p, $C3);
+      p := ThunkPage + THUNK_HELPERS + H_MSCALL;
+      TB(p, $48); TB(p, $89); TB(p, $F8);      { mov rax, rdi }
+      TB(p, $4D); TB(p, $89); TB(p, $C1);      { mov r9, r8 }
+      TB(p, $49); TB(p, $89); TB(p, $C8);      { mov r8, rcx }
+      TB(p, $48); TB(p, $89); TB(p, $F1);      { mov rcx, rsi  (rdx is already b) }
+      TB(p, $48); TB(p, $83); TB(p, $EC); TB(p, $28);   { sub rsp, 40: shadow space, 16-aligned }
+      TB(p, $FF); TB(p, $D0);                  { call rax }
+      TB(p, $48); TB(p, $83); TB(p, $C4); TB(p, $28);   { add rsp, 40 }
       TB(p, $C3);
     end;
   end;
@@ -2034,7 +2064,172 @@ end;
   the thread. }
 var
   WinStartThunk: Int64;
-  WinLock: Int64;               { an SRWLOCK, around the fd table, brk and spawn }
+  WinLock: Int64;               { a spinlock (bit 0), around the fd table, brk and spawn }
+
+{ ---- Calls newer than Windows Server 2003 -------------------------------------
+  The image imports only what every Windows from XP/Server 2003 on exports,
+  which is also what ReactOS's kernel32 offers (its newer calls sit in a
+  private kernel32_vista.dll). The few newer calls are looked up once with
+  GetProcAddress and made through the MSCALL helper; where a system lacks
+  one (Windows 7 lacks the Windows 8 ones, ReactOS all of them) a fallback
+  stands in:
+    GetSystemTimePreciseAsFileTime  GetSystemTimeAsFileTime (coarser clock)
+    QueryUnbiasedInterruptTime      QueryPerformanceCounter (counts sleep)
+    GetTickCount64                  GetTickCount (wraps after 49.7 days)
+    WaitOnAddress, WakeByAddress*   the waiter re-reads the word, yielding
+                                    and then sleeping 1 ms; a wake does nothing
+  The translator's own lock is a spinlock on lock bts/btr, so SRW locks are
+  not needed anywhere. }
+const
+  NmKernel32: array[0..12] of Byte = (107,101,114,110,101,108,51,50,46,100,108,108,0);   { kernel32.dll }
+  NmKernelbase: array[0..14] of Byte = (107,101,114,110,101,108,98,97,115,101,46,100,108,108,0);   { kernelbase.dll }
+  NmPrecise: array[0..30] of Byte = (71,101,116,83,121,115,116,101,109,84,105,109,101,80,114,101,99,105,115,101,65,115,70,105,108,101,84,105,109,101,0);   { GetSystemTimePreciseAsFileTime }
+  NmUnbiased: array[0..26] of Byte = (81,117,101,114,121,85,110,98,105,97,115,101,100,73,110,116,101,114,114,117,112,116,84,105,109,101,0);   { QueryUnbiasedInterruptTime }
+  NmTick64: array[0..14] of Byte = (71,101,116,84,105,99,107,67,111,117,110,116,54,52,0);   { GetTickCount64 }
+  NmWait: array[0..13] of Byte = (87,97,105,116,79,110,65,100,100,114,101,115,115,0);   { WaitOnAddress }
+  NmWakeOne: array[0..19] of Byte = (87,97,107,101,66,121,65,100,100,114,101,115,115,83,105,110,103,108,101,0);   { WakeByAddressSingle }
+  NmWakeAll: array[0..16] of Byte = (87,97,107,101,66,121,65,100,100,114,101,115,115,65,108,108,0);   { WakeByAddressAll }
+
+  NmPre8: array[0..15] of Byte = (80,88,88,95,87,73,78,65,66,73,95,80,82,69,56,0);   { PXX_WINABI_PRE8 }
+
+var
+  ApiReady: Boolean;
+  PPrecise, PUnbiased, PTick64, PWait, PWakeOne, PWakeAll, QpcFreq: Int64;
+
+function MsCall(fn, a, b, c, d: Int64): Int64;
+begin
+  Result := THMsCall(ThunkPage + THUNK_HELPERS + H_MSCALL)(fn, a, b, c, d);
+end;
+
+procedure ApiInit;
+var m: Int64;
+    buf: array[0..7] of Byte;
+begin
+  if ApiReady then Exit;
+  { PXX_WINABI_PRE8=1 takes the fallbacks even where the newer calls exist,
+    so a Windows 8+ system (or Wine) can test what Windows 7 and ReactOS run. }
+  if W_GetEnvironmentVariableA(Int64(@NmPre8[0]), Int64(@buf[0]), 8) > 0 then
+  begin
+    ApiReady := True;
+    Exit;
+  end;
+  if ThunkPageReady then
+  begin
+    m := W_GetModuleHandleA(Int64(@NmKernel32[0]));
+    if m <> 0 then
+    begin
+      PPrecise := W_GetProcAddress(m, Int64(@NmPrecise[0]));
+      PUnbiased := W_GetProcAddress(m, Int64(@NmUnbiased[0]));
+      PTick64 := W_GetProcAddress(m, Int64(@NmTick64[0]));
+    end;
+    m := W_GetModuleHandleA(Int64(@NmKernelbase[0]));
+    if m <> 0 then
+    begin
+      PWait := W_GetProcAddress(m, Int64(@NmWait[0]));
+      PWakeOne := W_GetProcAddress(m, Int64(@NmWakeOne[0]));
+      PWakeAll := W_GetProcAddress(m, Int64(@NmWakeAll[0]));
+      if (PWakeOne = 0) or (PWakeAll = 0) then PWait := 0;
+    end;
+  end;
+  ApiReady := True;
+end;
+
+procedure WinPreciseTime(ft: Int64);
+begin
+  ApiInit;
+  if PPrecise <> 0 then MsCall(PPrecise, ft, 0, 0, 0)
+  else W_GetSystemTimeAsFileTime(ft);
+end;
+
+{ The monotonic clock in 100 ns units. }
+function WinUnbiased: Int64;
+var t, c: Int64;
+begin
+  ApiInit;
+  t := 0;
+  if PUnbiased <> 0 then
+  begin
+    MsCall(PUnbiased, Int64(@t), 0, 0, 0);
+    Result := t;
+    Exit;
+  end;
+  if QpcFreq <= 0 then
+  begin
+    W_QueryPerformanceFrequency(Int64(@t));
+    if t <= 0 then t := 1;
+    QpcFreq := t;
+  end;
+  c := 0;
+  W_QueryPerformanceCounter(Int64(@c));
+  t := UDiv(c, QpcFreq);
+  Result := t * 10000000 + UDiv((c - t * QpcFreq) * 10000000, QpcFreq);
+end;
+
+function WinTick64: Int64;
+begin
+  ApiInit;
+  if PTick64 <> 0 then Result := MsCall(PTick64, 0, 0, 0, 0)
+  else Result := W_GetTickCount;
+end;
+
+function LockBts(addr, bit: Int64): Boolean;
+begin
+  Result := False;
+  if ThunkPageReady then
+    Result := THLockBtr(ThunkPage + THUNK_HELPERS + H_LOCKBTS)(addr, bit) <> 0;
+end;
+
+procedure WinLockAcquire;
+var spins: Integer;
+begin
+  spins := 0;
+  while LockBts(Int64(@WinLock), 0) do
+  begin
+    if spins < 64 then W_SwitchToThread else W_Sleep(1);
+    Inc(spins);
+  end;
+end;
+
+procedure WinLockRelease;
+begin
+  LockBtr(Int64(@WinLock), 0);
+end;
+
+{ futex WAIT on a 32-bit word: 0 when woken or the word differs, -ETIMEDOUT. }
+function AddrWait(addr, cmp, ms: Int64): Int64;
+var c: LongInt;
+    start, spins: Int64;
+begin
+  ApiInit;
+  c := LongInt(cmp);
+  Result := 0;
+  if PWait <> 0 then
+  begin
+    if (MsCall(PWait, addr, Int64(@c), 4, ms) and $FFFFFFFF) = 0 then
+      if W_GetLastError = 1460 then Result := -110;               { ERROR_TIMEOUT }
+    Exit;
+  end;
+  start := W_GetTickCount;
+  spins := 0;
+  while PLongInt(addr)^ = c do
+  begin
+    if (ms <> $FFFFFFFF) and (((W_GetTickCount - start) and $FFFFFFFF) >= ms) then
+    begin
+      Result := -110;
+      Exit;
+    end;
+    if spins < 64 then W_SwitchToThread else W_Sleep(1);
+    Inc(spins);
+  end;
+end;
+
+procedure AddrWake(addr: Int64; all: Boolean);
+begin
+  ApiInit;
+  if PWait = 0 then Exit;
+  if all then MsCall(PWakeAll, addr, 0, 0, 0) else MsCall(PWakeOne, addr, 0, 0, 0);
+end;
+
 
 { Past each thread's block, in its 32-byte scratch: the saved Windows stack
   (+0), the CLEARTID word (+8), the blocked-signal mask (+16) and the
@@ -2055,7 +2250,7 @@ var
 procedure ThreadRegister(tid, blk: Int64);
 var i: Integer;
 begin
-  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinLockAcquire;
   for i := 0 to MAX_THREAD - 1 do
     if ThreadTid[i] = 0 then
     begin
@@ -2063,16 +2258,16 @@ begin
       ThreadTid[i] := tid;
       Break;
     end;
-  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  WinLockRelease;
 end;
 
 procedure ThreadUnregister(tid: Int64);
 var i: Integer;
 begin
-  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinLockAcquire;
   for i := 0 to MAX_THREAD - 1 do
     if ThreadTid[i] = tid then begin ThreadTid[i] := 0; Break; end;
-  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  WinLockRelease;
 end;
 
 { The scratch of thread `tid', or 0. }
@@ -2080,10 +2275,10 @@ function ThreadScratch(tid: Int64): Int64;
 var i: Integer;
 begin
   Result := 0;
-  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinLockAcquire;
   for i := 0 to MAX_THREAD - 1 do
     if ThreadTid[i] = tid then begin Result := ThreadBlk[i] + __pxxTlsBlockSize; Break; end;
-  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  WinLockRelease;
 end;
 
 function WinSetBlock(blk: Int64): Int64;
@@ -2118,7 +2313,7 @@ begin
   if ctid <> 0 then
   begin
     PLongInt(ctid)^ := 0;
-    W_WakeByAddressAll(ctid);
+    AddrWake(ctid, True);
   end;
   W_ExitThread(0);
 end;
@@ -2197,16 +2392,11 @@ begin
           ms := (PInt64(ts)^ - now[0]) * 1000 + (PInt64(ts + 8)^ - now[1]) div 1000000;
           if ms <= 0 then begin Result := -110; Exit; end;               { ETIMEDOUT }
         end;
-        cmp := LongInt(val);
-        if W_WaitOnAddress(uaddr, Int64(@cmp), 4, ms) = 0 then
-        begin
-          if W_GetLastError = 1460 then begin Result := -110; Exit; end;  { ERROR_TIMEOUT }
-        end;
-        Result := 0;
+        Result := AddrWait(uaddr, val, ms);
       end;
     1, 10:
       begin
-        if val = 1 then W_WakeByAddressSingle(uaddr) else W_WakeByAddressAll(uaddr);
+        AddrWake(uaddr, val <> 1);
         Result := 0;
       end;
   else
@@ -2577,7 +2767,7 @@ begin
   for i := 0 to 7 do ms[i] := 0;
   PLongWord(Int64(@ms[0]))^ := 64;
   W_GlobalMemoryStatusEx(Int64(@ms[0]));
-  PInt64(si)^ := W_GetTickCount64 div 1000;
+  PInt64(si)^ := WinTick64 div 1000;
   PInt64(si + 32)^ := ms[1];                 { totalram = ullTotalPhys }
   PInt64(si + 40)^ := ms[2];                 { freeram = ullAvailPhys }
   PInt64(si + 64)^ := ms[3] - ms[1];         { totalswap: the page file beyond RAM }
@@ -2899,9 +3089,9 @@ begin
   n := 128;
   s := S_accept(WinFd[fd], Int64(@b[0]), Int64(@n));
   if s = -1 then begin Result := SockErr; Exit; end;
-  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinLockAcquire;
   Result := SockFd(s, WinFdMem[fd], WinFdLen[fd], WinFdPos[fd], flags);
-  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  WinLockRelease;
   if Result >= 0 then SaOut(Int64(@b[0]), n, sa, lenp);
 end;
 
@@ -3296,21 +3486,6 @@ const
   EP_MAX = 255;                         { entries in an interest-list page }
   LX_EPOLLONESHOT = $40000000;
 
-{ a div b for a >= 0, b > 0, by shifts: this unit has no divide stub. }
-function UDiv(a, b: Int64): Int64;
-var bit, d: Int64;
-begin
-  Result := 0;
-  d := b; bit := 1;
-  while (d <= a) and (d < $2000000000000000) do begin d := d shl 1; bit := bit shl 1; end;
-  while bit > 0 do
-  begin
-    if a >= d then begin a := a - d; Result := Result or bit; end;
-    d := d shr 1;
-    bit := bit shr 1;
-  end;
-end;
-
 { A timerfd's expiration count brought up to now. WinFdMem = deadline
   (0: disarmed), WinFdLen = interval, WinFdPos = expirations. }
 procedure TfUpdate(fd: Int64);
@@ -3587,7 +3762,7 @@ begin
   while True do
   begin
     v := 0;
-    W_AcquireSRWLockExclusive(Int64(@WinLock));
+    WinLockAcquire;
     if FdKind(fd) = FK_TIMER then
     begin
       TfUpdate(fd);
@@ -3599,7 +3774,7 @@ begin
       if WinFd[fd] <> 0 then v := 1 else v := WinFdPos[fd];
       WinFdPos[fd] := WinFdPos[fd] - v;
     end;
-    W_ReleaseSRWLockExclusive(Int64(@WinLock));
+    WinLockRelease;
     if v > 0 then
     begin
       PInt64(buf)^ := v;
@@ -3625,9 +3800,9 @@ begin
   if n < 8 then begin Result := -LX_EINVAL; Exit; end;
   v := PInt64(buf)^;
   if v = -1 then begin Result := -LX_EINVAL; Exit; end;
-  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinLockAcquire;
   WinFdPos[fd] := WinFdPos[fd] + v;
-  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  WinLockRelease;
   Result := 8;
 end;
 
@@ -3762,9 +3937,9 @@ begin
     2, 3, 12, 22, 32, 33, 72, 257, 292, 293, $7F000003,
     41, 53, 213, 233, 283, 284, 290, 291:
       begin
-        W_AcquireSRWLockExclusive(Int64(@WinLock));
+        WinLockAcquire;
         Result := WinSys(nr, a0, a1, a2, a3, a4, a5);
-        W_ReleaseSRWLockExclusive(Int64(@WinLock));
+        WinLockRelease;
       end;
   else
     Result := WinSys(nr, a0, a1, a2, a3, a4, a5);

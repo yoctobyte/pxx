@@ -12,9 +12,27 @@ C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux.
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
 ```
 
-The program imports `kernel32.dll`, `kernelbase.dll` (for `WaitOnAddress`,
-which threads wait on) and `ws2_32.dll` (sockets), all part of every
-Windows. It needs no C runtime (msvcrt or ucrt) and no installer.
+The program imports `kernel32.dll` and `ws2_32.dll` (sockets), and only
+functions that every Windows since XP and Server 2003 exports, so it needs
+no C runtime (msvcrt or ucrt) and no installer. The few newer functions it
+uses are looked up when it starts, with a fallback for each one a system
+lacks (see below), so the same `.exe` is meant for Windows 8 and later,
+Windows 7, and ReactOS.
+
+## Older Windows and ReactOS
+
+| Newer function | Missing on | Stand-in |
+|---|---|---|
+| `GetSystemTimePreciseAsFileTime` | Windows 7, ReactOS | `GetSystemTimeAsFileTime` (a coarser wall clock) |
+| `QueryUnbiasedInterruptTime` | ReactOS | `QueryPerformanceCounter` (also counts time asleep) |
+| `GetTickCount64` | ReactOS | `GetTickCount` (wraps after 49.7 days) |
+| `WaitOnAddress`, `WakeByAddress*` | Windows 7, ReactOS | the waiting thread re-reads the word, yielding and then sleeping 1 ms |
+
+The translator's own lock is a spinlock, so SRW locks are not needed. The
+last fallback makes a contended lock or a thread join take up to a
+millisecond longer. Set `PXX_WINABI_PRE8=1` to use every fallback on a
+newer system; `make test-windows` runs a few time, socket and thread tests
+that way under Wine.
 
 ## How it works
 
