@@ -124,6 +124,74 @@ begin
       'mov eax, 1',
       'jmp qword [rdi+56]']);
 
+    { ---- ADOPT A FOREIGN THREAD ------------------------------------------
+      A thread libc made without pxx (a C library's worker calling back into
+      pxx code) inherits its creator's gs -- the creator's exception chain,
+      heap magazine and signal slots -- and a `try` on it links its frame into
+      the creator's live chain: bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread.
+      Every `try` entry compares the block's owner marker with this thread's
+      fs:[0] and calls here on a mismatch. This does for the thread what
+      palthread's PxxPthreadStart does for one pxx made: one mmap holding a
+      block (slot 0 = self, user area from the init image) and a signal alt
+      stack above it, gs pointed at it. Bounds are left 0 (unset), so the I/O
+      lock pays gettid on this thread, its documented fail-safe. On an mmap
+      failure the thread keeps the shared block it had. The block is not freed
+      at thread exit: one block per foreign thread that ever enters a `try`.
+      Every register but rax is preserved; the caller is a try entry, which
+      loads rax right after.
+      decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part }
+    ExcAdoptAddr := -1;
+    if TlsMainInstalled and (not KernelLibc) and (not TlsViaTeb) then
+    begin
+      ExcAdoptAddr := CodeLen;
+      EmitAsmX64([
+        'push rdi', 'push rsi', 'push rdx', 'push rcx',
+        'push r8', 'push r9', 'push r10', 'push r11',
+        'xor edi, edi',
+        'mov rsi, %', TlsBlockSize + SIG_ALTSTACK_SIZE,
+        'mov edx, 3',                         { PROT_READ | PROT_WRITE }
+        'mov r10d, 0x22',                     { MAP_PRIVATE | MAP_ANONYMOUS }
+        'mov r8, -1',
+        'xor r9d, r9d',
+        'mov eax, 9',                         { mmap }
+        'syscall',
+        'cmp rax, -4096',
+        'ja .adoptfail',
+        'mov r9, rax',
+        'mov [r9], r9',                       { slot 0 = self }
+        'mov rsi, gs:[%]', 8 * TLS_SLOT_INIT_IMAGE,   { the creator's image, read through the old gs }
+        'mov [r9+%], rsi', 8 * TLS_SLOT_INIT_IMAGE,
+        'test rsi, rsi',
+        'jz .adoptnoimg',
+        'lea rdi, [r9+%]', TLS_USER_FIRST_OFF,
+        'mov ecx, %', TlsUserBytes,
+        'rep movsb',
+        '.adoptnoimg:',
+        'mov rax, fs:[0]',
+        'mov [r9+%], rax', 8 * TLS_SLOT_OWNER_FS,
+        'mov eax, 186',                       { gettid }
+        'syscall',
+        'mov [r9+%], rax', 8 * TLS_SLOT_TID,
+        'mov rsi, r9',
+        'mov edi, 0x1001',                    { ARCH_SET_GS }
+        'mov eax, 158',
+        'syscall',
+        'lea rax, [r9+%]', TlsBlockSize,      { the alt stack above the block }
+        'sub rsp, 24',
+        'mov [rsp], rax',                     { ss_sp }
+        'mov qword [rsp+8], 0',               { ss_flags }
+        'mov qword [rsp+16], %', SIG_ALTSTACK_SIZE,
+        'mov rdi, rsp',
+        'xor esi, esi',
+        'mov eax, 131',                       { sigaltstack }
+        'syscall',
+        'add rsp, 24',
+        '.adoptfail:',
+        'pop r11', 'pop r10', 'pop r9', 'pop r8',
+        'pop rcx', 'pop rdx', 'pop rsi', 'pop rdi',
+        'ret']);
+    end;
+
     ExcRaiseAddr := CodeLen;
     { RAISE SITE: the `call` that got us here pushed its own return address, so
       [rsp] IS the instruction after the `raise`. Record it for ExceptAddr before

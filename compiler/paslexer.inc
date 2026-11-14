@@ -1258,6 +1258,9 @@ begin
   { The same, for __pxxTlsFsEntrySlotOff (i386's block install, TLS_SLOT_FS_ENTRY). }
   name := 'PXX_HAS_TLS_FS_ENTRY';
   PasDefine(name);
+  { ...and for __pxxTlsOwnerFsSlotOff (x86-64's foreign-thread marker, TLS_SLOT_OWNER_FS). }
+  name := 'PXX_HAS_TLS_OWNER_FS';
+  PasDefine(name);
   { --os=openbsd (experimental): the program is still built against Linux
     (LINUX stays defined), but a few RTL mappings must carry MAP_STACK there:
     OpenBSD kills a syscall made with rsp outside a MAP_STACK region, so a

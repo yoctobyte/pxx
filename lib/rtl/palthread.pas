@@ -199,6 +199,7 @@ const
   SYS_arch_prctl  = 158;
   SYS_sigaltstack = 131;
   ARCH_SET_GS     = $1001;
+  ARCH_GET_FS     = $1003;
 {$else}
 {$ifdef CPUI386}
   { i386 int 0x80 numbers. SYS_mmap is mmap2 (192): its last arg is an offset
@@ -395,6 +396,12 @@ begin
     end;
 {$endif}
     ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_SET_GS, blk, 0, 0, 0, 0);
+{$ifdef PXX_HAS_TLS_OWNER_FS}
+    { The owner marker (TLS_SLOT_OWNER_FS in the compiler): this thread's fs
+      base, so a thread IT later creates through libc, which inherits this gs,
+      is recognised as foreign at its first `try`. }
+    ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_GET_FS, blk + __pxxTlsOwnerFsSlotOff, 0, 0, 0, 0);
+{$endif}
     ss[0] := blk + tlsBytes;                   { ss_sp }
     ss[1] := 0;                                { ss_flags }
     ss[2] := altBytes;                         { ss_size }

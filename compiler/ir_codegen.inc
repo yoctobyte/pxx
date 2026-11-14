@@ -2201,6 +2201,16 @@ begin
       'mov eax, 158',                         { arch_prctl }
       'syscall'
     ]);
+  { The owner marker (TLS_SLOT_OWNER_FS): this thread's fs base, which is 0 in
+    a static binary and libc's thread pointer in a dynamic one. syscall keeps
+    r9. Not under --os=windows (no arch_prctl) or KernelLibc (fs IS the block). }
+  if (not KernelLibc) and (not TlsViaTeb) then
+    EmitAsmX64([
+      'lea rsi, [r9+%]', 8 * TLS_SLOT_OWNER_FS,
+      'mov edi, 0x1003',                       { ARCH_GET_FS }
+      'mov eax, 158',
+      'syscall'
+    ]);
   if BSS_TLS_IMAGE >= 0 then
   begin
     EmitTlsMainR9;
@@ -15072,6 +15082,21 @@ begin
             path left. Snapshot the pool at try-entry (the values every frame
             up-stack expects back) so the landing pad can restore it. The GPR
             residents need no snapshot: r12-r15 are in the setjmp buf. }
+          { Does this thread own the gs block? Owner 0 = no libc thread
+            pointer to compare against (a static binary, a clone-stub thread),
+            so no check. See ExcAdoptAddr. }
+          if ExceptionUsed and (ExcAdoptAddr > 0) then  { 0 = never emitted: offset 0 is the entry point }
+          begin
+            EmitAsmX64([
+              'mov rax, gs:[%]', 8 * TLS_SLOT_OWNER_FS,
+              'test rax, rax']);
+            EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz: no owner recorded }
+            EmitAsmX64(['cmp rax, fs:[0]']);
+            EmitB($0F); EmitB($84); pos := CodeLen; EmitI32(0);       { je: this thread owns it }
+            IREmitCodeCall(ExcAdoptAddr);
+            Patch32(excSkip, CodeLen - (excSkip + 4));
+            Patch32(pos, CodeLen - (pos + 4));
+          end;
           FloatPoolSave;
           EmitAsmX64(['sub rsp, %', EXC_FRAME_SIZE]);
           EmitStatusSlotX64(0, BSS_EXC_TOP, False);

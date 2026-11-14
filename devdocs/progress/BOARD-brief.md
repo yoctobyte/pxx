@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:51 blocked:8 backlog:4 backlog_new:1 backlog-umbrella:14 backlog-core:165 backlog-nilpy:99 backlog-tools:72 backlog-pascal:14 backlog-decide:48 backlog-libs:28 backlog-cfront:10 backlog-web:9 backlog-windows:3 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4411 rejected:90`
+`working:3 unfinished:51 blocked:8 backlog:4 backlog_new:1 backlog-umbrella:14 backlog-core:164 backlog-nilpy:99 backlog-tools:72 backlog-pascal:14 backlog-decide:47 backlog-libs:28 backlog-cfront:10 backlog-web:9 backlog-windows:3 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4413 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
@@ -103,12 +103,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
-- `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
+- `[p 70] [N]` bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 
 _451 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

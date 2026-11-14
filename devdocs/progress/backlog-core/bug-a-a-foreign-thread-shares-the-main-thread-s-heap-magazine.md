@@ -217,3 +217,13 @@ re-measures it: `lib/crtl/src/pthread.c:108` defines `pthread_create` itself and
 routes it to `__pxx_pthread_create` → `PxxPthreadStart`, so an ordinary
 `pthread_create` in a pxx-compiled C program is trampolined. A foreign thread in
 C means a linked external `.so` starting one of its own.
+
+## 2026-11-14: partly answered
+
+A foreign thread now gets a block of its own, and with it its own magazine,
+at its first `try` on x86-64. See the resolution in
+done/decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part.
+A foreign thread that allocates but never enters a `try` still shares the
+creator's magazine. The fs owner marker (TLS_SLOT_OWNER_FS) would let the heap
+fast path make the same check; that costs a load and a compare per allocation
+and has not been measured.

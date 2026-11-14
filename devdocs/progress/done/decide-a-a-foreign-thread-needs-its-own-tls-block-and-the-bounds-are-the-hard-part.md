@@ -3,7 +3,7 @@ slug: decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-h
 track: U
 prio: 70
 type: decide
-status: backlog
+status: done
 created: 2026-09-02
 found-by: frankC
 owner: ""
@@ -378,3 +378,47 @@ it read a ticket's PROPOSAL framing past a summary whose first line said the
 work had shipped. A cost derived from constants cannot tell you which
 population reaches which constant — that takes a compiled program. **Derive the
 bound, then compile something to find out who is standing under it.**
+
+## Resolution (2026-11-14): owner marker = the libc thread pointer, hook = `try` entry (x86-64)
+
+**Marker.** New slot TLS_SLOT_OWNER_FS (15, the map's last free slot) holds
+the fs base of the thread the gs block belongs to. glibc and musl keep it at
+fs:[0]. It is written by EmitTlsMainInstall (`arch_prctl(ARCH_GET_FS)`, which
+gives 0 in a static binary) and by palthread's PxxPthreadStart
+(`__pxxTlsOwnerFsSlotOff`, under PXX_HAS_TLS_OWNER_FS). It is the "something
+no stack switch can move" this ticket asked for. A coroutine on a heap stack
+keeps its thread's fs. A thread libc made without pxx inherits the creator's
+gs, but not its fs.
+
+**Hook.** Every `try` entry runs: `mov rax, gs:[120]; test rax, rax; jz ok;
+cmp rax, fs:[0]; je ok; call adopt`. That is four instructions on the hot path
+of a libc-linked program, and owner 0 (a static binary, a clone-stub thread)
+skips the compare. The adopt helper (ExcAdoptAddr, exception_emit.inc) does
+what PxxPthreadStart does: one mmap holds the block and an alt stack; slot 0 is
+self; the user area is copied from the init image; the owner marker and tid are
+set; gs is switched with ARCH_SET_GS; sigaltstack is registered. Bounds stay 0,
+so the I/O lock takes its gettid fail-safe on that thread. If mmap fails, the
+thread keeps the shared block.
+
+**Measured.** test/test_foreign_thread_exception_chain.pas, 30 runs per
+level:
+
+| compiler | -O0 | -O2 |
+| --- | --- | --- |
+| ~/pxx-frozen/latest (before) | 217 x18, SIGSEGV x12 | 217 x17, timeout x10, SIGSEGV x3 |
+| with the adopt | 0 x30 | 0 x30 |
+
+strace counts exactly two ARCH_SET_GS calls (main plus one adoption) across
+600k `try`s. A coroutine scheduler with `try` in each coroutine, in a binary
+that links libc (marker live), adopts nothing and catches correctly
+(test/test_scheduler_exc_dynamic.pas). Rows smoke_fexc26, smoke_fexc26_o2 and
+test_scheduler_exc_dyn26 are wired. The repro is out of tools/optdiff.skip.
+
+**Not covered.**
+- Only `try` adopts. A foreign thread that never enters a `try` still shares
+  the creator's block: heap magazine (its guard is atomic, so this is a
+  contention cost, not a corruption), threadvars and C `__thread`.
+- The adopted block is not freed at thread exit (one ~37 KB mapping per
+  foreign thread that ever entered a `try`).
+- x86-64 Linux only. Not i386, aarch64 or arm32; not --os=windows (TEB) or
+  KernelLibc (fs is the block there).

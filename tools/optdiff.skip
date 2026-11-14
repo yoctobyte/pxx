@@ -88,7 +88,8 @@ test_parallel_writeln_atomic*
 # 139` at -O3, three codes in one sweep. A one-run-per-level differential
 # cannot express a question about a program whose exit code is a coin flip.
 # The BUG stays open and owned at p70; this skips the INSTRUMENT, not the bug.
-test_foreign_thread_exception_chain*
+# 2026-11-14: FIXED (the adopt at try entry); 60 of 60 runs pass at -O0 and
+# -O2, so it is deterministic again and back in optdiff's population.
 # relocation probes: they PRINT ADDRESSES (%p of a global, a const array and a
 # rodata string) on purpose -- tools/reloc_resolve_check.py parses them -- and
 # -O1+ shrinks the code, so every data address moves (42 0x47e8c0... at -O0,

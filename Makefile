@@ -43176,6 +43176,19 @@ test-quick: $(COMPILER)
 	# fault.
 	./$(COMPILER) --threadsafe test/test_heap_magazine_foreign_thread.pas $(TESTTMP)/smoke_magforeign26
 	tools/expect_same.sh smoke_magforeign26 "$$(timeout 30 $(TESTTMP)/smoke_magforeign26; echo "exit=$$?")" "$$(printf 'MAGFOREIGN OK 9000\nexit=0')"
+	# A thread libc made (not pxx) inherits its creator's gs block; its first
+	# `try` now adopts a block of its own (ExcAdoptAddr, x86-64). Unwired until
+	# 2026-11-14 because it failed: 0 of 60 runs passed on the prior compiler
+	# (217 / SIGSEGV / timeout), 60 of 60 with the adopt, at -O0 and -O2.
+	# bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread
+	./$(COMPILER) --threadsafe test/test_foreign_thread_exception_chain.pas $(TESTTMP)/smoke_fexc26
+	tools/expect_same.sh smoke_fexc26 "$$(timeout 60 $(TESTTMP)/smoke_fexc26 | tail -1; echo "exit=$$?")" "$$(printf 'FOREIGNEXC OK\nexit=0')"
+	./$(COMPILER) --threadsafe -O2 test/test_foreign_thread_exception_chain.pas $(TESTTMP)/smoke_fexc26_o2
+	tools/expect_same.sh smoke_fexc26_o2 "$$(timeout 60 $(TESTTMP)/smoke_fexc26_o2 | tail -1; echo "exit=$$?")" "$$(printf 'FOREIGNEXC OK\nexit=0')"
+	# ...and the owner marker must not mistake a coroutine's heap stack for a
+	# foreign thread: the scheduler exception test, in a binary that links libc.
+	./$(COMPILER) test/test_scheduler_exc_dynamic.pas $(TESTTMP)/test_scheduler_exc_dyn26
+	tools/expect_same.sh test_scheduler_exc_dyn26 "$$($(TESTTMP)/test_scheduler_exc_dyn26)" "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
 	tools/expect_same.sh smoke_fwdptralias26 "$$($(TESTTMP)/smoke_fwdptralias26)" "11 22"
 	# feature-dynamic-soname-discovery: an `external 'lib<x>.so'` for a library

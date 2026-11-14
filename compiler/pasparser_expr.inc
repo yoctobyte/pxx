@@ -4430,7 +4430,8 @@ begin
 
       if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize')
          or CaseEqual(name, '__pxxTlsUserOff') or CaseEqual(name, '__pxxTlsUserBytes')
-         or CaseEqual(name, '__pxxTlsInitImageSlotOff') or CaseEqual(name, '__pxxTlsFsEntrySlotOff') then
+         or CaseEqual(name, '__pxxTlsInitImageSlotOff') or CaseEqual(name, '__pxxTlsFsEntrySlotOff')
+         or CaseEqual(name, '__pxxTlsOwnerFsSlotOff') then
       begin
         { The two sizes the clone stub carves off a child stack, as compile-time
           constants the RTL can READ instead of restating.
@@ -4453,6 +4454,7 @@ begin
         else if CaseEqual(name, '__pxxTlsUserBytes') then i64v := TlsUserBytes
         else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then i64v := 8 * TLS_SLOT_INIT_IMAGE
         else if CaseEqual(name, '__pxxTlsFsEntrySlotOff') then i64v := 8 * TLS_SLOT_FS_ENTRY
+        else if CaseEqual(name, '__pxxTlsOwnerFsSlotOff') then i64v := 8 * TLS_SLOT_OWNER_FS
         else i64v := SIG_ALTSTACK_SIZE;
         Next;
         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;

@@ -1288,7 +1288,19 @@ const
     PxxPthreadStart cannot read a segment register and reads it here
     (__pxxTlsFsEntrySlotOff). 0 on every other target. }
   TLS_SLOT_FS_ENTRY = 14;
-  TLS_SLOT_FIRST_FREE = 15;
+  { x86-64 ONLY: the libc thread pointer (fs base, which glibc and musl also
+    keep at fs:[0]) of the thread this block belongs to, or 0 when the program
+    has no libc thread pointer (a static binary: fs base 0) or the block was
+    made by the clone stub. It is the "already mine" marker
+    decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
+    asked for: no stack switch moves it, so a generator on a heap stack is not
+    mistaken for a foreign thread, and a thread libc made without pxx's help
+    (SDL, a C library's worker) inherits the creator's gs but not its fs. Every
+    `try` entry compares the two and adopts a fresh block on a mismatch
+    (ExcAdoptAddr). Written by EmitTlsMainInstall and palthread's
+    PxxPthreadStart, through __pxxTlsOwnerFsSlotOff. }
+  TLS_SLOT_OWNER_FS = 15;
+  TLS_SLOT_FIRST_FREE = 16;   { = TLS_SLOT_HEAP_MAG: the map has no free slot left }
   { ---- the per-thread heap magazine -------------------------------------
     A short free LIST per size class, held thread-locally so that a GetMem or
     FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds
@@ -7784,6 +7796,7 @@ var
   ExcSpillAddr    : Integer;  { xtensa windowed only: the register-window spill chain }
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
+  ExcAdoptAddr    : Integer;  { x86-64: the helper a `try` entry calls when this thread does not own the gs block (TLS_SLOT_OWNER_FS); -1 = not emitted, no check }
   CoroutineUsed   : Boolean;
   CoSwitchAddr    : Integer;  { code address of the bare CoSwitch context-switch stub }
   CloneStubAddr   : Integer;  { code address of the bare clone+trampoline thread-spawn stub; 0 = not yet emitted (lazy) }
