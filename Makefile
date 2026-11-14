@@ -19496,6 +19496,26 @@ test-core: $(COMPILER)
 	tools/expect_same.sh caplusint26 "$$($(TESTTMP)/caplusint26)" "$$(printf 'store arrow guard 11223344 buf6 0 buf7 0\nstore union guard 55667788 1 2 3 4 5 6 7 8\nload arrow 15 member 8 8\nlocal 1 3 global 2 guards 99999999 77777777\nshort -2 guard 12345678 size 2\nu64 8000000000000001 guard badf00d size 8\nsizes 1 1 1 1')"
 	./$(COMPILER) --target=aarch64 test/c_array_plus_int_deref_width.c $(TESTTMP)/caplusint_a64
 	tools/expect_same.sh caplusint_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/caplusint_a64)" "$$(printf 'store arrow guard 11223344 buf6 0 buf7 0\nstore union guard 55667788 1 2 3 4 5 6 7 8\nload arrow 15 member 8 8\nlocal 1 3 global 2 guards 99999999 77777777\nshort -2 guard 12345678 size 2\nu64 8000000000000001 guard badf00d size 8\nsizes 1 1 1 1')"
+	# gcc's __sync_* / __atomic_* builtins and <stdatomic.h>, at 1/2/4/8 bytes,
+	# equal to gcc's output; the helpers travel with a --freestanding object and
+	# hold under 4 threads; aarch64 atomics are ldaxr/stlxr + dmb ish (they were
+	# relaxed ldxr/stxr). feature-c-sync-and-atomic-builtins
+	./$(COMPILER) test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat26
+	tools/expect_same.sh csyncat26 "$$($(TESTTMP)/csyncat26)" "$$(cat test/c_sync_atomic_builtins.expected)"
+	./$(COMPILER) --target=aarch64 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_a64
+	tools/expect_same.sh csyncat_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/csyncat_a64)" "$$(cat test/c_sync_atomic_builtins.expected)"
+	tools/expect_same.sh csyncat_a64_order "$$(od -An -tx1 -v $(TESTTMP)/csyncat_a64 | tr -d '\n' | grep -o '20 fc 5f 88 1f 00 02 6b 61 00 00 54 23 fc 04 88 84 ff ff 35 bf 3b 03 d5' | wc -l | tr -d ' ')" "3"
+	tools/expect_same.sh csyncat_i386_8 "$$(./$(COMPILER) --target=i386 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_i386 2>&1 | grep -c 'an 8-byte atomic needs a 64-bit target')" "1"
+	./$(COMPILER) test/c_stdatomic.c $(TESTTMP)/cstdatomic26
+	tools/expect_same.sh cstdatomic26 "$$($(TESTTMP)/cstdatomic26)" "$$(cat test/c_stdatomic.expected)"
+	./$(COMPILER) --target=aarch64 test/c_stdatomic.c $(TESTTMP)/cstdatomic_a64
+	tools/expect_same.sh cstdatomic_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cstdatomic_a64)" "$$(cat test/c_stdatomic.expected)"
+	printf 'static _Atomic(int) z;\nint main(void){return 0;}\n' > $(TESTTMP)/catomic_spec.c
+	tools/expect_same.sh catomic_spec "$$(./$(COMPILER) $(TESTTMP)/catomic_spec.c $(TESTTMP)/catomic_spec 2>&1 | grep -c '_Atomic(type) specifier is not supported')" "1"
+	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_atomics.c $(TESTTMP)/c_fs_atomics.o > /dev/null
+	tools/expect_same.sh c_fs_atomics_undef "$$(nm $(TESTTMP)/c_fs_atomics.o | grep -c ' U ')" "0"
+	gcc -no-pie -pthread -o $(TESTTMP)/c_fs_atomics test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics.o
+	tools/expect_same.sh c_fs_atomics "$$($(TESTTMP)/c_fs_atomics)" "atomics ok"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,

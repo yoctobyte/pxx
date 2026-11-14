@@ -4889,7 +4889,7 @@ begin
     IR_ATOMIC:
       begin
         { Atomic read-modify-write on addr^, returning the OLD value, via an
-          LL/SC (ldxr/stxr) retry loop. Args pushed left-to-right; popped into
+          LL/SC (ldaxr/stlxr) retry loop. Args pushed left-to-right; popped into
           x1=addr (+ x2=val/expected, x3=newval). Result (old) in x0. Encodings
           + branch offsets verified against aarch64-linux-gnu-as. }
         argNode := IRA[node]; nArgs := 0;
@@ -4906,10 +4906,10 @@ begin
               EmitI32($F84107E3);       { ldr x3, [sp], #16  newval }
               EmitI32($F84107E2);       { ldr x2, [sp], #16  expected }
               EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
-              EmitI32($885F7C20);       { ldxr w0, [x1]      old }
+              EmitI32($885FFC20);       { ldaxr w0, [x1]     old }
               EmitI32($6B02001F);       { cmp  w0, w2 }
               EmitI32($54000061);       { b.ne +3 (done) }
-              EmitI32($88047C23);       { stxr w4, w3, [x1] }
+              EmitI32($8804FC23);       { stlxr w4, w3, [x1] }
               EmitI32($35FFFF84);       { cbnz w4, -4 (retry) }
             end;
           ATOMIC_CAS64:
@@ -4917,47 +4917,54 @@ begin
               EmitI32($F84107E3);       { ldr x3, [sp], #16 }
               EmitI32($F84107E2);       { ldr x2, [sp], #16 }
               EmitI32($F84107E1);       { ldr x1, [sp], #16 }
-              EmitI32($C85F7C20);       { ldxr x0, [x1] }
+              EmitI32($C85FFC20);       { ldaxr x0, [x1] }
               EmitI32($EB02001F);       { cmp  x0, x2 }
               EmitI32($54000061);       { b.ne +3 }
-              EmitI32($C8047C23);       { stxr w4, x3, [x1] }
+              EmitI32($C804FC23);       { stlxr w4, x3, [x1] }
               EmitI32($35FFFF84);       { cbnz w4, -4 }
             end;
           ATOMIC_ADD:
             begin
               EmitI32($F84107E2);       { ldr x2, [sp], #16  delta }
               EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
-              EmitI32($885F7C20);       { ldxr w0, [x1]      old }
+              EmitI32($885FFC20);       { ldaxr w0, [x1]     old }
               EmitI32($0B020004);       { add  w4, w0, w2 }
-              EmitI32($88037C24);       { stxr w3, w4, [x1] }
+              EmitI32($8803FC24);       { stlxr w3, w4, [x1] }
               EmitI32($35FFFFA3);       { cbnz w3, -3 }
             end;
           ATOMIC_ADD64:
             begin
               EmitI32($F84107E2);       { ldr x2, [sp], #16 }
               EmitI32($F84107E1);       { ldr x1, [sp], #16 }
-              EmitI32($C85F7C20);       { ldxr x0, [x1] }
+              EmitI32($C85FFC20);       { ldaxr x0, [x1] }
               EmitI32($8B020004);       { add  x4, x0, x2 }
-              EmitI32($C8037C24);       { stxr w3, x4, [x1] }
+              EmitI32($C803FC24);       { stlxr w3, x4, [x1] }
               EmitI32($35FFFFA3);       { cbnz w3, -3 }
             end;
           ATOMIC_XCHG64:
             begin
               EmitI32($F84107E2);       { ldr x2, [sp], #16  val }
               EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
-              EmitI32($C85F7C20);       { ldxr x0, [x1] }
-              EmitI32($C8037C22);       { stxr w3, x2, [x1] }
+              EmitI32($C85FFC20);       { ldaxr x0, [x1] }
+              EmitI32($C803FC22);       { stlxr w3, x2, [x1] }
               EmitI32($35FFFFC3);       { cbnz w3, -2 }
             end;
           else { ATOMIC_XCHG }
             begin
               EmitI32($F84107E2);       { ldr x2, [sp], #16  val }
               EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
-              EmitI32($885F7C20);       { ldxr w0, [x1] }
-              EmitI32($88037C22);       { stxr w3, w2, [x1] }
+              EmitI32($885FFC20);       { ldaxr w0, [x1] }
+              EmitI32($8803FC22);       { stlxr w3, w2, [x1] }
               EmitI32($35FFFFC3);       { cbnz w3, -2 }
             end;
         end;
+        { SEQUENTIALLY CONSISTENT, as x86-64's lock prefix is: acquire/release
+          exclusives plus a full barrier after the loop (gcc's __sync sequence
+          is ldxr/stlxr + dmb ish; this is at least as strong). A plain
+          ldxr/stxr pair is RELAXED: a lock built on it let the critical
+          section's accesses move across the lock on real hardware.
+          feature-c-sync-and-atomic-builtins }
+        EmitI32($D5033BBF);             { dmb ish }
       end;
 
     IR_NEG:

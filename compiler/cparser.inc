@@ -243,6 +243,10 @@ function CNodeIsPointer(node: Integer): Boolean; forward;
 { CNodeDecaysToPointer forward moved to forwards.inc (must sit above ir.inc:901,
   which calls it; this spot is below that use — too late for the FPC seed). }
 function CNodePtrElemRec(node: Integer): Integer; forward;
+function CAtomicIntrinsic(const name: AnsiString; argHead, argN: Integer): Integer; forward;
+function CAtomicRewrite(var name: AnsiString; var argHead: Integer; argN: Integer;
+                        var retKind: Integer): Boolean; forward;
+function CAtomicRetype(node, p: Integer): Integer; forward;
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 
 { ===== C expression compiler (Slice B) =====
@@ -1831,8 +1835,10 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     name: AnsiString;
     argUndecl: array[0..MAX_PROC_PARAMS-1] of Boolean;
     argN: Integer;
+    atomRet, atomP: Integer;   { gcc atomic builtins: CAtomicRewrite / CAtomicRetype }
 begin
   Result := -1;
+  atomP := -1;
   case CurTok.Kind of
     tkInteger:
     begin
@@ -2488,6 +2494,15 @@ begin
           end;
         end;
         Expect(tkRParen, ')');
+        { gcc's __sync_* / __atomic_* builtins, and the __pxx_atomic_*
+          intrinsics their helpers are written with. }
+        if Copy(name, 1, 13) = '__pxx_atomic_' then
+        begin
+          node := CAtomicIntrinsic(name, argHead, argN);
+          if node >= 0 then begin Result := node; Exit; end;
+        end;
+        if CAtomicRewrite(name, argHead, argN, atomRet) and (atomRet = 1) then
+          atomP := ASTLeft[argHead];
         { gcc builtin `__builtin_expect(x, c)` is a branch-prediction hint that
           evaluates to its first argument — lua uses it pervasively via
           l_likely/l_unlikely. Reduce it to that argument's value. }
@@ -2896,6 +2911,7 @@ begin
           else
             Error('call to undeclared function: ' + name);
         end;
+        if atomP >= 0 then node := CAtomicRetype(node, atomP);
         Result := node;
       end
       else
@@ -3424,6 +3440,256 @@ begin
     Result := CNodePtrElemRec(ASTLeft[node])
   else if ASTKind[node] = AN_ASSIGN then
     Result := CNodePtrElemRec(ASTLeft[node]);
+end;
+
+{ ===== gcc __sync_* / __atomic_* builtins =====================================
+
+  feature-c-sync-and-atomic-builtins. Each builtin becomes a call to a small
+  per-width helper, __pxx_a_<op>_<N>, where N is the byte size of the first
+  argument's pointee (1, 2, 4, or 8). The helper bodies are C, and the
+  translation unit carries them itself (CAddAtomicBuiltins, cpreproc.inc), so
+  hosted and --freestanding builds behave alike. They sit on AN_ATOMIC through
+  the __pxx_atomic_{xchg,cas,add}{32,64} intrinsics below.
+
+  Every operation is sequentially consistent. The memory-order arguments are
+  evaluated and passed along, and the helpers ignore them. This is correct for
+  every order; only a weaker order could be faster.
+
+  The helpers return `unsigned long long`, and a value-returning builtin's
+  result is converted back to the pointee type here (CAtomicRetype). Without
+  that, `__atomic_fetch_sub(&i, 1) < 0` would compare an unsigned value. }
+
+function CAtomicArgAt(argHead, k: Integer): Integer;
+var i: Integer;
+begin
+  Result := argHead; i := 0;
+  while (Result >= 0) and (i < k) do begin Result := ASTRight[Result]; Inc(i); end;
+end;
+
+procedure CAtomicInsertLit(var argHead: Integer; k: Integer; v: Int64);
+var lit, a, prev: Integer;
+begin
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := v; ASTTk[lit] := Ord(tyInt32);
+  a := AllocNode(AN_ARG); ASTLeft[a] := lit; ASTRight[a] := -1;
+  if (k = 0) or (argHead < 0) then
+  begin
+    ASTRight[a] := argHead; argHead := a; Exit;
+  end;
+  prev := CAtomicArgAt(argHead, k - 1);
+  if prev < 0 then
+  begin
+    { fewer arguments than the builtin takes: append, and the count check
+      in CAtomicRewrite reports it }
+    prev := argHead;
+    while ASTRight[prev] >= 0 do prev := ASTRight[prev];
+  end;
+  ASTRight[a] := ASTRight[prev]; ASTRight[prev] := a;
+end;
+
+function CAtomicOpCode(const s: AnsiString): Integer;
+begin
+  if s = 'add' then Result := 0
+  else if s = 'sub' then Result := 1
+  else if s = 'or' then Result := 2
+  else if s = 'and' then Result := 3
+  else if s = 'xor' then Result := 4
+  else if s = 'nand' then Result := 5
+  else Result := -1;
+end;
+
+function CAtomicTargetHas: Boolean;
+begin
+  Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+         or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32);
+end;
+
+{ The internal intrinsics the helper bodies are written with:
+  __pxx_atomic_{xchg,cas,add}{32,64}(addr, ...) -> the OLD value, as
+  Pascal's __pxxatomic_*. Returns -1 when name is not one of them. }
+function CAtomicIntrinsic(const name: AnsiString; argHead, argN: Integer): Integer;
+var op, want: Integer;
+begin
+  Result := -1;
+  if Copy(name, 1, 13) <> '__pxx_atomic_' then Exit;
+  if name = '__pxx_atomic_xchg32' then op := ATOMIC_XCHG
+  else if name = '__pxx_atomic_cas32' then op := ATOMIC_CAS
+  else if name = '__pxx_atomic_add32' then op := ATOMIC_ADD
+  else if name = '__pxx_atomic_xchg64' then op := ATOMIC_XCHG64
+  else if name = '__pxx_atomic_cas64' then op := ATOMIC_CAS64
+  else if name = '__pxx_atomic_add64' then op := ATOMIC_ADD64
+  else Exit;
+  if (op >= ATOMIC_XCHG64) and (TARGET_PTR_SIZE < 8) then
+    Error(name + ': 64-bit atomics need a 64-bit target');
+  if (op = ATOMIC_CAS) or (op = ATOMIC_CAS64) then want := 3 else want := 2;
+  if argN <> want then
+    Error(name + ' takes ' + AIntToStr(want) + ' arguments');
+  Result := AllocNode(AN_ATOMIC);
+  ASTIVal[Result] := op;
+  ASTTk[Result] := Ord(tyInt64);
+  ASTLeft[Result] := argHead;
+end;
+
+{ Rename a gcc atomic builtin to its helper and reshape its arguments.
+  retKind: 0 = the helper's own type (int / void), 1 = the pointee's type.
+  False when `name` is not an atomic builtin (left alone). }
+function CAtomicRewrite(var name: AnsiString; var argHead: Integer; argN: Integer;
+                        var retKind: Integer): Boolean;
+var p, n, op, want: Integer; tk: TTypeKind; base, rest, orig: AnsiString;
+    sized: Boolean;
+begin
+  Result := False;
+  retKind := 0;
+  if (Copy(name, 1, 7) <> '__sync_') and (Copy(name, 1, 9) <> '__atomic_') then Exit;
+  orig := name;
+  base := ''; want := -1; op := -1; sized := True;
+  { [want] is the argument count gcc takes }
+  if Copy(name, 1, 17) = '__sync_fetch_and_' then
+  begin
+    op := CAtomicOpCode(Copy(name, 18, Length(name) - 17));
+    if op < 0 then Exit;
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 5); CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (Copy(name, 1, 7) = '__sync_') and (Length(name) > 17)
+          and (Copy(name, Length(name) - 9, 10) = '_and_fetch') then
+  begin
+    op := CAtomicOpCode(Copy(name, 8, Length(name) - 17));
+    if op < 0 then Exit;
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 5); CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 1);
+  end
+  else if name = '__sync_bool_compare_and_swap' then begin want := 3; base := 'bcas'; end
+  else if name = '__sync_val_compare_and_swap' then begin want := 3; base := 'cas'; retKind := 1; end
+  else if name = '__sync_lock_test_and_set' then
+  begin
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 2); CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__sync_lock_release' then
+  begin
+    want := 1; base := 'rmw';
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 2, 3);
+    CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__sync_synchronize' then
+  begin
+    want := 0; base := 'fence'; sized := False;
+    CAtomicInsertLit(argHead, 0, 5);
+  end
+  else if name = '__atomic_load_n' then
+  begin
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 3, 7); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (name = '__atomic_store_n') or (name = '__atomic_exchange_n') then
+  begin
+    want := 3; base := 'rmw';
+    if name = '__atomic_exchange_n' then retKind := 1;
+    CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__atomic_compare_exchange_n' then begin want := 6; base := 'cmpx'; end
+  else if name = '__atomic_compare_exchange' then begin want := 6; base := 'cmpxp'; end
+  else if name = '__atomic_load' then begin want := 3; base := 'loadp'; end
+  else if name = '__atomic_store' then begin want := 3; base := 'storep'; end
+  else if name = '__atomic_exchange' then begin want := 4; base := 'xchgp'; end
+  else if Copy(name, 1, 15) = '__atomic_fetch_' then
+  begin
+    op := CAtomicOpCode(Copy(name, 16, Length(name) - 15));
+    if op < 0 then Exit;
+    want := 3; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (Copy(name, 1, 9) = '__atomic_') and (Length(name) > 15)
+          and (Copy(name, Length(name) - 5, 6) = '_fetch') then
+  begin
+    rest := Copy(name, 10, Length(name) - 15);
+    op := CAtomicOpCode(rest);
+    if op < 0 then Exit;
+    want := 3; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 1);
+  end
+  else if name = '__atomic_test_and_set' then begin want := 2; base := 'tas'; sized := False; end
+  else if name = '__atomic_clear' then
+  begin
+    want := 2; base := 'rmw';
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (name = '__atomic_thread_fence') or (name = '__atomic_signal_fence') then
+  begin
+    want := 1; base := 'fence'; sized := False;
+  end
+  else if (name = '__atomic_always_lock_free') or (name = '__atomic_is_lock_free') then
+  begin
+    want := 2; base := 'lockfree'; sized := False;
+  end
+  else Exit;   { not a builtin we know: left to the ordinary call path }
+  if argN <> want then
+    Error(orig + ' takes ' + AIntToStr(want) + ' argument(s), not ' + AIntToStr(argN));
+  if not CAtomicTargetHas then
+    Error(orig + ': atomics are not implemented for this target '
+          + '(bug-a-riscv32-and-xtensa-have-no-atomic-codegen)');
+  Result := True;
+  if not sized then
+  begin
+    name := '__pxx_a_' + base;
+    Exit;
+  end;
+  p := ASTLeft[argHead];
+  if not CNodeDecaysToPointer(p) then
+    Error(orig + ': the first argument must be a pointer');
+  tk := IntToTypeKind(CNodePointeeTk(p));
+  if tk = tyPointer then n := TARGET_PTR_SIZE
+  else if tk = tyRecord then n := RecSize(CNodePtrElemRec(p))
+  else if TypeIsFloat(tk) then
+  begin
+    n := 0;
+    Error(orig + ': an atomic on a floating type is not supported');
+  end
+  else n := TypeSlotSize(tk);
+  if (tk = tyRecord) and (retKind = 1) then
+    Error(orig + ': the _n forms take an integer or pointer object, not a struct');
+  if (n <> 1) and (n <> 2) and (n <> 4) and (n <> 8) then
+    Error(orig + ': an atomic on a ' + AIntToStr(n) + '-byte object is not supported (1, 2, 4 or 8)');
+  if (n = 8) and (TARGET_PTR_SIZE < 8) then
+    Error(orig + ': an 8-byte atomic needs a 64-bit target');
+  name := '__pxx_a_' + base + '_' + AIntToStr(n);
+end;
+
+{ The result of a value-returning atomic builtin, in the pointee's type: a
+  narrow integer is truncated and re-extended by its signedness, a 64-bit one
+  retagged, and a pointer carries its pointee so `->` and `*` keep working. }
+function CAtomicRetype(node, p: Integer): Integer;
+var tk: TTypeKind; q, d, c: Integer;
+begin
+  Result := node;
+  tk := IntToTypeKind(CNodePointeeTk(p));
+  if tk = tyPointer then
+  begin
+    { the pointer object itself: `head` for `&head`, else `*pp` }
+    q := CCommaValue(p);
+    if ASTKind[q] = AN_ADDR then d := ASTLeft[q]
+    else
+    begin
+      d := AllocNode(AN_DEREF);
+      ASTLeft[d] := p;
+      ASTTk[d] := Ord(tyPointer);
+      if CNodePtrElemRec(p) > 0 then ASTIVal[d] := CNodePtrElemRec(p);
+    end;
+    if CNodePtrDepth(d) <= 1 then
+      Result := CVaArgThreadPointee(node, 1, CNodePointeeTk(d), CNodePtrElemRec(d),
+                                    CNodePointeeTk(d), CNodePtrElemRec(d))
+    else
+      Result := CVaArgThreadPointee(node, CNodePtrDepth(d), Ord(tyPointer), 0,
+                                    CNodePtrBaseTk(d), CNodePtrElemRec(d));
+    Exit;
+  end;
+  if TypeSlotSize(tk) < 8 then node := CMakeNarrowIntCast(node, tk);
+  c := AllocNode(AN_PTR_CAST);
+  ASTLeft[c] := node;
+  ASTIVal[c] := -1;
+  ASTRight[c] := -1;
+  ASTTk[c] := Ord(tk);
+  Result := c;
 end;
 
 { Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }

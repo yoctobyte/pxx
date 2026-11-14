@@ -1,0 +1,63 @@
+fadd -5 si -2
+addf 1
+fsub 1
+neg 1
+lt0 1
+sc -3 -2
+sc -3 -3
+us 65530 4
+us 65535
+ss -7 -8
+or 7 15
+and 13
+xor 12
+nand 4294967291
+fnand 4294967291 4294967293
+sll -1 1
+sll -4
+sll neg 1
+ull f0f0f0f0f0f0f0f0 f0f0f0f0f0f0f00f
+ull f0f0f0f0f0f0f00f
+bcas 0 1
+bcas 1 42
+vcas 42 42
+vcas 42 43
+vcas sc -3 -100
+vcas ss -8 -9
+tas -10 77
+rel 0
+load sc -100
+load us 65535
+load sll -4
+store 300
+xchg 300 65535
+cx fail 0 exp 43 ui 43
+cx ok 1 exp 43 ui 9
+cx sc 0 e -100
+fadd 0
+addf 10
+fsub 10
+subf -11
+fand 5a a
+orf 3a
+fxor 3a c5
+andf c0
+fnand c0 ffffffff
+xorf fffffffe
+for fffffffe fffffffe
+nandf fffffffd
+us subf 65534
+us wrap 0
+ull f0f0f0f0f0f0f01f
+generic -4 1234567890123 77
+gcx 0 got 77
+gcx 1 sll 5
+gx short -9 12
+tas 0
+tas 1
+clear 0
+guard 11 23 7f ff
+ptr 1 1
+pcas 1 2 1
+pvcas 2 2
+lockfree 1 1 5

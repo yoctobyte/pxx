@@ -231,6 +231,21 @@ begin
         SrcPos := p;
         idDone := True;
       end
+      else if s = '_Atomic' then
+      begin
+        { C11 _Atomic as a QUALIFIER (`_Atomic int x`) is dropped like
+          volatile: an atomic object is an ordinary object of the same size,
+          and the __atomic_* builtins and <stdatomic.h> do the accesses
+          (feature-c-sync-and-atomic-builtins). A plain `x++` on one is
+          therefore NOT atomic under pxx. The SPECIFIER form `_Atomic(T)` is
+          refused by name rather than misparsed. }
+        SrcPos := p;
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '(') then
+          Error('the _Atomic(type) specifier is not supported yet; write the qualifier form `_Atomic type`');
+        SrcPos := p;
+        idDone := True;
+      end
       else if ((nameLen >= 7) and (s[1] = 'G') and (s[2] = '_') and (s[3] = 'G') and (s[4] = 'N') and (s[5] = 'U') and (s[6] = 'C') and (s[7] = '_')) or
               ((nameLen >= 9) and (s[1] = '_') and (s[2] = 'G') and (s[3] = 'L') and (s[4] = 'I') and (s[5] = 'B') and (s[6] = 'C') and (s[7] = 'X') and (s[8] = 'X') and (s[9] = '_')) then
       begin

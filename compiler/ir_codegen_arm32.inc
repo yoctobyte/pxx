@@ -4600,7 +4600,8 @@ begin
     IR_ATOMIC:
       begin
         { Atomic read-modify-write on addr^, returning the OLD value, via an
-          LL/SC (ldrex/strex) retry loop + a trailing dmb ish (ARM has no
+          LL/SC (ldrex/strex) retry loop between two dmb ish, gcc's ARMv7
+          __sync sequence: sequentially consistent (ARM has no
           implicit barrier on ldrex/strex, unlike aarch64's ldaxr/stlxr or x86
           TSO). Args popped into r1=addr (+ r2=val/expected, r3=newval). Result
           (old) in r0. The 64-bit variants need ldrexd/strexd register pairs —
@@ -4622,6 +4623,7 @@ begin
               EmitI32($E8BD0008);       { pop {r3}  newval }
               EmitI32($E8BD0004);       { pop {r2}  expected }
               EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($F57FF05B);       { dmb ish  (before: earlier accesses stay before) }
               EmitI32($E1910F9F);       { ldrex r0, [r1]   old }
               EmitI32($E1500002);       { cmp r0, r2 }
               EmitI32($1A000002);       { bne done (+2) }
@@ -4634,6 +4636,7 @@ begin
             begin
               EmitI32($E8BD0004);       { pop {r2}  delta }
               EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($F57FF05B);       { dmb ish  (before: earlier accesses stay before) }
               EmitI32($E1910F9F);       { ldrex r0, [r1]   old }
               EmitI32($E0804002);       { add r4, r0, r2 }
               EmitI32($E1813F94);       { strex r3, r4, [r1] }
@@ -4645,6 +4648,7 @@ begin
             begin
               EmitI32($E8BD0004);       { pop {r2}  val }
               EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($F57FF05B);       { dmb ish  (before: earlier accesses stay before) }
               EmitI32($E1910F9F);       { ldrex r0, [r1] }
               EmitI32($E1813F92);       { strex r3, r2, [r1] }
               EmitI32($E3530000);       { cmp r3, #0 }

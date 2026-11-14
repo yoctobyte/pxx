@@ -283,11 +283,13 @@ AN_ARG Left xNode
 AN_ARG Left zeroNode
 AN_ARG Right -1
 AN_ARG Right ASTRight[chkArg]
+AN_ARG Right ASTRight[prev]
 AN_ARG Right AllocNode(AN_ARG)
 AN_ARG Right a1
 AN_ARG Right a2
 AN_ARG Right a3
 AN_ARG Right aArg
+AN_ARG Right argHead
 AN_ARG Right argNode
 AN_ARG Right argSeq
 AN_ARG Right argsHead
@@ -569,6 +571,7 @@ AN_ASSIGN Right vlaMul
 AN_ASSIGN Right zeroNode
 AN_AS_CAST Left argAST
 AN_AS_CAST Left left
+AN_ATOMIC Left argHead
 AN_AWAIT Left -1          { bare `await
 AN_AWAIT Left CurASTNode
 AN_AWAIT Left ParseStatementAST()
@@ -938,6 +941,7 @@ AN_DEREF Left innerAddr
 AN_DEREF Left inode
 AN_DEREF Left node
 AN_DEREF Left operand
+AN_DEREF Left p
 AN_DEREF Left ptrNode
 AN_DEREF Left scNode
 AN_DEREF Left slotAddr

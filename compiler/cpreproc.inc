@@ -3854,6 +3854,32 @@ begin
     (bug-c-line-file-func-and-predefined-macros-missing): absent, those
     silently took whatever fallback branch the source picked for an
     unrecognized/undefined byte order, sometimes the wrong one. }
+  { gcc's memory-order constants and atomic feature macros, on the targets
+    whose backends lower AN_ATOMIC (feature-c-sync-and-atomic-builtins). }
+  CPAddLiteral('__ATOMIC_RELAXED', '0');
+  CPAddLiteral('__ATOMIC_CONSUME', '1');
+  CPAddLiteral('__ATOMIC_ACQUIRE', '2');
+  CPAddLiteral('__ATOMIC_RELEASE', '3');
+  CPAddLiteral('__ATOMIC_ACQ_REL', '4');
+  CPAddLiteral('__ATOMIC_SEQ_CST', '5');
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+     or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
+  begin
+    CPAddLiteral('__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1', '1');
+    CPAddLiteral('__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2', '1');
+    CPAddLiteral('__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4', '1');
+    CPAddLiteral('__GCC_ATOMIC_BOOL_LOCK_FREE', '2');
+    CPAddLiteral('__GCC_ATOMIC_CHAR_LOCK_FREE', '2');
+    CPAddLiteral('__GCC_ATOMIC_SHORT_LOCK_FREE', '2');
+    CPAddLiteral('__GCC_ATOMIC_INT_LOCK_FREE', '2');
+    CPAddLiteral('__GCC_ATOMIC_LONG_LOCK_FREE', '2');
+    CPAddLiteral('__GCC_ATOMIC_POINTER_LOCK_FREE', '2');
+    if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) then
+    begin
+      CPAddLiteral('__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8', '1');
+      CPAddLiteral('__GCC_ATOMIC_LLONG_LOCK_FREE', '2');
+    end;
+  end;
   CPAddLiteral('__ORDER_LITTLE_ENDIAN__', '1234');
   CPAddLiteral('__ORDER_BIG_ENDIAN__', '4321');
   CPAddLiteral('__BYTE_ORDER__', '__ORDER_LITTLE_ENDIAN__');
@@ -4013,4 +4039,143 @@ begin
   if protos = '' then Exit;
   src := protos + src + #10 + bodies;
   nm := '';
+end;
+
+{ ---- gcc __sync_* / __atomic_* helper bodies ----------------------------
+
+  feature-c-sync-and-atomic-builtins. cparser (CAtomicRewrite) renames each
+  builtin to __pxx_a_<op>_<N>. A translation unit that mentions __sync_ or
+  __atomic_ gets the whole helper set: static prototypes on line 1 (so no
+  line number moves) and static bodies at the end. That holds for hosted and
+  --freestanding builds alike, since a kernel has no crtl to pull them from.
+
+  The 4- and 8-byte cores sit on the __pxx_atomic_* intrinsics (AN_ATOMIC).
+  The 1- and 2-byte cores run a compare-and-swap loop on the aligned 4-byte
+  word that contains the object. Every target with IR_ATOMIC is little-endian,
+  which the shift assumes. All other operations are compare-and-swap loops
+  over the core: <op> 0 add, 1 sub, 2 or, 3 and, 4 xor, 5 nand, 6 exchange,
+  7 load. The 8-byte set is left out on ILP32 targets, whose backends have no
+  64-bit IR_ATOMIC; cparser refuses an 8-byte object there by name. }
+function CAtomSubst(const s, key, val: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(s) do
+  begin
+    if (s[i] = key[1]) and (Copy(s, i, Length(key)) = key) then
+    begin
+      Result := Result + val;
+      i := i + Length(key);
+    end
+    else
+    begin
+      Result := Result + s[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+function CAtomicWidthBodies(n: Integer): AnsiString;
+var t, m, fm, core, fast: AnsiString;
+begin
+  case n of
+    1: begin t := 'unsigned char'; m := '0xFFULL'; fm := '0xFFu'; end;
+    2: begin t := 'unsigned short'; m := '0xFFFFULL'; fm := '0xFFFFu'; end;
+    4: begin t := 'unsigned int'; m := '0xFFFFFFFFULL'; fm := ''; end;
+  else begin t := 'unsigned long long'; m := '0xFFFFFFFFFFFFFFFFULL'; fm := ''; end;
+  end;
+  if n = 4 then
+  begin
+    core := 'unsigned long long __pxx_a_cas_@N(volatile void *p, unsigned long long e, unsigned long long d)'
+          + '{return (unsigned int)__pxx_atomic_cas32((void *)p, (long long)(unsigned int)e, (long long)(unsigned int)d);}';
+    fast := 'if(op==7){op=0;v=0;}'
+          + 'if(op==0){o=(unsigned int)__pxx_atomic_add32((void *)p,(long long)(unsigned int)v);'
+          + 'n=(o+v)&@M;return retnew?n:o;}'
+          + 'if(op==6){o=(unsigned int)__pxx_atomic_xchg32((void *)p,(long long)(unsigned int)v);'
+          + 'return retnew?(v&@M):o;}';
+  end
+  else if n = 8 then
+  begin
+    core := 'unsigned long long __pxx_a_cas_@N(volatile void *p, unsigned long long e, unsigned long long d)'
+          + '{return (unsigned long long)__pxx_atomic_cas64((void *)p, (long long)e, (long long)d);}';
+    fast := 'if(op==7){op=0;v=0;}'
+          + 'if(op==0){o=(unsigned long long)__pxx_atomic_add64((void *)p,(long long)v);'
+          + 'n=o+v;return retnew?n:o;}'
+          + 'if(op==6){o=(unsigned long long)__pxx_atomic_xchg64((void *)p,(long long)v);'
+          + 'return retnew?v:o;}';
+  end
+  else
+  begin
+    core := 'unsigned long long __pxx_a_cas_@N(volatile void *p, unsigned long long e, unsigned long long d)'
+          + '{unsigned long a=(unsigned long)p;unsigned int *w=(unsigned int *)(a&~3UL);'
+          + 'int sh=(int)(a&3UL)*8;unsigned int m=@FM<<sh;unsigned int old,cur,nw;'
+          + 'for(;;){old=*(volatile unsigned int *)w;cur=(old&m)>>sh;'
+          + 'if(cur!=((unsigned int)e&@FM))return cur;'
+          + 'nw=(old&~m)|(((unsigned int)d&@FM)<<sh);'
+          + 'if((unsigned int)__pxx_atomic_cas32((void *)w,(long long)old,(long long)nw)==old)return cur;}}';
+    fast := '';
+  end;
+  Result := core + #10
+    + 'unsigned long long __pxx_a_rmw_@N(volatile void *p, unsigned long long v, int mo, int op, int retnew)'
+    + '{unsigned long long o,n;' + fast
+    + 'do{o=(unsigned long long)*(volatile @T *)p;n=__pxx_a_op(o,v,op)&@M;}'
+    + 'while(__pxx_a_cas_@N(p,o,n)!=o);return retnew?n:o;}' + #10
+    + 'int __pxx_a_bcas_@N(volatile void *p, unsigned long long e, unsigned long long d)'
+    + '{return __pxx_a_cas_@N(p,e,d)==(e&@M);}' + #10
+    + 'int __pxx_a_cmpx_@N(volatile void *p, void *ep, unsigned long long d, int weak, int so, int fo)'
+    + '{unsigned long long e=(unsigned long long)*(@T *)ep;unsigned long long o=__pxx_a_cas_@N(p,e,d);'
+    + 'if(o==e)return 1;*(@T *)ep=(@T)o;return 0;}' + #10
+    + 'int __pxx_a_cmpxp_@N(volatile void *p, void *ep, void *dp, int weak, int so, int fo)'
+    + '{return __pxx_a_cmpx_@N(p,ep,(unsigned long long)*(@T *)dp,weak,so,fo);}' + #10
+    + 'void __pxx_a_loadp_@N(volatile void *p, void *rp, int mo)'
+    + '{*(@T *)rp=(@T)__pxx_a_rmw_@N(p,0,mo,7,0);}' + #10
+    + 'void __pxx_a_storep_@N(volatile void *p, void *vp, int mo)'
+    + '{__pxx_a_rmw_@N(p,(unsigned long long)*(@T *)vp,mo,6,0);}' + #10
+    + 'void __pxx_a_xchgp_@N(volatile void *p, void *vp, void *rp, int mo)'
+    + '{*(@T *)rp=(@T)__pxx_a_rmw_@N(p,(unsigned long long)*(@T *)vp,mo,6,0);}' + #10;
+  Result := CAtomSubst(Result, '@N', AIntToStr(n));
+  Result := CAtomSubst(Result, '@T', t);
+  Result := CAtomSubst(Result, '@M', m);
+  if fm <> '' then Result := CAtomSubst(Result, '@FM', fm);
+end;
+
+procedure CAddAtomicBuiltins(var src: AnsiString);
+var all, line, protos, bodies, maxw: AnsiString; i, j, w, n: Integer;
+begin
+  if (Pos('__sync_', src) = 0) and (Pos('__atomic_', src) = 0) then Exit;
+  if not ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+          or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) then Exit;
+  if TARGET_PTR_SIZE >= 8 then maxw := '8' else maxw := '4';
+  all := 'unsigned long long __pxx_a_op(unsigned long long o, unsigned long long v, int op)'
+       + '{switch(op){case 0:return o+v;case 1:return o-v;case 2:return o|v;case 3:return o&v;'
+       + 'case 4:return o^v;case 5:return ~(o&v);case 6:return v;default:return o;}}' + #10;
+  n := 1;
+  while n <= 8 do
+  begin
+    if (n < 8) or (TARGET_PTR_SIZE >= 8) then all := all + CAtomicWidthBodies(n);
+    n := n * 2;
+  end;
+  all := all
+       + 'int __pxx_a_tas(volatile void *p, int mo){return __pxx_a_rmw_1(p,1,mo,6,0)!=0;}' + #10
+       + 'void __pxx_a_fence(int mo){volatile int t=0;__pxx_atomic_cas32((void *)&t,0,0);}' + #10
+       + 'int __pxx_a_lockfree(unsigned long sz, const volatile void *p)'
+       + '{return sz==1||sz==2||sz==4||sz==' + maxw + ';}' + #10;
+  protos := '';
+  bodies := '';
+  i := 1;
+  while i <= Length(all) do
+  begin
+    j := i;
+    while (j <= Length(all)) and (all[j] <> #10) do Inc(j);
+    line := Copy(all, i, j - i);
+    if line <> '' then
+    begin
+      w := Pos('{', line);
+      protos := protos + 'static ' + Copy(line, 1, w - 1) + '; ';
+      bodies := bodies + 'static ' + line + #10;
+    end;
+    i := j + 1;
+  end;
+  src := protos + src + #10 + bodies;
 end;

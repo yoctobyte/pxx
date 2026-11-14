@@ -3655,6 +3655,7 @@ begin
     AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
     CPreprocess(Source, SourceFileDir);
     if FreestandingMode then CAddFreestandingBuiltins(Source);
+    CAddAtomicBuiltins(Source);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
