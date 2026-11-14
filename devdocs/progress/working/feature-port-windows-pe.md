@@ -441,3 +441,13 @@ overflow cannot run a handler). Next: threads, then sockets.
 - test_timer flaked once in ~8 runs right after a snapshot resume (two
   timerfds expired in one wait and came back in registration order, where
   Linux gives expiry order); not chased.
+
+### 2026-11-14: the compiler on Windows
+
+- `pascal26 --os=windows compiler/compiler.pas` builds (36 s). Under Wine
+  and inside ReactOS x64 the .exe runs --version and compiles hello.pas
+  with --os=windows to an .exe that runs (PXX_HOME = a root with lib/ and
+  compiler/builtin/). Its default output is a Linux ELF (written without
+  the execute bit). Cosmetic: --version says host linux, cannot hash
+  /proc/self/exe, and the UTF-8 em dash shows as mojibake on the ReactOS
+  console (OEM code page).

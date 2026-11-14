@@ -53,6 +53,12 @@ three ReactOS behaviours:
 - A refused non-blocking `connect` shows in Winsock's except set but leaves
   `SO_ERROR` at 0; the translator reports `ECONNREFUSED`.
 
+The compiler itself builds for Windows (`--os=windows compiler/compiler.pas`)
+and works there: under Wine and inside ReactOS it compiled `hello.pas` to a
+Windows `.exe` that runs. Give it `--os=windows` (its default output is
+still a Linux ELF) and set `PXX_HOME` to a directory holding `lib/` and
+`compiler/builtin/` (where `winabi` lives).
+
 Known differences there:
 
 - ReactOS has no IPv6: the IPv6 tests report that and skip.
