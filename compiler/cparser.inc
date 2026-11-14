@@ -11826,7 +11826,18 @@ begin
   end
   else
   begin
-    if not CTryBakeGlobalInit(asn) then CompileAST(asn);   { CStaticDataMode }
+    if not CTryBakeGlobalInit(asn) then
+    begin
+      CompileAST(asn);   { CStaticDataMode }
+      { a `__thread` array's element: store it into the init image too, so
+        new threads start with it (feature-c-thread-local-arrays) }
+      if CTlsArrayInitTarget(asn) then
+      begin
+        TlsArrToImage := True;
+        CompileAST(asn);
+        TlsArrToImage := False;
+      end;
+    end;
     ASTNodeCount := ASTArenaFloor;
   end;
 end;

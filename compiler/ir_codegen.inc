@@ -15891,7 +15891,9 @@ begin
     if ASTKind[i] = AN_IDENT then
     begin
       sym := ASTIVal[i];
-      if (sym >= 0) and (sym < SymCount) and (SymTlsOffset[sym] >= 0) then
+      { a C array keeps its symbol; IRAppend redirects its address }
+      if (sym >= 0) and (sym < SymCount) and (SymTlsOffset[sym] >= 0)
+         and not CTlsReachedByAddress(sym) then
       begin
         addrNode := AllocNode(AN_TLSBASE);
         ASTTk[addrNode]   := Ord(tyPointer);

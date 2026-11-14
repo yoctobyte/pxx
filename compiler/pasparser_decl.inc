@@ -2802,7 +2802,11 @@ begin
   end;
 
   tk := Syms[idx].TypeKind;
-  if Syms[idx].IsArray or (SymDynDepth[idx] > 0) then
+  { A C array (and below, a C struct) is placed here too: IRAppend redirects
+    the symbol's ADDRESS, which is the only way C reaches either.
+    feature-c-thread-local-arrays }
+  if (Syms[idx].IsArray or (SymDynDepth[idx] > 0))
+     and not (CProgramMode and Syms[idx].IsArray and (SymDynDepth[idx] = 0)) then
   begin
     why := spelling + ' ' + Syms[idx].Name + ': an array is not supported yet. '
          + 'The mechanism is the TLS block''s user area and an array fits it; what is '
@@ -2812,7 +2816,7 @@ begin
     reason := TLSREFUSE_ARRAY;
     Exit;
   end;
-  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
+  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (CProgramMode and (tk = tyRecord))) then
   begin
     why := spelling + ' ' + Syms[idx].Name + ': only ordinal, pointer and floating-point '
          + 'thread-local variables are supported. A managed type (string, interface, '
@@ -2827,6 +2831,9 @@ begin
   sz := SymAllocSize[idx];
   if sz <= 0 then sz := TypeSlotSize(tk);
   align := TypeAlign(tk);
+  { a C struct may carry any alignment up to max_align_t's; the per-record
+    answer (CRecAlign) lives in the C frontend, included later }
+  if CProgramMode and (tk = tyRecord) then align := 16;
   if align < 1 then align := 1;
   off := AlignTo(TlsUserUsed, align);
   if off + sz > TlsUserBytes then
@@ -2845,6 +2852,16 @@ begin
   SymTlsOffset[idx] := TLS_USER_FIRST_OFF + off;
   TlsUserUsed := off + sz;
   TryAssignThreadVarStorage := True;
+end;
+
+function CTlsReachedByAddress(sym: Integer): Boolean;
+{ A C thread-local that keeps its symbol (an array or a struct): IRAppend
+  redirects its address and ThreadVarRewriteRange leaves it alone. Scalars
+  are rewritten into AN_DEREF(AN_TLSBASE) instead. feature-c-thread-local-arrays }
+begin
+  Result := CProgramMode and (sym >= 0) and (sym < SymCount)
+            and (SymTlsOffset[sym] >= 0)
+            and (Syms[sym].IsArray or (Syms[sym].TypeKind = tyRecord));
 end;
 
 procedure AssignThreadVarStorage(idx: Integer);

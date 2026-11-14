@@ -9361,6 +9361,17 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh i386/c_thread_local26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_thread_local26_i386)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_i386
 	tools/expect_same.sh i386/c_tlinit26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_tlinit26_i386)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
+	# __thread arrays and structs: per-thread copies, initialisers reach every
+	# new thread (the init image), on all four block-installing targets. The
+	# expected output is gcc's. feature-c-thread-local-arrays
+	./$(COMPILER) --threadsafe test/c_thread_local_arrays.c $(TESTTMP)/c_tlarr26 > /dev/null
+	tools/expect_same.sh c_tlarr26 "$$($(TESTTMP)/c_tlarr26)" "$$(cat test/c_thread_local_arrays.expected)"
+	./$(COMPILER) --threadsafe --target=i386 test/c_thread_local_arrays.c $(TESTTMP)/c_tlarr_i386 > /dev/null
+	tools/expect_same.sh i386/c_tlarr_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_tlarr_i386)" "$$(cat test/c_thread_local_arrays.expected)"
+	./$(COMPILER) --threadsafe --target=aarch64 test/c_thread_local_arrays.c $(TESTTMP)/c_tlarr_a64 > /dev/null
+	tools/expect_same.sh aarch64/c_tlarr_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_tlarr_a64)" "$$(cat test/c_thread_local_arrays.expected)"
+	./$(COMPILER) --threadsafe --target=arm32 test/c_thread_local_arrays.c $(TESTTMP)/c_tlarr_arm32 > /dev/null
+	tools/expect_same.sh arm32/c_tlarr_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_tlarr_arm32)" "$$(cat test/c_thread_local_arrays.expected)"
 	./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_i386
 	tools/expect_same.sh i386/c_errno_per_thread26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_errno_per_thread26_i386)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	# pthread_join's retval is the start routine's return (crtl trampoline), on
@@ -20600,13 +20611,13 @@ test-core: $(COMPILER)
 	fi
 	@grep -q 'error: __thread counter: the per-thread variable area is full' $(TESTTMP)/ctls_full.log || { echo "FAIL ctls: area-full did not report as an error naming the declaration"; cat $(TESTTMP)/ctls_full.log; exit 1; }
 	@grep -q 'PXX_TLS_USER_4K' $(TESTTMP)/ctls_full.log || { echo "FAIL ctls: the refusal does not name the flag that fixes it, so it is a stop with no way forward"; exit 1; }
-	@# 2. ONE WARNING PER REASON, not per compilation. Before this, the one-shot
-	@#    flag reported the array and suppressed the struct ENTIRELY, and each
-	@#    suppressed declaration is its own latent data race.
+	@# 2. The two declarations this row was built on -- a `__thread` array and a
+	@#    `__thread` struct, the pair whose second warning a one-shot flag used to
+	@#    hide -- get real per-thread storage since feature-c-thread-local-arrays,
+	@#    so neither degrades and neither warns. Once-per-reason is still held by
+	@#    c_func_scope_thread_local's row 2 (two declarations, one warning).
 	@./$(COMPILER) $(TESTTMP)/ctls_two.c $(TESTTMP)/ctls_two26 > $(TESTTMP)/ctls_two.log 2>&1
-	@tools/expect_same.sh ctls_two_reasons "$$(grep -c 'warning: __thread' $(TESTTMP)/ctls_two.log)" "2"
-	@grep -q '__thread buf:' $(TESTTMP)/ctls_two.log || { echo "FAIL ctls: the array reason went unreported"; exit 1; }
-	@grep -q '__thread s:' $(TESTTMP)/ctls_two.log || { echo "FAIL ctls: the non-scalar reason went unreported -- this is the half the one-shot warning hid"; exit 1; }
+	@tools/expect_same.sh ctls_two_reasons "$$(grep -c 'warning: __thread' $(TESTTMP)/ctls_two.log)" "0"
 	@tools/expect_same.sh ctls_two_runs "$$($(TESTTMP)/ctls_two26)" "got=3"
 	@# 3. THE INVARIANT: a limit that is OURS still degrades and still builds.
 	@#    riscv32 cannot set a thread register yet, so this must warn and

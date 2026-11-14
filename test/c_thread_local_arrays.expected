@@ -1,0 +1,10 @@
+main ia=11,22,33,44 p=33 *ia=11 nm=tls sm=6 r1=5 za=0 d=3 ll=0 sz=16,12
+main tp=3,4 tb=init,1.5,6 arr=7,10,0 sp=0,0 c=3 g=4
+main ia=1099,1022,1033,1044 p=1033 *ia=1099 nm=Tone sm=60 r1=5 za=7 d=3 ll=1099511627776 sz=16,12
+main tp=103,4 tb=changed,1.5,66 arr=7,10,77 sp=103,9 c=103 g=4
+thr ia=11,22,33,44 p=33 *ia=11 nm=tls sm=6 r1=5 za=0 d=3 ll=0 sz=16,12
+thr tp=3,4 tb=init,1.5,6 arr=7,10,0 sp=0,0 c=3 g=4
+thr ia=1198,1022,1033,1044 p=1033 *ia=1198 nm=Ttwo sm=120 r1=5 za=14 d=3 ll=2199023255552 sz=16,12
+thr tp=103,4 tb=changed,1.5,66 arr=7,10,77 sp=103,9 c=103 g=4
+main ia=1099,1022,1033,1044 p=1033 *ia=1099 nm=Tone sm=60 r1=5 za=7 d=3 ll=1099511627776 sz=16,12
+main tp=103,4 tb=changed,1.5,66 arr=7,10,77 sp=103,9 c=103 g=4

@@ -528,7 +528,60 @@ begin
 end;
 
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
+var tlsBase: Integer;
 begin
+  { A C `__thread` ARRAY keeps its AN_IDENT (ThreadVarRewriteRange skips it):
+    C reaches an array through its SYMBOL on dozens of paths -- decay to a
+    pointer argument, pointer arithmetic strides, row decay, ptr-to-array
+    shapes -- and every one of them ends in the address of that symbol, which
+    is built HERE and nowhere else. So the address is redirected at the one
+    door: base of the calling thread's block + the array's offset in it. A
+    load or store of the WHOLE array never happens in C (arrays are not
+    assignable), so those kinds reaching here would be a new path, refused.
+    feature-c-thread-local-arrays }
+  if (a >= 0) and CTlsReachedByAddress(a) then
+  begin
+    if (kind = IR_LEA) or (kind = IR_SLOTADDR) then
+    begin
+      tlsBase := IRAppend(IR_TLSBASE, -1, -1, -1, 0, Ord(tyPointer));
+      if TlsArrToImage then
+      begin
+        { the init image is laid out like a block's USER area, and the block's
+          slot 13 holds its address }
+        tlsBase := IRAppend(IR_LOAD_MEM,
+                     IRAppend(IR_BINOP, tlsBase,
+                       IRAppend(IR_CONST_INT, -1, -1, -1, 8 * TLS_SLOT_INIT_IMAGE, Ord(tyPointer)),
+                       Ord(tkPlus), 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        Result := IRAppend(IR_BINOP, tlsBase,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, SymTlsOffset[a] - TLS_USER_FIRST_OFF, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
+      end
+      else
+        Result := IRAppend(IR_BINOP, tlsBase,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, SymTlsOffset[a], Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
+      SymIRReached[a] := True;
+      Exit;
+    end;
+    { a small struct moved whole (`return tp;`, `c = tp`) is loaded or stored
+      BY SYMBOL; the same move through the redirected address is a memory op }
+    if kind = IR_LOAD_SYM then
+    begin
+      Result := IRAppend(IR_LOAD_MEM, IRAppend(IR_LEA, a, -1, -1, 0, Ord(tyPointer)),
+                         b, c, ival, tk);
+      Exit;
+    end;
+    if kind = IR_STORE_SYM then
+    begin
+      Result := IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, a, -1, -1, 0, Ord(tyPointer)),
+                         b, c, ival, tk);
+      Exit;
+    end;
+    if kind = IR_DYNDATA then
+      Error('internal: thread-local array ' + Syms[a].Name
+            + ' reached by a whole-symbol load/store (IR kind ' + AIntToStr(kind) + ', type ' + AIntToStr(tk) + ', ival ' + AIntToStr(ival) + '); only its address is redirected (feature-c-thread-local-arrays)');
+  end;
   EnsureIRCapacity(IRCount + 1);
   IRKind[IRCount] := kind;
   IRA[IRCount] := a;
@@ -4784,6 +4837,8 @@ begin
   value := ASTRight[asn];
   if not CBakeAddrOf(target, sym, off) then Exit;
   if not CSymIsStaticData(sym) then Exit;
+  { a thread-local's bytes live in each thread's block, never in .data }
+  if SymTlsOffset[sym] >= 0 then Exit;
   { the leaf: its type, width and (for a bit-field) its bits }
   bitW := 0; bitSh := 0;
   tk := tyUnknown;

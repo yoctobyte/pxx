@@ -156,3 +156,10 @@ main-copy=103, the initialiser fixture grandchild-x=50, errno-crosstalk=1, and
 `threadvar` refused. After: all gcc-equal, natively and under qemu-i386, on
 the clone route and the libc-linked pthread route (test-threads rows
 `i386/*26_i386`).
+
+## Update 2026-11-14: case (3) closed for C
+
+A C `__thread` array or struct (any non-managed record; C has no managed
+types) gets real per-thread storage, with initialisers, on all four targets:
+feature-c-thread-local-arrays. The (1) target, (2) dynamic-binary, (4)
+--emit-obj/--shared and (5) function-scope cases are unchanged.

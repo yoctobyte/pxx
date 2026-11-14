@@ -569,14 +569,42 @@ begin
   UClsAlign[ci] := TARGET_PTR_SIZE;
 end;
 
+function CTlsArrayInitTarget(asn: Integer): Boolean;
+{ Does this C initialiser store into a `__thread` ARRAY? The target's root
+  identifier, under the element and field steps an initialiser path builds.
+  Such a store is compiled a second time with TlsArrToImage set.
+  feature-c-thread-local-arrays }
+var n: Integer;
+begin
+  Result := False;
+  if (not CProgramMode) or (BSS_TLS_IMAGE < 0) or (asn < 0) then Exit;
+  if ASTKind[asn] <> AN_ASSIGN then Exit;
+  n := ASTLeft[asn];
+  while (n >= 0) and ((ASTKind[n] = AN_INDEX) or (ASTKind[n] = AN_FIELD)) do
+    n := ASTLeft[n];
+  if (n < 0) or (ASTKind[n] <> AN_IDENT) then Exit;
+  n := ASTIVal[n];
+  Result := CTlsReachedByAddress(n);
+end;
+
 procedure CompilePendingGlobalInits;
 { Emit the recorded constant global-var initializers as assignments, at the
   current code position (just before `main begin`). }
 var i, identNode, valNode, idxLit, target, assignNode, lenVal, innerAddr: Integer;
-    initTk, pk: Integer;
+    initTk, pk, i2: Integer;
 begin
-  for i := 0 to PendingInitCount - 1 do
+  { Each entry once; a C `__thread` ARRAY's entries twice -- the second time
+    with TlsArrToImage set, so the same store lands in the init image that
+    every new thread's block is copied from (the scalar arm at the bottom
+    copies one value instead; an array's element target has too many shapes
+    to copy that way). feature-c-thread-local-arrays }
+  for i2 := 0 to 2 * PendingInitCount - 1 do
   begin
+    i := i2 div 2;
+    TlsArrToImage := Odd(i2);
+    if TlsArrToImage and not ((BSS_TLS_IMAGE >= 0)
+         and CTlsReachedByAddress(PendingInitSym[i])) then
+      Continue;
     { The recorded Tk is the DECLARED storage kind; every target built below is
       an EXPRESSION, so it must carry the value kind the resolver would have
       given the same `a[0] := 'aa'` written by hand — StrValTk, which folds
@@ -811,7 +839,8 @@ begin
       the main block, so it is the value that was just stored, whatever its
       initialiser kind.
       bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
-    if (BSS_TLS_IMAGE >= 0) and (SymTlsOffset[PendingInitSym[i]] >= 0) then
+    if (BSS_TLS_IMAGE >= 0) and (SymTlsOffset[PendingInitSym[i]] >= 0)
+       and not CTlsReachedByAddress(PendingInitSym[i]) then
     begin
       innerAddr := AllocNode(AN_TLSBASE);
       ASTTk[innerAddr] := Ord(tyPointer);
@@ -842,6 +871,7 @@ begin
       ASTNodeCount := ASTArenaFloor;
     end;
   end;
+  TlsArrToImage := False;
 end;
 
 procedure RegisterBuiltinTGuid;

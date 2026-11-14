@@ -7679,6 +7679,7 @@ var
   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }
   TlsBlockSize    : Integer;     { DERIVED, never spelled twice: TLS_USER_FIRST_OFF + TlsUserBytes. The slot map plus the threadvar area; what EmitTlsMainInstall reserves, what the clone stub carves, and what __pxxTlsBlockSize folds to. }
+  TlsArrToImage: Boolean; { while True, IRAppend points a C `__thread` array's address at the INIT IMAGE (slot TLS_SLOT_INIT_IMAGE) instead of the calling thread's block. Set only by CompilePendingGlobalInits' second pass over a thread-local array's initialisers, which is how new threads see them. feature-c-thread-local-arrays }
   ThreadVarRewriteHigh: Integer; { how far into the PERMANENT AST region (below ASTArenaFloor) ThreadVarRewriteRange has swept. Never a high-water mark of ASTNodeCount: the arena is rolled back per statement and node indices are REUSED -- see the routine, which records the one-statement bug that came of assuming otherwise }
   ParsingThreadVar: Boolean;     { ParseVarSection is running for a `threadvar` section, not a `var` one }
   BSS_SIG_NUM     : Integer;
