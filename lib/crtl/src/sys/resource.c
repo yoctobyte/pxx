@@ -23,6 +23,8 @@
  */
 #include <sys/resource.h>
 #include <errno.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 extern int __pxx_prlimit(int resource, void *newLim, void *oldLim);
 extern int __pxx_getrusage(int who, void *usage);
@@ -55,6 +57,26 @@ int getrlimit(int resource, struct rlimit *rlim) {
   if (rc < 0) { errno = -rc; return -1; }
   rlim->rlim_cur = narrow(out.rlim_cur);
   rlim->rlim_max = narrow(out.rlim_max);
+  return 0;
+}
+
+int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
+            struct rlimit *old_limit) {
+  struct __pxx_rlimit64 in, out;
+  long rc;
+  if (new_limit) {
+    in.rlim_cur = widen(new_limit->rlim_cur);
+    in.rlim_max = widen(new_limit->rlim_max);
+  }
+  out.rlim_cur = 0;
+  out.rlim_max = 0;
+  rc = syscall(SYS_prlimit64, (long)pid, (long)resource, new_limit ? &in : 0,
+               old_limit ? &out : 0);
+  if (rc < 0) return -1;            /* syscall() has set errno */
+  if (old_limit) {
+    old_limit->rlim_cur = narrow(out.rlim_cur);
+    old_limit->rlim_max = narrow(out.rlim_max);
+  }
   return 0;
 }
 

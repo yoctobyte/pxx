@@ -107,6 +107,7 @@ int setvbuf(FILE *stream, char *buf, int mode, size_t size);
 void setbuf(FILE *stream, char *buf);
 int remove(const char *path);
 int rename(const char *oldp, const char *newp);
+int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath);
 
 /* The _unlocked family — aliases of the plain spellings, since crtl's FILE has
    no lock to skip. Declared because real code (busybox's libbb) calls them by

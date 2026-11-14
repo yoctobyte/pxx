@@ -9,6 +9,19 @@
    intrinsics, which expect the buffer address. */
 typedef struct { long __jb[16]; } jmp_buf;
 
+/* sigjmp_buf: the same register buffer FIRST (so &env is still the address
+   __pxx_setjmp wants), then whether sigsetjmp saved the signal mask and the mask
+   itself -- sigset_t's layout, spelled out so this header need not include
+   <signal.h>. sigsetjmp(env, savemask) records the mask (or the flag 0) BEFORE
+   the setjmp, in the caller's own expression, because setjmp has to run in the
+   caller's frame; siglongjmp puts the mask back before jumping. That is the
+   difference that matters to a longjmp out of a signal handler: without it the
+   signal stays blocked. toybox keeps a `sigjmp_buf *rebound` in every applet's
+   context. */
+typedef struct { long __jb[16]; long __saved; unsigned long __mask[16]; } sigjmp_buf;
+extern void __pxx_sigjmp_save(sigjmp_buf *env, int savemask);
+extern void __pxx_sigjmp_restore(sigjmp_buf *env);
+
 extern int  __pxx_setjmp(void *env);
 extern void __pxx_longjmp(void *env, int val);
 
@@ -20,13 +33,13 @@ extern void __pxx_longjmp(void *env, int val);
    longjmp(env, val) call still takes the macro below. Bodies in src/setjmp.c. */
 extern void longjmp(jmp_buf env, int val);
 extern void _longjmp(jmp_buf env, int val);
-extern void siglongjmp(jmp_buf env, int val);
+extern void siglongjmp(sigjmp_buf env, int val);
 
 #define setjmp(env)         __pxx_setjmp(&(env))
 #define _setjmp(env)        __pxx_setjmp(&(env))
-#define sigsetjmp(env, s)   __pxx_setjmp(&(env))
+#define sigsetjmp(env, s)   (__pxx_sigjmp_save(&(env), (s)), __pxx_setjmp(&(env)))
 #define longjmp(env, val)   __pxx_longjmp(&(env), val)
 #define _longjmp(env, val)  __pxx_longjmp(&(env), val)
-#define siglongjmp(env, v)  __pxx_longjmp(&(env), v)
+#define siglongjmp(env, v)  (__pxx_sigjmp_restore(&(env)), __pxx_longjmp(&(env), v))
 
 #endif

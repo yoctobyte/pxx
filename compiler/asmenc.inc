@@ -825,6 +825,26 @@ begin
     Exit;
   end;
 
+  { Cache-line write-back (Gibux VT-d: page-table lines for an IOMMU that does
+    not snoop). clflush is 0F AE /7; clflushopt and clwb are the same opcode
+    under a 66 prefix, /7 and /6. Memory operand only; the 66 goes before any
+    REX the address needs. }
+  ext := -1;
+  if CaseEqual(mn,'clflush') then ext := 7
+  else if CaseEqual(mn,'clflushopt') then ext := 7 + 16
+  else if CaseEqual(mn,'clwb') then ext := 6 + 16;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    if (ext and 16) <> 0 then AsmB($66);
+    AsmPrefixAndREX(0, ext and 7, 0, 0);
+    AsmB($0F); AsmB($AE);
+    AsmModRM(ext and 7, 0);
+    Exit;
+  end;
+
   { XSAVE family (Gibux: per-process xsave areas). xsave /4, xrstor /5,
     xsaveopt /6 are 0F AE; xsavec is 0F C7 /4. The 64 spellings add REX.W,
     which only changes the layout of the x87 FIP/FDP words in the legacy area.

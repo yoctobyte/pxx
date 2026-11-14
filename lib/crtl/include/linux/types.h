@@ -29,6 +29,12 @@ typedef uint32_t __be32;
 typedef uint64_t __le64;
 typedef uint64_t __be64;
 
+/* the 8-byte-aligned u64 the uapi structs use so that i386 and x86-64 agree
+   on their layout (linux/gpio.h, linux/sched.h's clone_args) */
+#define __aligned_u64  __u64 __attribute__((aligned(8)))
+#define __aligned_be64 __be64 __attribute__((aligned(8)))
+#define __aligned_le64 __le64 __attribute__((aligned(8)))
+
 typedef uint16_t __sum16;
 typedef uint32_t __wsum;
 

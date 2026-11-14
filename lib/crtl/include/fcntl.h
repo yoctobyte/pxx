@@ -141,6 +141,17 @@ extern int fcntl(int fd, int cmd, ...);
    the reason both are declared here rather than one being written in terms of
    the other at a call site. */
 extern int posix_fallocate(int fd, off_t offset, off_t len);
+
+/* posix_fadvise(2): a hint, so it RETURNS THE ERROR NUMBER like
+   posix_fallocate above. The values are the generic ones every Linux ABI pxx
+   targets uses. */
+#define POSIX_FADV_NORMAL     0
+#define POSIX_FADV_RANDOM     1
+#define POSIX_FADV_SEQUENTIAL 2
+#define POSIX_FADV_WILLNEED   3
+#define POSIX_FADV_DONTNEED   4
+#define POSIX_FADV_NOREUSE    5
+extern int posix_fadvise(int fd, off_t offset, off_t len, int advice);
 extern int fallocate(int fd, int mode, off_t offset, off_t len);
 
 #endif

@@ -58,4 +58,13 @@ extern void *mremap(void *old_address, size_t old_size, size_t new_size, int fla
 extern int   mlock(const void *addr, size_t len);
 extern int   munlock(const void *addr, size_t len);
 
+/* mlockall/munlockall(2): the whole address space; flags are the generic
+   Linux values (nbd-client pins itself so it cannot deadlock swapping to the
+   device it serves). */
+#define MCL_CURRENT 1
+#define MCL_FUTURE  2
+#define MCL_ONFAULT 4
+extern int   mlockall(int flags);
+extern int   munlockall(void);
+
 #endif

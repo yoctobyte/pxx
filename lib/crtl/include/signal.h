@@ -95,14 +95,55 @@ int pthread_kill(long thread, int sig);
    crash-backtrace setup to compile and run inert. */
 typedef struct { unsigned long __val[16]; } sigset_t;
 
+/* The kernel's siginfo: three ints, then a union whose alignment is a long's,
+   so it starts at byte 16 on LP64 and byte 12 on ILP32 -- the earlier
+   `int __pad0' put si_addr at 16 on both, which is wrong on i386 and arm32.
+   128 bytes in all. The member names are the POSIX ones, as macros into the
+   union like every libc does it. */
+union sigval { int sival_int; void *sival_ptr; };
 typedef struct {
   int si_signo;
   int si_errno;
   int si_code;
-  int __pad0;
-  void *si_addr;
-  long __pad[24];
+  union {
+    int __pad[sizeof(long) == 8 ? 28 : 29];   /* the union starts at 16 / 12 */
+    struct { int __pid; unsigned int __uid; } __kill;
+    struct { int __tid; int __overrun; union sigval __val; } __timer;
+    struct { int __pid; unsigned int __uid; union sigval __val; } __rt;
+    struct { int __pid; unsigned int __uid; int __status; long __utime; long __stime; } __chld;
+    struct { void *__addr; } __fault;
+    struct { long __band; int __fd; } __poll;
+  } __si;
 } siginfo_t;
+#define si_pid     __si.__kill.__pid
+#define si_uid     __si.__kill.__uid
+#define si_status  __si.__chld.__status
+#define si_utime   __si.__chld.__utime
+#define si_stime   __si.__chld.__stime
+#define si_value   __si.__rt.__val
+#define si_int     __si.__rt.__val.sival_int
+#define si_ptr     __si.__rt.__val.sival_ptr
+#define si_timerid __si.__timer.__tid
+#define si_overrun __si.__timer.__overrun
+#define si_addr    __si.__fault.__addr
+#define si_band    __si.__poll.__band
+#define si_fd      __si.__poll.__fd
+
+/* si_code values: the generic senders, and SIGCHLD's reasons */
+#define SI_USER     0
+#define SI_KERNEL   0x80
+#define SI_QUEUE    (-1)
+#define SI_TIMER    (-2)
+#define SI_MESGQ    (-3)
+#define SI_ASYNCIO  (-4)
+#define SI_SIGIO    (-5)
+#define SI_TKILL    (-6)
+#define CLD_EXITED    1
+#define CLD_KILLED    2
+#define CLD_DUMPED    3
+#define CLD_TRAPPED   4
+#define CLD_STOPPED   5
+#define CLD_CONTINUED 6
 
 typedef struct {
   void *ss_sp;

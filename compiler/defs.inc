@@ -426,7 +426,7 @@ const
     it here, so the number cannot drift between what a program tests for and what
     the binary reports. feature-toolchain-cli-ux }
   PXX_GENERATION     = 26;
-  MAX_CPREP_ARGS = 4096;
+  MAX_CPREP_ARGS = 9216;
   { Argument slots RESERVED PER EXPANSION LEVEL in CPArgStart/CPArgEnd -- the
     stride, not the array size, and it is the real limit on how many arguments
     one macro invocation may have. It was 16, which C99 5.2.4.1 puts at an
@@ -437,7 +437,10 @@ const
     token far away or spun. MAX_CPREP_ARGS bounds levels * stride; the deepest
     level is 16 (CPTempStr16), so 17 * 128 = 2176 fits with room over.
     bug-c-a-macro-call-with-more-than-16-arguments-is-silently-mis-expanded }
-  CPREP_ARGS_PER_LEVEL = 128;
+  { 512 since 2026-11-14: toybox's ps.c calls TAGGED_ARRAY with ~245 arguments
+    (every brace initialiser's commas split at the macro level). gcc has no
+    cap. 17 levels * 512 = 8704, inside MAX_CPREP_ARGS. }
+  CPREP_ARGS_PER_LEVEL = 512;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
   { "No bound" for a TOKEN INDEX — MainProgramTokCount before the main program's

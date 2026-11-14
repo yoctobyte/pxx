@@ -142,4 +142,44 @@ struct fstrim_range {
 #define FITRIM    _IOWR('X', 121, struct fstrim_range)
 #endif
 
+/* Inode flags (FS_IOC_GETFLAGS / SETFLAGS) and the fsxattr ioctls -- what
+   lsattr/chattr read and write. The ioctls carry `long' in their size field,
+   so they differ between ILP32 and LP64 exactly as the kernel's do. */
+#define FS_IOC_GETFLAGS     _IOR('f', 1, long)
+#define FS_IOC_SETFLAGS     _IOW('f', 2, long)
+#define FS_IOC_GETVERSION   _IOR('v', 1, long)
+#define FS_IOC_SETVERSION   _IOW('v', 2, long)
+
+struct fsxattr {
+  uint32_t fsx_xflags;
+  uint32_t fsx_extsize;
+  uint32_t fsx_nextents;
+  uint32_t fsx_projid;
+  uint32_t fsx_cowextsize;
+  unsigned char fsx_pad[8];
+};
+#define FS_IOC_FSGETXATTR   _IOR('X', 31, struct fsxattr)
+#define FS_IOC_FSSETXATTR   _IOW('X', 32, struct fsxattr)
+
+#define FS_SECRM_FL         0x00000001
+#define FS_UNRM_FL          0x00000002
+#define FS_COMPR_FL         0x00000004
+#define FS_SYNC_FL          0x00000008
+#define FS_IMMUTABLE_FL     0x00000010
+#define FS_APPEND_FL        0x00000020
+#define FS_NODUMP_FL        0x00000040
+#define FS_NOATIME_FL       0x00000080
+#define FS_ENCRYPT_FL       0x00000800
+#define FS_INDEX_FL         0x00001000
+#define FS_JOURNAL_DATA_FL  0x00004000
+#define FS_NOTAIL_FL        0x00008000
+#define FS_DIRSYNC_FL       0x00010000
+#define FS_TOPDIR_FL        0x00020000
+#define FS_EXTENT_FL        0x00080000
+#define FS_VERITY_FL        0x00100000
+#define FS_NOCOW_FL         0x00800000
+#define FS_INLINE_DATA_FL   0x10000000
+#define FS_PROJINHERIT_FL   0x20000000
+#define FS_CASEFOLD_FL      0x40000000
+
 #endif

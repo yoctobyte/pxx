@@ -1,0 +1,33 @@
+mkdirat 0
+openat ok 1
+symlinkat 0
+fstatat 0 size 5 mode 640
+fstatat nofollow 0 islnk 1
+same dev/ino 1 1 nlink 1
+readlinkat 5 sub/f
+faccessat 0 -1
+fchmodat 0
+mode 600
+renameat 0
+linkat 0
+unlinkat 0 0 0 0
+unlinkat missing -1 errno 2
+sc 1 1 1
+pc 255 -1
+confstr 14 /bin:/usr/bin
+codeset ANSI_X3.4-1968
+newlocale C 1 bogus 0
+wc 1 0 -1 -1 1 -1
+getentropy 0 -1
+siginfo layout 1
+utmpx readable 1
+ifaddrs lo 1
+fadvise 1
+iconv 0 6: 61 00 e9 00 ac 20
+iconv ascii -1 errno 84 left 5
+iconv bogus 1
+eventfd 7
+prlimit 0 0 same 1
+getcwd null 1
+getopt + 1 2
+getopt - 2 5

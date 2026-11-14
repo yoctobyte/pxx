@@ -8,6 +8,10 @@
  */
 
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <errno.h>
 
 /* Mirrors TPxxStatBuf (lib/rtl/pxxcio.pas): 5 x int64 + 2 x int32 = 48 bytes,
@@ -143,4 +147,82 @@ int mkfifo(const char *path, mode_t mode) {
    path here — the raw PAL result IS the answer. */
 mode_t umask(mode_t mask) {
   return (mode_t)__pxx_umask((int)mask);
+}
+
+/* ---- the *at family -------------------------------------------------------
+ * Over the raw syscall bridge rather than the PAL, because the PAL's stat entry
+ * takes no flags and AT_SYMLINK_NOFOLLOW is the point of half the callers.
+ *
+ * fstatat is statx(2), the same call the PAL makes, decoded at the same
+ * offsets (lib/rtl/platform/posix/platform_backend.pas DoStatx): statx has one
+ * layout on every target, so this needs no per-arch struct. st_dev/st_rdev are
+ * built with makedev(), which is the PAL's EncodeDevUser bit for bit -- a tree
+ * walker compares the st_dev of fstatat against the st_dev of stat to notice a
+ * mount point, and two encodings would make every directory a mount point. */
+static unsigned int sx_u32(const unsigned char *p, int o)
+{
+  return (unsigned int)p[o] | ((unsigned int)p[o + 1] << 8) |
+         ((unsigned int)p[o + 2] << 16) | ((unsigned int)p[o + 3] << 24);
+}
+static long long sx_s64(const unsigned char *p, int o)
+{
+  return (long long)((unsigned long long)sx_u32(p, o) |
+                     ((unsigned long long)sx_u32(p, o + 4) << 32));
+}
+
+int fstatat(int dirfd, const char *path, struct stat *buf, int flags)
+{
+  unsigned char sx[256];
+  /* STATX_BASIC_STATS (0x7ff): the fields struct stat has, nothing more */
+  if (syscall(SYS_statx, (long)dirfd, path, (long)flags, 0x7ffL, sx) < 0)
+    return -1;
+  buf->st_mode    = (mode_t)(sx_u32(sx, 0x1C) & 0xFFFF);
+  buf->st_blksize = (blksize_t)sx_u32(sx, 0x04);
+  buf->st_nlink   = (nlink_t)sx_u32(sx, 0x10);
+  buf->st_uid     = (uid_t)sx_u32(sx, 0x14);
+  buf->st_gid     = (gid_t)sx_u32(sx, 0x18);
+  buf->st_ino     = (ino_t)sx_s64(sx, 0x20);
+  buf->st_size    = (off_t)sx_s64(sx, 0x28);
+  buf->st_blocks  = (blkcnt_t)sx_s64(sx, 0x30);
+  buf->st_atim.tv_sec  = (long)sx_s64(sx, 0x40);
+  buf->st_atim.tv_nsec = (long)sx_u32(sx, 0x48);
+  buf->st_ctim.tv_sec  = (long)sx_s64(sx, 0x60);
+  buf->st_ctim.tv_nsec = (long)sx_u32(sx, 0x68);
+  buf->st_mtim.tv_sec  = (long)sx_s64(sx, 0x70);
+  buf->st_mtim.tv_nsec = (long)sx_u32(sx, 0x78);
+  buf->st_rdev = makedev(sx_u32(sx, 0x80), sx_u32(sx, 0x84));
+  buf->st_dev  = makedev(sx_u32(sx, 0x88), sx_u32(sx, 0x8C));
+  return 0;
+}
+
+/* fchmodat(2) has no flags argument; AT_SYMLINK_NOFOLLOW needs fchmodat2
+   (Linux 6.6). Without it the answer is glibc's: Linux cannot change a
+   symlink's mode, so EOPNOTSUPP rather than silently chmod'ing the target. */
+int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
+{
+  if (flags & ~AT_SYMLINK_NOFOLLOW) { errno = EINVAL; return -1; }
+  if (flags) {
+#ifdef SYS_fchmodat2
+    return (int)syscall(SYS_fchmodat2, (long)dirfd, path, (long)mode, (long)flags);
+#else
+    errno = EOPNOTSUPP;
+    return -1;
+#endif
+  }
+  return (int)syscall(SYS_fchmodat, (long)dirfd, path, (long)mode);
+}
+
+int mkdirat(int dirfd, const char *path, mode_t mode)
+{
+  return (int)syscall(SYS_mkdirat, (long)dirfd, path, (long)mode);
+}
+
+int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev)
+{
+  return (int)syscall(SYS_mknodat, (long)dirfd, path, (long)mode, (long)dev);
+}
+
+int mkfifoat(int dirfd, const char *path, mode_t mode)
+{
+  return mknodat(dirfd, path, mode | S_IFIFO, 0);
 }

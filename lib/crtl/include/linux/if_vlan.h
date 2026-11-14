@@ -37,4 +37,19 @@ enum vlan_flags {
     VLAN_FLAG_BRIDGE_BINDING = 0x10
 };
 
+/* The SIOCGIFVLAN / SIOCSIFVLAN argument (uapi, unchanged since 2.4). */
+struct vlan_ioctl_args {
+  int cmd;
+  char device1[24];
+  union {
+    char device2[24];
+    int VID;
+    unsigned int skb_priority;
+    unsigned int name_type;
+    unsigned int bind_type;
+    unsigned int flag;
+  } u;
+  short vlan_qos;
+};
+
 #endif

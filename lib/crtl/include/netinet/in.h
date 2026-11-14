@@ -97,6 +97,27 @@ struct sockaddr_in {
 #define IPPROTO_IDP   22
 #define IPPROTO_TP    29
 #define IPPROTO_IPV6  41
+
+/* IPPROTO_IPV6 socket options, the kernel's numbers (include/uapi/linux/in6.h) */
+#define IPV6_ADDRFORM        1
+#define IPV6_2292PKTINFO     2
+#define IPV6_CHECKSUM        7
+#define IPV6_NEXTHOP         9
+#define IPV6_UNICAST_HOPS    16
+#define IPV6_MULTICAST_IF    17
+#define IPV6_MULTICAST_HOPS  18
+#define IPV6_MULTICAST_LOOP  19
+#define IPV6_ADD_MEMBERSHIP  20
+#define IPV6_DROP_MEMBERSHIP 21
+#define IPV6_JOIN_GROUP      IPV6_ADD_MEMBERSHIP
+#define IPV6_LEAVE_GROUP     IPV6_DROP_MEMBERSHIP
+#define IPV6_V6ONLY          26
+#define IPV6_RECVPKTINFO     49
+#define IPV6_PKTINFO         50
+#define IPV6_RECVHOPLIMIT    51
+#define IPV6_HOPLIMIT        52
+#define IPV6_RECVTCLASS      66
+#define IPV6_TCLASS          67
 #define IPPROTO_ROUTING 43
 #define IPPROTO_FRAGMENT 44
 #define IPPROTO_RSVP  46

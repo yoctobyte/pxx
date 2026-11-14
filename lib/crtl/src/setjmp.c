@@ -28,7 +28,20 @@
  */
 
 #include <setjmp.h>
+#include <signal.h>
 
 void (longjmp)(jmp_buf env, int val) { __pxx_longjmp(&env, val); }
 void (_longjmp)(jmp_buf env, int val) { __pxx_longjmp(&env, val); }
-void (siglongjmp)(jmp_buf env, int val) { __pxx_longjmp(&env, val); }
+void (siglongjmp)(sigjmp_buf env, int val) { __pxx_sigjmp_restore(&env); __pxx_longjmp(&env, val); }
+
+/* sigsetjmp's mask half (see <setjmp.h>). */
+void __pxx_sigjmp_save(sigjmp_buf *env, int savemask)
+{
+  env->__saved = savemask != 0;
+  if (savemask) sigprocmask(SIG_BLOCK, 0, (sigset_t *)env->__mask);
+}
+
+void __pxx_sigjmp_restore(sigjmp_buf *env)
+{
+  if (env->__saved) sigprocmask(SIG_SETMASK, (sigset_t *)env->__mask, 0);
+}

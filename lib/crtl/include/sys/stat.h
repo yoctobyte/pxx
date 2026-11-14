@@ -84,4 +84,16 @@ extern int mkfifo(const char *path, mode_t mode);
 extern int fchmod(int fd, mode_t mode);
 extern mode_t umask(mode_t mask);
 
+/* The directory-relative family. dirfd is an open directory or AT_FDCWD, and
+   flags take AT_SYMLINK_NOFOLLOW / AT_EMPTY_PATH (from <fcntl.h>). A tree
+   walker that holds directory descriptors -- toybox's dirtree, find, rm -r,
+   cp -r -- resolves every name through these, so a version that accepted only
+   AT_FDCWD would look right in a test run from the top directory and stat the
+   wrong file one level down. */
+extern int fstatat(int dirfd, const char *path, struct stat *buf, int flags);
+extern int fchmodat(int dirfd, const char *path, mode_t mode, int flags);
+extern int mkdirat(int dirfd, const char *path, mode_t mode);
+extern int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev);
+extern int mkfifoat(int dirfd, const char *path, mode_t mode);
+
 #endif

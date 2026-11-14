@@ -48,9 +48,12 @@ int openat(int dirfd, const char *path, int flags, ...) {
     mode = va_arg(ap, int);
     va_end(ap);
   }
-  /* Only AT_FDCWD (-100) is supported; sqlite's default VFS uses plain open(). */
-  if (dirfd != -100) { errno = EBADF; return -1; }
-  return sysret(__pxx_open(path, flags, mode));
+  /* AT_FDCWD goes through the PAL's open like open() does; a real directory
+     descriptor goes to openat(2) directly. Before toybox this refused every
+     dirfd but AT_FDCWD with EBADF -- sqlite never passes one, a tree walker
+     passes nothing else. */
+  if (dirfd == AT_FDCWD) return sysret(__pxx_open(path, flags, mode));
+  return (int)syscall(SYS_openat, (long)dirfd, path, (long)flags, (long)mode);
 }
 
 int creat(const char *path, mode_t mode) {
@@ -163,5 +166,31 @@ int posix_fallocate(int fd, off_t offset, off_t len) {
     return rc;
   }
   errno = saved;
+  return 0;
+}
+
+/* posix_fadvise(3). Three syscall shapes for one call: the 64-bit ABIs take
+   (fd, off, len, advice); i386 has fadvise64_64 with each 64-bit value split
+   into two registers; arm32 moved advice second (arm_fadvise64_64) so the
+   64-bit pairs land in aligned register pairs. off_t is the native long here,
+   so the high halves are its sign extension. riscv32 gets ENOSYS until
+   something there needs it. */
+int posix_fadvise(int fd, off_t offset, off_t len, int advice)
+{
+  long r;
+  int e = errno;
+#if defined(__x86_64__) || defined(__aarch64__)
+  r = syscall(SYS_fadvise64, (long)fd, (long)offset, (long)len, (long)advice);
+#elif defined(__i386__)
+  r = syscall(SYS_fadvise64_64, (long)fd, (long)offset, offset < 0 ? -1L : 0L,
+              (long)len, len < 0 ? -1L : 0L, (long)advice);
+#elif defined(__arm__)
+  r = syscall(SYS_arm_fadvise64_64, (long)fd, (long)advice, (long)offset,
+              offset < 0 ? -1L : 0L, (long)len, len < 0 ? -1L : 0L);
+#else
+  (void)fd; (void)offset; (void)len; (void)advice;
+  return ENOSYS;
+#endif
+  if (r < 0) { r = errno; errno = e; return (int)r; }
   return 0;
 }

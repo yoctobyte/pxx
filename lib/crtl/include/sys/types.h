@@ -116,4 +116,8 @@ typedef uint64_t u_int64_t;
    guard-wrapped, so the cycle terminates. */
 #include <sys/select.h>
 
+/* glibc's <sys/types.h> brings <endian.h> along, and code relies on it:
+   toybox's lsusb calls le16toh having included neither. */
+#include <endian.h>
+
 #endif

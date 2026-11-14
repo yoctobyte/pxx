@@ -38,4 +38,17 @@ struct utmpx {
   char __glibc_reserved[20];
 };
 
+/* The utmpx database: read-only, sequential, over the same file and record
+   layout as the system's (glibc's on this ABI, see <utmp.h>). A system with no
+   /var/run/utmp -- a container, a fresh live image -- is an empty database:
+   getutxent returns NULL, which is what who/w/uptime then report. Writing
+   (pututxline) is refused with ENOSYS rather than faked. */
+void setutxent(void);
+void endutxent(void);
+struct utmpx *getutxent(void);
+struct utmpx *getutxid(const struct utmpx *ut);
+struct utmpx *getutxline(const struct utmpx *ut);
+struct utmpx *pututxline(const struct utmpx *ut);
+int utmpxname(const char *file);
+
 #endif

@@ -32,6 +32,20 @@ typedef struct {
 #define WEOF (-1)
 
 size_t wcslen(const wchar_t *s);
+
+/* Multibyte conversion and display width in the C locale, which is ASCII:
+   bytes 0..127 are their own wide characters and everything above is EILSEQ
+   (or -1 for wcwidth). Measured against glibc's C locale: mbrtowc(0xE9) and
+   wcrtomb(0xE9) are -1/EILSEQ, wcwidth is 1 for printable ASCII, 0 for L'\0'
+   and -1 for controls and for every non-ASCII value (U+00E9, U+4E00). */
+size_t mbrtowc(wchar_t *pwc, const char *s, size_t n, mbstate_t *ps);
+size_t wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
+size_t mbrlen(const char *s, size_t n, mbstate_t *ps);
+int mbsinit(const mbstate_t *ps);
+wint_t btowc(int c);
+int wctob(wint_t c);
+int wcwidth(wchar_t wc);
+int wcswidth(const wchar_t *s, size_t n);
 wint_t towlower(wint_t c);
 wint_t towupper(wint_t c);
 

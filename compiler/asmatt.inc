@@ -33,6 +33,7 @@ const
   ATTBIND_REG  = 1;   { %N is a register: `"r"`, `"rm"`, `"a"` and friends }
   ATTBIND_MEM  = 2;   { %N is the FRAME SLOT at AttBindOff[n]: `"m"` }
   ATTBIND_IMM  = 3;   { %N is the constant AttBindImm[n]: `"i"`, `"n"` }
+  ATTBIND_MEMREG = 4; { %N is `(reg)`, reg holding the object's address: an `"m"` dereference }
   ATT_MAX_LABELS = 64;
 
 var
@@ -748,6 +749,15 @@ begin
     AsmOpKind[slot] := AOP_IMM;
     AsmOpVal[slot] := AttBindImm[n];
   end
+  else if AttBindKind[n] = ATTBIND_MEMREG then
+  begin
+    AsmOpKind[slot] := AOP_MEMR;
+    AsmOpReg[slot] := AttBindReg[n];
+    AsmOpIndex[slot] := -1;
+    AsmOpScale[slot] := 1;
+    AsmOpVal[slot] := 0;
+    AsmOpSize[slot] := AttBindSize[n];
+  end
   else
   begin
     AsmOpKind[slot] := AOP_MEM;
@@ -865,7 +875,7 @@ begin
       if AttIsDigit(AttPeek) then
       begin
         n := AttReadOperandNumber;
-        if AttBindKind[n] = ATTBIND_IMM then
+        if (AttBindKind[n] = ATTBIND_IMM) or (AttBindKind[n] = ATTBIND_MEMREG) then
           AttUseOperand(slot, n)
         else if AttBindKind[n] = ATTBIND_REG then
         begin
@@ -975,6 +985,8 @@ begin
          or CaseEqual(b,'push') or CaseEqual(b,'pop')
          or CaseEqual(b,'lgdt') or CaseEqual(b,'lidt') or CaseEqual(b,'ltr')
          or CaseEqual(b,'invlpg')
+         or CaseEqual(b,'clflush') or CaseEqual(b,'clflushopt')
+         or CaseEqual(b,'clwb')
          { Gibux SMP: the atomic read-modify-writes (with `lock`, below) and
            the descriptor-register reads. rdtscp takes no operands, so it
            never reaches this list (the zero-operand arm passes it on). }

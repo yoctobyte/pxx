@@ -694,7 +694,17 @@ begin
     if CPathIsCModule(CPPathAtDepth[d]) then
     begin
       Result := CPPathAtDepth[d];
-      Exit;
+      { A USER .c that another .c #includes is part of THAT translation unit,
+        not a module of its own: bzip2.c includes libarchive/bz/*.c, whose
+        `static` functions are prototyped in a header the includer read.
+        Attributed to the inner file, the definition and the prototype were
+        two different static functions in two modules, and the object called
+        an undefined `f` (busybox's BZ2_* and xz_dec_* at link). So keep
+        walking out while the file found is the user's; crtl's own .c files
+        stay modules, which is what the module map exists for.
+        bug-c-a-static-defined-in-an-included-c-file-is-never-emitted }
+      if (CPFindSub(Result, 'lib/crtl/') > 0) or (CPFindSub(Result, '<crtl-') > 0) then
+        Exit;
     end;
 end;
 

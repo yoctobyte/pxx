@@ -68,6 +68,119 @@ begin
   end;
 end;
 
+{ The constant argument of `aligned(...)` in a lowercased attribute text, from
+  position j (just past the `(`): an integer literal, `sizeof(T)` /
+  `__alignof__(T)` of a scalar type, a parenthesised one, or a product of
+  those. 0 when it is anything else. The preprocessor has already run, so this
+  is what a macro like busybox's `ALIGNED(sizeof(long))` expands to. Reading
+  only digits made that 0, and an alignment of 0 marks the struct body not
+  simple -- the WHOLE struct went opaque and every member access read 4 bytes
+  at offset 0: busybox bzip2's EState passed a truncated address as
+  s->crc32table and crashed (reported by pixx-f2).
+  bug-c-an-aligned-attribute-with-a-sizeof-argument-makes-the-struct-opaque }
+function CAttrAlignExprAt(const s: AnsiString; var j: Integer): Integer;
+var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer;
+
+  procedure SkipWs;
+  begin
+    while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
+  end;
+
+  function Factor: Integer;
+  var q: Integer;
+  begin
+    Result := 0;
+    SkipWs;
+    if j > Length(s) then Exit;
+    if s[j] = '(' then
+    begin
+      Inc(j);
+      Result := CAttrAlignExprAt(s, j);
+      SkipWs;
+      if (j <= Length(s)) and (s[j] = ')') then Inc(j) else Result := 0;
+      Exit;
+    end;
+    if s[j] in ['0'..'9'] then
+    begin
+      if (j < Length(s)) and (s[j] = '0') and (s[j+1] = 'x') then
+      begin
+        j := j + 2;
+        while (j <= Length(s)) and (s[j] in ['0'..'9', 'a'..'f']) do
+        begin
+          if s[j] in ['0'..'9'] then Result := Result * 16 + Ord(s[j]) - Ord('0')
+          else Result := Result * 16 + Ord(s[j]) - Ord('a') + 10;
+          Inc(j);
+        end;
+      end
+      else
+        while (j <= Length(s)) and (s[j] in ['0'..'9']) do
+        begin
+          Result := Result * 10 + Ord(s[j]) - Ord('0');
+          Inc(j);
+        end;
+      while (j <= Length(s)) and (s[j] in ['u', 'l']) do Inc(j);
+      Exit;
+    end;
+    { sizeof / _Alignof / __alignof__ / __alignof of a scalar type name }
+    w := '';
+    while (j <= Length(s)) and (s[j] in ['a'..'z', '0'..'9', '_']) do
+    begin
+      AppendChar(w, s[j]);
+      Inc(j);
+    end;
+    if (w <> 'sizeof') and (w <> '_alignof') and (w <> '__alignof__') and (w <> '__alignof') then
+      Exit;
+    SkipWs;
+    if (j > Length(s)) or (s[j] <> '(') then Exit;
+    Inc(j);
+    ty := '';
+    depth := 1;
+    while (j <= Length(s)) and (depth > 0) do
+    begin
+      if s[j] = '(' then Inc(depth)
+      else if s[j] = ')' then Dec(depth);
+      if depth > 0 then AppendChar(ty, s[j]);
+      Inc(j);
+    end;
+    if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) then ptrSz := 8 else ptrSz := 4;
+    if CStrContains(ty, '*') then begin Result := ptrSz; Exit; end;
+    { word by word: the size is decided by the words present, as in a decl }
+    k := 0;
+    w := ' ' + ty + ' ';
+    for q := 1 to Length(w) do
+      if w[q] in [#9, #10, #13] then w[q] := ' ';
+    if CStrContains(w, ' long long ') then k := 8
+    else if CStrContains(w, ' double ') then
+    begin
+      if CStrContains(w, ' long ') then k := 0 else k := 8;   { long double: unknown here }
+    end
+    else if CStrContains(w, ' long ') then k := ptrSz
+    else if CStrContains(w, ' short ') then k := 2
+    else if CStrContains(w, ' char ') or CStrContains(w, ' _bool ') then k := 1
+    else if CStrContains(w, ' float ') then k := 4
+    else if CStrContains(w, ' int ') or CStrContains(w, ' unsigned ') or
+            CStrContains(w, ' signed ') then k := 4
+    else if CStrContains(w, ' size_t ') or CStrContains(w, ' uintptr_t ') or
+            CStrContains(w, ' intptr_t ') or CStrContains(w, ' ptrdiff_t ') then k := ptrSz
+    else if CStrContains(w, ' uint64_t ') or CStrContains(w, ' int64_t ') then k := 8
+    else if CStrContains(w, ' uint32_t ') or CStrContains(w, ' int32_t ') then k := 4
+    else if CStrContains(w, ' uint16_t ') or CStrContains(w, ' int16_t ') then k := 2
+    else if CStrContains(w, ' uint8_t ') or CStrContains(w, ' int8_t ') then k := 1;
+    Result := k;
+  end;
+
+begin
+  Result := Factor;
+  SkipWs;
+  while (Result > 0) and (j <= Length(s)) and (s[j] = '*') do
+  begin
+    Inc(j);
+    f := Factor;
+    Result := Result * f;
+    SkipWs;
+  end;
+end;
+
 function CAttrAlignedValueOf(const s: AnsiString): Integer;
 var i, j, v: Integer;
 begin
@@ -88,12 +201,16 @@ begin
       if (j <= Length(s)) and (s[j] = '(') then
       begin
         Inc(j);
+        v := CAttrAlignExprAt(s, j);
         while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
-        v := 0;
-        while (j <= Length(s)) and (s[j] in ['0'..'9']) do
+        if (v <= 0) or (j > Length(s)) or (s[j] <> ')') then
         begin
-          v := v * 10 + Ord(s[j]) - Ord('0');
-          Inc(j);
+          { gcc's own rule for an argument it cannot use is an error; ours
+            used to be a silent opaque struct. Say so and take the biggest
+            alignment, which is what a bare `aligned` means. }
+          Warn('C: cannot evaluate the argument of __attribute__((aligned(...))) in "' +
+               s + '"; using the target''s biggest alignment');
+          if TargetArch = TARGET_ARM32 then v := 8 else v := 16;
         end;
         Result := v;
         Exit;
@@ -601,8 +718,10 @@ begin
     the duplicate-definition check tell crtl's fcntl.c and unistd.c apart
     instead of reading two legal statics as a redefinition.
     bug-c-static-functions-in-different-crtl-modules-collide }
-  if CPathIsCModule(path) then CMarkTokModule(TokCount, path)
-  else if encl <> '' then CMarkTokModule(TokCount, encl)
+  { encl first: for a user .c included by another .c the preprocessor names
+    the INCLUDER as the module (CPEnclosingCModule says why) }
+  if encl <> '' then CMarkTokModule(TokCount, encl)
+  else if CPathIsCModule(path) then CMarkTokModule(TokCount, path)
   else CMarkTokNoModule(TokCount);
   { tokens from here belong to `path`. The main translation unit keeps file 1;
     a header interns its own id, so its code lands in the line table as itself

@@ -110,3 +110,13 @@ int munlock(const void *addr, size_t len)
   return -1;
 #endif
 }
+
+int mlockall(int flags)
+{
+  return (int)syscall(SYS_mlockall, (long)flags);
+}
+
+int munlockall(void)
+{
+  return (int)syscall(SYS_munlockall);
+}

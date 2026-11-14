@@ -113,6 +113,11 @@ struct addrinfo {
 #define AI_CANONNAME   0x0002
 #define AI_NUMERICHOST 0x0004
 #define AI_NUMERICSERV 0x0400
+/* Accepted and not acted on: this resolver returns what DNS or the literal
+   gives, and AI_ADDRCONFIG only ever REMOVES results. */
+#define AI_V4MAPPED    0x0008
+#define AI_ALL         0x0010
+#define AI_ADDRCONFIG  0x0020
 
 
 struct hostent *gethostbyname(const char *name);

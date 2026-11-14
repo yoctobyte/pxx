@@ -3044,7 +3044,18 @@ begin
   Result := node;
 end;
 
+{ The UFld index of a field node, or -1. }
+function CNodeFieldIdx(node: Integer): Integer;
+var rec: Integer;
+begin
+  Result := -1;
+  rec := ResolveNodeRec(ASTLeft[node]);
+  if rec >= REC_UCLASS_BASE then
+    Result := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(node));
+end;
+
 function CNodePtrDepth(node: Integer): Integer;
+var fi: Integer;
 begin
   node := CCommaValue(node);
   Result := 0;
@@ -3058,6 +3069,13 @@ begin
       Result := SymPtrDepth[ASTIVal[node]];
       if Result = 0 then Result := 1;
     end;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    { a pointer member: its recorded depth (the C struct builder stamps it) }
+    fi := CNodeFieldIdx(node);
+    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) then
+      Result := UFldPtrDepth[fi];
   end
   else if ASTKind[node] = AN_INDEX then
   begin
@@ -3109,13 +3127,20 @@ begin
 end;
 
 function CNodePtrBaseTk(node: Integer): Integer;
-var baseNode: Integer;
+var baseNode, fi: Integer;
 begin
   node := CCommaValue(node);
   Result := Ord(tyUnknown);
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
     Result := SymPtrBaseTk[ASTIVal[node]]
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    fi := CNodeFieldIdx(node);
+    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) and
+       (UFldPtrDepth[fi] > 0) then
+      Result := UFldPtrBaseTk[fi];
+  end
   else if ASTKind[node] = AN_INDEX then
   begin
     baseNode := ASTLeft[node];
@@ -6932,6 +6957,12 @@ begin
             and (Syms[si].Kind in [skLocal, skParam]);
 end;
 
+function CIsTypeofWord(const w: AnsiString): Boolean;
+{ GNU `typeof` and its reserved spellings (C23 `typeof` too). }
+begin
+  Result := (w = 'typeof') or (w = '__typeof__') or (w = '__typeof');
+end;
+
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
@@ -6939,6 +6970,7 @@ begin
     tkRecord { 'struct' }];
   if (not Result) and (CurTok.Kind = tkIdent) then
     Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
+              CIsTypeofWord(CurTok.SVal) or
               { typedef name is a type only if not shadowed by a variable of the
                 same exact name — zlib inftrees.h `typedef ... code;` vs trees.c
                 `int code;` loop var. }
@@ -7243,6 +7275,41 @@ begin
               Next;
             end;
             if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, True);
+          end
+          else if (not sawBase) and CIsTypeofWord(CurTok.SVal) then
+          begin
+            { `typeof(expr)` / `typeof(type-name)` (GNU, C23). The type-name
+              form takes ParseCDeclType's answer; the expression form is parsed
+              for its TYPE only -- the nodes are never compiled -- and takes the
+              scalar kind the expression carries, signedness included. That is
+              what toybox's minof/maxof need (`typeof(a) aa = (a);` inside a
+              statement expression). A pointer or struct expression would also
+              need its pointee or record identity, which an expression node does
+              not carry in one place, so those are refused by name rather than
+              given a type that is right in size and wrong in what it points at.
+              feature-c-typeof }
+            Next;
+            Expect(tkLParen, '(');
+            if IsCTypeTok then
+            begin
+              { the parentheses are the recursion: a bare ParseCDeclType inside
+                its own body is the function's RESULT variable }
+              base := ParseCDeclType();
+              if CTypeIsVoid then isVoid := True;
+            end
+            else
+            begin
+              base := IntToTypeKind(ASTTk[ParseCExpr]);
+              if (base = tyPointer) or (base = tyRecord) or (base = tyUnknown) then
+                Error('C: typeof of a pointer, struct or untyped expression is not supported yet; '
+                    + 'only arithmetic expressions and type names (feature-c-typeof)');
+              if (base = tyBoolean) or (base = tyInteger) then base := tyInt32;   { a comparison has type int in C }
+            end;
+            Expect(tkRParen, ')');
+            if (base = tyInt64) or (base = tyUInt64) then tdLongRank := 1;
+            if base = tySingle then isFloatTy := True;
+            if base = tyDouble then isFloatTy := True;
+            sawBase := True; isTypedef := True;
           end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
@@ -9965,7 +10032,8 @@ var
   saveReg: array[0..MAX_CASM_OPERANDS-1] of Integer;
   saveCount: Integer;
   tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
-  head, tail, nd, idn, asn, sq, blk, val: Integer;
+  memReg: array[0..MAX_CASM_OPERANDS-1] of Boolean;   { "m" reached through an address register }
+  head, tail, nd, idn, asn, sq, blk, val, adr: Integer;
   cls, nm, rest: AnsiString;
   dummySize: Integer;
   immV: Int64;
@@ -10131,6 +10199,25 @@ begin
     used[reg] := True;
   end;
 
+  { ---- an `"m"` INPUT that is a dereference: the object itself ----
+    `"m"(*(volatile char *)p)`, `"m"(a[i])`, `"m"(s->f)`: the asm must address
+    THAT object, not a copy of its value in a frame slot. For a load the copy
+    reads the same bytes; for clflush, invlpg, lgdt or a lock-prefixed RMW the
+    ADDRESS is the operand, and the copy flushed a stack temporary while the
+    page-table line the IOMMU reads stayed dirty (Gibux vtd.c). So the address
+    is computed into a pool register and %N is `(reg)`. x86-64 only: the i386
+    text sink has no such operand form yet and keeps the copy.
+    bug-c-an-m-operand-that-is-a-dereference-binds-a-copy }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    memReg[i] := False;
+    if (TargetArch = TARGET_X86_64) and (i >= CAsmOutCount) and
+       (CAsmOps[i].TiedTo < 0) and (CAsmOps[i].Cons = 'm') and
+       ((ASTKind[CAsmOps[i].Expr] = AN_DEREF) or (ASTKind[CAsmOps[i].Expr] = AN_INDEX) or
+        (ASTKind[CAsmOps[i].Expr] = AN_FIELD)) then
+      memReg[i] := True;
+  end;
+
   { ---- and the rest, pinned from the caller-saved pool ---- }
   { An `"m"` operand is DELIBERATELY not in this loop: it is encoded as a frame
     slot, so it consumes no pool entry. It used to take one to hold its address,
@@ -10140,7 +10227,7 @@ begin
   for i := 0 to CAsmOpCount - 1 do
   begin
     if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
-    if not CAsmClassWantsReg(CAsmOps[i].Cons) then Continue;
+    if not (CAsmClassWantsReg(CAsmOps[i].Cons) or memReg[i]) then Continue;
     while (poolNext < CAsmPoolCount) and used[CAsmPoolReg(poolNext)] do Inc(poolNext);
     if poolNext >= CAsmPoolCount then
       Error('C: inline asm needs more registers than this frontend can pin'
@@ -10182,6 +10269,12 @@ begin
         tmpSym[i] := j;
     end;
     opOwn[i] := tmpSym[i] < 0;
+    if memReg[i] then
+    begin
+      { the carrier holds the ADDRESS, so any width of object is fine }
+      tmpSym[i] := AllocVar('', tyPointer);
+      Continue;
+    end;
     { The width rule is about the CARRIER, not about the constraint. A value
       that has to be copied into a temporary must fit a register, because the
       copy is an ordinary assignment; an `"m"` bound straight to a variable's
@@ -10209,6 +10302,8 @@ begin
               + '" must be an integer constant');
       AttBindImmOperand(i, immV);
     end
+    else if memReg[i] then
+      AttBindOperand(i, ATTBIND_MEMREG, opReg[i], opSz[i], 0)
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i], 0)
     else
@@ -10224,7 +10319,9 @@ begin
   for i := 0 to saveCount - 1 do
     AttEmitPushPop(saveReg[i], True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
-    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+    if memReg[i] then
+      AttEmitFrameMove(opReg[i], 8, Syms[tmpSym[i]].Offset, True)
+    else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
   AttEncodeTemplateInner(CAsmTemplate, isExt);
   for i := 0 to CAsmOutCount - 1 do
@@ -10246,6 +10343,13 @@ begin
     ASTIVal[idn] := tmpSym[i];
     ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
     val := CAsmOps[i].Expr;
+    if memReg[i] then
+    begin
+      adr := AllocNode(AN_ADDR);
+      ASTLeft[adr] := val;
+      ASTTk[adr] := Ord(tyPointer);
+      val := adr;
+    end;
     asn := AllocNode(AN_ASSIGN);
     ASTLeft[asn] := idn; ASTRight[asn] := val;
     ASTTk[asn] := ASTTk[idn];
@@ -16616,12 +16720,54 @@ begin
   TokPos := savedPos; Next;
 end;
 
+{ `main`'s file-scope initialisers, compiled as a procedure of their own and
+  CALLED from main's head instead of being compiled INTO it.
+
+  Inline, every temporary the initialisers need became one of main's locals:
+  a trivial program's main had a 5,520-byte frame, and toybox's -- whose
+  243-entry toy_list and friends are initialised here -- ran past 24 KB. That
+  is not only waste. toybox measures recursion depth as the distance between
+  main's &argc and a local in the command it is about to run, gives up above
+  24,000 bytes, and so ran NO command at all: every invocation answered
+  "Unknown command". gcc's main frame is the handful of bytes its own locals
+  need, and code that measures stack distance from main is entitled to that.
+
+  The unit-init proc in ParseCUnit is the same shape for a C unit; this is the
+  program's. Emitted BEFORE main's body address is taken, so the two bodies do
+  not interleave. Returns the proc index. }
+function CEmitMainInitProc: Integer;
+var initIdx, patchPos, savedSC, savedFS, savedCur: Integer;
+    dummyNames: array[0..0] of AnsiString;
+    dummyTypes: array[0..0] of TTypeKind;
+begin
+  initIdx := RegisterProc('__pxx_c_main_init', False, tyInteger, 0, dummyNames, dummyTypes);
+  ProcCStaticLink[initIdx] := True;
+  SetProcBodyAddrHere(initIdx);
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  savedCur := CurProc;
+  FrameSize := 0;
+  CurProc := initIdx;
+  Procs[initIdx].ScopeBase := SymCount;
+  patchPos := EmitProcPrologue;
+  Procs[initIdx].FramePatch := patchPos;
+  CompilePendingGlobalInits;
+  CEmitDeferredCAggInits;
+  EmitProcEpilog(-1);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC);
+  FrameSize := savedFS;
+  CurProc := savedCur;
+  Result := initIdx;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
   name, extLib, hdrLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
+  mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
@@ -17505,6 +17651,8 @@ begin
     redeclaration must not turn the symbol global again.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   if procSawStatic then ProcCStaticLink[procIdx] := True;
+  mainInitIdx := -1;
+  if name = 'main' then mainInitIdx := CEmitMainInitProc;
   SetProcBodyAddrHere(procIdx);
   
   { Save scope }
@@ -18230,8 +18378,8 @@ begin
        (TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
       EmitZeroLocalSlotForTarget(Procs[procIdx].RetSymIdx,
                                  TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
-    CompilePendingGlobalInits;
-    CEmitDeferredCAggInits;
+    { the initialisers, out of line (CEmitMainInitProc says why) }
+    if mainInitIdx >= 0 then EmitCallProc(mainInitIdx);
   end;
 
   { Parse & Compile Body }
@@ -18643,6 +18791,19 @@ begin
       if not CConstWide then begin CConstWide := True; CConstUns := (fl and 4) <> 0; end;
     end;
     Next;
+  end
+  else if CurTok.Kind = tkString then
+  begin
+    { A string literal is an ADDRESS constant, never null, so in the truth
+      contexts a constant expression can use one -- `0 || "abc"`, `!"x"`,
+      `"x" && n` -- it is 1. toybox computes `static const int NEED_OPTIONS =
+      "opts" || 0 || ...;` from its command table; this folded it to 0 (the
+      primary had no string arm, read nothing and answered 0), and every
+      command then skipped option parsing entirely. Adjacent literals are one
+      literal. Anywhere else (an array bound, a case label) a string is not a
+      constant expression and the context's own checks still say so. }
+    while CurTok.Kind = tkString do Next;
+    Result := 1;
   end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
@@ -19411,6 +19572,9 @@ var
   bfNDims: array of Integer;
   bfPtrElemArrLen: array of Integer;   { flattened extent of an ARRAY pointee, `int (*fp)[4]` -> 4; 0 otherwise }
   bfPtrElemNDims: array of Integer;    { ...its dim count when it has more than one (`mat4 *p`) }
+  bfPtrDepth: array of Integer;        { pointer depth of a pointer member (`char **m` -> 2); 0 = not recorded }
+  bfPtrBaseTk: array of Integer;       { ...and the ultimate pointee kind (`char`) / record }
+  bfPtrBaseRec: array of Integer;
   bfPtrElemDim: array of Integer;      { ...and those dims, MAX_ARR_DIMS per field }
   bfDimSpan: array of Integer;
   { An ARRAY TYPEDEF's dims, captured when the member's type is parsed: an
@@ -19473,7 +19637,8 @@ begin
   SetLength(bfBitShift, bfCap);  SetLength(bfBitBytes, bfCap);  SetLength(bfAnonRec, bfCap);
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   SetLength(bfPtrElemArrLen, bfCap);
-  SetLength(bfPtrElemNDims, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
+  SetLength(bfPtrElemNDims, bfCap);
+  SetLength(bfPtrDepth, bfCap); SetLength(bfPtrBaseTk, bfCap); SetLength(bfPtrBaseRec, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   bitPos := 0;
@@ -19574,6 +19739,9 @@ begin
                     UFldPtrElemDimSpan[(UClsFBase[subci] + k) * MAX_ARR_DIMS + ndi];
                 end;
                 bfAnonRec[bfCount] := REC_UCLASS_BASE + subci;   { flattened from this anon member }
+                bfPtrDepth[bfCount] := UFldPtrDepth[UClsFBase[subci] + k];
+                bfPtrBaseTk[bfCount] := UFldPtrBaseTk[UClsFBase[subci] + k];
+                bfPtrBaseRec[bfCount] := UFldPtrBaseRec[UClsFBase[subci] + k];
                 Inc(bfCount);
               end;
             if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
@@ -19645,6 +19813,7 @@ begin
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1; bfElemProcSig[bfCount] := -1;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
         totalSz := sz;
@@ -19719,6 +19888,7 @@ begin
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           bfProcSig[bfCount] := fldProcSig; bfElemProcSig[bfCount] := -1;
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
         if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
@@ -20089,6 +20259,29 @@ begin
           { `ft *pf` (exactly one star): field is a pointer-to-fn-ptr, callable via
             `(*s.pf)()` — record the pointee sig on the parallel elem channel. }
           if declStars = 1 then bfElemProcSig[bfCount] := fldElemProcSig else bfElemProcSig[bfCount] := -1;
+          { The member's full pointer shape, the way a local's is kept
+            (SetSymPointerType): depth and ultimate base. Without it a
+            `char **m` member was "a pointer to a pointer to something", so
+            `*s.m[i]` and `**s.m` loaded 8 bytes and `s.m[i][j]` indexed
+            pointers: toybox's `*toys.optargs[1]` came back as four characters
+            and devmem refused every width. The first declarator's shape is
+            ParseCDeclType's; a later one's is its own stars over the base
+            scalar (unrecorded when that base is itself a pointer typedef).
+            bug-c-indexing-a-pointer-to-pointer-struct-member-loses-a-level }
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
+          if (declStars > 0) and firstDecl and (CTypePtrDepth = declStars) then
+          begin
+            bfPtrDepth[bfCount] := CTypePtrDepth;
+            bfPtrBaseTk[bfCount] := CTypePtrBaseTk;
+            bfPtrBaseRec[bfCount] := CTypePtrBaseRec;
+          end
+          else if (declStars > 0) and (not firstDecl) and
+                  (IntToTypeKind(baseScalarTk) <> tyPointer) then
+          begin
+            bfPtrDepth[bfCount] := declStars;
+            bfPtrBaseTk[bfCount] := baseScalarTk;
+            bfPtrBaseRec[bfCount] := baseRecId;
+          end;
           Inc(bfCount);
         end;
 
@@ -20178,6 +20371,9 @@ begin
     UFldAnonRec[UFldCount-1] := bfAnonRec[k];
     UFldPtrElemArrLen[UFldCount-1] := bfPtrElemArrLen[k];
     UFldPtrElemNDims[UFldCount-1] := bfPtrElemNDims[k];
+    UFldPtrDepth[UFldCount-1] := bfPtrDepth[k];
+    UFldPtrBaseTk[UFldCount-1] := bfPtrBaseTk[k];
+    UFldPtrBaseRec[UFldCount-1] := bfPtrBaseRec[k];
     for ndi := 0 to MAX_ARR_DIMS - 1 do
       UFldPtrElemDimSpan[(UFldCount-1) * MAX_ARR_DIMS + ndi] := bfPtrElemDim[k * MAX_ARR_DIMS + ndi];
     UFldIsArray[UFldCount-1] := bfIsArr[k];

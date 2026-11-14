@@ -434,8 +434,27 @@ ssize_t readlink(const char *path, char *buf, size_t bufsz) {
 }
 
 /* Kernel getcwd returns the path length incl. NUL, or -errno. */
+/* getcwd(NULL, size): the glibc/musl extension every modern libc has --
+   allocate the buffer (size bytes, or as many as the path needs when size is
+   0) and hand ownership to the caller. toybox's xgetcwd is exactly
+   getcwd(NULL, 0); the kernel answered that with ERANGE, so `env -i`, `cp -r
+   /abs` and anything else reaching xgetcwd died with "Numerical result out of
+   range". */
 char *getcwd(char *buf, size_t size) {
-  int r = __pxx_getcwd(buf, (unsigned long)size);
+  int r;
+  if (!buf) {
+    size_t n = size ? size : 4096;
+    char *b = (char *)malloc(n);
+    if (!b) { errno = ENOMEM; return 0; }
+    r = __pxx_getcwd(b, (unsigned long)n);
+    if (r < 0) { free(b); errno = -r; return 0; }
+    if (!size) {   /* shrink to the path: the caller may keep it a long time */
+      char *t = (char *)realloc(b, strlen(b) + 1);
+      if (t) b = t;
+    }
+    return b;
+  }
+  r = __pxx_getcwd(buf, (unsigned long)size);
   if (r < 0) { errno = -r; return 0; }
   return buf;
 }
@@ -527,6 +546,8 @@ int rmdir(const char *path) {
   return 0;
 }
 
+static long crtl_sysconf_more(int name);
+
 long sysconf(int name) {
   if (name == _SC_PAGESIZE) return 4096;
   /* USER_HZ, not CONFIG_HZ: the kernel's internal tick rate is a build option,
@@ -539,7 +560,7 @@ long sysconf(int name) {
      table or to bound a close-all loop, so answering -1 here is worse than
      answering the conventional value. */
   if (name == _SC_OPEN_MAX) return 1024;
-  return -1;
+  return crtl_sysconf_more(name);
 }
 
 /* isatty: 1 when fd is a terminal, 0 otherwise.
@@ -813,7 +834,7 @@ static int pxx_getopt_impl(int argc, char *const argv[], const char *optstring,
     char **av = (char **)argv;     /* glibc permutes in place too */
     const char *prog;
     char c;
-    int silent;
+    int silent, order;
 
     if (optind == 0 || optreset) {   /* glibc-style / BSD-style reset */
         optind = 1;
@@ -823,11 +844,34 @@ static int pxx_getopt_impl(int argc, char *const argv[], const char *optstring,
         pxx_last_nonopt = 1;
     }
     if (optstring == 0) return -1;
+    /* glibc's ordering prefix, BEFORE the ':' (glibc reads "+:" and "-:").
+       '+' = stop at the first non-option (POSIX, also forced by
+       POSIXLY_CORRECT); '-' = hand each non-option back as option 1 with the
+       word in optarg. busybox starts the optstring of every applet that runs
+       another program with '+' -- `setsid ash -l` must leave -l to ash --
+       and permuting here made that "invalid option -- 'l'". */
+    order = 0;
+    if (optstring[0] == '+' || optstring[0] == '-') order = *optstring++;
+    else if (getenv("POSIXLY_CORRECT")) order = '+';
     silent = (optstring[0] == ':');
     if (silent) optstring++;
     prog = (argc > 0 && av[0]) ? av[0] : "";
 
-    if (pxx_optpos == 1) {
+    if (pxx_optpos == 1 && order != 0) {
+        /* in order: no permutation, so the bookkeeping stays empty */
+        pxx_first_nonopt = pxx_last_nonopt = optind;
+        if (optind >= argc || av[optind] == 0) return -1;
+        if (!pxx_is_opt(av[optind])) {
+            if (order == '+') return -1;
+            optarg = av[optind++];
+            return 1;
+        }
+        if (av[optind][1] == '-' && av[optind][2] == 0) {
+            optind++;
+            pxx_first_nonopt = pxx_last_nonopt = optind;
+            return -1;
+        }
+    } else if (pxx_optpos == 1) {
         /* At an argument boundary. Settle any deferred permutation, then skip
            over the non-options to the next option. */
         if (pxx_last_nonopt > optind) pxx_last_nonopt = optind;
@@ -1595,4 +1639,204 @@ int fexecve(int fd, char *const argv[], char *const envp[]) {
   while (i > 0) path[k++] = digits[--i];
   path[k] = '\0';
   return execve(path, argv, envp);
+}
+
+/* ---- the *at family, sysconf's long tail, pathconf, confstr ---------------
+ * Added for toybox (0BSD), whose dirtree holds a directory descriptor per
+ * level and resolves every name against it. Raw syscalls throughout: each one
+ * is the kernel call of the same name, nothing to translate, and syscall()
+ * already sets errno. */
+
+int unlinkat(int dirfd, const char *path, int flags)
+{
+  return (int)syscall(SYS_unlinkat, (long)dirfd, path, (long)flags);
+}
+
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsz)
+{
+  return (ssize_t)syscall(SYS_readlinkat, (long)dirfd, path, buf, (long)bufsz);
+}
+
+int fchownat(int dirfd, const char *path, uid_t owner, gid_t group, int flags)
+{
+  return (int)syscall(SYS_fchownat, (long)dirfd, path, (long)owner, (long)group,
+                      (long)flags);
+}
+
+/* faccessat(2) has NO flags argument -- glibc emulates AT_EACCESS and
+   AT_SYMLINK_NOFOLLOW in userspace or uses faccessat2 (Linux 5.8). This uses
+   faccessat2 when there are flags, and on a kernel without it falls back to the
+   flagless call, which differs only for setuid programs (AT_EACCESS) and for a
+   dangling symlink (NOFOLLOW). */
+int faccessat(int dirfd, const char *path, int mode, int flags)
+{
+  if (flags) {
+#ifdef SYS_faccessat2
+    long r = syscall(SYS_faccessat2, (long)dirfd, path, (long)mode, (long)flags);
+    if (r == 0 || errno != ENOSYS) return (int)r;
+#endif
+  }
+  return (int)syscall(SYS_faccessat, (long)dirfd, path, (long)mode);
+}
+
+int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags)
+{
+  return (int)syscall(SYS_linkat, (long)olddirfd, oldpath, (long)newdirfd, newpath,
+                      (long)flags);
+}
+
+int symlinkat(const char *target, int newdirfd, const char *linkpath)
+{
+  return (int)syscall(SYS_symlinkat, target, (long)newdirfd, linkpath);
+}
+
+/* renameat(3). aarch64 and riscv never had renameat(2), only renameat2. */
+int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath)
+{
+#ifdef SYS_renameat
+  return (int)syscall(SYS_renameat, (long)olddirfd, oldpath, (long)newdirfd, newpath);
+#else
+  return (int)syscall(SYS_renameat2, (long)olddirfd, oldpath, (long)newdirfd, newpath, 0L);
+#endif
+}
+
+/* getentropy(3): getrandom in a loop, since a short read is legal; more than
+   256 bytes is EIO by definition (the cap is what makes "all or nothing"
+   cheap enough to promise). */
+int getentropy(void *buf, size_t len)
+{
+  char *p = (char *)buf;
+  if (len > 256) { errno = EIO; return -1; }
+  while (len) {
+    long r = syscall(SYS_getrandom, p, (long)len, 0L);
+    if (r < 0) { if (errno == EINTR) continue; return -1; }
+    p += r; len -= (size_t)r;
+  }
+  return 0;
+}
+
+/* sysconf's answers beyond the original four. Every value either comes from
+   the kernel or is the Linux constant glibc reports; an unknown name is -1 with
+   errno untouched, which POSIX reads as "no limit". */
+static long crtl_count_cpus(void)
+{
+  unsigned long m[16];
+  long r = syscall(SYS_sched_getaffinity, 0L, (long)sizeof m, m);
+  long n = 0, i;
+  if (r <= 0) return 1;
+  for (i = 0; i < r / (long)sizeof(unsigned long); i++) {
+    unsigned long w = m[i];
+    while (w) { n += (long)(w & 1); w >>= 1; }
+  }
+  return n ? n : 1;
+}
+
+static long crtl_sysinfo_pages(int avail)
+{
+  /* struct sysinfo, read as longs: totalram is [4], freeram [5]; mem_unit is
+     the u32 after procs/pad and totalhigh/freehigh -- byte 104 on LP64, 52 on
+     ILP32. Raw so that sysconf does not pull <sys/sysinfo.h>'s body into every
+     program that includes <unistd.h>. */
+  long b[32];
+  unsigned long n, unit;
+  if (syscall(SYS_sysinfo, b) < 0) return -1;
+  n = (unsigned long)b[avail ? 5 : 4];
+  unit = *(unsigned int *)((char *)b + (sizeof(long) == 8 ? 104 : 52));
+  if (unit == 0) unit = 1;
+  return (long)((unsigned long long)n * unit / 4096);
+}
+
+static long crtl_sysconf_more(int name)
+{
+  switch (name) {
+  case _SC_ARG_MAX: {
+    /* the kernel's rule: a quarter of the stack limit, never below 128 KiB */
+    unsigned long long lim[2];
+    if (syscall(SYS_prlimit64, 0L, 3L /* RLIMIT_STACK */, 0L, lim) == 0 &&
+        lim[0] != ~0ULL && lim[0] / 4 > 131072)
+      return (long)(lim[0] / 4 > 0x7fffffffULL ? 0x7fffffffULL : lim[0] / 4);
+    return 131072;
+  }
+  case _SC_NPROCESSORS_CONF:
+  case _SC_NPROCESSORS_ONLN: return crtl_count_cpus();
+  case _SC_PHYS_PAGES: return crtl_sysinfo_pages(0);
+  case _SC_AVPHYS_PAGES: return crtl_sysinfo_pages(1);
+  case _SC_CHILD_MAX: return -1;
+  case _SC_NGROUPS_MAX: return 65536;
+  case _SC_HOST_NAME_MAX: return 64;
+  case _SC_LOGIN_NAME_MAX: return 256;
+  case _SC_TTY_NAME_MAX: return 32;
+  case _SC_LINE_MAX: return 2048;
+  case _SC_RE_DUP_MAX: return 0x7fff;
+  case _SC_IOV_MAX: return 1024;
+  case _SC_STREAM_MAX: return 16;
+  case _SC_SYMLOOP_MAX: return -1;
+  case _SC_EXPR_NEST_MAX: return 32;
+  case _SC_BC_BASE_MAX: return 99;
+  case _SC_BC_DIM_MAX: return 2048;
+  case _SC_BC_SCALE_MAX: return 99;
+  case _SC_BC_STRING_MAX: return 1000;
+  case _SC_COLL_WEIGHTS_MAX: return 255;
+  case _SC_THREAD_KEYS_MAX: return 1024;
+  case _SC_THREAD_STACK_MIN: return 16384;
+  case _SC_THREAD_DESTRUCTOR_ITERATIONS: return 4;
+  case _SC_VERSION:
+  case _SC_2_VERSION: return 200809L;
+  case _SC_MONOTONIC_CLOCK: return 200809L;
+  }
+  return -1;
+}
+
+/* pathconf/fpathconf: the Linux constants glibc reports for an ordinary local
+   filesystem. glibc asks statfs for _PC_NAME_MAX and _PC_LINK_MAX per
+   filesystem type; every filesystem a live system mounts answers 255 for the
+   first, and nothing in the corpora reads the second. */
+static long crtl_pathconf(int name)
+{
+  switch (name) {
+  case _PC_LINK_MAX: return 127;
+  case _PC_MAX_CANON: return 255;
+  case _PC_MAX_INPUT: return 255;
+  case _PC_NAME_MAX: return 255;
+  case _PC_PATH_MAX: return 4096;
+  case _PC_PIPE_BUF: return 4096;
+  case _PC_CHOWN_RESTRICTED: return 1;
+  case _PC_NO_TRUNC: return 1;
+  case _PC_VDISABLE: return 0;
+  case _PC_FILESIZEBITS: return 64;
+  case _PC_2_SYMLINKS: return 1;
+  }
+  errno = EINVAL;
+  return -1;
+}
+
+long pathconf(const char *path, int name)
+{
+  /* F_OK: the path must exist (ENOENT otherwise), readable or not */
+  if (syscall(SYS_faccessat, -100L, path, 0L) < 0) return -1;
+  return crtl_pathconf(name);
+}
+
+long fpathconf(int fd, int name)
+{
+  (void)fd;
+  return crtl_pathconf(name);
+}
+
+size_t confstr(int name, char *buf, size_t len)
+{
+  const char *v;
+  size_t n;
+  if (name == _CS_PATH) v = "/bin:/usr/bin";
+  else if (name == _CS_GNU_LIBC_VERSION || name == _CS_GNU_LIBPTHREAD_VERSION) {
+    errno = EINVAL;
+    return 0;
+  } else v = "";
+  n = strlen(v) + 1;
+  if (buf && len) {
+    size_t c = n < len ? n : len;
+    memcpy(buf, v, c - 1);
+    buf[c - 1] = 0;
+  }
+  return n;
 }

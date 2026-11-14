@@ -40,4 +40,34 @@ struct lconv {
 #define LC_IDENTIFICATION 12
 struct lconv *localeconv(void);
 char *setlocale(int category, const char *locale);
+
+/* POSIX 2008 locale objects. crtl has one locale, "C" (alias "POSIX", and ""
+   which means "from the environment" and resolves to it), so newlocale hands
+   back that one object for those names and fails with ENOENT for every other
+   -- including "C.UTF-8", which glibc provides and crtl does not. That is what
+   glibc does for a locale that is not installed, and the callers that try one
+   name and then another (toybox's main) take the same path they take there. */
+typedef struct __pxx_locale *locale_t;
+#define LC_GLOBAL_LOCALE ((locale_t)-1L)
+#define LC_CTYPE_MASK          (1 << LC_CTYPE)
+#define LC_NUMERIC_MASK        (1 << LC_NUMERIC)
+#define LC_TIME_MASK           (1 << LC_TIME)
+#define LC_COLLATE_MASK        (1 << LC_COLLATE)
+#define LC_MONETARY_MASK       (1 << LC_MONETARY)
+#define LC_MESSAGES_MASK       (1 << LC_MESSAGES)
+#define LC_PAPER_MASK          (1 << LC_PAPER)
+#define LC_NAME_MASK           (1 << LC_NAME)
+#define LC_ADDRESS_MASK        (1 << LC_ADDRESS)
+#define LC_TELEPHONE_MASK      (1 << LC_TELEPHONE)
+#define LC_MEASUREMENT_MASK    (1 << LC_MEASUREMENT)
+#define LC_IDENTIFICATION_MASK (1 << LC_IDENTIFICATION)
+#define LC_ALL_MASK (LC_CTYPE_MASK | LC_NUMERIC_MASK | LC_TIME_MASK | \
+                     LC_COLLATE_MASK | LC_MONETARY_MASK | LC_MESSAGES_MASK | \
+                     LC_PAPER_MASK | LC_NAME_MASK | LC_ADDRESS_MASK | \
+                     LC_TELEPHONE_MASK | LC_MEASUREMENT_MASK | \
+                     LC_IDENTIFICATION_MASK)
+locale_t newlocale(int mask, const char *name, locale_t base);
+locale_t duplocale(locale_t loc);
+void freelocale(locale_t loc);
+locale_t uselocale(locale_t loc);
 #endif

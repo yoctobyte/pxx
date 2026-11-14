@@ -20693,6 +20693,36 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_TLS_USER_1K test/c_func_scope_thread_local_area_full.c $(TESTTMP)/c_fstl_full > $(TESTTMP)/c_fstl_full.log 2>&1
 	tools/expect_same.sh c_fstl_full_warns "$$(grep -c 'warning: __thread b: the per-thread variable area is full' $(TESTTMP)/c_fstl_full.log)" "1"
 	tools/expect_same.sh c_fstl_full_runs "$$($(TESTTMP)/c_fstl_full)" "6 8"
+	# toybox 0.8.15 (feature-c-toybox-builds-with-pxx): the crtl surface it needed
+	# (*at family over real dirfds, sysconf/pathconf/confstr, locale objects,
+	# wide chars, utmpx, getifaddrs, iconv, eventfd, prlimit, getcwd(NULL),
+	# getopt '+'/'-'), and the compiler shapes it hit. Expected output is gcc's.
+	# The surface test makes argv[1] itself: a fresh name under a mktemp dir.
+	./$(COMPILER) test/c_crtl_toybox_surface.c $(TESTTMP)/c_crtlsurf26 > /dev/null
+	tools/expect_same.sh c_crtlsurf26 "$$($(TESTTMP)/c_crtlsurf26 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
+	./$(COMPILER) --target=i386 test/c_crtl_toybox_surface.c $(TESTTMP)/c_crtlsurf_i386 > /dev/null
+	tools/expect_same.sh i386/c_crtlsurf_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_crtlsurf_i386 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
+	./$(COMPILER) test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes26 > /dev/null
+	tools/expect_same.sh c_tbshapes26 "$$($(TESTTMP)/c_tbshapes26)" "$$(cat test/c_toybox_compiler_shapes.expected)"
+	./$(COMPILER) --target=i386 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_i386 > /dev/null
+	tools/expect_same.sh i386/c_tbshapes_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_tbshapes_i386)" "$$(cat test/c_toybox_compiler_shapes.expected)"
+	./$(COMPILER) --target=aarch64 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_a64 > /dev/null
+	tools/expect_same.sh aarch64/c_tbshapes_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_tbshapes_a64)" "$$(cat test/c_toybox_compiler_shapes.expected)"
+	./$(COMPILER) --target=arm32 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_arm > /dev/null
+	tools/expect_same.sh arm32/c_tbshapes_arm "$$(tools/run_target.sh arm32 $(TESTTMP)/c_tbshapes_arm)" "$$(cat test/c_toybox_compiler_shapes.expected)"
+	./$(COMPILER) test/c_static_proto_in_header.c $(TESTTMP)/c_sproto26 > /dev/null
+	tools/expect_same.sh c_sproto26 "$$($(TESTTMP)/c_sproto26)" "$$(cat test/c_static_proto_in_header.expected)"
+	./$(COMPILER) --emit-obj test/c_static_proto_in_header.c $(TESTTMP)/c_sproto26.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_sproto26_linked $(TESTTMP)/c_sproto26.o > /dev/null
+	tools/expect_same.sh c_sproto26_linked "$$($(TESTTMP)/c_sproto26_linked)" "$$(cat test/c_static_proto_in_header.expected)"
+	./$(COMPILER) test/c_inline_asm_m_deref_and_clflush.c $(TESTTMP)/c_asmmderef26 > /dev/null
+	tools/expect_same.sh c_asmmderef26 "$$($(TESTTMP)/c_asmmderef26)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
+	./$(COMPILER) -O2 test/c_inline_asm_m_deref_and_clflush.c $(TESTTMP)/c_asmmderef26_o2 > /dev/null
+	tools/expect_same.sh c_asmmderef26_o2 "$$($(TESTTMP)/c_asmmderef26_o2)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
+	./$(COMPILER) test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz26 > /dev/null
+	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
+	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null
+	tools/expect_same.sh i386/c_alignsz_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_alignsz_i386)" "$$(cat test/c_aligned_attribute_sizeof_argument.i386.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

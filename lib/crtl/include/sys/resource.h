@@ -103,6 +103,11 @@ struct rusage {
    unlimited resource, so it round-trips rather than being translated. */
 int getrlimit(int resource, struct rlimit *rlim);
 int setrlimit(int resource, const struct rlimit *rlim);
+/* prlimit(2): get and/or set another process's limit (pid 0 = this one).
+   glibc declares it only under _GNU_SOURCE; toybox's ulimit declares it
+   itself, with this signature. */
+int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
+            struct rlimit *old_limit);
 
 /* getpriority(2) returns the nice value, -20..19 -- and -1 IS A VALID ANSWER,
    so the return value alone cannot report failure. The POSIX contract is that

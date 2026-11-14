@@ -8,10 +8,7 @@
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
-#define _SC_PAGESIZE 30
-#define _SC_PAGE_SIZE _SC_PAGESIZE
-#define _SC_CLK_TCK 2
-#define _SC_OPEN_MAX 4
+#include <sys/_confname.h>   /* _SC_*, _PC_*, _CS_* */
 
 /* access(2) mode bits (POSIX <unistd.h>). Match the Linux kernel values so a
    real access() syscall interprets them; without these sqlite's access(path,
@@ -159,6 +156,23 @@ int chown(const char *path, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
 uid_t geteuid(void);
 ssize_t readlink(const char *path, char *buf, size_t bufsz);
+
+/* The directory-relative spellings (AT_* flags in <fcntl.h>). See
+   <sys/stat.h> for why a dirfd-only-AT_FDCWD version would be worse than none. */
+int unlinkat(int dirfd, const char *path, int flags);
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsz);
+int fchownat(int dirfd, const char *path, uid_t owner, gid_t group, int flags);
+int faccessat(int dirfd, const char *path, int mode, int flags);
+int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags);
+int symlinkat(const char *target, int newdirfd, const char *linkpath);
+
+/* getentropy(3): up to 256 random bytes, all or nothing. */
+int getentropy(void *buf, size_t len);
+
+/* pathconf/fpathconf: per-file limits; confstr: configuration strings. */
+long pathconf(const char *path, int name);
+long fpathconf(int fd, int name);
+size_t confstr(int name, char *buf, size_t len);
 int execve(const char *path, char *const argv[], char *const envp[]);
 int execvp(const char *file, char *const argv[]);
 
