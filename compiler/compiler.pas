@@ -3117,10 +3117,12 @@ begin
     ErrorNoPos('--image-base: a kernel-half base is for --link --freestanding only');
   if LinkMode then
   begin
-    if TargetArch <> TARGET_X86_64 then
-      ErrorNoPos('--link: x86-64 only -- it links the objects writeELFRelX64General '
-                 + 'writes, and the ' + TargetArchName(TargetArch)
+    if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then
+      ErrorNoPos('--link: x86-64 and aarch64 only -- it links the objects '
+                 + 'writeELFRelX64General writes, and the ' + TargetArchName(TargetArch)
                  + ' object writer is a different format');
+    if (TargetArch = TARGET_AARCH64) and FreestandingMode then
+      ErrorNoPos('--link --freestanding: x86-64 only');
     if LinkOutPath <> '' then
     begin
       if ParamCount < i then

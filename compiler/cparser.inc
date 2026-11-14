@@ -3272,9 +3272,16 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
-    if CNodeIsPointer(ASTLeft[node]) then
+    { `arr + n` / `n + arr`: an ARRAY operand decays like a pointer, and its
+      element type is the pointee. Asking CNodeIsPointer alone missed every
+      array, so `*(buf + 4)` and `(buf + 120)[k]` on an `unsigned char buf[]`
+      defaulted to tyInteger: a 4-byte store per byte. libtomcrypt's portable
+      STORE64H `(y)[7] = ...` with y = md->sha512.buf + 120 then zeroed three
+      bytes past the hash state, into the caller's next local.
+      bug-c-array-plus-int-derefs-as-int-so-a-byte-store-writes-four }
+    if CNodeDecaysToPointer(ASTLeft[node]) then
       Result := CNodePointeeTk(ASTLeft[node])
-    else if CNodeIsPointer(ASTRight[node]) then
+    else if CNodeDecaysToPointer(ASTRight[node]) then
       Result := CNodePointeeTk(ASTRight[node]);
   end
   else if ASTKind[node] = AN_TERNARY then
@@ -15470,7 +15477,7 @@ begin
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
   if (EmitSharedMode or EmitObjMode) and
      ((TargetArch = TARGET_X86_64) or
-      (EmitObjMode and (TargetArch = TARGET_I386))) then
+      (EmitObjMode and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64)))) then
   begin
     thunkStart := CodeLen;
     InitThunkOff := CodeLen;
@@ -15490,6 +15497,12 @@ begin
       if TargetArch = TARGET_X86_64 then
       begin
         EmitAsmX64(['mov rdi, rdx']); { (envp, from ld.so) }
+        EmitCallProc(envPi);
+      end
+      else if TargetArch = TARGET_AARCH64 then
+      begin
+        { AAPCS64 hands envp in x2, and the prologue left x0..x7 alone }
+        EmitI32($AA0203E0);   { mov x0, x2 }
         EmitCallProc(envPi);
       end
       else

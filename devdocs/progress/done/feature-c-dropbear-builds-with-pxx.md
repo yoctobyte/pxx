@@ -5,7 +5,7 @@ prio: 40
 type: feature
 blocked-by: []
 summary: "Build the dropbear SSH server (and dbclient, dropbearkey) with pxx from unmodified upstream sources, and prove it by logging in with a stock OpenSSH client. Real-world C after busybox/lua/sqlite: ~90k lines with bundled libtomcrypt/libtommath, so crypto and bignum code that catches miscompiles no unit test does. Then it runs on gibux (instead of Alpine's gcc-built one) and on the BSD targets (--os=freebsd/netbsd/openbsd) as an end-to-end test of the translators."
-status: open
+status: done
 owner: unassigned
 ---
 
@@ -112,7 +112,29 @@ Test-environment traps (not miscompiles; the gcc build shows them too):
   client's channel EOF and the shell dies of SIGHUP. The tool keeps stdin
   open.
 
-Left: acceptance 5 (aarch64 under qemu-aarch64).
+## Progress (2026-11-14): aarch64
+
+`python3 tools/dropbear_pxx.py --target aarch64` builds all four programs
+for aarch64 and runs the same rows under qemu-aarch64 (binfmt_misc). The
+work needed four pxx pieces, each with tests and a done ticket:
+
+- [[bug-c-crtl-prctl-was-fixed-arity-so-a-short-call-failed-off-x86-64]]
+- [[feature-c-inline-asm-on-aarch64]] (sntrup761.c's `__aarch64__` arms)
+- [[feature-link-aarch64]] (plexus has no aarch64 linker: `pascal26
+  --link` now links aarch64 objects, and aarch64 `--emit-obj` objects get
+  the init thunk that sets environ)
+- [[bug-c-array-plus-int-derefs-as-int-so-a-byte-store-writes-four]]. This
+  was a miscompile on every target. On aarch64, libtomcrypt's portable
+  STORE64H zeroed three bytes past the sha512 state, which killed dbclient
+  on sha512 kex and broke the server's nistp384 kex.
+
+Result: **38 rows, 0 failed on aarch64** (compiler 02a259a0b2c1). The rows
+are the same as on x86-64: keygen for all three key types, OpenSSH logins
+over every cipher/kex/host-key row, 1 MiB both ways, the pty, scp both ways,
+and dbclient → stock sshd. RSA-2048 keygen takes 76–238 s under qemu,
+depending on load, so the tool allows foreign targets 1200 s for it.
+
+All five acceptance items are met.
 
 ## Follow-ups (other sessions)
 

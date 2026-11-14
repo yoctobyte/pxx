@@ -355,7 +355,10 @@ def tests(work, bindir, port0):
     for kt, extra in (("ed25519", []), ("ecdsa", ["-s", "256"]), ("rsa", ["-s", "2048"])):
         f = os.path.join(t, "host_" + kt)
         t0 = time.time()
-        rc, out, err = run([dbk, "-t", kt, "-f", f] + extra, env=env, timeout=300)
+        # RSA-2048 prime search under qemu-aarch64 took 76s on a quiet box and
+        # 238s on a loaded one; a foreign target gets 4x the native headroom.
+        rc, out, err = run([dbk, "-t", kt, "-f", f] + extra, env=env,
+                           timeout=300 if TARGET == "x86_64" else 1200)
         dt = time.time() - t0
         rc2, pub, _ = run([dbk, "-y", "-f", f], env=env)
         publine = next((l for l in pub.decode(errors="replace").splitlines()

@@ -330,7 +330,10 @@ const
   { The image base is ImageBase: LOAD_ADDR ($400000, the static non-PIE base ld
     uses on x86-64) unless --image-base / --gibix moved it. }
   ELFLNK_PAGE   = $1000;
-  ELFLNK_STUB_SIZE = 93;        { the synthesised _start; see ElfLnkPutStub }
+  ELFLNK_STUB_SIZE_X64 = 93;    { the synthesised _start; see ElfLnkPutStub }
+  ELFLNK_STUB_SIZE_A64 = 128;   { 26 instructions + 3 literal quads; ElfLnkPutStubA64 }
+  ELFLNK_EM_X86_64 = 62;
+  ELFLNK_EM_AARCH64 = 183;
 
 var
   ElfLnkObjPath  : array of AnsiString;
@@ -371,6 +374,7 @@ var
   ElfLnkRxEnd    : Int64;             { file offset (and base-relative address) where the RX segment ends }
   ElfLnkEntryStub: Boolean;           { reserve and write the synthesised _start (stage 5) }
   ElfLnkStubAddr : Int64;
+  ElfLnkMachine  : Integer;           { e_machine of the inputs and the output: 62 or 183 }
 
 function ElfLnkKindName(k: Integer): AnsiString;
 begin
@@ -420,6 +424,7 @@ begin
   ElfLnkRxEnd := 0;
   ElfLnkEntryStub := False;
   ElfLnkStubAddr := 0;
+  ElfLnkMachine := ELFLNK_EM_X86_64;
   ElfLnkObjCount := 0;
   SetLength(ElfLnkObjPath, 0);
   SetLength(ElfLnkObjSec0, 0);
@@ -561,6 +566,12 @@ begin
   Inc(ElfLnkEdgeCount);
 end;
 
+function ElfLnkStubSize: Integer;
+begin
+  if ElfLnkMachine = ELFLNK_EM_AARCH64 then ElfLnkStubSize := ELFLNK_STUB_SIZE_A64
+  else ElfLnkStubSize := ELFLNK_STUB_SIZE_X64;
+end;
+
 function ElfLnkAddObject(const path: AnsiString): Boolean;
 var i, j, n, nsec, symEnts, bind, k, obj, kind, base, tgt, slot: Integer;
     stOff, stSize, stEnt, strTab, e, shndx, nameIdx, al, rOff, rEnt, sidx, symSec: Int64;
@@ -572,6 +583,13 @@ begin
   LoadInput(path, ElfRdBuf);
   if Length(ElfRdBuf) = 0 then begin ElfRdErr := 'cannot read'; Exit; end;
   if not ElfRdCheckHeader then Exit;
+  if ElfRdU16(18) <> ElfLnkMachine then
+  begin
+    ElfRdErr := 'e_machine is ' + AIntToStr(ElfRdU16(18)) + ', and this link is for '
+              + AIntToStr(ElfLnkMachine) + ' (62 x86-64, 183 aarch64): pass the same --target'
+              + ' to --link as to --emit-obj';
+    Exit;
+  end;
   nsec := ElfRdShNum;
 
   { register the object and a slot for every section header }
@@ -882,7 +900,7 @@ begin
     begin
       addr := ElfLnkAlignUp(addr, 16);
       ElfLnkStubAddr := addr;
-      addr := addr + ELFLNK_STUB_SIZE;
+      addr := addr + ElfLnkStubSize;
     end;
     ElfLnkOutAddr[k] := start;
     ElfLnkOutSize[k] := addr - start;
@@ -1164,6 +1182,18 @@ begin
     11: ElfLnkRelTypeName := 'R_X86_64_32S';
     41: ElfLnkRelTypeName := 'R_X86_64_GOTPCRELX';
     42: ElfLnkRelTypeName := 'R_X86_64_REX_GOTPCRELX';
+    257: ElfLnkRelTypeName := 'R_AARCH64_ABS64';
+    258: ElfLnkRelTypeName := 'R_AARCH64_ABS32';
+    261: ElfLnkRelTypeName := 'R_AARCH64_PREL32';
+    263: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G0';
+    264: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G0_NC';
+    265: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G1';
+    266: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G1_NC';
+    267: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G2';
+    268: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G2_NC';
+    269: ElfLnkRelTypeName := 'R_AARCH64_MOVW_UABS_G3';
+    282: ElfLnkRelTypeName := 'R_AARCH64_JUMP26';
+    283: ElfLnkRelTypeName := 'R_AARCH64_CALL26';
   else
     ElfLnkRelTypeName := 'relocation type ' + AIntToStr(t);
   end;
@@ -1229,6 +1259,102 @@ end;
 
 { Apply rela section `rela` of object `obj` (-1: none) to its input section
   `target`, whose bytes sit in `buf` from index `bufOff`. }
+{ aarch64 (e_machine 183). What pxx's aarch64 object writer emits: data
+  words (ABS64/ABS32), absolute addresses built by movz/movk (MOVW_UABS_G0..G3,
+  imm16 in bits [20:5]), and b/bl (JUMP26/CALL26, imm26 = (S+A-P)/4), plus
+  PREL32 for completeness. An instruction relocation patches the word already
+  in buf, so the opcode and register bits the object wrote are kept. }
+function ElfLnkRelocateA64(obj, nsec, target, rela: Integer;
+                           var buf: array of Byte; bufOff: Int64): Boolean;
+var j, n, width, g: Integer;
+    symSec, stOff, strTab, rOff, rEnt, e, off, info, rtype, si, add, S, P, v, secSize, w: Int64;
+    ok: Boolean;
+begin
+  ElfLnkRelocateA64 := False;
+  secSize := ElfRdShSize(target);
+  symSec := ElfRdShLink(rela);
+  stOff := ElfRdShOffset(Integer(symSec));
+  strTab := ElfRdShOffset(Integer(ElfRdShLink(Integer(symSec))));
+  rOff := ElfRdShOffset(rela);
+  rEnt := ElfRdShEntSize(rela);
+  if rEnt <= 0 then rEnt := 24;
+  n := Integer(ElfRdShSize(rela) div rEnt);
+  for j := 0 to n - 1 do
+  begin
+    e := rOff + Int64(j) * rEnt;
+    off := ElfRdU64(e);
+    info := ElfRdU64(e + 8);
+    add := ElfRdU64(e + 16);
+    rtype := info and $FFFFFFFF;
+    si := (info shr 32) and $FFFFFFFF;
+    if rtype = 257 then width := 8
+    else if (rtype = 258) or (rtype = 261) or ((rtype >= 263) and (rtype <= 269))
+            or (rtype = 282) or (rtype = 283) then width := 4
+    else
+    begin
+      ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfRdSecName(target)
+                + ' -- the aarch64 link takes R_AARCH64_ABS64/ABS32/PREL32, MOVW_UABS_G0..G3'
+                + ' and JUMP26/CALL26';
+      Exit;
+    end;
+    if (off < 0) or (off + width > secSize) then
+    begin
+      ElfRdErr := 'relocation at offset ' + AIntToStr(off) + ' runs past the end of '
+                + ElfRdSecName(target);
+      Exit;
+    end;
+    S := ElfLnkSymS(obj, nsec, stOff, strTab, si, ok);
+    if not ok then Exit;
+    P := ElfLnkSecAddr[ElfLnkObjSec0[obj] + target] + off;
+    if rtype = 257 then
+      ElfLnkPutLE(buf, bufOff + off, S + add, 8)
+    else if (rtype = 258) or (rtype = 261) then
+    begin
+      if rtype = 261 then v := S + add - P else v := S + add;
+      if (v < -2147483648) or (v > $FFFFFFFF) then
+      begin
+        ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target) + '+'
+                  + AIntToStr(off) + ' does not fit in 32 bits (value 0x' + IntToHexStr(v, 16) + ')';
+        Exit;
+      end;
+      ElfLnkPutLE(buf, bufOff + off, v, 4);
+    end
+    else
+    begin
+      w := Int64(buf[Integer(bufOff + off)]) or (Int64(buf[Integer(bufOff + off) + 1]) shl 8)
+           or (Int64(buf[Integer(bufOff + off) + 2]) shl 16) or (Int64(buf[Integer(bufOff + off) + 3]) shl 24);
+      if (rtype = 282) or (rtype = 283) then
+      begin
+        v := S + add - P;
+        if ((v and 3) <> 0) or (v < -134217728) or (v > 134217724) then
+        begin
+          ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target) + '+'
+                    + AIntToStr(off) + ': branch displacement 0x' + IntToHexStr(v, 16)
+                    + ' is not a multiple of 4 within +-128 MiB';
+          Exit;
+        end;
+        w := (w and $FC000000) or ((v shr 2) and $03FFFFFF);
+      end
+      else
+      begin
+        { MOVW_UABS_Gg: imm16 = bits [16g+15 : 16g] of S+A. The checked forms
+          (odd types, and G3) need the rest above those bits to be zero. }
+        g := Integer((rtype - 263) div 2);
+        v := S + add;
+        if (((rtype - 263) mod 2) = 0) and (g < 3) and ((v shr (16 * (g + 1))) <> 0) then
+        begin
+          ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target) + '+'
+                    + AIntToStr(off) + ': 0x' + IntToHexStr(v, 16) + ' does not fit';
+          Exit;
+        end;
+        w := (w and $FFE0001F) or (((v shr (16 * g)) and $FFFF) shl 5);
+      end;
+      ElfLnkPutLE(buf, bufOff + off, w, 4);
+    end;
+  end;
+  ElfLnkRelocateA64 := True;
+end;
+
 function ElfLnkRelocate(obj, nsec, target, rela: Integer;
                         var buf: array of Byte; bufOff: Int64): Boolean;
 var j, n, width, slot: Integer;
@@ -1237,6 +1363,11 @@ var j, n, width, slot: Integer;
 begin
   ElfLnkRelocate := True;
   if rela < 0 then Exit;
+  if ElfLnkMachine = ELFLNK_EM_AARCH64 then
+  begin
+    ElfLnkRelocate := ElfLnkRelocateA64(obj, nsec, target, rela, buf, bufOff);
+    Exit;
+  end;
   ElfLnkRelocate := False;
   slot := ElfLnkObjSec0[obj] + target;
   secSize := ElfRdShSize(target);
@@ -1328,7 +1459,7 @@ end;
 procedure ElfLnkPutStub(var buf: array of Byte; initStart, initEnd, mainAddr: Int64);
 const
   { 93 bytes; the three movabs immediates are zero here and filled below }
-  STUB: array[0..92] of Byte = (
+  STUB: array[0..ELFLNK_STUB_SIZE_X64 - 1] of Byte = (
     $31,$ED,                               {  0 xor ebp,ebp            }
     $4C,$8B,$24,$24,                       {  2 mov r12,[rsp]          }
     $4C,$8D,$6C,$24,$08,                   {  6 lea r13,[rsp+8]        }
@@ -1355,10 +1486,45 @@ const
     $F4);                                  { 92 hlt                    }
 var i: Integer;
 begin
-  for i := 0 to ELFLNK_STUB_SIZE - 1 do buf[i] := STUB[i];
+  for i := 0 to ELFLNK_STUB_SIZE_X64 - 1 do buf[i] := STUB[i];
   ElfLnkPutLE(buf, 22, initStart, 8);
   ElfLnkPutLE(buf, 32, initEnd, 8);
   ElfLnkPutLE(buf, 73, mainAddr, 8);
+end;
+
+{ The same contract on aarch64. The kernel enters with sp -> argc, argv[],
+  NULL, envp[], and sp is already 16-aligned (AAPCS64 needs nothing more).
+  argc/argv/envp live in callee-saved x19..x21 across the calls, the
+  .init_array walk is x22..x23, and every call is (x0, x1, x2) = (argc,
+  argv, envp). exit(2) is syscall 93 with main's w0. The three addresses are
+  literal quads that the ldr-literal instructions reach PC-relatively.
+  Encoded with llvm-mc:
+
+      mov x29, #0 ; mov x30, #0              frame chain stops here
+      ldr x19, [sp] ; add x20, sp, #8         argc, argv
+      add x21, x20, x19, lsl #3 ; add x21, x21, #8     envp
+      ldr x22, lit1 ; ldr x23, lit2           .init_array bounds
+   1: cmp x22, x23 ; b.hs 2f
+      mov x0, x19 ; mov x1, x20 ; mov x2, x21
+      ldr x9, [x22] ; blr x9 ; add x22, x22, #8 ; b 1b
+   2: mov x0, x19 ; mov x1, x20 ; mov x2, x21
+      ldr x9, lit3 ; blr x9                    main
+      mov x8, #93 ; svc #0 ; brk #0 ; nop
+   lit1/lit2/lit3 at +104/+112/+120 }
+procedure ElfLnkPutStubA64(var buf: array of Byte; initStart, initEnd, mainAddr: Int64);
+const
+  W: array[0..25] of LongWord = (
+    $D280001D, $D280001E, $F94003F3, $910023F4, $8B130E95, $910022B5,
+    $58000296, $580002B7, $EB1702DF, $54000102, $AA1303E0, $AA1403E1,
+    $AA1503E2, $F94002C9, $D63F0120, $910022D6, $17FFFFF8, $AA1303E0,
+    $AA1403E1, $AA1503E2, $58000149, $D63F0120, $D2800BA8, $D4000001,
+    $D4200000, $D503201F);
+var i: Integer;
+begin
+  for i := 0 to 25 do ElfLnkPutLE(buf, 4 * i, W[i], 4);
+  ElfLnkPutLE(buf, 104, initStart, 8);
+  ElfLnkPutLE(buf, 112, initEnd, 8);
+  ElfLnkPutLE(buf, 120, mainAddr, 8);
 end;
 
 { Write the linked executable. ElfLnkLoadList and ElfLnkLayout must have run.
@@ -1535,7 +1701,7 @@ begin
   ElfLnkBReset;
   ElfLnkBPut($464C457F, 4); ElfLnkBPut(2, 1); ElfLnkBPut(1, 1); ElfLnkBPut(1, 1);
   ElfLnkBPadTo(16);
-  ElfLnkBPut(2, 2); ElfLnkBPut(62, 2); ElfLnkBPut(1, 4);   { ET_EXEC, EM_X86_64 }
+  ElfLnkBPut(2, 2); ElfLnkBPut(ElfLnkMachine, 2); ElfLnkBPut(1, 4);   { ET_EXEC, EM_X86_64 / EM_AARCH64 }
   ElfLnkBPut(entry, 8); ElfLnkBPut(64, 8);
   ElfLnkBPut(0, 8);                                        { e_shoff, patched below }
   ElfLnkBPut(0, 4); ElfLnkBPut(64, 2); ElfLnkBPut(56, 2); ElfLnkBPut(phCount, 2);
@@ -1687,12 +1853,16 @@ begin
   end;
   if entryName = '' then
   begin
-    SetLength(stub, ELFLNK_STUB_SIZE);
-    ElfLnkPutStub(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
-                  ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr);
+    SetLength(stub, ElfLnkStubSize);
+    if ElfLnkMachine = ELFLNK_EM_AARCH64 then
+      ElfLnkPutStubA64(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
+                       ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr)
+    else
+      ElfLnkPutStub(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
+                    ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr);
     ElfLnkWriteZeros(ElfLnkStubAddr - cur);
-    ElfLnkWrite(stub, ELFLNK_STUB_SIZE);
-    cur := ElfLnkStubAddr + ELFLNK_STUB_SIZE;
+    ElfLnkWrite(stub, ElfLnkStubSize);
+    cur := ElfLnkStubAddr + ElfLnkStubSize;
   end;
   textEnd := ElfLnkOutAddr[ELFLNK_K_TEXT] + ElfLnkOutSize[ELFLNK_K_TEXT];
   ElfLnkWriteZeros(textEnd - cur);
@@ -1728,7 +1898,7 @@ begin
   begin
     ElfLnkBPut(strPos, 4); ElfLnkBPut($12, 1); ElfLnkBPut(0, 1);
     ElfLnkBPut(outIdx[ELFLNK_K_TEXT], 2);  { GLOBAL FUNC .text }
-    ElfLnkBPut(ElfLnkStubAddr, 8); ElfLnkBPut(ELFLNK_STUB_SIZE, 8);
+    ElfLnkBPut(ElfLnkStubAddr, 8); ElfLnkBPut(ElfLnkStubSize, 8);
   end;
   ElfLnkBPut(0, 1);
   for i := 0 to ElfLnkCount - 1 do
@@ -1832,6 +2002,7 @@ var j, g: Integer;
 begin
   ElfLnkLinkArgs := False;
   ElfLnkReset;
+  if TargetArch = TARGET_AARCH64 then ElfLnkMachine := ELFLNK_EM_AARCH64;
   ElfLnkGcOn := gc;
   for j := first to last do
     if not ElfLnkAddObject(ParamStr(j)) then

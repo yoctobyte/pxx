@@ -15100,6 +15100,19 @@ begin
       arithmetic -- do not copy the constant. }
     EmitAsm386('sub esp, 12');
   end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    { AAPCS64: x19..x28, fp/lr and the low halves of d8..d15 are the caller's.
+      A 160-byte frame keeps sp 16-aligned at every call in the body:
+        stp x29,x30,[sp,#-160]! ; mov x29,sp
+        stp x19..x28 at 16..95 ; stp d8..d15 at 96..159
+      (words from llvm-mc; only an --emit-obj .init_array carrier reaches here,
+      --shared is refused above) }
+    EmitI32($A9B67BFD); EmitI32($910003FD);
+    EmitI32($A90153F3); EmitI32($A9025BF5); EmitI32($A90363F7);
+    EmitI32($A9046BF9); EmitI32($A90573FB);
+    EmitI32($6D0627E8); EmitI32($6D072FEA); EmitI32($6D0837EC); EmitI32($6D093FEE);
+  end
   else
     ErrorNoPos('internal: no init/fini thunk prologue for --target=' +
                TargetArchName(TargetArch));
@@ -15129,6 +15142,15 @@ begin
       'pop ebx',
       'ret'
     ]);
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    { the prologue's frame, unwound: ldp in the same slots, then
+      ldp x29,x30,[sp],#160 ; ret }
+    EmitI32($A94153F3); EmitI32($A9425BF5); EmitI32($A94363F7);
+    EmitI32($A9446BF9); EmitI32($A94573FB);
+    EmitI32($6D4627E8); EmitI32($6D472FEA); EmitI32($6D4837EC); EmitI32($6D493FEE);
+    EmitI32($A8CA7BFD); EmitI32($D65F03C0);
   end
   else
     ErrorNoPos('internal: no init/fini thunk epilogue for --target=' +

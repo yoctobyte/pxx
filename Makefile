@@ -19480,6 +19480,22 @@ test-core: $(COMPILER)
 	tools/expect_same.sh casma64op_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/casma64op_a64)" "$$(printf '16 unary bad=0 sum=69\n64 unary bad=0 sum=49697999\nbinary bad=0 sum=72585166')"
 	./$(COMPILER) test/casm_a64_operands.c $(TESTTMP)/casma64op_x64
 	tools/expect_same.sh casma64op_x64 "$$($(TESTTMP)/casma64op_x64)" "$$(printf '16 unary bad=0 sum=69\n64 unary bad=0 sum=49697999\nbinary bad=0 sum=72585166')"
+	# pascal26 --link on aarch64 (dropbear acceptance 5): two objects, no ld.
+	# Cross-object call, data and function-pointer tables (ABS64), movz/movk
+	# addresses (MOVW_UABS), the synthesised _start (argc/argv, the .init_array
+	# walk that sets environ, main's value as the exit status). Output = gcc's.
+	# A mixed-machine link is refused by name.
+	./$(COMPILER) --target=aarch64 --emit-obj test/c_link_aarch64_a.c $(TESTTMP)/clnka64_a.o > /dev/null
+	./$(COMPILER) --target=aarch64 --emit-obj test/c_link_aarch64_b.c $(TESTTMP)/clnka64_b.o > /dev/null
+	./$(COMPILER) --target=aarch64 --link -o $(TESTTMP)/clnka64 $(TESTTMP)/clnka64_a.o $(TESTTMP)/clnka64_b.o
+	tools/expect_same.sh clnka64 "$$(PXX_LINK_A64=yes tools/run_target.sh aarch64 $(TESTTMP)/clnka64 one; echo rc=$$?)" "$$(printf 'argc 2 argv1 one\nbump 15 shared 115\nname alpha\nname beta\nname gamma\nops 13 42\nenv yes\nstrlen 1\nrc=3')"
+	tools/expect_same.sh clnka64_mixed "$$(./$(COMPILER) --link -o $(TESTTMP)/clnka64_mixed $(TESTTMP)/clnka64_a.o 2>&1 | grep -c 'e_machine is 183, and this link is for 62')" "1"
+	# `*(arr + n)` / `(arr + n)[k]` have the array's element type (a byte store
+	# wrote four; dropbear's sha512 STORE64H zeroed past the hash state).
+	./$(COMPILER) test/c_array_plus_int_deref_width.c $(TESTTMP)/caplusint26
+	tools/expect_same.sh caplusint26 "$$($(TESTTMP)/caplusint26)" "$$(printf 'store arrow guard 11223344 buf6 0 buf7 0\nstore union guard 55667788 1 2 3 4 5 6 7 8\nload arrow 15 member 8 8\nlocal 1 3 global 2 guards 99999999 77777777\nshort -2 guard 12345678 size 2\nu64 8000000000000001 guard badf00d size 8\nsizes 1 1 1 1')"
+	./$(COMPILER) --target=aarch64 test/c_array_plus_int_deref_width.c $(TESTTMP)/caplusint_a64
+	tools/expect_same.sh caplusint_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/caplusint_a64)" "$$(printf 'store arrow guard 11223344 buf6 0 buf7 0\nstore union guard 55667788 1 2 3 4 5 6 7 8\nload arrow 15 member 8 8\nlocal 1 3 global 2 guards 99999999 77777777\nshort -2 guard 12345678 size 2\nu64 8000000000000001 guard badf00d size 8\nsizes 1 1 1 1')"
 	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
 	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
 	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,
