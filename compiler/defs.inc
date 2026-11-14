@@ -5855,6 +5855,14 @@ var
   ExternalCount  : Integer;
   DynCallCodePos : array[0..MAX_CALLFIX-1] of Integer;
   DynCallExtIdx  : array[0..MAX_CALLFIX-1] of Integer;
+  { --os=windows: where SysV put each argument of the external call about to
+    be emitted (WinCallNote), so EmitExternalIndirectCall can move every one
+    to its Microsoft x64 slot. WinCallArgN = 0: not described (the
+    integer-only adapter applies). }
+  WinCallArgN    : Integer;
+  WinCallArgSse  : array[0..MAX_CALL_ARGS-1] of Boolean;
+  WinCallArgReg  : array[0..MAX_CALL_ARGS-1] of Integer;   { SysV register index; -1: on the stack }
+  WinCallArgStk  : array[0..MAX_CALL_ARGS-1] of Integer;   { the stack slot, leftmost 0 }
   { riscv32 --emit-obj: the site is `auipc t0; jalr ra, t0` relocated as one
     R_RISCV_CALL_PLT, not a literal word (RvHiLoRefs). Moved with the two
     arrays above. }

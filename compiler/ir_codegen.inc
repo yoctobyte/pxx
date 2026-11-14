@@ -11953,6 +11953,7 @@ begin
             if ProcExternal[procIdx] then
             begin
               extIdx := RegisterExternal(procIdx);
+              WinCallNote(nSlots, slotIsSse, slotIsStack, slotIsAgg, slotRegIdx);
               EmitExternalIndirectCall(extIdx);
             end
             else

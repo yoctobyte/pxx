@@ -1220,7 +1220,7 @@ begin
   WriteLn('  --os=minix            Minix 3.4/i386 output (EXPERIMENTAL): the same');
   WriteLn('                        design over Minix message passing; no threads');
   WriteLn('  --os=windows          Windows x64 console .exe (EXPERIMENTAL): the same');
-  WriteLn('                        design over kernel32; no sockets yet');
+  WriteLn('                        design over kernel32 and ws2_32');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
   WriteLn('                        than the raw instruction (x86-64, opt-in). For');
   WriteLn('                        hosts that forbid raw syscalls outside libc;');

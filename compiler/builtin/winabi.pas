@@ -251,9 +251,15 @@ end;
     FK_MEM     bytes in memory read like a file (/proc/self/environ)
     FK_DIR     a directory: its UTF-16 path for getdents64 and *at calls, and
                the FindFirstFileW enumeration (one page per directory fd:
-               the path in the first 2 KiB, the find data after it) }
+               the path in the first 2 KiB, the find data after it)
+    FK_SOCK    a Winsock SOCKET (WinFdMem/Len/Pos: Linux family, type, protocol)
+    FK_EPOLL, FK_TIMER, FK_EVENT
+               epoll, timerfd and eventfd, emulated here (see the end of the
+               unit) }
 const
   FK_NONE = 0; FK_HANDLE = 1; FK_MEM = 2; FK_DIR = 3;
+  FK_SOCK = 4; FK_EPOLL = 5; FK_TIMER = 6; FK_EVENT = 7;
+  LX_O_NONBLOCK = $800;
   LX_AT_FDCWD = -100;
   LX_O_ACCMODE = 3; LX_O_CREAT = $40; LX_O_EXCL = $80; LX_O_TRUNC = $200;
   LX_O_APPEND = $400; LX_O_DIRECTORY = $10000;
@@ -318,6 +324,7 @@ var
   WinFdMem, WinFdLen, WinFdPos: array[0..MAX_FD-1] of Int64;   { FK_MEM; FK_DIR: page, find handle, state }
   WinFdAppend: array[0..MAX_FD-1] of Boolean;
   WinFdFlags: array[0..MAX_FD-1] of LongInt;                   { the open flags, for F_GETFL }
+  WinFdOpt: array[0..MAX_FD-1] of LongInt;                     { FK_SOCK: SO_REUSEADDR/SO_REUSEPORT as set }
   WinEnvStart, WinEnvEnd: Int64;                               { the environ strings WinArgBlock wrote }
 
 { GetLastError as a Linux -errno. }
@@ -380,6 +387,53 @@ begin
       Result := i;
       Exit;
     end;
+end;
+
+{ ---- Winsock imports and forwards ---------------------------------------
+  The socket calls and the emulated epoll/timerfd/eventfd objects live near
+  the end of the unit (they raise SIGPIPE and take WinLock); the file calls
+  above them dispatch through these forwards. SOCKET results are 64-bit
+  (INVALID_SOCKET is all ones); int results are declared LongInt. }
+function S_WSAStartup(ver, data: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'WSAStartup';
+function S_WSASocketW(af, typ, proto, info, g, flags: Int64): Int64; cdecl; external 'ws2_32.dll' name 'WSASocketW';
+function S_closesocket(s: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'closesocket';
+function S_bind(s, name, len: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'bind';
+function S_connect(s, name, len: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'connect';
+function S_listen(s, n: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'listen';
+function S_accept(s, addr, lenp: Int64): Int64; cdecl; external 'ws2_32.dll' name 'accept';
+function S_send(s, buf, len, flags: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'send';
+function S_recv(s, buf, len, flags: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'recv';
+function S_sendto(s, buf, len, flags, too, tolen: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'sendto';
+function S_recvfrom(s, buf, len, flags, from, fromlen: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'recvfrom';
+function S_shutdown(s, how: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'shutdown';
+function S_getsockname(s, name, lenp: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'getsockname';
+function S_getpeername(s, name, lenp: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'getpeername';
+function S_setsockopt(s, level, name, val, len: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'setsockopt';
+function S_getsockopt(s, level, name, val, lenp: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'getsockopt';
+function S_ioctlsocket(s, cmd, argp: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'ioctlsocket';
+function S_select(n, r, w, e, tv: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'select';
+function S_WSAGetLastError: LongInt; cdecl; external 'ws2_32.dll' name 'WSAGetLastError';
+function S_WSAIoctl(s, code, inb, inlen, outb, outlen, ret, ov, cr: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'WSAIoctl';
+function S_WSADuplicateSocketW(s, pid, info: Int64): LongInt; cdecl; external 'ws2_32.dll' name 'WSADuplicateSocketW';
+
+function SockIo(fd, buf, n, flags, sa, salen: Int64; isSend: Boolean): Int64; forward;
+function SockReady(fd: Int64): LongInt; forward;
+function SockDup(fd, nfd: Int64): Int64; forward;
+procedure SockSetNonblock(fd: Int64; enable: Boolean); forward;
+function EmuRead(fd, buf, n: Int64): Int64; forward;
+function EmuWrite(fd, buf, n: Int64): Int64; forward;
+function EmuReady(fd: Int64): LongInt; forward;
+procedure DropFd(fd: Int64); forward;
+function ReadReady(fd: Int64): LongInt; forward;
+function WinSignalSelf(sig, code: Int64): Int64; forward;
+
+{ CLOCK_MONOTONIC in ns: the clock timerfd deadlines and waits run on. }
+function MonoNs: Int64;
+var t: Int64;
+begin
+  t := 0;
+  W_QueryUnbiasedInterruptTime(Int64(@t));
+  Result := t * 100;
 end;
 
 { UTF-8 at s (NUL-terminated) -> UTF-16 at dst, NUL-terminated, cap units.
@@ -529,6 +583,15 @@ begin
         Result := 0;
         Exit;
       end;
+    FK_SOCK, FK_EPOLL, FK_TIMER, FK_EVENT:
+      begin
+        for i := 0 to 143 do PByte(st + i)^ := 0;
+        if FdKind(fd) = FK_SOCK then PLongWord(st + 24)^ := $C1FF   { S_IFSOCK | 0777 }
+        else PLongWord(st + 24)^ := $180;                          { an anonymous inode: 0600, no type }
+        PInt64(st + 56)^ := 4096;
+        Result := 0;
+        Exit;
+      end;
   end;
   h := WinFd[fd];
   t := W_GetFileType(h);
@@ -656,10 +719,14 @@ function WinWrite(fd, buf, n: Int64): Int64;
 var h, z: Int64;
     done: LongWord;
 begin
+  case FdKind(fd) of
+    FK_SOCK: begin Result := SockIo(fd, buf, n, 0, 0, 0, True); Exit; end;
+    FK_TIMER, FK_EVENT, FK_EPOLL: begin Result := EmuWrite(fd, buf, n); Exit; end;
+  end;
   h := FdHandle(fd);
   if h = 0 then
   begin
-    if FdKind(fd) = FK_NONE then Result := -LX_EBADF else Result := -LX_EBADF;
+    Result := -LX_EBADF;
     Exit;
   end;
   if n > $7FFFFFFF then n := $7FFFFFFF;
@@ -669,7 +736,11 @@ begin
     W_SetFilePointerEx(h, 0, Int64(@z), 2);          { FILE_END }
   end;
   done := 0;
-  if W_WriteFile(h, buf, n, Int64(@done), 0) = 0 then Result := WinErr
+  if W_WriteFile(h, buf, n, Int64(@done), 0) = 0 then
+  begin
+    Result := WinErr;
+    if Result = -LX_EPIPE then WinSignalSelf(13, 0);   { SIGPIPE (SI_USER), as Linux sends it }
+  end
   else Result := done;
 end;
 
@@ -690,9 +761,16 @@ begin
         Result := k;
         Exit;
       end;
+    FK_SOCK: begin Result := SockIo(fd, buf, n, 0, 0, 0, False); Exit; end;
+    FK_TIMER, FK_EVENT, FK_EPOLL: begin Result := EmuRead(fd, buf, n); Exit; end;
   end;
   h := WinFd[fd];
   if n > $7FFFFFFF then n := $7FFFFFFF;
+  if ((WinFdFlags[fd] and LX_O_NONBLOCK) <> 0) and (ReadReady(fd) = 0) then
+  begin
+    Result := -LX_EAGAIN;                            { O_NONBLOCK pipe or console with nothing yet }
+    Exit;
+  end;
   done := 0;
   { A broken pipe or closed console reads as end of file, as on Linux. }
   if W_ReadFile(h, buf, n, Int64(@done), 0) = 0 then
@@ -827,9 +905,12 @@ begin
         if WinFdLen[fd] <> INVALID_HANDLE then W_FindClose(WinFdLen[fd]);
         W_VirtualFree(WinFdMem[fd], 0, MEM_RELEASE);
       end;
+    FK_SOCK: S_closesocket(WinFd[fd]);
+    FK_EPOLL: W_VirtualFree(WinFdMem[fd], 0, MEM_RELEASE);
   end;
   WinFdKind[fd] := FK_NONE;
   WinFd[fd] := 0;
+  DropFd(fd);                                        { out of every epoll list, as on Linux }
   Result := 0;
 end;
 
@@ -1017,17 +1098,17 @@ begin
   Result := t;
 end;
 
-function WinPipe(fds: Int64): Int64;
+function WinPipe(fds, flags: Int64): Int64;
 var r, w, a, b: Int64;
 begin
   r := 0; w := 0;
   if W_CreatePipe(Int64(@r), Int64(@w), 0, 0) = 0 then begin Result := WinErr; Exit; end;
   a := FdAlloc(3);
   if a < 0 then begin W_CloseHandle(r); W_CloseHandle(w); Result := a; Exit; end;
-  WinFdKind[a] := FK_HANDLE; WinFd[a] := r;
+  WinFdKind[a] := FK_HANDLE; WinFd[a] := r; WinFdFlags[a] := flags and LX_O_NONBLOCK;
   b := FdAlloc(3);
   if b < 0 then begin WinClose(a); W_CloseHandle(w); Result := b; Exit; end;
-  WinFdKind[b] := FK_HANDLE; WinFd[b] := w; WinFdFlags[b] := 1;
+  WinFdKind[b] := FK_HANDLE; WinFd[b] := w; WinFdFlags[b] := 1 or (flags and LX_O_NONBLOCK);
   PLongInt(fds)^ := a;
   PLongInt(fds + 4)^ := b;
   Result := 0;
@@ -1041,6 +1122,21 @@ begin
   WinFdKind[nfd] := WinFdKind[fd];
   WinFdMem[nfd] := WinFdMem[fd]; WinFdLen[nfd] := WinFdLen[fd]; WinFdPos[nfd] := WinFdPos[fd];
   WinFdAppend[nfd] := WinFdAppend[fd]; WinFdFlags[nfd] := WinFdFlags[fd];
+  WinFdOpt[nfd] := WinFdOpt[fd];
+  if WinFdKind[fd] = FK_SOCK then
+  begin
+    Result := SockDup(fd, nfd);
+    if Result < 0 then WinFdKind[nfd] := FK_NONE;
+    Exit;
+  end;
+  if WinFdKind[fd] = FK_EPOLL then
+  begin
+    page := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_READWRITE);
+    if page = 0 then begin WinFdKind[nfd] := FK_NONE; Result := -LX_ENOMEM; Exit; end;
+    for h := 0 to 4095 do PByte(page + h)^ := PByte(WinFdMem[fd] + h)^;
+    WinFdMem[nfd] := page;
+  end;
+  WinFd[nfd] := WinFd[fd];
   if WinFdKind[fd] = FK_HANDLE then
   begin
     h := 0;
@@ -1092,8 +1188,11 @@ begin
     1: Result := 0;                                 { F_GETFD }
     2: Result := 0;                                 { F_SETFD }
     3: Result := WinFdFlags[fd];                    { F_GETFL }
-    4: begin                                        { F_SETFL: O_APPEND only }
+    4: begin                                        { F_SETFL: O_APPEND, O_NONBLOCK }
          WinFdAppend[fd] := (arg and LX_O_APPEND) <> 0;
+         WinFdFlags[fd] := (WinFdFlags[fd] and not (LX_O_APPEND or LX_O_NONBLOCK))
+                           or (arg and (LX_O_APPEND or LX_O_NONBLOCK));
+         if FdKind(fd) = FK_SOCK then SockSetNonblock(fd, (arg and LX_O_NONBLOCK) <> 0);
          Result := 0;
        end;
   else
@@ -1300,9 +1399,10 @@ end;
   a disk file, a memory file and a directory are always ready; a pipe is
   readable when PeekNamedPipe shows bytes or the writer is gone (that read
   answers end of file, as on Linux, and is reported with POLLHUP); a console
-  is readable when its handle is signalled. Writes are always ready. }
+  is readable when its handle is signalled. Writes are always ready, except
+  on a socket, which Winsock answers for (SockReady). }
 const
-  LX_POLLIN = 1; LX_POLLPRI = 2; LX_POLLOUT = 4; LX_POLLHUP = $10; LX_POLLNVAL = $20;
+  LX_POLLIN = 1; LX_POLLPRI = 2; LX_POLLOUT = 4; LX_POLLERR = 8; LX_POLLHUP = $10; LX_POLLNVAL = $20;
 
 { POLLIN, POLLIN|POLLHUP, 0 (not yet), or POLLNVAL. }
 function ReadReady(fd: Int64): LongInt;
@@ -1330,8 +1430,86 @@ begin
     Result := LX_POLLIN;
 end;
 
-{ One pass over a pollfd array; answers how many have revents set. }
-function PollPass(fds, n: Int64): Int64;
+{ What fd is ready for now, as Linux poll bits (POLLNVAL when not open). }
+function FdReady(fd: Int64): LongInt;
+begin
+  case FdKind(fd) of
+    FK_NONE: Result := LX_POLLNVAL;
+    FK_SOCK: Result := SockReady(fd);
+    FK_EPOLL, FK_TIMER, FK_EVENT: Result := EmuReady(fd);
+  else
+    Result := ReadReady(fd) or LX_POLLOUT;
+  end;
+end;
+
+{ ---- Waiting ----------------------------------------------------------------
+  Between readiness passes, poll/select/epoll_wait wait on what they watch:
+  Winsock select on the sockets (it wakes the moment one is ready), no
+  later than the nearest timerfd deadline, and for at most a few ms when
+  something select cannot watch is in the set (a pipe, the console, an
+  eventfd); with nothing to watch it is a plain sleep. }
+type
+  TSockWait = record
+    rd, wr, ex: array[0..64] of Int64;   { Winsock fd_sets: the count, then up to 64 SOCKETs }
+    next: Int64;                         { the nearest timerfd deadline, monotonic ns (0: none) }
+    other: Boolean;
+  end;
+
+procedure SwClear(var w: TSockWait);
+begin
+  w.rd[0] := 0; w.wr[0] := 0; w.ex[0] := 0;
+  w.next := 0;
+  w.other := False;
+end;
+
+procedure SwAdd(var w: TSockWait; fd, ev: Int64);
+var s: Int64;
+begin
+  case FdKind(fd) of
+    FK_SOCK:
+      begin
+        if (w.rd[0] >= 64) or (w.wr[0] >= 64) or (w.ex[0] >= 64) then begin w.other := True; Exit; end;
+        s := WinFd[fd];
+        if (ev and (LX_POLLIN or LX_POLLPRI)) <> 0 then begin w.rd[0] := w.rd[0] + 1; w.rd[w.rd[0]] := s; end;
+        if (ev and LX_POLLOUT) <> 0 then begin w.wr[0] := w.wr[0] + 1; w.wr[w.wr[0]] := s; end;
+        w.ex[0] := w.ex[0] + 1; w.ex[w.ex[0]] := s;
+      end;
+    FK_TIMER:
+      if (WinFdMem[fd] <> 0) and ((w.next = 0) or (WinFdMem[fd] < w.next)) then w.next := WinFdMem[fd];
+    FK_HANDLE, FK_EVENT, FK_EPOLL:
+      w.other := True;
+  end;
+end;
+
+{ Wait up to ms (-1: no limit) for something in w. }
+procedure SwWait(var w: TSockWait; ms: Int64);
+var d: Int64;
+    tv: array[0..1] of LongInt;
+begin
+  if w.other and ((ms < 0) or (ms > 5)) then ms := 5;
+  if w.next <> 0 then
+  begin
+    d := (w.next - MonoNs + 999999) div 1000000;
+    if d < 0 then d := 0;
+    if (ms < 0) or (d < ms) then ms := d;
+  end;
+  if w.rd[0] + w.wr[0] + w.ex[0] > 0 then
+  begin
+    if ms < 0 then S_select(0, Int64(@w.rd[0]), Int64(@w.wr[0]), Int64(@w.ex[0]), 0)
+    else
+    begin
+      tv[0] := ms div 1000;
+      tv[1] := (ms mod 1000) * 1000;
+      S_select(0, Int64(@w.rd[0]), Int64(@w.wr[0]), Int64(@w.ex[0]), Int64(@tv[0]));
+    end;
+  end
+  else if ms < 0 then W_Sleep($FFFFFFFF)                 { INFINITE: nothing can ever be ready }
+  else W_Sleep(ms);
+end;
+
+{ One pass over a pollfd array; answers how many have revents set, and
+  puts what to wait on into w. }
+function PollPass(fds, n: Int64; var w: TSockWait): Int64;
 var i, fd, ev, rv, r: Int64;
 begin
   Result := 0;
@@ -1342,14 +1520,10 @@ begin
     rv := 0;
     if fd >= 0 then
     begin
-      r := ReadReady(fd);
+      r := FdReady(fd);
       if r = LX_POLLNVAL then rv := LX_POLLNVAL
-      else
-      begin
-        if (ev and LX_POLLIN) <> 0 then rv := rv or (r and LX_POLLIN);
-        rv := rv or (r and LX_POLLHUP);
-        if (ev and LX_POLLOUT) <> 0 then rv := rv or LX_POLLOUT;
-      end;
+      else rv := r and (ev or LX_POLLERR or LX_POLLHUP);
+      SwAdd(w, fd, ev);
     end;
     PWord(fds + 8 * i + 6)^ := rv;
     if rv <> 0 then Result := Result + 1;
@@ -1358,24 +1532,29 @@ end;
 
 { ms < 0 waits for ever. }
 function WinPoll(fds, n, ms: Int64): Int64;
-var waited, step: Int64;
+var w: TSockWait;
+    start, left: Int64;
 begin
-  waited := 0;
-  step := 1;
+  start := MonoNs;
   while True do
   begin
-    Result := PollPass(fds, n);
+    SwClear(w);
+    Result := PollPass(fds, n, w);
     if Result > 0 then Exit;
-    if (ms >= 0) and (waited >= ms) then Exit;
-    W_Sleep(step);
-    waited := waited + step;
-    if step < 10 then step := step + 1;
+    if ms = 0 then Exit;
+    left := -1;
+    if ms > 0 then
+    begin
+      left := ms - (MonoNs - start) div 1000000;
+      if left <= 0 then Exit;
+    end;
+    SwWait(w, left);
   end;
 end;
 
 { select / pselect6 over fd_set bitmaps (an fd_set is 1024 bits). }
-function SelPass(n, rs, ws, es: Int64; var outR, outW: array of Int64): Int64;
-var fd, word, bit: Int64;
+function SelPass(n, rs, ws, es: Int64; var outR, outW: array of Int64; var w: TSockWait): Int64;
+var fd, word, bit, ev: Int64;
     r: LongInt;
 begin
   Result := 0;
@@ -1384,37 +1563,49 @@ begin
   begin
     word := fd shr 6;
     bit := Int64(1) shl (fd and 63);
-    if (rs <> 0) and ((PInt64(rs + 8 * word)^ and bit) <> 0) then
+    ev := 0;
+    if (rs <> 0) and ((PInt64(rs + 8 * word)^ and bit) <> 0) then ev := LX_POLLIN;
+    if (ws <> 0) and ((PInt64(ws + 8 * word)^ and bit) <> 0) then ev := ev or LX_POLLOUT;
+    if ev <> 0 then
     begin
-      r := ReadReady(fd);
+      r := FdReady(fd);
       if r = LX_POLLNVAL then begin Result := -LX_EBADF; Exit; end;
-      if r <> 0 then begin outR[word] := outR[word] or bit; Result := Result + 1; end;
-    end;
-    if (ws <> 0) and ((PInt64(ws + 8 * word)^ and bit) <> 0) then
-    begin
-      if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
-      outW[word] := outW[word] or bit;
-      Result := Result + 1;
+      if ((ev and LX_POLLIN) <> 0) and ((r and (LX_POLLIN or LX_POLLHUP or LX_POLLERR)) <> 0) then
+      begin
+        outR[word] := outR[word] or bit;
+        Result := Result + 1;
+      end;
+      if ((ev and LX_POLLOUT) <> 0) and ((r and (LX_POLLOUT or LX_POLLERR)) <> 0) then
+      begin
+        outW[word] := outW[word] or bit;
+        Result := Result + 1;
+      end;
+      SwAdd(w, fd, ev);
     end;
   end;
 end;
 
 function WinSelect(n, rs, ws, es, ms: Int64): Int64;
 var outR, outW: array[0..15] of Int64;
-    waited, step, words, i: Int64;
+    w: TSockWait;
+    start, left, words, i: Int64;
 begin
   if n > 1024 then n := 1024;
   if n < 0 then begin Result := -LX_EINVAL; Exit; end;
-  waited := 0;
-  step := 1;
+  start := MonoNs;
   while True do
   begin
-    Result := SelPass(n, rs, ws, es, outR, outW);
+    SwClear(w);
+    Result := SelPass(n, rs, ws, es, outR, outW, w);
     if Result < 0 then Exit;
-    if (Result > 0) or ((ms >= 0) and (waited >= ms)) then Break;
-    W_Sleep(step);
-    waited := waited + step;
-    if step < 10 then step := step + 1;
+    if (Result > 0) or (ms = 0) then Break;
+    left := -1;
+    if ms > 0 then
+    begin
+      left := ms - (MonoNs - start) div 1000000;
+      if left <= 0 then Break;
+    end;
+    SwWait(w, left);
   end;
   words := (n + 63) shr 6;
   for i := 0 to words - 1 do
@@ -2398,6 +2589,1048 @@ begin
   Result := 0;
 end;
 
+{ ---- Sockets ---------------------------------------------------------------
+  Winsock (ws2_32) underneath, one SOCKET per FK_SOCK fd. The wire structs
+  agree with Linux (a u16 family first; sockaddr_in6 is 28 bytes on both)
+  except AF_INET6, which is 23; every sockaddr crossing over is copied and
+  renumbered. Where Windows behaves differently by default it is set the
+  Linux way at creation: IPV6_V6ONLY off, and no WSAECONNRESET on a UDP
+  socket after an ICMP port-unreachable. An accepted socket does not inherit
+  the listener's non-blocking mode, as on Linux. The fd keeps the family,
+  type and protocol it was created with (SO_DOMAIN, SO_PROTOCOL, SO_TYPE),
+  and SO_REUSEADDR / SO_REUSEPORT are only recorded: Windows already rebinds
+  a port in TIME_WAIT, and its own SO_REUSEADDR would let a second socket
+  steal a port that is in use. A send to a peer that has gone raises SIGPIPE
+  unless MSG_NOSIGNAL, as on Linux. socketpair is a loopback TCP (or UDP)
+  pair. Not done: SCM_RIGHTS and other control messages, MSG_TRUNC lengths. }
+const
+  LX_EPERM = 1; LX_ENOTSOCK = 88; LX_ENOPROTOOPT = 92; LX_EOPNOTSUPP = 95;
+  LX_EAFNOSUPPORT = 97; LX_EINPROGRESS = 115;
+  WS_FIONBIO = $8004667E; WS_FIONREAD = $4004667F;
+  SIO_UDP_CONNRESET = $9800000C;
+  SOCKET_FLAGS = $81;                  { WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT }
+  OPT_REUSEADDR = 1; OPT_REUSEPORT = 2;
+
+var
+  WsaReady: Boolean;
+
+procedure WsaInit;
+var d: array[0..63] of Int64;          { WSADATA, 408 bytes }
+begin
+  if WsaReady then Exit;
+  S_WSAStartup($0202, Int64(@d[0]));
+  WsaReady := True;
+end;
+
+{ A WSA error code as a (positive) Linux errno. }
+function SockErrno(e: Int64): Int64;
+begin
+  case e of
+    0: Result := 0;
+    10004: Result := LX_EINTR;
+    10009: Result := LX_EBADF;
+    10013: Result := LX_EACCES;
+    10014: Result := LX_EFAULT;
+    10022: Result := LX_EINVAL;
+    10024: Result := LX_EMFILE;
+    10035: Result := LX_EAGAIN;
+    10036: Result := LX_EINPROGRESS;
+    10037: Result := 114;                 { EALREADY }
+    10038: Result := LX_ENOTSOCK;
+    10039: Result := 89;                  { EDESTADDRREQ }
+    10040: Result := 90;                  { EMSGSIZE }
+    10041: Result := 91;                  { EPROTOTYPE }
+    10042: Result := LX_ENOPROTOOPT;
+    10043: Result := 93;                  { EPROTONOSUPPORT }
+    10044: Result := 94;                  { ESOCKTNOSUPPORT }
+    10045: Result := LX_EOPNOTSUPP;
+    10046: Result := 96;                  { EPFNOSUPPORT }
+    10047: Result := LX_EAFNOSUPPORT;
+    10048: Result := 98;                  { EADDRINUSE }
+    10049: Result := 99;                  { EADDRNOTAVAIL }
+    10050: Result := 100;                 { ENETDOWN }
+    10051: Result := 101;                 { ENETUNREACH }
+    10052: Result := 102;                 { ENETRESET }
+    10053: Result := 103;                 { ECONNABORTED }
+    10054: Result := 104;                 { ECONNRESET }
+    10055: Result := 105;                 { ENOBUFS }
+    10056: Result := 106;                 { EISCONN }
+    10057: Result := 107;                 { ENOTCONN }
+    10058: Result := LX_EPIPE;            { ESHUTDOWN: Linux answers a send after shutdown with EPIPE }
+    10060: Result := 110;                 { ETIMEDOUT }
+    10061: Result := 111;                 { ECONNREFUSED }
+    10064: Result := 112;                 { EHOSTDOWN }
+    10065: Result := 113;                 { EHOSTUNREACH }
+  else
+    Result := LX_EIO;
+  end;
+end;
+
+function SockErr: Int64;
+begin
+  Result := -SockErrno(S_WSAGetLastError);
+end;
+
+{ 0 when fd is a socket, else -EBADF / -ENOTSOCK. }
+function SockCheck(fd: Int64): Int64;
+begin
+  case FdKind(fd) of
+    FK_SOCK: Result := 0;
+    FK_NONE: Result := -LX_EBADF;
+  else
+    Result := -LX_ENOTSOCK;
+  end;
+end;
+
+{ A Linux sockaddr (src, len) into dst (128 bytes), family renumbered.
+  Answers the length to pass, or -errno. }
+function SaIn(src, len, dst: Int64): Int64;
+var i, af: Int64;
+begin
+  if (len < 2) or (len > 128) then begin Result := -LX_EINVAL; Exit; end;
+  if src = 0 then begin Result := -LX_EFAULT; Exit; end;
+  for i := 0 to len - 1 do PByte(dst + i)^ := PByte(src + i)^;
+  af := PWord(src)^;
+  if af = 10 then PWord(dst)^ := 23
+  else if af > 2 then begin Result := -LX_EAFNOSUPPORT; Exit; end;
+  Result := len;
+end;
+
+{ A Windows sockaddr (src, its length l) out to the caller's (dst, lenp):
+  family renumbered, truncated to the room given, the full length stored. }
+procedure SaOut(src, l, dst, lenp: Int64);
+var i, room: Int64;
+begin
+  if (dst = 0) or (lenp = 0) then Exit;
+  if (l >= 2) and (PWord(src)^ = 23) then PWord(src)^ := 10;
+  room := PLongInt(lenp)^;
+  if room > l then room := l;
+  for i := 0 to room - 1 do PByte(dst + i)^ := PByte(src + i)^;
+  PLongInt(lenp)^ := l;
+end;
+
+procedure SockSetNonblock(fd: Int64; enable: Boolean);
+var v: LongWord;
+begin
+  if enable then v := 1 else v := 0;
+  S_ioctlsocket(WinFd[fd], WS_FIONBIO, Int64(@v));
+end;
+
+{ A new SOCKET onto a fresh fd (the caller holds WinLock). }
+function SockFd(s, af, typ, proto, flags: Int64): Int64;
+var fd: Int64;
+begin
+  fd := FdAlloc(3);
+  if fd < 0 then begin S_closesocket(s); Result := fd; Exit; end;
+  WinFdKind[fd] := FK_SOCK;
+  WinFd[fd] := s;
+  WinFdMem[fd] := af; WinFdLen[fd] := typ; WinFdPos[fd] := proto;
+  WinFdFlags[fd] := 2 or (flags and LX_O_NONBLOCK);
+  WinFdOpt[fd] := 0;
+  SockSetNonblock(fd, (flags and LX_O_NONBLOCK) <> 0);
+  Result := fd;
+end;
+
+{ A bare SOCKET of family waf, set the Linux way. -1 on failure. }
+function SockNew(waf, typ, proto: Int64): Int64;
+var z: LongWord;
+    ret: LongWord;
+begin
+  WsaInit;
+  Result := S_WSASocketW(waf, typ, proto, 0, 0, SOCKET_FLAGS);
+  if Result = -1 then Exit;
+  z := 0;
+  if waf = 23 then S_setsockopt(Result, 41, 27, Int64(@z), 4);       { IPV6_V6ONLY off }
+  if typ = 2 then
+    S_WSAIoctl(Result, SIO_UDP_CONNRESET, Int64(@z), 4, 0, 0, Int64(@ret), 0, 0);
+end;
+
+function SockTypeCheck(af, typ: Int64): Int64;
+begin
+  { Linux's order (__sys_socket, __sock_create): stray flag bits in the
+    type word, then the family, then the type. }
+  if (typ and not Int64($8080F)) <> 0 then Result := -LX_EINVAL
+  else if (af <> 1) and (af <> 2) and (af <> 10) then Result := -LX_EAFNOSUPPORT
+  else if (typ and $F) >= 11 then Result := -LX_EINVAL
+  else Result := 0;
+end;
+
+function WinSocket(af, typ, proto: Int64): Int64;
+var s, waf: Int64;
+begin
+  Result := SockTypeCheck(af, typ);
+  if Result < 0 then Exit;
+  if af = 10 then waf := 23 else waf := af;
+  s := SockNew(waf, typ and $F, proto);
+  if s = -1 then begin Result := SockErr; Exit; end;
+  if proto = 0 then
+  begin
+    if af <> 1 then
+    begin
+      if (typ and $F) = 1 then proto := 6
+      else if (typ and $F) = 2 then proto := 17;
+    end;
+  end;
+  Result := SockFd(s, af, typ and $F, proto, typ);
+end;
+
+{ socketpair over loopback: AF_UNIX is what Linux programs ask for, and a
+  connected TCP (or UDP) pair on 127.0.0.1 carries the same bytes. }
+function WinSocketpair(af, typ, proto, sv: Int64): Int64;
+var l, a, b, ty: Int64;
+    sa, sb: array[0..1] of Int64;    { two sockaddr_in }
+    n: LongInt;
+    one: LongWord;
+begin
+  Result := SockTypeCheck(af, typ);
+  if Result < 0 then Exit;
+  if af <> 1 then begin Result := -LX_EOPNOTSUPP; Exit; end;
+  ty := typ and $F;
+  if (ty <> 1) and (ty <> 2) then begin Result := -LX_EOPNOTSUPP; Exit; end;
+  sa[0] := 0; sa[1] := 0;
+  PWord(Int64(@sa[0]))^ := 2;
+  PLongWord(Int64(@sa[0]) + 4)^ := $0100007F;          { 127.0.0.1 }
+  sb[0] := sa[0]; sb[1] := sa[1];
+  a := -1; b := -1; l := -1;
+  if ty = 1 then
+  begin
+    l := SockNew(2, 1, 6);
+    if l = -1 then begin Result := SockErr; Exit; end;
+    n := 16;
+    if (S_bind(l, Int64(@sa[0]), 16) <> 0) or (S_listen(l, 1) <> 0)
+       or (S_getsockname(l, Int64(@sa[0]), Int64(@n)) <> 0) then
+    begin Result := SockErr; S_closesocket(l); Exit; end;
+    a := SockNew(2, 1, 6);
+    if (a <> -1) and (S_connect(a, Int64(@sa[0]), 16) = 0) then b := S_accept(l, 0, 0);
+    if b = -1 then Result := SockErr;
+    S_closesocket(l);
+    one := 1;
+    if b <> -1 then
+    begin
+      S_setsockopt(a, 6, 1, Int64(@one), 4);                   { TCP_NODELAY: a local pipe }
+      S_setsockopt(b, 6, 1, Int64(@one), 4);
+    end;
+  end
+  else
+  begin
+    a := SockNew(2, 2, 17);
+    b := SockNew(2, 2, 17);
+    n := 16;
+    if (a = -1) or (b = -1) or (S_bind(a, Int64(@sa[0]), 16) <> 0) or (S_bind(b, Int64(@sb[0]), 16) <> 0)
+       or (S_getsockname(a, Int64(@sa[0]), Int64(@n)) <> 0) then Result := SockErr
+    else
+    begin
+      n := 16;
+      if (S_getsockname(b, Int64(@sb[0]), Int64(@n)) <> 0) or (S_connect(a, Int64(@sb[0]), 16) <> 0)
+         or (S_connect(b, Int64(@sa[0]), 16) <> 0) then Result := SockErr;
+    end;
+  end;
+  if (Result < 0) or (a = -1) or (b = -1) then
+  begin
+    if Result >= 0 then Result := SockErr;
+    if a <> -1 then S_closesocket(a);
+    if b <> -1 then S_closesocket(b);
+    Exit;
+  end;
+  a := SockFd(a, 1, ty, 0, typ);
+  if a < 0 then begin S_closesocket(b); Result := a; Exit; end;
+  b := SockFd(b, 1, ty, 0, typ);
+  if b < 0 then begin WinClose(a); Result := b; Exit; end;
+  PLongInt(sv)^ := a;
+  PLongInt(sv + 4)^ := b;
+  Result := 0;
+end;
+
+function WinBind(fd, sa, len: Int64): Int64;
+var b: array[0..15] of Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  Result := SaIn(sa, len, Int64(@b[0]));
+  if Result < 0 then Exit;
+  if S_bind(WinFd[fd], Int64(@b[0]), Result) <> 0 then Result := SockErr else Result := 0;
+end;
+
+function WinConnect(fd, sa, len: Int64): Int64;
+var b: array[0..15] of Int64;
+    e: Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  Result := SaIn(sa, len, Int64(@b[0]));
+  if Result < 0 then Exit;
+  if S_connect(WinFd[fd], Int64(@b[0]), Result) = 0 then begin Result := 0; Exit; end;
+  e := S_WSAGetLastError;
+  if e = 10035 then Result := -LX_EINPROGRESS            { WSAEWOULDBLOCK: started }
+  else Result := -SockErrno(e);
+end;
+
+{ listen on an unbound socket binds it to an ephemeral port first, as
+  Linux does (Windows refuses with WSAEINVAL). }
+function WinListen(fd, backlog: Int64): Int64;
+var b: array[0..3] of Int64;
+    n: LongInt;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if S_listen(WinFd[fd], backlog) = 0 then begin Result := 0; Exit; end;
+  Result := SockErr;
+  n := 32;
+  if (Result = -LX_EINVAL) and (S_getsockname(WinFd[fd], Int64(@b[0]), Int64(@n)) <> 0) then
+  begin
+    b[0] := 0; b[1] := 0; b[2] := 0; b[3] := 0;
+    if WinFdMem[fd] = 10 then begin PWord(Int64(@b[0]))^ := 23; n := 28; end
+    else begin PWord(Int64(@b[0]))^ := 2; n := 16; end;
+    if (S_bind(WinFd[fd], Int64(@b[0]), n) = 0) and (S_listen(WinFd[fd], backlog) = 0) then Result := 0
+    else Result := SockErr;
+  end;
+end;
+
+{ accept / accept4. The wait happens outside WinLock; only the fd table
+  update takes it. }
+function WinAccept(fd, sa, lenp, flags: Int64): Int64;
+var b: array[0..15] of Int64;
+    n: LongInt;
+    s: Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if (flags and not Int64($80800)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
+  n := 128;
+  s := S_accept(WinFd[fd], Int64(@b[0]), Int64(@n));
+  if s = -1 then begin Result := SockErr; Exit; end;
+  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  Result := SockFd(s, WinFdMem[fd], WinFdLen[fd], WinFdPos[fd], flags);
+  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  if Result >= 0 then SaOut(Int64(@b[0]), n, sa, lenp);
+end;
+
+function WinSockName(fd, sa, lenp: Int64; peer: Boolean): Int64;
+var b: array[0..15] of Int64;
+    n: LongInt;
+    i: Integer;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if lenp = 0 then begin Result := -LX_EFAULT; Exit; end;
+  n := 128;
+  if peer then Result := S_getpeername(WinFd[fd], Int64(@b[0]), Int64(@n))
+  else Result := S_getsockname(WinFd[fd], Int64(@b[0]), Int64(@n));
+  if Result <> 0 then
+  begin
+    Result := SockErr;
+    if peer or (Result <> -LX_EINVAL) then Exit;
+    { not bound yet: Linux answers the family's any-address, port 0 }
+    for i := 0 to 15 do b[i] := 0;
+    if WinFdMem[fd] = 10 then begin PWord(Int64(@b[0]))^ := 23; n := 28; end
+    else if WinFdMem[fd] = 1 then begin PWord(Int64(@b[0]))^ := 1; n := 2; end
+    else begin PWord(Int64(@b[0]))^ := 2; n := 16; end;
+  end;
+  SaOut(Int64(@b[0]), n, sa, lenp);
+  Result := 0;
+end;
+
+{ Linux MSG_ flags -> Winsock: OOB, PEEK, DONTROUTE are the same bits,
+  WAITALL moves; DONTWAIT is done with a non-blocking spell; NOSIGNAL is
+  only for SIGPIPE, which Windows never sends. }
+function WsMsgFlags(f: Int64): Int64;
+begin
+  Result := f and 7;
+  if (f and $100) <> 0 then Result := Result or 8;
+end;
+
+{ send/sendto/recv/recvfrom and read/write on a socket. For a send, sa and
+  salen are a Linux sockaddr and its length (sa 0: none); for a receive,
+  sa and salen are where the source address goes and its length word. }
+function SockIo(fd, buf, n, flags, sa, salen: Int64; isSend: Boolean): Int64;
+var b: array[0..15] of Int64;
+    s, r, wf, e: Int64;
+    l: LongInt;
+    spell: Boolean;
+begin
+  s := WinFd[fd];
+  if n > $7FFFFFFF then n := $7FFFFFFF;
+  if n < 0 then begin Result := -LX_EINVAL; Exit; end;
+  wf := WsMsgFlags(flags);
+  l := 0;
+  if isSend and (sa <> 0) then
+  begin
+    l := SaIn(sa, salen, Int64(@b[0]));
+    if l < 0 then begin Result := l; Exit; end;
+  end;
+  spell := ((flags and $40) <> 0) and ((WinFdFlags[fd] and LX_O_NONBLOCK) = 0);   { MSG_DONTWAIT }
+  if spell then SockSetNonblock(fd, True);
+  if isSend then
+  begin
+    if sa = 0 then r := S_send(s, buf, n, wf)
+    else r := S_sendto(s, buf, n, wf, Int64(@b[0]), l);
+  end
+  else
+  begin
+    l := 128;
+    if (sa = 0) or (WinFdLen[fd] = 1) then r := S_recv(s, buf, n, wf)
+    else r := S_recvfrom(s, buf, n, wf, Int64(@b[0]), Int64(@l));
+  end;
+  e := 0;
+  if r < 0 then e := S_WSAGetLastError;
+  if spell then SockSetNonblock(fd, False);
+  if (not isSend) and (e = 10040) then begin r := n; e := 0; end;   { WSAEMSGSIZE: a datagram cut to fit, as Linux gives it }
+  if e <> 0 then
+  begin
+    Result := -SockErrno(e);
+    if isSend and (WinFdLen[fd] = 1) and ((e = 10053) or (e = 10054)) then Result := -LX_EPIPE;
+    if (Result = -LX_EPIPE) and ((flags and $4000) = 0) then WinSignalSelf(13, 0);   { SIGPIPE, SI_USER }
+    Exit;
+  end;
+  Result := r;
+  if (not isSend) and (sa <> 0) then
+  begin
+    if WinFdLen[fd] = 1 then PLongInt(salen)^ := 0          { a stream socket names no source }
+    else SaOut(Int64(@b[0]), l, sa, salen);
+  end;
+end;
+
+function WinSendRecv(fd, buf, n, flags, sa, salen: Int64; isSend: Boolean): Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  Result := SockIo(fd, buf, n, flags, sa, salen, isSend);
+end;
+
+{ sendmsg / recvmsg: the iovecs gathered into (scattered from) one buffer
+  so a datagram stays one datagram. Control messages are refused on send
+  and never produced on receive. msghdr: name 0, namelen 8, iov 16,
+  iovlen 24, control 32, controllen 40, flags 48. }
+function WinMsg(isSend: Boolean; fd, m, flags: Int64): Int64;
+var iov, cnt, total, i, k, len, p, buf, nm: Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  iov := PInt64(m + 16)^;
+  cnt := PInt64(m + 24)^;
+  if (cnt < 0) or (cnt > 1024) then begin Result := -LX_EINVAL; Exit; end;
+  if isSend and (PInt64(m + 32)^ <> 0) and (PInt64(m + 40)^ <> 0) then begin Result := -LX_EOPNOTSUPP; Exit; end;
+  total := 0;
+  for i := 0 to cnt - 1 do total := total + PInt64(iov + 16 * i + 8)^;
+  nm := PInt64(m);
+  if cnt = 1 then buf := PInt64(iov)^
+  else if total = 0 then buf := Int64(@total)
+  else
+  begin
+    buf := W_VirtualAlloc(0, total, MEM_RESERVE or MEM_COMMIT, PAGE_READWRITE);
+    if buf = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  end;
+  if isSend then
+  begin
+    if cnt > 1 then
+    begin
+      p := buf;
+      for i := 0 to cnt - 1 do
+      begin
+        len := PInt64(iov + 16 * i + 8)^;
+        for k := 0 to len - 1 do PByte(p + k)^ := PByte(PInt64(iov + 16 * i)^ + k)^;
+        p := p + len;
+      end;
+    end;
+    if nm <> 0 then Result := SockIo(fd, buf, total, flags, nm, PLongWord(m + 8)^, True)
+    else Result := SockIo(fd, buf, total, flags, 0, 0, True);
+  end
+  else
+  begin
+    if nm <> 0 then Result := SockIo(fd, buf, total, flags, nm, m + 8, False)
+    else Result := SockIo(fd, buf, total, flags, 0, 0, False);
+    if (Result > 0) and (cnt > 1) then
+    begin
+      p := buf;
+      total := Result;
+      for i := 0 to cnt - 1 do
+      begin
+        len := PInt64(iov + 16 * i + 8)^;
+        if len > total then len := total;
+        for k := 0 to len - 1 do PByte(PInt64(iov + 16 * i)^ + k)^ := PByte(p + k)^;
+        p := p + len;
+        total := total - len;
+      end;
+    end;
+    PInt64(m + 40)^ := 0;
+    PLongInt(m + 48)^ := 0;
+  end;
+  if (cnt > 1) and (buf <> Int64(@total)) then W_VirtualFree(buf, 0, MEM_RELEASE);
+end;
+
+function WinShutdown(fd, how: Int64): Int64;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if (how < 0) or (how > 2) then begin Result := -LX_EINVAL; Exit; end;
+  if S_shutdown(WinFd[fd], how) <> 0 then Result := SockErr else Result := 0;
+end;
+
+{ (level, name) -> Winsock; level -1 when there is no equivalent. }
+procedure SockOptToWs(var level, name: Int64);
+begin
+  case level of
+    1: begin                                                    { SOL_SOCKET }
+         level := $FFFF;
+         case name of
+           1: name := 1; 3: name := $1008; 4: name := $1007; 5: name := $10;
+           6: name := $20; 7: name := $1001; 8: name := $1002; 9: name := 8;
+           10: name := $100; 13: name := $80; 18: name := $1004; 19: name := $1003;
+           20: name := $1006; 21: name := $1005; 30: name := 2;
+         else level := -1;
+         end;
+       end;
+    6: case name of                                             { IPPROTO_TCP }
+         1: ; 2: name := 4; 4: name := 3; 5: name := 17; 6: name := 16;
+       else level := -1;
+       end;
+    0: case name of                                             { IPPROTO_IP }
+         1: name := 3; 2: name := 4;
+         32: name := 9; 33: name := 10; 34: name := 11; 35: name := 12; 36: name := 13;
+       else level := -1;
+       end;
+    41: case name of                                            { IPPROTO_IPV6 }
+          26: name := 27; 16: name := 4; 17: name := 9; 18: name := 10;
+          19: name := 11; 20: name := 12; 21: name := 13;
+        else level := -1;
+        end;
+  else
+    level := -1;
+  end;
+end;
+
+{ An int option value out: 4 bytes, or what fits. }
+procedure OptIntOut(val, lenp, v: Int64);
+var room, i: Int64;
+begin
+  room := PLongInt(lenp)^;
+  if room > 4 then room := 4;
+  for i := 0 to room - 1 do PByte(val + i)^ := (v shr (8 * i)) and $FF;
+  PLongInt(lenp)^ := room;
+end;
+
+function WinSetsockopt(fd, level, name, val, len: Int64): Int64;
+var lv, nm, ms, i: Int64;
+    t: array[0..3] of LongInt;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if (len < 0) or ((len > 0) and (val = 0)) then begin Result := -LX_EFAULT; Exit; end;
+  if (level = 1) and ((name = 2) or (name = 15)) then
+  begin
+    if len < 4 then begin Result := -LX_EINVAL; Exit; end;
+    if name = 2 then i := OPT_REUSEADDR else i := OPT_REUSEPORT;
+    if PLongInt(val)^ <> 0 then WinFdOpt[fd] := WinFdOpt[fd] or i
+    else WinFdOpt[fd] := WinFdOpt[fd] and not i;
+    Result := 0;
+    Exit;
+  end;
+  lv := level; nm := name;
+  SockOptToWs(lv, nm);
+  if lv < 0 then begin Result := -LX_ENOPROTOOPT; Exit; end;
+  t[0] := 0; t[1] := 0; t[2] := 0; t[3] := 0;
+  if (level = 1) and ((name = 20) or (name = 21)) then          { timeval -> DWORD ms }
+  begin
+    if len < 16 then begin Result := -LX_EINVAL; Exit; end;
+    ms := PInt64(val)^ * 1000 + PInt64(val + 8)^ div 1000;
+    if (ms = 0) and (PInt64(val + 8)^ > 0) then ms := 1;
+    t[0] := ms;
+    len := 4;
+  end
+  else if (level = 1) and (name = 13) then                       { linger: two ints -> two u16 }
+  begin
+    if len < 8 then begin Result := -LX_EINVAL; Exit; end;
+    if PLongInt(val)^ <> 0 then PWord(Int64(@t[0]))^ := 1;
+    PWord(Int64(@t[0]) + 2)^ := PLongInt(val + 4)^;
+    len := 4;
+  end
+  else if len <= 16 then
+  begin
+    for i := 0 to len - 1 do PByte(Int64(@t[0]) + i)^ := PByte(val + i)^;
+    if len < 4 then len := 4;                                    { a char-sized IP option: Winsock takes a DWORD }
+  end
+  else
+  begin
+    if S_setsockopt(WinFd[fd], lv, nm, val, len) <> 0 then Result := SockErr else Result := 0;
+    Exit;
+  end;
+  if S_setsockopt(WinFd[fd], lv, nm, Int64(@t[0]), len) <> 0 then Result := SockErr else Result := 0;
+end;
+
+function WinGetsockopt(fd, level, name, val, lenp: Int64): Int64;
+var lv, nm, v: Int64;
+    t: array[0..7] of LongInt;
+    n: LongInt;
+    i: Integer;
+begin
+  Result := SockCheck(fd);
+  if Result < 0 then Exit;
+  if (lenp = 0) or (val = 0) then begin Result := -LX_EFAULT; Exit; end;
+  if PLongInt(lenp)^ < 0 then begin Result := -LX_EINVAL; Exit; end;
+  Result := 0;
+  if level = 1 then
+    case name of
+      2: begin OptIntOut(val, lenp, Ord((WinFdOpt[fd] and OPT_REUSEADDR) <> 0)); Exit; end;
+      15: begin OptIntOut(val, lenp, Ord((WinFdOpt[fd] and OPT_REUSEPORT) <> 0)); Exit; end;
+      3: begin OptIntOut(val, lenp, WinFdLen[fd]); Exit; end;    { SO_TYPE }
+      38: begin OptIntOut(val, lenp, WinFdPos[fd]); Exit; end;   { SO_PROTOCOL }
+      39: begin OptIntOut(val, lenp, WinFdMem[fd]); Exit; end;   { SO_DOMAIN }
+    end;
+  lv := level; nm := name;
+  SockOptToWs(lv, nm);
+  if lv < 0 then begin Result := -LX_ENOPROTOOPT; Exit; end;
+  for i := 0 to 7 do t[i] := 0;
+  n := 32;
+  if S_getsockopt(WinFd[fd], lv, nm, Int64(@t[0]), Int64(@n)) <> 0 then begin Result := SockErr; Exit; end;
+  if (level = 1) and ((name = 20) or (name = 21)) then          { DWORD ms -> timeval }
+  begin
+    if PLongInt(lenp)^ < 16 then begin Result := -LX_EINVAL; Exit; end;
+    v := PLongWord(Int64(@t[0]))^;
+    PInt64(val)^ := v div 1000;
+    PInt64(val + 8)^ := (v mod 1000) * 1000;
+    PLongInt(lenp)^ := 16;
+  end
+  else if (level = 1) and (name = 13) then                       { linger }
+  begin
+    if PLongInt(lenp)^ < 8 then begin Result := -LX_EINVAL; Exit; end;
+    PLongInt(val)^ := PWord(Int64(@t[0]))^;
+    PLongInt(val + 4)^ := PWord(Int64(@t[0]) + 2)^;
+    PLongInt(lenp)^ := 8;
+  end
+  else if (level = 1) and (name = 4) then                        { SO_ERROR holds a WSA code }
+    OptIntOut(val, lenp, SockErrno(t[0]))
+  else if n > 4 then
+  begin
+    if n > PLongInt(lenp)^ then n := PLongInt(lenp)^;
+    for i := 0 to n - 1 do PByte(val + i)^ := PByte(Int64(@t[0]) + i)^;
+    PLongInt(lenp)^ := n;
+  end
+  else
+    OptIntOut(val, lenp, t[0]);
+end;
+
+{ What a socket is ready for, now (Linux poll bits). A failed connect shows
+  in Winsock's except set; Linux reports it as POLLOUT|POLLERR|POLLHUP. }
+function SockReady(fd: Int64): LongInt;
+var r, w, e: array[0..1] of Int64;
+    tv: array[0..1] of LongInt;
+begin
+  r[0] := 1; r[1] := WinFd[fd];
+  w[0] := 1; w[1] := WinFd[fd];
+  e[0] := 1; e[1] := WinFd[fd];
+  tv[0] := 0; tv[1] := 0;
+  Result := 0;
+  if S_select(0, Int64(@r[0]), Int64(@w[0]), Int64(@e[0]), Int64(@tv[0])) < 0 then
+  begin
+    Result := LX_POLLERR;
+    Exit;
+  end;
+  if (r[0] and $FFFFFFFF) <> 0 then Result := Result or LX_POLLIN;
+  if (w[0] and $FFFFFFFF) <> 0 then Result := Result or LX_POLLOUT;
+  if (e[0] and $FFFFFFFF) <> 0 then Result := Result or LX_POLLOUT or LX_POLLERR or LX_POLLHUP;
+end;
+
+{ dup of a socket: a second SOCKET for the same endpoint. }
+function SockDup(fd, nfd: Int64): Int64;
+var info: array[0..127] of Int64;      { WSAPROTOCOL_INFOW, 628 bytes }
+    s: Int64;
+begin
+  if S_WSADuplicateSocketW(WinFd[fd], W_GetCurrentProcessId, Int64(@info[0])) <> 0 then
+  begin
+    Result := SockErr;
+    Exit;
+  end;
+  s := S_WSASocketW(-1, -1, -1, Int64(@info[0]), 0, SOCKET_FLAGS);   { FROM_PROTOCOL_INFO }
+  if s = -1 then begin Result := SockErr; Exit; end;
+  WinFd[nfd] := s;
+  WinFdOpt[nfd] := WinFdOpt[fd];
+  SockSetNonblock(nfd, (WinFdFlags[nfd] and LX_O_NONBLOCK) <> 0);
+  Result := nfd;
+end;
+
+{ ioctl: FIONREAD and FIONBIO, on sockets and pipes. }
+function WinIoctl(fd, req, arg: Int64): Int64;
+var v: LongWord;
+    avail: Int64;
+begin
+  if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+  Result := -LX_ENOTTY;
+  if req = $5421 then                                          { FIONBIO }
+  begin
+    if PLongInt(arg)^ <> 0 then WinFdFlags[fd] := WinFdFlags[fd] or LX_O_NONBLOCK
+    else WinFdFlags[fd] := WinFdFlags[fd] and not LX_O_NONBLOCK;
+    if FdKind(fd) = FK_SOCK then SockSetNonblock(fd, PLongInt(arg)^ <> 0);
+    Result := 0;
+  end
+  else if req = $541B then                                     { FIONREAD }
+  begin
+    if FdKind(fd) = FK_SOCK then
+    begin
+      v := 0;
+      if S_ioctlsocket(WinFd[fd], WS_FIONREAD, Int64(@v)) <> 0 then begin Result := SockErr; Exit; end;
+      PLongInt(arg)^ := v;
+      Result := 0;
+    end
+    else if (FdKind(fd) = FK_HANDLE) and (W_GetFileType(WinFd[fd]) = 3) then
+    begin
+      avail := 0;
+      if W_PeekNamedPipe(WinFd[fd], 0, 0, 0, Int64(@avail), 0) = 0 then avail := 0;
+      PLongInt(arg)^ := avail and $FFFFFFFF;
+      Result := 0;
+    end;
+  end;
+end;
+
+{ ---- epoll, timerfd, eventfd ------------------------------------------------
+  Windows has none of them; each is an fd whose state lives here, the way
+  minixabi does it. An epoll fd's interest list is a page of 16-byte
+  entries (fd, events, data); epoll_wait checks every member, and between
+  checks waits in Winsock select on the member sockets, until the nearest
+  timerfd deadline, or for a few ms when a member is something select
+  cannot watch (a pipe, the console, an eventfd). Level-triggered only
+  (EPOLLET is taken as level; EPOLLONESHOT disarms). close() drops the fd
+  from every list. A timerfd keeps its deadline and interval in monotonic
+  ns and counts expirations; an eventfd keeps its counter. dup copies a
+  timerfd or eventfd rather than sharing it. }
+const
+  EP_MAX = 255;                         { entries in an interest-list page }
+  LX_EPOLLONESHOT = $40000000;
+
+{ a div b for a >= 0, b > 0, by shifts: this unit has no divide stub. }
+function UDiv(a, b: Int64): Int64;
+var bit, d: Int64;
+begin
+  Result := 0;
+  d := b; bit := 1;
+  while (d <= a) and (d < $2000000000000000) do begin d := d shl 1; bit := bit shl 1; end;
+  while bit > 0 do
+  begin
+    if a >= d then begin a := a - d; Result := Result or bit; end;
+    d := d shr 1;
+    bit := bit shr 1;
+  end;
+end;
+
+{ A timerfd's expiration count brought up to now. WinFdMem = deadline
+  (0: disarmed), WinFdLen = interval, WinFdPos = expirations. }
+procedure TfUpdate(fd: Int64);
+var now, late, k: Int64;
+begin
+  if WinFdMem[fd] = 0 then Exit;
+  now := MonoNs;
+  if now < WinFdMem[fd] then Exit;
+  late := now - WinFdMem[fd];
+  if WinFdLen[fd] > 0 then
+  begin
+    k := 1 + UDiv(late, WinFdLen[fd]);
+    WinFdPos[fd] := WinFdPos[fd] + k;
+    WinFdMem[fd] := WinFdMem[fd] + k * WinFdLen[fd];
+  end
+  else
+  begin
+    WinFdPos[fd] := WinFdPos[fd] + 1;
+    WinFdMem[fd] := 0;
+  end;
+end;
+
+{ fd is in epoll fd ep's list at index (or -1). }
+function EpFind(ep, fd: Int64): Int64;
+var i: Int64;
+begin
+  Result := -1;
+  for i := 0 to WinFdLen[ep] - 1 do
+    if PLongInt(WinFdMem[ep] + 16 * i)^ = fd then begin Result := i; Exit; end;
+end;
+
+procedure EpRemove(ep, i: Int64);
+var k: Int64;
+begin
+  for k := i to WinFdLen[ep] - 2 do
+  begin
+    PInt64(WinFdMem[ep] + 16 * k)^ := PInt64(WinFdMem[ep] + 16 * k + 16)^;
+    PInt64(WinFdMem[ep] + 16 * k + 8)^ := PInt64(WinFdMem[ep] + 16 * k + 24)^;
+  end;
+  WinFdLen[ep] := WinFdLen[ep] - 1;
+end;
+
+procedure DropFd(fd: Int64);
+var ep, i: Int64;
+begin
+  for ep := 0 to MAX_FD - 1 do
+    if WinFdKind[ep] = FK_EPOLL then
+    begin
+      i := EpFind(ep, fd);
+      if i >= 0 then EpRemove(ep, i);
+    end;
+end;
+
+{ The members of ep that are ready, written to evs (12-byte packed
+  epoll_events) when evs <> 0; a ONESHOT member that fires is disarmed. }
+function EpCollect(ep, evs, maxev: Int64): Int64;
+var i, fd, want, got, e: Int64;
+begin
+  Result := 0;
+  i := 0;
+  while (i < WinFdLen[ep]) and (Result < maxev) do
+  begin
+    e := WinFdMem[ep] + 16 * i;
+    fd := PLongInt(e)^;
+    want := PLongWord(e + 4)^;
+    if (want <> 0) and (fd <> ep) then
+    begin
+      got := FdReady(fd) and (want or LX_POLLERR or LX_POLLHUP) and $FFFF;
+      if got <> 0 then
+      begin
+        if evs <> 0 then
+        begin
+          PLongWord(evs + 12 * Result)^ := got;
+          PInt64(evs + 12 * Result + 4)^ := PInt64(e + 8)^;
+          if (want and LX_EPOLLONESHOT) <> 0 then PLongWord(e + 4)^ := 0;
+        end;
+        Result := Result + 1;
+      end;
+    end;
+    i := i + 1;
+  end;
+end;
+
+function EmuReady(fd: Int64): LongInt;
+begin
+  Result := 0;
+  case FdKind(fd) of
+    FK_TIMER:
+      begin
+        TfUpdate(fd);
+        if WinFdPos[fd] > 0 then Result := LX_POLLIN;
+      end;
+    FK_EVENT:
+      begin
+        Result := LX_POLLOUT;
+        if WinFdPos[fd] > 0 then Result := Result or LX_POLLIN;
+      end;
+    FK_EPOLL:
+      if EpCollect(fd, 0, 1) > 0 then Result := LX_POLLIN;
+  end;
+end;
+
+{ A new emulated fd of kind k (the caller holds WinLock). }
+function EmuFd(k, flags: Int64): Int64;
+begin
+  Result := FdAlloc(3);
+  if Result < 0 then Exit;
+  WinFdKind[Result] := k;
+  WinFdFlags[Result] := 2 or (flags and LX_O_NONBLOCK);
+end;
+
+function WinEpollCreate(flags: Int64): Int64;
+var page: Int64;
+begin
+  if (flags and not Int64($80000)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
+  page := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_READWRITE);
+  if page = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  Result := EmuFd(FK_EPOLL, 0);
+  if Result < 0 then begin W_VirtualFree(page, 0, MEM_RELEASE); Exit; end;
+  WinFdMem[Result] := page;
+  WinFdLen[Result] := 0;
+end;
+
+function WinEpollCtl(ep, op, fd, ev: Int64): Int64;
+var i, k: Int64;
+begin
+  if (FdKind(ep) = FK_NONE) or (FdKind(fd) = FK_NONE) then begin Result := -LX_EBADF; Exit; end;
+  if (FdKind(ep) <> FK_EPOLL) or (fd = ep) then begin Result := -LX_EINVAL; Exit; end;
+  k := FdKind(fd);
+  if (k = FK_MEM) or (k = FK_DIR) or ((k = FK_HANDLE) and (W_GetFileType(WinFd[fd]) = 1)) then
+  begin
+    Result := -LX_EPERM;                     { a regular file or directory: not pollable }
+    Exit;
+  end;
+  i := EpFind(ep, fd);
+  Result := 0;
+  case op of
+    1: begin                                                    { EPOLL_CTL_ADD }
+         if i >= 0 then begin Result := -LX_EEXIST; Exit; end;
+         if WinFdLen[ep] >= EP_MAX then begin Result := -LX_ENOSPC; Exit; end;
+         i := WinFdLen[ep];
+         WinFdLen[ep] := i + 1;
+         PLongInt(WinFdMem[ep] + 16 * i)^ := fd;
+         PLongWord(WinFdMem[ep] + 16 * i + 4)^ := PLongWord(ev)^;
+         PInt64(WinFdMem[ep] + 16 * i + 8)^ := PInt64(ev + 4)^;
+       end;
+    2: begin                                                    { EPOLL_CTL_DEL }
+         if i < 0 then begin Result := -LX_ENOENT; Exit; end;
+         EpRemove(ep, i);
+       end;
+    3: begin                                                    { EPOLL_CTL_MOD }
+         if i < 0 then begin Result := -LX_ENOENT; Exit; end;
+         PLongWord(WinFdMem[ep] + 16 * i + 4)^ := PLongWord(ev)^;
+         PInt64(WinFdMem[ep] + 16 * i + 8)^ := PInt64(ev + 4)^;
+       end;
+  else
+    Result := -LX_EINVAL;
+  end;
+end;
+
+function WinEpollWait(ep, evs, maxev, ms: Int64): Int64;
+var w: TSockWait;
+    start, left, i: Int64;
+begin
+  if FdKind(ep) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+  if (FdKind(ep) <> FK_EPOLL) or (maxev <= 0) then begin Result := -LX_EINVAL; Exit; end;
+  start := MonoNs;
+  while True do
+  begin
+    Result := EpCollect(ep, evs, maxev);
+    if Result > 0 then Exit;
+    if ms = 0 then Exit;
+    left := -1;
+    if ms > 0 then
+    begin
+      left := ms - (MonoNs - start) div 1000000;
+      if left <= 0 then Exit;
+    end;
+    SwClear(w);
+    for i := 0 to WinFdLen[ep] - 1 do
+      SwAdd(w, PLongInt(WinFdMem[ep] + 16 * i)^, PLongWord(WinFdMem[ep] + 16 * i + 4)^);
+    SwWait(w, left);
+  end;
+end;
+
+function WinTimerfdCreate(clock, flags: Int64): Int64;
+begin
+  if (clock <> 0) and (clock <> 1) and (clock <> 7) then begin Result := -LX_EINVAL; Exit; end;
+  if (flags and not Int64($80800)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
+  Result := EmuFd(FK_TIMER, flags);
+  if Result < 0 then Exit;
+  WinFd[Result] := clock;
+  WinFdMem[Result] := 0; WinFdLen[Result] := 0; WinFdPos[Result] := 0;
+end;
+
+function TsNs(p: Int64): Int64;
+begin
+  Result := PInt64(p)^ * 1000000000 + PInt64(p + 8)^;
+end;
+
+procedure NsTs(p, ns: Int64);
+begin
+  if ns < 0 then ns := 0;
+  PInt64(p)^ := ns div 1000000000;
+  PInt64(p + 8)^ := ns mod 1000000000;
+end;
+
+procedure TfGet(fd, cur: Int64);
+begin
+  TfUpdate(fd);
+  NsTs(cur, WinFdLen[fd]);
+  if WinFdMem[fd] = 0 then NsTs(cur + 16, 0)
+  else NsTs(cur + 16, WinFdMem[fd] - MonoNs);
+end;
+
+{ timerfd_settime(fd, flags, new, old): itimerspec = interval, value.
+  TFD_TIMER_ABSTIME (1): the value is on the timer's clock. }
+function WinTimerfdSettime(fd, flags, nv, ov: Int64): Int64;
+var v, ts: array[0..1] of Int64;
+    val: Int64;
+begin
+  if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+  if FdKind(fd) <> FK_TIMER then begin Result := -LX_EINVAL; Exit; end;
+  if (flags and not Int64(3)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
+  if (PInt64(nv + 8)^ < 0) or (PInt64(nv + 8)^ >= 1000000000) or (PInt64(nv + 24)^ < 0)
+     or (PInt64(nv + 24)^ >= 1000000000) or (PInt64(nv)^ < 0) or (PInt64(nv + 16)^ < 0) then
+  begin
+    Result := -LX_EINVAL;
+    Exit;
+  end;
+  if ov <> 0 then TfGet(fd, ov);
+  WinFdPos[fd] := 0;
+  WinFdLen[fd] := TsNs(nv);
+  val := TsNs(nv + 16);
+  if val = 0 then WinFdMem[fd] := 0
+  else if (flags and 1) <> 0 then
+  begin
+    v[0] := 0; v[1] := 0;
+    if WinFd[fd] = 0 then
+    begin
+      WinClockGettime(0, Int64(@ts[0]));
+      WinFdMem[fd] := MonoNs + (val - TsNs(Int64(@ts[0])));
+    end
+    else WinFdMem[fd] := val;
+    if WinFdMem[fd] <= 0 then WinFdMem[fd] := 1;               { already passed }
+  end
+  else WinFdMem[fd] := MonoNs + val;
+  Result := 0;
+end;
+
+function WinTimerfdGettime(fd, cur: Int64): Int64;
+begin
+  if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+  if FdKind(fd) <> FK_TIMER then begin Result := -LX_EINVAL; Exit; end;
+  TfGet(fd, cur);
+  Result := 0;
+end;
+
+function WinEventfd(initval, flags: Int64): Int64;
+begin
+  if (flags and not Int64($80801)) <> 0 then begin Result := -LX_EINVAL; Exit; end;
+  Result := EmuFd(FK_EVENT, flags);
+  if Result < 0 then Exit;
+  WinFd[Result] := flags and 1;                                 { EFD_SEMAPHORE }
+  WinFdPos[Result] := initval and $FFFFFFFF;
+end;
+
+{ read on a timerfd / eventfd: 8 bytes, waiting unless non-blocking. }
+function EmuRead(fd, buf, n: Int64): Int64;
+var v: Int64;
+begin
+  if FdKind(fd) = FK_EPOLL then begin Result := -LX_EINVAL; Exit; end;
+  if n < 8 then begin Result := -LX_EINVAL; Exit; end;
+  while True do
+  begin
+    v := 0;
+    W_AcquireSRWLockExclusive(Int64(@WinLock));
+    if FdKind(fd) = FK_TIMER then
+    begin
+      TfUpdate(fd);
+      v := WinFdPos[fd];
+      WinFdPos[fd] := 0;
+    end
+    else if WinFdPos[fd] > 0 then
+    begin
+      if WinFd[fd] <> 0 then v := 1 else v := WinFdPos[fd];
+      WinFdPos[fd] := WinFdPos[fd] - v;
+    end;
+    W_ReleaseSRWLockExclusive(Int64(@WinLock));
+    if v > 0 then
+    begin
+      PInt64(buf)^ := v;
+      Result := 8;
+      Exit;
+    end;
+    if (WinFdFlags[fd] and LX_O_NONBLOCK) <> 0 then begin Result := -LX_EAGAIN; Exit; end;
+    if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+    v := 5;
+    if (FdKind(fd) = FK_TIMER) and (WinFdMem[fd] <> 0) then
+    begin
+      v := (WinFdMem[fd] - MonoNs + 999999) div 1000000;
+      if v < 0 then v := 0;
+    end;
+    W_Sleep(v);
+  end;
+end;
+
+function EmuWrite(fd, buf, n: Int64): Int64;
+var v: Int64;
+begin
+  if FdKind(fd) <> FK_EVENT then begin Result := -LX_EINVAL; Exit; end;
+  if n < 8 then begin Result := -LX_EINVAL; Exit; end;
+  v := PInt64(buf)^;
+  if v = -1 then begin Result := -LX_EINVAL; Exit; end;
+  W_AcquireSRWLockExclusive(Int64(@WinLock));
+  WinFdPos[fd] := WinFdPos[fd] + v;
+  W_ReleaseSRWLockExclusive(Int64(@WinLock));
+  Result := 8;
+end;
+
 function WinSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 begin
   case nr of
@@ -2428,7 +3661,7 @@ begin
     18: Result := WinPrw(a0, a1, a2, a3, True);                   { pwrite64 }
     19: Result := WinReadv(a0, a1, a2);
     21: Result := WinAccessAt(LX_AT_FDCWD, a0);                   { access }
-    22: Result := WinPipe(a0);
+    22: Result := WinPipe(a0, 0);
     32: Result := WinDupMin(a0, 0);
     33: Result := WinDup2(a0, a1);
     72: Result := WinFcntl(a0, a1, a2);
@@ -2457,14 +3690,39 @@ begin
     268: Result := 0;                                             { fchmodat }
     269, 439: Result := WinAccessAt(a0, a1);                      { faccessat, faccessat2 }
     292: Result := WinDup2(a0, a1);                               { dup3 }
-    293: Result := WinPipe(a0);                                   { pipe2 }
+    293: Result := WinPipe(a0, a1);                               { pipe2 }
     9: Result := WinMmap(a0, a1, a2, a3);
     10: Result := WinMprotect(a0, a1, a2);
     11: Result := WinMunmap(a0);
     12: Result := WinBrk(a0);
     13: Result := WinRtSigaction(a0, a1, a2);
     131: Result := 0;                           { sigaltstack: faults run on the faulting stack }
-    16: Result := -LX_ENOTTY;                   { ioctl }
+    16: Result := WinIoctl(a0, a1, a2);
+    41: Result := WinSocket(a0, a1, a2);
+    42: Result := WinConnect(a0, a1, a2);
+    43: Result := WinAccept(a0, a1, a2, 0);
+    288: Result := WinAccept(a0, a1, a2, a3);                     { accept4 }
+    44: Result := WinSendRecv(a0, a1, a2, a3, a4, a5, True);      { sendto }
+    45: Result := WinSendRecv(a0, a1, a2, a3, a4, a5, False);     { recvfrom }
+    46: Result := WinMsg(True, a0, a1, a2);
+    47: Result := WinMsg(False, a0, a1, a2);
+    48: Result := WinShutdown(a0, a1);
+    49: Result := WinBind(a0, a1, a2);
+    50: Result := WinListen(a0, a1);
+    51: Result := WinSockName(a0, a1, a2, False);
+    52: Result := WinSockName(a0, a1, a2, True);
+    53: Result := WinSocketpair(a0, a1, a2, a3);
+    54: Result := WinSetsockopt(a0, a1, a2, a3, a4);
+    55: Result := WinGetsockopt(a0, a1, a2, a3, a4);
+    213: if a0 <= 0 then Result := -LX_EINVAL else Result := WinEpollCreate(0);   { epoll_create }
+    291: Result := WinEpollCreate(a0);                             { epoll_create1 }
+    233: Result := WinEpollCtl(a0, a1, a2, a3);
+    232, 281: Result := WinEpollWait(a0, a1, a2, a3);              { epoll_wait, epoll_pwait (mask ignored) }
+    283: Result := WinTimerfdCreate(a0, a1);
+    286: Result := WinTimerfdSettime(a0, a1, a2, a3);
+    287: Result := WinTimerfdGettime(a0, a1);
+    284: Result := WinEventfd(a0, 0);
+    290: Result := WinEventfd(a0, a1);                             { eventfd2 }
     7: Result := WinPoll(a0, a1, a2);                             { poll }
     20: Result := WinWritev(a0, a1, a2);
     23: Result := WinSelect(a0, a1, a2, a3, TvMs(a4));             { select }
@@ -2495,12 +3753,14 @@ begin
 end;
 
 { The syscalls that change the translator's own tables (the fd table, brk,
-  the child table) run one at a time; the blocking ones (read, wait4, poll,
-  futex) are not among them. }
+  the child table, epoll lists) run one at a time; the blocking ones (read,
+  wait4, poll, futex, accept) are not among them -- accept takes the lock
+  itself, only for the fd table. }
 function PXXWinSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
 begin
   case nr of
-    2, 3, 12, 22, 32, 33, 72, 257, 292, 293, $7F000003:
+    2, 3, 12, 22, 32, 33, 72, 257, 292, 293, $7F000003,
+    41, 53, 213, 233, 283, 284, 290, 291:
       begin
         W_AcquireSRWLockExclusive(Int64(@WinLock));
         Result := WinSys(nr, a0, a1, a2, a3, a4, a5);

@@ -18741,10 +18741,97 @@ begin
   Result := extIdx;
 end;
 
+{ --os=windows: record where the SysV marshalling put each argument (one
+  slot per argument; an aggregate leaves the call undescribed, and the
+  integer-only adapter keeps its old behaviour). }
+procedure WinCallNote(n: Integer; const sse, stk, agg: array of Boolean; const reg: array of Integer);
+var i, j: Integer;
+begin
+  WinCallArgN := 0;
+  if (TargetKernel <> KERNEL_WINDOWS) or (TargetArch <> TARGET_X86_64) then Exit;
+  j := 0;
+  for i := 0 to n - 1 do
+  begin
+    if agg[i] then Exit;
+    WinCallArgSse[i] := sse[i];
+    if stk[i] then
+    begin
+      WinCallArgReg[i] := -1;
+      WinCallArgStk[i] := j;
+      Inc(j);
+    end
+    else
+      WinCallArgReg[i] := reg[i];
+  end;
+  WinCallArgN := n;
+end;
+
+{ SysV integer argument register k as a register number (rdi rsi rdx rcx r8 r9). }
+function WinSysVIntReg(k: Integer): Integer;
+begin
+  case k of
+    0: Result := 7;
+    1: Result := 6;
+    2: Result := 2;
+    3: Result := 1;
+    4: Result := 8;
+  else
+    Result := 9;
+  end;
+end;
+
+{ The Microsoft x64 frame for a described call with a floating-point
+  argument, built from the SysV registers and stack the marshalling left.
+  Microsoft gives argument i the i-th slot whatever its type: rcx/xmm0,
+  rdx/xmm1, r8/xmm2, r9/xmm3, then [rsp+32+8*(i-4)]; SysV counts the two
+  classes apart. Arguments 5+ are copied to their slots first (reading
+  registers and the old stack only); the first four go through their own
+  shadow slot ([rsp+8*i]) so no move overwrites a register another still
+  needs, and a floating one is loaded into BOTH its xmm and its integer
+  register, which is what a variadic Microsoft callee reads. Answers the
+  frame size to pop after the call. rax is the only scratch. }
+function EmitWinCallFrame: Integer;
+var i, n, src, dst: Integer;
+begin
+  n := WinCallArgN;
+  Result := 32;
+  if n > 4 then Result := Result + 8 * (n - 4);
+  Result := (Result + 15) and not 15;
+  EmitAsmX64(['sub rsp, %', Result]);
+  for i := 0 to n - 1 do
+  begin
+    if i < 4 then dst := 8 * i else dst := 32 + 8 * (i - 4);
+    if WinCallArgReg[i] < 0 then
+    begin
+      src := Result + 8 * WinCallArgStk[i];
+      EmitAsmX64(['mov rax, [rsp+%]', src]);
+      EmitAsmX64(['mov [rsp+%], rax', dst]);
+    end
+    else if WinCallArgSse[i] then
+      EmitAsmX64(['movq [rsp+%], %xmm', dst, WinCallArgReg[i]])
+    else
+      EmitAsmX64(['mov [rsp+%], %r64', dst, WinSysVIntReg(WinCallArgReg[i])]);
+  end;
+  for i := 0 to n - 1 do
+    if i < 4 then
+    begin
+      case i of
+        0: EmitAsmX64(['mov rcx, [rsp]']);
+        1: EmitAsmX64(['mov rdx, [rsp+8]']);
+        2: EmitAsmX64(['mov r8, [rsp+16]']);
+      else
+        EmitAsmX64(['mov r9, [rsp+24]']);
+      end;
+      if WinCallArgSse[i] then EmitAsmX64(['movq %xmm, [rsp+%]', i, 8 * i]);
+    end;
+end;
+
 { Emit the indirect call through the external's GOT slot and register the
   fixup. Caller is responsible for argument marshalling, stack alignment, and
   the variadic AL count. }
 procedure EmitExternalIndirectCall(extIdx: Integer);
+var winFrame, i: Integer;
+    winSse: Boolean;
 begin
   if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
   { pxx internal ABI: the external callee runs under SysV, where all XMM are
@@ -18765,23 +18852,32 @@ begin
       then rdi/rsi/rdx/rcx -> rcx/rdx/r8/r9 (r9 and r8 move out first). Any
       7th+ argument the caller pushed now sits at [rsp+48] -- exactly where
       Microsoft's callee looks for it -- so this holds for every argument
-      count. rsp stays 16-aligned (48). Floating-point arguments are NOT
-      adapted: Microsoft assigns xmm0-3 by position, SysV by count.
-      feature-port-windows-pe }
-    EmitAsmX64([
-      'sub rsp, 48',
-      'mov [rsp+32], r8',
-      'mov [rsp+40], r9',
-      'mov r9, rcx',
-      'mov r8, rdx',
-      'mov rdx, rsi',
-      'mov rcx, rdi']);
+      count. rsp stays 16-aligned (48). A call with a floating-point argument
+      takes the general frame instead (EmitWinCallFrame): Microsoft assigns
+      xmm0-3 by position, SysV by count. feature-port-windows-pe }
+    winSse := False;
+    for i := 0 to WinCallArgN - 1 do
+      if WinCallArgSse[i] then winSse := True;
+    if winSse then winFrame := EmitWinCallFrame
+    else
+    begin
+      winFrame := 48;
+      EmitAsmX64([
+        'sub rsp, 48',
+        'mov [rsp+32], r8',
+        'mov [rsp+40], r9',
+        'mov r9, rcx',
+        'mov r8, rdx',
+        'mov rdx, rsi',
+        'mov rcx, rdi']);
+    end;
+    WinCallArgN := 0;
     EmitB($FF); EmitB($15);
     DynCallCodePos[DynCallCount] := CodeLen;
     DynCallExtIdx[DynCallCount] := extIdx;
     Inc(DynCallCount);
     EmitI32(0);
-    EmitAsmX64(['add rsp, 48']);
+    EmitAsmX64(['add rsp, %', winFrame]);
     FloatPoolRestore;
     Exit;
   end;

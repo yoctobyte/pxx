@@ -348,3 +348,42 @@ overflow cannot run a handler). Next: threads, then sockets.
 - test-windows gains, under --threadsafe: the twelve thread tests the
   FreeBSD target runs, plus test_signal_threads,
   test_signal_num_threads_race and test_thread_clone.
+
+### 2026-11-14: phase 3c, sockets; floating-point DLL arguments
+
+- **Sockets over ws2_32.** FK_SOCK fds hold a SOCKET plus the Linux family,
+  type and protocol. sockaddrs are copied and AF_INET6 renumbered (10 <->
+  23); WSA errors map to errno (WSAEWOULDBLOCK -> EAGAIN, or EINPROGRESS
+  from connect; WSAESHUTDOWN and, on a stream send, ECONNABORTED/RESET ->
+  EPIPE with SIGPIPE unless MSG_NOSIGNAL). Linux defaults set at creation:
+  IPV6_V6ONLY off, SIO_UDP_CONNRESET off; accept resets the inherited
+  FIONBIO. SO_REUSEADDR/REUSEPORT are only recorded (Windows' own
+  SO_REUSEADDR allows port stealing); SO_DOMAIN/PROTOCOL/TYPE answered from
+  the fd; RCVTIMEO/SNDTIMEO and LINGER converted. listen on an unbound
+  socket binds first; getsockname of an unbound one answers the any-address.
+  MSG_DONTWAIT is a FIONBIO spell around the call. sendmsg/recvmsg gather
+  into one buffer (control messages refused on send). socketpair is a
+  loopback TCP/UDP pair. dup uses WSADuplicateSocketW. accept waits outside
+  WinLock and takes it only for the fd table.
+- **epoll/timerfd/eventfd** emulated as minixabi does: an epoll fd's list is
+  a page of (fd, events, data); level-triggered, ONESHOT disarms, close drops
+  the fd from every list. Readiness is one FdReady per fd (sockets through a
+  zero-timeout Winsock select), and poll/select/epoll_wait wait in Winsock
+  select on the member sockets, until the nearest timerfd deadline, capped
+  at 5 ms when a pipe/console/eventfd is in the set. No divide-by-variable
+  in winabi, so timer expiration counts use a shift divider.
+- **Non-blocking pipes** (pipe2/fcntl O_NONBLOCK: EAGAIN when PeekNamedPipe
+  shows nothing), FIONREAD/FIONBIO, and SIGPIPE on a pipe write to a gone
+  reader (Linux behaviour; the runtime only suppresses it for sockets).
+- **Floating-point DLL arguments.** IR_CALL describes where SysV put each
+  argument (WinCallNote); when one is a float, EmitExternalIndirectCall
+  builds the Microsoft frame from that (EmitWinCallFrame): args 5+ copied
+  to [rsp+32+8k], the first four through their own shadow slot into
+  rcx/rdx/r8/r9 and, for a float, xmm0-3 as well (a variadic callee reads
+  the integer register). Integer-only calls keep the old adapter, so their
+  bytes are unchanged; non-Windows output is unchanged. Not converted: a
+  record by value, and floats into a MsToSysV callback.
+- test-windows gains 22 socket/async tests (the BSD targets' socket list
+  minus lib_dns_tcp, which forks) and test_windows_dll_floats (msvcrt:
+  pow, ldexp, _gcvt, atan2, powf, two sprintf rows with floats in
+  registers and on the stack).

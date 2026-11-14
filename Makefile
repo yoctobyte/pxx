@@ -11288,8 +11288,10 @@ test-windows: $(COMPILER)
 	# (phase 2) files, directories, select/poll and starting processes,
 	# (phase 3) signals: faults turned into Pascal exceptions, kill/raise,
 	# per-thread masks and sigtimedwait; and threads (--threadsafe: the PE TLS
-	# directory, CreateThread, WaitOnAddress). No sockets yet. The two C
-	# signal files drop their fork() rows: Windows has no fork.
+	# directory, CreateThread, WaitOnAddress); and sockets over ws2_32, with
+	# epoll, timerfd and eventfd emulated (the reactor and async tests); and
+	# floating-point arguments to a DLL (msvcrt here, libc/libm on Linux). The
+	# two C signal files drop their fork() rows: Windows has no fork.
 	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
@@ -11312,7 +11314,15 @@ test-windows: $(COMPILER)
 	           test/lib_signals_fpc.pas test/test_signal_num.pas test/test_signal_bss_alias.pas \
 	           test/test_signal_sp_rewrite.pas test/test_signal_pc_rewrite.pas \
 	           test/test_signal_handler_callback_b336.pas test/test_cross_signal_runtime_predicate.pas \
-	           test/test_float_exception_mask.pas test/test_stack_overflow_raise.pas; do \
+	           test/test_float_exception_mask.pas test/test_stack_overflow_raise.pas \
+	           test/test_reactor.pas test/test_async.pas test/test_scheduler.pas test/test_timer.pas \
+	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_net.pas test/lib_sockets.pas test/lib_net6.pas \
+	           test/lib_http_serve.pas test/lib_platform_net_sockopt.pas test/lib_sock_closedpeer.pas \
+	           test/lib_net_v6only.pas test/lib_asyncnet6.pas test/lib_net_timeout.pas test/lib_dns_async.pas \
+	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
+	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
+	           test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py \
+	           test/test_windows_dll_floats.pas; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \

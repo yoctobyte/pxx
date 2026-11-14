@@ -6,16 +6,15 @@ order: 62
 # Windows (experimental)
 
 `--os=windows` writes a Windows x64 console executable (PE32+) from Pascal,
-C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux. It
-cannot open sockets yet.
+C or Nil Python. It is **EXPERIMENTAL**, like every target except Linux.
 
 ```sh
 ./pxx --os=windows hello.pas hello.exe     # run it on Windows, or: wine64 hello.exe
 ```
 
-The program imports `kernel32.dll` (and `kernelbase.dll` for
-`WaitOnAddress`, which threads wait on) and nothing else. It needs no C
-runtime (msvcrt or ucrt) and no installer.
+The program imports `kernel32.dll`, `kernelbase.dll` (for `WaitOnAddress`,
+which threads wait on) and `ws2_32.dll` (sockets), all part of every
+Windows. It needs no C runtime (msvcrt or ucrt) and no installer.
 
 ## How it works
 
@@ -27,7 +26,7 @@ to a small translator compiled into the program
 calls. Windows has no stable system-call numbers (they change between
 builds), so kernel32 is the bottom layer rather than the kernel.
 
-Four things differ from the BSD ports:
+Five things differ from the BSD ports:
 
 - **The file format.** `compiler/pewriter.inc` writes the PE image. It is
   laid out like the ELF one, with the code at RVA `0x1000` and the data
@@ -39,9 +38,13 @@ Four things differ from the BSD ports:
   internally. Each call to a DLL function converts at the call site: the
   first four arguments move to `rcx`, `rdx`, `r8` and `r9`, the fifth and
   sixth go to the stack above 32 bytes of shadow space, and stacked
-  arguments already land where Windows expects them. Floating-point
-  arguments are not converted yet (Windows assigns `xmm0`–`xmm3` by
-  position).
+  arguments already land where Windows expects them. A call with a
+  floating-point argument is rebuilt argument by argument instead, because
+  Windows gives argument *n* the *n*-th slot whatever its type (`rcx` or
+  `xmm0`, `rdx` or `xmm1`, and so on, then the stack), where System V
+  counts integers and floats apart. A float among the first four also goes
+  into its integer register, which is what a variadic Windows function
+  such as `sprintf` reads. Float results come back in `xmm0` under both.
 - **Thread-local storage.** A Windows program cannot point `fs` or `gs` at
   its own block, because `gs` is the thread environment block. The block
   is the image's PE TLS data instead, which the loader allocates for every
@@ -76,7 +79,17 @@ test-windows` (run under Wine through `tools/vm/wine.sh`):
 - directories: create, remove, list (`getdents64` over `FindFirstFileW`),
   the current directory, and the `*at` calls relative to a directory fd
 
-- `select`, `poll` and their `p` forms, on the console, pipes and files
+- `select`, `poll` and their `p` forms, on the console, pipes, files and
+  sockets
+- sockets (TCP and UDP, IPv4 and IPv6) over Winsock: `connect`, `bind`,
+  `listen`, `accept`, the send and receive calls, `shutdown`, the socket
+  options the runtime uses, non-blocking mode (`O_NONBLOCK`, `SOCK_NONBLOCK`,
+  `MSG_DONTWAIT`), `socketpair`, and the runtime's sockets, net, HTTP and
+  async DNS units
+- `epoll`, `timerfd` and `eventfd`, emulated, so the coroutine scheduler and
+  its reactor run (the async echo, UDP and timer tests)
+- non-blocking pipes (`pipe2` with `O_NONBLOCK`, `fcntl`), and `SIGPIPE` on a
+  write to a pipe or socket whose reader has gone, as on Linux
 - starting programs: `ExecuteProcess` and the other SysUtils process calls,
   and Nil Python's `subprocess` (`run`, `Popen`, pipes in both directions,
   return codes, `FileNotFoundError`), with `wait4` and `kill`
@@ -90,8 +103,20 @@ strings. A program named without a path is looked up on `PATH` (separated by
 by `kill` reports that signal to `wait`, as on Linux. A C program's own
 `fork()` answers `ENOSYS`.
 
-`select` and `poll` wait in a short sleep loop: Windows has no one call that
-covers consoles, pipes and files.
+`select`, `poll` and `epoll_wait` check each fd, then wait in Winsock's
+`select` on the sockets among them, which wakes as soon as one is ready.
+Windows has no one call that also covers consoles and pipes, so when one of
+those is in the set the wait is cut to a few milliseconds and the check
+repeats.
+
+Sockets keep Linux's defaults where Windows differs: an IPv6 socket also
+takes IPv4 (`IPV6_V6ONLY` off), a UDP socket ignores the ICMP "port
+unreachable" that Windows would report on the next receive, and an accepted
+socket does not inherit the listener's non-blocking mode. `SO_REUSEADDR` and
+`SO_REUSEPORT` are recorded but not passed on: Windows already lets a server
+rebind a port that is in `TIME_WAIT`, and its own `SO_REUSEADDR` would let a
+second socket take a port that is in use. `socketpair` is a connected pair
+of loopback TCP (or UDP) sockets.
 
 Signals:
 
@@ -131,10 +156,17 @@ path means what it means on Linux.
   (`TerminateProcess`) whatever the signal; it cannot run that program's
   handler. There is no alternate signal stack, and a stack overflow has no
   room left to run a handler in.
-- **Still to come:** sockets.
+- **Sockets:** no control messages (`SCM_RIGHTS` cannot pass an fd to
+  another process), and `MSG_TRUNC` does not report a truncated datagram's
+  full length. A blocking socket call cannot be interrupted by a signal.
+  The runtime's DNS resolver reads `/etc/hosts` and `/etc/resolv.conf`,
+  which Windows does not have.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
   libraries cannot work on Windows. `external 'user32.dll'` and other DLLs
-  do work, without floating-point arguments.
+  do work, with integer, pointer and floating-point arguments. A record
+  passed by value is not converted (Windows passes one larger than 8 bytes
+  by reference), and a callback that Windows calls with floating-point
+  arguments does not receive them.
 
 A system call the translator does not map returns `ENOSYS`. Set
 `PXX_WINABI_TRACE=1` in the environment to have each one named on stderr.
