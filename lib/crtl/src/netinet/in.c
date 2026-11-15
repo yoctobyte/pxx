@@ -105,6 +105,31 @@ static void __crtl_fill_sockaddr_in(struct sockaddr *addr, socklen_t *addrlen,
   if (addrlen) *addrlen = sizeof(struct sockaddr_in);
 }
 
+/* EVERY FAMILY BUT AF_INET GOES TO THE KERNEL AS IT IS. The PAL entries
+   below are IPv4-shaped (host, port), so a sockaddr_nl (busybox ip), a
+   sockaddr_ll (udhcpc), a sockaddr_un or a sockaddr_in6 used to be refused
+   with EINVAL before any system call. On 64-bit targets with the Linux call
+   numbers (the same test as the real sendmsg below) bind, connect and sendto
+   pass the caller's address and length through, and accept, recvfrom,
+   getsockname and getpeername hand the kernel the caller's buffer. The OS
+   translators (BSD, NT) take these numbers as they take the PAL's own.
+   AF_INET keeps the PAL path (flag translation, MSG_NOSIGNAL). accept and
+   recvfrom with an address ask the socket's family first (one getsockname);
+   without an address they take the PAL path. i386 and the 32-bit embedded
+   targets keep the IPv4-only behaviour. */
+#if defined(SYS_bind) && defined(SYS_connect) && defined(SYS_sendto) && \
+    defined(SYS_recvfrom) && defined(SYS_getsockname) && defined(SYS_getpeername) && \
+    defined(SYS_accept4) && defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+#define __CRTL_RAW_SOCKADDR 1
+static int __crtl_sock_family(int sockfd) {
+  struct sockaddr_storage ss;
+  socklen_t len = sizeof(ss);
+  ss.ss_family = AF_UNSPEC;
+  if (syscall(SYS_getsockname, (long)sockfd, (long)&ss, (long)&len) < 0) return -1;
+  return ss.ss_family;
+}
+#endif
+
 int socket(int domain, int type, int protocol) {
   return __crtl_sock_fail(__pxx_socket(domain, type, protocol));
 }
@@ -112,6 +137,10 @@ int socket(int domain, int type, int protocol) {
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   unsigned long host;
   int port;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (addr && addr->sa_family != AF_INET)
+    return (int)syscall(SYS_bind, (long)sockfd, (long)addr, (long)addrlen);
+#endif
   (void)addrlen;
   if (__crtl_sockaddr_in(addr, &host, &port) < 0) return -1;
   return __crtl_sock_fail(__pxx_bind_ipv4(sockfd, host, port));
@@ -120,6 +149,10 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   unsigned long host;
   int port;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (addr && addr->sa_family != AF_INET)
+    return (int)syscall(SYS_connect, (long)sockfd, (long)addr, (long)addrlen);
+#endif
   (void)addrlen;
   if (__crtl_sockaddr_in(addr, &host, &port) < 0) return -1;
   return __crtl_sock_fail(__pxx_connect_ipv4(sockfd, host, port));
@@ -132,7 +165,15 @@ int listen(int sockfd, int backlog) {
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   unsigned long host;
   int port;
-  int fd = __pxx_accept_ipv4(sockfd, &host, &port);
+  int fd;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (addr && addrlen) {
+    int fam = __crtl_sock_family(sockfd);
+    if (fam >= 0 && fam != AF_INET)
+      return (int)syscall(SYS_accept4, (long)sockfd, (long)addr, (long)addrlen, 0L);
+  }
+#endif
+  fd = __pxx_accept_ipv4(sockfd, &host, &port);
   if (fd < 0) return __crtl_sock_fail(fd);
   __crtl_fill_sockaddr_in(addr, addrlen, host, port);
   return fd;
@@ -158,6 +199,13 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
                const struct sockaddr *dest_addr, socklen_t addrlen) {
   unsigned long host;
   int port;
+  /* no address: send(2) (a connected socket), as POSIX says */
+  if (!dest_addr) return __crtl_sock_fail_long(__pxx_send(sockfd, buf, (int)len, flags));
+#ifdef __CRTL_RAW_SOCKADDR
+  if (dest_addr->sa_family != AF_INET)
+    return (ssize_t)syscall(SYS_sendto, (long)sockfd, (long)buf, (long)len, (long)flags,
+                            (long)dest_addr, (long)addrlen);
+#endif
   (void)addrlen;
   if (__crtl_sockaddr_in(dest_addr, &host, &port) < 0) return -1;
   return __crtl_sock_fail_long(__pxx_sendto_ipv4(sockfd, buf, (int)len, host, port, flags));
@@ -168,6 +216,14 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
   unsigned long host;
   int port;
   long rc;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (src_addr && addrlen) {
+    int fam = __crtl_sock_family(sockfd);
+    if (fam >= 0 && fam != AF_INET)
+      return (ssize_t)syscall(SYS_recvfrom, (long)sockfd, (long)buf, (long)len, (long)flags,
+                              (long)src_addr, (long)addrlen);
+  }
+#endif
   rc = __pxx_recvfrom_ipv4(sockfd, buf, (int)len, &host, &port, flags);
   if (rc < 0) return __crtl_sock_fail_long(rc);
   __crtl_fill_sockaddr_in(src_addr, addrlen, host, port);
@@ -209,7 +265,12 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   unsigned long host;
   int port;
-  int rc = __pxx_getsockname_ipv4(sockfd, &host, &port);
+  int rc;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (addr && addrlen)
+    return (int)syscall(SYS_getsockname, (long)sockfd, (long)addr, (long)addrlen);
+#endif
+  rc = __pxx_getsockname_ipv4(sockfd, &host, &port);
   if (rc < 0) return __crtl_sock_fail(rc);
   __crtl_fill_sockaddr_in(addr, addrlen, host, port);
   return 0;
@@ -218,7 +279,12 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   unsigned long host;
   int port;
-  int rc = __pxx_getpeername_ipv4(sockfd, &host, &port);
+  int rc;
+#ifdef __CRTL_RAW_SOCKADDR
+  if (addr && addrlen)
+    return (int)syscall(SYS_getpeername, (long)sockfd, (long)addr, (long)addrlen);
+#endif
+  rc = __pxx_getpeername_ipv4(sockfd, &host, &port);
   if (rc < 0) return __crtl_sock_fail(rc);
   __crtl_fill_sockaddr_in(addr, addrlen, host, port);
   return 0;

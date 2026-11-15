@@ -39,3 +39,14 @@ and SO_PEERCRED. The gcc build is the reference.
 
 How the PAL splits this, and what to do on ESP32, is pxx's call. On Linux,
 AF_UNIX is ordinary socket syscalls with a different sockaddr.
+
+## Progress 2026-11-15
+
+- bind, connect, sendto, accept, recvfrom, getsockname and getpeername now
+  pass any family but AF_INET straight to the kernel on 64-bit targets with
+  the Linux call numbers (x86-64, aarch64), so a `sockaddr_un` works there.
+  `test/c_crtl_sockaddr_families.c` (test-core) covers AF_UNIX, AF_INET6 and
+  AF_NETLINK against gcc. `socketpair` exists on the same targets
+  (`__CRTL_REAL_MSG`). i386 and the 32-bit embedded targets are unchanged.
+- Still open: `struct ucred`, getsockopt beyond SO_ERROR (SO_PEERCRED,
+  SO_TYPE, SO_DOMAIN, SO_ACCEPTCONN), and the nettest acceptance run.

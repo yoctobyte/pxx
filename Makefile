@@ -28362,6 +28362,20 @@ test-core: $(COMPILER)
 	# Compared against the GCC ORACLE'S OWN RUN rather than a literal, because
 	# EAGAIN's number and whether a peeked datagram stays queued are the
 	# kernel's answers, not ours to assert.
+	# bind/connect/accept/sendto/recvfrom/getsockname/getpeername with
+	# AF_UNIX, AF_INET6 and AF_NETLINK, diffed against glibc on x86-64 and
+	# aarch64 (the two targets that pass non-IPv4 addresses through to the
+	# kernel). in.c used to answer EINVAL for any family but AF_INET before a
+	# system call: busybox ip (sockaddr_nl) and udhcpc (sockaddr_ll) failed.
+	# Under `timeout': the old code made connect fail and accept block.
+	./$(COMPILER) test/c_crtl_sockaddr_families.c $(TESTTMP)/c_sockfam26
+	@gcc -o $(TESTTMP)/c_sockfam_gcc test/c_crtl_sockaddr_families.c
+	@timeout 60 $(TESTTMP)/c_sockfam_gcc > $(TESTTMP)/c_sockfam.oracle
+	tools/expect_same.sh c_sockfam26 "$$(timeout 60 $(TESTTMP)/c_sockfam26)" "$$(cat $(TESTTMP)/c_sockfam.oracle)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_crtl_sockaddr_families.c $(TESTTMP)/c_sockfam26_aarch64 >/dev/null || { echo "c_sockfam26 aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_sockfam26 "$$(timeout 60 tools/run_target.sh aarch64 $(TESTTMP)/c_sockfam26_aarch64)" "$$(cat $(TESTTMP)/c_sockfam.oracle)" || exit 1; \
+	else echo "=== c_sockfam26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle
