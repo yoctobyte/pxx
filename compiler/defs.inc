@@ -5614,6 +5614,7 @@ var
   CFnSigPRecIds : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypePtrElemProcSig : Integer; { POINTER-to-fn-ptr (`ft *`): sig of the pointee fn-pointer, so `(*pf)()`/`(**(ft*)x)()` can find the callee sig CTypeProcSig drops. -1 = pointee not a fn-ptr }
   CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the FIRST dim of the last ParseCDeclType, else -1 }
+  CTypeTypedefAlign : Integer; { __attribute__((aligned(N))) the typedef named in the last ParseCDeclType carries; 0 = none }
   CTypeTypedefNDims : Integer; { how many dims that typedef has; 0 = not an array typedef }
   CTypeTypedefDims : array[0..MAX_ARR_DIMS-1] of Integer; { its dims, outermost first -- `typedef int T[2][3]' gives 2 then 3 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
@@ -5748,6 +5749,7 @@ var
     (CExpandFnTypedefDecl). Valid only while CTypedefIsFnType is True. }
   CTypedefFnRetTok, CTypedefFnNameTok, CTypedefFnLParTok, CTypedefFnRParTok : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length of the FIRST dim; -1 = not an array typedef. Read CTypedefNDims beside it -- this alone cannot tell `T[2]' from `T[2][3]', and answering as if it could is what corrupted neighbouring locals (bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals). }
+  CTypedefAlign : array[0..MAX_CTYPEDEF-1] of Integer; { `typedef int T __attribute__((aligned(16)))`: the alignment the NAME carries beyond its type's own; 0 = none. bug-c-an-aligned-typedef-member-does-not-align-the-member }
   CTypedefNDims : array[0..MAX_CTYPEDEF-1] of Integer; { how many dimensions the array typedef has; 0 = not an array typedef. The count is the discriminator: CTypedefArrLen was ONE integer and the parser dropped every dimension after the first SILENTLY, so `typedef int T[2][3]' allocated 2 elements and indexed with a 2-wide row. }
   CTypedefDims : array[0..MAX_CTYPEDEF*MAX_ARR_DIMS-1] of Integer; { the dimensions themselves, flat: typedef i, dim d is at i*MAX_ARR_DIMS + d. Flat rather than 2-D because nothing else in this file is 2-D and the self-host subset is the thing that has to compile it. }
   CTypedefLongRank : array[0..MAX_CTYPEDEF-1] of Integer; { 0 = not a long-family base, 1 = `long`, 2 = `long long`. TTypeKind COLLAPSES these -- both are tyInt64 on a 64-bit target -- so the kind alone cannot tell `typedef long T` from `typedef long long T`, and gcc rejects that pair at BOTH widths. Same distinction SymCLongRank already keeps for _Generic. }

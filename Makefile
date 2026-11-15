@@ -20848,6 +20848,9 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_weak_g "$$($(TESTTMP)/c_weak_g)" "$$(cat test/c_weak_strong.expected)"
 	$(COMPILER) --link -o $(TESTTMP)/c_weak_l $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o > /dev/null
 	tools/expect_same.sh c_weak_l "$$($(TESTTMP)/c_weak_l)" "$$(cat test/c_weak_strong.expected)"
+	# an aligned typedef aligns members, aliases, _Alignof and globals
+	$(COMPILER) test/c_typedef_aligned.c $(TESTTMP)/c_tdal > /dev/null
+	tools/expect_same.sh c_tdal "$$($(TESTTMP)/c_tdal)" "$$(cat test/c_typedef_aligned.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

@@ -4226,6 +4226,7 @@ begin
     if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
     else if tk = tyRecord then Result := CRecAlign(CTypeBaseRec)
     else Result := TypeAlign(tk);
+    if (CTypePtrDepth = 0) and (CTypeTypedefAlign > Result) then Result := CTypeTypedefAlign;
     while CurTok.Kind = tkStar do begin Next; Result := TARGET_PTR_SIZE; while CurTok.Kind = tkConst do Next; end;
     while CurTok.Kind = tkLBrack do
     begin
@@ -6950,6 +6951,7 @@ begin
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
     CTypedefNDims[idx] := 0;
+    CTypedefAlign[idx] := 0;
     CTypedefLongRank[idx] := newRank;
     Exit;
   end;
@@ -6971,6 +6973,7 @@ begin
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
   CTypedefNDims[CTypedefCount] := 0;
+  CTypedefAlign[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
@@ -7292,6 +7295,7 @@ begin
   CTypePtrElemProcSig := -1;
   CTypeTypedefArrLen := -1;
   CTypeTypedefNDims := 0;
+  CTypeTypedefAlign := 0;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
@@ -7417,6 +7421,7 @@ begin
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
               CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length of the first dim, else -1 }
               CTypeTypedefNDims := CTypedefNDims[tdIdx];  { and HOW MANY dims -- see the field's note in defs.inc }
+              CTypeTypedefAlign := CTypedefAlign[tdIdx];  { an aligned(N) typedef: members, globals and _Alignof honour it }
               for tdDimI := 0 to MAX_ARR_DIMS - 1 do
                 CTypeTypedefDims[tdDimI] := CTypedefDims[tdIdx * MAX_ARR_DIMS + tdDimI];
               tdLongRank := CTypedefLongRank[tdIdx];    { `long`/`long long` rank of the type this name denotes }
@@ -16650,7 +16655,7 @@ function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer;
   endIdx. The lexer records an attribute on the token AFTER it (CAttrFlags bit
   2, value in CAttrAlignValues). A bare `aligned` already carries the
   target's biggest alignment. 0 when there is none. }
-var k, startIdx: Integer; s: AnsiString;
+var k, startIdx, ti: Integer; s: AnsiString; sawStar: Boolean;
 begin
   Result := 0;
   startIdx := typeIdx;
@@ -16666,6 +16671,20 @@ begin
   for k := startIdx to endIdx do
     if ((CAttrFlags[k] and 2) <> 0) and ((CAttrAlignValues[k] and $FFFF) > Result) then
       Result := (CAttrAlignValues[k] and $FFFF);
+  { ...and an aligned TYPEDEF the declaration is spelled with (`al_t g;`), as
+    long as no `*` follows it: `al_t *p` is a plain pointer.
+    bug-c-an-aligned-typedef-member-does-not-align-the-member }
+  sawStar := False;
+  for k := typeIdx to endIdx do
+    if Tokens[k].Kind = tkStar then sawStar := True;
+  if not sawStar then
+    for k := typeIdx to endIdx do
+      if Tokens[k].Kind = tkIdent then
+      begin
+        ti := FindCTypedef(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen));
+        if (ti >= 0) and (CTypedefAlign[ti] > Result) and (CTypedefTk[ti] <> Ord(tyPointer)) then
+          Result := CTypedefAlign[ti];
+      end;
 end;
 
 function CDeclSawStatic(typeIdx: Integer): Boolean;
@@ -19783,6 +19802,7 @@ var
     array bound or bit width read later can re-enter ParseCDeclType
     (`sizeof(T)`), which resets the globals. }
   fldTdArrLen, fldTdNDims, fldTdK: Integer;
+  fldTdAlign: Integer;   { the member type's typedef aligned(N), 0 = none }
   fldTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
@@ -20032,6 +20052,8 @@ begin
       fTk := ParseCDeclType;
       fldTdArrLen := CTypeTypedefArrLen;
       fldTdNDims := CTypeTypedefNDims;
+      fldTdAlign := 0;
+      if CTypePtrDepth = 0 then fldTdAlign := CTypeTypedefAlign;
       for fldTdK := 0 to MAX_ARR_DIMS - 1 do fldTdDims[fldTdK] := CTypeTypedefDims[fldTdK];
       if (fldTdNDims < 1) and (fldTdArrLen >= 1) then
       begin
@@ -20347,6 +20369,13 @@ begin
           sz := TypeSlotSize(IntToTypeKind(baseScalarTk));
           al := TypeFieldAlign(IntToTypeKind(baseScalarTk));
         end;
+        { A member whose type is an aligned typedef (`typedef int T
+          __attribute__((aligned(16)))`) takes that alignment as its TYPE's: so
+          packed and #pragma pack below still cap it, as gcc does (p1 offset 1,
+          pack(4) offset 4). It was the plain int's 4, so `struct { char c; T x; }`
+          put x at 4 where gcc-built code reads 16.
+          bug-c-an-aligned-typedef-member-does-not-align-the-member }
+        if (declStars = 0) and (fldTdAlign > al) then al := fldTdAlign;
         if al < 1 then al := 1;
         attrEndIdx := TokPos - 1;
         fieldPacked := structPacked or CAttrPackedInRange(declStartIdx, attrEndIdx);
@@ -20734,6 +20763,16 @@ begin
   end;
 end;
 
+{ The largest aligned(N) from `first` to the declaration's `;` (which may
+  carry it: the lexer puts an attribute on the token after it), or 0. }
+function CAttrAlignInDecl(first: Integer): Integer;
+var k: Integer;
+begin
+  k := first;
+  while (k >= 0) and (k < TokCount) and (Tokens[k].Kind <> tkSemicolon) do Inc(k);
+  Result := CAttrAlignInRange(first, k);
+end;
+
 function CApplyAttrMode(tk: TTypeKind; bytes: Integer): TTypeKind;
 var uns: Boolean;
 begin
@@ -20754,6 +20793,7 @@ procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
+    tdAlign: Integer;   { aligned(N) this typedef name carries }
     tdDimV: Integer;   { array typedef: the dim being read (CTypedefReadDims reads the rest) }
     tdElemNDims: Integer;      { dims the ELEMENT typedef carries (`typedef vec4 mat4[4]`) }
     tdElemDims: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -21020,6 +21060,13 @@ begin
       name, after it, or after the type -- makes an INTEGER type that wide,
       keeping its signedness. bug-c-attribute-mode-qi-hi-si-di-was-ignored }
     tk := CApplyAttrMode(tk, CModeBytesInDecl(tdFirstTok));
+    { aligned(N) anywhere in the declaration, or inherited from the typedef
+      this one aliases (`typedef al_t al2_t;`). Read before the dims below,
+      whose constant expressions may run another type parse.
+      bug-c-an-aligned-typedef-member-does-not-align-the-member }
+    tdAlign := 0;
+    if CTypePtrDepth = 0 then tdAlign := CTypeTypedefAlign;
+    if CAttrAlignInDecl(tdFirstTok) > tdAlign then tdAlign := CAttrAlignInDecl(tdFirstTok);
     CTypedefRedefArmed := True;
     if CTypeLongLong then CTypedefPendingRank := 2
     else if CTypeLong then CTypedefPendingRank := 1
@@ -21035,6 +21082,11 @@ begin
     end
     else
       AddCTypedef(nm, tk);
+    if tdAlign > 0 then
+    begin
+      ci := FindCTypedef(nm);
+      if ci >= 0 then CTypedefAlign[ci] := tdAlign;
+    end;
     { AN ARRAY TYPEDEF WHOSE ELEMENT IS ITSELF AN ARRAY TYPEDEF keeps both sets
       of dims: its own brackets outermost, then the element typedef's. cglm's
       `typedef vec4 mat4[4]` over `typedef float vec4[4]` recorded [4] only, so
