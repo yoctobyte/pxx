@@ -299,6 +299,7 @@ function W_GetFileInformationByHandle(h, info: Int64): LongInt; cdecl; external 
 function W_GetSystemTimes(idle, kernel, user: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetSystemTimes';
 function W_GetFileAttributesExW(name, level, data: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetFileAttributesExW';
 function W_GetFileAttributesW(name: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetFileAttributesW';
+function W_SetFileAttributesW(name, attrs: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetFileAttributesW';
 function W_DeleteFileW(name: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DeleteFileW';
 function W_RemoveDirectoryW(name: Int64): LongInt; cdecl; external 'kernel32.dll' name 'RemoveDirectoryW';
 function W_CreateDirectoryW(name, sa: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CreateDirectoryW';
@@ -1317,6 +1318,23 @@ begin
   r := WinPath(dirfd, path, Int64(@w[0]));
   if r < 0 then begin Result := r; Exit; end;
   if W_GetFileAttributesW(Int64(@w[0])) = INVALID_ATTRS then Result := WinErr else Result := 0;
+end;
+
+{ chmod / fchmodat: Windows keeps one permission bit, the read-only
+  attribute. No write bit (0222) in mode sets it and any write bit clears it,
+  which is what stat reads back (0444 or 0644, 0755 for a directory). The
+  rest of mode has nowhere to go. }
+function WinChmodAt(dirfd, path, mode: Int64): Int64;
+var w: array[0..WPATH-1] of Word;
+    r: Int64; a: LongWord;
+begin
+  r := WinPath(dirfd, path, Int64(@w[0]));
+  if r < 0 then begin Result := r; Exit; end;
+  a := W_GetFileAttributesW(Int64(@w[0]));
+  if a = INVALID_ATTRS then begin Result := WinErr; Exit; end;
+  if (mode and $92) = 0 then a := a or FILE_ATTRIBUTE_READONLY
+  else a := a and not LongWord(FILE_ATTRIBUTE_READONLY);
+  if W_SetFileAttributesW(Int64(@w[0]), a) = 0 then Result := WinErr else Result := 0;
 end;
 
 { getcwd: UTF-8, with '/' kept as Windows writes it ('\'): a Windows path
@@ -4682,7 +4700,9 @@ begin
     332: Result := WinStatx(a0, a1, a2, a4);                      { statx }
     264, 316: Result := WinRenameAt(a0, a1, a2, a3);              { renameat, renameat2 }
     267: Result := WinReadlinkAt(a0, a1, a2, a3);
-    268: Result := 0;                                             { fchmodat }
+    268: Result := WinChmodAt(a0, a1, a2);                        { fchmodat }
+    90: Result := WinChmodAt(-100, a0, a1);                       { chmod }
+    91: Result := 0;                                              { fchmod: through a handle would need FILE_WRITE_ATTRIBUTES }
     269, 439: Result := WinAccessAt(a0, a1);                      { faccessat, faccessat2 }
     292: Result := WinDup2(a0, a1);                               { dup3 }
     293: Result := WinPipe(a0, a1);                               { pipe2 }

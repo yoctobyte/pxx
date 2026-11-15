@@ -11344,7 +11344,8 @@ test-windows: $(COMPILER)
 	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
 	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
 	           test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py \
-	           test/test_windows_dll_floats.pas test/test_nt_relocation.pas test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c; do \
+	           test/test_windows_dll_floats.pas test/test_nt_relocation.pas test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
+	           test/c_os_chmod_readonly.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \

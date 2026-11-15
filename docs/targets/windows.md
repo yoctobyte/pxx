@@ -249,8 +249,11 @@ path means what it means on Linux.
 
 - **Refused at compile time:** `-g`, `--shared`, `--emit-obj`,
   `--rtl-libc`, and CPUs other than x86-64.
-- **Not supported:** C's `fork()`, process groups, symbolic links, and file
-  modes (`chmod` succeeds and does nothing).
+- **Not supported:** C's `fork()`, process groups and symbolic links.
+- **File modes:** Windows keeps one permission bit, the read-only attribute.
+  `chmod` with no write bit sets it, and with any write bit clears it; `stat`
+  reads it back as `0444` or `0644`. The other bits are dropped. `fchmod`
+  succeeds and changes nothing.
 - **`mmap` of a file** is a view of a file mapping (`CreateFileMappingW`,
   `MapViewOfFile`): `MAP_SHARED` with `PROT_WRITE` writes through to the
   file, `MAP_PRIVATE` is copy-on-write, and `msync` flushes the view. Not
