@@ -1783,6 +1783,46 @@ begin
   NbSys(NB_LWP_EXIT, 0, 0, 0, 0, 0, 0);
 end;
 
+{ ---- System V IPC: the Linux calls and structs (sysvipc.inc) ----------- }
+{ Layouts measured on the NetBSD VM with offsetof. }
+const
+  IPC_UID = 0; IPC_MODE16 = False; IPC_SHMLOCK = 3;
+  IPC_SHM: array[0..9] of Integer = (32, 8, 40, 44, 48, 4, 56, 64, 72, 88);
+  IPC_MSG: array[0..8] of Integer = (96, 32, 40, 48, 52, 56, 64, 72, 104);
+  IPC_SEM: array[0..3] of Integer = (32, 40, 48, 64);
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64; forward;
+procedure IpcNap; forward;
+
+{$I sysvipc.inc}
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64;
+var u: Int64;                       { semctl's union semun, which the kernel takes by address }
+begin
+  case Integer(op) of
+    IPC_OP_SHMGET: Result := Lx(NbSys(231, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMAT: Result := Lx(NbSys(228, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMDT: Result := Lx(NbSys(230, a0, 0, 0, 0, 0, 0));
+    IPC_OP_SHMCTL: Result := Lx(NbSys(443, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMGET: Result := Lx(NbSys(221, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMOP: Result := Lx(NbSys(222, a0, a1, a2, 0, 0, 0));
+    IPC_OP_MSGGET: Result := Lx(NbSys(225, a0, a1, 0, 0, 0, 0));
+    IPC_OP_MSGSND: Result := Lx(NbSys(226, a0, a1, a2, a3, 0, 0));
+    IPC_OP_MSGRCV: Result := Lx(NbSys(227, a0, a1, a2, a3, a4, 0));
+    IPC_OP_MSGCTL: Result := Lx(NbSys(444, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMCTL: begin u := a3; Result := Lx(NbSys(442, a0, a1, a2, Int64(@u), 0, 0)); end;
+    IPC_OP_SEMTIMEDOP: Result := Lx(NbSys(506, a0, a1, a2, a3, 0, 0));
+  else Result := -IPC_LX_ENOSYS;
+  end;
+end;
+
+procedure IpcNap;
+var ts: array[0..1] of Int64;
+begin
+  ts[0] := 0; ts[1] := 1000000;
+  NbSys(NB_NANOSLEEP, Int64(@ts[0]), 0, 0, 0, 0, 0);
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 {$ifdef CPU_AARCH64}
@@ -1823,6 +1863,8 @@ begin
     8: Result := Lx(NbSys(NB_LSEEK, a0, 0, a1, a2, 0, 0));
     9: Result := NbMmap(a0, a1, a2, a3, a4, a5);
     10: Result := Lx(NbSys(NB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    29, 30, 31, 64, 65, 66, 67, 68, 69, 70, 71, 220:              { System V IPC }
+      Result := IpcLinux(nr, a0, a1, a2, a3, a4);
     26: Result := Lx(NbSys(277, a0, a1, a2, 0, 0, 0));                  { __msync13: the flags agree }
     11: Result := Lx(NbSys(NB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := NbBrk(a0);

@@ -55,6 +55,9 @@ const
   OB_GETGID = 47; OB_MMAP = 49; OB_FSTAT = 53; OB_IOCTL = 54; OB_SYMLINK = 57;
   OB_READLINK = 58; OB_EXECVE = 59; OB_UMASK = 60; OB_GETTIMEOFDAY = 67;
   OB_SELECT = 71; OB_MUNMAP = 73; OB_MPROTECT = 74; OB_MADVISE = 75; OB_MSYNC = 256;
+  OB_SEMGET = 221; OB_MSGGET = 225; OB_MSGSND = 226; OB_MSGRCV = 227; OB_SHMAT = 228;
+  OB_SHMDT = 230; OB_SHMGET = 289; OB_SEMOP = 290; OB_SEMCTL = 295; OB_SHMCTL = 296;
+  OB_MSGCTL = 297;
   OB_GETPGRP = 81; OB_SETPGID = 82; OB_UTIMENSAT = 84; OB_CLOCK_GETTIME = 87;
   OB_CLOCK_GETRES = 89; OB_DUP2 = 90; OB_NANOSLEEP = 91; OB_FCNTL = 92;
   OB_FSYNC = 95; OB_SETPRIORITY = 96; OB_GETDENTS = 99; OB_GETPRIORITY = 100;
@@ -201,6 +204,17 @@ function Lc_clock_settime(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external
 function Lc_clock_getres(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'clock_getres';
 function Lc_dup2(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'dup2';
 function Lc_nanosleep(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'nanosleep';
+function Lc_shmget(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'shmget';
+function Lc_shmat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'shmat';
+function Lc_shmdt(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'shmdt';
+function Lc_shmctl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'shmctl';
+function Lc_semget(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'semget';
+function Lc_semop(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'semop';
+function Lc_semctl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'semctl';
+function Lc_msgget(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'msgget';
+function Lc_msgsnd(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'msgsnd';
+function Lc_msgrcv(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'msgrcv';
+function Lc_msgctl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'msgctl';
 function Lc_fcntl(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fcntl';
 function Lc_accept4(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'accept4';
 function Lc_fsync(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fsync';
@@ -781,6 +795,17 @@ begin
     OB_MUNMAP: r := Int64(LongInt(Lc_munmap(a0, a1, a2, a3, a4, a5)));
     OB_MPROTECT: r := Int64(LongInt(Lc_mprotect(a0, a1, a2, a3, a4, a5)));
     OB_MSYNC: r := Int64(LongInt(Lc_msync(a0, a1, a2, a3, a4, a5)));
+    OB_SHMGET: r := Int64(LongInt(Lc_shmget(a0, a1, a2, a3, a4, a5)));
+    OB_SHMAT: r := Lc_shmat(a0, a1, a2, a3, a4, a5);
+    OB_SHMDT: r := Int64(LongInt(Lc_shmdt(a0, a1, a2, a3, a4, a5)));
+    OB_SHMCTL: r := Int64(LongInt(Lc_shmctl(a0, a1, a2, a3, a4, a5)));
+    OB_SEMGET: r := Int64(LongInt(Lc_semget(a0, a1, a2, a3, a4, a5)));
+    OB_SEMOP: r := Int64(LongInt(Lc_semop(a0, a1, a2, a3, a4, a5)));
+    OB_SEMCTL: r := Int64(LongInt(Lc_semctl(a0, a1, a2, PInt64(a3)^, 0, 0)));   { the kernel's union pointer; libc's union by value }
+    OB_MSGGET: r := Int64(LongInt(Lc_msgget(a0, a1, a2, a3, a4, a5)));
+    OB_MSGSND: r := Int64(LongInt(Lc_msgsnd(a0, a1, a2, a3, a4, a5)));
+    OB_MSGRCV: r := Int64(LongInt(Lc_msgrcv(a0, a1, a2, a3, a4, a5)));   { int here, not ssize_t }
+    OB_MSGCTL: r := Int64(LongInt(Lc_msgctl(a0, a1, a2, a3, a4, a5)));
     OB_MADVISE: r := Int64(LongInt(Lc_madvise(a0, a1, a2, a3, a4, a5)));
     OB_UTIMES: r := Int64(LongInt(Lc_utimes(a0, a1, a2, a3, a4, a5)));
     OB_GETGROUPS: r := Int64(LongInt(Lc_getgroups(a0, a1, a2, a3, a4, a5)));
@@ -2794,6 +2819,45 @@ begin
   else Result := Lx(ObSys(OB_OPENAT, dirfd, path, ObOpenFlags(flags), mode, 0, 0));
 end;
 
+{ ---- System V IPC: the Linux calls and structs (sysvipc.inc) ----------- }
+{ Layouts measured on the OpenBSD VM with offsetof. }
+const
+  IPC_UID = 8; IPC_MODE16 = False; IPC_SHMLOCK = 3;
+  IPC_SHM: array[0..9] of Integer = (32, 4, 36, 40, 44, 2, 48, 64, 80, 104);
+  IPC_MSG: array[0..8] of Integer = (48, 56, 64, 72, 76, 80, 96, 112, 160);
+  IPC_SEM: array[0..3] of Integer = (40, 48, 64, 112);
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64; forward;
+procedure IpcNap; forward;
+
+{$I sysvipc.inc}
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64;
+var u: Int64;                       { semctl's union semun, which the kernel takes by address }
+begin
+  case Integer(op) of
+    IPC_OP_SHMGET: Result := Lx(ObSys(OB_SHMGET, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMAT: Result := Lx(ObSys(OB_SHMAT, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMDT: Result := Lx(ObSys(OB_SHMDT, a0, 0, 0, 0, 0, 0));
+    IPC_OP_SHMCTL: Result := Lx(ObSys(OB_SHMCTL, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMGET: Result := Lx(ObSys(OB_SEMGET, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMOP: Result := Lx(ObSys(OB_SEMOP, a0, a1, a2, 0, 0, 0));
+    IPC_OP_MSGGET: Result := Lx(ObSys(OB_MSGGET, a0, a1, 0, 0, 0, 0));
+    IPC_OP_MSGSND: Result := Lx(ObSys(OB_MSGSND, a0, a1, a2, a3, 0, 0));
+    IPC_OP_MSGRCV: Result := Lx(ObSys(OB_MSGRCV, a0, a1, a2, a3, a4, 0));
+    IPC_OP_MSGCTL: Result := Lx(ObSys(OB_MSGCTL, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMCTL: begin u := a3; Result := Lx(ObSys(OB_SEMCTL, a0, a1, a2, Int64(@u), 0, 0)); end;
+  else Result := -IPC_LX_ENOSYS;        { semtimedop: sysvipc.inc polls semop }
+  end;
+end;
+
+procedure IpcNap;
+var ts: array[0..1] of Int64;
+begin
+  ts[0] := 0; ts[1] := 1000000;
+  ObSys(OB_NANOSLEEP, Int64(@ts[0]), 0, 0, 0, 0, 0);
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 {$ifdef CPU_AARCH64}
@@ -2835,6 +2899,8 @@ begin
     8: Result := Lx(ObSys(OB_LSEEK, a0, a1, a2, 0, 0, 0));
     9: Result := Lx(ObSys(OB_MMAP, a0, a1, a2, ObMmapFlags(a3), a4, a5));
     10: Result := Lx(ObSys(OB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    29, 30, 31, 64, 65, 66, 67, 68, 69, 70, 71, 220:              { System V IPC }
+      Result := IpcLinux(nr, a0, a1, a2, a3, a4);
     26: Result := Lx(ObSys(OB_MSYNC, a0, a1, (a2 and 1) or ((a2 and 4) shr 1) or ((a2 and 2) shl 1), 0, 0, 0));   { msync: SYNC 2, INVALIDATE 4 here }
     11: Result := Lx(ObSys(OB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := ObBrk(a0);

@@ -2123,6 +2123,45 @@ begin
   DfSys(DF_CLOSE, s, 0, 0, 0, 0, 0);
 end;
 
+{ ---- System V IPC: the Linux calls and structs (sysvipc.inc) ----------- }
+{ Layouts measured on the DragonFly VM with offsetof. }
+const
+  IPC_UID = 8; IPC_MODE16 = True; IPC_SHMLOCK = 0;
+  IPC_SHM: array[0..9] of Integer = (32, 8, 40, 44, 48, 4, 56, 64, 72, 88);
+  IPC_MSG: array[0..8] of Integer = (48, 56, 64, 72, 76, 80, 96, 112, 160);
+  IPC_SEM: array[0..3] of Integer = (40, 48, 64, 112);
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64; forward;
+procedure IpcNap; forward;
+
+{$I sysvipc.inc}
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64;
+var u: Int64;                       { semctl's union semun, which the kernel takes by address }
+begin
+  case Integer(op) of
+    IPC_OP_SHMGET: Result := Lx(DfSys(231, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMAT: Result := Lx(DfSys(228, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMDT: Result := Lx(DfSys(230, a0, 0, 0, 0, 0, 0));
+    IPC_OP_SHMCTL: Result := Lx(DfSys(229, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMGET: Result := Lx(DfSys(221, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMOP: Result := Lx(DfSys(222, a0, a1, a2, 0, 0, 0));
+    IPC_OP_MSGGET: Result := Lx(DfSys(225, a0, a1, 0, 0, 0, 0));
+    IPC_OP_MSGSND: Result := Lx(DfSys(226, a0, a1, a2, a3, 0, 0));
+    IPC_OP_MSGRCV: Result := Lx(DfSys(227, a0, a1, a2, a3, a4, 0));
+    IPC_OP_MSGCTL: Result := Lx(DfSys(224, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMCTL: begin u := a3; Result := Lx(DfSys(220, a0, a1, a2, Int64(@u), 0, 0)); end;
+  else Result := -IPC_LX_ENOSYS;        { semtimedop: sysvipc.inc polls semop }
+  end;
+end;
+
+procedure IpcNap;
+var ts: array[0..1] of Int64;
+begin
+  ts[0] := 0; ts[1] := 1000000;
+  DfSys(DF_NANOSLEEP, Int64(@ts[0]), 0, 0, 0, 0, 0);
+end;
+
 { ---- the dispatcher ------------------------------------------------------- }
 
 function PXXDfbsdSyscall(nr, a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl;
@@ -2160,6 +2199,8 @@ begin
     8: Result := Lx(DfSys(DF_LSEEK, a0, 0, a1, a2, 0, 0));      { lseek(fd, pad, off, whence) }
     9: Result := Lx(DfMmap(a0, a1, a2, DfMmapFlags(a3), a4, a5));
     10: Result := Lx(DfSys(DF_MPROTECT, a0, a1, a2, 0, 0, 0));
+    29, 30, 31, 64, 65, 66, 67, 68, 69, 70, 71, 220:              { System V IPC }
+      Result := IpcLinux(nr, a0, a1, a2, a3, a4);
     26: Result := Lx(DfSys(65, a0, a1, a2 and 3, 0, 0, 0));                { msync: MS_SYNC is 0 here, the other two agree }
     11: Result := Lx(DfSys(DF_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := DfBrk(a0);

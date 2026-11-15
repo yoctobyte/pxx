@@ -10,8 +10,10 @@
  * reads a semid out of a count, which fails with a plausible errno rather than
  * a crash. Rows 8-12 are that assertion.
  *
- * ROW 21 IS THE LAYOUT ROW AND IT IS LAST BECAUSE ONE OF ITS FIELDS IS
- * DELIBERATELY NOT GLIBC'S. ipc_perm (48/36), shmid_ds (112/84) and msqid_ds
+ * ROW 21 IS THE LAYOUT ROW AND IT IS LAST BECAUSE ONE OF ITS FIELDS WAS
+ * DELIBERATELY NOT GLIBC'S. (2026-11-15: x86-64's kernel semid64_ds is 104,
+ * like glibc's, not the 88 measured below -- 88 is asm-generic's, aarch64's.
+ * sys/sem.h now has it, so all five fields match glibc on x86-64.) ipc_perm (48/36), shmid_ds (112/84) and msqid_ds
  * (120/88) are byte-identical to glibc on both widths. `struct semid_ds' is
  * the KERNEL's semid64_ds -- 88 on x86-64 where glibc's is 104, and 64 on i386
  * where they agree -- because crtl hands the caller's struct straight to the

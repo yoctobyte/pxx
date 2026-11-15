@@ -78,6 +78,24 @@ int semop(int semid, struct sembuf *sops, size_t nsops)
 #endif
 }
 
+/* semtimedop: semop that gives up after *timeout (EAGAIN). i386 reaches it
+   through ipc() as call 4, with the timeout in `fifth'. */
+int semtimedop(int semid, struct sembuf *sops, size_t nsops,
+               const struct timespec *timeout)
+{
+#ifdef SYS_semtimedop
+  return (int)syscall(SYS_semtimedop, (long)semid, (long)sops, (long)nsops,
+                      (long)timeout);
+#elif defined(SYS_ipc)
+  return (int)syscall(SYS_ipc, (long)CRTL_IPCCALL_SEMTIMEDOP, (long)semid,
+                      (long)nsops, (long)0, (long)sops, (long)timeout);
+#else
+  (void)semid; (void)sops; (void)nsops; (void)timeout;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
 int semctl(int semid, int semnum, int cmd, ...)
 {
   unsigned long arg = 0;

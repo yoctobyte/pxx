@@ -75,6 +75,14 @@ of the same program: the output has to be identical.
 - threads built with `--threadsafe`: `TThread`, C `pthread_create`, `threadvar`,
   `thread_local`, mutexes, parallel for
 - the scheduler calls, `mlock`, `fallocate`, `swapon`/`swapoff`
+- System V IPC (`shmget`/`shmat`, `semget`/`semop`/`semctl`, `msgget`/`msgsnd`/
+  `msgrcv`, and the three `*ctl` calls), on all four BSDs. The `*_ds` structs
+  come back in Linux's layout. A few fields are what the system itself says:
+  FreeBSD rounds `shm_segsz` up to a page, NetBSD leaves `msg_cbytes` at 0,
+  and DragonFly leaves `sem_otime` at 0. Linux-only commands (`IPC_INFO`,
+  `SHM_STAT`, `MSG_EXCEPT` and the like) say `EINVAL`. Only NetBSD has
+  `semtimedop`; elsewhere a timed wait retries `semop` every millisecond until
+  it succeeds or the time runs out (`EAGAIN`).
 
 Every Pascal library test (`test/lib_*.pas`, 157) and C test (`test/c_*.c`,
 224) was run on both kernels on 2026-11-12. Every difference that was a
@@ -130,7 +138,7 @@ These compile, but the call fails when the program runs:
 - **Linux-only `/proc` files.** Only the ones listed in the table above exist;
   `/proc/self/maps`, `/proc/self/stat` and the rest do not.
 - **Linux-only interfaces:** `SCM_CREDENTIALS`, abstract Unix sockets,
-  `inotify`, extended attributes (`xattr`), SysV IPC, `klogctl`, `adjtimex`,
+  `inotify`, extended attributes (`xattr`), `klogctl`, `adjtimex`,
   Linux-specific device `ioctl`s.
 - **`acct`** is left unmapped on purpose. Tests in the VM run as root, and a
   working `acct` call there would switch on process accounting.

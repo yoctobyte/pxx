@@ -562,21 +562,56 @@ begin
   Result := FbShmFile(Int64(@b[0]), n + 1);
 end;
 
+{ /proc/self/environ: the environment the process started with, as Linux's
+  file shows it -- read from our own initial stack, which struct ps_strings
+  (kern.proc.ps_strings, KERN_PROC_PS_STRINGS 38, for this pid) points at:
+  ps_envstr at 16, ps_nenvstr at 24. NOT kern.proc.env: FreeBSD 14.3 answers
+  ENOMEM to that sysctl for about 2% of processes, for the life of the
+  process and at any buffer size (measured 2026-11-15 from a cc-built
+  program: 13 of 800 one-shot calls), and an open that failed left the
+  program with an empty environment -- test-freebsd's env row failing now
+  and then. kern.proc.env is kept as the fallback. DragonFly's translator
+  reads ps_strings the same way. }
 function FbProcEnviron: Int64;
-var mib: array[0..3] of Integer; len, buf, size, fd, r: Int64;
+var mib: array[0..3] of Integer; len, buf, size, r, ps, v, s, n, cnt, i, k: Int64;
 begin
-  mib[0] := 1; mib[1] := 14; mib[2] := 35;
+  mib[0] := 1; mib[1] := 14; mib[2] := 38;
   mib[3] := Integer(FbSys(FB_GETPID, 0, 0, 0, 0, 0, 0));
-  len := 0;
-  r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, 0, Int64(@len), 0, 0);
-  if r < 0 then begin Result := Lx(r); Exit; end;
-  size := (len + 4096 + $FFF) and (not Int64($FFF));
+  ps := 0; len := 8;
+  r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, Int64(@ps), Int64(@len), 0, 0);
+  if (r >= 0) and (ps <> 0) then
+  begin
+    v := PInt64(ps + 16)^;
+    cnt := Int64(PInteger(ps + 24)^) and $FFFFFFFF;
+    size := 0;
+    for i := 0 to cnt - 1 do
+      if PInt64(v + 8 * i)^ <> 0 then size := size + StrLen0(PInt64(v + 8 * i)^) + 1;
+    len := size;
+    size := (size + 1 + $FFF) and (not Int64($FFF));
+    buf := FbSys(FB_MMAP, 0, size, 3, $1002, -1, 0);
+    if buf < 0 then begin Result := -LX_ENOMEM; Exit; end;
+    n := 0;
+    for i := 0 to cnt - 1 do
+    begin
+      s := PInt64(v + 8 * i)^;
+      if s <> 0 then
+      begin
+        k := 0;
+        while PByte(s + k)^ <> 0 do begin PByte(buf + n)^ := PByte(s + k)^; n := n + 1; k := k + 1; end;
+        PByte(buf + n)^ := 0; n := n + 1;
+      end;
+    end;
+    Result := FbShmFile(buf, len);
+    FbSys(FB_MUNMAP, buf, size, 0, 0, 0, 0);
+    Exit;
+  end;
+  mib[2] := 35;                                          { kern.proc.env }
+  size := 512 * 1024;                                    { kern.argmax: arguments and environment together }
   buf := FbSys(FB_MMAP, 0, size, 3, $1002, -1, 0);
   if buf < 0 then begin Result := -LX_ENOMEM; Exit; end;
   len := size;
   r := FbSys(FB_SYSCTL, Int64(@mib[0]), 4, buf, Int64(@len), 0, 0);
-  if r < 0 then len := 0;
-  Result := FbShmFile(buf, len);
+  if r >= 0 then Result := FbShmFile(buf, len) else Result := Lx(r);
   FbSys(FB_MUNMAP, buf, size, 0, 0, 0, 0);
 end;
 
@@ -1772,6 +1807,45 @@ begin
   end;
 end;
 
+{ ---- System V IPC: the Linux calls and structs (sysvipc.inc) ----------- }
+{ Layouts measured on the FreeBSD VM with offsetof. }
+const
+  IPC_UID = 8; IPC_MODE16 = True; IPC_SHMLOCK = 11;
+  IPC_SHM: array[0..9] of Integer = (32, 8, 40, 44, 48, 4, 56, 64, 72, 80);
+  IPC_MSG: array[0..8] of Integer = (48, 56, 64, 72, 76, 80, 88, 96, 104);
+  IPC_SEM: array[0..3] of Integer = (40, 48, 56, 64);
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64; forward;
+procedure IpcNap; forward;
+
+{$I sysvipc.inc}
+
+function IpcHost(op, a0, a1, a2, a3, a4: Int64): Int64;
+var u: Int64;                       { semctl's union semun, which the kernel takes by address }
+begin
+  case Integer(op) of
+    IPC_OP_SHMGET: Result := Lx(FbSys(231, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMAT: Result := Lx(FbSys(228, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SHMDT: Result := Lx(FbSys(230, a0, 0, 0, 0, 0, 0));
+    IPC_OP_SHMCTL: Result := Lx(FbSys(512, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMGET: Result := Lx(FbSys(221, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMOP: Result := Lx(FbSys(222, a0, a1, a2, 0, 0, 0));
+    IPC_OP_MSGGET: Result := Lx(FbSys(225, a0, a1, 0, 0, 0, 0));
+    IPC_OP_MSGSND: Result := Lx(FbSys(226, a0, a1, a2, a3, 0, 0));
+    IPC_OP_MSGRCV: Result := Lx(FbSys(227, a0, a1, a2, a3, a4, 0));
+    IPC_OP_MSGCTL: Result := Lx(FbSys(511, a0, a1, a2, 0, 0, 0));
+    IPC_OP_SEMCTL: begin u := a3; Result := Lx(FbSys(510, a0, a1, a2, Int64(@u), 0, 0)); end;
+  else Result := -IPC_LX_ENOSYS;        { semtimedop: sysvipc.inc polls semop }
+  end;
+end;
+
+procedure IpcNap;
+var ts: array[0..1] of Int64;
+begin
+  ts[0] := 0; ts[1] := 1000000;
+  FbSys(240, Int64(@ts[0]), 0, 0, 0, 0, 0);
+end;
+
 {$ifdef CPU_AARCH64}
 function LxX64Call(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 {$else}
@@ -1816,6 +1890,8 @@ begin
     8: Result := Lx(FbSys(FB_LSEEK, a0, a1, a2, 0, 0, 0));
     9: Result := Lx(FbSys(FB_MMAP, a0, a1, a2, FbMmapFlags(a3), a4, a5));
     10: Result := Lx(FbSys(FB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    29, 30, 31, 64, 65, 66, 67, 68, 69, 70, 71, 220:              { System V IPC }
+      Result := IpcLinux(nr, a0, a1, a2, a3, a4);
     26: Result := Lx(FbSys(65, a0, a1, a2 and 3, 0, 0, 0));                { msync: MS_SYNC is 0 here, the other two agree }
     11: Result := Lx(FbSys(FB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := FbBrk(a0);

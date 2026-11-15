@@ -5,6 +5,8 @@
  * struct semid_ds HERE IS THE KERNEL'S semid64_ds AND IS THEREFORE *NOT*
  * BYTE-COMPATIBLE WITH GLIBC'S STRUCT OF THE SAME NAME. Measured 2026-09-02:
  * glibc's is 104 bytes on x86-64 and 64 on i386, the kernel's is 88 and 64.
+ * (Corrected 2026-11-15: 88 is asm-generic's, aarch64 and riscv; x86-64's
+ * own semid64_ds is 104 like glibc's, and the struct below now has it.)
  * glibc carries __sem_otime_high / __sem_ctime_high on BOTH widths and its
  * semctl() TRANSLATES field by field into a kernel-shaped struct on the way
  * through. crtl passes the caller's struct straight to the kernel, so the
@@ -67,6 +69,14 @@ struct semid_ds {
   unsigned long __sem_otime_high;
   time_t        sem_ctime;    /* last change by semctl() */
   unsigned long __sem_ctime_high;
+#elif defined(__x86_64__)
+  /* x86-64's own semid64_ds (asm/sembuf.h) keeps a spare long after each
+     time; asm-generic's (aarch64, riscv) does not. Without them sem_nsems
+     read sem_ctime. */
+  time_t        sem_otime;
+  unsigned long __unused1;
+  time_t        sem_ctime;
+  unsigned long __unused2;
 #else
   time_t        sem_otime;
   time_t        sem_ctime;
@@ -97,6 +107,9 @@ struct seminfo {
 
 int semget(key_t key, int nsems, int semflg);
 int semop(int semid, struct sembuf *sops, size_t nsops);
+struct timespec;
+int semtimedop(int semid, struct sembuf *sops, size_t nsops,
+               const struct timespec *timeout);
 int semctl(int semid, int semnum, int cmd, ...);
 
 #endif
