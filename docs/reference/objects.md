@@ -95,7 +95,11 @@ work through the pxx heap, and pxx calling back out to a shared library
 (`sqrt` from `libm`) resolved by the system linker.
 
 Also a **shared library** — see below — including one written as a Pascal
-`library`. Not yet: object output for arm32 and aarch64.
+`library`. Not yet: a shared library for arm32 and aarch64. An aarch64
+object runs its initialisation from `.init_array` like an x86-64 one (since
+2026-11-15). It has been linked and run only on FreeBSD/arm64; it needs a
+non-PIE link below 4 GiB, because it addresses its data with 32-bit absolute
+relocations.
 
 ## Writing it as a `library`
 

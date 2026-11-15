@@ -10936,6 +10936,8 @@ test-freebsd-arm64: $(COMPILER)
 	  : "c_os_sysv_ipc.c, row 29 left out: qemu-aarch64 answers msg_lrpid 0 where Linux, and the BSD, give this pid"; \
 	  ./$(COMPILER) --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.la >/dev/null && ./$(COMPILER) --os=freebsd --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.fa >/dev/null && \
 	  tools/expect_same.sh freebsd_arm64_c_os_sysv_ipc.c "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/ipc.fa one 2>&1 | grep -v '^29 '; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./ipc.la one 2>&1 | grep -v '^29 '; echo exit=$$?)" || exit 1; \
+	  : "objlink, the object half: an aarch64 object linked by the VM's cc runs its initialisation"; \
+	  tools/expect_same.sh freebsd_arm64_objlink "$$(PXX_OBJLINK_OBJECT_ONLY=1 tools/vm/objlink.sh freebsd ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c --target=aarch64 2>&1)" "$$(PXX_OBJLINK_OBJECT_ONLY=1 tools/vm/objlink.sh linux ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" || exit 1; \
 	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
 	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
 	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \

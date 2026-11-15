@@ -128,11 +128,12 @@ takes about 20 minutes.
 The compiler refuses these with a message that names the reason:
 
 - CPUs other than x86-64 and aarch64 (`--target=arm32` and so on)
-- `--shared` and `--emit-obj` on aarch64. A library is x86-64 only on Linux
-  too. An aarch64 object links with FreeBSD's `cc`, but it never runs its
-  initialisation: there is no aarch64 init thunk for `.init_array`, on Linux
-  either. Tried on 2026-11-15: the object's main body never set its globals,
-  and the first routine that wrote output hung.
+- `--shared` on aarch64: a library is x86-64 only, on Linux too.
+- `--emit-obj` on NetBSD/arm64 and OpenBSD/arm64. The aarch64 backend
+  reaches its data through 32-bit absolute addresses in the text. NetBSD/arm64
+  links programs above 4 GiB, where those cannot reach, and OpenBSD/arm64
+  links PIE, which refuses them (with `-nopie` it links and the program
+  crashes; not looked into). FreeBSD/arm64 works (below).
 - `--rtl-libc`
 
 These compile, but the call fails when the program runs:
@@ -156,7 +157,9 @@ Device numbers are real FreeBSD numbers: `/dev/null` is 0:20, not Linux's 1:3.
 ## Objects and shared libraries
 
 On x86-64, `--emit-obj` and `--shared` work for FreeBSD, NetBSD, DragonFly
-and OpenBSD, and the system's own `cc` links the result into a C program:
+and OpenBSD, and the system's own `cc` links the result into a C program.
+On FreeBSD/arm64, `--emit-obj` works too (since 2026-11-15), and
+`make test-freebsd-arm64` links the object half of the test below:
 
 ```sh
 ./pxx --os=freebsd --emit-obj mylib.pas mylib.o     # then, on FreeBSD:

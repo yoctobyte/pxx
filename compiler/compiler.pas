@@ -3510,9 +3510,28 @@ begin
       would move it anyway (it carries .reloc), but needn't. }
     if EmitSharedMode and (TargetKernel = KERNEL_WINDOWS) and (ImageBase = LOAD_ADDR) then
       ImageBase := $10000000;
-    if (EmitSharedMode or EmitObjMode) and (TargetArch <> TARGET_X86_64) then
-      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is x86-64 only for now'
-        + ' (an arm64 object has not been linked and run on that system yet)');
+    { aarch64: an object runs its initialisation through .init_array as the
+      x86-64 one does (EmitInitFiniThunks' aarch64 arm). A library is x86-64
+      only on every kernel (RefuseSharedOffX86_64). Not Minix or NT, refused
+      above. }
+    if EmitSharedMode and (TargetArch <> TARGET_X86_64) then
+      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is x86-64 only');
+    if EmitObjMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then
+      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is x86-64 and aarch64 only');
+    { The aarch64 backend reaches .data/.bss through 4-byte literals
+      (R_AARCH64_ABS32, elfwriter.inc): the program they are linked into must
+      sit below 4 GiB, and it carries absolute relocations in its text.
+      FreeBSD/arm64's cc links and runs it. NetBSD/arm64 puts text at
+      0x200100000 and its linker refuses the ABS32s. OpenBSD/arm64 links PIE
+      and refuses text relocations; with -nopie the program links and dies
+      with SIGSEGV (not looked into). Measured 2026-11-15. }
+    if EmitObjMode and (TargetArch = TARGET_AARCH64) and (TargetKernel = KERNEL_NETBSD) then
+      ErrorNoPos('--os=' + KernelOsName + ' --target=aarch64: ' + ObjOrSoWord + ' is not supported:'
+        + ' the object addresses its data with 32-bit absolute relocations, and NetBSD/arm64'
+        + ' links programs above 4 GiB');
+    if EmitObjMode and (TargetArch = TARGET_AARCH64) and (TargetKernel = KERNEL_OPENBSD) then
+      ErrorNoPos('--os=' + KernelOsName + ' --target=aarch64: ' + ObjOrSoWord + ' is not supported:'
+        + ' the object carries absolute relocations in its text, which OpenBSD''s PIE link refuses');
     if (EmitSharedMode or EmitObjMode) and (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then
       ErrorNoPos('--os=openbsd --rtl-raw: ' + ObjOrSoWord + ' is not supported: OpenBSD takes a system call'
         + ' only from libc or the program''s own pinned table, and an object has neither;'

@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "An --emit-obj object for aarch64 (Linux, and the BSDs if let through) has no .init_array: the global initialisers, the units' initialization sections and the Pascal main body never run when a C program links it. The init/fini thunk is gated to x86-64 and i386, and the aarch64 entry code at offset 0 still stores sp as the argc block, which is wrong when a loader calls in."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -73,3 +73,27 @@ There is no aarch64 cross gcc on plexus, but the FreeBSD/arm64 VM
 (`PXX_FBSD_ARCH=aarch64 tools/vm/freebsd.sh`, port 2228, TCG: slow) has `cc`,
 and a Linux aarch64 object can be checked the same way on any aarch64 Linux
 box with gcc.
+
+## Fixed 2026-11-15
+
+`EmitInitFiniThunks` has an aarch64 arm: the init thunk runs the prologue,
+stores sp in a BSS slot and branches (`b`, recorded with link 0) to code
+offset 0; where the body falls off, sp comes back from the slot and the thunk
+epilogue returns to the loader. The offset-0 sp store turned out harmless (the
+x86-64 entry stores rsp the same way in an object). The gate in
+pasparser_prog.inc takes aarch64.
+
+Measured with `test/test_os_objlink.pas` + `test_os_objlink_main.c`:
+
+- FreeBSD/arm64, the VM's `cc`: identical to the x86-64 Linux object half.
+  The refusal is lifted for FreeBSD, and `make test-freebsd-arm64` links it
+  (`tools/vm/objlink.sh` with `PXX_OBJLINK_OBJECT_ONLY=1`).
+- NetBSD/arm64: the link fails, `R_AARCH64_ABS32` truncated: NetBSD puts text
+  at 0x200100000 and the backend's data literals are 4 bytes. Still refused.
+- OpenBSD/arm64: the PIE link refuses the text relocations; with `-nopie` the
+  program links and takes SIGSEGV. Still refused.
+- Linux aarch64: the object now carries `.init_array`, but there is no aarch64
+  linker on plexus to run it.
+
+What would open NetBSD and OpenBSD: PC-relative data addressing in the
+aarch64 backend (adrp/add, or 8-byte literals with ABS64 and a PIC story).

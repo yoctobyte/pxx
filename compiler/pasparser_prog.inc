@@ -1115,8 +1115,46 @@ end;
   that leaks.
   bug-a-c-a-shared-library-never-runs-its-initialisation }
 procedure EmitInitFiniThunks;
-var callSite: Integer;
+var callSite, spSlot, bPos: Integer;
 begin
+  { AARCH64 HAS NO RETURN ADDRESS ON THE STACK. The x86 thunk calls offset 0
+    and the body's fall-through `ret` pops the address that call pushed. On
+    aarch64 the return address is x30, which every `bl` in the body
+    overwrites. So the thunk stores its sp (its saved frame: x29/x30 and the
+    callee-saved registers, EmitSharedThunkPrologue) in a BSS slot and
+    branches to offset 0; where the body falls off, sp comes back from the slot
+    and the thunk epilogue runs, returning to the loader through the x30 it
+    saved. The branch is recorded (link 0: a `b`) so --dce re-aims it.
+    bug-a-an-aarch64-emit-obj-object-never-runs-its-initialisation }
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    spSlot := BSSSize; Inc(BSSSize, 8);
+    EmitI32($18000050);          { ldr w16, [pc+8] }
+    EmitI32($14000002);          { b   [pc+8] }
+    EmitGlobRef(spSlot);
+    EmitI32($F9400210);          { ldr x16, [x16] }
+    EmitI32($9100021F);          { mov sp, x16 }
+    EmitSharedThunkEpilogue;
+
+    InitThunkOff := CodeLen;
+    EmitSharedThunkPrologue;
+    EmitI32($18000050);          { ldr w16, [pc+8] }
+    EmitI32($14000002);          { b   [pc+8] }
+    EmitGlobRef(spSlot);
+    EmitI32($910003F1);          { mov x17, sp }
+    EmitI32($F9000211);          { str x17, [x16] }
+    bPos := CodeLen;
+    RecordCodeRefAtLink(bPos, 0, 0);
+    EmitI32($14000000 or (((0 - bPos) div 4) and $3FFFFFF));   { b <code offset 0> }
+
+    FiniThunkOff := CodeLen;
+    EmitSharedThunkPrologue;
+    if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+      EmitCallProc(GetFiniRunnerProc);
+    EmitSharedThunkEpilogue;
+    Exit;
+  end;
+
   { The program body falls into here. Return to the loader instead of exiting. }
   EmitAsmX64(['ret']);
 
@@ -2941,7 +2979,8 @@ begin
     bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers
     bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers }
   if EmitSharedMode or (EmitObjMode and
-       ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386))) then
+       ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
+        (TargetArch = TARGET_AARCH64))) then
     EmitInitFiniThunks
   else
   begin
