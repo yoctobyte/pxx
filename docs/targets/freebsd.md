@@ -128,7 +128,11 @@ takes about 20 minutes.
 The compiler refuses these with a message that names the reason:
 
 - CPUs other than x86-64 and aarch64 (`--target=arm32` and so on)
-- `--shared` and `--emit-obj` on aarch64 (not yet linked and run there)
+- `--shared` and `--emit-obj` on aarch64. A library is x86-64 only on Linux
+  too. An aarch64 object links with FreeBSD's `cc`, but it never runs its
+  initialisation: there is no aarch64 init thunk for `.init_array`, on Linux
+  either. Tried on 2026-11-15: the object's main body never set its globals,
+  and the first routine that wrote output hung.
 - `--rtl-libc`
 
 These compile, but the call fails when the program runs:
