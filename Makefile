@@ -28384,6 +28384,13 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/c_crtl_sockaddr_families.c $(TESTTMP)/c_sockfam26_aarch64 >/dev/null || { echo "c_sockfam26 aarch64 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh aarch64/c_sockfam26 "$$(timeout 60 tools/run_target.sh aarch64 $(TESTTMP)/c_sockfam26_aarch64)" "$$(cat $(TESTTMP)/c_sockfam.oracle)" || exit 1; \
 	else echo "=== c_sockfam26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
+	# setitimer/getitimer (busybox fancy ping), diffed against glibc on x86-64
+	# and i386.
+	./$(COMPILER) test/c_crtl_setitimer.c $(TESTTMP)/c_setitimer26
+	@gcc -o $(TESTTMP)/c_setitimer_gcc test/c_crtl_setitimer.c
+	tools/expect_same.sh c_setitimer26 "$$(timeout 20 $(TESTTMP)/c_setitimer26)" "$$(timeout 20 $(TESTTMP)/c_setitimer_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_setitimer.c $(TESTTMP)/c_setitimer26_i386 >/dev/null
+	tools/expect_same.sh i386/c_setitimer26 "$$(timeout 20 tools/run_target.sh i386 $(TESTTMP)/c_setitimer26_i386)" "$$(timeout 20 $(TESTTMP)/c_setitimer_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

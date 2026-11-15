@@ -7,6 +7,8 @@
  */
 
 #include <sys/time.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <errno.h>
 
 extern int __pxx_realtime(long long *sec, long long *usec);
@@ -30,6 +32,29 @@ int utimes(const char *filename, const struct timeval times[2]) {
   int rc = __pxx_utimes(filename, atime, mtime);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
+}
+
+/* setitimer/getitimer: the kernel's own call, where the target has its number
+   (the OS translators take the Linux number as they take the PAL's). A target
+   without it (the ESP builds) says ENOSYS rather than pretending to arm. */
+int setitimer(int which, const struct itimerval *nv, struct itimerval *ov) {
+#ifdef SYS_setitimer
+  return (int)syscall(SYS_setitimer, (long)which, (long)nv, (long)ov);
+#else
+  (void)which; (void)nv; (void)ov;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+int getitimer(int which, struct itimerval *cur) {
+#ifdef SYS_getitimer
+  return (int)syscall(SYS_getitimer, (long)which, (long)cur);
+#else
+  (void)which; (void)cur;
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 /* No PAL syscall sets the clock, so this fails cleanly rather than pretending.

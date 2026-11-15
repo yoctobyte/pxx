@@ -578,11 +578,15 @@ REQUIRED_ON="USE_BB_CRYPT"
 #   od     DESKTOP -- the POSIX od (-A, -t, -N, -j); without it od is the
 #          old fixed-format one and `od -An -tx1' fails. DESKTOP is global
 #          (it also widens ps, cpio, ...), so it rides on od being asked for.
+#   ping   FEATURE_FANCY_PING -- without it ping takes NO options at all
+#          (argv[1] is the host, "HOST is alive!"), so `ping -c 1 -W 1 H'
+#          says "bad address '-c'". One knob for ping and ping6 (Gibux's
+#          network tests, 2026-11-15).
 # --usage adds SHOW_USAGE + FEATURE_VERBOSE_USAGE: an applet's usage text,
 # which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Gibux's
 # switch_root "NEW_ROOT must be a mountpoint" was invisible). Opt-in, for a
 # root-filesystem build, because it is size.
-for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP; do
+for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP ping:FEATURE_FANCY_PING ping6:FEATURE_FANCY_PING; do
   printf '%s\n' $APPLETS | grep -qx "${_pair%%:*}" && REQUIRED_ON="$REQUIRED_ON ${_pair#*:}"
 done
 IMPLIED_APPLETS=""
@@ -1338,6 +1342,10 @@ run_realargs_cases() {   # $1 = runner, $2 = install dir
   has_applet expr   && { printf '### expr\n';        ra_one "$runner" "$dir" expr 2147483647 + 1;    printf '### exit=%d\n' "$?"; }
   has_applet basename && { printf '### basename\n';  ra_one "$runner" "$dir" basename /a/b/c.txt .txt; printf '### exit=%d\n' "$?"; }
   has_applet dirname  && { printf '### dirname\n';   ra_one "$runner" "$dir" dirname /a/b/c.txt;     printf '### exit=%d\n' "$?"; }
+  # ping: the OPTIONS are the case (FEATURE_FANCY_PING above). Unprivileged it
+  # stops at the socket with "permission denied" on both sides; with ICMP
+  # sockets allowed, the round-trip times differ run to run, so that line goes.
+  has_applet ping && { printf '### ping -q -c 1 -W 1\n'; ra_one "$runner" "$dir" ping -q -c 1 -W 1 127.0.0.1 2>&1 | grep -v 'round-trip'; printf '### exit=%d\n' "${PIPESTATUS[0]}"; }
   return 0
 }
 

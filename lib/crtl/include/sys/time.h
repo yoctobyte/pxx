@@ -16,6 +16,19 @@ struct timezone {
   int tz_dsttime;
 };
 
+/* Interval timers (busybox's fancy ping arms SIGALRM with setitimer). The
+   kernel's struct: two timevals, long fields, so it is right on every target
+   this header has a timeval for. */
+struct itimerval {
+  struct timeval it_interval;
+  struct timeval it_value;
+};
+#define ITIMER_REAL    0
+#define ITIMER_VIRTUAL 1
+#define ITIMER_PROF    2
+extern int setitimer(int which, const struct itimerval *nv, struct itimerval *ov);
+extern int getitimer(int which, struct itimerval *cur);
+
 extern int gettimeofday(struct timeval *tv, void *tz);
 extern int utimes(const char *filename, const struct timeval times[2]);
 

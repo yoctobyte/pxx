@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  717 functions across 73 headers. }
+  719 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -72,19 +72,19 @@ begin
       ' getegid:unistd.h getentropy:unistd.h getenv:stdlib.h geteuid:unistd.h getgid:unistd.h ' +
       ' getgrent:grp.h getgrgid:grp.h getgrgid_r:grp.h getgrnam:grp.h getgrnam_r:grp.h ' +
       ' getgrouplist:grp.h getgroups:unistd.h gethostbyaddr:netdb.h gethostbyname:netdb.h ' +
-      ' gethostid:unistd.h gethostname:unistd.h getifaddrs:ifaddrs.h getline:stdio.h ' +
-      ' getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h getmntent_r:mntent.h ' +
-      ' getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h getopt_long_only:unistd.h ' +
-      ' getpagesize:unistd.h getpass:unistd.h getpeername:sys/socket.h getpgid:unistd.h ' +
-      ' getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h getpwent:pwd.h ' +
-      ' getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h getpwuid_r:pwd.h getrandom:sys/random.h ' +
-      ' getresgid:unistd.h getresuid:unistd.h getrlimit:sys/resource.h getrusage:sys/resource.h ' +
-      ' getservbyname:netdb.h getservbyname_r:netdb.h getservbyport:netdb.h getservent:netdb.h ' +
-      ' getsid:unistd.h getsockname:sys/socket.h getsockopt:sys/socket.h getspent:shadow.h ' +
-      ' getspnam:shadow.h getspnam_r:shadow.h gettimeofday:sys/time.h getuid:unistd.h ' +
-      ' getusershell:unistd.h getutxent:utmpx.h getutxid:utmpx.h getutxline:utmpx.h ' +
-      ' getxattr:sys/xattr.h glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h ' +
-      ' gmtime_r:time.h grantpt:stdlib.h ';
+      ' gethostid:unistd.h gethostname:unistd.h getifaddrs:ifaddrs.h getitimer:sys/time.h ' +
+      ' getline:stdio.h getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h ' +
+      ' getmntent_r:mntent.h getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h ' +
+      ' getopt_long_only:unistd.h getpagesize:unistd.h getpass:unistd.h getpeername:sys/socket.h ' +
+      ' getpgid:unistd.h getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h ' +
+      ' getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h getpwuid_r:pwd.h ' +
+      ' getrandom:sys/random.h getresgid:unistd.h getresuid:unistd.h getrlimit:sys/resource.h ' +
+      ' getrusage:sys/resource.h getservbyname:netdb.h getservbyname_r:netdb.h ' +
+      ' getservbyport:netdb.h getservent:netdb.h getsid:unistd.h getsockname:sys/socket.h ' +
+      ' getsockopt:sys/socket.h getspent:shadow.h getspnam:shadow.h getspnam_r:shadow.h ' +
+      ' gettimeofday:sys/time.h getuid:unistd.h getusershell:unistd.h getutxent:utmpx.h ' +
+      ' getutxid:utmpx.h getutxline:utmpx.h getxattr:sys/xattr.h glob:glob.h ' +
+      ' glob_pattern_p:glob.h globfree:glob.h gmtime:time.h gmtime_r:time.h grantpt:stdlib.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +
       ' htons:netinet/in.h hypot:math.h ';
@@ -166,30 +166,31 @@ begin
       ' semget:sys/sem.h semop:sys/sem.h semtimedop:sys/sem.h send:sys/socket.h ' +
       ' sendmsg:sys/socket.h sendto:sys/socket.h setbuf:stdio.h setegid:unistd.h setenv:stdlib.h ' +
       ' seteuid:unistd.h setgid:unistd.h setgrent:grp.h setgroups:unistd.h sethostname:unistd.h ' +
-      ' setlocale:locale.h setlogmask:syslog.h setmntent:mntent.h setns:sched.h setpgid:unistd.h ' +
-      ' setpgrp:unistd.h setpriority:sys/resource.h setpwent:pwd.h setregid:unistd.h ' +
-      ' setresgid:unistd.h setresuid:unistd.h setreuid:unistd.h setrlimit:sys/resource.h ' +
-      ' setservent:netdb.h setsid:unistd.h setsockopt:sys/socket.h setspent:shadow.h ' +
-      ' settimeofday:sys/time.h setuid:unistd.h setusershell:unistd.h setutxent:utmpx.h ' +
-      ' setvbuf:stdio.h setxattr:sys/xattr.h sgetspent:shadow.h shmat:sys/shm.h shmctl:sys/shm.h ' +
-      ' shmdt:sys/shm.h shmget:sys/shm.h shutdown:sys/socket.h sigaction:signal.h ' +
-      ' sigaddset:signal.h sigaltstack:signal.h sigdelset:signal.h sigemptyset:signal.h ' +
-      ' sigfillset:signal.h sigisemptyset:signal.h sigismember:signal.h signal:signal.h ' +
-      ' signbit:math.h sigprocmask:signal.h sigsuspend:signal.h sigtimedwait:signal.h ' +
-      ' sigwait:signal.h sin:math.h sinf:math.h sinh:math.h sleep:unistd.h snprintf:stdio.h ' +
-      ' socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h ' +
-      ' srand:stdlib.h srand48:stdlib.h srandom:stdlib.h sscanf:stdio.h stat:sys/stat.h ' +
-      ' statfs:sys/statfs.h statvfs:sys/statvfs.h stpcpy:string.h stpncpy:string.h ' +
-      ' strcasestr:string.h strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h ' +
-      ' strcoll:string.h strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h ' +
-      ' strerror_r:string.h strftime:time.h strlcat:string.h strlcpy:string.h strlen:string.h ' +
-      ' strncat:string.h strncmp:string.h strncpy:string.h strndup:stdlib.h strnlen:string.h ' +
-      ' strpbrk:string.h strptime:time.h strrchr:string.h strsep:string.h strsignal:string.h ' +
-      ' strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h strtok:string.h ' +
-      ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
-      ' strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h ' +
-      ' swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h ' +
-      ' syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
+      ' setitimer:sys/time.h setlocale:locale.h setlogmask:syslog.h setmntent:mntent.h ' +
+      ' setns:sched.h setpgid:unistd.h setpgrp:unistd.h setpriority:sys/resource.h ' +
+      ' setpwent:pwd.h setregid:unistd.h setresgid:unistd.h setresuid:unistd.h setreuid:unistd.h ' +
+      ' setrlimit:sys/resource.h setservent:netdb.h setsid:unistd.h setsockopt:sys/socket.h ' +
+      ' setspent:shadow.h settimeofday:sys/time.h setuid:unistd.h setusershell:unistd.h ' +
+      ' setutxent:utmpx.h setvbuf:stdio.h setxattr:sys/xattr.h sgetspent:shadow.h ' +
+      ' shmat:sys/shm.h shmctl:sys/shm.h shmdt:sys/shm.h shmget:sys/shm.h shutdown:sys/socket.h ' +
+      ' sigaction:signal.h sigaddset:signal.h sigaltstack:signal.h sigdelset:signal.h ' +
+      ' sigemptyset:signal.h sigfillset:signal.h sigisemptyset:signal.h sigismember:signal.h ' +
+      ' signal:signal.h signbit:math.h sigprocmask:signal.h sigsuspend:signal.h ' +
+      ' sigtimedwait:signal.h sigwait:signal.h sin:math.h sinf:math.h sinh:math.h sleep:unistd.h ' +
+      ' snprintf:stdio.h socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h ' +
+      ' sqrtf:math.h srand:stdlib.h srand48:stdlib.h srandom:stdlib.h sscanf:stdio.h ' +
+      ' stat:sys/stat.h statfs:sys/statfs.h statvfs:sys/statvfs.h stpcpy:string.h ' +
+      ' stpncpy:string.h strcasestr:string.h strcat:string.h strchr:string.h strchrnul:string.h ' +
+      ' strcmp:string.h strcoll:string.h strcpy:string.h strcspn:string.h strdup:stdlib.h ' +
+      ' strerror:string.h strerror_r:string.h strftime:time.h strlcat:string.h strlcpy:string.h ' +
+      ' strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h strndup:stdlib.h ' +
+      ' strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h strsep:string.h ' +
+      ' strsignal:string.h strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h ' +
+      ' strtok:string.h strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h ' +
+      ' strtoul:stdlib.h strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h ' +
+      ' strxfrm:string.h swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h ' +
+      ' symlinkat:unistd.h sync:unistd.h syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h ' +
+      ' syslog:syslog.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +
