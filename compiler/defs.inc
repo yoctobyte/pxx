@@ -7703,6 +7703,7 @@ var
     would have sent every signal to handler 0 (feature-signal-siginfo-ucontext
     item 4). Allocated in EnsureSignalBss, NOT in one arch's emitter -- see the
     note there. }
+  PeDllTlsIdxBss: Integer;       { --os=nt --shared: BSS offset of the word the loader writes the DLL's TLS index into (AddressOfIndex), or -1 before the first thread-local access asks for it. An executable's index is always 0; a DLL's is whatever the loader gives it. }
   TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
   TlsBaseUsed     : Boolean;     { a non-x86-64 backend emitted IR_TLSBASE. Read by the ELF writer: in a DYNAMIC binary on those targets the one thread register belongs to the libc the loader brought in, so the read falls back to the main thread's block, one shared copy. See TargetHasTlsBlock. }
   TlsSharedWarned : Boolean;     { the dynamic-binary shared-copy warning was printed; ResolveSynthImportLibraries runs once per DT_NEEDED builder }

@@ -179,10 +179,11 @@ What works inside one: the pxx heap, managed strings, dynamic arrays, classes
 with virtual methods, and calls out to `external` routines, which are resolved
 through the library's own GOT with a `DT_NEEDED` on the providing library.
 
-**No initialisation runs here either.** Loading the library does not run the
-Pascal main body, so an exported routine must not depend on a global having
-been assigned at startup — the same rule as for objects, and for the same
-reason.
+**Unlike an object, a library initialises itself.** Since 2026-09-01 the
+library's `DT_INIT` runs the global initialisers, the units' `initialization`
+sections and the Pascal main body when it loads (`test/test_shared_lib_init.pas`).
+A DLL written with `--os=nt --shared` does the same from DllMain
+(`docs/targets/windows.md`).
 
 Before 2026-09-01 `--shared` served the `.asm` frontend only. A compiled source
 produced a valid `ET_DYN` that exported nothing, because the writer built its

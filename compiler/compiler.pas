@@ -1721,6 +1721,7 @@ begin
   LdsoRunnable := False;
   LinkGcSections := True;
   TlsMainInstalled := False;
+  PeDllTlsIdxBss := -1;
   TlsBaseUsed := False;
   BSS_TLS_IMAGE := -1;
   TlsStrictUsed := False;
@@ -3370,7 +3371,8 @@ begin
     Never the input itself — that overwrote the source with the binary. }
   outFile := GetFilePath(inFile) + GetFileBaseName(inFile);
 {$endif}
-  if TargetKernel = KERNEL_WINDOWS then outFile := outFile + '.exe';
+  if (TargetKernel = KERNEL_WINDOWS) and EmitSharedMode then outFile := outFile + '.dll'
+  else if TargetKernel = KERNEL_WINDOWS then outFile := outFile + '.exe';
   if ParamCount >= i + 1 then
   begin
     { An OUTPUT PATH that starts with `-` is a mistyped flag, not a filename.
@@ -3465,6 +3467,10 @@ begin
   { A .so output name implies shared-library emission (same as --shared). }
   if (n >= 3) and (outFile[n] = 'o') and (outFile[n-1] = 's') and (outFile[n-2] = '.') then
     EmitSharedMode := True;
+  { ...and so does a .dll one, which is what --os=nt --shared writes. }
+  if (TargetKernel = KERNEL_WINDOWS) and (n >= 4) and (outFile[n-3] = '.') and
+     (LowerCase(Copy(outFile, n - 2, 3)) = 'dll') then
+    EmitSharedMode := True;
   { --os=freebsd is measured for one shape only: an x86-64 executable through
     the raw-syscall translator. Refuse the rest in words rather than build
     something nobody has run (aarch64 used to die on "PXXFbsdSyscall not
@@ -3494,9 +3500,16 @@ begin
         ' (FreeBSD, NetBSD and OpenBSD also take --target=aarch64); other CPUs are not supported yet');
     { Objects and libraries for the BSDs: the translator is ordinary code
       inside them, so the host's cc links them as it would a Linux one. }
-    if (EmitSharedMode or EmitObjMode) and
-       ((TargetKernel = KERNEL_WINDOWS) or (TargetKernel = KERNEL_MINIX)) then
+    if (EmitSharedMode or EmitObjMode) and (TargetKernel = KERNEL_MINIX) then
       ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is not supported; build an executable');
+    { --os=nt: --shared writes a DLL (pewriter.inc). An object would need a
+      COFF writer and a Windows linker to check it against. }
+    if EmitObjMode and (not EmitSharedMode) and (TargetKernel = KERNEL_WINDOWS) then
+      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is not supported; build an executable, or a DLL with --shared');
+    { A DLL prefers a base of its own, away from the executable's: the loader
+      would move it anyway (it carries .reloc), but needn't. }
+    if EmitSharedMode and (TargetKernel = KERNEL_WINDOWS) and (ImageBase = LOAD_ADDR) then
+      ImageBase := $10000000;
     if (EmitSharedMode or EmitObjMode) and (TargetArch <> TARGET_X86_64) then
       ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is x86-64 only for now'
         + ' (an arm64 object has not been linked and run on that system yet)');
@@ -4284,7 +4297,12 @@ begin
     code, and the only one before the writers. }
   DropBodilessMethodFixups;
   CheckUndefinedExternData;
-  if EmitSharedMode then
+  if EmitSharedMode and (TargetKernel = KERNEL_WINDOWS) then
+  begin
+    EmitPeDllEntry;
+    writePE(outFile);
+  end
+  else if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then
   begin

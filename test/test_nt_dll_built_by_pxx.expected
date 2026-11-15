@@ -1,0 +1,14 @@
+loaded 8000
+sum 5050
+mix 6547.75
+len 21
+div 8
+div0 -4
+counter 40
+bump 1 2
+thread bump 3
+bump 3
+loaded 8005
+c 41 42 42
+c scale 4.5
+c dup 6

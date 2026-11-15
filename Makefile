@@ -10921,7 +10921,7 @@ test-freebsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=freebsd --target=aarch64 test/test_os_env.pas $$d/env.fa >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh freebsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fa one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c test/c_os_sysv_ipc.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -10933,6 +10933,9 @@ test-freebsd-arm64: $(COMPILER)
 	    ./$(COMPILER) --target=aarch64 $$t $$d/fe.la >/dev/null && ./$(COMPILER) --os=freebsd --target=aarch64 $$t $$d/fe.fa >/dev/null && \
 	    tools/expect_same.sh freebsd_arm64_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/fe.fa one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./fe.la one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  : "c_os_sysv_ipc.c, row 29 left out: qemu-aarch64 answers msg_lrpid 0 where Linux, and the BSD, give this pid"; \
+	  ./$(COMPILER) --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.la >/dev/null && ./$(COMPILER) --os=freebsd --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.fa >/dev/null && \
+	  tools/expect_same.sh freebsd_arm64_c_os_sysv_ipc.c "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/ipc.fa one 2>&1 | grep -v '^29 '; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./ipc.la one 2>&1 | grep -v '^29 '; echo exit=$$?)" || exit 1; \
 	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
 	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
 	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
@@ -10974,7 +10977,7 @@ test-netbsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=netbsd --target=aarch64 test/test_os_env.pas $$d/env.na >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh netbsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/netbsd.sh run $$d/env.na one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c test/c_os_sysv_ipc.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -10986,6 +10989,9 @@ test-netbsd-arm64: $(COMPILER)
 	    ./$(COMPILER) --target=aarch64 $$t $$d/fe.la >/dev/null && ./$(COMPILER) --os=netbsd --target=aarch64 $$t $$d/fe.na >/dev/null && \
 	    tools/expect_same.sh netbsd_arm64_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/netbsd.sh run $$d/fe.na one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./fe.la one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  : "c_os_sysv_ipc.c, row 29 left out: qemu-aarch64 answers msg_lrpid 0 where Linux, and the BSD, give this pid"; \
+	  ./$(COMPILER) --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.la >/dev/null && ./$(COMPILER) --os=netbsd --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.na >/dev/null && \
+	  tools/expect_same.sh netbsd_arm64_c_os_sysv_ipc.c "$$(PXX_TEST_PROBE=probe-value tools/vm/netbsd.sh run $$d/ipc.na one 2>&1 | grep -v '^29 '; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./ipc.la one 2>&1 | grep -v '^29 '; echo exit=$$?)" || exit 1; \
 	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
 	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c test/crtl_pthread_recursive_mutex.c \
 	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
@@ -11027,7 +11033,7 @@ test-openbsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) test/test_os_env.pas $$d/env.oa >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh openbsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.oa one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c test/c_os_sysv_ipc.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11039,6 +11045,9 @@ test-openbsd-arm64: $(COMPILER)
 	    ./$(COMPILER) --target=aarch64 $$t $$d/fe.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) $$t $$d/fe.oa >/dev/null && \
 	    tools/expect_same.sh openbsd_arm64_$$(basename $$t) "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/fe.oa one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./fe.la one 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  : "c_os_sysv_ipc.c, row 29 left out: qemu-aarch64 answers msg_lrpid 0 where Linux, and the BSD, give this pid"; \
+	  ./$(COMPILER) --target=aarch64 test/c_os_sysv_ipc.c $$d/ipc.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) test/c_os_sysv_ipc.c $$d/ipc.oa >/dev/null && \
+	  tools/expect_same.sh openbsd_arm64_c_os_sysv_ipc.c "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/ipc.oa one 2>&1 | grep -v '^29 '; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./ipc.la one 2>&1 | grep -v '^29 '; echo exit=$$?)" || exit 1; \
 	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
 	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c \
 	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
@@ -11313,7 +11322,9 @@ test-windows: $(COMPILER)
 	# two C signal files drop their fork() rows: Windows has no fork. A pre-8
 	# pass reruns a few time, socket and thread tests with PXX_WINABI_PRE8=1
 	# (the fallbacks Windows 7 and ReactOS take), and the import table must
-	# name only kernel32 and ws2_32.
+	# name only kernel32 and ws2_32. --shared writes a DLL: one from Pascal and
+	# one from C, called by a pxx executable (test_nt_dll_built_by_pxx.pas), and
+	# the C one exports its own functions and none of lib/crtl's.
 	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
@@ -11413,6 +11424,12 @@ test-windows: $(COMPILER)
 	    ./$(COMPILER) --os=windows test/test_nt_dll_callbacks.pas $$d/dllcb.exe >/dev/null && \
 	    tools/expect_same.sh windows_dll_callbacks "$$(tools/vm/wine.sh $$d/dllcb.exe 2>&1)" "$$(cat test/test_nt_dll_callbacks.expected)" || exit 1; \
 	  else echo "test-windows: SKIP windows_dll_records, windows_dll_callbacks (no clang to build the callee DLL)"; fi; \
+	  : "--shared: DLLs pxx writes itself, from Pascal and from C, called by a pxx executable"; \
+	  ./$(COMPILER) --os=windows --shared --threadsafe test/nt_dll_pascal_lib.pas $$d/nt_dll_pascal_lib.dll >/dev/null && \
+	  ./$(COMPILER) --os=windows --shared test/nt_dll_c_lib.c $$d/nt_dll_c_lib.dll >/dev/null && \
+	  ./$(COMPILER) --os=windows --threadsafe test/test_nt_dll_built_by_pxx.pas $$d/dllpxx.exe >/dev/null && \
+	  tools/expect_same.sh windows_dll_built_by_pxx "$$(tools/vm/wine.sh $$d/dllpxx.exe 2>&1; echo exit=$$?)" "$$(cat test/test_nt_dll_built_by_pxx.expected; echo exit=0)" || exit 1; \
+	  tools/expect_same.sh windows_dll_exports "$$(objdump -p $$d/nt_dll_c_lib.dll | sed -n 's/^.*+base\[ *[0-9]*\]  [0-9a-f]* //p' | tr '\n' ' ')" "c_dup_len c_next c_peek c_scale " || exit 1; \
 	  echo "test-windows: OK"
 
 test-asm: $(COMPILER)

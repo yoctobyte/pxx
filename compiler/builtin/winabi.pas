@@ -2496,6 +2496,24 @@ begin
   LockOr(Int64(@WinCbLock), 1);
 end;
 
+{ --os=nt --shared: DllMain's DLL_PROCESS_ATTACH (pewriter.inc). table is
+  the count, then per export its RVA, its shape and the slot its export
+  stub jumps through; each slot gets the export's PxxWinCallback adapter.
+  base is the DLL's load address (DllMain's hinstDLL). cdecl: DllMain calls
+  it with System V's rdi and rsi, after the init thunk has run: the adapter
+  generator reads a typed constant (IntLoad) and WinCbLock's initial 1, and
+  both are set by initialisation code, not stored in the image. }
+procedure PxxDllAttach(base, table: Int64); cdecl;
+var n, i, e: Int64;
+begin
+  n := PInt64(table)^;
+  for i := 0 to n - 1 do
+  begin
+    e := table + 8 + 24 * i;
+    PInt64(e + 16)^ := PxxWinCallback(base + PInt64(e)^, PInt64(e + 8)^);
+  end;
+end;
+
 { ---- Threads -------------------------------------------------------------------
   The clone stub (thread_emit.inc) carves the child's stack, TLS block and
   stage area exactly as on Linux and calls clone with the address to resume

@@ -252,8 +252,25 @@ path means what it means on Linux.
 
 ## Not supported yet
 
-- **Refused at compile time:** `-g`, `--shared`, `--emit-obj`,
-  `--rtl-libc`, and CPUs other than x86-64.
+- **Refused at compile time:** `-g`, `--emit-obj`, `--rtl-libc`, and
+  CPUs other than x86-64.
+- **DLLs:** `--shared` (or an output name ending in `.dll`) writes a DLL.
+  A Pascal `library` exports its `cdecl` routines and the ones its
+  `exports` clause names. A C file exports its functions that are not
+  `static`, and none of lib/crtl's. Loading the DLL runs its
+  initialisation: the global initialisers, the units' `initialization`
+  sections and the library's main body, as a Linux `.so` does.
+  `finalization` does not run at unload. Each export is a stub that jumps
+  to an adapter, which takes the Microsoft convention and calls the routine
+  (the callback adapters, built by DllMain). Threadvars work, through the
+  TLS index the loader gives the DLL; build with `--threadsafe` when
+  threads call in. The DLL prefers the base `0x10000000` and carries
+  `.reloc`. Refused at compile time: an export with more than 14
+  parameters, or with a record parameter or result by value. Tested with
+  pxx executables calling pxx DLLs under Wine
+  (`test/test_nt_dll_built_by_pxx.pas`). NOT TESTED: a DLL loaded by a
+  program another compiler made, `LoadLibrary` at run time, and the
+  ReactOS loader.
 - **Not supported:** C's `fork()` and process groups.
 - **Symbolic links** are Windows' own (`CreateSymbolicLinkW`). Making one
   needs the privilege, or Windows 10's developer mode; without it `symlink`

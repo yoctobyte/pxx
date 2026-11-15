@@ -2027,6 +2027,17 @@ begin
     because the consumers cannot test for it at RUNTIME -- `mov rax, fs:[0]`
     faults on an fs base of 0 and, worse, inside a glibc host it succeeds and
     returns glibc's TCB. }
+  { --os=nt --shared: a DLL's TLS block is the loader's too, one per thread
+    from the DLL's own TLS directory, and zeroed. There is no entry code to
+    fill its slots, so they stay 0: no tid and no stack bounds (the I/O lock
+    then asks gettid), no self-pointer (TlsViaTeb never reads it). The flag
+    is what makes pewriter write that TLS directory. }
+  if EmitSharedMode and TlsViaTeb then
+  begin
+    TlsMainInstalled := True;
+    BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize + 16);
+    Exit;
+  end;
   if EmitObjMode or EmitSharedMode then Exit;
   if (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32) then
   begin

@@ -1352,14 +1352,48 @@ end;
   self-pointer in slot 0, `mov reg, gs:[0]` (fs under the BSDs that use it).
   Under --os=windows (TlsViaTeb) it is the executable's PE TLS data:
   `mov reg, gs:[0x58]` (the TEB's ThreadLocalStoragePointer), then
-  `mov reg, [reg]` (index 0). }
+  `mov reg, [reg]` (index 0).
+
+  In a DLL (--os=nt --shared) the index is the loader's choice, written into
+  a BSS word the TLS directory names (PeDllTlsIdxBss), so the second load is
+  `mov reg, [reg + idx*8]` with idx in a borrowed register: rax (rcx when reg
+  is rax), pushed below the red zone the way exception_emit's TEB store does
+  it. No flags change (lea, push, mov, pop), so this can still sit between a
+  compare and its branch. }
 procedure EmitTlsSelfLoad(reg: Integer);
-var rex, m: Integer;
+var rex, m, sc: Integer;
 begin
   rex := $48;
   if reg >= 8 then rex := $4C;
   m := ((reg and 7) shl 3) or 4;
-  if TlsViaTeb then
+  if TlsViaTeb and EmitSharedMode then
+  begin
+    if PeDllTlsIdxBss < 0 then
+    begin
+      BSSSize := (BSSSize + 7) and (not 7);
+      PeDllTlsIdxBss := BSSSize;
+      Inc(BSSSize, 8);
+    end;
+    if reg = 0 then sc := 1 else sc := 0;
+    EmitB($65); EmitB(rex); EmitB($8B); EmitB(m); EmitB($25); EmitI32($58);   { mov reg, gs:[0x58] }
+    EmitAsmX64(['lea rsp, [rsp-128]']);
+    EmitB($50 or sc);                                                         { push rax/rcx }
+    EmitB($48); EmitB($8B); EmitB($04 or (sc shl 3)); EmitB($25);             { mov sc, [idx] (rip-relative) }
+    EmitGlobRef(PeDllTlsIdxBss);
+    if reg >= 8 then EmitB($4D) else EmitB($48);                              { mov reg, [reg + sc*8] }
+    EmitB($8B);
+    if (reg and 7) = 5 then
+    begin
+      EmitB($44 or ((reg and 7) shl 3)); EmitB($C0 or (sc shl 3) or (reg and 7)); EmitB(0);
+    end
+    else
+    begin
+      EmitB($04 or ((reg and 7) shl 3)); EmitB($C0 or (sc shl 3) or (reg and 7));
+    end;
+    EmitB($58 or sc);                                                         { pop }
+    EmitAsmX64(['lea rsp, [rsp+128]']);
+  end
+  else if TlsViaTeb then
   begin
     EmitB($65); EmitB(rex); EmitB($8B); EmitB(m); EmitB($25); EmitI32($58);
     if reg >= 8 then EmitB($4D) else EmitB($48);
