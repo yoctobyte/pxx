@@ -1388,6 +1388,7 @@ var
   isGenerator, isStackless, isAsync: Boolean;
   isIram, isInterrupt: Boolean;
   sawIram, sawCdecl, sawRegister, sawStackful, sawReintroduce: Boolean;
+  sawStdcall: Boolean;
   sawVarargs: Boolean;
   sawWeakExternal: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
@@ -2093,7 +2094,7 @@ begin
   declOverload := False;
   declFlexColumn := False;
   declInline := False;
-  sawIram := False; sawCdecl := False; sawRegister := False;
+  sawIram := False; sawCdecl := False; sawRegister := False; sawStdcall := False;
   sawVarargs := False;
   sawWeakExternal := False;
   sawStackful := False; sawReintroduce := False;
@@ -2130,6 +2131,7 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then
     begin isIram := True; sawIram := True; end;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'cdecl') then sawCdecl := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stdcall') then sawStdcall := True;
     { `varargs` -- FPC's spelling for the trailing `...` of a C callee. NOT in
       IsInertRoutineDirectiveTok, whose comment names it as the first of the
       directives it refuses to swallow BECAUSE it changes how a call marshals;
@@ -3014,6 +3016,14 @@ begin
     bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
   if sawCdecl and TargetSelectsCdecl then
     ProcCdecl[procIdx] := True;
+  { set, never cleared: a forward declaration may carry it and the body not }
+  { and its body takes SysV (ProcCdecl), which is what the adapter calls:
+    pxx's internal convention does not put a float in xmm }
+  if sawStdcall and (TargetKernel = KERNEL_WINDOWS) then
+  begin
+    ProcWinCb[procIdx] := True;
+    if TargetSelectsCdecl then ProcCdecl[procIdx] := True;
+  end;
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
   if isInterrupt and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then

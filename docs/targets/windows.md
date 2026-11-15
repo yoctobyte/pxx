@@ -264,11 +264,16 @@ path means what it means on Linux.
   (`qsort(@v[0], n, 4, @Cmp)`, `EnumWindows(@Cb, 0)`) is handed over as an
   adapter that takes the Microsoft convention and calls the routine,
   floating-point and stack arguments included (up to 14 parameters). The
-  program's own calls to the routine are unchanged. The adapter is made only
-  where the address goes straight into the call: an address stored first,
-  in a variable or a record field such as `lpfnWndProc`, is the routine
-  itself, and Windows calling it crashes. A record passed by value to a
-  callback is not converted.
+  program's own calls to the routine are unchanged. Declare a callback
+  `stdcall`, as Delphi and Free Pascal code does, and every address taken
+  of it is the adapter, so one stored first also works: a variable, or a
+  record field such as a window class's `lpfnWndProc`. Without `stdcall`,
+  only an address passed straight into the call is adapted, and one stored
+  first is the routine itself, which crashes when Windows calls it. Calling
+  a `stdcall` routine through a procedural variable from Pascal does not
+  work: the variable holds the adapter, which expects the Microsoft
+  convention. Call it by name. A record passed by value to a callback is not
+  converted.
 
 A system call the translator does not map returns `ENOSYS`. Set
 `PXX_WINABI_TRACE=1` in the environment to have each one named on stderr.

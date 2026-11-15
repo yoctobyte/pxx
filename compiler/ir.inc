@@ -6433,6 +6433,28 @@ begin
   IRMarkStatementNode(IRAppendCall(pi, arg, -1, Ord(tyPointer)));
 end;
 
+{ --os=nt: PxxWinCallback(addr, shape), the address of an adapter Windows
+  can call for routine pi whose own address is the IR value addr. shape is
+  the parameter count shl 16, plus bit i for a Single/Double parameter i.
+  feature-port-windows-pe }
+function IRWinCallbackOf(pi, addr: Integer): Integer;
+var shape: Int64; i, a0, a1, wpi: Integer;
+begin
+  Result := addr;
+  wpi := FindProc('PxxWinCallback');
+  if wpi < 0 then Exit;
+  shape := Int64(Procs[pi].ParamCount) shl 16;
+  for i := 0 to Procs[pi].ParamCount - 1 do
+    if (i < 16) and (not Procs[pi].Params[i].IsRef) and
+       ((Procs[pi].Params[i].TypeKind = tyDouble) or (Procs[pi].Params[i].TypeKind = tySingle)) then
+      shape := shape or (Int64(1) shl i);
+  a0 := IRAppend(IR_ARG, addr, -1, -1, 0, Ord(tyPointer));
+  a1 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, Integer(shape), Ord(tyNativeInt)),
+          -1, -1, 0, Ord(tyNativeInt));
+  IRB[a0] := a1;
+  Result := IRAppendCall(wpi, a0, -1, Ord(tyPointer));
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -6455,7 +6477,6 @@ var argTk: TTypeKind;
   pvSinkIsProcVar: Boolean;
   tempIsByValueCopy: Boolean;
   fcBoxPi, fcObjPi, fcArg, fcBox: Integer;   { a fresh callable argument }
-  cbPi, cbI, cbA0, cbA1: Integer; cbShape: Int64;   { an NT DLL callback }
 begin
   if isRefArg then CheckVarArgWidth(cpi, pathIdx, argAST);
   if isRefArg then IRStrUniqueForByRefElem(cpi, pathIdx, argAST);
@@ -6466,19 +6487,10 @@ begin
     Pascal's own calls to the routine stay SysV. feature-port-windows-pe }
   if (not isRefArg) and (TargetKernel = KERNEL_WINDOWS) and (cpi >= 0) and ProcExternal[cpi] and
      (ASTKind[argAST] = AN_PROCADDR) and (ASTIVal[argAST] >= 0) and
-     (not ProcExternal[ASTIVal[argAST]]) and (FindProc('PxxWinCallback') >= 0) then
+     (not ProcExternal[ASTIVal[argAST]]) and (not ProcWinCb[ASTIVal[argAST]]) and
+     (FindProc('PxxWinCallback') >= 0) then
   begin
-    cbPi := ASTIVal[argAST];
-    cbShape := Int64(Procs[cbPi].ParamCount) shl 16;
-    for cbI := 0 to Procs[cbPi].ParamCount - 1 do
-      if (cbI < 16) and (not Procs[cbPi].Params[cbI].IsRef) and
-         ((Procs[cbPi].Params[cbI].TypeKind = tyDouble) or (Procs[cbPi].Params[cbI].TypeKind = tySingle)) then
-        cbShape := cbShape or (Int64(1) shl cbI);
-    cbA0 := IRAppend(IR_ARG, IRLowerAST(argAST), -1, -1, 0, Ord(tyPointer));
-    cbA1 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, Integer(cbShape), Ord(tyNativeInt)),
-              -1, -1, 0, Ord(tyNativeInt));
-    IRB[cbA0] := cbA1;
-    Result := IRAppendCall(FindProc('PxxWinCallback'), cbA0, -1, Ord(tyPointer));
+    Result := IRWinCallbackOf(ASTIVal[argAST], IRLowerAST(argAST));
     Exit;
   end;
   { A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS OWNED BY A HIDDEN VARIANT, as
@@ -13974,6 +13986,11 @@ begin
               'write the handler as an `assembler` routine and take ITS address; see ' +
               'test/test_esp_bare_csr.pas.');
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
+      { --os=nt, a `stdcall` routine: every address of it is the adapter
+        Windows can call (IRWinCallbackOf). }
+      if (TargetKernel = KERNEL_WINDOWS) and (ASTIVal[node] >= 0) and
+         ProcWinCb[ASTIVal[node]] and (not ProcExternal[ASTIVal[node]]) then
+        Result := IRWinCallbackOf(ASTIVal[node], Result);
     end;
 
     AN_CLASSREF:

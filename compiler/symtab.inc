@@ -14805,7 +14805,7 @@ begin
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
-  SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
+  SetLength(ProcCdecl, n);  SetLength(ProcWinCb, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcResultFresh, n);  SetLength(ProcResultArgIdx, n);  SetLength(ProcResultFreshOrArg, n);  SetLength(ProcParamStays, n);  SetLength(ProcAggregateDestSym, n);
@@ -14881,6 +14881,7 @@ begin
   ProcLibrary[ProcCount]      := -1;
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;
+  ProcWinCb[ProcCount]        := False;
   ProcUnitIdx[ProcCount] := CurrentUnitIdx; ProcDeclImpl[ProcCount] := DeclInImplNow;
   ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
   ProcPyRebindTok[ProcCount]  := -2;  { -2 = not computed; see defs.inc }

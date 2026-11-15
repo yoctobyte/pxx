@@ -5333,6 +5333,7 @@ var
   ProcCaseSensitive : array of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array of Integer; { Strs[] entry for DT_NEEDED name }
   ProcExtName  : array of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
+  ProcWinCb    : array of Boolean; { --os=nt, a routine declared `stdcall`: a callback Windows calls. Every address taken of it (@R, into a variable or a record field such as lpfnWndProc) is winabi's PxxWinCallback adapter, which takes the Microsoft convention; direct calls stay internal. feature-port-windows-pe }
   ProcCdecl    : array of Boolean; { signature uses the C (System V AMD64) convention. Set for a `... cdecl` PROC TYPE so an INDIRECT call through it marshals SysV (int->rdi.., float->xmm0..) instead of PXX's internal all-integer convention — needed for dlsym'd C functions with float args. }
   ProcVariadic : array of Boolean; { C function with a trailing `...` — needs the System V register-save prologue so va_arg can read the variadic args. }
   ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }

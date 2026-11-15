@@ -7407,12 +7407,17 @@ procedure EatProcTypeCallConv(mpi: Integer);
   has there is no second one to name. `register` in particular must NOT become
   C-ABI: it is FPC's own convention, not C's. Whether `stdcall` and `safecall`
   should mark anything is a question a real Windows target answers, not this
-  one (feature-port-windows-pe). }
+  one (feature-port-windows-pe). --os=nt answers it for `stdcall`: there a
+  stdcall routine's body is C-ABI (its addresses are Windows callbacks
+  through winabi's adapter, which calls SysV), so a stdcall procedural type
+  is C-ABI too, or the address would not fit the type. }
 begin
   if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkIdent) and IsCallConvName(GetTokenStr(TokPos)) then
   begin
     if CaseEqual(GetTokenStr(TokPos), 'cdecl') then ProcCdecl[mpi] := True;
+    if CaseEqual(GetTokenStr(TokPos), 'stdcall') and (TargetKernel = KERNEL_WINDOWS) and
+       TargetSelectsCdecl then ProcCdecl[mpi] := True;
     Next;   { consume ';' }
     Next;   { consume the directive }
   end;
