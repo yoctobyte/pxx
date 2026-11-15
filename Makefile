@@ -11329,7 +11329,8 @@ test-windows: $(COMPILER)
 	# (the fallbacks Windows 7 and ReactOS take), and the import table must
 	# name only kernel32 and ws2_32. --shared writes a DLL: one from Pascal and
 	# one from C, called by a pxx executable (test_nt_dll_built_by_pxx.pas), and
-	# the C one exports its own functions and none of lib/crtl's.
+	# the C one exports its own functions (and __pxx_dll_table), none of lib/crtl's. dlopen and
+	# dynlibs load that DLL and msvcrt.dll at run time.
 	# feature-port-windows-pe
 	@d=$(TESTTMP)/os_windows_run26; mkdir -p $$d && \
 	  for t in test/hello.pas test/test_exception_unwind_temp_leak.pas test/test_exception_object_leaks.pas \
@@ -11434,7 +11435,12 @@ test-windows: $(COMPILER)
 	  ./$(COMPILER) --os=windows --shared test/nt_dll_c_lib.c $$d/nt_dll_c_lib.dll >/dev/null && \
 	  ./$(COMPILER) --os=windows --threadsafe test/test_nt_dll_built_by_pxx.pas $$d/dllpxx.exe >/dev/null && \
 	  tools/expect_same.sh windows_dll_built_by_pxx "$$(tools/vm/wine.sh $$d/dllpxx.exe 2>&1; echo exit=$$?)" "$$(cat test/test_nt_dll_built_by_pxx.expected; echo exit=0)" || exit 1; \
-	  tools/expect_same.sh windows_dll_exports "$$(objdump -p $$d/nt_dll_c_lib.dll | sed -n 's/^.*+base\[ *[0-9]*\]  [0-9a-f]* //p' | tr '\n' ' ')" "c_dup_len c_next c_peek c_scale " || exit 1; \
+	  tools/expect_same.sh windows_dll_exports "$$(objdump -p $$d/nt_dll_c_lib.dll | sed -n 's/^.*+base\[ *[0-9]*\]  [0-9a-f]* //p' | tr '\n' ' ')" "__pxx_dll_table c_dup_len c_next c_peek c_scale " || exit 1; \
+	  : "dlopen and dynlibs: the pxx DLL above and msvcrt.dll, loaded at run time"; \
+	  ./$(COMPILER) --os=windows test/c_nt_dlopen.c $$d/dlopen.exe >/dev/null && \
+	  tools/expect_same.sh windows_dlopen "$$(tools/vm/wine.sh $$d/dlopen.exe 2>&1; echo exit=$$?)" "$$(cat test/c_nt_dlopen.expected; echo exit=0)" || exit 1; \
+	  ./$(COMPILER) --os=windows test/test_nt_dynlibs.pas $$d/dynlibs.exe >/dev/null && \
+	  tools/expect_same.sh windows_dynlibs "$$(tools/vm/wine.sh $$d/dynlibs.exe 2>&1; echo exit=$$?)" "$$(cat test/test_nt_dynlibs.expected; echo exit=0)" || exit 1; \
 	  echo "test-windows: OK"
 
 test-asm: $(COMPILER)

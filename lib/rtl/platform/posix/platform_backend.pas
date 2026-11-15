@@ -504,6 +504,34 @@ begin
   Result := True;
 end;
 
+{$ifdef PXX_OS_WINDOWS}
+
+{ --os=nt: Windows' own loader, through the translator (winabi.pas,
+  WIN_PXX_DLOPEN/_DLSYM/_DLCLOSE): LoadLibraryA, GetProcAddress, FreeLibrary.
+  A symbol comes back callable from pxx code: a pxx DLL's routine itself, or
+  an adapter to Microsoft's convention (winabi.pas says which signatures that
+  adapter gets right). }
+function PalBackendHasDynlib: Boolean;
+begin
+  Result := True;
+end;
+
+function PalBackendDlOpen(name: PChar): Pointer;
+begin
+  Result := Pointer(__pxxrawsyscall($7F000004, Int64(name), 0, 0, 0, 0, 0));
+end;
+
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := Pointer(__pxxrawsyscall($7F000005, Int64(handle), Int64(sym), 0, 0, 0, 0));
+end;
+
+function PalBackendDlClose(handle: Pointer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall($7F000006, Int64(handle), 0, 0, 0, 0, 0));
+end;
+
+{$else}
 {$ifdef PXX_DYNLIB_LIBC}
 
 const
@@ -560,6 +588,7 @@ begin
   Result := 0;
 end;
 
+{$endif}
 {$endif}
 
 function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
