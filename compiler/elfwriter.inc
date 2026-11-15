@@ -2210,7 +2210,12 @@ begin
     displacement pointing at it was wrong.
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   PatchDynCallSites(dataBase, codeVA);
-  if (ExternalCount > 0) and (TargetKernel <> KERNEL_WINDOWS) then   { PE: PatchPEImports }
+  { Not for --shared either: the .so writer emits its own .rela.dyn and never
+    ran PrepareDynamicData, so DynamicRelaOff is 0 there and this wrote the
+    executable-shaped rela table over the first bytes of Data[] -- measured on
+    an --os=openbsd --shared library (it imports libc): WriteLn's newline
+    constant at .data+0x19 became '?', byte 1 of a GOT slot address. }
+  if (ExternalCount > 0) and (TargetKernel <> KERNEL_WINDOWS) and not EmitSharedMode then   { PE: PatchPEImports }
     PatchDynamicData(dataBase);
 
   for i := 0 to MethodFixCount-1 do
@@ -8096,8 +8101,12 @@ begin
   if FiniThunkOff >= 0 then Inc(dynamicSize, 16);
 
   phOff := ELF_HEADER_SIZE;
-  textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
-  dataOff := AlignTo(textOff + CodeLen, 8);
+  textOff := phOff + 4 * PROG_HEADER_SIZE;   { 2 x PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
+  { The data starts on a page of its own: the text is mapped R+X and the rest
+    RW, never one RWX segment. NetBSD (PaX MPROTECT) refuses to map a
+    writable executable segment ("mmap of data failed: Permission denied")
+    and OpenBSD enforces W^X; Linux took it, but should not have to. }
+  dataOff := AlignTo(textOff + CodeLen, 4096);
   dynstrOff := dataOff + DataLen;
   dynsymOff := AlignTo(dynstrOff + dynstrSize, 8);
   hashOff := dynsymOff + numDynSyms * 24;
@@ -8168,15 +8177,19 @@ begin
   writeU16(f,3);writeU16(f,62);writeU32(f,1);           { ET_DYN, EM_X86_64 }
   writeU64(f,0);writeU64(f,phOff);writeU64(f,shOff);    { entry=0, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
-  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,3);
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,4);
   writeU16(f,64);writeU16(f,10);writeU16(f,9);  { shentsize, shnum, shstrndx }
 
-  { PT_LOAD: whole file, RWX (same single-segment simplification the ET_EXEC
-    writer already uses). }
-  writeU32(f,1);writeU32(f,7);
+  { PT_LOAD 1: the headers and the code, R+X. }
+  writeU32(f,1);writeU32(f,5);
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
-  { memsz > filesz: the tail is .bss, zero-filled by the kernel. }
-  writeU64(f,fileSize);writeU64(f,memSize);writeU64(f,$200000);
+  writeU64(f,textOff + CodeLen);writeU64(f,textOff + CodeLen);writeU64(f,$1000);
+  { PT_LOAD 2: data, the dynamic tables and .bss, RW; vaddr = file offset as
+    everywhere in this writer. memsz > filesz: the tail is .bss, zero-filled
+    by the kernel. }
+  writeU32(f,1);writeU32(f,6);
+  writeU64(f,dataOff);writeU64(f,dataOff);writeU64(f,dataOff);
+  writeU64(f,fileSize - dataOff);writeU64(f,memSize - dataOff);writeU64(f,$1000);
 
   { PT_DYNAMIC }
   writeU32(f,2);writeU32(f,6);

@@ -7,6 +7,7 @@
 #   tools/vm/freebsd.sh fetch     download + verify FreeBSD 15.1 qcow2, one-time key setup
 #   tools/vm/freebsd.sh start     boot headless (ssh on 127.0.0.1:$PXX_FBSD_PORT)
 #   tools/vm/freebsd.sh run BIN [ARGS...]   copy BIN in, run it, relay stdout/stderr/exit
+#   tools/vm/freebsd.sh ssh CMD...          run a shell command in the VM
 #   tools/vm/freebsd.sh stop
 #
 # The image lives in $PXX_VM_DIR/freebsd (default /data/vm/freebsd) -- several
@@ -72,6 +73,8 @@ run)
     ssh $SSHO -p "$PORT" root@127.0.0.1 "mv -f /tmp/pxxbin.new /tmp/pxxbin && chmod +x /tmp/pxxbin && cd /tmp && ulimit -s 8192 && $envs /tmp/pxxbin $*"
   fi
   ;;
+ssh)
+  shift; exec ssh $SSHO -p "$PORT" root@127.0.0.1 "$@" ;;
 stop)
   ssh $SSHO -p "$PORT" root@127.0.0.1 "shutdown -p now" 2>/dev/null || true
   ;;

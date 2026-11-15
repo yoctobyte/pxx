@@ -119,8 +119,7 @@ takes about 20 minutes.
 The compiler refuses these with a message that names the reason:
 
 - CPUs other than x86-64 and aarch64 (`--target=arm32` and so on)
-- `--shared` and `.so` output
-- `--emit-obj` and `.o` output
+- `--shared` and `--emit-obj` on aarch64 (not yet linked and run there)
 - `--rtl-libc`
 
 These compile, but the call fails when the program runs:
@@ -140,6 +139,36 @@ These compile, but the call fails when the program runs:
   the C library function instead.
 
 Device numbers are real FreeBSD numbers: `/dev/null` is 0:20, not Linux's 1:3.
+
+## Objects and shared libraries
+
+On x86-64, `--emit-obj` and `--shared` work for FreeBSD, NetBSD, DragonFly
+and OpenBSD, and the system's own `cc` links the result into a C program:
+
+```sh
+./pxx --os=freebsd --emit-obj mylib.pas mylib.o     # then, on FreeBSD:
+cc main.c mylib.o -o prog
+./pxx --os=netbsd --shared mylib.pas libmylib.so    # cc main.c -L. -lmylib
+```
+
+The export surface and the rules are the Linux ones (see
+[Linking a pxx object into another program](../reference/objects.md)): the
+C-convention routines are exported, and the program body runs from the
+host's init array before `main`. The translator is ordinary code inside the
+object, so the pxx half makes its own system calls while the host's half
+uses the system's libc. Two things are specific to these systems:
+
+- A library's text is mapped read+execute and its data read-write, in two
+  segments. NetBSD (PaX MPROTECT) refuses to map one writable, executable
+  segment, and OpenBSD enforces W^X.
+- On OpenBSD only the default (libc) build can be an object or a library.
+  `--rtl-raw` is refused there, because OpenBSD accepts a system call only
+  from libc or from the program's own pinned table, and an object inside
+  someone else's program has neither.
+
+Each `make test-<os>` links `test/test_os_objlink.pas` both ways with the
+VM's `cc` (`tools/vm/objlink.sh`) and compares the output with the same
+pair linked by gcc on Linux.
 
 ## Testing it
 

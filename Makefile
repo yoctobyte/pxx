@@ -10893,7 +10893,8 @@ test-freebsd: $(COMPILER)
 	  for t in test/c_os_freebsd_termios.c; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=freebsd $$t $$d/fe.fb >/dev/null && \
 	    tools/expect_same.sh freebsd_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/freebsd.sh run $$d/fe.fb 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
-	  done; echo "test-freebsd: OK"
+	  done; tools/expect_same.sh freebsd_objlink "$$(tools/vm/objlink.sh freebsd ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" "$$(tools/vm/objlink.sh linux ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" || exit 1; \
+	  echo "test-freebsd: OK"
 
 # --os=freebsd --target=aarch64 on a real FreeBSD/arm64 kernel (qemu TCG VM,
 # PXX_FBSD_ARCH=aarch64 tools/vm/freebsd.sh; port 2228). NOT in `test`: it
@@ -11104,7 +11105,8 @@ test-openbsd: $(COMPILER)
 	  for t in test/c_os_freebsd_termios.c; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=openbsd --rtl-raw $$t $$d/fe.ob >/dev/null && \
 	    tools/expect_same.sh openbsd_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/openbsd.sh run $$d/fe.ob 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
-	  done; echo "test-openbsd: OK"
+	  done; tools/expect_same.sh openbsd_objlink "$$(tools/vm/objlink.sh openbsd ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" "$$(tools/vm/objlink.sh linux ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" || exit 1; \
+	  echo "test-openbsd: OK"
 
 # --os=openbsd --rtl-libc (EXPERIMENTAL): the same translator, but its last
 # step calls OpenBSD's libc (libc.so.104.0, OpenBSD 8.0) instead of the
@@ -11203,7 +11205,8 @@ test-netbsd: $(COMPILER)
 	  for t in test/c_os_freebsd_termios.c; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=netbsd $$t $$d/fe.nb >/dev/null && \
 	    tools/expect_same.sh netbsd_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/netbsd.sh run $$d/fe.nb 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
-	  done; echo "test-netbsd: OK"
+	  done; tools/expect_same.sh netbsd_objlink "$$(tools/vm/objlink.sh netbsd ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" "$$(tools/vm/objlink.sh linux ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" || exit 1; \
+	  echo "test-netbsd: OK"
 
 # --os=dragonfly (EXPERIMENTAL) on a real DragonFly BSD 6.4.2 kernel (qemu VM,
 # tools/vm/dragonfly.sh, port 2230; the image lives under $PXX_VM_DIR, default
@@ -11253,7 +11256,8 @@ test-dragonfly: $(COMPILER)
 	  for t in test/c_os_freebsd_termios.c; do \
 	    ./$(COMPILER) $$t $$d/fe.lx >/dev/null && ./$(COMPILER) --os=dragonfly $$t $$d/fe.df >/dev/null && \
 	    tools/expect_same.sh dragonfly_pty_$$(basename $$t) "$$(PXX_VM_PTY=1 tools/vm/dragonfly.sh run $$d/fe.df 2>&1)" "$$(script -qec $$d/fe.lx /dev/null </dev/null | tr -d '\r')" || exit 1; \
-	  done; echo "test-dragonfly: OK"
+	  done; tools/expect_same.sh dragonfly_objlink "$$(tools/vm/objlink.sh dragonfly ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" "$$(tools/vm/objlink.sh linux ./$(COMPILER) $$d test/test_os_objlink.pas test/test_os_objlink_main.c 2>&1)" || exit 1; \
+	  echo "test-dragonfly: OK"
 
 test-minix: $(COMPILER)
 	# --os=minix (EXPERIMENTAL): Minix 3.4 i386 on the VM against the Linux

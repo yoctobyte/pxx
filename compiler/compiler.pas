@@ -779,31 +779,87 @@ begin
   PrintBuildIdentity('  ');
 end;
 
+function WhichOnPath(const what: AnsiString): AnsiString; forward;
+
+function ObjOrSoWord: AnsiString;
+begin
+  if EmitSharedMode then ObjOrSoWord := 'shared-library output (--shared, .so)'
+  else ObjOrSoWord := 'object output (--emit-obj, .o)';
+end;
+
 procedure PrintTargetList;
-{ Honest about the two ways a target can be missing: a backend can be COMPILED
+{ Honest about the ways a target can be missing: a backend can be COMPILED
   OUT (-dPXX_NO_I386 / -dPXX_NO_ARM32), and a target that emits perfectly well
-  may still not RUN here. Both are things a user hits and neither is guessable. }
+  may still not RUN here. The "runs here" column is answered for THIS host
+  (the compiler's own CPU and OS, see NativeArch/NativeKernel) and probes PATH
+  for the tool that would run it (qemu-user, Wine), so it is the same answer
+  `--doctor` gives, not a recital that only holds on an x86-64 Linux box. }
 var i: Integer;
+  function ListPad(const s: AnsiString; w: Integer): AnsiString;
+  var r: AnsiString;
+  begin
+    r := s;
+    while Length(r) < w do AppendChar(r, ' ');
+    ListPad := r;
+  end;
+  function CpuRuns(arch: Integer; const qemu: AnsiString): AnsiString;
+  begin
+    if arch = NativeArch then CpuRuns := 'yes'
+    else if (arch = TARGET_I386) and (NativeArch = TARGET_X86_64)
+            and (NativeKernel = KERNEL_LINUX) then CpuRuns := 'yes'
+    else if NativeKernel <> KERNEL_LINUX then CpuRuns := 'no'
+    else if Length(WhichOnPath(qemu)) > 0 then CpuRuns := 'via ' + qemu
+    else CpuRuns := 'needs ' + qemu;
+  end;
+  procedure CpuRow(arch: Integer; const name, qemu, notes: AnsiString);
+  var n: AnsiString;
+  begin
+    n := name;
+    if arch = NativeArch then n := n + ' (default)';
+    WriteLn(ListPad(n, 24), ListPad(CpuRuns(arch, qemu), 20), notes);
+  end;
+  procedure OsRow(k: Integer; const name, cpus, notes: AnsiString);
+  var n, runs: AnsiString;
+  begin
+    n := name;
+    if k = NativeKernel then n := n + ' (default)';
+    if k = NativeKernel then runs := 'yes'
+    else if (k = KERNEL_WINDOWS) and (Length(WhichOnPath('wine64')) > 0) then runs := 'via wine64'
+    else if (k = KERNEL_WINDOWS) and (Length(WhichOnPath('wine')) > 0) then runs := 'via wine'
+    else if k = KERNEL_WINDOWS then runs := 'needs wine, or Windows'
+    else if k = KERNEL_LINUX then runs := 'no (a Linux box or VM)'
+    else runs := 'no (a VM)';
+    WriteLn(ListPad(n, 24), ListPad(runs, 24), ListPad(cpus, 16), notes);
+  end;
 begin
   WriteLn('target                  runs on this host   notes');
-  if NativeArch = TARGET_X86_64 then
-    WriteLn('x86_64 (default)        yes                 native')
-  else
-    WriteLn('x86_64                  on an x86-64 host');
+  CpuRow(TARGET_X86_64, 'x86_64', 'qemu-x86_64', 'native');
 {$ifdef PXX_NO_I386}
   WriteLn('i386                    (not built)         backend compiled out (-dPXX_NO_I386)');
 {$else}
-  WriteLn('i386                    via qemu-i386       32-bit');
+  CpuRow(TARGET_I386, 'i386', 'qemu-i386', '32-bit');
 {$endif}
-  WriteLn('aarch64                 via qemu-aarch64');
+  CpuRow(TARGET_AARCH64, 'aarch64', 'qemu-aarch64', '');
 {$ifdef PXX_NO_ARM32}
   WriteLn('arm32                   (not built)         backend compiled out (-dPXX_NO_ARM32)');
 {$else}
-  WriteLn('arm32                   via qemu-arm');
+  CpuRow(TARGET_ARM32, 'arm32', 'qemu-arm', '');
 {$endif}
-  WriteLn('riscv32                 via qemu-riscv32');
+  CpuRow(TARGET_RISCV32, 'riscv32', 'qemu-riscv32', '');
   WriteLn('xtensa                  no                  ESP32/S2/S3 — flash it');
-  WriteLn('wasm32                  via wasmtime        WebAssembly (WASI): Pascal, C and Nil Python');
+  if Length(WhichOnPath('wasmtime')) > 0 then
+    WriteLn('wasm32                  via wasmtime        WebAssembly (WASI): Pascal, C and Nil Python')
+  else
+    WriteLn('wasm32                  needs wasmtime      WebAssembly (WASI): Pascal, C and Nil Python');
+  WriteLn;
+  WriteLn('--os=                   runs on this host       CPUs            notes');
+  OsRow(KERNEL_LINUX, 'linux', 'all of the above', '');
+  OsRow(KERNEL_FREEBSD, 'freebsd', 'x86_64 aarch64', 'EXPERIMENTAL');
+  OsRow(KERNEL_OPENBSD, 'openbsd', 'x86_64 aarch64', 'EXPERIMENTAL; libc, or --rtl-raw');
+  OsRow(KERNEL_NETBSD, 'netbsd', 'x86_64 aarch64', 'EXPERIMENTAL');
+  OsRow(KERNEL_DRAGONFLY, 'dragonfly', 'x86_64', 'EXPERIMENTAL');
+  OsRow(KERNEL_MINIX, 'minix', 'i386', 'EXPERIMENTAL; no threads');
+  OsRow(KERNEL_WINDOWS, 'nt', 'x86_64', 'EXPERIMENTAL; alias windows; .exe');
   WriteLn;
   WriteLn('default: ', ArchName(NativeArch), ' ', KernelOsNameOf(NativeKernel),
           ' (this compiler''s own platform; --target= and --os= choose another)');
@@ -968,6 +1024,15 @@ end;
   tool installed?", answered without execve (the self-hosted compiler has none).
   sysopen(O_RDONLY) succeeds on an executable file, and a tool nobody may READ
   is not one this compiler could hand work to either. }
+function PathListSep: Char;
+begin
+{$ifdef PXX_OS_WINDOWS}
+  PathListSep := ';';
+{$else}
+  PathListSep := ':';
+{$endif}
+end;
+
 function WhichOnPath(const what: AnsiString): AnsiString;
 var pathVar, cand: AnsiString; i, start, f: Integer;
 begin
@@ -977,7 +1042,7 @@ begin
   start := 1;
   for i := 1 to Length(pathVar) + 1 do
   begin
-    if (i > Length(pathVar)) or (pathVar[i] = ':') then
+    if (i > Length(pathVar)) or (pathVar[i] = PathListSep) then
     begin
       if i > start then
       begin
@@ -990,6 +1055,13 @@ begin
         if cand[Length(cand)] <> '/' then AppendChar(cand, '/');
         cand := cand + what;
         f := sysopen(cand, 0);
+{$ifdef PXX_OS_WINDOWS}
+        if f < 0 then
+        begin
+          cand := cand + '.exe';
+          f := sysopen(cand, 0);
+        end;
+{$endif}
         if f >= 0 then
         begin
           sysclose(f);
@@ -1146,7 +1218,8 @@ begin
   PrintBuildIdentity('');
   WriteLn;
   WriteLn('compile and run, this host:');
-  ShowDoctorRow('native x86-64 programs', True, 'always — pxx emits ELF directly, no as/ld needed', '');
+  ShowDoctorRow('native ' + ArchName(NativeArch) + ' programs', True,
+                'always (' + KernelOsNameOf(NativeKernel) + ') — pxx writes the executable directly, no as/ld needed', '');
   ShowDoctorRow('Pascal RTL units', WhereDirExists(rtldir), rtldir,
                 'RTL not found — set PXX_HOME, or `home <dir>` in pxx.cfg (pxx --where)');
   ShowDoctorRow('builtin units', WhereDirExists(bdir), bdir,
@@ -1168,6 +1241,15 @@ begin
   ShowDoctorRow('arm32', Length(p) > 0, p, 'qemu-arm not on PATH (qemu-user)');
   p := WhichOnPath('qemu-riscv32');
   ShowDoctorRow('riscv32', Length(p) > 0, p, 'qemu-riscv32 not on PATH (qemu-user)');
+  WriteLn;
+  WriteLn('run programs built for another OS (`--os=`):');
+  p := WhichOnPath('wine64');
+  if Length(p) = 0 then p := WhichOnPath('wine');
+  if NativeKernel = KERNEL_WINDOWS then
+    ShowDoctorRow('nt (Windows .exe)', True, 'this host', '')
+  else
+    ShowDoctorRow('nt (Windows .exe)', Length(p) > 0, p, 'wine not on PATH; .exe files still EMIT fine');
+  WriteLn('  the BSDs and Minix need that system (a VM: tools/vm/ in the source tree)');
   WriteLn;
   WriteLn('ESP32 (xtensa / riscv32 SoC targets):');
   ShowDoctorRow('ESP-IDF', WhereDirExists(home + '/esp/esp-idf'), home + '/esp/esp-idf',
@@ -3410,10 +3492,18 @@ begin
              or (TargetKernel = KERNEL_OPENBSD))) then
       ErrorNoPos('--os=' + KernelOsName + ' is x86-64 only' +
         ' (FreeBSD, NetBSD and OpenBSD also take --target=aarch64); other CPUs are not supported yet');
-    if EmitSharedMode then
-      ErrorNoPos('--os=' + KernelOsName + ': shared-library output (--shared, .so) is not supported; build an executable');
-    if EmitObjMode then
-      ErrorNoPos('--os=' + KernelOsName + ': object output (--emit-obj, .o) is not supported; build an executable');
+    { Objects and libraries for the BSDs: the translator is ordinary code
+      inside them, so the host's cc links them as it would a Linux one. }
+    if (EmitSharedMode or EmitObjMode) and
+       ((TargetKernel = KERNEL_WINDOWS) or (TargetKernel = KERNEL_MINIX)) then
+      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is not supported; build an executable');
+    if (EmitSharedMode or EmitObjMode) and (TargetArch <> TARGET_X86_64) then
+      ErrorNoPos('--os=' + KernelOsName + ': ' + ObjOrSoWord + ' is x86-64 only for now'
+        + ' (an arm64 object has not been linked and run on that system yet)');
+    if (EmitSharedMode or EmitObjMode) and (TargetKernel = KERNEL_OPENBSD) and not KernelLibc then
+      ErrorNoPos('--os=openbsd --rtl-raw: ' + ObjOrSoWord + ' is not supported: OpenBSD takes a system call'
+        + ' only from libc or the program''s own pinned table, and an object has neither;'
+        + ' drop --rtl-raw (the default goes through libc)');
     if KernelLibc then
     begin
       { The translator calls OpenBSD's libc instead of the kernel. }
@@ -3662,7 +3752,12 @@ begin
     layout ([rsp] = argc). First instruction of the image, before anything
     clobbers rdi (the TLS install below makes syscalls).
     feature-port-freebsd-native }
-  if (not isAsm) and ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_DRAGONFLY))
+  { Not in an object or a library: there code offset 0 is the program body,
+    called by the host's init array under the C ABI, so rdi/x0 is not the argc
+    block and moving the stack there is a jump into the void (measured: an
+    --os=freebsd --emit-obj object linked by cc died before main). }
+  if (not isAsm) and (not (EmitObjMode or EmitSharedMode))
+     and ((TargetKernel = KERNEL_FREEBSD) or (TargetKernel = KERNEL_DRAGONFLY))
      and (TargetArch = TARGET_X86_64) then
     EmitAsmX64(['mov rsp, rdi']);   { DragonFly's exec_setregs is FreeBSD's: rdi = the argc block }
   { --os=windows: the entry is called like a function (rsp = 8 mod 16, [rsp] a
@@ -3672,7 +3767,7 @@ begin
     pseudo-call answers its address; the first qword is how many follow, an
     even number) and it is copied onto an aligned stack, so every later entry
     stage reads what it reads on Linux. feature-port-windows-pe }
-  if (not isAsm) and (TargetKernel = KERNEL_WINDOWS) then
+  if (not isAsm) and (not (EmitObjMode or EmitSharedMode)) and (TargetKernel = KERNEL_WINDOWS) then
     EmitAsmX64([
       'mov eax, %', WIN_PXX_ARGBLOCK,
       'syscall',
@@ -3696,7 +3791,8 @@ begin
     AT_NULL move down 8 bytes (the strings stay; the pointers still reach
     them). Afterwards [sp] = argc, the Linux entry layout every later stage
     reads. feature-port-freebsd-native }
-  if (not isAsm) and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_AARCH64) then
+  if (not isAsm) and (not (EmitObjMode or EmitSharedMode))
+     and (TargetKernel = KERNEL_FREEBSD) and (TargetArch = TARGET_AARCH64) then
   begin
     EmitI32($910003E9);       { mov  x9, sp }
     EmitI32($EB09001F);       { cmp  x0, x9 }
