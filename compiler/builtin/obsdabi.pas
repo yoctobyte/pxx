@@ -75,6 +75,7 @@ const
   OB_TFORK = 8; OB_FUTEX = 83; OB_THREXIT = 302;
   OB_PPOLL = 109; OB_PSELECT = 110;
   OB_MKNOD = 14; OB_SYNC = 36; OB_STATFS = 63; OB_FSTATFS = 64; OB_UTIMES = 76;
+  OB_GETFSSTAT = 62;
   OB_GETGROUPS = 79; OB_SETGROUPS = 80; OB_FUTIMENS = 85; OB_CLOCK_SETTIME = 88;
   OB_SETREUID = 126; OB_SETREGID = 127; OB_GETTHRNAME = 142; OB_SETTHRNAME = 143;
   OB_MLOCK = 203; OB_MUNLOCK = 204; OB_MLOCKALL = 271; OB_MUNLOCKALL = 272;
@@ -177,6 +178,7 @@ function Lc_execve(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.
 function Lc_umask(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'umask';
 function Lc_statfs(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'statfs';
 function Lc_fstatfs(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'fstatfs';
+function Lc_getfsstat(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getfsstat';
 function Lc_gettimeofday(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'gettimeofday';
 function Lc_setitimer(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'setitimer';
 function Lc_getitimer(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getitimer';
@@ -769,6 +771,7 @@ begin
     OB_UMASK: r := Int64(LongInt(Lc_umask(a0, a1, a2, a3, a4, a5)));
     OB_STATFS: r := Int64(LongInt(Lc_statfs(a0, a1, a2, a3, a4, a5)));
     OB_FSTATFS: r := Int64(LongInt(Lc_fstatfs(a0, a1, a2, a3, a4, a5)));
+    OB_GETFSSTAT: r := Int64(LongInt(Lc_getfsstat(a0, a1, a2, a3, a4, a5)));
     OB_GETTIMEOFDAY: r := Int64(LongInt(Lc_gettimeofday(a0, a1, a2, a3, a4, a5)));
     OB_SETITIMER: r := Int64(LongInt(Lc_setitimer(a0, a1, a2, a3, a4, a5)));
     OB_GETITIMER: r := Int64(LongInt(Lc_getitimer(a0, a1, a2, a3, a4, a5)));
@@ -1289,6 +1292,85 @@ begin
   if n > cap then n := cap;
   for i := 0 to n - 1 do PByte(buf + i)^ := tmp[i];
   Result := n;
+end;
+
+{ ---- three more /proc files: fdinfo, mounts, stat (see proctext.inc) ---- }
+type TxPtr = Int64;
+{$I proctext.inc}
+
+{ OpenBSD struct stat: st_dev (32-bit) at 4, st_ino at 8. }
+function ObProcFdInfo(fd: Int64): Int64;
+var sb: array[0..31] of Int64; t: array[0..127] of Byte; n, r: Int64;
+begin
+  r := ObSys(OB_FSTAT, fd, Int64(@sb[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxFdInfo(Int64(@t[0]), n, PInteger(Int64(@sb[0]) + 4)^ and $FFFFFFFF, sb[1]);
+  Result := ObDataFd(Int64(@t[0]), n);
+end;
+
+{ getfsstat: struct statfs is 568 bytes, f_flags (32-bit) at 0, the type,
+  mount point and source at 120 (16), 136 and 226 (90 each). }
+function ObProcMounts: Int64;
+var cnt, size, fs, buf, n, i, e, fl: Int64;
+begin
+  cnt := ObSys(OB_GETFSSTAT, 0, 0, 2, 0, 0, 0);     { MNT_NOWAIT: how many }
+  if cnt < 0 then begin Result := Lx(cnt); Exit; end;
+  cnt := cnt + 4;
+  size := (cnt * 568 + cnt * 600 + $FFF) and (not Int64($FFF));
+  fs := ObSys(OB_MMAP, 0, size, 3, 2 or OB_MAP_ANON, -1, 0);
+  if fs < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  buf := fs + cnt * 568;
+  cnt := ObSys(OB_GETFSSTAT, fs, cnt * 568, 2, 0, 0, 0);
+  n := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    e := fs + i * 568;
+    fl := PInteger(e)^;
+    TxMount(buf, n, e + 226, e + 136, e + 120, 90,
+            (fl and 1) <> 0, (fl and 8) <> 0, (fl and 4) <> 0);
+  end;
+  Result := ObDataFd(buf, n);
+  ObSys(OB_MUNMAP, fs, size, 0, 0, 0, 0);
+end;
+
+{ kern.cp_time {1,40}: six longs, user nice sys spin intr idle (spin is
+  counted as system time); kern.cp_time2 {1,71,n}: CPU n's, the same six.
+  hw.ncpu {6,3} counts them. kern.cp_time is the AVERAGE over the CPUs, and
+  Linux's "cpu" line is the sum, so the sum of the per-CPU rows is used when
+  every one could be read. }
+function ObProcStat: Int64;
+var mib: array[0..2] of Integer; t, sum: array[0..5] of Int64; len, m, n, r, ncpu, i, k: Int64;
+    allOk: Boolean;
+begin
+  mib[0] := 1; mib[1] := 40; len := 48;
+  r := ObSys(OB_SYSCTL, Int64(@mib[0]), 2, Int64(@t[0]), Int64(@len), 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  mib[0] := 6; mib[1] := 3; ncpu := 0; len := 4;
+  if ObSys(OB_SYSCTL, Int64(@mib[0]), 2, Int64(@ncpu), Int64(@len), 0, 0) < 0 then ncpu := 0;
+  ncpu := ncpu and $FFFFFFFF;
+  m := ObSys(OB_MMAP, 0, 8192 + ncpu * 200, 3, 2 or OB_MAP_ANON, -1, 0);
+  if m < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  for k := 0 to 5 do sum[k] := 0;
+  allOk := ncpu > 0;
+  for i := 0 to ncpu - 1 do
+  begin
+    mib[0] := 1; mib[1] := 71; mib[2] := Integer(i); len := 48;
+    if ObSys(OB_SYSCTL, Int64(@mib[0]), 3, m + 4096 + ncpu * 120 + i * 48, Int64(@len), 0, 0) < 0 then allOk := False
+    else for k := 0 to 5 do sum[k] := sum[k] + PInt64(m + 4096 + ncpu * 120 + i * 48 + k * 8)^;
+  end;
+  if allOk then for k := 0 to 5 do t[k] := sum[k];
+  n := 0;
+  TxCpuLine(m, n, -1, t[0], t[1], t[2] + t[3], t[5], t[4]);
+  if allOk then
+    for i := 0 to ncpu - 1 do
+    begin
+      r := m + 4096 + ncpu * 120 + i * 48;
+      TxCpuLine(m, n, Integer(i), PInt64(r)^, PInt64(r + 8)^, PInt64(r + 16)^ + PInt64(r + 24)^,
+                PInt64(r + 40)^, PInt64(r + 32)^);
+    end;
+  Result := ObDataFd(m, n);
+  ObSys(OB_MUNMAP, m, 8192 + ncpu * 200, 0, 0, 0, 0);
 end;
 
 { ---- Signals ----------------------------------------------------------------
@@ -2607,6 +2689,9 @@ begin
   else if ObPtsName(path, Int64(@nm[0])) then
     Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@nm[0]), ObOpenFlags(flags), 0, 0, 0))
   else if PathIs(path, @ProcHostname[0], Length(ProcHostname)) then Result := ObProcHostname
+  else if ProcFdInfoNum(path) >= 0 then Result := ObProcFdInfo(ProcFdInfoNum(path))
+  else if ProcIsMounts(path) then Result := ObProcMounts
+  else if ProcIsStat(path) then Result := ObProcStat
   else if PathIs(path, @DevFull[0], Length(DevFull)) then
   begin
     Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@DevZero[0]), ObOpenFlags(flags) and not Int64($E00), 0, 0, 0));

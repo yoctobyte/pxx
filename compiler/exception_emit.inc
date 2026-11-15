@@ -141,7 +141,12 @@ begin
       loads rax right after.
       decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part }
     ExcAdoptAddr := -1;
-    if TlsMainInstalled and (not KernelLibc) and (not TlsViaTeb) then
+    { Not under a translated --os (the BSDs, Minix): a static program there
+      has no thread libc made, and the check would misfire. DragonFly gives
+      even a static program a nonzero fs base whose fs:[0] is not that base,
+      so every `try` took its own thread for a foreign one and swapped in a
+      fresh block, losing the signal slots (test_signal_pc_rewrite failed). }
+    if TlsMainInstalled and (not KernelLibc) and (not TlsViaTeb) and (not KernelTranslated) then
     begin
       ExcAdoptAddr := CodeLen;
       EmitAsmX64([

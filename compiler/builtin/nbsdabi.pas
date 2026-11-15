@@ -687,6 +687,83 @@ begin
   Result := n;
 end;
 
+{ ---- three more /proc files: fdinfo, mounts, stat (see proctext.inc) ---- }
+type TxPtr = Int64;
+{$I proctext.inc}
+
+const
+  NB_GETVFSSTAT = 483;            { __getvfsstat90: the struct statvfs NB_STATVFS uses }
+  NB_NOT_PROC = -1000000;
+
+{ NetBSD struct stat: st_dev at 0, st_ino at 16. }
+function NbProcFdInfo(fd: Int64): Int64;
+var sb: array[0..31] of Int64; t: array[0..127] of Byte; n, r: Int64;
+begin
+  r := NbSys(NB_FSTAT, fd, Int64(@sb[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxFdInfo(Int64(@t[0]), n, sb[0], sb[2]);
+  Result := NbDataFd(Int64(@t[0]), n);
+end;
+
+{ getvfsstat: struct statvfs is 3296 bytes, f_flag at 0, the type, mount
+  point and source at 192 (32), 224 and 1248 (1024 each). }
+function NbProcMounts: Int64;
+var cnt, size, fs, buf, n, i, e, fl: Int64;
+begin
+  cnt := NbSys(NB_GETVFSSTAT, 0, 0, 2, 0, 0, 0);    { ST_NOWAIT: how many }
+  if cnt < 0 then begin Result := Lx(cnt); Exit; end;
+  cnt := cnt + 4;
+  size := (cnt * 3296 + cnt * 2200 + $FFF) and (not Int64($FFF));
+  fs := NbSys7(NB_MMAP, 0, size, 3, $1002, -1, 0, 0);
+  if fs < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  buf := fs + cnt * 3296;
+  cnt := NbSys(NB_GETVFSSTAT, fs, cnt * 3296, 2, 0, 0, 0);
+  n := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    e := fs + i * 3296;
+    fl := PInt64(e)^;
+    TxMount(buf, n, e + 1248, e + 224, e + 192, 1024,
+            (fl and 1) <> 0, (fl and 8) <> 0, (fl and 4) <> 0);
+  end;
+  Result := NbDataFd(buf, n);
+  NbSys(NB_MUNMAP, fs, size, 0, 0, 0, 0);
+end;
+
+{ kern.cp_time {1,51}: five uint64 (user nice sys intr idle), the sum; with a
+  third name, {1,51,n}, CPU n's. hw.ncpu {6,3} counts them. }
+function NbProcStat: Int64;
+var mib: array[0..2] of Integer; t: array[0..4] of Int64; len, m, n, r, ncpu, i: Int64;
+begin
+  mib[0] := 1; mib[1] := 51; len := 40;
+  r := NbSys(NB_SYSCTL, Int64(@mib[0]), 2, Int64(@t[0]), Int64(@len), 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  mib[0] := 6; mib[1] := 3; ncpu := 0; len := 4;
+  if NbSys(NB_SYSCTL, Int64(@mib[0]), 2, Int64(@ncpu), Int64(@len), 0, 0) < 0 then ncpu := 0;
+  ncpu := ncpu and $FFFFFFFF;
+  m := NbSys7(NB_MMAP, 0, 8192 + ncpu * 200, 3, $1002, -1, 0, 0);
+  if m < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  n := 0;
+  TxCpuLine(m, n, -1, t[0], t[1], t[2], t[4], t[3]);
+  for i := 0 to ncpu - 1 do
+  begin
+    mib[0] := 1; mib[1] := 51; mib[2] := Integer(i); len := 40;
+    if NbSys(NB_SYSCTL, Int64(@mib[0]), 3, Int64(@t[0]), Int64(@len), 0, 0) >= 0 then
+      TxCpuLine(m, n, Integer(i), t[0], t[1], t[2], t[4], t[3]);
+  end;
+  Result := NbDataFd(m, n);
+  NbSys(NB_MUNMAP, m, 8192 + ncpu * 200, 0, 0, 0, 0);
+end;
+
+function NbProcOpen(p: Int64): Int64;
+begin
+  if ProcFdInfoNum(p) >= 0 then Result := NbProcFdInfo(ProcFdInfoNum(p))
+  else if ProcIsMounts(p) then Result := NbProcMounts
+  else if ProcIsStat(p) then Result := NbProcStat
+  else Result := NB_NOT_PROC;
+end;
+
 { ---- Signals ----------------------------------------------------------------
   As in fbsdabi: rt_sigaction records the program's (Linux-ABI) handler and
   installs NbSigEntry, which builds a Linux siginfo/ucontext, calls the
@@ -1571,14 +1648,20 @@ begin
 end;
 
 function NbOpenAt(dirfd, path, flags, mode: Int64): Int64;
+var pr: Int64;
 begin
   if PathIs(path, @ProcEnviron[0], Length(ProcEnviron)) then Result := NbProcEnviron
   else if PathIs(path, @ProcHostname[0], Length(ProcHostname)) then Result := NbProcHostname
   else
   begin
-    Result := NbSys(NB_OPENAT, dirfd, path, NbOpenFlags(flags), mode, 0, 0);
-    if (Result = -79) and ((flags and $20000) <> 0) then Result := -40    { O_NOFOLLOW on a symlink: EFTYPE -> ELOOP }
-    else Result := Lx(Result);
+    pr := NbProcOpen(path);
+    if pr <> NB_NOT_PROC then Result := pr
+    else
+    begin
+      Result := NbSys(NB_OPENAT, dirfd, path, NbOpenFlags(flags), mode, 0, 0);
+      if (Result = -79) and ((flags and $20000) <> 0) then Result := -40    { O_NOFOLLOW on a symlink: EFTYPE -> ELOOP }
+      else Result := Lx(Result);
+    end;
   end;
 end;
 

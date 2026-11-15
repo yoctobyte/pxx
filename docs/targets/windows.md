@@ -199,6 +199,13 @@ Signals:
   them. Windows runs that handler on a thread of its own, so it really is
   asynchronous. Checked by hand under Wine, not in the test target.
 
+`/proc` has four files: `/proc/self/environ`, `/proc/self/exe` (the
+program's own file), `/proc/self/fdinfo/N` (the volume serial number as
+`mnt_id` and the file index as `ino`, which the compiler's output guard
+compares) and the aggregate `cpu` line of `/proc/stat` (`GetSystemTimes`).
+Every other `/proc` path is `ENOENT`, also under Wine, whose drive `Z:` would
+otherwise show Linux's own `/proc`.
+
 Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
 `/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken
 on the current drive. Under Wine that is drive `Z:`, the Unix root, so the

@@ -2203,8 +2203,10 @@ begin
     ]);
   { The owner marker (TLS_SLOT_OWNER_FS): this thread's fs base, which is 0 in
     a static binary and libc's thread pointer in a dynamic one. syscall keeps
-    r9. Not under --os=windows (no arch_prctl) or KernelLibc (fs IS the block). }
-  if (not KernelLibc) and (not TlsViaTeb) then
+    r9. Not under --os=windows (no arch_prctl) or KernelLibc (fs IS the block),
+    nor any translated --os: there the slot stays 0, "no owner, no check",
+    as ExcAdoptAddr is not emitted there either (exception_emit.inc). }
+  if (not KernelLibc) and (not TlsViaTeb) and (not KernelTranslated) then
     EmitAsmX64([
       'lea rsi, [r9+%]', 8 * TLS_SLOT_OWNER_FS,
       'mov edi, 0x1003',                       { ARCH_GET_FS }

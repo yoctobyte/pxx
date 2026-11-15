@@ -687,6 +687,88 @@ begin
   Result := len;
 end;
 
+{ ---- three more /proc files: fdinfo, mounts, stat (see proctext.inc) ---- }
+type TxPtr = Int64;
+{$I proctext.inc}
+
+const
+  DF_GETFSSTAT = 18;
+  DfSysCpTime: array[0..11] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101);      { kern.cp_time }
+  DfSysCpTimes: array[0..12] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101,115); { kern.cp_times }
+
+{ DragonFly struct stat: st_ino (64-bit) at 0, st_dev (32-bit) at 12. }
+function DfProcFdInfo(fd: Int64): Int64;
+var sb: array[0..31] of Int64; t: array[0..127] of Byte; n, r: Int64;
+begin
+  r := DfSys(DF_FSTAT, fd, Int64(@sb[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxFdInfo(Int64(@t[0]), n, PInteger(Int64(@sb[0]) + 12)^ and $FFFFFFFF, sb[0]);
+  Result := DfDataFd(Int64(@t[0]), n);
+end;
+
+{ getfsstat: struct statfs is 320 bytes, f_flags (int) at 80, the type,
+  mount point and source at 104 (16), 120 and 218 (80 each). }
+function DfProcMounts: Int64;
+var cnt, size, fs, buf, n, i, e, fl: Int64;
+begin
+  cnt := DfSys(DF_GETFSSTAT, 0, 0, 2, 0, 0, 0);     { MNT_NOWAIT: how many }
+  if cnt < 0 then begin Result := Lx(cnt); Exit; end;
+  cnt := cnt + 4;
+  size := (cnt * 320 + cnt * 600 + $FFF) and (not Int64($FFF));
+  fs := DfMmap(0, size, 3, 2 or DF_MAP_ANON, -1, 0);
+  if fs < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  buf := fs + cnt * 320;
+  cnt := DfSys(DF_GETFSSTAT, fs, cnt * 320, 2, 0, 0, 0);
+  n := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    e := fs + i * 320;
+    fl := PInteger(e + 80)^;
+    TxMount(buf, n, e + 218, e + 120, e + 104, 80,
+            (fl and 1) <> 0, (fl and 8) <> 0, (fl and 4) <> 0);
+  end;
+  Result := DfDataFd(buf, n);
+  DfSys(DF_MUNMAP, fs, size, 0, 0, 0, 0);
+end;
+
+{ A sysctl by name: sysctl.name2oid ({0,3}) gives the numbers, then the
+  value. DragonFly has no sysctlbyname system call; libc does this too. }
+function DfSysctlName(nm: PByte; nlen: Integer; old, oldlen: Int64): Int64;
+var q: array[0..1] of Integer; oid: array[0..23] of Integer; olen, r: Int64;
+begin
+  q[0] := 0; q[1] := 3; olen := SizeOf(oid);
+  r := DfSys(DF_SYSCTL, Int64(@q[0]), 2, Int64(@oid[0]), Int64(@olen), Int64(nm), nlen);
+  if r < 0 then begin Result := r; Exit; end;
+  Result := DfSys(DF_SYSCTL, Int64(@oid[0]), olen div 4, old, oldlen, 0, 0);
+end;
+
+{ kern.cp_time / kern.cp_times: five longs per CPU, user nice sys intr idle. }
+function DfProcStat: Int64;
+var agg: array[0..4] of Int64; len, size, m, buf, n, i, ncpu, r, t: Int64;
+begin
+  len := 40;
+  r := DfSysctlName(@DfSysCpTime[0], Length(DfSysCpTime), Int64(@agg[0]), Int64(@len));
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  len := 0;
+  DfSysctlName(@DfSysCpTimes[0], Length(DfSysCpTimes), 0, Int64(@len));
+  size := (len + 8192 + (len div 40) * 200 + $FFF) and (not Int64($FFF));
+  m := DfMmap(0, size, 3, 2 or DF_MAP_ANON, -1, 0);
+  if m < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  if DfSysctlName(@DfSysCpTimes[0], Length(DfSysCpTimes), m, Int64(@len)) < 0 then len := 0;
+  ncpu := len div 40;
+  buf := m + len;
+  n := 0;
+  TxCpuLine(buf, n, -1, agg[0], agg[1], agg[2], agg[4], agg[3]);
+  for i := 0 to ncpu - 1 do
+  begin
+    t := m + i * 40;
+    TxCpuLine(buf, n, Integer(i), PInt64(t)^, PInt64(t + 8)^, PInt64(t + 16)^, PInt64(t + 32)^, PInt64(t + 24)^);
+  end;
+  Result := DfDataFd(buf, n);
+  DfSys(DF_MUNMAP, m, size, 0, 0, 0, 0);
+end;
+
 { ---- Signals ----------------------------------------------------------------
   fbsdabi's design (read its Signals header): the program's handler speaks
   the Linux SA_SIGINFO ABI and may REWRITE the saved RIP/RSP in the Linux
@@ -1934,6 +2016,9 @@ function DfOpenAt(dirfd, path, flags, mode: Int64): Int64;
 begin
   if PathIs(path, ProcEnviron) then Result := DfProcEnviron
   else if PathIs(path, ProcHostname) then Result := DfProcHostname
+  else if ProcFdInfoNum(path) >= 0 then Result := DfProcFdInfo(ProcFdInfoNum(path))
+  else if ProcIsMounts(path) then Result := DfProcMounts
+  else if ProcIsStat(path) then Result := DfProcStat
   else if PathIs(path, DevFull) then
   begin
     Result := Lx(DfSys(DF_OPENAT, DF_AT_FDCWD, Int64(@DevZero[0]), DfOpenFlags(flags) and not Int64($E00), 0, 0, 0));

@@ -78,6 +78,8 @@ const
   FB_PPOLL = 545; FB_STATFS = 555; FB_FSTATFS = 556; FB_POSIX_OPENPT = 504;
   FB_THR_EXIT = 431; FB_THR_KILL = 433; FB_UMTX_OP = 454;
   FB_MLOCK = 203; FB_MUNLOCK = 204; FB_SCHED_SETPARAM = 327; FB_SCHED_GETPARAM = 328;
+  FB_GETFSSTAT = 557; FB_SYSCTLBYNAME = 570;
+  FB_NOT_PROC = -1000000;
   FB_SCHED_SETSCHEDULER = 329; FB_SCHED_GETSCHEDULER = 330; FB_SCHED_GET_PRIORITY_MAX = 332;
   FB_SCHED_GET_PRIORITY_MIN = 333; FB_SCHED_RR_GET_INTERVAL = 334; FB_SWAPON = 85;
   FB_SWAPOFF = 582; FB_THR_SET_NAME = 464; FB_POSIX_FALLOCATE = 530;
@@ -593,6 +595,85 @@ begin
   if len > cap then len := cap;
   for i := 0 to Integer(len) - 1 do PByte(buf + i)^ := tmp[i];
   Result := len;
+end;
+
+{ ---- three more /proc files: fdinfo, mounts, stat (see proctext.inc) ---- }
+type TxPtr = Int64;
+{$I proctext.inc}
+
+const
+  SysCpTime: array[0..12] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101,0);  { kern.cp_time }
+  SysCpTimes: array[0..13] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101,115,0);  { kern.cp_times }
+
+function FbProcFdInfo(fd: Int64): Int64;
+var sb: array[0..31] of Int64; t: array[0..127] of Byte; n, r: Int64;
+begin
+  r := FbSys(FB_FSTAT, fd, Int64(@sb[0]), 0, 0, 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxFdInfo(Int64(@t[0]), n, sb[0], sb[1]);          { st_dev, st_ino }
+  Result := FbShmFile(Int64(@t[0]), n);
+end;
+
+{ getfsstat: struct statfs is 2344 bytes, f_flags at 8, the type, source and
+  mount point at 280 (16), 296 and 1320 (1024 each). }
+function FbProcMounts: Int64;
+var cnt, size, fs, buf, n, i, e, fl: Int64;
+begin
+  cnt := FbSys(FB_GETFSSTAT, 0, 0, 2, 0, 0, 0);     { MNT_NOWAIT: how many }
+  if cnt < 0 then begin Result := Lx(cnt); Exit; end;
+  cnt := cnt + 4;
+  size := (cnt * 2344 + cnt * 2200 + $FFF) and (not Int64($FFF));
+  fs := FbSys(FB_MMAP, 0, size, 3, $1002, -1, 0);
+  if fs < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  buf := fs + cnt * 2344;
+  cnt := FbSys(FB_GETFSSTAT, fs, cnt * 2344, 2, 0, 0, 0);
+  n := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    e := fs + i * 2344;
+    fl := PInt64(e + 8)^;
+    TxMount(buf, n, e + 296, e + 1320, e + 280, 1024,
+            (fl and 1) <> 0, (fl and 8) <> 0, (fl and 4) <> 0);
+  end;
+  Result := FbShmFile(buf, n);
+  FbSys(FB_MUNMAP, fs, size, 0, 0, 0, 0);
+end;
+
+{ kern.cp_time / kern.cp_times: five longs per CPU, user nice sys intr idle. }
+function FbProcStat: Int64;
+var agg: array[0..4] of Int64; len, size, m, buf, n, i, ncpu, r, t: Int64;
+begin
+  len := 40;
+  r := FbSys(FB_SYSCTLBYNAME, Int64(@SysCpTime[0]), 12, Int64(@agg[0]), Int64(@len), 0, 0);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  len := 0;
+  FbSys(FB_SYSCTLBYNAME, Int64(@SysCpTimes[0]), 13, 0, Int64(@len), 0, 0);
+  size := (len + 8192 + (len div 40) * 200 + $FFF) and (not Int64($FFF));
+  m := FbSys(FB_MMAP, 0, size, 3, $1002, -1, 0);
+  if m < 0 then begin Result := -LX_ENOMEM; Exit; end;
+  if FbSys(FB_SYSCTLBYNAME, Int64(@SysCpTimes[0]), 13, m, Int64(@len), 0, 0) < 0 then len := 0;
+  ncpu := len div 40;
+  buf := m + len;
+  n := 0;
+  TxCpuLine(buf, n, -1, agg[0], agg[1], agg[2], agg[4], agg[3]);
+  for i := 0 to ncpu - 1 do
+  begin
+    t := m + i * 40;
+    TxCpuLine(buf, n, i, PInt64(t)^, PInt64(t + 8)^, PInt64(t + 16)^, PInt64(t + 32)^, PInt64(t + 24)^);
+  end;
+  Result := FbShmFile(buf, n);
+  FbSys(FB_MUNMAP, m, size, 0, 0, 0, 0);
+end;
+
+{ The /proc files above, by path; FB_NOT_PROC (never an fd or a -errno)
+  when p is none of them. }
+function FbProcOpen(p: Int64): Int64;
+begin
+  if ProcFdInfoNum(p) >= 0 then Result := FbProcFdInfo(ProcFdInfoNum(p))
+  else if ProcIsMounts(p) then Result := FbProcMounts
+  else if ProcIsStat(p) then Result := FbProcStat
+  else Result := FB_NOT_PROC;
 end;
 
 { ---- Signals ----------------------------------------------------------------
@@ -1675,7 +1756,11 @@ begin
     2: if PathIs(a0, @ProcEnviron[0], Length(ProcEnviron)) then Result := FbProcEnviron
        else if PathIs(a0, @DevPtmx[0], Length(DevPtmx)) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a1), 0, 0, 0, 0, 0))
        else if PathIs(a0, @ProcHostname[0], Length(ProcHostname)) then Result := FbProcHostname
-       else Result := FbOpenAt(FB_AT_FDCWD, a0, a1, a2);
+       else
+       begin
+         Result := FbProcOpen(a0);
+         if Result = FB_NOT_PROC then Result := FbOpenAt(FB_AT_FDCWD, a0, a1, a2);
+       end;
     3: Result := Lx(FbSys(FB_CLOSE, a0, 0, 0, 0, 0, 0));
     4: Result := FbStatAt(FB_AT_FDCWD, a0, a1, 0);              { stat }
     5: begin                                                    { fstat }
@@ -1952,7 +2037,11 @@ begin
     257: if PathIs(a1, @ProcEnviron[0], Length(ProcEnviron)) then Result := FbProcEnviron
          else if PathIs(a1, @DevPtmx[0], Length(DevPtmx)) then Result := Lx(FbSys(FB_POSIX_OPENPT, FbOpenFlags(a2), 0, 0, 0, 0, 0))
          else if PathIs(a1, @ProcHostname[0], Length(ProcHostname)) then Result := FbProcHostname
-         else Result := FbOpenAt(a0, a1, a2, a3);
+         else
+         begin
+           Result := FbProcOpen(a1);
+           if Result = FB_NOT_PROC then Result := FbOpenAt(a0, a1, a2, a3);
+         end;
     258: Result := Lx(FbSys(FB_MKDIRAT, a0, a1, a2, 0, 0, 0));
     262: Result := FbStatAt(a0, a1, a2, a3);                    { newfstatat }
     263: begin                                                  { unlinkat }

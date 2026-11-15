@@ -287,6 +287,7 @@ function W_CreateFileW(name, access, share, sa, disp, flags, tmpl: Int64): Int64
 function W_GetLastError: LongWord; cdecl; external 'kernel32.dll' name 'GetLastError';
 function W_SetFilePointerEx(h, dist, newPos, method: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetFilePointerEx';
 function W_GetFileInformationByHandle(h, info: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetFileInformationByHandle';
+function W_GetSystemTimes(idle, kernel, user: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetSystemTimes';
 function W_GetFileAttributesExW(name, level, data: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetFileAttributesExW';
 function W_GetFileAttributesW(name: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetFileAttributesW';
 function W_DeleteFileW(name: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DeleteFileW';
@@ -699,6 +700,48 @@ begin
   Result := fd;
 end;
 
+{ ---- /proc/self/fdinfo/N and /proc/stat (see proctext.inc) ----------------
+  fdinfo gives the compiler's output guard a file's identity: the volume
+  serial number as mnt_id and the file index as ino, the two numbers fstat
+  already reports as st_dev and st_ino. /proc/stat has the aggregate cpu line
+  only, from GetSystemTimes (whose kernel time includes the idle time), in
+  Linux's USER_HZ ticks of 10 ms. The text goes into one of a few static
+  buffers, reused in turn: the readers open, read and close one file at a
+  time, and nothing then has to free a page per open. }
+type TxPtr = Int64;
+{$I proctext.inc}
+
+var
+  WinTxRing: array[0..3, 0..4095] of Byte;
+  WinTxNext: Integer;
+
+function WinTxBuf: Int64;
+begin
+  Result := Int64(@WinTxRing[WinTxNext, 0]);
+  WinTxNext := (WinTxNext + 1) and 3;
+end;
+
+function WinProcFdInfo(fd, flags: Int64): Int64;
+var st: array[0..17] of Int64; b, n, r: Int64;
+begin
+  r := WinFstat(fd, Int64(@st[0]));
+  if r < 0 then begin Result := r; Exit; end;
+  b := WinTxBuf; n := 0;
+  TxFdInfo(b, n, st[0], st[1]);
+  Result := OpenMem(b, n, flags);
+end;
+
+function WinProcStat(flags: Int64): Int64;
+var idle, kern, user: Int64; b, n: Int64;
+begin
+  idle := 0; kern := 0; user := 0;
+  if W_GetSystemTimes(Int64(@idle), Int64(@kern), Int64(@user)) = 0 then
+  begin Result := -LX_ENOENT; Exit; end;
+  b := WinTxBuf; n := 0;
+  TxCpuLine(b, n, -1, user div 100000, 0, (kern - idle) div 100000, idle div 100000, 0);
+  Result := OpenMem(b, n, flags);
+end;
+
 function WinOpenAt(dirfd, path, flags, mode: Int64): Int64;
 var w: array[0..WPATH-1] of Word;
     r, h, fd, access, disp, attrs: Int64;
@@ -709,6 +752,8 @@ begin
     Result := OpenMem(WinEnvStart, WinEnvEnd - WinEnvStart, flags);
     Exit;
   end;
+  if ProcFdInfoNum(path) >= 0 then begin Result := WinProcFdInfo(ProcFdInfoNum(path), flags); Exit; end;
+  if ProcIsStat(path) then begin Result := WinProcStat(flags); Exit; end;
   r := WinPath(dirfd, path, Int64(@w[0]));
   if r < 0 then begin Result := r; Exit; end;
   a := W_GetFileAttributesW(Int64(@w[0]));

@@ -52,6 +52,7 @@ builds them from FreeBSD parts:
 | `personality` | a value kept in the program |
 | `prctl(PR_SET_NAME / PR_GET_NAME)` | `thr_set_name` and a kept copy |
 | `/proc/self/environ`, `/proc/self/exe`, `/proc/self/fd/N`, `/proc/sys/kernel/hostname` | the startup block, `sysctl`, `fcntl(F_KINFO)` |
+| `/proc/self/fdinfo/N`, `/proc/mounts` (and `/proc/self/mounts`), `/proc/stat` | `fstat`, `getfsstat`, `kern.cp_time(s)` (see [the /proc files](#the-proc-files-the-translators-build)) |
 
 The executable carries the `NT_FREEBSD_ABI_TAG` note every native FreeBSD
 program has. Without it, FreeBSD reports a stack overflow as `SIGBUS` instead
@@ -126,8 +127,8 @@ These compile, but the call fails when the program runs:
 
 - **Threads through glibc's `pthread_create`**, the route a program takes when
   it links the system C library. Use `--threadsafe` threads.
-- **Linux-only `/proc` files.** Only the four listed in the table above exist;
-  `/proc/self/maps`, `/proc/self/stat` and the rest do not.
+- **Linux-only `/proc` files.** Only the ones listed in the table above exist;
+  `/proc/self/maps`, `/proc/self/stat`, `/proc/net/dev` and the rest do not.
 - **Linux-only interfaces:** `SCM_CREDENTIALS`, abstract Unix sockets,
   `inotify`, extended attributes (`xattr`), SysV IPC, `klogctl`, `adjtimex`,
   Linux-specific device `ioctl`s.
@@ -169,6 +170,29 @@ uses the system's libc. Two things are specific to these systems:
 Each `make test-<os>` links `test/test_os_objlink.pas` both ways with the
 VM's `cc` (`tools/vm/objlink.sh`) and compares the output with the same
 pair linked by gcc on Linux.
+
+## The /proc files the translators build
+
+The BSDs have no Linux `/proc` (NetBSD's procfs, when mounted, is a
+different set of files), so each translator answers three more files from
+the system's own calls. The text is built in `compiler/builtin/proctext.inc`,
+shared by all of them:
+
+| File | Read by | FreeBSD | NetBSD | OpenBSD | DragonFly |
+|---|---|---|---|---|---|
+| `/proc/self/fdinfo/N` (`mnt_id:`, `ino:`) | the compiler's output guard | `fstat` | `fstat` | `fstat` | `fstat` |
+| `/proc/mounts`, `/proc/self/mounts` | crtl's `getmntent` (`df`, mount lists) | `getfsstat` | `getvfsstat` | `getfsstat` | `getfsstat` |
+| `/proc/stat` (the `cpu` lines) | palparallel's load sampler | `kern.cp_time(s)` | `kern.cp_time` {1,51} | `kern.cp_time2` {1,71} | `kern.cp_time(s)` |
+
+`mnt_id` is the file system's device number, which is one per mounted file
+system, as Linux's mount id is. A mount line has the source, the mount point,
+the type, `rw` or `ro` with `nosuid` and `noexec` when set, and `0 0`. The cpu
+lines count user, nice, system, idle and interrupt time in the system's own
+clock ticks (OpenBSD's spin time is added to system); Linux's other columns are
+0. OpenBSD's own `kern.cp_time` is the average over the CPUs, so the first line
+there is the sum of the per-CPU rows, as on Linux. Under `--os=nt`, winabi
+answers `/proc/self/fdinfo/N` (volume serial and file index) and the `cpu` line
+of `/proc/stat` (`GetSystemTimes`, in 10 ms ticks).
 
 ## Testing it
 
@@ -396,7 +420,8 @@ sockets, async I/O, timers, termios (on a pty), ptys, and the C and NilPy runtim
 
 Not done yet:
 
-- `/proc/self/maps` and the rest of `/proc`, apart from the files above.
+- `/proc/self/maps` and the rest of `/proc`, apart from the files above and
+  the three in [the /proc files](#the-proc-files-the-translators-build).
 - eventfd.
 - A thread stack mapped by the program itself for a raw `__pxxclone` call
   must have `MAP_STACK`.
@@ -544,7 +569,8 @@ and exit code with the Linux build: files, signals, threads, sockets (IPv4,
 IPv6, dual-stack), async I/O, timers, termios on a pty, ptys, `-g`, and the C
 and NilPy runtimes. It passes.
 
-Not done yet: `/proc` apart from the files above.
+Not done yet: `/proc` apart from the files above and the three in
+[the /proc files](#the-proc-files-the-translators-build).
 
 The VM is the stock `NetBSD-11.1-amd64-live.img`, booted under OVMF with
 `consdev=com0` in `/EFI/NetBSD/boot.cfg` on its EFI partition, and set up over
