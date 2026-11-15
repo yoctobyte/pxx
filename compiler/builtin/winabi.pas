@@ -284,6 +284,7 @@ const
   INVALID_HANDLE = -1;
   INVALID_ATTRS = $FFFFFFFF;
   FILE_ATTRIBUTE_READONLY = 1;
+  FILE_ATTRIBUTE_REPARSE_POINT = $400;
   FILE_ATTRIBUTE_DIRECTORY = $10;
 
   DevNull: array[0..8] of Byte = (47,100,101,118,47,110,117,108,108);   { /dev/null }
@@ -293,6 +294,7 @@ const
                                    101,120,101);                        { /proc/self/exe }
 
 function W_CreateFileW(name, access, share, sa, disp, flags, tmpl: Int64): Int64; cdecl; external 'kernel32.dll' name 'CreateFileW';
+function W_DeviceIoControl(h, code, inb, inlen, outb, outlen, ret, ovl: Int64): LongInt; cdecl; external 'kernel32.dll' name 'DeviceIoControl';
 function W_GetLastError: LongWord; cdecl; external 'kernel32.dll' name 'GetLastError';
 function W_SetFilePointerEx(h, dist, newPos, method: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetFilePointerEx';
 function W_GetFileInformationByHandle(h, info: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetFileInformationByHandle';
@@ -356,6 +358,7 @@ begin
     206: Result := -LX_ENAMETOOLONG;
     267: Result := -LX_ENOTDIR;
     8, 14: Result := -LX_ENOMEM;
+    1314: Result := -1;                          { ERROR_PRIVILEGE_NOT_HELD: EPERM }
   else
     Result := -LX_EIO;
   end;
@@ -681,10 +684,14 @@ begin
   Result := 0;
 end;
 
-{ newfstatat / stat / lstat. There are no symlinks to tell apart here. }
+function WinLinkStat(w, st, flags: Int64): Int64; forward;
+
+{ newfstatat / stat / lstat. A symbolic link (a reparse point) is the
+  target's for stat and the link's own for lstat (AT_SYMLINK_NOFOLLOW):
+  WinLinkStat, by the symlink code further down. }
 function WinStatAt(dirfd, path, st, flags: Int64): Int64;
 var w: array[0..WPATH-1] of Word;
-    r: Int64;
+    r: Int64; a: LongWord;
 begin
   if ((flags and $1000) <> 0) and ((path = 0) or (PByte(path)^ = 0)) then   { AT_EMPTY_PATH }
   begin
@@ -693,7 +700,11 @@ begin
   end;
   r := WinPath(dirfd, path, Int64(@w[0]));
   if r < 0 then begin Result := r; Exit; end;
-  Result := StatPathW(Int64(@w[0]), st);
+  a := W_GetFileAttributesW(Int64(@w[0]));
+  if (a <> INVALID_ATTRS) and ((a and FILE_ATTRIBUTE_REPARSE_POINT) <> 0) then
+    Result := WinLinkStat(Int64(@w[0]), st, flags)
+  else
+    Result := StatPathW(Int64(@w[0]), st);
 end;
 
 { statx(dirfd, path, flags, mask, buf): the stat above, rewritten in statx's
@@ -1294,6 +1305,14 @@ begin
   end
   else
   begin
+    { a link to a directory is a directory reparse point: unlink removes the
+      link (RemoveDirectoryW does that and leaves the target alone) }
+    if (a <> INVALID_ATTRS) and ((a and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+       ((a and FILE_ATTRIBUTE_REPARSE_POINT) <> 0) then
+    begin
+      if W_RemoveDirectoryW(Int64(@w[0])) = 0 then Result := WinErr else Result := 0;
+      Exit;
+    end;
     if (a <> INVALID_ATTRS) and ((a and FILE_ATTRIBUTE_DIRECTORY) <> 0) then begin Result := -LX_EISDIR; Exit; end;
     if W_DeleteFileW(Int64(@w[0])) = 0 then Result := WinErr else Result := 0;
   end;
@@ -1398,6 +1417,8 @@ begin
 end;
 
 { readlink: /proc/self/exe only (there are no symlinks to read). }
+function WinReadlinkPath(dirfd, path, buf, cap: Int64): Int64; forward;
+
 function WinReadlinkAt(dirfd, path, buf, cap: Int64): Int64;
 var w: array[0..WPATH-1] of Word;
     n, i, t: Int64;
@@ -1405,7 +1426,7 @@ var w: array[0..WPATH-1] of Word;
 begin
   if not PathIs(path, @ProcExe[0], Length(ProcExe)) then
   begin
-    if WinAccessAt(dirfd, path) = 0 then Result := -LX_EINVAL else Result := -LX_ENOENT;
+    Result := WinReadlinkPath(dirfd, path, buf, cap);
     Exit;
   end;
   n := W_GetModuleFileNameW(0, Int64(@w[0]), WPATH);
@@ -4643,6 +4664,151 @@ begin
   Result := 0;
 end;
 
+{ ---- symbolic links ----------------------------------------------------------
+  symlink is CreateSymbolicLinkW (looked up at run time: XP's and older
+  ReactOS's kernel32 lack it, and an import would stop the program loading
+  there), first with SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE (Windows 10
+  in developer mode) and then without it, for a system that does not know
+  the flag. Without the privilege the answer is EPERM. A link to a directory
+  says so (SYMBOLIC_LINK_FLAG_DIRECTORY), judged by the target as seen from
+  the link's directory. The target is stored with '\' separators; readlink
+  gives a relative one back with '/', as it was written.
+  readlink and lstat read the reparse point (FSCTL_GET_REPARSE_POINT): a
+  symbolic link's print name, or a junction's. lstat says S_IFLNK | 0777 and
+  the target's length as the size; stat opens the path, which follows the
+  link, and describes the target. }
+const
+  NmCreateSymbolicLinkW: array[0..19] of Byte = (67,114,101,97,116,101,83,121,109,98,111,108,105,99,76,105,110,107,87,0);
+  IO_REPARSE_TAG_SYMLINK = $A000000C;
+  IO_REPARSE_TAG_MOUNT_POINT = $A0000003;
+
+var
+  PCreateSymbolicLinkW: Int64;
+  WinRpBuf: array[0..16383] of Byte;
+
+{ The link at w: its target as UTF-8 into dst (cap bytes), the length; or
+  -EINVAL when w is not a link. }
+function WinReparseTarget(w, dst, cap: Int64): Int64;
+var h, ret, off, len, i, t: Int64; tag: LongWord; ok: LongInt;
+    tmp: array[0..4095] of Byte; rel: Boolean;
+begin
+  h := W_CreateFileW(w, 0, 7, 0, 3, $2200000, 0);   { OPEN_EXISTING, OPEN_REPARSE_POINT | BACKUP_SEMANTICS }
+  if h = -1 then begin Result := WinErr; Exit; end;
+  ret := 0;
+  ok := W_DeviceIoControl(h, $900A8, 0, 0, Int64(@WinRpBuf[0]), Length(WinRpBuf), Int64(@ret), 0);
+  W_CloseHandle(h);
+  if ok = 0 then begin Result := -LX_EINVAL; Exit; end;
+  tag := PLongWord(@WinRpBuf[0])^;
+  if tag = IO_REPARSE_TAG_SYMLINK then off := 20
+  else if tag = IO_REPARSE_TAG_MOUNT_POINT then off := 16
+  else begin Result := -LX_EINVAL; Exit; end;
+  len := PWord(@WinRpBuf[12])^;                       { PrintNameLength }
+  if len > 0 then off := off + PWord(@WinRpBuf[10])^
+  else
+  begin
+    len := PWord(@WinRpBuf[10])^;                     { SubstituteName, without \??\ }
+    off := off + PWord(@WinRpBuf[8])^;
+    if (len >= 8) and (PWord(@WinRpBuf[off])^ = 92) and (PWord(@WinRpBuf[off + 2])^ = 63) then
+    begin off := off + 8; len := len - 8; end;
+  end;
+  if off + len > Length(WinRpBuf) then begin Result := -LX_EINVAL; Exit; end;
+  rel := (len >= 2) and (PWord(@WinRpBuf[off])^ <> 92) and
+         not ((len >= 4) and (PWord(@WinRpBuf[off + 2])^ = 58));      { not \x nor X: }
+  ArgOut := Int64(@tmp[0]);
+  i := 0;
+  while (i < len div 2) and (ArgOut - Int64(@tmp[0]) < Length(tmp) - 4) do
+    i := i + PutUtf8(Int64(@WinRpBuf[off]) + 2 * i);
+  t := ArgOut - Int64(@tmp[0]);
+  if rel then
+    for i := 0 to t - 1 do
+      if tmp[i] = 92 then tmp[i] := 47;
+  if t > cap then t := cap;
+  for i := 0 to t - 1 do PByte(dst + i)^ := tmp[i];
+  Result := t;
+end;
+
+function WinReadlinkPath(dirfd, path, buf, cap: Int64): Int64;
+var w: array[0..WPATH-1] of Word; r: Int64;
+begin
+  r := WinPath(dirfd, path, Int64(@w[0]));
+  if r < 0 then begin Result := r; Exit; end;
+  if W_GetFileAttributesW(Int64(@w[0])) = INVALID_ATTRS then begin Result := WinErr; Exit; end;
+  Result := WinReparseTarget(Int64(@w[0]), buf, cap);
+end;
+
+function WinLinkStat(w, st, flags: Int64): Int64;
+var h, n: Int64; info: array[0..12] of LongWord; t: array[0..1023] of Byte;
+begin
+  { Only a symbolic link or a junction is a link. Any other reparse point
+    (a cloud placeholder, a deduplicated file) is described as it stands:
+    opening it to follow could fetch its contents. Reading the tag opens
+    with FILE_FLAG_OPEN_REPARSE_POINT, which does not. }
+  n := WinReparseTarget(w, Int64(@t[0]), Length(t));
+  if n < 0 then begin Result := StatPathW(w, st); Exit; end;
+  if (flags and $100) <> 0 then                       { AT_SYMLINK_NOFOLLOW: the link }
+  begin
+    Result := StatPathW(w, st);
+    if Result < 0 then Exit;
+    PLongWord(st + 24)^ := $A1FF;                     { S_IFLNK | 0777 }
+    PInt64(st + 48)^ := n;
+    PInt64(st + 64)^ := 0;
+    Exit;
+  end;
+  h := W_CreateFileW(w, 0, 7, 0, 3, $2000000, 0);    { follows the link }
+  if h = -1 then begin Result := WinErr; Exit; end;
+  if W_GetFileInformationByHandle(h, Int64(@info[0])) = 0 then
+  begin
+    Result := WinErr;
+    W_CloseHandle(h);
+    Exit;
+  end;
+  W_CloseHandle(h);
+  FillStat(st, info[0] and not LongWord(FILE_ATTRIBUTE_REPARSE_POINT), (Int64(info[8]) shl 32) or info[9],
+           Int64(@info[1]), Int64(@info[3]), Int64(@info[5]),
+           (Int64(info[11]) shl 32) or info[12], info[10]);
+  Result := 0;
+end;
+
+function WinSymlinkAt(target, dirfd, linkpath: Int64): Int64;
+var wl, wt, wd: array[0..WPATH-1] of Word;
+    r, i, k, n, m, fl: Int64; a: LongWord;
+begin
+  if target = 0 then begin Result := -LX_EFAULT; Exit; end;
+  r := WinPath(dirfd, linkpath, Int64(@wl[0]));
+  if r < 0 then begin Result := r; Exit; end;
+  n := Utf8ToW(target, Int64(@wt[0]), WPATH);
+  if n < 0 then begin Result := -LX_ENAMETOOLONG; Exit; end;
+  for i := 0 to n - 1 do
+    if wt[i] = 47 then wt[i] := 92;
+  wt[n] := 0;
+  { is the target a directory, seen from the link's own directory? }
+  m := 0;
+  if (n > 0) and (wt[0] <> 92) and not ((n > 1) and (wt[1] = 58)) then
+  begin
+    k := 0; i := 0;
+    while wl[i] <> 0 do begin if (wl[i] = 92) or (wl[i] = 47) then k := i + 1; i := i + 1; end;
+    for i := 0 to k - 1 do wd[i] := wl[i];
+    m := k;
+  end;
+  for i := 0 to n do
+    if m + i < WPATH then wd[m + i] := wt[i];
+  wd[WPATH - 1] := 0;
+  a := W_GetFileAttributesW(Int64(@wd[0]));
+  fl := 0;
+  if (a <> INVALID_ATTRS) and ((a and FILE_ATTRIBUTE_DIRECTORY) <> 0) then fl := 1;
+  if PCreateSymbolicLinkW = 0 then
+    PCreateSymbolicLinkW := W_GetProcAddress(W_GetModuleHandleA(Int64(@NmKernel32[0])), Int64(@NmCreateSymbolicLinkW[0]));
+  if (PCreateSymbolicLinkW = 0) or not ThunkPageReady then begin Result := -1; Exit; end;   { EPERM }
+  if W_GetFileAttributesW(Int64(@wl[0])) <> INVALID_ATTRS then begin Result := -LX_EEXIST; Exit; end;
+  r := MsCall(PCreateSymbolicLinkW, Int64(@wl[0]), Int64(@wt[0]), fl or 2, 0) and $FF;
+  if (r = 0) and (W_GetLastError = 87) then           { ERROR_INVALID_PARAMETER: no such flag here }
+    r := MsCall(PCreateSymbolicLinkW, Int64(@wl[0]), Int64(@wt[0]), fl, 0) and $FF;
+  if r = 0 then begin Result := WinErr; Exit; end;
+  { Wine's CreateSymbolicLinkW is a stub that says yes and makes nothing:
+    a link that is not there was not made }
+  if W_GetFileAttributesW(Int64(@wl[0])) = INVALID_ATTRS then Result := -1 else Result := 0;   { EPERM }
+end;
+
 function WinSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 begin
   case nr of
@@ -4700,6 +4866,8 @@ begin
     332: Result := WinStatx(a0, a1, a2, a4);                      { statx }
     264, 316: Result := WinRenameAt(a0, a1, a2, a3);              { renameat, renameat2 }
     267: Result := WinReadlinkAt(a0, a1, a2, a3);
+    266: Result := WinSymlinkAt(a0, a1, a2);                      { symlinkat }
+    88: Result := WinSymlinkAt(a0, -100, a1);                     { symlink }
     268: Result := WinChmodAt(a0, a1, a2);                        { fchmodat }
     90: Result := WinChmodAt(-100, a0, a1);                       { chmod }
     91: Result := 0;                                              { fchmod: through a handle would need FILE_WRITE_ATTRIBUTES }

@@ -249,7 +249,17 @@ path means what it means on Linux.
 
 - **Refused at compile time:** `-g`, `--shared`, `--emit-obj`,
   `--rtl-libc`, and CPUs other than x86-64.
-- **Not supported:** C's `fork()`, process groups and symbolic links.
+- **Not supported:** C's `fork()` and process groups.
+- **Symbolic links** are Windows' own (`CreateSymbolicLinkW`). Making one
+  needs the privilege, or Windows 10's developer mode; without it `symlink`
+  says `EPERM`. `readlink` and `lstat` read the reparse point of a symbolic
+  link or a junction, and `stat` follows it. Any other reparse point, such
+  as a cloud placeholder, counts as a plain file, so `stat` does not fetch
+  its contents. NOT TESTED where it can work: Wine's
+  `CreateSymbolicLinkW` succeeds without making anything (the translator
+  checks, and says `EPERM`), Wine shows a Unix link as its target, and the
+  ReactOS live CD cannot make links. `test/c_os_symlink.c` checks it on a
+  Windows that can.
 - **File modes:** Windows keeps one permission bit, the read-only attribute.
   `chmod` with no write bit sets it, and with any write bit clears it; `stat`
   reads it back as `0444` or `0644`. The other bits are dropped. `fchmod`

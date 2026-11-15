@@ -11396,6 +11396,11 @@ test-windows: $(COMPILER)
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_spawn_$$n "$$(tools/vm/wine.sh $$d/$$n.exe $$d/child.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx $$d/child.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  : "c_os_symlink.c: Linux's answer, or (Wine, ReactOS: no link can be made) that it says so"; \
+	  ./$(COMPILER) test/c_os_symlink.c $$d/sym.lx >/dev/null && ./$(COMPILER) --os=windows test/c_os_symlink.c $$d/sym.exe >/dev/null && \
+	  symw="$$(cd $$d && $(CURDIR)/tools/vm/wine.sh ./sym.exe 2>&1; echo exit=$$?)" && \
+	  { [ "$$symw" = "$$(printf 'no symlink privilege\nexit=0')" ] || \
+	    tools/expect_same.sh windows_symlink "$$symw" "$$(cd $$d && ./sym.lx 2>&1; echo exit=$$?)"; } || exit 1; \
 	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=windows test/test_os_env.pas $$d/env.exe >/dev/null && \
 	  tools/expect_same.sh windows_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/wine.sh $$d/env.exe one two 2>&1 | grep -v '^argv0='; echo exit=$$?)" \
 	    "$$(PXX_TEST_PROBE=probe-value $$d/env.lx one two 2>&1 | grep -v '^argv0='; echo exit=$$?)" || exit 1; \
