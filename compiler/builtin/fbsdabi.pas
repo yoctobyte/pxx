@@ -1816,6 +1816,7 @@ begin
     8: Result := Lx(FbSys(FB_LSEEK, a0, a1, a2, 0, 0, 0));
     9: Result := Lx(FbSys(FB_MMAP, a0, a1, a2, FbMmapFlags(a3), a4, a5));
     10: Result := Lx(FbSys(FB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    26: Result := Lx(FbSys(65, a0, a1, a2 and 3, 0, 0, 0));                { msync: MS_SYNC is 0 here, the other two agree }
     11: Result := Lx(FbSys(FB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := FbBrk(a0);
     13: Result := FbRtSigaction(a0, a1, a2);

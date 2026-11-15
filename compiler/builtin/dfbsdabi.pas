@@ -2160,6 +2160,7 @@ begin
     8: Result := Lx(DfSys(DF_LSEEK, a0, 0, a1, a2, 0, 0));      { lseek(fd, pad, off, whence) }
     9: Result := Lx(DfMmap(a0, a1, a2, DfMmapFlags(a3), a4, a5));
     10: Result := Lx(DfSys(DF_MPROTECT, a0, a1, a2, 0, 0, 0));
+    26: Result := Lx(DfSys(65, a0, a1, a2 and 3, 0, 0, 0));                { msync: MS_SYNC is 0 here, the other two agree }
     11: Result := Lx(DfSys(DF_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := DfBrk(a0);
     16: if IfnIsMine(a1) then Result := IfnLinuxIoctl(a0, a1, a2)

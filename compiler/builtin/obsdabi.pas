@@ -54,7 +54,7 @@ const
   OB_GETPPID = 39; OB_DUP = 41; OB_FSTATAT = 42; OB_GETEGID = 43;
   OB_GETGID = 47; OB_MMAP = 49; OB_FSTAT = 53; OB_IOCTL = 54; OB_SYMLINK = 57;
   OB_READLINK = 58; OB_EXECVE = 59; OB_UMASK = 60; OB_GETTIMEOFDAY = 67;
-  OB_SELECT = 71; OB_MUNMAP = 73; OB_MPROTECT = 74; OB_MADVISE = 75;
+  OB_SELECT = 71; OB_MUNMAP = 73; OB_MPROTECT = 74; OB_MADVISE = 75; OB_MSYNC = 256;
   OB_GETPGRP = 81; OB_SETPGID = 82; OB_UTIMENSAT = 84; OB_CLOCK_GETTIME = 87;
   OB_CLOCK_GETRES = 89; OB_DUP2 = 90; OB_NANOSLEEP = 91; OB_FCNTL = 92;
   OB_FSYNC = 95; OB_SETPRIORITY = 96; OB_GETDENTS = 99; OB_GETPRIORITY = 100;
@@ -186,6 +186,7 @@ function Lc_select(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.
 function Lc_kevent(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'kevent';
 function Lc_munmap(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'munmap';
 function Lc_mprotect(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'mprotect';
+function Lc_msync(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'msync';
 function Lc_madvise(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'madvise';
 function Lc_utimes(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'utimes';
 function Lc_getgroups(a0, a1, a2, a3, a4, a5: Int64): Int64; cdecl; external 'libc.so.104.0' name 'getgroups';
@@ -779,6 +780,7 @@ begin
     OB_KEVENT: r := Int64(LongInt(Lc_kevent(a0, a1, a2, a3, a4, a5)));
     OB_MUNMAP: r := Int64(LongInt(Lc_munmap(a0, a1, a2, a3, a4, a5)));
     OB_MPROTECT: r := Int64(LongInt(Lc_mprotect(a0, a1, a2, a3, a4, a5)));
+    OB_MSYNC: r := Int64(LongInt(Lc_msync(a0, a1, a2, a3, a4, a5)));
     OB_MADVISE: r := Int64(LongInt(Lc_madvise(a0, a1, a2, a3, a4, a5)));
     OB_UTIMES: r := Int64(LongInt(Lc_utimes(a0, a1, a2, a3, a4, a5)));
     OB_GETGROUPS: r := Int64(LongInt(Lc_getgroups(a0, a1, a2, a3, a4, a5)));
@@ -2833,6 +2835,7 @@ begin
     8: Result := Lx(ObSys(OB_LSEEK, a0, a1, a2, 0, 0, 0));
     9: Result := Lx(ObSys(OB_MMAP, a0, a1, a2, ObMmapFlags(a3), a4, a5));
     10: Result := Lx(ObSys(OB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    26: Result := Lx(ObSys(OB_MSYNC, a0, a1, (a2 and 1) or ((a2 and 4) shr 1) or ((a2 and 2) shl 1), 0, 0, 0));   { msync: SYNC 2, INVALIDATE 4 here }
     11: Result := Lx(ObSys(OB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := ObBrk(a0);
     16: if IfnIsMine(a1) then Result := IfnLinuxIoctl(a0, a1, a2)

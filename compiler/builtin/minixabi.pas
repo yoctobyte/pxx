@@ -1486,6 +1486,80 @@ begin
   Result := MxFdCall(VFS_CLOSE, fd);
 end;
 
+{ ---- a shared writable mapping of a file ----------------------------------------
+  Minix's VM maps a file privately or read-only, and answers ENXIO for
+  MAP_SHARED with PROT_WRITE. Such a mapping is made private and writable
+  instead, and its bytes are written back to the file by msync and munmap
+  (through a duplicate of the fd at 230 or above, as the program may close
+  its own, and never past the file's current end, as a mapping cannot grow
+  a file). Another process sees the stores at those points and not before,
+  and this mapping does not see the file change under it. }
+const
+  MX_SHMAPS = 16;
+
+var
+  MxShAddr, MxShLen, MxShFd, MxShOffLo, MxShOffHi: array[0..MX_SHMAPS-1] of LongInt;
+
+function MxShWriteBack(k: Integer): LongInt;
+var save, size, n, off: Int64;
+begin
+  Result := 0;
+  if MxLseek(MxShFd[k], 0, 0, 1, save) < 0 then Exit;
+  if MxLseek(MxShFd[k], 0, 0, 2, size) < 0 then Exit;
+  MxLseek(MxShFd[k], LongInt(save and $FFFFFFFF), LongInt(save shr 32), 0, save);
+  off := (Int64(MxShOffHi[k]) shl 32) or (Int64(MxShOffLo[k]) and $FFFFFFFF);
+  n := MxShLen[k];
+  if off + n > size then n := size - off;
+  if n > 0 then Result := MxPrw(VFS_WRITE, MxShFd[k], MxShAddr[k], LongInt(n), MxShOffLo[k], MxShOffHi[k], False);
+  if Result > 0 then Result := 0;
+end;
+
+function MxMmapAny(addr, len, prot, flags, fd, pgoff: LongInt): LongInt;
+var k: Integer; d: LongInt;
+begin
+  if ((flags and $20) <> 0) or ((flags and 3) <> 1) or ((prot and 2) = 0) then
+  begin
+    Result := MxMmap(addr, len, prot, flags, fd, pgoff);
+    Exit;
+  end;
+  Result := MxMmap(addr, len, prot, (flags and not 3) or 2, fd, pgoff);
+  if (Result < 0) and (Result > -4096) then Exit;
+  for k := 0 to MX_SHMAPS - 1 do
+    if MxShLen[k] = 0 then
+    begin
+      d := MxFcntlRaw(fd, 0, 230);                     { F_DUPFD }
+      if d < 0 then Exit;                              { mapped, but stores stay private }
+      MxShAddr[k] := Result; MxShLen[k] := len; MxShFd[k] := d;
+      MxShOffLo[k] := pgoff shl 12; MxShOffHi[k] := (pgoff shr 20) and $FFF;
+      Exit;
+    end;
+end;
+
+function MxMunmapAny(addr, len: LongInt): LongInt;
+var k: Integer;
+begin
+  for k := 0 to MX_SHMAPS - 1 do
+    if (MxShLen[k] <> 0) and (MxShAddr[k] = addr) then
+    begin
+      MxShWriteBack(k);
+      MxClose(MxShFd[k]);
+      MxShLen[k] := 0;
+    end;
+  Result := MxMunmap(addr, len);
+end;
+
+{ msync: the shared mappings in [addr, addr+len) written back; the rest of
+  memory has no file behind it here. }
+function MxMsync(addr, len: LongInt): LongInt;
+var k: Integer;
+begin
+  Result := 0;
+  for k := 0 to MX_SHMAPS - 1 do
+    if (MxShLen[k] <> 0) and (LongWord(MxShAddr[k]) < LongWord(addr) + LongWord(len)) and
+       (LongWord(addr) < LongWord(MxShAddr[k]) + LongWord(MxShLen[k])) then
+      if MxShWriteBack(k) < 0 then Result := -5;     { EIO }
+end;
+
 function MxEpollCreate(flags: LongInt): LongInt;
 var i: LongInt;
 begin
@@ -2584,8 +2658,9 @@ begin
     200, 202: begin MxClear(m); Result := Lx(MxCall(MX_PM, PM_GETGID, m));   { getgid32 / getegid32 }
                 if (nr = 202) and (Result >= 0) then Result := m[2]; end;
     37: Result := MxKill(a0, a1);
-    192: Result := MxMmap(a0, a1, a2, a3, a4, a5);     { mmap2 }
-    91: Result := MxMunmap(a0, a1);
+    192: Result := MxMmapAny(a0, a1, a2, a3, a4, a5);  { mmap2 }
+    91: Result := MxMunmapAny(a0, a1);
+    144: Result := MxMsync(a0, a1);                     { msync }
     125, 219: Result := 0;                            { mprotect, madvise: no such calls; the pages stay RW }
     45: Result := 0;                                  { brk: the runtime maps its heap; "no break" }
     10: Result := PathCall(VFS_UNLINK, a0, 0, 0);

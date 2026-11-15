@@ -284,6 +284,14 @@ The work log, with the reasons behind each choice, is in
 
 ## OpenBSD, NetBSD and Minix
 
+`mmap` of a file goes to the kernel on every BSD, and `msync`'s flags are
+translated: Linux's `MS_SYNC` is 4, FreeBSD's and DragonFly's 0, OpenBSD's 2
+(where `MS_INVALIDATE` is 4). Minix's memory service maps a file privately
+or read-only, but answers `ENXIO` for a shared writable mapping. The
+translator makes that mapping private and writes its bytes back to the file
+on `msync` and `munmap`, never past the file's current end. Another process
+sees the stores at those points, not before.
+
 OpenBSD, NetBSD, DragonFly and Minix have EXPERIMENTAL
 `--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64),
 `--os=dragonfly` (since 2026-11-13, x86-64 only) and `--os=minix`

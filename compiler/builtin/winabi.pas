@@ -76,6 +76,11 @@ function W_ReadFile(h, buf, n, done, ovl: Int64): LongInt; cdecl; external 'kern
 function W_CloseHandle(h: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CloseHandle';
 procedure W_ExitProcess(code: Int64); cdecl; external 'kernel32.dll' name 'ExitProcess';
 function W_VirtualAlloc(addr, size, typ, prot: Int64): Int64; cdecl; external 'kernel32.dll' name 'VirtualAlloc';
+function W_CreateFileMappingW(h, sa, prot, hi, lo, name: Int64): Int64; cdecl; external 'kernel32.dll' name 'CreateFileMappingW';
+function W_MapViewOfFile(m, access, offHi, offLo, len: Int64): Int64; cdecl; external 'kernel32.dll' name 'MapViewOfFile';
+function W_UnmapViewOfFile(addr: Int64): LongInt; cdecl; external 'kernel32.dll' name 'UnmapViewOfFile';
+function W_FlushViewOfFile(addr, len: Int64): LongInt; cdecl; external 'kernel32.dll' name 'FlushViewOfFile';
+function W_GetFileSizeEx(h, size: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetFileSizeEx';
 function W_VirtualFree(addr, size, typ: Int64): LongInt; cdecl; external 'kernel32.dll' name 'VirtualFree';
 function W_VirtualProtect(addr, size, prot, old: Int64): LongInt; cdecl; external 'kernel32.dll' name 'VirtualProtect';
 function W_GetCurrentProcessId: LongWord; cdecl; external 'kernel32.dll' name 'GetCurrentProcessId';
@@ -4538,6 +4543,88 @@ begin
   Result := 8;
 end;
 
+{ ---- mmap of a file ----------------------------------------------------------
+  A file mapping (CreateFileMappingW) and a view of it (MapViewOfFile):
+  MAP_SHARED with PROT_WRITE is a read-write view whose stores reach the file,
+  MAP_PRIVATE with PROT_WRITE is a copy-on-write view (FILE_MAP_COPY), and
+  anything else is read-only. PROT_EXEC is not granted: the file would have to
+  be opened for execute. The mapping object is closed at once, as the view
+  keeps it alive. A view starts at a multiple of 64 KiB (Windows' allocation
+  granularity) where Linux needs only a page, so an offset in between maps
+  from the 64 KiB below it and answers the address inside; WinViews records
+  each view's base for munmap. Linux maps past the end of the file and faults
+  on touching it; Windows refuses a view longer than the file, so the view is
+  cut to the file's end, and an empty file (which Windows cannot map at all)
+  answers zeroed private memory. MAP_FIXED is not supported for a file. }
+const
+  WIN_VIEWS = 64;
+  LX_ENODEV = 19;
+  FILE_MAP_WRITE = 2; FILE_MAP_READ = 4; FILE_MAP_COPY = 1;
+  PAGE_WRITECOPY = 8;
+
+var
+  WinViewUser, WinViewBase: array[0..WIN_VIEWS-1] of Int64;
+
+function WinMmapFile(addr, len, prot, flags, fd, off: Int64): Int64;
+var h, m, size, base, delta, vlen, access, pprot: Int64; k: Integer;
+begin
+  if (flags and LX_MAP_FIXED) <> 0 then begin Result := -LX_ENOSYS; Exit; end;
+  if (off < 0) or ((off and 4095) <> 0) or (len <= 0) then begin Result := -LX_EINVAL; Exit; end;
+  if FdKind(fd) <> FK_HANDLE then
+  begin
+    if FdKind(fd) = FK_NONE then Result := -LX_EBADF else Result := -LX_ENODEV;
+    Exit;
+  end;
+  h := WinFd[fd];
+  size := 0;
+  if W_GetFileSizeEx(h, Int64(@size)) = 0 then begin Result := -LX_ENODEV; Exit; end;
+  if off >= size then
+  begin
+    Result := WinMmap(0, len, prot or 3, LX_MAP_ANONYMOUS or 2);
+    Exit;
+  end;
+  if (prot and 2) = 0 then begin pprot := PAGE_READONLY; access := FILE_MAP_READ; end
+  else if (flags and 3) = 1 then begin pprot := PAGE_READWRITE; access := FILE_MAP_WRITE; end
+  else begin pprot := PAGE_WRITECOPY; access := FILE_MAP_COPY; end;
+  m := W_CreateFileMappingW(h, 0, pprot, 0, 0, 0);
+  if m = 0 then begin Result := -LX_EACCES; Exit; end;
+  delta := off and $FFFF;
+  vlen := len + delta;
+  if off - delta + vlen > size then vlen := size - (off - delta);
+  base := W_MapViewOfFile(m, access, (off - delta) shr 32, (off - delta) and $FFFFFFFF, vlen);
+  W_CloseHandle(m);
+  if base = 0 then begin Result := -LX_ENOMEM; Exit; end;
+  Result := base + delta;
+  for k := 0 to WIN_VIEWS - 1 do
+    if WinViewBase[k] = 0 then
+    begin
+      WinViewBase[k] := base; WinViewUser[k] := Result;
+      Exit;
+    end;
+end;
+
+{ munmap: a file view by the address mmap answered, else VirtualFree. }
+function WinMunmapAny(addr: Int64): Int64;
+var k: Integer;
+begin
+  for k := 0 to WIN_VIEWS - 1 do
+    if (WinViewBase[k] <> 0) and (WinViewUser[k] = addr) then
+    begin
+      W_UnmapViewOfFile(WinViewBase[k]);
+      WinViewBase[k] := 0; WinViewUser[k] := 0;
+      Result := 0;
+      Exit;
+    end;
+  Result := WinMunmap(addr);
+end;
+
+{ msync: a view's stores to the file now; anything else has no file. }
+function WinMsync(addr, len: Int64): Int64;
+begin
+  W_FlushViewOfFile(addr, len);   { a region that is not a view has nothing to flush }
+  Result := 0;
+end;
+
 function WinSys(nr, a0, a1, a2, a3, a4, a5: Int64): Int64;
 begin
   case nr of
@@ -4599,9 +4686,11 @@ begin
     269, 439: Result := WinAccessAt(a0, a1);                      { faccessat, faccessat2 }
     292: Result := WinDup2(a0, a1);                               { dup3 }
     293: Result := WinPipe(a0, a1);                               { pipe2 }
-    9: Result := WinMmap(a0, a1, a2, a3);
+    9: if (a3 and LX_MAP_ANONYMOUS) = 0 then Result := WinMmapFile(a0, a1, a2, a3, a4, a5)
+       else Result := WinMmap(a0, a1, a2, a3);
     10: Result := WinMprotect(a0, a1, a2);
-    11: Result := WinMunmap(a0);
+    11: Result := WinMunmapAny(a0);
+    26: Result := WinMsync(a0, a1);                               { msync }
     12: Result := WinBrk(a0);
     13: Result := WinRtSigaction(a0, a1, a2);
     131: Result := 0;                           { sigaltstack: faults run on the faulting stack }

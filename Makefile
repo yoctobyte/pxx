@@ -10871,7 +10871,7 @@ test-freebsd: $(COMPILER)
 	  for k in 1 2 3 4 5 6 7 8; do \
 	    tools/expect_same.sh freebsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fb one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  done; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -10921,7 +10921,7 @@ test-freebsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=freebsd --target=aarch64 test/test_os_env.pas $$d/env.fa >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh freebsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/freebsd.sh run $$d/env.fa one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -10974,7 +10974,7 @@ test-netbsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=netbsd --target=aarch64 test/test_os_env.pas $$d/env.na >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh netbsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/netbsd.sh run $$d/env.na one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11027,7 +11027,7 @@ test-openbsd-arm64: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_os_env.pas $$d/env.la >/dev/null && ./$(COMPILER) --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) test/test_os_env.pas $$d/env.oa >/dev/null && \
 	  cp $$d/env.la $$d/pxxbin && want="$$(cd $$d && PXX_TEST_PROBE=probe-value qemu-aarch64 ./pxxbin one two; echo exit=$$?)" && \
 	  tools/expect_same.sh openbsd_arm64_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.oa one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11086,7 +11086,7 @@ test-openbsd: $(COMPILER)
 	  tools/expect_same.sh openbsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/openbsd.sh run $$d/env.ob one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=openbsd --rtl-raw test/fileio.pas $$d/g.ob >/dev/null && \
 	  tools/expect_same.sh openbsd_debug_info "$$(tools/vm/openbsd.sh run $$d/g.ob 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11186,7 +11186,7 @@ test-netbsd: $(COMPILER)
 	  tools/expect_same.sh netbsd_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/netbsd.sh run $$d/env.nb one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=netbsd test/fileio.pas $$d/g.nb >/dev/null && \
 	  tools/expect_same.sh netbsd_debug_info "$$(tools/vm/netbsd.sh run $$d/g.nb 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11237,7 +11237,7 @@ test-dragonfly: $(COMPILER)
 	  tools/expect_same.sh dragonfly_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/dragonfly.sh run $$d/env.df one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  ./$(COMPILER) -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) -g --os=dragonfly test/fileio.pas $$d/g.df >/dev/null && \
 	  tools/expect_same.sh dragonfly_debug_info "$$(tools/vm/dragonfly.sh run $$d/g.df 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
-	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c \
+	  for t in test/c_os_freebsd_runtime.c test/os_freebsd_runtime.py test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c \
 	           test/c_crtl_signal_and_wait.c test/c_crtl_signal_dispositions.c \
 	           test/c_crtl_select.c test/c_crtl_uio.c test/c_crtl_tempfile_and_unlocked.c test/c_crtl_tcpgrp_statfs.c \
 	           test/c_crtl_utimensat.c test/c_crtl_fallocate.c test/c_crtl_sched_and_fs_ioctls.c test/c_crtl_telnet_and_prctl.c test/c_crtl_open_flags_arch.c test/c_crtl_busybox_394_gaps.c test/c_crtl_wait.c test/c_crtl_mount_and_prio.c test/c_crtl_bits_and_fdatasync.c \
@@ -11288,7 +11288,7 @@ test-minix: $(COMPILER)
 	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_http_serve.pas test/test_async.pas \
 	           test/lib_asyncnet6.pas test/lib_dns_async.pas \
 	           test/c_pty_family.c test/c_crtl_busybox_394_gaps.c test/c_crtl_sched_and_fs_ioctls.c \
-	           test/c_crtl_telnet_and_prctl.c test/c_os_procfiles.c test/c_os_netif.c; do \
+	           test/c_crtl_telnet_and_prctl.c test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \
@@ -11344,7 +11344,7 @@ test-windows: $(COMPILER)
 	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
 	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
 	           test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py \
-	           test/test_windows_dll_floats.pas test/test_nt_relocation.pas test/c_os_procfiles.c test/c_os_netif.c; do \
+	           test/test_windows_dll_floats.pas test/test_nt_relocation.pas test/c_os_procfiles.c test/c_os_netif.c test/c_os_mmap_file.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \

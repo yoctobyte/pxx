@@ -249,8 +249,15 @@ path means what it means on Linux.
 
 - **Refused at compile time:** `-g`, `--shared`, `--emit-obj`,
   `--rtl-libc`, and CPUs other than x86-64.
-- **Not supported:** C's `fork()`, process groups, symbolic links, file
-  modes (`chmod` succeeds and does nothing), and `mmap` of a file.
+- **Not supported:** C's `fork()`, process groups, symbolic links, and file
+  modes (`chmod` succeeds and does nothing).
+- **`mmap` of a file** is a view of a file mapping (`CreateFileMappingW`,
+  `MapViewOfFile`): `MAP_SHARED` with `PROT_WRITE` writes through to the
+  file, `MAP_PRIVATE` is copy-on-write, and `msync` flushes the view. Not
+  supported: `PROT_EXEC` (the view is not executable) and `MAP_FIXED`.
+  Windows cannot map past a file's end, so the view stops there, and
+  touching the rest faults (Linux faults past the last page). An empty file
+  maps as zeroed private memory.
 - **Signals between processes:** `kill` on another program ends it
   (`TerminateProcess`) whatever the signal; it cannot run that program's
   handler. There is no alternate signal stack, and a stack overflow has no

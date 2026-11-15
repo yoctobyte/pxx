@@ -1823,6 +1823,7 @@ begin
     8: Result := Lx(NbSys(NB_LSEEK, a0, 0, a1, a2, 0, 0));
     9: Result := NbMmap(a0, a1, a2, a3, a4, a5);
     10: Result := Lx(NbSys(NB_MPROTECT, a0, a1, a2, 0, 0, 0));
+    26: Result := Lx(NbSys(277, a0, a1, a2, 0, 0, 0));                  { __msync13: the flags agree }
     11: Result := Lx(NbSys(NB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := NbBrk(a0);
     13: Result := NbRtSigaction(a0, a1, a2);
