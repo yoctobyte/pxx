@@ -3,9 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 static int helper(void) { return 2; }
-int part_helper(void) { return helper(); }
+/* assert and __builtin_popcount lower onto crtl's __pxx_* helpers, which a
+   --shared-runtime object leaves undefined for the runtime object to supply */
+int part_helper(void) {
+  assert(helper() == 2);
+  return __builtin_popcount(3u) == 2 ? helper() : -1;
+}
 
 char *part_make(const char *s) {
   char *p = malloc(strlen(s) + 2);

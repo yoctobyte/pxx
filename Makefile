@@ -20755,6 +20755,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_rab_g "$$($(TESTTMP)/c_rab_g)" "$$(cat test/c_redeclared_array_bakes.expected)"
 	$(COMPILER) --link -o $(TESTTMP)/c_rab_p $(TESTTMP)/c_rab.o > /dev/null
 	tools/expect_same.sh c_rab_p "$$($(TESTTMP)/c_rab_p)" "$$(cat test/c_redeclared_array_bakes.expected)"
+	$(COMPILER) test/c_fnptr_array_member.c $(TESTTMP)/c_fpam > /dev/null
+	tools/expect_same.sh c_fpam "$$($(TESTTMP)/c_fpam)" "$$(cat test/c_fnptr_array_member.expected)"
+	$(COMPILER) --emit-obj --function-sections test/c_fnptr_array_member.c $(TESTTMP)/c_fpam.o > /dev/null
+	gcc -o $(TESTTMP)/c_fpam_g $(TESTTMP)/c_fpam.o
+	tools/expect_same.sh c_fpam_g "$$($(TESTTMP)/c_fpam_g)" "$$(cat test/c_fnptr_array_member.expected)"
+	$(COMPILER) test/c_fnptr_array_param.c $(TESTTMP)/c_fpap > /dev/null
+	tools/expect_same.sh c_fpap "$$($(TESTTMP)/c_fpap)" "$$(cat test/c_fnptr_array_param.expected)"
+	$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_fnptr_array_param.c $(TESTTMP)/c_fpap.o > /dev/null
+	XDG_CACHE_HOME=$(TESTTMP)/c_srt_cache $(COMPILER) --link -o $(TESTTMP)/c_fpap_s $(TESTTMP)/c_fpap.o > /dev/null
+	tools/expect_same.sh c_fpap_s "$$($(TESTTMP)/c_fpap_s)" "$$(cat test/c_fnptr_array_param.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

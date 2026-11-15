@@ -7044,9 +7044,32 @@ begin
             fn-pointer signature cannot classify a by-value struct argument
             and the indirect call marshals a pointer. }
           CFnSigPRecIds[CFnSigNParams] := CTypeBaseRec;
+          { An ARRAY parameter is a pointer (C 6.7.6.3p7), the same decay a
+            named function's parameters get: an array typedef (`va_list`, which
+            is `__pxx_va_elem[1]` on x86-64), or `T a[]` after the name below.
+            Without it the indirect call passed the 24-byte block BY VALUE
+            where the callee reads a pointer: dropbear's `_dropbear_log(prio,
+            fmt, va_list)` hook handed vsnprintf garbage and the server
+            segfaulted on its first log line.
+            bug-c-an-array-parameter-of-a-function-pointer-does-not-decay }
+          if (CTypePtrDepth = 0) and (CTypeTypedefArrLen >= 0) then
+          begin
+            CFnSigPTypes[CFnSigNParams] := tyPointer;
+            CFnSigPRecIds[CFnSigNParams] := REC_NONE;
+          end;
           Inc(CFnSigNParams);
         end;
         if CurTok.Kind = tkIdent then Next;  { optional parameter name }
+        if (CurTok.Kind = tkLBrack) and (CFnSigNParams > 0) then
+        begin
+          while CurTok.Kind = tkLBrack do
+          begin
+            while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+            Eat(tkRBrack);
+          end;
+          CFnSigPTypes[CFnSigNParams - 1] := tyPointer;
+          CFnSigPRecIds[CFnSigNParams - 1] := REC_NONE;
+        end;
       end
       else
       begin
@@ -7178,6 +7201,7 @@ var
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
+  fpStars: Integer;                { stars in the `(*..name)` group: 2 = pointer to a function pointer }
   fpNDims, fpDi: Integer;          { every dimension of `(*name[N][M]..)`, same reason }
   fpDims: array[0..7] of Integer;
   fpNParams, fpSig, fnRetNParams, pi: Integer;
@@ -7638,6 +7662,7 @@ begin
     fpName := '';
     fpArrLen := -2;
     fpNDims := 0;
+    fpStars := 0;
     fnRetIsFunc := False;
     fnRetNParams := 0;
     { first group `(*name)` — collapse to Pointer, capturing the declarator name }
@@ -7645,6 +7670,8 @@ begin
     repeat
       if CurTok.Kind = tkLParen then Inc(depth)
       else if CurTok.Kind = tkRParen then Dec(depth)
+      else if (CurTok.Kind = tkStar) and (depth = 1) and (fpName = '') then
+        Inc(fpStars)
       else if (CurTok.Kind = tkIdent) and (fpName = '') then
       begin
         fpName := CurTok.SVal;
@@ -7845,6 +7872,22 @@ begin
       CTypePtrBaseRec := baseRec;
       CTypePtrElemArrLen := paArrLen;
       CTypeIsVoid := False;
+    end
+    else if (fpStars = 2) and (not pointeeRetFn) and (CTypeProcSig >= 0) then
+    begin
+      { `ret (**name)(params)`: a POINTER TO a function pointer, the inline
+        spelling of `ft *name`. The stars in the group were not counted, so it
+        became a plain function pointer: `(*pp)(a)` then called pp ITSELF, the
+        address of the slot, and faulted. Publish it the way the typedef
+        spelling does (the star arm above): the signature belongs to the
+        pointee, and the variable is not directly callable. }
+      CTypePtrElemProcSig := CTypeProcSig;
+      CTypeProcSig := -1;
+      CTypeElemTk := Ord(tyPointer);
+      CTypeElemRec := REC_NONE;
+      CTypePtrDepth := 1;
+      CTypePtrBaseTk := Ord(tyPointer);
+      CTypePtrBaseRec := REC_NONE;
     end;
   end;
 end;
@@ -8189,9 +8232,19 @@ begin
     end
     else
     begin
-      SetSymPointerType(idx, tyUnknown, REC_NONE,
-                        1, Ord(tyUnknown), REC_NONE);
-      if procSig >= 0 then SymProcSig[idx] := procSig;
+      if (procSig < 0) and (CTypePtrElemProcSig >= 0) then
+      begin
+        { `ret (**name)(params)`: points at a function pointer; `(*name)(a)`
+          and `name[i](a)` call through the pointee's signature }
+        SetSymPointerType(idx, tyPointer, REC_NONE, 1, Ord(tyPointer), REC_NONE);
+        SymElemProcSig[idx] := CTypePtrElemProcSig;
+      end
+      else
+      begin
+        SetSymPointerType(idx, tyUnknown, REC_NONE,
+                          1, Ord(tyUnknown), REC_NONE);
+        if procSig >= 0 then SymProcSig[idx] := procSig;
+      end;
     end;
     head := -1; tail := -1;
     if CurTok.Kind = tkAssign then
@@ -19561,6 +19614,7 @@ var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
   fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, bfCap, k: Integer;
+  fpMemArrLen, fpMemSlots: Integer;   { `RET (*name[N])(..)` member: N, and its 8-byte slots }
   fTk: TTypeKind;
   isArr, firstDecl, subIsUnion, fldBaseIsEnum: Boolean;
   anonBitW, anonBitBytes: Integer;
@@ -19857,6 +19911,12 @@ begin
           Register it as an 8-byte pointer field; the normal name-reading loop
           below would Break (the name token is already consumed). }
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, TARGET_PTR_SIZE);
+        { `(*name[N])`: N slots (a pointer-to-array member keeps one) }
+        fpMemArrLen := 0;
+        if (CTypeFnPtrArrLen >= 1) and (CTypePtrElemArrLen <= 0) and (CTypeFnPtrNDims <= 1) then
+          fpMemArrLen := CTypeFnPtrArrLen;
+        fpMemSlots := 1;
+        if fpMemArrLen > 1 then fpMemSlots := fpMemArrLen;
         if bfCount < bfCap then
         begin
           bfNOff[bfCount] := CTypeFnPtrNameOff; bfNLen[bfCount] := CTypeFnPtrNameLen;
@@ -19892,13 +19952,32 @@ begin
             bfPtrElemArrLen[bfCount] := 0;
           end;
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
+          { `RET (*name[N])(params);` -- an ARRAY of N function pointers, laid
+            out and indexed in place like the typedef'd `fn_t name[N];` (whose
+            element signature also rides on bfProcSig). It was one 8-byte
+            pointer: the members after it overlapped the array, and `p->fn[i]`
+            loaded fn as a pointer and indexed what it pointed at (Gibux's ACPI
+            INTx table, a page fault on q35).
+            bug-c-an-array-of-function-pointers-member-is-one-pointer }
+          if (fpMemArrLen > 1) or ((fpMemArrLen = 1) and (CTypePtrElemArrLen <= 0)) then
+          begin
+            bfIsArr[bfCount] := True; bfArrLen[bfCount] := fpMemArrLen;
+            bfTk[bfCount] := Ord(tyPointer);
+          end;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           bfProcSig[bfCount] := fldProcSig; bfElemProcSig[bfCount] := -1;
+          { `ret (**name)(..)` member: no own signature, the pointee's instead }
+          if (CTypeProcSig < 0) and (CTypePtrElemProcSig >= 0) then
+          begin
+            bfProcSig[bfCount] := -1;
+            bfElemProcSig[bfCount] := CTypePtrElemProcSig;
+            bfElemTk[bfCount] := Ord(tyPointer);
+          end;
           bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
-        if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
-        else curOff := thisOff + TARGET_PTR_SIZE;
+        if isUnion then begin if TARGET_PTR_SIZE * fpMemSlots > curOff then curOff := TARGET_PTR_SIZE * fpMemSlots; end
+        else curOff := thisOff + TARGET_PTR_SIZE * fpMemSlots;
         if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
         CEndCMember;
       end

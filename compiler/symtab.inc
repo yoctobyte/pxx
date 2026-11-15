@@ -18700,7 +18700,13 @@ begin
       objdump; the invariant is one check at the choke point, which is where
       the parent ticket's IREmitCodeCall(0) guard already showed this shape
       pays. }
-    if Copy(enm, 1, 6) = '__pxx_' then
+    { --shared-runtime is the one build where an unbodied `__pxx_*` is
+      intended: crtl's bodies (assert's __pxx_assert_fail,
+      __pxx_builtin_popcount32, ...) are left out of the object ON PURPOSE,
+      and the runtime object `--link` adds supplies them. dropbear's
+      common-channel.c and mlkem768.c hit this the day the flag became that
+      tool's default. }
+    if (Copy(enm, 1, 6) = '__pxx_') and not (SharedRuntime and EmitObjMode) then
       Error(enm + ' is a pxx-internal runtime symbol and cannot be imported '
             + 'dynamically: no library exports it, so this build would link '
             + 'clean and die at load with "undefined symbol: ' + enm + '". '
