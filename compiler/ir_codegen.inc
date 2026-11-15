@@ -1877,6 +1877,19 @@ begin
      (not SourceMentionsKeyword('uses')) then
     TlsUserBytes := 0;
 
+  { --emit-obj: NO AREA AT ALL, whatever was asked. Nothing installs a main
+    block in an object (TLSREFUSE_NOINSTALL: the entry is the host's crt), so
+    every threadvar and `__thread` is already refused or degraded and the area
+    can never be used. Sized anyway, it was not merely waste: the clone leg
+    (`mov r12, gs:[8*TLS_SLOT_INIT_IMAGE]`) and palthread's PxxPthreadStart
+    both read the creator's init image through gs when the area is nonzero,
+    and the creator's gs is 0 -- every thread a --threadsafe object created
+    segfaulted before its entry ran, by either route. Objects only: a
+    --shared library may run inside a pxx host whose threads DO use the area.
+    bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import }
+  if EmitObjMode and not EmitSharedMode then
+    TlsUserBytes := 0;
+
   { *** RETIRED 2026-09-19. THERE IS NO NILPY ARM. Everything in this block is
     HISTORY, including its claim that the C allocator arm WARNS -- 402d61e0d
     made that a hard ERROR, measured again 2026-09-22 from BASIC. The full

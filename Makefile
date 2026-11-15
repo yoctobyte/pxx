@@ -20784,6 +20784,15 @@ test-core: $(COMPILER)
 	$(COMPILER) --emit-obj --threadsafe --function-sections test/c_scm_rights.c $(TESTTMP)/c_scm.o > /dev/null
 	gcc -o $(TESTTMP)/c_scm_g $(TESTTMP)/c_scm.o -lpthread
 	tools/expect_same.sh c_scm_g "$$($(TESTTMP)/c_scm_g)" "$$(cat test/c_scm_rights.expected)"
+	# threads made in a SECOND --threadsafe object: pxx --link (the clone route)
+	# and gcc (glibc's pthread_create). It hung, then segfaulted, then gcc
+	# refused the link. bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import
+	$(COMPILER) --emit-obj --threadsafe test/c_obj_thread_a.c $(TESTTMP)/c_objth_a.o > /dev/null
+	$(COMPILER) --emit-obj --threadsafe test/c_obj_thread_b.c $(TESTTMP)/c_objth_b.o > /dev/null
+	$(COMPILER) --link --threadsafe -o $(TESTTMP)/c_objth $(TESTTMP)/c_objth_a.o $(TESTTMP)/c_objth_b.o > /dev/null
+	tools/expect_same.sh c_objth "$$(timeout 20 $(TESTTMP)/c_objth)" "$$(cat test/c_obj_thread.expected)"
+	gcc -o $(TESTTMP)/c_objth_g $(TESTTMP)/c_objth_a.o $(TESTTMP)/c_objth_b.o -lpthread
+	tools/expect_same.sh c_objth_g "$$(timeout 20 $(TESTTMP)/c_objth_g)" "$$(cat test/c_obj_thread.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

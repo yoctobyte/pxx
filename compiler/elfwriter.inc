@@ -4475,11 +4475,58 @@ begin
   { the units every hosted object carries (measured on a C object: 1,540
     builtinheap, 130 platform_backend, 124 platform, 122 pxxcio) }
   Result := (u = 'builtinheap') or (u = 'platform') or (u = 'platform_backend') or
-            (u = 'pxxcio');
+            (u = 'pxxcio') or
+            { --threadsafe: the pthread trampoline is cdecl, so it was a STRONG
+              global in every object -- two objects collided at a gcc link, and
+              pxx --link kept one silently, which hung pthread_create from the
+              second object (Gibux s13). Weak like the rest: one copy wins. }
+            (u = 'palthread');
   { a unit's own initialisation/finalisation stays per object: each object's
     thunk runs its own, and a shared one would run N times }
   if Result and ((Copy(Procs[procIdx].Name, 1, 7) = '__fini_') or
                  (Copy(Procs[procIdx].Name, 1, 7) = '__init_')) then Result := False;
+end;
+
+var
+  ObjImportNameCachedFor: Integer = -1;
+  ObjImportNames: array of AnsiString;
+
+function ObjProcShadowsAnImport(procIdx: Integer): Boolean;
+{ Does this object also IMPORT a library routine under this routine's name?
+  Then the definition must stay LOCAL. In an executable the import is a
+  dynamic relocation and a same-named body is internal, so the two never meet;
+  in an object both are the same NAME, and every linker (gcc's and pxx --link
+  alike) binds the UND to the object's own exported definition. That is how
+  crtl's pthread_create, calling PalThreadCreate, got itself back as palthread's
+  "libc" pthread_create and deadlocked on its own registry lock (Gibux s13).
+  The pthread pair is renamed at the source now (crtl's pthread.h), which keeps
+  the family's one shared registry -- making two of its members LOCAL would
+  split it. This is the guard for the rest: crtl's dlopen/dlsym/dlclose against
+  the -dPXX_DYNLIB_LIBC imports, and anything that later grows the same shape.
+  A local copy is strictly better than a call that finds itself.
+  bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import }
+var i, n: Integer;
+begin
+  Result := False;
+  if ObjImportNameCachedFor <> ProcCount then
+  begin
+    n := 0;
+    SetLength(ObjImportNames, 0);
+    for i := 0 to ProcCount - 1 do
+      { ProcExternal, not ProcLibrary alone: a C prototype is tagged libc when
+        it is declared, and keeps the tag after crtl supplies its body }
+      if (ProcLibrary[i] >= 0) and ProcExternal[i] then
+      begin
+        SetLength(ObjImportNames, n + 1);
+        if ProcExtName[i] >= 0 then ObjImportNames[n] := Strs[ProcExtName[i]].Text
+        else ObjImportNames[n] := Procs[i].Name;
+        Inc(n);
+      end;
+    ObjImportNameCachedFor := ProcCount;
+  end;
+  if ProcExternal[procIdx] then Exit;
+  for i := 0 to Length(ObjImportNames) - 1 do
+    if ObjImportNames[i] = Procs[procIdx].Name then begin Result := True; Exit; end;
 end;
 
 function ObjProcIsExported(procIdx: Integer): Boolean;
@@ -4514,6 +4561,7 @@ var i: Integer;
 begin
   Result := False;
   if ProcCStaticLink[procIdx] then Exit;
+  if ObjProcShadowsAnImport(procIdx) then Exit;
   if ProcCdecl[procIdx] then begin Result := True; Exit; end;
   if ObjProcIsBuiltinRtl(procIdx) then begin Result := True; Exit; end;
   if not ProcConventionIsC(procIdx) then Exit;

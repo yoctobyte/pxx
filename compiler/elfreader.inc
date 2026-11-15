@@ -1684,6 +1684,27 @@ begin
     WriteLn(tag, ': ', AIntToStr(nUnres), ' undefined reference(s); nothing written');
     Exit;
   end;
+  { ...and no name may have two STRONG definitions, which ld refuses as
+    `multiple definition`. Counted since the merge dump was written, but only
+    the dump said so: the link kept the first and wrote the program, so every
+    reference went to one object's copy while the other's state sat unused.
+    That is how two --threadsafe objects each carrying a strong
+    PxxPthreadStart linked here and were refused by gcc.
+    bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import }
+  nDef := 0;
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefs[i] > 1 then
+    begin
+      Inc(nDef);
+      if nDef <= 50 then
+        WriteLn(tag, ': multiple definition of ''', ElfLnkName[i], ''' (first in ',
+                ElfLnkFirst[i], ', ', AIntToStr(ElfLnkDefs[i]), ' strong definitions)');
+    end;
+  if nDef > 0 then
+  begin
+    WriteLn(tag, ': ', AIntToStr(nDef), ' multiply defined symbol(s); nothing written');
+    Exit;
+  end;
   { entryName '' means the synthesised _start, which calls main }
   if entryName = '' then g := ElfLnkFind('main') else g := ElfLnkFind(entryName);
   if (g < 0) or (ElfLnkDefObj[g] < 0) then

@@ -79,6 +79,18 @@ int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
 pthread_t pthread_self(void);
 int  pthread_equal(pthread_t a, pthread_t b);
 
+/* THE LINK NAMES ARE crtl's OWN, not the POSIX ones. The thread runtime under
+ * these (lib/rtl/palthread.pas) imports libc's pthread_create/pthread_join
+ * BY THOSE NAMES, weakly, to start a thread glibc knows about. An --emit-obj
+ * object carries both that import and these bodies, and if the bodies were
+ * exported as `pthread_create` every linker would bind the import to them:
+ * pthread_create called itself through the PAL and deadlocked on its own
+ * registry lock (Gibux s13). Renamed, every pxx C caller -- `&pthread_create`
+ * included -- reaches crtl's copy, all objects still share ONE weak copy of
+ * the family and its registry, and the import reaches libc or nothing.
+ * bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import */
+#define pthread_create __pxx_crtl_pthread_create
+#define pthread_join   __pxx_crtl_pthread_join
 int  pthread_create(pthread_t *t, const pthread_attr_t *attr,
                     void *(*start)(void *), void *arg);
 int  pthread_join(pthread_t t, void **retval);
