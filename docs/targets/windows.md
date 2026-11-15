@@ -267,10 +267,10 @@ path means what it means on Linux.
   threads call in. The DLL prefers the base `0x10000000` and carries
   `.reloc`. Refused at compile time: an export with more than 14
   parameters, or with a record parameter or result by value. Tested with
-  pxx executables calling pxx DLLs under Wine
-  (`test/test_nt_dll_built_by_pxx.pas`). NOT TESTED: a DLL loaded by a
-  program another compiler made, `LoadLibrary` at run time, and the
-  ReactOS loader.
+  pxx executables calling pxx DLLs (`test/test_nt_dll_built_by_pxx.pas`)
+  under Wine in `make test-windows`, and once by hand on ReactOS
+  (`tools/vm/reactos/rosbatch.sh -f <dll>...`). NOT TESTED: a DLL loaded
+  by a program another compiler made, and `LoadLibrary` at run time.
 - **Not supported:** C's `fork()` and process groups.
 - **Symbolic links** are Windows' own (`CreateSymbolicLinkW`). Making one
   needs the privilege, or Windows 10's developer mode; without it `symlink`

@@ -4,7 +4,9 @@
 # on a small ISO, resumes the "ready" snapshot (rossnap.sh), inserts the ISO
 # in the swap CD drive; the StartUp poller runs run.cmd and powers off.
 # Results come off the data disk; the next resume resets it.
-# usage: rosbatch.sh [-t seconds] [-e VAR=VALUE]... test...
+# usage: rosbatch.sh [-t seconds] [-e VAR=VALUE]... [-f file]... test...
+#   -f: put this file on the CD next to the programs (a DLL they import:
+#   the loader looks in the program's own directory first).
 #   test: a name under test/ (".pas" assumed without an extension) or an
 #   absolute path; ":ts" appended builds with --threadsafe. A program with
 #   no Linux build (Windows-only probe) runs and is shown, not compared.
@@ -18,16 +20,19 @@ P=${PXX:-$ROOT/compiler/pascal26}
 T=$ROOT/test
 secs=600
 envs=""
+files=""
 while :; do
   case "${1:-}" in
     -t) secs=$2; shift 2;;
     -e) envs="$envs$2 "; shift 2;;
+    -f) files="$files$2 "; shift 2;;
     *) break;;
   esac
 done
 qemu-img snapshot -l $SN/data.qcow2 2>/dev/null | grep -q ' ready ' || { echo "no snapshot: run rossnap.sh"; exit 1; }
 B=$SN/batch
 rm -rf $B; mkdir -p $B/cd $B/want $B/got
+for f in $files; do cp "$f" $B/cd/ || exit 1; done
 # the 2 s pause: right after a resume the guest clock is still settling
 printf '@echo off\r\nset IN=%%1\r\nset OUT=\r\nfor %%%%d in (C D E F G H I) do if exist %%%%d:\\pxxmark set OUT=%%%%d:\r\nif "%%OUT%%"=="" goto :eof\r\n%%OUT%%\r\ncd \\\r\ntimeout /t 2 /nobreak > nul\r\nif not exist \\tmp mkdir \\tmp\r\n' > $B/cd/run.cmd
 for e in $envs; do printf 'set %s\r\n' "$e" >> $B/cd/run.cmd; done
@@ -51,7 +56,7 @@ for t in "$@"; do
 done
 printf 'echo done > alldone.txt\r\n' >> $B/cd/run.cmd
 rm -f $B/cd/*.map
-xorriso -as mkisofs -quiet -V PXXB -o $B/batch.iso $B/cd 2>/dev/null || { echo "iso failed"; exit 1; }
+xorriso -as mkisofs -quiet -J -joliet-long -V PXXB -o $B/batch.iso $B/cd 2>/dev/null || { echo "iso failed"; exit 1; }
 start=$(date +%s)
 rm -f $SN/mon.sock
 timeout $secs bash -c ". '$S/roscommon.sh'; rosqemu -loadvm ready" &

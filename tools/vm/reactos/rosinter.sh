@@ -11,7 +11,7 @@ if [ $# -gt 0 ]; then
   rm -rf $SN/inter
   mkdir -p $SN/inter/cd
   cp "$@" $SN/inter/cd/
-  xorriso -as mkisofs -quiet -V PXXI -o $SN/inter/inter.iso $SN/inter/cd 2>/dev/null || { echo "iso failed"; exit 1; }
+  xorriso -as mkisofs -quiet -J -joliet-long -V PXXI -o $SN/inter/inter.iso $SN/inter/cd 2>/dev/null || { echo "iso failed"; exit 1; }
   ( python3 $S/roswait.py $SN cmd "change swapcd $SN/inter/inter.iso" >/dev/null ) &
 fi
 rosqemu -loadvm ready
