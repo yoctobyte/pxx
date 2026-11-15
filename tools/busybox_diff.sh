@@ -74,6 +74,11 @@
 #   --keep      leave the work directory in place and print it
 #   --usage     build in applet usage text (SHOW_USAGE, FEATURE_VERBOSE_USAGE);
 #               off by default because it is size. A root filesystem wants it.
+#   --interactive  line editing for sh/ash (FEATURE_EDITING, history, TAB
+#               completion, fancy prompt, SIGWINCH): arrow keys at a console
+#               shell. Off by default, because the harness keeps everything
+#               interactive out of a byte-for-byte comparison; the ash cases
+#               run scripts with no terminal, so they stay valid with it on.
 #   --targets   space-separated target list (default: x86_64 aarch64)
 #   --applets   space-separated applet list (default: cat echo -- rung 2).
 #               A single applet reproduces rung 1 exactly.
@@ -251,6 +256,7 @@ while [ $# -gt 0 ]; do
     --build-only) BUILDONLY=1; shift ;;
     --out)     BOOUT="$2"; shift 2 ;;
     --usage)   USAGE=1; shift ;;
+    --interactive) INTERACTIVE=1; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -469,6 +475,12 @@ configure_tree() {
       [ "$f" = SH_IS_ASH ] && continue
       sed -i "s/^# CONFIG_$f is not set\$/CONFIG_$f=y/" .config
     done
+    # A valued knob may not have a line yet (its parent was off), so drop
+    # whatever is there and append it; oldconfig reads it from the file.
+    for f in $REQUIRED_VAL; do
+      sed -i -e "/^CONFIG_${f%%=*}=/d" -e "/^# CONFIG_${f%%=*} is not set\$/d" .config
+      printf 'CONFIG_%s\n' "$f" >> .config
+    done
     yes '' | make oldconfig >/dev/null 2>&1 || exit 1
     make -j"$(nproc 2>/dev/null || echo 4)"
   ) > "$log" 2>&1
@@ -582,13 +594,28 @@ REQUIRED_ON="USE_BB_CRYPT"
 #          (argv[1] is the host, "HOST is alive!"), so `ping -c 1 -W 1 H'
 #          says "bad address '-c'". One knob for ping and ping6 (Gibux's
 #          network tests, 2026-11-15).
+#   sh/ash with --interactive: line editing -- FEATURE_EDITING (arrow
+#          keys; without it they print escape codes), its history (255
+#          lines, saved), TAB completion, the fancy prompt (\u \w in PS1) and
+#          SIGWINCH, plus the two numeric knobs in REQUIRED_VAL. Opt-in (see
+#          ASH_OFF): the ash cases run scripts, not a terminal, so they do
+#          not exercise it; pixx's console shell does (2026-11-15).
+#   head/tail  FEATURE_FANCY_HEAD/TAIL -- -c, -q, -v and multiplier suffixes.
 # --usage adds SHOW_USAGE + FEATURE_VERBOSE_USAGE: an applet's usage text,
 # which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Gibux's
 # switch_root "NEW_ROOT must be a mountpoint" was invisible). Opt-in, for a
 # root-filesystem build, because it is size.
-for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP ping:FEATURE_FANCY_PING ping6:FEATURE_FANCY_PING; do
+for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP ping:FEATURE_FANCY_PING ping6:FEATURE_FANCY_PING \
+             head:FEATURE_FANCY_HEAD tail:FEATURE_FANCY_TAIL; do
   printf '%s\n' $APPLETS | grep -qx "${_pair%%:*}" && REQUIRED_ON="$REQUIRED_ON ${_pair#*:}"
 done
+# Knobs with a VALUE (NAME=VALUE), set the same way and checked the same way.
+REQUIRED_VAL=""
+if [ "${INTERACTIVE:-0}" = 1 ] && printf '%s\n' $APPLETS | grep -qxE 'sh|ash'; then
+  ASH_OFF=$(printf '%s\n' $ASH_OFF | grep -vx FEATURE_EDITING | tr '\n' ' ')
+  REQUIRED_ON="$REQUIRED_ON FEATURE_EDITING FEATURE_EDITING_SAVEHISTORY FEATURE_TAB_COMPLETION FEATURE_EDITING_FANCY_PROMPT FEATURE_EDITING_WINCH"
+  REQUIRED_VAL="FEATURE_EDITING_MAX_LEN=1024 FEATURE_EDITING_HISTORY=255"
+fi
 IMPLIED_APPLETS=""
 printf '%s\n' $APPLETS | grep -qx test && IMPLIED_APPLETS='[ [['
 [ "${USAGE:-0}" = 1 ] && REQUIRED_ON="$REQUIRED_ON SHOW_USAGE FEATURE_VERBOSE_USAGE"
@@ -596,6 +623,7 @@ required_knobs_ok() {
   local f
   [ -f "$BB/.config" ] || return 1
   for f in $REQUIRED_ON; do grep -qxF "CONFIG_$f=y" "$BB/.config" || return 1; done
+  for f in $REQUIRED_VAL; do grep -qxF "CONFIG_$f" "$BB/.config" || return 1; done
   return 0
 }
 
@@ -677,6 +705,10 @@ for f in $REQUIRED_ON; do
     || { [ "$f" = USE_BB_CRYPT ] \
            && die "oldconfig dropped CONFIG_$f -- without it the link needs -lcrypt, which the gcc oracle can be given and pxx cannot (lib/crtl has no crypt), so the two sides would not be the same program"; \
          die "oldconfig dropped CONFIG_$f, which the requested applets need (see REQUIRED_ON)"; }
+done
+for f in $REQUIRED_VAL; do
+  grep -qxF "CONFIG_$f" "$BB/.config" \
+    || die "oldconfig did not keep CONFIG_$f, which the requested applets need (see REQUIRED_VAL)"
 done
 
 if printf '%s\n' $APPLETS | grep -qx ash; then
