@@ -7927,6 +7927,9 @@ begin
   grown := AllocArray('', elemTk, 0, newLen - 1);
   Syms[idx].Offset := Syms[grown].Offset;
   Syms[idx].ArrLen := newLen;
+  { the row's size follows its slot, as CGrowGlobalRecord's does: an object
+    symbol's st_size and CPlaceGlobalInData both read it }
+  SymAllocSize[idx] := SymAllocSize[grown];
 end;
 
 { The record twin of CGrowGlobalArray. `extern const struct T x;` while T is
@@ -13125,7 +13128,7 @@ begin
       same call in the main declarator path below }
     if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
        (not declSawThread) and (TargetArch = TARGET_X86_64) and
-       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+       (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
     begin
@@ -13603,7 +13606,7 @@ begin
       See CStaticDataMode. }
     if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit) and (idx >= 0) and
        (not declSawThread) and (TargetArch = TARGET_X86_64) and
-       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+       (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }

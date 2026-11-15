@@ -1210,7 +1210,9 @@ begin
   WriteLn('  --function-sections   --emit-obj (x86-64): one .text.<name> section per function,');
   WriteLn('                        every cross-function reference a relocation, so a linker');
   WriteLn('                        can drop what the program never reaches (ld --gc-sections).');
-  WriteLn('                        The object''s symbols and exports are unchanged.');
+  WriteLn('                        C globals and literals get .data.<name>/.bss.<name> the same');
+  WriteLn('                        way, and C initialisers are baked (--c-static-data) unless');
+  WriteLn('                        --no-c-static-data. The object''s symbols and exports are unchanged.');
   WriteLn('  --shared-runtime      --emit-obj (C): the object carries only its own code; the');
   WriteLn('                        C runtime is compiled once into a runtime object that');
   WriteLn('                        --link builds, caches (~/.cache/pxx) and adds itself. For');
@@ -1222,7 +1224,8 @@ begin
   WriteLn('                        .data with their values (and relocations); one that would');
   WriteLn('                        need run-time code is refused (nothing would run it).');
   WriteLn('  --c-static-data       x86-64 C: initialised file-scope variables are .data at load');
-  WriteLn('                        time, not stores run before main (implied by --freestanding).');
+  WriteLn('                        time, not stores run before main (implied by --freestanding,');
+  WriteLn('                        and by --emit-obj --function-sections; --no-c-static-data).');
   WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');
@@ -1831,6 +1834,12 @@ begin
         x86-64 build: values in .data at load time instead of stores run
         before main. See CStaticDataMode in defs.inc. }
       CStaticDataMode := True;
+      Inc(i);
+    end
+    else if option = '--no-c-static-data' then
+    begin
+      { opts out of the default below (x86-64 --emit-obj --function-sections) }
+      NoCStaticData := True;
       Inc(i);
     end
     else if option = '-OO' then
@@ -3105,6 +3114,17 @@ begin
     not a defeat -- revert it, name the wall here, and file it. Do not weaken
     the pass to keep the default. }
   if EmitObjMode and not DceOff then DceEnabled := True;
+
+  { A gc-ready C object (x86-64 --emit-obj --function-sections) bakes its
+    file-scope initialisers into .data (CStaticDataMode) by default. Run as
+    stores in the init thunk instead, they made every crtl global and every
+    literal they name reachable from an .init_array root, so the per-global
+    data sections (ObjPlanDataCuts) could drop nothing: toybox 0.8.15 with
+    default objects went 9.47 MB -> 1.69 MB with both (5.12 MB with the cuts
+    alone). --no-c-static-data restores the stores. }
+  if EmitObjMode and FunctionSections and (TargetArch = TARGET_X86_64) and
+     (not EmitSharedMode) and (not NoCStaticData) then
+    CStaticDataMode := True;
 
   { HISTORICAL -- the note below described this line while it was OFF, and is
     kept because it records the two reverts and the reasoning that produced

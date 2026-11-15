@@ -52,3 +52,30 @@ Levers, roughly in order of payoff:
    buffers drop.
 
 The same cause explains dropbear's ~9 MB programs and busybox's 25 MB.
+
+## After 89d7eed232 (shared runtime opt-in + weak Pascal runtime), 2026-11-14
+
+| build | binary | .text | .data | .bss | objects |
+|---|---|---|---|---|---|
+| before (b3c5f711ea) | 12.4 MB | 8.28 MB | 4.06 MB | 16.8 MB | 162 MB |
+| default, B only (weak RTL) | 9.47 MB | 5.35 MB | 4.06 MB | 16.8 MB | 161 MB |
+| `--shared-runtime` (A + B) | 3.76 MB | 3.04 MB | 0.66 MB | 7.29 MB | 15 MB |
+| gcc | 0.48 MB | 0.29 MB | 0.05 MB | 0.01 MB | |
+
+Then, 2026-11-15 (feature-a-data-sections-per-c-global-and-literal):
+
+| build | binary | .text | .data | .bss | objects |
+|---|---|---|---|---|---|
+| default (B + data sections + baked initialisers) | 1.69 MB | 1.33 MB | 0.31 MB | 0.15 MB | 164 MB |
+| `--shared-runtime` (A + the same) | 1.71 MB | 1.33 MB | 0.33 MB | 0.24 MB | 13 MB |
+
+Default and shared-runtime binaries are now the same size. The shared runtime
+buys object size and compile time, not binary size.
+
+Left:
+1. A2 is dropped: measured, it is not where the time goes
+   (feature-c-header-parsing-dominates-compile-time).
+2. .text 1.33 MB against gcc's 0.29 MB is not yet broken down (codegen
+   density, plus whatever crtl the program reaches).
+3. The toybox suite: 101 FAIL against gcc's 0, all already present before this
+   work (cpio, sed addresses, printf/echo escapes, stat, id, utf8 width, ...).

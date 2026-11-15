@@ -20738,6 +20738,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_srt_d "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_d -a -b x)" "$$(cat test/c_shared_runtime.expected)"
 	gcc -o $(TESTTMP)/c_srt_dg $(TESTTMP)/c_srt_dm.o $(TESTTMP)/c_srt_dp.o
 	tools/expect_same.sh c_srt_dg "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dg -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	gcc -o $(TESTTMP)/c_srt_dgc -Wl,--gc-sections $(TESTTMP)/c_srt_dm.o $(TESTTMP)/c_srt_dp.o
+	tools/expect_same.sh c_srt_dgc "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dgc -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	gcc -o $(TESTTMP)/c_srt_dgr -Wl,--gc-sections $(TESTTMP)/c_srt_dp.o $(TESTTMP)/c_srt_dm.o
+	tools/expect_same.sh c_srt_dgr "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dgr -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	$(COMPILER) --link -o $(TESTTMP)/c_srt_dr $(TESTTMP)/c_srt_dp.o $(TESTTMP)/c_srt_dm.o > /dev/null
+	tools/expect_same.sh c_srt_dr "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dr -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	$(COMPILER) --c-static-data test/c_redeclared_array_bakes.c $(TESTTMP)/c_rab > /dev/null
+	tools/expect_same.sh c_rab "$$($(TESTTMP)/c_rab)" "$$(cat test/c_redeclared_array_bakes.expected)"
+	$(COMPILER) --emit-obj --function-sections test/c_redeclared_array_bakes.c $(TESTTMP)/c_rab.o > /dev/null
+	gcc -o $(TESTTMP)/c_rab_g -Wl,--gc-sections $(TESTTMP)/c_rab.o
+	tools/expect_same.sh c_rab_g "$$($(TESTTMP)/c_rab_g)" "$$(cat test/c_redeclared_array_bakes.expected)"
+	$(COMPILER) --link -o $(TESTTMP)/c_rab_p $(TESTTMP)/c_rab.o > /dev/null
+	tools/expect_same.sh c_rab_p "$$($(TESTTMP)/c_rab_p)" "$$(cat test/c_redeclared_array_bakes.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

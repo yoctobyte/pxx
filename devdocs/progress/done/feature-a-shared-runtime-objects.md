@@ -38,7 +38,10 @@ time: a compile cannot know who will link the object.
 ## Not done
 
 - A2: the Pascal runtime (builtinheap, platform, pxxcio) is still compiled into
-  every object; it is merged by B instead. That is the remaining ~2.3 s per unit.
+  every object; it is merged by B instead. Measured 2026-11-15, that is NOT the
+  remaining ~2.3 s per unit: an empty C file compiles in 0.39 s with it, and
+  the headers take the rest (feature-c-header-parsing-dominates-compile-time).
+  Not built.
 - aarch64: the code path exists (runtime built without --function-sections)
   but no aarch64 link was tested.
 - Runtime cache is never pruned; old compiler hashes accumulate (~1 MB each).

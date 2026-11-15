@@ -32,6 +32,7 @@ Options come before the source path.
 | `--xtensa-abi=…` | Xtensa call-ABI variant. |
 | `--emit-obj` | Emit a relocatable object instead of an executable (unstable). |
 | `--shared-runtime` | With `--emit-obj` (C): leave the C runtime out of the object. `--link` sees the object's `__pxxrt_needed_<target>[_ts]` reference, builds the runtime once per compiler binary into `$XDG_CACHE_HOME/pxx` (or `~/.cache/pxx`), and adds it. Linking with gcc/ld instead fails with that symbol name. Default objects stay self-contained, with weak runtime copies a linker merges. |
+| `--function-sections` (data) / `--no-c-static-data` | On x86-64 `--emit-obj`, `--function-sections` also gives each C global a `.data.<name>`/`.bss.<name>` section and each string literal a `.data.pxx.str<n>` one, so a GC link drops the data nothing reaches. It also bakes C initialisers into `.data` (`--c-static-data`): run as init-thunk stores, they kept every global alive. `--no-c-static-data` restores the stores. |
 | `--debug` | Print lexer/parser/preprocessor diagnostics. |
 | `--dump-ir` | Print lowered IR while still emitting the executable. |
 | `--dump-rtti` | Print generated RTTI tables while still emitting the executable. |

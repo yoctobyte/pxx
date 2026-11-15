@@ -512,8 +512,11 @@ begin
     `.text` in object order. }
   if (nm = '.text') or (Copy(nm, 1, 6) = '.text.') then
     begin k := ELFLNK_K_TEXT; wantTy := 1;  wantFl := 6; end
-  else if nm = '.data'  then begin k := ELFLNK_K_DATA; wantTy := 1;  wantFl := 3; end
-  else if nm = '.bss'   then begin k := ELFLNK_K_BSS;  wantTy := ELFRD_SHT_NOBITS; wantFl := 3; end
+  { `.data.<name>` / `.bss.<name>` are the same flag's data cuts }
+  else if (nm = '.data') or (Copy(nm, 1, 6) = '.data.') then
+    begin k := ELFLNK_K_DATA; wantTy := 1;  wantFl := 3; end
+  else if (nm = '.bss') or (Copy(nm, 1, 5) = '.bss.') then
+    begin k := ELFLNK_K_BSS;  wantTy := ELFRD_SHT_NOBITS; wantFl := 3; end
   else if nm = '.init_array' then begin k := ELFLNK_K_INIT; wantTy := 14; wantFl := 3; end
   else if nm = '.fini_array' then begin k := ELFLNK_K_FINI; wantTy := 15; wantFl := 3; end
   else if FreestandingMode and (nm = '.multiboot') then
@@ -525,7 +528,7 @@ begin
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
-              + 'links pxx''s own objects (.text .text.* .data .bss .init_array .fini_array), '
+              + 'links pxx''s own objects (.text .text.* .data .data.* .bss .bss.* .init_array .fini_array), '
               + 'not a third-party toolchain''s';
     Exit;
   end;
@@ -628,11 +631,13 @@ begin
     ElfLnkSecKindOf[slot] := kind;
     if kind = ELFLNK_NKIND then Continue;
     { ONE PER NAME PER OBJECT is what the emitter writes for everything but
-      code. Two .init_array sections would need a rule for their relative
-      order -- constructor order -- that nothing here has had to decide. Code
-      may come in any number: --function-sections writes one per function,
-      and their order is simply header order. }
-    if (kind <> ELFLNK_K_TEXT) and (kind <> ELFLNK_K_RODATA) and seen[kind] then
+      code and data. Two .init_array sections would need a rule for their
+      relative order -- constructor order -- that nothing here has had to
+      decide. Code and data may come in any number: --function-sections writes
+      one per function and one per C global, and their order is simply header
+      order. }
+    if (kind <> ELFLNK_K_TEXT) and (kind <> ELFLNK_K_RODATA) and
+       (kind <> ELFLNK_K_DATA) and (kind <> ELFLNK_K_BSS) and seen[kind] then
     begin
       ElfRdErr := 'two ' + ElfLnkKindName(kind) + ' sections in one object; pxx writes one';
       Exit;

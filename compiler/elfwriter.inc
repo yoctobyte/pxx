@@ -5374,6 +5374,355 @@ begin
   if req > 16 then ObjSecAlign := req else ObjSecAlign := 16;
 end;
 
+{ ===== --function-sections for DATA: a section per C global (x86-64) =========
+  The .data/.bss half of what ObjPlanCuts does for code, and gcc's
+  -fdata-sections. Without it an object's .data and .bss are one section each,
+  addressed section-relative, so a linker's GC can drop none of it: every
+  object kept every crtl buffer it carried (pxx_env_buf 16 KiB, pxx_tz_buf
+  8 KiB, gr_line, ...), ~39 KiB of named statics per toybox object, whichever
+  object's weak crtl copy won.
+
+  THE CUTS. One per C global this object DEFINES (ObjDataIsLocal or
+  ObjDataIsExport) with a size, at its start; a cut runs to the next cut or the
+  section end, so the bytes between two globals -- string literals, GOT slots,
+  Pascal state, padding -- belong to the global BEFORE them, and the bytes
+  before the first global stay in the head section (.data/.bss, symbols 2/3).
+  Contiguous on purpose: a gap that is its own section could be dropped while
+  something that only computes its address from a neighbour still needs it;
+  attached to a neighbour, the worst case is a neighbour kept alive.
+
+  THE REFERENCES. Every relocation into .data/.bss is section-relative in this
+  writer, built from an offset (ObjDRef). The cut is chosen by that offset --
+  for a C initialiser `&g + k`, by g's base, the addend carried on top -- and
+  the addend becomes relative to the cut. The measured C shapes reference a
+  global at its base and add the index after the LEA (ObjDataIsReferenced), so
+  an offset decides the owner; a reference that lands EXACTLY on the next
+  global's start is taken as that global, the half-open rule
+  ObjRoAdoptDeadTypedConsts uses.
+
+  SAFE BY REFUSAL. A self-relative word in .data (AddDataRelFix, RTTI) must not
+  span two sections; if one would, no .data cut is made at all. Overlapping
+  globals keep the first. Only under --function-sections, which aarch64
+  refuses, so only x86-64 objects are ever cut, and an object without the flag
+  is byte-for-byte what it was. }
+var
+  ODCSec   : array of Integer;     { 0 = .data, 1 = .bss }
+  ODCOff   : array of Integer;     { start: .data offset, or REMAPPED .bss offset }
+  ODCEndT  : array of Integer;     { the global's own end (planning only) }
+  ODCName  : array of AnsiString;
+  ODCShndx : array of Integer;
+  ODCSym   : array of Integer;     { its STT_SECTION symbol }
+  ODCRelAt : array of Integer;     { first index of its entries in ODR* }
+  ODCRelN  : array of Integer;
+  ODCNm    : array of Integer;     { .shstrtab: '.rela.data.<n>' (+5 '.data.<n>') or '.bss.<n>' }
+  ODCCount : Integer;
+  ODCFirstBss : Integer;           { first .bss cut; = ODCCount when there is none }
+  ODCDroppedData : Boolean;        { .data cuts refused (a self-relative word spans two) }
+  { every .rela.data entry, collected, then grouped by the cut its SITE is in }
+  ODRPos, ODRAddn : array of Int64;
+  ODRSym, ODRType : array of Integer;
+  ODRCount, ODRHeadN : Integer;
+
+function ObjDSecEnd(sec: Integer): Integer;
+begin
+  if sec = 0 then ObjDSecEnd := DataLen else ObjDSecEnd := BSSSize - ObjBssDropTotal;
+end;
+
+{ The data cut holding offset `off` of section `sec`, -1 for the head. }
+function ObjDCutOf(sec, off: Integer): Integer;
+var lo, hi, mid: Integer;
+begin
+  ObjDCutOf := -1;
+  if sec = 0 then begin lo := 0; hi := ODCFirstBss - 1; end
+  else begin lo := ODCFirstBss; hi := ODCCount - 1; end;
+  if hi < lo then Exit;
+  if off < ODCOff[lo] then Exit;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if ODCOff[mid] <= off then lo := mid else hi := mid - 1;
+  end;
+  ObjDCutOf := lo;
+end;
+
+function ObjDCutEnd(c: Integer): Integer;
+begin
+  if (c + 1 < ODCCount) and (ODCSec[c + 1] = ODCSec[c]) then ObjDCutEnd := ODCOff[c + 1]
+  else ObjDCutEnd := ObjDSecEnd(ODCSec[c]);
+end;
+
+{ The head section's size: up to the first cut of that section. }
+function ObjDHeadEnd(sec: Integer): Integer;
+var c: Integer;
+begin
+  if sec = 0 then c := 0 else c := ODCFirstBss;
+  if (c < ODCCount) and (ODCSec[c] = sec) then ObjDHeadEnd := ODCOff[c]
+  else ObjDHeadEnd := ObjDSecEnd(sec);
+end;
+
+{ The alignment the cut's start had inside its section, up to the section's
+  own: a linker that places it on that boundary keeps every offset inside it
+  aligned as it was. }
+function ObjDCutAlign(c: Integer): Integer;
+var a, cap: Integer;
+begin
+  if ODCSec[c] = 0 then cap := ObjSecAlign(ReqDataAlign) else cap := ObjSecAlign(ReqBssAlign);
+  a := 1;
+  if ODCOff[c] = 0 then a := cap
+  else
+    while (a < cap) and ((ODCOff[c] mod (a * 2)) = 0) do a := a * 2;
+  ObjDCutAlign := a;
+end;
+
+{ A reference to offset `off` of section `sec` (0 .data, 1 .bss): the symbol
+  to relocate against, and the part of the addend that locates `off` in it. }
+procedure ObjDRef(sec, off: Integer; var sym: Integer; var rel: Int64);
+var c: Integer;
+begin
+  c := ObjDCutOf(sec, off);
+  if c < 0 then
+  begin
+    sym := 2 + sec;
+    rel := off;
+  end
+  else
+  begin
+    sym := ODCSym[c];
+    rel := Int64(off) - ODCOff[c];
+  end;
+end;
+
+function ObjDataSecOf(i: Integer): Integer;
+begin
+  if SymOffIsData(Syms[i].Offset) then ObjDataSecOf := 0 else ObjDataSecOf := 1;
+end;
+
+{ st_shndx / st_value of a data symbol this object defines }
+function ObjDataSymShndx(i: Integer): Integer;
+var c: Integer;
+begin
+  c := ObjDCutOf(ObjDataSecOf(i), ObjDataValue(i));
+  if c < 0 then ObjDataSymShndx := ObjDataShndx(i) else ObjDataSymShndx := ODCShndx[c];
+end;
+
+function ObjDataSymValue(i: Integer): Integer;
+var c: Integer;
+begin
+  c := ObjDCutOf(ObjDataSecOf(i), ObjDataValue(i));
+  if c < 0 then ObjDataSymValue := ObjDataValue(i)
+  else ObjDataSymValue := ObjDataValue(i) - ODCOff[c];
+end;
+
+procedure ObjDCutAdd(sec, off, en: Integer; const nm: AnsiString);
+var n: Integer;
+begin
+  if ODCCount >= Length(ODCOff) then
+  begin
+    n := Length(ODCOff) * 2;
+    if n < 64 then n := 64;
+    SetLength(ODCSec, n); SetLength(ODCOff, n); SetLength(ODCEndT, n);
+    SetLength(ODCName, n);
+  end;
+  ODCSec[ODCCount] := sec;
+  ODCOff[ODCCount] := off;
+  ODCEndT[ODCCount] := en;
+  ODCName[ODCCount] := nm;
+  Inc(ODCCount);
+end;
+
+{ (sec, off) order }
+function ObjDCutLess(a, b: Integer): Boolean;
+begin
+  if ODCSec[a] <> ODCSec[b] then ObjDCutLess := ODCSec[a] < ODCSec[b]
+  else ObjDCutLess := ODCOff[a] < ODCOff[b];
+end;
+
+procedure ObjDCutSwap(a, b: Integer);
+var t: Integer; s: AnsiString;
+begin
+  t := ODCSec[a]; ODCSec[a] := ODCSec[b]; ODCSec[b] := t;
+  t := ODCOff[a]; ODCOff[a] := ODCOff[b]; ODCOff[b] := t;
+  t := ODCEndT[a]; ODCEndT[a] := ODCEndT[b]; ODCEndT[b] := t;
+  s := ODCName[a]; ODCName[a] := ODCName[b]; ODCName[b] := s;
+end;
+
+{ The data cuts and their symbol indices; section indices come later
+  (ObjNumberDataCuts), once the relocations are counted. }
+procedure ObjPlanDataCuts(firstSecSym: Integer);
+var i, j, k, sec, off, en, prevSec, prevEnd, gap: Integer;
+    ok: Boolean;
+begin
+  ODCCount := 0;
+  ODCFirstBss := 0;
+  ODCDroppedData := False;
+  ODRCount := 0;
+  ODRHeadN := 0;
+  if not (FunctionSections and (TargetArch = TARGET_X86_64)) then Exit;
+  for i := 0 to SymCount - 1 do
+    if (ObjDataIsLocal(i) or ObjDataIsExport(i)) and (SymAllocSize[i] > 0) then
+    begin
+      sec := ObjDataSecOf(i);
+      off := ObjDataValue(i);
+      en := off + SymAllocSize[i];
+      if (off >= 0) and (en <= ObjDSecEnd(sec)) then
+        ObjDCutAdd(sec, off, en, Syms[i].Name);
+    end;
+  { Every interned string is an entry of its own, [EntryStart, EntryEnd), and
+    is referenced only inside it (the handle and the chars sit at fixed
+    offsets in the entry). Without a cut each, a crtl copy's whole literal
+    pool rode with whichever global preceded it and stayed alive in every
+    object (toybox: 182 x 17.6 KiB). Not when the section indices would reach
+    SHN_LORESERVE (0xff00): this writer has no extended numbering. }
+  if ObjCutCount * 2 + (ODCCount + StrCount) * 2 + 32 < $FF00 then
+    for i := 0 to StrCount - 1 do
+      if (Strs[i].EntryStart >= 0) and (Strs[i].EntryEnd > Strs[i].EntryStart) and
+         (Strs[i].EntryEnd <= DataLen) then
+        ObjDCutAdd(0, Strs[i].EntryStart, Strs[i].EntryEnd, 'pxx.str' + AIntToStr(i));
+  { shell sort by (sec, off) }
+  gap := ODCCount div 2;
+  while gap > 0 do
+  begin
+    for i := gap to ODCCount - 1 do
+    begin
+      j := i;
+      while (j - gap >= 0) and ObjDCutLess(j, j - gap) do
+      begin
+        ObjDCutSwap(j, j - gap);
+        j := j - gap;
+      end;
+    end;
+    gap := gap div 2;
+  end;
+  { drop a global that starts inside the one before it (the first stands) }
+  k := 0; prevSec := -1; prevEnd := 0;
+  for i := 0 to ODCCount - 1 do
+  begin
+    if (ODCSec[i] = prevSec) and (ODCOff[i] < prevEnd) then Continue;
+    if k <> i then
+    begin
+      ODCSec[k] := ODCSec[i]; ODCOff[k] := ODCOff[i];
+      ODCEndT[k] := ODCEndT[i]; ODCName[k] := ODCName[i];
+    end;
+    prevSec := ODCSec[k];
+    prevEnd := ODCEndT[k];
+    Inc(k);
+  end;
+  ODCCount := k;
+  ODCFirstBss := 0;
+  while (ODCFirstBss < ODCCount) and (ODCSec[ODCFirstBss] = 0) do Inc(ODCFirstBss);
+  { a self-relative word must stay inside one section with its target }
+  ok := True;
+  for i := 0 to DataRelFixCount - 1 do
+    if ObjDCutOf(0, DataRelFixPos[i]) <> ObjDCutOf(0, DataRelFixTarget[i]) then ok := False;
+  if not ok then
+  begin
+    ODCDroppedData := True;
+    for i := ODCFirstBss to ODCCount - 1 do
+    begin
+      j := i - ODCFirstBss;
+      ODCSec[j] := ODCSec[i]; ODCOff[j] := ODCOff[i];
+      ODCEndT[j] := ODCEndT[i]; ODCName[j] := ODCName[i];
+    end;
+    ODCCount := ODCCount - ODCFirstBss;
+    ODCFirstBss := 0;
+  end;
+  SetLength(ODCShndx, ODCCount + 1);
+  SetLength(ODCSym, ODCCount + 1);
+  SetLength(ODCRelAt, ODCCount + 1);
+  SetLength(ODCRelN, ODCCount + 1);
+  SetLength(ODCNm, ODCCount + 1);
+  for i := 0 to ODCCount - 1 do
+  begin
+    ODCShndx[i] := 0;
+    ODCSym[i] := firstSecSym + i;
+    ODCRelAt[i] := 0;
+    ODCRelN[i] := 0;
+    ODCNm[i] := 0;
+  end;
+end;
+
+procedure ObjDRelPush(pos: Int64; sym, rtype: Integer; addend: Int64);
+var n: Integer;
+begin
+  if ODRCount >= Length(ODRPos) then
+  begin
+    n := Length(ODRPos) * 2;
+    if n < 256 then n := 256;
+    SetLength(ODRPos, n); SetLength(ODRAddn, n);
+    SetLength(ODRSym, n); SetLength(ODRType, n);
+  end;
+  ODRPos[ODRCount] := pos;
+  ODRSym[ODRCount] := sym;
+  ODRType[ODRCount] := rtype;
+  ODRAddn[ODRCount] := addend;
+  Inc(ODRCount);
+end;
+
+{ Group the .rela.data entries: the head's first (in collection order, so an
+  uncut object writes the file it always did), then each cut's, sites made
+  cut-relative. Run ONCE. }
+procedure ObjGroupDataRelocs;
+var i, c, n: Integer;
+    cutOf, fill: array of Integer;
+    sPos, sAdd: array of Int64; sSym, sTyp: array of Integer;
+begin
+  ODRHeadN := ODRCount;
+  if ODCFirstBss = 0 then Exit;   { no .data cut }
+  SetLength(cutOf, ODRCount);
+  ODRHeadN := 0;
+  for c := 0 to ODCCount - 1 do ODCRelN[c] := 0;
+  for i := 0 to ODRCount - 1 do
+  begin
+    cutOf[i] := ObjDCutOf(0, Integer(ODRPos[i]));
+    if cutOf[i] < 0 then Inc(ODRHeadN) else Inc(ODCRelN[cutOf[i]]);
+  end;
+  n := ODRHeadN;
+  for c := 0 to ODCCount - 1 do begin ODCRelAt[c] := n; n := n + ODCRelN[c]; end;
+  SetLength(sPos, ODRCount); SetLength(sAdd, ODRCount);
+  SetLength(sSym, ODRCount); SetLength(sTyp, ODRCount);
+  SetLength(fill, ODCCount + 1);
+  for c := 0 to ODCCount - 1 do fill[c] := ODCRelAt[c];
+  n := 0;
+  for i := 0 to ODRCount - 1 do
+  begin
+    c := cutOf[i];
+    if c < 0 then
+    begin
+      sPos[n] := ODRPos[i]; sAdd[n] := ODRAddn[i];
+      sSym[n] := ODRSym[i]; sTyp[n] := ODRType[i];
+      Inc(n);
+    end
+    else
+    begin
+      sPos[fill[c]] := ODRPos[i] - ODCOff[c];
+      sAdd[fill[c]] := ODRAddn[i];
+      sSym[fill[c]] := ODRSym[i];
+      sTyp[fill[c]] := ODRType[i];
+      Inc(fill[c]);
+    end;
+  end;
+  for i := 0 to ODRCount - 1 do
+  begin
+    ODRPos[i] := sPos[i]; ODRAddn[i] := sAdd[i];
+    ODRSym[i] := sSym[i]; ODRType[i] := sTyp[i];
+  end;
+end;
+
+{ Number the data cuts after the code cuts: a .data cut is followed by its
+  .rela.data.<name> when it has entries; a .bss cut has none. }
+function ObjNumberDataCuts(firstShndx: Integer): Integer;
+var c, n: Integer;
+begin
+  n := firstShndx;
+  for c := 0 to ODCCount - 1 do
+  begin
+    ODCShndx[c] := n;
+    Inc(n);
+    if (ODCSec[c] = 0) and (ODCRelN[c] > 0) then Inc(n);
+  end;
+  ObjNumberDataCuts := n;
+end;
+
 procedure CheckUndefinedExternData;
 { An EXECUTABLE that uses a C `extern` variable nothing defines is refused.
   ld refuses it too ("undefined reference to `ghost'"), and so does pxx's own
@@ -5514,16 +5863,19 @@ function ObjDataExportSymForOff(bssOff: Integer): Integer;
   where gcc says 2. Sharing a definition is a two-sided contract and only the
   import side was wired.
 
-  .bss only, because the export loop declares section 5 for every data symbol
-  it writes. Accepting a .data-encoded offset here would name a symbol whose
-  own st_shndx says .bss -- a wrong address that still links. }
+  .data too: the export loop writes each symbol's own section (ObjDataShndx /
+  ObjDataSymShndx), so a global CPlaceGlobalInData moved there is named
+  correctly. It used to be refused here, from when that loop said .bss for
+  every symbol -- and with --c-static-data on by default for gc-ready objects,
+  a baked weak crtl global (`int optind = 1;`) then bound every reference in
+  its object to the private copy: toybox's getopt set one optind and
+  getopt_long read another. Both encodings compare raw: a .data offset carries
+  DATA_SYM_BIAS on both sides. }
 var k: Integer;
 begin
   ObjDataExportSymForOff := -1;
-  if SymOffIsData(bssOff) then Exit;
   for k := 0 to SymCount-1 do
-    if ObjDataIsExport(k) and (not SymOffIsData(Syms[k].Offset)) and
-       (Syms[k].Offset = bssOff) then
+    if ObjDataIsExport(k) and (Syms[k].Offset = bssOff) then
     begin
       ObjDataExportSymForOff := k;
       Exit;
@@ -5884,16 +6236,20 @@ procedure ObjBuildTextRelocsX64(firstGlobal, extSym0, impSym0,
   the reason to do it this way: the objects this produces must be the files
   they were before the refactor, and four saved ones (the reloc probe and a
   function-sections case, x86-64 and i386) are compared to check it. }
-var i, dsym: Integer;
+var i, dsym, csym: Integer; crel: Int64;
 begin
-  { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
+  { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss -- or a data
+    cut's own (ObjDRef), under --function-sections.
     R_X86_64_64 = 1, R_X86_64_32S = 11. }
   for i := 0 to FixCount-1 do
+  begin
     { rtype 1 = R_X86_64_64 (absolute), 2 = R_X86_64_PC32 for the lea form }
+    ObjDRef(0, Fixups[i].DataOff, csym, crel);
     if FixupPCRel[i] then
-      ObjRelPush(Fixups[i].CodePos, 2, 2, Fixups[i].DataOff - 4)
+      ObjRelPush(Fixups[i].CodePos, csym, 2, crel - 4)
     else
-      ObjRelPush(Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
+      ObjRelPush(Fixups[i].CodePos, csym, 1, crel);
+  end;
   for i := 0 to GlobFixCount-1 do
   begin
     { A data-resident global (a typed const baked into .data) carries a BIASED
@@ -5951,26 +6307,27 @@ begin
       else
         ObjRelPush(GlobFix[i].CodePos, dsym, 11, 0);
     end
-    else if GlobFixPCRel[i] then
+    else
     begin
       if SymOffIsData(GlobFix[i].BSSoff) then
-        ObjRelPush(GlobFix[i].CodePos, 2, 2,
-                    SymOffDataPart(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i])
+        ObjDRef(0, SymOffDataPart(GlobFix[i].BSSoff), csym, crel)
       else
-        ObjRelPush(GlobFix[i].CodePos, 3, 2,
-                    ObjBssRemap(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i]);
-    end
-    else if SymOffIsData(GlobFix[i].BSSoff) then
-      ObjRelPush(GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
-    else
-      ObjRelPush(GlobFix[i].CodePos, 3, 11, ObjBssRemap(GlobFix[i].BSSoff));
+        ObjDRef(1, ObjBssRemap(GlobFix[i].BSSoff), csym, crel);
+      if GlobFixPCRel[i] then
+        ObjRelPush(GlobFix[i].CodePos, csym, 2, crel - 4 - GlobFixTrail[i])
+      else
+        ObjRelPush(GlobFix[i].CodePos, csym, 11, crel);
+    end;
   end;
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
   for i := 0 to DynCallCount-1 do
+  begin
     { `call qword ptr [rip+disp32]` naming our own GOT slot in .data: PC32, so
       the addend carries the -4 to the end of the instruction. }
-    ObjRelPush(DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
+    ObjDRef(0, ExternalGotOff[DynCallExtIdx[i]], csym, crel);
+    ObjRelPush(DynCallCodePos[i], csym, 2, crel - 4);
+  end;
   { @proc: the `mov rax, imm64` operand, absolute against .text }
   { @proc: `lea rax,[rip+disp32]` against .text -- PC32 (rtype 2), addend
     carrying the -4 to the end of the instruction. It was R_X86_64_64 against
@@ -6153,14 +6510,14 @@ procedure ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0: Inte
   relocation here uses. A function or a variable defined in another object
   relocates against its own UND symbol; an exported definition against its
   own symbol, for the reason ObjDataExportSymForOff gives. }
-var p, k, e: Integer;
+var p, k, e: Integer; rel: Int64;
 begin
   addend := CDRAddend[i];
   case CDRKind[i] of
     CDR_DATA:
       begin
-        sym := 2;
-        addend := addend + CDRTarget[i];
+        ObjDRef(0, CDRTarget[i], sym, rel);
+        addend := addend + rel;
       end;
     CDR_PROC:
       begin
@@ -6187,20 +6544,20 @@ begin
       p := CDRTarget[i];
       if ObjDataIsImport(p) then
         sym := impSym0 + ObjDataImportOrdinal(p)
-      else if SymOffIsData(Syms[p].Offset) then
-      begin
-        sym := 2;
-        addend := addend + SymOffDataPart(Syms[p].Offset);
-      end
       else
       begin
         e := ObjDataExportSymForOff(Syms[p].Offset);
         if e >= 0 then
           sym := firstGlobal + numExportProcs + ObjDataExportOrdinal(e)
+        else if SymOffIsData(Syms[p].Offset) then
+        begin
+          ObjDRef(0, SymOffDataPart(Syms[p].Offset), sym, rel);
+          addend := addend + rel;
+        end
         else
         begin
-          sym := 3;
-          addend := addend + ObjBssRemap(Syms[p].Offset);
+          ObjDRef(1, ObjBssRemap(Syms[p].Offset), sym, rel);
+          addend := addend + rel;
         end;
       end;
     end;
@@ -6239,6 +6596,7 @@ var
     nThunkSym, initThunkSym, finiThunkSym: Integer;
     thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
   nSecSym, c, extraRelaOff, extraRelaCount: Integer;
+  dataRelaOff, dataRelaCount, dshstr: Integer;
   machine, rAbs64: Integer;
   cdrSym: Integer; cdrAdd: Int64;   { a CDataReloc entry's symbol and addend }
 {$ifdef FPC}
@@ -6345,7 +6703,9 @@ begin
   { --function-sections: one STT_SECTION symbol per cut after the head (whose
     section symbol is the fixed symbol 1), LOCAL, after the thunk symbols. }
   ObjPlanCuts(4 + numLocalProcs + numLocalData + nThunkSym);
-  nSecSym := ObjCutCount - 1;
+  { and the data cuts' after them -- see ObjPlanDataCuts }
+  ObjPlanDataCuts(4 + numLocalProcs + numLocalData + nThunkSym + ObjCutCount - 1);
+  nSecSym := ObjCutCount - 1 + ODCCount;
 
   firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym + nSecSym;
   extSym0 := firstGlobal + numExportProcs + numExportData;
@@ -6374,7 +6734,40 @@ begin
   ObjGroupRelocs;
   relaTextCount := ObjCutRelN[0];
   extraRelaCount := ObjRelCount - relaTextCount;
-  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount + CDRCount;
+
+  { .rela.data: data->data pointers, data->code method slots, and one
+    R_X86_64_64 per external GOT slot against that extern's UND symbol, then
+    the C initialisers baked into .data (CStaticDataMode). Collected, then
+    grouped by data cut; an uncut object writes them in this order, as before. }
+  for i := 0 to DataPtrFixCount-1 do
+  begin
+    ObjDRef(0, DataPtrFix[i].TargetOff, dsym, cdrAdd);
+    ObjDRelPush(DataPtrFix[i].DataPos, dsym, rAbs64, cdrAdd);
+  end;
+  { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
+    method's own symbol under --function-sections, where it was `.text` plus the
+    body offset. }
+  for i := 0 to MethodFixCount-1 do
+    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
+      ObjDRelPush(MethodFixups[i].DataPos,
+                  ObjProcSymIdx[MethodFixups[i].ProcIdx], rAbs64, 0)
+    else
+      ObjDRelPush(MethodFixups[i].DataPos,
+                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
+                  ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
+  for i := 0 to ExternalCount-1 do
+    ObjDRelPush(ExternalGotOff[i], extSym0 + i, rAbs64, 0);
+  for i := 0 to CDRCount-1 do
+  begin
+    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
+    ObjDRelPush(CDRPos[i], cdrSym, rAbs64, cdrAdd);
+  end;
+  ObjGroupDataRelocs;
+  relaDataCount := ODRHeadN;
+  dataRelaCount := ODRCount - ODRHeadN;
+  if PxxDbgEnabled('obj.datasections') or (FunctionSections and (ODCCount > 0) and PxxDbgEnabled('a.datamap')) then
+    writeln(StdErr, 'data-sections: .data cuts ', ODCFirstBss, '  .bss cuts ',
+            ODCCount - ODCFirstBss, '  .data refused ', ODCDroppedData);
 
   textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
   dataOff := AlignTo(textOff + CodeLen, 16);
@@ -6395,6 +6788,7 @@ begin
   if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
   if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
   numSects := ObjNumberCuts(numSects);
+  numSects := ObjNumberDataCuts(numSects);
 
   { Names are appended to the 66-byte base blob only for sections that EXIST, so
     an object without initialisers is byte-for-byte the file it was before this
@@ -6421,6 +6815,13 @@ begin
     ObjCutRelaNm[c] := shstrSize;
     shstrSize := shstrSize + Length(ObjCutName[c]) + 12;
   end;
+  { '.rela.data.<name>' (+5 '.data.<name>') per .data cut, '.bss.<name>' per .bss }
+  for c := 0 to ODCCount - 1 do
+  begin
+    ODCNm[c] := shstrSize;
+    if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCName[c]) + 12
+    else shstrSize := shstrSize + Length(ODCName[c]) + 6;
+  end;
 
   { Every offset here is already 8-aligned: relaDataOff is, 24 and 8 preserve
     it, so the array sections need no padding of their own. }
@@ -6433,7 +6834,8 @@ begin
   if hasFiniArr then relaFiniArrOff := finiArrOff + 8;
   extraRelaOff := relaFiniArrOff;
   if hasFiniArr then extraRelaOff := relaFiniArrOff + 24;
-  shstrOff := extraRelaOff + extraRelaCount * 24;
+  dataRelaOff := extraRelaOff + extraRelaCount * 24;
+  shstrOff := dataRelaOff + dataRelaCount * 24;
   shOff := AlignTo(shstrOff + shstrSize, 8);
 
 {$ifdef FPC}
@@ -6479,7 +6881,7 @@ begin
     pass which simply exports everything. }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-      writeSym64(f, ObjDataStrOff[i], $01, ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
+      writeSym64(f, ObjDataStrOff[i], $01, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
   { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
     data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
     -- a thunk is code no proc owns and its extent is recorded nowhere, so
@@ -6493,6 +6895,8 @@ begin
   { the cut sections' own symbols ($03 = LOCAL SECTION), in cut order }
   for c := 1 to ObjCutCount - 1 do
     writeSym64(f, 0, $03, ObjCutShndx[c], 0, 0);
+  for c := 0 to ODCCount - 1 do
+    writeSym64(f, 0, $03, ODCShndx[c], 0, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
       writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ObjTextShndx(Procs[i].BodyAddr),
@@ -6502,7 +6906,7 @@ begin
     SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
+      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
     writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
@@ -6533,29 +6937,9 @@ begin
   for i := 0 to ObjCutRelN[0] - 1 do
     writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
 
-  { .rela.data: data->data pointers, data->code method slots, and one
-    R_X86_64_64 per external GOT slot against that extern's UND symbol. }
-  for i := 0 to DataPtrFixCount-1 do
-    writeRela64(f, DataPtrFix[i].DataPos, 2, rAbs64, DataPtrFix[i].TargetOff);
-  { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
-    method's own symbol under --function-sections, where it was `.text` plus the
-    body offset. }
-  for i := 0 to MethodFixCount-1 do
-    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
-      writeRela64(f, MethodFixups[i].DataPos,
-                  ObjProcSymIdx[MethodFixups[i].ProcIdx], rAbs64, 0)
-    else
-      writeRela64(f, MethodFixups[i].DataPos,
-                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
-                  ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
-  for i := 0 to ExternalCount-1 do
-    writeRela64(f, ExternalGotOff[i], extSym0 + i, rAbs64, 0);
-  { C initialisers baked into .data (CStaticDataMode) }
-  for i := 0 to CDRCount-1 do
-  begin
-    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
-    writeRela64(f, CDRPos[i], cdrSym, rAbs64, cdrAdd);
-  end;
+  { .rela.data: the head's entries, collected and grouped above }
+  for i := 0 to ODRHeadN - 1 do
+    writeRela64(f, ODRPos[i], ODRSym[i], ODRType[i], ODRAddn[i]);
 
   { .init_array / .fini_array: ONE 8-byte slot each, whose VALUE is supplied by
     the relocation rather than by these bytes. The slot is written as zero
@@ -6580,6 +6964,9 @@ begin
   { the cut sections' relocations, grouped, after the head's and the arrays' }
   for i := ObjCutRelN[0] to ObjRelCount - 1 do
     writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
+  { and the data cuts' }
+  for i := ODRHeadN to ODRCount - 1 do
+    writeRela64(f, ODRPos[i], ODRSym[i], ODRType[i], ODRAddn[i]);
 
   { .shstrtab: 66-byte base blob, plus 29 bytes per array pair that exists. }
   writeU8(f, 0);
@@ -6602,6 +6989,9 @@ begin
     writeStrZ(f, '.rela.fini_array');
   end;
   for c := 1 to ObjCutCount - 1 do writeStrZ(f, '.rela.text.' + ObjCutName[c]);
+  for c := 0 to ODCCount - 1 do
+    if ODCSec[c] = 0 then writeStrZ(f, '.rela.data.' + ODCName[c])
+    else writeStrZ(f, '.bss.' + ODCName[c]);
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs. $40 = SHF_INFO_LINK on rela sections; 6 = ALLOC|EXEC, 3 = ALLOC|WRITE. }
@@ -6611,11 +7001,11 @@ begin
   writeShdrB64(f, 0, 0, 16, 0);
   writeShdrA64(f, 7, 4, $40, relaTextOff, relaTextCount*24);
   writeShdrB64(f, 6, 1, 8, 24);
-  writeShdrA64(f, 18, 1, 3, dataOff, DataLen);
+  writeShdrA64(f, 18, 1, 3, dataOff, ObjDHeadEnd(0));
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqDataAlign), 0);
   writeShdrA64(f, 24, 4, $40, relaDataOff, relaDataCount*24);
   writeShdrB64(f, 6, 3, 8, 24);
-  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, BSSSize - ObjBssDropTotal);
+  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, ObjDHeadEnd(1));
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqBssAlign), 0);
   writeShdrA64(f, 40, 2, 0, symOff, numSyms*24);
   writeShdrB64(f, 7, firstGlobal, 8, 24);
@@ -6654,6 +7044,25 @@ begin
       writeShdrB64(f, 6, ObjCutShndx[c], 8, 24);
     end;
   end;
+  { the data cuts, the same way: .data bytes in place inside the one data blob,
+    each followed by its .rela.data.<name> when it has one; .bss is NOBITS. }
+  for c := 0 to ODCCount - 1 do
+    if ODCSec[c] = 0 then
+    begin
+      writeShdrA64(f, ODCNm[c] + 5, 1, 3, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c]);
+      writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);
+      if ODCRelN[c] > 0 then
+      begin
+        writeShdrA64(f, ODCNm[c], 4, $40,
+                     dataRelaOff + (ODCRelAt[c] - ODRHeadN) * 24, ODCRelN[c] * 24);
+        writeShdrB64(f, 6, ODCShndx[c], 8, 24);
+      end;
+    end
+    else
+    begin
+      writeShdrA64(f, ODCNm[c], 8, 3, dataOff + DataLen, ObjDCutEnd(c) - ODCOff[c]);
+      writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);
+    end;
 
 {$ifdef FPC}
   Close(f);

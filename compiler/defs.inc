@@ -4167,6 +4167,7 @@ var
     --freestanding, where nothing would run it and it is refused by name.
     x86-64 executables and objects only. Gibux. }
   CStaticDataMode : Boolean;
+  NoCStaticData   : Boolean;   { --no-c-static-data: keep the init-thunk stores }
   CStatSymFlag    : array of Boolean;   { by Syms index: placed by CPlaceGlobalInData }
   { One 8-byte slot in Data[] holding an address the writer supplies:
     CDR_DATA = Data[] offset Target, CDR_PROC = Procs[Target]'s entry,
