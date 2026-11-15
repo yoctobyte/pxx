@@ -11284,7 +11284,7 @@ test-minix: $(COMPILER)
 	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_http_serve.pas test/test_async.pas \
 	           test/lib_asyncnet6.pas test/lib_dns_async.pas \
 	           test/c_pty_family.c test/c_crtl_busybox_394_gaps.c test/c_crtl_sched_and_fs_ioctls.c \
-	           test/c_crtl_telnet_and_prctl.c; do \
+	           test/c_crtl_telnet_and_prctl.c test/c_os_procfiles.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \
@@ -11340,7 +11340,7 @@ test-windows: $(COMPILER)
 	           test/c_crtl_sock_flags.c test/c_crtl_cmsg_and_socket_levels.c test/c_crtl_inet6.c \
 	           test/csocket_loopback_b88.c test/lib_mimic_socket.npy \
 	           test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py \
-	           test/test_windows_dll_floats.pas; do \
+	           test/test_windows_dll_floats.pas test/test_nt_relocation.pas test/c_os_procfiles.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
@@ -11370,6 +11370,14 @@ test-windows: $(COMPILER)
 	    tools/expect_same.sh windows_pre8_threads_$$n "$$(PXX_WINABI_PRE8=1 tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
 	  tools/expect_same.sh windows_imports "$$(objdump -p $$d/lib_net.pas.exe | sed -n 's/.*DLL Name: //p' | sort | tr '\n' ' ')" "kernel32.dll ws2_32.dll " || exit 1; \
+	  for t in test/test_nt_relocation.pas test/test_exception_unwind_temp_leak.pas test/test_interfaces_multi_secondary.pas \
+	           test/test_class_str.pas test/test_signal_pc_rewrite.pas test/lib_net.pas test/c_struct_fnptr_member_local.c \
+	           test/test_nilpy_variant.npy; do \
+	    n=$$(basename $$t); \
+	    ./$(COMPILER) --os=windows --image-base=0x7ffe0000 $$t $$d/reloc_$$n.exe >/dev/null && \
+	    tools/expect_same.sh windows_relocated_$$n "$$(tools/vm/wine.sh $$d/reloc_$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  done; \
+	  tools/expect_same.sh windows_dynamic_base "$$(objdump -p $$d/test_nt_relocation.pas.exe | sed -n 's/^DllCharacteristics[ \t]*//p')" "00008140" || exit 1; \
 	  ./$(COMPILER) test/test_qplus_int64_mul_traps.pas $$d/q.lx >/dev/null && ./$(COMPILER) --os=windows test/test_qplus_int64_mul_traps.pas $$d/q.exe >/dev/null && \
 	  for a in "" "one" "one two" "one two three" "one two three four" "one two three four five"; do \
 	    tools/expect_same.sh "windows_qplus_args_$$a" "$$(tools/vm/wine.sh $$d/q.exe $$a 2>&1; echo exit=$$?)" "$$($$d/q.lx $$a 2>&1; echo exit=$$?)" || exit 1; \
@@ -23399,6 +23407,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_static_array_length26 "$$($(TESTTMP)/test_static_array_length26)" "$$(printf '3\n2\n64\n60\n3\n2\n0\n5\n9\n5')"
 	./$(COMPILER) -Itest/builtin_shadow test/test_builtin_name_demote.pas $(TESTTMP)/test_builtin_name_demote26
 	tools/expect_same.sh test_builtin_name_demote26 "$$($(TESTTMP)/test_builtin_name_demote26)" "$$(printf '10000\n60\nsys-ok')"
+	./$(COMPILER) -Itest/class_routine_shadow test/test_p_a_class_beats_a_used_units_routine_before_a_dot.pas $(TESTTMP)/test_class_beats_routine26
+	tools/expect_same.sh test_class_beats_routine26 "$$($(TESTTMP)/test_class_beats_routine26)" "$$(printf 'TB TB\nTA worker-class\n3 42')"
 	./$(COMPILER) test/test_narrowing_typecast_rvalue.pas $(TESTTMP)/test_narrowing_typecast_rvalue26
 	tools/expect_same.sh test_narrowing_typecast_rvalue26 "$$($(TESTTMP)/test_narrowing_typecast_rvalue26)" "$$(printf '44\ncmp-ok\n44\n44\n4464\n4294967295\n4294967295\n-1\n-56\n5\n5')"
 	# ...and the arm that fix deliberately left alone: `Integer(x)` as an RVALUE
@@ -31329,6 +31339,10 @@ test-i386: $(COMPILER)
 	# The .expected is gcc's own output for the same file on x86-64 -- the
 	# point of a cross row is that the answer does not depend on the target.
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	# The address of a 64-bit array element / struct field is ONE pointer in a
+	# variadic tail (it went out as an 8-byte pair: sscanf %llu segfaulted).
+	./$(COMPILER) --target=i386 test/c_vararg_address_of_64bit_element.c $(TESTTMP)/test_i386_va64addr
+	tools/expect_same.sh i386/va64addr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_va64addr)" "$$(printf '1 3 11 22 33\n2 2 -5 6\n3 1\n4 2 7 8\n5 8 4')"
 	./$(COMPILER) --target=i386 test/c_labels_as_values.c $(TESTTMP)/test_i386_labelval
 	tools/expect_same.sh i386/labelval "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	./$(COMPILER) --target=i386 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_i386_tcpgrp
@@ -33906,6 +33920,10 @@ test-riscv32: $(COMPILER)
 	# The .expected is gcc's own output for the same file on x86-64 -- the
 	# point of a cross row is that the answer does not depend on the target.
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	# The address of a 64-bit array element / struct field is ONE pointer in a
+	# variadic tail (it went out as an 8-byte pair: sscanf %llu segfaulted).
+	./$(COMPILER) --target=riscv32 test/c_vararg_address_of_64bit_element.c $(TESTTMP)/test_riscv32_va64addr
+	tools/expect_same.sh riscv32/va64addr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_va64addr)" "$$(printf '1 3 11 22 33\n2 2 -5 6\n3 1\n4 2 7 8\n5 8 4')"
 	./$(COMPILER) --target=riscv32 test/c_labels_as_values.c $(TESTTMP)/test_riscv32_labelval
 	tools/expect_same.sh riscv32/labelval "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	# statfs is where the syscall tables stop agreeing: asm-generic slot 43 is
@@ -37406,6 +37424,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/strn_fieldstride "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_strnstride)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
+	# The address of a 64-bit array element / struct field is ONE pointer in a
+	# variadic tail (it went out as an 8-byte pair: sscanf %llu segfaulted).
+	./$(COMPILER) --target=arm32 test/c_vararg_address_of_64bit_element.c $(TESTTMP)/test_a32_va64addr
+	tools/expect_same.sh arm32/va64addr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_va64addr)" "$$(printf '1 3 11 22 33\n2 2 -5 6\n3 1\n4 2 7 8\n5 8 4')"
 	./$(COMPILER) --target=arm32 test/c_local_string_array_init.c $(TESTTMP)/test_a32_lsarr
 	tools/expect_same.sh arm32/lsarr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	./$(COMPILER) --target=arm32 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_a32_cmsg

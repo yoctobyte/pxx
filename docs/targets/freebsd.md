@@ -173,16 +173,16 @@ pair linked by gcc on Linux.
 
 ## The /proc files the translators build
 
-The BSDs have no Linux `/proc` (NetBSD's procfs, when mounted, is a
-different set of files), so each translator answers three more files from
-the system's own calls. The text is built in `compiler/builtin/proctext.inc`,
-shared by all of them:
+The BSDs and Minix have no Linux `/proc` (NetBSD's procfs and Minix's
+`/proc`, when mounted, are different sets of files), so each translator
+answers three more files from the system's own calls. The text is built in
+`compiler/builtin/proctext.inc`, shared by all of them:
 
-| File | Read by | FreeBSD | NetBSD | OpenBSD | DragonFly |
-|---|---|---|---|---|---|
-| `/proc/self/fdinfo/N` (`mnt_id:`, `ino:`) | the compiler's output guard | `fstat` | `fstat` | `fstat` | `fstat` |
-| `/proc/mounts`, `/proc/self/mounts` | crtl's `getmntent` (`df`, mount lists) | `getfsstat` | `getvfsstat` | `getfsstat` | `getfsstat` |
-| `/proc/stat` (the `cpu` lines) | palparallel's load sampler | `kern.cp_time(s)` | `kern.cp_time` {1,51} | `kern.cp_time2` {1,71} | `kern.cp_time(s)` |
+| File | Read by | FreeBSD | NetBSD | OpenBSD | DragonFly | Minix |
+|---|---|---|---|---|---|---|
+| `/proc/self/fdinfo/N` (`mnt_id:`, `ino:`) | the compiler's output guard | `fstat` | `fstat` | `fstat` | `fstat` | `fstat` |
+| `/proc/mounts`, `/proc/self/mounts` | crtl's `getmntent` (`df`, mount lists) | `getfsstat` | `getvfsstat` | `getfsstat` | `getfsstat` | `getvfsstat` |
+| `/proc/stat` (the `cpu` lines) | palparallel's load sampler | `kern.cp_time(s)` | `kern.cp_time` {1,51} | `kern.cp_time2` {1,71} | `kern.cp_time(s)` | `kern.cp_time` {1,51}, aggregate line only |
 
 `mnt_id` is the file system's device number, which is one per mounted file
 system, as Linux's mount id is. A mount line has the source, the mount point,
@@ -191,8 +191,9 @@ lines count user, nice, system, idle and interrupt time in the system's own
 clock ticks (OpenBSD's spin time is added to system); Linux's other columns are
 0. OpenBSD's own `kern.cp_time` is the average over the CPUs, so the first line
 there is the sum of the per-CPU rows, as on Linux. Under `--os=nt`, winabi
-answers `/proc/self/fdinfo/N` (volume serial and file index) and the `cpu` line
-of `/proc/stat` (`GetSystemTimes`, in 10 ms ticks).
+answers all three: `/proc/self/fdinfo/N` (volume serial and file index),
+`/proc/mounts` (the local drives, the current one on `/`) and the `cpu` line of
+`/proc/stat` (`GetSystemTimes`, in 10 ms ticks).
 
 ## Testing it
 

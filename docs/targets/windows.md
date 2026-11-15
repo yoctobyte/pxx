@@ -90,8 +90,12 @@ Five things differ from the BSD ports:
   laid out like the ELF one, with the code at RVA `0x1000` and the data
   after it. Imports go through the Import Address Table, which takes the
   place of the GOT slots the x86-64 external call already reads. The image
-  loads at a fixed base (`0x400000`) with no relocations, so there is no
-  ASLR yet.
+  prefers the base `0x400000` and carries a `.reloc` section that lists
+  every absolute address in it (method slots, data pointers, C initialisers,
+  the TLS directory, the code's 64-bit immediates), so it is marked
+  `DYNAMIC_BASE` and Windows may load it anywhere below 4 GiB (ASLR, without
+  high-entropy addresses). `--image-base=0x7ffe0000` gives a base the loader
+  has to move, which is how `make test-windows` checks the relocations.
 - **The calling convention.** pxx code keeps the System V convention
   internally. Each call to a DLL function converts at the call site: the
   first four arguments move to `rcx`, `rdx`, `r8` and `r9`, the fifth and
@@ -123,7 +127,10 @@ Five things differ from the BSD ports:
 Each item is checked against the Linux build of the same test by `make
 test-windows` (run under Wine through `tools/vm/wine.sh`):
 
-- console output and input
+- console output and input; UTF-8 text written to a console window is
+  shown as UTF-8 (converted for `WriteConsoleW`, also when a character is
+  split across two writes), while output to a file or a pipe is left as
+  the bytes the program wrote
 - the heap
 - exceptions
 - time and `Sleep`
@@ -199,12 +206,22 @@ Signals:
   them. Windows runs that handler on a thread of its own, so it really is
   asynchronous. Checked by hand under Wine, not in the test target.
 
-`/proc` has four files: `/proc/self/environ`, `/proc/self/exe` (the
+`/proc` has five files: `/proc/self/environ`, `/proc/self/exe` (the
 program's own file), `/proc/self/fdinfo/N` (the volume serial number as
 `mnt_id` and the file index as `ino`, which the compiler's output guard
-compares) and the aggregate `cpu` line of `/proc/stat` (`GetSystemTimes`).
+compares), `/proc/mounts` (one line per local drive, `C: / ntfs rw 0 0`,
+with the current drive on `/` and the others on `D:/` and so on) and the
+aggregate `cpu` line of `/proc/stat` (`GetSystemTimes`).
 Every other `/proc` path is `ENOENT`, also under Wine, whose drive `Z:` would
 otherwise show Linux's own `/proc`.
+
+The runtime's DNS resolver reads `/etc/hosts` and `/etc/resolv.conf`. On
+Windows `/etc/hosts` is the system's own hosts file
+(`<system directory>\drivers\etc\hosts`), and `/etc/resolv.conf` is made
+up when it is opened: a `nameserver` line for each DNS server Windows is set
+to use, and a `search` line for its domain, from `GetNetworkParams` in
+`iphlpapi.dll` (loaded only then, so the image still imports kernel32 and
+ws2_32 alone).
 
 Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
 `/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken
@@ -224,8 +241,6 @@ path means what it means on Linux.
 - **Sockets:** no control messages (`SCM_RIGHTS` cannot pass an fd to
   another process), and `MSG_TRUNC` does not report a truncated datagram's
   full length. A blocking socket call cannot be interrupted by a signal.
-  The runtime's DNS resolver reads `/etc/hosts` and `/etc/resolv.conf`,
-  which Windows does not have.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
   libraries cannot work on Windows. `external 'user32.dll'` and other DLLs
   do work, with integer, pointer and floating-point arguments. A record

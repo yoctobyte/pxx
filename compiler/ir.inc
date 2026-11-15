@@ -13755,6 +13755,19 @@ begin
       if CProgramMode and (Result >= 0) and
          TypeIsFloat(IntToTypeKind(IRTk[Result])) then
         IRTk[Result] := Ord(tyPointer);
+      { ...and a 64-bit ORDINAL pointee on a 32-bit target, where the tag is
+        not harmless after all: the variadic tail sizes an argument by it, so
+        `sscanf(s, "%llu %llu", &v[0], &v[1])` on `unsigned long long v[]`
+        passed each address as an 8-byte pair (the address, then whatever
+        edx held), and va_arg read the second pointer from the first one's
+        padding word -- a segfault on i386, under Linux as under --os=minix.
+        `&scalar` was right because IR_LEA on a symbol is already tyPointer;
+        `&v[i]` and `&r.f` lower to IR_INDEX / IR_FIELD with the element's
+        tag. On a 64-bit target an address and an Int64 take one slot alike.
+        bug-c-the-address-of-a-64-bit-array-element-is-an-8-byte-vararg-on-32-bit }
+      if CProgramMode and (Result >= 0) and (TARGET_PTR_SIZE = 4) and
+         ((IntToTypeKind(IRTk[Result]) = tyInt64) or (IntToTypeKind(IRTk[Result]) = tyUInt64)) then
+        IRTk[Result] := Ord(tyPointer);
       { ...and a FROZEN STRING pointee, which leaks the same way and into the
         same marshalling. `@r.f` and `@arr[0]` lower to IR_FIELD / IR_INDEX
         tagged with the string kind the aggregate records, and the call-argument

@@ -66,7 +66,7 @@ const
   VFS_LSTAT = $117; VFS_IOCTL = $118; VFS_FCNTL = $119; VFS_UMASK = $11B;
   VFS_GETDENTS = $11D; VFS_FCHDIR = $11F; VFS_FSYNC = $120;
   VFS_FTRUNCATE = $122; VFS_SELECT = $11E; VFS_UTIMENS = $125;
-  VFS_STATVFS1 = $128; VFS_FSTATVFS1 = $129;
+  VFS_GETVFSSTAT = $127; VFS_STATVFS1 = $128; VFS_FSTATVFS1 = $129;
   PM_GETPRIORITY = 26; PM_SETPRIORITY = 27; PM_GETSID = 32; VFS_SYMLINK = $113; VFS_READLINK = $114;
   VFS_PIPE2 = $11A;
   PM_FORK = 2; PM_WAIT4 = 3; PM_EXEC = 14;
@@ -2164,11 +2164,84 @@ begin
   Result := MxDataFd(LongInt(@b[0]), n + 1);
 end;
 
+{ ---- three more /proc files: fdinfo, mounts, stat (see proctext.inc) ----
+  fdinfo gives the compiler's output guard a file's identity, the st_dev
+  and st_ino fstat reports. /proc/mounts lists getvfsstat's table, and
+  /proc/stat has the aggregate cpu line from kern.cp_time. }
+type TxPtr = LongInt;
+{$I proctext.inc}
+
+{ Minix struct stat: dev at 0 (8 bytes), ino at 12 (8). }
+function MxProcFdInfo(fd: LongInt): LongInt;
+var m: TMxMsg; st: array[0..31] of LongInt; t: array[0..127] of Byte; n, r: LongInt;
+begin
+  MxClear(m);
+  m[2] := fd; m[3] := LongInt(@st[0]);                { mess_lc_vfs_fstat }
+  r := MxCall(MX_VFS, VFS_FSTAT, m);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxFdInfo(LongInt(@t[0]), n, PInt64(@st[0])^, PInt64(LongInt(@st[0]) + 12)^);
+  Result := MxDataFd(LongInt(@t[0]), n);
+end;
+
+{ getvfsstat (mess_lc_vfs_getvfsstat: flags 8, len 12, buf 16), a buffer of
+  NULL first for the count. struct statvfs is 2228 bytes: f_flag at 0
+  (ST_RDONLY 1, ST_NOEXEC 4, ST_NOSUID 8, NetBSD's), f_fstypename at 148
+  (32), f_mntonname at 180 and f_mntfromname at 1204 (1024 each). }
+function MxProcMounts: LongInt;
+var m: TMxMsg; cnt, size, fs, buf, n, i, e, fl: LongInt;
+begin
+  MxClear(m);
+  m[2] := 2;                                          { ST_NOWAIT }
+  cnt := MxCall(MX_VFS, VFS_GETVFSSTAT, m);
+  if cnt < 0 then begin Result := Lx(cnt); Exit; end;
+  cnt := cnt + 4;
+  size := (cnt * 2228 + cnt * 2200 + $FFF) and (not $FFF);
+  fs := MxMmap(0, size, 3, $22, -1, 0);
+  if (fs < 0) and (fs >= -4095) then begin Result := -LX_ENOMEM; Exit; end;
+  buf := fs + cnt * 2228;
+  MxClear(m);
+  m[2] := 2; m[3] := cnt * 2228; m[4] := fs;
+  cnt := MxCall(MX_VFS, VFS_GETVFSSTAT, m);
+  n := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    e := fs + i * 2228;
+    fl := PLongInt(e)^;
+    TxMount(buf, n, e + 1204, e + 180, e + 148, 1024,
+            (fl and 1) <> 0, (fl and 8) <> 0, (fl and 4) <> 0);
+  end;
+  Result := MxDataFd(buf, n);
+  MxMunmap(fs, size);
+end;
+
+{ kern.cp_time {1,51}: five 64-bit counters, user nice sys intr idle
+  (NetBSD's, as the MIB service keeps them), in clock ticks. Read with the
+  same mess_lc_mib_sysctl as SysctlStr, the name both inline and by
+  pointer. Minix 3.4 runs on one CPU, so only the aggregate line is made. }
+function MxProcStat: LongInt;
+var m: TMxMsg; name: array[0..1] of LongInt; t: array[0..4] of Int64;
+    b: array[0..255] of Byte; n, r: LongInt;
+begin
+  name[0] := 1; name[1] := 51;
+  MxClear(m);
+  m[2] := LongInt(@t[0]); m[3] := 40; m[6] := 2; m[7] := LongInt(@name[0]);
+  m[8] := 1; m[9] := 51;
+  r := MxCall(MX_MIB, MIB_SYSCTL, m);
+  if r < 0 then begin Result := Lx(r); Exit; end;
+  n := 0;
+  TxCpuLine(LongInt(@b[0]), n, -1, t[0], t[1], t[2], t[4], t[3]);
+  Result := MxDataFd(LongInt(@b[0]), n);
+end;
+
 function MxOpenAt(dirfd, path, flags, mode: LongInt): LongInt;
 begin
   if path = 0 then Result := -LX_EFAULT
   else if PathIs(path, @ProcEnviron[0], 18) then Result := MxProcEnviron
   else if PathIs(path, @ProcHostname[0], 25) then Result := MxProcHostname
+  else if ProcFdInfoNum(path) >= 0 then Result := MxProcFdInfo(ProcFdInfoNum(path))
+  else if ProcIsMounts(path) then Result := MxProcMounts
+  else if ProcIsStat(path) then Result := MxProcStat
   else if not DirOk(dirfd, path) then Result := -LX_ENOSYS
   else Result := MxOpen(path, flags, mode);
 end;

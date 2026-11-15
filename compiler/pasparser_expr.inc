@@ -5452,6 +5452,24 @@ begin
           procIdx := -1;
       end;
 
+      { The same rule for a CLASS in front of `.`: `type TB = class(TA)` and
+        then `TB.Create` bound to a used unit's `procedure TB` and died with
+        "class method not found (Create)" -- the metaclass arm saw a routine
+        name, not the class. It surfaced through the kernel translators, which
+        every --os=freebsd/netbsd/openbsd/dragonfly/nt program pulls in
+        unasked: winabi's code-emitting helper is called TB, fbsdabi has
+        PathIs, so a program's own class of either name could not be
+        constructed on those targets while it built fine for Linux. Same
+        narrowness as the alias arm: declared in the unit being compiled, the
+        routine is not, and only in front of `.`, the position where a class
+        name is a metaclass.
+        bug-p-a-source-class-loses-to-a-used-units-routine-before-a-dot }
+      if (not NilPyUserCode) and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+         (FindUClassInUnit(name, CurrentUnitIdx) >= 0) and
+         (ProcUnitIdx[procIdx] <> CurrentUnitIdx) then
+        procIdx := -1;
+
       { A NilPy module-level `def` is NOT bound above its own `def` statement —
         Python rebinds the name when that statement RUNS, so a module-body call
         that precedes it still reaches whatever the name meant before.

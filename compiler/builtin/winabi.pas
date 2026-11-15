@@ -70,6 +70,8 @@ const
 
 function W_GetStdHandle(which: Int64): Int64; cdecl; external 'kernel32.dll' name 'GetStdHandle';
 function W_WriteFile(h, buf, n, done, ovl: Int64): LongInt; cdecl; external 'kernel32.dll' name 'WriteFile';
+function W_GetConsoleMode(h, mode: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetConsoleMode';
+function W_WriteConsoleW(h, buf, n, done, res: Int64): LongInt; cdecl; external 'kernel32.dll' name 'WriteConsoleW';
 function W_ReadFile(h, buf, n, done, ovl: Int64): LongInt; cdecl; external 'kernel32.dll' name 'ReadFile';
 function W_CloseHandle(h: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CloseHandle';
 procedure W_ExitProcess(code: Int64); cdecl; external 'kernel32.dll' name 'ExitProcess';
@@ -83,6 +85,8 @@ function W_QueryPerformanceCounter(p: Int64): LongInt; cdecl; external 'kernel32
 function W_QueryPerformanceFrequency(p: Int64): LongInt; cdecl; external 'kernel32.dll' name 'QueryPerformanceFrequency';
 function W_GetTickCount: LongWord; cdecl; external 'kernel32.dll' name 'GetTickCount';
 function W_GetModuleHandleA(name: Int64): Int64; cdecl; external 'kernel32.dll' name 'GetModuleHandleA';
+function W_LoadLibraryA(name: Int64): Int64; cdecl; external 'kernel32.dll' name 'LoadLibraryA';
+function W_GetSystemDirectoryW(buf, size: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetSystemDirectoryW';
 function W_GetProcAddress(m, name: Int64): Int64; cdecl; external 'kernel32.dll' name 'GetProcAddress';
 procedure W_Sleep(ms: Int64); cdecl; external 'kernel32.dll' name 'Sleep';
 function W_SwitchToThread: LongInt; cdecl; external 'kernel32.dll' name 'SwitchToThread';
@@ -295,6 +299,9 @@ function W_RemoveDirectoryW(name: Int64): LongInt; cdecl; external 'kernel32.dll
 function W_CreateDirectoryW(name, sa: Int64): LongInt; cdecl; external 'kernel32.dll' name 'CreateDirectoryW';
 function W_MoveFileExW(src, dst, flags: Int64): LongInt; cdecl; external 'kernel32.dll' name 'MoveFileExW';
 function W_GetCurrentDirectoryW(n, buf: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetCurrentDirectoryW';
+function W_GetLogicalDrives: LongWord; cdecl; external 'kernel32.dll' name 'GetLogicalDrives';
+function W_GetDriveTypeA(root: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetDriveTypeA';
+function W_GetVolumeInformationA(root, name, nameLen, serial, maxComp, fsFlags, fsName, fsNameLen: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetVolumeInformationA';
 function W_SetCurrentDirectoryW(name: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetCurrentDirectoryW';
 function W_FlushFileBuffers(h: Int64): LongInt; cdecl; external 'kernel32.dll' name 'FlushFileBuffers';
 function W_SetEndOfFile(h: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetEndOfFile';
@@ -508,6 +515,11 @@ end;
   units). '/' is a separator Win32 accepts as it is; /dev/null is NUL. An
   absolute path keeps its meaning on the current drive (under Wine, drive Z:
   is the Unix root, so /tmp/x is /tmp/x). Answers 0 or -errno. }
+const
+  EtcHosts: array[0..9] of Byte = (47,101,116,99,47,104,111,115,116,115);   { /etc/hosts }
+  EtcResolv: array[0..15] of Byte = (47,101,116,99,47,114,101,115,111,108,118,46,99,111,110,102);   { /etc/resolv.conf }
+  HostsTail: array[0..17] of Byte = (92,100,114,105,118,101,114,115,92,101,116,99,92,104,111,115,116,115);   { \drivers\etc\hosts }
+
 function WinPath(dirfd, path, dst: Int64): Int64;
 var n, pre, i: Int64;
 begin
@@ -515,6 +527,18 @@ begin
   if PathIs(path, @DevNull[0], Length(DevNull)) then
   begin
     PWord(dst)^ := 78; PWord(dst + 2)^ := 85; PWord(dst + 4)^ := 76; PWord(dst + 6)^ := 0;   { NUL }
+    Result := 0;
+    Exit;
+  end;
+  { /etc/hosts is Windows' own: <system directory>\drivers\etc\hosts, so
+    the runtime's resolver (dns.pas, dns_async.pas, crtl) reads the file
+    Windows reads, as it reads /etc/hosts on Linux. }
+  if PathIs(path, @EtcHosts[0], Length(EtcHosts)) then
+  begin
+    n := W_GetSystemDirectoryW(dst, WPATH - 32);
+    if (n = 0) or (n >= WPATH - 32) then begin Result := -LX_ENOENT; Exit; end;
+    for i := 0 to Length(HostsTail) - 1 do PWord(dst + 2 * (n + i))^ := HostsTail[i];
+    PWord(dst + 2 * (n + Length(HostsTail)))^ := 0;
     Result := 0;
     Exit;
   end;
@@ -665,6 +689,43 @@ begin
   Result := StatPathW(Int64(@w[0]), st);
 end;
 
+{ statx(dirfd, path, flags, mask, buf): the stat above, rewritten in statx's
+  layout. crtl's stat/fstat/lstat reach the PAL through statx, so before this
+  every one of them was ENOSYS under --os=nt (Pascal's own stat calls use
+  newfstatat). The mask says every basic field is there; there is no birth
+  time to give. st_dev is split as Linux's major/minor so that makedev()
+  gives fstat's number back. }
+function WinStatx(dirfd, path, flags, buf: Int64): Int64;
+var st: array[0..17] of Int64; sb, i: Int64; dev: Int64;
+begin
+  Result := WinStatAt(dirfd, path, Int64(@st[0]), flags);
+  if Result < 0 then Exit;
+  sb := Int64(@st[0]);
+  for i := 0 to 255 do PByte(buf + i)^ := 0;
+  PLongWord(buf + 0)^ := $7FF;                        { STATX_BASIC_STATS }
+  PLongWord(buf + 4)^ := PLongWord(sb + 56)^;         { blksize }
+  PLongWord(buf + 16)^ := PLongWord(sb + 16)^;        { nlink }
+  PLongWord(buf + 20)^ := PLongWord(sb + 28)^;        { uid }
+  PLongWord(buf + 24)^ := PLongWord(sb + 32)^;        { gid }
+  PWord(buf + 28)^ := PWord(sb + 24)^;                { mode }
+  PInt64(buf + 32)^ := PInt64(sb + 8)^;               { ino }
+  PInt64(buf + 40)^ := PInt64(sb + 48)^;              { size }
+  PInt64(buf + 48)^ := PInt64(sb + 64)^;              { blocks }
+  PInt64(buf + 64)^ := PInt64(sb + 72)^;              { atime }
+  PLongWord(buf + 72)^ := PLongWord(sb + 80)^;
+  PInt64(buf + 96)^ := PInt64(sb + 104)^;             { ctime }
+  PLongWord(buf + 104)^ := PLongWord(sb + 112)^;
+  PInt64(buf + 112)^ := PInt64(sb + 88)^;             { mtime }
+  PLongWord(buf + 120)^ := PLongWord(sb + 96)^;
+  dev := PInt64(sb + 40)^;                            { rdev }
+  PLongWord(buf + 128)^ := ((dev shr 8) and $FFF) or ((dev shr 32) and (not Int64($FFF)));
+  PLongWord(buf + 132)^ := (dev and $FF) or ((dev shr 12) and (not Int64($FF)));
+  dev := PInt64(sb + 0)^;                             { dev }
+  PLongWord(buf + 136)^ := ((dev shr 8) and $FFF) or ((dev shr 32) and (not Int64($FFF)));
+  PLongWord(buf + 140)^ := (dev and $FF) or ((dev shr 12) and (not Int64($FF)));
+  Result := 0;
+end;
+
 { /proc/self/environ: the strings WinArgBlock already laid out as envp,
   which are NUL-separated exactly as the file is. }
 function OpenMem(buf, len, flags: Int64): Int64;
@@ -731,6 +792,50 @@ begin
   Result := OpenMem(b, n, flags);
 end;
 
+{ /proc/mounts: one line per drive letter, "C: / ntfs rw 0 0". The current
+  drive is mounted on / (an absolute Unix path is taken on the current
+  drive, see WinPath) and every other drive on its own root, "D:/". The type
+  is the volume's file system name in lower case; a drive with no volume in
+  it (an empty CD drive) is left out, and so are network drives, whose
+  GetVolumeInformation can wait on the network. FILE_READ_ONLY_VOLUME
+  ($80000) is "ro". }
+function WinProcMounts(flags: Int64): Int64;
+var drives, fsFlags, i, j: LongWord; b, n: Int64;
+    root: array[0..3] of Byte; fs: array[0..63] of Byte; cur: array[0..WPATH-1] of Word;
+    curDrive: Integer; ro: Boolean;
+begin
+  b := WinTxBuf; n := 0;
+  curDrive := -1;
+  if W_GetCurrentDirectoryW(WPATH, Int64(@cur[0])) >= 2 then
+    if (cur[1] = 58) and (((cur[0] or 32) >= 97) and ((cur[0] or 32) <= 122)) then
+      curDrive := (cur[0] or 32) - 97;
+  drives := W_GetLogicalDrives;
+  for i := 0 to 25 do
+    if ((drives shr i) and 1) <> 0 then
+    begin
+      root[0] := 65 + i; root[1] := 58; root[2] := 92; root[3] := 0;   { "X:\" }
+      if W_GetDriveTypeA(Int64(@root[0])) = 4 then Continue;        { DRIVE_REMOTE }
+      fsFlags := 0;
+      for j := 0 to 63 do fs[j] := 0;
+      if W_GetVolumeInformationA(Int64(@root[0]), 0, 0, 0, 0, Int64(@fsFlags), Int64(@fs[0]), 63) = 0 then Continue;
+      for j := 0 to 62 do
+        if (fs[j] >= 65) and (fs[j] <= 90) then fs[j] := fs[j] + 32;
+      if fs[0] = 0 then begin fs[0] := 63; fs[1] := 0; end;            { "?" }
+      ro := (fsFlags and $80000) <> 0;
+      if n > 3900 then Break;                                        { the ring buffer is 4 KiB }
+      TxPut(b, n, 65 + i); TxPut(b, n, 58); TxPut(b, n, 32);
+      if Integer(i) = curDrive then TxPut(b, n, 47)
+      else begin TxPut(b, n, 65 + i); TxPut(b, n, 58); TxPut(b, n, 47); end;
+      TxPut(b, n, 32);
+      TxStr(b, n, Int64(@fs[0]), 63, False);
+      TxPut(b, n, 32);
+      if ro then begin TxPut(b, n, 114); TxPut(b, n, 111); end
+      else begin TxPut(b, n, 114); TxPut(b, n, 119); end;
+      TxPut(b, n, 32); TxPut(b, n, 48); TxPut(b, n, 32); TxPut(b, n, 48); TxPut(b, n, 10);
+    end;
+  Result := OpenMem(b, n, flags);
+end;
+
 function WinProcStat(flags: Int64): Int64;
 var idle, kern, user: Int64; b, n: Int64;
 begin
@@ -741,6 +846,8 @@ begin
   TxCpuLine(b, n, -1, user div 100000, 0, (kern - idle) div 100000, idle div 100000, 0);
   Result := OpenMem(b, n, flags);
 end;
+
+function WinProcResolv(flags: Int64): Int64; forward;
 
 function WinOpenAt(dirfd, path, flags, mode: Int64): Int64;
 var w: array[0..WPATH-1] of Word;
@@ -754,6 +861,8 @@ begin
   end;
   if ProcFdInfoNum(path) >= 0 then begin Result := WinProcFdInfo(ProcFdInfoNum(path), flags); Exit; end;
   if ProcIsStat(path) then begin Result := WinProcStat(flags); Exit; end;
+  if ProcIsMounts(path) then begin Result := WinProcMounts(flags); Exit; end;
+  if PathIs(path, @EtcResolv[0], Length(EtcResolv)) then begin Result := WinProcResolv(flags); Exit; end;
   r := WinPath(dirfd, path, Int64(@w[0]));
   if r < 0 then begin Result := r; Exit; end;
   a := W_GetFileAttributesW(Int64(@w[0]));
@@ -795,6 +904,106 @@ begin
   Result := fd;
 end;
 
+{ ---- UTF-8 on a console --------------------------------------------------
+  The runtime writes UTF-8. A file or a pipe takes the bytes as they are,
+  but a console shows them in its code page (OEM 437 or 850 by default, on
+  ReactOS too), so `—` came out as three wrong characters. A write that has
+  a byte >= $80 and goes to a console handle is decoded here and written
+  with WriteConsoleW. A sequence cut by the end of one write is kept for the
+  next (WinConPend, per fd), so a program that writes byte by byte prints
+  the same text. A malformed byte becomes U+FFFD. ASCII-only writes, and
+  every write to a file or pipe, go through WriteFile unchanged. }
+var
+  WinConPend: array[0..MAX_FD-1, 0..3] of Byte;
+  WinConPendN: array[0..MAX_FD-1] of Byte;
+
+function Utf8SeqLen(c: Int64): Integer;
+begin
+  if c < $80 then Result := 1
+  else if (c >= $C2) and (c <= $DF) then Result := 2
+  else if (c >= $E0) and (c <= $EF) then Result := 3
+  else if (c >= $F0) and (c <= $F4) then Result := 4
+  else Result := 0;                                  { a continuation byte or invalid: one U+FFFD }
+end;
+
+{ Code point c as UTF-16 at dst; answers the number of units (1 or 2). }
+function ConPutCode(c: Int64; dst: Int64): Integer;
+begin
+  if c >= $10000 then
+  begin
+    c := c - $10000;
+    PWord(dst)^ := $D800 + (c shr 10);
+    PWord(dst + 2)^ := $DC00 + (c and $3FF);
+    Result := 2;
+  end
+  else
+  begin
+    PWord(dst)^ := c;
+    Result := 1;
+  end;
+end;
+
+function ConWrite(fd, h, buf, n: Int64): Int64;
+var w: array[0..2063] of Word; seq: array[0..3] of Byte;
+    i, k, len, c, wn, j: Int64; done: LongWord; ok: Boolean;
+begin
+  wn := 0;
+  i := 0;
+  while i < n do
+  begin
+    { the next sequence: pending bytes first }
+    k := 0;
+    for j := 0 to WinConPendN[fd] - 1 do begin seq[k] := WinConPend[fd, j]; k := k + 1; end;
+    WinConPendN[fd] := 0;
+    if k = 0 then begin seq[0] := PByte(buf + i)^; i := i + 1; k := 1; end;
+    len := Utf8SeqLen(seq[0]);
+    ok := len > 0;
+    while ok and (k < len) and (i < n) do
+    begin
+      if (PByte(buf + i)^ and $C0) <> $80 then ok := False
+      else begin seq[k] := PByte(buf + i)^; k := k + 1; i := i + 1; end;
+    end;
+    if ok and (k < len) then
+    begin
+      { cut by the end of this write: keep it for the next }
+      for j := 0 to k - 1 do WinConPend[fd, j] := seq[j];
+      WinConPendN[fd] := k;
+      Break;
+    end;
+    if not ok then c := $FFFD
+    else if len = 1 then c := seq[0]
+    else if len = 2 then c := ((seq[0] and $1F) shl 6) or (seq[1] and $3F)
+    else if len = 3 then c := ((seq[0] and $0F) shl 12) or ((seq[1] and $3F) shl 6) or (seq[2] and $3F)
+    else c := ((seq[0] and $07) shl 18) or ((seq[1] and $3F) shl 12) or ((seq[2] and $3F) shl 6) or (seq[3] and $3F);
+    wn := wn + ConPutCode(c, Int64(@w[wn]));
+    if wn >= 2048 then
+    begin
+      if W_WriteConsoleW(h, Int64(@w[0]), wn, Int64(@done), 0) = 0 then begin Result := WinErr; Exit; end;
+      wn := 0;
+    end;
+  end;
+  if wn > 0 then
+    if W_WriteConsoleW(h, Int64(@w[0]), wn, Int64(@done), 0) = 0 then begin Result := WinErr; Exit; end;
+  Result := n;
+end;
+
+{ Should this write go through ConWrite? A byte >= $80 in it (or a sequence
+  pending from the last one) and a console handle. }
+function ConWanted(fd, h, buf, n: Int64): Boolean;
+var i: Int64; mode: LongWord;
+begin
+  Result := False;
+  if (fd < 0) or (fd >= MAX_FD) then Exit;
+  if WinConPendN[fd] = 0 then
+  begin
+    i := 0;
+    while (i < n) and (PByte(buf + i)^ < $80) do i := i + 1;
+    if i = n then Exit;
+  end;
+  mode := 0;
+  Result := W_GetConsoleMode(h, Int64(@mode)) <> 0;
+end;
+
 function WinWrite(fd, buf, n: Int64): Int64;
 var h, z: Int64;
     done: LongWord;
@@ -814,6 +1023,11 @@ begin
   begin
     z := 0;
     W_SetFilePointerEx(h, 0, Int64(@z), 2);          { FILE_END }
+  end;
+  if ConWanted(fd, h, buf, n) then
+  begin
+    Result := ConWrite(fd, h, buf, n);
+    Exit;
   end;
   done := 0;
   if W_WriteFile(h, buf, n, Int64(@done), 0) = 0 then
@@ -990,6 +1204,7 @@ begin
   end;
   WinFdKind[fd] := FK_NONE;
   WinFd[fd] := 0;
+  if (fd >= 0) and (fd < MAX_FD) then WinConPendN[fd] := 0;
   DropFd(fd);                                        { out of every epoll list, as on Linux }
   Result := 0;
 end;
@@ -1353,11 +1568,13 @@ end;
 { Every TLS access assumes the executable's PE TLS index is 0 (TlsViaTeb in
   the compiler). An EXE's always is -- the loader numbers it first -- but a
   wrong guess would be silent corruption, so it is checked once: the TLS
-  directory is found through the headers at the fixed image base. }
+  directory is found through the headers of the image, wherever the loader
+  put it (the image is relocatable, see pewriter.inc). }
 procedure WinTlsIndexCheck;
 var base, opt, rva: Int64;
 begin
-  base := $400000;
+  base := W_GetModuleHandleA(0);
+  if base = 0 then Exit;
   opt := base + PLongInt(base + $3C)^ + 24;
   rva := PLongWord(opt + 112 + 8 * 9)^;
   if rva <> 0 then
@@ -2166,6 +2383,57 @@ function MsCall(fn, a, b, c, d: Int64): Int64;
 begin
   Result := THMsCall(ThunkPage + THUNK_HELPERS + H_MSCALL)(fn, a, b, c, d);
 end;
+
+{ /etc/resolv.conf: "nameserver <ip>" for each DNS server Windows uses,
+  and "search <domain>" when it has one, from GetNetworkParams. That is in
+  iphlpapi.dll, loaded when the file is first opened, so the image still
+  imports kernel32 and ws2_32 only. FIXED_INFO (x64): HostName[132],
+  DomainName[132], CurrentDnsServer at 264, DnsServerList at 272 (an
+  IP_ADDR_STRING: Next at +0, IpAddress[16] at +8). }
+const
+  NmIphlpapi: array[0..12] of Byte = (105,112,104,108,112,97,112,105,46,100,108,108,0);   { iphlpapi.dll }
+  NmGetNetworkParams: array[0..16] of Byte = (71,101,116,78,101,116,119,111,114,107,80,97,114,97,109,115,0);   { GetNetworkParams }
+  TxNameserver: array[0..10] of Byte = (110,97,109,101,115,101,114,118,101,114,32);   { nameserver }
+  TxSearch: array[0..6] of Byte = (115,101,97,114,99,104,32);   { search }
+
+var
+  PGetNetworkParams: Int64;
+  WinResolvBuf: array[0..16383] of Byte;
+
+function WinProcResolv(flags: Int64): Int64;
+var m, len, info, b, n, e: Int64; r: Int64;
+begin
+  if PGetNetworkParams = 0 then
+  begin
+    m := W_LoadLibraryA(Int64(@NmIphlpapi[0]));
+    if m <> 0 then PGetNetworkParams := W_GetProcAddress(m, Int64(@NmGetNetworkParams[0]));
+  end;
+  if (PGetNetworkParams = 0) or not ThunkPageReady then begin Result := -LX_ENOENT; Exit; end;
+  info := Int64(@WinResolvBuf[8192]);
+  len := 8192;
+  r := MsCall(PGetNetworkParams, info, Int64(@len), 0, 0) and $FFFFFFFF;
+  if r <> 0 then begin Result := -LX_ENOENT; Exit; end;      { ERROR_BUFFER_OVERFLOW and the rest }
+  b := Int64(@WinResolvBuf[0]); n := 0;
+  e := info + 272;
+  while (e <> 0) and (n < 7900) do
+  begin
+    if PByte(e + 8)^ <> 0 then
+    begin
+      TxLit(b, n, @TxNameserver[0], Length(TxNameserver));
+      TxStr(b, n, e + 8, 16, False);
+      TxPut(b, n, 10);
+    end;
+    e := PInt64(e)^;
+  end;
+  if PByte(info + 132)^ <> 0 then
+  begin
+    TxLit(b, n, @TxSearch[0], Length(TxSearch));
+    TxStr(b, n, info + 132, 132, False);
+    TxPut(b, n, 10);
+  end;
+  Result := OpenMem(b, n, flags);
+end;
+
 
 procedure ApiInit;
 var m: Int64;
@@ -3963,6 +4231,7 @@ begin
     258: Result := WinMkdirAt(a0, a1);
     262: Result := WinStatAt(a0, a1, a2, a3);                     { newfstatat }
     263: Result := WinUnlinkAt(a0, a1, a2);
+    332: Result := WinStatx(a0, a1, a2, a4);                      { statx }
     264, 316: Result := WinRenameAt(a0, a1, a2, a3);              { renameat, renameat2 }
     267: Result := WinReadlinkAt(a0, a1, a2, a3);
     268: Result := 0;                                             { fchmodat }
