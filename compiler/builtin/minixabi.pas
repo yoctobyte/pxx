@@ -39,6 +39,7 @@ implementation
 const
   LX_ENOENT = 2;
   LX_EBADF = 9;
+  LX_EAGAIN = 11;
   LX_EFAULT = 14;
   LX_ENOMEM = 12;
   LX_EINVAL = 22;
@@ -2617,6 +2618,257 @@ begin
   Result := 0;
 end;
 
+{ ---- System V IPC -----------------------------------------------------------
+  Minix's ipc server, found by name through RS (RS_LOOKUP 0x708, the
+  endpoint at m_rs_req.endpoint), answers shared memory and semaphores
+  (IPC_SHMGET 0xD01 .. IPC_SEMOP 0xD07). It has no message queues: msgget
+  and the rest stay ENOSYS. The program calls Linux i386's direct numbers
+  (semget 393 .. shmdt 398) with the kernel's ipc64 layouts, and semop and
+  semtimedop through ipc() (117, calls 1 and 4), which is what crtl does on
+  i386. Messages (measured with offsetof in the VM): shmget key/size/flag
+  at 8/12/16 and retid at 20; shmat id/addr/flag, retaddr 20; shmdt addr 8;
+  shmctl id/cmd/buf, ret 20; semget key/nr/flag, retid 20; semctl
+  id/num/cmd/opt, ret 24; semop id/ops/size.
+
+  Minix's structs are NetBSD's, on i386: ipc_perm (28: uid 0, gid 4, cuid 8,
+  cgid 12, mode 16, seq 20, key 24), shmid_ds (72: segsz 28, lpid 32, cpid
+  36, nattch 40, atime/dtime/ctime 64-bit at 44/52/60), semid_ds (52: nsems
+  16-bit at 28, otime 32, ctime 40). Linux i386's: ipc64_perm (36: key 0,
+  uid 4, gid 8, cuid 12, cgid 16, mode 20, seq 24), shmid64_ds (84: segsz
+  36, each time and its high word at 40/48/56, cpid 64, lpid 68, nattch 72),
+  semid64_ds (64: otime 36, ctime 44, nsems 52). IPC_CREAT, IPC_EXCL,
+  IPC_NOWAIT, SHM_RDONLY, SHM_RND, SEM_UNDO and IPC_RMID/SET/STAT have the
+  same numbers; the semctl GET/SET commands and SHM_LOCK do not.
+  semtimedop is polled (IPC_NOWAIT, 10 ms naps): the server has no timeout. }
+const
+  MX_RS = 2;
+  MX_RS_LOOKUP = $708;
+  MX_IPC_SHMGET = $D01; MX_IPC_SHMAT = $D02; MX_IPC_SHMDT = $D03; MX_IPC_SHMCTL = $D04;
+  MX_IPC_SEMGET = $D05; MX_IPC_SEMCTL = $D06; MX_IPC_SEMOP = $D07;
+  MxIpcName: array[0..3] of Char = ('i', 'p', 'c', #0);
+
+var
+  MxIpcEp: LongInt;       { 0: not looked up yet; -1: no ipc server }
+
+function MxIpcEndpoint: LongInt;
+var m: TMxMsg;
+begin
+  if MxIpcEp = 0 then
+  begin
+    MxClear(m);
+    m[6] := LongInt(@MxIpcName[0]);          { m_rs_req.name }
+    m[3] := 4;                               { m_rs_req.name_len, with the NUL }
+    if MxCall(MX_RS, MX_RS_LOOKUP, m) = 0 then MxIpcEp := m[4]
+    else MxIpcEp := -1;
+  end;
+  Result := MxIpcEp;
+end;
+
+{ One ipc-server call: the answer (>= 0) or -Linux-errno. ENOSYS without a
+  server, as Minix's own libc says. }
+function MxIpcCall(typ: LongInt; var m: TMxMsg): LongInt;
+var ep: LongInt;
+begin
+  ep := MxIpcEndpoint;
+  if ep = -1 then begin Result := -LX_ENOSYS; Exit; end;
+  Result := Lx(MxCall(ep, typ, m));
+end;
+
+procedure MxIpcZero(p, n: LongInt);
+var i: LongInt;
+begin
+  for i := 0 to n - 1 do PByte(p + i)^ := 0;
+end;
+
+procedure MxPermToLx(b, l: LongInt);
+begin
+  PLongInt(l)^ := PLongInt(b + 24)^;
+  PLongInt(l + 4)^ := PLongInt(b)^;
+  PLongInt(l + 8)^ := PLongInt(b + 4)^;
+  PLongInt(l + 12)^ := PLongInt(b + 8)^;
+  PLongInt(l + 16)^ := PLongInt(b + 12)^;
+  PLongInt(l + 20)^ := PLongInt(b + 16)^ and $1FF;
+  PLongInt(l + 24)^ := PWord(b + 20)^;
+end;
+
+{ IPC_SET: the owner and the permission bits, the fields both read. }
+procedure MxPermFromLx(l, b: LongInt);
+begin
+  PLongInt(b)^ := PLongInt(l + 4)^;
+  PLongInt(b + 4)^ := PLongInt(l + 8)^;
+  PLongInt(b + 16)^ := PLongInt(l + 20)^ and $1FF;
+end;
+
+{ A 64-bit Minix time to Linux i386's time and its high word. }
+procedure MxTime64ToLx(b, l: LongInt);
+begin
+  PLongInt(l)^ := PLongInt(b)^;
+  PLongInt(l + 4)^ := PLongInt(b + 4)^;
+end;
+
+function MxShmget(key, size, flag: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := key; m[3] := size; m[4] := flag;
+  Result := MxIpcCall(MX_IPC_SHMGET, m);
+  if Result >= 0 then Result := m[5];
+end;
+
+function MxShmat(id, addr, flag: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := id; m[3] := addr; m[4] := flag;
+  Result := MxIpcCall(MX_IPC_SHMAT, m);
+  if Result >= 0 then Result := m[5];
+end;
+
+function MxShmdt(addr: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := addr;
+  Result := MxIpcCall(MX_IPC_SHMDT, m);
+  if Result > 0 then Result := 0;
+end;
+
+function MxShmctl(id, cmd, buf: LongInt): LongInt;
+var m: TMxMsg; b: array[0..17] of LongInt;
+begin
+  cmd := cmd and not $100;                   { IPC_64: implied by the direct call }
+  MxIpcZero(LongInt(@b[0]), 72);
+  case cmd of
+    0: ;                                     { IPC_RMID }
+    1: begin                                 { IPC_SET }
+         if buf = 0 then begin Result := -LX_EFAULT; Exit; end;
+         MxPermFromLx(buf, LongInt(@b[0]));
+       end;
+    2: if buf = 0 then begin Result := -LX_EFAULT; Exit; end;   { IPC_STAT }
+    11: cmd := 3;                            { SHM_LOCK }
+    12: cmd := 4;                            { SHM_UNLOCK }
+  else
+    begin Result := -LX_EINVAL; Exit; end;   { IPC_INFO, SHM_STAT, SHM_INFO: Linux's own }
+  end;
+  MxClear(m);
+  m[2] := id; m[3] := cmd; m[4] := LongInt(@b[0]);
+  Result := MxIpcCall(MX_IPC_SHMCTL, m);
+  if Result < 0 then Exit;
+  Result := m[5];
+  if cmd = 2 then
+  begin
+    MxIpcZero(buf, 84);
+    MxPermToLx(LongInt(@b[0]), buf);
+    PLongInt(buf + 36)^ := b[7];             { segsz }
+    MxTime64ToLx(LongInt(@b[11]), buf + 40); { atime }
+    MxTime64ToLx(LongInt(@b[13]), buf + 48); { dtime }
+    MxTime64ToLx(LongInt(@b[15]), buf + 56); { ctime }
+    PLongInt(buf + 64)^ := b[9];             { cpid }
+    PLongInt(buf + 68)^ := b[8];             { lpid }
+    PLongInt(buf + 72)^ := b[10];            { nattch }
+    Result := 0;
+  end;
+end;
+
+function MxSemget(key, nsems, flag: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := key; m[3] := nsems; m[4] := flag;
+  Result := MxIpcCall(MX_IPC_SEMGET, m);
+  if Result >= 0 then Result := m[5];
+end;
+
+{ semctl(id, num, cmd, arg): arg is union semun's value, as Linux passes it. }
+function MxSemctl(id, num, cmd, arg: LongInt): LongInt;
+var m: TMxMsg; b: array[0..12] of LongInt; opt: LongInt;
+begin
+  cmd := cmd and not $100;
+  MxIpcZero(LongInt(@b[0]), 52);
+  opt := arg;
+  case cmd of
+    0: ;                                     { IPC_RMID }
+    1: begin                                 { IPC_SET }
+         if arg = 0 then begin Result := -LX_EFAULT; Exit; end;
+         MxPermFromLx(arg, LongInt(@b[0]));
+         opt := LongInt(@b[0]);
+       end;
+    2: begin                                 { IPC_STAT }
+         if arg = 0 then begin Result := -LX_EFAULT; Exit; end;
+         opt := LongInt(@b[0]);
+       end;
+    11: cmd := 4;                            { GETPID }
+    12: cmd := 5;                            { GETVAL }
+    13: cmd := 6;                            { GETALL }
+    14: cmd := 3;                            { GETNCNT }
+    15: cmd := 7;                            { GETZCNT }
+    16: cmd := 8;                            { SETVAL }
+    17: cmd := 9;                            { SETALL }
+  else
+    begin Result := -LX_EINVAL; Exit; end;   { IPC_INFO, SEM_STAT, SEM_INFO }
+  end;
+  MxClear(m);
+  m[2] := id; m[3] := num; m[4] := cmd; m[5] := opt;
+  Result := MxIpcCall(MX_IPC_SEMCTL, m);
+  if Result < 0 then Exit;
+  Result := m[6];
+  if cmd = 2 then
+  begin
+    MxIpcZero(arg, 64);
+    MxPermToLx(LongInt(@b[0]), arg);
+    MxTime64ToLx(LongInt(@b[8]), arg + 36);   { otime }
+    MxTime64ToLx(LongInt(@b[10]), arg + 44);  { ctime }
+    PLongInt(arg + 52)^ := PWord(LongInt(@b[7]))^;   { nsems }
+    Result := 0;
+  end;
+end;
+
+function MxSemop(id, ops, n: LongInt): LongInt;
+var m: TMxMsg;
+begin
+  MxClear(m);
+  m[2] := id; m[3] := ops; m[4] := n;
+  Result := MxIpcCall(MX_IPC_SEMOP, m);
+  if Result > 0 then Result := 0;
+end;
+
+{ semtimedop: try with IPC_NOWAIT on every operation, nap 10 ms on EAGAIN,
+  give up (EAGAIN, as Linux) once the time has passed. The caller's array is
+  not touched: the tries use a copy (up to 64 operations, E2BIG beyond). }
+function MxSemtimedop(id, ops, n, ts: LongInt): LongInt;
+var c: array[0..191] of SmallInt; i, sec, ns, left, step: LongInt;
+begin
+  if ts = 0 then begin Result := MxSemop(id, ops, n); Exit; end;
+  if (n < 0) or (n > 64) then begin Result := -7; Exit; end;    { E2BIG }
+  sec := PLongInt(ts)^; ns := PLongInt(ts + 4)^;
+  if (sec < 0) or (ns < 0) or (ns > 999999999) then begin Result := -LX_EINVAL; Exit; end;
+  for i := 0 to 3 * n - 1 do c[i] := PSmallInt(ops + 2 * i)^;
+  for i := 0 to n - 1 do c[3 * i + 2] := c[3 * i + 2] or $800;     { IPC_NOWAIT }
+  if sec > 100000 then sec := 100000;
+  left := sec * 100 + (ns + 9999999) div 10000000;                  { 10 ms naps }
+  while True do
+  begin
+    Result := MxSemop(id, LongInt(@c[0]), n);
+    if Result <> -LX_EAGAIN then Exit;
+    if left <= 0 then Exit;
+    step := 1;
+    MxSleepUs(0, 10000 * step);
+    Dec(left, step);
+  end;
+end;
+
+{ ipc(call, first, second, third, ptr, fifth): crtl's i386 semop and
+  semtimedop. }
+function MxIpcMux(call, first, second, third, ptr, fifth: LongInt): LongInt;
+begin
+  case call and $FFFF of
+    1: Result := MxSemop(first, ptr, second);
+    4: Result := MxSemtimedop(first, ptr, second, fifth);
+  else
+    Result := -LX_ENOSYS;
+  end;
+end;
+
 { ---- the entry --------------------------------------------------------------- }
 
 function PXXMinixSyscall(nr, a0, a1, a2, a3, a4, a5: LongInt): LongInt; cdecl;
@@ -2806,6 +3058,13 @@ begin
     186: begin if a1 <> 0 then begin PLongInt(a1)^ := 0; PLongInt(a1 + 4)^ := 2; PLongInt(a1 + 8)^ := 0; end;
            Result := 0; end;
     243: Result := -LX_ENOSYS;                        { set_thread_area: never emitted for minix }
+    393: Result := MxSemget(a0, a1, a2);
+    394: Result := MxSemctl(a0, a1, a2, a3);
+    395: Result := MxShmget(a0, a1, a2);
+    396: Result := MxShmctl(a0, a1, a2);
+    397: Result := MxShmat(a0, a1, a2);
+    398: Result := MxShmdt(a0);
+    117: Result := MxIpcMux(a0, a1, a2, a3, a4, a5);
   else
     Result := -LX_ENOSYS;
   end;

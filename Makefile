@@ -11276,7 +11276,8 @@ test-minix: $(COMPILER)
 	# --os=minix (EXPERIMENTAL): Minix 3.4 i386 on the VM against the Linux
 	# i386 build run here. No threads (Minix has none), and handlers run on
 	# the interrupted stack (no sigaltstack), so test-netbsd's lists minus
-	# the thread, stack-overflow and fault-address programs.
+	# the thread, stack-overflow and fault-address programs. System V shared
+	# memory and semaphores go to Minix's ipc server (c_os_sysv_ipc.c).
 	@d=$(TESTTMP)/os_minix_run26; mkdir -p $$d && \
 	  tools/vm/minix.sh start && \
 	  for t in test/fileio.pas test/test_sysutils_datetime.pas test/test_rtl_libc_torture.pas \
@@ -11307,6 +11308,10 @@ test-minix: $(COMPILER)
 	  tools/expect_same.sh minix_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/env.mx one two 2>&1; echo exit=$$?)" "$$want" || exit 1; \
 	  ./$(COMPILER) --target=i386 -g test/fileio.pas $$d/g.lx >/dev/null && ./$(COMPILER) --target=i386 -g --os=minix test/fileio.pas $$d/g.mx >/dev/null && \
 	  tools/expect_same.sh minix_debug_info "$$(tools/vm/minix.sh run $$d/g.mx 2>&1; echo exit=$$?)" "$$(cd /tmp && $$d/g.lx 2>&1; echo exit=$$?)" || exit 1; \
+	  : "c_os_sysv_ipc.c without rows 13-14 (Minix's ipc server refuses SEM_UNDO) and 22-31 (it has no message queues)"; \
+	  ./$(COMPILER) --target=i386 test/c_os_sysv_ipc.c $$d/ipc.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix test/c_os_sysv_ipc.c $$d/ipc.mx >/dev/null && \
+	  tools/expect_same.sh minix_c_os_sysv_ipc.c "$$(tools/vm/minix.sh run $$d/ipc.mx 2>&1 | grep -v -E '^(1[34]|2[2-9]|3[01]) '; echo exit=$$?)" \
+	    "$$($$d/ipc.lx 2>&1 | grep -v -E '^(1[34]|2[2-9]|3[01]) '; echo exit=$$?)" || exit 1; \
 	  echo "test-minix: OK"
 
 test-windows: $(COMPILER)

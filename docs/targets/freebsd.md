@@ -304,6 +304,12 @@ translator makes that mapping private and writes its bytes back to the file
 on `msync` and `munmap`, never past the file's current end. Another process
 sees the stores at those points, not before.
 
+System V shared memory and semaphores work on Minix too, through its ipc
+server (found by name through RS). Minix has no message queues, so `msgget`
+and the rest say `ENOSYS`. The server also refuses `SEM_UNDO`, and so does
+the translator: `EINVAL`, the answer Minix's own libc gives. It has no
+`semtimedop`, so a timed wait retries `semop` every 10 ms.
+
 OpenBSD, NetBSD, DragonFly and Minix have EXPERIMENTAL
 `--os=openbsd`, `--os=netbsd` (since 2026-11-12; both also on arm64),
 `--os=dragonfly` (since 2026-11-13, x86-64 only) and `--os=minix`
