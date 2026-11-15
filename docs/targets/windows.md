@@ -62,6 +62,11 @@ system provides it: Windows, ReactOS or Wine).
 It finds `lib/` and `compiler/builtin/` (where `winabi` lives) the usual
 way: installed as `<root>/compiler/pascal26.exe` beside `<root>/lib`, or
 through `PXX_HOME`.
+It also compiles itself there: on 2026-11-15, under Wine, the Windows build
+compiled `compiler/compiler.pas` in 42 s to an `.exe` byte-identical to the
+one the Linux compiler makes with `--os=windows`. The guard that refuses an
+output naming an input also works there: `g/sub/../t.pas` and `G/T.PAS`
+(Windows names ignore case) both count as `g/t.pas`.
 
 Known differences there:
 

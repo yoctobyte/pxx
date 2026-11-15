@@ -11042,10 +11042,14 @@ test-openbsd-arm64: $(COMPILER)
 	  for t in test/test_a_threadvar_is_per_thread.pas test/c_errno_is_per_thread.c test/c_pthread_detach.c \
 	           test/c_pthread_join_returns_value.c test/c_thread_local_is_per_thread.c \
 	           test/lib_classes_tthread.pas test/lib_fpc_thread_surface.pas test/test_critsec_once.pas test/test_mutex.pas \
-	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas test/test_cross_futex_through_the_pal.pas test/c_pthread_create_join_does_not_grow.c; do \
+	           test/test_parallel_for_capture.pas test/test_parallel_for_private.pas test/test_cross_futex_through_the_pal.pas; do \
 	    ./$(COMPILER) --threadsafe --target=aarch64 $$t $$d/th.la >/dev/null && ./$(COMPILER) --threadsafe --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) $$t $$d/th.oa >/dev/null && \
 	    tools/expect_same.sh openbsd_arm64_threads_$$(basename $$t) "$$(tools/vm/openbsd.sh run $$d/th.oa 2>&1; echo exit=$$?)" "$$(cd /tmp && qemu-aarch64 $$d/th.la 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  : "c_pthread_create_join_does_not_grow.c measures ru_maxrss, and under qemu-aarch64 that includes the"; \
+	  : "emulator's own memory for 3000 threads (bounded=no every time), so the answer is written down."; \
+	  ./$(COMPILER) --threadsafe --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) test/c_pthread_create_join_does_not_grow.c $$d/th.oa >/dev/null && \
+	    tools/expect_same.sh openbsd_arm64_threads_c_pthread_create_join_does_not_grow.c "$$(tools/vm/openbsd.sh run $$d/th.oa 2>&1; echo exit=$$?)" "$$(printf 'bounded=yes\nexit=0')" || exit 1; \
 	  ./$(COMPILER) -g --target=aarch64 test/fileio.pas $$d/g.la >/dev/null && ./$(COMPILER) -g --os=openbsd --target=aarch64 $(OBSD_A64_FLAGS) test/fileio.pas $$d/g.oa >/dev/null && \
 	  tools/expect_same.sh openbsd_arm64_debug_info "$$(tools/vm/openbsd.sh run $$d/g.oa 2>&1; echo exit=$$?)" "$$(cd /tmp && qemu-aarch64 $$d/g.la 2>&1; echo exit=$$?)" || exit 1; \
 	  for t in test/c_os_freebsd_termios.c; do \

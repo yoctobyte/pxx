@@ -229,6 +229,18 @@ on the host and the other in the VM, and requires identical output. The
 repository's hooks treat it as a full suite, so run it as
 `PXX_ALLOW_FULL_SUITE=1 make test-freebsd`.
 
+The compiler compiles itself on each of these systems. On 2026-11-15, the
+`--os=<os>` build of `compiler/compiler.pas`, copied into each x86-64 VM with
+the tracked `compiler/` and `lib/` trees, rebuilt itself there. Each result
+was byte-identical to the Linux cross-build, in 54 s on FreeBSD, 57 s on
+NetBSD, 84 s on OpenBSD and 74 s on DragonFly. The i386 `--os=minix`
+build did the same in the Minix VM in 25 minutes. That needs `compiler/`
+and `lib/asmcore` only, which fit the VM's small disk. Run natively, it makes
+programs for its own system by default. There it also refuses an output
+that is an input under another name, either `sub/../t.pas` or a hard link
+(the check compares device and inode, through the translator's
+`/proc/self/fdinfo`).
+
 ### Things the VM does differently
 
 These showed up as differences in the 2026-11-12 run and are not translator
