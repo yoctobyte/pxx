@@ -200,6 +200,7 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
   until the global-variable path started asking the same question, and pxx
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
+function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
 function CRecMissingFieldKind(recId: Integer): Integer; forward;
 procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forward;
 procedure CRefuseIncompleteSizeof(recId: Integer); forward;
@@ -4225,7 +4226,7 @@ begin
     if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
     else if tk = tyRecord then Result := CRecAlign(CTypeBaseRec)
     else Result := TypeAlign(tk);
-    while CurTok.Kind = tkStar do begin Next; Result := TARGET_PTR_SIZE; end;
+    while CurTok.Kind = tkStar do begin Next; Result := TARGET_PTR_SIZE; while CurTok.Kind = tkConst do Next; end;
     while CurTok.Kind = tkLBrack do
     begin
       { an array has its element's alignment: skip the dimension }
@@ -4488,7 +4489,7 @@ begin
         was a command substitution running a command whose NAME was garbage,
         three layers away from sizeof. Measured: gcc 16, pxx 8. }
       starCount := 0;
-      while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+      while CurTok.Kind = tkStar do begin Inc(starCount); Next; while CurTok.Kind = tkConst do Next; end;
       if CSizeofTryArrayDeref(starCount, sz) then
         { an array dereferenced: sized, see CSizeofDescriptorWalkDeref }
       else if (starCount > 1) and (CurTok.Kind = tkIdent) then
@@ -4821,7 +4822,7 @@ begin
       stars do not dereference an array, so a pointer keeps the path below. }
     savedPos := TokPos - 1;
     starCount := 0;
-    while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(starCount); Next; while CurTok.Kind = tkConst do Next; end;
     if (starCount > 0) and CSizeofTryArrayDeref(starCount, sz) then
       node := -1
     else
@@ -5296,6 +5297,58 @@ begin
   end;
 end;
 
+{ GNU cast to a union, `(union u)expr` (gcc's extension, NetBSD and rump use
+  it): a temporary union whose member of expr's type holds expr. The record-
+  cast path treats `(T)x` as an identity, right for a struct-to-struct cast and
+  wrong here: the scalar 5 was then used as the union's ADDRESS and the
+  program faulted reading `x.i`. The member is the one whose type is the
+  operand's; else the first of the same kind (floating, pointer, integer);
+  else the first. Every union member is at offset 0.
+  bug-c-a-cast-to-a-union-used-the-value-as-the-unions-address }
+function CUnionCastLiteral(recId, operand: Integer): Integer;
+var tmpSym, savedRecId, zseq, ci, fi, pick, kindPick, idn, fld, asn, sq, t: Integer;
+    otk: TTypeKind;
+  function UnionMemberClass(tk: TTypeKind): Integer;
+  begin
+    if tk in [tySingle, tyDouble, tyExtended] then Result := 1
+    else if tk = tyPointer then Result := 2
+    else Result := 0;
+  end;
+begin
+  ci := recId - REC_UCLASS_BASE;
+  otk := IntToTypeKind(ASTTk[operand]);
+  pick := -1; kindPick := -1;
+  for fi := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
+  begin
+    if (pick < 0) and (UFldTk[fi] = Ord(otk)) then pick := fi;
+    if (kindPick < 0) and (UnionMemberClass(IntToTypeKind(UFldTk[fi])) = UnionMemberClass(otk)) then kindPick := fi;
+  end;
+  if pick < 0 then pick := kindPick;
+  if (pick < 0) and (UClsFCount[ci] > 0) then pick := UClsFBase[ci];
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := recId;
+  tmpSym := AllocVar('', tyRecord);
+  LastTypeRecId := savedRecId;
+  zseq := CMakeZeroLocal(tmpSym, tyRecord);
+  if pick >= 0 then
+  begin
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := tmpSym; ASTTk[idn] := Ord(tyRecord);
+    fld := AllocNode(AN_FIELD); ASTLeft[fld] := idn;
+    ASTSOffset[fld] := UFldNOff[pick]; ASTSLen[fld] := UFldNLen[pick];
+    ASTTk[fld] := UFldTk[pick];
+    asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := fld; ASTRight[asn] := operand;
+    ASTTk[asn] := UFldTk[pick];
+    sq := AllocNode(AN_SEQ); ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    t := zseq;
+    while ASTRight[t] <> -1 do t := ASTRight[t];
+    ASTRight[t] := sq;
+  end;
+  Result := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[Result] := tmpSym;
+  ASTLeft[Result] := zseq;
+  ASTTk[Result] := Ord(tyRecord);
+end;
+
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
@@ -5439,6 +5492,9 @@ begin
       (records are carried BY ADDRESS in this IR) yielded a value where an address
       was expected — a by-value/assign copy then read garbage and SEGV'd. Yield the
       operand unchanged (composes with the whole-record-value init path). }
+    if (castDepth = 0) and (castTk = tyRecord) and (ASTTk[operand] <> Ord(tyRecord)) and
+       (clRecId >= REC_UCLASS_BASE) then
+    begin Result := ParseCPostfixTail(CUnionCastLiteral(clRecId, operand)); Exit; end;
     if (castDepth = 0) and (castTk = tyRecord) then
     begin Result := operand; Exit; end;
     { `(void)expr` evaluates expr for its side effects and discards the value.
@@ -8281,7 +8337,7 @@ begin
     hadStar := False;
     Next;   { consume the ',' — the loop handles stars/name of each sibling }
     declPtr := 0;
-    while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
     if declPtr > 0 then
     begin
       declTk := tyPointer; declPtrDepth := declPtr;
@@ -8359,7 +8415,7 @@ begin
       begin
         Next;
         declPtr := 0;
-        while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+        while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
         if declPtr > 0 then
         begin
           declTk := tyPointer; declPtrDepth := declPtr;
@@ -9204,7 +9260,7 @@ begin
       Next;
       { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
       declPtr := 0;
-      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
       if declPtr > 0 then
       begin
         declTk := tyPointer;
@@ -13289,8 +13345,14 @@ begin
       IRLowerAddress(int-literal) -> "Unsupported linear node" (tcc tccgen.c).
       The stars keep the base pointer depth (uniform declarators, the common case
       and all of tcc's `Sym *a, *b`). }
+    { ...and the `const` after each star, as ParseCDeclType skips it for the
+      first declarator. Left in, `extern T * const a, * const b;` stopped here
+      at `const` and `b` came out DEFINED, not extern (4 bytes of .bss, and a
+      rump link's `multiple definition`); a local or a member of that shape
+      lost its value. Every star loop in this file skips it now.
+      bug-c-a-later-declarators-const-after-the-star-was-not-skipped }
     gStars := 0;
-    while CurTok.Kind = tkStar do begin Next; Inc(gStars); end;
+    while CurTok.Kind = tkStar do begin Next; Inc(gStars); while CurTok.Kind = tkConst do Next; end;
     if not gFirstDecl then
     begin
       if gStars > 0 then
@@ -15228,6 +15290,73 @@ begin
     (s = '__asm__') or (s = '__asm');
 end;
 
+{ `d_open_t yopen;` -- a declaration through a FUNCTION-TYPE typedef
+  (`typedef int d_open_t(int, int);`) declares a function, C 6.7.6.3. Every
+  path here read it as an object: yopen became 4 bytes of .bss and a call to
+  it jumped into data (rump's sys/conf.h, `dev_type_open(bdev_open)`). Rather
+  than teach the prototype path a second spelling, the declaration is
+  rewritten in the token stream, once, in pass 1, into the spelling that path
+  already handles:
+
+    [specifiers] T a, b;   ->   [specifiers] R a (args); [specifiers] R b (args);
+
+  R and (args) are the typedef's own tokens (CTypedefFnRetTok..RParTok), so
+  the parameter types, attributes and qualifiers come through unchanged, and
+  pass 2 sees an ordinary prototype. Only the plain shape: a name directly
+  followed by `,` or `;`. `T *p;` (a pointer, already right) and `T x = ...`
+  (not C) are left alone.
+  bug-c-a-function-declared-through-a-function-typedef-became-an-object }
+procedure CExpandFnTypedefDecl;
+var s0, k, e, ti, n, i, j, nameTok: Integer;
+    nm: AnsiString;
+    out: array of TRawToken;
+  procedure Put(const t: TRawToken);
+  begin
+    if n >= Length(out) then SetLength(out, n * 2 + 16);
+    out[n] := t; Inc(n);
+  end;
+begin
+  s0 := TokPos - 1;
+  k := s0;
+  while (k < TokCount) and
+        (((Tokens[k].Kind = tkIdent) and
+          CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen)) and
+          (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) <> '__attribute__') and
+          (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) <> '__attribute')) or
+         (Tokens[k].Kind = tkConst)) do Inc(k);
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIdent) then Exit;
+  nm := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+  ti := FindCTypedef(nm);
+  if (ti < 0) or (not CTypedefIsFnType[ti]) or CTypedefShadowed(nm) then Exit;
+  if (CTypedefFnRetTok[ti] < 0) or (CTypedefFnRParTok[ti] <= CTypedefFnLParTok[ti]) then Exit;
+  { the declarator list: ident (, ident)* ; -- anything else is not ours }
+  e := k + 1;
+  while True do
+  begin
+    if (e >= TokCount) or (Tokens[e].Kind <> tkIdent) then Exit;
+    Inc(e);
+    if e >= TokCount then Exit;
+    if Tokens[e].Kind = tkSemicolon then Break;
+    if Tokens[e].Kind <> tkComma then Exit;
+    Inc(e);
+  end;
+  n := 0;
+  SetLength(out, 64);
+  nameTok := k + 1;
+  while nameTok < e do
+  begin
+    for i := s0 to k - 1 do Put(Tokens[i]);
+    for j := CTypedefFnRetTok[ti] to CTypedefFnNameTok[ti] - 1 do Put(Tokens[j]);
+    Put(Tokens[nameTok]);
+    for j := CTypedefFnLParTok[ti] to CTypedefFnRParTok[ti] do Put(Tokens[j]);
+    Put(Tokens[e]);                    { the closing `;` }
+    nameTok := nameTok + 2;            { past `, ` to the next name }
+  end;
+  RemoveTokens(s0, e - s0 + 1);
+  InsertTokens(s0, out, n);
+  TokPos := s0; Next;
+end;
+
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
@@ -16124,6 +16253,7 @@ begin
     end
     else if IsCTypeTok then
     begin
+      CExpandFnTypedefDecl;
       if CTopLevelIsFunc then ParseCSubroutine
       else ParseCGlobalVarDecl;
     end
@@ -16213,6 +16343,7 @@ begin
       end
       else if IsCTypeTok then
       begin
+        CExpandFnTypedefDecl;
         if CTopLevelIsFunc then ParseCSubroutine
         else ParseCGlobalVarDecl;
       end
@@ -16533,8 +16664,8 @@ begin
   end;
   if startIdx < 0 then startIdx := 0;
   for k := startIdx to endIdx do
-    if ((CAttrFlags[k] and 2) <> 0) and (CAttrAlignValues[k] > Result) then
-      Result := CAttrAlignValues[k];
+    if ((CAttrFlags[k] and 2) <> 0) and ((CAttrAlignValues[k] and $FFFF) > Result) then
+      Result := (CAttrAlignValues[k] and $FFFF);
 end;
 
 function CDeclSawStatic(typeIdx: Integer): Boolean;
@@ -16828,6 +16959,7 @@ var
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
   mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
+  procSawWeak: Boolean;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
@@ -16897,6 +17029,7 @@ begin
     ordinary case, a static defined in a .c the user named.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   procSawStatic := CDeclSawStatic(TokPos - 1);
+  procSawWeak := CDeclSawWeak(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -17619,6 +17752,11 @@ begin
       if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
       else ProcLibrary[procIdx] := InternStr(extLib);   { libm for math, else libc }
     end;
+    { `extern int maybe(void) __attribute__((weak));` -- an OPTIONAL import,
+      the same thing as Pascal's `weakexternal`: an undefined weak symbol
+      that resolves to 0 when nothing defines it, so `maybe ? maybe() : 0`
+      works. It was a required import. bug-c-attribute-weak-was-ignored }
+    if procSawWeak and (Procs[procIdx].BodyAddr < 0) then ProcWeakExternal[procIdx] := True;
     Next;
     Exit;
   end;
@@ -17710,6 +17848,10 @@ begin
     redeclaration must not turn the symbol global again.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   if procSawStatic then ProcCStaticLink[procIdx] := True;
+  { ...and a weak DEFINITION, which another object's strong one may replace
+    (ObjProcBind). bug-c-attribute-weak-was-ignored }
+  if procSawWeak or ProcWeakExternal[procIdx] then ProcCWeakDef[procIdx] := True;
+  ProcWeakExternal[procIdx] := False;
   mainInitIdx := -1;
   if name = 'main' then mainInitIdx := CEmitMainInitProc;
   SetProcBodyAddrHere(procIdx);
@@ -19392,7 +19534,7 @@ begin
     packed/aligned(N) attributes are applied by ParseCStructInto. }
   for i := declStart to startIdx - 1 do
   begin
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
     begin
       Result := False;
       Exit;
@@ -19403,7 +19545,7 @@ begin
   i := startIdx;
   while i < TokCount do
   begin
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
     begin
       Result := False;
       Exit;
@@ -19420,7 +19562,7 @@ begin
         Inc(i);
         while (i < TokCount) and (Tokens[i].Kind <> tkEOF) do
         begin
-          if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+          if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
           begin
             Result := False;
             Exit;
@@ -19472,8 +19614,8 @@ begin
   if lo < 0 then lo := 0;
   if hi >= TokCount then hi := TokCount - 1;
   for i := lo to hi do
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] > Result) then
-      Result := CAttrAlignValues[i];
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) > Result) then
+      Result := (CAttrAlignValues[i] and $FFFF);
 end;
 
 function CStructDeclStart(startIdx: Integer): Integer;
@@ -19756,7 +19898,7 @@ begin
       bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
       repeat
         declStars := 0;
-        while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+        while CurTok.Kind = tkStar do begin Inc(declStars); Next; while CurTok.Kind = tkConst do Next; end;
         if CurTok.Kind <> tkIdent then
         begin
           { ANONYMOUS aggregate member (no declarator, e.g. `union { int b1; };`):
@@ -20020,7 +20162,7 @@ begin
         else
         begin
           declStars := 0;
-          while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+          while CurTok.Kind = tkStar do begin Inc(declStars); Next; while CurTok.Kind = tkConst do Next; end;
         end;
         { ANONYMOUS bit-field `T : width;` -- no name, so the declarator has a `:` where
           the identifier would be. It reserves BITS but declares no member:
@@ -20551,6 +20693,63 @@ begin
   end;
 end;
 
+{ The mode(..) width on any token from `first` to the declaration's `;`
+  (the lexer puts it on the token AFTER the attribute, which may be the `;`
+  itself), or 0. }
+{ Did this declaration say __attribute__((weak))? From the storage-class
+  words before the type at typeIdx to the `;` or the open brace that ends the
+  declarator (parens nest: a parameter list may hold neither). The flag
+  lands on the token AFTER the attribute, so `int f(void) __attribute__((weak));`
+  carries it on the `;`. bug-c-attribute-weak-was-ignored }
+function CDeclSawWeak(typeIdx: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrAlignValues[k] and $10000) <> 0 then begin Result := True; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+function CModeBytesInDecl(first: Integer): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  k := first;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrFlags[k] and 128) <> 0 then begin Result := (CAttrAlignValues[k] shr 24) and $FF; Exit; end;
+    if Tokens[k].Kind = tkSemicolon then Exit;
+    Inc(k);
+  end;
+end;
+
+function CApplyAttrMode(tk: TTypeKind; bytes: Integer): TTypeKind;
+var uns: Boolean;
+begin
+  Result := tk;
+  if bytes <= 0 then Exit;
+  if not (tk in [tyInteger, tyChar, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32, tyUInt32,
+                 tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) then Exit;
+  uns := tk in [tyChar, tyUInt8, tyUInt16, tyUInt32, tyUInt64, tyNativeUInt];
+  case bytes of
+    1: if uns then Result := tyUInt8 else Result := tyInt8;
+    2: if uns then Result := tyUInt16 else Result := tyInt16;
+    4: if uns then Result := tyUInt32 else Result := tyInt32;
+    8: if uns then Result := tyUInt64 else Result := tyInt64;
+  end;
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
@@ -20563,8 +20762,10 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     ftPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;
     ftRi: Integer;
+    tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
 begin
   Next; { consume 'typedef' }
+  tdFirstTok := TokPos - 1;   { the type's first token: CTypedefFnRetTok }
 
   isAggregate := ((CurTok.Kind = tkRecord) or
                   ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
@@ -20593,7 +20794,7 @@ begin
         silently — the exact failure this fallback is otherwise careful to avoid.
         bug-a-dynamic-tables-left-their-fixed-size-shadows-behind }
       SkipBraceBlock;
-      while CurTok.Kind = tkStar do Next;
+      while (CurTok.Kind = tkStar) or (CurTok.Kind = tkConst) do Next;
       if CurTok.Kind = tkIdent then
       begin
         nm := CurTok.SVal; Next;
@@ -20617,7 +20818,7 @@ begin
       UClsCaseSensFields[ci] := True; { C: `b` != `B` }
       ParseCStructInto(ci, isUnion);
       ptrStars := 0;
-      while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
+      while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
       if CurTok.Kind = tkIdent then
       begin
         nmOff := Tokens[TokPos-1].SOffset;
@@ -20651,7 +20852,7 @@ begin
       `typedef struct T *Ref;` is a pointer to it. A tagless no-body typedef
       stays an opaque pointer handle. }
     ptrStars := 0;
-    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
     if CurTok.Kind = tkIdent then
     begin
       nmOff := Tokens[TokPos-1].SOffset;
@@ -20718,7 +20919,9 @@ begin
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     nm := CurTok.SVal;
+    ftNameTok := TokPos - 1;
     Next;                              { consume NAME -> CurTok is '(' }
+    ftLParTok := TokPos - 1;
     ftRet := tk;
     if CTypeIsVoid then ftRet := tyInteger;
     ftNParams := 0;
@@ -20743,6 +20946,7 @@ begin
         Next;                          { `...` varargs marker }
       Eat(tkComma);
     end;
+    ftRParTok := TokPos - 1;
     Eat(tkRParen);
     ftSig := RegisterProc('$cfntype', True, ftRet, ftNParams, ftPNames, ftPTypes);
     Procs[ftSig].BodyAddr := -1;
@@ -20772,7 +20976,14 @@ begin
     CTypeIsVoid := False;
     AddCTypedefFnPtr(nm, ftSig);
     ci := FindCTypedef(nm);
-    if ci >= 0 then CTypedefIsFnType[ci] := True;   { `*` decays, not indirects }
+    if ci >= 0 then
+    begin
+      CTypedefIsFnType[ci] := True;   { `*` decays, not indirects }
+      CTypedefFnRetTok[ci] := tdFirstTok;
+      CTypedefFnNameTok[ci] := ftNameTok;
+      CTypedefFnLParTok[ci] := ftLParTok;
+      CTypedefFnRParTok[ci] := ftRParTok;
+    end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;
@@ -20805,6 +21016,10 @@ begin
       that produced `tk` a few lines above -- no other ParseCDeclType runs on
       the path to here, the two arms that do their own both Exit first.
       bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently }
+    { __attribute__((mode(..))) anywhere in this declaration -- before the
+      name, after it, or after the type -- makes an INTEGER type that wide,
+      keeping its signedness. bug-c-attribute-mode-qi-hi-si-di-was-ignored }
+    tk := CApplyAttrMode(tk, CModeBytesInDecl(tdFirstTok));
     CTypedefRedefArmed := True;
     if CTypeLongLong then CTypedefPendingRank := 2
     else if CTypeLong then CTypedefPendingRank := 1

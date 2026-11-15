@@ -5322,6 +5322,7 @@ var
     failing to start when it is not. A fully static link bakes the same zero.
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   ProcWeakExternal : array of Boolean;
+  ProcCWeakDef : array of Boolean;   { a C DEFINITION said __attribute__((weak)): the object binds it STB_WEAK }
   { This proc row has NO Self parameter although it IS a method -- the `static`
     directive. Read by GenMakeStaticMethodCall so that every call site building
     a metaclass Self argument is corrected in ONE place rather than seven.
@@ -5740,6 +5741,12 @@ var
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
   CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
   CTypedefIsFnType : array[0..MAX_CTYPEDEF-1] of Boolean; { True for a function-TYPE typedef `typedef R N(args);` (vs a fn-POINTER typedef): a following `*` in a declarator DECAYS (pointer-to-function) rather than adding a level, so `N *p` is the callable, matching C function/pointer-to-function equivalence }
+  { ...and, for one, WHERE its spelling is: the return-type tokens [RetTok,
+    NameTok) and the parameter list [LParTok..RParTok]. `d_open_t yopen;`
+    declares a FUNCTION (C 6.9.1p2 forbids it only as a definition), and the
+    C parser expands it back into `R yopen(args);` from these tokens
+    (CExpandFnTypedefDecl). Valid only while CTypedefIsFnType is True. }
+  CTypedefFnRetTok, CTypedefFnNameTok, CTypedefFnLParTok, CTypedefFnRParTok : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length of the FIRST dim; -1 = not an array typedef. Read CTypedefNDims beside it -- this alone cannot tell `T[2]' from `T[2][3]', and answering as if it could is what corrupted neighbouring locals (bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals). }
   CTypedefNDims : array[0..MAX_CTYPEDEF-1] of Integer; { how many dimensions the array typedef has; 0 = not an array typedef. The count is the discriminator: CTypedefArrLen was ONE integer and the parser dropped every dimension after the first SILENTLY, so `typedef int T[2][3]' allocated 2 elements and indexed with a 2-wide row. }
   CTypedefDims : array[0..MAX_CTYPEDEF*MAX_ARR_DIMS-1] of Integer; { the dimensions themselves, flat: typedef i, dim d is at i*MAX_ARR_DIMS + d. Flat rather than 2-D because nothing else in this file is 2-D and the self-host subset is the thing that has to compile it. }
@@ -7772,6 +7779,8 @@ var
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
+  CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
+  CAttrModeBytes  : Integer;   { __attribute__((mode(QI/HI/SI/DI/word))) width, 0 = none; rides the next token as CAttrFlags bit 128 + CAttrAlignValues bits 24..31 }
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
   CLexLongCount : Integer;      { last C integer literal's l/L suffix count (1=long, >=2=long long) }
   CLexHexOctal : Boolean; { last C integer literal was hex or octal (radix<>10) — C types these through the unsigned rungs of the constant ladder, decimals do not }

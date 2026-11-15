@@ -20834,6 +20834,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_objth "$$(timeout 20 $(TESTTMP)/c_objth)" "$$(cat test/c_obj_thread.expected)"
 	gcc -o $(TESTTMP)/c_objth_g $(TESTTMP)/c_objth_a.o $(TESTTMP)/c_objth_b.o -lpthread
 	tools/expect_same.sh c_objth_g "$$(timeout 20 $(TESTTMP)/c_objth_g)" "$$(cat test/c_obj_thread.expected)"
+	# rump-pxx's silent gaps (S5 S6 S7 S10 S11): accepted, and the program was wrong
+	$(COMPILER) test/c_rump_silent.c $(TESTTMP)/c_rumps > /dev/null
+	tools/expect_same.sh c_rumps "$$($(TESTTMP)/c_rumps)" "$$(cat test/c_rump_silent.expected)"
+	$(COMPILER) --emit-obj test/c_extern_multi_const.c $(TESTTMP)/c_emc.o > /dev/null
+	tools/expect_same.sh c_emc "$$(nm $(TESTTMP)/c_emc.o | grep -cE ' U [abc]$$')" "3"
+	$(COMPILER) test/c_weak_a.c $(TESTTMP)/c_weak > /dev/null
+	tools/expect_same.sh c_weak "$$($(TESTTMP)/c_weak)" "$$(cat test/c_weak.expected)"
+	$(COMPILER) --emit-obj test/c_weak_a.c $(TESTTMP)/c_weak_a.o > /dev/null
+	$(COMPILER) --emit-obj test/c_weak_b.c $(TESTTMP)/c_weak_b.o > /dev/null
+	tools/expect_same.sh c_weak_nm "$$(nm $(TESTTMP)/c_weak_a.o | grep -E ' [Ww] (wk|wk2|maybe)$$' | awk '{print $$(NF-1)" "$$NF}' | LC_ALL=C sort | tr '\n' ' ')" "W wk W wk2 w maybe "
+	gcc -o $(TESTTMP)/c_weak_g $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o
+	tools/expect_same.sh c_weak_g "$$($(TESTTMP)/c_weak_g)" "$$(cat test/c_weak_strong.expected)"
+	$(COMPILER) --link -o $(TESTTMP)/c_weak_l $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o > /dev/null
+	tools/expect_same.sh c_weak_l "$$($(TESTTMP)/c_weak_l)" "$$(cat test/c_weak_strong.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

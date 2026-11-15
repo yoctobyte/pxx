@@ -231,6 +231,24 @@ end;
   there is none. The word must stand alone: `mode` preceded by an identifier
   character (`nomode`, `__mode__` counts as standalone once underscores go) is
   not it. }
+{ Does the lowercased attribute text name `w` as a WORD (`weak`, not
+  `weakref`)? Underscores count as separators, so `__weak__` is it. }
+function CAttrHasWord(const s, w: AnsiString): Boolean;
+var i, j: Integer;
+begin
+  Result := False;
+  i := 1;
+  while i + Length(w) - 1 <= Length(s) do
+  begin
+    j := 0;
+    while (j < Length(w)) and (s[i + j] = w[j + 1]) do Inc(j);
+    if (j = Length(w)) and ((i = 1) or not (s[i-1] in ['a'..'z','0'..'9'])) and
+       ((i + j > Length(s)) or not (s[i + j] in ['a'..'z','0'..'9'])) then
+    begin Result := True; Exit; end;
+    Inc(i);
+  end;
+end;
+
 function CAttrModeName(const s: AnsiString): AnsiString;
 var i, j: Integer; r: AnsiString;
 begin
@@ -337,6 +355,18 @@ begin
                   '))) asks for a 128-bit type, and pxx has none (no __int128). ' +
                   'Ignoring it would make the type 64 bits wide. For libtommath, ' +
                   'build with -DMP_32BIT');
+          { ...and the narrower ones are no longer skipped: `typedef int di_t
+            __attribute__((mode(DI)));` was 4 bytes (gcc 8), `mode(QI)` 4 (gcc 1)
+            -- NetBSD's and libgcc's fixed-width types. The width rides the next
+            token to the parser (CAttrModeBytes; ParseCTypedef applies it).
+            bug-c-attribute-mode-qi-hi-si-di-was-ignored }
+          if (CAttrModeName(attrText) = 'qi') or (CAttrModeName(attrText) = 'byte') then CAttrModeBytes := 1
+          else if CAttrModeName(attrText) = 'hi' then CAttrModeBytes := 2
+          else if CAttrModeName(attrText) = 'si' then CAttrModeBytes := 4
+          else if CAttrModeName(attrText) = 'di' then CAttrModeBytes := 8
+          else if (CAttrModeName(attrText) = 'word') or (CAttrModeName(attrText) = 'pointer') then
+            CAttrModeBytes := TARGET_PTR_SIZE;
+          if CAttrHasWord(attrText, 'weak') then CAttrWeak := True;
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
           if CStrContains(attrText, 'aligned') then
@@ -1136,6 +1166,8 @@ begin
   CAttrPacked := False;
   CAttrAligned := False;
   CAttrAlignValue := 0;
+  CAttrModeBytes := 0;
+  CAttrWeak := False;
   TokCount := 0; TokCharLen := 0;
   repeat
     CLexOne;
@@ -1153,6 +1185,19 @@ begin
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     if CLexFloatSuffixF then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 64;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
+    { CAttrAlignValues packs three things: the aligned(N) value in bits 0..15
+      (readers mask it), weak in bit 16, the mode(..) width in bits 24..31. }
+    if CAttrModeBytes > 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or 128;
+      CAttrAlignValues[TokCount] := (CAttrAlignValues[TokCount] and $FFFF) or (CAttrModeBytes shl 24);
+      CAttrModeBytes := 0;
+    end;
+    if CAttrWeak then
+    begin
+      CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
+      CAttrWeak := False;
+    end;
     CAttrPacked := False;
     CAttrAligned := False;
     CAttrAlignValue := 0;
@@ -1203,6 +1248,8 @@ begin
   CAttrPacked := False;
   CAttrAligned := False;
   CAttrAlignValue := 0;
+  CAttrModeBytes := 0;
+  CAttrWeak := False;
   SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
@@ -1243,6 +1290,19 @@ begin
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     if CLexFloatSuffixF then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 64;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
+    { CAttrAlignValues packs three things: the aligned(N) value in bits 0..15
+      (readers mask it), weak in bit 16, the mode(..) width in bits 24..31. }
+    if CAttrModeBytes > 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or 128;
+      CAttrAlignValues[TokCount] := (CAttrAlignValues[TokCount] and $FFFF) or (CAttrModeBytes shl 24);
+      CAttrModeBytes := 0;
+    end;
+    if CAttrWeak then
+    begin
+      CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
+      CAttrWeak := False;
+    end;
     CAttrPacked := False;
     CAttrAligned := False;
     CAttrAlignValue := 0;

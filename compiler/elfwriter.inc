@@ -5066,7 +5066,7 @@ function ObjProcBind(procIdx: Integer): Byte;
   exported weak alongside the code; see ObjDataIsRuntime.
   bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
 begin
-  if ProcObjRuntimeCopy[procIdx] or ObjProcIsBuiltinRtl(procIdx) then ObjProcBind := $20
+  if ProcObjRuntimeCopy[procIdx] or ObjProcIsBuiltinRtl(procIdx) or ProcCWeakDef[procIdx] then ObjProcBind := $20
   else ObjProcBind := $10;
 end;
 
@@ -6636,7 +6636,7 @@ end;
 
 procedure writeELFRelX64General(const outPath: AnsiString);
 var
-  i: Integer;
+  i, wkI: Integer;
   numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
   numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
@@ -6658,6 +6658,21 @@ var
   f: Integer;
 {$endif}
 begin
+  { A weak C DEFINITION only means something if the calls to it can be
+    re-bound: a strong definition in another object must win, and in one
+    .text section the call was already a resolved rel32 to this object's own
+    copy (gcc: wk() -> 20 with the strong object linked, pxx: 2). Function
+    sections relocate every call against the callee's symbol, so an object
+    holding one is written that way. Read only by the writers, so it can be
+    decided here, after the parse has seen the attribute.
+    bug-c-attribute-weak-was-ignored }
+  if not FunctionSections then
+    for wkI := 0 to ProcCount - 1 do
+      if ProcCWeakDef[wkI] and ObjProcIsDefined(wkI) then
+      begin
+        FunctionSections := True;
+        Break;
+      end;
   CRegisterCDataImports;   { before anything counts ExternalCount }
   ObjBssPlanImportDrops;   { before any .bss offset is written out }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches

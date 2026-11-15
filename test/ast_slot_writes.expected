@@ -411,6 +411,7 @@ AN_ASSIGN Left elemNode
 AN_ASSIGN Left elvisRd
 AN_ASSIGN Left fcLhs
 AN_ASSIGN Left fieldNode
+AN_ASSIGN Left fld
 AN_ASSIGN Left fldNode
 AN_ASSIGN Left frIdn
 AN_ASSIGN Left icLhs
@@ -977,6 +978,7 @@ AN_FIELD Left baseFld
 AN_FIELD Left baseNode
 AN_FIELD Left castNode
 AN_FIELD Left identNode
+AN_FIELD Left idn
 AN_FIELD Left lastArg
 AN_FIELD Left node
 AN_FIELD Left otherNode
