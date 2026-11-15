@@ -206,12 +206,13 @@ Signals:
   them. Windows runs that handler on a thread of its own, so it really is
   asynchronous. Checked by hand under Wine, not in the test target.
 
-`/proc` has five files: `/proc/self/environ`, `/proc/self/exe` (the
+`/proc` has six files: `/proc/self/environ`, `/proc/self/exe` (the
 program's own file), `/proc/self/fdinfo/N` (the volume serial number as
 `mnt_id` and the file index as `ino`, which the compiler's output guard
 compares), `/proc/mounts` (one line per local drive, `C: / ntfs rw 0 0`,
 with the current drive on `/` and the others on `D:/` and so on) and the
-aggregate `cpu` line of `/proc/stat` (`GetSystemTimes`).
+aggregate `cpu` line of `/proc/stat` (`GetSystemTimes`), and
+`/proc/net/dev` (the interface names, every counter 0).
 Every other `/proc` path is `ENOENT`, also under Wine, whose drive `Z:` would
 otherwise show Linux's own `/proc`.
 
@@ -222,6 +223,17 @@ up when it is opened: a `nameserver` line for each DNS server Windows is set
 to use, and a `search` line for its domain, from `GetNetworkParams` in
 `iphlpapi.dll` (loaded only then, so the image still imports kernel32 and
 ws2_32 alone).
+
+Network interfaces (`if_nameindex`, `if_nametoindex`, `getifaddrs`) come
+from `GetAdaptersAddresses`, from the same DLL loaded the same way. They
+are IPv4 adapters only, as Linux's `SIOCGIFCONF` lists them. The runtime
+answers the Linux `SIOCGIFCONF`, `SIOCGIFFLAGS`, `SIOCGIFADDR`,
+`SIOCGIFNETMASK`, `SIOCGIFBRDADDR`, `SIOCGIFINDEX` and `SIOCGIFNAME`
+ioctls itself. A name is Windows' own (`loopback_0`, `ethernet_32768`,
+from `ConvertInterfaceLuidToNameA`). Where Windows has no such name
+(ReactOS and XP), a loopback is `lo` and any other adapter `if<index>`.
+ReactOS reports index 0 for its loopback, which would end
+`if_nameindex`'s list, so such an adapter gets the next free index.
 
 Paths are converted from UTF-8 to UTF-16, and `/` works as a separator.
 `/dev/null` becomes `NUL`. An absolute Unix path such as `/tmp/x` is taken

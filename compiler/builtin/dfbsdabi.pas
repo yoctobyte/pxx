@@ -691,6 +691,40 @@ end;
 type TxPtr = Int64;
 {$I proctext.inc}
 
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls (ifnet.inc) }
+const
+  IFN_REQ = 32;
+  IFN_FIXED_STEP = False;
+  IFN_GIFCONF = $C0106924; IFN_GIFFLAGS = $C0206911; IFN_GIFADDR = $C0206921;
+  IFN_GIFNETMASK = $C0206925; IFN_GIFBRDADDR = $C0206923;
+
+function IfnIoctl(fd, req: Int64; arg: TxPtr): Int64;
+begin
+  Result := Lx(DfSys(54, fd, req, arg, 0, 0, 0));
+end;
+
+function IfnTmpSock: Int64;
+begin
+  Result := Lx(DfSys(97, 2, 2, 0, 0, 0, 0));             { AF_INET, SOCK_DGRAM }
+end;
+
+procedure IfnCloseFd(fd: Int64);
+begin
+  DfSys(6, fd, 0, 0, 0, 0, 0);
+end;
+
+function IfnHostIndex(name: TxPtr): Int64;
+begin
+  Result := -1;                  { the AF_LINK entries carry it }
+end;
+
+function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
+begin
+  Result := False;
+end;
+
+{$I ifnet.inc}
+
 const
   DF_GETFSSTAT = 18;
   DfSysCpTime: array[0..11] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101);      { kern.cp_time }
@@ -2012,6 +2046,14 @@ end;
 
 { open/openat with the paths DragonFly lacks. /dev/full is /dev/zero whose
   writes fail with ENOSPC (bit 3 of DfTfd marks the fd). }
+function DfProcNetDev: Int64;
+var t: array[0..8191] of Byte; n: Int64;
+begin
+  n := 0;
+  IfnProcNetDev(Int64(@t[0]), n, Length(t));
+  Result := DfDataFd(Int64(@t[0]), n);
+end;
+
 function DfOpenAt(dirfd, path, flags, mode: Int64): Int64;
 begin
   if PathIs(path, ProcEnviron) then Result := DfProcEnviron
@@ -2019,6 +2061,7 @@ begin
   else if ProcFdInfoNum(path) >= 0 then Result := DfProcFdInfo(ProcFdInfoNum(path))
   else if ProcIsMounts(path) then Result := DfProcMounts
   else if ProcIsStat(path) then Result := DfProcStat
+  else if ProcIsNetDev(path) then Result := DfProcNetDev
   else if PathIs(path, DevFull) then
   begin
     Result := Lx(DfSys(DF_OPENAT, DF_AT_FDCWD, Int64(@DevZero[0]), DfOpenFlags(flags) and not Int64($E00), 0, 0, 0));
@@ -2119,7 +2162,8 @@ begin
     10: Result := Lx(DfSys(DF_MPROTECT, a0, a1, a2, 0, 0, 0));
     11: Result := Lx(DfSys(DF_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := DfBrk(a0);
-    16: case Integer(a1) of                                              { ioctl }
+    16: if IfnLinuxIoctl(a0, a1, a2) <> IFN_NOT_MINE then Result := IfnLinuxIoctl(a0, a1, a2)
+        else case Integer(a1) of                                         { ioctl }
           $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := DfSys(DF_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
                    if (r = -25) or (r = -35) then                { a master: ENOTTY, or EAGAIN before a slave is open }

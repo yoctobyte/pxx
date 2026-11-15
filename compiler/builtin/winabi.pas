@@ -518,6 +518,7 @@ end;
 const
   EtcHosts: array[0..9] of Byte = (47,101,116,99,47,104,111,115,116,115);   { /etc/hosts }
   EtcResolv: array[0..15] of Byte = (47,101,116,99,47,114,101,115,111,108,118,46,99,111,110,102);   { /etc/resolv.conf }
+  ProcNetDevW: array[0..12] of Byte = (47,112,114,111,99,47,110,101,116,47,100,101,118);   { /proc/net/dev }
   HostsTail: array[0..17] of Byte = (92,100,114,105,118,101,114,115,92,101,116,99,92,104,111,115,116,115);   { \drivers\etc\hosts }
 
 function WinPath(dirfd, path, dst: Int64): Int64;
@@ -848,6 +849,7 @@ begin
 end;
 
 function WinProcResolv(flags: Int64): Int64; forward;
+function WinProcNetDev(flags: Int64): Int64; forward;
 
 function WinOpenAt(dirfd, path, flags, mode: Int64): Int64;
 var w: array[0..WPATH-1] of Word;
@@ -863,6 +865,7 @@ begin
   if ProcIsStat(path) then begin Result := WinProcStat(flags); Exit; end;
   if ProcIsMounts(path) then begin Result := WinProcMounts(flags); Exit; end;
   if PathIs(path, @EtcResolv[0], Length(EtcResolv)) then begin Result := WinProcResolv(flags); Exit; end;
+  if PathIs(path, @ProcNetDevW[0], Length(ProcNetDevW)) then begin Result := WinProcNetDev(flags); Exit; end;
   r := WinPath(dirfd, path, Int64(@w[0]));
   if r < 0 then begin Result := r; Exit; end;
   a := W_GetFileAttributesW(Int64(@w[0]));
@@ -2212,6 +2215,7 @@ const
   H_LOCKBTR = 48;      { (addr, bit): lock btr [addr], bit; the old bit }
   H_LOCKBTS = 64;      { (addr, bit): lock bts [addr], bit; the old bit }
   H_MSCALL = 80;       { (fn, a, b, c, d): fn(a, b, c, d) under the Microsoft convention }
+  H_MSCALL5 = 112;     { (fn, a, b, c, d, e): the same with a fifth argument, on the stack }
 
 type
   THJump = procedure(sp, target: Int64); cdecl;
@@ -2219,6 +2223,7 @@ type
   THLockOr = procedure(addr, bits: Int64); cdecl;
   THLockBtr = function(addr, bit: Int64): Int64; cdecl;
   THMsCall = function(fn, a, b, c, d: Int64): Int64; cdecl;
+  THMsCall5 = function(fn, a, b, c, d, e: Int64): Int64; cdecl;
 
 { The page, with the helpers written the first time. False if Windows
   refused the page. }
@@ -2258,6 +2263,16 @@ begin
       TB(p, $49); TB(p, $89); TB(p, $C8);      { mov r8, rcx }
       TB(p, $48); TB(p, $89); TB(p, $F1);      { mov rcx, rsi  (rdx is already b) }
       TB(p, $48); TB(p, $83); TB(p, $EC); TB(p, $28);   { sub rsp, 40: shadow space, 16-aligned }
+      TB(p, $FF); TB(p, $D0);                  { call rax }
+      TB(p, $48); TB(p, $83); TB(p, $C4); TB(p, $28);   { add rsp, 40 }
+      TB(p, $C3);
+      p := ThunkPage + THUNK_HELPERS + H_MSCALL5;
+      TB(p, $48); TB(p, $89); TB(p, $F8);      { mov rax, rdi }
+      TB(p, $48); TB(p, $83); TB(p, $EC); TB(p, $28);   { sub rsp, 40: shadow space + arg 5 }
+      TB(p, $4C); TB(p, $89); TB(p, $4C); TB(p, $24); TB(p, $20);   { mov [rsp+32], r9 }
+      TB(p, $4D); TB(p, $89); TB(p, $C1);      { mov r9, r8 }
+      TB(p, $49); TB(p, $89); TB(p, $C8);      { mov r8, rcx }
+      TB(p, $48); TB(p, $89); TB(p, $F1);      { mov rcx, rsi  (rdx is already b) }
       TB(p, $FF); TB(p, $D0);                  { call rax }
       TB(p, $48); TB(p, $83); TB(p, $C4); TB(p, $28);   { add rsp, 40 }
       TB(p, $C3);
@@ -2384,6 +2399,11 @@ begin
   Result := THMsCall(ThunkPage + THUNK_HELPERS + H_MSCALL)(fn, a, b, c, d);
 end;
 
+function MsCall5(fn, a, b, c, d, e: Int64): Int64;
+begin
+  Result := THMsCall5(ThunkPage + THUNK_HELPERS + H_MSCALL5)(fn, a, b, c, d, e);
+end;
+
 { /etc/resolv.conf: "nameserver <ip>" for each DNS server Windows uses,
   and "search <domain>" when it has one, from GetNetworkParams. That is in
   iphlpapi.dll, loaded when the file is first opened, so the image still
@@ -2432,6 +2452,234 @@ begin
     TxPut(b, n, 10);
   end;
   Result := OpenMem(b, n, flags);
+end;
+
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls --------
+  The BSD translators answer these from SIOCGIFCONF (ifnet.inc); here the
+  source is GetAdaptersAddresses (iphlpapi, loaded on first use like
+  GetNetworkParams above), IPv4 adapters only, as Linux's SIOCGIFCONF lists.
+  A name is Windows' own NDIS interface name (ConvertInterfaceLuidToNameA:
+  loopback_0, ethernet_32768), or if<index> where that call is missing or
+  the name does not fit Linux's 16 bytes. The flags are UP and RUNNING when
+  the adapter is up, LOOPBACK for a loopback one, BROADCAST and MULTICAST
+  otherwise. /proc/net/dev's counters are 0.
+  IP_ADAPTER_ADDRESSES (x64): IfIndex 4, Next 8, FirstUnicastAddress 24,
+  IfType 100, OperStatus 104, Luid 224. IP_ADAPTER_UNICAST_ADDRESS: Next 8,
+  the sockaddr pointer 16, OnLinkPrefixLength 52. }
+const
+  NmGetAdaptersAddresses: array[0..20] of Byte = (71,101,116,65,100,97,112,116,101,114,115,65,100,100,114,101,115,115,101,115,0);
+  NmLuidToName: array[0..27] of Byte = (67,111,110,118,101,114,116,73,110,116,101,114,102,97,99,101,76,117,105,100,84,111,78,97,109,101,65,0);
+  WIN_IF_MAX = 32;
+  WIN_IF_NOT_MINE = -$7FFFFFFF;
+
+var
+  PGetAdaptersAddresses, PLuidToName: Int64;
+  WinIfBuf: array[0..65535] of Byte;
+  WinIfN: Integer;
+  WinIfIndex: array[0..WIN_IF_MAX-1] of LongWord;
+  WinIfName: array[0..WIN_IF_MAX-1, 0..15] of Byte;
+  WinIfAddr, WinIfMask: array[0..WIN_IF_MAX-1] of LongWord;     { network byte order }
+  WinIfFlags: array[0..WIN_IF_MAX-1] of Word;
+
+const
+  WinIfPow10: array[0..9] of Int64 = (1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000);
+
+procedure WinIfScan;
+var m, len, a, u, sa, r: Int64; nm: array[0..63] of Byte; i, k, pfx, pw: Integer; idx: LongWord;
+begin
+  WinIfN := 0;
+  if PGetAdaptersAddresses = 0 then
+  begin
+    m := W_LoadLibraryA(Int64(@NmIphlpapi[0]));
+    if m <> 0 then
+    begin
+      PGetAdaptersAddresses := W_GetProcAddress(m, Int64(@NmGetAdaptersAddresses[0]));
+      PLuidToName := W_GetProcAddress(m, Int64(@NmLuidToName[0]));
+    end;
+  end;
+  if (PGetAdaptersAddresses = 0) or not ThunkPageReady then Exit;
+  len := Length(WinIfBuf);
+  r := MsCall5(PGetAdaptersAddresses, 2, $E, 0, Int64(@WinIfBuf[0]), Int64(@len)) and $FFFFFFFF;
+  if r <> 0 then Exit;                     { SKIP_ANYCAST | SKIP_MULTICAST | SKIP_DNS_SERVER }
+  a := Int64(@WinIfBuf[0]);
+  while (a <> 0) and (WinIfN < WIN_IF_MAX) do
+  begin
+    idx := PLongWord(a + 4)^;
+    k := WinIfN;
+    WinIfIndex[k] := idx;
+    for i := 0 to 15 do WinIfName[k, i] := 0;
+    for i := 0 to 63 do nm[i] := 0;
+    { the Luid is a Vista field: XP's and ReactOS's structure (Length at 0)
+      ends before it }
+    if (PLuidToName <> 0) and (PLongWord(a)^ >= 232) and
+       (MsCall(PLuidToName, a + 224, Int64(@nm[0]), 63, 0) and $FFFFFFFF = 0) and
+       (nm[0] <> 0) and (nm[15] = 0) then
+      for i := 0 to 15 do WinIfName[k, i] := nm[i];
+    WinIfAddr[k] := 0; WinIfMask[k] := 0;
+    u := PInt64(a + 24)^;
+    while u <> 0 do
+    begin
+      sa := PInt64(u + 16)^;
+      if (sa <> 0) and (PWord(sa)^ = 2) then
+      begin
+        WinIfAddr[k] := PLongWord(sa + 4)^;
+        pfx := PByte(u + 52)^;
+        if pfx > 32 then pfx := 32;
+        if pfx = 0 then WinIfMask[k] := 0
+        else WinIfMask[k] := (($FFFFFFFF shl (32 - pfx)) and $FFFFFFFF);
+        { to network byte order }
+        WinIfMask[k] := ((WinIfMask[k] shr 24) and $FF) or ((WinIfMask[k] shr 8) and $FF00) or
+                        ((WinIfMask[k] shl 8) and $FF0000) or ((WinIfMask[k] shl 24) and $FF000000);
+        Break;
+      end;
+      u := PInt64(u + 8)^;
+    end;
+    if PLongWord(a + 104)^ = 1 then WinIfFlags[k] := $41 else WinIfFlags[k] := 0;   { UP | RUNNING }
+    if PLongWord(a + 100)^ = 24 then WinIfFlags[k] := WinIfFlags[k] or 8              { LOOPBACK }
+    else WinIfFlags[k] := WinIfFlags[k] or $1002;                                     { BROADCAST | MULTICAST }
+    Inc(WinIfN);
+    a := PInt64(a + 8)^;
+  end;
+  { ReactOS says index 0 (if_nameindex's end marker): the next free ones }
+  r := 0;
+  for k := 0 to WinIfN - 1 do if WinIfIndex[k] > r then r := WinIfIndex[k];
+  for k := 0 to WinIfN - 1 do
+    if WinIfIndex[k] = 0 then begin r := r + 1; WinIfIndex[k] := r; end;
+  { no Windows name: lo for a loopback, as on Linux, else if<index> }
+  for k := 0 to WinIfN - 1 do
+    if WinIfName[k, 0] = 0 then
+      if (WinIfFlags[k] and 8) <> 0 then
+      begin
+        WinIfName[k, 0] := 108; WinIfName[k, 1] := 111;
+      end
+      else
+      begin
+        WinIfName[k, 0] := 105; WinIfName[k, 1] := 102;
+        i := 2;
+        { the digits by subtraction: no div here (a program without one of
+          its own has no division-by-zero stub for this unit to use) }
+        r := WinIfIndex[k]; pw := 9;
+        while (pw > 0) and (r < WinIfPow10[pw]) do pw := pw - 1;
+        while (pw >= 0) and (i < 15) do
+        begin
+          WinIfName[k, i] := 48;
+          while r >= WinIfPow10[pw] do begin r := r - WinIfPow10[pw]; WinIfName[k, i] := WinIfName[k, i] + 1; end;
+          i := i + 1; pw := pw - 1;
+        end;
+      end;
+end;
+
+function WinIfFind(nm: Int64): Integer;
+var k, i: Integer; same: Boolean;
+begin
+  Result := -1;
+  for k := 0 to WinIfN - 1 do
+  begin
+    same := True;
+    for i := 0 to 15 do
+    begin
+      if WinIfName[k, i] <> PByte(nm + i)^ then begin same := False; Break; end;
+      if WinIfName[k, i] = 0 then Break;
+    end;
+    if same then begin Result := k; Exit; end;
+  end;
+end;
+
+function WinProcNetDev(flags: Int64): Int64;
+const
+  H1: array[0..75] of Byte = (73,110,116,101,114,45,124,32,32,32,82,101,99,101,105,118,101,32,32,32,32,32,32,
+    32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,
+    32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,124,32,32,84,114,97,110,115,109,
+    105,116);
+  H2: array[0..121] of Byte = (32,102,97,99,101,32,124,98,121,116,101,115,32,32,32,32,112,97,99,107,101,116,
+    115,32,101,114,114,115,32,100,114,111,112,32,102,105,102,111,32,102,114,97,109,
+    101,32,99,111,109,112,114,101,115,115,101,100,32,109,117,108,116,105,99,97,115,
+    116,124,98,121,116,101,115,32,32,32,32,112,97,99,107,101,116,115,32,101,114,114,
+    115,32,100,114,111,112,32,102,105,102,111,32,99,111,108,108,115,32,99,97,114,
+    114,105,101,114,32,99,111,109,112,114,101,115,115,101,100);
+var b, n: Int64; k, i, len: Integer;
+begin
+  WinIfScan;
+  b := WinTxBuf; n := 0;
+  TxLit(b, n, @H1[0], Length(H1)); TxPut(b, n, 10);
+  TxLit(b, n, @H2[0], Length(H2)); TxPut(b, n, 10);
+  for k := 0 to WinIfN - 1 do
+  begin
+    if n > 3900 then Break;
+    len := 0;
+    while (len < 16) and (WinIfName[k, len] <> 0) do len := len + 1;
+    for i := len to 5 do TxPut(b, n, 32);
+    TxStr(b, n, Int64(@WinIfName[k, 0]), 16, False);
+    TxPut(b, n, 58);
+    for i := 1 to 16 do begin TxPut(b, n, 32); TxPut(b, n, 48); end;
+    TxPut(b, n, 10);
+  end;
+  Result := OpenMem(b, n, flags);
+end;
+
+{ A Linux sockaddr_in for addr (network order) at d. }
+procedure WinIfSin(d: Int64; addr: LongWord);
+var i: Integer;
+begin
+  for i := 0 to 15 do PByte(d + i)^ := 0;
+  PWord(d)^ := 2;
+  PLongWord(d + 4)^ := addr;
+end;
+
+{ The Linux interface ioctls (a 40-byte struct ifreq: name, then the union
+  at 16), or WIN_IF_NOT_MINE. }
+function WinIfIoctl(req, arg: Int64): Int64;
+var k, i: Integer; cap, outp, o: Int64;
+begin
+  Result := WIN_IF_NOT_MINE;
+  case req of
+    $8912:                                            { SIOCGIFCONF }
+      begin
+        WinIfScan;
+        cap := PInteger(arg)^; outp := PInt64(arg + 8)^; o := 0;
+        for k := 0 to WinIfN - 1 do
+        begin
+          if outp <> 0 then
+          begin
+            if o + 40 > cap then Break;
+            for i := 0 to 39 do PByte(outp + o + i)^ := 0;
+            for i := 0 to 15 do PByte(outp + o + i)^ := WinIfName[k, i];
+            WinIfSin(outp + o + 16, WinIfAddr[k]);
+          end;
+          o := o + 40;
+        end;
+        PInteger(arg)^ := o;
+        Result := 0;
+      end;
+    $8913, $8915, $8919, $891B, $8933:               { FLAGS ADDR BRDADDR NETMASK INDEX }
+      begin
+        WinIfScan;
+        k := WinIfFind(arg);
+        if k < 0 then begin Result := -19; Exit; end;  { ENODEV }
+        for i := 16 to 39 do PByte(arg + i)^ := 0;
+        case req of
+          $8913: PWord(arg + 16)^ := WinIfFlags[k];
+          $8915: WinIfSin(arg + 16, WinIfAddr[k]);
+          $8919: WinIfSin(arg + 16, WinIfAddr[k] or not WinIfMask[k]);
+          $891B: WinIfSin(arg + 16, WinIfMask[k]);
+        else
+          PInteger(arg + 16)^ := WinIfIndex[k];
+        end;
+        Result := 0;
+      end;
+    $8910:                                            { SIOCGIFNAME }
+      begin
+        WinIfScan;
+        Result := -19;
+        for k := 0 to WinIfN - 1 do
+          if WinIfIndex[k] = LongWord(PInteger(arg + 16)^) then
+          begin
+            for i := 0 to 15 do PByte(arg + i)^ := WinIfName[k, i];
+            Result := 0;
+            Exit;
+          end;
+      end;
+  end;
 end;
 
 
@@ -3815,6 +4063,8 @@ var v: LongWord;
     avail: Int64;
 begin
   if FdKind(fd) = FK_NONE then begin Result := -LX_EBADF; Exit; end;
+  Result := WinIfIoctl(req, arg);
+  if Result <> WIN_IF_NOT_MINE then Exit;
   Result := -LX_ENOTTY;
   if req = $5421 then                                          { FIONBIO }
   begin

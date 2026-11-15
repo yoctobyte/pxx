@@ -691,6 +691,40 @@ end;
 type TxPtr = Int64;
 {$I proctext.inc}
 
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls (ifnet.inc) }
+const
+  IFN_REQ = 144;
+  IFN_FIXED_STEP = True;
+  IFN_GIFCONF = $C0106926; IFN_GIFFLAGS = $C0906911; IFN_GIFADDR = $C0906921;
+  IFN_GIFNETMASK = $C0906925; IFN_GIFBRDADDR = $C0906923;
+
+function IfnIoctl(fd, req: Int64; arg: TxPtr): Int64;
+begin
+  Result := Lx(NbSys(54, fd, req, arg, 0, 0, 0));
+end;
+
+function IfnTmpSock: Int64;
+begin
+  Result := Lx(NbSys(394, 2, 2, 0, 0, 0, 0));             { AF_INET, SOCK_DGRAM }
+end;
+
+procedure IfnCloseFd(fd: Int64);
+begin
+  NbSys(6, fd, 0, 0, 0, 0, 0);
+end;
+
+function IfnHostIndex(name: TxPtr): Int64;
+begin
+  Result := -1;                  { the AF_LINK entries carry it }
+end;
+
+function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
+begin
+  Result := False;
+end;
+
+{$I ifnet.inc}
+
 const
   NB_GETVFSSTAT = 483;            { __getvfsstat90: the struct statvfs NB_STATVFS uses }
   NB_NOT_PROC = -1000000;
@@ -756,11 +790,20 @@ begin
   NbSys(NB_MUNMAP, m, 8192 + ncpu * 200, 0, 0, 0, 0);
 end;
 
+function NbProcNetDev: Int64;
+var t: array[0..8191] of Byte; n: Int64;
+begin
+  n := 0;
+  IfnProcNetDev(Int64(@t[0]), n, Length(t));
+  Result := NbDataFd(Int64(@t[0]), n);
+end;
+
 function NbProcOpen(p: Int64): Int64;
 begin
   if ProcFdInfoNum(p) >= 0 then Result := NbProcFdInfo(ProcFdInfoNum(p))
   else if ProcIsMounts(p) then Result := NbProcMounts
   else if ProcIsStat(p) then Result := NbProcStat
+  else if ProcIsNetDev(p) then Result := NbProcNetDev
   else Result := NB_NOT_PROC;
 end;
 
@@ -1826,7 +1869,8 @@ begin
            end;
            Result := Lx(r);
          end;
-    16: case Integer(a1) of                                              { ioctl }
+    16: if IfnLinuxIoctl(a0, a1, a2) <> IFN_NOT_MINE then Result := IfnLinuxIoctl(a0, a1, a2)
+        else case Integer(a1) of                                         { ioctl }
           $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := NbSys(NB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
                    if (r = 0) and (a2 <> 0) then TermiosToLx(Int64(@sb[0]), a2);

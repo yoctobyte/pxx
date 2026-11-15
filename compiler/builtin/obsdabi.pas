@@ -1298,6 +1298,89 @@ end;
 type TxPtr = Int64;
 {$I proctext.inc}
 
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls (ifnet.inc) }
+const
+  IFN_REQ = 32;
+  IFN_FIXED_STEP = False;
+  IFN_GIFCONF = $C0106924; IFN_GIFFLAGS = $C0206911; IFN_GIFADDR = $C0206921;
+  IFN_GIFNETMASK = $C0206925; IFN_GIFBRDADDR = $C0206923;
+
+function IfnIoctl(fd, req: Int64; arg: TxPtr): Int64;
+begin
+  Result := Lx(ObSys(54, fd, req, arg, 0, 0, 0));
+end;
+
+function IfnTmpSock: Int64;
+begin
+  Result := Lx(ObSys(97, 2, 2, 0, 0, 0, 0));             { AF_INET, SOCK_DGRAM }
+end;
+
+procedure IfnCloseFd(fd: Int64);
+begin
+  ObSys(6, fd, 0, 0, 0, 0, 0);
+end;
+
+{ OpenBSD's SIOCGIFCONF has no AF_LINK entries and there is no SIOCGIFINDEX;
+  the routing sysctl's interface list (NET_RT_IFLIST, what libc's getifaddrs
+  reads) has one RTM_IFINFO message per interface: msglen at 0, type at 3,
+  hdrlen at 4, ifm_index at 6, then its sockaddr_dl (name length at 5, the
+  name at 8). Not libc's if_nametoindex: an import outside the Lc_ set broke
+  every program's exit. }
+var
+  ObIfList: array[0..32767] of Byte;
+
+{ Find an interface by name (nm <> 0) or by index; its index, or -1, and
+  its name into dst when dst <> 0. }
+function ObIfLookup(nm: TxPtr; idx: Int64; dst: TxPtr): Int64;
+var mib: array[0..5] of LongInt; len, o, ml, h, sd, nl, i: Int64; same: Boolean;
+begin
+  Result := -1;
+  mib[0] := 4; mib[1] := 17; mib[2] := 0; mib[3] := 0; mib[4] := 3; mib[5] := 0;   { CTL_NET PF_ROUTE 0 0 NET_RT_IFLIST 0 }
+  len := Length(ObIfList);
+  if ObSys(OB_SYSCTL, Int64(@mib[0]), 6, Int64(@ObIfList[0]), Int64(@len), 0, 0) < 0 then Exit;
+  o := 0;
+  while o + 8 <= len do
+  begin
+    ml := ObIfList[o] or (Int64(ObIfList[o + 1]) shl 8);
+    if ml < 8 then Exit;
+    h := ObIfList[o + 4] or (Int64(ObIfList[o + 5]) shl 8);
+    if (ObIfList[o + 3] = 14) and (h + 8 <= ml) and (ObIfList[o + h + 1] = 18) then   { RTM_IFINFO, AF_LINK }
+    begin
+      sd := o + h;
+      nl := ObIfList[sd + 5];
+      if nl > 15 then nl := 15;
+      if nm <> 0 then
+      begin
+        same := PByte(nm + nl)^ = 0;
+        for i := 0 to nl - 1 do
+          if PByte(nm + i)^ <> ObIfList[sd + 8 + i] then same := False;
+      end
+      else same := (ObIfList[o + 6] or (Int64(ObIfList[o + 7]) shl 8)) = idx;
+      if same then
+      begin
+        Result := ObIfList[o + 6] or (Int64(ObIfList[o + 7]) shl 8);
+        if dst <> 0 then
+          for i := 0 to 15 do
+            if i < nl then PByte(dst + i)^ := ObIfList[sd + 8 + i] else PByte(dst + i)^ := 0;
+        Exit;
+      end;
+    end;
+    o := o + ml;
+  end;
+end;
+
+function IfnHostIndex(name: TxPtr): Int64;
+begin
+  Result := ObIfLookup(name, 0, 0);
+end;
+
+function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
+begin
+  Result := (idx > 0) and (ObIfLookup(0, idx, dst) >= 0);
+end;
+
+{$I ifnet.inc}
+
 { OpenBSD struct stat: st_dev (32-bit) at 4, st_ino at 8. }
 function ObProcFdInfo(fd: Int64): Int64;
 var sb: array[0..31] of Int64; t: array[0..127] of Byte; n, r: Int64;
@@ -1371,6 +1454,14 @@ begin
     end;
   Result := ObDataFd(m, n);
   ObSys(OB_MUNMAP, m, 8192 + ncpu * 200, 0, 0, 0, 0);
+end;
+
+function ObProcNetDev: Int64;
+var t: array[0..8191] of Byte; n: Int64;
+begin
+  n := 0;
+  IfnProcNetDev(Int64(@t[0]), n, Length(t));
+  Result := ObDataFd(Int64(@t[0]), n);
 end;
 
 { ---- Signals ----------------------------------------------------------------
@@ -2692,6 +2783,7 @@ begin
   else if ProcFdInfoNum(path) >= 0 then Result := ObProcFdInfo(ProcFdInfoNum(path))
   else if ProcIsMounts(path) then Result := ObProcMounts
   else if ProcIsStat(path) then Result := ObProcStat
+  else if ProcIsNetDev(path) then Result := ObProcNetDev
   else if PathIs(path, @DevFull[0], Length(DevFull)) then
   begin
     Result := Lx(ObSys(OB_OPENAT, OB_AT_FDCWD, Int64(@DevZero[0]), ObOpenFlags(flags) and not Int64($E00), 0, 0, 0));
@@ -2743,7 +2835,8 @@ begin
     10: Result := Lx(ObSys(OB_MPROTECT, a0, a1, a2, 0, 0, 0));
     11: Result := Lx(ObSys(OB_MUNMAP, a0, a1, 0, 0, 0, 0));
     12: Result := ObBrk(a0);
-    16: case Integer(a1) of                                              { ioctl }
+    16: if IfnLinuxIoctl(a0, a1, a2) <> IFN_NOT_MINE then Result := IfnLinuxIoctl(a0, a1, a2)
+        else case Integer(a1) of                                         { ioctl }
           $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := ObSys(OB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
                    if (r = 0) and (a2 <> 0) then TermiosToLx(Int64(@sb[0]), a2);

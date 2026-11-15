@@ -601,6 +601,40 @@ end;
 type TxPtr = Int64;
 {$I proctext.inc}
 
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls (ifnet.inc) }
+const
+  IFN_REQ = 32;
+  IFN_FIXED_STEP = False;
+  IFN_GIFCONF = $C0106924; IFN_GIFFLAGS = $C0206911; IFN_GIFADDR = $C0206921;
+  IFN_GIFNETMASK = $C0206925; IFN_GIFBRDADDR = $C0206923;
+
+function IfnIoctl(fd, req: Int64; arg: TxPtr): Int64;
+begin
+  Result := Lx(FbSys(54, fd, req, arg, 0, 0, 0));
+end;
+
+function IfnTmpSock: Int64;
+begin
+  Result := Lx(FbSys(97, 2, 2, 0, 0, 0, 0));             { AF_INET, SOCK_DGRAM }
+end;
+
+procedure IfnCloseFd(fd: Int64);
+begin
+  FbSys(6, fd, 0, 0, 0, 0, 0);
+end;
+
+function IfnHostIndex(name: TxPtr): Int64;
+begin
+  Result := -1;                  { the AF_LINK entries carry it }
+end;
+
+function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
+begin
+  Result := False;
+end;
+
+{$I ifnet.inc}
+
 const
   SysCpTime: array[0..12] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101,0);  { kern.cp_time }
   SysCpTimes: array[0..13] of Byte = (107,101,114,110,46,99,112,95,116,105,109,101,115,0);  { kern.cp_times }
@@ -666,6 +700,14 @@ begin
   FbSys(FB_MUNMAP, m, size, 0, 0, 0, 0);
 end;
 
+function FbProcNetDev: Int64;
+var t: array[0..8191] of Byte; n: Int64;
+begin
+  n := 0;
+  IfnProcNetDev(Int64(@t[0]), n, Length(t));
+  Result := FbShmFile(Int64(@t[0]), n);
+end;
+
 { The /proc files above, by path; FB_NOT_PROC (never an fd or a -errno)
   when p is none of them. }
 function FbProcOpen(p: Int64): Int64;
@@ -673,6 +715,7 @@ begin
   if ProcFdInfoNum(p) >= 0 then Result := FbProcFdInfo(ProcFdInfoNum(p))
   else if ProcIsMounts(p) then Result := FbProcMounts
   else if ProcIsStat(p) then Result := FbProcStat
+  else if ProcIsNetDev(p) then Result := FbProcNetDev
   else Result := FB_NOT_PROC;
 end;
 
@@ -1788,7 +1831,8 @@ begin
            MaskToFb(PInt64(a0)^, Int64(@t[0]));
            Result := Lx(FbSys(FB_SIGSUSPEND, Int64(@t[0]), 0, 0, 0, 0, 0));
          end;
-    16: case Integer(a1) of                                              { ioctl }
+    16: if IfnLinuxIoctl(a0, a1, a2) <> IFN_NOT_MINE then Result := IfnLinuxIoctl(a0, a1, a2)
+        else case Integer(a1) of                                         { ioctl }
           $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := FbSys(FB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);
                    if (r = 0) and (a2 <> 0) then TermiosToLx(Int64(@sb[0]), a2);

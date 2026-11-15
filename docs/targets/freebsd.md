@@ -183,6 +183,15 @@ answers three more files from the system's own calls. The text is built in
 | `/proc/self/fdinfo/N` (`mnt_id:`, `ino:`) | the compiler's output guard | `fstat` | `fstat` | `fstat` | `fstat` | `fstat` |
 | `/proc/mounts`, `/proc/self/mounts` | crtl's `getmntent` (`df`, mount lists) | `getfsstat` | `getvfsstat` | `getfsstat` | `getfsstat` | `getvfsstat` |
 | `/proc/stat` (the `cpu` lines) | palparallel's load sampler | `kern.cp_time(s)` | `kern.cp_time` {1,51} | `kern.cp_time2` {1,71} | `kern.cp_time(s)` | `kern.cp_time` {1,51}, aggregate line only |
+| `/proc/net/dev` (the interface names) | crtl's `if_nameindex` | `SIOCGIFCONF` | `SIOCGIFCONF` | `SIOCGIFCONF` | `SIOCGIFCONF` | not yet |
+
+The interface ioctls behind crtl's `getifaddrs` and `if_nametoindex`
+(`SIOCGIFCONF`, `SIOCGIFFLAGS`, `SIOCGIFADDR`, `SIOCGIFNETMASK`,
+`SIOCGIFBRDADDR`, `SIOCGIFINDEX`, `SIOCGIFNAME`) are translated to the BSD
+ones and their Linux layouts in `compiler/builtin/ifnet.inc`; an interface's
+index comes from the `AF_LINK` entry of `SIOCGIFCONF`, or on OpenBSD, whose
+list has none, from libc's `if_nametoindex`. `/proc/net/dev` lists the names
+with every counter 0.
 
 `mnt_id` is the file system's device number, which is one per mounted file
 system, as Linux's mount id is. A mount line has the source, the mount point,
