@@ -17087,9 +17087,34 @@ begin
   FHelpContext := 0;
 end;
 
-function pyos_path_isabs(const p: AnsiString): Boolean;
+{ The path separator test. On NT (--os=nt) Windows' own paths reach a
+  program -- argv[0] is Z:\dir\prog.exe under Wine -- so os.path splits on
+  '\' as well, as CPython's ntpath does. Joining still writes '/', which
+  Windows accepts, so a program prints the same paths it does on Linux. }
+function PyPathSep(c: AnsiChar): Boolean;
 begin
-  Result := (Length(p) > 0) and (p[1] = '/');
+  {$ifdef PXX_OS_WINDOWS}
+  Result := (c = '/') or (c = '\');
+  {$else}
+  Result := c = '/';
+  {$endif}
+end;
+
+{ How much of p is the drive, kept whole by dirname: 'C:' is 2 on NT, and
+  nothing elsewhere. }
+function PyPathDrive(const p: AnsiString): Integer;
+begin
+  Result := 0;
+  {$ifdef PXX_OS_WINDOWS}
+  if (Length(p) >= 2) and (p[2] = ':') and (UpCase(p[1]) in ['A'..'Z']) then Result := 2;
+  {$endif}
+end;
+
+function pyos_path_isabs(const p: AnsiString): Boolean;
+var d: Integer;
+begin
+  d := PyPathDrive(p);
+  Result := (Length(p) > d) and PyPathSep(p[d + 1]);
 end;
 
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
@@ -17098,7 +17123,7 @@ begin
     and an empty first component contributes nothing. }
   if pyos_path_isabs(b) then begin Result := b; Exit; end;
   if Length(a) = 0 then begin Result := b; Exit; end;
-  if a[Length(a)] = '/' then Result := a + b
+  if PyPathSep(a[Length(a)]) then Result := a + b
   else Result := a + '/' + b;
 end;
 
@@ -17113,13 +17138,13 @@ begin
 end;
 
 function pyos_path_dirname(const p: AnsiString): AnsiString;
-var i: Integer;
+var i, d: Integer;
 begin
-  Result := '';
+  d := PyPathDrive(p);
   i := Length(p);
-  while (i > 0) and (p[i] <> '/') do Dec(i);
-  if i = 0 then Exit;              { no separator: dirname is empty }
-  if i = 1 then begin Result := '/'; Exit; end;   { keep the root slash }
+  while (i > d) and not PyPathSep(p[i]) do Dec(i);
+  if i = d then begin Result := Copy(p, 1, d); Exit; end;   { no separator: just the drive, if any }
+  if i = d + 1 then begin Result := Copy(p, 1, i); Exit; end;   { keep the root slash }
   Result := Copy(p, 1, i - 1);
 end;
 
@@ -17131,7 +17156,7 @@ function pyos_path_basename(const p: AnsiString): AnsiString;
 var i: Integer;
 begin
   i := Length(p);
-  while (i > 0) and (p[i] <> '/') do Dec(i);
+  while (i > PyPathDrive(p)) and not PyPathSep(p[i]) do Dec(i);
   Result := Copy(p, i + 1, Length(p) - i);
 end;
 
@@ -17177,7 +17202,7 @@ var i, lastSlash, dot: Integer;
 begin
   lastSlash := 0;
   for i := 1 to Length(p) do
-    if p[i] = '/' then lastSlash := i;
+    if PyPathSep(p[i]) then lastSlash := i;
   dot := 0;
   { scan only the BASENAME, and never accept its first character: CPython gives
     ('.bashrc', '') and ('a.b/c', '') }
@@ -17207,13 +17232,15 @@ end;
 
 function pyos_path_normpath(const p: AnsiString): AnsiString;
 var parts: array[0..255] of AnsiString; n, i, st: Integer;
-    seg: AnsiString; absPath: Boolean;
+    seg, drv: AnsiString; absPath: Boolean; d: Integer;
 begin
   if p = '' then begin Result := '.'; Exit; end;
-  absPath := p[1] = '/';
-  n := 0; st := 1;
-  for i := 1 to Length(p) + 1 do
-    if (i > Length(p)) or (p[i] = '/') then
+  d := PyPathDrive(p);
+  drv := Copy(p, 1, d);            { 'C:' on NT, kept as it is }
+  absPath := (Length(p) > d) and PyPathSep(p[d + 1]);
+  n := 0; st := d + 1;
+  for i := d + 1 to Length(p) + 1 do
+    if (i > Length(p)) or PyPathSep(p[i]) then
     begin
       seg := Copy(p, st, i - st);
       st := i + 1;
@@ -17238,8 +17265,9 @@ begin
     if Result <> '' then Result := Result + '/';
     Result := Result + parts[i];
   end;
-  if absPath then Result := '/' + Result
-  else if Result = '' then Result := '.';
+  if absPath then Result := drv + '/' + Result
+  else if Result = '' then Result := drv + '.'
+  else Result := drv + Result;
 end;
 
 function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'): AnsiString;
@@ -17596,17 +17624,20 @@ end;
   what Python's abspath does (it does NOT resolve symlinks — that is realpath).
   Kept purely lexical for exactly that reason. }
 function pyos_path_abspath(const p: AnsiString): AnsiString;
-var full, comp, outp: AnsiString; i, j: Integer;
+var full, comp, outp, drv: AnsiString; i, j: Integer;
 begin
   if pyos_path_isabs(p) then full := p
   else full := pyos_path_join(pyos_getcwd, p);
+  { a drive (NT's 'C:') stays in front; the rest is written with '/' }
+  i := PyPathDrive(full);
+  drv := Copy(full, 1, i);
+  Inc(i);
   outp := '';
-  i := 1;
   while i <= Length(full) do
   begin
-    while (i <= Length(full)) and (full[i] = '/') do Inc(i);
+    while (i <= Length(full)) and PyPathSep(full[i]) do Inc(i);
     j := i;
-    while (j <= Length(full)) and (full[j] <> '/') do Inc(j);
+    while (j <= Length(full)) and not PyPathSep(full[j]) do Inc(j);
     if j > i then
     begin
       comp := Copy(full, i, j - i);
@@ -17622,7 +17653,7 @@ begin
     i := j;
   end;
   if Length(outp) = 0 then outp := '/';
-  Result := outp;
+  Result := drv + outp;
 end;
 
 procedure pysys_exit; overload;
@@ -21085,7 +21116,7 @@ begin
   exe := pysys_executable;
   cut := 0;
   for i := 1 to Length(exe) do
-    if exe[i] = '/' then cut := i;
+    if PyPathSep(exe[i]) then cut := i;
   if cut > 0 then Result := Copy(exe, 1, cut) + modBase
   else Result := modBase;
 end;

@@ -11331,7 +11331,8 @@ test-windows: $(COMPILER)
 	           test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas \
 	           test/c_crtl_uio.c test/c_crtl_ioctl_and_sysinfo.c \
 	           test/test_nilpy_time_and_listdir.npy test/test_nilpy_glob_module.npy \
-	           test/test_nilpy_file_io_and_comprehensions.npy \
+	           test/test_nilpy_file_io_and_comprehensions.npy test/test_nilpy_path_of_argv0.npy \
+	           test/test_nilpy_mmap_maps_the_file_privately.npy test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy \
 	           test/c_crtl_select.c test/crtl_poll_set.c \
 	           test/lib_signals_fpc.pas test/test_signal_num.pas test/test_signal_bss_alias.pas \
 	           test/test_signal_sp_rewrite.pas test/test_signal_pc_rewrite.pas \

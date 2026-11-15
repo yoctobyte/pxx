@@ -1,0 +1,16 @@
+# os.path takes apart the program's own path. Under --os=nt that path is a
+# Windows one (Z:\dir\prog.exe under Wine), so dirname and basename must split
+# on '\' too, as CPython's ntpath does; on Linux the same lines hold for a
+# '/' path. Differential: runs unchanged under CPython.
+import os
+import sys
+
+a = os.path.abspath(sys.argv[0])
+b = os.path.basename(a)
+d = os.path.dirname(a)
+print("basename has no separator:", "/" not in b and "\\" not in b)
+print("basename not empty:", b != "")
+print("dirname is absolute:", os.path.isabs(d))
+print("join gives the program back:", os.path.exists(os.path.join(d, b)))
+print("split agrees:", os.path.split(a)[1] == b)
+print(os.path.splitext("x.tar.gz")[1], os.path.basename("a/b.c"), os.path.dirname("a/b.c"))

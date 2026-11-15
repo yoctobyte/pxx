@@ -1,0 +1,6 @@
+basename has no separator: True
+basename not empty: True
+dirname is absolute: True
+join gives the program back: True
+split agrees: True
+.gz b.c a

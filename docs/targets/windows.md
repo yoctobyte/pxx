@@ -148,6 +148,11 @@ test-windows` (run under Wine through `tools/vm/wine.sh`):
   `ftruncate`, `fsync`, `dup`/`dup2`, and pipes
 - directories: create, remove, list (`getdents64` over `FindFirstFileW`),
   the current directory, and the `*at` calls relative to a directory fd
+- Nil Python's `os.path` on Windows paths: `basename`, `dirname`, `split`,
+  `splitext`, `isabs`, `abspath` and `normpath` take `\` as a separator and
+  keep a drive (`Z:`) in front, as CPython's `ntpath` does. Unlike CPython,
+  `join`, `abspath` and `normpath` write `/` (Windows accepts it), so a
+  program prints the same paths as on Linux: `Z:/dir/prog.exe`
 
 - `select`, `poll` and their `p` forms, on the console, pipes, files and
   sockets
