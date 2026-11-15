@@ -6455,9 +6455,32 @@ var argTk: TTypeKind;
   pvSinkIsProcVar: Boolean;
   tempIsByValueCopy: Boolean;
   fcBoxPi, fcObjPi, fcArg, fcBox: Integer;   { a fresh callable argument }
+  cbPi, cbI, cbA0, cbA1: Integer; cbShape: Int64;   { an NT DLL callback }
 begin
   if isRefArg then CheckVarArgWidth(cpi, pathIdx, argAST);
   if isRefArg then IRStrUniqueForByRefElem(cpi, pathIdx, argAST);
+  { --os=nt: a program's own routine passed straight to a DLL routine is a
+    callback Windows will call with the Microsoft convention. Hand the DLL
+    the address of an adapter instead (winabi's PxxWinCallback: the
+    parameter count shl 16, plus bit i for a floating-point parameter i).
+    Pascal's own calls to the routine stay SysV. feature-port-windows-pe }
+  if (not isRefArg) and (TargetKernel = KERNEL_WINDOWS) and (cpi >= 0) and ProcExternal[cpi] and
+     (ASTKind[argAST] = AN_PROCADDR) and (ASTIVal[argAST] >= 0) and
+     (not ProcExternal[ASTIVal[argAST]]) and (FindProc('PxxWinCallback') >= 0) then
+  begin
+    cbPi := ASTIVal[argAST];
+    cbShape := Int64(Procs[cbPi].ParamCount) shl 16;
+    for cbI := 0 to Procs[cbPi].ParamCount - 1 do
+      if (cbI < 16) and (not Procs[cbPi].Params[cbI].IsRef) and
+         ((Procs[cbPi].Params[cbI].TypeKind = tyDouble) or (Procs[cbPi].Params[cbI].TypeKind = tySingle)) then
+        cbShape := cbShape or (Int64(1) shl cbI);
+    cbA0 := IRAppend(IR_ARG, IRLowerAST(argAST), -1, -1, 0, Ord(tyPointer));
+    cbA1 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, Integer(cbShape), Ord(tyNativeInt)),
+              -1, -1, 0, Ord(tyNativeInt));
+    IRB[cbA0] := cbA1;
+    Result := IRAppendCall(FindProc('PxxWinCallback'), cbA0, -1, Ord(tyPointer));
+    Exit;
+  end;
   { A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS OWNED BY A HIDDEN VARIANT, as
     it is when bound to a name first. The lambda's value is a fresh heap
     object as a raw Pointer: a `key: Pointer` parameter (sorted, min, max,

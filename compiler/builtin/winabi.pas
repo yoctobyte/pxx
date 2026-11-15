@@ -2341,6 +2341,117 @@ begin
   TB(p, $C3);                                        { ret }
 end;
 
+{ ---- A program's own routine handed to a DLL as a callback ------------------
+  qsort's comparator, EnumWindows' callback, a window procedure: Windows
+  calls them with the Microsoft convention. The compiler wraps the address
+  of a Pascal routine passed to an external DLL routine in a call to
+  PxxWinCallback(target, shape), with shape = the parameter count shl 16
+  plus bit i set when parameter i is floating point. The adapter keeps the
+  registers Windows expects back, as MsToSysV's does, and first stores the
+  four register arguments in the caller's shadow space (each position's
+  integer register or xmm register, by its type), which puts every argument
+  at [rbp+16+8i] beside the stack ones. It then loads them into SysV's
+  registers in order (integers rdi, rsi, rdx, rcx, r8, r9; floats xmm0-7).
+  Up to 14 parameters, as long as they fit those registers. One adapter per
+  (target, shape), on pages of their own; the same pair answers the same
+  address. }
+const
+  WINCB_PER_PAGE = 8;         { 512 bytes each in a 4096-byte page: one is up to ~300 }
+  WINCB_SLOT = 512;
+  WINCB_MAX = 256;
+
+var
+  WinCbTarget, WinCbShape, WinCbCode: array[0..WINCB_MAX-1] of Int64;
+  WinCbN: Integer;
+  WinCbPage: Int64;
+  WinCbLock: Int64 = 1;
+
+function PxxWinCallback(target, shape: Int64): Int64;
+var p, n, i, d, ki, kf: Int64; k: Integer;
+const
+  IntLoad: array[0..5] of Byte = ($7D, $75, $55, $4D, $45, $4D);    { modrm: rdi rsi rdx rcx r8 r9 }
+begin
+  Result := target;
+  if target = 0 then Exit;
+  if not ThunkPageReady then Exit;
+  while not LockBtr(Int64(@WinCbLock), 0) do W_Sleep(0);
+  for k := 0 to WinCbN - 1 do
+    if (WinCbTarget[k] = target) and (WinCbShape[k] = shape) then
+    begin
+      Result := WinCbCode[k];
+      LockOr(Int64(@WinCbLock), 1);
+      Exit;
+    end;
+  n := (shape shr 16) and $FF;
+  if n > 14 then n := 14;
+  if WinCbN < WINCB_MAX then
+  begin
+    if WinCbN mod WINCB_PER_PAGE = 0 then
+      WinCbPage := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    if WinCbPage <> 0 then
+    begin
+      p := WinCbPage + WINCB_SLOT * (WinCbN mod WINCB_PER_PAGE);
+      Result := p;
+      TB(p, $55);                                        { push rbp }
+      TB(p, $48); TB(p, $89); TB(p, $E5);                { mov rbp, rsp }
+      { the four register arguments to the shadow space, [rbp+16..+40] }
+      for i := 0 to 3 do
+        if (shape and (1 shl i)) <> 0 then
+        begin
+          TB(p, $F2); TB(p, $0F); TB(p, $11); TB(p, $45 or (i shl 3)); TB(p, 16 + 8 * i);   { movsd [rbp+d], xmm_i }
+        end
+        else
+        begin
+          case i of
+            0: begin TB(p, $48); TB(p, $89); TB(p, $4D); end;     { mov [rbp+d], rcx }
+            1: begin TB(p, $48); TB(p, $89); TB(p, $55); end;     { rdx }
+            2: begin TB(p, $4C); TB(p, $89); TB(p, $45); end;     { r8 }
+          else
+            begin TB(p, $4C); TB(p, $89); TB(p, $4D); end;        { r9 }
+          end;
+          TB(p, 16 + 8 * i);
+        end;
+      TB(p, $56); TB(p, $57); TB(p, $53);                { push rsi; push rdi; push rbx }
+      TB(p, $41); TB(p, $54); TB(p, $41); TB(p, $55);    { push r12; push r13 }
+      TB(p, $41); TB(p, $56); TB(p, $41); TB(p, $57);    { push r14; push r15 }
+      TB(p, $48); TB(p, $81); TB(p, $EC); TD(p, 168);    { sub rsp, 168 }
+      for i := 6 to 15 do TXmm(p, i, 16 * (i - 6), False);
+      ki := 0; kf := 0;
+      for i := 0 to n - 1 do
+      begin
+        d := 16 + 8 * i;
+        if (shape and (1 shl i)) <> 0 then
+        begin
+          if kf < 8 then
+          begin
+            TB(p, $F2); TB(p, $0F); TB(p, $10); TB(p, $45 or (kf shl 3)); TB(p, d);   { movsd xmm_kf, [rbp+d] }
+            kf := kf + 1;
+          end;
+        end
+        else if ki < 6 then
+        begin
+          if ki < 4 then TB(p, $48) else TB(p, $4C);
+          TB(p, $8B); TB(p, IntLoad[ki]); TB(p, d);                                  { mov reg, [rbp+d] }
+          ki := ki + 1;
+        end;
+      end;
+      TB(p, $48); TB(p, $B8);                            { mov rax, imm64 }
+      TD(p, target); TD(p, target shr 32);
+      TB(p, $FF); TB(p, $D0);                            { call rax }
+      for i := 6 to 15 do TXmm(p, i, 16 * (i - 6), True);
+      TB(p, $48); TB(p, $81); TB(p, $C4); TD(p, 168);    { add rsp, 168 }
+      TB(p, $41); TB(p, $5F); TB(p, $41); TB(p, $5E);    { pop r15; pop r14 }
+      TB(p, $41); TB(p, $5D); TB(p, $41); TB(p, $5C);    { pop r13; pop r12 }
+      TB(p, $5B); TB(p, $5F); TB(p, $5E); TB(p, $5D);    { pop rbx; pop rdi; pop rsi; pop rbp }
+      TB(p, $C3);                                        { ret }
+      if p - Result > WINCB_SLOT then W_ExitProcess(70);   { cannot happen: 14 loads at most }
+      WinCbTarget[WinCbN] := target; WinCbShape[WinCbN] := shape; WinCbCode[WinCbN] := Result;
+      WinCbN := WinCbN + 1;
+    end;
+  end;
+  LockOr(Int64(@WinCbLock), 1);
+end;
+
 { ---- Threads -------------------------------------------------------------------
   The clone stub (thread_emit.inc) carves the child's stack, TLS block and
   stage area exactly as on Linux and calls clone with the address to resume

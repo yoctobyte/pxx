@@ -259,9 +259,16 @@ path means what it means on Linux.
   record passed by value follows the Microsoft rule: one of 1, 2, 4 or 8
   bytes travels as an integer, any other size as a pointer to a copy the
   caller makes. A record result of 1, 2, 4 or 8 bytes comes back in `rax`,
-  and a larger one through a hidden first argument. A callback that Windows
-  calls with floating-point arguments does not receive them, and a record
-  passed by value to a callback is not converted.
+  and a larger one through a hidden first argument.
+- **Callbacks:** a routine of the program passed straight to a DLL routine
+  (`qsort(@v[0], n, 4, @Cmp)`, `EnumWindows(@Cb, 0)`) is handed over as an
+  adapter that takes the Microsoft convention and calls the routine,
+  floating-point and stack arguments included (up to 14 parameters). The
+  program's own calls to the routine are unchanged. The adapter is made only
+  where the address goes straight into the call: an address stored first,
+  in a variable or a record field such as `lpfnWndProc`, is the routine
+  itself, and Windows calling it crashes. A record passed by value to a
+  callback is not converted.
 
 A system call the translator does not map returns `ENOSYS`. Set
 `PXX_WINABI_TRACE=1` in the environment to have each one named on stderr.

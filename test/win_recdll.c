@@ -15,3 +15,15 @@ __declspec(dllexport) long long take6(int a, int b, int c, int d, P8 e, P12 f) {
 __declspec(dllexport) P8 ret8(int a, int b) { P8 r = {a, b}; return r; }
 __declspec(dllexport) P12 ret12(int a, double s, int b) { P12 r = {a, (int)(s * 2), b}; return r; }
 __declspec(dllexport) P2 ret2(short a) { P2 r = {(short)(a * 3)}; return r; }
+/* Callbacks into the program (test/test_nt_dll_callbacks.pas): called with the
+   Microsoft convention, floats positional in xmm0-3, arguments 5+ on the stack.
+   Every float comes in from the caller: a constant here would be an .rdata
+   relocation. */
+typedef double (*FD)(double, int, double);
+__declspec(dllexport) double cb_mixed(FD f, double a, double b) { double r = f(a, 3, b); return r + r; }
+typedef long long (*F6)(long long, long long, long long, long long, long long, long long);
+__declspec(dllexport) long long cb_six(F6 f) { return f(1, 2, 3, 4, 5, 6); }
+typedef double (*F6M)(int, double, int, double, int, double);
+__declspec(dllexport) double cb_six_mixed(F6M f, double b, double d, double g) { return f(1, b, 2, d, 3, g); }
+typedef float (*FS)(float, float);
+__declspec(dllexport) double cb_single(FS f, float a, float b) { return f(a, b); }

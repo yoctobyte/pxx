@@ -11399,7 +11399,9 @@ test-windows: $(COMPILER)
 	    python3 tools/vm/mkdll.py $$d/win_recdll.obj $$d/win_recdll.dll win_recdll.dll >/dev/null && \
 	    ./$(COMPILER) --os=windows test/test_nt_dll_records.pas $$d/dllrec.exe >/dev/null && \
 	    tools/expect_same.sh windows_dll_records "$$(tools/vm/wine.sh $$d/dllrec.exe 2>&1)" "$$(cat test/test_nt_dll_records.expected)" || exit 1; \
-	  else echo "test-windows: SKIP windows_dll_records (no clang to build the callee DLL)"; fi; \
+	    ./$(COMPILER) --os=windows test/test_nt_dll_callbacks.pas $$d/dllcb.exe >/dev/null && \
+	    tools/expect_same.sh windows_dll_callbacks "$$(tools/vm/wine.sh $$d/dllcb.exe 2>&1)" "$$(cat test/test_nt_dll_callbacks.expected)" || exit 1; \
+	  else echo "test-windows: SKIP windows_dll_records, windows_dll_callbacks (no clang to build the callee DLL)"; fi; \
 	  echo "test-windows: OK"
 
 test-asm: $(COMPILER)
