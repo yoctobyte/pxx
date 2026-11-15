@@ -20765,6 +20765,11 @@ test-core: $(COMPILER)
 	$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_fnptr_array_param.c $(TESTTMP)/c_fpap.o > /dev/null
 	XDG_CACHE_HOME=$(TESTTMP)/c_srt_cache $(COMPILER) --link -o $(TESTTMP)/c_fpap_s $(TESTTMP)/c_fpap.o > /dev/null
 	tools/expect_same.sh c_fpap_s "$$($(TESTTMP)/c_fpap_s)" "$$(cat test/c_fnptr_array_param.expected)"
+	$(COMPILER) test/c_scm_rights.c $(TESTTMP)/c_scm > /dev/null
+	tools/expect_same.sh c_scm "$$($(TESTTMP)/c_scm)" "$$(cat test/c_scm_rights.expected)"
+	$(COMPILER) --emit-obj --threadsafe --function-sections test/c_scm_rights.c $(TESTTMP)/c_scm.o > /dev/null
+	gcc -o $(TESTTMP)/c_scm_g $(TESTTMP)/c_scm.o -lpthread
+	tools/expect_same.sh c_scm_g "$$($(TESTTMP)/c_scm_g)" "$$(cat test/c_scm_rights.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

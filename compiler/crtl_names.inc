@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  715 functions across 73 headers. }
+  716 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -177,19 +177,19 @@ begin
       ' sigfillset:signal.h sigisemptyset:signal.h sigismember:signal.h signal:signal.h ' +
       ' signbit:math.h sigprocmask:signal.h sigsuspend:signal.h sigtimedwait:signal.h ' +
       ' sigwait:signal.h sin:math.h sinf:math.h sinh:math.h sleep:unistd.h snprintf:stdio.h ' +
-      ' socket:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h srand:stdlib.h ' +
-      ' srand48:stdlib.h srandom:stdlib.h sscanf:stdio.h stat:sys/stat.h statfs:sys/statfs.h ' +
-      ' statvfs:sys/statvfs.h stpcpy:string.h stpncpy:string.h strcasestr:string.h ' +
-      ' strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h strcoll:string.h ' +
-      ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +
-      ' strftime:time.h strlcat:string.h strlcpy:string.h strlen:string.h strncat:string.h ' +
-      ' strncmp:string.h strncpy:string.h strndup:stdlib.h strnlen:string.h strpbrk:string.h ' +
-      ' strptime:time.h strrchr:string.h strsep:string.h strsignal:string.h strspn:string.h ' +
-      ' strstr:string.h strtod:stdlib.h strtoimax:inttypes.h strtok:string.h strtok_r:string.h ' +
-      ' strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h ' +
-      ' strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h swapoff:sys/swap.h ' +
-      ' swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h syscall:unistd.h ' +
-      ' sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
+      ' socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h ' +
+      ' srand:stdlib.h srand48:stdlib.h srandom:stdlib.h sscanf:stdio.h stat:sys/stat.h ' +
+      ' statfs:sys/statfs.h statvfs:sys/statvfs.h stpcpy:string.h stpncpy:string.h ' +
+      ' strcasestr:string.h strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h ' +
+      ' strcoll:string.h strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h ' +
+      ' strerror_r:string.h strftime:time.h strlcat:string.h strlcpy:string.h strlen:string.h ' +
+      ' strncat:string.h strncmp:string.h strncpy:string.h strndup:stdlib.h strnlen:string.h ' +
+      ' strpbrk:string.h strptime:time.h strrchr:string.h strsep:string.h strsignal:string.h ' +
+      ' strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h strtok:string.h ' +
+      ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
+      ' strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h ' +
+      ' swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h ' +
+      ' syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +

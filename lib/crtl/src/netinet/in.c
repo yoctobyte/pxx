@@ -31,6 +31,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
+#include <unistd.h>  /* syscall */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -676,7 +678,28 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen,
    ENet builds every packet as a header iovec plus payload iovecs on an
    UNCONNECTED UDP socket, so the old version sent a 4-byte header with no
    destination (EDESTADDRREQ) and no peer ever connected.
-   Control data is not carried: msg_controllen comes back 0. */
+   Control data is not carried by this fallback: msg_controllen comes back 0.
+   64-bit targets with the Linux call numbers use the REAL sendmsg/recvmsg
+   instead (below), which carry control data -- SCM_RIGHTS descriptor passing
+   (Gibux's nbd keeper), MSG_CMSG_CLOEXEC, MSG_CTRUNC -- and every flag, as
+   pread/pwrite do in unistd.c. The other OS ABIs translate those numbers. */
+#if defined(SYS_sendmsg) && defined(SYS_recvmsg) && defined(SYS_socketpair) && \
+    defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+#define __CRTL_REAL_MSG 1
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  return (ssize_t)syscall(SYS_sendmsg, (long)sockfd, (long)msg, (long)flags);
+}
+
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  return (ssize_t)syscall(SYS_recvmsg, (long)sockfd, (long)msg, (long)flags);
+}
+
+int socketpair(int domain, int type, int protocol, int sv[2]) {
+  return (int)syscall(SYS_socketpair, (long)domain, (long)type, (long)protocol, (long)sv);
+}
+#endif
+
+#ifndef __CRTL_REAL_MSG
 static size_t __crtl_iov_total(const struct msghdr *msg) {
   size_t k, n = 0;
   for (k = 0; k < msg->msg_iovlen; k++) n += msg->msg_iov[k].iov_len;
@@ -738,6 +761,14 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
   msg->msg_flags = 0;
   return r;
 }
+
+/* No socketpair without the real call: refused, not faked */
+int socketpair(int domain, int type, int protocol, int sv[2]) {
+  (void)domain; (void)type; (void)protocol; (void)sv;
+  errno = ENOSYS;
+  return -1;
+}
+#endif
 
 /* (poll lives in poll.c, over the PAL's set poll. A second, "optimistic"
    poll here reported every fd ready and ignored the timeout; whichever copy

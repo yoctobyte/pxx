@@ -1,0 +1,9 @@
+sizes 56 16 20 24
+cloexec pair 1
+empty peek -1 1
+sent 1
+peek 1 F
+recv 1 F fd 1 ctrunc 0
+cloexec got 1
+read 5 pipe!
+dgram 1 ctrunc 1

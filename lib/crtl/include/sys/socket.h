@@ -218,6 +218,10 @@ struct sockaddr_storage {
 #define MSG_DONTWAIT 0x40
 #define MSG_WAITALL 0x100
 #define MSG_NOSIGNAL 0x4000
+/* recvmsg's reported and requested flags, Linux's values */
+#define MSG_CTRUNC 8
+#define MSG_EOR 0x80
+#define MSG_CMSG_CLOEXEC 0x40000000
 #define MSG_MAXIOVLEN 16
 
 /* Scatter/gather I/O. struct iovec USED to be defined here, with a comment
@@ -282,6 +286,15 @@ struct cmsghdr {
 struct cmsghdr *__cmsg_nxthdr(struct msghdr *mhdr, struct cmsghdr *cmsg);
 #define CMSG_NXTHDR(mhdr, cmsg) __cmsg_nxthdr(mhdr, cmsg)
 
+/* control message types at SOL_SOCKET: descriptor passing and credentials */
+#define SCM_RIGHTS 1
+#define SCM_CREDENTIALS 2
+struct ucred {
+  int pid;
+  unsigned int uid;
+  unsigned int gid;
+};
+
 #define SHUT_RD 0
 #define SHUT_WR 1
 #define SHUT_RDWR 2
@@ -308,5 +321,6 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags);
 ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
+int socketpair(int domain, int type, int protocol, int sv[2]);
 
 #endif
