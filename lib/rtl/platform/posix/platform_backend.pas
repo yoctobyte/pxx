@@ -508,9 +508,9 @@ end;
 
 { --os=nt: Windows' own loader, through the translator (winabi.pas,
   WIN_PXX_DLOPEN/_DLSYM/_DLCLOSE): LoadLibraryA, GetProcAddress, FreeLibrary.
-  A symbol comes back callable from pxx code: a pxx DLL's routine itself, or
-  an adapter to Microsoft's convention (winabi.pas says which signatures that
-  adapter gets right). }
+  A symbol is GetProcAddress's address; a call through a procedure type
+  converts to Microsoft's convention when the address lies outside the
+  program's code (compiler/symtab.inc, EmitWinCheckedIndirectCall). }
 function PalBackendHasDynlib: Boolean;
 begin
   Result := True;

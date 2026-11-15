@@ -507,23 +507,14 @@ end;
 
 { The export directory, in Data[] like the imports: the directory, the
   address table (the stubs' RVAs, PatchPEDll), the name pointers, the
-  ordinals, the names, then the DLL's own name.
-
-  One more export than routines: __pxx_dll_table, the table the stubs jump
-  through, at address-table index PeDllExpCount and at its sorted place
-  among the names. winabi's dlsym reads it to hand a pxx caller the routine
-  itself rather than its Microsoft-convention adapter. }
-const PE_DLL_TABLE_NAME = '__pxx_dll_table';
-
+  ordinals, the names, then the DLL's own name. }
 procedure PreparePEExports(const dllName: AnsiString);
-var i, k, nameFix, eatFix, enptFix, eotFix, enpt, total, tpos, e: Integer;
+var i, k, nameFix, eatFix, enptFix, eotFix, enpt, total: Integer;
     nm: AnsiString;
 begin
   PeExportDirOff := -1; PeExportDirSize := 0;
   if PeDllExpCount = 0 then Exit;
-  total := PeDllExpCount + 1;
-  tpos := 0;
-  while (tpos < PeDllExpCount) and (Procs[PeDllExp[tpos]].Name < PE_DLL_TABLE_NAME) do Inc(tpos);
+  total := PeDllExpCount;
   PeDataAlign(4);
   PeExportDirOff := DataLen;
   DataPutU32(0); DataPutU32(0); DataPutU32(0);       { Characteristics, TimeDateStamp, version }
@@ -540,18 +531,11 @@ begin
   PeRvaFixAdd(enptFix, enpt, False);
   for i := 0 to total - 1 do DataPutU32(0);
   PeRvaFixAdd(eotFix, DataLen, False);
-  for i := 0 to total - 1 do
-  begin
-    { name i: the routines below tpos, the table, the routines from tpos }
-    if i < tpos then e := i else if i = tpos then e := PeDllExpCount else e := i - 1;
-    DataPutU16(e);
-  end;
+  for i := 0 to total - 1 do DataPutU16(i);
   for i := 0 to total - 1 do
   begin
     PeRvaFixAdd(enpt + 4 * i, DataLen, False);
-    if i < tpos then nm := Procs[PeDllExp[i]].Name
-    else if i = tpos then nm := PE_DLL_TABLE_NAME
-    else nm := Procs[PeDllExp[i - 1]].Name;
+    nm := Procs[PeDllExp[i]].Name;
     for k := 1 to Length(nm) do DataPutB(Ord(nm[k]));
     DataPutB(0);
   end;
@@ -572,7 +556,6 @@ begin
       (dataRva + PeDllTableOff + 8 + 24 * i + 16) - (codeOffset + PeDllStubPos[i] + 6));
     PatchDataI32(PeExportEatOff + 4 * i, codeOffset + PeDllStubPos[i]);
   end;
-  PatchDataI32(PeExportEatOff + 4 * PeDllExpCount, dataRva + PeDllTableOff);   { __pxx_dll_table }
   Patch32(PeDllLeaPos, (dataRva + PeDllTableOff) - (codeOffset + PeDllLeaPos + 4));
   if (PeTlsDirOff >= 0) and (PeDllTlsIdxBss >= 0) then
     PatchDataU64(PeTlsDirOff + 16, bssBase + PeDllTlsIdxBss);   { AddressOfIndex }

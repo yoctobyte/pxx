@@ -2519,106 +2519,16 @@ end;
 { ---- dlopen, dlsym, dlclose ------------------------------------------------
   The PAL loader (lib/rtl's PalBackendDl*, which dynlibs and crtl's <dlfcn.h>
   share) asks for these through WIN_PXX_DLOPEN, _DLSYM and _DLCLOSE
-  ($7F000004..6): LoadLibraryA, GetProcAddress, FreeLibrary.
-
-  WHAT dlsym HANDS BACK IS CALLED WITH THE SYSTEM V CONVENTION -- the
-  caller is pxx code calling through a plain function pointer -- and what
-  GetProcAddress answers takes Microsoft's. Two cases:
-
-  - A DLL pxx wrote (--os=nt --shared) exports __pxx_dll_table, the table
-    its export stubs jump through (pewriter.inc: the count, then per export
-    the routine's RVA, its shape and its adapter slot). An export is the
-    stub `jmp [rip+slot]`; when that slot is one of the table's, dlsym
-    answers the routine itself, base + RVA, which is System V already: every
-    argument shape works, floats included.
-  - Any other DLL gets an adapter, built once per address (WinDlThunk). It
-    moves rdi, rsi, rdx, rcx to rcx, rdx, r8, r9, r8 and r9 to the fifth and
-    sixth stack slots, and eight more stack arguments up past the 32-byte
-    shadow space. That is exact for integer and pointer arguments (up to 14),
-    for floating-point arguments when every argument is one (up to 4: xmm0-3
-    stay put), and for any result in rax or xmm0. It is WRONG for a routine
-    that mixes integer and floating-point arguments, for a fifth float, for
-    a record by value, and for a 9-16 byte record result: the pointer type
-    alone does not say which arguments are floats. }
-const
-  WINDL_SLOT = 144;
-  WINDL_PER_PAGE = 28;        { 4096 div 144 }
-  WINDL_MAX = 512;
-  NmPxxDllTable: array[0..15] of Char = ('_', '_', 'p', 'x', 'x', '_', 'd', 'l', 'l', '_', 't', 'a', 'b', 'l', 'e', #0);
-
-var
-  WinDlLock: Int64 = 1;
-  WinDlN: Int64;
-  WinDlPage: Int64;
-  WinDlTarget, WinDlCode: array[0..WINDL_MAX - 1] of Int64;
-
-function WinDlThunk(target: Int64): Int64;
-var p, j: Int64; k: Integer;
-begin
-  Result := 0;
-  if not ThunkPageReady then Exit;
-  while not LockBtr(Int64(@WinDlLock), 0) do W_Sleep(0);
-  for k := 0 to WinDlN - 1 do
-    if WinDlTarget[k] = target then
-    begin
-      Result := WinDlCode[k];
-      LockOr(Int64(@WinDlLock), 1);
-      Exit;
-    end;
-  if WinDlN < WINDL_MAX then
-  begin
-    if WinDlN mod WINDL_PER_PAGE = 0 then
-      WinDlPage := W_VirtualAlloc(0, 4096, MEM_RESERVE or MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    if WinDlPage <> 0 then
-    begin
-      p := WinDlPage + WINDL_SLOT * (WinDlN mod WINDL_PER_PAGE);
-      Result := p;
-      TB(p, $55);                                        { push rbp  (rsp 0 mod 16) }
-      TB(p, $48); TB(p, $89); TB(p, $E5);                { mov rbp, rsp }
-      TB(p, $48); TB(p, $83); TB(p, $EC); TB(p, 112);    { sub rsp, 112 }
-      TB(p, $4C); TB(p, $89); TB(p, $44); TB(p, $24); TB(p, 32);   { mov [rsp+32], r8 }
-      TB(p, $4C); TB(p, $89); TB(p, $4C); TB(p, $24); TB(p, 40);   { mov [rsp+40], r9 }
-      for j := 0 to 7 do
-      begin
-        TB(p, $48); TB(p, $8B); TB(p, $45); TB(p, 16 + 8 * j);     { mov rax, [rbp+16+8j] }
-        TB(p, $48); TB(p, $89); TB(p, $44); TB(p, $24); TB(p, 48 + 8 * j);   { mov [rsp+48+8j], rax }
-      end;
-      TB(p, $49); TB(p, $89); TB(p, $C9);                { mov r9, rcx }
-      TB(p, $49); TB(p, $89); TB(p, $D0);                { mov r8, rdx }
-      TB(p, $48); TB(p, $89); TB(p, $F2);                { mov rdx, rsi }
-      TB(p, $48); TB(p, $89); TB(p, $F9);                { mov rcx, rdi }
-      TB(p, $48); TB(p, $B8);                            { mov rax, imm64 }
-      TD(p, target); TD(p, target shr 32);
-      TB(p, $FF); TB(p, $D0);                            { call rax }
-      TB(p, $C9);                                        { leave }
-      TB(p, $C3);                                        { ret }
-      WinDlTarget[WinDlN] := target; WinDlCode[WinDlN] := Result;
-      WinDlN := WinDlN + 1;
-    end;
-  end;
-  LockOr(Int64(@WinDlLock), 1);
-end;
-
+  ($7F000004..6): LoadLibraryA, GetProcAddress, FreeLibrary. dlsym answers
+  GetProcAddress's address as it is: a call through a C-convention pointer
+  sees that it lies outside the program's code and converts to Microsoft's
+  convention with the pointer type's signature (symtab.inc,
+  EmitWinCheckedIndirectCall). A pxx DLL's export is its stub, which takes
+  that convention like any other DLL's. }
 function WinDlSym(h, name: Int64): Int64;
-var p, t, slot, k: Int64;
 begin
-  Result := 0;
-  if (h = 0) or (name = 0) then Exit;
-  p := W_GetProcAddress(h, name);
-  if p = 0 then Exit;
-  t := W_GetProcAddress(h, Int64(@NmPxxDllTable[0]));
-  if (t <> 0) and (p <> t) and (PByte(p)^ = $FF) and (PByte(p + 1)^ = $25) then
-  begin
-    slot := p + 6 + PLongInt(p + 2)^;
-    k := slot - (t + 8 + 16);
-    if (k >= 0) and (k mod 24 = 0) and (k div 24 < PInt64(t)^) then
-    begin
-      Result := h + PInt64(t + 8 + k)^;
-      Exit;
-    end;
-  end;
-  if p = t then begin Result := p; Exit; end;          { the table itself: data }
-  Result := WinDlThunk(p);
+  if (h = 0) or (name = 0) then Result := 0
+  else Result := W_GetProcAddress(h, name);
 end;
 
 function WinDlClose(h: Int64): Int64;

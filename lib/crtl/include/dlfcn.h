@@ -8,9 +8,9 @@
  * unavailable" answer a caller already handles, e.g. sqlite's extension
  * loading. Under -dPXX_DYNLIB_LIBC the PAL wraps libc's real loader, and the
  * binary then links libc.so.6. Under --os=nt the PAL uses Windows' loader
- * (LoadLibraryA, GetProcAddress, FreeLibrary; winabi.pas says what dlsym's
- * address is, a pxx DLL's routine or an adapter, and which signatures the
- * adapter gets right).
+ * (LoadLibraryA, GetProcAddress, FreeLibrary). dlsym's address is
+ * GetProcAddress's; a call through a function pointer that lies outside the
+ * program's code takes the Microsoft convention (docs/targets/windows.md).
  *
  * The mode flags are accepted and not honoured: the PAL takes only a name.
  * Values match glibc so code that tests or combines them compiles unchanged.

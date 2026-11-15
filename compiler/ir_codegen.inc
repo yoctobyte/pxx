@@ -9013,10 +9013,20 @@ begin
           EmitLoadSavedRspX64(mStack * 8 + padBytes);   { r11 = P }
           EmitAsmX64(['mov r11, [r11]']); { = callee }
           { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
-            save the callee-saved xmm8..13 pool around the call. }
+            save the callee-saved xmm8..13 pool around the call. --os=nt asks
+            where the pointer points first (EmitWinCheckedIndirectCall). }
+          if WinIndirectChecked then
+          begin
+            WinCallDestFirst := False;
+            WinCallNote(nSlots, slotIsSse, slotIsStack, slotIsAgg, slotRegIdx);
+            EmitWinCheckedIndirectCall(sseIdx);
+          end
+          else
+          begin
           FloatPoolSave;
           EmitAsmX64(['call r11']);
           FloatPoolRestore;
+          end;
           EmitRestoreCallerRspX64(mStack * 8 + padBytes);
           EmitAsmX64(['add rsp, 8']); { (pop callee) }
           if TypeIsFloat(Procs[cpi].RetType) then

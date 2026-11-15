@@ -4,4 +4,7 @@ mix 6547.75
 missing TRUE
 unload TRUE
 strlen 6
+ldexp 24.0
+muldiv 1050
+own 1051
 bad TRUE

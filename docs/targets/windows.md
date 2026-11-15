@@ -269,28 +269,27 @@ path means what it means on Linux.
   parameters, or with a record parameter or result by value. Tested with
   pxx executables calling pxx DLLs (`test/test_nt_dll_built_by_pxx.pas`)
   under Wine in `make test-windows`, and once by hand on ReactOS
-  (`tools/vm/reactos/rosbatch.sh -f <dll>...`). A pxx DLL also exports
-  `__pxx_dll_table`, which `dlsym` uses (below). NOT TESTED: a DLL loaded
+  (`tools/vm/reactos/rosbatch.sh -f <dll>...`). NOT TESTED: a DLL loaded
   by a program another compiler made.
 - **Loading a library at run time:** C's `dlopen`, `dlsym`, `dlclose` and
   `dlerror`, and Pascal's `dynlibs` (`LoadLibrary`, `GetProcedureAddress`,
   `UnloadLibrary`), use Windows' loader (`LoadLibraryA`, `GetProcAddress`,
-  `FreeLibrary`). The address `dlsym` returns is called with pxx's own
-  convention, so:
-  - from a DLL pxx wrote, it is the routine itself, and every signature
-    works;
-  - from any other DLL, it is an adapter to the Microsoft convention, built
-    once per address. The adapter is right for integer and pointer
-    arguments (up to 14), for floating-point arguments when every argument
-    is one (up to 4), and for a result in `rax` or `xmm0`. It is wrong for
-    a routine that mixes integer and floating-point arguments, for a fifth
-    floating-point argument, for a record passed by value, and for a record
-    result of 9 to 16 bytes. For those, declare the routine
-    `external 'x.dll'` instead: a call to a declared routine is converted
-    with its full signature.
-
-  `dlopen(NULL)` is refused, as on Linux. Tested under Wine
+  `FreeLibrary`). `dlsym` returns `GetProcAddress`'s address unchanged; see
+  the next item for how a call through it works. `dlopen(NULL)` is refused,
+  as on Linux. Tested under Wine
   (`test/c_nt_dlopen.c`, `test/test_nt_dynlibs.pas`).
+- **Calls through a function pointer:** a call through a C function
+  pointer, or a `cdecl` or `stdcall` procedure type, first compares the
+  address with the program's code (two compares and a branch, on NT only).
+  Inside it is pxx code and is called with pxx's convention. Outside it is
+  taken to be Microsoft-convention code (a DLL's routine, a pxx DLL's
+  export, a callback adapter) and the call is converted as a call to an
+  `external 'x.dll'` routine is, with the full signature the pointer type
+  gives: integer, pointer and floating-point arguments, mixed, on the stack
+  past the fourth. Not converted on that path: a record passed by value, and
+  a record result larger than 8 bytes. Misjudged: the raw address of a
+  routine in another pxx image handed over by hand (not its export, which
+  is fine). Tested in `test/test_nt_dynlibs.pas` and `test/c_nt_dlopen.c`.
 - **Not supported:** C's `fork()` and process groups.
 - **Symbolic links** are Windows' own (`CreateSymbolicLinkW`). Making one
   needs the privilege, or Windows 10's developer mode; without it `symlink`
@@ -336,11 +335,11 @@ path means what it means on Linux.
   of it is the adapter, so one stored first also works: a variable, or a
   record field such as a window class's `lpfnWndProc`. Without `stdcall`,
   only an address passed straight into the call is adapted, and one stored
-  first is the routine itself, which crashes when Windows calls it. Calling
-  a `stdcall` routine through a procedural variable from Pascal does not
-  work: the variable holds the adapter, which expects the Microsoft
-  convention. Call it by name. A record passed by value to a callback is not
-  converted.
+  first is the routine itself, which crashes when Windows calls it. A
+  `stdcall` routine called through a procedural variable from Pascal works:
+  the variable holds the adapter, which lies outside the program's code, so
+  the call takes the Microsoft convention (above). A record passed by value
+  to a callback is not converted.
 
 A system call the translator does not map returns `ENOSYS`. Set
 `PXX_WINABI_TRACE=1` in the environment to have each one named on stderr.

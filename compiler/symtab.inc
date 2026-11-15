@@ -18846,6 +18846,81 @@ begin
     end;
 end;
 
+{ --os=nt: a C-convention call through a POINTER, whose target is in r11
+  with the System V arguments already in place (IR_CALL_IND's cdecl arm,
+  which has called WinCallNote). The pointer says nothing about which
+  convention its target takes, so ask where it points:
+
+    cmp r11 with the start of this image's code and with the start of its
+    data, which follows the code directly. Inside: pxx code, the System V
+    call. Outside: a DLL's function, an export stub of a pxx DLL, or one of
+    winabi's callback adapters -- all Microsoft x64, so the call goes through
+    the same conversion an `external 'x.dll'` call makes (EmitWinCallFrame
+    for a call with a floating-point argument, the integer shuffle
+    otherwise), with the full signature the pointer's type gives.
+
+  One compare pair and a predicted branch per indirect call, on NT only.
+  rax is free here (only AL, the vector count, is live, and it is set again
+  on the internal path; a Microsoft callee ignores it). Not for winabi's own
+  calls: its thunk-page helpers are System V code outside the image
+  (WinIndirectChecked). A raw routine address handed out of another pxx
+  image (not its export stub) is misjudged: it is pxx code outside this
+  image. }
+function WinIndirectChecked: Boolean;
+var u: AnsiString;
+begin
+  Result := (TargetKernel = KERNEL_WINDOWS) and (TargetArch = TARGET_X86_64);
+  if not Result then Exit;
+  u := '';
+  if (CurProc >= 0) and (ProcUnitIdx[CurProc] >= 0) and (ProcUnitIdx[CurProc] < Length(Strs)) then
+    u := LowerCase(Strs[ProcUnitIdx[CurProc]].Text);
+  if u = 'winabi' then Result := False;
+end;
+
+procedure EmitWinCheckedIndirectCall(sseCount: Integer);
+var jb1, jae1, jdone, winFrame, i: Integer;
+    winSse: Boolean;
+begin
+  EmitB($48); EmitB($8D); EmitB($05);            { lea rax, [rip+code offset 0] }
+  RecordCodeRef(0);
+  EmitI32(0 - (CodeLen + 4));
+  EmitB($49); EmitB($39); EmitB($C3);            { cmp r11, rax }
+  EmitB($0F); EmitB($82); jb1 := CodeLen; EmitI32(0);    { jb .foreign }
+  EmitB($48); EmitB($B8); EmitDataRef(0);         { rax = the first data byte: the code's end }
+  EmitB($49); EmitB($39); EmitB($C3);            { cmp r11, rax }
+  EmitB($0F); EmitB($83); jae1 := CodeLen; EmitI32(0);   { jae .foreign }
+  EmitAsmX64(['mov eax, %', sseCount]);
+  FloatPoolSave;
+  EmitAsmX64(['call r11']);
+  FloatPoolRestore;
+  EmitB($E9); jdone := CodeLen; EmitI32(0);       { jmp .done }
+  Patch32(jb1, CodeLen - (jb1 + 4));
+  Patch32(jae1, CodeLen - (jae1 + 4));
+  { .foreign: }
+  FloatPoolSave;
+  winSse := False;
+  for i := 0 to WinCallArgN - 1 do
+    if WinCallArgSse[i] then winSse := True;
+  if winSse then winFrame := EmitWinCallFrame
+  else
+  begin
+    winFrame := 48;
+    EmitAsmX64([
+      'sub rsp, 48',
+      'mov [rsp+32], r8',
+      'mov [rsp+40], r9',
+      'mov r9, rcx',
+      'mov r8, rdx',
+      'mov rdx, rsi',
+      'mov rcx, rdi']);
+  end;
+  WinCallArgN := 0;
+  EmitAsmX64(['call r11']);
+  EmitAsmX64(['add rsp, %', winFrame]);
+  FloatPoolRestore;
+  Patch32(jdone, CodeLen - (jdone + 4));
+end;
+
 { Emit the indirect call through the external's GOT slot and register the
   fixup. Caller is responsible for argument marshalling, stack alignment, and
   the variadic AL count. }
