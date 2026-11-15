@@ -151,6 +151,12 @@ These compile, but the call fails when the program runs:
   FreeBSD kernel and never reaches the translator, so it is read with FreeBSD's
   numbers. For example, 39 is `getpid` on Linux and `getppid` on FreeBSD. Call
   the C library function instead.
+- **A BSD `ioctl` number written by hand.** Everything else in the program goes
+  through the translator, and the translator expects Linux's numbers: use
+  the constants from pxx's `<sys/ioctl.h>` and `<termios.h>`. FreeBSD's own
+  `TIOCSCTTY` (`0x20007461`) is unknown to the translator and answers
+  `ENOTTY`; Linux's (`0x540E`), from the header, works. This applies to all
+  four BSDs.
 
 Device numbers are real FreeBSD numbers: `/dev/null` is 0:20, not Linux's 1:3.
 
