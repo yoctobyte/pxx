@@ -1,4 +1,5 @@
-{ ifnet.inc -- network interfaces for the BSD translators, the Linux way.
+{ ifnet.inc -- network interfaces for the BSD and Minix translators, the
+  Linux way.
   Included after proctext.inc (TxPtr and the Tx text helpers). The host
   unit defines, before the include:
 
@@ -14,8 +15,10 @@
     function IfnHostIndex(name: TxPtr): Int64;
     function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
                      a name's interface index and back when the system can
-                     say (OpenBSD, through libc); -1 / False to use the
-                     AF_LINK entries of SIOCGIFCONF, which carry sdl_index
+                     say (OpenBSD: the routing sysctl; Minix: SIOCGIFINDEX,
+                     with IfnHostName False so each listed name is asked);
+                     -1 / False to use the AF_LINK entries of SIOCGIFCONF,
+                     which carry sdl_index
 
   What it gives: IfnProcNetDev (the text of /proc/net/dev, for crtl's
   if_nameindex) and IfnLinuxIoctl (SIOCGIFCONF, SIOCGIFFLAGS, SIOCGIFADDR,
@@ -23,7 +26,11 @@
   layouts, for crtl's getifaddrs and if_nametoindex). One scratch buffer, so
   two threads asking at once can mix their answers; the readers are one-shot.
 
-  /proc/net/dev's counters are all 0: the names are what is read. }
+  /proc/net/dev's counters are all 0: the names are what is read.
+
+  Pointer size follows TxPtr: on i386 (Minix) struct ifconf's buffer
+  pointer is at 4 rather than 8, and a Linux struct ifreq is 32 bytes
+  rather than 40. }
 
 const
   IFN_NOT_MINE = -$7FFFFFFF;           { not an interface ioctl: the caller's own case }
@@ -45,6 +52,22 @@ var
   IfnBuf: array[0..32767] of Byte;
   IfnLen: Int64;
 
+{ A Linux struct ifreq's size, and where struct ifconf keeps its pointer. }
+function IfnLxReq: Integer;
+begin
+  if SizeOf(TxPtr) = 4 then Result := 32 else Result := 40;
+end;
+
+function IfnConfPtr(ifc: TxPtr): TxPtr;
+begin
+  if SizeOf(TxPtr) = 4 then Result := PLongInt(ifc + 4)^ else Result := PInt64(ifc + 8)^;
+end;
+
+procedure IfnSetConfPtr(ifc, v: TxPtr);
+begin
+  if SizeOf(TxPtr) = 4 then PLongInt(ifc + 4)^ := v else PInt64(ifc + 8)^ := v;
+end;
+
 function ProcIsNetDev(p: TxPtr): Boolean;
 begin
   Result := TxPathIs(p, @ProcNetDev[0], Length(ProcNetDev));
@@ -58,12 +81,14 @@ begin
   IfnLen := -1;
   fd := IfnTmpSock;
   if fd < 0 then Exit;
-  ifc[0] := Length(IfnBuf);               { int ifc_len, then the buffer pointer at 8 }
-  ifc[1] := TxPtr(@IfnBuf[0]);
+  ifc[0] := 0; ifc[1] := 0;
+  PInteger(TxPtr(@ifc[0]))^ := Length(IfnBuf);        { int ifc_len, then the buffer pointer }
+  IfnSetConfPtr(TxPtr(@ifc[0]), TxPtr(@IfnBuf[0]));
   r := IfnIoctl(fd, IFN_GIFCONF, TxPtr(@ifc[0]));
   IfnCloseFd(fd);
   if r < 0 then Exit;
-  IfnLen := ifc[0] and $7FFFFFFF;
+  IfnLen := PInteger(TxPtr(@ifc[0]))^ and $7FFFFFFF;
+  if IfnLen > Length(IfnBuf) then IfnLen := Length(IfnBuf);
 end;
 
 { The entry after the one at offset o. }
@@ -149,6 +174,27 @@ begin
   end;
 end;
 
+{ The name of interface idx from the list's names and the host's own
+  index lookup (Minix: SIOCGIFINDEX, no AF_LINK entries). }
+function IfnNameByHostIndex(idx: Int64; dst: TxPtr): Boolean;
+var o: Int64; i: Integer;
+begin
+  Result := False;
+  if idx <= 0 then Exit;
+  IfnScan;
+  o := 0;
+  while o + 16 <= IfnLen do
+  begin
+    if (IfnBuf[o] <> 0) and (IfnHostIndex(TxPtr(@IfnBuf[o])) = idx) then
+    begin
+      for i := 0 to 15 do PByte(dst + i)^ := IfnBuf[o + i];
+      Result := True;
+      Exit;
+    end;
+    o := IfnNext(o);
+  end;
+end;
+
 { The name of interface idx into the 16 bytes at dst. }
 function IfnNameOf(idx: Int64; dst: TxPtr): Boolean;
 var o: Int64; i: Integer;
@@ -167,6 +213,7 @@ begin
     end;
     o := IfnNext(o);
   end;
+  Result := IfnNameByHostIndex(idx, dst);
 end;
 
 { A BSD sockaddr_in (len, family, port, addr) at s as Linux's (family as
@@ -179,8 +226,15 @@ begin
   for i := 2 to 7 do PByte(d + i)^ := PByte(s + i)^;
 end;
 
+{ Is req one of the Linux interface ioctls IfnLinuxIoctl answers? }
+function IfnIsMine(req: Int64): Boolean;
+begin
+  Result := (req = $8910) or (req = $8912) or (req = $8913) or (req = $8915) or
+            (req = $8919) or (req = $891B) or (req = $8933);
+end;
+
 { Linux ioctl `req` on fd with its argument at arg, or IFN_NOT_MINE. A Linux
-  ifreq is 40 bytes: the name, then the union at 16. }
+  ifreq is the name, then the union at 16 (IfnLxReq bytes in all). }
 function IfnLinuxIoctl(fd, req: Int64; arg: TxPtr): Int64;
 var r: array[0..18] of Int64; rq, o, k, cap, outp, idx: Int64; i: Integer; f: Int64;
 begin
@@ -191,7 +245,7 @@ begin
         IfnScan;
         if IfnLen < 0 then begin Result := -19; Exit; end;      { ENODEV }
         cap := PInteger(arg)^;
-        outp := PInt64(arg + 8)^;
+        outp := IfnConfPtr(arg);
         k := 0; o := 0;
         while o + 16 <= IfnLen do
         begin
@@ -199,12 +253,12 @@ begin
           begin
             if outp <> 0 then
             begin
-              if k + 40 > cap then Break;
-              for i := 0 to 39 do PByte(outp + k + i)^ := 0;
+              if k + IfnLxReq > cap then Break;
+              for i := 0 to IfnLxReq - 1 do PByte(outp + k + i)^ := 0;
               for i := 0 to 15 do PByte(outp + k + i)^ := IfnBuf[o + i];
               IfnSinToLinux(TxPtr(@IfnBuf[o + 16]), outp + k + 16);
             end;
-            k := k + 40;
+            k := k + IfnLxReq;
           end;
           o := IfnNext(o);
         end;
@@ -221,7 +275,7 @@ begin
         else rq := IFN_GIFNETMASK;
         Result := IfnIoctl(fd, rq, TxPtr(@r[0]));
         if Result < 0 then Exit;
-        for i := 16 to 39 do PByte(arg + i)^ := 0;
+        for i := 16 to IfnLxReq - 1 do PByte(arg + i)^ := 0;
         if req = $8913 then
         begin
           { the bits both agree on, and IFF_MULTICAST ($8000 on the BSDs, $1000 here) }

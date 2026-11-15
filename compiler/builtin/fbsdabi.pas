@@ -1831,7 +1831,7 @@ begin
            MaskToFb(PInt64(a0)^, Int64(@t[0]));
            Result := Lx(FbSys(FB_SIGSUSPEND, Int64(@t[0]), 0, 0, 0, 0, 0));
          end;
-    16: if IfnLinuxIoctl(a0, a1, a2) <> IFN_NOT_MINE then Result := IfnLinuxIoctl(a0, a1, a2)
+    16: if IfnIsMine(a1) then Result := IfnLinuxIoctl(a0, a1, a2)
         else case Integer(a1) of                                         { ioctl }
           $5401: begin                                          { TCGETS -> TIOCGETA }
                    r := FbSys(FB_IOCTL, a0, $402C7413, Int64(@sb[0]), 0, 0, 0);

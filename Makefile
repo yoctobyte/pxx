@@ -11284,7 +11284,7 @@ test-minix: $(COMPILER)
 	           test/test_asyncecho.pas test/test_asyncudp.pas test/lib_http_serve.pas test/test_async.pas \
 	           test/lib_asyncnet6.pas test/lib_dns_async.pas \
 	           test/c_pty_family.c test/c_crtl_busybox_394_gaps.c test/c_crtl_sched_and_fs_ioctls.c \
-	           test/c_crtl_telnet_and_prctl.c test/c_os_procfiles.c; do \
+	           test/c_crtl_telnet_and_prctl.c test/c_os_procfiles.c test/c_os_netif.c; do \
 	    n=$$(basename $$t); \
 	    ./$(COMPILER) --target=i386 $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --target=i386 --os=minix $$t $$d/$$n.mx >/dev/null && \
 	    tools/expect_same.sh minix_$$n "$$(PXX_TEST_PROBE=probe-value tools/vm/minix.sh run $$d/$$n.mx one 2>&1; echo exit=$$?)" "$$(cd $$d && PXX_TEST_PROBE=probe-value ./$$n.lx one 2>&1; echo exit=$$?)" || exit 1; \

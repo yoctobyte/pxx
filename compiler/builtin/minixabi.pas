@@ -2171,6 +2171,159 @@ end;
 type TxPtr = LongInt;
 {$I proctext.inc}
 
+{ ---- network interfaces: /proc/net/dev and the Linux SIOCGIF* ioctls (ifnet.inc)
+  Minix's lwip service answers NetBSD's ioctls (sys/sockio.h: a 144-byte
+  ifreq, an 8-byte ifconf on i386); its SIOCGIFINDEX gives the index. }
+const
+  IFN_REQ = 144;
+  IFN_FIXED_STEP = True;
+  IFN_GIFCONF = LongInt($C0086926); IFN_GIFFLAGS = LongInt($C0906911); IFN_GIFADDR = LongInt($C0906921);
+  IFN_GIFNETMASK = LongInt($C0906925); IFN_GIFBRDADDR = LongInt($C0906923);
+  MX_GIFINDEX = LongInt($C090698C);
+
+var
+  MxRtBuf: array[0..16383] of Byte;
+
+{ The routing sysctl's interface list (net.route.0.0.iflist.0, the one
+  NetBSD's getifaddrs reads; lwip's SIOCGIFCONF says ENOTTY) into MxRtBuf;
+  its length, or -1. The reply's oldlen is m[2]. }
+function MxRtList: LongInt;
+var m: TMxMsg; name: array[0..5] of LongInt; r: LongInt;
+begin
+  Result := -1;
+  name[0] := 4; name[1] := 34; name[2] := 0; name[3] := 0; name[4] := 5; name[5] := 0;
+  MxClear(m);
+  m[2] := LongInt(@MxRtBuf[0]); m[3] := Length(MxRtBuf); m[6] := 6; m[7] := LongInt(@name[0]);
+  m[8] := 4; m[9] := 34; m[10] := 0; m[11] := 0; m[12] := 5; m[13] := 0;
+  r := MxCall(MX_MIB, MIB_SYSCTL, m);
+  if r < 0 then Exit;
+  Result := m[2];
+  if (Result < 0) or (Result > Length(MxRtBuf)) then Result := -1;
+end;
+
+function MxRtWord(o: LongInt): LongInt;
+begin
+  Result := MxRtBuf[o] or (MxRtBuf[o + 1] shl 8);
+end;
+
+{ A sockaddr's size in a routing message: its sa_len rounded up to 8. }
+function MxRtSaLen(o: LongInt): LongInt;
+begin
+  Result := MxRtBuf[o];
+  if Result = 0 then Result := 8
+  else Result := (Result + 7) and not 7;
+end;
+
+{ SIOCGIFCONF made from that list, in NetBSD's layout (144-byte entries,
+  which ifnet.inc reads): an AF_LINK entry (sdl_index at 18) for each
+  RTM_IFINFO, whose sockaddr_dl is the message's last sockaddr, and an
+  AF_INET one for each RTM_NEWADDR's RTA_IFA. ifa_msghdr is 24 bytes,
+  ifam_index at 16; ifm_index at 12. }
+function MxIfConf(ifc: TxPtr): LongInt;
+var len, o, ml, cap, outp, k, sd, sa, bit, addrs, idx, j, nl, i: LongInt;
+    names: array[0..31, 0..15] of Byte; nidx: array[0..31] of LongInt; nn: Integer;
+begin
+  len := MxRtList;
+  if len < 0 then begin Result := -LX_ENOTTY; Exit; end;
+  cap := PLongInt(ifc)^; outp := PLongInt(ifc + 4)^;
+  k := 0; nn := 0; o := 0;
+  while o + 4 <= len do
+  begin
+    ml := MxRtWord(o);
+    if (ml < 4) or (o + ml > len) then Break;
+    if (MxRtBuf[o + 3] = $14) and (nn < 32) then                  { RTM_IFINFO }
+    begin
+      sd := -1; j := 16;
+      while j + 8 <= ml do
+      begin
+        if (MxRtBuf[o + j + 1] = 18) and (j + MxRtSaLen(o + j) = ml) then sd := o + j;
+        j := j + 8;
+      end;
+      if sd >= 0 then
+      begin
+        nl := MxRtBuf[sd + 5]; if nl > 15 then nl := 15;
+        for i := 0 to 15 do names[nn, i] := 0;
+        for i := 0 to nl - 1 do names[nn, i] := MxRtBuf[sd + 8 + i];
+        nidx[nn] := MxRtWord(o + 12);
+        if k + IFN_REQ <= cap then
+        begin
+          for i := 0 to IFN_REQ - 1 do PByte(outp + k + i)^ := 0;
+          for i := 0 to 15 do PByte(outp + k + i)^ := names[nn, i];
+          PByte(outp + k + 16)^ := 20; PByte(outp + k + 17)^ := 18;
+          PWord(outp + k + 18)^ := nidx[nn];
+          k := k + IFN_REQ;
+        end;
+        nn := nn + 1;
+      end;
+    end
+    else if MxRtBuf[o + 3] = $C then                               { RTM_NEWADDR }
+    begin
+      addrs := PLongInt(LongInt(@MxRtBuf[o + 4]))^;
+      idx := MxRtWord(o + 16);
+      sa := o + 24; bit := 1;
+      while (bit <= $80) and (sa < o + ml) do
+      begin
+        if (addrs and bit) <> 0 then
+        begin
+          if (bit = $20) and (MxRtBuf[sa + 1] = 2) then              { RTA_IFA, AF_INET }
+            for j := 0 to nn - 1 do
+              if (nidx[j] = idx) and (k + IFN_REQ <= cap) then
+              begin
+                for i := 0 to IFN_REQ - 1 do PByte(outp + k + i)^ := 0;
+                for i := 0 to 15 do PByte(outp + k + i)^ := names[j, i];
+                for i := 0 to 15 do PByte(outp + k + 16 + i)^ := MxRtBuf[sa + i];
+                k := k + IFN_REQ;
+              end;
+          sa := sa + MxRtSaLen(sa);
+        end;
+        bit := bit shl 1;
+      end;
+    end;
+    o := o + ml;
+  end;
+  PLongInt(ifc)^ := k;
+  Result := 0;
+end;
+
+function IfnIoctl(fd, req: Int64; arg: TxPtr): Int64;
+var m: TMxMsg;
+begin
+  if req = IFN_GIFCONF then begin Result := MxIfConf(arg); Exit; end;
+  MxClear(m);
+  m[2] := LongInt(fd); m[3] := LongInt(req); m[4] := arg;
+  Result := Lx(MxCall(MX_VFS, VFS_IOCTL, m));
+end;
+
+function IfnTmpSock: Int64;
+begin
+  Result := MxSockCall(1, 2, 2, 0, 0, 0, 0);          { AF_INET, SOCK_DGRAM }
+end;
+
+procedure IfnCloseFd(fd: Int64);
+begin
+  MxClose(LongInt(fd));
+end;
+
+function IfnHostIndex(name: TxPtr): Int64;
+var r: array[0..35] of LongInt; fd: Int64; i: Integer;
+begin
+  Result := -1;
+  for i := 0 to 35 do r[i] := 0;
+  for i := 0 to 15 do PByte(LongInt(@r[0]) + i)^ := PByte(name + i)^;
+  fd := IfnTmpSock;
+  if fd < 0 then Exit;
+  if IfnIoctl(fd, MX_GIFINDEX, LongInt(@r[0])) >= 0 then Result := r[4];
+  IfnCloseFd(fd);
+  if Result <= 0 then Result := -1;
+end;
+
+function IfnHostName(idx: Int64; dst: TxPtr): Boolean;
+begin
+  Result := False;                 { ifnet.inc asks IfnHostIndex for each name }
+end;
+
+{$I ifnet.inc}
+
 { Minix struct stat: dev at 0 (8 bytes), ino at 12 (8). }
 function MxProcFdInfo(fd: LongInt): LongInt;
 var m: TMxMsg; st: array[0..31] of LongInt; t: array[0..127] of Byte; n, r: LongInt;
@@ -2234,6 +2387,14 @@ begin
   Result := MxDataFd(LongInt(@b[0]), n);
 end;
 
+function MxProcNetDev: LongInt;
+var t: array[0..8191] of Byte; n: LongInt;
+begin
+  n := 0;
+  IfnProcNetDev(LongInt(@t[0]), n, Length(t));
+  Result := MxDataFd(LongInt(@t[0]), n);
+end;
+
 function MxOpenAt(dirfd, path, flags, mode: LongInt): LongInt;
 begin
   if path = 0 then Result := -LX_EFAULT
@@ -2242,6 +2403,7 @@ begin
   else if ProcFdInfoNum(path) >= 0 then Result := MxProcFdInfo(ProcFdInfoNum(path))
   else if ProcIsMounts(path) then Result := MxProcMounts
   else if ProcIsStat(path) then Result := MxProcStat
+  else if ProcIsNetDev(path) then Result := MxProcNetDev
   else if not DirOk(dirfd, path) then Result := -LX_ENOSYS
   else Result := MxOpen(path, flags, mode);
 end;
@@ -2454,7 +2616,8 @@ begin
          end;
     383: Result := MxStatx(a0, a1, a2, a4);            { statx }
     220: Result := MxGetdents(a0, a1, a2);             { getdents64 }
-    54: Result := MxIoctl(a0, a1, a2);
+    54: if IfnIsMine(a1) then Result := IfnLinuxIoctl(a0, a1, a2)
+        else Result := MxIoctl(a0, a1, a2);
     118, 148: Result := MxFdCall(VFS_FSYNC, a0);       { fsync, fdatasync }
     36: begin MxClear(m); Result := Lx(MxCall(MX_VFS, VFS_SYNC, m)); end;
     60: begin MxClear(m); m[2] := a0; Result := Lx(MxCall(MX_VFS, VFS_UMASK, m)); end;
