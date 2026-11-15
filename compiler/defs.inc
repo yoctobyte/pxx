@@ -5890,6 +5890,7 @@ var
     to its Microsoft x64 slot. WinCallArgN = 0: not described (the
     integer-only adapter applies). }
   WinCallArgN    : Integer;
+  WinCallDestFirst: Boolean;   { the next WinCallNote has a hidden result pointer as argument 0 }
   WinCallArgSse  : array[0..MAX_CALL_ARGS-1] of Boolean;
   WinCallArgReg  : array[0..MAX_CALL_ARGS-1] of Integer;   { SysV register index; -1: on the stack }
   WinCallArgStk  : array[0..MAX_CALL_ARGS-1] of Integer;   { the stack slot, leftmost 0 }

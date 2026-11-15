@@ -18748,28 +18748,40 @@ begin
 end;
 
 { --os=windows: record where the SysV marshalling put each argument (one
-  slot per argument; an aggregate leaves the call undescribed, and the
-  integer-only adapter keeps its old behaviour). }
+  slot per argument). A record by value reaches here as one integer slot
+  already (the C-call arm applies the Microsoft rule to it); any other
+  aggregate leaves the call undescribed, and the integer-only adapter keeps
+  its old behaviour. }
 procedure WinCallNote(n: Integer; const sse, stk, agg: array of Boolean; const reg: array of Integer);
-var i, j: Integer;
+var i, j, d: Integer;
 begin
   WinCallArgN := 0;
   if (TargetKernel <> KERNEL_WINDOWS) or (TargetArch <> TARGET_X86_64) then Exit;
+  { WinCallDestFirst: a large record result's hidden pointer is argument 0,
+    in SysV's first integer register, ahead of every slot listed here. }
+  d := 0;
+  if WinCallDestFirst then
+  begin
+    WinCallArgSse[0] := False;
+    WinCallArgReg[0] := 0;
+    d := 1;
+  end;
+  WinCallDestFirst := False;
   j := 0;
   for i := 0 to n - 1 do
   begin
     if agg[i] then Exit;
-    WinCallArgSse[i] := sse[i];
+    WinCallArgSse[i + d] := sse[i];
     if stk[i] then
     begin
-      WinCallArgReg[i] := -1;
-      WinCallArgStk[i] := j;
+      WinCallArgReg[i + d] := -1;
+      WinCallArgStk[i + d] := j;
       Inc(j);
     end
     else
-      WinCallArgReg[i] := reg[i];
+      WinCallArgReg[i + d] := reg[i];
   end;
-  WinCallArgN := n;
+  WinCallArgN := n + d;
 end;
 
 { SysV integer argument register k as a register number (rdi rsi rdx rcx r8 r9). }

@@ -8284,6 +8284,22 @@ begin
   else if n = 'pyle_v' then Result := -$93;     { b >= a }
 end;
 
+{ --os=nt: rax holds the address of a by-value record's private copy; a
+  Win64 call wants its bytes when it is 1, 2, 4 or 8 long (k), and the
+  address as it is otherwise (k = -1). k = 0 is an ordinary slot. }
+procedure EmitWinRecLoad(k, valNode: Integer);
+begin
+  { A record that fits a register may already arrive as its VALUE (a plain
+    load of the variable); only an address -- the private copy -- is read. }
+  if (k > 0) and (IntToTypeKind(IRTk[valNode]) <> tyPointer) then Exit;
+  case k of
+    1: EmitAsmX64(['movzx eax, byte [rax]']);
+    2: EmitAsmX64(['movzx eax, word [rax]']);
+    4: EmitAsmX64(['mov eax, [rax]']);
+    8: EmitAsmX64(['mov rax, [rax]']);
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
@@ -8365,6 +8381,15 @@ var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
       name the same argument and differ only here. }
     slotIsAgg: array[0..127] of Boolean;
     slotSrcOff: array[0..127] of Integer;
+    { --os=nt: a by-value record to a DLL. 0 = an ordinary slot; 1, 2, 4, 8 =
+      load that many bytes of the record into the slot (Win64 passes such a
+      record as an integer); -1 = pass the address of the private copy
+      (every other size). }
+    winRecLoad: array[0..127] of Integer;
+    { --os=nt: the size of a record/array result from a DLL (0 = not one):
+      1/2/4/8 come back in rax, a larger one through a hidden pointer in the
+      FIRST argument slot (rcx), which shifts every argument by one. }
+    winRetBytes: Integer;
     aggIsRef, aggIsArr: Boolean;
     aggRec, sysvSlots, aggK, aggPj: Integer;
     aggTk: TTypeKind;
@@ -11691,6 +11716,16 @@ begin
               argNode := IRB[argNode];
             end;
             intIdx := 0; sseIdx := 0; mStack := 0; nSlots := 0;
+            winRetBytes := 0;
+            if (TargetKernel = KERNEL_WINDOWS) and ProcExternal[procIdx] and
+               ABIRetViaHiddenDestProc(procIdx) then
+            begin
+              if Procs[procIdx].RetType = tyRecord then winRetBytes := RecSize(ProcRetRecId[procIdx])
+              else winRetBytes := ProcRetFixedArrBytes[procIdx];
+              { a large result's pointer is argument 0: SysV's rdi, which the
+                adapter moves to rcx }
+              if not (winRetBytes in [1, 2, 4, 8]) then intIdx := 1;
+            end;
             { ONE SLOT PER ARGUMENT is established here rather than assumed
               downstream: each iteration appends exactly one slot, so nSlots =
               nArgs on exit. That equality is the current CONVENTION, not SysV.
@@ -11743,6 +11778,44 @@ begin
                 aggRec := IRArgRecId[argNodeArr[i]];
                 if aggRec > REC_NONE then tk := tyRecord else aggRec := REC_NONE;
               end;
+              { --os=nt, a record BY VALUE to a DLL: the Microsoft x64 rule,
+                not SysV's. A record of 1, 2, 4 or 8 bytes travels as an
+                INTEGER in the argument's slot (also an all-float one, which
+                SysV would put in xmm); any other size is a POINTER to a copy
+                the caller owns, and the argument value here already is the
+                address of the private copy IRLowerCallArg made. Either way it
+                is one integer slot, so the call stays describable and
+                WinCallNote hands it to the ordinary Microsoft adapter.
+                feature-port-windows-pe }
+              if (TargetKernel = KERNEL_WINDOWS) and ProcExternal[procIdx] and
+                 (tk = tyRecord) and (not aggIsRef) and (not aggIsArr) and
+                 (aggRec > REC_NONE) then
+              begin
+                if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
+                slotArg[nSlots] := i;
+                slotIsAgg[nSlots] := False;
+                slotSrcOff[nSlots] := 0;
+                slotIsSse[nSlots] := False;
+                case RecSize(aggRec) of
+                  1, 2, 4, 8: winRecLoad[nSlots] := RecSize(aggRec);
+                else
+                  winRecLoad[nSlots] := -1;
+                end;
+                if intIdx < 6 then
+                begin
+                  slotRegIdx[nSlots] := intIdx;
+                  Inc(intIdx);
+                  slotIsStack[nSlots] := False;
+                end
+                else
+                begin
+                  slotRegIdx[nSlots] := -1;
+                  slotIsStack[nSlots] := True;
+                  Inc(mStack);
+                end;
+                Inc(nSlots);
+                Continue;
+              end;
               ABISysVArgPlace(tk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
                               sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);
               { A MEMORY-class aggregate takes ONE slot, however big it is. The
@@ -11757,6 +11830,7 @@ begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
                 slotArg[nSlots] := i;
                 slotIsAgg[nSlots] := True;
+                winRecLoad[nSlots] := 0;
                 slotSrcOff[nSlots] := (sysvSlots - 1) * 8;
                 slotIsSse[nSlots] := False;
                 slotIsStack[nSlots] := True;
@@ -11769,6 +11843,7 @@ begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
                 slotArg[nSlots] := i;
                 slotIsAgg[nSlots] := apAgg;
+                winRecLoad[nSlots] := 0;
                 slotSrcOff[nSlots] := aggK * 8;
                 if apMem then
                 begin
@@ -11843,6 +11918,7 @@ begin
                 end
                 else
                   IREmitNode(argNodeArr[i]);
+                EmitWinRecLoad(winRecLoad[slotIdx], argNodeArr[i]);
                 { C: a float value passed to an integer parameter (dest is an int
                   slot, not SSE) truncates double->int (cvttsd2si). Variadic floats
                   land in SSE (slotIsSse) and stay double, so this skips them. }
@@ -11899,6 +11975,7 @@ begin
                 end
                 else
                   IREmitNode(argNodeArr[i]);
+                EmitWinRecLoad(winRecLoad[slotIdx], argNodeArr[i]);
                 { C float->integer-parameter truncation (see the stack-arg loop). }
                 if CProgramMode and (not slotIsSse[slotIdx]) and
                    TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) and
@@ -11957,6 +12034,11 @@ begin
             begin
               IREmitNode(IRC[node]);                  { rax = hidden destination }
               EmitAsmX64(['mov r10, rax']);
+              { --os=nt: a large result's destination is the Microsoft hidden
+                first argument (rdi here, rcx after the adapter); a DLL then
+                answers it in rax, which is what the caller reads below. }
+              if (winRetBytes > 0) and not (winRetBytes in [1, 2, 4, 8]) then
+                EmitAsmX64(['mov rdi, rax']);
             end;
             { Variadic ABI: AL = number of vector registers used. Set
               unconditionally (0 for all-integer calls) so variadic callees
@@ -11965,6 +12047,7 @@ begin
             if ProcExternal[procIdx] then
             begin
               extIdx := RegisterExternal(procIdx);
+              WinCallDestFirst := (winRetBytes > 0) and not (winRetBytes in [1, 2, 4, 8]);
               WinCallNote(nSlots, slotIsSse, slotIsStack, slotIsAgg, slotRegIdx);
               EmitExternalIndirectCall(extIdx);
             end
@@ -11974,6 +12057,24 @@ begin
               padBytes + mStack*8 above the current (post-call) rsp. }
             restoreOff := padBytes + mStack * 8;
             EmitRestoreCallerRspX64(restoreOff);
+            { --os=nt: a 1/2/4/8-byte result came back as the bytes in rax.
+              Store them at the destination (an IR_LEA, so evaluating it again
+              is free of effects) and answer its address, as pxx's own
+              convention does. }
+            if winRetBytes in [1, 2, 4, 8] then
+            begin
+              if IRKind[IRC[node]] <> IR_LEA then
+                Error('--os=nt: a record result from a DLL needs a plain destination here');
+              EmitAsmX64(['mov r11, rax']);
+              IREmitNode(IRC[node]);
+              case winRetBytes of
+                1: EmitAsmX64(['mov [rax], r11b']);
+                2: EmitAsmX64(['mov [rax], r11w']);
+                4: EmitAsmX64(['mov [rax], r11d']);
+              else
+                EmitAsmX64(['mov [rax], r11']);
+              end;
+            end;
             if TypeIsFloat(Procs[procIdx].RetType) then
             begin
               { float/double returned in xmm0; the value model carries doubles,

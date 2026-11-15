@@ -11394,6 +11394,12 @@ test-windows: $(COMPILER)
 	  ./$(COMPILER) test/test_os_env.pas $$d/env.lx >/dev/null && ./$(COMPILER) --os=windows test/test_os_env.pas $$d/env.exe >/dev/null && \
 	  tools/expect_same.sh windows_env_argv "$$(PXX_TEST_PROBE=probe-value tools/vm/wine.sh $$d/env.exe one two 2>&1 | grep -v '^argv0='; echo exit=$$?)" \
 	    "$$(PXX_TEST_PROBE=probe-value $$d/env.lx one two 2>&1 | grep -v '^argv0='; echo exit=$$?)" || exit 1; \
+	  if command -v clang >/dev/null 2>&1; then \
+	    clang --target=x86_64-pc-windows-msvc -c -O1 test/win_recdll.c -o $$d/win_recdll.obj && \
+	    python3 tools/vm/mkdll.py $$d/win_recdll.obj $$d/win_recdll.dll win_recdll.dll >/dev/null && \
+	    ./$(COMPILER) --os=windows test/test_nt_dll_records.pas $$d/dllrec.exe >/dev/null && \
+	    tools/expect_same.sh windows_dll_records "$$(tools/vm/wine.sh $$d/dllrec.exe 2>&1)" "$$(cat test/test_nt_dll_records.expected)" || exit 1; \
+	  else echo "test-windows: SKIP windows_dll_records (no clang to build the callee DLL)"; fi; \
 	  echo "test-windows: OK"
 
 test-asm: $(COMPILER)

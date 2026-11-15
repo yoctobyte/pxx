@@ -243,10 +243,13 @@ path means what it means on Linux.
   full length. A blocking socket call cannot be interrupted by a signal.
 - **Calling other libraries:** `external 'libc.so.6'` and other Linux
   libraries cannot work on Windows. `external 'user32.dll'` and other DLLs
-  do work, with integer, pointer and floating-point arguments. A record
-  passed by value is not converted (Windows passes one larger than 8 bytes
-  by reference), and a callback that Windows calls with floating-point
-  arguments does not receive them.
+  do work, with integer, pointer, floating-point and record arguments. A
+  record passed by value follows the Microsoft rule: one of 1, 2, 4 or 8
+  bytes travels as an integer, any other size as a pointer to a copy the
+  caller makes. A record result of 1, 2, 4 or 8 bytes comes back in `rax`,
+  and a larger one through a hidden first argument. A callback that Windows
+  calls with floating-point arguments does not receive them, and a record
+  passed by value to a callback is not converted.
 
 A system call the translator does not map returns `ENOSYS`. Set
 `PXX_WINABI_TRACE=1` in the environment to have each one named on stderr.
