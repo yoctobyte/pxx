@@ -20853,6 +20853,9 @@ test-core: $(COMPILER)
 	# an aligned typedef aligns members, aliases, _Alignof and globals
 	$(COMPILER) test/c_typedef_aligned.c $(TESTTMP)/c_tdal > /dev/null
 	tools/expect_same.sh c_tdal "$$($(TESTTMP)/c_tdal)" "$$(cat test/c_typedef_aligned.expected)"
+	# setenv/putenv/unsetenv/clearenv reach an exec'd child; BIG overflows crtl's 16K env buffer
+	$(COMPILER) test/c_env_exec.c $(TESTTMP)/c_envx > /dev/null
+	tools/expect_same.sh c_envx "$$(env -i KEEP=k DROP=d BIG=$$(head -c 20000 /dev/zero | tr '\0' x) PATH=/bin:/usr/bin $(TESTTMP)/c_envx)" "$$(cat test/c_env_exec.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

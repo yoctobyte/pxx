@@ -200,6 +200,12 @@ extern int __pxx_remove(const char *path);
 static char pxx_env_buf[PXX_ENV_BUFSZ];
 static long pxx_env_len = 0;
 static int pxx_env_loaded = 0;
+/* What did NOT fit: the startup environment from record pxx_env_nloaded on.
+   Only set when the load truncated; pxx_env_publish passes these on to a
+   child unchanged, so a write never shrinks a large environment. */
+static char **pxx_env_startup = 0;
+static long pxx_env_nloaded = 0;
+static int pxx_env_truncated = 0;
 
 /* AND THE FALLBACK, ADDED 2026-09-19 BECAUSE /proc IS A LINUX DETAIL AND NOT
    THE ENVIRONMENT. Measured on wasm32 the day hosted C first ran there: the
@@ -237,10 +243,20 @@ static void pxx_env_load(void) {
   if (pxx_env_loaded) return;
   pxx_env_loaded = 1;
   fd = __pxx_open("/proc/self/environ", 0, 0);   /* O_RDONLY */
+  pxx_env_startup = environ;
   if (fd >= 0) {
     got = __pxx_read(fd, pxx_env_buf, PXX_ENV_BUFSZ);
     __pxx_close(fd);
-    if (got > 0) { pxx_env_len = got; return; }
+    if (got > 0) {
+      if (got >= PXX_ENV_BUFSZ) {
+        /* full: the last record may be cut; keep whole ones only */
+        while (got > 0 && pxx_env_buf[got - 1]) got--;
+        pxx_env_truncated = 1;
+      }
+      pxx_env_len = got;
+      for (n = 0; n < got; n++) if (!pxx_env_buf[n]) pxx_env_nloaded++;
+      return;
+    }
   }
   e = environ;
   if (!e) return;
@@ -248,9 +264,10 @@ static void pxx_env_load(void) {
     r = *e;
     n = 0;
     while (r[n]) n++;
-    if (pxx_env_len + n + 1 > PXX_ENV_BUFSZ) break;
+    if (pxx_env_len + n + 1 > PXX_ENV_BUFSZ) { pxx_env_truncated = 1; break; }
     for (got = 0; got <= n; got++) pxx_env_buf[pxx_env_len + got] = r[got];
     pxx_env_len += n + 1;
+    pxx_env_nloaded++;
     e++;
   }
 }
@@ -1071,14 +1088,14 @@ char *strndup(const char *s, size_t n) {
  * These mutate the same pxx_env_buf that getenv() reads, so a C program sees
  * its own writes.
  *
- * A STANDING CONSTRAINT, not an oversight: this buffer is NOT the one the
- * Pascal RTL's spawn path hands to execve (that is sysutils' EnvVars, see
- * decide-env-write-side option 3). Today that cannot diverge, because crtl
- * exposes no spawn surface at all — no execve, fork, system or posix_spawn in
- * any crtl header — so "setenv then exec" is unreachable from C. WHOEVER ADDS
- * A SPAWN SURFACE TO CRTL must make it pass this buffer, or unify the two
- * first; otherwise a C setenv silently fails to reach the child, which is
- * exactly the divergence that decision exists to prevent.
+ * crtl's exec* family passes `environ`, so every write ends in
+ * pxx_env_publish(), which points `environ` at this buffer's live records.
+ * The comment here used to say crtl had no spawn surface and that whoever
+ * added one must make it pass this buffer; exec* was added and that was
+ * missed, so setenv never reached a child
+ * (bug-crtl-setenv-and-putenv-did-not-reach-an-execd-child). This buffer is
+ * still NOT the Pascal RTL's sysutils EnvVars (decide-env-write-side
+ * option 3): a C setenv is not seen by a Pascal spawn in the same program.
  *
  * Records are appended to the buffer rather than edited in place: an overwrite
  * of a longer value would need to shift everything after it, and the buffer is
@@ -1102,6 +1119,53 @@ static int pxx_env_put(const char *name, const char *value) {
 /* Hide every existing record for `name` by making its NAME unmatchable. '\1'
  * cannot appear in a real environment name, and keeping the record's length
  * and terminator preserves the scan. */
+/* Point `environ` at the buffer's live records, so a child started with
+ * exec* gets what setenv/putenv/unsetenv/clearenv made. Before this, exec*
+ * passed `environ` -- still the startup envp -- and every write was lost at
+ * the exec: busybox udhcpc ran its script without interface/ip/router and
+ * DHCP never configured an address (pixx-cc, 2026-11-15).
+ * bug-crtl-setenv-and-putenv-did-not-reach-an-execd-child
+ *
+ * Called after every write. Hidden records (first byte 1) and empty ones are
+ * left out; what the load could not fit is passed on from the startup
+ * environment unchanged. The vector is malloc'd and replaced, never freed
+ * while in use: a caller may hold the old `environ`. */
+static char **pxx_env_vec = 0;
+static long pxx_env_cap = 0;
+
+static void pxx_env_publish(void) {
+  long i, n = 0, k;
+  char **v;
+  for (i = 0; i < pxx_env_len; i++)
+    if (!pxx_env_buf[i]) n++;
+  if (pxx_env_truncated && pxx_env_startup) {
+    for (k = 0; k < pxx_env_nloaded && pxx_env_startup[k]; k++) ;
+    if (k == pxx_env_nloaded)
+      for (; pxx_env_startup[k]; k++) n++;
+  }
+  if (n + 1 > pxx_env_cap) {
+    v = (char **)malloc(sizeof(char *) * (size_t)(n + 16));
+    if (!v) return;                      /* keep the old vector: stale beats none */
+    pxx_env_vec = v;                     /* the old one leaks: someone may hold it */
+    pxx_env_cap = n + 16;
+  }
+  v = pxx_env_vec;
+  n = 0;
+  i = 0;
+  while (i < pxx_env_len) {
+    if (pxx_env_buf[i] != 1 && pxx_env_buf[i] != 0) v[n++] = &pxx_env_buf[i];
+    while (i < pxx_env_len && pxx_env_buf[i]) i++;
+    i++;
+  }
+  if (pxx_env_truncated && pxx_env_startup) {
+    for (k = 0; k < pxx_env_nloaded && pxx_env_startup[k]; k++) ;
+    if (k == pxx_env_nloaded)
+      for (; pxx_env_startup[k]; k++) v[n++] = pxx_env_startup[k];
+  }
+  v[n] = 0;
+  environ = v;
+}
+
 static void pxx_env_hide(const char *name) {
   long i = 0;
   size_t j;
@@ -1122,13 +1186,16 @@ int setenv(const char *name, const char *value, int overwrite) {
     if (!overwrite) return 0;             /* present and told not to replace */
     pxx_env_hide(name);
   }
-  return pxx_env_put(name, value);
+  if (pxx_env_put(name, value) != 0) { pxx_env_publish(); return -1; }
+  pxx_env_publish();
+  return 0;
 }
 
 int unsetenv(const char *name) {
   if (!name || !*name || strchr(name, '=')) return -1;
   pxx_env_load();
   pxx_env_hide(name);
+  pxx_env_publish();
   return 0;
 }
 
@@ -1159,7 +1226,9 @@ int putenv(char *string) {
   if (string[i] != '=') return unsetenv(name);
   pxx_env_load();
   pxx_env_hide(name);
-  return pxx_env_put(name, &string[i + 1]);
+  if (pxx_env_put(name, &string[i + 1]) != 0) { pxx_env_publish(); return -1; }
+  pxx_env_publish();
+  return 0;
 }
 
 /* clearenv(): remove EVERY variable. busybox's `env -i` calls it, which is how
@@ -1178,6 +1247,8 @@ int putenv(char *string) {
 int clearenv(void) {
   pxx_env_loaded = 1;
   pxx_env_len = 0;
+  pxx_env_truncated = 0;                 /* nothing of the startup env survives */
+  pxx_env_publish();
   return 0;
 }
 

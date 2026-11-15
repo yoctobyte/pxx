@@ -1,0 +1,4 @@
+environ A=1 DROP=0
+execl: A=putenv B=setenv KEEP=replaced DROP=unset BIG=20000
+execvp: A=putenv B=setenv KEEP=replaced DROP=unset BIG=20000
+cleared: A=unset BIG=0 ONLY=1
