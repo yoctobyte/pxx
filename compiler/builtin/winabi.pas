@@ -100,6 +100,16 @@ function W_GetEnvironmentVariableA(name, buf, size: Int64): LongWord; cdecl; ext
 function W_GetFileType(h: Int64): LongWord; cdecl; external 'kernel32.dll' name 'GetFileType';
 function W_GetCommandLineW: Int64; cdecl; external 'kernel32.dll' name 'GetCommandLineW';
 function W_GetEnvironmentStringsW: Int64; cdecl; external 'kernel32.dll' name 'GetEnvironmentStringsW';
+function W_SetConsoleMode(h, mode: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleMode';
+function W_GetConsoleScreenBufferInfo(h, info: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetConsoleScreenBufferInfo';
+function W_SetConsoleCursorPosition(h, xy: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleCursorPosition';
+function W_SetConsoleTextAttribute(h, attr: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleTextAttribute';
+function W_FillConsoleOutputCharacterW(h, ch, len, xy, done: Int64): LongInt; cdecl; external 'kernel32.dll' name 'FillConsoleOutputCharacterW';
+function W_FillConsoleOutputAttribute(h, attr, len, xy, done: Int64): LongInt; cdecl; external 'kernel32.dll' name 'FillConsoleOutputAttribute';
+function W_GetConsoleCursorInfo(h, info: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetConsoleCursorInfo';
+function W_SetConsoleCursorInfo(h, info: Int64): LongInt; cdecl; external 'kernel32.dll' name 'SetConsoleCursorInfo';
+function W_ReadConsoleInputW(h, buf, n, done: Int64): LongInt; cdecl; external 'kernel32.dll' name 'ReadConsoleInputW';
+function W_GetNumberOfConsoleInputEvents(h, n: Int64): LongInt; cdecl; external 'kernel32.dll' name 'GetNumberOfConsoleInputEvents';
 
 var
   WinFd: array[0..MAX_FD-1] of Int64;   { Linux fd -> HANDLE (FK_HANDLE) }
@@ -1025,6 +1035,584 @@ begin
   Result := W_GetConsoleMode(h, Int64(@mode)) <> 0;
 end;
 
+{ ---- VT sequences on a console without VT processing ---------------------
+  The runtime's terminal code (ansiterm, screen, crtl programs) writes VT
+  escape sequences, as on Linux. Windows 10 consoles interpret them once
+  ENABLE_VIRTUAL_TERMINAL_PROCESSING is set, and so does Wine's; ReactOS's
+  console (and older Windows) refuses the flag and printed every sequence as
+  text, so the console demos were unreadable there. The first write to a
+  console fd asks for the flag and reads the mode back. Where it did not
+  stick, the sequences are carried out here through the console API: cursor
+  position and moves, erase in display and line, colours (SGR, including
+  bright, 256-colour and RGB, mapped to the 16 console colours), cursor
+  show/hide, save/restore, and the alternate screen (cleared on entry and
+  exit; line wrap at the last column is off while it is active, so a
+  full-width last row does not scroll the screen). Other sequences are
+  dropped, not printed. Coordinates are relative to the visible window,
+  which is what a terminal's are. One parser for the process: stdout and
+  stderr share the console. }
+const
+  CON_VT_UNKNOWN = 0; CON_VT_NATIVE = 1; CON_VT_EMULATE = 2; CON_VT_NONE = 3;
+var
+  WinConVT: array[0..MAX_FD-1] of Byte;   { per fd: CON_VT_* }
+  VtState: Integer;                       { 0 text, 1 after ESC, 2 CSI, 3 OSC, 4 OSC after ESC, 5 skip one }
+  VtPar: array[0..15] of Int64;
+  VtParN: Integer;
+  VtPriv: Integer;                        { the private marker `?`, or 0 }
+  VtDefAttr: LongInt = -1;                { the console's attributes before the first SGR }
+  VtAttr: LongInt;
+  VtRev: Boolean;
+  VtSaveX, VtSaveY: Int64;
+  VtAltOn: Boolean;
+
+function ConVtMode(fd, h: Int64): Integer;
+var mode, mode2: LongWord;
+begin
+  Result := CON_VT_NONE;
+  if (fd < 0) or (fd >= MAX_FD) then Exit;
+  if WinConVT[fd] <> CON_VT_UNKNOWN then begin Result := WinConVT[fd]; Exit; end;
+  mode := 0;
+  if W_GetConsoleMode(h, Int64(@mode)) = 0 then
+    Result := CON_VT_NONE
+  else
+  begin
+    W_SetConsoleMode(h, mode or 4 or 1);           { ENABLE_VIRTUAL_TERMINAL_PROCESSING, PROCESSED_OUTPUT }
+    mode2 := 0;
+    W_GetConsoleMode(h, Int64(@mode2));
+    if (mode2 and 4) <> 0 then Result := CON_VT_NATIVE
+    else Result := CON_VT_EMULATE;
+  end;
+  WinConVT[fd] := Result;
+end;
+
+{ The screen buffer info: buffer size, cursor, attributes, window. }
+function VtInfo(h: Int64; var cx, cy, attr, wl, wt, wr, wb, bw, bh: Int64): Boolean;
+var b: array[0..11] of Word;
+begin
+  Result := W_GetConsoleScreenBufferInfo(h, Int64(@b[0])) <> 0;
+  if not Result then Exit;
+  bw := b[0]; bh := b[1]; cx := b[2]; cy := b[3]; attr := b[4];
+  wl := b[5]; wt := b[6]; wr := b[7]; wb := b[8];
+end;
+
+function VtXY(x, y: Int64): Int64;
+begin
+  Result := (y shl 16) or (x and $FFFF);
+end;
+
+procedure VtFill(h, x, y, len, attr: Int64);
+var done: LongWord;
+begin
+  if len <= 0 then Exit;
+  done := 0;
+  W_FillConsoleOutputCharacterW(h, 32, len, VtXY(x, y), Int64(@done));
+  W_FillConsoleOutputAttribute(h, attr, len, VtXY(x, y), Int64(@done));
+end;
+
+function VtArg(i, def: Int64): Int64;
+begin
+  if (i < VtParN) and (VtPar[i] > 0) then Result := VtPar[i] else Result := def;
+end;
+
+{ ANSI colour 0..7 -> console bits (blue 1, green 2, red 4). }
+function VtCol(c: Int64): Int64;
+begin
+  Result := 0;
+  if (c and 1) <> 0 then Result := Result or 4;
+  if (c and 2) <> 0 then Result := Result or 2;
+  if (c and 4) <> 0 then Result := Result or 1;
+end;
+
+{ An xterm 256-colour index -> one of the 16 console colours. }
+function VtCol256(n: Int64): Int64;
+var r, g, b, m, k: Int64;
+begin
+  if n < 8 then Result := VtCol(n)
+  else if n < 16 then Result := VtCol(n - 8) or 8
+  else if n >= 232 then
+  begin
+    { grey ramp }
+    if n < 238 then Result := 0 else if n < 244 then Result := 8
+    else if n < 250 then Result := 7 else Result := 15;
+  end
+  else
+  begin
+    k := n - 16;                                   { 36 r + 6 g + b, each 0..5 }
+    r := 0; while k >= 36 do begin k := k - 36; r := r + 1; end;
+    g := 0; while k >= 6 do begin k := k - 6; g := g + 1; end;
+    b := k;
+    m := r; if g > m then m := g; if b > m then m := b;
+    Result := 0;
+    if (r >= 2) and (r * 2 >= m) then Result := Result or 4;
+    if (g >= 2) and (g * 2 >= m) then Result := Result or 2;
+    if (b >= 2) and (b * 2 >= m) then Result := Result or 1;
+    if m >= 4 then Result := Result or 8;
+  end;
+end;
+
+function VtColRGB(r, g, b: Int64): Int64;
+var m: Int64;
+begin
+  m := r; if g > m then m := g; if b > m then m := b;
+  Result := 0;
+  if (r >= 64) and (r * 2 >= m) then Result := Result or 4;
+  if (g >= 64) and (g * 2 >= m) then Result := Result or 2;
+  if (b >= 64) and (b * 2 >= m) then Result := Result or 1;
+  if m >= 192 then Result := Result or 8;
+end;
+
+procedure VtApplyAttr(h: Int64);
+var a: Int64;
+begin
+  a := VtAttr;
+  if VtRev then a := ((a and $0F) shl 4) or ((a and $F0) shr 4);
+  W_SetConsoleTextAttribute(h, a);
+end;
+
+procedure VtSgr(h: Int64);
+var i, c: Int64;
+begin
+  if VtParN = 0 then begin VtParN := 1; VtPar[0] := 0; end;
+  i := 0;
+  while i < VtParN do
+  begin
+    c := VtPar[i];
+    if c = 0 then begin VtAttr := VtDefAttr; VtRev := False; end
+    else if c = 1 then VtAttr := VtAttr or 8
+    else if c = 22 then VtAttr := (VtAttr and not 8) or (VtDefAttr and 8)
+    else if c = 7 then VtRev := True
+    else if c = 27 then VtRev := False
+    else if (c >= 30) and (c <= 37) then VtAttr := (VtAttr and not 7) or VtCol(c - 30)
+    else if (c >= 90) and (c <= 97) then VtAttr := (VtAttr and not 15) or VtCol(c - 90) or 8
+    else if c = 39 then VtAttr := (VtAttr and not 15) or (VtDefAttr and 15)
+    else if (c >= 40) and (c <= 47) then VtAttr := (VtAttr and not $70) or (VtCol(c - 40) shl 4)
+    else if (c >= 100) and (c <= 107) then VtAttr := (VtAttr and not $F0) or ((VtCol(c - 100) or 8) shl 4)
+    else if c = 49 then VtAttr := (VtAttr and not $F0) or (VtDefAttr and $F0)
+    else if ((c = 38) or (c = 48)) and (i + 2 < VtParN) and (VtPar[i + 1] = 5) then
+    begin
+      if c = 38 then VtAttr := (VtAttr and not 15) or VtCol256(VtPar[i + 2])
+      else VtAttr := (VtAttr and not $F0) or (VtCol256(VtPar[i + 2]) shl 4);
+      i := i + 2;
+    end
+    else if ((c = 38) or (c = 48)) and (i + 4 < VtParN) and (VtPar[i + 1] = 2) then
+    begin
+      if c = 38 then VtAttr := (VtAttr and not 15) or VtColRGB(VtPar[i + 2], VtPar[i + 3], VtPar[i + 4])
+      else VtAttr := (VtAttr and not $F0) or (VtColRGB(VtPar[i + 2], VtPar[i + 3], VtPar[i + 4]) shl 4);
+      i := i + 4;
+    end;
+    i := i + 1;
+  end;
+  VtApplyAttr(h);
+end;
+
+procedure VtCursorShow(h: Int64; show: Boolean);
+var ci: array[0..1] of LongWord;
+begin
+  ci[0] := 25; ci[1] := 1;
+  if W_GetConsoleCursorInfo(h, Int64(@ci[0])) = 0 then ci[0] := 25;
+  if show then ci[1] := 1 else ci[1] := 0;
+  W_SetConsoleCursorInfo(h, Int64(@ci[0]));
+end;
+
+procedure VtWrap(h: Int64; wrap: Boolean);
+var mode: LongWord;
+begin
+  mode := 0;
+  if W_GetConsoleMode(h, Int64(@mode)) = 0 then Exit;
+  if wrap then mode := mode or 2 else mode := mode and not 2;   { ENABLE_WRAP_AT_EOL_OUTPUT }
+  W_SetConsoleMode(h, mode);
+end;
+
+procedure VtClearWindow(h: Int64);
+var cx, cy, attr, wl, wt, wr, wb, bw, bh, y: Int64;
+begin
+  if not VtInfo(h, cx, cy, attr, wl, wt, wr, wb, bw, bh) then Exit;
+  for y := wt to wb do VtFill(h, 0, y, bw, attr);
+end;
+
+{ Carry out the CSI sequence ending in `fin`. }
+procedure VtCsi(h, fin: Int64);
+var cx, cy, attr, wl, wt, wr, wb, bw, bh, x, y, k: Int64;
+begin
+  if not VtInfo(h, cx, cy, attr, wl, wt, wr, wb, bw, bh) then Exit;
+  if VtPriv <> 0 then
+  begin
+    if VtPriv <> Ord('?') then Exit;
+    for k := 0 to VtParN - 1 do
+    begin
+      if VtPar[k] = 25 then VtCursorShow(h, fin = Ord('h'))
+      else if (VtPar[k] = 1049) or (VtPar[k] = 47) or (VtPar[k] = 1047) then
+      begin
+        if fin = Ord('h') then
+        begin
+          VtSaveX := cx - wl; VtSaveY := cy - wt;
+          VtAltOn := True;
+          VtWrap(h, False);
+          VtClearWindow(h);
+        end
+        else if VtAltOn then
+        begin
+          VtAltOn := False;
+          VtClearWindow(h);
+          VtWrap(h, True);
+          W_SetConsoleCursorPosition(h, VtXY(wl, wt));
+        end;
+      end;
+    end;
+    Exit;
+  end;
+  x := cx; y := cy;
+  case fin of
+    Ord('H'), Ord('f'):
+      begin
+        y := wt + VtArg(0, 1) - 1;
+        x := wl + VtArg(1, 1) - 1;
+      end;
+    Ord('A'): y := cy - VtArg(0, 1);
+    Ord('B'), Ord('e'): y := cy + VtArg(0, 1);
+    Ord('C'), Ord('a'): x := cx + VtArg(0, 1);
+    Ord('D'): x := cx - VtArg(0, 1);
+    Ord('E'): begin y := cy + VtArg(0, 1); x := 0; end;
+    Ord('F'): begin y := cy - VtArg(0, 1); x := 0; end;
+    Ord('G'), Ord('`'): x := wl + VtArg(0, 1) - 1;
+    Ord('d'): y := wt + VtArg(0, 1) - 1;
+    Ord('s'): begin VtSaveX := cx - wl; VtSaveY := cy - wt; Exit; end;
+    Ord('u'): begin x := wl + VtSaveX; y := wt + VtSaveY; end;
+    Ord('m'): begin VtSgr(h); Exit; end;
+    Ord('J'):
+      begin
+        k := 0; if VtParN > 0 then k := VtPar[0];
+        if k = 0 then
+        begin
+          VtFill(h, cx, cy, bw - cx, attr);
+          for y := cy + 1 to wb do VtFill(h, 0, y, bw, attr);
+        end
+        else if k = 1 then
+        begin
+          for y := wt to cy - 1 do VtFill(h, 0, y, bw, attr);
+          VtFill(h, 0, cy, cx + 1, attr);
+        end
+        else VtClearWindow(h);
+        Exit;
+      end;
+    Ord('K'):
+      begin
+        k := 0; if VtParN > 0 then k := VtPar[0];
+        if k = 0 then VtFill(h, cx, cy, bw - cx, attr)
+        else if k = 1 then VtFill(h, 0, cy, cx + 1, attr)
+        else VtFill(h, 0, cy, bw, attr);
+        Exit;
+      end;
+    Ord('X'): begin VtFill(h, cx, cy, VtArg(0, 1), attr); Exit; end;
+  else
+    Exit;                                          { not carried out: dropped }
+  end;
+  if x < 0 then x := 0;
+  if x >= bw then x := bw - 1;
+  if y < wt then y := wt;
+  if y > wb then y := wb;
+  W_SetConsoleCursorPosition(h, VtXY(x, y));
+end;
+
+{ A run of plain text: the UTF-8 path or WriteFile, as WinWrite would. }
+function VtText(fd, h, buf, n: Int64): Boolean;
+var done: LongWord;
+begin
+  Result := True;
+  if n <= 0 then Exit;
+  if ConWanted(fd, h, buf, n) then Result := ConWrite(fd, h, buf, n) >= 0
+  else
+  begin
+    done := 0;
+    Result := W_WriteFile(h, buf, n, Int64(@done), 0) <> 0;
+  end;
+end;
+
+function ConWriteVT(fd, h, buf, n: Int64): Int64;
+var i, run, c, cx, cy, attr, wl, wt, wr, wb, bw, bh: Int64;
+begin
+  if VtDefAttr < 0 then
+  begin
+    if VtInfo(h, cx, cy, attr, wl, wt, wr, wb, bw, bh) then VtDefAttr := attr else VtDefAttr := 7;
+    VtAttr := VtDefAttr;
+  end;
+  run := 0;
+  i := 0;
+  while i < n do
+  begin
+    c := PByte(buf + i)^;
+    if VtState = 0 then
+    begin
+      if c = 27 then
+      begin
+        if not VtText(fd, h, buf + run, i - run) then begin Result := WinErr; Exit; end;
+        VtState := 1;
+      end;
+    end
+    else if VtState = 1 then
+    begin
+      if c = Ord('[') then begin VtState := 2; VtParN := 0; VtPriv := 0; end
+      else if c = Ord(']') then VtState := 3
+      else if (c = Ord('(')) or (c = Ord(')')) or (c = Ord('#')) then VtState := 5
+      else
+      begin
+        if c = Ord('7') then
+        begin
+          if VtInfo(h, cx, cy, attr, wl, wt, wr, wb, bw, bh) then begin VtSaveX := cx - wl; VtSaveY := cy - wt; end;
+        end
+        else if c = Ord('8') then
+        begin
+          if VtInfo(h, cx, cy, attr, wl, wt, wr, wb, bw, bh) then
+            W_SetConsoleCursorPosition(h, VtXY(wl + VtSaveX, wt + VtSaveY));
+        end
+        else if c = Ord('c') then
+        begin
+          VtAttr := VtDefAttr; VtRev := False; VtApplyAttr(h);
+          VtClearWindow(h);
+        end;
+        VtState := 0;
+      end;
+      run := i + 1;
+    end
+    else if VtState = 2 then
+    begin
+      if (c >= Ord('0')) and (c <= Ord('9')) then
+      begin
+        if VtParN = 0 then begin VtParN := 1; VtPar[0] := 0; end;
+        if VtPar[VtParN - 1] < 100000 then VtPar[VtParN - 1] := VtPar[VtParN - 1] * 10 + (c - Ord('0'));
+      end
+      else if (c = Ord(';')) or (c = Ord(':')) then
+      begin
+        if VtParN = 0 then begin VtParN := 1; VtPar[0] := 0; end;
+        if VtParN < 16 then begin VtPar[VtParN] := 0; VtParN := VtParN + 1; end;
+      end
+      else if (c >= $3C) and (c <= $3F) then VtPriv := c
+      else if (c >= $40) and (c <= $7E) then
+      begin
+        VtCsi(h, c);
+        VtState := 0;
+      end;
+      run := i + 1;
+    end
+    else if VtState = 3 then
+    begin
+      if c = 7 then VtState := 0 else if c = 27 then VtState := 4;
+      run := i + 1;
+    end
+    else if VtState = 4 then
+    begin
+      if c = Ord('\') then VtState := 0 else VtState := 3;
+      run := i + 1;
+    end
+    else
+    begin
+      VtState := 0;                                { the charset designator's byte }
+      run := i + 1;
+    end;
+    i := i + 1;
+  end;
+  if VtState = 0 then
+    if not VtText(fd, h, buf + run, n - run) then begin Result := WinErr; Exit; end;
+  Result := n;
+end;
+
+{ Emulate for this write? A console that refused VT processing, and an ESC
+  in the bytes or a sequence still open from the last write. }
+function VtWanted(fd, h, buf, n: Int64): Boolean;
+var i: Int64;
+begin
+  Result := False;
+  if VtState = 0 then
+  begin
+    i := 0;
+    while (i < n) and (PByte(buf + i)^ <> 27) do i := i + 1;
+    if i = n then Exit;
+  end;
+  Result := ConVtMode(fd, h) = CON_VT_EMULATE;
+end;
+
+{ ---- The console as a terminal: modes, size, keys ------------------------
+  TCGETS/TCSETS on a console fd read and set the console mode (ICANON is
+  ENABLE_LINE_INPUT, ECHO is ENABLE_ECHO_INPUT, ISIG is
+  ENABLE_PROCESSED_INPUT), so isatty() is true on a console and raw mode
+  engages. Without ICANON a read takes key events (ReadConsoleInputW), not
+  ReadFile, because ReadFile drops the keys that have no character: the
+  arrows reached a program as nothing, where a terminal sends `ESC [ A`.
+  Keys are translated to xterm's sequences and queued; Enter is `\n` while
+  ICRNL is set, as on Linux. VMIN 0 makes a read return what is there. }
+var
+  WinConRaw: Boolean;
+  WinConIFlag: LongWord = $500;                    { ICRNL | IXON }
+  WinConVmin: Byte = 1;
+  WinConQ: array[0..255] of Byte;
+  WinConQN: Int64;
+
+function ConIsInput(h: Int64): Boolean;
+var n: LongWord;
+begin
+  n := 0;
+  Result := W_GetNumberOfConsoleInputEvents(h, Int64(@n)) <> 0;
+end;
+
+procedure ConQPut(b: Int64);
+begin
+  if WinConQN < 256 then begin WinConQ[WinConQN] := b; WinConQN := WinConQN + 1; end;
+end;
+
+{ ESC and up to four more bytes (0 ends them). Bytes, not a string: this
+  unit runs below the string runtime, and a string literal here called a
+  stub that a program without strings (hello.pas) never emits. }
+procedure ConQStr(a, b, c, d: Int64);
+begin
+  ConQPut(27);
+  ConQPut(a);
+  if b <> 0 then ConQPut(b);
+  if c <> 0 then ConQPut(c);
+  if d <> 0 then ConQPut(d);
+end;
+
+{ One key-down record -> bytes on the queue. }
+procedure ConQKey(rec: Int64);
+var vk, ch, rep, k, ctl: Int64;
+begin
+  if (PWord(rec)^ <> 1) or (PLongInt(rec + 4)^ = 0) then Exit;   { KEY_EVENT, key down }
+  rep := PWord(rec + 8)^;
+  if rep < 1 then rep := 1;
+  vk := PWord(rec + 10)^;
+  ch := PWord(rec + 14)^;
+  ctl := PLongWord(rec + 16)^;
+  for k := 1 to rep do
+  begin
+    if ch <> 0 then
+    begin
+      if (ctl and 3) <> 0 then ConQPut(27);        { Alt (left or right): ESC prefix, as xterm }
+      if (ch = 13) and ((WinConIFlag and $100) <> 0) then ConQPut(10)
+      else if ch < $80 then ConQPut(ch)
+      else if ch < $800 then begin ConQPut($C0 or (ch shr 6)); ConQPut($80 or (ch and $3F)); end
+      else begin ConQPut($E0 or (ch shr 12)); ConQPut($80 or ((ch shr 6) and $3F)); ConQPut($80 or (ch and $3F)); end;
+    end
+    else
+      case vk of
+        $26: ConQStr(91, 65, 0, 0);   { Up: ESC [A }
+        $28: ConQStr(91, 66, 0, 0);   { Down: ESC [B }
+        $27: ConQStr(91, 67, 0, 0);   { Right: ESC [C }
+        $25: ConQStr(91, 68, 0, 0);   { Left: ESC [D }
+        $24: ConQStr(91, 72, 0, 0);   { Home: ESC [H }
+        $23: ConQStr(91, 70, 0, 0);   { End: ESC [F }
+        $2D: ConQStr(91, 50, 126, 0);   { Insert: ESC [2~ }
+        $2E: ConQStr(91, 51, 126, 0);   { Delete: ESC [3~ }
+        $21: ConQStr(91, 53, 126, 0);   { PgUp: ESC [5~ }
+        $22: ConQStr(91, 54, 126, 0);   { PgDn: ESC [6~ }
+        $70: ConQStr(79, 80, 0, 0);   { F1: ESC OP }
+        $71: ConQStr(79, 81, 0, 0);   { F2: ESC OQ }
+        $72: ConQStr(79, 82, 0, 0);   { F3: ESC OR }
+        $73: ConQStr(79, 83, 0, 0);   { F4: ESC OS }
+        $74: ConQStr(91, 49, 53, 126);   { F5: ESC [15~ }
+        $75: ConQStr(91, 49, 55, 126);   { F6: ESC [17~ }
+        $76: ConQStr(91, 49, 56, 126);   { F7: ESC [18~ }
+        $77: ConQStr(91, 49, 57, 126);   { F8: ESC [19~ }
+        $78: ConQStr(91, 50, 48, 126);   { F9: ESC [20~ }
+        $79: ConQStr(91, 50, 49, 126);   { F10: ESC [21~ }
+        $7A: ConQStr(91, 50, 51, 126);   { F11: ESC [23~ }
+        $7B: ConQStr(91, 50, 52, 126);   { F12: ESC [24~ }
+      end;
+  end;
+end;
+
+{ Move the console's pending events into the queue; block for one when
+  `wait` and the queue is empty. }
+procedure ConQFill(h: Int64; wait: Boolean);
+var rec: array[0..4] of LongWord; n, got: LongWord;
+begin
+  while WinConQN < 200 do
+  begin
+    n := 0;
+    if W_GetNumberOfConsoleInputEvents(h, Int64(@n)) = 0 then Exit;
+    if (n = 0) and not (wait and (WinConQN = 0)) then Exit;
+    got := 0;
+    if W_ReadConsoleInputW(h, Int64(@rec[0]), 1, Int64(@got)) = 0 then Exit;
+    if got = 1 then ConQKey(Int64(@rec[0]));
+  end;
+end;
+
+{ A raw-mode read of the console: n bytes at most from the queue. }
+function ConRawRead(h, buf, n: Int64; nonblock: Boolean): Int64;
+var i: Int64;
+begin
+  ConQFill(h, (not nonblock) and (WinConVmin > 0));
+  if WinConQN = 0 then
+  begin
+    if nonblock then Result := -LX_EAGAIN else Result := 0;
+    Exit;
+  end;
+  if n > WinConQN then n := WinConQN;
+  for i := 0 to n - 1 do PByte(buf + i)^ := WinConQ[i];
+  for i := n to WinConQN - 1 do WinConQ[i - n] := WinConQ[i];
+  WinConQN := WinConQN - n;
+  Result := n;
+end;
+
+{ TCGETS / TCSETS* / TIOCGWINSZ on a console fd; -LX_ENOTTY when h is no console. }
+function ConIoctl(h, req, arg: Int64): Int64;
+var mode: LongWord; lf: LongWord; i: Integer;
+    cx, cy, attr, wl, wt, wr, wb, bw, bh, ho: Int64;
+begin
+  Result := -LX_ENOTTY;
+  mode := 0;
+  if W_GetConsoleMode(h, Int64(@mode)) = 0 then Exit;
+  if req = $5401 then                              { TCGETS: struct termios, 36 bytes }
+  begin
+    for i := 0 to 35 do PByte(arg + i)^ := 0;
+    lf := $8A30;                                   { IEXTEN | ECHOE | ECHOK | ECHOCTL | ECHOKE }
+    if ConIsInput(h) then
+    begin
+      if (mode and 2) <> 0 then lf := lf or 2;     { ICANON }
+      if (mode and 4) <> 0 then lf := lf or 8;     { ECHO }
+      if (mode and 1) <> 0 then lf := lf or 1;     { ISIG }
+    end
+    else lf := lf or 11;
+    PLongWord(arg)^ := WinConIFlag;
+    PLongWord(arg + 4)^ := 5;                      { OPOST | ONLCR }
+    PLongWord(arg + 8)^ := $BF;                    { B38400 | CS8 | CREAD }
+    PLongWord(arg + 12)^ := lf;
+    PByte(arg + 17 + 0)^ := 3;  PByte(arg + 17 + 1)^ := 28;   { VINTR ^C, VQUIT ^\ }
+    PByte(arg + 17 + 2)^ := 127; PByte(arg + 17 + 3)^ := 21;  { VERASE, VKILL ^U }
+    PByte(arg + 17 + 4)^ := 4;                                { VEOF ^D }
+    PByte(arg + 17 + 6)^ := WinConVmin;                       { VMIN }
+    Result := 0;
+  end
+  else if (req >= $5402) and (req <= $5404) then   { TCSETS, TCSETSW, TCSETSF }
+  begin
+    Result := 0;
+    if not ConIsInput(h) then Exit;
+    lf := PLongWord(arg + 12)^;
+    WinConIFlag := PLongWord(arg)^;
+    WinConVmin := PByte(arg + 17 + 6)^;
+    mode := mode and not 7;
+    if (lf and 1) <> 0 then mode := mode or 1;
+    if (lf and 2) <> 0 then
+    begin
+      mode := mode or 2;
+      if (lf and 8) <> 0 then mode := mode or 4;   { echo needs line input on a console }
+    end;
+    WinConRaw := (lf and 2) = 0;
+    if req = $5404 then WinConQN := 0;
+    if W_SetConsoleMode(h, mode) = 0 then Result := WinErr;
+  end
+  else if req = $5413 then                         { TIOCGWINSZ }
+  begin
+    ho := h;
+    if ConIsInput(h) then ho := W_GetStdHandle(-11);
+    if not VtInfo(ho, cx, cy, attr, wl, wt, wr, wb, bw, bh) then
+      if not VtInfo(W_GetStdHandle(-12), cx, cy, attr, wl, wt, wr, wb, bw, bh) then Exit;
+    PWord(arg)^ := wb - wt + 1;
+    PWord(arg + 2)^ := wr - wl + 1;
+    PWord(arg + 4)^ := 0;
+    PWord(arg + 6)^ := 0;
+    Result := 0;
+  end;
+end;
+
 function WinWrite(fd, buf, n: Int64): Int64;
 var h, z: Int64;
     done: LongWord;
@@ -1044,6 +1632,11 @@ begin
   begin
     z := 0;
     W_SetFilePointerEx(h, 0, Int64(@z), 2);          { FILE_END }
+  end;
+  if VtWanted(fd, h, buf, n) then
+  begin
+    Result := ConWriteVT(fd, h, buf, n);
+    Exit;
   end;
   if ConWanted(fd, h, buf, n) then
   begin
@@ -1081,6 +1674,11 @@ begin
   end;
   h := WinFd[fd];
   if n > $7FFFFFFF then n := $7FFFFFFF;
+  if WinConRaw and ConIsInput(h) then
+  begin
+    Result := ConRawRead(h, buf, n, (WinFdFlags[fd] and LX_O_NONBLOCK) <> 0);
+    Exit;
+  end;
   if ((WinFdFlags[fd] and LX_O_NONBLOCK) <> 0) and (ReadReady(fd) = 0) then
   begin
     Result := -LX_EAGAIN;                            { O_NONBLOCK pipe or console with nothing yet }
@@ -1768,7 +2366,14 @@ begin
   end
   else if t = 2 then                               { FILE_TYPE_CHAR: the console }
   begin
-    if W_WaitForSingleObject(h, 0) = 0 then Result := LX_POLLIN else Result := 0;
+    if WinConRaw and ConIsInput(h) then
+    begin
+      { only a key counts: a key-up, focus or mouse event made the console
+        handle signalled and the read that followed blocked }
+      ConQFill(h, False);
+      if WinConQN > 0 then Result := LX_POLLIN else Result := 0;
+    end
+    else if W_WaitForSingleObject(h, 0) = 0 then Result := LX_POLLIN else Result := 0;
   end
   else
     Result := LX_POLLIN;
@@ -4261,6 +4866,11 @@ begin
   Result := WinIfIoctl(req, arg);
   if Result <> WIN_IF_NOT_MINE then Exit;
   Result := -LX_ENOTTY;
+  if ((req >= $5401) and (req <= $5404)) or (req = $5413) then
+  begin
+    if FdKind(fd) = FK_HANDLE then Result := ConIoctl(WinFd[fd], req, arg);
+    Exit;
+  end;
   if req = $5421 then                                          { FIONBIO }
   begin
     if PLongInt(arg)^ <> 0 then WinFdFlags[fd] := WinFdFlags[fd] or LX_O_NONBLOCK

@@ -11370,6 +11370,13 @@ test-windows: $(COMPILER)
 	    ./$(COMPILER) $$t $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$t $$d/$$n.exe >/dev/null && \
 	    tools/expect_same.sh windows_$$n "$$(tools/vm/wine.sh $$d/$$n.exe 2>&1; echo exit=$$?)" "$$($$d/$$n.lx 2>&1; echo exit=$$?)" || exit 1; \
 	  done; \
+	  if command -v script >/dev/null 2>&1; then \
+	    ./$(COMPILER) test/nt_console_tty.c $$d/nt_console_tty.lx >/dev/null && \
+	    ./$(COMPILER) --os=windows test/nt_console_tty.c $$d/nt_console_tty.exe >/dev/null && \
+	    tools/expect_same.sh windows_nt_console_tty \
+	      "$$( (sleep 3; printf x) | timeout 60 script -qec "stty rows 30 cols 100; tools/vm/wine.sh $$d/nt_console_tty.exe 2>/dev/null" /dev/null | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r//g' | grep -aE '^(isatty|winsz|tcgetattr|tcsetattr|read|red)')" \
+	      "$$( (sleep 1; printf x) | timeout 60 script -qec "stty rows 30 cols 100; $$d/nt_console_tty.lx" /dev/null | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r//g' | grep -aE '^(isatty|winsz|tcgetattr|tcsetattr|read|red)')" || exit 1; \
+	  else echo "=== windows_nt_console_tty: script(1) absent, NOT verified ==="; fi; \
 	  for t in "test/c_crtl_signal_and_wait.c:^(1[4-9]|2[01]) " "test/c_crtl_signal_dispositions.c:^5 "; do \
 	    f=$${t%%:*}; x=$${t#*:}; n=$$(basename $$f); \
 	    ./$(COMPILER) $$f $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$f $$d/$$n.exe >/dev/null && \
