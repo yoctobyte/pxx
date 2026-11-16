@@ -46,6 +46,8 @@ type
     procedure Initialize;
     procedure CreateForm(formClass: TFormClass; var ref: TForm);
     procedure Run;
+    { leave Run's event loop: the program continues after Application.Run }
+    procedure Terminate;
     property MainForm: TForm read FMainForm write FMainForm;
   end;
 
@@ -163,6 +165,11 @@ begin
     WidgetSet.ShowWidget(FMainForm);
   end;
   WidgetSet.AppRun;
+end;
+
+procedure TApplication.Terminate;
+begin
+  WidgetSet.AppQuit;
 end;
 
 initialization

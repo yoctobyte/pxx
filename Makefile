@@ -11377,6 +11377,16 @@ test-windows: $(COMPILER)
 	      "$$( (sleep 3; printf x) | timeout 60 script -qec "stty rows 30 cols 100; tools/vm/wine.sh $$d/nt_console_tty.exe 2>/dev/null" /dev/null | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r//g' | grep -aE '^(isatty|winsz|tcgetattr|tcsetattr|read|red)')" \
 	      "$$( (sleep 1; printf x) | timeout 60 script -qec "stty rows 30 cols 100; $$d/nt_console_tty.lx" /dev/null | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r//g' | grep -aE '^(isatty|winsz|tcgetattr|tcsetattr|read|red)')" || exit 1; \
 	  else echo "=== windows_nt_console_tty: script(1) absent, NOT verified ==="; fi; \
+	  if command -v xvfb-run >/dev/null 2>&1; then \
+	    ./$(COMPILER) test/test_pcl_win32_widgets.pas $$d/pcl_widgets.lx >/dev/null && \
+	    ./$(COMPILER) --os=windows test/test_pcl_win32_widgets.pas $$d/pcl_widgets.exe >/dev/null && \
+	    tools/expect_same.sh windows_pcl_widgets "$$(timeout 120 xvfb-run -a tools/vm/wine.sh $$d/pcl_widgets.exe 2>/dev/null)" \
+	      "$$(timeout 60 xvfb-run -a $$d/pcl_widgets.lx 2>/dev/null)" || exit 1; \
+	    ./$(COMPILER) --os=windows -Fuexamples/solitaire_gui examples/solitaire_gui/solitaire_gui.pas $$d/solitaire_gui.exe >/dev/null && \
+	    tools/expect_same.sh windows_solitaire_gui_smoke "$$(tools/vm/wine.sh $$d/solitaire_gui.exe --smoke 2>/dev/null | tail -1)" "SMOKE OK" && \
+	    tools/expect_same.sh windows_solitaire_gui_gui_smoke \
+	      "$$(timeout 120 xvfb-run -a tools/vm/wine.sh $$d/solitaire_gui.exe --gui-smoke 2>/dev/null | tail -1)" "GUI SMOKE OK" || exit 1; \
+	  else echo "=== windows_pcl_widgets: xvfb-run absent, NOT verified ==="; fi; \
 	  for t in "test/c_crtl_signal_and_wait.c:^(1[4-9]|2[01]) " "test/c_crtl_signal_dispositions.c:^5 "; do \
 	    f=$${t%%:*}; x=$${t#*:}; n=$$(basename $$f); \
 	    ./$(COMPILER) $$f $$d/$$n.lx >/dev/null && ./$(COMPILER) --os=windows $$f $$d/$$n.exe >/dev/null && \

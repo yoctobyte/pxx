@@ -57,6 +57,33 @@ No Windows box exists — Wine is the only oracle and is not pixel-faithful. So:
 - This ticket does **not** gate the GUI umbrella or the OS umbrella; console+stdio earns
   "runs on Windows," GUI bolts on.
 
+## Delivered (2026-11-16)
+
+- `lib/pcl/win32widgets.pas` (`TWin32WidgetSet`); `interfaces.pas` selects it by
+  default for `--os=windows` (the guard is `PXX_OS_WINDOWS`; `--os=windows` does not
+  define `WINDOWS`). No `-dWIDGETSET_WIN32` is needed.
+- `graphics.pas` has a GDI path under `PXX_OS_WINDOWS`: TCanvas on an HDC, TBitmap
+  as a top-down 32-bit DIB section (the same B,G,R,A bytes as cairo ARGB32).
+- Covered: form, button, label, edit, check box, panel, memo, list box, combo box,
+  paint box (double-buffered), menus with mnemonics/separators/enable, TTimer,
+  MessageBox, open/save file dialogs (comdlg32), OnResize, mouse, and keys delivered
+  as GDK keyvals so programs written against the GTK set need no change.
+  `Application.Terminate` was added to forms.pas for programs that called
+  `gtk_main_quit`.
+- Not yet: TPaned, TBox, TToolBar, TTreeView, TNotebook, the folder chooser, GL areas,
+  `DismissModal`.
+- Imports: kernel32, user32, gdi32 and comdlg32 (the file dialogs), all of them
+  shipped with every Windows and ReactOS.
+- Tested: `make test-windows` builds `test/test_pcl_win32_widgets.pas` (all the
+  controls; output compared with the GTK build) and `examples/solitaire_gui`
+  (`--smoke`, `--gui-smoke`) and runs them under Wine with xvfb-run. Both also ran
+  by hand on ReactOS 0.4.16 x64 (`tools/vm/reactos/rosinter.sh`): solitaire draws
+  and plays, and the widget test prints the same lines.
+- Found on ReactOS, not on Wine: an edit's EN_CHANGE arrives even when the text is
+  set to the same value, and storing it back through `TEdit.Text` re-entered
+  SetText until the stack ran out. SetText now skips unchanged text, the way
+  `gtk_entry_set_text` does.
+
 ## Acceptance (intentionally minimal)
 
 - A PCL app (`TForm` + a `TButton` + an `OnClick`, built `--widgetset=win32

@@ -2,11 +2,20 @@
 unit graphics;
 
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
-{ PCL Graphics implementation wrapping Cairo drawing contexts. }
+{ PCL Graphics: TCanvas over a cairo context (linux, the GTK widgetset) or a
+  GDI device context (--os=windows, the Win32 widgetset). The two draw the
+  same: a rectangle or ellipse is filled with Brush and outlined with Pen,
+  TextOut's Y is the top of a line whose baseline sits Font.Size below it,
+  and a TBitmap is 32-bit pixels B,G,R,A in memory on both (cairo ARGB32 and a
+  top-down GDI DIB section share that layout). }
 
 interface
 
+{$ifdef PXX_OS_WINDOWS}
+uses classes_lite;
+{$else}
 uses classes_lite, gtk3_c;
+{$endif}
 
 type
   TColor = LongWord;
@@ -80,7 +89,7 @@ type
 
   TCanvas = class
   private
-    FHandle: Pointer; { cairo_t }
+    FHandle: Pointer; { cairo_t, or a GDI HDC on windows }
     FPen: TPen;
     FBrush: TBrush;
     FFont: TFont;
@@ -149,6 +158,135 @@ begin
   FFont.Destroy;
 end;
 
+{$ifdef PXX_OS_WINDOWS}
+{ ---- GDI ------------------------------------------------------------------- }
+type
+  TBitmapInfo32 = record
+    biSize: LongWord;
+    biWidth, biHeight: LongInt;
+    biPlanes, biBitCount: Word;
+    biCompression, biSizeImage: LongWord;
+    biXPelsPerMeter, biYPelsPerMeter: LongInt;
+    biClrUsed, biClrImportant: LongWord;
+    colors: LongWord;
+  end;
+
+function CreatePen(style, width: LongInt; color: LongWord): Pointer; stdcall; external 'gdi32.dll';
+function CreateSolidBrush(color: LongWord): Pointer; stdcall; external 'gdi32.dll';
+function GetStockObject(i: LongInt): Pointer; stdcall; external 'gdi32.dll';
+function CreateFontW(h, w, esc, orient, weight: LongInt; italic, underline, strike, charset,
+  outprec, clipprec, quality, pitch: LongWord; face: PWideChar): Pointer; stdcall; external 'gdi32.dll';
+function SelectObject(dc, obj: Pointer): Pointer; stdcall; external 'gdi32.dll';
+function DeleteObject(obj: Pointer): LongInt; stdcall; external 'gdi32.dll';
+function MoveToEx(dc: Pointer; x, y: LongInt; old: Pointer): LongInt; stdcall; external 'gdi32.dll';
+function GdiLineTo(dc: Pointer; x, y: LongInt): LongInt; stdcall; external 'gdi32.dll' name 'LineTo';
+function GdiRectangle(dc: Pointer; l, t, r, b: LongInt): LongInt; stdcall; external 'gdi32.dll' name 'Rectangle';
+function GdiEllipse(dc: Pointer; l, t, r, b: LongInt): LongInt; stdcall; external 'gdi32.dll' name 'Ellipse';
+function TextOutW(dc: Pointer; x, y: LongInt; s: PWideChar; n: LongInt): LongInt; stdcall; external 'gdi32.dll';
+function SetTextColor(dc: Pointer; c: LongWord): LongWord; stdcall; external 'gdi32.dll';
+function SetBkMode(dc: Pointer; mode: LongInt): LongInt; stdcall; external 'gdi32.dll';
+function SetTextAlign(dc: Pointer; align: LongWord): LongWord; stdcall; external 'gdi32.dll';
+function CreateDIBSection(dc: Pointer; const bmi: TBitmapInfo32; usage: LongWord; var bits: Pointer;
+  section: Pointer; offset: LongWord): Pointer; stdcall; external 'gdi32.dll';
+function CreateCompatibleDC(dc: Pointer): Pointer; stdcall; external 'gdi32.dll';
+function DeleteDC(dc: Pointer): LongInt; stdcall; external 'gdi32.dll';
+function BitBlt(dst: Pointer; x, y, w, h: LongInt; src: Pointer; sx, sy: LongInt; rop: LongWord): LongInt; stdcall; external 'gdi32.dll';
+function MultiByteToWideChar(cp, flags: LongWord; s: PChar; n: LongInt; w: PWideChar; wn: LongInt): LongInt; stdcall; external 'kernel32.dll';
+
+{ TColor is $00BBGGRR, which is GDI's COLORREF already. }
+function GdiColor(c: TColor): LongWord;
+begin
+  Result := c and $00FFFFFF;
+end;
+
+{ Select a pen for Pen (or none), and a brush for Brush (or the hollow
+  stock brush); the caller draws and then calls GdiRestore. }
+procedure GdiSelect(dc: Pointer; pen: TPen; brush: TBrush; var oldPen, oldBrush, newPen, newBrush: Pointer);
+var w: LongInt;
+begin
+  newPen := nil; newBrush := nil; oldBrush := nil;
+  w := pen.Width;
+  if w < 1 then w := 1;
+  newPen := CreatePen(0, w, GdiColor(pen.Color));            { PS_SOLID }
+  oldPen := SelectObject(dc, newPen);
+  if brush <> nil then
+  begin
+    newBrush := CreateSolidBrush(GdiColor(brush.Color));
+    oldBrush := SelectObject(dc, newBrush);
+  end
+  else
+    oldBrush := SelectObject(dc, GetStockObject(5));         { NULL_BRUSH }
+end;
+
+procedure GdiRestore(dc: Pointer; oldPen, oldBrush, newPen, newBrush: Pointer);
+begin
+  SelectObject(dc, oldPen);
+  SelectObject(dc, oldBrush);
+  if newPen <> nil then DeleteObject(newPen);
+  if newBrush <> nil then DeleteObject(newBrush);
+end;
+
+procedure TCanvas.ApplyPen; begin end;
+procedure TCanvas.ApplyBrush; begin end;
+procedure TCanvas.ApplyFont; begin end;
+
+procedure TCanvas.MoveTo(X, Y: Integer);
+begin
+  if FHandle <> nil then MoveToEx(FHandle, X, Y, nil);
+end;
+
+procedure TCanvas.LineTo(X, Y: Integer);
+var op, ob, np, nb: Pointer;
+begin
+  if FHandle = nil then Exit;
+  GdiSelect(FHandle, FPen, nil, op, ob, np, nb);
+  GdiLineTo(FHandle, X, Y);
+  GdiRestore(FHandle, op, ob, np, nb);
+end;
+
+procedure TCanvas.Rectangle(X1, Y1, X2, Y2: Integer);
+var op, ob, np, nb: Pointer;
+begin
+  if FHandle = nil then Exit;
+  GdiSelect(FHandle, FPen, FBrush, op, ob, np, nb);
+  GdiRectangle(FHandle, X1, Y1, X2, Y2);
+  GdiRestore(FHandle, op, ob, np, nb);
+end;
+
+procedure TCanvas.Ellipse(X1, Y1, X2, Y2: Integer);
+var op, ob, np, nb: Pointer;
+begin
+  if FHandle = nil then Exit;
+  GdiSelect(FHandle, FPen, FBrush, op, ob, np, nb);
+  GdiEllipse(FHandle, X1, Y1, X2, Y2);
+  GdiRestore(FHandle, op, ob, np, nb);
+end;
+
+procedure TCanvas.TextOut(X, Y: Integer; const Text: string);
+var font, old: Pointer; face, w: array of WideChar; n, i: Integer; fname: string;
+begin
+  if (FHandle = nil) or (Length(Text) = 0) then Exit;
+  fname := FFont.Name;
+  SetLength(face, 32);
+  for i := 0 to 31 do face[i] := #0;
+  for i := 1 to Length(fname) do
+    if i <= 31 then face[i - 1] := WideChar(Ord(fname[i]));
+  { cairo's font size is the em height in pixels; a negative CreateFont
+    height asks GDI for the same }
+  font := CreateFontW(-FFont.Size, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, @face[0]);   { DEFAULT_CHARSET, CLEARTYPE_QUALITY }
+  old := SelectObject(FHandle, font);
+  SetBkMode(FHandle, 1);                                     { TRANSPARENT }
+  SetTextColor(FHandle, GdiColor(FFont.Color));
+  SetTextAlign(FHandle, 24);                                 { TA_BASELINE: as cairo_show_text }
+  n := MultiByteToWideChar(65001, 0, PChar(Text), Length(Text), nil, 0);
+  SetLength(w, n + 1);
+  MultiByteToWideChar(65001, 0, PChar(Text), Length(Text), @w[0], n);
+  TextOutW(FHandle, X, Y + FFont.Size, @w[0], n);
+  SetTextAlign(FHandle, 0);
+  SelectObject(FHandle, old);
+  DeleteObject(font);
+end;
+{$else}
 procedure SetCairoColor(cr: Pointer; AColor: TColor);
 var r, g, b: Double;
 begin
@@ -266,6 +404,7 @@ begin
     cairo_show_text(FHandle, PChar(Text));
   end;
 end;
+{$endif}
 
 type
   PLongWord = ^LongWord;
@@ -278,6 +417,35 @@ begin
   FData := nil;
 end;
 
+{$ifdef PXX_OS_WINDOWS}
+destructor TBitmap.Destroy;
+begin
+  if FSurface <> nil then DeleteObject(FSurface);
+end;
+
+procedure TBitmap.RecreateSurface;
+var bmi: TBitmapInfo32; bits: Pointer;
+begin
+  if FSurface <> nil then
+  begin
+    DeleteObject(FSurface);
+    FSurface := nil;
+    FData := nil;
+  end;
+  if (FWidth > 0) and (FHeight > 0) then
+  begin
+    FillChar(bmi, SizeOf(bmi), 0);
+    bmi.biSize := 40;
+    bmi.biWidth := FWidth;
+    bmi.biHeight := -FHeight;                                { top-down, as cairo }
+    bmi.biPlanes := 1;
+    bmi.biBitCount := 32;
+    bits := nil;
+    FSurface := CreateDIBSection(nil, bmi, 0, bits, nil, 0);
+    if FSurface <> nil then FData := bits;
+  end;
+end;
+{$else}
 destructor TBitmap.Destroy;
 begin
   if FSurface <> nil then
@@ -299,6 +467,7 @@ begin
       FData := cairo_image_surface_get_data(FSurface);
   end;
 end;
+{$endif}
 
 procedure TBitmap.SetWidth(v: Integer);
 begin
@@ -358,6 +527,20 @@ begin
   Result := ((val shr 16) and $FF) or (((val shr 8) and $FF) shl 8) or ((val and $FF) shl 16) or ($FF000000);
 end;
 
+{$ifdef PXX_OS_WINDOWS}
+procedure TCanvas.Draw(X, Y: Integer; Bitmap: TBitmap);
+var mem, old: Pointer;
+begin
+  if (FHandle <> nil) and (Bitmap <> nil) and (Bitmap.Handle <> nil) then
+  begin
+    mem := CreateCompatibleDC(FHandle);
+    old := SelectObject(mem, Bitmap.Handle);
+    BitBlt(FHandle, X, Y, Bitmap.Width, Bitmap.Height, mem, 0, 0, $00CC0020);   { SRCCOPY }
+    SelectObject(mem, old);
+    DeleteDC(mem);
+  end;
+end;
+{$else}
 procedure TCanvas.Draw(X, Y: Integer; Bitmap: TBitmap);
 var
   dx, dy: Double;
@@ -373,5 +556,6 @@ begin
     cairo_restore(FHandle);
   end;
 end;
+{$endif}
 
 end.

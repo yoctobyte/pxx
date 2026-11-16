@@ -1,6 +1,6 @@
 { SPDX-License-Identifier: 0BSD }
 program solitaire_gui;
-{ Klondike solitaire — PCL/GTK3 GUI over the tested `klondike` engine. The board
+{ Klondike solitaire — PCL GUI (GTK3 on linux, Win32 for --os=windows) over the tested `klondike` engine. The board
   is custom-drawn in TPaintBox.OnPaint and played by dragging cards: press a card
   (OnMouseDown) to pick it up together with the run stacked on top of it, release
   on a destination (OnMouseUp) to drop; an illegal drop leaves everything where it
@@ -17,11 +17,12 @@ program solitaire_gui;
   stock press draws, print SMOKE OK and exit (no event loop).
 
   `--gui-smoke`: map the REAL window, run the REAL event loop, self-quit from a
-  g_timeout (exercised under xvfb in CI); prints GUI SMOKE OK. }
+  TTimer (exercised under xvfb in CI, natively and under Wine); prints
+  GUI SMOKE OK. }
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, menus, sysutils, klondike, gtk3_c;
+uses controls, stdctrls, forms, extctrls, graphics, menus, sysutils, klondike;
 
 const
   COL_TABLE = $00206018;   { felt green, $00BBGGRR }
@@ -29,7 +30,11 @@ const
   COL_BACK2 = $00C05828;   { card back inner }
   COL_EMPTY = $00305828;   { empty pile slot }
   COL_GRAY  = $00A0A0A0;
+{$ifdef PXX_OS_WINDOWS}
+  CARD_FONT = 'Arial';         { has the suit glyphs; ReactOS maps it to Liberation Sans }
+{$else}
   CARD_FONT = 'DejaVu Sans';
+{$endif}
 
 type
   THandler = class
@@ -63,6 +68,7 @@ type
     procedure DoAuto(Sender: TObject);
     procedure DoQuit(Sender: TObject);
     procedure DoHelp(Sender: TObject);
+    procedure GuiAutoQuit(Sender: TObject);
   end;
 
 function RankStr(r: Integer): string;
@@ -334,7 +340,7 @@ begin
     97:  DoAuto(nil);       { a }
     100: DoDraw(nil);       { d }
     32:  DoDraw(nil);       { space }
-    113: gtk_main_quit;     { q }
+    113: Application.Terminate;     { q }
   end;
 end;
 
@@ -355,7 +361,7 @@ end;
 procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selPile := -1; moveCount := 0; Refresh; end;
 procedure THandler.DoDraw(Sender: TObject); begin DrawStock; selPile := -1; Refresh; end;
 procedure THandler.DoUndo(Sender: TObject); begin Undo; selPile := -1; Refresh; end;
-procedure THandler.DoQuit(Sender: TObject); begin gtk_main_quit; end;
+procedure THandler.DoQuit(Sender: TObject); begin Application.Terminate; end;
 procedure THandler.DoHelp(Sender: TObject);
 begin
   if Form <> nil then
@@ -384,10 +390,10 @@ begin
 end;
 
 { --gui-smoke: self-quit once the real event loop is running. }
-function GuiAutoQuit(data: Pointer): Integer; cdecl;
+procedure THandler.GuiAutoQuit(Sender: TObject);
 begin
-  gtk_main_quit;
-  GuiAutoQuit := 0;
+  TTimer(Sender).Enabled := False;
+  Application.Terminate;
 end;
 
 var
@@ -398,6 +404,7 @@ var
   GameMenu, HelpMenu: TMenuItem;
   pm: TMethod;
   arg: string;
+  QuitTimer: TTimer;
 begin
   Application := TApplication.Create;
   Application.Initialize;
@@ -462,7 +469,10 @@ begin
   end
   else if arg = '--gui-smoke' then
   begin
-    g_timeout_add(400, @GuiAutoQuit, nil);
+    QuitTimer := TTimer.Create(nil);
+    QuitTimer.Interval := 400;
+    pm.Code := @H.GuiAutoQuit; pm.Data := H; QuitTimer.OnTimer := pm;
+    QuitTimer.Enabled := True;
     Application.Run;
     writeln('GUI SMOKE OK');
   end
