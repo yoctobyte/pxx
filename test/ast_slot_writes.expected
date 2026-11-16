@@ -414,6 +414,7 @@ AN_ASSIGN Left fieldNode
 AN_ASSIGN Left fld
 AN_ASSIGN Left fldNode
 AN_ASSIGN Left frIdn
+AN_ASSIGN Left fraIdn
 AN_ASSIGN Left icLhs
 AN_ASSIGN Left identN
 AN_ASSIGN Left identNode
@@ -439,6 +440,7 @@ AN_ASSIGN Left vcLhs
 AN_ASSIGN Left vrIndex
 AN_ASSIGN Left wIdent
 AN_ASSIGN Right ASTLeft[ASTLeft[node]]
+AN_ASSIGN Right ASTLeft[argHead]
 AN_ASSIGN Right ASTLeft[currArg]
 AN_ASSIGN Right ASTLeft[item]
 AN_ASSIGN Right ASTLeft[pairNode]
@@ -863,6 +865,7 @@ AN_CALL_IND Right n
 AN_CALL_IND Right node
 AN_CALL_IND Right unboxCall
 AN_CALL_IND Right valNode
+AN_CASE Left AllocNode(AN_INT_LIT)
 AN_CASE Left condNode
 AN_CASE Right branchSeq
 AN_CLASSREF Right 0
@@ -892,6 +895,7 @@ AN_COMMA Left wAsg
 AN_COMMA Right ASTLeft[lastArg]
 AN_COMMA Right ASTLeft[n]
 AN_COMMA Right AllocNode(AN_INT_LIT)
+AN_COMMA Right CMakeBinop(Ord(tkNeq), fraArg, fraIdn)
 AN_COMMA Right CurASTNode
 AN_COMMA Right ParseCExpr
 AN_COMMA Right PyMakeIdent(setTmpSym)
@@ -1238,6 +1242,7 @@ AN_REPEAT Right condNode
 AN_REPEAT Right notCond
 AN_REPEAT Right postComma
 AN_RTTIOF Left objNode
+AN_SEQ Left ASTLeft[lq]
 AN_SEQ Left CWrapStaticInitOnce(head)
 AN_SEQ Left GenMakeAssign(GenMakeIdent(tmpSym, Syms[tmpSym].TypeKind), CloneAST(destNode))
 AN_SEQ Left GenMakeAssign(destNode, GenMakeIdent(tmpSym, Syms[tmpSym].TypeKind))

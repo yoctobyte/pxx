@@ -182,6 +182,68 @@ begin
   if mine >= 0 then Result := mine;
 end;
 
+{ GNU local labels: `__label__ a, b;` at the top of a block (in practice a
+  statement expression, so a macro can use one label per expansion) makes
+  those names the block's own. Each gets a fresh spelling in TokChars,
+  `name.L<n>` -- the dot keeps it from meeting any C identifier -- and goto,
+  a label and `&&name` inside the block resolve through this stack. A block
+  pops what it pushed at its closing brace (ParseCBlockAST,
+  ParseCStmtExprAST). Function scope is unchanged: labels stay per function
+  (GotoLabelCount), and only the spelling differs. }
+var
+  CLocalLabOrigOff, CLocalLabOrigLen, CLocalLabNewOff, CLocalLabNewLen: array of Integer;
+  CLocalLabCount: Integer;
+  CLocalLabSerial: Integer;
+
+procedure CLocalLabPush(tokIdx: Integer);
+var nm: AnsiString; k: Integer;
+begin
+  if CLocalLabCount >= Length(CLocalLabOrigOff) then
+  begin
+    k := Length(CLocalLabOrigOff) * 2 + 16;
+    SetLength(CLocalLabOrigOff, k); SetLength(CLocalLabOrigLen, k);
+    SetLength(CLocalLabNewOff, k); SetLength(CLocalLabNewLen, k);
+  end;
+  CLocalLabOrigOff[CLocalLabCount] := Tokens[tokIdx].SOffset;
+  CLocalLabOrigLen[CLocalLabCount] := Tokens[tokIdx].SLen;
+  nm := '';
+  for k := 0 to Tokens[tokIdx].SLen - 1 do nm := nm + TokChars[Tokens[tokIdx].SOffset + k];
+  Inc(CLocalLabSerial);
+  nm := nm + '.L' + AIntToStr(CLocalLabSerial);
+  CLocalLabNewOff[CLocalLabCount] := TokCharLen;
+  CLocalLabNewLen[CLocalLabCount] := Length(nm);
+  for k := 1 to Length(nm) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('C: token char buffer overflow (local label)');
+    TokChars[TokCharLen] := nm[k];
+    Inc(TokCharLen);
+  end;
+  Inc(CLocalLabCount);
+end;
+
+{ The (offset, length) a label NAME token stands for: its local-label
+  spelling when an enclosing block declared it with __label__, else itself.
+  Exact compare: C labels are case-sensitive. }
+procedure CLabelSpan(tokIdx: Integer; var off, len: Integer);
+var i, k: Integer; same: Boolean;
+begin
+  off := Tokens[tokIdx].SOffset;
+  len := Tokens[tokIdx].SLen;
+  for i := CLocalLabCount - 1 downto 0 do
+    if CLocalLabOrigLen[i] = len then
+    begin
+      same := True;
+      for k := 0 to len - 1 do
+        if TokChars[CLocalLabOrigOff[i] + k] <> TokChars[off + k] then begin same := False; Break; end;
+      if same then
+      begin
+        off := CLocalLabNewOff[i];
+        len := CLocalLabNewLen[i];
+        Exit;
+      end;
+    end;
+end;
+
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 { The braced-list loop condition, called from the first such loop ~3200 lines
@@ -2574,6 +2636,78 @@ begin
           ASTTk[Result] := Ord(tyInteger);
           Exit;
         end;
+        { gcc's `__builtin_return_address(0)`: this function's return address.
+          It is FPC's get_pc_addr exactly -- AN_PCADDR, a load of [frame +
+          FrameRetAddrOffset] that every backend already has. Level 0 only, for
+          the reason __builtin_frame_address gives below: a caller's level
+          needs a frame-chain walk, and a plausible wrong address is the worst
+          answer. NetBSD's rump sources record it for lock debugging. }
+        if name = '__builtin_return_address' then
+        begin
+          fraArg := -1;
+          if argHead >= 0 then fraArg := ASTLeft[argHead];
+          if (fraArg < 0) or (ASTKind[fraArg] <> AN_INT_LIT) or
+             (ASTIVal[fraArg] <> 0) then
+            Error('__builtin_return_address: only the constant 0 (this ' +
+                  'function''s own return address) is supported');
+          Result := AllocNode(AN_PCADDR);
+          ASTTk[Result] := Ord(tyPointer);
+          Exit;
+        end;
+        { `__builtin_prefetch(addr[, rw[, locality]])` is a cache hint with no
+          effect on the program. The address is still evaluated, as gcc does,
+          so its side effects happen; the value is discarded. It is ASSIGNED to
+          a hidden local: as a bare expression statement, `&v[bump()]` was
+          dropped whole, and bump() with it. }
+        if name = '__builtin_prefetch' then
+        begin
+          if argHead >= 0 then
+          begin
+            fraSym := AllocVar('', tyPointer);
+            fraIdn := AllocNode(AN_IDENT);
+            ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyPointer);
+            Result := AllocNode(AN_ASSIGN);
+            ASTLeft[Result] := fraIdn; ASTRight[Result] := ASTLeft[argHead];
+            ASTTk[Result] := Ord(tyPointer);
+          end
+          else
+          begin
+            Result := AllocNode(AN_INT_LIT);
+            ASTIVal[Result] := 0; ASTTk[Result] := Ord(tyInteger);
+          end;
+          Exit;
+        end;
+        { `__builtin_unreachable()` tells gcc control never gets here; reaching
+          it is undefined behaviour. pxx does not optimise on it, so it is a
+          no-op: code after it still exists and runs if it is ever reached. }
+        if (name = '__builtin_unreachable') and (argHead < 0) then
+        begin
+          Result := AllocNode(AN_INT_LIT);
+          ASTIVal[Result] := 0; ASTTk[Result] := Ord(tyInteger);
+          Exit;
+        end;
+        { `__builtin_isnan(x)`: x != x, the one comparison a NaN fails. x goes
+          through a hidden double local first so it is evaluated ONCE (an
+          argument with side effects must not run twice), and an integer
+          argument converts, as gcc's does. }
+        if (name = '__builtin_isnan') and (argHead >= 0) then
+        begin
+          fraSym := AllocVar('', tyDouble);
+          fraIdn := AllocNode(AN_IDENT);
+          ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyDouble);
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := fraIdn; ASTRight[node] := ASTLeft[argHead];
+          ASTTk[node] := Ord(tyDouble);
+          fraArg := AllocNode(AN_IDENT);
+          ASTIVal[fraArg] := fraSym; ASTTk[fraArg] := Ord(tyDouble);
+          fraIdn := AllocNode(AN_IDENT);
+          ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyDouble);
+          Result := AllocNode(AN_COMMA);
+          ASTLeft[Result] := node;
+          ASTRight[Result] := CMakeBinop(Ord(tkNeq), fraArg, fraIdn);
+          ASTTk[Result] := ASTTk[ASTRight[Result]];
+          Exit;
+        end;
         { gcc builtin `__builtin_inf()`: the double +infinity, as a CONSTANT and
           not a call. duktape's duk_config.h:2256 is
           `#define DUK_DOUBLE_INFINITY (__builtin_inf())`, and that one line is
@@ -4251,6 +4385,53 @@ begin
   Expect(tkRParen, ')');
 end;
 
+{ gcc's `__builtin_types_compatible_p(T1, T2)`: 1 when the two type NAMES
+  are the same type once typedefs are seen through and top-level qualifiers
+  dropped, else 0 -- a constant, so it also works in a constant expression.
+  CurTok is the keyword.
+
+  Compared: the base kind, the struct/union, the pointer depth and what a
+  pointer points at, and the array dimensions. A known gap: pxx gives some
+  distinct C types one kind (`long` and `long long` on LP64), and those
+  compare equal here where gcc says 0. NetBSD's rump sources use it inside
+  type-checking macros (__type_fit and friends). }
+function CParseOneTypeKey: AnsiString;
+var tk: TTypeKind; depth: Integer;
+begin
+  tk := ParseCDeclType;
+  depth := CTypePtrDepth;
+  Result := AIntToStr(Ord(tk)) + ':' + AIntToStr(CTypeBaseRec) + ':' +
+            AIntToStr(CTypePtrBaseTk) + ':' + AIntToStr(CTypePtrBaseRec) + ':';
+  if CTypeIsVoid then Result := Result + 'v';
+  while CurTok.Kind = tkStar do
+  begin
+    Next; Inc(depth);
+    while CurTok.Kind = tkConst do Next;
+  end;
+  Result := Result + ':*' + AIntToStr(depth);
+  while CurTok.Kind = tkLBrack do
+  begin
+    Next;
+    if CurTok.Kind = tkRBrack then Result := Result + '[]'
+    else Result := Result + '[' + AIntToStr(CEvalConstExpr) + ']';
+    Expect(tkRBrack, ']');
+  end;
+end;
+
+function CParseTypesCompatible: Integer;
+var k1, k2: AnsiString;
+begin
+  Next;   { the keyword }
+  Expect(tkLParen, '(');
+  if not IsCTypeTok then Error('__builtin_types_compatible_p: expected a type name');
+  k1 := CParseOneTypeKey;
+  Expect(tkComma, ',');
+  if not IsCTypeTok then Error('__builtin_types_compatible_p: expected a type name');
+  k2 := CParseOneTypeKey;
+  Expect(tkRParen, ')');
+  if k1 = k2 then Result := 1 else Result := 0;
+end;
+
 { The size of an already-parsed operand node, by the rules the parenthesised
   general-expression arm of ParseCSizeof uses: a member is the member object,
   a decayed row is the row, otherwise the result type. }
@@ -5353,7 +5534,7 @@ end;
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
-    frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP: Integer;
+    frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP, labOff, labLen: Integer;
     clDesig: Boolean;
     castPaLen, castPaNDims: Integer;
     castPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
@@ -5379,6 +5560,13 @@ begin
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
     Result := ParseCSizeof();
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
+  begin
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := CParseTypesCompatible;
+    ASTTk[Result] := Ord(tyInteger);
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and ((CurTok.SVal = '_Alignof') or (CurTok.SVal = '__alignof__')
@@ -5738,9 +5926,11 @@ begin
         Error('expected a label name after && (GNU labels-as-values)');
       Result := AllocNode(AN_LABELADDR);
       { CurTok is Tokens[TokPos - 1] -- the same spelling AN_GOTO and AN_LABEL
-        use to capture a label name, so all three name it identically. }
-      ASTSOffset[Result] := Tokens[TokPos - 1].SOffset;
-      ASTSLen[Result] := Tokens[TokPos - 1].SLen;
+        use to capture a label name, so all three name it identically
+        (CLabelSpan: a __label__ name resolves to its block's spelling). }
+      CLabelSpan(TokPos - 1, labOff, labLen);
+      ASTSOffset[Result] := labOff;
+      ASTSLen[Result] := labLen;
       ASTTk[Result] := Ord(tyPointer);
       Next;
       Exit;
@@ -10783,7 +10973,7 @@ begin
 end;
 
 function ParseCStatementAST: Integer;
-var node, exprNode, seq, seq2, blk: Integer;
+var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
@@ -11024,6 +11214,16 @@ begin
     ASTSLen[node] := 1;   { C switch-case MARKER flag (distinct from a Pascal AN_CASE
                             statement, whose ASTRight is a branch chain) — the switch
                             lowering turns it into an IR_LABEL dispatch target. }
+    { gcc's case RANGE, `case LO ... HI:` (NetBSD: `case 'a' ... 'z':`). The
+      lexer gives `...` as three dots. HI rides as an AN_INT_LIT in ASTLeft,
+      which a plain marker leaves at -1; the dispatch scan tests both ends.
+      An empty range (LO > HI) matches nothing, as in gcc. }
+    if CurTok.Kind = tkDot then
+    begin
+      Next; Expect(tkDot, '...'); Expect(tkDot, '...');
+      ASTLeft[node] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTLeft[node]] := CEvalConstExpr;
+    end;
     Expect(tkColon, ':');
     Result := node;
     Exit;
@@ -11227,11 +11427,28 @@ begin
     end;
     if CurTok.Kind <> tkIdent then Error('expected label name after goto');
     node := AllocNode(AN_GOTO);
-    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
-    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    CLabelSpan(TokPos - 1, labOff, labLen);
+    ASTSOffset[node] := labOff;
+    ASTSLen[node] := labLen;
     Next;
     Eat(tkSemicolon);
     Result := node;
+    Exit;
+  end;
+
+  { `__label__ a, b;` -- GNU local labels (CLocalLabPush). Declares, emits
+    nothing. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__label__') then
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      CLocalLabPush(TokPos - 1);
+      Next;
+      if CurTok.Kind = tkComma then Next else Break;
+    end;
+    Expect(tkSemicolon, ';');
+    Result := -1;
     Exit;
   end;
 
@@ -11241,13 +11458,14 @@ begin
     { Register the label name so AN_LABEL/AN_GOTO resolve it (C labels are not
       pre-declared; the table is reset per function in ParseCSubroutine). }
     if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
-    GotoLabelNOff[GotoLabelCount] := Tokens[TokPos - 1].SOffset;
-    GotoLabelNLen[GotoLabelCount] := Tokens[TokPos - 1].SLen;
+    CLabelSpan(TokPos - 1, labOff, labLen);
+    GotoLabelNOff[GotoLabelCount] := labOff;
+    GotoLabelNLen[GotoLabelCount] := labLen;
     GotoLabelCodePos[GotoLabelCount] := -1;
     Inc(GotoLabelCount);
     node := AllocNode(AN_LABEL);
-    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
-    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    ASTSOffset[node] := labOff;
+    ASTSLen[node] := labLen;
     Next; Next;    { consume ident and colon }
     { C 6.8.1: a label PREFIXES a statement — they are ONE statement. Returning
       the label alone detached the following statement from an enclosing
@@ -11297,9 +11515,10 @@ begin
 end;
 
 function ParseCBlockAST: Integer;
-var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark, labMark: Integer;
 begin
   Expect(tkBegin, '{');
+  labMark := CLocalLabCount;
   { C block scope: an inner `int v` SHADOWS an outer v (FindSym's hash chain
     is newest-first, so the inner decl wins while in scope) and DIES at the
     closing brace — implemented by blanking the names of locals declared
@@ -11326,6 +11545,7 @@ begin
   end;
   Expect(tkEnd, '}');
   CTagLeaveBlock(tagMark);
+  CLocalLabCount := labMark;
   { End of scope: unhook this block's locals from their hash chains so name
     lookup can't bind them anymore. AST nodes already hold sym INDICES, which
     stay valid (codegen, DWARF); block-scope statics are skGlobal (BSS) and
@@ -11370,9 +11590,10 @@ end;
 
 function ParseCStmtExprAST: Integer;
 var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
-    prevStmt, valNode, comma: Integer;
+    prevStmt, valNode, comma, labMark, lq, lq2: Integer;
 begin
   Expect(tkBegin, '{');
+  labMark := CLocalLabCount;
   tagMark := CTagEnterBlock;
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
@@ -11398,6 +11619,29 @@ begin
   end;
   Expect(tkEnd, '}');
   CTagLeaveBlock(tagMark);
+  CLocalLabCount := labMark;
+  { A LABELLED last statement (`out: 1;`, the local-label idiom) arrives as
+    AN_BLOCK(SEQ(AN_LABEL, SEQ(expr))). Its value is the expression's, so the
+    label goes into the side-effect block and the expression stays the value. }
+  if (prevStmt >= 0) and (ASTKind[prevStmt] = AN_BLOCK) then
+  begin
+    lq := ASTLeft[prevStmt];
+    if (lq >= 0) and (ASTKind[lq] = AN_SEQ) and (ASTLeft[lq] >= 0) and
+       (ASTKind[ASTLeft[lq]] = AN_LABEL) then
+    begin
+      lq2 := ASTRight[lq];
+      if (lq2 >= 0) and (ASTKind[lq2] = AN_SEQ) and (ASTRight[lq2] = -1) and
+         not CNodeIsStatementKind(ASTLeft[lq2]) then
+      begin
+        seqNode := AllocNode(AN_SEQ);
+        ASTLeft[seqNode] := ASTLeft[lq];
+        if lastSeq = -1 then ASTLeft[blockNode] := seqNode
+        else ASTRight[lastSeq] := seqNode;
+        lastSeq := seqNode;
+        prevStmt := ASTLeft[lq2];
+      end;
+    end;
+  end;
   { last statement decides the value: an expression yields it; a structural
     statement makes the whole thing void — push it into the block too. }
   if CNodeIsStatementKind(prevStmt) then
@@ -11546,7 +11790,7 @@ begin
 end;
 
 function CBraceFlatIntInitCountAt(openIdx: Integer; allowFloat: Boolean): Integer;
-var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen, dIdx, subDepth: Integer; sawValue: Boolean;
 begin
   { Returns the element COUNT of a flat integer brace init = max index + 1,
     honouring `[k] =` array designators (C 6.7.8) so `{5, [2]=2, 3}` counts as
@@ -11556,12 +11800,26 @@ begin
   depth := 1;
   sawValue := False;
   ei := 0; maxSeen := -1;
+  subDepth := 0;
   j := openIdx + 1;
   while (depth > 0) and (j < TokCount) do
   begin
     case Tokens[j].Kind of
       tkBegin: begin Result := -1; Exit; end;   { nested aggregate -> not flat }
+      tkRBrack:
+        { closes a SUBSCRIPT opened mid-element (below); a designator's `]` is
+          stepped over by its own arm and never reaches here }
+        if subDepth > 0 then Dec(subDepth)
+        else begin Result := -1; Exit; end;
       tkLBrack:
+        if sawValue then
+          { MID-ELEMENT `[` is a subscript, not a designator: `offsetof(T,
+            n.y[1])` expands to `...->n.y[1]))`. Read as `[1] =` it moved the
+            running index, and `{ offsetof(T, n.y[1]), 7 }` counted 3
+            elements where gcc has 2. A designator only ever STARTS an
+            element. }
+          Inc(subDepth)
+        else
         begin
           { `[<int>] =` element designator repositions the running index. Only a
             literal index is understood here (the scanner can't fold consts). A
@@ -18651,7 +18909,8 @@ end;
   (CEvalConstExpr is forward-declared at the top of the C parser.) }
 
 function CEvalConstOffsetofAddress: Int64;
-var parenDepth, recId: Integer;
+var parenDepth, recId, fldTotal, fldNDims, subK, subDiv, subSpan, nextRec: Integer;
+    subIdx: Int64;
     fieldName, savedFnPtrName: AnsiString;
     savedIsVoid, savedFnRetIsFunc: Boolean;
     savedPtrDepth, savedElemTk, savedElemRec, savedPtrBaseTk, savedPtrBaseRec: Integer;
@@ -18728,15 +18987,43 @@ begin
         construct with one loop, not a case and a special case.
 
         RecFieldRecId returns REC_NONE for a field that is not itself a record,
-        which ends the walk naturally at the last link. }
+        which ends the walk naturally at the last link.
+
+        A link may carry SUBSCRIPTS: `offsetof(T, b[2])`, `offsetof(T, n.y[3])`
+        (gcc's __builtin_offsetof takes them; NetBSD's rump sources use them).
+        Each `[i]` adds i times the stride of that dimension: the field's whole
+        size divided by the product of the spans so far. This walk used to stop
+        at the `[`, leave it unconsumed, and the initialiser parse never came
+        back (a hang, not an error). }
       while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
       begin
         Next;
         if CurTok.Kind <> tkIdent then Break;
         fieldName := CurTok.SVal;
         Result := Result + RecFieldOffset(recId, fieldName);
-        recId := RecFieldRecId(recId, fieldName);
+        nextRec := RecFieldRecId(recId, fieldName);
         Next;
+        if CurTok.Kind = tkLBrack then
+        begin
+          fldTotal := RecFieldByteSize(recId, fieldName);
+          fldNDims := RecFieldArrNDims(recId, fieldName);
+          subK := 0;
+          subDiv := 1;
+          while CurTok.Kind = tkLBrack do
+          begin
+            Next;
+            subIdx := CEvalConstExpr;
+            Expect(tkRBrack, ']');
+            if fldNDims >= 2 then subSpan := RecFieldArrDimSpanAt(recId, fieldName, subK)
+            else subSpan := RecFieldArrLen(recId, fieldName);
+            if subSpan <= 0 then
+              Error('C: offsetof subscript on a member whose array extent is not known here: ' + fieldName);
+            subDiv := subDiv * subSpan;
+            Result := Result + subIdx * (fldTotal div subDiv);
+            Inc(subK);
+          end;
+        end;
+        recId := nextRec;
       end;
       while (parenDepth > 0) and (CurTok.Kind = tkRParen) do
       begin
@@ -18915,7 +19202,7 @@ begin
 end;
 
 function CEvalConstPrimary: Int64;
-var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW: Boolean;
+var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst: Boolean;
 begin
   wasCall := False;
   Result := 0;
@@ -19045,6 +19332,26 @@ begin
   begin
     Result := CParseAlignof;
     CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
+  end
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
+    Result := CParseTypesCompatible
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_constant_p') and
+          (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { In a CONSTANT expression (an array size: NetBSD's sys/bitops.h ilog2
+      in `bmempools[NMEMPOOLS]`) the answer is whether the operand folds
+      here: 1 for `4`, 0 for a name that is not a constant. The expression
+      parser's answer stays 0 (see ParseCUnary's call arm), which is the
+      sound direction there; here the operand is folded anyway, so the
+      constant arm is the one gcc takes too. }
+    Next; Next;   { name, ( }
+    savedNonConst := CConstExprSawNonConst;
+    CConstExprSawNonConst := False;
+    CEvalConstExpr;
+    if CConstExprSawNonConst then Result := 0 else Result := 1;
+    CConstExprSawNonConst := savedNonConst;
+    Expect(tkRParen, ')');
+    CConstUns := False; CConstWide := False;
   end
   else if CurTok.Kind = tkIdent then
   begin

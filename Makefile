@@ -28394,6 +28394,45 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_setitimer26 "$$(timeout 20 $(TESTTMP)/c_setitimer26)" "$$(timeout 20 $(TESTTMP)/c_setitimer_gcc)"
 	./$(COMPILER) --target=i386 test/c_crtl_setitimer.c $(TESTTMP)/c_setitimer26_i386 >/dev/null
 	tools/expect_same.sh i386/c_setitimer26 "$$(timeout 20 tools/run_target.sh i386 $(TESTTMP)/c_setitimer26_i386)" "$$(timeout 20 $(TESTTMP)/c_setitimer_gcc)"
+	# GNU C extensions NetBSD's rump sources use, each diffed against gcc:
+	# case ranges, __label__ local labels, __builtin_offsetof with subscripts
+	# (LP64 layout only: the i386 offsets differ from x86-64 gcc's).
+	./$(COMPILER) test/c_gnu_case_range.c $(TESTTMP)/c_caserange26
+	@gcc -o $(TESTTMP)/c_caserange26_gcc test/c_gnu_case_range.c
+	tools/expect_same.sh c_caserange26 "$$(timeout 20 $(TESTTMP)/c_caserange26)" "$$(timeout 20 $(TESTTMP)/c_caserange26_gcc)"
+	./$(COMPILER) --target=i386 test/c_gnu_case_range.c $(TESTTMP)/c_caserange26_i386 >/dev/null
+	tools/expect_same.sh i386/c_caserange26 "$$(timeout 20 tools/run_target.sh i386 $(TESTTMP)/c_caserange26_i386)" "$$(timeout 20 $(TESTTMP)/c_caserange26_gcc)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 || command -v qemu-aarch64-static >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_gnu_case_range.c $(TESTTMP)/c_caserange26_aarch64 >/dev/null || { echo "c_caserange26 aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_caserange26 "$$(timeout 20 tools/run_target.sh aarch64 $(TESTTMP)/c_caserange26_aarch64)" "$$(timeout 20 $(TESTTMP)/c_caserange26_gcc)" || exit 1; \
+	else echo "=== c_caserange26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
+	./$(COMPILER) test/c_gnu_local_label.c $(TESTTMP)/c_loclabel26
+	@gcc -o $(TESTTMP)/c_loclabel26_gcc test/c_gnu_local_label.c
+	tools/expect_same.sh c_loclabel26 "$$(timeout 20 $(TESTTMP)/c_loclabel26)" "$$(timeout 20 $(TESTTMP)/c_loclabel26_gcc)"
+	./$(COMPILER) --target=i386 test/c_gnu_local_label.c $(TESTTMP)/c_loclabel26_i386 >/dev/null
+	tools/expect_same.sh i386/c_loclabel26 "$$(timeout 20 tools/run_target.sh i386 $(TESTTMP)/c_loclabel26_i386)" "$$(timeout 20 $(TESTTMP)/c_loclabel26_gcc)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 || command -v qemu-aarch64-static >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_gnu_local_label.c $(TESTTMP)/c_loclabel26_aarch64 >/dev/null || { echo "c_loclabel26 aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_loclabel26 "$$(timeout 20 tools/run_target.sh aarch64 $(TESTTMP)/c_loclabel26_aarch64)" "$$(timeout 20 $(TESTTMP)/c_loclabel26_gcc)" || exit 1; \
+	else echo "=== c_loclabel26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
+	./$(COMPILER) test/c_gnu_builtin_offsetof.c $(TESTTMP)/c_bioffsetof26
+	@gcc -o $(TESTTMP)/c_bioffsetof26_gcc test/c_gnu_builtin_offsetof.c
+	tools/expect_same.sh c_bioffsetof26 "$$(timeout 20 $(TESTTMP)/c_bioffsetof26)" "$$(timeout 20 $(TESTTMP)/c_bioffsetof26_gcc)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 || command -v qemu-aarch64-static >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_gnu_builtin_offsetof.c $(TESTTMP)/c_bioffsetof26_aarch64 >/dev/null || { echo "c_bioffsetof26 aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_bioffsetof26 "$$(timeout 20 tools/run_target.sh aarch64 $(TESTTMP)/c_bioffsetof26_aarch64)" "$$(timeout 20 $(TESTTMP)/c_bioffsetof26_gcc)" || exit 1; \
+	else echo "=== c_bioffsetof26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
+	# __builtin_return_address/prefetch/unreachable/isnan/types_compatible_p,
+	# and __builtin_constant_p folded in an array size.
+	./$(COMPILER) test/c_gnu_builtins_rump.c $(TESTTMP)/c_gnubuiltins26
+	@gcc -O0 -w -o $(TESTTMP)/c_gnubuiltins26_gcc test/c_gnu_builtins_rump.c
+	tools/expect_same.sh c_gnubuiltins26 "$$(timeout 20 $(TESTTMP)/c_gnubuiltins26)" "$$(timeout 20 $(TESTTMP)/c_gnubuiltins26_gcc)"
+	./$(COMPILER) --target=i386 test/c_gnu_builtins_rump.c $(TESTTMP)/c_gnubuiltins26_i386 >/dev/null
+	tools/expect_same.sh i386/c_gnubuiltins26 "$$(timeout 20 tools/run_target.sh i386 $(TESTTMP)/c_gnubuiltins26_i386)" "$$(timeout 20 $(TESTTMP)/c_gnubuiltins26_gcc)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 || command -v qemu-aarch64-static >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_gnu_builtins_rump.c $(TESTTMP)/c_gnubuiltins26_aarch64 >/dev/null || { echo "c_gnubuiltins26 aarch64 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh aarch64/c_gnubuiltins26 "$$(timeout 20 tools/run_target.sh aarch64 $(TESTTMP)/c_gnubuiltins26_aarch64)" "$$(timeout 20 $(TESTTMP)/c_gnubuiltins26_gcc)" || exit 1; \
+	else echo "=== c_gnubuiltins26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

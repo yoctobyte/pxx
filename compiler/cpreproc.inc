@@ -4218,6 +4218,13 @@ begin
   CPAddLiteral('__ATOMIC_RELEASE', '3');
   CPAddLiteral('__ATOMIC_ACQ_REL', '4');
   CPAddLiteral('__ATOMIC_SEQ_CST', '5');
+  { gcc's __builtin_offsetof(TYPE, DESIGNATOR), as the same address-of-member
+    form <stddef.h>'s offsetof uses: a member path with subscripts
+    (`b[2]`, `n.y[3]`) folds in a static initialiser too
+    (CEvalConstOffsetofAddress). `unsigned long` is size_t's width on every
+    pxx target (LP64 and ILP32). NetBSD's rump sources call the builtin by
+    name. }
+  CPPredefLine('__builtin_offsetof(t, m) ((unsigned long)&(((t *)0)->m))');
   if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
      or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
   begin

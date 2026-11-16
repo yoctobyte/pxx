@@ -345,7 +345,7 @@ end;
   dispatch can jump straight into the loop. C markers carry ASTSLen=1 (distinct
   from a Pascal AN_CASE statement / the Default(T) node). }
 procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer; var defaultLabel: Integer);
-var condNode, selSz: Integer; caseVal: Int64;
+var condNode, selSz, skipLabel: Integer; caseVal, hiVal: Int64;
 begin
   if node < 0 then Exit;
   if ASTKind[node] = AN_SWITCH then Exit;   { nested switch owns its own case labels }
@@ -361,6 +361,28 @@ begin
     if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
        (caseVal < 0) then
       caseVal := caseVal and ((Int64(1) shl (selSz * 8)) - 1);
+    { `case LO ... HI:` -- HI in an AN_INT_LIT child (cparser.inc). Two
+      compares in the selector's type: below LO skips, at most HI jumps. }
+    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_INT_LIT) then
+    begin
+      hiVal := ASTIVal[ASTLeft[node]];
+      if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
+         (hiVal < 0) then
+        hiVal := hiVal and ((Int64(1) shl (selSz * 8)) - 1);
+      skipLabel := IRNewLabel;
+      condNode := IRAppend(IR_BINOP,
+        IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
+        IRAppend(IR_CONST_INT, -1, -1, -1, caseVal, selTk),
+        Ord(tkGe), 0, Ord(tyBoolean));
+      IRAppend(IR_JUMP_IF_FALSE, skipLabel, condNode, -1, 0, 0);
+      condNode := IRAppend(IR_BINOP,
+        IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
+        IRAppend(IR_CONST_INT, -1, -1, -1, hiVal, selTk),
+        Ord(tkGt), 0, Ord(tyBoolean));
+      IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[node], condNode, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, skipLabel, 0);
+      Exit;
+    end;
     condNode := IRAppend(IR_BINOP,
       IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
       IRAppend(IR_CONST_INT, -1, -1, -1, caseVal, selTk),
