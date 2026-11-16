@@ -618,12 +618,11 @@ _none_
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 
-## backlog-windows (3)
+## backlog-windows (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-pcl-tk-windows-compat | M | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
-| feature-pcl-win32-widgetset | M | 25→30 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 
 ## backlog-docs (1)
@@ -1018,9 +1017,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4453)
+## done (4454)
 
-4453 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4454 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (90)
 
@@ -1516,6 +1515,7 @@ _none_
 - [p 30] [A+O] feature-opt-a-wide-string-literal-should-be-a-static-block-not-a-runtime-transcode
 - [p 30] [P] feature-pascal-corpus-passrc
 - [p 30] [P] feature-pascal-management-operators-on-a-class-field
+- [p 30] [B] feature-pcl-cross-platform-gui
 - [p 30] [W] feature-web-syndication-feeds
 - [p 30] [C+S] feature-xtensa-freestanding-objects-carry-the-idf-application-runtime
 - [p 30] [A] perf-an-open-array-constructor-argument-is-heap-built-per-call
@@ -1621,11 +1621,11 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **5** — decide-t-the-full-suite-hook-refuses-prose-about-the-suite
-- **3** — feature-port-windows-pe
 - **2** — decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - **2** — decide-release-signing-key-custody
 - **2** — feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
 - **2** — feature-a-unreferenced-class-rtti-keeps-every-method-alive
+- **2** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **2** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 - **2** — task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize
@@ -1670,7 +1670,6 @@ _none_
 - **1** — feature-pal-esp-posix-fd-semantics
 - **1** — feature-pascal-management-operators-copy-and-addref
 - **1** — feature-pascal-management-operators-nested-and-array
-- **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
 - **1** — feature-release-checksums-repro
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host

@@ -9,7 +9,7 @@ blocked-by: [feature-pcl-seam-seal, feature-port-windows-pe]
 # PCL — native Win32 widgetset (user32/gdi32, zero-dep, best-effort)
 
 - **Type:** feature (**Track B** — `lib/pcl`, built with `$(PXX_STABLE)`).
-- **Status:** backlog. Child of [[feature-pcl-cross-platform-gui]].
+- **Status:** done
   **Blocked-by two lanes:** [[feature-pcl-seam-seal]] (Track B — a total seam to
   implement against) **and** [[feature-port-windows-pe]] (Track A — a PE that boots +
   the IAT to import user32/gdi32/kernel32). Cannot start until both land.
@@ -94,3 +94,6 @@ No Windows box exists — Wine is the only oracle and is not pixel-faithful. So:
   GTK code).
 - Gate: `make lib-test` stays green on Linux; Windows GUI is Wine-smoke best-effort, NOT
   a byte-identical or pixel-parity gate.
+
+## Log
+- 2026-11-16 — resolved, commit c1b6577315.
