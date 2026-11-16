@@ -19525,6 +19525,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/casm_kernel_user_mode_subset.c $(TESTTMP)/casm_kernel_um
 	tools/expect_same.sh casm_kernel_um "$$($(TESTTMP)/casm_kernel_um)" "$$(printf 'far return cs=0x33\nes roundtrip 1\nimm 37\nlabels 15')"
 	tools/casm_sysinsn_vs_gcc.sh ./$(COMPILER) test/casm_kernel_system_instructions.c $(TESTTMP)/casm_sysinsn
+	# -nostdinc / --freestanding: no crtl header synthesised for a hand
+	# prototype; htonl stays an undefined symbol (Gibux g03).
+	./$(COMPILER) --emit-obj -nostdinc test/c_nostdinc_no_header_synthesis.c $(TESTTMP)/c_nostdinc_nosynth.o > /dev/null
+	nm $(TESTTMP)/c_nostdinc_nosynth.o | grep -q ' U htonl$$'
+	./$(COMPILER) --emit-obj --freestanding -Itest/include_kernel_trap test/c_nostdinc_no_header_synthesis.c $(TESTTMP)/c_fs_nosynth.o > /dev/null
+	nm $(TESTTMP)/c_fs_nosynth.o | grep -q ' U htonl$$'
 	# --emit-obj --freestanding (Gibux): no .init_array/.fini_array, no crtl body
 	# pulled in by a libc header except stdarg's helpers, a .bss without the
 	# signal alternate stack. va_arg is run through a gcc-linked driver.

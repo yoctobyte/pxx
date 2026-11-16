@@ -15315,6 +15315,14 @@ var
 begin
   Result := -1;
   if CUseSystemLibs then Exit;
+  { -nostdinc and --freestanding say the program brings its own headers, as
+    with gcc. The synthetic `#include <netinet/in.h>` for a hand-written
+    `htonl` prototype then either failed (-nostdinc: "include file not
+    found", nothing on the <> path) or, with kernel -I roots, pulled in the
+    KERNEL's netinet/in.h, a header the file never asked for. A prototype
+    with no definition stays an undefined symbol, which is what gcc leaves
+    for the link. NetBSD's rump tree hit this in 141 files (Gibux item 13). }
+  if NoStdInc or FreestandingMode then Exit;
   wantList := '';
   for i := 0 to ProcCount - 1 do
     if ProcExternal[i] then
