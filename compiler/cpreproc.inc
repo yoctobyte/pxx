@@ -513,6 +513,245 @@ begin
   CPDefine(s, 1, Length(s));
 end;
 
+{ The integer type families gcc predefines on hosted x86-64 and i386
+  (`gcc -dM -E` and `gcc -m32 -dM -E`, gcc 15.2 on plexus: every *_TYPE__,
+  *_MAX__/_MIN__, *_WIDTH__, *_C(c) and __SIZEOF_SIZE_T__ and kin
+  line, minus floating point). NetBSD's sys/common_ansi.h #errors without
+  __PTRDIFF_TYPE__ and builds its own stdint on the rest, so rump-pxx stopped
+  at its first header (g01). The ESP block above is the same idea for newlib.
+  bug-c-gcc-predefined-type-macros-and-pragma-operator-missing }
+{ x86-64 (LP64) }
+procedure CPAddHostedGccTypePredefs64;
+begin
+  CPPredefLine('__CHAR16_TYPE__ short unsigned int');
+  CPPredefLine('__CHAR32_TYPE__ unsigned int');
+  CPPredefLine('__CHAR8_TYPE__ unsigned char');
+  CPPredefLine('__INT16_C(c) c');
+  CPPredefLine('__INT16_MAX__ 0x7fff');
+  CPPredefLine('__INT16_TYPE__ short int');
+  CPPredefLine('__INT32_C(c) c');
+  CPPredefLine('__INT32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT32_TYPE__ int');
+  CPPredefLine('__INT64_C(c) c ## L');
+  CPPredefLine('__INT64_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INT64_TYPE__ long int');
+  CPPredefLine('__INT8_C(c) c');
+  CPPredefLine('__INT8_MAX__ 0x7f');
+  CPPredefLine('__INT8_TYPE__ signed char');
+  CPPredefLine('__INTMAX_C(c) c ## L');
+  CPPredefLine('__INTMAX_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INTMAX_TYPE__ long int');
+  CPPredefLine('__INTMAX_WIDTH__ 64');
+  CPPredefLine('__INTPTR_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INTPTR_TYPE__ long int');
+  CPPredefLine('__INTPTR_WIDTH__ 64');
+  CPPredefLine('__INT_FAST16_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INT_FAST16_TYPE__ long int');
+  CPPredefLine('__INT_FAST16_WIDTH__ 64');
+  CPPredefLine('__INT_FAST32_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INT_FAST32_TYPE__ long int');
+  CPPredefLine('__INT_FAST32_WIDTH__ 64');
+  CPPredefLine('__INT_FAST64_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INT_FAST64_TYPE__ long int');
+  CPPredefLine('__INT_FAST64_WIDTH__ 64');
+  CPPredefLine('__INT_FAST8_MAX__ 0x7f');
+  CPPredefLine('__INT_FAST8_TYPE__ signed char');
+  CPPredefLine('__INT_FAST8_WIDTH__ 8');
+  CPPredefLine('__INT_LEAST16_MAX__ 0x7fff');
+  CPPredefLine('__INT_LEAST16_TYPE__ short int');
+  CPPredefLine('__INT_LEAST16_WIDTH__ 16');
+  CPPredefLine('__INT_LEAST32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_LEAST32_TYPE__ int');
+  CPPredefLine('__INT_LEAST32_WIDTH__ 32');
+  CPPredefLine('__INT_LEAST64_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__INT_LEAST64_TYPE__ long int');
+  CPPredefLine('__INT_LEAST64_WIDTH__ 64');
+  CPPredefLine('__INT_LEAST8_MAX__ 0x7f');
+  CPPredefLine('__INT_LEAST8_TYPE__ signed char');
+  CPPredefLine('__INT_LEAST8_WIDTH__ 8');
+  CPPredefLine('__INT_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_WIDTH__ 32');
+  CPPredefLine('__LONG_LONG_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__LONG_LONG_WIDTH__ 64');
+  CPPredefLine('__LONG_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__LONG_WIDTH__ 64');
+  CPPredefLine('__PTRDIFF_MAX__ 0x7fffffffffffffffL');
+  CPPredefLine('__PTRDIFF_TYPE__ long int');
+  CPPredefLine('__PTRDIFF_WIDTH__ 64');
+  CPPredefLine('__SCHAR_MAX__ 0x7f');
+  CPPredefLine('__SCHAR_WIDTH__ 8');
+  CPPredefLine('__SHRT_MAX__ 0x7fff');
+  CPPredefLine('__SHRT_WIDTH__ 16');
+  CPPredefLine('__SIG_ATOMIC_MAX__ 0x7fffffff');
+  CPPredefLine('__SIG_ATOMIC_MIN__ (-__SIG_ATOMIC_MAX__ - 1)');
+  CPPredefLine('__SIG_ATOMIC_TYPE__ int');
+  CPPredefLine('__SIG_ATOMIC_WIDTH__ 32');
+  CPPredefLine('__SIZEOF_PTRDIFF_T__ 8');
+  CPPredefLine('__SIZEOF_SIZE_T__ 8');
+  CPPredefLine('__SIZEOF_WCHAR_T__ 4');
+  CPPredefLine('__SIZEOF_WINT_T__ 4');
+  CPPredefLine('__SIZE_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__SIZE_TYPE__ long unsigned int');
+  CPPredefLine('__SIZE_WIDTH__ 64');
+  CPPredefLine('__UINT16_C(c) c');
+  CPPredefLine('__UINT16_MAX__ 0xffff');
+  CPPredefLine('__UINT16_TYPE__ short unsigned int');
+  CPPredefLine('__UINT32_C(c) c ## U');
+  CPPredefLine('__UINT32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT32_TYPE__ unsigned int');
+  CPPredefLine('__UINT64_C(c) c ## UL');
+  CPPredefLine('__UINT64_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINT64_TYPE__ long unsigned int');
+  CPPredefLine('__UINT8_C(c) c');
+  CPPredefLine('__UINT8_MAX__ 0xff');
+  CPPredefLine('__UINT8_TYPE__ unsigned char');
+  CPPredefLine('__UINTMAX_C(c) c ## UL');
+  CPPredefLine('__UINTMAX_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINTMAX_TYPE__ long unsigned int');
+  CPPredefLine('__UINTPTR_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINTPTR_TYPE__ long unsigned int');
+  CPPredefLine('__UINT_FAST16_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINT_FAST16_TYPE__ long unsigned int');
+  CPPredefLine('__UINT_FAST32_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINT_FAST32_TYPE__ long unsigned int');
+  CPPredefLine('__UINT_FAST64_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINT_FAST64_TYPE__ long unsigned int');
+  CPPredefLine('__UINT_FAST8_MAX__ 0xff');
+  CPPredefLine('__UINT_FAST8_TYPE__ unsigned char');
+  CPPredefLine('__UINT_LEAST16_MAX__ 0xffff');
+  CPPredefLine('__UINT_LEAST16_TYPE__ short unsigned int');
+  CPPredefLine('__UINT_LEAST32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_LEAST32_TYPE__ unsigned int');
+  CPPredefLine('__UINT_LEAST64_MAX__ 0xffffffffffffffffUL');
+  CPPredefLine('__UINT_LEAST64_TYPE__ long unsigned int');
+  CPPredefLine('__UINT_LEAST8_MAX__ 0xff');
+  CPPredefLine('__UINT_LEAST8_TYPE__ unsigned char');
+  CPPredefLine('__WCHAR_MAX__ 0x7fffffff');
+  CPPredefLine('__WCHAR_MIN__ (-__WCHAR_MAX__ - 1)');
+  CPPredefLine('__WCHAR_TYPE__ int');
+  CPPredefLine('__WCHAR_WIDTH__ 32');
+  CPPredefLine('__WINT_MAX__ 0xffffffffU');
+  CPPredefLine('__WINT_MIN__ 0U');
+  CPPredefLine('__WINT_TYPE__ unsigned int');
+  CPPredefLine('__WINT_WIDTH__ 32');
+end;
+
+{ i386 (ILP32) }
+procedure CPAddHostedGccTypePredefs32;
+begin
+  CPPredefLine('__CHAR16_TYPE__ short unsigned int');
+  CPPredefLine('__CHAR32_TYPE__ unsigned int');
+  CPPredefLine('__CHAR8_TYPE__ unsigned char');
+  CPPredefLine('__INT16_C(c) c');
+  CPPredefLine('__INT16_MAX__ 0x7fff');
+  CPPredefLine('__INT16_TYPE__ short int');
+  CPPredefLine('__INT32_C(c) c');
+  CPPredefLine('__INT32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT32_TYPE__ int');
+  CPPredefLine('__INT64_C(c) c ## LL');
+  CPPredefLine('__INT64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INT64_TYPE__ long long int');
+  CPPredefLine('__INT8_C(c) c');
+  CPPredefLine('__INT8_MAX__ 0x7f');
+  CPPredefLine('__INT8_TYPE__ signed char');
+  CPPredefLine('__INTMAX_C(c) c ## LL');
+  CPPredefLine('__INTMAX_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INTMAX_TYPE__ long long int');
+  CPPredefLine('__INTMAX_WIDTH__ 64');
+  CPPredefLine('__INTPTR_MAX__ 0x7fffffff');
+  CPPredefLine('__INTPTR_TYPE__ int');
+  CPPredefLine('__INTPTR_WIDTH__ 32');
+  CPPredefLine('__INT_FAST16_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_FAST16_TYPE__ int');
+  CPPredefLine('__INT_FAST16_WIDTH__ 32');
+  CPPredefLine('__INT_FAST32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_FAST32_TYPE__ int');
+  CPPredefLine('__INT_FAST32_WIDTH__ 32');
+  CPPredefLine('__INT_FAST64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INT_FAST64_TYPE__ long long int');
+  CPPredefLine('__INT_FAST64_WIDTH__ 64');
+  CPPredefLine('__INT_FAST8_MAX__ 0x7f');
+  CPPredefLine('__INT_FAST8_TYPE__ signed char');
+  CPPredefLine('__INT_FAST8_WIDTH__ 8');
+  CPPredefLine('__INT_LEAST16_MAX__ 0x7fff');
+  CPPredefLine('__INT_LEAST16_TYPE__ short int');
+  CPPredefLine('__INT_LEAST16_WIDTH__ 16');
+  CPPredefLine('__INT_LEAST32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_LEAST32_TYPE__ int');
+  CPPredefLine('__INT_LEAST32_WIDTH__ 32');
+  CPPredefLine('__INT_LEAST64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INT_LEAST64_TYPE__ long long int');
+  CPPredefLine('__INT_LEAST64_WIDTH__ 64');
+  CPPredefLine('__INT_LEAST8_MAX__ 0x7f');
+  CPPredefLine('__INT_LEAST8_TYPE__ signed char');
+  CPPredefLine('__INT_LEAST8_WIDTH__ 8');
+  CPPredefLine('__INT_MAX__ 0x7fffffff');
+  CPPredefLine('__INT_WIDTH__ 32');
+  CPPredefLine('__LONG_LONG_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__LONG_LONG_WIDTH__ 64');
+  CPPredefLine('__LONG_MAX__ 0x7fffffffL');
+  CPPredefLine('__LONG_WIDTH__ 32');
+  CPPredefLine('__PTRDIFF_MAX__ 0x7fffffff');
+  CPPredefLine('__PTRDIFF_TYPE__ int');
+  CPPredefLine('__PTRDIFF_WIDTH__ 32');
+  CPPredefLine('__SCHAR_MAX__ 0x7f');
+  CPPredefLine('__SCHAR_WIDTH__ 8');
+  CPPredefLine('__SHRT_MAX__ 0x7fff');
+  CPPredefLine('__SHRT_WIDTH__ 16');
+  CPPredefLine('__SIG_ATOMIC_MAX__ 0x7fffffff');
+  CPPredefLine('__SIG_ATOMIC_MIN__ (-__SIG_ATOMIC_MAX__ - 1)');
+  CPPredefLine('__SIG_ATOMIC_TYPE__ int');
+  CPPredefLine('__SIG_ATOMIC_WIDTH__ 32');
+  CPPredefLine('__SIZEOF_PTRDIFF_T__ 4');
+  CPPredefLine('__SIZEOF_SIZE_T__ 4');
+  CPPredefLine('__SIZEOF_WCHAR_T__ 4');
+  CPPredefLine('__SIZEOF_WINT_T__ 4');
+  CPPredefLine('__SIZE_MAX__ 0xffffffffU');
+  CPPredefLine('__SIZE_TYPE__ unsigned int');
+  CPPredefLine('__SIZE_WIDTH__ 32');
+  CPPredefLine('__UINT16_C(c) c');
+  CPPredefLine('__UINT16_MAX__ 0xffff');
+  CPPredefLine('__UINT16_TYPE__ short unsigned int');
+  CPPredefLine('__UINT32_C(c) c ## U');
+  CPPredefLine('__UINT32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT32_TYPE__ unsigned int');
+  CPPredefLine('__UINT64_C(c) c ## ULL');
+  CPPredefLine('__UINT64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__UINT64_TYPE__ long long unsigned int');
+  CPPredefLine('__UINT8_C(c) c');
+  CPPredefLine('__UINT8_MAX__ 0xff');
+  CPPredefLine('__UINT8_TYPE__ unsigned char');
+  CPPredefLine('__UINTMAX_C(c) c ## ULL');
+  CPPredefLine('__UINTMAX_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__UINTMAX_TYPE__ long long unsigned int');
+  CPPredefLine('__UINTPTR_MAX__ 0xffffffffU');
+  CPPredefLine('__UINTPTR_TYPE__ unsigned int');
+  CPPredefLine('__UINT_FAST16_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_FAST16_TYPE__ unsigned int');
+  CPPredefLine('__UINT_FAST32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_FAST32_TYPE__ unsigned int');
+  CPPredefLine('__UINT_FAST64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__UINT_FAST64_TYPE__ long long unsigned int');
+  CPPredefLine('__UINT_FAST8_MAX__ 0xff');
+  CPPredefLine('__UINT_FAST8_TYPE__ unsigned char');
+  CPPredefLine('__UINT_LEAST16_MAX__ 0xffff');
+  CPPredefLine('__UINT_LEAST16_TYPE__ short unsigned int');
+  CPPredefLine('__UINT_LEAST32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_LEAST32_TYPE__ unsigned int');
+  CPPredefLine('__UINT_LEAST64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__UINT_LEAST64_TYPE__ long long unsigned int');
+  CPPredefLine('__UINT_LEAST8_MAX__ 0xff');
+  CPPredefLine('__UINT_LEAST8_TYPE__ unsigned char');
+  CPPredefLine('__WCHAR_MAX__ 0x7fffffffL');
+  CPPredefLine('__WCHAR_MIN__ (-__WCHAR_MAX__ - 1)');
+  CPPredefLine('__WCHAR_TYPE__ long int');
+  CPPredefLine('__WCHAR_WIDTH__ 32');
+  CPPredefLine('__WINT_MAX__ 0xffffffffU');
+  CPPredefLine('__WINT_MIN__ 0U');
+  CPPredefLine('__WINT_TYPE__ unsigned int');
+  CPPredefLine('__WINT_WIDTH__ 32');
+end;
+
 { The integer type families gcc predefines for the ESP toolchains
   (riscv32-esp-elf and xtensa-esp-elf 15.2, ilp32: their -dM dumps agree on
   every line here). newlib's <stdint.h>, <inttypes.h> and sys/_intsup.h are
@@ -3536,6 +3775,78 @@ begin
   Result := CPRangeIsLiteral(line, a, p - 1, 'include');
 end;
 
+{ Emit one macro-expanded line, running each C99 `_Pragma("...")` in it.
+  `_Pragma` is an operator that usually comes out of a macro -- NetBSD's
+  sys/cdefs.h spells __BEGIN_PUBLIC_DECLS as _Pragma("GCC visibility
+  push(default)") -- so the directive scanner never sees it; it reached the
+  parser as a stray identifier (g02). The string is destringized (\" and \\)
+  and handed to CPPragma at this exact output position, so a
+  `_Pragma("pack(1)")` places its pack marker where the operator stood, as
+  `#pragma pack(1)` does. String and character literals are skipped, and a
+  `_Pragma` not followed by `( "..." )` is left alone.
+  bug-c-gcc-predefined-type-macros-and-pragma-operator-missing }
+procedure CPEmitExpanded(const t: AnsiString);
+var i, n, from, j, k: Integer; q: Char; body: AnsiString;
+begin
+  n := Length(t);
+  i := 1;
+  from := 1;
+  while i <= n do
+  begin
+    if (t[i] = '"') or (t[i] = '''') then
+    begin
+      q := t[i];
+      Inc(i);
+      while (i <= n) and (t[i] <> q) do
+      begin
+        if (t[i] = '\') and (i < n) then Inc(i);
+        Inc(i);
+      end;
+      Inc(i);
+    end
+    else if CPIsIdentChar(t[i]) then
+    begin
+      j := i;
+      while (j <= n) and CPIsIdentChar(t[j]) do Inc(j);
+      if (j - i = 7) and (Copy(t, i, 7) = '_Pragma') then
+      begin
+        k := j;
+        while (k <= n) and (t[k] in [' ', #9]) do Inc(k);
+        if (k <= n) and (t[k] = '(') then
+        begin
+          Inc(k);
+          while (k <= n) and (t[k] in [' ', #9]) do Inc(k);
+          if (k <= n) and (t[k] = '"') then
+          begin
+            Inc(k);
+            body := '';
+            while (k <= n) and (t[k] <> '"') do
+            begin
+              if (t[k] = '\') and (k < n) and (t[k + 1] in ['"', '\']) then Inc(k);
+              body := body + t[k];
+              Inc(k);
+            end;
+            Inc(k);   { closing quote }
+            while (k <= n) and (t[k] in [' ', #9]) do Inc(k);
+            if (k <= n) and (t[k] = ')') then
+            begin
+              if i > from then CPrepOutAppendStr(Copy(t, from, i - from));
+              if body <> '' then CPPragma(body, 1, Length(body));
+              CPrepOutAppendCh(' ');
+              from := k + 1;
+              j := k + 1;
+            end;
+          end;
+        end;
+      end;
+      i := j;
+    end
+    else
+      Inc(i);
+  end;
+  if from <= n then CPrepOutAppendStr(Copy(t, from, n - from + 1));
+end;
+
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
     savedFileId, savedLine, savedDepth: Integer;
@@ -3630,7 +3941,7 @@ begin
             SetLength(CPrepLineExp, 0);
             CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
             CPSyncLine;
-            CPrepOutAppendStr(CPrepLineExp);
+            CPEmitExpanded(CPrepLineExp);
             CPrepOutAppendCh(#10);
             CPDirective(cont, q, Length(cont), depth, baseDir);
             CPrepLine := '';
@@ -3650,7 +3961,7 @@ begin
         SetLength(CPrepLineExp, 0);
         CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
         CPSyncLine;
-        CPrepOutAppendStr(CPrepLineExp);
+        CPEmitExpanded(CPrepLineExp);
         CPrepOutAppendCh(#10);
       end;
     end
@@ -3659,7 +3970,7 @@ begin
       SetLength(CPrepLineExp, 0);
       CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
       CPSyncLine;
-      CPrepOutAppendStr(CPrepLineExp);
+      CPEmitExpanded(CPrepLineExp);
       CPrepOutAppendCh(#10);
     end;
   end;
@@ -3884,6 +4195,14 @@ begin
   if (TargetPlatform = PLATFORM_ESP) and
      ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
     CPAddEspGccTypePredefs;
+  if TargetPlatform = PLATFORM_POSIX then
+  begin
+    if TargetArch = TARGET_X86_64 then CPAddHostedGccTypePredefs64
+    else if TargetArch = TARGET_I386 then CPAddHostedGccTypePredefs32;
+  end;
+  { Every target but wasm writes ELF. NetBSD's sys/cdefs.h picks cdefs_aout.h
+    without it. bug-c-gcc-predefined-type-macros-and-pragma-operator-missing }
+  if TargetPlatform <> PLATFORM_WASI then CPAddLiteral('__ELF__', '1');
   { Byte order: every currently-supported target (x86-64/i386/aarch64/arm32/
     riscv32/xtensa) runs little-endian in this compiler's configuration — no
     big-endian target exists to make this conditional on. __BYTE_ORDER__ gates

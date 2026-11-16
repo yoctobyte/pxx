@@ -20856,6 +20856,9 @@ test-core: $(COMPILER)
 	# setenv/putenv/unsetenv/clearenv reach an exec'd child; BIG overflows crtl's 16K env buffer
 	$(COMPILER) test/c_env_exec.c $(TESTTMP)/c_envx > /dev/null
 	tools/expect_same.sh c_envx "$$(env -i KEEP=k DROP=d BIG=$$(head -c 20000 /dev/zero | tr '\0' x) PATH=/bin:/usr/bin $(TESTTMP)/c_envx)" "$$(cat test/c_env_exec.expected)"
+	# gcc's predefined type macros + __ELF__, and the _Pragma operator (rump-pxx g01, g02)
+	$(COMPILER) test/c_predef_pragma_op.c $(TESTTMP)/c_ppop > /dev/null
+	tools/expect_same.sh c_ppop "$$($(TESTTMP)/c_ppop)" "$$(cat test/c_predef_pragma_op.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

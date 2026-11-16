@@ -1,0 +1,6 @@
+sizes 8 8 8 4 8 4
+max 1 1
+c 1
+pub 7 pk 5 np 8
+macro 2 1
+_Pragma("pack(1)") stays text
