@@ -20865,6 +20865,9 @@ test-core: $(COMPILER)
 	# gcc's predefined type macros + __ELF__, and the _Pragma operator (rump-pxx g01, g02)
 	$(COMPILER) test/c_predef_pragma_op.c $(TESTTMP)/c_ppop > /dev/null
 	tools/expect_same.sh c_ppop "$$($(TESTTMP)/c_ppop)" "$$(cat test/c_predef_pragma_op.expected)"
+	# declarator shapes from NetBSD headers (rump-pxx g06 g07 g08 g23) + a typedef X crtl's printf must not see
+	$(COMPILER) test/c_declarator_shapes.c $(TESTTMP)/c_dcls > /dev/null
+	tools/expect_same.sh c_dcls "$$($(TESTTMP)/c_dcls)" "$$(cat test/c_declarator_shapes.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

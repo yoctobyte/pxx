@@ -573,11 +573,10 @@ _none_
 | task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision | B | 30 | task | ELEVEN names, not five, and the number changed because the SIX THAT MOVED CAME BACK as a deliberate duplicate on 2026-09-11. LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar are still declared only in lib/rtl/sysutils.pas; AllocMem, DynArraySize, SetString, sLineBreak, UTF8Decode and UTF8Encode are now declared in BOTH sysutils.pas and compiler/builtin/builtin.pas. Nothing here is undecided: lib/rtl and every external corpus build with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so a name that lives only in builtin/ is invisible to them. Measured three times -- `undefined variable (LowerCase)` from inside sysutils.pas, `undefined variable (StringOfChar)` at lib_strpchar.pas:49, and on seven `undefined variable (SetString)` in external/synapse/synautil.pas plus `undefined variable (UTF8Encode)` in testjsondata.pp, which took out four tstate rows for two days. THE TRIGGER IS A PIN whose stable_linux_amd64/default/builtin/builtin.pas carries these names; grep it there, that is the whole test. Then move the five and DELETE the six duplicates from sysutils.pas. Do NOT start before that pin exists. `Error` is a twelfth name and is NOT part of this row: it is compiler-internal here and needs sysutils' exception hierarchy first. | — |
 | task-b-four-fpc-build-artefacts-are-committed-under-lib-asmcore | B | 20 | task | `lib/asmcore/asmcore_base.{o,ppu}` and `lib/asmcore/asmcore_x64.{o,ppu}` are TRACKED IN GIT -- four FPC build artefacts committed at 3d3ed9ab3, in a directory `compiler/compiler.pas` uses and `make bootstrap` compiles with fpc. They are INERT TODAY and that is measured, not assumed: fpc records the source timestamp inside a ppu and rebuilds on any mismatch in either direction, so any checkout makes the .pas disagree with the recorded time and the unit is recompiled. What they are is two committed .ppu in a source tree that nobody knows are there, in the one directory where an fpc-side compile happens. The live version of the hazard is an OPTION change, which the source-time check cannot see: a ppu built with -dFOO is silently reused by a compile without it. Remove them and add the extensions to .gitignore; verify with `make bootstrap` plus the FPC seed canary, which is the consumer that would notice. | — |
 
-## backlog-cfront (23)
+## backlog-cfront (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-a-multi-name-typedef-declares-only-its-first-name | C | 60 | bug | `typedef int ta, tb;`, `typedef struct {...} S, *PS;` and `typedef int *a, *b;` register only the first name: every arm of ParseCTypedef (struct body, tagged struct, enum, generic) takes one name and skips to `;`. Loud (the later name is `undeclared identifier`), not silent. Each arm needs a comma loop that re-derives the type from the base plus the declarator's own stars. | — |
 | bug-c-a-pointer-typedef-loses-its-base-under-indexing | C | 50 | bug | `typedef char *str; str *c; *c[0]` loads 4 bytes instead of 1: a pointer typedef used as the base of a further pointer loses its ultimate base kind. Locals and struct members both; present in the frozen compiler too. | — |
 | bug-c-a-struct-returned-by-value-across-a-gcc-object-boundary-crashes | C | 50 | bug | A C function returning a struct BY VALUE, called across a pxx/gcc object boundary, crashes in both directions. pxx returns aggregates through a hidden destination in r10 (RetViaHiddenDest) for every C function, external ones included; SysV returns a <=16-byte struct in rax:rdx (or xmm) and a larger one through a hidden pointer in rdi, returned in rax. pxx calling gcc's `struct pt mkpt(int,int)` copies 8 bytes from the address it expects in rax and gets the struct's VALUE: SIGSEGV. gcc calling pxx's mkpt gets the same crash the other way. A 24-byte struct crashes too. libc's div()/ldiv() work, through the dynamic-import classifier. The codegen comments say it outright: 'true SysV sret (rdi, and rax:rdx for 16 bytes or less) is still not modelled'. | — |
 | bug-c-an-m-operand-dereference-on-i386-still-binds-a-copy | C | 40 | bug | The ATTBIND_MEMREG fix is x86-64 only: on i386 an \"m\" input that is a dereference still binds a frame-slot copy, so clflush/lock RMW act on the copy. | — |
@@ -1014,9 +1013,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4447)
+## done (4452)
 
-4447 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4452 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (90)
 
@@ -1164,7 +1163,6 @@ _none_
 - [p 60] [A] bug-a-the-address-of-a-string-element-is-the-literals-address
 - [p 60] [A] bug-a-the-pinned-compiler-cannot-build-live-lib-rtl-and-nothing-tracks-it [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [B] bug-b-val-of-a-float-is-not-correctly-rounded-while-strtofloat-of-the-same-string-is
-- [p 60] [C] bug-c-a-multi-name-typedef-declares-only-its-first-name
 - [p 60] [E] bug-e-every-world-reports-meta-name-rijn-so-a-banner-cannot-name-the-scene
 - [p 60] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]

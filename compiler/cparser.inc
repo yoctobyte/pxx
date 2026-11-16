@@ -263,6 +263,7 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
+procedure CSplitDeclarators(isTypedef: Boolean); forward;
 function CRecMissingFieldKind(recId: Integer): Integer; forward;
 procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forward;
 procedure CRefuseIncompleteSizeof(recId: Integer); forward;
@@ -7185,6 +7186,45 @@ begin
   if idx >= 0 then CTypedefProcSig[idx] := sigPi;
 end;
 
+{ Block-scope statics are skGlobal (BSS), so CTypedefShadowed's
+  skLocal/skParam rule did not see them: crtl's printf has
+  `static struct __crtl_dexp X;` and a USER `typedef struct {..} X;` turned
+  its `X.df[i] = 0;` into a declaration -- "expected C expression" inside
+  stdio.c for any program with a typedef named X. Each such symbol is noted
+  with the function that declared it, and shadows a typedef only there.
+  bug-c-a-block-scope-static-did-not-shadow-a-typedef }
+var CBlockStaticSym, CBlockStaticProc: array of Integer;
+    CBlockStaticCount: Integer;
+
+procedure CNoteBlockStatics(fromSym: Integer);
+var si: Integer;
+begin
+  for si := fromSym to SymCount - 1 do
+    if Syms[si].Kind = skGlobal then
+    begin
+      if CBlockStaticCount >= Length(CBlockStaticSym) then
+      begin
+        SetLength(CBlockStaticSym, CBlockStaticCount * 2 + 16);
+        SetLength(CBlockStaticProc, CBlockStaticCount * 2 + 16);
+      end;
+      CBlockStaticSym[CBlockStaticCount] := si;
+      CBlockStaticProc[CBlockStaticCount] := CurProc;
+      Inc(CBlockStaticCount);
+    end;
+end;
+
+function CIsBlockStaticHere(si: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := CBlockStaticCount - 1 downto 0 do
+    if CBlockStaticSym[k] = si then
+    begin
+      Result := (CurProc >= 0) and (CBlockStaticProc[k] = CurProc);
+      Exit;
+    end;
+end;
+
 function CTypedefShadowed(const name: AnsiString): Boolean;
 var si: Integer;
 begin
@@ -7203,7 +7243,8 @@ begin
     int x;` — c-testsuite 00022). Exact-case (C is case-sensitive; FindSym has a
     case-insensitive fallback). }
   Result := (si >= 0) and StrEqual(Syms[si].Name, name)
-            and (Syms[si].Kind in [skLocal, skParam]);
+            and ((Syms[si].Kind in [skLocal, skParam]) or
+                 ((Syms[si].Kind = skGlobal) and CIsBlockStaticHere(si)));
 end;
 
 function CIsTypeofWord(const w: AnsiString): Boolean;
@@ -10977,6 +11018,7 @@ var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
+    bsMark: Integer;   { SymCount before a block-scope static declaration: CNoteBlockStatics }
     localSawExtern: Boolean;   { a block-scope `extern`, likewise -- the declaration is parsed and DISCARDED; see the arm below }
     externDepth: Integer;      { nesting while discarding that declaration }
 begin
@@ -11161,8 +11203,10 @@ begin
       CLocalStaticDecl := True;
       CLocalThreadDecl := localSawThread;
       CLocalThreadSymCount := 0;
+      bsMark := SymCount;
       Result := ParseCLocalDeclAST;
       CLocalStaticDecl := False;
+      CNoteBlockStatics(bsMark);
       CLocalThreadDecl := False;
       if localSawThread then CAssignLocalThreadStorage;
       Exit;
@@ -16524,6 +16568,7 @@ begin
     end
     else if IsCTypeTok then
     begin
+      CSplitDeclarators(False);
       CExpandFnTypedefDecl;
       if CTopLevelIsFunc then ParseCSubroutine
       else ParseCGlobalVarDecl;
@@ -16614,6 +16659,7 @@ begin
       end
       else if IsCTypeTok then
       begin
+        CSplitDeclarators(False);
         CExpandFnTypedefDecl;
         if CTopLevelIsFunc then ParseCSubroutine
         else ParseCGlobalVarDecl;
@@ -21104,6 +21150,262 @@ begin
   end;
 end;
 
+{ `typedef SPEC A, *B, C[3];` -- a typedef with several declarators
+  registered only A; B and C were never types (NetBSD's sys/types.h
+  `typedef int32_t __devmajor_t, __devminor_t;`, then `(__devminor_t)x`
+  failed). Rewritten here, once, from the `typedef` token, into one typedef per
+  declarator:
+
+    typedef SPEC A; typedef SPEC' *B; typedef SPEC' C[3];
+
+  The comma BECOMES the `;` and `typedef SPEC'` is inserted after it, so every
+  original token -- and the attribute flags the lexer put on it -- stays where
+  it was. SPEC' is SPEC without an aggregate body: `typedef struct {..} X, *PX`
+  must name ONE struct, so an anonymous body is given a synthetic tag first
+  and the copies say `struct <tag>`. The first declarator is found from its
+  end: trailing ()/[] groups, then the name, or a `(*name)` group; stars and
+  qualifiers directly before it belong to it, not to SPEC.
+  bug-c-a-multi-name-typedef-declares-only-its-first-name }
+var CTdAnonSeq: Integer;
+
+function CTdMatchBack(k: Integer): Integer;
+{ k is a `)` or `]`: the index of its opening partner, or -1 }
+var depth: Integer;
+begin
+  Result := -1;
+  depth := 0;
+  while k >= 0 do
+  begin
+    if Tokens[k].Kind in [tkRParen, tkRBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkLParen, tkLBrack] then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Result := k; Exit; end;
+    end;
+    Dec(k);
+  end;
+end;
+
+function CTdIsQual(k: Integer): Boolean;
+var w: AnsiString;
+begin
+  Result := Tokens[k].Kind = tkConst;
+  if Result or (Tokens[k].Kind <> tkIdent) then Exit;
+  w := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+  Result := (w = 'volatile') or (w = 'restrict') or (w = '__restrict') or
+            (w = '__restrict__') or (w = '__volatile__') or (w = '_Atomic');
+end;
+
+procedure CSplitDeclarators(isTypedef: Boolean);
+var s0, sp, k, c, semi, depth, ds, g, firstGroup, b, e, n, i, j, kw: Integer;
+    w, tag: AnsiString;
+    out: array of TRawToken;
+    src: array of Integer;
+    t, semiTok: TRawToken;
+    fp: Boolean;
+  procedure Put(idx: Integer);
+  begin
+    if n >= Length(out) then
+    begin
+      SetLength(out, n * 2 + 16);
+      SetLength(src, n * 2 + 16);
+    end;
+    out[n] := Tokens[idx]; src[n] := idx; Inc(n);
+  end;
+begin
+  s0 := TokPos - 1;
+  if isTypedef then sp := s0 + 1 else sp := s0;   { the first SPEC token }
+  { the first top-level comma, before the closing `;` }
+  c := -1; semi := -1; depth := 0;
+  k := sp;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack: Inc(depth);
+      tkBegin:
+        begin
+          { a declaration's own open brace at depth 0 is a function body or a braced
+            initialiser: not ours. A typedef's is the aggregate body. }
+          if (depth = 0) and not isTypedef then Exit;
+          Inc(depth);
+        end;
+      tkRParen, tkRBrack, tkEnd: Dec(depth);
+      tkComma: if (depth = 0) and (c < 0) then c := k;
+      tkSemicolon: if depth = 0 then begin semi := k; Break; end;
+      tkEOF: Exit;
+    end;
+    Inc(k);
+  end;
+  if (c < 0) or (semi < 0) then Exit;
+  { where the first declarator starts: from its end, which is the comma or
+    the top-level `=` of an initialiser }
+  k := c - 1;
+  depth := 0;
+  for g := sp to c - 1 do
+  begin
+    if Tokens[g].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[g].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (Tokens[g].Kind = tkAssign) and (depth = 0) then begin k := g - 1; Break; end;
+  end;
+  firstGroup := -1;
+  while (k >= sp) and (Tokens[k].Kind in [tkRParen, tkRBrack]) do
+  begin
+    g := CTdMatchBack(k);
+    if g < sp then Exit;
+    if (g > sp) and (Tokens[g - 1].Kind = tkLParen) and (g - 2 >= sp) and
+       (Tokens[g - 2].Kind = tkIdent) then
+    begin
+      w := GetTokenStrFromRaw(Tokens[g - 2].SOffset, Tokens[g - 2].SLen);
+      if (w = '__attribute__') or (w = '__attribute') then
+      begin
+        k := g - 3;                       { an attribute: not the declarator }
+        Continue;
+      end;
+    end;
+    firstGroup := g;
+    k := g - 1;
+  end;
+  if (firstGroup >= 0) and (Tokens[firstGroup].Kind = tkLParen) and
+     (Tokens[firstGroup + 1].Kind in [tkStar, tkLParen]) then
+    ds := firstGroup                     { `(*name)(...)` }
+  else if Tokens[k].Kind = tkIdent then
+    ds := k
+  else
+    Exit;
+  while (ds - 1 >= sp) and ((Tokens[ds - 1].Kind = tkStar) or
+        (CTdIsQual(ds - 1) and (ds - 2 >= sp) and (Tokens[ds - 2].Kind = tkStar))) do
+    Dec(ds);
+  if ds <= sp then Exit;                 { no specifier left }
+  { a plain declaration is split only for the shapes its own parser cannot
+    take: a `(*name)` declarator, or a function-pointer typedef as SPEC
+    (`extern pf_t a, b;`, `extern void (*c)(int), (*d)(int);` -- NetBSD
+    sys/dtrace_bsd.h). Every other multi-declarator already works there.
+    bug-c-several-function-pointer-declarators-in-one-declaration }
+  if not isTypedef then
+  begin
+    fp := False;
+    for k := sp to semi - 1 do
+    begin
+      if (Tokens[k].Kind = tkLParen) and (k + 1 < semi) and (Tokens[k + 1].Kind = tkStar) then fp := True;
+      if (k < ds) and (Tokens[k].Kind = tkIdent) then
+      begin
+        g := FindCTypedef(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen));
+        if (g >= 0) and (CTypedefProcSig[g] >= 0) then fp := True;
+      end;
+    end;
+    if not fp then Exit;
+  end;
+  { an aggregate body in SPEC: tag it if anonymous, and leave it out of copies }
+  b := -1; e := -1;
+  for k := sp to ds - 1 do
+    if Tokens[k].Kind = tkBegin then begin b := k; Break; end;
+  if b >= 0 then
+  begin
+    depth := 0;
+    for k := b to ds - 1 do
+    begin
+      if Tokens[k].Kind = tkBegin then Inc(depth)
+      else if Tokens[k].Kind = tkEnd then
+      begin
+        Dec(depth);
+        if depth = 0 then begin e := k; Break; end;
+      end;
+    end;
+    if e < 0 then Exit;
+    kw := b - 1;
+    if (Tokens[kw].Kind = tkIdent) and (kw - 1 >= sp) and
+       ((Tokens[kw - 1].Kind = tkRecord) or
+        ((Tokens[kw - 1].Kind = tkIdent) and
+         ((GetTokenStrFromRaw(Tokens[kw - 1].SOffset, Tokens[kw - 1].SLen) = 'union') or
+          (GetTokenStrFromRaw(Tokens[kw - 1].SOffset, Tokens[kw - 1].SLen) = 'enum')))) then
+      { tagged already }
+    else
+    begin
+      { anonymous: give it a tag the copies can name }
+      Inc(CTdAnonSeq);
+      tag := '__pxx_td_anon_' + AIntToStr(CTdAnonSeq);
+      if TokCharLen + Length(tag) > STRING_CAP then Exit;
+      t := Tokens[b];
+      t.Kind := tkIdent;
+      t.IVal := 0;
+      t.SOffset := TokCharLen;
+      t.SLen := Length(tag);
+      for i := 1 to Length(tag) do
+      begin
+        TokChars[TokCharLen] := tag[i];
+        Inc(TokCharLen);
+      end;
+      SetLength(out, 1);
+      out[0] := t;
+      InsertTokens(b, out, 1);
+      Inc(b); Inc(e); Inc(c); Inc(semi); Inc(ds);
+    end;
+  end;
+  { split at every top-level comma, last to first so indices stay valid; the
+    `;` is copied now, because each insertion moves it }
+  semiTok := Tokens[semi];
+  k := semi - 1;
+  depth := 0;
+  while k >= c do
+  begin
+    case Tokens[k].Kind of
+      tkRParen, tkRBrack, tkEnd: Inc(depth);
+      tkLParen, tkLBrack, tkBegin: Dec(depth);
+      tkComma:
+        if depth = 0 then
+        begin
+          n := 0;
+          SetLength(out, 16); SetLength(src, 16);
+          if isTypedef then Put(s0);       { typedef }
+          for j := sp to ds - 1 do
+            if (b < 0) or (j < b) or (j > e) then Put(j);
+          t := semiTok;
+          t.Line := Tokens[k].Line;
+          Tokens[k] := t;                  { the comma becomes `;` (its attribute slot stays) }
+          InsertTokens(k + 1, out, n);
+          for j := 0 to n - 1 do
+          begin
+            CAttrFlags[k + 1 + j] := CAttrFlags[src[j]];
+            CAttrAlignValues[k + 1 + j] := CAttrAlignValues[src[j]];
+          end;
+        end;
+    end;
+    Dec(k);
+  end;
+end;
+
+{ `typedef int (imp_t)(int, int);` -- the typedef NAME in parentheses, which
+  C allows and NetBSD's sys/vmem.h uses (vmem_import_t). Every path below
+  wants `NAME (` or `NAME ;`, so the redundant pair is removed here, from the
+  `typedef` token to its `;`: `( IDENT )` followed by `(`, `[` or `;`, where
+  IDENT is not already a type name (that would be a cast-like parameter
+  group, not a declarator).
+  bug-c-a-parenthesised-function-typedef-name-was-not-a-type }
+procedure CUnparenTypedefName;
+var k, depth: Integer;
+begin
+  k := TokPos;            { the token after `typedef` }
+  depth := 0;
+  while (k + 3 < TokCount) and not ((depth = 0) and (Tokens[k].Kind = tkSemicolon)) do
+  begin
+    if (depth = 0) and (Tokens[k].Kind = tkLParen) and (Tokens[k + 1].Kind = tkIdent) and
+       (Tokens[k + 2].Kind = tkRParen) and
+       (Tokens[k + 3].Kind in [tkLParen, tkLBrack, tkSemicolon]) and
+       (FindCTypedef(GetTokenStrFromRaw(Tokens[k + 1].SOffset, Tokens[k + 1].SLen)) < 0) and
+       not CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k + 1].SOffset, Tokens[k + 1].SLen)) then
+    begin
+      RemoveTokens(k + 2, 1);
+      RemoveTokens(k, 1);
+      Exit;
+    end;
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(depth);
+      tkRParen, tkRBrack, tkEnd: Dec(depth);
+    end;
+    Inc(k);
+  end;
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
@@ -21119,6 +21421,8 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftRi: Integer;
     tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
 begin
+  CSplitDeclarators(True);
+  CUnparenTypedefName;
   Next; { consume 'typedef' }
   tdFirstTok := TokPos - 1;   { the type's first token: CTypedefFnRetTok }
 
@@ -21172,6 +21476,10 @@ begin
       UClsIsRecord[ci] := True;
       UClsCaseSensFields[ci] := True; { C: `b` != `B` }
       ParseCStructInto(ci, isUnion);
+      { `typedef struct mi {..} const mi_t;` -- a qualifier after the body
+        (NetBSD sys/module.h modinfo_t). It stopped the name being read.
+        bug-c-a-qualifier-after-a-struct-typedef-body-hid-the-name }
+      while (CurTok.Kind = tkConst) or ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__'))) do Next;
       ptrStars := 0;
       while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
       if CurTok.Kind = tkIdent then
@@ -21206,6 +21514,7 @@ begin
       `struct Zio { ... }` body fills the same record and `z->field` resolves.
       `typedef struct T *Ref;` is a pointer to it. A tagless no-body typedef
       stays an opaque pointer handle. }
+    while (CurTok.Kind = tkConst) or ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__'))) do Next;   { `typedef struct T const CT;` }
     ptrStars := 0;
     while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
     if CurTok.Kind = tkIdent then
@@ -21240,10 +21549,20 @@ begin
     Next; { 'enum' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
     if CurTok.Kind = tkBegin then ParseCEnumBody; { enumerators -> constants }
+    { `typedef enum E *PE;` -- CSplitDeclarators writes exactly this for
+      `typedef enum {..} E, *PE;`, and it registered nothing: the star was
+      not a name. bug-c-a-multi-name-typedef-declares-only-its-first-name }
+    ptrStars := 0;
+    while (CurTok.Kind = tkStar) or (CurTok.Kind = tkConst) do
+    begin
+      if CurTok.Kind = tkStar then Inc(ptrStars);
+      Next;
+    end;
     if CurTok.Kind = tkIdent then
     begin
       nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyInt32);
+      if ptrStars > 0 then AddCTypedefEx(nm, tyPointer, Ord(tyInt32), REC_NONE)
+      else AddCTypedef(nm, tyInt32);
     end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
