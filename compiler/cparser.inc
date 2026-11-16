@@ -7250,7 +7250,11 @@ end;
 function CIsTypeofWord(const w: AnsiString): Boolean;
 { GNU `typeof` and its reserved spellings (C23 `typeof` too). }
 begin
-  Result := (w = 'typeof') or (w = '__typeof__') or (w = '__typeof');
+  Result := (w = 'typeof') or (w = '__typeof__') or (w = '__typeof') or
+            { C23 typeof_unqual, gcc 14's spellings (NetBSD sys/atomic.h):
+              this frontend does not carry qualifiers in the type, so it is
+              the same thing as typeof here }
+            (w = 'typeof_unqual') or (w = '__typeof_unqual__') or (w = '__typeof_unqual');
 end;
 
 function IsCTypeTok: Boolean;
@@ -7485,6 +7489,7 @@ var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
+  tyNode, tyCallee: Integer;   { typeof(expr): the expression's node (and CNodeProcSig's callee out-param) }
   tdLongRank: Integer;   { long rank carried by a typedef-name base; see the CTypeLong assignment }
   tdDimI: Integer;       { copies an array typedef's dims out of CTypedefDims into CTypeTypedefDims }
   base, fpRet, fpPType: TTypeKind;
@@ -7614,10 +7619,36 @@ begin
             end
             else
             begin
-              base := IntToTypeKind(ASTTk[ParseCExpr]);
-              if (base = tyPointer) or (base = tyRecord) or (base = tyUnknown) then
-                Error('C: typeof of a pointer, struct or untyped expression is not supported yet; '
-                    + 'only arithmetic expressions and type names (feature-c-typeof)');
+              tyNode := ParseCExpr;
+              base := IntToTypeKind(ASTTk[tyNode]);
+              { A struct takes the record the node resolves to; a pointer its
+                pointee kind and record, the same pair a pointer typedef
+                carries (tdElemTk/tdElemRec, read at the pointer suffix
+                below). NetBSD's sys/cdefs_elf.h and sys/atomic.h spell
+                `__typeof__(ptr) x` and `const volatile __typeof__(t) *p`.
+                feature-c-typeof }
+              if base = tyRecord then
+              begin
+                baseRec := ResolveNodeRec(tyNode);
+                if baseRec < 0 then
+                  Error('C: typeof of a struct expression whose struct is not known here (feature-c-typeof)');
+              end
+              else if base = tyPointer then
+              begin
+                tdElemTk := CNodePointeeTk(tyNode);
+                tdElemRec := CNodePtrElemRec(tyNode);
+                { only a C record id, and only when the pointee is a record or
+                  CNodePointeeTk's unmodelled default: `&arr[0]` carries an
+                  unrelated id on its AN_ADDR beside a correct int64 pointee }
+                if (tdElemRec >= REC_UCLASS_BASE) and
+                   ((IntToTypeKind(tdElemTk) = tyRecord) or (IntToTypeKind(tdElemTk) = tyInteger)) then
+                  tdElemTk := Ord(tyRecord)
+                else
+                  tdElemRec := REC_NONE;
+                CTypeProcSig := CNodeProcSig(tyNode, tyCallee);
+              end
+              else if base = tyUnknown then
+                Error('C: typeof of an untyped expression is not supported (feature-c-typeof)');
               if (base = tyBoolean) or (base = tyInteger) then base := tyInt32;   { a comparison has type int in C }
             end;
             Expect(tkRParen, ')');
