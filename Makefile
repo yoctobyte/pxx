@@ -28512,6 +28512,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_computed_include.c $(TESTTMP)/c_compinc26
 	@gcc -o $(TESTTMP)/c_compinc26_gcc test/c_computed_include.c
 	tools/expect_same.sh c_compinc26 "$$(timeout 20 $(TESTTMP)/c_compinc26)" "$$(timeout 20 $(TESTTMP)/c_compinc26_gcc)"
+	# A cast through a pointer typedef keeps the pointee (fields, member calls).
+	./$(COMPILER) test/c_cast_ptr_typedef.c $(TESTTMP)/c_castptd26
+	@gcc -w -o $(TESTTMP)/c_castptd26_gcc test/c_cast_ptr_typedef.c
+	tools/expect_same.sh c_castptd26 "$$(timeout 20 $(TESTTMP)/c_castptd26)" "$$(timeout 20 $(TESTTMP)/c_castptd26_gcc)"
+	# `(*p++)(args)` over a table of function pointers, incl. a typedef'd table and a struct field of it.
+	./$(COMPILER) test/c_call_incdec_fnptr.c $(TESTTMP)/c_callincfp26
+	@gcc -w -o $(TESTTMP)/c_callincfp26_gcc test/c_call_incdec_fnptr.c
+	tools/expect_same.sh c_callincfp26 "$$(timeout 20 $(TESTTMP)/c_callincfp26)" "$$(timeout 20 $(TESTTMP)/c_callincfp26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

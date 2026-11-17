@@ -5741,6 +5741,7 @@ var
   CTypedefElemTk : array[0..MAX_CTYPEDEF-1] of Integer; { pointer typedef: pointed-at TTypeKind ordinal }
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
   CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
+  CTypedefPtrElemProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { POINTER-to-fn-pointer typedef (`typedef ft *ftl;`): the pointee's signature, so `ftl p; (*p++)(a)` / `p[i](a)` resolve the callee like `ft *p` does; -1 = none }
   CTypedefIsFnType : array[0..MAX_CTYPEDEF-1] of Boolean; { True for a function-TYPE typedef `typedef R N(args);` (vs a fn-POINTER typedef): a following `*` in a declarator DECAYS (pointer-to-function) rather than adding a level, so `N *p` is the callable, matching C function/pointer-to-function equivalence }
   { ...and, for one, WHERE its spelling is: the return-type tokens [RetTok,
     NameTok) and the parameter list [LParTok..RParTok]. `d_open_t yopen;`

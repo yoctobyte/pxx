@@ -5594,6 +5594,27 @@ begin
     castBaseRec := CTypePtrBaseRec;
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     castPtrElemProcSig := CTypePtrElemProcSig;  { ptr-to-fn-ptr cast `(ft*)e`: pointee callee sig }
+    { A POINTER TYPEDEF (`typedef struct D *PD;`) comes back as tyPointer with
+      its pointee in CTypeElemTk/Rec but depth 0 -- the stars were in the
+      typedef, not here. Depth 0 skipped the alias registration below, so the
+      cast's value was a bare pointer with no record: `((PD)p)->w` read offset
+      0 (the FIRST field, whatever was asked for) and `((PD)p)->fn(a)` made no
+      call at all -- it yielded the first field. Xlib's XAllocID is exactly
+      `(*((_XPrivDisplay)(dpy))->resource_alloc)((dpy))`. Publish it as the
+      one-star spelling `(struct D *)` does. A fn-pointer typedef (castProcSig)
+      is a callable value, not a pointer to a pointee, and stays as it was.
+      bug-c-cast-through-a-pointer-typedef-loses-the-pointee }
+    { One level only: a typedef of `T **` has a POINTER element and its depth
+      is not recorded anywhere; that shape is
+      bug-c-pointer-to-pointer-struct-member-reads-offset-0. }
+    if (castDepth = 0) and (castTk = tyPointer) and (castProcSig < 0) and
+       (castElemTk <> Ord(tyPointer)) and
+       ((castElemRec <> REC_NONE) or (castElemTk <> Ord(tyUnknown))) then
+    begin
+      castDepth := 1;
+      castBaseTk := castElemTk;
+      castBaseRec := castElemRec;
+    end;
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
     { `(T (*)[N]..)e`: a pointer to ARRAY. The operand's recursive parse clobbers
@@ -6130,6 +6151,23 @@ begin
       ASTLeft[callee] := inner;
       ASTTk[callee] := Ord(tyPointer);
     end;
+  end
+  else if (ASTKind[inner] = AN_INCDEC) and (derefCount >= 1) and
+          (ASTKind[ASTLeft[inner]] = AN_IDENT) and
+          (SymElemProcSig[ASTIVal[ASTLeft[inner]]] >= 0) then
+  begin
+    { `(*p++)(args)` / `(*++p)(args)` -- walking a table of function pointers
+      (`ft *p`), the twin of the `(*pf)(args)` arm above with the step in the
+      operand. Without this arm the callee had no signature: `(*p++)(6, 7)`
+      called through the wrong value and returned garbage, and with the table
+      typedef'd (Xlib's XcmsFuncListPtr, xcms/CvCols.c) the call did not
+      parse. One deref of the INCDEC is the load of the current entry; the
+      INCDEC itself is evaluated once inside it.
+      bug-c-call-through-an-incremented-pointer-to-function-pointer }
+    Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]];
+    callee := AllocNode(AN_DEREF);
+    ASTLeft[callee] := inner;
+    ASTTk[callee] := Ord(tyPointer);
   end
   else if ASTKind[inner] = AN_PROCADDR then
     { `(name)(args)` — a parenthesized bare function name decayed to its address
@@ -7142,6 +7180,7 @@ begin
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
     CTypedefProcSig[idx] := -1;
+    CTypedefPtrElemProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
     CTypedefNDims[idx] := 0;
@@ -7164,6 +7203,7 @@ begin
   CTypedefElemTk[CTypedefCount] := elemTk;
   CTypedefRec[CTypedefCount] := rec;
   CTypedefProcSig[CTypedefCount] := -1;
+  CTypedefPtrElemProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
   CTypedefNDims[CTypedefCount] := 0;
@@ -7683,6 +7723,7 @@ begin
               tdElemTk := CTypedefElemTk[tdIdx];
               tdElemRec := CTypedefRec[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
+              CTypePtrElemProcSig := CTypedefPtrElemProcSig[tdIdx]; { ptr-to-fn-ptr typedef: the pointee's }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
               CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length of the first dim, else -1 }
               CTypeTypedefNDims := CTypedefNDims[tdIdx];  { and HOW MANY dims -- see the field's note in defs.inc }
@@ -7813,7 +7854,8 @@ begin
     { A star past a fn-pointer typedef makes a POINTER-to-fn-ptr: not directly
       callable, but preserve the pointee sig so `(*pf)()` / `(**(ft*)x)()` can
       still resolve the callee (see CNodeProcSig). }
-    if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig;
+    if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig
+    else CTypePtrElemProcSig := -1;  { `ftl *x` (ftl a ptr-to-fn-ptr typedef) is one level further: no callee here }
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     { `void' arrives here as the tyInteger PLACEHOLDER set where isVoid is read
       (`Result := tyInteger { placeholder; pointer suffix overrides below }').
@@ -8377,6 +8419,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
     lclNDims, lclSpan0, lclEB, mdi: Integer;
     ptrElemSig, declPtrElemSig: Integer;  { pointee fn-ptr sig for `ft *pf` (SymElemProcSig channel) }
+    sibFnSig: Integer;  { the base fn-pointer type's sig for a sibling declarator (`ft *a, *b, c`), else -1 }
     paLen, sibPaLen: Integer;
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
@@ -8605,6 +8648,7 @@ begin
     scalarTk := Procs[procSig].RetType;
     scalarRec := CTypeBaseRec;
     hadStar := False;
+    sibFnSig := -1;   { siblings of an inline fn-ptr take its RETURN type, not a callable }
     Next;   { consume the ',' — the loop handles stars/name of each sibling }
     declPtr := 0;
     while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
@@ -8641,6 +8685,14 @@ begin
   hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
   if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
+  { A sibling of a fn-pointer-typedef declarator (`XcmsDIConversionProc *a, *b;`)
+  is built from the SAME base type, so it needs the base's call signature:
+  the base's own when the first declarator had no star, else the one its star
+  moved to the pointee channel. Without it `(*b++)(args)` did not parse.
+  bug-c-call-through-an-incremented-pointer-to-function-pointer }
+  if procSig >= 0 then sibFnSig := procSig
+  else if hadStar then sibFnSig := ptrElemSig
+  else sibFnSig := -1;
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
   declPtrElemSig := ptrElemSig;   { primary declarator: `ft *pf` pointee sig }
   declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
@@ -8692,13 +8744,14 @@ begin
           declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
           if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
           else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
-          declProcSig := -1; declPtrElemSig := -1;
+          declProcSig := -1;
+          if declPtr = 1 then declPtrElemSig := sibFnSig else declPtrElemSig := -1;  { `ft *a, *b`: b is `ft *` too }
         end
         else if hadStar then
         begin
           declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
           declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-          declProcSig := -1; declPtrElemSig := -1;
+          declProcSig := sibFnSig; declPtrElemSig := -1;  { `ft *a, b`: b is a callable `ft` }
         end
         else
         begin
@@ -9539,14 +9592,15 @@ begin
         declBaseRec := scalarRec;
         if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
         else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
-        declProcSig := -1; declPtrElemSig := -1;
+        declProcSig := -1;
+        if declPtr = 1 then declPtrElemSig := sibFnSig else declPtrElemSig := -1;  { `ft *a, *b`: b is `ft *` too }
       end
       else if hadStar then
       begin
         { sibling with no star, base had a redistributable star: plain scalar }
         declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
         declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-        declProcSig := -1; declPtrElemSig := -1;
+        declProcSig := sibFnSig; declPtrElemSig := -1;  { `ft *a, b`: b is a callable `ft` }
       end
       else
       begin
@@ -21581,6 +21635,13 @@ begin
           { `ft *pf` (exactly one star): field is a pointer-to-fn-ptr, callable via
             `(*s.pf)()` — record the pointee sig on the parallel elem channel. }
           if declStars = 1 then bfElemProcSig[bfCount] := fldElemProcSig else bfElemProcSig[bfCount] := -1;
+          { `ftl f` with ftl a pointer-to-fn-ptr TYPEDEF (Xlib's XcmsFuncListPtr
+            to_CIEXYZ): no star here, but the same shape as `ft *f`. fldProcSig
+            < 0 tells it apart from a plain fn-pointer typedef, whose sig the
+            fallback above also copied into fldElemProcSig.
+            bug-c-call-through-an-incremented-pointer-to-function-pointer }
+          if (declStars = 0) and (fldProcSig < 0) and (fldElemProcSig >= 0) then
+            bfElemProcSig[bfCount] := fldElemProcSig;
           { The member's full pointer shape, the way a local's is kept
             (SetSymPointerType): depth and ultimate base. Without it a
             `char **m` member was "a pointer to a pointer to something", so
@@ -22470,6 +22531,11 @@ begin
     begin
       AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
       if CTypeProcSig >= 0 then CTypedefProcSig[FindCTypedef(nm)] := CTypeProcSig;
+      { `typedef ft *ftl;` -- a table of function pointers (Xlib's
+        XcmsFuncListPtr). Keep the pointee signature for the typedef's users.
+        bug-c-call-through-an-incremented-pointer-to-function-pointer }
+      if (CTypeProcSig < 0) and (CTypePtrDepth = 1) and (CTypePtrElemProcSig >= 0) then
+        CTypedefPtrElemProcSig[FindCTypedef(nm)] := CTypePtrElemProcSig;
       if (CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown)) then
         RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
     end
