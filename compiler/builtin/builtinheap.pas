@@ -1002,6 +1002,15 @@ const
     lane measured hello-world at (memory 2) = 128 KiB today. 16 pages is
     headroom without taxing every module for space nobody is using. }
   HEAP_ARENA = 1048576;     { 1 MiB static arena; see WasmArena }
+{$elseif defined(CPU_XTENSA)}
+  { HOSTED XTENSA IS A NO-MMU KERNEL (Gibux on the ESP32-S3): nothing faults
+    in lazily, a mapping IS the memory. The 256 MiB chunk below was refused and
+    halved to whatever PSRAM was left -- 2 MiB per process, so a shell and a
+    three-stage pipeline took the board's 8 MiB. 64 KiB arenas, a further one
+    as each fills (they need not be contiguous), and a request over half an
+    arena gets its own mapping (PXXAlloc) rather than abandoning the current
+    arena's tail. feature-xtensa-heap-grows-in-small-arenas-on-no-mmu }
+  HEAP_ARENA = 65536;
 {$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
@@ -1899,6 +1908,25 @@ begin
     a source that is not zero) must re-produce the guarantee here, not push it
     back onto callers. }
   need := size + 8;                         { 8-byte size header + payload }
+{$if defined(CPU_XTENSA) and not defined(PXX_ESP)}
+  { A big request gets a mapping of its own and leaves the current arena's
+    tail for the small ones (see HEAP_ARENA's xtensa arm). The block is an
+    ordinary sized block: free puts it on the free list like any other. }
+  if need > HEAP_ARENA div 2 then
+  begin
+    base := HeapMmap(need);
+    if HeapMmapFailed(base) then PXXHeapExhausted;
+    HeapMappedBytes := HeapMappedBytes + need;
+    if (HeapLow = 0) or (base < HeapLow) then HeapLow := base;
+    if base + need > HeapHigh then HeapHigh := base + need;
+    PMachineWord(base)^ := size;
+    Result := Pointer(base + 8);
+{$ifdef PXX_THREADSAFE}
+    PXXHeapSpin := 0;
+{$endif}
+    Exit;
+  end;
+{$endif}
   if (HeapPtr = 0) or (HeapEnd - HeapPtr < need) then
   begin
     arena := need;
