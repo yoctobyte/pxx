@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  719 functions across 73 headers. }
+  720 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -76,14 +76,14 @@ begin
       ' getline:stdio.h getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h ' +
       ' getmntent_r:mntent.h getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h ' +
       ' getopt_long_only:unistd.h getpagesize:unistd.h getpass:unistd.h getpeername:sys/socket.h ' +
-      ' getpgid:unistd.h getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h ' +
-      ' getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h getpwuid_r:pwd.h ' +
-      ' getrandom:sys/random.h getresgid:unistd.h getresuid:unistd.h getrlimit:sys/resource.h ' +
-      ' getrusage:sys/resource.h getservbyname:netdb.h getservbyname_r:netdb.h ' +
-      ' getservbyport:netdb.h getservent:netdb.h getsid:unistd.h getsockname:sys/socket.h ' +
-      ' getsockopt:sys/socket.h getspent:shadow.h getspnam:shadow.h getspnam_r:shadow.h ' +
-      ' gettimeofday:sys/time.h getuid:unistd.h getusershell:unistd.h getutxent:utmpx.h ' +
-      ' getutxid:utmpx.h getutxline:utmpx.h getxattr:sys/xattr.h glob:glob.h ' +
+      ' getpgid:unistd.h getpgrp:unistd.h getpid:unistd.h getppid:unistd.h ' +
+      ' getpriority:sys/resource.h getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h ' +
+      ' getpwuid_r:pwd.h getrandom:sys/random.h getresgid:unistd.h getresuid:unistd.h ' +
+      ' getrlimit:sys/resource.h getrusage:sys/resource.h getservbyname:netdb.h ' +
+      ' getservbyname_r:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
+      ' getsockname:sys/socket.h getsockopt:sys/socket.h getspent:shadow.h getspnam:shadow.h ' +
+      ' getspnam_r:shadow.h gettimeofday:sys/time.h getuid:unistd.h getusershell:unistd.h ' +
+      ' getutxent:utmpx.h getutxid:utmpx.h getutxline:utmpx.h getxattr:sys/xattr.h glob:glob.h ' +
       ' glob_pattern_p:glob.h globfree:glob.h gmtime:time.h gmtime_r:time.h grantpt:stdlib.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +

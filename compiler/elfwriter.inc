@@ -4144,6 +4144,26 @@ end;
   (busybox, one per translation unit) has exactly one main, and only that
   object's process entry may define app_main; every other object's stub would
   be a duplicate definition. feature-xtensa-posix-objects-get-a-process-entry }
+{ The binding of an exported proc in the ESP-family (xtensa/riscv32) object
+  writers: GLOBAL, except WEAK for a C definition that asked for it
+  (ProcCWeakDef, which these writers used to drop) and for the crtl copies a
+  --shared-runtime object still carries (stdarg, setjmp: compiler support,
+  stateless, one per object by design), so that N objects and the runtime
+  object link -- measured: `multiple definition of __pxx_va_start_impl`.
+  NOT ObjProcBind's weak-everything: these writers resolve a call inside the
+  object when they emit it, so a weak crtl copy that loses still runs for its
+  own object's callers, with its own state -- two heaps, two stdouts, and a
+  clean link. Self-contained objects stay GLOBAL and collide loudly; on
+  xtensa and riscv32 a multi-object program takes --shared-runtime.
+  feature-xtensa-shared-runtime-objects-link }
+function ObjEspProcBind(procIdx: Integer): Byte;
+begin
+  if ProcCWeakDef[procIdx] or (ProcObjRuntimeCopy[procIdx] and SharedRuntime) then
+    Result := $20
+  else
+    Result := $10;
+end;
+
 function ObjAppMainIsWeak: Boolean;
 begin
   Result := EspFreestandingObj or
@@ -4357,9 +4377,9 @@ begin
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
     begin
       if ProcIram[i] then
-        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, $12, 3)
+        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, ObjEspProcBind(i) or 2, 3)
       else
-        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1);
+        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, ObjEspProcBind(i) or 2, 1);
     end;
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
@@ -4727,7 +4747,7 @@ begin
   else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
-      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1); { GLOBAL FUNC }
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, ObjEspProcBind(i) or 2, 1); { FUNC, ObjEspProcBind }
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
     begin

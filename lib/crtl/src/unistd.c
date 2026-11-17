@@ -1146,6 +1146,9 @@ pid_t getpgid(pid_t pid) {
   return (pid_t)rc;
 }
 
+/* getpgrp(): POSIX says it always succeeds; it is getpgid(0). busybox hush. */
+pid_t getpgrp(void) { return getpgid(0); }
+
 /* setpgrp(): POSIX's zero-argument form, which IS setpgid(0, 0). The BSD
    two-argument setpgrp(pid, pgid) is a different function with the same name
    and is NOT provided -- a program written against it would compile here and

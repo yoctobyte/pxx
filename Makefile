@@ -20917,6 +20917,15 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_pie_link.py $(COMPILER) $(TESTTMP)
 	# a windowed xtensa posix object is a process: app_main runs main(argc, argv)
 	python3 -I tools/check_xtensa_posix_main.py $(COMPILER) $(TESTTMP)
+	# C setjmp/longjmp on xtensa, call0 and windowed
+	python3 -I tools/check_xtensa_setjmp.py $(COMPILER) $(TESTTMP)
+	# xtensa --shared-runtime objects + the runtime object link and share crtl state
+	python3 -I tools/check_xtensa_shared_runtime.py $(COMPILER) $(TESTTMP)
+	# busybox hush gaps: a subscripted string literal folds; crtl has getpgrp (x86-64 and xtensa)
+	./$(COMPILER) test/c_busybox_hush_gaps.c $(TESTTMP)/c_bbhush >/dev/null
+	tools/expect_same.sh c_busybox_hush_gaps "$$($(TESTTMP)/c_bbhush)" "$$(cat test/c_busybox_hush_gaps.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/c_busybox_hush_gaps.c $(TESTTMP)/c_bbhush_xt >/dev/null
+	tools/expect_same.sh xtensa/c_busybox_hush_gaps "$$(tools/run_target.sh xtensa $(TESTTMP)/c_bbhush_xt)" "$$(cat test/c_busybox_hush_gaps.expected)"
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

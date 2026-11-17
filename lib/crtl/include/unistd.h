@@ -58,6 +58,8 @@ pid_t getsid(pid_t pid);
    the form busybox's crond uses. */
 int setpgid(pid_t pid, pid_t pgid);
 pid_t getpgid(pid_t pid);
+/* getpgrp(): the caller's process group, getpgid(0); it cannot fail. hush. */
+pid_t getpgrp(void);
 int setpgrp(void);
 
 /* alarm(2): schedule SIGALRM in `seconds', and return the seconds REMAINING on

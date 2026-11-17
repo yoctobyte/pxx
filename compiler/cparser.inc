@@ -15317,12 +15317,41 @@ begin
     EmitCReturnZeroStub;
 end;
 
+{ XTENSA C setjmp/longjmp: the Pascal exception helpers' design
+  (exception_emit.inc, ExcSetJmp/ExcLongJmp -- read its comment for WHY) with
+  C's contract: longjmp delivers val, 0 becoming 1.
+  WINDOWED: both are entered by CALL8 with &env in a2 (the setjmp macro calls
+  __pxx_setjmp from the user's own frame). Spill every window with a
+  self-recursive CALL8 chain, copy the caller's two save areas into env (11
+  words of the 32), and on longjmp write them back, forge a0/a1 and RETW: the
+  window underflow reloads the setjmp frame. Each body carries its OWN spill
+  chain (CALL8 into its own entry), so no call crosses from one proc to
+  another and DCE can move either alone.
+  CALL0: a0, sp and the callee-saved a12..a15.
+  feature-xtensa-c-setjmp-longjmp }
+procedure XtensaEmitSpillChain(var spillAt: Integer);
+begin
+  while (CodeLen and 3) <> 0 do xtensa_nop;
+  spillAt := CodeLen;
+  xtensa_entry(reg_xtensa_sp, 32);
+  xtensa_movi(reg_xtensa_a3, 0);
+  XtensaWideBegin;
+  xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { count = 0: -> retw }
+  xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
+  xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+  xtensa_call8(spillAt - CodeLen);
+  XtensaWideEnd;
+  xtensa_retw;
+end;
+
 procedure EmitCSetjmpStubs;
-var sjIdx, ljIdx: Integer;
+var sjIdx, ljIdx, spill, jOver, k: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
 begin
   pn[0] := 'env'; pt[0] := tyPointer;
   sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen and 3) <> 0 do EmitB(0);          { CALLn targets are 4-aligned }
   SetProcBodyAddrHere(sjIdx);
   case TargetArch of
   TARGET_X86_64:
@@ -15419,12 +15448,55 @@ begin
     EmitI32($00000513);   { li a0, 0 }
     EmitI32($00008067);   { ret }
   end;
+  TARGET_XTENSA:
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_entry(reg_xtensa_sp, 32);
+    jOver := CodeLen; xtensa_j(0);                    { over the spill chain }
+    XtensaEmitSpillChain(spill);
+    Patch24(jOver, EncodeXtensaJ(CodeLen - jOver));
+    xtensa_movi(reg_xtensa_a10, 16);
+    xtensa_call8(spill - CodeLen);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);  { the caller's a0-a3 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { the caller's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { ITS caller's sp }
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);  { the caller's a4-a7 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+    end;
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 32);   { return address + call bits }
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 36);   { this body's own sp }
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_retw;
+  end
+  else
+  begin
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    xtensa_s32i(reg_xtensa_a12, reg_xtensa_a2, 8);
+    xtensa_s32i(reg_xtensa_a13, reg_xtensa_a2, 12);
+    xtensa_s32i(reg_xtensa_a14, reg_xtensa_a2, 16);
+    xtensa_s32i(reg_xtensa_a15, reg_xtensa_a2, 20);
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_ret;
+  end;
   else
     Error('EmitCSetjmpStubs: unsupported target');
   end;
 
   pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
   ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen and 3) <> 0 do EmitB(0);
   SetProcBodyAddrHere(ljIdx);
   case TargetArch of
   TARGET_X86_64:
@@ -15532,6 +15604,55 @@ begin
     EmitI32($00051463);   { bnez a0, +8 }
     EmitI32($00100513);   { li a0, 1   (val==0 -> 1) }
     EmitI32($00008067);   { ret }
+  end;
+  TARGET_XTENSA:
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_entry(reg_xtensa_sp, 32);
+    jOver := CodeLen; xtensa_j(0);
+    XtensaEmitSpillChain(spill);
+    Patch24(jOver, EncodeXtensaJ(CodeLen - jOver));
+    xtensa_movi(reg_xtensa_a10, 16);
+    xtensa_call8(spill - CodeLen);
+    xtensa_l32i(reg_xtensa_a7, reg_xtensa_a2, 36);   { setjmp's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a7, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 32);   { forge the return }
+    XtensaWideBegin;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);        { val... }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);
+    xtensa_movi(reg_xtensa_a2, 1);                   { ...0 becomes 1 }
+    XtensaWideEnd;
+    xtensa_mov(reg_xtensa_sp, reg_xtensa_a7);        { a1 LAST }
+    xtensa_retw;
+  end
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 0);
+    xtensa_l32i(reg_xtensa_a12, reg_xtensa_a2, 8);
+    xtensa_l32i(reg_xtensa_a13, reg_xtensa_a2, 12);
+    xtensa_l32i(reg_xtensa_a14, reg_xtensa_a2, 16);
+    xtensa_l32i(reg_xtensa_a15, reg_xtensa_a2, 20);
+    xtensa_l32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    XtensaWideBegin;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);
+    xtensa_movi(reg_xtensa_a2, 1);
+    XtensaWideEnd;
+    xtensa_ret;
   end;
   else
     Error('EmitCSetjmpStubs: unsupported target');
@@ -16957,8 +17078,8 @@ begin
       BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
       .c-unit pull carry the same condition, and changing one would make a C
       program and a C unit disagree about which stubs exist. }
-    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
-      EmitCSetjmpStubs;
+    if TargetArch <> TARGET_WASM32 then
+      EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
     if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
     if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
       EmitCVforkStub;
@@ -19696,6 +19817,7 @@ end;
 
 function CEvalConstPrimary: Int64;
 var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst: Boolean;
+    strLitText: AnsiString; strLitIdx: Int64;
 begin
   wasCall := False;
   Result := 0;
@@ -19802,8 +19924,30 @@ begin
       command then skipped option parsing entirely. Adjacent literals are one
       literal. Anywhere else (an array bound, a case label) a string is not a
       constant expression and the context's own checks still say so. }
-    while CurTok.Kind = tkString do Next;
+    strLitText := '';
+    while CurTok.Kind = tkString do begin strLitText := strLitText + CurTok.SVal; Next; end;
     Result := 1;
+    { ...EXCEPT SUBSCRIPTED: "abc"[i] is the character, an integer constant
+      expression gcc folds. busybox's BUILD_BUG_ON(CONFIG_BUSYBOX_EXEC_PATH[0]
+      != '/') became `char[-1]` -- the subscript was never read, so the
+      comparison saw 1 != '/'. Index = length is the terminating NUL; past it
+      is out of bounds and refused. Plain char's signedness decides a high
+      byte (CPlainCharSigned). bug-c-a-subscripted-string-literal-folds-to-1 }
+    if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      strLitIdx := CEvalConstExpr;
+      if CurTok.Kind <> tkRBrack then Error('C: expected ] after a string literal subscript');
+      Next;
+      if (strLitIdx < 0) or (strLitIdx > Length(strLitText)) then
+        Error('C: string literal subscript ' + AIntToStr(strLitIdx) + ' is out of bounds');
+      if strLitIdx = Length(strLitText) then Result := 0
+      else
+      begin
+        Result := Ord(strLitText[strLitIdx + 1]);
+        if CPlainCharSigned and (Result > 127) then Result := Result - 256;
+      end;
+    end;
   end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
@@ -22534,8 +22678,8 @@ begin
       BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
       .c-unit pull carry the same condition, and changing one would make a C
       program and a C unit disagree about which stubs exist. }
-    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
-      EmitCSetjmpStubs;
+    if TargetArch <> TARGET_WASM32 then
+      EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
     if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
     if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
       EmitCVforkStub;
