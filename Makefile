@@ -20911,6 +20911,8 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_freestanding_struct.py $(COMPILER) $(TESTTMP)
 	# crtl on xtensa issues the time64 syscalls (Gibux implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
+	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed
+	python3 -I tools/check_xtensa_vfork.py $(COMPILER) $(TESTTMP)
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

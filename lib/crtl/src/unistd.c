@@ -351,9 +351,16 @@ pid_t fork(void) {
    child can no longer corrupt the parent's stack. The cost is that vfork's
    performance reason for existing is gone, which is a fair trade for a
    runtime that has no copy-on-write-free path to offer anyway. */
+#if !(defined(__xtensa__) && defined(__linux__))
 pid_t vfork(void) {
   return fork();
 }
+#endif
+/* ON XTENSA vfork IS REAL and the compiler writes it (EmitCVforkStub,
+   cparser.inc): a frameless body, because a vfork child returns into the
+   caller and a C wrapper's frame is exactly what it would trample. Gibux on
+   the ESP32-S3 has no MMU and so no fork at all, and busybox NOMMU calls
+   vfork itself. feature-crtl-a-real-vfork-on-xtensa */
 /* The id-changing calls, through the raw syscall bridge (as chroot is). They
    were ENOSYS stubs until dropbear (feature-c-dropbear-builds-with-pxx): a
    server started as root must drop to the user before it runs their shell,

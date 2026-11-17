@@ -15108,6 +15108,81 @@ begin
   end;
 end;
 
+{ vfork(2) ON XTENSA, AS A FRAMELESS BODY -- crtl's C vfork() is fork() there
+  and anywhere else. A vfork child shares the parent's memory and stack and
+  RETURNS INTO THE CALLER; the parent resumes, later, inside this body. So the
+  body may own no stack frame: a C wrapper's frame (windowed `entry`) sits
+  below the caller's sp, the child's next calls overwrite it, and the parent's
+  return through it -- retw, a window underflow from that very area -- reads
+  what the child left. This is uClibc's xtensa vfork.S, hand-encoded:
+    WINDOWED: no `entry`. The body runs in the CALLER's window, where call8 left
+      the return address in a8 (call-size in its top two bits) and expects the
+      result in a10. a2..a7 are the caller's and must survive, so a2..a6 park in
+      a11..a15 (a call8 callee may clobber a8..a15) around the syscall; the
+      return is retw's arithmetic done by hand: a8's low 30 bits under the
+      current PC's top 2 (taken from a call0 to the next word), then jx.
+    CALL0: every register the syscall touches is caller-saved; `ret` reads only
+      a0, which no stack holds.
+  clone(CLONE_VM|CLONE_VFORK|SIGCHLD = 0x4111, stack 0 = the same sp, ptid,
+  tls, ctid 0) -- xtensa's argument order, syscall 116; arguments in a6 a3 a4
+  a5 a8. Gibux (no MMU) has vfork and no fork; Linux and qemu have both.
+  feature-crtl-a-real-vfork-on-xtensa }
+procedure EmitCVforkStub;
+var vIdx, pad: Integer;
+    pn: array[0..0] of AnsiString; pt: array[0..0] of TTypeKind;
+begin
+  vIdx := RegisterProc('vfork', True, tyInteger, 0, pn, pt);
+  while (CodeLen and 3) <> 0 do EmitB(0);
+  SetProcBodyAddrHere(vIdx);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a9, reg_xtensa_a8);       { return address (+ call size) }
+    xtensa_mov(reg_xtensa_a11, reg_xtensa_a2);
+    xtensa_mov(reg_xtensa_a12, reg_xtensa_a3);
+    xtensa_mov(reg_xtensa_a13, reg_xtensa_a4);
+    xtensa_mov(reg_xtensa_a14, reg_xtensa_a5);
+    xtensa_mov(reg_xtensa_a15, reg_xtensa_a6);
+  end;
+  xtensa_movi(reg_xtensa_a6, $111);
+  xtensa_addmi(reg_xtensa_a6, reg_xtensa_a6, $4000); { flags 0x4111 }
+  xtensa_movi(reg_xtensa_a3, 0);                     { stack: the same sp }
+  xtensa_movi(reg_xtensa_a4, 0);
+  xtensa_movi(reg_xtensa_a5, 0);
+  xtensa_movi(reg_xtensa_a8, 0);
+  xtensa_movi(reg_xtensa_a2, 116);                   { clone }
+  xtensa_syscall;
+  if XtensaABI <> XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_ret;                                      { result already in a2 }
+    Exit;
+  end;
+  xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);         { the caller's result register }
+  xtensa_mov(reg_xtensa_a2, reg_xtensa_a11);
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a12);
+  xtensa_mov(reg_xtensa_a4, reg_xtensa_a13);
+  xtensa_mov(reg_xtensa_a5, reg_xtensa_a14);
+  xtensa_mov(reg_xtensa_a6, reg_xtensa_a15);
+  xtensa_mov(reg_xtensa_a11, reg_xtensa_a0);         { the caller's a0 }
+  { call0 to the next WORD: a0 := this PC + 3, whose top two bits are the
+    region retw would keep. The pad bytes between are never executed. }
+  pad := (4 - ((CodeLen + 3) and 3)) and 3;
+  xtensa_call0(3 + pad);
+  while pad > 0 do begin EmitB(0); Dec(pad); end;
+  xtensa_movi(reg_xtensa_a12, 30);
+  xtensa_ssr(reg_xtensa_a12);
+  xtensa_srl(reg_xtensa_a13, reg_xtensa_a0);         { PC >> 30 }
+  xtensa_ssl(reg_xtensa_a12);
+  xtensa_sll(reg_xtensa_a13, reg_xtensa_a13);        { ... << 30: the top bits }
+  xtensa_movi(reg_xtensa_a12, 2);
+  xtensa_ssl(reg_xtensa_a12);
+  xtensa_sll(reg_xtensa_a14, reg_xtensa_a9);         { drop the call size... }
+  xtensa_ssr(reg_xtensa_a12);
+  xtensa_srl(reg_xtensa_a14, reg_xtensa_a14);        { ...bits 31:30 }
+  xtensa_or(reg_xtensa_a14, reg_xtensa_a14, reg_xtensa_a13);
+  xtensa_mov(reg_xtensa_a0, reg_xtensa_a11);
+  xtensa_jx(reg_xtensa_a14);
+end;
+
 procedure EmitCFenvStubs;
 var fsIdx, fgIdx: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
@@ -16830,6 +16905,8 @@ begin
     if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
       EmitCSetjmpStubs;
     if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
+      EmitCVforkStub;
   end;
 
   firstIdx := TokPos - 1;
@@ -22405,6 +22482,8 @@ begin
     if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
       EmitCSetjmpStubs;
     if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
+      EmitCVforkStub;
   end;
 
   firstIdx := TokPos - 1;

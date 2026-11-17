@@ -1840,7 +1840,11 @@ FILE *popen(const char *command, const char *mode) {
 
   if (pipe(fds) != 0) return 0;
 
+#if defined(__xtensa__) && defined(__linux__)
+  pid = vfork();   /* as system(): the child only dup2s, closes and execs */
+#else
   pid = fork();
+#endif
   if (pid < 0) { close(fds[0]); close(fds[1]); return 0; }
   if (pid == 0) {
     char *argv[4];
