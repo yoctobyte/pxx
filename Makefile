@@ -37003,8 +37003,18 @@ test-xtensa: $(COMPILER)
 	# both counts 0, which passes the call0 row and fails the windowed one for
 	# entirely the wrong reason.
 	test -s $(TESTTMP)/xtw_movsp.asm && test -s $(TESTTMP)/xtc_movsp.asm
-	tools/expect_same.sh xtensa-windowed/prologue-uses-movsp \
-	    "$$(grep -c 'movsp' $(TESTTMP)/xtw_movsp.asm | awk '{print ($$1>0)?"yes":"no"}')" "yes"
+	# SINCE 2026-11-17 THE FRAME IS IN ENTRY ITSELF (`entry a1, 32+F`), gcc's
+	# shape: a MOVSP right after ENTRY raises AllocaCause on every call (a trap
+	# per call on Linux/IDF; Gibux had no handler and stopped busybox). The
+	# invariant this row guards is unchanged -- a1 moves only by ENTRY or
+	# MOVSP, never by arithmetic -- so it now asserts: no executed write to a1
+	# by add/addi/addmi/sub, no executed movsp (this program has no alloca), and
+	# the positive control that frames really are in ENTRY (one over 32 ran).
+	# bug-xtensa-windowed-prologue-movsp-traps-on-every-call
+	tools/expect_same.sh xtensa-windowed/prologue-moves-a1-only-by-entry \
+	    "$$(grep -cE '(add|addi|addmi|sub)(\.n)?[[:space:]]+a1,|movsp' $(TESTTMP)/xtw_movsp.asm)" "0"
+	tools/expect_same.sh xtensa-windowed/prologue-frame-in-entry \
+	    "$$(grep -oE 'entry[[:space:]]+a1, [0-9]+' $(TESTTMP)/xtw_movsp.asm | awk '$$3>32{n++} END{print (n>0)?"yes":"no"}')" "yes"
 	tools/expect_same.sh xtensa-call0/prologue-has-no-movsp \
 	    "$$(grep -c 'movsp' $(TESTTMP)/xtc_movsp.asm | awk '{print ($$1>0)?"yes":"no"}')" "no"
 	# A BACKWARD JUMP PAST J'S +-128 KiB, both ABIs. J is an 18-bit BYTE offset,
