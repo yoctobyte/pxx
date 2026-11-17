@@ -4027,6 +4027,118 @@ begin
   end;
 end;
 
+{ XTENSA LITERAL TABLE (.xt.lit): the ranges of .text / .iram1.text that are
+  literal words, as gcc's objects carry. ld needs it to accept a dynamic
+  relocation in a read-only section: linking a PIE (-pie, as Gibux's user
+  programs are linked, tests/xtensa/prog.ld) turns every R_XTENSA_32 into
+  R_XTENSA_RELATIVE, and outside a listed literal range that is the error
+  "dangerous relocation: dynamic relocation in read-only section". Every
+  relocated word in pxx's code IS a literal (both ESP backends route each
+  absolute address through an l32r slot), so the table is exactly the
+  relocated words, coalesced into runs. Entries are (address, size) pairs with
+  an R_XTENSA_32 on the address against the code section's symbol.
+  feature-xtensa-objects-carry-a-literal-table }
+var
+  ObjXtLitStart, ObjXtLitLen, ObjXtLitSym: array of Integer;
+  ObjXtLitCount: Integer;
+  ObjXtLitMarkT, ObjXtLitMarkI: array of Boolean;
+
+procedure ObjXtLitMark(pos: Integer; iram: Boolean);
+var m: Integer;
+begin
+  if iram then
+  begin
+    m := CodePosToIramOff(pos);
+    if m >= 0 then
+    begin
+      ObjXtLitMarkI[m div 4] := True;
+      Exit;
+    end;
+  end;
+  ObjXtLitMarkT[pos div 4] := True;
+end;
+
+procedure ObjXtLitAdd(start, len, sym: Integer);
+begin
+  if ObjXtLitCount >= Length(ObjXtLitStart) then
+  begin
+    SetLength(ObjXtLitStart, ObjXtLitCount * 2 + 64);
+    SetLength(ObjXtLitLen, ObjXtLitCount * 2 + 64);
+    SetLength(ObjXtLitSym, ObjXtLitCount * 2 + 64);
+  end;
+  ObjXtLitStart[ObjXtLitCount] := start;
+  ObjXtLitLen[ObjXtLitCount] := len;
+  ObjXtLitSym[ObjXtLitCount] := sym;
+  Inc(ObjXtLitCount);
+end;
+
+procedure ObjXtLitPlan(iram: Boolean; iramSize: Integer);
+var i, k, run, n: Integer;
+begin
+  ObjXtLitCount := 0;
+  if TargetArch <> TARGET_XTENSA then Exit;
+  n := CodeLen div 4 + 1;
+  SetLength(ObjXtLitMarkT, n);
+  for i := 0 to n - 1 do ObjXtLitMarkT[i] := False;
+  if iram then
+  begin
+    SetLength(ObjXtLitMarkI, iramSize div 4 + 1);
+    for i := 0 to iramSize div 4 do ObjXtLitMarkI[i] := False;
+  end;
+  for i := 0 to FixCount-1 do ObjXtLitMark(Fixups[i].CodePos, iram);
+  for i := 0 to GlobFixCount-1 do ObjXtLitMark(GlobFix[i].CodePos, iram);
+  for i := 0 to DynCallCount-1 do ObjXtLitMark(DynCallCodePos[i], iram);
+  if iram then
+  begin
+    for i := 0 to IramCallFixCount-1 do ObjXtLitMark(IramCallFix[i].CodePos, True);
+    for i := 0 to ProcAddrFixCount-1 do ObjXtLitMark(ProcAddrFix[i].CodePos, True);
+  end;
+  k := 0;
+  while k < n do
+  begin
+    if ObjXtLitMarkT[k] then
+    begin
+      run := 0;
+      while (k + run < n) and ObjXtLitMarkT[k + run] do Inc(run);
+      ObjXtLitAdd(k * 4, run * 4, 1);
+      k := k + run;
+    end
+    else Inc(k);
+  end;
+  if iram then
+  begin
+    n := iramSize div 4 + 1;
+    k := 0;
+    while k < n do
+    begin
+      if ObjXtLitMarkI[k] then
+      begin
+        run := 0;
+        while (k + run < n) and ObjXtLitMarkI[k + run] do Inc(run);
+        ObjXtLitAdd(k * 4, run * 4, 2);
+        k := k + run;
+      end
+      else Inc(k);
+    end;
+  end;
+end;
+
+{$ifdef FPC}
+procedure ObjXtLitWrite(var f: File);
+{$else}
+procedure ObjXtLitWrite(f: Integer);
+{$endif}
+var k: Integer;
+begin
+  for k := 0 to ObjXtLitCount - 1 do
+  begin
+    writeU32(f, 0);
+    writeU32(f, ObjXtLitLen[k]);
+  end;
+  for k := 0 to ObjXtLitCount - 1 do
+    writeRela32(f, k * 8, ObjXtLitSym[k], 1, ObjXtLitStart[k]);
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -4050,6 +4162,7 @@ var
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
   cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
+  xtLitOff, xtLitName, xtLitShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4125,6 +4238,15 @@ begin
     shstrSize := shstrSize + Length(SymSectionName[ObjNsSym[i]]) + 1;
   end;
   shnum := shnum + ObjNsCount;
+  { .xt.lit + .rela.xt.lit, after the named sections (ObjXtLitPlan) }
+  ObjXtLitPlan(True, iramSize);
+  xtLitShndx := shnum;
+  xtLitName := shstrSize;                { '.rela.xt.lit'; +5 is '.xt.lit' }
+  if ObjXtLitCount > 0 then
+  begin
+    shnum := shnum + 2;
+    shstrSize := shstrSize + 13;
+  end;
 
   textOff := ELF32_HEADER_SIZE;
   iramOff := AlignTo(textOff + CodeLen, 4);
@@ -4136,7 +4258,8 @@ begin
   relaIramOff := relaTextOff + relaTextCount * 12;
   relaDataOff := relaIramOff + relaIramCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
-  shstrOff := relaRoOff + relaRoCount * 12;
+  xtLitOff := relaRoOff + relaRoCount * 12;
+  shstrOff := xtLitOff + ObjXtLitCount * 20;
   shOff := shstrOff + shstrSize;
   for i := 0 to ObjNsCount - 1 do
   begin
@@ -4357,6 +4480,8 @@ begin
       end;
   end;
 
+  ObjXtLitWrite(f);
+
   { .shstrtab: 95-byte blob, 116 with the split }
   writeU8(f, 0);
   writeStrZ(f, '.text');            { 1 }
@@ -4375,6 +4500,7 @@ begin
     writeStrZ(f, '.rela.rodata');   { 103 }
   end;
   for i := 0 to ObjNsCount - 1 do writeStrZ(f, SymSectionName[ObjNsSym[i]]);
+  if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
   impAdd := shstrOff + shstrSize;   { the file position, from here on }
   for i := 0 to ObjNsCount - 1 do
   begin
@@ -4415,6 +4541,13 @@ begin
       writeShdrA(f, ObjNsNameOff[i], 1, 3, ObjNsFileOff[i], ObjNsLen[i]);
     writeShdrB(f, 0, 0, 8, 0);
   end;
+  if ObjXtLitCount > 0 then
+  begin
+    writeShdrA(f, xtLitName + 5, 1, 0, xtLitOff, ObjXtLitCount*8);           { .xt.lit }
+    writeShdrB(f, 0, 0, 4, 0);
+    writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
+    writeShdrB(f, 9, xtLitShndx, 4, 12);
+  end;
 
 {$ifdef FPC}
   Close(f);
@@ -4449,6 +4582,7 @@ var
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
   cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
+  xtLitOff, xtLitName, xtLitShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4517,6 +4651,15 @@ begin
     shnum := 9;
     shstrSize := 66;
   end;
+  { .xt.lit + .rela.xt.lit, appended after every fixed index (ObjXtLitPlan) }
+  ObjXtLitPlan(False, 0);
+  xtLitShndx := shnum;
+  xtLitName := shstrSize;                        { '.rela.xt.lit'; +5 is '.xt.lit' }
+  if ObjXtLitCount > 0 then
+  begin
+    shnum := shnum + 2;
+    shstrSize := shstrSize + 13;
+  end;
 
   textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
   rodataOff := AlignTo(textOff + CodeLen, 8);
@@ -4526,7 +4669,8 @@ begin
   relaTextOff := AlignTo(strOff + strSize, 4);
   relaDataOff := relaTextOff + relaTextCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
-  shstrOff := relaRoOff + relaRoCount * 12;
+  xtLitOff := relaRoOff + relaRoCount * 12;
+  shstrOff := xtLitOff + ObjXtLitCount * 20;
   shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
@@ -4650,6 +4794,8 @@ begin
       end;
   end;
 
+  ObjXtLitWrite(f);
+
   { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
   writeU8(f, 0);
   writeStrZ(f, '.text');        { 1 }
@@ -4665,6 +4811,7 @@ begin
     writeStrZ(f, '.rodata');      { 66 }
     writeStrZ(f, '.rela.rodata'); { 74 }
   end;
+  if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .data, 4 .rela.data, 5 .bss,
@@ -4693,6 +4840,13 @@ begin
     writeShdrB(f, 0, 0, 8, 0);
     writeShdrA(f, 74, 4, $40, relaRoOff, relaRoCount*12); { 10 .rela.rodata }
     writeShdrB(f, 6, 9, 4, 12);
+  end;
+  if ObjXtLitCount > 0 then
+  begin
+    writeShdrA(f, xtLitName + 5, 1, 0, xtLitOff, ObjXtLitCount*8);           { .xt.lit }
+    writeShdrB(f, 0, 0, 4, 0);
+    writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
+    writeShdrB(f, 6, xtLitShndx, 4, 12);
   end;
 
 {$ifdef FPC}

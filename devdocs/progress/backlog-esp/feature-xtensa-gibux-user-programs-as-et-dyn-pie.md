@@ -4,7 +4,7 @@ tags: [esp, xtensa, gibux, pie, elf, linux-abi]
 prio: 60
 type: feature
 blocked-by: []
-summary: "pxx should build Gibux user programs on ESP32-S3. The shape is a 32-bit ET_DYN with no PT_INTERP and only R_XTENSA_RELATIVE relocations, using Linux xtensa syscalls (number in a2, arguments in a6 a3 a4 a5 a8 a9). It needs separate PT_LOADs: .text+.literal (with the ELF and program headers) in R E, everything else in RW, because the S3 runs SRAM through an instruction-bus alias that allows aligned 32-bit loads only. The gcc reference is ~/gibux/tests/xtensa/prog.ld with -fPIE -pie --no-dynamic-linker -nostdlib. Not started; requested by the Gibux kernel session as 'for later, no rush'."
+summary: "pxx should build Gibux user programs on ESP32-S3. The shape is a 32-bit ET_DYN with no PT_INTERP and only R_XTENSA_RELATIVE relocations, using Linux xtensa syscalls (number in a2, arguments in a6 a3 a4 a5 a8 a9). It needs separate PT_LOADs: .text+.literal (with the ELF and program headers) in R E, everything else in RW, because the S3 runs SRAM through an instruction-bus alias that allows aligned 32-bit loads only. The gcc reference is ~/gibux/tests/xtensa/prog.ld with -fPIE -pie --no-dynamic-linker -nostdlib. The GNU ld route WORKS since feature-xtensa-objects-carry-a-literal-table (2026-11-17): --emit-obj --no-ro-data, then ld -pie --no-dynamic-linker -T prog.ld. Left: a C entry that hands argc/argv/environ to main(), and a first run on Gibux."
 status: open
 owner: unassigned
 ---
@@ -30,3 +30,16 @@ Requested on 2026-11-17 by the Gibux kernel session. It is for after the kernel 
 - Open questions:
   - Absolute data addresses in literals each need an R_XTENSA_RELATIVE.
   - The windowed ABI must be checked against the Gibux user entry.
+
+## Status 2026-11-17: the ld route works
+pxx objects now carry an .xt.lit literal table (feature-xtensa-objects-carry-a-literal-table). With it, GNU ld accepts their literal relocations in a PIE:
+
+    pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --no-ro-data --emit-obj prog.c prog.o
+    xtensa-esp32s3-elf-ld -pie --no-dynamic-linker -T prog.ld prog.o -o prog
+
+The result is ET_DYN with no PT_INTERP and only R_XTENSA_RELATIVE relocations, and .text sits alone in the R+X PT_LOAD. `--no-ro-data` is needed because without it pointer-holding constants land in a read-only .rodata, which ld also refuses to give dynamic relocations. In prog.ld .rodata goes to the RW segment anyway, so it costs nothing there. test/c_xtensa_pie_hello.c is the first program, and its entry is a C `_start` that never returns.
+
+Left:
+- **A C entry for main().** A `_start` that reads argc/argv/envp from the initial stack, sets environ and calls main, as the hosted call0 program stub does. That is also what BusyBox needs.
+- **A run on Gibux.** qemu-user cannot run it, because nothing applies the RELATIVE relocations.
+- **pxx writing the ET_DYN itself** (no GNU ld). Optional now.
