@@ -51,6 +51,19 @@
 #define FBIOPUT_MODEINFO     0x4617
 #define FBIOGET_DISPINFO     0x4618
 
+/* FBIOBLANK's argument. The kernel header takes the VESA levels from
+   <linux/vesa.h> and offsets all but the first by one; LVGL's fbdev driver
+   unblanks with FB_BLANK_UNBLANK at start-up. Enumerators AND same-named
+   macros, as in the kernel's headers, so `#ifdef VESA_POWERDOWN' works. */
+#include <linux/vesa.h>
+enum {
+  FB_BLANK_UNBLANK       = VESA_NO_BLANKING,
+  FB_BLANK_NORMAL        = VESA_NO_BLANKING + 1,
+  FB_BLANK_VSYNC_SUSPEND = VESA_VSYNC_SUSPEND + 1,
+  FB_BLANK_HSYNC_SUSPEND = VESA_HSYNC_SUSPEND + 1,
+  FB_BLANK_POWERDOWN     = VESA_POWERDOWN + 1
+};
+
 /* fix.type */
 #define FB_TYPE_PACKED_PIXELS      0
 #define FB_TYPE_PLANES             1
