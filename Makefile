@@ -20915,6 +20915,8 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_vfork.py $(COMPILER) $(TESTTMP)
 	# a pxx xtensa object links as a PIE (ld -pie): the .xt.lit literal table
 	python3 -I tools/check_xtensa_pie_link.py $(COMPILER) $(TESTTMP)
+	# a windowed xtensa posix object is a process: app_main runs main(argc, argv)
+	python3 -I tools/check_xtensa_posix_main.py $(COMPILER) $(TESTTMP)
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

@@ -4139,6 +4139,17 @@ begin
     writeRela32(f, k * 8, ObjXtLitSym[k], 1, ObjXtLitStart[k]);
 end;
 
+{ app_main is WEAK in a freestanding object (see writeELF32RelIram), and in a
+  posix object with no `main`: a program linked from several posix objects
+  (busybox, one per translation unit) has exactly one main, and only that
+  object's process entry may define app_main; every other object's stub would
+  be a duplicate definition. feature-xtensa-posix-objects-get-a-process-entry }
+function ObjAppMainIsWeak: Boolean;
+begin
+  Result := EspFreestandingObj or
+            ((TargetPlatform = PLATFORM_POSIX) and (FindProc('main') < 0));
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -4338,8 +4349,8 @@ begin
     end;
   { a freestanding object has no IDF to call it: WEAK, so two objects never
     collide over it and the kernel's own app_main, if any, wins }
-  if EspFreestandingObj then writeSym32(f, appMainOff, 0, 0, $22, 1)
-  else writeSym32(f, appMainOff, 0, 0, $12, 1);
+  if ObjAppMainIsWeak then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: ObjAppMainIsWeak }
+  else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
   { The MARKED surface, and only it: a cdecl routine keeps its section -- an
     iram proc stays in .iram1.text -- so exporting it does not move its code. }
   for i := 0 to ProcCount-1 do
@@ -4546,7 +4557,7 @@ begin
     writeShdrA(f, xtLitName + 5, 1, 0, xtLitOff, ObjXtLitCount*8);           { .xt.lit }
     writeShdrB(f, 0, 0, 4, 0);
     writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
-    writeShdrB(f, 9, xtLitShndx, 4, 12);
+    writeShdrB(f, 8, xtLitShndx, 4, 12);   { link: .symtab is section 8 here }
   end;
 
 {$ifdef FPC}
@@ -4712,7 +4723,7 @@ begin
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
-  if EspFreestandingObj then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: see writeELF32RelIram }
+  if ObjAppMainIsWeak then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: ObjAppMainIsWeak }
   else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then

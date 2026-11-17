@@ -16213,6 +16213,61 @@ begin
       xtensa_entry(reg_xtensa_sp, 32);
       xtensa_retw;
       cEspObjEntry := True;
+        end
+    { AND A POSIX OBJECT ON WINDOWED XTENSA IS A PROCESS: the entry of a Linux
+      (or Gibux, ESP32-S3) program linked by GNU ld, e.g. as a PIE with
+      `ld -pie --no-dynamic-linker -e app_main`. The kernel starts it as if by
+      a CALL4 that never returns (PS.WOE=1, CALLINC=1, a0=0) with the Linux
+      initial stack at sp: argc, argv[], 0, envp[], 0, auxv. So `entry sp, 32`
+      is legal, the initial stack is sp+32 after it, and this is the call0
+      stub's sequence one window over: the initial sp to BSS_INITIAL_RSP, the
+      initializer shell (which sets environ), main(argc, argv) in a10/a11, the
+      finalizers, exit_group with main's result. A source with no main gets
+      the empty body, as the IDF arm does. Before this, offset 0 was the `ill`
+      trap below and a C program built this way had no entry at all.
+      feature-xtensa-posix-objects-get-a-process-entry }
+    else if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_POSIX) and (TargetArch = TARGET_XTENSA) and
+       (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspFreestandingObj) then
+    begin
+      if CodeLen <> 0 then
+        Error('internal: the xtensa process entry stub must be at code offset 0, ' +
+              'where the object writer exports app_main, but code starts at ' +
+              AIntToStr(CodeLen));
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, 32);   { the initial stack }
+      { SEED THE ROOT FRAME'S SAVE AREA, as the Pascal process entry does
+        (EmitProgramEntryForTarget, which says why at length): no CALL8 reached
+        this frame, so [sp-12] -- the caller's sp, from which a window
+        overflow finds where to spill this frame's a4..a7 -- is whatever lay
+        on the stack. Measured: main's result kept in a7 across the finalizer
+        call came back 0, and every program exited 0. }
+      xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);
+      xtensa_s32i(reg_xtensa_a0, reg_xtensa_a8, 0);
+      xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 4);
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 8);
+      xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 12);
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+      xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 0);
+      if needInit then
+      begin
+        xtensa_mov(reg_xtensa_a10, reg_xtensa_a6);     { arg1 = the initial stack }
+        EmitXtensaLongCallSlot(initPatch, initAnchor);
+      end;
+      xtensa_l32i(reg_xtensa_a10, reg_xtensa_a6, 0);   { argc }
+      xtensa_addi(reg_xtensa_a11, reg_xtensa_a6, 4);   { argv }
+      EmitXtensaLongCallSlot(callPatch, callAnchor);
+      xtensa_mov(reg_xtensa_a7, reg_xtensa_a10);       { main's result, kept across the next call }
+      xtFiniIdx := GetFiniRunnerProc;
+      EmitXtensaLongCallSlot(xtFiniLit, xtFiniAnchor);
+      RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
+      xtensa_mov(reg_xtensa_a2, reg_xtensa_a7);
+      EmitExitReg;
+      while (CodeLen and 3) <> 0 do EmitB(0);
+      cEspNoMainBody := CodeLen;
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_retw;
+      cEspObjEntry := True;
     end;
     { OFFSET 0 IS RESERVED EVEN WHEN NOTHING ENTERS THERE. Every runtime stub's
       address variable reads 0 as "never emitted" (IREmitCodeCall's guard, the
