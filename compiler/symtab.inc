@@ -17972,6 +17972,14 @@ begin
         EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
         EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
+        if EspBareBoot then
+        begin
+          { no RTL: copy inline (XtensaInlineMem), then a2 = dest again }
+          XtensaInlineMem(sz, True);
+          EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);
+        end
+        else
+        begin
         EmitLoadConstXtensa(reg_xtensa_a4, sz);                       { a4 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
@@ -17988,6 +17996,7 @@ begin
         begin
           EmitCallProc(procIdx);
           EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);           { a2 = dest (return value) }
+        end;
         end;
       end
       else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and

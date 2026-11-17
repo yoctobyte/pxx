@@ -20907,6 +20907,8 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_freestanding_obj.py $(COMPILER) $(TESTTMP)
 	# __attribute__((section)) there: .iram1* functions, any-name data sections
 	python3 -I tools/check_esp_section_attr.py $(COMPILER) $(TESTTMP)
+	# struct copy / zero with no RTL underneath: inline loops, run under qemu
+	python3 -I tools/check_xtensa_freestanding_struct.py $(COMPILER) $(TESTTMP)
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

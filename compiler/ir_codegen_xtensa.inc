@@ -1117,6 +1117,56 @@ begin
   Patch24(pSkip, EncodeXtensaBranch(condR, s, t, CodeLen - pSkip));
 end;
 
+{ INLINE ZERO / COPY of n bytes (n a compile-time constant), for an image with
+  no RTL underneath -- a bare boot or a freestanding object (EspBareBoot) has
+  no PXXMemZero / PXXMemMove, and a struct assignment, a struct returned by
+  value or `struct x = {0}` must not need one (gcc inlines or calls the
+  kernel's own memset/memcpy; this inlines). dest in a2, src in a3 (copy).
+  Clobbers a2, a3, a8..a11 only -- what the helper call it replaces clobbers
+  on both ABIs. Words when n is a multiple of 4 AND the pointers turn out
+  4-aligned at run time (a struct of chars may sit anywhere, and an unaligned
+  l32i/s32i faults); bytes otherwise. Forward copy: C struct assignment has
+  no partial overlap. bug-c-struct-copy-and-zero-in-a-freestanding-xtensa-object }
+procedure XtensaInlineMem(n: Integer; isCopy: Boolean);
+var pAlign, pSkip, top: Integer;
+  procedure Loop(step: Integer);
+  begin
+    { a10 = end = a2 + n; do { ...; a2 += step } while a2 <> a10 }
+    EmitLoadConstXtensa(reg_xtensa_a11, n);
+    xtensa_add(reg_xtensa_a10, reg_xtensa_a2, reg_xtensa_a11);
+    top := CodeLen;
+    if isCopy then
+    begin
+      if step = 4 then xtensa_l32i(reg_xtensa_a8, reg_xtensa_a3, 0)
+      else xtensa_l8ui(reg_xtensa_a8, reg_xtensa_a3, 0);
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_a3, step);
+      if step = 4 then xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 0)
+      else xtensa_s8i(reg_xtensa_a8, reg_xtensa_a2, 0);
+    end
+    else if step = 4 then xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 0)
+    else xtensa_s8i(reg_xtensa_a9, reg_xtensa_a2, 0);
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, step);
+    xtensa_bne(reg_xtensa_a2, reg_xtensa_a10, top - CodeLen);
+  end;
+begin
+  if n <= 0 then Exit;
+  xtensa_movi(reg_xtensa_a9, 0);
+  if (n and 3) <> 0 then begin Loop(1); Exit; end;
+  { a11 = (dest | src) & 3; nonzero -> the byte loop }
+  if isCopy then xtensa_or(reg_xtensa_a11, reg_xtensa_a2, reg_xtensa_a3)
+  else xtensa_mov(reg_xtensa_a11, reg_xtensa_a2);
+  xtensa_movi(reg_xtensa_a10, 3);
+  xtensa_and(reg_xtensa_a11, reg_xtensa_a11, reg_xtensa_a10);
+  pAlign := CodeLen;
+  xtensa_bne(reg_xtensa_a11, reg_xtensa_a9, 0);        { -> bytes, patched }
+  Loop(4);
+  pSkip := CodeLen;
+  xtensa_j(0);                                          { -> done, patched }
+  Patch24(pAlign, EncodeXtensaBranch(9, reg_xtensa_a11, reg_xtensa_a9, CodeLen - pAlign));
+  Loop(1);
+  Patch24(pSkip, EncodeXtensaJ(CodeLen - pSkip));
+end;
+
 procedure IREmitNodeXtensa(node: Integer); forward;
 
 procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
@@ -4961,6 +5011,9 @@ begin
         { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeXtensa(IRA[node]);             { a2 = dest }
+        if EspBareBoot then XtensaInlineMem(Integer(IRIVal[node]), False)
+        else
+        begin
         procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'xtensa');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
@@ -4970,6 +5023,7 @@ begin
         else
           EmitLoadConstXtensa(reg_xtensa_a3, Integer(IRIVal[node])); { a2=dest; arg1=count }
         EmitCallProc(procIdx);
+        end;
       end;
 
     IR_COPY_REC:
@@ -4980,6 +5034,9 @@ begin
         XtensaPushA2;
         IREmitNodeXtensa(IRA[node]);             { a2 = dest }
         XtensaPopA3;                              { a3 = src }
+        if EspBareBoot then XtensaInlineMem(Integer(IRIVal[node]), True)
+        else
+        begin
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         if XtensaABI = XTENSA_ABI_WINDOWED then
@@ -4991,6 +5048,7 @@ begin
         else
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[node]));   { a2=dest, a3=src, a4=count }
         EmitCallProc(procIdx);
+        end;
       end;
 
     IR_READLINE:
@@ -6776,6 +6834,8 @@ begin
            (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           EmitSlotAddrXtensa(reg_xtensa_a2, i);
+          if EspBareBoot then XtensaInlineMem(RecSize(SymTR[i].RecId), False)
+          else begin
           procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'xtensa');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
@@ -6785,6 +6845,7 @@ begin
           else
             EmitLoadConstXtensa(reg_xtensa_a3, RecSize(SymTR[i].RecId));
           EmitCallProc(procIdx);
+          end;
         end
         else
         begin
@@ -6916,7 +6977,8 @@ begin
             begin
               EmitSlotAddrXtensa(reg_xtensa_a2, si);
               EmitLoadConstXtensa(reg_xtensa_a3, sz);
-              EmitXtensaHelperCall(XtensaHelperProc('PXXMemZero'), 2);
+              if EspBareBoot then XtensaInlineMem(sz, False)
+              else EmitXtensaHelperCall(XtensaHelperProc('PXXMemZero'), 2);
             end;
           end;
         end;

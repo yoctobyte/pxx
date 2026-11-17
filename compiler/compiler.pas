@@ -61,6 +61,7 @@ function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 procedure CMarkTokModuleId(startTok, modId: Integer); forward;   { ditto }
 procedure CMarkTokNoModule(startTok: Integer); forward;          { ditto }
 function CModuleOfTok(t: Integer): Integer; forward;   { real body in dbg_filetable.inc; lexer.inc asks which C translation unit a token came from, and lexer.inc is included first (ditto) }
+procedure XtensaInlineMem(n: Integer; isCopy: Boolean); forward;   { real body in ir_codegen_xtensa.inc; symtab.inc's aggregate-result epilogue copies inline with it when there is no RTL (EspBareBoot) }
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
 function NodeDynDepth(node: Integer): Integer; forward;   { real body in ast_arena.inc; symtab.inc's IsNodeArray asks it, and used to carry a second copy of the walk that drifted (ditto) }
