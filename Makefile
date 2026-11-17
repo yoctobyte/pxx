@@ -28504,6 +28504,10 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/c_gnu_builtins_rump.c $(TESTTMP)/c_gnubuiltins26_aarch64 >/dev/null || { echo "c_gnubuiltins26 aarch64 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh aarch64/c_gnubuiltins26 "$$(timeout 20 tools/run_target.sh aarch64 $(TESTTMP)/c_gnubuiltins26_aarch64)" "$$(timeout 20 $(TESTTMP)/c_gnubuiltins26_gcc)" || exit 1; \
 	else echo "=== c_gnubuiltins26: qemu-aarch64 absent, aarch64 NOT verified ==="; fi
+	# A UTF-8 BOM at the start of the main file and of an #included header.
+	./$(COMPILER) test/c_utf8_bom.c $(TESTTMP)/c_utf8bom26
+	@gcc -o $(TESTTMP)/c_utf8bom26_gcc test/c_utf8_bom.c
+	tools/expect_same.sh c_utf8bom26 "$$(timeout 20 $(TESTTMP)/c_utf8bom26)" "$$(timeout 20 $(TESTTMP)/c_utf8bom26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

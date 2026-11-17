@@ -3853,6 +3853,13 @@ var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
     savedPath, savedBaseDir: AnsiString;
 begin
   pos := 1;
+  { A UTF-8 byte-order mark (EF BB BF) at the start of a file is not text:
+    gcc and clang skip it, in the main file and in every #include. LVGL's
+    lv_conf_template.h starts with one, so every LVGL file failed with
+    `stray token at top level: ''`. Only at the very start; a BOM anywhere
+    else is an ordinary (stray) character, as with gcc. }
+  if (Length(src) >= 3) and (src[1] = #$EF) and (src[2] = #$BB) and (src[3] = #$BF) then
+    pos := 4;
   inComment := False;
   { -g: this text is one FILE. Save the enclosing file's origin and restore it
     on the way out, so returning from an #include resumes the outer line count
