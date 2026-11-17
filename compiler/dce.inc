@@ -84,7 +84,7 @@ function DceBodyEnd(slot: Integer): Integer;
   body never recorded an end, which reads as "zero bytes I am sure about" and
   makes everything after it look like the always-live gap. Conservative on
   purpose: an unknown extent must not be guessed at. }
-var p: Integer;
+var p, q: Integer;
 begin
   p := DceOrder[slot];
   Result := ProcBodyEnd[p];
@@ -101,6 +101,31 @@ begin
       Result := Result + 2
     else
       Result := Procs[p].BodyAddr;
+  end;
+  { xtensa: the frontends record a body's end just BEFORE its closing RETW
+    (retw.n, or the 3-byte form), and the next body's 4-alignment pads
+    with 3-byte NOPs after it. A dropped body therefore left its RETW and
+    the padding behind as orphans in the always-live gap: ~2.4 KB of
+    `retw.n; nop; nop` per busybox object. The RETW is reached only by the
+    body's own jumps, so it is the body's; it is claimed together with the
+    NOPs ONLY when they bring the end exactly to a 4-aligned offset within
+    the slot's limit (the compaction moves what follows by a multiple of 4,
+    keeping L32R literals aligned) -- otherwise nothing changes.
+    feature-xtensa-dce-drops-a-dead-bodys-closing-retw-and-padding }
+  if (TargetArch = TARGET_XTENSA) and (Result > Procs[p].BodyAddr) and
+     ((Result mod 4) <> 0) then
+  begin
+    q := Result;
+    if (q + 2 <= DceLimit[slot]) and (q + 2 <= CodeLen) and
+       (Code[q] = $1D) and (Code[q + 1] = $F0) then
+      q := q + 2
+    else if (q + 3 <= DceLimit[slot]) and (q + 3 <= CodeLen) and
+       (Code[q] = $90) and (Code[q + 1] = $00) and (Code[q + 2] = $00) then
+      q := q + 3;
+    while ((q mod 4) <> 0) and (q + 3 <= DceLimit[slot]) and (q + 3 <= CodeLen) and
+          (Code[q] = $F0) and (Code[q + 1] = $20) and (Code[q + 2] = $00) do
+      q := q + 3;
+    if (q mod 4) = 0 then Result := q;
   end;
 end;
 

@@ -15822,6 +15822,22 @@ end;
   Called from two places (the stub, and the crtl pull that supplies the shell's
   body) and they must agree, so it is one function rather than two spellings of
   one condition. feature-c-entry-stub-must-run-initializers-for-environ }
+{ Does the token stream contain `main (`? Conservative on purpose: a call
+  to main, or a prototype, also counts, and keeps the full process entry. }
+function CTokensMentionMain: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to TokCount - 2 do
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 4) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'main') then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function CNeedsEnvironInit: Boolean;
 var i: Integer;
 begin
@@ -16385,6 +16401,24 @@ begin
       feature-xtensa-posix-objects-get-a-process-entry }
     else if EmitObjMode and (not EmitSharedMode) and
        (TargetPlatform = PLATFORM_POSIX) and (TargetArch = TARGET_XTENSA) and
+       (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspFreestandingObj) and
+       (not CTokensMentionMain) then
+    begin
+      { A translation unit that never says `main(` cannot define main: its
+        app_main is the WEAK one that only fills offset 0 (ObjAppMainIsWeak),
+        and nothing ever enters it. The full stub below would still CALL the
+        initializer shell, main's slot and the finalizer runner, and those
+        edges kept ~3.5 KB (__pxx_atexit_run, PXXNilRef, PXXWriteNL,
+        PXXSysWrite, __fini_pxxcio) alive in every busybox object.
+        feature-xtensa-no-main-objects-carry-no-process-exit-path }
+      if CodeLen <> 0 then
+        Error('internal: the xtensa process entry stub must be at code offset 0');
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_retw;
+      while (CodeLen and 3) <> 0 do EmitB(0);
+    end
+    else if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_POSIX) and (TargetArch = TARGET_XTENSA) and
        (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspFreestandingObj) then
     begin
       if CodeLen <> 0 then
@@ -16430,12 +16464,39 @@ begin
       xtensa_l32i(reg_xtensa_a10, reg_xtensa_a6, 0);   { argc }
       xtensa_addi(reg_xtensa_a11, reg_xtensa_a6, 4);   { argv }
       EmitXtensaLongCallSlot(callPatch, callAnchor);
+      if SharedRuntime then
+      begin
+        { RETURNING FROM main IS exit(main's result) (C11 5.1.2.2.3), and
+          under --shared-runtime that has to be the RUNTIME OBJECT's exit:
+          atexit() resolves to rt.o, so the handlers sit in rt.o's table,
+          and this object's own finalizer runner drained a private, empty
+          copy of it -- "atexit ran" never printed (pxx, on Gibux). rt.o's
+          exit runs its __pxx_atexit_run, then exits with the code. The
+          object's local runner is not called at all, so its finalizer
+          bodies are dead here and DCE drops them.
+          bug-xtensa-shared-runtime-objects-skip-atexit-handlers }
+        { a10 already holds main's result: exit's argument }
+        xtInitIdx := FindProc('exit');
+        if xtInitIdx < 0 then
+        begin
+          xtInitNames[0] := 'code'; xtInitTypes[0] := tyInteger;
+          xtInitIdx := RegisterProc('exit', False, tyInteger, 1,
+                                    xtInitNames, xtInitTypes);
+        end;
+        ProcExternal[xtInitIdx] := True;
+        EmitCallProc(xtInitIdx);
+        xtensa_movi(reg_xtensa_a2, 127);                 { exit does not return }
+        EmitExitReg;
+      end
+      else
+      begin
       xtensa_mov(reg_xtensa_a7, reg_xtensa_a10);       { main's result, kept across the next call }
       xtFiniIdx := GetFiniRunnerProc;
       EmitXtensaLongCallSlot(xtFiniLit, xtFiniAnchor);
       RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
       xtensa_mov(reg_xtensa_a2, reg_xtensa_a7);
       EmitExitReg;
+      end;
       while (CodeLen and 3) <> 0 do EmitB(0);
       cEspNoMainBody := CodeLen;
       xtensa_entry(reg_xtensa_sp, 32);

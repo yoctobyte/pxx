@@ -6,7 +6,10 @@ under qemu-xtensa with an argument and an environment variable: it must print
 argc, argv[1], the variable and the atexit line, and exit 3 (main's result,
 which the unseeded root window used to lose). Then the same object links as a
 PIE (test/xtensa_pie_prog.ld, -e app_main). And an object with no main
-exports app_main WEAK, so it cannot clash with the one that has it. Exits 0,
+exports app_main WEAK, so it cannot clash with the one that has it. And
+built --shared-runtime against a runtime object, main's return still runs the
+atexit handler, which now sits in the runtime object's table
+(bug-xtensa-shared-runtime-objects-skip-atexit-handlers). Exits 0,
 saying so, without qemu-xtensa or the xtensa binutils.
 usage: tools/check_xtensa_posix_main.py <compiler> <tmpdir>
 feature-xtensa-posix-objects-get-a-process-entry
@@ -56,6 +59,21 @@ def main():
     syms = subprocess.run([b + 'readelf', '-sW', lib], capture_output=True, text=True).stdout
     if not any(l.split()[-1] == 'app_main' and ' WEAK ' in l for l in syms.splitlines() if l.split()):
         print('check_xtensa_posix_main: FAIL, app_main is not WEAK in an object with no main')
+        return 1
+    rtsrc = os.path.join(tmp, 'c_xt_pmain_rt.c')
+    with open(rtsrc, 'w') as f:
+        f.write('#include <pxx/runtime_all.h>\n')
+    rto = os.path.join(tmp, 'c_xt_pmain_rt.o')
+    sho = os.path.join(tmp, 'c_xt_pmain_sh.o')
+    she = os.path.join(tmp, 'c_xt_pmain_sh.elf')
+    subprocess.run([cc] + FLAGS + [rtsrc, rto], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([cc] + FLAGS + ['--shared-runtime', 'test/c_xtensa_posix_main.c', sho],
+                   check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([b + 'ld', '-e', 'app_main', '-Ttext=0x10000', sho, rto, '-o', she], check=True)
+    r = subprocess.run([qemu, she, 'hi'], capture_output=True, text=True, timeout=60, env=env)
+    if r.stdout.strip() != want or r.returncode != 3:
+        print('check_xtensa_posix_main: FAIL, --shared-runtime got %r exit %d, want %r exit 3'
+              % (r.stdout.strip(), r.returncode, want))
         return 1
     print('check_xtensa_posix_main: OK')
     return 0
