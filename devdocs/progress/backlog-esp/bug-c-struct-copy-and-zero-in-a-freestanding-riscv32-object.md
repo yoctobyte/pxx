@@ -20,3 +20,6 @@ The xtensa fix (XtensaInlineMem) did not reach riscv32. Gibux targets the S3 onl
 ## Sites
 - ir_codegen_riscv32.inc: IR_DEFAULT_MEM, IR_COPY_REC, and the hidden-temp zero and managed-local zero.
 - symtab.inc: the riscv32 aggregate-result epilogue.
+
+## Also: struct return from an extern callee (2026-11-17)
+ir_codegen_riscv32.inc gates the hidden result pointer on `not ProcExternal[procIdx]` (~4721, ~4979, ~5009). This is the same defect bug-esp-a-struct-returning-extern-call-passes-no-result-pointer fixed on xtensa. In a freestanding riscv32 object an extern callee is pxx code and needs the pointer. Port XtensaCallHasHiddenDest. test/c_xtensa_extern_structret_{a,b}.c is the shape to test with.

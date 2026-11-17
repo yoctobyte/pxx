@@ -19980,11 +19980,23 @@ begin
       DynCallExtIdx[DynCallCount] := extIdx;
       Inc(DynCallCount);
       EmitI32(0);
-      xtensa_l32r(reg_xtensa_a8, $FFFF);
+      { ON CALL0 THE CALLEE GOES IN a9, NOT a8: a8 carries the hidden
+        aggregate-result destination there (the caller loads it just before
+        the call), and loading the callee over it made the callee store its
+        result through a code address. The indirect path made the same move
+        for the same reason. a9 is caller-saved and free here; windowed keeps
+        a8 (the destination is argument word 0 there).
+        bug-esp-a-struct-returning-extern-call-passes-no-result-pointer }
       if XtensaABI = XTENSA_ABI_WINDOWED then
-        xtensa_callx8(reg_xtensa_a8)
+      begin
+        xtensa_l32r(reg_xtensa_a8, $FFFF);
+        xtensa_callx8(reg_xtensa_a8);
+      end
       else
-        xtensa_callx0(reg_xtensa_a8);
+      begin
+        xtensa_l32r(reg_xtensa_a9, $FFFF);
+        xtensa_callx0(reg_xtensa_a9);
+      end;
       Exit;
     end;
     if TargetArch = TARGET_RISCV32 then
@@ -20092,11 +20104,16 @@ begin
         IramCallFix[IramCallFixCount].ProcIdx := procIdx;
         Inc(IramCallFixCount);
         EmitI32(0);
-        xtensa_l32r(reg_xtensa_a8, $FFFF);
-        if XtensaABI = XTENSA_ABI_WINDOWED then
-          xtensa_callx8(reg_xtensa_a8)
+        if XtensaABI = XTENSA_ABI_WINDOWED then   { call0: a9, see the external path }
+        begin
+          xtensa_l32r(reg_xtensa_a8, $FFFF);
+          xtensa_callx8(reg_xtensa_a8);
+        end
         else
-          xtensa_callx0(reg_xtensa_a8);
+        begin
+          xtensa_l32r(reg_xtensa_a9, $FFFF);
+          xtensa_callx0(reg_xtensa_a9);
+        end;
       end;
       Exit;
     end;

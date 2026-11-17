@@ -1167,6 +1167,22 @@ begin
   Patch24(pSkip, EncodeXtensaJ(CodeLen - pSkip));
 end;
 
+{ Does a DIRECT call to procIdx pass the hidden aggregate-result destination?
+  An external was excluded: it was taken to be a gcc-built ESP-IDF routine,
+  which returns a small struct in registers. In a FREESTANDING object
+  (EspFreestandingObj) an external C function is another pxx object -- the
+  Gibux kernel is all pxx -- whose body takes the destination like any local
+  one (EmitAggregateDestStash), so the call must pass it. Without it the
+  callee stored its result through whatever a10 held: Gibux's mount_ns_root
+  wrote through 0 (StoreProhibited). Calls across a gcc boundary that return
+  a struct are still not gcc's ABI there.
+  bug-esp-a-struct-returning-extern-call-passes-no-result-pointer }
+function XtensaCallHasHiddenDest(procIdx: Integer): Boolean;
+begin
+  Result := (procIdx >= 0) and ((not ProcExternal[procIdx]) or EspFreestandingObj) and
+            ABIRetViaHiddenDestProc(procIdx);
+end;
+
 procedure IREmitNodeXtensa(node: Integer); forward;
 
 procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
@@ -4520,8 +4536,7 @@ begin
           argument word instead (callee a2), which is also what xtensa gcc does
           for a >16-byte struct return; every real argument shifts up one word
           and the callee's param-copy loop starts at word 1. }
-        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           ABIRetViaHiddenDestProc(procIdx) and (XtensaABI = XTENSA_ABI_CALL0) then
+        if XtensaCallHasHiddenDest(procIdx) and (XtensaABI = XTENSA_ABI_CALL0) then
         begin
           IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
           XtensaPushA2;
@@ -4530,8 +4545,7 @@ begin
         nArgs := 0;     { word count }
         i := 0;         { argument index }
         argBase := XtSpillDepth;   { windowed: base offset of this call's arg block }
-        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           ABIRetViaHiddenDestProc(procIdx) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+        if XtensaCallHasHiddenDest(procIdx) and (XtensaABI = XTENSA_ABI_WINDOWED) then
         begin
           IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
           XtensaPushA2;                    { word 0 }
@@ -4756,8 +4770,7 @@ begin
         else
         begin
           XtensaLoadArgRegsCall0(nArgs);
-          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-             ABIRetViaHiddenDestProc(procIdx) then
+          if XtensaCallHasHiddenDest(procIdx) then
           begin
             xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);   { hidden dest (deepest) }
             argFree := (nArgs + 1) * 4;

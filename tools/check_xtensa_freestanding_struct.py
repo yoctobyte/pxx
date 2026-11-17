@@ -72,6 +72,26 @@ def main():
                 print('check_xtensa_freestanding_struct: extern-bss FAIL, .bss is %d bytes'
                       ' (the extern declarations kept their storage)' % size)
                 return 1
+    # a struct returned by an EXTERN callee (another object), direct and
+    # through a function pointer: the caller must pass the hidden result
+    # pointer, and on call0 the callee address must not overwrite it in a8
+    objs = []
+    for part, src in (('a', 'test/c_xtensa_extern_structret_a.c'),
+                      ('b', 'test/c_xtensa_extern_structret_b.c')):
+        o = os.path.join(tmp, 'c_xtsr_%s.o' % part)
+        subprocess.run([cc, '--target=esp32s3', '--xtensa-abi=call0', '--freestanding',
+                        '--emit-obj', src, o], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([cc, '--target=esp32s3', '--freestanding', '--emit-obj', src,
+                        o + '.w.o'], check=True, stdout=subprocess.DEVNULL)
+        objs.append(o)
+    elf3 = os.path.join(tmp, 'c_xtsr.elf')
+    subprocess.run([b + 'ld', '-e', '_start', '-Ttext=0x10000', st] + objs + ['-o', elf3],
+                   check=True)
+    rc = subprocess.run([qemu, elf3], timeout=60).returncode
+    if rc != 32:
+        print('check_xtensa_freestanding_struct: extern struct return FAIL, exit %d,'
+              ' want 32' % rc)
+        return 1
     print('check_xtensa_freestanding_struct: OK')
     return 0
 
