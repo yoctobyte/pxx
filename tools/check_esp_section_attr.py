@@ -80,6 +80,14 @@ def check(cc, tmp, arch, chip, fails):
     want('counter section', syms.get('counter', (0, 0, None))[2], '.data')
     want('cache_init section', syms.get('cache_init', (0, 0, None))[2], '.iram1.text')
     want('xtensa_start section', syms.get('xtensa_start', (0, 0, None))[2], '.iram1.text')
+    # every function starts word-aligned: CALLn targets must be, and the
+    # inline L32R pools were laid out for an aligned start (Gibux's
+    # caches_init sat at .iram1.text+0x77 and read its frame size off-word)
+    for name, (val, _sz, sec) in syms.items():
+        if sec in ('.text', '.iram1.text') and name in (
+                'cache_init', 'xtensa_start', 'flash_mid', 'later'):
+            if val % 4:
+                fails.append('%s %s at %s+%#x, not word-aligned' % (chip, name, sec, val))
     want('flash_mid section', syms.get('flash_mid', (0, 0, None))[2], '.text')
     want('later section', syms.get('later', (0, 0, None))[2], '.text')
     dump = run(b + 'objdump', '-s', '-j', '.rodata_desc', '-j', '.dram1.flags', obj)

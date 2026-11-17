@@ -4063,6 +4063,14 @@ begin
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
     begin
+      { Keep each body at its Code[] address modulo 4: an L32R reads the
+        word-ALIGNED address its offset names, and the inline pools were laid
+        out for the body's Code[] position. Packed end to end, a body after
+        one of odd length shifted its pools off the word and read garbage --
+        Gibux's caches_init loaded 0x81000000 as its frame size and faulted.
+        It also keeps a CALLn target word-aligned. ObjIramPad writes the gap.
+        bug-esp-iram-bodies-packed-off-their-literal-alignment }
+      while (iramSize and 3) <> (Procs[i].BodyAddr and 3) do Inc(iramSize);
       ObjProcIramOff[i] := iramSize;
       iramSize := iramSize + (ProcBodyEnd[i] - Procs[i].BodyAddr);
     end;
@@ -4160,17 +4168,27 @@ begin
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
+  impAdd := 0;   { bytes of .iram1.text written so far }
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+    begin
+      writePad(f, ObjProcIramOff[i] - impAdd);
       Blockwrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
+      impAdd := ObjProcIramOff[i] + ProcBodyEnd[i] - Procs[i].BodyAddr;
+    end;
   writePad(f, rodataOff - (iramOff + iramSize));
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
   if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
+  impAdd := 0;   { bytes of .iram1.text written so far }
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+    begin
+      writePad(f, ObjProcIramOff[i] - impAdd);
       OutWrite(f, Code, Procs[i].BodyAddr, ProcBodyEnd[i] - Procs[i].BodyAddr);
+      impAdd := ObjProcIramOff[i] + ProcBodyEnd[i] - Procs[i].BodyAddr;
+    end;
   writePad(f, rodataOff - (iramOff + iramSize));
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
 {$endif}
