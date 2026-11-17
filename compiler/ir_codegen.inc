@@ -1408,8 +1408,25 @@ procedure EnsureSignalBss;
 begin
   if SigBssAllocated then Exit;
   SigBssAllocated := True;
-  BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
-  BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
+  { The handler table and the dispatch scratch are read ONLY by the per-arch
+    signal runtime emitters, which run only under TargetHasSignalRuntime, and
+    every signal-install builtin is refused by the parser under the same
+    predicate. Where it is false -- every ESP build, wasm32 -- they were 544
+    bytes of BSS nothing touched, and on ESP BSS is SRAM, in EVERY object of a
+    multi-object kernel. -1 is not an offset, so a stray reader faults loudly
+    in review rather than aliasing BSS[0]. The four parked fields below stay:
+    the signal-info builtins lower to them on every target.
+    bug-esp-every-freestanding-object-carries-544-bytes-of-signal-bss }
+  if TargetHasSignalRuntime then
+  begin
+    BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
+    BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
+  end
+  else
+  begin
+    BSS_SIG_HOOKS   := -1;
+    BSS_SIG_SCRATCH := -1;
+  end;
   BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);

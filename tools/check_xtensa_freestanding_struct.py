@@ -44,6 +44,34 @@ def main():
     if rc != WANT:
         print('check_xtensa_freestanding_struct: FAIL, exit %d, want %d' % (rc, WANT))
         return 1
+    # extern declarations take no .bss: two objects, interleaved live and
+    # extern globals, run; and the declaring object's .bss stays small
+    objs = []
+    for part, src in (('a', 'test/c_xtensa_extern_bss_a.c'),
+                      ('b', 'test/c_xtensa_extern_bss_b.c')):
+        o = os.path.join(tmp, 'c_xteb_%s.o' % part)
+        subprocess.run([cc, '--target=esp32s3', '--xtensa-abi=call0', '--freestanding',
+                        '--emit-obj', src, o],
+                       check=True, stdout=subprocess.DEVNULL)
+        objs.append(o)
+    elf2 = os.path.join(tmp, 'c_xteb.elf')
+    subprocess.run([b + 'ld', '-e', '_start', '-Ttext=0x10000', st] + objs + ['-o', elf2],
+                   check=True)
+    rc = subprocess.run([qemu, elf2], timeout=60).returncode
+    if rc != 189:
+        print('check_xtensa_freestanding_struct: extern-bss FAIL, exit %d, want 189' % rc)
+        return 1
+    hdrs = subprocess.run([b + 'readelf', '-SW', objs[0]], check=True, capture_output=True,
+                          text=True).stdout
+    for line in hdrs.splitlines():
+        p = line.split()
+        if '.bss' in p:
+            k = p.index('.bss')
+            size = int(p[k + 4], 16)
+            if size >= 256:
+                print('check_xtensa_freestanding_struct: extern-bss FAIL, .bss is %d bytes'
+                      ' (the extern declarations kept their storage)' % size)
+                return 1
     print('check_xtensa_freestanding_struct: OK')
     return 0
 

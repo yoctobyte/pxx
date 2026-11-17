@@ -3872,6 +3872,85 @@ begin
   end;
 end;
 
+{ .BSS WITHOUT THE IMPORTS' STORAGE. A C global every declaration of which
+  said `extern` (ObjDataIsImport) got a .bss slot at parse time -- the fold
+  that makes it an import runs only here, after every declaration is seen --
+  and every reference to it relocates against its UND symbol. The slot was
+  dead, and it was in EVERY object that included the header: Gibux's 61
+  ESP32-S3 objects carried 1.9 MB of .bss against gcc's 120 KB, on a chip with
+  512 KB of SRAM. The ESP writers now cut those ranges out: each live offset
+  moves down by the cut bytes below it. Cuts are whole 16-byte granules
+  (ObjBssGran), so every shift is a multiple of 16 and no surviving variable
+  loses its alignment; a small import costs at most its granule remainders.
+  bug-c-extern-declarations-get-bss-in-every-object }
+const ObjBssGran = 16;
+var
+  ObjBssCutOff, ObjBssCutLen: array of Integer;
+  ObjBssCutCount, ObjBssCutTotal: Integer;
+
+
+procedure ObjBssPlan;
+var i, j, lo, hi, t: Integer;
+  procedure ObjBssAddCut(a, b: Integer);
+  begin
+    if ObjBssCutCount >= Length(ObjBssCutOff) then
+    begin
+      SetLength(ObjBssCutOff, ObjBssCutCount + 64);
+      SetLength(ObjBssCutLen, ObjBssCutCount + 64);
+    end;
+    ObjBssCutOff[ObjBssCutCount] := a;
+    ObjBssCutLen[ObjBssCutCount] := b - a;
+    Inc(ObjBssCutCount);
+  end;
+begin
+  ObjBssCutCount := 0;
+  ObjBssCutTotal := 0;
+  for i := 0 to SymCount - 1 do
+    if ObjDataIsImport(i) and (not SymOffIsData(Syms[i].Offset)) and
+       (Syms[i].Offset >= 0) and (SymAllocSize[i] > 0) then
+    begin
+      lo := AlignTo(Syms[i].Offset, ObjBssGran);
+      hi := ((Syms[i].Offset + SymAllocSize[i]) div ObjBssGran) * ObjBssGran;
+      if hi > BSSSize then hi := (BSSSize div ObjBssGran) * ObjBssGran;
+      if hi > lo then ObjBssAddCut(lo, hi);
+    end;
+  { sort by offset, then merge overlaps (two names folded onto one slot) }
+  for i := 1 to ObjBssCutCount - 1 do
+  begin
+    j := i;
+    while (j > 0) and (ObjBssCutOff[j - 1] > ObjBssCutOff[j]) do
+    begin
+      t := ObjBssCutOff[j]; ObjBssCutOff[j] := ObjBssCutOff[j - 1]; ObjBssCutOff[j - 1] := t;
+      t := ObjBssCutLen[j]; ObjBssCutLen[j] := ObjBssCutLen[j - 1]; ObjBssCutLen[j - 1] := t;
+      Dec(j);
+    end;
+  end;
+  j := 0;
+  for i := 0 to ObjBssCutCount - 1 do
+    if (j > 0) and (ObjBssCutOff[i] <= ObjBssCutOff[j - 1] + ObjBssCutLen[j - 1]) then
+    begin
+      if ObjBssCutOff[i] + ObjBssCutLen[i] > ObjBssCutOff[j - 1] + ObjBssCutLen[j - 1] then
+        ObjBssCutLen[j - 1] := ObjBssCutOff[i] + ObjBssCutLen[i] - ObjBssCutOff[j - 1];
+    end
+    else
+    begin
+      ObjBssCutOff[j] := ObjBssCutOff[i];
+      ObjBssCutLen[j] := ObjBssCutLen[i];
+      Inc(j);
+    end;
+  ObjBssCutCount := j;
+  for i := 0 to ObjBssCutCount - 1 do ObjBssCutTotal := ObjBssCutTotal + ObjBssCutLen[i];
+end;
+
+{ a live .bss offset, after the cuts below it }
+function ObjBssOff(o: Integer): Integer;
+var k: Integer;
+begin
+  Result := o;
+  for k := 0 to ObjBssCutCount - 1 do
+    if ObjBssCutOff[k] + ObjBssCutLen[k] <= o then Result := Result - ObjBssCutLen[k];
+end;
+
 function ObjProcIsDefined(procIdx: Integer): Boolean; forward;
 procedure ObjEspCdrRel(i, extSym0, sText, sIram, sData, sBss, sRo: Integer;
                        var sym: Integer; var addend: Int64);
@@ -3919,7 +3998,7 @@ begin
     else
     begin
       sym := sBss;
-      addend := addend + Syms[p].Offset;
+      addend := addend + ObjBssOff(Syms[p].Offset);
     end;
   end;
 end;
@@ -3944,7 +4023,7 @@ begin
   else
   begin
     shndx := shBss;
-    value := Syms[i].Offset;
+    value := ObjBssOff(Syms[i].Offset);
   end;
 end;
 
@@ -3989,6 +4068,7 @@ begin
     end;
 
   ObjRoPrepare;
+  ObjBssPlan;
   if RoSplitActive then nSecSyms := 5 else nSecSyms := 4;
   ObjNsCollect;
   ObjNsSym0 := nSecSyms + 1;
@@ -4176,7 +4256,7 @@ begin
       else if impK >= 0 then
         writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, GlobFix[i].CodePos, 4, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, GlobFix[i].CodePos, 4, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) < 0 then
@@ -4211,7 +4291,7 @@ begin
       else if impK >= 0 then
         writeRelaRef32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, mapped, 4, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, mapped, 4, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
@@ -4298,7 +4378,7 @@ begin
   writeShdrA(f, 30, 4, $40, relaIramOff, relaIramCount*12);  writeShdrB(f, 8, 3, 4, 12);
   writeShdrA(f, 47, 1, 3, dataOff, ObjRwLen);                writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 53, 4, $40, relaDataOff, relaDataCount*12);  writeShdrB(f, 8, 5, 4, 12);
-  writeShdrA(f, 64, 8, 3, rodataOff + DataFileLen, BSSSize); writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 64, 8, 3, rodataOff + DataFileLen, BSSSize - ObjBssCutTotal); writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 69, 2, 0, symOff, numSyms*16);               writeShdrB(f, 9, firstGlobal, 4, 16);
   writeShdrA(f, 77, 3, 0, strOff, strSize);                  writeShdrB(f, 0, 0, 1, 0);
   writeShdrA(f, 85, 3, 0, shstrOff, shstrSize);              writeShdrB(f, 0, 0, 1, 0);
@@ -4399,6 +4479,7 @@ begin
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   ObjRoPrepare;
+  ObjBssPlan;
   if RoSplitActive then nSecSyms := 4 else nSecSyms := 3;
   ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
@@ -4522,7 +4603,7 @@ begin
       if impK >= 0 then
         writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, GlobFix[i].CodePos, 3, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, GlobFix[i].CodePos, 3, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
@@ -4580,7 +4661,7 @@ begin
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 24, 4, $40, relaDataOff, relaDataCount*12);
   writeShdrB(f, 6, 3, 4, 12);
-  writeShdrA(f, 35, 8, 3, rodataOff + DataFileLen, BSSSize);
+  writeShdrA(f, 35, 8, 3, rodataOff + DataFileLen, BSSSize - ObjBssCutTotal);
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 40, 2, 0, symOff, numSyms*16);
   writeShdrB(f, 7, firstGlobal, 4, 16);
