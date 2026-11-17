@@ -252,9 +252,21 @@ struct winsize {
    has it: both headers reach the same asm-generic number, and a program that
    includes either gets the constant. Same token sequence in both places, which
    is what makes the duplicate legal rather than merely tolerated. */
+#if defined(__XTENSA__)
+#define TIOCGPGRP  0x80047477
+#else
 #define TIOCGPGRP  0x540F
+#endif
+#if defined(__XTENSA__)
+#define TIOCSPGRP  0x40047476
+#else
 #define TIOCSPGRP  0x5410
+#endif
+#if defined(__XTENSA__)
+#define TIOCGSID   0x80045429
+#else
 #define TIOCGSID   0x5429
+#endif
 
 int tcgetattr(int fd, struct termios *t);
 int tcsetattr(int fd, int actions, const struct termios *t);

@@ -4164,6 +4164,18 @@ begin
     Result := $10;
 end;
 
+{ A hosted xtensa object whose file-scope initialisers need code (pxx keeps
+  most initialised globals in .bss and fills them at run time) gets one
+  .init_array slot pointing at its init thunk, as the x86-64 writer does.
+  Before, only the object holding main ran its initialisers -- at the top of
+  main -- and every other object's globals read zero: busybox's bb_banner and
+  every libbb table. crtl's __pxx_run_initializers walks the array before main.
+  feature-xtensa-objects-run-their-initialisers }
+function ObjInitArrHas: Boolean;
+begin
+  Result := (TargetArch = TARGET_XTENSA) and (InitThunkOff >= 0);
+end;
+
 function ObjAppMainIsWeak: Boolean;
 begin
   Result := EspFreestandingObj or
@@ -4194,6 +4206,7 @@ var
   impStr, impK, impAdd: Integer;
   cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
   xtLitOff, xtLitName, xtLitShndx: Integer;
+  iaOff, iaName, iaShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4278,6 +4291,14 @@ begin
     shnum := shnum + 2;
     shstrSize := shstrSize + 13;
   end;
+  { .init_array + .rela.init_array (ObjInitArrHas) }
+  iaShndx := shnum;
+  iaName := shstrSize;                   { '.rela.init_array'; +5 is '.init_array' }
+  if ObjInitArrHas then
+  begin
+    shnum := shnum + 2;
+    shstrSize := shstrSize + 17;
+  end;
 
   textOff := ELF32_HEADER_SIZE;
   iramOff := AlignTo(textOff + CodeLen, 4);
@@ -4290,7 +4311,9 @@ begin
   relaDataOff := relaIramOff + relaIramCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
   xtLitOff := relaRoOff + relaRoCount * 12;
-  shstrOff := xtLitOff + ObjXtLitCount * 20;
+  iaOff := xtLitOff + ObjXtLitCount * 20;
+  shstrOff := iaOff;
+  if ObjInitArrHas then shstrOff := iaOff + 16;  { the 4-byte slot + one RELA }
   shOff := shstrOff + shstrSize;
   for i := 0 to ObjNsCount - 1 do
   begin
@@ -4512,6 +4535,11 @@ begin
   end;
 
   ObjXtLitWrite(f);
+  if ObjInitArrHas then
+  begin
+    writeU32(f, 0);                                  { RELA: the value is the addend }
+    writeRela32(f, 0, 1, 1, InitThunkOff);           { R_XTENSA_32 / R_RISCV_32 vs .text }
+  end;
 
   { .shstrtab: 95-byte blob, 116 with the split }
   writeU8(f, 0);
@@ -4532,6 +4560,7 @@ begin
   end;
   for i := 0 to ObjNsCount - 1 do writeStrZ(f, SymSectionName[ObjNsSym[i]]);
   if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
+  if ObjInitArrHas then writeStrZ(f, '.rela.init_array');
   impAdd := shstrOff + shstrSize;   { the file position, from here on }
   for i := 0 to ObjNsCount - 1 do
   begin
@@ -4579,6 +4608,13 @@ begin
     writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
     writeShdrB(f, 8, xtLitShndx, 4, 12);   { link: .symtab is section 8 here }
   end;
+  if ObjInitArrHas then
+  begin
+    writeShdrA(f, iaName + 5, 14, 3, iaOff, 4);      { .init_array: SHT_INIT_ARRAY, WA }
+    writeShdrB(f, 0, 0, 4, 4);
+    writeShdrA(f, iaName, 4, $40, iaOff + 4, 12);    { .rela.init_array }
+    writeShdrB(f, 8, iaShndx, 4, 12);
+  end;
 
 {$ifdef FPC}
   Close(f);
@@ -4614,6 +4650,7 @@ var
   impStr, impK, impAdd: Integer;
   cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
   xtLitOff, xtLitName, xtLitShndx: Integer;
+  iaOff, iaName, iaShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4691,6 +4728,14 @@ begin
     shnum := shnum + 2;
     shstrSize := shstrSize + 13;
   end;
+  { .init_array + .rela.init_array (ObjInitArrHas) }
+  iaShndx := shnum;
+  iaName := shstrSize;                           { '.rela.init_array'; +5 is '.init_array' }
+  if ObjInitArrHas then
+  begin
+    shnum := shnum + 2;
+    shstrSize := shstrSize + 17;
+  end;
 
   textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
   rodataOff := AlignTo(textOff + CodeLen, 8);
@@ -4701,7 +4746,9 @@ begin
   relaDataOff := relaTextOff + relaTextCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
   xtLitOff := relaRoOff + relaRoCount * 12;
-  shstrOff := xtLitOff + ObjXtLitCount * 20;
+  iaOff := xtLitOff + ObjXtLitCount * 20;
+  shstrOff := iaOff;
+  if ObjInitArrHas then shstrOff := iaOff + 16;  { the 4-byte slot + one RELA }
   shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
@@ -4826,6 +4873,11 @@ begin
   end;
 
   ObjXtLitWrite(f);
+  if ObjInitArrHas then
+  begin
+    writeU32(f, 0);                                  { RELA: the value is the addend }
+    writeRela32(f, 0, 1, 1, InitThunkOff);           { R_XTENSA_32 / R_RISCV_32 vs .text }
+  end;
 
   { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
   writeU8(f, 0);
@@ -4843,6 +4895,7 @@ begin
     writeStrZ(f, '.rela.rodata'); { 74 }
   end;
   if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
+  if ObjInitArrHas then writeStrZ(f, '.rela.init_array');
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .data, 4 .rela.data, 5 .bss,
@@ -4878,6 +4931,13 @@ begin
     writeShdrB(f, 0, 0, 4, 0);
     writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
     writeShdrB(f, 6, xtLitShndx, 4, 12);
+  end;
+  if ObjInitArrHas then
+  begin
+    writeShdrA(f, iaName + 5, 14, 3, iaOff, 4);      { .init_array: SHT_INIT_ARRAY, WA }
+    writeShdrB(f, 0, 0, 4, 4);
+    writeShdrA(f, iaName, 4, $40, iaOff + 4, 12);    { .rela.init_array }
+    writeShdrB(f, 6, iaShndx, 4, 12);
   end;
 
 {$ifdef FPC}
@@ -5681,9 +5741,15 @@ begin
     object linked beside this one DOES own the definition, so the private slot
     would be a second, never-initialised stdout (measured: toybox's xprintf
     passed NULL to ferror). }
+  { ...and so are the bounds the LINKER defines: no runtime owns them, a
+    private slot is two equal zeros-or-garbage, and crtl's xtensa
+    __pxx_run_initializers walked one into a nil call.
+    feature-xtensa-objects-run-their-initialisers }
   ObjDataIsImport := ObjDataIsCandidate(i) and SymObjDataExternOnly[i] and
                      (not SymCStaticLink[i]) and
-                     ((not SymObjRuntimeCopy[i]) or SharedRuntime);
+                     ((not SymObjRuntimeCopy[i]) or SharedRuntime or
+                      (Syms[i].Name = '__init_array_start') or
+                      (Syms[i].Name = '__init_array_end'));
 end;
 
 function ObjDataIsLocal(i: Integer): Boolean;

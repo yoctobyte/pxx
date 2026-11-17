@@ -15819,6 +15819,16 @@ begin
     reached by the .init_array thunk below.
     bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
   if CUseSystemLibs or NoDefaultRtl then Exit;
+  { A hosted windowed xtensa OBJECT always has pre-main work: environ, and the
+    other objects' .init_array slots, both in __pxx_run_initializers.
+    feature-xtensa-objects-run-their-initialisers }
+  if (TargetArch = TARGET_XTENSA) and EmitObjMode and (not EmitSharedMode) and
+     (TargetPlatform = PLATFORM_POSIX) and (XtensaABI = XTENSA_ABI_WINDOWED) and
+     (not EspFreestandingObj) and (not FreestandingMode) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if TargetArch = TARGET_XTENSA then Exit;
   if (TargetArch = TARGET_RISCV32) and EspBareBoot then Exit;
   { --shared-runtime: environ lives in the runtime object, whose own init
@@ -16158,6 +16168,9 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
     callAnchor, initAnchor: Integer;   { xtensa only -- see PatchEntryStubCall }
     xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
+    xtInitIdx, xtInitLit, xtInitAnchor: Integer;
+    xtInitNames: array[0..0] of AnsiString;
+    xtInitTypes: array[0..0] of TTypeKind;
     needInit: Boolean;
     cPullsBuiltinHeap: Boolean;   { the default-RTL pull below, decided ONCE -- see its use }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
@@ -16169,6 +16182,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cSfI: Integer;
     envPi: Integer;   { __pxx_set_environ, for the init thunk }
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
+    xtInitThunk: Boolean;           { hosted xtensa object: .init_array thunk }
 begin
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
@@ -16373,7 +16387,23 @@ begin
       if needInit then
       begin
         xtensa_mov(reg_xtensa_a10, reg_xtensa_a6);     { arg1 = the initial stack }
-        EmitXtensaLongCallSlot(initPatch, initAnchor);
+        if SharedRuntime then
+        begin
+          { the body is in the runtime object: an EXTERNAL call (an UND
+            symbol and an R_XTENSA_32 literal), registered here because no
+            header declares it }
+          xtInitIdx := FindProc('__pxx_run_initializers');
+          if xtInitIdx < 0 then
+          begin
+            xtInitNames[0] := 'sp'; xtInitTypes[0] := tyPointer;
+            xtInitIdx := RegisterProc('__pxx_run_initializers', False, tyInteger, 1,
+                                      xtInitNames, xtInitTypes);
+          end;
+          ProcExternal[xtInitIdx] := True;
+          EmitCallProc(xtInitIdx);
+        end
+        else
+          EmitXtensaLongCallSlot(initPatch, initAnchor);
       end;
       xtensa_l32i(reg_xtensa_a10, reg_xtensa_a6, 0);   { argc }
       xtensa_addi(reg_xtensa_a11, reg_xtensa_a6, 4);   { argv }
@@ -17280,15 +17310,24 @@ begin
 
     Emitted BEFORE ApplyCallFixups because the call below is a forward like any
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
-  if (EmitSharedMode or EmitObjMode) and
+  { Hosted windowed xtensa objects too (busybox per TU on Gibux): the thunk
+    carries only the initialisers -- environ is the process entry's, set by
+    __pxx_run_initializers, which then runs every object's .init_array slot.
+    feature-xtensa-objects-run-their-initialisers }
+  xtInitThunk := EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_XTENSA) and
+     (TargetPlatform = PLATFORM_POSIX) and (XtensaABI = XTENSA_ABI_WINDOWED) and
+     (not EspFreestandingObj) and (not FreestandingMode);
+  if xtInitThunk then
+    while (CodeLen and 3) <> 0 do EmitB(0);
+  if xtInitThunk or ((EmitSharedMode or EmitObjMode) and
      ((TargetArch = TARGET_X86_64) or
-      (EmitObjMode and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64)))) then
+      (EmitObjMode and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64))))) then
   begin
     thunkStart := CodeLen;
     InitThunkOff := CodeLen;
     EmitSharedThunkPrologue;
     thunkBody := CodeLen;
-    if needInit then
+    if needInit and not xtInitThunk then
     begin
       envPi := FindProc('__pxx_set_environ');
       if envPi < 0 then
@@ -17361,7 +17400,7 @@ begin
       did not, because under --shared the runner always exists. }
     if ((not EmitObjMode) or EmitSharedMode or
         (FiniProcCount > 0) or (FiniRunnerProc >= 0)) and
-       not (FreestandingMode and EmitObjMode) then
+       not (FreestandingMode and EmitObjMode) and not xtInitThunk then
     begin
       FiniThunkOff := CodeLen;
       EmitSharedThunkPrologue;

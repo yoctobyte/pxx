@@ -15131,6 +15131,18 @@ begin
     EmitI32($A9046BF9); EmitI32($A90573FB);
     EmitI32($6D0627E8); EmitI32($6D072FEA); EmitI32($6D0837EC); EmitI32($6D093FEE);
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { windowed, called through an .init_array pointer by CALLX8 (the caller
+      4-aligned the thunk). A procedure's own frame shape: a15 = the entry sp,
+      128 bytes of scratch below it, a7 = the local-area bias -- the global
+      initialiser code is the code main's prologue normally hosts. }
+    xtensa_entry(reg_xtensa_sp, 32);
+    xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -128);
+    xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+    xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -64);
+  end
   else
     ErrorNoPos('internal: no init/fini thunk prologue for --target=' +
                TargetArchName(TargetArch));
@@ -15170,6 +15182,8 @@ begin
     EmitI32($6D4627E8); EmitI32($6D472FEA); EmitI32($6D4837EC); EmitI32($6D493FEE);
     EmitI32($A8CA7BFD); EmitI32($D65F03C0);
   end
+  else if TargetArch = TARGET_XTENSA then
+    xtensa_retw
   else
     ErrorNoPos('internal: no init/fini thunk epilogue for --target=' +
                TargetArchName(TargetArch));

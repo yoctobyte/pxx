@@ -5,7 +5,8 @@ test/c_xtensa_srt_{main,part}.c built --shared-runtime --emit-obj (windowed),
 the runtime object built from lib/crtl/include/pxx/runtime_all.h as
 ElfRtProvide builds it, linked `ld -e app_main`, run under qemu-xtensa:
 errno, stdout, environ and the heap must be ONE across the objects, and the
-stdarg/setjmp copies every object carries must not collide (they are WEAK).
+stdarg/setjmp copies every object carries must not collide (they are WEAK),
+and the second object's initialised globals must be filled (its .init_array).
 Then the same three link as a PIE. Exits 0, saying so, without qemu-xtensa or
 the xtensa binutils.
 usage: tools/check_xtensa_shared_runtime.py <compiler> <tmpdir>
@@ -19,7 +20,7 @@ import sys
 
 F = ['--target=xtensa', '--platform=posix', '--xtensa-soft-mulhigh', '--xtensa-abi=windowed',
      '--no-ro-data', '--emit-obj']
-WANT = 'dup shared open -1 errno 2 same-stdout 1 env yes sum 15'
+WANT = 'dup shared open -1 errno 2 same-stdout 1 env yes sum 15\n[hello world] [two] 5 bb22'
 
 
 def main():

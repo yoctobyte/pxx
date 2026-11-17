@@ -700,10 +700,28 @@ void __pxx_set_environ(char **envp)
   environ = envp;
 }
 
+#if defined(__xtensa__) && defined(__PXXRT_MARKER)
+/* Hosted xtensa objects (busybox per TU on Gibux, linked by GNU ld): every
+ * object but main's fills its initialised globals from an .init_array slot,
+ * and nothing else runs those -- the process entry is pxx's, not a crt1.
+ * The linker defines the bounds (ld's default scripts; a custom script must
+ * KEEP .init_array between them). feature-xtensa-objects-run-their-initialisers */
+typedef void (*__pxx_initfn)(void);
+extern __pxx_initfn __init_array_start[];
+extern __pxx_initfn __init_array_end[];
+#endif
+
 void __pxx_run_initializers(long *sp)
 {
   long argc = sp[0];
   __pxx_set_environ((char **)(sp + argc + 2));
+#if defined(__xtensa__) && defined(__PXXRT_MARKER)
+  {
+    __pxx_initfn *p;
+    for (p = __init_array_start; p < __init_array_end; p++)
+      (*p)();
+  }
+#endif
 }
 
 /* ---------------------------------------------------------------------------

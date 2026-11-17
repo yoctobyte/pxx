@@ -11,7 +11,11 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 /* TCGETS is 0x5401 on every target pxx builds for (asm-generic/ioctls.h; only
    mips/alpha/sparc/powerpc differ) — the same constant __pxx_isatty uses. */
 #define TCGETS  0x5401
+#if defined(__XTENSA__)
+#define FIONREAD 0x8004667F
+#else
 #define FIONREAD 0x541B
+#endif
 
 /* THE TTY IOCTLS, script-transcribed from this box's
    /usr/include/asm-generic/ioctls.h -- the same discipline as the socket block
@@ -21,11 +25,14 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
    either.
 
    ARCHITECTURE CAVEAT, and it is real where the socket block's is not: these
-   numbers are asm-generic's, which x86, arm, arm64, riscv and xtensa all use
-   unchanged -- but mips, alpha, sparc and powerpc define their own. pxx builds
-   for none of those today. If a target from that set is ever added, this block
-   is one of the places that must fork per-arch; the socket ioctls above never
-   need to.
+   numbers are asm-generic's, which x86, arm, arm64 and riscv use unchanged.
+   XTENSA DOES NOT: its asm/ioctls.h keeps TCGETS..TCSETSF and the plain 'T'
+   _IO numbers, but the 't'/'f' families and every _IOR/_IOW-shaped 'T'
+   request carry the _IOC encoding (TIOCGPGRP 0x80047477, FIONBIO
+   0x4004667E). The __XTENSA__ arms below were computed from Linux 7.0's
+   arch/xtensa/include/uapi/asm/ioctls.h; hush's tcgetpgrp got ENOTTY on Gibux
+   with 0x540F. bug-crtl-xtensa-tty-ioctls-use-the-generic-numbers.
+   mips, alpha, sparc and powerpc differ again; pxx builds for none of them.
 
    The _IOR/_IOW-shaped entries in that header (TCGETS2, TIOCGPTPEER, the
    TIOCGRS485 pair, ...) are deliberately NOT here: transcribing their expansion
@@ -34,20 +41,64 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 #define TCSETS             0x5402
 #define TCSETSW            0x5403
 #define TCSETSF            0x5404
+#if defined(__XTENSA__)
+#define TCGETA             0x80127417
+#else
 #define TCGETA             0x5405
+#endif
+#if defined(__XTENSA__)
+#define TCSETA             0x40127418
+#else
 #define TCSETA             0x5406
+#endif
+#if defined(__XTENSA__)
+#define TCSETAW            0x40127419
+#else
 #define TCSETAW            0x5407
+#endif
+#if defined(__XTENSA__)
+#define TCSETAF            0x4012741C
+#else
 #define TCSETAF            0x5408
+#endif
+#if defined(__XTENSA__)
+#define TCSBRK             0x741D
+#else
 #define TCSBRK             0x5409
+#endif
+#if defined(__XTENSA__)
+#define TCXONC             0x741E
+#else
 #define TCXONC             0x540A
+#endif
+#if defined(__XTENSA__)
+#define TCFLSH             0x741F
+#else
 #define TCFLSH             0x540B
+#endif
 #define TIOCEXCL           0x540C
 #define TIOCNXCL           0x540D
 #define TIOCSCTTY          0x540E
+#if defined(__XTENSA__)
+#define TIOCGPGRP          0x80047477
+#else
 #define TIOCGPGRP          0x540F
+#endif
+#if defined(__XTENSA__)
+#define TIOCSPGRP          0x40047476
+#else
 #define TIOCSPGRP          0x5410
+#endif
+#if defined(__XTENSA__)
+#define TIOCOUTQ           0x80047473
+#else
 #define TIOCOUTQ           0x5411
+#endif
+#if defined(__XTENSA__)
+#define TIOCSTI            0x40015412
+#else
 #define TIOCSTI            0x5412
+#endif
 /* glibc's <sys/ioctl.h> provides this (via bits/ioctl-types.h) and ours did
    not, so `#include <sys/ioctl.h>` followed by `struct winsize ws;` -- the
    canonical way C code asks for the terminal size -- got an INCOMPLETE TYPE.
@@ -78,44 +129,144 @@ struct winsize {
 #define TIOCGWINSZ         0x5413
 #define TIOCSWINSZ         0x5414
 #endif
+#if defined(__XTENSA__)
+#define TIOCMGET           0x80045415
+#else
 #define TIOCMGET           0x5415
+#endif
+#if defined(__XTENSA__)
+#define TIOCMBIS           0x40045416
+#else
 #define TIOCMBIS           0x5416
+#endif
+#if defined(__XTENSA__)
+#define TIOCMBIC           0x40045417
+#else
 #define TIOCMBIC           0x5417
+#endif
+#if defined(__XTENSA__)
+#define TIOCMSET           0x40045418
+#else
 #define TIOCMSET           0x5418
+#endif
+#if defined(__XTENSA__)
+#define TIOCGSOFTCAR       0x80045419
+#else
 #define TIOCGSOFTCAR       0x5419
+#endif
+#if defined(__XTENSA__)
+#define TIOCSSOFTCAR       0x4004541A
+#else
 #define TIOCSSOFTCAR       0x541A
+#endif
+#if defined(__XTENSA__)
+#define TIOCLINUX          0x4001541C
+#else
 #define TIOCLINUX          0x541C
+#endif
 #define TIOCCONS           0x541D
+#if defined(__XTENSA__)
+#define TIOCGSERIAL        0x803C541E
+#else
 #define TIOCGSERIAL        0x541E
+#endif
+#if defined(__XTENSA__)
+#define TIOCSSERIAL        0x403C541F
+#else
 #define TIOCSSERIAL        0x541F
+#endif
+#if defined(__XTENSA__)
+#define TIOCPKT            0x40045420
+#else
 #define TIOCPKT            0x5420
+#endif
+#if defined(__XTENSA__)
+#define FIONBIO            0x4004667E
+#else
 #define FIONBIO            0x5421
+#endif
 #define TIOCNOTTY          0x5422
+#if defined(__XTENSA__)
+#define TIOCSETD           0x40045423
+#else
 #define TIOCSETD           0x5423
+#endif
+#if defined(__XTENSA__)
+#define TIOCGETD           0x80045424
+#else
 #define TIOCGETD           0x5424
+#endif
+#if defined(__XTENSA__)
+#define TCSBRKP            0x40045425
+#else
 #define TCSBRKP            0x5425     /* Needed for POSIX tcsendbreak() */
+#endif
 #define TIOCSBRK           0x5427     /* BSD compatibility */
 #define TIOCCBRK           0x5428     /* BSD compatibility */
+#if defined(__XTENSA__)
+#define TIOCGSID           0x80045429
+#else
 #define TIOCGSID           0x5429     /* Return the session ID of FD */
+#endif
+#if defined(__XTENSA__)
+#define TIOCGRS485         0x8020542E
+#else
 #define TIOCGRS485         0x542E
+#endif
+#if defined(__XTENSA__)
+#define TIOCSRS485         0xC020542F
+#else
 #define TIOCSRS485         0x542F
+#endif
 #define TCGETX             0x5432     /* SYS5 TCGETX compatibility */
 #define TCSETX             0x5433
 #define TCSETXF            0x5434
 #define TCSETXW            0x5435
 #define TIOCVHANGUP        0x5437
+#if defined(__XTENSA__)
+#define FIONCLEX           0x6602
+#else
 #define FIONCLEX           0x5450
+#endif
+#if defined(__XTENSA__)
+#define FIOCLEX            0x6601
+#else
 #define FIOCLEX            0x5451
+#endif
+#if defined(__XTENSA__)
+#define FIOASYNC           0x4004667D
+#else
 #define FIOASYNC           0x5452
+#endif
 #define TIOCSERCONFIG      0x5453
+#if defined(__XTENSA__)
+#define TIOCSERGWILD       0x80045454
+#else
 #define TIOCSERGWILD       0x5454
+#endif
+#if defined(__XTENSA__)
+#define TIOCSERSWILD       0x40045455
+#else
 #define TIOCSERSWILD       0x5455
+#endif
 #define TIOCGLCKTRMIOS     0x5456
 #define TIOCSLCKTRMIOS     0x5457
 #define TIOCSERGSTRUCT     0x5458     /* For debugging only */
+#if defined(__XTENSA__)
+#define TIOCSERGETLSR      0x80045459
+#else
 #define TIOCSERGETLSR      0x5459     /* Get line status register */
+#endif
+#if defined(__XTENSA__)
+#define TIOCSERGETMULTI    0x80A8545A
+#else
 #define TIOCSERGETMULTI    0x545A     /* Get multiport config */
+#endif
+#if defined(__XTENSA__)
+#define TIOCSERSETMULTI    0x40A8545B
+#else
 #define TIOCSERSETMULTI    0x545B     /* Set multiport config */
+#endif
 #define TIOCMIWAIT         0x545C     /* wait for a change on serial input line(s) */
 #define TIOCGICOUNT        0x545D     /* read serial port __inline__ interrupt counts */
 #define TIOCPKT_DATA       0
