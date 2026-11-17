@@ -15137,10 +15137,11 @@ begin
       4-aligned the thunk). A procedure's own frame shape: a15 = the entry sp,
       128 bytes of scratch below it, a7 = the local-area bias -- the global
       initialiser code is the code main's prologue normally hosts. }
-    xtensa_entry(reg_xtensa_sp, 32);
-    xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
-    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -128);
-    xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+    { the whole frame in ENTRY: a MOVSP right after it traps on every call
+      (bug-xtensa-windowed-prologue-movsp-traps-on-every-call) }
+    xtensa_entry(reg_xtensa_sp, 32 + 128);
+    xtensa_addi(reg_xtensa_a15, reg_xtensa_sp, 64);
+    xtensa_addi(reg_xtensa_a15, reg_xtensa_a15, 64);
     xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -64);
   end
   else
@@ -16403,6 +16404,33 @@ begin
     aligned := ((size + XtSpillMax + 15) div 16) * 16;
     if aligned = 0 then aligned := 16;
     Patch32(patchPos, aligned);
+    { THE WHOLE FRAME IN ENTRY'S IMMEDIATE when it fits (imm12 * 8, up to
+      32760), as gcc does: `entry a1, 32+F; ...; add a15, a1, a8; nop`
+      replaces `entry a1, 32; mov.n a15, a1; ...; sub a8, a1, a8; movsp a1, a8`.
+      Same final sp, same a15 (= entry sp + F = the old 32-byte frame's sp),
+      same layout. MOVSP right after ENTRY always finds the caller's window
+      live, so it raised an AllocaCause exception on EVERY call: ESP-IDF and
+      Linux spill and retry in a handler (a trap per call), Gibux had no
+      handler and stopped busybox at its first one. The literal stays (it is
+      a8 = F for the add). Only the shape this prologue emitted is rewritten,
+      checked byte for byte; anything else keeps MOVSP.
+      bug-xtensa-windowed-prologue-movsp-traps-on-every-call }
+    if 32 + aligned <= 32760 then
+    begin
+      p := -1;
+      for rvLo := patchPos - 5 downto patchPos - 16 do
+        if (rvLo >= 0) and (p < 0) and
+           (Code[rvLo] = $36) and (Code[rvLo + 1] = $41) and (Code[rvLo + 2] = $00) and
+           (Code[rvLo + 3] = $FD) and (Code[rvLo + 4] = $01) then p := rvLo;
+      if (p >= 0) and
+         (Code[patchPos + 7] = $80) and (Code[patchPos + 8] = $81) and (Code[patchPos + 9] = $C0) and
+         (Code[patchPos + 10] = $10) and (Code[patchPos + 11] = $18) and (Code[patchPos + 12] = $00) then
+      begin
+        Patch24(p, $000136 or (((32 + aligned) div 8) shl 12));   { entry a1, 32+F }
+        Patch24(patchPos + 7, $80F180);                            { add a15, a1, a8 }
+        Patch24(patchPos + 10, $0020F0);                           { nop }
+      end;
+    end;
     { ...and every alloca's block offset, which is the same final number:
       the block sits just above the region this frame reserves for spills. }
     for rvLo := 0 to XtAllocaLitCount - 1 do

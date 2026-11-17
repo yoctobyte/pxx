@@ -1068,8 +1068,9 @@ end;
   every data->data pointer (DataPtrFix, DataRelFix) from outside the class
   tables into them. NilPy ProcSig slots (MFK_PYSIG) are never withheld.
 
-  Gated to the ESP object targets, where those tables are the complete list of
-  ways code reaches data; elsewhere the slots stay unconditional roots. }
+  Gated to the ESP-family object writers (ESP and hosted xtensa/riscv32), where
+  those tables are the complete list of ways code reaches data; elsewhere the
+  slots stay unconditional roots. }
 var
   DceWithholdClassSlots: Boolean;
   DceClsS, DceClsE: array of Integer;
@@ -1107,9 +1108,16 @@ begin
     if (x >= RttiAllS[k]) and (x < RttiAllE[k]) then begin Result := True; Exit; end;
 end;
 
+{ The ESP-family object WRITERS, not the ESP platform: hosted xtensa/riscv32
+  objects (busybox per TU on Gibux, --platform=posix) go through the same two
+  writers and the same reference tables. Rooting there kept TInterfacedObject's
+  slots and the whole release chain behind them, ~14 KB in every C object
+  (17,936 B of text for an empty TU, ~3.3 MB over busybox's 182).
+  feature-xtensa-posix-objects-drop-unreferenced-class-slots }
 function DceClassSlotsWithholdable: Boolean;
 begin
-  Result := EmitObjMode and (TargetPlatform = PLATFORM_ESP) and
+  Result := EmitObjMode and
+            ((TargetPlatform = PLATFORM_ESP) or (TargetPlatform = PLATFORM_POSIX)) and
             ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA));
 end;
 
