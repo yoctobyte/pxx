@@ -474,6 +474,67 @@ begin
   xtensa_rsr(SR_PRID, ar);
 end;
 
+{ The system instructions a kernel's arch headers spell in C inline asm
+  (casm_xtensa.inc): exchange-special-register, raise-interrupt-level, wait,
+  the six sync barriers, the user-register pair (THREADPTR is UR 231), and the
+  acquire/release load and store. Every byte pattern below was read back from
+  xtensa-esp32s3-elf-as 2.43 (`xsr.ps a3` = 30 E6 61, `rsil a4, 15` = 40 6F 00,
+  `waiti 5` = 00 75 00, `rur.threadptr a5` = 70 5E E3, `wur.threadptr a5` =
+  50 E7 F3, `l32ai a3, a4, 8` = 32 B4 02, `s32ri a3, a4, 8` = 32 F4 02).
+  feature-c-xtensa-inline-asm-templates }
+procedure xtensa_xsr(sr, at: Integer);
+begin
+  EmitB((at and $F) shl 4);
+  EmitB(sr and $FF);
+  EmitB($61);
+end;
+
+procedure xtensa_rsil(at, level: Integer);
+begin
+  EmitB((at and $F) shl 4);
+  EmitB($60 or (level and $F));
+  EmitB($00);
+end;
+
+procedure xtensa_waiti(level: Integer);
+begin
+  EmitB($00);
+  EmitB($70 or (level and $F));
+  EmitB($00);
+end;
+
+{ isync 0, rsync 1, esync 2, dsync 3, excw 8, memw 12, extw 13: RRR with
+  op0 = 0, r = 2 and the kind in t. }
+procedure xtensa_syncop(kind: Integer);
+begin
+  EmitB((kind and $F) shl 4);
+  EmitB($20);
+  EmitB($00);
+end;
+
+procedure xtensa_rur(ar, ur: Integer);
+begin
+  EmitB((ur and $F) shl 4);
+  EmitB(((ar and $F) shl 4) or ((ur shr 4) and $F));
+  EmitB($E3);
+end;
+
+procedure xtensa_wur(ur, at: Integer);
+begin
+  EmitB((at and $F) shl 4);
+  EmitB(ur and $FF);
+  EmitB($F3);
+end;
+
+{ RRI8 loads/stores with an r field the ordinary helpers do not take:
+  l32ai r = 11, s32ri r = 15 (s32c1i is r = 14, above). }
+procedure xtensa_rri8_mem(r, t, s, offset: Integer);
+begin
+  EmitB(((t and $F) shl 4) or 2);
+  EmitB(((r and $F) shl 4) or (s and $F));
+  EmitB((offset div 4) and $FF);
+end;
+
 procedure xtensa_rsync;                          { rsync }
 { Wait for a WSR to a state register to take effect before any dependent
   instruction issues. Insn word $002010.

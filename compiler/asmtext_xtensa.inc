@@ -124,7 +124,8 @@ begin
   Result := CaseEqual(mnem, 'l32i') or CaseEqual(mnem, 'l16ui')
     or CaseEqual(mnem, 'l16si') or CaseEqual(mnem, 'l8ui')
     or CaseEqual(mnem, 's32i') or CaseEqual(mnem, 's16i')
-    or CaseEqual(mnem, 's8i');
+    or CaseEqual(mnem, 's8i') or CaseEqual(mnem, 's32c1i')
+    or CaseEqual(mnem, 'l32ai') or CaseEqual(mnem, 's32ri');
 end;
 
 procedure AsmXtensaEmitLoadStore(const mnem: AnsiString; rt, rs, off: Integer);
@@ -136,7 +137,88 @@ begin
   else if CaseEqual(mnem, 's32i') then xtensa_s32i(rt, rs, off)
   else if CaseEqual(mnem, 's16i') then xtensa_s16i(rt, rs, off)
   else if CaseEqual(mnem, 's8i') then xtensa_s8i(rt, rs, off)
+  else if CaseEqual(mnem, 's32c1i') then xtensa_s32c1i(rt, rs, off)
+  else if CaseEqual(mnem, 'l32ai') then xtensa_rri8_mem(11, rt, rs, off)
+  else if CaseEqual(mnem, 's32ri') then xtensa_rri8_mem(15, rt, rs, off)
   else Error('EmitAsmXtensa: not a load/store: ' + mnem);
+end;
+
+{ Special- and user-register NAMES, for the spellings C inline asm uses:
+  `rsr.ps %0`, `wsr %0, intenable`, `rur.threadptr %0`. The numbers were read
+  back from xtensa-esp32s3-elf-as (`wsr.<name> a2`, byte 1), not copied from
+  a manual. A Pascal asm block cannot reach these -- asmenc.inc resolves a
+  bare identifier operand as a Pascal symbol before this file sees the line,
+  see the wsr/rsr note below -- but a C template arrives here as text, so
+  for C the table is the whole story.
+  feature-c-xtensa-inline-asm-templates }
+function AsmXtensaSrNum(const nameIn: AnsiString; var n: Integer): Boolean;
+var s: AnsiString;
+begin
+  s := AsmTextLowerStr(AsmXtensaTrim(nameIn));
+  Result := True;
+  if s = 'lbeg' then n := 0 else if s = 'lend' then n := 1
+  else if s = 'lcount' then n := 2 else if s = 'sar' then n := 3
+  else if s = 'br' then n := 4 else if s = 'litbase' then n := 5
+  else if s = 'scompare1' then n := 12 else if s = 'acclo' then n := 16
+  else if s = 'acchi' then n := 17 else if s = 'm0' then n := 32
+  else if s = 'm1' then n := 33 else if s = 'm2' then n := 34
+  else if s = 'm3' then n := 35 else if s = 'windowbase' then n := 72
+  else if s = 'windowstart' then n := 73 else if s = 'mmid' then n := 89
+  else if s = 'ibreakenable' then n := 96 else if s = 'memctl' then n := 97
+  else if s = 'atomctl' then n := 99 else if s = 'ddr' then n := 104
+  else if s = 'ibreaka0' then n := 128 else if s = 'ibreaka1' then n := 129
+  else if s = 'dbreaka0' then n := 144 else if s = 'dbreaka1' then n := 145
+  else if s = 'dbreakc0' then n := 160 else if s = 'dbreakc1' then n := 161
+  else if s = 'configid0' then n := 176
+  else if (Length(s) = 4) and (Copy(s, 1, 3) = 'epc') and (s[4] >= '1') and (s[4] <= '7') then
+    n := 176 + Ord(s[4]) - Ord('0')
+  else if s = 'depc' then n := 192
+  else if (Length(s) = 4) and (Copy(s, 1, 3) = 'eps') and (s[4] >= '2') and (s[4] <= '7') then
+    n := 192 + Ord(s[4]) - Ord('0')
+  else if s = 'configid1' then n := 208
+  else if (Length(s) = 8) and (Copy(s, 1, 7) = 'excsave') and (s[8] >= '1') and (s[8] <= '7') then
+    n := 208 + Ord(s[8]) - Ord('0')
+  else if s = 'cpenable' then n := 224
+  else if (s = 'interrupt') or (s = 'intset') then n := 226
+  else if s = 'intclear' then n := 227 else if s = 'intenable' then n := 228
+  else if s = 'ps' then n := 230 else if s = 'vecbase' then n := 231
+  else if s = 'exccause' then n := 232 else if s = 'debugcause' then n := 233
+  else if s = 'ccount' then n := 234 else if s = 'prid' then n := 235
+  else if s = 'icount' then n := 236 else if s = 'icountlevel' then n := 237
+  else if s = 'excvaddr' then n := 238
+  else if (Length(s) = 9) and (Copy(s, 1, 8) = 'ccompare') and (s[9] >= '0') and (s[9] <= '2') then
+    n := 240 + Ord(s[9]) - Ord('0')
+  else if (Length(s) = 5) and (Copy(s, 1, 4) = 'misc') and (s[5] >= '0') and (s[5] <= '3') then
+    n := 244 + Ord(s[5]) - Ord('0')
+  else Result := False;
+end;
+
+function AsmXtensaUrNum(const nameIn: AnsiString; var n: Integer): Boolean;
+var s: AnsiString;
+begin
+  s := AsmTextLowerStr(AsmXtensaTrim(nameIn));
+  Result := True;
+  if s = 'threadptr' then n := 231
+  else if s = 'fcr' then n := 232
+  else if s = 'fsr' then n := 233
+  else Result := False;
+end;
+
+{ A special-register operand: a name from the table, else a number (or `%`). }
+function AsmXtensaSrOp(const op: AnsiString; const holes: array of Int64; var holeCur: Integer): Integer;
+var n: Integer;
+begin
+  if AsmXtensaSrNum(op, n) then Result := n
+  else Result := Integer(AsmXtensaInt(op, holes, holeCur));
+  AsmXtensaCheckSr(Result);
+end;
+
+function AsmXtensaUrOp(const op: AnsiString; const holes: array of Int64; var holeCur: Integer): Integer;
+var n: Integer;
+begin
+  if AsmXtensaUrNum(op, n) then Result := n
+  else Result := Integer(AsmXtensaInt(op, holes, holeCur));
+  AsmXtensaCheckSr(Result);
 end;
 
 { Assemble one ordinary (non-label, non-jump/branch) instruction line, binding
@@ -167,6 +249,15 @@ begin
     `assembler` handler that spelled it itself would skip the frame unwind its
     own (non-naked) prologue requires. }
   if CaseEqual(mnem, 'syscall') then begin xtensa_syscall; Exit; end;
+  { the barriers. memw/rsync/isync have no Pascal caller to break by
+    appearing here; C templates (casm_xtensa.inc) spell all of them. }
+  if CaseEqual(mnem, 'isync') then begin xtensa_syncop(0); Exit; end;
+  if CaseEqual(mnem, 'rsync') then begin xtensa_syncop(1); Exit; end;
+  if CaseEqual(mnem, 'esync') then begin xtensa_syncop(2); Exit; end;
+  if CaseEqual(mnem, 'dsync') then begin xtensa_syncop(3); Exit; end;
+  if CaseEqual(mnem, 'excw') then begin xtensa_syncop(8); Exit; end;
+  if CaseEqual(mnem, 'memw') then begin xtensa_syncop(12); Exit; end;
+  if CaseEqual(mnem, 'extw') then begin xtensa_syncop(13); Exit; end;
 
   { split rest into up to three comma-separated operands }
   op0 := ''; op1 := ''; op2 := ''; partIdx := 0;
@@ -178,6 +269,20 @@ begin
     else AppendChar(op2, rest[i]);
   end;
   op0 := AsmXtensaTrim(op0); op1 := AsmXtensaTrim(op1); op2 := AsmXtensaTrim(op2);
+
+  { `waiti N` takes a level, not a register }
+  if CaseEqual(mnem, 'waiti') then
+    begin imm := Integer(AsmXtensaInt(op0, holes, holeCur)); xtensa_waiti(imm); Exit; end;
+  { The dotted spellings: `rsr.ps a2` is `rsr a2, ps`, and so on. Rewritten
+    into the two-operand form so one arm below encodes both. }
+  if (Length(mnem) > 4) and (mnem[4] = '.') and
+     (CaseEqual(Copy(mnem, 1, 3), 'rsr') or CaseEqual(Copy(mnem, 1, 3), 'wsr') or
+      CaseEqual(Copy(mnem, 1, 3), 'xsr') or CaseEqual(Copy(mnem, 1, 3), 'rur') or
+      CaseEqual(Copy(mnem, 1, 3), 'wur')) then
+  begin
+    op1 := Copy(mnem, 5, Length(mnem) - 4);
+    mnem := Copy(mnem, 1, 3);
+  end;
 
   { Resolve operands into locals first. The dialect mis-evaluates several nested
     function-call arguments in one call, so never pass AsmXtensaRegOp/Int results
@@ -246,9 +351,21 @@ begin
     alone deliberately -- adding it would mean a name table, which is the thing
     that cannot work here. }
   else if CaseEqual(mnem, 'wsr') then
-    begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); AsmXtensaCheckSr(imm); xtensa_wsr(imm, r0); end
+    begin imm := AsmXtensaSrOp(op1, holes, holeCur); xtensa_wsr(imm, r0); end
   else if CaseEqual(mnem, 'rsr') then
-    begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); AsmXtensaCheckSr(imm); xtensa_rsr(imm, r0); end
+    begin imm := AsmXtensaSrOp(op1, holes, holeCur); xtensa_rsr(imm, r0); end
+  else if CaseEqual(mnem, 'xsr') then
+    begin imm := AsmXtensaSrOp(op1, holes, holeCur); xtensa_xsr(imm, r0); end
+  else if CaseEqual(mnem, 'rur') then
+    begin imm := AsmXtensaUrOp(op1, holes, holeCur); xtensa_rur(r0, imm); end
+  else if CaseEqual(mnem, 'wur') then
+    begin imm := AsmXtensaUrOp(op1, holes, holeCur); xtensa_wur(imm, r0); end
+  else if CaseEqual(mnem, 'rsil') then
+    begin
+      imm := Integer(AsmXtensaInt(op1, holes, holeCur));
+      if (imm < 0) or (imm > 15) then Error('EmitAsmXtensa: rsil level out of range (0..15)');
+      xtensa_rsil(r0, imm);
+    end
   else if CaseEqual(mnem, 'movi') then begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); xtensa_movi(r0, imm); end
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_addi(r0, r1, imm); end
   else if AsmXtensaIsLoadStore(mnem) then
@@ -270,7 +387,52 @@ begin
     else if CaseEqual(op1, '@data') then EmitLoadDataRefXtensa(r0, imm)
     else Error('EmitAsmXtensa: expected @fp, @glob or @data after la');
   end
-  else Error('EmitAsmXtensa: unsupported instruction');
+  else Error('EmitAsmXtensa: unsupported instruction: ' + AsmXtensaTrim(line));
+end;
+
+{ Would AsmXtensaProcessLine accept this line's MNEMONIC (and special-register
+  name)? Asked at PARSE time by the C frontend, which encodes nothing then:
+  the lines replay at codegen, and a `static inline` nobody calls is still
+  lowered here, so without the question an instruction this engine lacks
+  stopped the compile in a routine gcc would never have emitted (rump-pxx g20,
+  Gibux arch headers). Operand shapes are still checked where they are
+  encoded. Keep in step with AsmTextLineXtensa and AsmXtensaProcessLine. }
+function AsmXtensaLineKnown(const lineIn: AnsiString): Boolean;
+var line, m, op, rest: AnsiString; j, n, k: Integer;
+begin
+  line := AsmXtensaTrim(lineIn);
+  Result := True;
+  if (Length(line) >= 2) and (line[Length(line)] = ':') then Exit;   { a label }
+  m := ''; j := 1;
+  while (j <= Length(line)) and not AsmTextIsSpace(AsmTextCharAt(line, j)) do
+    begin AppendChar(m, AsmTextLower(line[j])); Inc(j); end;
+  rest := AsmXtensaTrim(Copy(line, j, Length(line)));
+  if (Length(m) > 4) and (m[4] = '.') then
+  begin
+    op := Copy(m, 5, Length(m) - 4);
+    m := Copy(m, 1, 3);
+    if (m = 'rsr') or (m = 'wsr') or (m = 'xsr') then Result := AsmXtensaSrNum(op, n)
+    else if (m = 'rur') or (m = 'wur') then Result := AsmXtensaUrNum(op, n)
+    else Result := False;
+    Exit;
+  end;
+  if (m = 'rsr') or (m = 'wsr') or (m = 'xsr') or (m = 'rur') or (m = 'wur') then
+  begin
+    k := Pos(',', rest);
+    op := '';
+    if k > 0 then op := AsmXtensaTrim(Copy(rest, k + 1, Length(rest)));
+    if (op <> '') and ((op[1] = '%') or ((op[1] >= '0') and (op[1] <= '9'))) then Exit;
+    if (m = 'rur') or (m = 'wur') then Result := AsmXtensaUrNum(op, n)
+    else Result := AsmXtensaSrNum(op, n);
+    Exit;
+  end;
+  Result := (m = 'nop') or (m = 'ret') or (m = 'syscall') or (m = 'isync') or
+    (m = 'rsync') or (m = 'esync') or (m = 'dsync') or (m = 'excw') or
+    (m = 'memw') or (m = 'extw') or (m = 'waiti') or (m = 'add') or (m = 'sub') or
+    (m = 'and') or (m = 'or') or (m = 'xor') or (m = 'mull') or (m = 'muluh') or
+    (m = 'ssl') or (m = 'ssr') or (m = 'sll') or (m = 'srl') or (m = 'sra') or
+    (m = 'mov') or (m = 'rsil') or (m = 'movi') or (m = 'addi') or (m = 'la') or
+    (m = 'j') or AsmXtensaIsLoadStore(m) or AsmXtensaBranchCode(m, n);
 end;
 
 const ASM_XT_MAX_LABELS = 32;

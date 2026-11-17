@@ -20888,6 +20888,15 @@ test-core: $(COMPILER)
 	# typeof of pointer/struct/member/fn-pointer expressions, typeof_unqual (rump-pxx g04 g05, util-linux)
 	$(COMPILER) test/c_typeof_ptr_struct.c $(TESTTMP)/c_tyof > /dev/null
 	tools/expect_same.sh c_tyof "$$($(TESTTMP)/c_tyof)" "$$(cat test/c_typeof_ptr_struct.expected)"
+	# GNU C inline asm on xtensa: operands, ties, names, s32c1i/l32ai/s32ri under
+	# qemu (call0, the hosted ABI); the privileged forms by disassembly (Gibux)
+	tools/check_casm_xtensa.sh $(COMPILER) $(TESTTMP)
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_xtensa_inline_asm.c $(TESTTMP)/c_xtasm >/dev/null || { echo "c_xtensa_inline_asm compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh xtensa/c_xtasm "$$(tools/run_target.sh xtensa $(TESTTMP)/c_xtasm)" "$$(cat test/c_xtensa_inline_asm.expected)" || exit 1; \
+	else \
+	  echo "=== c_xtensa_inline_asm: qemu-xtensa absent, NOT verified ==="; \
+	fi
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

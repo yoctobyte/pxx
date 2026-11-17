@@ -10919,6 +10919,249 @@ begin
 end;
 {$endif}
 
+{ GNU C inline asm on xtensa. The split is aarch64's (casm_a64.inc) with one
+  difference: the template is not encoded here but kept as TEXT LINES in the
+  InlineAsmLine pool, the same pool a Pascal asm block on this target fills,
+  and the IR_ASM arm of ir_codegen_xtensa.inc replays them through
+  AsmXtensaProcessLine at final code positions. So an instruction the text
+  engine knows is available to both languages, and nothing is encoded twice.
+
+  Operands are pinned to a3..a6, a10, a11: caller-saved under both ABIs, and
+  untouched by EmitLoadVarXtensa/EmitStoreVarXtensa (a2, a8, a9) and by the
+  frame pointer (a7 windowed, a15 call0). Codegen loads each input through a2
+  into its register, replays the lines, and stores each output back through
+  a2. Every operand has a register of its own (a tied input shares its
+  output's), so "&" holds by construction.
+
+  What a kernel's arch headers need (Gibux, ESP32-S3): rsr/wsr/xsr by name or
+  dotted (rsr.ps), rsil, waiti, memw/isync/rsync/esync/dsync/extw/excw,
+  rur/wur threadptr, s32c1i with scompare1, l32ai/s32ri.
+  feature-c-xtensa-inline-asm-templates }
+function CAsmBuildBlockXtensa: Integer;
+const XT_POOL_N = 6;
+var
+  i, j, k, reg, tk, sz, poolNext, startOff, blkLen, b, first, nIn, nOut, num: Integer;
+  used: array[0..15] of Boolean;
+  pool: array[0..XT_POOL_N-1] of Integer;
+  opReg, tmpSym: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  opImm: array[0..MAX_CASM_OPERANDS-1] of Int64;
+  rest, nm, cls, s, line, tpl, bad: AnsiString;
+  head, tail, nd, idn, asn, sq, blk: Integer;
+begin
+  bad := '';
+  pool[0] := 3; pool[1] := 4; pool[2] := 5; pool[3] := 6; pool[4] := 10; pool[5] := 11;
+  for i := 0 to 15 do used[i] := False;
+  { clobbers: the scratch registers may be named; a0 (return address), a1
+    (sp) and the frame pointer may not, nor a call0 callee-saved one }
+  rest := CAsmClobRegs;
+  while rest <> '' do
+  begin
+    i := Pos(' ', rest);
+    if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
+    else begin nm := rest; rest := ''; end;
+    if nm = '' then Continue;
+    if CaseEqual(nm, 'sar') then Continue;     { no value lives in SAR across a statement }
+    if not AsmXtensaRegNum(nm, reg) then
+      Error('C: xtensa inline asm clobbers "' + nm + '", which is not a general register');
+    { a7 is the biased frame base and a15 the frame pointer on both ABIs
+      (EmitProcPrologue: `mov a15, a1` / `addi a7, a15, -N`); a12..a14 are
+      callee-saved under call0 and this prologue does not save them }
+    if (reg <= 1) or (reg = 7) or (reg = 15) or ((reg >= 12) and (XtensaABI = XTENSA_ABI_CALL0)) then
+      Error('C: xtensa inline asm clobbers "' + nm + '", which this frontend does not'
+            + ' save around the block -- a2..a6 and a8..a11 may be clobbered');
+    used[reg] := True;
+  end;
+
+  poolNext := 0;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    opReg[i] := -1;
+    tmpSym[i] := -1;
+    opImm[i] := 0;
+    if CAsmOps[i].TiedTo >= 0 then Continue;
+    cls := CAsmOps[i].Cons;
+    if (cls = 'i') or (cls = 'n') then
+    begin
+      if not CAsmImmValue(CAsmOps[i].Expr, opImm[i]) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant');
+      Continue;
+    end;
+    if (cls <> 'a') and (cls <> 'r') and (cls <> 'g') and (cls <> 'rm') and (cls <> 'mr') then
+      Error('C: xtensa inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
+            + ' -- this target reads "a"/"r" (and "g"/"rm" as a register) and the immediates "i"/"n"');
+    while (poolNext < XT_POOL_N) and used[pool[poolNext]] do Inc(poolNext);
+    if poolNext >= XT_POOL_N then
+      Error('C: xtensa inline asm needs more registers than this frontend pins'
+            + ' (a3..a6, a10, a11, less any clobbered)');
+    opReg[i] := pool[poolNext];
+    used[opReg[i]] := True;
+  end;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if opReg[i] < 0 then Continue;
+    tk := ASTTk[CAsmOps[i].Expr];
+    sz := TypeSlotSize(IntToTypeKind(tk));
+    if (IntToTypeKind(tk) = tyDouble) or (IntToTypeKind(tk) = tySingle) then
+      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
+            + ' only address registers are supported');
+    if (sz <> 1) and (sz <> 2) and (sz <> 4) then
+      Error('C: xtensa inline asm operand is ' + AIntToStr(sz) + ' bytes wide,'
+            + ' which does not fit one address register');
+    if CAsmOps[i].TiedTo < 0 then
+      tmpSym[i] := AllocVar('', IntToTypeKind(tk))
+    else
+      tmpSym[i] := tmpSym[CAsmOps[i].TiedTo];
+  end;
+
+  { the template: every %N / %[name] becomes its register or its value }
+  tpl := CAsmTemplate;
+  s := '';
+  i := 1;
+  while i <= Length(tpl) do
+  begin
+    if tpl[i] <> '%' then begin AppendChar(s, tpl[i]); Inc(i); Continue; end;
+    Inc(i);
+    if (i <= Length(tpl)) and (tpl[i] = '%') then begin AppendChar(s, '%'); Inc(i); Continue; end;
+    num := -1;
+    if (i <= Length(tpl)) and (tpl[i] = '[') then
+    begin
+      j := i + 1;
+      while (j <= Length(tpl)) and (tpl[j] <> ']') do Inc(j);
+      nm := Copy(tpl, i + 1, j - i - 1);
+      for k := 0 to CAsmOpCount - 1 do
+        if (CAsmOps[k].TiedTo < 0) and (CAsmOps[k].SymName = nm) then num := k;
+      if num < 0 then Error('C: xtensa inline asm names operand [' + nm + '], which does not exist');
+      i := j + 1;
+    end
+    else if (i <= Length(tpl)) and (tpl[i] >= '0') and (tpl[i] <= '9') then
+    begin
+      num := 0;
+      while (i <= Length(tpl)) and (tpl[i] >= '0') and (tpl[i] <= '9') do
+      begin
+        num := num * 10 + Ord(tpl[i]) - Ord('0');
+        Inc(i);
+      end;
+      if num >= CAsmOpCount then
+        Error('C: xtensa inline asm uses %' + AIntToStr(num) + ', which is not an operand');
+    end
+    else Error('C: xtensa inline asm: operand modifiers are not supported');
+    if opReg[num] < 0 then s := s + AIntToStr(opImm[num])
+    else s := s + 'a' + AIntToStr(opReg[num]);
+  end;
+  startOff := InlineAsmLineCount;
+  line := '';
+  i := 1;
+  while i <= Length(s) + 1 do
+  begin
+    if (i > Length(s)) or (s[i] = #10) or (s[i] = ';') then
+    begin
+      j := Pos('#', line);
+      if j > 0 then line := Copy(line, 1, j - 1);
+      line := AsmTextTrim(line);
+      if (line <> '') and (bad = '') and not AsmXtensaLineKnown(line) then bad := line;
+      if line <> '' then AsmAddInlineLine(line, 0, 0);
+      line := '';
+    end
+    else if (s[i] = #9) or (s[i] = #13) then AppendChar(line, ' ')
+    else AppendChar(line, s[i]);
+    Inc(i);
+  end;
+  blkLen := InlineAsmLineCount - startOff;
+  { An instruction the text engine lacks. In a `static` routine (the arch
+    header's static inline) or an imported header it POISONS the routine
+    instead: a call to it refuses with this text, and an uncalled one --
+    which gcc never emits, so never assembles -- costs nothing. Anywhere else
+    the routine is compiled for use and the compile stops now, naming the
+    line, rather than at codegen. }
+  if bad <> '' then
+  begin
+    InlineAsmLineCount := startOff;
+    if (CurProc >= 0) and (CHeaderMode or
+       ((CurProc < Length(ProcCStaticLink)) and ProcCStaticLink[CurProc])) then
+    begin
+      if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+      ProcAsmPoison[CurProc] := 'its inline asm uses "' + bad
+          + '", which the xtensa assembler in pxx does not encode';
+      blk := AllocNode(AN_BLOCK); ASTLeft[blk] := -1;
+      Result := blk;
+      Exit;
+    end;
+    Error('C: xtensa inline asm: "' + bad + '" is not an instruction the xtensa'
+          + ' assembler in pxx encodes');
+  end;
+
+  { the bindings codegen replays: inputs (tied ones included), then outputs }
+  b := CAsmA64BlkCount;
+  Inc(CAsmA64BlkCount);
+  SetLength(CAsmA64BlkFirst, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkIn, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkOut, CAsmA64BlkCount);
+  first := CAsmA64BindCount;
+  nIn := 0; nOut := 0;
+  for j := 0 to 1 do
+    for i := 0 to CAsmOpCount - 1 do
+    begin
+      if opReg[i] < 0 then Continue;
+      if (j = 0) and (i < CAsmOutCount) then Continue;
+      if (j = 1) and (i >= CAsmOutCount) then Continue;
+      Inc(CAsmA64BindCount);
+      SetLength(CAsmA64BindSym, CAsmA64BindCount);
+      SetLength(CAsmA64BindReg, CAsmA64BindCount);
+      CAsmA64BindSym[CAsmA64BindCount - 1] := tmpSym[i];
+      CAsmA64BindReg[CAsmA64BindCount - 1] := opReg[i];
+      if j = 0 then Inc(nIn) else Inc(nOut);
+    end;
+  CAsmA64BlkFirst[b] := first;
+  CAsmA64BlkIn[b] := nIn;
+  CAsmA64BlkOut[b] := nOut;
+
+  { tmp = expr for each untied input, the block, expr = tmp for each output.
+    A tied input shares its output's temporary, which is loaded with the
+    output's current value -- what "+a" means. }
+  head := -1; tail := -1;
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+  begin
+    if opReg[i] < 0 then Continue;
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := CAsmOps[i].Expr;
+    ASTTk[asn] := ASTTk[idn];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    if head < 0 then head := sq else ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  nd := AllocNode(AN_ASM);
+  ASTLeft[nd] := startOff;
+  ASTRight[nd] := blkLen;
+  ASTIVal[nd] := b + 1;
+  sq := AllocNode(AN_SEQ);
+  ASTLeft[sq] := nd; ASTRight[sq] := -1;
+  if head < 0 then head := sq else ASTRight[tail] := sq;
+  tail := sq;
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := CAsmOps[i].Expr; ASTRight[asn] := idn;
+    ASTTk[asn] := ASTTk[CAsmOps[i].Expr];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;
+  Result := blk;
+end;
+
 procedure CWarnFuncScopeThreadLocal(sawStatic: Boolean);
 { SUPERSEDED IN PART 2026-11-14: a `static __thread` now gets real per-thread
   storage (CAssignLocalThreadStorage), and the area-sizing objection below is
@@ -11438,6 +11681,11 @@ begin
         Exit;
       end;
       {$endif}
+      if TargetArch = TARGET_XTENSA then
+      begin
+        Result := CAsmBuildBlockXtensa;
+        Exit;
+      end;
       if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
       begin
         { inside a routine of an IMPORTED HEADER: accept and poison (see
@@ -11447,13 +11695,13 @@ begin
         begin
           if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
           ProcAsmPoison[CurProc] := 'its body holds C inline asm, which is only supported on'
-              + ' x86-64, i386 and aarch64, not ' + TargetArchName(TargetArch);
+              + ' x86-64, i386, aarch64 and xtensa, not ' + TargetArchName(TargetArch);
           node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
           Result := node;
           Exit;
         end;
         Error('C: inline asm with a non-empty template is only supported on'
-              + ' x86-64, i386 and aarch64, not ' + TargetArchName(TargetArch));
+              + ' x86-64, i386, aarch64 and xtensa, not ' + TargetArchName(TargetArch));
       end;
       if CAsmOpCount > 0 then
       begin

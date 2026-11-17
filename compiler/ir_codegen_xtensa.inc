@@ -2473,6 +2473,7 @@ procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
+  asmBlk, asmK: Integer;   { IR_ASM: the C inline-asm binding block, and a cursor }
   isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
   r4: Integer;      { the string-marshalling quad's FOURTH register -- a7 on
                       Call0, a3 under windowed, because a7 is the windowed
@@ -5671,6 +5672,20 @@ begin
 
     IR_ASM:
       begin
+        { GNU C inline asm (CAsmBuildBlockXtensa, cparser.inc): IRIVal is its
+          binding block + 1. Each input is loaded from its temporary through
+          a2 into its pinned register (a3..a6, a10, a11 -- the load helper
+          touches only a2, a8, a9), the lines replay below, and each output
+          is stored back through a2. }
+        if IRIVal[node] > 0 then
+        begin
+          asmBlk := Integer(IRIVal[node]) - 1;
+          for asmK := CAsmA64BlkFirst[asmBlk] to CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] - 1 do
+          begin
+            EmitLoadVarXtensa(CAsmA64BindSym[asmK]);
+            xtensa_mov(CAsmA64BindReg[asmK], reg_xtensa_a2);
+          end;
+        end;
         { Inline asm block: replay the parse-time-captured text lines
           (AsmParseBodyTextXtensa, asmenc.inc) through the xtensa text engine.
           Emitting here, at final code positions, makes label fixups, the L32R
@@ -5681,6 +5696,16 @@ begin
         for i := IRA[node] to IRA[node] + IRB[node] - 1 do
           AsmXtensaProcessInlineLine(i);
         AsmXtensaBlockResolve;
+        if IRIVal[node] > 0 then
+        begin
+          asmBlk := Integer(IRIVal[node]) - 1;
+          for asmK := CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] to
+                      CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] + CAsmA64BlkOut[asmBlk] - 1 do
+          begin
+            xtensa_mov(reg_xtensa_a2, CAsmA64BindReg[asmK]);
+            EmitStoreVarXtensa(CAsmA64BindSym[asmK]);
+          end;
+        end;
       end;
 
     IR_COSWITCH:
