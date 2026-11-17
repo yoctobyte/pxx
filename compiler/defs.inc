@@ -7785,6 +7785,16 @@ var
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
   CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
+  { __attribute__((section("name"))): the lexer files the name in
+    CAttrSecNames and the next token carries its index + 1 in CAttrAlignValues
+    bits 17..23 (CDeclSectionName reads it). SymSectionName / ProcIram are
+    where the parser puts it: a global gets a section of that name in an ESP
+    object (writeELF32RelIram), a function named .iram1* is an IRAM routine.
+    feature-c-section-attribute-on-esp }
+  CAttrSection    : AnsiString;
+  CAttrSecNames   : array of AnsiString;
+  CAttrSecCount   : Integer;
+  SymSectionName  : array of AnsiString;   { by Syms index; '' = the default section }
   CAttrModeBytes  : Integer;   { __attribute__((mode(QI/HI/SI/DI/word))) width, 0 = none; rides the next token as CAttrFlags bit 128 + CAttrAlignValues bits 24..31 }
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
   CLexLongCount : Integer;      { last C integer literal's l/L suffix count (1=long, >=2=long long) }

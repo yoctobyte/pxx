@@ -233,6 +233,59 @@ end;
   not it. }
 { Does the lowercased attribute text name `w` as a WORD (`weak`, not
   `weakref`)? Underscores count as separators, so `__weak__` is it. }
+{ The name in `section("x")` / `__section__("x" "y")`: every string piece
+  inside the parentheses after the word, concatenated (IDF's IRAM_ATTR is
+  section(".iram1" "." "28") after __COUNTER__). '' when there is none. The
+  attribute text arrives lowercased, so the name does too. }
+function CAttrSectionOf(const s: AnsiString): AnsiString;
+var i, j, depth: Integer; inStr: Boolean;
+begin
+  Result := '';
+  i := 1;
+  while i + 6 <= Length(s) do
+  begin
+    if (Copy(s, i, 7) = 'section') and ((i = 1) or not (s[i-1] in ['a'..'z','0'..'9'])) then
+    begin
+      j := i + 7;
+      while (j <= Length(s)) and (s[j] in ['_', ' ', #9]) do Inc(j);
+      if (j <= Length(s)) and (s[j] = '(') then
+      begin
+        depth := 0; inStr := False;
+        while j <= Length(s) do
+        begin
+          if inStr then
+          begin
+            if s[j] = '"' then inStr := False else AppendChar(Result, s[j]);
+          end
+          else if s[j] = '"' then inStr := True
+          else if s[j] = '(' then Inc(depth)
+          else if s[j] = ')' then
+          begin
+            Dec(depth);
+            if depth = 0 then Exit;
+          end;
+          Inc(j);
+        end;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+function CAttrSecIndex(const nm: AnsiString): Integer;
+var k: Integer;
+begin
+  for k := 0 to CAttrSecCount - 1 do
+    if CAttrSecNames[k] = nm then begin Result := k + 1; Exit; end;
+  if CAttrSecCount >= 127 then
+    Error('C: more than 127 distinct __attribute__((section)) names in one compile');
+  if CAttrSecCount >= Length(CAttrSecNames) then SetLength(CAttrSecNames, CAttrSecCount + 16);
+  CAttrSecNames[CAttrSecCount] := nm;
+  Inc(CAttrSecCount);
+  Result := CAttrSecCount;
+end;
+
 function CAttrHasWord(const s, w: AnsiString): Boolean;
 var i, j: Integer;
 begin
@@ -367,6 +420,7 @@ begin
           else if (CAttrModeName(attrText) = 'word') or (CAttrModeName(attrText) = 'pointer') then
             CAttrModeBytes := TARGET_PTR_SIZE;
           if CAttrHasWord(attrText, 'weak') then CAttrWeak := True;
+          if CAttrHasWord(attrText, 'section') then CAttrSection := CAttrSectionOf(attrText);
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
           if CStrContains(attrText, 'aligned') then
@@ -1168,6 +1222,7 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CAttrSection := '';
   TokCount := 0; TokCharLen := 0;
   repeat
     CLexOne;
@@ -1197,6 +1252,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrSection <> '' then
+    begin
+      CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or (CAttrSecIndex(CAttrSection) shl 17);
+      CAttrSection := '';
     end;
     CAttrPacked := False;
     CAttrAligned := False;
@@ -1250,6 +1310,7 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CAttrSection := '';
   SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
@@ -1302,6 +1363,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrSection <> '' then
+    begin
+      CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or (CAttrSecIndex(CAttrSection) shl 17);
+      CAttrSection := '';
     end;
     CAttrPacked := False;
     CAttrAligned := False;

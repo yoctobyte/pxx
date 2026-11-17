@@ -20056,7 +20056,12 @@ begin
     takes this path like an IDF object (EspFreestandingObj, compiler.pas). }
   if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32))
      and ((not EspBareBoot) or EspFreestandingObj) then
-    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) then
+    { ...and IRAM to IRAM too: the writer PACKS the iram bodies into
+      .iram1.text, so the distance between two of them there is not their
+      distance in Code[] whenever a flash routine sat between them -- a direct
+      call computed here would land inside the wrong body. }
+    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) or
+       ((CurProc >= 0) and ProcIram[CurProc] and ProcIram[procIdx] and (CurProc <> procIdx)) then
     begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');
       if TargetArch = TARGET_RISCV32 then

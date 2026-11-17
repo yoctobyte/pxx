@@ -263,6 +263,9 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
+function CDeclSectionName(typeIdx: Integer): AnsiString; forward;
+procedure CApplyProcSection(procIdx: Integer; const nm: AnsiString); forward;
+function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean; forward;
 procedure CSplitDeclarators(isTypedef: Boolean); forward;
 function CRecMissingFieldKind(recId: Integer): Integer; forward;
 procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forward;
@@ -13506,6 +13509,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
     declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
+    gSecPlace: Boolean;     { __attribute__((section)) placed this global (CApplyGlobalSection) }
 begin
   { PXXDBG=c.staticdata turns CStaticDataMode on for a whole test run, which
     is how the C corpus exercises the baker without a flag on every row. }
@@ -13821,6 +13825,7 @@ begin
     end;
     { its initialiser (already consumed above) is baked into .data -- see the
       same call in the main declarator path below }
+    if (idx >= 0) then CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), False);
     if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
        (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
@@ -14305,7 +14310,8 @@ begin
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
-    if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit) and (idx >= 0) and
+    gSecPlace := CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), declSawExtern);
+    if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
        (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
@@ -17588,6 +17594,7 @@ var
   mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   procSawWeak: Boolean;
+  procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
@@ -17658,6 +17665,7 @@ begin
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   procSawStatic := CDeclSawStatic(TokPos - 1);
   procSawWeak := CDeclSawWeak(TokPos - 1);
+  procSecName := CDeclSectionName(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -18385,6 +18393,7 @@ begin
       that resolves to 0 when nothing defines it, so `maybe ? maybe() : 0`
       works. It was a required import. bug-c-attribute-weak-was-ignored }
     if procSawWeak and (Procs[procIdx].BodyAddr < 0) then ProcWeakExternal[procIdx] := True;
+    CApplyProcSection(procIdx, procSecName);
     Next;
     Exit;
   end;
@@ -18479,6 +18488,7 @@ begin
   { ...and a weak DEFINITION, which another object's strong one may replace
     (ObjProcBind). bug-c-attribute-weak-was-ignored }
   if procSawWeak or ProcWeakExternal[procIdx] then ProcCWeakDef[procIdx] := True;
+  CApplyProcSection(procIdx, procSecName);
   ProcWeakExternal[procIdx] := False;
   mainInitIdx := -1;
   if name = 'main' then mainInitIdx := CEmitMainInitProc;
@@ -21406,6 +21416,60 @@ begin
     end;
     Inc(k);
   end;
+end;
+
+{ The __attribute__((section("x"))) name on a declaration, scanned exactly as
+  CDeclSawWeak scans (the lexer puts the index on the token AFTER the
+  attribute, bits 17..23 of CAttrAlignValues), or ''. feature-c-section-attribute-on-esp }
+function CDeclSectionName(typeIdx: Integer): AnsiString;
+var k, depth, id: Integer;
+begin
+  Result := '';
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    id := (CAttrAlignValues[k] shr 17) and $7F;
+    if (id > 0) and (id <= CAttrSecCount) then begin Result := CAttrSecNames[id - 1]; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ A function's section: in a freestanding ESP object (EspFreestandingObj) a
+  name beginning ".iram" makes it an IRAM routine -- its bytes, inline L32R
+  literals included, go to .iram1.text, and calls across the flash/IRAM split
+  go through a relocated literal. Any other name there is not honoured and
+  says so once. Elsewhere unchanged (the IDF profile keeps ignoring it). }
+procedure CApplyProcSection(procIdx: Integer; const nm: AnsiString);
+begin
+  if (nm = '') or (procIdx < 0) or not EspFreestandingObj then Exit;
+  if Copy(nm, 1, 5) = '.iram' then
+  begin
+    if Length(ProcIram) <= procIdx then Exit;
+    ProcIram[procIdx] := True;
+  end
+  else
+    Warn('section("' + nm + '") on function ' + Procs[procIdx].Name + ' is not honoured;'
+         + ' only .iram* is -- the function stays in .text');
+end;
+
+{ A global's section: in a freestanding ESP object any name is honoured -- the
+  variable gets an ELF section of that name of its own (writeELF32RelIram),
+  initialised or not, so it is placed in .data now. True = place it. }
+function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean;
+begin
+  Result := False;
+  if (nm = '') or (idx < 0) or isExtern or not EspFreestandingObj then Exit;
+  if Length(SymSectionName) <= idx then SetLength(SymSectionName, idx + 256);
+  SymSectionName[idx] := nm;
+  Result := True;
 end;
 
 function CModeBytesInDecl(first: Integer): Integer;

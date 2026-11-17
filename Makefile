@@ -20905,6 +20905,8 @@ test-core: $(COMPILER)
 	gcc -no-pie $(TESTTMP)/c_fsd_main.c $(TESTTMP)/c_fsd.o -o $(TESTTMP)/c_fsd
 	tools/expect_same.sh c_fsd "$$($(TESTTMP)/c_fsd)" "$$(cat test/c_freestanding_static_data.expected)"
 	python3 -I tools/check_xtensa_freestanding_obj.py $(COMPILER) $(TESTTMP)
+	# __attribute__((section)) there: .iram1* functions, any-name data sections
+	python3 -I tools/check_esp_section_attr.py $(COMPILER) $(TESTTMP)
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

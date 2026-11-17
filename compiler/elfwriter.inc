@@ -3797,18 +3797,93 @@ end;
   the two writers, so the caller passes them: text, iram text (-1 when the
   writer has none), data, bss, rodata.
   feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
+{ NAMED DATA SECTIONS: a C global with __attribute__((section("x"))) in a
+  freestanding ESP object (CApplyGlobalSection, cparser.inc) gets an ELF
+  section of exactly that name, holding a copy of its bytes -- what gcc does,
+  and what an IDF app descriptor in .rodata_desc needs (esp32s3.ld KEEPs it
+  first in DROM). One section per variable; several of one name are legal in
+  a relocatable object and ld concatenates them. The bytes keep a dead twin in
+  .data, as an IRAM routine keeps one in .text, so no Data[] offset moves;
+  every reference to the variable relocates against its own section instead
+  (ObjEspDataRef). Only writeELF32RelIram emits them: writeELF32Rel routes
+  there when ObjNsCount > 0.
+  feature-c-section-attribute-on-esp }
+var
+  ObjNsSym, ObjNsOff, ObjNsLen, ObjNsFileOff, ObjNsNameOff: array of Integer;
+  ObjNsCount, ObjNsSym0, ObjNsShndx0: Integer;
+
+procedure ObjNsCollect;
+var i, k: Integer;
+  procedure ObjNsRefuseIn(pos: Integer);
+  var j: Integer;
+  begin
+    for j := 0 to ObjNsCount - 1 do
+      if (pos >= ObjNsOff[j]) and (pos < ObjNsOff[j] + ObjNsLen[j]) then
+        ErrorNoPos('C global ' + Syms[ObjNsSym[j]].Name + ' in section "' +
+                   SymSectionName[ObjNsSym[j]] + '" holds an address, and a named' +
+                   ' data section carries no relocations yet -- keep pointers out of it');
+  end;
+begin
+  ObjNsCount := 0;
+  if not EspFreestandingObj then Exit;
+  for i := 0 to SymCount - 1 do
+    if (i < Length(SymSectionName)) and (SymSectionName[i] <> '') and
+       SymOffIsData(Syms[i].Offset) and (SymAllocSize[i] > 0) then
+    begin
+      if ObjNsCount >= Length(ObjNsSym) then
+      begin
+        SetLength(ObjNsSym, ObjNsCount + 16); SetLength(ObjNsOff, ObjNsCount + 16);
+        SetLength(ObjNsLen, ObjNsCount + 16); SetLength(ObjNsFileOff, ObjNsCount + 16);
+        SetLength(ObjNsNameOff, ObjNsCount + 16);
+      end;
+      ObjNsSym[ObjNsCount] := i;
+      ObjNsOff[ObjNsCount] := SymOffDataPart(Syms[i].Offset);
+      ObjNsLen[ObjNsCount] := SymAllocSize[i];
+      Inc(ObjNsCount);
+    end;
+  if ObjNsCount = 0 then Exit;
+  for k := 0 to DataPtrFixCount - 1 do ObjNsRefuseIn(DataPtrFix[k].DataPos);
+  for k := 0 to MethodFixCount - 1 do ObjNsRefuseIn(MethodFixups[k].DataPos);
+  for k := 0 to CDRCount - 1 do ObjNsRefuseIn(CDRPos[k]);
+end;
+
+function ObjNsOf(o: Integer): Integer;
+var k: Integer;
+begin
+  Result := -1;
+  for k := 0 to ObjNsCount - 1 do
+    if (o >= ObjNsOff[k]) and (o < ObjNsOff[k] + ObjNsLen[k]) then begin Result := k; Exit; end;
+end;
+
+{ symbol + addend for a reference to Data[] offset o }
+procedure ObjEspDataRef(o, sData, sRo: Integer; var sym: Integer; var addend: Int64);
+var k: Integer;
+begin
+  k := ObjNsOf(o);
+  if k >= 0 then
+  begin
+    sym := ObjNsSym0 + k;
+    addend := o - ObjNsOff[k];
+  end
+  else
+  begin
+    sym := ObjDataSym(o, sData, sRo);
+    addend := ObjDataOff(o);
+  end;
+end;
+
 function ObjProcIsDefined(procIdx: Integer): Boolean; forward;
 procedure ObjEspCdrRel(i, extSym0, sText, sIram, sData, sBss, sRo: Integer;
                        var sym: Integer; var addend: Int64);
-var p, k: Integer;
+var p, k: Integer; rel: Int64;
 begin
   addend := CDRAddend[i];
   p := CDRTarget[i];
   case CDRKind[i] of
     CDR_DATA:
       begin
-        sym := ObjDataSym(p, sData, sRo);
-        addend := addend + ObjDataOff(p);
+        ObjEspDataRef(p, sData, sRo, sym, rel);
+        addend := addend + rel;
       end;
     CDR_PROC:
       if ObjProcIsDefined(p) then
@@ -3838,8 +3913,8 @@ begin
       sym := extSym0 + ExternalCount + ObjDataImportOrdinal(p)
     else if SymOffIsData(Syms[p].Offset) then
     begin
-      sym := ObjDataSym(SymOffDataPart(Syms[p].Offset), sData, sRo);
-      addend := addend + ObjDataOff(SymOffDataPart(Syms[p].Offset));
+      ObjEspDataRef(SymOffDataPart(Syms[p].Offset), sData, sRo, sym, rel);
+      addend := addend + rel;
     end
     else
     begin
@@ -3852,8 +3927,16 @@ end;
 { A data symbol this object defines: in .data (or .rodata) when the C
   initialiser placed it there, else in .bss. }
 procedure ObjEspDataSymLoc(i, shData, shBss, shRo: Integer; var shndx, value: Integer);
+var k: Integer;
 begin
-  if SymOffIsData(Syms[i].Offset) then
+  k := -1;
+  if SymOffIsData(Syms[i].Offset) then k := ObjNsOf(SymOffDataPart(Syms[i].Offset));
+  if k >= 0 then
+  begin
+    shndx := ObjNsShndx0 + k;
+    value := SymOffDataPart(Syms[i].Offset) - ObjNsOff[k];
+  end
+  else if SymOffIsData(Syms[i].Offset) then
   begin
     if ObjDataIsRo(SymOffDataPart(Syms[i].Offset)) then shndx := shRo else shndx := shData;
     value := ObjDataOff(SymOffDataPart(Syms[i].Offset));
@@ -3907,7 +3990,9 @@ begin
 
   ObjRoPrepare;
   if RoSplitActive then nSecSyms := 5 else nSecSyms := 4;
-  ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
+  ObjNsCollect;
+  ObjNsSym0 := nSecSyms + 1;
+  ObjPlanEspSymbols(nSecSyms + ObjNsCount, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
   numSyms := extSym0 + ExternalCount + ObjEspImportCount;
 
@@ -3945,6 +4030,13 @@ begin
     shnum := 11;
     shstrSize := 95;
   end;
+  ObjNsShndx0 := shnum;
+  for i := 0 to ObjNsCount - 1 do
+  begin
+    ObjNsNameOff[i] := shstrSize;
+    shstrSize := shstrSize + Length(SymSectionName[ObjNsSym[i]]) + 1;
+  end;
+  shnum := shnum + ObjNsCount;
 
   textOff := ELF32_HEADER_SIZE;
   iramOff := AlignTo(textOff + CodeLen, 4);
@@ -3957,7 +4049,13 @@ begin
   relaDataOff := relaIramOff + relaIramCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
   shstrOff := relaRoOff + relaRoCount * 12;
-  shOff := AlignTo(shstrOff + shstrSize, 4);
+  shOff := shstrOff + shstrSize;
+  for i := 0 to ObjNsCount - 1 do
+  begin
+    ObjNsFileOff[i] := AlignTo(shOff, 8);
+    shOff := ObjNsFileOff[i] + ObjNsLen[i];
+  end;
+  shOff := AlignTo(shOff, 4);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -4007,6 +4105,8 @@ begin
   writeSym32(f, 0, 0, 0, 3, 7);   { .bss }
   if RoSplitActive then
     writeSym32(f, 0, 0, 0, 3, 11); { .rodata }
+  for i := 0 to ObjNsCount - 1 do
+    writeSym32(f, 0, 0, 0, 3, ObjNsShndx0 + i);   { a named data section (ObjNsCollect) }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
     begin
@@ -4069,8 +4169,10 @@ begin
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-        writeRelaRef32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
-                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i], GlobFixLoStore[i])
+      begin
+        ObjEspDataRef(SymOffDataPart(GlobFix[i].BSSoff), 3, 5, cdrSym, cdrAdd);
+        writeRelaRef32(f, GlobFix[i].CodePos, cdrSym, Integer(cdrAdd), GlobFixHiLo[i], GlobFixLoStore[i]);
+      end
       else if impK >= 0 then
         writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
@@ -4102,8 +4204,10 @@ begin
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-        writeRelaRef32(f, mapped, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
-                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i], GlobFixLoStore[i])
+      begin
+        ObjEspDataRef(SymOffDataPart(GlobFix[i].BSSoff), 3, 5, cdrSym, cdrAdd);
+        writeRelaRef32(f, mapped, cdrSym, Integer(cdrAdd), GlobFixHiLo[i], GlobFixLoStore[i]);
+      end
       else if impK >= 0 then
         writeRelaRef32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
@@ -4172,7 +4276,19 @@ begin
     writeStrZ(f, '.rodata');        { 95 }
     writeStrZ(f, '.rela.rodata');   { 103 }
   end;
-  writePad(f, shOff - (shstrOff + shstrSize));
+  for i := 0 to ObjNsCount - 1 do writeStrZ(f, SymSectionName[ObjNsSym[i]]);
+  impAdd := shstrOff + shstrSize;   { the file position, from here on }
+  for i := 0 to ObjNsCount - 1 do
+  begin
+    writePad(f, ObjNsFileOff[i] - impAdd);
+{$ifdef FPC}
+    Blockwrite(f, Data[Integer(DataRemap(ObjNsOff[i]))], ObjNsLen[i]);   { RoPermuteData moved it }
+{$else}
+    OutWrite(f, Data, Integer(DataRemap(ObjNsOff[i])), ObjNsLen[i]);
+{$endif}
+    impAdd := ObjNsFileOff[i] + ObjNsLen[i];
+  end;
+  writePad(f, shOff - impAdd);
 
   { Section headers. $40 = SHF_INFO_LINK on rela sections. }
   writeShdrA(f, 0, 0, 0, 0, 0);                              writeShdrB(f, 0, 0, 0, 0);
@@ -4190,6 +4306,16 @@ begin
   begin
     writeShdrA(f, 95, 1, 2, rodataOff, RoImageLen);          writeShdrB(f, 0, 0, 8, 0);
     writeShdrA(f, 103, 4, $40, relaRoOff, relaRoCount*12);   writeShdrB(f, 8, 11, 4, 12);
+  end;
+  { the named data sections: SHF_ALLOC, plus SHF_WRITE unless .rodata* or a
+    variable the read-only split put in the RO part }
+  for i := 0 to ObjNsCount - 1 do
+  begin
+    if (Copy(SymSectionName[ObjNsSym[i]], 1, 7) = '.rodata') or ObjDataIsRo(ObjNsOff[i]) then
+      writeShdrA(f, ObjNsNameOff[i], 1, 2, ObjNsFileOff[i], ObjNsLen[i])
+    else
+      writeShdrA(f, ObjNsNameOff[i], 1, 3, ObjNsFileOff[i], ObjNsLen[i]);
+    writeShdrB(f, 0, 0, 8, 0);
   end;
 
 {$ifdef FPC}
@@ -4245,6 +4371,13 @@ begin
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
     ErrorNoPos('internal: writeELF32Rel serves --target=xtensa and --target=riscv32 '
         + 'only, but was dispatched for --target=' + TargetArchName(TargetArch));
+  { ...and so do named data sections (ObjNsCollect), which only it emits }
+  ObjNsCollect;
+  if ObjNsCount > 0 then
+  begin
+    writeELF32RelIram(outPath);
+    Exit;
+  end;
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
