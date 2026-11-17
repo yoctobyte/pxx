@@ -7107,6 +7107,9 @@ var
     runtime. The entry stub sets sp; output (PutC) goes to UART0 MMIO from the
     program itself. Defines PXX_ESP_BARE for the source. xtensa/riscv32 only. }
   EspBareBoot : Boolean;
+  EspFreestandingObj : Boolean;   { --freestanding --emit-obj on riscv32/xtensa:
+                                    the bare runtime, the chip's own ABI, no
+                                    app_main entry (compiler.pas) }
   { Set once the first write/writeln has been reported as a no-op on an ESP
     profile, so the diagnostic is one per compilation rather than one per
     statement. The no-op itself is INTENDED and documented (docs/targets/

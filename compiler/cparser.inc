@@ -13822,7 +13822,7 @@ begin
     { its initialiser (already consumed above) is baked into .data -- see the
       same call in the main declarator path below }
     if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
-       (not declSawThread) and (TargetArch = TARGET_X86_64) and
+       (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
@@ -14306,7 +14306,7 @@ begin
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
     if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit) and (idx >= 0) and
-       (not declSawThread) and (TargetArch = TARGET_X86_64) and
+       (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
@@ -17111,6 +17111,24 @@ begin
     end;
   end;
 
+  { A FREESTANDING ESP OBJECT with no main: the initialisers have no thunk to
+    run in (the block above is x86-64 / i386 / aarch64) and no main to run at
+    the start of, so before this they were dropped SILENTLY -- `int gv = 5;`
+    read 0 in the kernel that linked it. They are walked here with
+    CStaticDataMode on, so each constant one is baked into .data and emits
+    nothing; one that would need code at run time is refused by name, either
+    by CTryBakeGlobalInit or by the length check below.
+    feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
+  if EspFreestandingObj and (FindProc('main') < 0) then
+  begin
+    thunkStart := CodeLen;
+    CompilePendingGlobalInits;
+    CEmitDeferredCAggInits;
+    if CodeLen <> thunkStart then
+      ErrorNoPos('--freestanding: this translation unit needs run-time'
+                 + ' initialisation (a file-scope initialiser that is not a'
+                 + ' constant), and a freestanding object has nothing to run it');
+  end;
   CProgramMode := False;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   FillRootVMTSlotDefaults;   { the reserved root slots, as ParseProgram and the NilPy epilogue fill them }

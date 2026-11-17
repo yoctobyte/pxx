@@ -3430,6 +3430,9 @@ begin
     if ObjDataIsRo(DataPtrFix[i].DataPos) = wantRo then Inc(Result);
   for i := 0 to MethodFixCount-1 do
     if ObjDataIsRo(MethodFixups[i].DataPos) = wantRo then Inc(Result);
+  { the baked C initialisers; only the ESP writers call this }
+  for i := 0 to CDRCount-1 do
+    if ObjDataIsRo(CDRPos[i]) = wantRo then Inc(Result);
 end;
 
 { Fold RoAddS/RoAddE[0..RoAddCount) -- ascending, outside every existing
@@ -3673,6 +3676,13 @@ begin
     MarkRef(DataRelFixTarget[i]);
   end;
   for i := 0 to MethodFixCount - 1 do MarkRef(MethodFixups[i].DataPos);
+  { a C initialiser baked into .data (a freestanding object's
+    `const char *g = "x";`) holds the literal's address in its slot }
+  for i := 0 to CDRCount - 1 do
+  begin
+    MarkRef(CDRPos[i]);
+    if CDRKind[i] = CDR_DATA then MarkRef(CDRTarget[i]);
+  end;
 
   n := 0; bytes := 0;
   r := 0;
@@ -3780,6 +3790,81 @@ begin
   if (TargetArch = TARGET_RISCV32) and RvcOn then Result := 1 else Result := 0;
 end;
 
+{ The ESP object writers' view of the C initialisers baked into .data
+  (CStaticDataMode, which a freestanding ESP object turns on --
+  EspFreestandingObj): each CDataReloc slot is one data word relocated with
+  R_XTENSA_32 / R_RISCV_32 (type 1 on both). Section symbols differ between
+  the two writers, so the caller passes them: text, iram text (-1 when the
+  writer has none), data, bss, rodata.
+  feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
+function ObjProcIsDefined(procIdx: Integer): Boolean; forward;
+procedure ObjEspCdrRel(i, extSym0, sText, sIram, sData, sBss, sRo: Integer;
+                       var sym: Integer; var addend: Int64);
+var p, k: Integer;
+begin
+  addend := CDRAddend[i];
+  p := CDRTarget[i];
+  case CDRKind[i] of
+    CDR_DATA:
+      begin
+        sym := ObjDataSym(p, sData, sRo);
+        addend := addend + ObjDataOff(p);
+      end;
+    CDR_PROC:
+      if ObjProcIsDefined(p) then
+      begin
+        if (sIram >= 0) and ProcIram[p] then
+        begin
+          sym := sIram;
+          addend := addend + ObjProcIramOff[p];
+        end
+        else
+        begin
+          sym := sText;
+          addend := addend + Procs[p].BodyAddr;
+        end;
+      end
+      else
+      begin
+        sym := -1;
+        for k := 0 to ExternalCount - 1 do
+          if ExternalProc[k] = p then sym := extSym0 + k;
+        if sym < 0 then
+          ErrorNoPos('internal: a C initialiser names ' + Procs[p].Name +
+                     ', which has neither a body nor an import (CRegisterCDataImports)');
+      end;
+  else
+    if ObjDataIsImport(p) then
+      sym := extSym0 + ExternalCount + ObjDataImportOrdinal(p)
+    else if SymOffIsData(Syms[p].Offset) then
+    begin
+      sym := ObjDataSym(SymOffDataPart(Syms[p].Offset), sData, sRo);
+      addend := addend + ObjDataOff(SymOffDataPart(Syms[p].Offset));
+    end
+    else
+    begin
+      sym := sBss;
+      addend := addend + Syms[p].Offset;
+    end;
+  end;
+end;
+
+{ A data symbol this object defines: in .data (or .rodata) when the C
+  initialiser placed it there, else in .bss. }
+procedure ObjEspDataSymLoc(i, shData, shBss, shRo: Integer; var shndx, value: Integer);
+begin
+  if SymOffIsData(Syms[i].Offset) then
+  begin
+    if ObjDataIsRo(SymOffDataPart(Syms[i].Offset)) then shndx := shRo else shndx := shData;
+    value := ObjDataOff(SymOffDataPart(Syms[i].Offset));
+  end
+  else
+  begin
+    shndx := shBss;
+    value := Syms[i].Offset;
+  end;
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -3802,6 +3887,7 @@ var
   relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
+  cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3929,7 +4015,10 @@ begin
       else
         writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC in .text }
     end;
-  writeSym32(f, appMainOff, 0, 0, $12, 1);
+  { a freestanding object has no IDF to call it: WEAK, so two objects never
+    collide over it and the kernel's own app_main, if any, wins }
+  if EspFreestandingObj then writeSym32(f, appMainOff, 0, 0, $22, 1)
+  else writeSym32(f, appMainOff, 0, 0, $12, 1);
   { The MARKED surface, and only it: a cdecl routine keeps its section -- an
     iram proc stays in .iram1.text -- so exporting it does not move its code. }
   for i := 0 to ProcCount-1 do
@@ -3942,7 +4031,10 @@ begin
     end;
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
-      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 7);
+    begin
+      ObjEspDataSymLoc(i, 5, 7, 11, cdrSh, cdrVal);
+      writeSym32(f, ObjDataStrOff[i], cdrVal, SymAllocSize[i], $11, cdrSh);
+    end;
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   impStr := strSize - ObjEspImportStrLen;
@@ -4055,6 +4147,12 @@ begin
           writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
                       Procs[MethodFixups[i].ProcIdx].BodyAddr);
       end;
+    for i := 0 to CDRCount-1 do
+      if ObjDataIsRo(CDRPos[i]) = (pass = 1) then
+      begin
+        ObjEspCdrRel(i, extSym0, 1, 2, 3, 4, 5, cdrSym, cdrAdd);
+        writeRela32(f, ObjDataOff(CDRPos[i]), cdrSym, 1, Integer(cdrAdd));
+      end;
   end;
 
   { .shstrtab: 95-byte blob, 116 with the split }
@@ -4126,6 +4224,7 @@ var
   relaTextCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
+  cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4237,13 +4336,17 @@ begin
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
-  writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
+  if EspFreestandingObj then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: see writeELF32RelIram }
+  else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1); { GLOBAL FUNC }
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
-      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
+    begin
+      ObjEspDataSymLoc(i, 3, 5, 9, cdrSh, cdrVal);
+      writeSym32(f, ObjDataStrOff[i], cdrVal, SymAllocSize[i], $11, cdrSh);
+    end;
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0); { NOTYPE UNDEF, GLOBAL or WEAK }
   impStr := strSize - ObjEspImportStrLen;
@@ -4307,6 +4410,12 @@ begin
       if ObjDataIsRo(MethodFixups[i].DataPos) = (pass = 1) then
         writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
                     Procs[MethodFixups[i].ProcIdx].BodyAddr);
+    for i := 0 to CDRCount-1 do
+      if ObjDataIsRo(CDRPos[i]) = (pass = 1) then
+      begin
+        ObjEspCdrRel(i, extSym0, 1, -1, 2, 3, 4, cdrSym, cdrAdd);
+        writeRela32(f, ObjDataOff(CDRPos[i]), cdrSym, 1, Integer(cdrAdd));
+      end;
   end;
 
   { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }

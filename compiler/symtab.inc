@@ -20051,8 +20051,11 @@ begin
     either: compiler.pas has no `interrupt;` and no `iram;`.
     Measured on esp32s3: handler entered, its first direct store printed, and
     the first CALL faulted. }
+  { A FREESTANDING ESP OBJECT takes the bare runtime but is still an ET_REL
+    for an external linker that places .iram1.text away from flash, so it
+    takes this path like an IDF object (EspFreestandingObj, compiler.pas). }
   if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32))
-     and (not EspBareBoot) then
+     and ((not EspBareBoot) or EspFreestandingObj) then
     if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) then
     begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');

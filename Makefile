@@ -20897,6 +20897,14 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_xtensa_inline_asm: qemu-xtensa absent, NOT verified ==="; \
 	fi
+	# File-scope initialisers as DATA in a freestanding object (Gibux): x86-64
+	# linked by gcc and run (casts from integers, array+offset: rump-pxx g19);
+	# xtensa with no IDF runtime, windowed, linked by GNU ld and read back
+	./$(COMPILER) --freestanding --emit-obj -DPXX_NO_MAIN test/c_freestanding_static_data.c $(TESTTMP)/c_fsd.o > /dev/null
+	printf '#include <stdio.h>\nint check(void);\nint main(void){printf("%%d\\n", check()); return 0;}\n' > $(TESTTMP)/c_fsd_main.c
+	gcc -no-pie $(TESTTMP)/c_fsd_main.c $(TESTTMP)/c_fsd.o -o $(TESTTMP)/c_fsd
+	tools/expect_same.sh c_fsd "$$($(TESTTMP)/c_fsd)" "$$(cat test/c_freestanding_static_data.expected)"
+	python3 -I tools/check_xtensa_freestanding_obj.py $(COMPILER) $(TESTTMP)
 	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
 	#    block-scope static with NO thread storage class must stay quiet. The
 	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of

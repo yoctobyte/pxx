@@ -4689,6 +4689,10 @@ begin
         v := -a;
         Result := True;
       end;
+    AN_PTR_CAST:
+      { `(volatile unsigned *)0x60000000`: a device register's address, the
+        commonest kernel initialiser there is (rump-pxx g19, Gibux) }
+      Result := CBakeIntValue(ASTLeft[node], v);
     AN_NOT:
       { C's `~` (its `!` is a compare): bitwise; the store keeps the low bytes }
       if CBakeIntValue(ASTLeft[node], a) then
@@ -4743,10 +4747,17 @@ begin
     AN_STR_LIT:
       begin
         kind := CDR_DATA;
-        target := Strs[InternStr(GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node]))].Offset + 8;
+        { the index FIRST: InternStr may grow Strs, and `Strs[InternStr(..)]`
+          read the old array (a segfault on the first literal that grew it --
+          a freestanding xtensa object's `const char *g = "hello";`) }
+        target := InternStr(GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node]));
+        target := Strs[target].Offset + 8;
         addend := 0;
         Result := True;
       end;
+    AN_PTR_CAST:
+      { `(void *)&x`, `(char *)buf`: the cast changes no bits }
+      Result := CBakeAddrValue(ASTLeft[node], kind, target, addend);
     AN_PROCADDR:
       begin
         kind := CDR_PROC;
@@ -4780,6 +4791,20 @@ begin
         if ASTIVal[node] = Ord(tkPlus) then addend := addend + k
         else addend := addend - k;
         Result := True;
+      end
+      { `buf + 2` with buf a global ARRAY, as the scalar replay hands it over
+        (unscaled, ASTSLen 0): the step is the array's element stride }
+      else if (ASTSLen[node] <> 1) and
+         ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+         (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (ASTIVal[ASTLeft[node]] >= 0) and Syms[ASTIVal[ASTLeft[node]]].IsArray and
+         CBakeAddrValue(ASTLeft[node], kind, target, addend) and
+         CBakeIntValue(ASTRight[node], k) then
+      begin
+        k := k * IRArrayElemStride(ASTLeft[node]);
+        if ASTIVal[node] = Ord(tkPlus) then addend := addend + k
+        else addend := addend - k;
+        Result := True;
       end;
   end;
 end;
@@ -4791,7 +4816,7 @@ var k, n: Integer;
 begin
   n := 0;
   for k := 0 to CDRCount - 1 do
-    if (CDRPos[k] + 8 <= pos) or (CDRPos[k] >= pos + size) then
+    if (CDRPos[k] + TARGET_PTR_SIZE <= pos) or (CDRPos[k] >= pos + size) then
     begin
       CDRPos[n] := CDRPos[k]; CDRKind[n] := CDRKind[k];
       CDRTarget[n] := CDRTarget[k]; CDRAddend[n] := CDRAddend[k];

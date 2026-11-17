@@ -1732,6 +1732,7 @@ begin
   EmitAsmTextMode := False;
   CodePadStart := -1;   { no ELF page padding until the writer appends it }
   EspBareBoot := False;
+  EspFreestandingObj := False;
   EspWriteNoopWarned := False;
   NoDefaultRtl := False;
   StrictIR := True;   { DEFAULT ON since 2026-07-11: IRVerify rejects any IR_UNSUPPORTED
@@ -2944,6 +2945,21 @@ begin
     if TargetArch = TARGET_XTENSA then TargetSoc := SOC_ESP32S3
     else if TargetArch = TARGET_RISCV32 then TargetSoc := SOC_ESP32C3;
   end;
+  { A FREESTANDING ESP OBJECT is a piece of a kernel or firmware the user links
+    with their own entry, vectors and linker script (Gibux on the ESP32-S3).
+    It takes the bare profile's runtime -- no ESP-IDF underneath, so none of
+    app_main's runtime, PXXIdfStdWrite or the lwip/stdio/heap_caps imports the
+    IDF platform backend brings -- but NOT the bare IMAGE's constraints: the
+    ABI stays the chip's (windowed on a named xtensa chip, gcc's default and
+    what the kernel's own .S window handlers serve), and the SoC is not
+    limited to the two whose memory map the bare image hardcodes, because an
+    object has no map. feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
+  if FreestandingMode and EmitObjMode and
+     ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) then
+  begin
+    EspBareBoot := True;
+    EspFreestandingObj := True;
+  end;
   if EspBareBoot and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
   begin writeln(StdErr, '--esp-profile=bare requires an ESP target: a SoC name '
         + '(--target=esp32c3, esp32s3, ...) or the generic --target=riscv32 / '
@@ -2987,12 +3003,12 @@ begin
     --esp-profile=bare` built an S3-shaped image and said ok. Measured
     2026-09-24; the IDF profile is unaffected (IDF owns the map there) and
     runs on the classic ESP32 under qemu -M esp32. }
-  if EspBareBoot and SocExplicit and (TargetSoc <> SOC_ESP32S3) and
+  if EspBareBoot and (not EspFreestandingObj) and SocExplicit and (TargetSoc <> SOC_ESP32S3) and
      (TargetSoc <> SOC_ESP32C3) then
   begin writeln(StdErr, '--esp-profile=bare supports esp32s3 and esp32c3 only: the bare image hardcodes their load address and UART0 base, and ' + SocName(TargetSoc) + ' has a different memory map. Use the ESP-IDF profile (drop --esp-profile=bare), which works for ' + SocName(TargetSoc) + ' because IDF owns the map.'); Halt(1); end;
   if XtensaHasFpu and (TargetSoc = SOC_ESP32S2) then
   begin writeln(StdErr, '--xtensa-fpu: the esp32s2 has no FPU (XCHAL_HAVE_FP = 0); drop the flag -- Single and Double go through softfloat'); Halt(1); end;
-  if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+  if EspBareBoot and (not EspFreestandingObj) and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   { Derive the platform from the target unless --platform= set it explicitly.
     esp targets (xtensa/riscv32) and bare-metal profiles are esp; all else is
@@ -3013,7 +3029,7 @@ begin
     and excluded here so a bare chip build is not flipped INTO that refusal).
     bug-a-target-esp32s3-builds-a-call0-object-that-esp-idf-cannot-call }
   if SocExplicit and SocIsXtensa(TargetSoc) and (not XtensaAbiExplicit) and
-     (not EspBareBoot) and (TargetPlatform = PLATFORM_ESP) then
+     ((not EspBareBoot) or EspFreestandingObj) and (TargetPlatform = PLATFORM_ESP) then
     XtensaABI := XTENSA_ABI_WINDOWED;
   { ESP IMPLIES --compact-classes: memory is precious on that target (user,
     2026-08-21) and the root slots cost data per class declared. An explicit
