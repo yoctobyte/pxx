@@ -367,13 +367,11 @@ const
   mmap) is `Unknown syscall 222` here, and 64 -- which looks like an mmap2 --
   is `utime`.
 
-  UNLIKE riscv32 IT IS NOT TIME64. `timerfd_settime` 313 answers EFAULT (i.e.
-  it exists and tried to read the itimerspec), while 410, the settime64 number,
-  is `Unknown syscall`. So xtensa deliberately does NOT get SCHED_TIME64 and
-  takes the 32-bit itimerspec arm, the same as i386/arm32. Copying riscv32's
-  block here -- the obvious move, since both are 32-bit ESP targets -- would
-  have produced an ENOSYS at runtime and no compile error, which is precisely
-  the failure the riscv32 note above warns about.
+  IT IS TIME64 NOW (2026-11-17), with timerfd_settime64 = 411. The note this
+  replaces said xtensa was NOT time64 because "410, the settime64 number, is
+  `Unknown syscall`" -- but 410 is timerfd_GETtime64; settime64 is 411. Under
+  today's qemu-xtensa both answer (EBADF / EFAULT on a junk fd), and the plain
+  313 still exists; time64 is chosen for Gibux, as PAL_TIME64 says.
 
   AND IT HAS BOTH epoll_wait AND epoll_pwait (18 and 274), so it takes the x86
   arm rather than the aarch64/arm32 one. mmap is mmap2 (page offset in the last
@@ -387,7 +385,7 @@ const
   SYS_read            = 12;
   SYS_close           = 9;
   SYS_timerfd_create  = 312;
-  SYS_timerfd_settime = 313;
+  SYS_timerfd_settime = 411;        { timerfd_settime64 -- SCHED_TIME64 }
   SYS_mmap            = 80;         { mmap2 -- page offset, 0 here }
   SYS_mprotect        = 82;
   SYS_munmap          = 81;
@@ -435,6 +433,7 @@ type
   which is what ArmOneShotTimer used to do and what put it on the 8/12 offsets.
   Same rule, same target, as PAL_TIME64 in platform_backend.pas. }
 {$ifdef CPU_RISCV32}{$define SCHED_TIME64}{$endif}
+{$ifdef CPU_XTENSA}{$define SCHED_TIME64}{$endif}   { see PAL_TIME64 in platform_backend.pas }
 
 const
 { Independent reactors, one per OS thread that ever calls into the scheduler.

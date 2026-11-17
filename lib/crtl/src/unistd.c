@@ -1480,6 +1480,8 @@ int pause(void)
 {
 #if defined(SYS_pause)
   return (int)syscall(SYS_pause);
+#elif defined(SYS_ppoll_time64) && defined(__xtensa__)
+  return (int)syscall(SYS_ppoll_time64, (long)0, (long)0, (long)0, (long)0);
 #elif defined(SYS_ppoll)
   return (int)syscall(SYS_ppoll, (long)0, (long)0, (long)0, (long)0);
 #else

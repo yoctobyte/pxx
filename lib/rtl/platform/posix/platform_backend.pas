@@ -172,6 +172,14 @@ implementation
   fields must stay native-width. PAL_TIME64 is therefore riscv32 alone, and a
   future 32-bit port added after 2020 will want it too. }
 {$ifdef CPU_RISCV32}{$define PAL_TIME64}{$endif}
+{ XTENSA TAKES IT TOO, BY CHOICE RATHER THAN NECESSITY (2026-11-17). Linux
+  xtensa keeps the time32 calls, but Gibux -- the kernel these programs run on
+  on the ESP32-S3 -- implements the *_time64 set with __kernel_timespec, the
+  word-size-independent ABI, as musl does on every 32-bit port. qemu-xtensa
+  answers all of them (measured: 403/404/407/412/414 return EFAULT/EINVAL for
+  a junk argument, never ENOSYS), so the hosted tests exercise the same path.
+  feature-xtensa-crtl-uses-the-time64-syscalls }
+{$ifdef CPU_XTENSA}{$define PAL_TIME64}{$endif}
 
 type
   { THE KERNEL'S timespec WORD, WHICH IS NOT ALWAYS THE NATIVE WORD -- see
@@ -402,10 +410,15 @@ const
   SYS_socket=96; SYS_connect=101; SYS_accept4=333; SYS_bind=100; SYS_listen=102;
   SYS_setsockopt=97; SYS_shutdown=99; SYS_fcntl=67;
   SYS_getsockopt=98; SYS_getsockname=104; SYS_getpeername=105; SYS_ioctl=66;
-  SYS_sendto=110; SYS_recvfrom=111; SYS_ppoll=273;
+  SYS_sendto=110; SYS_recvfrom=111; SYS_ppoll=414;   { ppoll_time64 }
   SYS_clone = 116; SYS_execve = 117; SYS_pipe2 = 311; SYS_dup3 = 310; SYS_wait4 = 121; SYS_kill = 123;
-  SYS_clock_gettime = 245;
-  SYS_mmap = 80; SYS_munmap = 81; SYS_mprotect = 82; SYS_fchmod = 52; SYS_getpid = 120; SYS_nanosleep = 195; SYS_utimensat = 296;
+  { the time family is time64 here -- see PAL_TIME64. 403..414 are the
+    generic numbers every 32-bit port shares; Gibux's asm/unistd.h (from Linux
+    v6.12 syscall.tbl) and a probe under qemu-xtensa agree on each. }
+  SYS_clock_gettime = 403;                 { clock_gettime64 }
+  SYS_clock_settime = 404;                 { clock_settime64 }
+  SYS_clock_nanosleep = 407;               { clock_nanosleep_time64 }
+  SYS_mmap = 80; SYS_munmap = 81; SYS_mprotect = 82; SYS_fchmod = 52; SYS_getpid = 120; SYS_utimensat = 412; { utimensat_time64 }
   SYS_fchmodat = 300; SYS_fchownat = 297; SYS_umask = 58;
   SYS_getcwd = 43; SYS_rt_sigaction = 226;
   SYS_truncate = 22; SYS_mknodat = 290;
@@ -1139,13 +1152,9 @@ function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
   implemented" is exactly what a stub would have produced. }
 var ts: TTimeSpec;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   ts.Sec := TPalTimeWord(sec);
   ts.Nsec := TPalTimeWord(nsec);
   Result := Integer(__pxxrawsyscall(SYS_clock_settime, PtrUInt(clockId), PtrUInt(@ts), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendFchmod(handle, mode: Integer): Integer;

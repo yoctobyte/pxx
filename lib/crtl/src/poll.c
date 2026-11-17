@@ -38,7 +38,18 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
    kernel's own call where there is one (it writes back the time left, so it
    gets a copy); elsewhere poll's millisecond timeout, without a mask. */
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout, const void *sigmask) {
-#if defined(SYS_ppoll)
+#if defined(SYS_ppoll_time64) && ((defined(__riscv) && (__riscv_xlen == 32)) || defined(__xtensa__))
+  /* time64 kernel ABI (riscv32 has nothing else; xtensa by choice, see
+     PAL_TIME64): the kernel's timespec is two 64-bit words even though
+     `long' is 32 bits here. */
+  struct { long long tv_sec, tv_nsec; } ts, *tp = 0;
+  if (timeout) {
+    ts.tv_sec = timeout->tv_sec;
+    ts.tv_nsec = timeout->tv_nsec;
+    tp = &ts;
+  }
+  return (int)syscall(SYS_ppoll_time64, (long)fds, (long)nfds, (long)tp, (long)sigmask, 8L);
+#elif defined(SYS_ppoll)
   struct timespec ts, *tp = 0;
   if (timeout) {
     ts = *timeout;

@@ -61,7 +61,7 @@ struct __pxx_kts32 { long tv_sec; long tv_nsec; };
 
 int select(int nfds, fd_set *r, fd_set *w, fd_set *e, struct timeval *tv)
 {
-#if defined(SYS_pselect6) && !(defined(__riscv) && (__riscv_xlen == 32))
+#if defined(SYS_pselect6) && !(defined(__riscv) && (__riscv_xlen == 32)) && !defined(__xtensa__)
   struct __pxx_kts32 ts;
   struct __pxx_kts32 *pts = 0;
   if (tv) { ts.tv_sec = (long)tv->tv_sec; ts.tv_nsec = (long)tv->tv_usec * 1000L; pts = &ts; }

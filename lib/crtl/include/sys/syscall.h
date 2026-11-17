@@ -3683,6 +3683,27 @@
 # define __NR_clock_gettime64              403
 # define __NR_clock_getres_time64          406
 # define __NR_timer_settime64              409
+/* The time64 rows qemu -strace could not NAME (it printed "Unknown syscall"
+   for each, so tools/qemu_syscall_map.sh dropped them). Added by hand on
+   2026-11-17 from Gibux's asm/unistd.h, itself Linux v6.12 syscall.tbl, and
+   checked that way, row by row; qemu-xtensa does implement them (a junk
+   argument draws EFAULT/EINVAL, not ENOSYS). crtl uses ppoll/pselect6
+   _time64 on xtensa. feature-xtensa-crtl-uses-the-time64-syscalls */
+# define __NR_clock_settime64                404
+# define __NR_clock_adjtime64                405
+# define __NR_clock_nanosleep_time64         407
+# define __NR_timer_gettime64                408
+# define __NR_timerfd_gettime64              410
+# define __NR_timerfd_settime64              411
+# define __NR_utimensat_time64               412
+# define __NR_pselect6_time64                413
+# define __NR_ppoll_time64                   414
+# define __NR_io_pgetevents_time64           416
+# define __NR_recvmmsg_time64                417
+# define __NR_mq_timedsend_time64            418
+# define __NR_mq_timedreceive_time64         419
+# define __NR_semtimedop_time64              420
+# define __NR_rt_sigtimedwait_time64         421
 # define __NR_futex_time64                 422
 # define __NR_pidfd_send_signal            424
 # define __NR_pidfd_open                   434
@@ -4013,6 +4034,21 @@
 # define SYS_clock_gettime64               __NR_clock_gettime64
 # define SYS_clock_getres_time64           __NR_clock_getres_time64
 # define SYS_timer_settime64               __NR_timer_settime64
+# define SYS_clock_settime64                __NR_clock_settime64
+# define SYS_clock_adjtime64                __NR_clock_adjtime64
+# define SYS_clock_nanosleep_time64         __NR_clock_nanosleep_time64
+# define SYS_timer_gettime64                __NR_timer_gettime64
+# define SYS_timerfd_gettime64              __NR_timerfd_gettime64
+# define SYS_timerfd_settime64              __NR_timerfd_settime64
+# define SYS_utimensat_time64               __NR_utimensat_time64
+# define SYS_pselect6_time64                __NR_pselect6_time64
+# define SYS_ppoll_time64                   __NR_ppoll_time64
+# define SYS_io_pgetevents_time64           __NR_io_pgetevents_time64
+# define SYS_recvmmsg_time64                __NR_recvmmsg_time64
+# define SYS_mq_timedsend_time64            __NR_mq_timedsend_time64
+# define SYS_mq_timedreceive_time64         __NR_mq_timedreceive_time64
+# define SYS_semtimedop_time64              __NR_semtimedop_time64
+# define SYS_rt_sigtimedwait_time64         __NR_rt_sigtimedwait_time64
 # define SYS_futex_time64                  __NR_futex_time64
 # define SYS_pidfd_send_signal             __NR_pidfd_send_signal
 # define SYS_pidfd_open                    __NR_pidfd_open

@@ -105,7 +105,7 @@ end;
   SYS_futex = 422;                { futex_time64; rv32 has no plain futex at all }
 {$else}
 {$ifdef CPU_XTENSA}
-  SYS_futex = 191;                { xtensa's own numbering, measured under qemu }
+  SYS_futex = 422;                { futex_time64, as PAL_TIME64 (platform_backend) }
 {$else}
   SYS_futex = -1;                 { no table for this target: fails at runtime }
 {$endif}
@@ -121,7 +121,9 @@ begin
 end;
 
 function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
-{$ifdef CPU_RISCV32}
+{$ifdef CPU_RISCV32}{$define PALFUTEX_TIME64}{$endif}
+{$ifdef CPU_XTENSA}{$define PALFUTEX_TIME64}{$endif}
+{$ifdef PALFUTEX_TIME64}
 var
   ts: array[0..1] of Int64;       { futex_time64 takes a 64-BIT timespec, and
                                     NativeInt is 4 bytes here -- see the header }
