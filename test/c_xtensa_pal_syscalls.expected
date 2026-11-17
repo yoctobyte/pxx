@@ -1,0 +1,13 @@
+uname 0 sysname Linux nodename-set 1
+times 1
+getrlimit 0 cur>0 1
+getrusage 0
+getpgid 1 getsid 1
+setpgid 0
+getpriority-ok 1
+setpriority 0
+getgroups 1
+sigprocmask 0 blocked 1
+alarm 0 then 1
+fdatasync-ran 1
+umask 0

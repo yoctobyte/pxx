@@ -20923,6 +20923,8 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_shared_runtime.py $(COMPILER) $(TESTTMP)
 	# hosted xtensa (no-MMU Gibux) heap: 64 KiB arenas, big requests mapped alone
 	python3 -I tools/check_xtensa_heap_arenas.py $(COMPILER) $(TESTTMP)
+	# hosted xtensa PAL: the syscalls it used to refuse (uname, times, prlimit64, ...)
+	python3 -I tools/check_xtensa_pal_syscalls.py $(COMPILER) $(TESTTMP)
 	# busybox hush gaps: a subscripted string literal folds; crtl has getpgrp (x86-64 and xtensa)
 	./$(COMPILER) test/c_busybox_hush_gaps.c $(TESTTMP)/c_bbhush >/dev/null
 	tools/expect_same.sh c_busybox_hush_gaps "$$($(TESTTMP)/c_bbhush)" "$$(cat test/c_busybox_hush_gaps.expected)"

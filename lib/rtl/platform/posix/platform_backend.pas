@@ -427,6 +427,20 @@ const
   SYS_exit = 118;
   SYS_exit_group = 119;
   SYS_getrandom = 338;
+  { From Linux 6.18's arch/xtensa/kernel/syscalls/syscall.tbl, each one then
+    run under qemu-xtensa -strace (tools/check_xtensa_pal_syscalls.py). They
+    used to be refused (PAL_ERR_UNSUPPORTED) for want of a measured number,
+    and uname(2) returned -1 with no syscall at all -- busybox `uname -a`
+    printed garbage on Gibux. rt_sigtimedwait is the time64 one (TPalTimeWord
+    is Int64 here); setitimer takes native-word timevals, which alarm builds.
+    bug-xtensa-pal-refused-nineteen-syscalls-it-had-numbers-for }
+  SYS_fdatasync = 27; SYS_sync = 178; SYS_setsid = 128; SYS_getgroups = 196;
+  SYS_getpriority = 132; SYS_setpriority = 133; SYS_getsid = 129;
+  SYS_setpgid = 148; SYS_getpgid = 149; SYS_setitimer = 134;
+  SYS_sethostname = 198; SYS_setgroups = 197;
+  SYS_rt_sigtimedwait = 421;               { rt_sigtimedwait_time64 }
+  SYS_rt_sigprocmask = 227; SYS_times = 154; SYS_uname = 208;
+  SYS_prlimit64 = 330; SYS_getrusage = 190;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -920,11 +934,7 @@ function PalBackendFdatasync(handle: Integer): Integer;
   nobody checked. A refusal here is recoverable; a wrong syscall number on a
   file descriptor is not. Measure it and this arm goes away. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_fdatasync, handle, 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 { sync(2) -- flush ALL filesystem buffers. busybox's `sync' applet is the
@@ -940,31 +950,19 @@ end;
   repo's expensive shape. Measure it and delete this arm. }
 function PalBackendSync: Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_sync, 0, 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendSetsid: Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_setsid, 0, 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 { getgroups(2). count=0 asks for the COUNT and must not write through list --
   that is the call every caller makes first, so it is the one that matters. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_getgroups, PtrUInt(count), PtrUInt(list), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendGetPriority(which, who: Integer): Integer;
@@ -975,53 +973,33 @@ function PalBackendGetPriority(which, who: Integer): Integer;
   a negative result still means -errno on this side of the PAL, and the
   conversion happens once, in the crtl wrapper that owns errno. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_getpriority, PtrUInt(which), PtrUInt(who), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendSetPriority(which, who, prio: Integer): Integer;
 { setpriority(2). Takes the nice value as-is -- only the GET direction is
   biased; the kernel clamps out-of-range values rather than refusing them. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_setpriority, PtrUInt(which), PtrUInt(who), PtrUInt(prio), 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendGetSid(pid: Integer): Integer;
 { getsid(2). pid=0 asks about the caller. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_getsid, PtrUInt(pid), 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendSetPgid(pid, pgid: Integer): Integer;
 { setpgid(2). Both zeros mean "the caller, into its own new group" -- which is
   what the BSD setpgrp() spelling reduces to. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_setpgid, PtrUInt(pid), PtrUInt(pgid), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendGetPgid(pid: Integer): Integer;
 { getpgid(2). pid=0 asks about the caller. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_getpgid, PtrUInt(pid), 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendAlarm(seconds: LongWord): Integer;
@@ -1042,9 +1020,6 @@ var
   newv, oldv: array[0..3] of NativeInt;
   rc: Int64;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   newv[0] := 0; newv[1] := 0;                 { it_interval: one-shot }
   newv[2] := NativeInt(seconds); newv[3] := 0;{ it_value }
   oldv[0] := 0; oldv[1] := 0; oldv[2] := 0; oldv[3] := 0;
@@ -1056,16 +1031,11 @@ begin
   end;
   Result := Integer(oldv[2]);
   if oldv[3] > 0 then Inc(Result);            { round a part-second UP, per alarm(2) }
-{$endif}
 end;
 
 function PalBackendSetHostname(name: PChar; len: Integer): Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_sethostname, PtrUInt(name), PtrUInt(len), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
@@ -1074,11 +1044,7 @@ function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
   and getuid. Passing 32-bit gids to the 16-bit call truncates every gid above
   65535 to a DIFFERENT existing group. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_setgroups, PtrUInt(count), PtrUInt(list), 0, 0, 0, 0));
-{$endif}
 end;
 
 function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
@@ -1096,15 +1062,11 @@ var
   ts: TTimeSpec;
   tsp: PtrUInt;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   ts.Sec := TPalTimeWord(sec);
   ts.Nsec := TPalTimeWord(nsec);
   if sec < 0 then tsp := 0 else tsp := PtrUInt(@ts);
   Result := Integer(__pxxrawsyscall(SYS_rt_sigtimedwait, PtrUInt(setPtr), 0, tsp,
                                     PtrUInt(setSize), 0, 0));
-{$endif}
 end;
 
 function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
@@ -1114,12 +1076,8 @@ function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize
   passes it because the caller's own sigset_t need not be that width, and it is
   the caller that knows which eight bytes to point at. }
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_rt_sigprocmask, PtrUInt(how), PtrUInt(setPtr),
                                     PtrUInt(oldSetPtr), PtrUInt(setSize), 0, 0));
-{$endif}
 end;
 
 function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
@@ -1227,11 +1185,7 @@ end;
   quietly does something else. Measure it the same way before filling it in. }
 function PalBackendTimes(buf: Pointer): Int64;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := __pxxrawsyscall(SYS_times, Int64(buf), 0, 0, 0, 0, 0);
-{$endif}
 end;
 
 { uname(2). Fills a `struct utsname`: SIX fixed 65-byte char arrays back to
@@ -1247,11 +1201,7 @@ end;
   PalBackendTimes above: its table is bespoke and measured, never inferred. }
 function PalBackendUname(buf: Pointer): Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_uname, Int64(buf), 0, 0, 0, 0, 0));
-{$endif}
 end;
 
 { prlimit64: the ONE syscall behind both getrlimit and setrlimit.
@@ -1272,12 +1222,8 @@ end;
   qemu-xtensa -strace, never inferred. }
 function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_prlimit64, 0, resource,
                                     Int64(newLim), Int64(oldLim), 0, 0));
-{$endif}
 end;
 
 { getrusage(2): the kernel fills a struct rusage of two timevals and fourteen
@@ -1287,11 +1233,7 @@ end;
   inferred, and nobody has measured this one. }
 function PalBackendGetrusage(who: Integer; usage: Pointer): Integer;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   Result := Integer(__pxxrawsyscall(SYS_getrusage, who, Int64(usage), 0, 0, 0, 0));
-{$endif}
 end;
 
 { umask always succeeds and returns the PREVIOUS mask — it has no error case,
@@ -1444,14 +1386,10 @@ function PalBackendUtimensat(dirFd: Integer; path: PChar;
   struct writes past what it was given. }
 var ts: TTimeSpecPair;
 begin
-{$ifdef CPU_XTENSA}
-  Result := PAL_ERR_UNSUPPORTED;
-{$else}
   ts[0].Sec := TPalTimeWord(aSec); ts[0].Nsec := TPalTimeWord(aNsec);
   ts[1].Sec := TPalTimeWord(mSec); ts[1].Nsec := TPalTimeWord(mNsec);
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PtrUInt(dirFd), PtrUInt(path),
                                     PtrUInt(@ts[0]), PtrUInt(flags), 0, 0));
-{$endif}
 end;
 
 { MAP_PRIVATE|MAP_ANONYMOUS. 34 ($22) everywhere EXCEPT xtensa, which is one of
