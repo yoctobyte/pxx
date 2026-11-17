@@ -461,6 +461,35 @@ begin
   Result := v;
 end;
 
+{ movs/cmps/stos/lods/scas + b/w/l/q, no operands: emit and report True.
+  The i386 sink refuses them by name rather than rendering an unchecked line. }
+function AttStringOp(const mn: AnsiString): Boolean;
+var b: AnsiString; sz: Char; op: Integer;
+begin
+  Result := False;
+  if Length(mn) <> 5 then Exit;
+  b := Copy(mn, 1, 4); sz := mn[5];
+  if CaseEqual(b, 'movs') then op := $A4
+  else if CaseEqual(b, 'cmps') then op := $A6
+  else if CaseEqual(b, 'stos') then op := $AA
+  else if CaseEqual(b, 'lods') then op := $AC
+  else if CaseEqual(b, 'scas') then op := $AE
+  else Exit;
+  if not ((sz = 'b') or (sz = 'w') or (sz = 'l') or (sz = 'q')) then Exit;
+  AttSkipSpace;
+  if not AttAtSeparator then Exit;     { an explicit-operand form: not handled here }
+  if AttSinkText then
+    Error('C: inline asm string instruction ' + mn + ' is not supported on the i386 path');
+  if sz = 'w' then AsmB($66);
+  if sz = 'q' then
+  begin
+    if TARGET_PTR_SIZE <> 8 then Error('C: inline asm ' + mn + ' needs a 64-bit target');
+    AsmB($48);
+  end;
+  if sz = 'b' then AsmB(op) else AsmB(op + 1);
+  Result := True;
+end;
+
 { ---- operands -------------------------------------------------------------
 
   `%` is the interesting character and it means three different things:
@@ -530,6 +559,12 @@ begin
     Exit;
   end;
   num := AttCtlRegNum(nm);
+  { db0..db7 / dr0..dr7, the debug registers (NetBSD's x86 dbregs, rump
+    repro g14c): carried as a control register numbered 16 + n, which the
+    mov-to/from-cr encoder turns into 0F 21 / 0F 23. }
+  if (num < 0) and (Length(nm) = 3) and (AsmRegLower(nm[1]) = 'd') and
+     (AsmRegLower(nm[2]) = 'r') and (nm[3] >= '0') and (nm[3] <= '7') then
+    num := 16 + Ord(nm[3]) - Ord('0');
   if num >= 0 then
   begin
     AsmOpKind[slot] := AOP_CREG; AsmOpReg[slot] := num; AsmOpSize[slot] := 8;
@@ -548,13 +583,18 @@ function AttReadOperandNumber: Integer; forward;
   `1*8(%0)` is how tls_sp_c32.c reaches every limb, and %0 there is an `"r"`
   operand holding a pointer. Both spellings land in the same slot as a plain
   register, so the memory parser below does not need to know which it got. }
+function AttReadNamedOperand: Integer; forward;
+
 procedure AttParseBaseOrOperand(slot: Integer);
 var n: Integer;
 begin
-  if AttExtended and (AttPeek = '%') and AttIsDigit(AttPeek2) then
+  if AttExtended and (AttPeek = '%') and (AttIsDigit(AttPeek2) or (AttPeek2 = '[')) then
   begin
     Inc(AttPos);
-    n := AttReadOperandNumber;
+    { %[name] names an operand as a base too: `leal 1(%[x]),%[y]` (rump
+      repro g14c) }
+    if AttPeek = '[' then n := AttReadNamedOperand
+    else n := AttReadOperandNumber;
     if AttBindKind[n] <> ATTBIND_REG then
       Error('C: inline asm template uses the memory operand %' + AIntToStr(n)
             + ' as an address register');
@@ -571,7 +611,7 @@ end;
   read here, and both refuse by name below rather than encoding something
   plausible. }
 procedure AttParseMemory(slot: Integer; disp: Int64; sawDisp: Boolean);
-var num, size, idxNum, idxSize, addrSize: Integer; scale: Int64;
+var num, size, idxNum, idxSize, addrSize: Integer; scale: Int64; addr32: Boolean;
 begin
   { AttPos is on '(' }
   Inc(AttPos);
@@ -597,7 +637,16 @@ begin
     i386, and it is not a matter of taste: `(%eax)` in 64-bit mode is a
     different, address-size-prefixed encoding, and `(%rax)` does not exist in
     32-bit mode at all. }
-  if size <> addrSize then
+  { A 32-bit base in 64-bit mode is 32-bit ADDRESSING: the 0x67 prefix, which
+    is exactly what gcc+gas emit when an `int` operand is the base --
+    `leal 1(%[x]),%[y]` with x an int assembles to 67 8d 47 01. Emitted here,
+    during operand parsing, because nothing of this instruction has been
+    emitted yet (only a lock prefix, which may precede it). The index, if
+    any, must then be 32-bit too, as gas requires. }
+  addr32 := (not AttSinkText) and (not AttGasMode) and (addrSize = 8) and (size = 4);
+  if addr32 then
+    AsmB($67)
+  else if size <> addrSize then
     Error('C: inline asm template needs a ' + AIntToStr(addrSize * 8)
           + '-bit base register inside ( )');
   idxNum := -1; scale := 1;
@@ -611,7 +660,10 @@ begin
     idxSize := AsmOpSize[slot];
     if AttGasMode and (idxSize <> addrSize) then
       Error('asm: needs a ' + AIntToStr(addrSize * 8) + '-bit index register inside ( )');
-    if (not AttGasMode) and (idxSize <> 8) then
+    if addr32 and (idxSize <> 4) then
+      Error('C: inline asm template mixes a 32-bit base with a '
+            + AIntToStr(idxSize * 8) + '-bit index inside ( )');
+    if (not AttGasMode) and (not addr32) and (idxSize <> 8) then
       Error('C: inline asm template needs a 64-bit index register inside ( )');
     AttSkipSpace;
     if AttPeek = ',' then
@@ -813,7 +865,10 @@ begin
         expensive. It needs a high-byte operand kind in the shared x86-64
         encoder, which is Track A and is filed separately.
         bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header }
-      if (AttPeek = 'b') or (AttPeek = 'w') then
+      { %k and %q (the 32- and 64-bit names) joined b and w for rump's
+        x86 headers (`movl %k0,%k0`, rump repro g14c) -- the same arm,
+        another width. }
+      if (AttPeek = 'b') or (AttPeek = 'w') or (AttPeek = 'k') or (AttPeek = 'q') then
       begin
         modCh := AttPeek;
         Inc(AttPos);
@@ -827,7 +882,13 @@ begin
                 + ' — a width modifier selects a register half');
         AsmOpKind[slot] := AOP_REG;
         AsmOpReg[slot] := AttBindReg[n];
-        if modCh = 'b' then AsmOpSize[slot] := 1 else AsmOpSize[slot] := 2;
+        case modCh of
+          'b': AsmOpSize[slot] := 1;
+          'w': AsmOpSize[slot] := 2;
+          'k': AsmOpSize[slot] := 4;
+        else
+          AsmOpSize[slot] := 8;
+        end;
         Exit;
       end;
       { %h<n>: the HIGH byte of operand n -- %ah/%ch/%dh/%bh. The encoder
@@ -984,7 +1045,7 @@ begin
          or CaseEqual(b,'in') or CaseEqual(b,'out')
          or CaseEqual(b,'push') or CaseEqual(b,'pop')
          or CaseEqual(b,'lgdt') or CaseEqual(b,'lidt') or CaseEqual(b,'ltr')
-         or CaseEqual(b,'invlpg')
+         or CaseEqual(b,'invlpg') or CaseEqual(b,'invpcid')
          or CaseEqual(b,'clflush') or CaseEqual(b,'clflushopt')
          or CaseEqual(b,'clwb')
          { Gibux SMP: the atomic read-modify-writes (with `lock`, below) and
@@ -1120,6 +1181,48 @@ begin
     instruction emits itself. The i386 path renders text lines and has no
     prefix support, so it refuses by name. Gibux SMP: futex and spinlock
     read-modify-writes that race other CPUs. }
+  { rep / repe / repz (F3) and repne / repnz (F2): string-instruction
+    prefixes, emitted ahead exactly as lock is. `rep stosb` with "+D" and
+    "+c" operands is memset in every kernel's string.h (rump repro g14c). }
+  if CaseEqual(mn, 'rep') or CaseEqual(mn, 'repe') or CaseEqual(mn, 'repz') or
+     CaseEqual(mn, 'repne') or CaseEqual(mn, 'repnz') then
+  begin
+    if AttSinkText then
+      Error('C: inline asm ' + mn + ' prefix is not supported on the i386 path');
+    if CaseEqual(mn, 'repne') or CaseEqual(mn, 'repnz') then AsmB($F2) else AsmB($F3);
+    if AttPeek = ';' then begin Inc(AttPos); Exit; end;
+    if AttAtSeparator then Exit;
+    mn := AttReadWord;
+    if mn = '' then Error('C: inline asm template expected an instruction after rep');
+    AttSkipSpace;
+  end;
+  { The string instructions, operand-less: movs cmps stos lods scas with a
+    b/w/l/q suffix. One byte each (A4..AF; the even opcode is the byte form,
+    odd the rest), 66 for a word, REX.W for a quad. }
+  if AttStringOp(mn) then Exit;
+  { .hidden / .internal / .protected <sym>: a VISIBILITY note on a symbol, no
+    bytes. NetBSD's __link_set_foreach expands to `__asm__(".hidden
+    __stop_link_set_x")` inside a function body (rump repro g21). It is read
+    and dropped: in a statically linked image an undefined symbol resolves
+    the same either way, which is also how pxx already treats
+    __attribute__((visibility("hidden"))) on the declarations beside it. A
+    shared library built with pxx would export such a symbol where gcc's
+    would not -- the cost of the shortcut, named here. }
+  if CaseEqual(mn, '.hidden') or CaseEqual(mn, '.internal') or CaseEqual(mn, '.protected') then
+  begin
+    if AttSinkText then
+      Error('C: inline asm ' + mn + ' is not supported on the i386 path');
+    if AttReadWord = '' then
+      Error('C: inline asm ' + mn + ' needs a symbol name');
+    AttSkipSpace;
+    while AttPeek = ',' do
+    begin
+      Inc(AttPos); AttSkipSpace;
+      if AttReadWord = '' then Error('C: inline asm ' + mn + ' needs a symbol name after ,');
+      AttSkipSpace;
+    end;
+    Exit;
+  end;
   if CaseEqual(mn, 'lock') then
   begin
     if AttSinkText then

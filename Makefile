@@ -19495,9 +19495,12 @@ test-core: $(COMPILER)
 	# has moved to casm_gnu_operands.c below. The symbolic spelling `[a] "=r"`
 	# graduated the same way on 2026-11-12 (Nilix's cpu.c writes %[cs]); it is
 	# exercised by casm_kernel_user_mode_subset.c.
-	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
-	  | grep -q 'read-write constraint "+r" is not supported' \
-	  || { echo 'casm_nonempty_template_fails: FAIL - "+r" was accepted, or refused without naming itself'; exit 1; }
+	# "+r" GRADUATED with dropbear (b1b534c3c6) and this row kept asserting the
+	# refusal -- unseen, because the freebsd kernel-entry rows stop test-core
+	# before it (bug-test-core-stops-at-freebsd-kernel-entries-5-not-2). It now
+	# asserts what the file does: compiles, and the register round trip keeps 0.
+	./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 > /dev/null
+	tools/expect_same.sh casm_plus_r_accepted "$$($(TESTTMP)/casmfail26)" "0"
 	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
 	  | grep -q 'inline asm goto is not supported' \
 	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
@@ -20803,6 +20806,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asmmderef26 "$$($(TESTTMP)/c_asmmderef26)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_m_deref_and_clflush.c $(TESTTMP)/c_asmmderef26_o2 > /dev/null
 	tools/expect_same.sh c_asmmderef26_o2 "$$($(TESTTMP)/c_asmmderef26_o2)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
+	# Memory outputs "=m"/"+m" on x86-64: the template writes the object itself
+	# (feature-c-inline-asm-plus-m-read-write-memory-operand). gcc's output.
+	./$(COMPILER) test/c_inline_asm_memory_outputs.c $(TESTTMP)/c_asmmemout26 > /dev/null
+	tools/expect_same.sh c_asmmemout26 "$$($(TESTTMP)/c_asmmemout26)" "$$(cat test/c_inline_asm_memory_outputs.expected)"
+	./$(COMPILER) -O2 test/c_inline_asm_memory_outputs.c $(TESTTMP)/c_asmmemout26_o2 > /dev/null
+	tools/expect_same.sh c_asmmemout26_o2 "$$($(TESTTMP)/c_asmmemout26_o2)" "$$(cat test/c_inline_asm_memory_outputs.expected)"
+	# NetBSD/rump x86 operand forms: qQ, %k/%q, named 32-bit base (0x67), rep +
+	# string ops, =A, N (rump repros g14a/g14c). gcc's output.
+	./$(COMPILER) test/c_inline_asm_rump_operand_forms.c $(TESTTMP)/c_asmrump26 > /dev/null
+	tools/expect_same.sh c_asmrump26 "$$($(TESTTMP)/c_asmrump26)" "$$(cat test/c_inline_asm_rump_operand_forms.expected)"
+	./$(COMPILER) -O2 test/c_inline_asm_rump_operand_forms.c $(TESTTMP)/c_asmrump26_o2 > /dev/null
+	tools/expect_same.sh c_asmrump26_o2 "$$($(TESTTMP)/c_asmrump26_o2)" "$$(cat test/c_inline_asm_rump_operand_forms.expected)"
 	./$(COMPILER) test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz26 > /dev/null
 	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
 	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null

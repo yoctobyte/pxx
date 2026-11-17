@@ -45,6 +45,14 @@ void k_set_cr3(uint64_t v) { __asm__ volatile ("movq %0, %%cr3" : : "a"(v) : "me
 void k_set_cr8(uint64_t v) { __asm__ volatile ("movq %0, %%cr8" : : "d"(v) : "memory"); }
 
 void k_invlpg(uint64_t va) { __asm__ volatile ("invlpg (%0)" : : "a"(va) : "memory"); }
+void k_invpcid(uint64_t type, void *desc) { __asm__ volatile ("invpcid (%0), %1" : : "a"(desc), "d"(type) : "memory"); }
+void k_invpcid_rex(void) { __asm__ volatile ("invpcid (%%r10), %%r11" : : : "memory"); }
+/* rump repro g14c: an "N" port, the debug registers (both directions, and a
+   REX.B general register), and mov to/from them */
+void k_outb_n(void) { __asm__ volatile ("outb %%al,%0" : : "N"(0x80), "a"(1)); }
+uint64_t k_dr0(void) { uint64_t v; __asm__ volatile ("movq %%dr0,%0" : "=a"(v)); return v; }
+void k_dr7_set(uint64_t v) { __asm__ volatile ("movq %0,%%dr7" : : "c"(v)); }
+void k_dr6_r9(void) { __asm__ volatile ("movq %%dr6,%%r9; movq %%r9,%%dr3" : : : "r9"); }
 void k_lgdt_reg(void *p) { __asm__ volatile ("lgdt (%0)" : : "a"(p)); }
 void k_lidt_reg(void *p) { __asm__ volatile ("lidt (%0)" : : "c"(p)); }
 

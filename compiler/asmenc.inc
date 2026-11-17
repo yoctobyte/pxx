@@ -681,7 +681,7 @@ end;
   i386 C file using them is refused by name rather than encoded as x86-64
   bytes; nothing 32-bit has asked for them. }
 function AsmSystemOp(const mn: AnsiString; nops: Integer): Boolean;
-var dataSlot, portSlot, sz, ext, rm, cr: Integer;
+var dataSlot, portSlot, sz, ext, rm, cr, rf, rh: Integer;
 begin
   Result := True;
   if nops = 0 then
@@ -905,6 +905,24 @@ begin
     Exit;
   end;
 
+  { invpcid r64, m128: 66 0F 38 82 /r. The type is a 64-bit register in long
+    mode without REX.W (gas emits none), and the 66 is a mandatory prefix,
+    so it goes ahead of any REX -- AsmPrefixAndREX's size-2 arm puts it
+    there and sets no W. Kernel TLB code (rump repro g20, NetBSD's
+    x86/cpufunc.h). }
+  if CaseEqual(mn,'invpcid') and (nops = 2) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: invpcid type must be a register');
+    if not ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_MEMR) or
+            (AsmOpKind[1] = AOP_GLOBAL) or (AsmOpKind[1] = AOP_RIPLBL)) then
+      Error('asm: invpcid descriptor must be a memory operand');
+    rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(2, rf and 7, rh, 1);
+    AsmB($0F); AsmB($38); AsmB($82);
+    AsmModRM(rf and 7, 1);
+    Exit;
+  end;
+
   { mov to/from a segment register: 8E /r (load sreg) and 8C /r (store it).
     A general register is taken at any width and encoded without a size
     prefix, which is what gas emits for `movw %ax, %ds` (8e d8). }
@@ -938,6 +956,17 @@ begin
     else begin cr := AsmOpReg[1]; rm := 0; end;
     if (AsmOpKind[rm] <> AOP_REG) or (AsmOpSize[rm] <> 8) then
       Error('asm: mov to or from a control register needs a 64-bit general register');
+    if cr >= 16 then
+    begin
+      { a debug register (AttParseRegisterRef numbers drN as 16 + N):
+        0F 23 /r loads it, 0F 21 /r reads it }
+      cr := cr - 16;
+      if AsmOpReg[rm] >= 8 then AsmB($41);
+      AsmB($0F);
+      if rm = 1 then AsmB($23) else AsmB($21);
+      AsmB($C0 or ((cr and 7) shl 3) or (AsmOpReg[rm] and 7));
+      Exit;
+    end;
     if (cr >= 8) or (AsmOpReg[rm] >= 8) then
       AsmB($40 or (Ord(cr >= 8) shl 2) or Ord(AsmOpReg[rm] >= 8));
     AsmB($0F);

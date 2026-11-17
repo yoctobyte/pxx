@@ -10060,6 +10060,7 @@ procedure CAsmParseOperandSection(isOutSection: Boolean);
 var raw, cls, sym: AnsiString;
     isOut, isInOut, early: Boolean;
     tied, immHi, addrN: Integer;
+    wasN: Boolean;
 begin
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
         (CurTok.Kind <> tkEOF) do
@@ -10090,11 +10091,28 @@ begin
     if (Length(cls) > 1) and (Pos('N', cls) > 0) then
       Delete(cls, Pos('N', cls), 1);
     if cls = 'n' then cls := 'i';
+    { "N" alone: an unsigned 8-bit constant, the port number of in/out
+      (`outb %%al,%0` with "N"(0x80), rump repro g14c). An "i" whose range
+      is checked like I and J's below. }
+    wasN := cls = 'N';
+    if wasN then cls := 'i';
+    { "A" on x86-64 for a value that fits one register is rax -- gcc reads it
+      that way (rdtsc's "=A" keeps only eax there; a known source bug that
+      gcc compiles, so pxx compiles it the same). On i386 it means the
+      edx:eax PAIR, which this frontend has no carrier for. }
+    if cls = 'A' then
+    begin
+      if TargetArch <> TARGET_X86_64 then
+        Error('C: inline asm constraint "' + raw + '" (the edx:eax pair) is'
+              + ' not supported on this target');
+      cls := 'a';
+    end;
     { "I" and "J" are x86's ranged immediates: a constant in 0..31 (a 32-bit
       shift or rotate count) and in 0..63 (a 64-bit one). libtomcrypt's ROLc
       and ROL64c spell their counts this way. They are an "i" whose value gcc
       range-checks, and so do we, below. }
     immHi := -1;
+    if wasN then immHi := 255;
     if cls = 'I' then begin cls := 'i'; immHi := 31; end
     else if cls = 'J' then begin cls := 'i'; immHi := 63; end;
     { "qm" / "Qm": a byte register OR memory, the usual spelling for a setcc
@@ -10102,6 +10120,11 @@ begin
       allowed choices, the same reading that honours "rm" as a register. }
     if (cls = 'qm') or (cls = 'mq') then cls := 'q';
     if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
+    { "qQ": either byte class. Q (a register with an addressable high byte:
+      a b c d) is also a q register, so Q satisfies both alternatives -- and
+      it is the one a template using %h needs. NetBSD's/rump's x86 atomic.h
+      spells xchgb's result this way (rump repro g14a). }
+    if (cls = 'qQ') or (cls = 'Qq') or (cls = 'qQm') or (cls = 'Qqm') then cls := 'Q';
     { A digit constraint names an earlier operand's location. It is only legal
       in the INPUT section -- an output tied to an output has no meaning -- and
       it must name an operand that already exists. }
@@ -10365,7 +10388,8 @@ begin
     if (CAsmOps[i].Cons = 'i') and (i < CAsmOutCount) then
       Error('C: inline asm output constraint "' + CAsmOps[i].Raw
             + '" is an immediate, which cannot be written');
-    if CAsmOps[i].IsInOut then
+    if CAsmOps[i].IsInOut and
+       not ((CAsmOps[i].Cons = 'm') and (TargetArch = TARGET_X86_64)) then
       Error('C: inline asm read-write constraint "' + CAsmOps[i].Raw
             + '" is not supported — write it as an "=' + CAsmOps[i].Cons
             + '" output with an input tied to it');
@@ -10486,9 +10510,21 @@ begin
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
-    if CAsmOps[i].Cons = 'm' then
+    { A MEMORY OUTPUT ("=m", "+m") on x86-64: the template writes the object
+      itself, through its address in a register (or straight into a plain
+      local's slot), so there is nothing to copy back and "+" costs nothing
+      more than "=". Rump/NetBSD's atomic and xchg helpers and Nilix's
+      xchg write exactly this.
+      feature-c-inline-asm-plus-m-read-write-memory-operand }
+    if (CAsmOps[i].Cons = 'm') and (TargetArch <> TARGET_X86_64) then
       Error('C: inline asm memory OUTPUT constraint "' + CAsmOps[i].Raw
-            + '" is not supported');
+            + '" is not supported on this target');
+    if CAsmOps[i].Cons = 'm' then
+      for j := 0 to CAsmOpCount - 1 do
+        if CAsmOps[j].TiedTo = i then
+          Error('C: inline asm ties operand ' + AIntToStr(j) + ' to the memory'
+                + ' output "' + CAsmOps[i].Raw + '" -- use "+m" for an'
+                + ' object the template both reads and writes');
     { An output expression is written twice -- once as the store target here,
       and once more if a matching input names it -- so what has to be excluded
       is a SIDE EFFECT, not a shape. The rule used to be "a plain variable",
@@ -10652,6 +10688,19 @@ begin
        ((ASTKind[CAsmOps[i].Expr] = AN_DEREF) or (ASTKind[CAsmOps[i].Expr] = AN_INDEX) or
         (ASTKind[CAsmOps[i].Expr] = AN_FIELD)) then
       memReg[i] := True;
+    if (TargetArch = TARGET_X86_64) and (i < CAsmOutCount) and
+       (CAsmOps[i].Cons = 'm') then
+    begin
+      memReg[i] := True;
+      if ASTKind[CAsmOps[i].Expr] = AN_IDENT then
+      begin
+        j := ASTIVal[CAsmOps[i].Expr];
+        tk := TypeSlotSize(IntToTypeKind(ASTTk[CAsmOps[i].Expr]));
+        if (j >= 0) and ((Syms[j].Kind = skLocal) or (Syms[j].Kind = skParam)) and
+           ((tk = 1) or (tk = 2) or (tk = 4) or (tk = 8)) then
+          memReg[i] := False;    { bound to the local's own slot below }
+      end;
+    end;
   end;
 
   { ---- and the rest, pinned from the caller-saved pool ---- }
@@ -10754,6 +10803,9 @@ begin
     operand for the whole block including the moves that fill and drain it. }
   for i := 0 to saveCount - 1 do
     AttEmitPushPop(saveReg[i], True);
+  for i := 0 to CAsmOutCount - 1 do
+    if memReg[i] then
+      AttEmitFrameMove(opReg[i], 8, Syms[tmpSym[i]].Offset, True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
     if memReg[i] then
       AttEmitFrameMove(opReg[i], 8, Syms[tmpSym[i]].Offset, True)
@@ -10769,8 +10821,9 @@ begin
 
   { ---- and the ordinary statements around it ---- }
   head := -1; tail := -1;
-  for i := CAsmOutCount to CAsmOpCount - 1 do
+  for i := 0 to CAsmOpCount - 1 do
   begin
+    if (i < CAsmOutCount) and not memReg[i] then Continue;
     { An `"m"` bound straight to the caller's own local has nothing to carry --
       the asm reads that variable's slot. Synthesising `x = x` here would be
       harmless and would also be a lie about what the block does. }
@@ -10805,6 +10858,7 @@ begin
 
   for i := 0 to CAsmOutCount - 1 do
   begin
+    if CAsmOps[i].Cons = 'm' then Continue;   { the template wrote the object itself }
     idn := AllocNode(AN_IDENT);
     ASTIVal[idn] := tmpSym[i];
     ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);

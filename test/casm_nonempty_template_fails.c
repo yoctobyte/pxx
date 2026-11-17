@@ -1,4 +1,10 @@
-/* Inline asm with real instructions must be REFUSED, not silently dropped —
+/* GRADUATED (2026-11-17): "+r" is supported since dropbear (b1b534c3c6), so
+ * this file now COMPILES and must print 0 -- the Makefile row asserts that.
+ * The name and the history below are kept because other comments refer to
+ * them; the refusal ordering it describes is exercised by casm_goto_fails.c's
+ * row and the per-construct refusal rows.
+ *
+ * Inline asm with real instructions must be REFUSED, not silently dropped —
  * and the refusal must NAME what is unsupported.
  *
  * This file must NOT compile, in any of its three shapes. Accepting the
