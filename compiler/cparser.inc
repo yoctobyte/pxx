@@ -15463,6 +15463,21 @@ begin
       xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
       xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
     end;
+    { ...and the 16 bytes BELOW the caller's sp: its caller's a0-a3, whose
+      a1 word is what the caller's own underflow reads (sp-12) to find its
+      a4-a7. A VLA or alloca the caller makes after setjmp lowers sp (MOVSP
+      copies that area down) and its contents then cover the old copy, which
+      longjmp's restored sp points at again -- busybox's run_nofork_applet
+      (`char *tmp[argc+1]` after setjmp) came back with a7 = 0. glibc and
+      newlib keep the same four words in the jmp_buf.
+      bug-xtensa-windowed-longjmp-after-a-vla-loses-the-callers-registers }
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 4);    { the caller's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 44 + k * 4);
+    end;
     xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { the caller's sp }
     xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
     xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { ITS caller's sp }
@@ -15626,6 +15641,13 @@ begin
     for k := 0 to 3 do
     begin
       xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 4);    { the caller's setjmp-time sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 44 + k * 4);
       xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
     end;
     xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 32);   { forge the return }
