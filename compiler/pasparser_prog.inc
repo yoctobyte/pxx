@@ -944,6 +944,11 @@ begin
     ClassName) walked wild memory for a plain TObject.Create instance. One
     padding slot, never dispatched (the root has no virtuals until an override
     materialises one). }
+  { 8-ALIGNED: the backlink words and every VMT slot are pointers, and the
+    ESP32-S3 (and every strict-alignment target) faults on an unaligned
+    pointer load. TObject's VMT sat at Data offset 42 on every target.
+    bug-a-vmt-placed-at-an-unaligned-data-offset }
+  while (DataLen and 7) <> 0 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;
   vmtStart := DataLen;
   for i := 0 to 15 do
   begin

@@ -9529,6 +9529,11 @@ begin
           on Free by the instance's RUNTIME class. Stays 0 (nil = nothing to
           finalize) for classes with no managed fields
           (bug-a-class-managed-fields-not-finalized-on-destroy). }
+        { 8-ALIGNED: the backlink words and every VMT slot are pointers, and the
+          ESP32-S3 (and every strict-alignment target) faults on an unaligned
+          pointer load. TObject's VMT sat at Data offset 42 on every target.
+          bug-a-vmt-placed-at-an-unaligned-data-offset }
+        while (DataLen and 7) <> 0 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;
         vmtStart := DataLen;
         for i := 0 to 15 do
         begin

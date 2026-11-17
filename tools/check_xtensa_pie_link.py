@@ -6,7 +6,8 @@ it with test/xtensa_pie_prog.ld, and requires: ET_DYN, no PT_INTERP, only
 R_XTENSA_RELATIVE dynamic relocations, and an R+X PT_LOAD that holds .text
 alone. Before the object carried .xt.lit, ld refused every literal with
 "dynamic relocation in read-only section". Also: the linked .text equals the
-object's except at the relocated words (ld relaxed nothing). Exits 0, saying
+object's except at the relocated words (ld relaxed nothing), and every
+pointer in data is word-aligned. Exits 0, saying
 so, without the xtensa binutils (~/.espressif).
 usage: tools/check_xtensa_pie_link.py <compiler> <tmpdir>
 feature-xtensa-objects-carry-a-literal-table
@@ -16,6 +17,23 @@ import os
 import re
 import subprocess
 import sys
+
+
+def unaligned_data_relocs(readelf, obj):
+    """R_XTENSA_32 in any data section (not code, not .xt.lit) at an offset
+    that is not a multiple of 4: a pointer the S3 faults loading, and one
+    Gibux's loader refuses to relocate."""
+    out = subprocess.run([readelf, '-rW', obj], capture_output=True, text=True).stdout
+    sec, bad = None, []
+    for line in out.splitlines():
+        m = re.match(r"Relocation section '([^']+)'", line)
+        if m:
+            sec = m.group(1)
+            continue
+        m = re.match(r'([0-9a-f]{8})\s+\S+\s+R_XTENSA_32\b', line)
+        if m and sec and 'text' not in sec and 'xt.lit' not in sec and int(m.group(1), 16) % 4:
+            bad.append('%s+0x%x' % (sec, int(m.group(1), 16)))
+    return bad
 
 
 def main():
@@ -30,6 +48,17 @@ def main():
         print('check_xtensa_pie_link: no xtensa binutils, NOT run')
         return 0
     b = bins[-1][:-len('ld')]
+    # every pointer in data is word-aligned: the PIE object, and a Pascal ESP
+    # object with classes and the read-only split (TObject's VMT sat at Data
+    # offset 42 on every target; bug-a-vmt-placed-at-an-unaligned-data-offset)
+    pobj = os.path.join(tmp, 'c_xt_pie_cls.o')
+    subprocess.run([cc, '--target=esp32s3', '--emit-obj', 'test/esp_obj_class_slots_need_a_class.pas',
+                    pobj], check=True, stdout=subprocess.DEVNULL)
+    for o in (obj, pobj):
+        bad = unaligned_data_relocs(b + 'readelf', o)
+        if bad:
+            print('check_xtensa_pie_link: FAIL, unaligned pointers in data: ' + ', '.join(bad[:4]))
+            return 1
     elf = os.path.join(tmp, 'c_xt_pie.elf')
     r = subprocess.run([b + 'ld', '-pie', '--no-dynamic-linker', '-T', 'test/xtensa_pie_prog.ld',
                         obj, '-o', elf], capture_output=True, text=True)

@@ -51051,6 +51051,11 @@ begin
     same layout the Pascal path reserves, so an instance can reach its class RTTI
     at [[instance+0] - 8] and its managed-field layout at [[instance+0] - 16].
     Keep the two in step. }
+  { 8-ALIGNED: the backlink words and every VMT slot are pointers, and the
+    ESP32-S3 (and every strict-alignment target) faults on an unaligned
+    pointer load. TObject's VMT sat at Data offset 42 on every target.
+    bug-a-vmt-placed-at-an-unaligned-data-offset }
+  while (DataLen and 7) <> 0 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;
   DataEnsure(16);
   for i := 0 to 15 do
   begin
