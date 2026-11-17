@@ -4,16 +4,16 @@ tags: [C]
 prio: 30
 type: feature
 blocked-by: []
-summary: "pxx's C runtime cannot do AF_UNIX sockets: bind/connect only take sockaddr_in (through __pxx_bind_ipv4/__pxx_connect_ipv4), socketpair is neither declared nor implemented, struct ucred is missing, and getsockopt only answers SO_ERROR. Found by Gibux, whose kernel now has AF_UNIX (stream, datagram, seqpacket, socketpair, SO_PEERCRED); its test user/nettest.c `unix` mode is refused by pxx (\"call to undeclared function: socketpair\")."
+summary: "pxx's C runtime cannot do AF_UNIX sockets: bind/connect only take sockaddr_in (through __pxx_bind_ipv4/__pxx_connect_ipv4), socketpair is neither declared nor implemented, struct ucred is missing, and getsockopt only answers SO_ERROR. Found by Nilix, whose kernel now has AF_UNIX (stream, datagram, seqpacket, socketpair, SO_PEERCRED); its test user/nettest.c `unix` mode is refused by pxx (\"call to undeclared function: socketpair\")."
 status: open
 owner: unassigned
 ---
 
 # AF_UNIX sockets in the C runtime
 
-Gibux (`githome:gibux`, private) now implements AF_UNIX in its kernel. Its
+Nilix (`githome:nilix`, private) now implements AF_UNIX in its kernel. Its
 user-side check, `user/nettest.c unix`, is plain POSIX C. gcc builds it and
-it passes on Gibux. pxx refuses it:
+it passes on Nilix. pxx refuses it:
 
     pascal26:128: error: call to undeclared function: socketpair
 
@@ -33,7 +33,7 @@ lib/crtl:
   `sockaddr_in` only.
 
 Acceptance: `pascal26 user/nettest.c nettest` builds, and
-`nettest unix` prints `unix: ok` on Linux and on Gibux. It covers
+`nettest unix` prints `unix: ok` on Linux and on Nilix. It covers
 socketpair, EOF, EPIPE, a stream server on a path and on an abstract name,
 and SO_PEERCRED. The gcc build is the reference.
 
@@ -50,3 +50,5 @@ AF_UNIX is ordinary socket syscalls with a different sockaddr.
   (`__CRTL_REAL_MSG`). i386 and the 32-bit embedded targets are unchanged.
 - Still open: `struct ucred`, getsockopt beyond SO_ERROR (SO_PEERCRED,
   SO_TYPE, SO_DOMAIN, SO_ACCEPTCONN), and the nettest acceptance run.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).

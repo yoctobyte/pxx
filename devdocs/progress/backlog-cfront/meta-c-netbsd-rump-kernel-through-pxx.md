@@ -5,15 +5,15 @@ prio: 50
 type: meta
 status: backlog
 created: 2026-11-15
-found-by: pxx (Gibux seat) trial build at 4225bfacc1
-tags: [cfront, gibux, freestanding, inline-asm, link]
+found-by: pxx (Nilix seat) trial build at 4225bfacc1
+tags: [cfront, nilix, freestanding, inline-asm, link]
 blocked-by: []
-summary: "NetBSD's rump kernel (USB/xHCI/umass/if_wm, Gibux's route to real-hardware drivers) through pxx: 126/485 compiles, nothing links. The full gap list, with minimal gcc-accepted repros, is ~/gibux/docs/rump-pxx/README.md and repros/ (run.sh; PXX= picks the compiler). Lockstep: Gibux waits, and no workarounds go in Gibux. g25 (extern incomplete array, then defined, under --freestanding) is fixed by 1f87a71427; nothing else changed there."
+summary: "NetBSD's rump kernel (USB/xHCI/umass/if_wm, Nilix's route to real-hardware drivers) through pxx: 126/485 compiles, nothing links. The full gap list, with minimal gcc-accepted repros, is ~/nilix/docs/rump-pxx/README.md and repros/ (run.sh; PXX= picks the compiler). Lockstep: Nilix waits, and no workarounds go in Nilix. g25 (extern incomplete array, then defined, under --freestanding) is fixed by 1f87a71427; nothing else changed there."
 ---
 
 # NetBSD rump kernel through pxx
 
-The source of truth is ~/gibux/docs/rump-pxx/README.md (gap numbers below are its own).
+The source of truth is ~/nilix/docs/rump-pxx/README.md (gap numbers below are its own).
 This is the order pxx takes them in, and why.
 
 1. **Silent wrong objects that any C program can hit:**
@@ -48,3 +48,5 @@ This is the order pxx takes them in, and why.
    - nm/objcopy equivalents (host binutils already work on pxx objects).
 
 Each fixed gap gets its own done ticket with the repro as a test.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).

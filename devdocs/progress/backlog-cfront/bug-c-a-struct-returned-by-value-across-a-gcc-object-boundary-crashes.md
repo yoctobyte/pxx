@@ -50,5 +50,7 @@ and the caller stores them into its destination; MEMORY class passes the
 destination in rdi (shifting the integer arguments by one) and gets it back in
 rax. pxx-to-pxx calls between objects then use the same rule, so both
 directions agree. aarch64 needs the same (x8 for MEMORY, x0/x1 or v0-v3 for
-small/HFA); i386 and arm32 have their own rules. Gibux builds every object
+small/HFA); i386 and arm32 have their own rules. Nilix builds every object
 with pxx, so it is not hit there today.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).

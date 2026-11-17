@@ -11,10 +11,10 @@ owner: unassigned
 
 # Struct copy and zero in a freestanding riscv32 object
 
-The xtensa fix (XtensaInlineMem) did not reach riscv32. Gibux targets the S3 only, so nobody is blocked on this yet.
+The xtensa fix (XtensaInlineMem) did not reach riscv32. Nilix targets the S3 only, so nobody is blocked on this yet.
 
 ## Repros
-- `~/gibux-payload/pxx-repros/xtensa-2026-11-17/{zero,move}.c` built with `--target=esp32c3`.
+- `~/nilix-payload/pxx-repros/xtensa-2026-11-17/{zero,move}.c` built with `--target=esp32c3`.
 - test/c_xtensa_freestanding_struct.c.
 
 ## Sites
@@ -23,3 +23,5 @@ The xtensa fix (XtensaInlineMem) did not reach riscv32. Gibux targets the S3 onl
 
 ## Also: struct return from an extern callee (2026-11-17)
 ir_codegen_riscv32.inc gates the hidden result pointer on `not ProcExternal[procIdx]` (~4721, ~4979, ~5009). This is the same defect bug-esp-a-struct-returning-extern-call-passes-no-result-pointer fixed on xtensa. In a freestanding riscv32 object an extern callee is pxx code and needs the pointer. Port XtensaCallHasHiddenDest. test/c_xtensa_extern_structret_{a,b}.c is the shape to test with.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).

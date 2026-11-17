@@ -4,27 +4,27 @@ tags: [C]
 prio: 20
 type: feature
 blocked-by: []
-summary: "Umbrella for Gibux, the owner's x86-64 kernel (githome:gibux, kept off GitHub): `make TOOLCHAIN=pxx test` in gibux/kernel must print `gibux: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. `--link --freestanding -e start32` links an image that boots to user space (item 4; boot.S/entry.S still assembled by gas). Still open: (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
+summary: "Umbrella for Nilix, the owner's x86-64 kernel (githome:nilix, kept off GitHub): `make TOOLCHAIN=pxx test` in nilix/kernel must print `nilix: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. `--link --freestanding -e start32` links an image that boots to user space (item 4; boot.S/entry.S still assembled by gas). Still open: (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
 status: open
 owner: unassigned
 ---
 
-# Gibux builds with pxx
+# Nilix builds with pxx
 
 The owner's rules for this work:
 
 - GCC is the reference for C.
-- Gibux must build under both gcc and pxx.
-- Gibux gets no workarounds. pxx gains the features instead.
+- Nilix must build under both gcc and pxx.
+- Nilix gets no workarounds. pxx gains the features instead.
 
-The request came through the peer session working on Gibux; its spec is
+The request came through the peer session working on Nilix; its spec is
 kept in this ticket's history.
 
-Acceptance: in ~/gibux/kernel,
+Acceptance: in ~/nilix/kernel,
 
     make TOOLCHAIN=pxx PXX=<pascal26> test
 
-must print `gibux: PASS (pxx)`, while `make TOOLCHAIN=gcc test` keeps
+must print `nilix: PASS (pxx)`, while `make TOOLCHAIN=gcc test` keeps
 passing. The kernel Makefile's pxx lines are the assumed command lines:
 
 - `--emit-obj --freestanding <src> <obj>`;
@@ -124,3 +124,5 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    allocated is never released. proc.h's `extern struct proc procs[128]` is
    about 420 KB in each of about ten kernel objects. This is waste, not
    wrong behaviour.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).

@@ -1,10 +1,10 @@
 ---
 track: ESP
-tags: [xtensa, codegen, size, register-allocation, gibux]
+tags: [xtensa, codegen, size, register-allocation, nilix]
 prio: 10
 type: feature
 blocked-by: []
-summary: "pxx's xtensa code is about 6x gcc -O2 on a simple loop (about 160 bytes against 27), and the pxx-built Gibux kernel boots in 480 ms on the S3 where gcc's boots in 39 ms. The owner asked (relayed by pxx2) for register allocation for xtensa, then riscv32, then the density .n forms, then literal pool sharing. Most of the bytes come from expression emission, not from allocation, so this ticket stages the work: leaf operands loaded straight into a scratch register, fused compare-and-branch, increments without an address temporary, and only then scalar locals kept in registers."
+summary: "pxx's xtensa code is about 6x gcc -O2 on a simple loop (about 160 bytes against 27), and the pxx-built Nilix kernel boots in 480 ms on the S3 where gcc's boots in 39 ms. The owner asked (relayed by pxx2) for register allocation for xtensa, then riscv32, then the density .n forms, then literal pool sharing. Most of the bytes come from expression emission, not from allocation, so this ticket stages the work: leaf operands loaded straight into a scratch register, fused compare-and-branch, increments without an address temporary, and only then scalar locals kept in registers."
 status: backlog
 owner: unassigned
 ---
@@ -19,6 +19,8 @@ owner: unassigned
 3. **`i++` / `x += c` on a local** goes through an address temporary and three stack slots. Fix: `l32i; addi; s32i` on the slot.
 4. **Register-resident scalar locals.** Locals whose address is never taken live in a10..a15 (windowed; they are callee-saved by the window) for the whole procedure. This is the actual register allocation.
 
-Measure each step with qemu executed-instruction counts and text size on test/c_xtensa_* plus the Gibux kernel. Wall clock is layout noise (see the C3 memory). pxx2's S3 board is available for silicon numbers.
+Measure each step with qemu executed-instruction counts and text size on test/c_xtensa_* plus the Nilix kernel. Wall clock is layout noise (see the C3 memory). pxx2's S3 board is available for silicon numbers.
 
 After xtensa: the same steps for riscv32, then the density `.n` forms, then literal pool sharing.
+
+Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).
