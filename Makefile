@@ -28508,6 +28508,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_utf8_bom.c $(TESTTMP)/c_utf8bom26
 	@gcc -o $(TESTTMP)/c_utf8bom26_gcc test/c_utf8_bom.c
 	tools/expect_same.sh c_utf8bom26 "$$(timeout 20 $(TESTTMP)/c_utf8bom26)" "$$(timeout 20 $(TESTTMP)/c_utf8bom26_gcc)"
+	# A computed #include: the operand is a macro expanding to <...> or "...".
+	./$(COMPILER) test/c_computed_include.c $(TESTTMP)/c_compinc26
+	@gcc -o $(TESTTMP)/c_compinc26_gcc test/c_computed_include.c
+	tools/expect_same.sh c_compinc26 "$$(timeout 20 $(TESTTMP)/c_compinc26)" "$$(timeout 20 $(TESTTMP)/c_compinc26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

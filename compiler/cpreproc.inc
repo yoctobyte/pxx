@@ -3481,7 +3481,7 @@ end;
 
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
-var a, b, k: Integer; hdrResolved, incName, searchList, pendSrc: AnsiString;
+var a, b, k: Integer; hdrResolved, incName, searchList, pendSrc, expanded: AnsiString;
 begin
   { The buffers ARE an array now, so the sixteen-slot guard that used to sit
     below this line is gone — it was written to be the only line to delete once
@@ -3496,7 +3496,41 @@ begin
     Error('C include nesting too deep');
   end;
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
-  if p > last then Exit;
+  if p > last then Error('#include expects "FILENAME" or <FILENAME>');
+  { A computed include (C 6.10.2p4): `#include LV_STDINT_INCLUDE` with
+    `#define LV_STDINT_INCLUDE <stdint.h>`. The operand is macro-expanded and
+    must then be one of the two plain forms; the expansion is handled as if it
+    had been written there. This used to fall through and include NOTHING,
+    without a word -- every LVGL file then died on `int64_t`/`bool` far from
+    the cause. In a `<...>` from an expansion the spaces between tokens are
+    dropped, so `<stdint . h>` (an operand built by token pasting) still names
+    the file; that is what gcc does for the usual spellings. }
+  if CPIsIdentChar(line[p]) and not (line[p] in ['0'..'9']) then
+  begin
+    expanded := '';
+    CPExpandRange(line, p, last, 0, expanded);
+    k := 1;
+    while (k <= Length(expanded)) and (expanded[k] in [' ', #9]) do Inc(k);
+    if (k <= Length(expanded)) and (expanded[k] = '<') then
+    begin
+      incName := '';
+      while (k <= Length(expanded)) and (expanded[k] <> '>') do
+      begin
+        if not (expanded[k] in [' ', #9]) then AppendChar(incName, expanded[k]);
+        Inc(k);
+      end;
+      expanded := incName + '>';
+    end
+    else
+      expanded := Copy(expanded, k, Length(expanded) - k + 1);
+    if (expanded = '') or not (expanded[1] in ['"', '<']) then
+    begin
+      ErrorIdent := Copy(line, p, last - p + 1);
+      Error('#include expects "FILENAME" or <FILENAME> after macro expansion');
+    end;
+    CPInclude(expanded, 1, Length(expanded), depth, baseDir);
+    Exit;
+  end;
   if (line[p] = '"') or (line[p] = '<') then
   begin
     if line[p] = '"' then b := Ord('"') else b := Ord('>');
