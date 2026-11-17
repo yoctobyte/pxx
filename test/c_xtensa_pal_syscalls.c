@@ -1,5 +1,5 @@
 /* The PAL calls hosted xtensa used to refuse without a syscall (uname(2)
-   returned -1 and BusyBox `uname -a` printed garbage on Gibux). Each one runs;
+   returned -1 and BusyBox `uname -a` printed garbage on Nilix). Each one runs;
    tools/check_xtensa_pal_syscalls.py compares the output with x86-64 and reads
    qemu-xtensa -strace for the syscall names.
    bug-xtensa-pal-refused-nineteen-syscalls-it-had-numbers-for */

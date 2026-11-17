@@ -85,7 +85,7 @@ int  pthread_equal(pthread_t a, pthread_t b);
  * object carries both that import and these bodies, and if the bodies were
  * exported as `pthread_create` every linker would bind the import to them:
  * pthread_create called itself through the PAL and deadlocked on its own
- * registry lock (Gibux s13). Renamed, every pxx C caller -- `&pthread_create`
+ * registry lock (Nilix s13). Renamed, every pxx C caller -- `&pthread_create`
  * included -- reaches crtl's copy, all objects still share ONE weak copy of
  * the family and its registry, and the import reaches libc or nothing.
  * bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import */

@@ -1,4 +1,4 @@
-/* A position-independent xtensa program in the shape Gibux's loader takes
+/* A position-independent xtensa program in the shape Nilix's loader takes
    (ESP32-S3, no MMU): ET_DYN from address 0, no PT_INTERP, code and its
    literals alone in an R+X PT_LOAD, everything read as data in an RW one.
    .init_array with its bounds is REQUIRED: pxx objects fill their globals

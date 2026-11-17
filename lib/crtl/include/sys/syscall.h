@@ -3685,7 +3685,7 @@
 # define __NR_timer_settime64              409
 /* The time64 rows qemu -strace could not NAME (it printed "Unknown syscall"
    for each, so tools/qemu_syscall_map.sh dropped them). Added by hand on
-   2026-11-17 from Gibux's asm/unistd.h, itself Linux v6.12 syscall.tbl, and
+   2026-11-17 from Nilix's asm/unistd.h, itself Linux v6.12 syscall.tbl, and
    checked that way, row by row; qemu-xtensa does implement them (a junk
    argument draws EFAULT/EINVAL, not ENOSYS). crtl uses ppoll/pselect6
    _time64 on xtensa. feature-xtensa-crtl-uses-the-time64-syscalls */

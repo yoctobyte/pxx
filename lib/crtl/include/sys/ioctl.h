@@ -30,7 +30,7 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
    _IO numbers, but the 't'/'f' families and every _IOR/_IOW-shaped 'T'
    request carry the _IOC encoding (TIOCGPGRP 0x80047477, FIONBIO
    0x4004667E). The __XTENSA__ arms below were computed from Linux 7.0's
-   arch/xtensa/include/uapi/asm/ioctls.h; hush's tcgetpgrp got ENOTTY on Gibux
+   arch/xtensa/include/uapi/asm/ioctls.h; hush's tcgetpgrp got ENOTTY on Nilix
    with 0x540F. bug-crtl-xtensa-tty-ioctls-use-the-generic-numbers.
    mips, alpha, sparc and powerpc differ again; pxx builds for none of them.
 

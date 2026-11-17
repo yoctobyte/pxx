@@ -1,7 +1,7 @@
-/* A pxx program for Gibux/S3 (or any no-MMU xtensa loader taking a PIE):
+/* A pxx program for Nilix/S3 (or any no-MMU xtensa loader taking a PIE):
    write, vfork, execve, wait4, exit, a pointer through a relocated literal and
    an initialised global. tools/check_xtensa_pie_link.py links it
-   (test/xtensa_pie_prog.ld); on Gibux, /init2 is the program it execs.
+   (test/xtensa_pie_prog.ld); on Nilix, /init2 is the program it execs.
    feature-xtensa-objects-carry-a-literal-table */
 #include <unistd.h>
 #include <sys/wait.h>

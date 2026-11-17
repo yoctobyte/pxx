@@ -19493,7 +19493,7 @@ test-core: $(COMPILER)
 	# blanket sentence for several different causes. A third shape, plain
 	# "=r"/"r", lived here until the operand binding landed; it now compiles and
 	# has moved to casm_gnu_operands.c below. The symbolic spelling `[a] "=r"`
-	# graduated the same way on 2026-11-12 (Gibux's cpu.c writes %[cs]); it is
+	# graduated the same way on 2026-11-12 (Nilix's cpu.c writes %[cs]); it is
 	# exercised by casm_kernel_user_mode_subset.c.
 	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
 	  | grep -q 'read-write constraint "+r" is not supported' \
@@ -19508,7 +19508,7 @@ test-core: $(COMPILER)
 	# difference, not a semantic one. --self-check is the positive control:
 	# swapping an operand order must change what pxx encodes.
 	python3 tools/casm_att_diff.py --self-check test/casm_att_template.att
-	# The same oracle over the instructions Gibux SMP (lock + cmpxchg/xadd/inc/
+	# The same oracle over the instructions Nilix SMP (lock + cmpxchg/xadd/inc/
 	# dec/or/and, str, sldt, sgdt, sidt, rdtscp, rdpid) and dropbear's
 	# sntrup761.c (bsf/bsr) needed; the prefix ORDER (F0 before REX, F3
 	# before REX) is what the disassembly would show going wrong.
@@ -19531,7 +19531,7 @@ test-core: $(COMPILER)
 	# expected number.
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/c_asm_fixed_reg_tie.c $(TESTTMP)/c_asm_tie26
 	tools/expect_same.sh c_asm_tie26 "$$($(TESTTMP)/c_asm_tie26)" "asm fixed-reg tie: 4 rows OK"
-	# Kernel inline asm (Gibux): the user-mode-runnable half executed and checked
+	# Kernel inline asm (Nilix): the user-mode-runnable half executed and checked
 	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
 	# segment register moves, named operands, "i"/"n" immediates through a
 	# constant expression, and jnz 1b / jmp 2f. Then the privileged half
@@ -19543,19 +19543,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh casm_kernel_um "$$($(TESTTMP)/casm_kernel_um)" "$$(printf 'far return cs=0x33\nes roundtrip 1\nimm 37\nlabels 15')"
 	tools/casm_sysinsn_vs_gcc.sh ./$(COMPILER) test/casm_kernel_system_instructions.c $(TESTTMP)/casm_sysinsn
 	# -nostdinc / --freestanding: no crtl header synthesised for a hand
-	# prototype; htonl stays an undefined symbol (Gibux g03).
+	# prototype; htonl stays an undefined symbol (Nilix g03).
 	./$(COMPILER) --emit-obj -nostdinc test/c_nostdinc_no_header_synthesis.c $(TESTTMP)/c_nostdinc_nosynth.o > /dev/null
 	nm $(TESTTMP)/c_nostdinc_nosynth.o | grep -q ' U htonl$$'
 	./$(COMPILER) --emit-obj --freestanding -Itest/include_kernel_trap test/c_nostdinc_no_header_synthesis.c $(TESTTMP)/c_fs_nosynth.o > /dev/null
 	nm $(TESTTMP)/c_fs_nosynth.o | grep -q ' U htonl$$'
-	# --emit-obj --freestanding (Gibux): no .init_array/.fini_array, no crtl body
+	# --emit-obj --freestanding (Nilix): no .init_array/.fini_array, no crtl body
 	# pulled in by a libc header except stdarg's helpers, a .bss without the
 	# signal alternate stack. va_arg is run through a gcc-linked driver.
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_object_has_no_runtime_hooks.c $(TESTTMP)/c_freestanding.o > /dev/null
 	tools/check_freestanding_object.sh $(TESTTMP)/c_freestanding.o fs_sum
 	gcc -no-pie -o $(TESTTMP)/c_freestanding_va test/c_freestanding_object_has_no_runtime_hooks_main.c $(TESTTMP)/c_freestanding.o
 	tools/expect_same.sh c_freestanding_va "$$($(TESTTMP)/c_freestanding_va)" "321 36"
-	# File-scope initialisers as .data (Gibux): gcc's output three ways -- the
+	# File-scope initialisers as .data (Nilix): gcc's output three ways -- the
 	# run-time stores, --c-static-data, and a --freestanding object (which
 	# refuses any store it could not bake) linked by gcc, so its relocations
 	# are what is tested.
@@ -19581,14 +19581,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --threadsafe test/c_crtl_strftime_zone_and_pthread_kill.c $(TESTTMP)/cstrfz > /dev/null
 	gcc -pthread -o $(TESTTMP)/cstrfz_gcc test/c_crtl_strftime_zone_and_pthread_kill.c
 	tools/expect_same.sh cstrfz "$$($(TESTTMP)/cstrfz)" "$$(TZ=UTC $(TESTTMP)/cstrfz_gcc)"
-	# A 2-D array of function pointers (Gibux irq.c), both spellings, both scopes.
+	# A 2-D array of function pointers (Nilix irq.c), both spellings, both scopes.
 	./$(COMPILER) test/c_two_dimensional_function_pointer_array.c $(TESTTMP)/c2dfp > /dev/null
 	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
-	# --link --freestanding: a kernel image at the kernel-half base (Gibux item 4).
+	# --link --freestanding: a kernel image at the kernel-half base (Nilix item 4).
 	tools/check_link_freestanding.sh ./$(COMPILER) $(TESTTMP)/clf
-	# An extern-only array reserves no .bss in the declaring object (Gibux item 6).
+	# An extern-only array reserves no .bss in the declaring object (Nilix item 6).
 	tools/check_extern_bss.sh ./$(COMPILER) $(TESTTMP)/ceb
-	# GNU as sources: .S/.s -> ET_REL, checked against GNU as (Gibux item 5).
+	# GNU as sources: .S/.s -> ET_REL, checked against GNU as (Nilix item 5).
 	tools/check_gas_frontend.sh ./$(COMPILER) $(TESTTMP)/cgas
 	# The bit builtins in a --freestanding object carry their own helpers.
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_bit_builtins.c $(TESTTMP)/c_fs_bits.o > /dev/null
@@ -19600,7 +19600,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_const_fold_types.c $(TESTTMP)/c_cfold > /dev/null
 	tools/expect_same.sh c_const_fold_types "$$($(TESTTMP)/c_cfold)" "$$($(TESTTMP)/c_cfold_gcc)"
 	# `f(x)[i].member` on a pointer-returning call, direct and through a function
-	# pointer: the member offset and the element stride (Gibux fs/ext2.c).
+	# pointer: the member offset and the element stride (Nilix fs/ext2.c).
 	gcc -w -o $(TESTTMP)/c_idxcall_gcc test/c_index_of_a_pointer_returning_call.c
 	./$(COMPILER) test/c_index_of_a_pointer_returning_call.c $(TESTTMP)/c_idxcall > /dev/null
 	tools/expect_same.sh c_index_of_a_pointer_returning_call "$$($(TESTTMP)/c_idxcall)" "$$($(TESTTMP)/c_idxcall_gcc)"
@@ -19651,7 +19651,7 @@ test-core: $(COMPILER)
 	# both from dropbear. Expected values are gcc -O0's.
 	./$(COMPILER) test/casm_plus_r_and_array_operand.c $(TESTTMP)/casmplusr26
 	tools/expect_same.sh casmplusr26 "$$($(TESTTMP)/casmplusr26)" "$$(printf 'negmask -1 0\ntopbit 1 0\nbottombit 1 0\nshrmod -4096 128\nadd_into 42\nbump 43 pad 7\nstore32h 01 02 03 04 seqno 01020304\nstore64h 11 22 33 44 55 66 77 88')"
-	# What those instructions do at run time, against gcc -O0: Gibux's
+	# What those instructions do at run time, against gcc -O0: Nilix's
 	# lock cmpxchg shape (both arms), `lock;`, lock xadd's old value, lock
 	# inc/dec/or/and, and sntrup761's bsfw + cmovew bottom-bit idiom.
 	./$(COMPILER) test/casm_lock_cmpxchg_xadd_bsf.c $(TESTTMP)/casmlock26
@@ -19713,7 +19713,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 --emit-obj --freestanding test/c_freestanding_atomics.c $(TESTTMP)/c_fs_atomics_i386.o > /dev/null
 	gcc -m32 -no-pie -pthread -o $(TESTTMP)/c_fs_atomics_i386 test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics_i386.o
 	tools/expect_same.sh c_fs_atomics_i386 "$$($(TESTTMP)/c_fs_atomics_i386)" "atomics ok"
-	# lfence/mfence/sfence in C inline asm, both encoders (Gibux asked for mfence).
+	# lfence/mfence/sfence in C inline asm, both encoders (Nilix asked for mfence).
 	./$(COMPILER) test/c_inline_asm_fences.c $(TESTTMP)/c_asm_fences > /dev/null
 	tools/expect_same.sh c_asm_fences "$$($(TESTTMP)/c_asm_fences)" "fence 2"
 	./$(COMPILER) --target=i386 test/c_inline_asm_fences.c $(TESTTMP)/c_asm_fences_i386 > /dev/null
@@ -20889,7 +20889,7 @@ test-core: $(COMPILER)
 	$(COMPILER) test/c_typeof_ptr_struct.c $(TESTTMP)/c_tyof > /dev/null
 	tools/expect_same.sh c_tyof "$$($(TESTTMP)/c_tyof)" "$$(cat test/c_typeof_ptr_struct.expected)"
 	# GNU C inline asm on xtensa: operands, ties, names, s32c1i/l32ai/s32ri under
-	# qemu (call0, the hosted ABI); the privileged forms by disassembly (Gibux)
+	# qemu (call0, the hosted ABI); the privileged forms by disassembly (Nilix)
 	tools/check_casm_xtensa.sh $(COMPILER) $(TESTTMP)
 	@if command -v qemu-xtensa >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_xtensa_inline_asm.c $(TESTTMP)/c_xtasm >/dev/null || { echo "c_xtensa_inline_asm compile FAIL"; exit 1; }; \
@@ -20897,7 +20897,7 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_xtensa_inline_asm: qemu-xtensa absent, NOT verified ==="; \
 	fi
-	# File-scope initialisers as DATA in a freestanding object (Gibux): x86-64
+	# File-scope initialisers as DATA in a freestanding object (Nilix): x86-64
 	# linked by gcc and run (casts from integers, array+offset: rump-pxx g19);
 	# xtensa with no IDF runtime, windowed, linked by GNU ld and read back
 	./$(COMPILER) --freestanding --emit-obj -DPXX_NO_MAIN test/c_freestanding_static_data.c $(TESTTMP)/c_fsd.o > /dev/null
@@ -20909,7 +20909,7 @@ test-core: $(COMPILER)
 	python3 -I tools/check_esp_section_attr.py $(COMPILER) $(TESTTMP)
 	# struct copy / zero with no RTL underneath: inline loops, run under qemu
 	python3 -I tools/check_xtensa_freestanding_struct.py $(COMPILER) $(TESTTMP)
-	# crtl on xtensa issues the time64 syscalls (Gibux implements those)
+	# crtl on xtensa issues the time64 syscalls (Nilix implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
 	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed
 	python3 -I tools/check_xtensa_vfork.py $(COMPILER) $(TESTTMP)
@@ -20921,7 +20921,7 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_setjmp.py $(COMPILER) $(TESTTMP)
 	# xtensa --shared-runtime objects + the runtime object link and share crtl state
 	python3 -I tools/check_xtensa_shared_runtime.py $(COMPILER) $(TESTTMP)
-	# hosted xtensa (no-MMU Gibux) heap: 64 KiB arenas, big requests mapped alone
+	# hosted xtensa (no-MMU Nilix) heap: 64 KiB arenas, big requests mapped alone
 	python3 -I tools/check_xtensa_heap_arenas.py $(COMPILER) $(TESTTMP)
 	# hosted xtensa PAL: the syscalls it used to refuse (uname, times, prlimit64, ...)
 	python3 -I tools/check_xtensa_pal_syscalls.py $(COMPILER) $(TESTTMP)
@@ -37011,7 +37011,7 @@ test-xtensa: $(COMPILER)
 	test -s $(TESTTMP)/xtw_movsp.asm && test -s $(TESTTMP)/xtc_movsp.asm
 	# SINCE 2026-11-17 THE FRAME IS IN ENTRY ITSELF (`entry a1, 32+F`), gcc's
 	# shape: a MOVSP right after ENTRY raises AllocaCause on every call (a trap
-	# per call on Linux/IDF; Gibux had no handler and stopped busybox). The
+	# per call on Linux/IDF; Nilix had no handler and stopped busybox). The
 	# invariant this row guards is unchanged -- a1 moves only by ENTRY or
 	# MOVSP, never by arithmetic -- so it now asserts: no executed write to a1
 	# by add/addi/addmi/sub, no executed movsp (this program has no alloca), and

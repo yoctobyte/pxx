@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A pxx xtensa object links as a PIE (ld -pie), the format Gibux loads.
+"""A pxx xtensa object links as a PIE (ld -pie), the format Nilix loads.
 
 Builds test/c_xtensa_pie_hello.c windowed with --emit-obj --no-ro-data, links
 it with test/xtensa_pie_prog.ld, and requires: ET_DYN, no PT_INTERP, only
@@ -22,7 +22,7 @@ import sys
 def unaligned_data_relocs(readelf, obj):
     """R_XTENSA_32 in any data section (not code, not .xt.lit) at an offset
     that is not a multiple of 4: a pointer the S3 faults loading, and one
-    Gibux's loader refuses to relocate."""
+    Nilix's loader refuses to relocate."""
     out = subprocess.run([readelf, '-rW', obj], capture_output=True, text=True).stdout
     sec, bad = None, []
     for line in out.splitlines():

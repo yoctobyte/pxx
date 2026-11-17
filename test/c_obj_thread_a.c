@@ -1,4 +1,4 @@
-/* Threads from a --threadsafe OBJECT, created in a second object (Gibux s13).
+/* Threads from a --threadsafe OBJECT, created in a second object (Nilix s13).
    Three bugs between them: crtl's exported pthread_create captured the
    runtime's own weak libc import of the same name, so it re-entered itself and
    deadlocked on its registry lock; the thread's start read the creator's

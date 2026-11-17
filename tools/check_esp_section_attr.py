@@ -81,7 +81,7 @@ def check(cc, tmp, arch, chip, fails):
     want('cache_init section', syms.get('cache_init', (0, 0, None))[2], '.iram1.text')
     want('xtensa_start section', syms.get('xtensa_start', (0, 0, None))[2], '.iram1.text')
     # every function starts word-aligned: CALLn targets must be, and the
-    # inline L32R pools were laid out for an aligned start (Gibux's
+    # inline L32R pools were laid out for an aligned start (Nilix's
     # caches_init sat at .iram1.text+0x77 and read its frame size off-word)
     for name, (val, _sz, sec) in syms.items():
         if sec in ('.text', '.iram1.text') and name in (

@@ -1,4 +1,4 @@
-# The assembly half of tools/check_link_freestanding.sh, shaped like Gibux's
+# The assembly half of tools/check_link_freestanding.sh, shaped like Nilix's
 # arch/x86_64/boot.S: a multiboot-style header in its own .multiboot section
 # that names __executable_start, _edata and _end through 32-bit absolutes
 # (R_X86_64_32, physical = virtual - KERNEL_VMA), 32-bit entry code, a
@@ -16,7 +16,7 @@ mb_header:
 	.long _end - KERNEL_VMA
 	.long start32 - KERNEL_VMA
 
-	# The PVH entry note, as Gibux's boot.S writes it: kept although nothing
+	# The PVH entry note, as Nilix's boot.S writes it: kept although nothing
 	# references it, laid out in the RX segment and covered by a PT_NOTE.
 	.section .note.Xen, "a"
 	.balign 4

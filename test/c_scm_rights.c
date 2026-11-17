@@ -1,6 +1,6 @@
 /* Descriptor passing: socketpair, sendmsg/recvmsg with an SCM_RIGHTS control
    message, MSG_CMSG_CLOEXEC, MSG_CTRUNC, and recv with MSG_PEEK/MSG_DONTWAIT.
-   Gibux's USB disk keeper hands each disk's socket to a root helper this way.
+   Nilix's USB disk keeper hands each disk's socket to a root helper this way.
    feature-crtl-descriptor-passing-socket-api */
 #include <stdio.h>
 #include <string.h>

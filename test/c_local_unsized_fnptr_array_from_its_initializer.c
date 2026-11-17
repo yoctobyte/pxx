@@ -1,5 +1,5 @@
 /* A block-scope array of function pointers sized by its initializer,
-   `long (*gens[])(...) = { f, g, ... };` (Gibux's fs/procfs.c), and a sized
+   `long (*gens[])(...) = { f, g, ... };` (Nilix's fs/procfs.c), and a sized
    one with a short list, whose remaining elements C zero-fills. Before
    2026-11-12 the unsized form was "expected C expression" and the short list
    left the tail as whatever the stack held (dirty() makes sure it holds

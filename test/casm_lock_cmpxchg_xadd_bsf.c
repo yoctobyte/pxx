@@ -2,7 +2,7 @@
  * are checked against gas by test/casm_att_atomics_sysregs.att; this checks
  * the operand plumbing around them at run time.
  *
- * - lock cmpxchg, Gibux's futex/spinlock shape verbatim: "=a" output tied to
+ * - lock cmpxchg, Nilix's futex/spinlock shape verbatim: "=a" output tied to
  *   an "0" input carrying the expected value. Both the success and the
  *   failure arm, because the failure arm is the one that writes eax.
  * - `lock;` with the instruction after the separator (the other gas spelling).

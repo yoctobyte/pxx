@@ -1,6 +1,6 @@
-/* Gibux item 6: an object that only DECLARES a big array (`extern struct proc
+/* Nilix item 6: an object that only DECLARES a big array (`extern struct proc
    procs[128];` from a header) used to reserve a private, never-addressed .bss
-   slot of the array's full size -- ten Gibux objects carried 5.5 MB that way.
+   slot of the array's full size -- ten Nilix objects carried 5.5 MB that way.
    This object declares two big imports between real .bss variables of its own,
    so dropping the slots moves every variable above them: their addresses,
    and the relocations that reach them, must still be right.

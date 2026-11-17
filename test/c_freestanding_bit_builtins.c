@@ -1,4 +1,4 @@
-/* The bit builtins in a --freestanding object (Gibux fs/event.c's
+/* The bit builtins in a --freestanding object (Nilix fs/event.c's
    __builtin_ctzll): cparser renames them to crtl's __pxx_builtin_* helpers,
    which a freestanding object can neither declare (no stdlib.h) nor link
    (no crtl). The unit now carries a static copy of each one it mentions.

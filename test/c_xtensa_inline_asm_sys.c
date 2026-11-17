@@ -1,4 +1,4 @@
-/* The privileged forms a kernel's arch headers spell (Gibux, ESP32-S3):
+/* The privileged forms a kernel's arch headers spell (Nilix, ESP32-S3):
    compiled --target=esp32s3 --freestanding --emit-obj and checked by
    disassembly (tools/check_casm_xtensa.sh), since user-mode qemu cannot run
    them. One function per line so each is found by name. */

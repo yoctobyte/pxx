@@ -1,6 +1,6 @@
 # .code16 in the GNU as frontend (compiler/gasfront.inc), checked against GNU
 # as by tools/check_gas_frontend.sh: the 16-bit instruction text and every
-# relocation must match gas's. The shape is an SMP AP trampoline (Gibux's
+# relocation must match gas's. The shape is an SMP AP trampoline (Nilix's
 # arch/x86_64/trampoline.S): real mode, then .code32, then .code64, all in
 # one section, with addresses written as TRAMP + (label - start).
 # .text has no branches, so it must come out BYTE-IDENTICAL to gas's (gas

@@ -320,7 +320,7 @@ char *ttyname(int fd)
    The entry is now called PalFork (see the note at PalBackendFork for why
    renaming it beat leaving it), and fork() below is real. */
 /* chroot(2) through the raw syscall bridge, the way sys/mount.c does mount,
-   umount2 and pivot_root. It was an ENOSYS stub; Gibux's switch_root test
+   umount2 and pivot_root. It was an ENOSYS stub; Nilix's switch_root test
    (2026-11-12) is the first caller that reaches it on a kernel that has it.
    A target without SYS_chroot still says ENOSYS. */
 int chroot(const char *path) {
@@ -358,7 +358,7 @@ pid_t vfork(void) {
 #endif
 /* ON XTENSA vfork IS REAL and the compiler writes it (EmitCVforkStub,
    cparser.inc): a frameless body, because a vfork child returns into the
-   caller and a C wrapper's frame is exactly what it would trample. Gibux on
+   caller and a C wrapper's frame is exactly what it would trample. Nilix on
    the ESP32-S3 has no MMU and so no fork at all, and busybox NOMMU calls
    vfork itself. feature-crtl-a-real-vfork-on-xtensa */
 /* The id-changing calls, through the raw syscall bridge (as chroot is). They
@@ -701,7 +701,7 @@ void __pxx_set_environ(char **envp)
 }
 
 #if defined(__xtensa__) && defined(__PXXRT_MARKER)
-/* Hosted xtensa objects (busybox per TU on Gibux, linked by GNU ld): every
+/* Hosted xtensa objects (busybox per TU on Nilix, linked by GNU ld): every
  * object but main's fills its initialised globals from an .init_array slot,
  * and nothing else runs those -- the process entry is pxx's, not a crt1.
  * The linker defines the bounds (ld's default scripts; a custom script must

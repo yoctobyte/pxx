@@ -574,7 +574,7 @@ applet_table_matches() {
 # added has the right applets and the wrong build, and the applet comparison
 # above cannot see that.
 REQUIRED_ON="USE_BB_CRYPT"
-# And knobs an APPLET needs to do its job on a real root filesystem (Gibux's
+# And knobs an APPLET needs to do its job on a real root filesystem (Nilix's
 # initramfs -> disk root, 2026-11-12), on only when that applet is asked for:
 #   mount  FEATURE_MOUNT_FLAGS -- without it `mount --move/--bind' reach the
 #          kernel as option TEXT, and a directory source is then MS_BIND, so an
@@ -584,7 +584,7 @@ REQUIRED_ON="USE_BB_CRYPT"
 #   stat   also FEATURE_STAT_FORMAT -- `stat -c FORMAT', which scripts lean on.
 #   dd     FEATURE_DD_IBS_OBS -- conv= (notrunc, sync, noerror), iflag=/oflag=,
 #          ibs=/obs=; without it `dd ... conv=notrunc' exits 1 before any I/O
-#          (Gibux's sparse-file disk test, 2026-11-13).
+#          (Nilix's sparse-file disk test, 2026-11-13).
 #   test   TEST1 TEST2 FEATURE_TEST_64 -- the `[' and `[[' spellings, which
 #          scripts use far more than `test' itself, and 64-bit comparisons.
 #   od     DESKTOP -- the POSIX od (-A, -t, -N, -j); without it od is the
@@ -592,7 +592,7 @@ REQUIRED_ON="USE_BB_CRYPT"
 #          (it also widens ps, cpio, ...), so it rides on od being asked for.
 #   ping   FEATURE_FANCY_PING -- without it ping takes NO options at all
 #          (argv[1] is the host, "HOST is alive!"), so `ping -c 1 -W 1 H'
-#          says "bad address '-c'". One knob for ping and ping6 (Gibux's
+#          says "bad address '-c'". One knob for ping and ping6 (Nilix's
 #          network tests, 2026-11-15).
 #   sh/ash with --interactive: line editing -- FEATURE_EDITING (arrow
 #          keys; without it they print escape codes), its history (255
@@ -602,7 +602,7 @@ REQUIRED_ON="USE_BB_CRYPT"
 #          not exercise it; pixx's console shell does (2026-11-15).
 #   head/tail  FEATURE_FANCY_HEAD/TAIL -- -c, -q, -v and multiplier suffixes.
 # --usage adds SHOW_USAGE + FEATURE_VERBOSE_USAGE: an applet's usage text,
-# which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Gibux's
+# which allnoconfig drops, so a refused invocation exits 1 SILENTLY (Nilix's
 # switch_root "NEW_ROOT must be a mountpoint" was invisible). Opt-in, for a
 # root-filesystem build, because it is size.
 for _pair in mount:FEATURE_MOUNT_FLAGS stat:FEATURE_STAT_FILESYSTEM stat:FEATURE_STAT_FORMAT sh:SH_IS_ASH dd:FEATURE_DD_IBS_OBS test:TEST1 test:TEST2 test:FEATURE_TEST_64 od:DESKTOP ping:FEATURE_FANCY_PING ping6:FEATURE_FANCY_PING \

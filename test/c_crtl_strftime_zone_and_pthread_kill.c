@@ -1,4 +1,4 @@
-/* Two crtl gaps a busybox userland hit (Gibux, 2026-11-13), output is gcc's:
+/* Two crtl gaps a busybox userland hit (Nilix, 2026-11-13), output is gcc's:
    - strftime had only the subset Lua's os.date emits: `date' printed a literal
      "%Z", and %z %T %D %F %R %r %c %x %X %C %u %U %W %k %l %P %n %t %s were
      missing; %e was not space-padded.

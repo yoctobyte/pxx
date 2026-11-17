@@ -1,4 +1,4 @@
-/* crtl on xtensa issues the time64 syscalls (PAL_TIME64; Gibux implements
+/* crtl on xtensa issues the time64 syscalls (PAL_TIME64; Nilix implements
    those, with 64-bit __kernel_timespec): clock_gettime64 403,
    clock_nanosleep_time64 407, ppoll_time64 414, pselect6_time64 413,
    utimensat_time64 412. tools/check_xtensa_time64_syscalls.py runs this under

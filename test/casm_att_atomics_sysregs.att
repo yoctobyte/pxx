@@ -1,4 +1,4 @@
-# AT&T instructions added for Gibux SMP (a pxx-built kernel) and for dropbear's
+# AT&T instructions added for Nilix SMP (a pxx-built kernel) and for dropbear's
 # sntrup761.c, checked against GNU as by tools/casm_att_diff.py -- the same
 # oracle as test/casm_att_template.att, a separate file so each list keeps the
 # reason its rows exist.

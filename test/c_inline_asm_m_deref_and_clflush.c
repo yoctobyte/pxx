@@ -1,4 +1,4 @@
-/* x86-64 inline asm (Gibux): clflush / clflushopt / clwb with a register-held
+/* x86-64 inline asm (Nilix): clflush / clflushopt / clwb with a register-held
    address and with an "m" operand, and "m" INPUTS that are dereferences --
    which must name the object itself, not a copy of its value. Before the fix
    `lock incl %0` with "m"(*p) incremented a stack copy (k stayed 41) and

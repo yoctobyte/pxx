@@ -1,4 +1,4 @@
-/* File-scope initialisers in every form a kernel writes (Gibux), built with
+/* File-scope initialisers in every form a kernel writes (Nilix), built with
    --c-static-data (or under --freestanding), where each becomes .data with
    relocations instead of a store run before main. The same file runs with
    and without the flag and prints gcc's output both ways:

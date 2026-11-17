@@ -1,5 +1,5 @@
 /* `extern T name;` inside a function, with no file-scope declaration of name
-   in this translation unit before it (Gibux fs/ext2.c: boot_epoch, defined
+   in this translation unit before it (Nilix fs/ext2.c: boot_epoch, defined
    in another file). Before 2026-11-12 the first use was "undeclared
    identifier". Here the definitions come later in the same file, so the
    program runs; the Makefile row also compiles it with -dNO_DEFINITIONS as an

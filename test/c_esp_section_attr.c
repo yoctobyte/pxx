@@ -1,4 +1,4 @@
-/* __attribute__((section)) in a freestanding ESP object (Gibux's ESP32-S3
+/* __attribute__((section)) in a freestanding ESP object (Nilix's ESP32-S3
    port): .iram1* functions go to .iram1.text with their literals; a global of
    any section name gets an ELF section of that name. Checked by
    tools/check_esp_section_attr.py (link + read back), not run.

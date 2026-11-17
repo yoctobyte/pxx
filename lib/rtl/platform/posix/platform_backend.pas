@@ -173,7 +173,7 @@ implementation
   future 32-bit port added after 2020 will want it too. }
 {$ifdef CPU_RISCV32}{$define PAL_TIME64}{$endif}
 { XTENSA TAKES IT TOO, BY CHOICE RATHER THAN NECESSITY (2026-11-17). Linux
-  xtensa keeps the time32 calls, but Gibux -- the kernel these programs run on
+  xtensa keeps the time32 calls, but Nilix -- the kernel these programs run on
   on the ESP32-S3 -- implements the *_time64 set with __kernel_timespec, the
   word-size-independent ABI, as musl does on every 32-bit port. qemu-xtensa
   answers all of them (measured: 403/404/407/412/414 return EFAULT/EINVAL for
@@ -413,7 +413,7 @@ const
   SYS_sendto=110; SYS_recvfrom=111; SYS_ppoll=414;   { ppoll_time64 }
   SYS_clone = 116; SYS_execve = 117; SYS_pipe2 = 311; SYS_dup3 = 310; SYS_wait4 = 121; SYS_kill = 123;
   { the time family is time64 here -- see PAL_TIME64. 403..414 are the
-    generic numbers every 32-bit port shares; Gibux's asm/unistd.h (from Linux
+    generic numbers every 32-bit port shares; Nilix's asm/unistd.h (from Linux
     v6.12 syscall.tbl) and a probe under qemu-xtensa agree on each. }
   SYS_clock_gettime = 403;                 { clock_gettime64 }
   SYS_clock_settime = 404;                 { clock_settime64 }
@@ -431,7 +431,7 @@ const
     run under qemu-xtensa -strace (tools/check_xtensa_pal_syscalls.py). They
     used to be refused (PAL_ERR_UNSUPPORTED) for want of a measured number,
     and uname(2) returned -1 with no syscall at all -- busybox `uname -a`
-    printed garbage on Gibux. rt_sigtimedwait is the time64 one (TPalTimeWord
+    printed garbage on Nilix. rt_sigtimedwait is the time64 one (TPalTimeWord
     is Int64 here); setitimer takes native-word timevals, which alarm builds.
     bug-xtensa-pal-refused-nineteen-syscalls-it-had-numbers-for }
   SYS_fdatasync = 27; SYS_sync = 178; SYS_setsid = 128; SYS_getgroups = 196;

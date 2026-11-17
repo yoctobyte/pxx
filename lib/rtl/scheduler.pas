@@ -371,7 +371,7 @@ const
   replaces said xtensa was NOT time64 because "410, the settime64 number, is
   `Unknown syscall`" -- but 410 is timerfd_GETtime64; settime64 is 411. Under
   today's qemu-xtensa both answer (EBADF / EFAULT on a junk fd), and the plain
-  313 still exists; time64 is chosen for Gibux, as PAL_TIME64 says.
+  313 still exists; time64 is chosen for Nilix, as PAL_TIME64 says.
 
   AND IT HAS BOTH epoll_wait AND epoll_pwait (18 and 274), so it takes the x86
   arm rather than the aarch64/arm32 one. mmap is mmap2 (page offset in the last

@@ -1,5 +1,5 @@
 # The GNU as frontend, 32-bit half: the instructions a multiboot kernel's
-# entry runs before long mode (Gibux boot.S's shapes), encoded by the 64-bit
+# entry runs before long mode (Nilix boot.S's shapes), encoded by the 64-bit
 # encoder and checked against GNU as by tools/check_gas_frontend.sh --
 # instruction text and relocations, after normalising encoding FORMS that
 # print differently but mean the same (gas picks A3/83, pxx 89 04 25/81).

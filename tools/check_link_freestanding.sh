@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pascal26 --link --freestanding: a kernel image (Gibux item 4, 2026-11-12).
+# pascal26 --link --freestanding: a kernel image (Nilix item 4, 2026-11-12).
 #
 #   tools/check_link_freestanding.sh <pascal26> <workdir>
 #
@@ -20,7 +20,7 @@
 # Controls: the same link without --freestanding refuses .multiboot by name;
 # without -e it refuses for want of an entry; and a compile (not a link) with
 # a kernel-half --image-base is refused.
-# The end-to-end proof is Gibux itself booting under qemu (done by hand
+# The end-to-end proof is Nilix itself booting under qemu (done by hand
 # 2026-11-12: "Hello from user space", isa-debug-exit 33); this is the part a
 # gate can run.
 set -u

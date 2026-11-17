@@ -1,5 +1,5 @@
 /* A two-dimensional array of function pointers, both spellings, both scopes:
-   `void (*h[16][4])(void)` (Gibux irq.c, 2026-11-13) and `fptr h[3][2]`.
+   `void (*h[16][4])(void)` (Nilix irq.c, 2026-11-13) and `fptr h[3][2]`.
    Each `[` in the declarator used to overwrite the last dimension, so h was a
    1-D array of 4 and h[11][0] = f wrote past its end (SIGSEGV); the typedef
    spelling at file scope was a parse error at the call. Output is gcc's. */

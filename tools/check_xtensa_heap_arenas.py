@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hosted xtensa heap maps memory in small pieces (no-MMU Gibux).
+"""The hosted xtensa heap maps memory in small pieces (no-MMU Nilix).
 
 test/c_xtensa_heap_arenas.c under qemu-xtensa -strace: it must print gcc's
 "sum 10696", and no mmap may exceed 256 KiB -- the old runtime asked for

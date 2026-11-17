@@ -1,6 +1,6 @@
 #!/bin/bash
 # check_extern_bss.sh <compiler> <workprefix>
-# Gibux item 6: an object that only declares big extern arrays reserves no
+# Nilix item 6: an object that only declares big extern arrays reserves no
 # .bss for them, and every variable that moved down is still addressed right.
 #   1. the declaring object's .bss is smaller than the two imports together
 #      (326,144 bytes): with the slots reserved it can never be;

@@ -1,6 +1,6 @@
 /* `f(x)[i].member` on a call returning a pointer to struct: the record was
    resolved as the call's own (none), so the member read and wrote offset 0
-   (Gibux fs/ext2.c: `ext_index(h)[pick].leaf_lo` read `.block`, and ext4
+   (Nilix fs/ext2.c: `ext_index(h)[pick].leaf_lo` read `.block`, and ext4
    files past 4 extents lost data). Through a function pointer the element
    stride was lost too: `fi()[2]` on `int *(*)(void)` stepped by bytes.
    Built by pxx and by gcc; the outputs must match.

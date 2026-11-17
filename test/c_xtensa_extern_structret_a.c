@@ -1,7 +1,7 @@
 /* A struct returned by a function in ANOTHER freestanding object, called
    directly (l32r + callx) and through a function pointer, at 8 and 24 bytes.
    The caller must pass the hidden result pointer to an extern callee too
-   (XtensaCallHasHiddenDest); Gibux's mount_ns_root stored through 0.
+   (XtensaCallHasHiddenDest); Nilix's mount_ns_root stored through 0.
    The callees are in c_xtensa_extern_structret_b.c. Run under qemu-xtensa by
    tools/check_xtensa_freestanding_struct.py; check() & 255 == the gcc value.
    bug-esp-a-struct-returning-extern-call-passes-no-result-pointer */

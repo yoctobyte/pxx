@@ -1,5 +1,5 @@
 /* chroot() reaches the kernel (it was an ENOSYS stub until 2026-11-12, found
-   by Gibux's switch_root test). Unprivileged, the answers are the kernel's:
+   by Nilix's switch_root test). Unprivileged, the answers are the kernel's:
    a missing path is ENOENT (the lookup comes before the capability check)
    and an existing one is EPERM. Root gets 0 for "/", which changes nothing.
    The stub said ENOSYS to both. Output is gcc's. */

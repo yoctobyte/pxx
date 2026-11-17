@@ -1,7 +1,7 @@
 /* An array of function pointers as a struct member, spelled inline:
    `void (*fn[4])(void);`. It was laid out as ONE pointer, so the members after
    it overlapped the array and `p->fn[i]` loaded fn as a pointer and indexed
-   what it pointed at (Gibux's ACPI INTx table: a page fault on q35).
+   what it pointed at (Nilix's ACPI INTx table: a page fault on q35).
    bug-c-an-array-of-function-pointers-member-is-one-pointer */
 #include <stdio.h>
 #include <stddef.h>

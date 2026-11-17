@@ -223,7 +223,7 @@ int kill(int pid, int sig) {
    SYS_gettid), so this is tgkill(getpid(), tid, sig), which is what glibc's
    comes down to. Like every pthread_* call it returns the error number rather
    than setting errno. Was missing under --threadsafe ("call to undeclared
-   function: pthread_kill"; Gibux's userland). */
+   function: pthread_kill"; Nilix's userland). */
 int pthread_kill(long thread, int sig) {
 #ifdef SYS_tgkill
   long r;

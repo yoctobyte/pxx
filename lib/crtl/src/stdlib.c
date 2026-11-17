@@ -698,7 +698,7 @@ int system(const char *command) {
   if (command == 0) return access("/bin/sh", X_OK) == 0 ? 1 : 0;
 
 #if defined(__xtensa__) && defined(__linux__)
-  pid = vfork();   /* no-MMU Gibux has no fork; the child only execs or exits */
+  pid = vfork();   /* no-MMU Nilix has no fork; the child only execs or exits */
 #else
   pid = fork();
 #endif

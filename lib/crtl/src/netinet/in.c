@@ -747,7 +747,7 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen,
    Control data is not carried by this fallback: msg_controllen comes back 0.
    64-bit targets with the Linux call numbers use the REAL sendmsg/recvmsg
    instead (below), which carry control data -- SCM_RIGHTS descriptor passing
-   (Gibux's nbd keeper), MSG_CMSG_CLOEXEC, MSG_CTRUNC -- and every flag, as
+   (Nilix's nbd keeper), MSG_CMSG_CLOEXEC, MSG_CTRUNC -- and every flag, as
    pread/pwrite do in unistd.c. The other OS ABIs translate those numbers. */
 #if defined(SYS_sendmsg) && defined(SYS_recvmsg) && defined(SYS_socketpair) && \
     defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8

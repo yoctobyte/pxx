@@ -1,5 +1,5 @@
 /* The privileged instructions a freestanding x86-64 kernel writes in inline
-   asm (Gibux's io.h, x86.h, cpu.c). They cannot run in user mode, so this
+   asm (Nilix's io.h, x86.h, cpu.c). They cannot run in user mode, so this
    file is COMPILED, by pxx and by gcc, and tools/casm_sysinsn_vs_gcc.sh
    compares the encodings objdump reads back. Every register operand is
    fixed ("a", "c", "d") so both compilers must produce identical bytes;
@@ -76,7 +76,7 @@ void k_fxrstor(void *area) { __asm__ volatile ("fxrstor64 (%0)" : : "c"(area) : 
 void k_fninit(void)        { __asm__ volatile ("fninit"); }
 void k_ldmxcsr(void *p)    { __asm__ volatile ("ldmxcsr (%0)" : : "d"(p)); }
 
-/* XSAVE state (Gibux: CR4.OSXSAVE, XCR0, per-process xsave areas). The
+/* XSAVE state (Nilix: CR4.OSXSAVE, XCR0, per-process xsave areas). The
    requested-feature bitmap is edx:eax; the area is the one operand. The
    r12/r13 rows force a SIB byte and a disp8. */
 void k_xsave64(void *p, uint64_t m)    { __asm__ volatile ("xsave64 (%0)"    : : "S"(p), "a"((uint32_t)m), "d"((uint32_t)(m >> 32)) : "memory"); }
