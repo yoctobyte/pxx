@@ -1,0 +1,23 @@
+# Path B sources: file  sha256  url
+# fetch.sh downloads each into $PATHB_WORK/dl and refuses a checksum mismatch.
+xorgproto-2024.1.tar.xz    372225fd40815b8423547f5d890c5debc72e88b91088fbfb13158c20495ccb59 https://www.x.org/releases/individual/proto/xorgproto-2024.1.tar.xz
+libXau-1.0.12.tar.xz       74d0e4dfa3d39ad8939e99bda37f5967aba528211076828464d2777d477fc0fb https://www.x.org/releases/individual/lib/libXau-1.0.12.tar.xz
+xtrans-1.5.2.tar.xz        5c5cbfe34764a9131d048f03c31c19e57fb4c682d67713eab6a65541b4dff86c https://www.x.org/releases/individual/lib/xtrans-1.5.2.tar.xz
+xcb-proto-1.17.0.tar.xz    2c1bacd2110f4799f74de6ebb714b94cf6f80fb112316b1219480fd22562148c https://xorg.freedesktop.org/archive/individual/proto/xcb-proto-1.17.0.tar.xz
+libxcb-1.17.0.tar.xz       599ebf9996710fea71622e6e184f3a8ad5b43d0e5fa8c4e407123c88a59a6d55 https://xorg.freedesktop.org/archive/individual/lib/libxcb-1.17.0.tar.xz
+libX11-1.8.10.tar.xz       2b3b3dad9347db41dca56beb7db5878f283bde1142f04d9f8e478af435dfdc53 https://www.x.org/releases/individual/lib/libX11-1.8.10.tar.xz
+libXext-1.3.6.tar.xz       edb59fa23994e405fdc5b400afdf5820ae6160b94f35e3dc3da4457a16e89753 https://www.x.org/releases/individual/lib/libXext-1.3.6.tar.xz
+libXrender-0.9.12.tar.xz   b832128da48b39c8d608224481743403ad1691bf4e554e4be9c174df171d1b97 https://www.x.org/releases/individual/lib/libXrender-0.9.12.tar.xz
+expat-2.6.4.tar.xz         a695629dae047055b37d50a0ff4776d1d45d0a4c842cf4ccee158441f55ff7ee https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-2.6.4.tar.xz
+freetype-2.13.3.tar.xz     0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289 https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz
+fontconfig-2.15.0.tar.xz   63a0658d0e06e0fa886106452b58ef04f21f58202ea02a94c39de0d3335d7c0e https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz
+libXft-2.3.8.tar.xz        5e8c3c4bc2d4c0a40aef6b4b38ed2fb74301640da29f6528154b5009b1c6dd49 https://www.x.org/releases/individual/lib/libXft-2.3.8.tar.xz
+zlib-1.3.1.tar.gz          9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23 https://zlib.net/fossils/zlib-1.3.1.tar.gz
+libfontenc-1.1.8.tar.xz    7b02c3d405236e0d86806b1de9d6868fe60c313628b38350b032914aa4fd14c6 https://www.x.org/releases/individual/lib/libfontenc-1.1.8.tar.xz
+libXfont-1.5.4.tar.bz2     1a7f7490774c87f2052d146d1e0e64518d32e6848184a18654e8d0bb57883242 https://www.x.org/releases/individual/lib/libXfont-1.5.4.tar.bz2
+tinyx-feab72c.tar.gz       82f69bbd7a979d30a25a80082ba6fdcb975740ba36836795a3763814aff0adca https://github.com/tinycorelinux/tinyx/archive/feab72ca891bc04b18763763e15ee4e532369cdf.tar.gz
+st-0.9.2.tar.gz            6b215d4f472b21d6232f30f221117a777e24bcfee68955ddefb7426467f9494b https://dl.suckless.org/st/st-0.9.2.tar.gz
+dwm-6.5.tar.gz             21d79ebfa9f2fb93141836c2666cb81f4784c69d64e7f1b2352f9b970ba09729 https://dl.suckless.org/dwm/dwm-6.5.tar.gz
+dejavu-fonts-ttf-2.37.tar.bz2 fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7 https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2
+font-misc-misc-1.1.3.tar.xz 79abe361f58bb21ade9f565898e486300ce1cc621d5285bec26e14b6a8618fed https://www.x.org/releases/individual/font/font-misc-misc-1.1.3.tar.xz
+font-cursor-misc-1.0.4.tar.xz 25d9c9595013cb8ca08420509993a6434c917e53ca1fec3f63acd45a19d4f982 https://www.x.org/releases/individual/font/font-cursor-misc-1.0.4.tar.xz

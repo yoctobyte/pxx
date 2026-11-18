@@ -1,0 +1,90 @@
+--- a/kdrive/linux/keyboard.c
++++ b/kdrive/linux/keyboard.c
+@@ -109,6 +109,75 @@
+ 	(1 << KG_ALTGR) | (1 << KG_SHIFT)
+ };
+ 
++/*
++ * pixx: a console without KDGKBENT (Rainyday's, for one) answers every query
++ * with an error, and the keymap stayed empty: no letters reached clients.
++ * Then fall back to the US layout of Linux's default keymap, by keycode
++ * (what K_MEDIUMRAW delivers), plain and shifted.
++ */
++static const struct {
++	unsigned char code;
++	KeySym plain, shift;
++} usKeys[] = {
++	{1, XK_Escape, NoSymbol}, {2, XK_1, XK_exclam}, {3, XK_2, XK_at},
++	{4, XK_3, XK_numbersign}, {5, XK_4, XK_dollar}, {6, XK_5, XK_percent},
++	{7, XK_6, XK_asciicircum}, {8, XK_7, XK_ampersand}, {9, XK_8, XK_asterisk},
++	{10, XK_9, XK_parenleft}, {11, XK_0, XK_parenright},
++	{12, XK_minus, XK_underscore}, {13, XK_equal, XK_plus},
++	{14, XK_BackSpace, NoSymbol}, {15, XK_Tab, XK_ISO_Left_Tab},
++	{16, XK_q, XK_Q}, {17, XK_w, XK_W}, {18, XK_e, XK_E}, {19, XK_r, XK_R},
++	{20, XK_t, XK_T}, {21, XK_y, XK_Y}, {22, XK_u, XK_U}, {23, XK_i, XK_I},
++	{24, XK_o, XK_O}, {25, XK_p, XK_P}, {26, XK_bracketleft, XK_braceleft},
++	{27, XK_bracketright, XK_braceright}, {28, XK_Return, NoSymbol},
++	{29, XK_Control_L, NoSymbol},
++	{30, XK_a, XK_A}, {31, XK_s, XK_S}, {32, XK_d, XK_D}, {33, XK_f, XK_F},
++	{34, XK_g, XK_G}, {35, XK_h, XK_H}, {36, XK_j, XK_J}, {37, XK_k, XK_K},
++	{38, XK_l, XK_L}, {39, XK_semicolon, XK_colon},
++	{40, XK_apostrophe, XK_quotedbl}, {41, XK_grave, XK_asciitilde},
++	{42, XK_Shift_L, NoSymbol}, {43, XK_backslash, XK_bar},
++	{44, XK_z, XK_Z}, {45, XK_x, XK_X}, {46, XK_c, XK_C}, {47, XK_v, XK_V},
++	{48, XK_b, XK_B}, {49, XK_n, XK_N}, {50, XK_m, XK_M},
++	{51, XK_comma, XK_less}, {52, XK_period, XK_greater},
++	{53, XK_slash, XK_question}, {54, XK_Shift_R, NoSymbol},
++	{55, XK_KP_Multiply, NoSymbol}, {56, XK_Alt_L, XK_Meta_L},
++	{57, XK_space, NoSymbol}, {58, XK_Caps_Lock, NoSymbol},
++	{59, XK_F1, NoSymbol}, {60, XK_F2, NoSymbol}, {61, XK_F3, NoSymbol},
++	{62, XK_F4, NoSymbol}, {63, XK_F5, NoSymbol}, {64, XK_F6, NoSymbol},
++	{65, XK_F7, NoSymbol}, {66, XK_F8, NoSymbol}, {67, XK_F9, NoSymbol},
++	{68, XK_F10, NoSymbol}, {69, XK_Num_Lock, NoSymbol},
++	{70, XK_Scroll_Lock, NoSymbol},
++	{71, XK_KP_7, NoSymbol}, {72, XK_KP_8, NoSymbol}, {73, XK_KP_9, NoSymbol},
++	{74, XK_KP_Subtract, NoSymbol}, {75, XK_KP_4, NoSymbol},
++	{76, XK_KP_5, NoSymbol}, {77, XK_KP_6, NoSymbol}, {78, XK_KP_Add, NoSymbol},
++	{79, XK_KP_1, NoSymbol}, {80, XK_KP_2, NoSymbol}, {81, XK_KP_3, NoSymbol},
++	{82, XK_KP_0, NoSymbol}, {83, XK_KP_Decimal, NoSymbol},
++	{86, XK_less, XK_greater}, {87, XK_F11, NoSymbol}, {88, XK_F12, NoSymbol},
++	{96, XK_KP_Enter, NoSymbol}, {97, XK_Control_R, NoSymbol},
++	{98, XK_KP_Divide, NoSymbol}, {100, XK_Alt_R, XK_Meta_R},
++	{102, XK_Home, NoSymbol}, {103, XK_Up, NoSymbol}, {104, XK_Prior, NoSymbol},
++	{105, XK_Left, NoSymbol}, {106, XK_Right, NoSymbol}, {107, XK_End, NoSymbol},
++	{108, XK_Down, NoSymbol}, {109, XK_Next, NoSymbol},
++	{110, XK_Insert, NoSymbol}, {111, XK_Delete, NoSymbol},
++	{125, XK_Super_L, NoSymbol}, {126, XK_Super_R, NoSymbol},
++	{127, XK_Menu, NoSymbol},
++};
++
++static void usFallbackMapping(void)
++{
++	int i, n = sizeof usKeys / sizeof usKeys[0];
++	int lo = usKeys[0].code, hi = usKeys[n - 1].code;
++
++	for (i = 0; i < (hi - lo + 1) * KD_MAX_WIDTH; i++)
++		kdKeymap[i] = NoSymbol;
++	for (i = 0; i < n; i++) {
++		KeySym *k = kdKeymap + (usKeys[i].code - lo) * KD_MAX_WIDTH;
++		k[0] = usKeys[i].plain;
++		k[1] = usKeys[i].shift;
++	}
++	kdMinScanCode = lo;
++	kdMaxScanCode = hi;
++}
++
+ static void readKernelMapping(void)
+ {
+ 	KeySym *k;
+@@ -365,6 +434,11 @@
+ 		if (k[3] == k[0] && k[2] == k[1] && k[2] == NoSymbol)
+ 			k[3] = NoSymbol;
+ 		row++;
++	}
++	if (minKeyCode == NR_KEYS) {
++		ErrorF("keyboard: the console has no keymap (KDGKBENT); using a built-in US map\n");
++		usFallbackMapping();
++		return;
+ 	}
+ 	kdMinScanCode = minKeyCode;
+ 	kdMaxScanCode = maxKeyCode;

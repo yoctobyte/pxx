@@ -1,0 +1,41 @@
+#!/bin/sh
+# startx for pixx's pxx-built desktop (Path B): TinyX Xfbdev on /dev/fb0,
+# the dwm window manager, one st terminal. Run as root from a text console
+# (Xfbdev takes over the VT and reads the keyboard from it; TinyX has no
+# other keyboard driver).
+#   Alt+Shift+Return  new terminal      Alt+Shift+c  close window
+#   Alt+j / Alt+k     focus next/prev   Alt+Shift+q  quit (back to the console)
+#
+# Mouse: PIXX_MOUSE=/dev/... picks the device; otherwise the first of
+# /dev/input/mice and /dev/psaux that exists. With neither, the server gets a
+# path that cannot open, so it runs without a pointer instead of probing its
+# built-in list, which ends in /dev/ttyS0 (the serial console). TinyX reads
+# PS/2-style byte streams only (no evdev), and it validates the protocol on
+# the first few packets: the pointer starts moving after a short movement.
+export DISPLAY=:0
+export HOME=${HOME:-/root}
+export FONTCONFIG_FILE=/etc/fonts/fonts.conf
+[ -c /dev/fb0 ] || { echo "startx-pixx: no /dev/fb0 (no framebuffer)"; exit 1; }
+if ! grep -q ' /dev/pts ' /proc/mounts; then
+  mkdir -p /dev/pts && mount -t devpts -o ptmxmode=0666 devpts /dev/pts
+fi
+mkdir -p /tmp && chmod 1777 /tmp
+MOUSE=$PIXX_MOUSE
+if [ -z "$MOUSE" ]; then
+  for m in /dev/input/mice /dev/psaux; do
+    [ -c $m ] && { MOUSE=$m; break; }
+  done
+fi
+if [ -z "$MOUSE" ]; then
+  echo "startx-pixx: no mouse device; running without a pointer"
+  MOUSE=/dev/null/no-mouse
+fi
+Xfbdev :0 -nolisten tcp -fp /usr/share/fonts/X11/misc/ -mouse $MOUSE -fb /dev/fb0 &
+XPID=$!
+i=0
+while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); done
+[ -S /tmp/.X11-unix/X0 ] || { echo "startx-pixx: the X server did not start"; kill $XPID 2>/dev/null; exit 1; }
+st &
+dwm
+kill $XPID 2>/dev/null
+wait $XPID 2>/dev/null
