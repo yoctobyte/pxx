@@ -4893,6 +4893,19 @@ begin
               * TypeSlotSize(tyInteger)
       else
         sz := Tokens[TokPos - 1].SLen + 1;
+      { CONSUME THE LITERAL. Left in place, CurTok was not the `)`, and the
+        re-parse below fires on `sz = TARGET_PTR_SIZE` -- which an 8-byte
+        array (a 7-character literal) is. That re-parse sized the literal as
+        an expression, 4, so `sizeof("charset")` was 4: fontconfig's gperf
+        name pool (`char str11[sizeof("charset")]`) came out 28 bytes short
+        and "charset"/"foundry"/... were not built-in objects.
+        Anything after the literal (`"abc"[0]`) is an expression: back to the
+        default so the re-parse sizes it.
+        bug-c-sizeof-of-a-parenthesised-7-character-literal-is-4 }
+      if (szK < TokCount) and (Tokens[szK].Kind = tkRParen) then
+        while CurTok.Kind = tkString do Next
+      else
+        sz := TARGET_PTR_SIZE;
     end
     else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
@@ -22859,6 +22872,8 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftRi: Integer;
     ftRetElemTk, ftRetElemRec, ftRetRec: Integer;   { the result's record shape, before the params' parses overwrite it }
     tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
+    isEnumFn: Boolean;
+    k: Integer;
 begin
   CSplitDeclarators(True);
   CUnparenTypedefName;
@@ -22983,7 +22998,25 @@ begin
     Exit;
   end;
 
-  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
+  { `typedef enum E Processor(XML_Parser, ...);` and `typedef enum E
+    (*fp)(int);` -- an enum RESULT, not an enum typedef. The arm below
+    registered `Processor` as an int and skipped its parameter list, so
+    `static Processor prologInitProcessor;` declared a 4-byte object and
+    every `parser->m_processor = prologInitProcessor` stored 0: expat parsed
+    a document without calling one handler. With no body, the general path
+    handles `enum E` as a type and the declarator as a function.
+    bug-c-a-function-typedef-returning-an-enum-declares-objects }
+  isEnumFn := False;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') and
+     (Tokens[TokPos].Kind = tkIdent) then
+  begin
+    k := TokPos + 1;
+    while (k < TokCount) and ((Tokens[k].Kind = tkStar) or (Tokens[k].Kind = tkConst)) do Inc(k);
+    if k + 1 < TokCount then
+      isEnumFn := ((Tokens[k].Kind = tkIdent) and (Tokens[k + 1].Kind = tkLParen)) or
+                  ((Tokens[k].Kind = tkLParen) and (Tokens[k + 1].Kind = tkStar));
+  end;
+  if (not isEnumFn) and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
   begin
     Next; { 'enum' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }

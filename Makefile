@@ -28706,6 +28706,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_modrs26_i386 "$$(timeout 20 $(TESTTMP)/c_modrs26_i386)" "$$(timeout 20 $(TESTTMP)/c_modrs26_gcc32)"
 	./$(COMPILER) --emit-obj --shared-runtime test/c_module_range_shift.c $(TESTTMP)/c_modrs26.o >/dev/null
 	tools/expect_same.sh c_modrs26_obj_undef "$$(nm $(TESTTMP)/c_modrs26.o | grep -cE ' U (h[0-9]|last_fn)$$')" "0"
+	./$(COMPILER) test/c_enum_fn_typedef.c $(TESTTMP)/c_enumfnt26
+	@gcc -w -o $(TESTTMP)/c_enumfnt26_gcc test/c_enum_fn_typedef.c
+	tools/expect_same.sh c_enumfnt26 "$$(timeout 20 $(TESTTMP)/c_enumfnt26)" "$$(timeout 20 $(TESTTMP)/c_enumfnt26_gcc)"
+	./$(COMPILER) --target=i386 test/c_enum_fn_typedef.c $(TESTTMP)/c_enumfnt26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_enumfnt26_gcc32 test/c_enum_fn_typedef.c
+	tools/expect_same.sh c_enumfnt26_i386 "$$(timeout 20 $(TESTTMP)/c_enumfnt26_i386)" "$$(timeout 20 $(TESTTMP)/c_enumfnt26_gcc32)"
+	./$(COMPILER) test/c_sizeof_literal_8_bytes.c $(TESTTMP)/c_szlit826
+	@gcc -w -o $(TESTTMP)/c_szlit826_gcc test/c_sizeof_literal_8_bytes.c
+	tools/expect_same.sh c_szlit826 "$$(timeout 20 $(TESTTMP)/c_szlit826)" "$$(timeout 20 $(TESTTMP)/c_szlit826_gcc)"
+	./$(COMPILER) --target=i386 test/c_sizeof_literal_8_bytes.c $(TESTTMP)/c_szlit826_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_szlit826_gcc32 test/c_sizeof_literal_8_bytes.c
+	tools/expect_same.sh c_szlit826_i386 "$$(timeout 20 $(TESTTMP)/c_szlit826_i386)" "$$(timeout 20 $(TESTTMP)/c_szlit826_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"
