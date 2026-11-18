@@ -7,6 +7,9 @@
 set -e
 T=$(cd "$(dirname "$0")" && pwd)
 export PATHB_WORK=${PATHB_WORK:?set PATHB_WORK to an empty or earlier work directory}
+mkdir -p "$PATHB_WORK"
+# resolved: make logs record real paths, and replay object names derive from them
+export PATHB_WORK=$(cd "$PATHB_WORK" && pwd -P)
 export PXXC=${PXXC:-$T/../../compiler/pascal26}
 export PXX_HOME=${PXX_HOME:-$(cd "$T/../.." && pwd)}
 export PXXFLAGS=${PXXFLAGS:---shared-runtime --threadsafe}

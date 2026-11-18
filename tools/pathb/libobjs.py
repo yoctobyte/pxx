@@ -4,7 +4,7 @@ usage: libobjs.py PKG:ARCHIVE...   e.g. libxcb:libxcb libX11:libX11
 An archive member foo.o is the replay object whose source basename is foo.c;
 every replay object matched by some member is printed once."""
 import os, subprocess, sys
-B = os.environ["PATHB_WORK"]
+B = os.path.realpath(os.environ["PATHB_WORK"])  # make logs hold resolved paths
 out = []
 for arg in sys.argv[1:]:
     pkg, lib = arg.split(":")

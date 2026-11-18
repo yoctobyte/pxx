@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 PXXC = os.environ.get("PXXC", os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../compiler/pascal26"))
 JOBS = int(os.environ.get("JOBS", "8"))
-B = os.environ["PATHB_WORK"]
+B = os.path.realpath(os.environ["PATHB_WORK"])  # make logs hold resolved paths
 EXTRA = shlex.split(os.environ.get("PXXFLAGS", ""))
 
 def units(log):

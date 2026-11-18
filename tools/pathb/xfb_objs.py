@@ -2,7 +2,8 @@
 """Replay objects for Xfbdev: every member of the archives on gcc's link line
 (kdrive/fbdev cwd), mapped to $PATHB_WORK/replay/tinyx/<dir_with_underscores>_<src>.c.o"""
 import os, subprocess, sys
-B = os.environ["PATHB_WORK"]; T = f"{B}/src/tinyx"; R = f"{B}/replay/tinyx"
+B = os.path.realpath(os.environ["PATHB_WORK"])  # make logs hold resolved paths
+T = f"{B}/src/tinyx"; R = f"{B}/replay/tinyx"
 arcs = ["kdrive/fbdev/libfbdev.a", "dix/.libs/libdix.a", "kdrive/src/libkdrive.a",
         "kdrive/linux/liblinux.a", "fb/.libs/libfb.a", "mi/.libs/libmi.a",
         "xfixes/.libs/libxfixes.a", "Xext/.libs/libXext.a", "dbe/.libs/libdbe.a",
