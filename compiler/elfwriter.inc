@@ -6064,6 +6064,7 @@ var
   ODCOff   : array of Integer;     { start: .data offset, or REMAPPED .bss offset }
   ODCEndT  : array of Integer;     { the global's own end (planning only) }
   ODCName  : array of AnsiString;
+  ODCFull  : array of AnsiString;  { a C section("name") global: the section's whole name; '' = .data.<ODCName> }
   ODCShndx : array of Integer;
   ODCSym   : array of Integer;     { its STT_SECTION symbol }
   ODCRelAt : array of Integer;     { first index of its entries in ODR* }
@@ -6118,9 +6119,21 @@ end;
   own: a linker that places it on that boundary keeps every offset inside it
   aligned as it was. }
 function ObjDCutAlign(c: Integer): Integer;
-var a, cap: Integer;
+var a, cap, sz, nat: Integer;
 begin
   if ODCSec[c] = 0 then cap := ObjSecAlign(ReqDataAlign) else cap := ObjSecAlign(ReqBssAlign);
+  { A named section (a link set) is concatenated with the same section of
+    every other object, and ld pads each input to its alignment: an 8-byte
+    entry aligned 16 left an 8-byte hole that __stop_ - __start_ counted as a
+    null entry. Its natural alignment, as gcc gives it -- the largest power of
+    two dividing its size, at most 8. feature-c-section-attribute-on-x86-64-objects }
+  if ODCFull[c] <> '' then
+  begin
+    sz := ODCEndT[c] - ODCOff[c];
+    nat := 1;
+    while (nat < 8) and (sz mod (nat * 2) = 0) do nat := nat * 2;
+    if nat < cap then cap := nat;
+  end;
   a := 1;
   if ODCOff[c] = 0 then a := cap
   else
@@ -6175,12 +6188,13 @@ begin
     n := Length(ODCOff) * 2;
     if n < 64 then n := 64;
     SetLength(ODCSec, n); SetLength(ODCOff, n); SetLength(ODCEndT, n);
-    SetLength(ODCName, n);
+    SetLength(ODCName, n); SetLength(ODCFull, n);
   end;
   ODCSec[ODCCount] := sec;
   ODCOff[ODCCount] := off;
   ODCEndT[ODCCount] := en;
   ODCName[ODCCount] := nm;
+  ODCFull[ODCCount] := '';
   Inc(ODCCount);
 end;
 
@@ -6198,13 +6212,34 @@ begin
   t := ODCOff[a]; ODCOff[a] := ODCOff[b]; ODCOff[b] := t;
   t := ODCEndT[a]; ODCEndT[a] := ODCEndT[b]; ODCEndT[b] := t;
   s := ODCName[a]; ODCName[a] := ODCName[b]; ODCName[b] := s;
+  s := ODCFull[a]; ODCFull[a] := ODCFull[b]; ODCFull[b] := s;
 end;
 
 { The data cuts and their symbol indices; section indices come later
   (ObjNumberDataCuts), once the relocations are counted. }
 procedure ObjPlanDataCuts(firstSecSym: Integer);
-var i, j, k, sec, off, en, prevSec, prevEnd, gap: Integer;
+var i, j, k, sec, off, en, prevSec, prevEnd, gap, nNamed, nAll: Integer;
     ok: Boolean;
+
+  procedure SortCuts;
+  var si, sj, sg: Integer;
+  begin
+    sg := ODCCount div 2;
+    while sg > 0 do
+    begin
+      for si := sg to ODCCount - 1 do
+      begin
+        sj := si;
+        while (sj - sg >= 0) and ObjDCutLess(sj, sj - sg) do
+        begin
+          ObjDCutSwap(sj, sj - sg);
+          sj := sj - sg;
+        end;
+      end;
+      sg := sg div 2;
+    end;
+  end;
+
 begin
   ODCCount := 0;
   ODCFirstBss := 0;
@@ -6219,7 +6254,15 @@ begin
       off := ObjDataValue(i);
       en := off + SymAllocSize[i];
       if (off >= 0) and (en <= ObjDSecEnd(sec)) then
+      begin
         ObjDCutAdd(sec, off, en, Syms[i].Name);
+        { __attribute__((section("link_set_x"))): the cut IS that section,
+          under its own name (NetBSD's link sets, rump's evcnts and domains;
+          the linker makes __start_/__stop_ for a C-identifier name).
+          feature-c-section-attribute-on-x86-64-objects }
+        if (i < Length(SymSectionName)) and (SymSectionName[i] <> '') then
+          ODCFull[ODCCount - 1] := SymSectionName[i];
+      end;
     end;
   { Every interned string is an entry of its own, [EntryStart, EntryEnd), and
     is referenced only inside it (the handle and the chars sit at fixed
@@ -6233,20 +6276,7 @@ begin
          (Strs[i].EntryEnd <= DataLen) then
         ObjDCutAdd(0, Strs[i].EntryStart, Strs[i].EntryEnd, 'pxx.str' + AIntToStr(i));
   { shell sort by (sec, off) }
-  gap := ODCCount div 2;
-  while gap > 0 do
-  begin
-    for i := gap to ODCCount - 1 do
-    begin
-      j := i;
-      while (j - gap >= 0) and ObjDCutLess(j, j - gap) do
-      begin
-        ObjDCutSwap(j, j - gap);
-        j := j - gap;
-      end;
-    end;
-    gap := gap div 2;
-  end;
+  SortCuts;
   { drop a global that starts inside the one before it (the first stands) }
   k := 0; prevSec := -1; prevEnd := 0;
   for i := 0 to ODCCount - 1 do
@@ -6255,13 +6285,30 @@ begin
     if k <> i then
     begin
       ODCSec[k] := ODCSec[i]; ODCOff[k] := ODCOff[i];
-      ODCEndT[k] := ODCEndT[i]; ODCName[k] := ODCName[i];
+      ODCEndT[k] := ODCEndT[i]; ODCName[k] := ODCName[i]; ODCFull[k] := ODCFull[i];
     end;
     prevSec := ODCSec[k];
     prevEnd := ODCEndT[k];
     Inc(k);
   end;
   ODCCount := k;
+  { A named section holds its global and nothing else: a link set is an array
+    the linker concatenates, and __stop_ - __start_ counts its entries, so
+    the alignment padding up to the next global must not ride in it. The gap
+    becomes a cut of its own (anything in it then has a section to relocate
+    against). feature-c-section-attribute-on-x86-64-objects }
+  nNamed := 0;
+  nAll := ODCCount;
+  for i := 0 to nAll - 1 do
+    if ODCFull[i] <> '' then
+    begin
+      Inc(nNamed);
+      if (i + 1 < nAll) and (ODCSec[i + 1] = ODCSec[i]) then en := ODCOff[i + 1]
+      else en := ObjDSecEnd(ODCSec[i]);
+      if en > ODCEndT[i] then
+        ObjDCutAdd(ODCSec[i], ODCEndT[i], en, 'pxx.pad' + AIntToStr(i));
+    end;
+  if ODCCount <> nAll then SortCuts;
   ODCFirstBss := 0;
   while (ODCFirstBss < ODCCount) and (ODCSec[ODCFirstBss] = 0) do Inc(ODCFirstBss);
   { a self-relative word must stay inside one section with its target }
@@ -6270,12 +6317,17 @@ begin
     if ObjDCutOf(0, DataRelFixPos[i]) <> ObjDCutOf(0, DataRelFixTarget[i]) then ok := False;
   if not ok then
   begin
+    for i := 0 to ODCFirstBss - 1 do
+      if ODCFull[i] <> '' then
+        ErrorNoPos('--emit-obj: C global in section "' + ODCFull[i] + '" cannot be given'
+                   + ' its own section: this object has a self-relative data word that'
+                   + ' spans two globals, so its .data stays one section');
     ODCDroppedData := True;
     for i := ODCFirstBss to ODCCount - 1 do
     begin
       j := i - ODCFirstBss;
       ODCSec[j] := ODCSec[i]; ODCOff[j] := ODCOff[i];
-      ODCEndT[j] := ODCEndT[i]; ODCName[j] := ODCName[i];
+      ODCEndT[j] := ODCEndT[i]; ODCName[j] := ODCName[i]; ODCFull[j] := ODCFull[i];
     end;
     ODCCount := ODCCount - ODCFirstBss;
     ODCFirstBss := 0;
@@ -7274,6 +7326,15 @@ begin
         FunctionSections := True;
         Break;
       end;
+  { ...and a section("name") global: the data cuts that carry it come with
+    function sections. feature-c-section-attribute-on-x86-64-objects }
+  if not FunctionSections then
+    for wkI := 0 to Length(SymSectionName) - 1 do
+      if SymSectionName[wkI] <> '' then
+      begin
+        FunctionSections := True;
+        Break;
+      end;
   CRegisterCDataImports;   { before anything counts ExternalCount }
   ObjBssPlanImportDrops;   { before any .bss offset is written out }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
@@ -7488,7 +7549,14 @@ begin
   for c := 0 to ODCCount - 1 do
   begin
     ODCNm[c] := shstrSize;
-    if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCName[c]) + 12
+    if ODCFull[c] <> '' then
+    begin
+      { '.rela<name>' then the section from +5, like the others; a .bss one is
+        just '<name>' }
+      if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCFull[c]) + 6
+      else shstrSize := shstrSize + Length(ODCFull[c]) + 1;
+    end
+    else if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCName[c]) + 12
     else shstrSize := shstrSize + Length(ODCName[c]) + 6;
   end;
 
@@ -7659,7 +7727,12 @@ begin
   end;
   for c := 1 to ObjCutCount - 1 do writeStrZ(f, '.rela.text.' + ObjCutName[c]);
   for c := 0 to ODCCount - 1 do
-    if ODCSec[c] = 0 then writeStrZ(f, '.rela.data.' + ODCName[c])
+    if ODCFull[c] <> '' then
+    begin
+      if ODCSec[c] = 0 then writeStrZ(f, '.rela' + ODCFull[c])
+      else writeStrZ(f, ODCFull[c]);
+    end
+    else if ODCSec[c] = 0 then writeStrZ(f, '.rela.data.' + ODCName[c])
     else writeStrZ(f, '.bss.' + ODCName[c]);
   writePad(f, shOff - (shstrOff + shstrSize));
 

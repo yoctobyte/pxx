@@ -264,6 +264,8 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
 function CDeclSectionName(typeIdx: Integer): AnsiString; forward;
+function CDeclCtorKind(typeIdx: Integer): Integer; forward;
+procedure CRegisterCtor(procIdx, kind: Integer); forward;
 procedure CApplyProcSection(procIdx: Integer; const nm: AnsiString); forward;
 function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean; forward;
 procedure CSplitDeclarators(isTypedef: Boolean); forward;
@@ -14795,7 +14797,14 @@ begin
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
     gSecPlace := CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), declSawExtern);
-    if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
+    { A section("name") global on an x86-64 object is .data even without
+      static data: in .bss its section would be NOBITS, and ld puts a NOBITS
+      input in an output section of its own, apart from gcc's PROGBITS one of
+      the same name -- a link set mixing the two lost entries. Its initialiser
+      may still be a store in the init thunk; the bytes are the section's.
+      feature-c-section-attribute-on-x86-64-objects }
+    if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64))) and
+       ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
        (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
@@ -16729,7 +16738,10 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     envPi: Integer;   { __pxx_set_environ, for the init thunk }
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
     xtInitThunk: Boolean;           { hosted xtensa object: .init_array thunk }
+    ci, finiDtors: Integer;         { C constructors/destructors in the thunks }
+    finiRunner: Boolean;
 begin
+  CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
     around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive
@@ -17978,6 +17990,14 @@ begin
                  + ' initialisation (a file-scope initialiser that is not a'
                  + ' constant, or environ), and a freestanding object has'
                  + ' nothing to run a .init_array');
+    { __attribute__((constructor)) functions, after the initialisers and in
+      declaration order, as gcc's .init_array entries for one translation unit
+      run. A freestanding object may have them: gcc gives it an .init_array too,
+      and rump (-DRUMP_USE_CTOR) registers every component this way. Their
+      priorities are not honoured across objects (all run at the object's own
+      slot). bug-c-constructor-and-destructor-attributes-were-dropped }
+    for ci := 0 to CCtorCount - 1 do
+      if Procs[CCtorProcs[ci]].BodyAddr >= 0 then EmitCallProc(CCtorProcs[ci]);
     if EmitObjMode and (not EmitSharedMode) and (CodeLen = thunkBody) then
     begin
       CodeLen := thunkStart;
@@ -17989,13 +18009,24 @@ begin
 
     { Same for finalization: the Pascal thunk already guards this and the C one
       did not, because under --shared the runner always exists. }
-    if ((not EmitObjMode) or EmitSharedMode or
+    finiRunner := ((not EmitObjMode) or EmitSharedMode or
         (FiniProcCount > 0) or (FiniRunnerProc >= 0)) and
-       not (FreestandingMode and EmitObjMode) and not xtInitThunk then
+       not (FreestandingMode and EmitObjMode) and not xtInitThunk;
+    { __attribute__((destructor)) functions: last declared runs first, as
+      glibc walks a translation unit's .fini_array entries backwards.
+      bug-c-constructor-and-destructor-attributes-were-dropped }
+    finiDtors := 0;
+    if not xtInitThunk then
+      for ci := 0 to CDtorCount - 1 do
+        if Procs[CDtorProcs[ci]].BodyAddr >= 0 then Inc(finiDtors);
+    if finiRunner or (finiDtors > 0) then
     begin
       FiniThunkOff := CodeLen;
       EmitSharedThunkPrologue;
-      EmitCallProc(GetFiniRunnerProc);
+      if finiDtors > 0 then
+        for ci := CDtorCount - 1 downto 0 do
+          if Procs[CDtorProcs[ci]].BodyAddr >= 0 then EmitCallProc(CDtorProcs[ci]);
+      if finiRunner then EmitCallProc(GetFiniRunnerProc);
       EmitSharedThunkEpilogue;
     end;
   end;
@@ -18019,6 +18050,23 @@ begin
                  + ' constant), and a freestanding object has nothing to run it');
   end;
   CProgramMode := False;
+  { An executable: constructors were called from main's init proc, which knew
+    only the ones declared before main; destructors join the finalizers, which
+    run last-registered first at exit. bug-c-constructor-and-destructor-attributes-were-dropped }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+  begin
+    if CCtorCount > CCtorInMain then
+      ErrorNoPos('C: __attribute__((constructor)) function ' + Procs[CCtorProcs[CCtorInMain]].Name
+                 + ' is declared after main; in a program pxx links, declare constructors before main');
+    for ci := 0 to CDtorCount - 1 do
+      if FiniProcCount < 256 then
+      begin
+        FiniProcs[FiniProcCount] := CDtorProcs[ci];
+        Inc(FiniProcCount);
+      end
+      else
+        ErrorNoPos('C: more than 256 finalizers and destructors');
+  end;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   FillRootVMTSlotDefaults;   { the reserved root slots, as ParseProgram and the NilPy epilogue fill them }
   ApplyCallFixups;
@@ -18443,7 +18491,7 @@ end;
   program's. Emitted BEFORE main's body address is taken, so the two bodies do
   not interleave. Returns the proc index. }
 function CEmitMainInitProc: Integer;
-var initIdx, patchPos, savedSC, savedFS, savedCur: Integer;
+var initIdx, patchPos, savedSC, savedFS, savedCur, i: Integer;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
 begin
@@ -18460,6 +18508,16 @@ begin
   Procs[initIdx].FramePatch := patchPos;
   CompilePendingGlobalInits;
   CEmitDeferredCAggInits;
+  { An executable's constructors run here, after the initialisers, before
+    main's body. An object or a shared library runs them from its init thunk
+    instead (ParseCProgram), so they are not called twice when it holds main.
+    One declared after main is refused at the end (ParseCProgram).
+    bug-c-constructor-and-destructor-attributes-were-dropped }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+  begin
+    for i := 0 to CCtorCount - 1 do EmitCallProc(CCtorProcs[i]);
+    CCtorInMain := CCtorCount;
+  end;
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
   SymRollbackTo(savedSC);
@@ -18477,6 +18535,7 @@ var
   mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   procSawWeak: Boolean;
+  procCtorKind: Integer;
   procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
@@ -18548,6 +18607,7 @@ begin
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   procSawStatic := CDeclSawStatic(TokPos - 1);
   procSawWeak := CDeclSawWeak(TokPos - 1);
+  procCtorKind := CDeclCtorKind(TokPos - 1);
   procSecName := CDeclSectionName(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -19277,6 +19337,7 @@ begin
       works. It was a required import. bug-c-attribute-weak-was-ignored }
     if procSawWeak and (Procs[procIdx].BodyAddr < 0) then ProcWeakExternal[procIdx] := True;
     CApplyProcSection(procIdx, procSecName);
+    CRegisterCtor(procIdx, procCtorKind);
     Next;
     Exit;
   end;
@@ -19372,6 +19433,7 @@ begin
     (ObjProcBind). bug-c-attribute-weak-was-ignored }
   if procSawWeak or ProcWeakExternal[procIdx] then ProcCWeakDef[procIdx] := True;
   CApplyProcSection(procIdx, procSecName);
+  CRegisterCtor(procIdx, procCtorKind);
   ProcWeakExternal[procIdx] := False;
   mainInitIdx := -1;
   if name = 'main' then mainInitIdx := CEmitMainInitProc;
@@ -22342,6 +22404,59 @@ end;
   declarator (parens nest: a parameter list may hold neither). The flag
   lands on the token AFTER the attribute, so `int f(void) __attribute__((weak));`
   carries it on the `;`. bug-c-attribute-weak-was-ignored }
+{ constructor (1) / destructor (2) attributes anywhere in the declaration
+  that starts at typeIdx, OR-ed: `static void f(void) __attribute__((constructor));`
+  puts it after the declarator, on the `;`. }
+function CDeclCtorKind(typeIdx: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := 0;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    Result := Result or ((CAttrFlags[k] shr 8) and 3);
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ File a function as a constructor and/or destructor, once each, in the order
+  first seen -- gcc's .init_array order within one translation unit. }
+procedure CRegisterCtor(procIdx, kind: Integer);
+var i: Integer; seen: Boolean;
+begin
+  if procIdx < 0 then Exit;
+  if (kind and 1) <> 0 then
+  begin
+    seen := False;
+    for i := 0 to CCtorCount - 1 do if CCtorProcs[i] = procIdx then seen := True;
+    if not seen then
+    begin
+      if Length(CCtorProcs) <= CCtorCount then SetLength(CCtorProcs, CCtorCount + 16);
+      CCtorProcs[CCtorCount] := procIdx;
+      Inc(CCtorCount);
+    end;
+  end;
+  if (kind and 2) <> 0 then
+  begin
+    seen := False;
+    for i := 0 to CDtorCount - 1 do if CDtorProcs[i] = procIdx then seen := True;
+    if not seen then
+    begin
+      if Length(CDtorProcs) <= CDtorCount then SetLength(CDtorProcs, CDtorCount + 16);
+      CDtorProcs[CDtorCount] := procIdx;
+      Inc(CDtorCount);
+    end;
+  end;
+end;
+
 function CDeclSawWeak(typeIdx: Integer): Boolean;
 var k, depth: Integer;
 begin
@@ -22410,7 +22525,10 @@ end;
 function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean;
 begin
   Result := False;
-  if (nm = '') or (idx < 0) or isExtern or not EspFreestandingObj then Exit;
+  if (nm = '') or (idx < 0) or isExtern then Exit;
+  { an x86-64 object gives it a section of that name too (writeELFRelX64General's
+    data cuts). feature-c-section-attribute-on-x86-64-objects }
+  if not (EspFreestandingObj or (EmitObjMode and (TargetArch = TARGET_X86_64))) then Exit;
   if Length(SymSectionName) <= idx then SetLength(SymSectionName, idx + 256);
   SymSectionName[idx] := nm;
   Result := True;

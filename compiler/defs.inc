@@ -3728,7 +3728,7 @@ var
   PendNestHMinus      : array[0..MAX_NESTED_TOKENS-1] of Boolean;
   PendNestSrcOff      : array[0..MAX_NESTED_TOKENS-1] of Integer;
   PendNestSrcLen      : array[0..MAX_NESTED_TOKENS-1] of Integer;
-  PendNestCAttrFlags  : array[0..MAX_NESTED_TOKENS-1] of Byte;
+  PendNestCAttrFlags  : array[0..MAX_NESTED_TOKENS-1] of Word;
   PendNestCAttrAlign  : array[0..MAX_NESTED_TOKENS-1] of Integer;
   PendNestCount      : Integer;
   { Per-routine boundaries within PendNestTok: a single enclosing body may stash
@@ -7801,6 +7801,14 @@ var
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
   CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
+  { __attribute__((constructor)) = 1, ((destructor)) = 2: rides the next token
+    as CAttrFlags bits 8..9. The parser files the function in CCtorProcs /
+    CDtorProcs, and the object's init/fini thunk calls them.
+    bug-c-constructor-and-destructor-attributes-were-dropped }
+  CAttrCtor       : Integer;
+  CCtorProcs, CDtorProcs : array of Integer;
+  CCtorCount, CDtorCount : Integer;
+  CCtorInMain : Integer;   { constructors main's init proc calls (an executable) }
   { __attribute__((section("name"))): the lexer files the name in
     CAttrSecNames and the next token carries its index + 1 in CAttrAlignValues
     bits 17..23 (CDeclSectionName reads it). SymSectionName / ProcIram are
@@ -8004,7 +8012,7 @@ var
     bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
   TokSrcOff : array of Integer;
   TokSrcLen : array of Integer;
-  CAttrFlags : array of Byte;
+  CAttrFlags : array of Word;   { bits 0..7 below; 256 = constructor, 512 = destructor (CAttrCtor) }
   CAttrAlignValues : array of Integer;
   TokCount   : Integer;
   TokCapacity : Integer;   { current allocated length of the token parallel arrays (grown by EnsureTokCapacity) }

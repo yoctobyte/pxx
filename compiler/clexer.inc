@@ -424,6 +424,8 @@ begin
           else if (CAttrModeName(attrText) = 'word') or (CAttrModeName(attrText) = 'pointer') then
             CAttrModeBytes := TARGET_PTR_SIZE;
           if CAttrHasWord(attrText, 'weak') then CAttrWeak := True;
+          if CAttrHasWord(attrText, 'constructor') then CAttrCtor := CAttrCtor or 1;
+          if CAttrHasWord(attrText, 'destructor') then CAttrCtor := CAttrCtor or 2;
           if CAttrHasWord(attrText, 'section') then CAttrSection := CAttrSectionOf(attrText);
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
@@ -1226,6 +1228,7 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CAttrCtor := 0;
   CAttrSection := '';
   TokCount := 0; TokCharLen := 0;
   repeat
@@ -1256,6 +1259,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrCtor <> 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or (CAttrCtor shl 8);
+      CAttrCtor := 0;
     end;
     if CAttrSection <> '' then
     begin
@@ -1314,6 +1322,7 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CAttrCtor := 0;
   CAttrSection := '';
   SavedLexSource := Source;
   savedSrcPos := SrcPos;
@@ -1367,6 +1376,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrCtor <> 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or (CAttrCtor shl 8);
+      CAttrCtor := 0;
     end;
     if CAttrSection <> '' then
     begin

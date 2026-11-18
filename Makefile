@@ -20841,6 +20841,29 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_attw26 "$$($(TESTTMP)/c_attw26)" "$$(cat test/c_inline_asm_att_widths.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_att_widths.c $(TESTTMP)/c_attw26_o2 > /dev/null
 	tools/expect_same.sh c_attw26_o2 "$$($(TESTTMP)/c_attw26_o2)" "$$(cat test/c_inline_asm_att_widths.expected)"
+	# constructor/destructor attributes: whole program, -O2, and a pxx object (also --freestanding) under a gcc main (bug-c-constructor-and-destructor-attributes-were-dropped)
+	./$(COMPILER) test/c_attribute_constructor.c $(TESTTMP)/c_ctor26 > /dev/null
+	tools/expect_same.sh c_ctor26 "$$($(TESTTMP)/c_ctor26)" "$$(cat test/c_attribute_constructor.expected)"
+	./$(COMPILER) -O2 test/c_attribute_constructor.c $(TESTTMP)/c_ctor26_o2 > /dev/null
+	tools/expect_same.sh c_ctor26_o2 "$$($(TESTTMP)/c_ctor26_o2)" "$$(cat test/c_attribute_constructor.expected)"
+	./$(COMPILER) --emit-obj -DCT_NO_MAIN test/c_attribute_constructor.c $(TESTTMP)/c_ctor26_obj.o > /dev/null
+	gcc test/c_attribute_constructor_main.c $(TESTTMP)/c_ctor26_obj.o -o $(TESTTMP)/c_ctor26_obj
+	tools/expect_same.sh c_ctor26_obj "$$($(TESTTMP)/c_ctor26_obj)" "$$(cat test/c_attribute_constructor.expected)"
+	./$(COMPILER) --emit-obj --freestanding --system-libs -DCT_NO_MAIN test/c_attribute_constructor.c $(TESTTMP)/c_ctor26_fobj.o > /dev/null
+	gcc test/c_attribute_constructor_main.c $(TESTTMP)/c_ctor26_fobj.o -o $(TESTTMP)/c_ctor26_fobj
+	tools/expect_same.sh c_ctor26_fobj "$$($(TESTTMP)/c_ctor26_fobj)" "$$(cat test/c_attribute_constructor.expected)"
+	# section("link_set_x") on x86-64 objects: pxx+pxx, --freestanding, and gcc+pxx (feature-c-section-attribute-on-x86-64-objects)
+	./$(COMPILER) --emit-obj test/c_attribute_section_link_set.c $(TESTTMP)/c_lset26_a.o > /dev/null
+	./$(COMPILER) --emit-obj -DLS_SECOND test/c_attribute_section_link_set.c $(TESTTMP)/c_lset26_b.o > /dev/null
+	gcc test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_a.o $(TESTTMP)/c_lset26_b.o -o $(TESTTMP)/c_lset26
+	tools/expect_same.sh c_lset26 "$$($(TESTTMP)/c_lset26)" "$$(cat test/c_attribute_section_link_set.expected)"
+	./$(COMPILER) --emit-obj --freestanding --system-libs test/c_attribute_section_link_set.c $(TESTTMP)/c_lset26_fa.o > /dev/null
+	./$(COMPILER) --emit-obj --freestanding --system-libs -DLS_SECOND test/c_attribute_section_link_set.c $(TESTTMP)/c_lset26_fb.o > /dev/null
+	gcc test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_fa.o $(TESTTMP)/c_lset26_fb.o -o $(TESTTMP)/c_lset26_f
+	tools/expect_same.sh c_lset26_f "$$($(TESTTMP)/c_lset26_f)" "$$(cat test/c_attribute_section_link_set.expected)"
+	gcc -c test/c_attribute_section_link_set.c -o $(TESTTMP)/c_lset26_ga.o
+	gcc test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_ga.o $(TESTTMP)/c_lset26_b.o -o $(TESTTMP)/c_lset26_m
+	tools/expect_same.sh c_lset26_m "$$($(TESTTMP)/c_lset26_m)" "$$(cat test/c_attribute_section_link_set.expected)"
 	# ++/-- on float/double/long double step by 1.0, on every target (awk in
 	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
 	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null
