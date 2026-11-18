@@ -281,6 +281,7 @@ function CEvalConstExpr: Int64; forward;
 function CTryParseStaticAssert: Boolean; forward;
 function CEvalConstFloatExpr: Double; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
+function CInitCountRecordArrayAt(openIdx, recId: Integer): Integer; forward;
 procedure CSkipCInitElement; forward;
 function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
                              nDims, dim0, elemsBelow: Integer;
@@ -1430,8 +1431,59 @@ function CFieldOfTernary(tern, fldOff, fldLen, tk: Integer): Integer; forward;
   for prefix (yield NEW). The pointed-at record for `(p++)->field` is derived from
   the lvalue (Left) by CNodePtrElemRec, not carried on the node. }
 function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
-var node, bfPrec: Integer; bfSigned: Boolean;
+var node, bfPrec, bfW, one, sum, asn, back: Integer; bfSigned: Boolean;
+    resTk: TTypeKind;
 begin
+  { A BITFIELD operand: AN_INCDEC loads and stores the whole storage unit, so
+    `p->cnt++` on a field above bit 0 wrote the new value at bit 0 -- over
+    its neighbours -- and left the field as it was (LVGL's style_cnt:6 at bit
+    4: lv_obj_add_style looped 4 billion times). Rewrite it the way `x OP= y`
+    already is, `lv = lv +- 1`, through the bitfield-aware assignment: prefix
+    yields that assignment's (masked) value; postfix yields it minus the step,
+    masked back to the field's width, so `c++` at the top of the field gives
+    the old top value. The base is evaluated twice, as for `+=`.
+    bug-c-increment-of-a-bitfield-above-bit-0-writes-at-bit-0 }
+  if (ASTKind[lv] = AN_FIELD) and (ASTLeft[lv] >= 0) then
+  begin
+    bfW := RecFieldBitWidth(ResolveNodeRec(ASTLeft[lv]), GetASTIdentName(lv));
+    if bfW > 0 then
+    begin
+      one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+      if isInc then sum := CMakeBinop(Ord(tkPlus), lv, one)
+      else sum := CMakeBinop(Ord(tkMinus), lv, one);
+      asn := AllocNode(AN_ASSIGN);
+      ASTLeft[asn] := lv;
+      ASTRight[asn] := CConvertAsIfAssigned(IntToTypeKind(ASTTk[lv]), sum);
+      ASTTk[asn] := ASTTk[lv];
+      if isPre then begin Result := asn; Exit; end;
+      one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+      if isInc then back := CMakeBinop(Ord(tkMinus), asn, one)
+      else back := CMakeBinop(Ord(tkPlus), asn, one);
+      if bfW < 64 then
+      begin
+        { `back & (2^w-1)`, sign-extended for a signed field, in the type the
+          field reads as (int below 32 bits), so `printf("%d", p->c++)` passes
+          an int on i386 too }
+        if bfW < 32 then resTk := tyInteger else resTk := IntToTypeKind(ASTTk[lv]);
+        bfSigned := TypeSigned(RecFieldType(ResolveNodeRec(ASTLeft[lv]), GetASTIdentName(lv)));
+        one := AllocNode(AN_INT_LIT); ASTIVal[one] := (Int64(1) shl bfW) - 1; ASTTk[one] := Ord(tyInt64);
+        node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
+        ASTLeft[node] := back; ASTRight[node] := one; ASTTk[node] := Ord(resTk);
+        if bfSigned then
+        begin
+          one := AllocNode(AN_INT_LIT); ASTIVal[one] := Int64(1) shl (bfW - 1); ASTTk[one] := Ord(tyInt64);
+          sum := AllocNode(AN_BINOP); ASTIVal[sum] := Ord(tkXor);
+          ASTLeft[sum] := node; ASTRight[sum] := one; ASTTk[sum] := Ord(resTk);
+          one := AllocNode(AN_INT_LIT); ASTIVal[one] := Int64(1) shl (bfW - 1); ASTTk[one] := Ord(tyInt64);
+          node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkMinus);
+          ASTLeft[node] := sum; ASTRight[node] := one; ASTTk[node] := Ord(resTk);
+        end;
+        back := node;
+      end;
+      Result := back;
+      Exit;
+    end;
+  end;
   node := AllocNode(AN_INCDEC);
   ASTLeft[node] := lv;
   if isInc then ASTIVal[node] := 1 else ASTIVal[node] := -1;
@@ -9387,6 +9439,33 @@ begin
       else if (dimCount <= 1) and (not hadArrDesig) and (nArrElems > arrLen) then
         arrLen := nArrElems;
       if (dimCount <= 1) and (recArrInitCount > arrLen) then arrLen := recArrInitCount;
+      { `static const lv_color_t colors[][5] = { {..x5}, {..x5}, .. }` in a
+        block: the unsized outer dimension of a STRUCT array was left at the 1
+        it was clamped to above (the scalar walk re-sizes its own), so the
+        array had one row and every later row read zero -- LVGL's
+        lv_palette_lighten/darken returned black, and the default theme drew
+        a black screen. File scope was right.
+        bug-c-a-block-scope-struct-array-with-an-unsized-outer-dimension-has-one-row }
+      if unsizedOuter and (declTk = tyRecord) and (recArrInitCount > 0) then
+      begin
+        beBelow := 1;
+        for di := 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+        if beBelow < 1 then beBelow := 1;
+        { a top-level brace is a ROW whatever it holds (gcc: `e[][2] =
+          {{1,2,3},{4,5,6}}` is two rows of which [0] is set); a flat list
+          is records under elision, filling rows in turn }
+        if Tokens[TokPos + 1].Kind = tkBegin then
+          dk := recArrInitCount
+        else if scalarRec >= REC_UCLASS_BASE then
+          dk := (CInitCountRecordArrayAt(TokPos, scalarRec) + beBelow - 1) div beBelow
+        else
+          dk := 0;
+        if dk > dimSpan[0] then
+        begin
+          dimSpan[0] := dk;
+          arrLen := dk * beBelow;
+        end;
+      end;
       { VARIABLE-LENGTH ARRAY. The symbol becomes a POINTER local filled from
         alloca at the declaration point, because that is what the object is:
         runtime-sized storage in this frame, released by the epilogue. Indexing

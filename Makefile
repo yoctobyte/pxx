@@ -28655,6 +28655,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) --threadsafe --target=i386 test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_i386
 	@gcc -m32 -w -pthread -o $(TESTTMP)/c_rumpapi26_gcc32 test/c_crtl_rumpuser_apis.c
 	tools/expect_same.sh c_rumpapi26_i386 "$$(timeout 30 $(TESTTMP)/c_rumpapi26_i386)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc32)"
+	./$(COMPILER) test/c_bitfield_incdec.c $(TESTTMP)/c_bfincdec26
+	@gcc -w -o $(TESTTMP)/c_bfincdec26_gcc test/c_bitfield_incdec.c
+	tools/expect_same.sh c_bfincdec26 "$$(timeout 20 $(TESTTMP)/c_bfincdec26)" "$$(timeout 20 $(TESTTMP)/c_bfincdec26_gcc)"
+	./$(COMPILER) --target=i386 test/c_bitfield_incdec.c $(TESTTMP)/c_bfincdec26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_bfincdec26_gcc32 test/c_bitfield_incdec.c
+	tools/expect_same.sh c_bfincdec26_i386 "$$(timeout 20 $(TESTTMP)/c_bfincdec26_i386)" "$$(timeout 20 $(TESTTMP)/c_bfincdec26_gcc32)"
+	./$(COMPILER) test/c_block_struct_array_init.c $(TESTTMP)/c_bsainit26
+	@gcc -w -o $(TESTTMP)/c_bsainit26_gcc test/c_block_struct_array_init.c
+	tools/expect_same.sh c_bsainit26 "$$(timeout 20 $(TESTTMP)/c_bsainit26)" "$$(timeout 20 $(TESTTMP)/c_bsainit26_gcc)"
+	./$(COMPILER) --target=i386 test/c_block_struct_array_init.c $(TESTTMP)/c_bsainit26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_bsainit26_gcc32 test/c_block_struct_array_init.c
+	tools/expect_same.sh c_bsainit26_i386 "$$(timeout 20 $(TESTTMP)/c_bsainit26_i386)" "$$(timeout 20 $(TESTTMP)/c_bsainit26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

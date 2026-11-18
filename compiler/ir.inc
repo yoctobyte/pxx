@@ -16530,6 +16530,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           begin
             idx := ResolveNodeRec(ASTLeft[node]);
             elemSize := RecSize(idx);
+            { A C ARRAY of records is typed as its element, so this zeroed one
+              element: `struct S a[4] = { {1} }` in a block left a[1..3] as
+              stack garbage (C99 6.7.8p21 says zero), 1-D and multidim alike.
+              The whole array, as the scalar-array arm below does.
+              bug-c-a-block-scope-struct-array-initialiser-zeroes-only-element-0 }
+            if (ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray and
+               (Syms[ASTIVal[ASTLeft[node]]].ArrLen > 1) and not RecordHasManagedFields(idx) then
+              elemSize := Syms[ASTIVal[ASTLeft[node]]].ArrLen * elemSize;
             if RecordHasManagedFields(idx) then
               Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, idx, elemSize, Ord(lhsTk))
             else

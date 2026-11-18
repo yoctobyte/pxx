@@ -426,6 +426,7 @@ AN_ASSIGN Left lhs
 AN_ASSIGN Left lhsIdent
 AN_ASSIGN Left lhsIncNode
 AN_ASSIGN Left lhsNode
+AN_ASSIGN Left lv
 AN_ASSIGN Left node
 AN_ASSIGN Left raDest
 AN_ASSIGN Left sTarget
@@ -449,6 +450,7 @@ AN_ASSIGN Right AllocNode(AN_BINOP)
 AN_ASSIGN Right AllocNode(AN_INT_LIT)
 AN_ASSIGN Right CAsmOps[i].Expr
 AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[left]), ASTRight[node])
+AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[lv]), sum)
 AN_ASSIGN Right CConvertAsIfAssigned(declTk, ASTRight[asn])
 AN_ASSIGN Right CLIArrElem[cliBase + ei]
 AN_ASSIGN Right CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs)
@@ -600,6 +602,7 @@ AN_BINOP Left Result
 AN_BINOP Left a
 AN_BINOP Left acc
 AN_BINOP Left augRead
+AN_BINOP Left back
 AN_BINOP Left baseFld
 AN_BINOP Left c
 AN_BINOP Left callN
@@ -641,6 +644,7 @@ AN_BINOP Left scaled
 AN_BINOP Left smGuardCall
 AN_BINOP Left stopNode
 AN_BINOP Left subRead
+AN_BINOP Left sum
 AN_BINOP Left tagCall
 AN_BINOP Left tagEq
 AN_BINOP Left tc
@@ -697,6 +701,7 @@ AN_BINOP Right n
 AN_BINOP Right nilNode
 AN_BINOP Right nineLit
 AN_BINOP Right node
+AN_BINOP Right one
 AN_BINOP Right oneN
 AN_BINOP Right oneNode
 AN_BINOP Right pairNode
