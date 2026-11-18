@@ -4612,6 +4612,7 @@ begin
     29: Result := 1;  { tyBool8 — C99 _Bool, one unsigned byte (same storage as tyUInt8) }
     30: Result := 4;  { tyUCS4Char — a Unicode code point (same storage as tyUInt32) }
     31: Result := 2;  { tyWideChar — a UTF-16 code unit (same storage as tyUInt16) }
+    32, 33: Result := 16;  { tyInt128/tyUInt128 — __int128, two 64-bit halves }
     27: Result := 8;  { tyPromoInt32 — two 32-bit NATIVE words: tag + inline payload }
     28: Result := 16; { tyPromoInt64 — two 64-bit NATIVE words: tag + inline payload }
   end;
@@ -4862,6 +4863,16 @@ begin
   else if Result <= 2 then Result := 2
   else if Result <= 4 then Result := 4
   else Result := 8;
+  { __int128 is 16-aligned on every 64-bit psABI (gcc: _Alignof 16). }
+  if (Ord(tk) = 32) or (Ord(tk) = 33) then Result := 16;
+end;
+
+{ GCC's 128-bit integers. Not ordinal and not TypeSigned on purpose (see the
+  enum): every site that handles one asks for it here.
+  feature-c-int128-and-attribute-mode }
+function TypeIsInt128(tk: TTypeKind): Boolean;
+begin
+  Result := (Ord(tk) = 32) or (Ord(tk) = 33);
 end;
 
 function TypeFieldAlign(tk: TTypeKind): Integer;
@@ -18333,6 +18344,15 @@ begin
         double returns were fine because neither side converts. Load the single
         with no widen and no rax bridge (the cdecl caller reads xmm0, not rax). }
       EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { movss xmm0, [rbp+off] }
+    end
+    else if TypeIsInt128(Syms[retSymIdx].TypeKind) and (Syms[retSymIdx].Kind = skLocal) and
+            not Syms[retSymIdx].IsArray then
+    begin
+      { __int128 returns in rdx:rax (SysV), which is also the value model
+        ir_codegen_i128.inc carries it in. feature-c-int128-and-attribute-mode }
+      EmitAsmX64([
+        'mov rax, [rbp+%]', Syms[retSymIdx].Offset,
+        'mov rdx, [rbp+%]', Syms[retSymIdx].Offset + 8]);
     end
     else
     begin

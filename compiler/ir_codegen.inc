@@ -5367,6 +5367,8 @@ begin
   if (lt = tyAnsiString) or TypeIsFrozenString(lt) or
      (rt = tyAnsiString) or TypeIsFrozenString(rt) then Exit;
   if (lt = tyVariant) or (rt = tyVariant) then Exit;
+  { a 128-bit compare needs both halves (ir_codegen_i128.inc) }
+  if TypeIsInt128(lt) or TypeIsInt128(rt) then Exit;
   CmpFusible := True;
 end;
 
@@ -6639,6 +6641,11 @@ procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
   path destroys the source register and r11 — the source is consumed by the
   conversion at every call site, and r11 is free in this backend. }
 begin
+  { converting from one register would use the low half: refused until a
+    correctly rounded 128-bit conversion exists (gcc's __floattidf).
+    feature-c-int128-and-attribute-mode }
+  if TypeIsInt128(srcTk) then
+    Error('__int128: conversion to a floating type is not supported yet (feature-c-int128-and-attribute-mode)');
   AsmScopeBegin;
   if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
   begin
@@ -8341,6 +8348,8 @@ begin
   end;
 end;
 
+{$I ir_codegen_i128.inc}
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
@@ -8422,6 +8431,9 @@ var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
       name the same argument and differ only here. }
     slotIsAgg: array[0..127] of Boolean;
     slotSrcOff: array[0..127] of Integer;
+    { a slot of an __int128 argument: an aggregate's placement, but its value
+      comes from rdx:rax, not from an address (ir_codegen_i128.inc) }
+    slotI128: array[0..127] of Boolean;
     { --os=nt: a by-value record to a DLL. 0 = an ordinary slot; 1, 2, 4, 8 =
       load that many bytes of the record into the slot (Win64 passes such a
       record as an integer); -1 = pass the address of the private copy
@@ -8453,7 +8465,25 @@ begin
     Exit;
   end;
   if node = -1 then Exit;
-  
+
+  { 128-bit integers live in rdx:rax and have their own arms; a 128-bit node
+    no arm claims is refused, never emitted as one register.
+    feature-c-int128-and-attribute-mode }
+  if I128Claims(node) then
+  begin
+    I128EmitNode(node);
+    Exit;
+  end;
+  { IR_INDEX / IR_FIELD / IR_LEA carry the ELEMENT's type but yield its ADDRESS }
+  if I128Node(node) and (IRKind[node] <> IR_NOP) and (IRKind[node] <> IR_BLOCK) and
+     (IRKind[node] <> IR_INDEX) and (IRKind[node] <> IR_FIELD) and (IRKind[node] <> IR_LEA) and
+     { a call's 128-bit result arrives in rdx:rax (SysV), already the model }
+     (IRKind[node] <> IR_CALL) and (IRKind[node] <> IR_CALL_IND) and
+     { zeroing by byte count; the element type is not read }
+     (IRKind[node] <> IR_DEFAULT_MEM) then
+    Error('__int128: ' + IROpName(IRKind[node]) +
+          ' of a 128-bit value is not supported yet (feature-c-int128-and-attribute-mode)');
+
   case IRKind[node] of
     IR_NOP, IR_BLOCK:
       begin end;
@@ -8896,6 +8926,7 @@ begin
               if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
               slotArg[nSlots] := i;
               slotIsAgg[nSlots] := True;
+              slotI128[nSlots] := TypeIsInt128(aggTk) and (not aggIsRef) and (not aggIsArr);
               slotSrcOff[nSlots] := (sysvSlots - 1) * 8;
               slotIsSse[nSlots] := False;
               slotIsStack[nSlots] := True;
@@ -8908,6 +8939,7 @@ begin
               if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
               slotArg[nSlots] := i;
               slotIsAgg[nSlots] := apAgg;
+              slotI128[nSlots] := apAgg and TypeIsInt128(aggTk) and (not aggIsRef) and (not aggIsArr);
               slotSrcOff[nSlots] := aggK * 8;
               if apMem then
               begin
@@ -8952,6 +8984,12 @@ begin
                   pushed high->low -- the direct arm's rule, in the arm that
                   needs it for the same reason. }
                 if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                if slotI128[slotIdx] then
+                begin
+                  I128EmitValue(argNodeArr[i]);
+                  EmitAsmX64(['push rdx', 'push rax']);
+                  Continue;
+                end;
                 IREmitNode(argNodeArr[i]);
                 aggK := slotSrcOff[slotIdx] div 8;
                 while aggK >= 0 do
@@ -8976,6 +9014,12 @@ begin
               if slotIsAgg[slotIdx] then
               begin
                 if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                if slotI128[slotIdx] then
+                begin
+                  I128EmitValue(argNodeArr[i]);
+                  EmitAsmX64(['push rdx', 'push rax']);
+                  Continue;
+                end;
                 IREmitNode(argNodeArr[i]);
                 aggK := slotSrcOff[slotIdx] div 8;
                 while aggK >= 0 do
@@ -11845,6 +11889,7 @@ begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
                 slotArg[nSlots] := i;
                 slotIsAgg[nSlots] := False;
+                slotI128[nSlots] := False;
                 slotSrcOff[nSlots] := 0;
                 slotIsSse[nSlots] := False;
                 case RecSize(aggRec) of
@@ -11881,6 +11926,7 @@ begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
                 slotArg[nSlots] := i;
                 slotIsAgg[nSlots] := True;
+                slotI128[nSlots] := TypeIsInt128(tk) and (not aggIsRef) and (not aggIsArr);
                 winRecLoad[nSlots] := 0;
                 slotSrcOff[nSlots] := (sysvSlots - 1) * 8;
                 slotIsSse[nSlots] := False;
@@ -11894,6 +11940,7 @@ begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
                 slotArg[nSlots] := i;
                 slotIsAgg[nSlots] := apAgg;
+                slotI128[nSlots] := apAgg and TypeIsInt128(tk) and (not aggIsRef) and (not aggIsArr);
                 winRecLoad[nSlots] := 0;
                 slotSrcOff[nSlots] := aggK * 8;
                 if apMem then
@@ -11947,6 +11994,12 @@ begin
                 if slotIsAgg[slotIdx] then
                 begin
                   if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                  if slotI128[slotIdx] then
+                  begin
+                    I128EmitValue(argNodeArr[i]);
+                    EmitAsmX64(['push rdx', 'push rax']);
+                    Continue;
+                  end;
                   IREmitNode(argNodeArr[i]);          { rax = the record's address }
                   aggK := slotSrcOff[slotIdx] div 8;
                   while aggK >= 0 do
@@ -12004,6 +12057,12 @@ begin
                 if slotIsAgg[slotIdx] then
                 begin
                   if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                  if slotI128[slotIdx] then
+                  begin
+                    I128EmitValue(argNodeArr[i]);
+                    EmitAsmX64(['push rdx', 'push rax']);
+                    Continue;
+                  end;
                   IREmitNode(argNodeArr[i]);          { rax = the record's address }
                   aggK := slotSrcOff[slotIdx] div 8;
                   while aggK >= 0 do
@@ -12893,6 +12952,8 @@ begin
             end
             else
             begin   { integer argument }
+              if TypeIsInt128(IntToTypeKind(IRTk[val1Node])) then
+                Error('__int128: conversion to a floating type is not supported yet (feature-c-int128-and-attribute-mode)');
               if specialId = 205 then
               begin EmitAsmX64(['xor rax,rax']); end { (Frac(int)=0) }
               else if specialId = 206 then
@@ -15209,6 +15270,9 @@ begin
           if not fused then
           begin
             IREmitNode(condNode); { evaluate condition -> rax }
+            { a 128-bit condition is true when EITHER half is non-zero }
+            if TypeIsInt128(IntToTypeKind(IRTk[condNode])) then
+              begin EmitAsmX64(['or rax, rdx']); end;
             EmitAsmX64(['test rax, rax']);
             if LabelPositions[lblId] <> -1 then
             begin

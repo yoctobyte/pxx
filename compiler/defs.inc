@@ -3020,7 +3020,17 @@ type
       where they are — they are additive, they still catch shapes the kind does
       not reach, and removing them is a separate migration.
       bug-a-writeln-of-a-widechar-prints-its-ordinal }
-    tyWideChar     { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
+    tyWideChar,    { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
+    { GCC's 128-bit integers, `__int128` and `unsigned __int128` (also
+      `__int128_t`/`__uint128_t` and `mode(TI)`). Sixteen bytes, aligned 16,
+      carried in rdx:rax on x86-64 the way i386 carries an Int64 in edx:eax.
+      Like the promotable ints, deliberately NOT reported by TypeIsOrdinal or
+      TypeSigned: the integer codegen everywhere assumes one register, and a
+      site that has not been taught the pair must refuse rather than drop the
+      high half. Ask TypeIsInt128 by name.
+      feature-c-int128-and-attribute-mode }
+    tyInt128,      { 32: __int128 — 16 bytes signed }
+    tyUInt128      { 33: unsigned __int128 — 16 bytes unsigned }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
@@ -10220,6 +10230,8 @@ begin
     tyBool8:       Result := 'tyBool8';
     tyUCS4Char:    Result := 'tyUCS4Char';
     tyWideChar:    Result := 'tyWideChar';
+    tyInt128:      Result := 'tyInt128';
+    tyUInt128:     Result := 'tyUInt128';
   else
     { Not reachable through the enum, and printed rather than raised on purpose:
       a DIAGNOSTIC helper that halts turns a reportable error into a crash and

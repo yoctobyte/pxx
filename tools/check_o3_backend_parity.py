@@ -114,6 +114,7 @@ EXPECTED = {
     # extends the in-tree XMM fusion (EmitFloatTree), which aarch64 has no
     # counterpart of at all, so it is one-armed with the pass it belongs to.
     "ir_codegen.inc": 23,
+    "ir_codegen_i128.inc": 0,   # x86-64 __int128 pair lowering; no -O3 folds (feature-c-int128-and-attribute-mode)
     "ir_codegen_aarch64.inc": 10,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,

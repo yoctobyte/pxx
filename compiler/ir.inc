@@ -11527,7 +11527,10 @@ end;
   bug-c-increment-and-decrement-of-a-double-add-integer-bits }
 function IRAddressAsPointer(n: Integer): Integer;
 begin
-  if (n >= 0) and TypeIsFloat(IntToTypeKind(IRTk[n])) then IRTk[n] := Ord(tyPointer);
+  { ...and an __int128 element's address, the same shape: libtommath's
+    `*_W++ += (mp_word)mu * *tmpn++` (feature-c-int128-and-attribute-mode) }
+  if (n >= 0) and (TypeIsFloat(IntToTypeKind(IRTk[n])) or TypeIsInt128(IntToTypeKind(IRTk[n]))) then
+    IRTk[n] := Ord(tyPointer);
   Result := n;
 end;
 
@@ -13250,6 +13253,17 @@ begin
                                  Int64(1) shl (narrowSize * 8 - 1), ASTTk[node]);
               Result := IRAppend(IR_BINOP, Result, right, Ord(tkMinus), 0, ASTTk[node]);
             end;
+          end
+          else if TypeIsInt128(castTk) and not TypeIsInt128(IntToTypeKind(IRTk[Result])) then
+          begin
+            { WIDENING to __int128 is a value change, not a retag: retagging
+              the operand in place turns an 8-byte memory load into a 16-byte
+              one, and a narrower variable's load into a claim that it is
+              128-bit. `x + 0` typed 128-bit widens x by x's own signedness
+              (ir_codegen_i128.inc), the same shape the 64-bit widen above
+              uses on the 32-bit targets. feature-c-int128-and-attribute-mode }
+            right := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInt64));
+            Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
           end
           else if not TypeIsFloat(castTk) then
             IRTk[Result] := ASTTk[node]

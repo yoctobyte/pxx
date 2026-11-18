@@ -676,6 +676,30 @@ begin
     end;
   end;
 
+  { double-precision shifts `shld dst, src, cl` / `shrd dst, src, cl`
+    (0F A5 /r, 0F AD /r): dst is the r/m operand, src the reg field. Register
+    forms with a CL count only -- what the 128-bit integer pair shifts need
+    (ir_codegen_i128.inc, feature-c-int128-and-attribute-mode). }
+  if CaseEqual(mnem, 'shld') or CaseEqual(mnem, 'shrd') then
+  begin
+    commaPos := 0;
+    for i := 1 to Length(op1) do
+      if (op1[i] = ',') and (commaPos = 0) then commaPos := i;
+    if commaPos = 0 then Error('EmitAsmX64: shld/shrd take three operands: ' + line);
+    rest := AsmTextTrim(AsmTextSlice(op1, commaPos + 1, Length(op1) - commaPos));
+    op1 := AsmTextTrim(AsmTextSlice(op1, 1, commaPos - 1));
+    if not CaseEqual(rest, 'cl') then Error('EmitAsmX64: shld/shrd count must be cl (this slice): ' + line);
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: shld/shrd destination must be a register (this slice): ' + line);
+    if AsmTextOperand(op1, holes, holeCur, r1, s1, mb1, md1, imm1) <> 0 then
+      Error('EmitAsmX64: shld/shrd source must be a register: ' + line);
+    EncPrefixAndREX(s0, r1, r0, False);
+    EncB($0F);
+    if CaseEqual(mnem, 'shld') then EncB($A5) else EncB($AD);
+    EncModRMReg(r1, r0);
+    Exit;
+  end;
+
   { single-operand: push / pop }
   { push/pop r64, [mem] (FF /6, 8F /0) or an absolute [@glob]/[@data]/[num] }
   if CaseEqual(mnem, 'push') or CaseEqual(mnem, 'pop') then
@@ -860,6 +884,18 @@ begin
     if (k1 = 0) and (r1 = 1) then x64_shift_reg_cl(s0, i, r0)   { ,cl (reg 1) }
     else if k1 = 1 then x64_shift_reg_imm(s0, i, r0, Integer(imm1))
     else Error('EmitAsmX64: shift count must be imm or cl');
+    Exit;
+  end;
+
+  { bsr / bsf reg, reg (0F BD /r, 0F BC /r): the 128-bit divide's normalising
+    shift (ir_codegen_i128.inc). lzcnt is BMI, newer than the fleet's Xeons. }
+  if CaseEqual(mnem, 'bsr') or CaseEqual(mnem, 'bsf') then
+  begin
+    if (k0 <> 0) or (k1 <> 0) then Error('EmitAsmX64: bsr/bsf take two registers (this slice): ' + line);
+    EncPrefixAndREX(s0, r0, r1, False);
+    EncB($0F);
+    if CaseEqual(mnem, 'bsr') then EncB($BD) else EncB($BC);
+    EncModRMReg(r0, r1);
     Exit;
   end;
 

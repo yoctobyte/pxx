@@ -20838,6 +20838,34 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_fincdec_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_fincdec_i386)" "$$(cat test/c_float_increment_decrement.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec_xt > /dev/null
 	tools/expect_same.sh c_fincdec_xt "$$(tools/run_target.sh xtensa $(TESTTMP)/c_fincdec_xt)" "$$(cat test/c_float_increment_decrement.expected)"
+	# __int128 on x86-64, against gcc (feature-c-int128-and-attribute-mode):
+	# arithmetic/shifts/compares, calls and returns, initialisers, division.
+	./$(COMPILER) test/c_int128_basic.c $(TESTTMP)/c_i128basic26 > /dev/null
+	tools/expect_same.sh c_i128basic26 "$$($(TESTTMP)/c_i128basic26)" "$$(cat test/c_int128_basic.expected)"
+	./$(COMPILER) -O2 test/c_int128_basic.c $(TESTTMP)/c_i128basic26_o2 > /dev/null
+	tools/expect_same.sh c_i128basic26_o2 "$$($(TESTTMP)/c_i128basic26_o2)" "$$(cat test/c_int128_basic.expected)"
+	./$(COMPILER) test/c_int128_calls.c $(TESTTMP)/c_i128calls26 > /dev/null
+	tools/expect_same.sh c_i128calls26 "$$($(TESTTMP)/c_i128calls26)" "$$(cat test/c_int128_calls.expected)"
+	./$(COMPILER) -O2 test/c_int128_calls.c $(TESTTMP)/c_i128calls26_o2 > /dev/null
+	tools/expect_same.sh c_i128calls26_o2 "$$($(TESTTMP)/c_i128calls26_o2)" "$$(cat test/c_int128_calls.expected)"
+	./$(COMPILER) test/c_int128_init.c $(TESTTMP)/c_i128init26 > /dev/null
+	tools/expect_same.sh c_i128init26 "$$($(TESTTMP)/c_i128init26)" "$$(cat test/c_int128_init.expected)"
+	./$(COMPILER) -O2 test/c_int128_init.c $(TESTTMP)/c_i128init26_o2 > /dev/null
+	tools/expect_same.sh c_i128init26_o2 "$$($(TESTTMP)/c_i128init26_o2)" "$$(cat test/c_int128_init.expected)"
+	./$(COMPILER) test/c_int128_divide.c $(TESTTMP)/c_i128divide26 > /dev/null
+	tools/expect_same.sh c_i128divide26 "$$($(TESTTMP)/c_i128divide26)" "$$(cat test/c_int128_divide.expected)"
+	./$(COMPILER) -O2 test/c_int128_divide.c $(TESTTMP)/c_i128divide26_o2 > /dev/null
+	tools/expect_same.sh c_i128divide26_o2 "$$($(TESTTMP)/c_i128divide26_o2)" "$$(cat test/c_int128_divide.expected)"
+	./$(COMPILER) test/c_int128_ptrwalk.c $(TESTTMP)/c_i128ptrwalk26 > /dev/null
+	tools/expect_same.sh c_i128ptrwalk26 "$$($(TESTTMP)/c_i128ptrwalk26)" "$$(cat test/c_int128_ptrwalk.expected)"
+	./$(COMPILER) -O2 test/c_int128_ptrwalk.c $(TESTTMP)/c_i128ptrwalk26_o2 > /dev/null
+	tools/expect_same.sh c_i128ptrwalk26_o2 "$$($(TESTTMP)/c_i128ptrwalk26_o2)" "$$(cat test/c_int128_ptrwalk.expected)"
+	@./$(COMPILER) test/c_int128_float_refused.c $(TESTTMP)/c_i128flt26 2>&1 \
+	  | grep -q '__int128: conversion to a floating type is not supported yet' \
+	  || { echo 'c_int128_float_refused: FAIL - an __int128 -> double conversion was accepted, or refused as something else'; exit 1; }
+	@./$(COMPILER) --target=aarch64 test/c_int128_float_refused.c $(TESTTMP)/c_i128a64 2>&1 \
+	  | grep -q 'is supported on x86-64 only so far' \
+	  || { echo 'c_int128_float_refused: FAIL - aarch64 accepted __int128, or refused it as something else'; exit 1; }
 	./$(COMPILER) test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz26 > /dev/null
 	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
 	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null

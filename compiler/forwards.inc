@@ -16,6 +16,7 @@ function TypeStorageSize(tk: TTypeKind; recId: Integer): Integer; forward;
   element a promotable int" through the one predicate rather than respelling
   the two kind tests. PXX prescans headers; FPC is single-pass and needs this. }
 function TypeIsPromoInt(tk: TTypeKind): Boolean; forward;
+function TypeIsInt128(tk: TTypeKind): Boolean; forward;
 function RegcallScalarType(tk: TTypeKind): Boolean; forward;
 function GenMakeSeq(stmt, next: Integer): Integer; forward;
 {$ifndef PXX_NO_CFRONT}function CNodeDecaysToPointer(node: Integer): Boolean; forward;{$endif}

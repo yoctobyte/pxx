@@ -254,7 +254,10 @@ begin
     instead of guessing the depth. }
   if not CASTNodeOccursIn(ASTRight[node], lv, 0) then Exit;
   tk := IntToTypeKind(ASTTk[lv]);
-  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (tk = tyPointer)) then Exit;
+  { __int128 is deliberately not TypeIsOrdinal, and leaving it out of this
+    gate doubled libtommath's `*_W++ += (mp_word)mu * *tmpn++`: every 64-bit
+    digit modexp was wrong. feature-c-int128-and-attribute-mode }
+  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or TypeIsInt128(tk) or (tk = tyPointer)) then Exit;
   Result := CASTLValueHasSideEffect(lv, 0);
 end;
 

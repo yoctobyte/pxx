@@ -40,12 +40,12 @@ CONFIGURATION (dropbear's own switches; no source is patched):
   --disable-zlib, and utmp/utmpx/wtmp/wtmpx/lastlog/pututline/pututxline and
   loginfunc off, so no login records are written. Password auth is compiled
   in (crtl's crypt does SHA-crypt), but these tests log in by key.
-  CFLAGS adds -DMP_32BIT, for BOTH builds: libtommath's own 32-bit-digit
-  configuration. Its default on x86-64 under __GNUC__ is 64-bit digits with
-  a 128-bit mp_word declared `__attribute__((mode(TI)))`, and pxx has no
-  128-bit integer (feature-c-int128-and-attribute-mode). pxx refuses that
-  attribute by name rather than making the type 64 bits wide, which is what
-  it silently did before: RSA key generation never found a prime.
+  libtommath keeps its default on x86-64 under __GNUC__: 64-bit digits with
+  a 128-bit mp_word declared `__attribute__((mode(TI)))`, which pxx compiles
+  since feature-c-int128-and-attribute-mode (2026-11-18). Until then this
+  added -DMP_32BIT to both builds, because pxx had no 128-bit integer; before
+  pxx refused mode(TI) by name it made the type 64 bits wide, and RSA key
+  generation never found a prime. PXX_DROPBEAR_MP32=1 restores -DMP_32BIT.
 
 THE LAST LINE IS A POSITIVE TOKEN: DROPBEAR-PXX-COMPLETE, with GREEN or RED.
 No token means no result, whatever the exit status says.
@@ -90,7 +90,10 @@ CONFIGURE = ["--disable-zlib", "--disable-utmp", "--disable-utmpx", "--disable-w
              "--disable-pututxline", "--disable-loginfunc"]
 TAG = "dropbear-pxx"
 # dropbear's configure default is -Os -W -Wall; setting CFLAGS replaces it.
-CFLAGS = "-Os -W -Wall -DMP_32BIT"
+# libtommath keeps its own default digit size: 64-bit digits with a 128-bit
+# mp_word (`mode(TI)`), which pxx compiles since feature-c-int128-and-attribute-mode.
+# PXX_DROPBEAR_MP32=1 restores the old -DMP_32BIT build.
+CFLAGS = "-Os -W -Wall" + (" -DMP_32BIT" if os.environ.get("PXX_DROPBEAR_MP32") == "1" else "")
 
 results = []          # (name, ok, detail)
 
@@ -156,8 +159,8 @@ def gcc_reference(work, jobs):
         die("gcc reference: configure failed, see %s/configure.log" % work)
     rc, out, err = run(["nice", "-n", "15", "make", "-j%d" % jobs, "PROGRAMS=" + " ".join(PROGRAMS)]
                        + PROGRAMS, cwd=tree, timeout=1800, env=env)
-    if b"-DMP_32BIT" not in out + err:
-        die("gcc reference: -DMP_32BIT did not reach the compile lines; libtommath would pick mode(TI)")
+    if ("-DMP_32BIT" in CFLAGS) != (b"-DMP_32BIT" in out + err):
+        die("gcc reference: the compile lines do not carry the CFLAGS' -DMP_32BIT setting")
     log = os.path.join(work, "make-gcc.log")
     open(log, "wb").write(out + err)
     if rc != 0:

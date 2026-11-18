@@ -377,6 +377,22 @@ begin
       aggregate before this existed. A refusal must not silently become a
       guess about the ABI. }
   end;
+  { __int128 is two INTEGER eightbytes, in two GP registers or wholly on the
+    stack -- an aggregate's placement, which the emit loops then fill from
+    rdx:rax instead of from an address (slotI128 there).
+    feature-c-int128-and-attribute-mode }
+  if TypeIsInt128(tk) and (not isRef) and (not isArray) and (TargetArch = TARGET_X86_64) then
+  begin
+    nSlots := 2; isAgg := True;
+    if intIdx + 2 <= 6 then
+    begin
+      reg0 := intIdx; reg1 := intIdx + 1;
+      Inc(intIdx, 2);
+    end
+    else
+      isMem := True;
+    Exit;
+  end;
 
   if TypeIsFloat(tk) and (not isRef) and (not isArray) then
   begin

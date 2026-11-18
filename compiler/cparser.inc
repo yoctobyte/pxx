@@ -427,6 +427,11 @@ begin
     unsigned 64 > signed 64 > unsigned 32 > signed 32. Without this an inline
     `i - 1u` (unsigned) was tagged signed, so `(i - 1u) < asize` compiled to a
     SIGNED compare (lua `findindex` looped forever in `pairs`). }
+  { __int128 outranks every other integer (feature-c-int128-and-attribute-mode) }
+  else if (IntToTypeKind(ASTTk[l]) = tyUInt128) or (IntToTypeKind(ASTTk[r]) = tyUInt128) then
+    Result := Ord(tyUInt128)
+  else if (IntToTypeKind(ASTTk[l]) = tyInt128) or (IntToTypeKind(ASTTk[r]) = tyInt128) then
+    Result := Ord(tyInt128)
   else if (IntToTypeKind(ASTTk[l]) = tyUInt64) or (IntToTypeKind(ASTTk[r]) = tyUInt64) then
     Result := Ord(tyUInt64)
   else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
@@ -455,6 +460,12 @@ begin
     if (tTk = tyExtended) or (eTk = tyExtended) then Result := Ord(tyExtended)
     else if (tTk = tyDouble) or (eTk = tyDouble) then Result := Ord(tyDouble)
     else Result := Ord(tySingle);
+  end
+  else if (TypeIsInt128(tTk) or TypeIsOrdinal(tTk)) and (TypeIsInt128(eTk) or TypeIsOrdinal(eTk)) and
+          (TypeIsInt128(tTk) or TypeIsInt128(eTk)) then
+  begin
+    if (tTk = tyUInt128) or (eTk = tyUInt128) then Result := Ord(tyUInt128)
+    else Result := Ord(tyInt128);
   end
   else if TypeIsOrdinal(tTk) and TypeIsOrdinal(eTk) then
   begin
@@ -1225,7 +1236,7 @@ begin
       so it's free to repurpose as the "arithmetic shr" sentinel for the
       signed case; the unsigned case keeps the existing `tkIdent` logical
       path unchanged. }
-    if TypeSigned(IntToTypeKind(ASTTk[l])) then
+    if TypeSigned(IntToTypeKind(ASTTk[l])) or (IntToTypeKind(ASTTk[l]) = tyInt128) then
       ivalOp := Ord(tkShr)
     else
       ivalOp := Ord(tkShrLogical);
@@ -7300,6 +7311,16 @@ begin
             (w = 'typeof_unqual') or (w = '__typeof_unqual__') or (w = '__typeof_unqual');
 end;
 
+{ GCC's 128-bit integer spellings: the keyword `__int128` (and `__int128__`)
+  and the predefined typedef names `__int128_t` / `__uint128_t`. Built in rather
+  than real typedefs so `unsigned __int128` composes like `unsigned long`.
+  feature-c-int128-and-attribute-mode }
+function CIsInt128Word(const s: AnsiString): Boolean;
+begin
+  Result := (s = '__int128') or (s = '__int128__') or
+            (s = '__int128_t') or (s = '__uint128_t');
+end;
+
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
@@ -7307,7 +7328,7 @@ begin
     tkRecord { 'struct' }];
   if (not Result) and (CurTok.Kind = tkIdent) then
     Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
-              CIsTypeofWord(CurTok.SVal) or
+              CIsTypeofWord(CurTok.SVal) or CIsInt128Word(CurTok.SVal) or
               { typedef name is a type only if not shadowed by a variable of the
                 same exact name — zlib inftrees.h `typedef ... code;` vs trees.c
                 `int code;` loop var. }
@@ -7319,7 +7340,8 @@ begin
   Result := tk;
   if tk = tyInt16 then Result := tyUInt16
   else if tk = tyInt32 then Result := tyUInt32
-  else if tk = tyInt64 then Result := tyUInt64;
+  else if tk = tyInt64 then Result := tyUInt64
+  else if tk = tyInt128 then Result := tyUInt128;
 end;
 
 { Consume a C declaration-specifier sequence (const, signed/unsigned,
@@ -7700,6 +7722,19 @@ begin
             if base = tyDouble then isFloatTy := True;
             sawBase := True; isTypedef := True;
           end
+          else if CIsInt128Word(CurTok.SVal) then
+          begin
+            { `__int128`, `signed`/`unsigned __int128`, `__int128_t`,
+              `__uint128_t`. x86-64 only so far: the other back ends have no
+              register-pair lowering yet, and taking the type there would drop
+              its high half. feature-c-int128-and-attribute-mode }
+            if TargetArch <> TARGET_X86_64 then
+              Error('C: ' + CurTok.SVal + ' (a 128-bit integer) is supported on x86-64 only so far ' +
+                    '(feature-c-int128-and-attribute-mode); for libtommath, build with -DMP_32BIT');
+            if CurTok.SVal = '__uint128_t' then isUnsigned := True;
+            base := tyInt128; sawBase := True;
+            Next;
+          end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
             Next;
@@ -7774,6 +7809,10 @@ begin
     Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
     Result := base
+  else if base = tyInt128 then
+  begin
+    if isUnsigned then Result := tyUInt128 else Result := tyInt128;
+  end
   else if base = tyBool8 then
     Result := base               { _Bool: 1-byte storage, but 0/1 conversion — see tyBool8 }
   else if base = tyUInt8 then
@@ -13440,11 +13479,15 @@ begin
     TokPos := CScalInitTok[i]; Next;   { CurTok = first expression token }
     sTarget := AllocNode(AN_IDENT);
     ASTIVal[sTarget] := CScalInitSym[i];
-    ASTTk[sTarget] := Ord(tyPointer);
+    { a pointer, or (feature-c-int128-and-attribute-mode) an __int128 }
+    if TypeIsInt128(Syms[CScalInitSym[i]].TypeKind) then
+      ASTTk[sTarget] := Ord(Syms[CScalInitSym[i]].TypeKind)
+    else
+      ASTTk[sTarget] := Ord(tyPointer);
     sExpr := ParseCExpr;
     sAsn := AllocNode(AN_ASSIGN);
     ASTLeft[sAsn] := sTarget; ASTRight[sAsn] := sExpr;
-    ASTTk[sAsn] := Ord(tyPointer);
+    ASTTk[sAsn] := ASTTk[sTarget];
     if not CTryBakeGlobalInit(sAsn) then CompileAST(sAsn);   { CStaticDataMode }
     ASTNodeCount := ASTArenaFloor;
   end;
@@ -14449,12 +14492,13 @@ begin
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
         end
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
-                (baseTk = tyRecord) then
+                ((baseTk = tyRecord) or TypeIsInt128(baseTk)) then
         begin
           { unsized `T x[] = {...}`: size by elements consumed under brace
             elision (a flat 63-scalar list of 7-leaf structs = 9 elements),
-            not by top-level commas. }
-          if recId >= REC_UCLASS_BASE then
+            not by top-level commas. An __int128 element is one leaf, so its
+            top-level count is the answer (feature-c-int128-and-attribute-mode). }
+          if (baseTk = tyRecord) and (recId >= REC_UCLASS_BASE) then
             flatInitCount := CInitCountRecordArrayAt(TokPos, recId)
           else
             flatInitCount := CBraceTopLevelInitCountAt(TokPos);
@@ -14686,6 +14730,30 @@ begin
       recBase := -1;
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
+      { A scalar __int128 global: replay `g = <expr>` at program start through
+        the ordinary expression path, so the value is computed in 128 bits.
+        Folding it here (CEvalConstExpr) is 64-bit, which would sign-extend
+        `= 0xFFFFFFFFFFFFFFFFull` and lose `= (unsigned __int128)1 << 70`.
+        Not baked into .data (CTryBakeGlobalInit refuses a slot wider than 8).
+        feature-c-int128-and-attribute-mode }
+      if (not wasArr) and (idx >= 0) and TypeIsInt128(baseTk) then
+        CDeferScalarPtrInitSkip(idx, initStartTok)
+      else if (CurTok.Kind = tkBegin) and wasArr and (idx >= 0) and TypeIsInt128(baseTk) then
+      begin
+        { ...and an ARRAY of them goes to the recursive initializer walker, as
+          an array of structs does: each element replays as `a[i] = <expr>`.
+          The ordinal array paths below fold every element to 64 bits, and
+          without this the initializer was skipped and the array left zero. }
+        EnsureCAggInitCapacity(CAggInitCount);
+        CAggInitSym[CAggInitCount] := idx;
+        CAggInitTok[CAggInitCount] := TokPos - 1;
+        CAggInitRec[CAggInitCount] := REC_NONE;
+        CAggInitLen[CAggInitCount] := arrLen;
+        CAggInitIsArr[CAggInitCount] := True;
+        Inc(CAggInitCount);
+        SkipBraceBlock;
+      end
+      else
       if (CurTok.Kind = tkBegin) and wasArr and (dimCount >= 2) and
          (baseTk <> tyRecord) and
          (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk) or (baseTk = tyPointer)) and
@@ -22154,6 +22222,7 @@ begin
     2: if uns then Result := tyUInt16 else Result := tyInt16;
     4: if uns then Result := tyUInt32 else Result := tyInt32;
     8: if uns then Result := tyUInt64 else Result := tyInt64;
+    16: if uns then Result := tyUInt128 else Result := tyInt128;   { mode(TI) }
   end;
 end;
 
