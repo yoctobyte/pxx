@@ -8018,6 +8018,7 @@ begin
     record. Depth >= 2 reports the element as Pointer (a `T**` derefs to a
     `T*`). The base (Result) before the stars is the element kind. }
   CTypePtrDepth := 0;
+  CTypeTdPtrFolded := False;
   CTypeElemTk := Ord(tyUnknown);
   CTypeElemRec := REC_NONE;
   CTypePtrBaseTk := Ord(tyUnknown);
@@ -8103,6 +8104,27 @@ begin
         `T * const * p` — without this the declarator name is never reached and
         the variable goes undeclared (read as 0). }
       while CurTok.Kind = tkConst do Next;
+    end;
+    { STARS OVER A POINTER TYPEDEF ADD TO ITS LEVEL. `typedef Glyph *Line;
+      Line *line` is `Glyph **line`, but the stars were counted as if Line were
+      a scalar: depth 1 with a POINTER element and no pointee, so
+      `line[y][x]` strode 8 and yielded a pointer -- sizeof 8, and a Glyph
+      passed by value was loaded through as an address. st's draw() crashed
+      on its first frame; `typedef int *IP; IP *p` gave `p[0][0]` 8 bytes.
+      The typedef's own pointee is known (tdElemTk/Rec), so it becomes the
+      base and the depth gains the typedef's level. A typedef of `T **`
+      (pointer element, depth not recorded) and a function typedef keep the
+      old reading. bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee }
+    if isTypedef and (Result = tyPointer) and (not tdIsFnType) and
+       (CTypePtrElemProcSig < 0) and (tdElemTk <> Ord(tyPointer)) and
+       ((tdElemRec <> REC_NONE) or (tdElemTk <> Ord(tyUnknown))) then
+    begin
+      Inc(CTypePtrDepth);
+      CTypeTdPtrFolded := True;
+      baseRec := tdElemRec;
+      CTypeBaseRec := tdElemRec;
+      CTypePtrBaseTk := tdElemTk;
+      CTypePtrBaseRec := tdElemRec;
     end;
     if CTypePtrDepth >= 2 then
     begin
@@ -8633,6 +8655,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
     hadStar: Boolean;
+    sibTdLvl, sibTdBaseTk, sibTdBaseRec: Integer;   { siblings over a pointer typedef: its extra level and pointee }
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     fpLocNDims: Integer;
@@ -8893,6 +8916,22 @@ begin
   hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
   if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
+  { A POINTER TYPEDEF base (`IP pv = v, *ip;` / `Line *a, *b;`): every
+    sibling's stars sit over the typedef's own level, as the first
+    declarator's do (ParseCDeclType, CTypeTdPtrFolded). The scalar base above
+    is the typedef's POINTEE then, and a sibling without stars is the typedef.
+    bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee }
+  sibTdLvl := 0; sibTdBaseTk := Ord(tyUnknown); sibTdBaseRec := REC_NONE;
+  if hadStar and CTypeTdPtrFolded then
+  begin
+    sibTdLvl := 1; sibTdBaseTk := ptrBaseTk; sibTdBaseRec := ptrBaseRec;
+  end
+  else if (not hadStar) and (baseTk = tyPointer) and (procSig < 0) and
+          (elemTkOrd <> Ord(tyPointer)) and
+          ((elemRec <> REC_NONE) or (elemTkOrd <> Ord(tyUnknown))) then
+  begin
+    sibTdLvl := 1; sibTdBaseTk := elemTkOrd; sibTdBaseRec := elemRec;
+  end;
   { A sibling of a fn-pointer-typedef declarator (`XcmsDIConversionProc *a, *b;`)
   is built from the SAME base type, so it needs the base's call signature:
   the base's own when the first declarator had no star, else the one its star
@@ -8946,7 +8985,21 @@ begin
         Next;
         declPtr := 0;
         while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
-        if declPtr > 0 then
+        if (declPtr > 0) and (sibTdLvl > 0) then
+        begin
+          declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
+          declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+          declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
+        begin
+          declTk := tyPointer; declPtrDepth := 0;
+          declElemTk := sibTdBaseTk; declElemRec := sibTdBaseRec;
+          declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if declPtr > 0 then
         begin
           declTk := tyPointer; declPtrDepth := declPtr;
           declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
@@ -9819,7 +9872,23 @@ begin
       { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
       declPtr := 0;
       while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
-      if declPtr > 0 then
+      if (declPtr > 0) and (sibTdLvl > 0) then
+      begin
+        { over a pointer typedef: see sibTdLvl }
+        declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
+        declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+        declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
+      begin
+        { `IP *a, b;`: b is the typedef itself }
+        declTk := tyPointer; declPtrDepth := 0;
+        declElemTk := sibTdBaseTk; declElemRec := sibTdBaseRec;
+        declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if declPtr > 0 then
       begin
         declTk := tyPointer;
         declPtrDepth := declPtr;
@@ -12820,11 +12889,20 @@ begin
 end;
 
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer;
-var j, depth: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
 begin
   Result := 0;
   depth := 1;
   sawValue := False;
+  { `[k] =` ARRAY DESIGNATORS move the running index (C 6.7.8p17), so the
+    count is the highest index written + 1, not the number of elements: st's
+    `colorname[] = { "black", ..., [255] = 0, "#cccccc", ... }` is 260 long
+    and was sized 20, so its default foreground/background/cursor colours
+    were past the end and st drew no text. CBraceFlatIntInitCountAt has the
+    same rule for flat int lists; this is the general counter's copy, folding
+    the index with the same helper. An index that does not fold leaves the
+    old element count. bug-c-a-designator-in-a-pointer-array-initialiser-is-not-counted }
+  ei := 0; maxSeen := -1;
   j := openIdx + 1;
   { Stop at end of the C SOURCE, not end of the token array. By the time a
     global initializer is counted the RTL may already be APPENDED to Tokens[],
@@ -12846,7 +12924,12 @@ begin
         begin
           if depth = 1 then
           begin
-            if sawValue then Inc(Result);
+            if sawValue then
+            begin
+              Inc(Result);
+              if ei > maxSeen then maxSeen := ei;
+              Inc(ei);
+            end;
             Dec(depth);
           end
           else
@@ -12855,14 +12938,33 @@ begin
       tkComma:
         if depth = 1 then
         begin
-          if sawValue then Inc(Result);
+          if sawValue then
+          begin
+            Inc(Result);
+            if ei > maxSeen then maxSeen := ei;
+            Inc(ei);
+          end;
           sawValue := False;
+        end;
+      tkLBrack:
+        if (depth = 1) and (not sawValue) then
+        begin
+          dIdx := CBraceDesignatorExprIdx(j + 1);
+          if (dIdx >= 0) and (CBraceDesignatorEnd + 1 < TokCount) and
+             (Tokens[CBraceDesignatorEnd + 1].Kind = tkAssign) then
+          begin
+            ei := dIdx;
+            j := CBraceDesignatorEnd + 1;   { land on '='; the loop's Inc(j) steps past it }
+          end
+          else
+            sawValue := True;
         end;
     else
       if depth = 1 then sawValue := True;
     end;
     Inc(j);
   end;
+  if (depth = 0) and (maxSeen + 1 > Result) then Result := maxSeen + 1;
   { An unterminated run is a REFUSAL, not a return value.
 
     This was `if depth <> 0 then Result := -1`, and it had detected the

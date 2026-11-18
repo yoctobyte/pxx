@@ -25,6 +25,8 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
+#include <time.h>
+#include <signal.h>
 
 #define FD_SETSIZE 1024
 
@@ -56,5 +58,11 @@ typedef struct {
    caller to discover it from a loop that never terminates. */
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
            struct timeval *timeout);
+
+/* pselect(2): a timespec timeout the caller keeps (const -- a copy goes to the
+   kernel, which writes the remainder into it) and a signal mask held for the
+   wait. st's main loop waits on its pty and the X connection with it. */
+int pselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+            const struct timespec *timeout, const sigset_t *sigmask);
 
 #endif

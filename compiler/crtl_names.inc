@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  740 functions across 73 headers. }
+  762 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -38,9 +38,9 @@ begin
       ' ctime:time.h ctime_r:time.h ';
     'd': Result :=
       ' daemon:unistd.h difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h ' +
-      ' dlclose:dlfcn.h dlerror:dlfcn.h dlopen:dlfcn.h dlsym:dlfcn.h dn_comp:resolv.h ' +
-      ' dn_expand:resolv.h dn_skipname:resolv.h dprintf:stdio.h drand48:stdlib.h dup:unistd.h ' +
-      ' dup2:unistd.h duplocale:locale.h ';
+      ' dladdr:dlfcn.h dlclose:dlfcn.h dlerror:dlfcn.h dlinfo:dlfcn.h dlopen:dlfcn.h ' +
+      ' dlsym:dlfcn.h dn_comp:resolv.h dn_expand:resolv.h dn_skipname:resolv.h dprintf:stdio.h ' +
+      ' drand48:stdlib.h dup:unistd.h dup2:unistd.h duplocale:locale.h ';
     'e': Result :=
       ' endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h endspent:shadow.h ' +
       ' endusershell:unistd.h endutxent:utmpx.h erand48:stdlib.h ether_aton:netinet/ether.h ' +
@@ -146,9 +146,9 @@ begin
       ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
       ' posix_openpt:stdlib.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
       ' pread:unistd.h preadv:sys/uio.h printf:stdio.h prlimit:sys/resource.h ' +
-      ' pthread_kill:signal.h ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h ' +
-      ' putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h putenv:stdlib.h ' +
-      ' puts:stdio.h pututxline:utmpx.h pwrite:unistd.h pwritev:sys/uio.h ';
+      ' pselect:sys/select.h pthread_kill:signal.h ptsname:stdlib.h ptsname_r:stdlib.h ' +
+      ' putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h ' +
+      ' putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
@@ -214,8 +214,12 @@ begin
       ' vsscanf:stdio.h vsyslog:syslog.h ';
     'w': Result :=
       ' wait:sys/wait.h wait3:sys/wait.h wait4:sys/wait.h waitpid:sys/wait.h wcrtomb:wchar.h ' +
-      ' wcslen:wchar.h wcstombs:stdlib.h wcswidth:wchar.h wctob:wchar.h wctomb:stdlib.h ' +
-      ' wctype:wctype.h wcwidth:wchar.h write:unistd.h writev:sys/uio.h ';
+      ' wcscat:wchar.h wcschr:wchar.h wcscmp:wchar.h wcscpy:wchar.h wcscspn:wchar.h ' +
+      ' wcsdup:wchar.h wcslen:wchar.h wcsncat:wchar.h wcsncmp:wchar.h wcsncpy:wchar.h ' +
+      ' wcsnlen:wchar.h wcspbrk:wchar.h wcsrchr:wchar.h wcsspn:wchar.h wcsstr:wchar.h ' +
+      ' wcstombs:stdlib.h wcswidth:wchar.h wctob:wchar.h wctomb:stdlib.h wctype:wctype.h ' +
+      ' wcwidth:wchar.h wmemchr:wchar.h wmemcmp:wchar.h wmemcpy:wchar.h wmemmove:wchar.h ' +
+      ' wmemset:wchar.h write:unistd.h writev:sys/uio.h ';
   else Result := '';
   end;
 end;

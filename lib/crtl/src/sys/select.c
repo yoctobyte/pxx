@@ -93,3 +93,35 @@ int select(int nfds, fd_set *r, fd_set *w, fd_set *e, struct timeval *tv)
 }
 
 #endif
+
+/* pselect over pselect6: the timeout is COPIED, because the kernel writes the
+   remainder back and the caller's is const; the sixth argument is the
+   {set, size} block (size = the kernel's 8-byte sigset), or null for none. */
+#if (defined(SYS_pselect6) || defined(SYS_pselect6_time64)) && !defined(__xtensa__)
+int pselect(int nfds, fd_set *r, fd_set *w, fd_set *e,
+            const struct timespec *tmo, const sigset_t *mask)
+{
+  struct { const void *set; unsigned long size; } blk;
+  void *pblk = 0;
+  if (mask) { blk.set = mask; blk.size = 8; pblk = &blk; }
+#if defined(SYS_pselect6) && !(defined(__riscv) && (__riscv_xlen == 32))
+  struct { long tv_sec; long tv_nsec; } ts, *pts = 0;
+  if (tmo) { ts.tv_sec = (long)tmo->tv_sec; ts.tv_nsec = (long)tmo->tv_nsec; pts = &ts; }
+  return (int)syscall(SYS_pselect6, (long)nfds, (long)r, (long)w, (long)e,
+                      (long)pts, (long)pblk);
+#else
+  struct { long long tv_sec; long long tv_nsec; } ts, *pts = 0;
+  if (tmo) { ts.tv_sec = (long long)tmo->tv_sec; ts.tv_nsec = (long long)tmo->tv_nsec; pts = &ts; }
+  return (int)syscall(SYS_pselect6_time64, (long)nfds, (long)r, (long)w, (long)e,
+                      (long)pts, (long)pblk);
+#endif
+}
+#else
+int pselect(int nfds, fd_set *r, fd_set *w, fd_set *e,
+            const struct timespec *tmo, const sigset_t *mask)
+{
+  (void)nfds; (void)r; (void)w; (void)e; (void)tmo; (void)mask;
+  errno = ENOSYS;
+  return -1;
+}
+#endif

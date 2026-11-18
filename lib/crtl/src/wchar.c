@@ -18,12 +18,152 @@
  */
 
 #include <wchar.h>
+#include <stdlib.h>
 
 size_t wcslen(const wchar_t *s)
 {
     const wchar_t *p = s;
     while (*p) p++;
     return (size_t)(p - s);
+}
+
+size_t wcsnlen(const wchar_t *s, size_t maxlen)
+{
+    size_t n = 0;
+    while (n < maxlen && s[n]) n++;
+    return n;
+}
+
+wchar_t *wcschr(const wchar_t *s, wchar_t c)
+{
+    for (;; s++) {
+        if (*s == c) return (wchar_t *)s;
+        if (!*s) return 0;
+    }
+}
+
+wchar_t *wcsrchr(const wchar_t *s, wchar_t c)
+{
+    const wchar_t *r = 0;
+    for (;; s++) {
+        if (*s == c) r = s;
+        if (!*s) return (wchar_t *)r;
+    }
+}
+
+/* wchar_t is signed here, as in glibc: the comparison is of the values */
+int wcscmp(const wchar_t *a, const wchar_t *b)
+{
+    while (*a && *a == *b) { a++; b++; }
+    return *a < *b ? -1 : *a > *b;
+}
+
+int wcsncmp(const wchar_t *a, const wchar_t *b, size_t n)
+{
+    for (; n; n--, a++, b++) {
+        if (*a != *b) return *a < *b ? -1 : 1;
+        if (!*a) return 0;
+    }
+    return 0;
+}
+
+wchar_t *wcscpy(wchar_t *d, const wchar_t *s)
+{
+    wchar_t *r = d;
+    while ((*d++ = *s++)) ;
+    return r;
+}
+
+wchar_t *wcsncpy(wchar_t *d, const wchar_t *s, size_t n)
+{
+    size_t i = 0;
+    for (; i < n && s[i]; i++) d[i] = s[i];
+    for (; i < n; i++) d[i] = 0;
+    return d;
+}
+
+wchar_t *wcscat(wchar_t *d, const wchar_t *s)
+{
+    wcscpy(d + wcslen(d), s);
+    return d;
+}
+
+wchar_t *wcsncat(wchar_t *d, const wchar_t *s, size_t n)
+{
+    wchar_t *p = d + wcslen(d);
+    while (n-- && *s) *p++ = *s++;
+    *p = 0;
+    return d;
+}
+
+size_t wcsspn(const wchar_t *s, const wchar_t *accept)
+{
+    size_t n = 0;
+    while (s[n] && wcschr(accept, s[n])) n++;
+    return n;
+}
+
+size_t wcscspn(const wchar_t *s, const wchar_t *reject)
+{
+    size_t n = 0;
+    while (s[n] && !wcschr(reject, s[n])) n++;
+    return n;
+}
+
+wchar_t *wcspbrk(const wchar_t *s, const wchar_t *accept)
+{
+    s += wcscspn(s, accept);
+    return *s ? (wchar_t *)s : 0;
+}
+
+wchar_t *wcsstr(const wchar_t *hay, const wchar_t *needle)
+{
+    size_t n = wcslen(needle);
+    if (!n) return (wchar_t *)hay;
+    for (; *hay; hay++)
+        if (*hay == *needle && !wmemcmp(hay, needle, n)) return (wchar_t *)hay;
+    return 0;
+}
+
+wchar_t *wcsdup(const wchar_t *s)
+{
+    size_t n = wcslen(s) + 1;
+    wchar_t *d = malloc(n * sizeof *d);
+    return d ? wmemcpy(d, s, n) : 0;
+}
+
+wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n)
+{
+    for (; n; n--, s++) if (*s == c) return (wchar_t *)s;
+    return 0;
+}
+
+int wmemcmp(const wchar_t *a, const wchar_t *b, size_t n)
+{
+    for (; n; n--, a++, b++) if (*a != *b) return *a < *b ? -1 : 1;
+    return 0;
+}
+
+wchar_t *wmemcpy(wchar_t *d, const wchar_t *s, size_t n)
+{
+    size_t i;
+    for (i = 0; i < n; i++) d[i] = s[i];
+    return d;
+}
+
+wchar_t *wmemmove(wchar_t *d, const wchar_t *s, size_t n)
+{
+    size_t i;
+    if (d < s) for (i = 0; i < n; i++) d[i] = s[i];
+    else for (i = n; i; i--) d[i - 1] = s[i - 1];
+    return d;
+}
+
+wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n)
+{
+    size_t i;
+    for (i = 0; i < n; i++) d[i] = c;
+    return d;
 }
 
 wint_t towlower(wint_t c)

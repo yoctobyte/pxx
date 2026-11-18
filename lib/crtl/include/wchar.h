@@ -33,6 +33,29 @@ typedef struct {
 
 size_t wcslen(const wchar_t *s);
 
+/* The string and memory family (C99 7.24.4): plain loops over 32-bit units,
+   no locale involved. st's selection code (wcschr over worddelimiters) needed
+   the first of them. */
+size_t   wcsnlen(const wchar_t *s, size_t maxlen);
+wchar_t *wcschr(const wchar_t *s, wchar_t c);
+wchar_t *wcsrchr(const wchar_t *s, wchar_t c);
+int      wcscmp(const wchar_t *a, const wchar_t *b);
+int      wcsncmp(const wchar_t *a, const wchar_t *b, size_t n);
+wchar_t *wcscpy(wchar_t *d, const wchar_t *s);
+wchar_t *wcsncpy(wchar_t *d, const wchar_t *s, size_t n);
+wchar_t *wcscat(wchar_t *d, const wchar_t *s);
+wchar_t *wcsncat(wchar_t *d, const wchar_t *s, size_t n);
+size_t   wcsspn(const wchar_t *s, const wchar_t *accept);
+size_t   wcscspn(const wchar_t *s, const wchar_t *reject);
+wchar_t *wcspbrk(const wchar_t *s, const wchar_t *accept);
+wchar_t *wcsstr(const wchar_t *hay, const wchar_t *needle);
+wchar_t *wcsdup(const wchar_t *s);
+wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n);
+int      wmemcmp(const wchar_t *a, const wchar_t *b, size_t n);
+wchar_t *wmemcpy(wchar_t *d, const wchar_t *s, size_t n);
+wchar_t *wmemmove(wchar_t *d, const wchar_t *s, size_t n);
+wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n);
+
 /* Multibyte conversion and display width in the C locale, which is ASCII:
    bytes 0..127 are their own wide characters and everything above is EILSEQ
    (or -1 for wcwidth). Measured against glibc's C locale: mbrtowc(0xE9) and

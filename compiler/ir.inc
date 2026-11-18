@@ -4542,6 +4542,38 @@ begin
       end;
     end;
   end
+  else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) and
+          (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyPointer) and
+          (SymTR[ASTIVal[ASTLeft[node]]].PtrDepth >= 2) then
+  begin
+    { `p[i] + 1` on a T**: p[i] is a T*, and steps by T -- the AN_DEREF arm
+      above says the same of `*p + 1`. It fell to the 1-byte default, so
+      `(L[0] + 1)->fg` on `Glyph **L` read 1 byte into L[0][0].
+      bug-c-pointer-arithmetic-on-an-indexed-pointer-to-pointer-steps-bytes }
+    if SymTR[ASTIVal[ASTLeft[node]]].PtrDepth > 2 then
+      elemTk := tyPointer
+    else
+    begin
+      elemTk := IntToTypeKind(SymTR[ASTIVal[ASTLeft[node]]].PtrBaseTk);
+      recId := SymTR[ASTIVal[ASTLeft[node]]].PtrBaseRec;
+    end;
+  end
+  else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_FIELD) and
+          (RecFieldPtrElemTk(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                             GetASTIdentName(ASTLeft[node])) = tyPointer) and
+          (RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                              GetASTIdentName(ASTLeft[node])) <> REC_NONE) then
+  begin
+    { ...and the same through a FIELD, `term.line[y] + 1` on `Line *line`
+      (a Glyph**): a field records its pointee pointer and the base record,
+      not its depth, so this reads a pointer element with a record base as
+      one level above that record. }
+    elemTk := tyRecord;
+    recId := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                                GetASTIdentName(ASTLeft[node]));
+  end
   else if ASTKind[node] = AN_ASSIGN then
   begin
     Result := IRPointerStride(ASTLeft[node]);

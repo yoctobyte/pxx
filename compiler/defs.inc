@@ -5608,6 +5608,7 @@ var
                                IS signed, so the two cannot be told apart from the TTypeKind
                                alone -- hence this flag. }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
+  CTypeTdPtrFolded : Boolean;   { the last ParseCDeclType added a POINTER TYPEDEF's own level under its stars (`Line *l` = `Glyph **l`) }
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
   CTypePtrBaseTk : Integer;  { ultimate pointed-at base TTypeKind ordinal when CTypePtrDepth>0 }

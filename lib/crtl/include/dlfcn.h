@@ -40,3 +40,36 @@ int   dlclose(void *handle);
 char *dlerror(void);
 
 #endif
+
+/* GNU extensions, under _GNU_SOURCE as glibc declares them: NetBSD's
+ * rumpuser_dl.c walks the link map with dlinfo(RTLD_DI_LINKMAP). Under
+ * --system-libs these are glibc's own; in crtl's libc-free runtime there is no
+ * link map to hand back, so dlinfo fails through dlerror and dladdr finds
+ * nothing (0), which is the "no information" answer both already have.
+ * Request values and Dl_info's layout match glibc. rump-pxx g40 */
+/* Outside the main guard, with its own: crtl's runtime is one translation
+ * unit, so an earlier plain #include <dlfcn.h> must not hide this section from
+ * a later one under _GNU_SOURCE. */
+#if defined(_GNU_SOURCE) && !defined(_CRTL_DLFCN_GNU)
+#define _CRTL_DLFCN_GNU
+#define RTLD_DI_LMID        1
+#define RTLD_DI_LINKMAP     2
+#define RTLD_DI_CONFIGADDR  3
+#define RTLD_DI_SERINFO     4
+#define RTLD_DI_SERINFOSIZE 5
+#define RTLD_DI_ORIGIN      6
+#define RTLD_DI_PROFILENAME 7
+#define RTLD_DI_PROFILEOUT  8
+#define RTLD_DI_TLS_MODID   9
+#define RTLD_DI_TLS_DATA    10
+
+typedef struct {
+    const char *dli_fname;   /* the object containing the address */
+    void       *dli_fbase;   /* its load base */
+    const char *dli_sname;   /* the nearest symbol */
+    void       *dli_saddr;   /* that symbol's address */
+} Dl_info;
+
+int dlinfo(void *handle, int request, void *arg);
+int dladdr(const void *addr, Dl_info *info);
+#endif

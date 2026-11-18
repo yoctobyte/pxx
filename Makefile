@@ -28755,6 +28755,29 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_sizeof_literal_8_bytes.c $(TESTTMP)/c_szlit826_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_szlit826_gcc32 test/c_sizeof_literal_8_bytes.c
 	tools/expect_same.sh c_szlit826_i386 "$$(timeout 20 $(TESTTMP)/c_szlit826_i386)" "$$(timeout 20 $(TESTTMP)/c_szlit826_gcc32)"
+	./$(COMPILER) --system-libs test/c_dlinfo_linkmap.c $(TESTTMP)/c_dlinfo26_sys 2>/dev/null
+	@gcc -w -o $(TESTTMP)/c_dlinfo26_gcc test/c_dlinfo_linkmap.c
+	tools/expect_same.sh c_dlinfo26_sys "$$(timeout 20 $(TESTTMP)/c_dlinfo26_sys)" "$$(timeout 20 $(TESTTMP)/c_dlinfo26_gcc)"
+	./$(COMPILER) test/c_dlinfo_linkmap.c $(TESTTMP)/c_dlinfo26 2>/dev/null
+	tools/expect_same.sh c_dlinfo26_crtl "$$(timeout 20 $(TESTTMP)/c_dlinfo26 | tr '\n' ' ')" "RTLD_DI_LINKMAP=2 sizeof(Dl_info)=32 linkmap none dlerror set "
+	./$(COMPILER) test/c_ptr_to_ptr_typedef.c $(TESTTMP)/c_pptd26
+	@gcc -w -o $(TESTTMP)/c_pptd26_gcc test/c_ptr_to_ptr_typedef.c
+	tools/expect_same.sh c_pptd26 "$$(timeout 20 $(TESTTMP)/c_pptd26)" "$$(timeout 20 $(TESTTMP)/c_pptd26_gcc)"
+	./$(COMPILER) --target=i386 test/c_ptr_to_ptr_typedef.c $(TESTTMP)/c_pptd26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_pptd26_gcc32 test/c_ptr_to_ptr_typedef.c
+	tools/expect_same.sh c_pptd26_i386 "$$(timeout 20 $(TESTTMP)/c_pptd26_i386)" "$$(timeout 20 $(TESTTMP)/c_pptd26_gcc32)"
+	./$(COMPILER) test/c_crtl_wcs_pselect.c $(TESTTMP)/c_wcspsel26
+	@gcc -w -o $(TESTTMP)/c_wcspsel26_gcc test/c_crtl_wcs_pselect.c
+	tools/expect_same.sh c_wcspsel26 "$$(timeout 20 $(TESTTMP)/c_wcspsel26)" "$$(timeout 20 $(TESTTMP)/c_wcspsel26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_wcs_pselect.c $(TESTTMP)/c_wcspsel26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_wcspsel26_gcc32 test/c_crtl_wcs_pselect.c
+	tools/expect_same.sh c_wcspsel26_i386 "$$(timeout 20 $(TESTTMP)/c_wcspsel26_i386)" "$$(timeout 20 $(TESTTMP)/c_wcspsel26_gcc32)"
+	./$(COMPILER) test/c_designator_ptr_array_count.c $(TESTTMP)/c_desigcnt26
+	@gcc -w -o $(TESTTMP)/c_desigcnt26_gcc test/c_designator_ptr_array_count.c
+	tools/expect_same.sh c_desigcnt26 "$$(timeout 20 $(TESTTMP)/c_desigcnt26)" "$$(timeout 20 $(TESTTMP)/c_desigcnt26_gcc)"
+	./$(COMPILER) --target=i386 test/c_designator_ptr_array_count.c $(TESTTMP)/c_desigcnt26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_desigcnt26_gcc32 test/c_designator_ptr_array_count.c
+	tools/expect_same.sh c_desigcnt26_i386 "$$(timeout 20 $(TESTTMP)/c_desigcnt26_i386)" "$$(timeout 20 $(TESTTMP)/c_desigcnt26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

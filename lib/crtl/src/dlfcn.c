@@ -6,6 +6,7 @@
  * returns NULL. Callers use that to tell "the symbol's value is NULL" from
  * "the lookup failed".
  */
+#define _GNU_SOURCE
 #include <dlfcn.h>
 
 extern void *__pxx_dlopen(const char *name);
@@ -67,4 +68,20 @@ char *dlerror(void)
     if (!dl_pending) return 0;
     dl_pending = 0;
     return dl_msg;
+}
+
+/* No link map and no symbol table in crtl's runtime: dlinfo fails through
+   dlerror, dladdr answers 0 ("no information"), as glibc does for an address
+   it cannot place. */
+int dlinfo(void *handle, int request, void *arg)
+{
+    (void)handle; (void)request; (void)arg;
+    dl_fail("dlinfo: this pxx runtime has no link map", 0);
+    return -1;
+}
+
+int dladdr(const void *addr, Dl_info *info)
+{
+    (void)addr; (void)info;
+    return 0;
 }

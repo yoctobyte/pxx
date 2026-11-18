@@ -2093,6 +2093,86 @@ end;
   /proc/self/exe), writing to a per-process temporary that is renamed into
   place, so parallel links racing to build it are safe. }
 
+{ THE KEY MUST COVER WHAT THE RUNTIME IS BUILT FROM, and that is crtl's
+  sources as much as this binary. Keyed on the binary alone, an edit to
+  lib/crtl (a new function, a fixed body) kept handing out the runtime built
+  before it: the objects compiled against the new headers then failed to link
+  with "undefined reference to 'wcschr'" although crtl defines it.
+  bug-a-the-shared-runtime-cache-ignores-crtl-edits
+
+  The crtl root is found the way the child's include search finds it: PXX_HOME
+  (or pxx.cfg's home), else next to the binary (compiler/ or the stable
+  layout one level deeper). The hash is FNV-1a over every file's relative path
+  and bytes, depth first in getdents order sorted by name, so it is the same
+  for the same tree wherever it sits. 2.3 MB, read once per --link that needs
+  the runtime. }
+procedure ElfRtHashTree(const dir, rel: AnsiString; var h: Int64);
+var names: array of AnsiString;
+    i, j, n, fd: Integer;
+    t, buf, path: AnsiString;
+begin
+  PxxListDir(dir);
+  n := DirEntCount;
+  SetLength(names, n);
+  for i := 0 to n - 1 do names[i] := DirEntNames[i];
+  for i := 1 to n - 1 do              { insertion sort: getdents order is not stable }
+  begin
+    t := names[i]; j := i - 1;
+    while (j >= 0) and (names[j] > t) do begin names[j + 1] := names[j]; Dec(j); end;
+    names[j + 1] := t;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    path := dir + '/' + names[i];
+    t := rel + names[i];
+    for j := 1 to Length(t) do
+      h := ((h xor Ord(t[j])) * 16777619) and $FFFFFFFF;
+    fd := sysopen(path, 65536);       { O_DIRECTORY: a directory, walk it }
+    if fd >= 0 then
+    begin
+      sysclose(fd);
+      ElfRtHashTree(path, rel + names[i] + '/', h);
+    end
+    else
+    begin
+      buf := '';
+      LoadFile(path, buf);
+      for j := 1 to Length(buf) do
+        h := ((h xor Ord(buf[j])) * 16777619) and $FFFFFFFF;
+    end;
+  end;
+end;
+
+function ElfRtHashCrtl: AnsiString;
+var root, hex: AnsiString; h: Int64; i: Integer;
+  function HasRt(const r: AnsiString): Boolean;
+  var fd: Integer; f: AnsiString;
+  begin
+    f := r + 'include/pxx/runtime_all.h';
+    fd := sysopen(f, 0);
+    Result := fd >= 0;
+    if fd >= 0 then sysclose(fd);
+  end;
+begin
+  Result := '';
+  root := PxxGetEnv('PXX_HOME');
+  if root = '' then root := PxxCfgHome;
+  if root <> '' then
+  begin
+    if root[Length(root)] <> '/' then root := root + '/';
+    root := root + 'lib/crtl/';
+  end
+  else if HasRt(ExeDir + '../lib/crtl/') then root := ExeDir + '../lib/crtl/'
+  else if HasRt(ExeDir + '../../lib/crtl/') then root := ExeDir + '../../lib/crtl/'
+  else Exit;
+  h := 2166136261;
+  ElfRtHashTree(root + 'include', 'include/', h);
+  ElfRtHashTree(root + 'src', 'src/', h);
+  hex := '0123456789abcdef';
+  for i := 7 downto 0 do
+    Result := Result + hex[((h shr (i * 4)) and 15) + 1];
+end;
+
 { The process environment as a NUL-separated block -> PChar vector, for the
   child (it needs PXX_HOME and friends to find lib/crtl like we did). }
 function ElfRtHashSelf: AnsiString;
@@ -2270,7 +2350,7 @@ begin
   ElfRtMkdir(dir);
   dir := dir + '/pxx';
   ElfRtMkdir(dir);
-  base := dir + '/rt-' + ElfRtHashSelf + '-' + marker;
+  base := dir + '/rt-' + ElfRtHashSelf + '-' + ElfRtHashCrtl + '-' + marker;
   path := base + '.o';
   if ElfRtFileExists(path) then begin Result := path; Exit; end;
   tmp := base + '.tmp' + AIntToStr(ElfRtGetPid);
