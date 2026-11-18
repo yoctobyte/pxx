@@ -20900,6 +20900,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj test/c_block_extern_list_partly_known.c $(TESTTMP)/c_bextl26.o > /dev/null
 	gcc test/c_block_extern_list_partly_known_main.c $(TESTTMP)/c_bextl26.o -o $(TESTTMP)/c_bextl26
 	tools/expect_same.sh c_bextl26 "$$($(TESTTMP)/c_bextl26)" "42"
+	# a parenthesised block-scope extern name, NetBSD link sets (bug-c-a-parenthesised-block-scope-extern-name-is-not-declared)
+	./$(COMPILER) --emit-obj test/c_block_extern_paren_name.c $(TESTTMP)/c_bextp26.o > /dev/null
+	gcc test/c_block_extern_paren_name_main.c $(TESTTMP)/c_bextp26.o -o $(TESTTMP)/c_bextp26
+	tools/expect_same.sh c_bextp26 "$$($(TESTTMP)/c_bextp26)" "42"
+	# an initialised flexible array member (bug-c-an-initialised-flexible-array-member-is-dropped)
+	./$(COMPILER) test/c_flexible_array_member_init.c $(TESTTMP)/c_faminit26 > /dev/null
+	tools/expect_same.sh c_faminit26 "$$($(TESTTMP)/c_faminit26)" "$$(cat test/c_flexible_array_member_init.expected)"
+	./$(COMPILER) --emit-obj --freestanding --system-libs test/c_flexible_array_member_init.c $(TESTTMP)/c_faminit26_f.o > /dev/null
+	gcc $(TESTTMP)/c_faminit26_f.o -o $(TESTTMP)/c_faminit26_f
+	tools/expect_same.sh c_faminit26_f "$$($(TESTTMP)/c_faminit26_f)" "$$(cat test/c_flexible_array_member_init.expected)"
 	# -fcommon (feature-c-fcommon-tentative-definitions-are-common-symbols)
 	./$(COMPILER) --emit-obj -fcommon test/c_fcommon_tentative.c $(TESTTMP)/c_fcommon26.o > /dev/null
 	gcc test/c_fcommon_tentative_main.c $(TESTTMP)/c_fcommon26.o -o $(TESTTMP)/c_fcommon26

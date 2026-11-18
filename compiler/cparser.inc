@@ -8586,6 +8586,36 @@ begin
   SymAllocSize[idx] := SymAllocSize[grown];
 end;
 
+{ Does record ci end in a flexible array member (`T v[]`, length 0)? }
+function CRecEndsInFam(ci: Integer): Boolean;
+var fi: Integer;
+begin
+  Result := False;
+  if (ci < 0) or (UClsFCount[ci] < 1) then Exit;
+  fi := UClsFBase[ci] + UClsFCount[ci] - 1;
+  Result := UFldIsArray[fi] and (UFldDynDepth[fi] = 0) and (UFldArrLen[fi] = 0);
+end;
+
+{ Grow a global record to `need` bytes: an initialised flexible array member's
+  elements live past sizeof (gcc does the same; the symbol's st_size covers
+  them). Repoints the row at a fresh slot, as CGrowGlobalRecord does. }
+procedure CGrowGlobalBytes(idx, need, align: Integer);
+var grown: Integer;
+    wasData: Boolean;
+begin
+  if (idx < 0) or (need <= SymAllocSize[idx]) then Exit;
+  if Syms[idx].Kind <> skGlobal then Exit;
+  wasData := SymOffIsData(Syms[idx].Offset);   { CStaticDataMode placed it in .data }
+  if align < 8 then align := 8;
+  AllocMinAlign := align;
+  if align > ReqBssAlign then ReqBssAlign := align;
+  grown := AllocArray('', tyUInt8, 0, need - 1);
+  AllocMinAlign := 0;
+  Syms[idx].Offset := Syms[grown].Offset;
+  SymAllocSize[idx] := SymAllocSize[grown];
+  if wasData then CPlaceGlobalInData(idx, align);
+end;
+
 { Wrap a static-local declaration's initializer chain (AN_SEQ head) in a
   one-time guard: `if guard == 0 { guard = 1; <inits> }`. C runs a block-scope
   static's initializer ONCE (load-time semantics), not on every function
@@ -13399,7 +13429,8 @@ end;
 { One record member: descend aggregates (braced = bounded, unbraced = elided
   flat fill), else a scalar leaf. }
 procedure CInitWalkMember(fi: Integer; emit: Boolean);
-var ndims, span0, eb, cons, ci2: Integer;
+var ndims, span0, eb, cons, ci2, es: Integer;
+    isFam: Boolean;
 begin
   if UFldIsArray[fi] and (UFldDynDepth[fi] = 0) then
   begin
@@ -13435,6 +13466,13 @@ begin
         if eb < 1 then eb := 1;
       end;
       cons := 0;
+      { a flexible array member `T v[]` has length 0: every element was
+        skipped as excess, and the object had no room for them (NetBSD
+        ioconf.c's cfiattrdata locator tables read back NULL). Only a static
+        object may initialise one (C99 6.7.2.1, gcc), so it is unbounded only
+        on the global paths, which also make the room (CGrowGlobalBytes). }
+      isFam := CInitFamOpen and (ndims = 1) and (UFldArrLen[fi] = 0);
+      if isFam then span0 := -1;
       if CurTok.Kind = tkBegin then
       begin
         Next;
@@ -13445,6 +13483,14 @@ begin
       else
         CInitWalkArray(UFldTk[fi], UFldRec_[fi], -1, fi, 0, ndims, span0, 0, eb,
                        False, emit, cons);
+      if isFam then
+      begin
+        if UFldTk[fi] = Ord(tyRecord) then es := RecSize(UFldRec_[fi])
+        else if UFldTk[fi] = Ord(tyPointer) then es := TARGET_PTR_SIZE
+        else es := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
+        if UFldOff_[fi] + cons * es > CInitFamMax then
+          CInitFamMax := UFldOff_[fi] + cons * es;
+      end;
     end;
     Dec(CInitPathDepth);
   end
@@ -13838,7 +13884,11 @@ begin
                      True, True, cons);
     end
     else
+    begin
+      CInitFamOpen := True;
       CInitWalkRecord(CAggInitRec[i] - REC_UCLASS_BASE, True, True);
+      CInitFamOpen := False;
+    end;
   end;
   TokPos := savedIdx; Next;
 end;
@@ -14121,6 +14171,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gTdArrLen0, gTdNDims0: Integer; gTdDims0: array[0..MAX_ARR_DIMS - 1] of Integer;
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
     declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
+    famTok: Integer;
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
     gSecPlace: Boolean;     { __attribute__((section)) placed this global (CApplyGlobalSection) }
     gCastK, gCastD: Integer; { the end of a `(T)` cast in front of a function name }
@@ -15328,6 +15379,21 @@ begin
           CAggInitLen[CAggInitCount] := 1;
           CAggInitIsArr[CAggInitCount] := False;
           Inc(CAggInitCount);
+        end;
+        if CRecEndsInFam(recId - REC_UCLASS_BASE) then
+        begin
+          { measure the initialised flexible array member with a dry walk, and
+            give the object its full extent now, while nothing has read its
+            offset (bug-c-an-initialised-flexible-array-member-is-dropped) }
+          famTok := TokPos - 1;
+          Next;
+          CInitPathDepth := 0;
+          CInitFamMax := 0;
+          CInitFamOpen := True;
+          CInitWalkRecord(recId - REC_UCLASS_BASE, True, False);
+          CInitFamOpen := False;
+          TokPos := famTok; Next;
+          CGrowGlobalBytes(idx, CInitFamMax, gAlign);
         end;
         SkipBraceBlock;
         while clWrap > 0 do begin Eat(tkRParen); Dec(clWrap); end;   { close a stripped compound-literal wrapper }
@@ -19188,6 +19254,21 @@ begin
       while (e < TokCount) and (Tokens[e].Kind <> tkSemicolon) and
             (Tokens[e].Kind <> tkBegin) and (Tokens[e].Kind <> tkEnd) do
       begin
+        { `( name )` is a grouping, not a function declarator: NetBSD's
+          __link_set_decl expands to `extern T * const (__start_link_set_x)[]`
+          inside the function. Not hoisted, the name was undeclared -- or,
+          inside rump's prop_kern_init, the loop over the set read both bounds
+          as 0 and initialised no pool.
+          bug-c-a-parenthesised-block-scope-extern-name-is-not-declared }
+        if (Tokens[e].Kind = tkLParen) and (e + 3 < TokCount) and
+           (Tokens[e + 1].Kind = tkIdent) and (Tokens[e + 2].Kind = tkRParen) and
+           (Tokens[e + 3].Kind in [tkSemicolon, tkLBrack, tkComma]) then
+        begin
+          nameTok := e + 1;
+          if FindSym(GetTokenStrFromRaw(Tokens[e + 1].SOffset, Tokens[e + 1].SLen)) < 0 then anyNew := True;
+          e := e + 3;
+          Continue;
+        end;
         if Tokens[e].Kind = tkLParen then hasParen := True;
         if (Tokens[e].Kind = tkIdent) and (Tokens[e + 1].Kind in [tkSemicolon, tkLBrack, tkComma]) then
         begin
