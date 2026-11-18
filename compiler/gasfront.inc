@@ -1100,7 +1100,11 @@ begin
   if op[1] = '$' then
   begin
     GasEval(Copy(op, 2, Length(op) - 1), c, p, m);
-    if (p < 0) and (m < 0) then begin Result := '$' + AIntToStr(c); Exit; end;
+    { AInt64ToStr, not AIntToStr: the value is an Int64, and the 32-bit
+      formatter turned `mov $0x0101010101010101,%r9` into `mov $0x01010101`
+      and `mov $0x80000000,%rax` into a sign-extended -2^31, both silently.
+      NetBSD's memset.S. bug-gas-a-64-bit-immediate-was-truncated-to-32-bits }
+    if (p < 0) and (m < 0) then begin Result := '$' + AInt64ToStr(c); Exit; end;
     if GasPhCount >= 2 then GasError('more than two symbolic operands in one instruction');
     GasPhC[GasPhCount] := c; GasPhP[GasPhCount] := p; GasPhM[GasPhCount] := m;
     GasPhMem[GasPhCount] := False;
@@ -1158,7 +1162,10 @@ begin
   GasEval(disp, c, p, m);
   if (p < 0) and (m < 0) and not (GasCode16 and (spec = '')) then
   begin
-    Result := AIntToStr(c) + spec;
+    { a displacement is a disp32: say so instead of truncating it }
+    if (c < -2147483648) or (c > 4294967295) then
+      GasError('displacement ' + AInt64ToStr(c) + ' does not fit in 32 bits: ' + op);
+    Result := AInt64ToStr(c) + spec;
     Exit;
   end;
   if GasPhCount >= 2 then GasError('more than two symbolic operands in one instruction');

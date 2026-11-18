@@ -76,4 +76,12 @@ diff <(br16 "$W"_16p.o) <(br16 "$W"_16g.o) || fail ".code16 branches differ from
 printf '\t.code16\n\tmovw (%%bx), %%ax\n' > "$W"_bx.s
 out=$("$PXX" --emit-obj "$W"_bx.s "$W"_bx.o 2>&1) && fail "16-bit addressing under .code16 was accepted"
 echo "$out" | grep -q '16-bit addressing' || fail "the .code16 (%bx) refusal does not say why: $out"
+# 5. test/gas_frontend_x64_encodings.s: BYTE-IDENTICAL to gas, instruction by
+#    instruction (NetBSD libc/libkern's shapes, and 64-bit immediates).
+"$PXX" --emit-obj test/gas_frontend_x64_encodings.s "$W"_encp.o > "$W"_encp.log 2>&1 || { cat "$W"_encp.log; fail "pxx could not assemble test/gas_frontend_x64_encodings.s"; }
+as test/gas_frontend_x64_encodings.s -o "$W"_encg.o || fail "gas could not assemble test/gas_frontend_x64_encodings.s"
+objdump -d "$W"_encp.o | grep '^ ' | cut -f2- > "$W"_encp.txt
+objdump -d "$W"_encg.o | grep '^ ' | cut -f2- > "$W"_encg.txt
+[ "$(wc -l < "$W"_encg.txt)" -gt 40 ] || fail "the x64 encodings listing is too short to mean anything"
+diff "$W"_encp.txt "$W"_encg.txt > "$W"_enc.diff || { cat "$W"_enc.diff; fail "x86-64 encodings differ from gas"; }
 echo "check_gas_frontend: OK"

@@ -570,6 +570,28 @@ begin
     AsmOpKind[slot] := AOP_CREG; AsmOpReg[slot] := num; AsmOpSize[slot] := 8;
     Exit;
   end;
+  { %ah %ch %dh %bh by NAME: the same numbering and flag as the %h<n> operand
+    modifier above (base register + 4, size 1, no REX), so every REX-only
+    combination is refused by the same EncHigh8Check. NetBSD's byte_swap_2.S
+    `xchgb %ah,%al`, strcmp.S `movb %cl,%ch`. }
+  if (Length(nm) = 2) and (AsmRegLower(nm[2]) = 'h') then
+  begin
+    num := -1;
+    case AsmRegLower(nm[1]) of
+      'a': num := 0;
+      'c': num := 1;
+      'd': num := 2;
+      'b': num := 3;
+    end;
+    if num >= 0 then
+    begin
+      AsmOpKind[slot] := AOP_REG;
+      AsmOpReg[slot] := num + 4;
+      AsmOpSize[slot] := 1;
+      AsmHigh8Operand := True;
+      Exit;
+    end;
+  end;
   if not AsmRegNum(nm, num, size) then
     Error('C: inline asm template has an unknown register: ' + nm);
   AsmOpKind[slot] := AOP_REG;
@@ -1053,6 +1075,8 @@ begin
            never reaches this list (the zero-operand arm passes it on). }
          or CaseEqual(b,'cmpxchg') or CaseEqual(b,'xadd')
          or CaseEqual(b,'bsf') or CaseEqual(b,'bsr')
+         or CaseEqual(b,'shld') or CaseEqual(b,'shrd')
+         or CaseEqual(b,'movabs')
          or CaseEqual(b,'str') or CaseEqual(b,'sldt')
          or CaseEqual(b,'sgdt') or CaseEqual(b,'sidt') or CaseEqual(b,'rdpid')
          or CaseEqual(b,'fxsave64') or CaseEqual(b,'fxrstor64')
@@ -1081,6 +1105,35 @@ end;
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.
   size 0 means "unsuffixed" -- legal AT&T when a register operand fixes the
   size, and left for AsmOpSizeOf to work out exactly as the Intel path does. }
+{ AT&T's zero/sign extensions carry BOTH widths in the mnemonic: movzbl is
+  movzx r32, r/m8, movslq is movsxd r64, r/m32. Six letters exactly, so the
+  string moves movsb/movsw/movsl/movsq (five) never match. }
+function AttSuffixWidth(c: Char): Integer;
+begin
+  case AsmRegLower(c) of
+    'b': Result := 1;
+    'w': Result := 2;
+    'l': Result := 4;
+    'q': Result := 8;
+  else
+    Result := 0;
+  end;
+end;
+
+function AttMovxSpelling(const mn: AnsiString; var srcSz, dstSz: Integer;
+                         var signed: Boolean): Boolean;
+begin
+  Result := False;
+  if Length(mn) <> 6 then Exit;
+  if not (CaseEqual(Copy(mn, 1, 4), 'movz') or CaseEqual(Copy(mn, 1, 4), 'movs')) then Exit;
+  signed := AsmRegLower(mn[4]) = 's';
+  srcSz := AttSuffixWidth(mn[5]);
+  dstSz := AttSuffixWidth(mn[6]);
+  if (srcSz = 0) or (dstSz = 0) or (srcSz >= dstSz) or (srcSz = 8) then Exit;
+  if (srcSz = 4) and not signed then Exit;   { movzlq does not exist: use movl }
+  Result := True;
+end;
+
 function AttSplitMnemonic(const mn: AnsiString; var base: AnsiString;
                           var size: Integer): Boolean;
 var n: Integer; last: Char; stem: AnsiString;
@@ -1172,6 +1225,7 @@ end;
 procedure AttEncodeOne;
 var mn, base: AnsiString;
     size, nops, i, tmpKind, tmpReg, tmpIdx, tmpScale, tmpSize: Integer;
+    movxSrc, movxDst: Integer; movxSigned: Boolean;
     tmpVal: Int64;
 begin
   AttSkipSpace;
@@ -1318,7 +1372,15 @@ begin
     Exit;
   end;
 
-  if not AttSplitMnemonic(mn, base, size) then
+  movxSrc := 0;
+  if AttMovxSpelling(mn, movxSrc, movxDst, movxSigned) then
+  begin
+    if not movxSigned then base := 'movzx'
+    else if movxSrc = 4 then base := 'movsxd'
+    else base := 'movsx';
+    size := 0;
+  end
+  else if not AttSplitMnemonic(mn, base, size) then
     Error('C: inline asm template has an unsupported instruction: ' + mn);
 
   { Cleared per INSTRUCTION, which is what makes the flag safe to read from
@@ -1365,6 +1427,22 @@ begin
   { in/out carry their width on the DATA register (al/ax/eax) and take the
     port in dx whatever the suffix says, so the suffix-vs-register check below
     would refuse `outb %al, %dx` for the dx it is required to name. }
+  if movxSrc <> 0 then
+  begin
+    if (nops <> 2) or (AsmOpKind[0] <> AOP_REG) then
+      Error('C: inline asm template writes ' + mn + ' without a register destination');
+    if AsmOpSize[0] <> movxDst then
+      Error('C: inline asm template writes ' + mn + ' with a '
+            + AIntToStr(AsmOpSize[0] * 8) + '-bit destination');
+    if AsmOpKind[1] = AOP_REG then
+    begin
+      if AsmOpSize[1] <> movxSrc then
+        Error('C: inline asm template writes ' + mn + ' with a '
+              + AIntToStr(AsmOpSize[1] * 8) + '-bit source');
+    end
+    else
+      AsmOpSize[1] := movxSrc;
+  end;
   if CaseEqual(base,'in') or CaseEqual(base,'out') then size := 0;
   if size <> 0 then
     for i := 0 to nops - 1 do
@@ -1391,6 +1469,16 @@ begin
               + AIntToStr(AsmOpSize[i] * 8) + '-bit register');
     end;
 
+  { movabs $imm64, %r64: the mov encoder already picks B8+r imm64 whenever
+    the value needs it (and the shorter C7 form when it does not, with the
+    same result). The moffs form (movabs addr, %al/%rax) is not a template
+    shape anything has asked for. }
+  if CaseEqual(base,'movabs') then
+  begin
+    if (nops <> 2) or (AsmOpKind[0] <> AOP_REG) or (AsmOpKind[1] <> AOP_IMM) then
+      Error('C: inline asm template uses movabs other than $imm, %reg: ' + mn);
+    base := 'mov';
+  end;
   if not AttEmitInstr(base, nops) then
     Error('C: inline asm template has an unsupported instruction: ' + mn);
   AttNoteRipFix;

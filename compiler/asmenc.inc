@@ -1048,7 +1048,7 @@ end;
 { Encode a single instruction whose mnemonic is in mn and whose operands have
   already been parsed into AsmOp[0..nops-1]. Returns False if mnemonic unknown. }
 function AsmDispatch(const mn: AnsiString; nops: Integer): Boolean;
-var opSize, rf, rh, ext, cc: Integer; ssePfx, sseOp, sseSt: Integer; tail: AnsiString;
+var opSize, rf, rh, ext, cc, r2: Integer; ssePfx, sseOp, sseSt: Integer; tail: AnsiString;
 begin
   Result := True;
   if AsmSystemOp(mn, nops) then Exit;
@@ -1292,15 +1292,42 @@ begin
   if CaseEqual(mn,'xor') then begin AsmEncodeALU($31,$33,6); Exit; end;
   if CaseEqual(mn,'cmp') then begin AsmEncodeALU($39,$3B,7); Exit; end;
 
-  { test: only r/m,reg (85). }
+  { test r/m, reg (84/85) and test r/m, imm (F6 /0 ib, F7 /0 iw/id).
+    test is commutative, so a register in EITHER slot is the reg field: AT&T
+    `test (%rax),%dl` arrives with the register in slot 0. The immediate form
+    is NetBSD libc's alignment check, `testb $7,%dil` (strlen.S, memset.S).
+    feature-gas-netbsd-libc-string-and-atomic-sources }
   if CaseEqual(mn,'test') then
   begin
-    if (AsmOpKind[1] <> AOP_REG) then Error('asm: test needs a register source');
-    opSize := AsmOpSize[1];
-    rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
-    AsmPrefixAndREX(opSize, rf, rh, 0);
+    if AsmOpKind[1] = AOP_IMM then
+    begin
+      opSize := AsmOpSizeOf(1);
+      { al/ax/eax/rax: the short accumulator form A8 ib / A9 iz, as gas emits }
+      if (AsmOpKind[0] = AOP_REG) and (AsmOpReg[0] = 0) and not AsmHigh8Operand then
+      begin
+        if opSize = 2 then AsmB($66);
+        if opSize = 8 then AsmB($48);
+        if opSize = 1 then AsmB($A8) else AsmB($A9);
+      end
+      else
+      begin
+        AsmPrefixAndREX(opSize, 0, 0, 0);
+        if opSize = 1 then AsmB($F6) else AsmB($F7);
+        AsmModRM(0, 0);
+      end;
+      if opSize = 1 then AsmB(Integer(AsmOpVal[1] and $FF))
+      else if opSize = 2 then AsmI16(AsmOpVal[1])
+      else AsmI32(AsmOpVal[1]);
+      Exit;
+    end;
+    if AsmOpKind[1] = AOP_REG then begin r2 := 1; ext := 0; end
+    else if AsmOpKind[0] = AOP_REG then begin r2 := 0; ext := 1; end
+    else Error('asm: test needs a register or an immediate operand');
+    opSize := AsmOpSize[r2];
+    rf := AsmOpReg[r2]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, ext);
     if opSize = 1 then AsmB($84) else AsmB($85);
-    AsmModRM(rf, 0);
+    AsmModRM(rf, ext);
     Exit;
   end;
 
@@ -1380,6 +1407,99 @@ begin
     Exit;
   end;
 
+  { imul reg, r/m, imm (6B /r ib, 69 /r iw/id), and the two-operand
+    `imul reg, imm` that is the same instruction with r/m = reg. NetBSD's
+    memset.S `imul $0x80,%r8,%r9`. }
+  if CaseEqual(mn,'imul') and (((nops = 3) and (AsmOpKind[2] = AOP_IMM)) or
+                               ((nops = 2) and (AsmOpKind[1] = AOP_IMM))) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: imul dest must be register');
+    if nops = 2 then
+    begin
+      AsmOpKind[2] := AOP_IMM; AsmOpVal[2] := AsmOpVal[1];
+      AsmOpKind[1] := AOP_REG; AsmOpReg[1] := AsmOpReg[0]; AsmOpSize[1] := AsmOpSize[0];
+    end;
+    opSize := AsmOpSize[0];
+    if opSize = 1 then Error('asm: imul has no 8-bit immediate form');
+    rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, 1);
+    if (AsmOpVal[2] >= -128) and (AsmOpVal[2] <= 127) then
+    begin
+      AsmB($6B); AsmModRM(rf, 1); AsmB(Integer(AsmOpVal[2] and $FF));
+    end
+    else
+    begin
+      AsmB($69); AsmModRM(rf, 1);
+      if opSize = 2 then AsmI16(AsmOpVal[2]) else AsmI32(AsmOpVal[2]);
+    end;
+    Exit;
+  end;
+
+  { movzx / movsx reg, r/m8|16 (0F B6/B7, 0F BE/BF) and movsxd reg64, r/m32
+    (REX.W 63): AT&T's movzbl, movzbq, movzwl, movsbq, movslq, ... arrive
+    here with the source width on slot 1 (asmatt.inc AttMovxSpelling).
+    A register source goes through x64_movx_reg_reg, which owns the
+    spl/bpl/sil/dil REX rule; a memory source is the plain reg, r/m shape.
+    NetBSD's strchr.S/strrchr.S `movzbq %sil,%rcx`. }
+  if (CaseEqual(mn,'movzx') or CaseEqual(mn,'movsx') or CaseEqual(mn,'movsxd')) and (nops = 2) then
+  begin
+    if AsmOpKind[0] <> AOP_REG then Error('asm: ' + mn + ' dest must be a register');
+    opSize := AsmOpSize[0];
+    r2 := AsmOpSize[1];
+    if not ((r2 = 1) or (r2 = 2) or (r2 = 4)) or (r2 >= opSize) then
+      Error('asm: ' + mn + ' needs a source narrower than its destination');
+    if (r2 = 4) and not CaseEqual(mn,'movsxd') then
+      Error('asm: ' + mn + ' of a 32-bit source is movsxd (signed) or a plain mov (unsigned)');
+    if AsmOpKind[1] = AOP_REG then
+    begin
+      EncToAsmBuffer := True;
+      x64_movx_reg_reg(opSize, r2, AsmOpReg[0], AsmOpReg[1], not CaseEqual(mn,'movzx'));
+      EncToAsmBuffer := False;
+      Exit;
+    end;
+    rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, 1);
+    if r2 = 4 then AsmB($63)
+    else
+    begin
+      AsmB($0F);
+      if CaseEqual(mn,'movzx') then
+      begin if r2 = 1 then AsmB($B6) else AsmB($B7); end
+      else
+      begin if r2 = 1 then AsmB($BE) else AsmB($BF); end;
+    end;
+    AsmModRM(rf, 1);
+    Exit;
+  end;
+
+  { shld/shrd r/m, reg, imm8 (0F A4/AC ib) or ..., cl (0F A5/AD). AT&T's
+    two-operand `shld %eax,%edx` is the cl form. random.S's Park-Miller step,
+    `shld $1,%eax,%edx`. }
+  if (CaseEqual(mn,'shld') or CaseEqual(mn,'shrd')) and ((nops = 2) or (nops = 3)) then
+  begin
+    if AsmOpKind[1] <> AOP_REG then Error('asm: ' + mn + ' source must be a register');
+    if (nops = 3) and not ((AsmOpKind[2] = AOP_IMM) or
+       ((AsmOpKind[2] = AOP_REG) and (AsmOpReg[2] = 1) and (AsmOpSize[2] = 1))) then
+      Error('asm: ' + mn + ' count must be an immediate or %cl');
+    opSize := AsmOpSize[1];
+    if opSize = 1 then Error('asm: ' + mn + ' has no 8-bit form');
+    rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
+    AsmPrefixAndREX(opSize, rf, rh, 0);
+    AsmB($0F);
+    if (nops = 3) and (AsmOpKind[2] = AOP_IMM) then
+    begin
+      if CaseEqual(mn,'shld') then AsmB($A4) else AsmB($AC);
+      AsmModRM(rf, 0);
+      AsmB(Integer(AsmOpVal[2] and $FF));
+    end
+    else
+    begin
+      if CaseEqual(mn,'shld') then AsmB($A5) else AsmB($AD);
+      AsmModRM(rf, 0);
+    end;
+    Exit;
+  end;
+
   { imul reg, r/m  (0F AF) }
   if CaseEqual(mn,'imul') and (nops = 2) then
   begin
@@ -1425,6 +1545,8 @@ begin
   if CaseEqual(mn,'not') then ext := 2;
   if CaseEqual(mn,'neg') then ext := 3;
   if CaseEqual(mn,'mul') then ext := 4;
+  { one-operand imul: rdx:rax = rax * r/m, signed (random.S `imull randseed(%rip)`) }
+  if CaseEqual(mn,'imul') and (nops = 1) then ext := 5;
   if CaseEqual(mn,'idiv') then ext := 7;
   if CaseEqual(mn,'div') then ext := 6;
   if ext >= 0 then
