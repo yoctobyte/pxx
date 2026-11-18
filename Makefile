@@ -32923,6 +32923,9 @@ test-i386: $(COMPILER)
 	! $(TESTTMP)/tgwr > $(TESTTMP)/tgwr.out 2> $(TESTTMP)/tgwr.log
 	grep -q "Unhandled exception: Exception: frame chain is intact" $(TESTTMP)/tgwr.log
 	tools/expect_same.sh goto_within_exception_region_out "$$(cat $(TESTTMP)/tgwr.out)" "$$(printf 'inside 5\nover 10 20\nhandler 7')"
+	# a label inside a finally body (bug-a-a-label-inside-a-finally-body-is-a-duplicate-ir-label)
+	./$(COMPILER) test/test_goto_label_in_finally_body.pas $(TESTTMP)/tglfin > /dev/null
+	tools/expect_same.sh goto_label_in_finally_body "$$($(TESTTMP)/tglfin)" "$$(cat test/test_goto_label_in_finally_body.expected)"
 	# The unwinder's stale-frame walk, which had no row: a skipped frame's LINK
 	# is dead memory too, and following it blind faulted, so the program died
 	# after the skip message but before the "Unhandled exception" line. Built

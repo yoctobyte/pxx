@@ -13,8 +13,8 @@ summary: >
 track: A
 type: bug
 prio: 20
-owner:
-status: open
+owner: claude-dupwt
+status: done
 ---
 
 ## Reproduce
@@ -49,3 +49,14 @@ The fix is to give each lowering of the body its own ids for the labels that
 live INSIDE it (and only those -- a goto out of the body to an outer label must
 keep the outer id, though that goto is now refused anyway). Found while writing
 `test/test_goto_within_exception_region.pas`, which leaves this case out and says so.
+
+## Fixed (2026-11-18)
+
+`IRFreshInnerLabels` (ir.inc) clears the GotoLabelIRId of every label the
+finally body declares, before each of the three lowerings: the normal path,
+the handler, and IRLowerCleanupToDepth's copy per crossing exit, break or
+continue. Each copy mints its own ids, and gotos within a copy follow them.
+Labels outside the body keep their ids. The ticket's case gives 4. Copies made
+by `continue` and `exit` with a backward goto give 24, and a goto inside a
+finally that an exception runs gives 6. All match FPC, at -O0 and -O2.
+test/test_goto_label_in_finally_body.pas, row goto_label_in_finally_body.

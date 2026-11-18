@@ -1416,6 +1416,30 @@ end;
   finalizer -- all passed while the generator for-in leaked one instance per
   early exit.
   bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in }
+{ A `finally` body is lowered once per path that runs it: fall-through, the
+  exception handler, and once more per exit/break/continue that crosses it
+  (IRLowerCleanupToDepth). A `label:` inside it resolved to the same
+  GotoLabelIRId every time, so the second copy said "duplicate IR label
+  definition". Clearing the ids of the labels the body DECLARES before each
+  copy gives each copy its own; a goto in that copy then mints or reuses the
+  fresh id. Labels outside the body keep theirs (a goto into a finally body
+  from outside is refused by IRCheckGotoRegion).
+  bug-a-a-label-inside-a-finally-body-is-a-duplicate-ir-label }
+procedure IRFreshInnerLabels(node: Integer);
+var i: Integer;
+begin
+  if node < 0 then Exit;
+  if (ASTKind[node] = AN_LABEL) and (ASTSOffset[node] <> -1) then
+    for i := GotoLabelBase to GotoLabelCount - 1 do
+      if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], ASTSOffset[node], ASTSLen[node]) then
+      begin
+        GotoLabelIRId[i] := -1;
+        Break;
+      end;
+  IRFreshInnerLabels(ASTChildLeft(node));
+  IRFreshInnerLabels(ASTChildRight(node));
+end;
+
 procedure IRLowerCleanupToDepth(targetDepth: Integer);
 var current, bodyNode, savedDepth, lastNode: Integer;
 begin
@@ -1437,6 +1461,7 @@ begin
     begin
       savedDepth := ExceptionCodegenDepth;
       ExceptionCodegenDepth := current - 1;
+      IRFreshInnerLabels(bodyNode);
       lastNode := IRLowerAST(bodyNode);
       IRMarkStatementNode(lastNode);
       ExceptionCodegenDepth := savedDepth;
@@ -20428,6 +20453,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       Dec(ExceptionCodegenDepth);
 
       last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+      IRFreshInnerLabels(ASTRight[node]);
       last := IRLowerAST(ASTRight[node]);
       IRMarkStatementNode(last);
       last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
@@ -20436,6 +20462,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
       savedDepth := ExceptionCodegenDepth;
       ExceptionCodegenDepth := savedDepth;
+      IRFreshInnerLabels(ASTRight[node]);
       last := IRLowerAST(ASTRight[node]);
       IRMarkStatementNode(last);
       ExceptionCodegenDepth := savedDepth;
