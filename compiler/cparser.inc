@@ -16902,6 +16902,290 @@ begin
   TokPos := s0; Next;
 end;
 
+{ K&R (OLD-STYLE) FUNCTION DEFINITIONS, C89 6.7.1 / C99 6.9.1:
+
+    static int f(a, b, c) char *a; register int b; BODY
+
+  were refused ("stray token at top level"), and old X server code (TinyX's
+  mi/, dix/, Xext/: ~40 files) is written that way. The definition is
+  rewritten in the token stream, once, before pass 1, into the prototype form
+  every later pass already handles:
+
+    static int f(char *a, register int b, int c) BODY
+
+  Each declaration's specifiers are copied in front of each of its
+  declarators; a parameter with no declaration is `int` (C89's implicit int).
+  Only this exact shape fires: at file scope, a name, `(`, a non-empty list of
+  plain identifiers, `)`, then declarations up to the body's opening brace, each
+  declarator naming one listed parameter once. Anything else (a prototype, an
+  attribute, a struct body among the declarations) is left alone.
+
+  KNOWN DIFFERENCE: a K&R `float` parameter is passed as a double by the
+  default argument promotions; after the rewrite it is a prototyped float. It
+  matches whenever a prototype is in scope (X's headers have them), which is
+  also the only case gcc accepts without complaint.
+  feature-c-k-and-r-function-definitions }
+function CKnRName(i: Integer): AnsiString;
+begin
+  Result := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+end;
+
+function CKnRIsQual(const s: AnsiString): Boolean;
+begin
+  Result := (s = 'const') or (s = 'volatile') or (s = 'restrict') or
+            (s = '__restrict') or (s = '__restrict__') or (s = '__const') or
+            (s = '__volatile__');
+end;
+
+function CKnROpens(k: TTokenKind): Integer;
+begin
+  Result := 0;
+  if (k = tkLParen) or (k = tkLBrack) then Result := 1
+  else if (k = tkRParen) or (k = tkRBrack) then Result := -1;
+end;
+
+function CRewriteKnRDefs(fromIdx, toIdx: Integer): Integer;
+var i, j, k, m, depth, pdepth, np, brIdx, a, b, c, e, ds, pd, q, pi, n, cnt,
+    specA, specB: Integer;
+    ok, haveInt: Boolean;
+    names: array of AnsiString;
+    pStart, pEnd, pSpecA, pSpecB: array of Integer;
+    out: array of TRawToken;
+    intRaw: TRawToken;
+    nm: AnsiString;
+  procedure Put(const t: TRawToken);
+  begin
+    if n >= Length(out) then SetLength(out, n * 2 + 16);
+    out[n] := t; Inc(n);
+  end;
+begin
+  Result := 0;
+  haveInt := False;
+  for i := fromIdx to toIdx do
+    if (not haveInt) and (Tokens[i].Kind = tkInteger_T) then   { C's `int` }
+    begin
+      intRaw := Tokens[i]; haveInt := True;
+    end;
+  depth := 0; pdepth := 0;
+  i := fromIdx;
+  while i + 4 <= toIdx do
+  begin
+    ok := (depth = 0) and (pdepth = 0) and (Tokens[i].Kind = tkIdent) and
+          (Tokens[i + 1].Kind = tkLParen) and (Tokens[i + 2].Kind = tkIdent);
+    j := i + 2; np := 0;
+    if ok then
+    begin
+      { the identifier list }
+      while (j + 1 <= toIdx) and (Tokens[j].Kind = tkIdent) and
+            (Tokens[j + 1].Kind = tkComma) do j := j + 2;
+      ok := (j + 1 <= toIdx) and (Tokens[j].Kind = tkIdent) and
+            (Tokens[j + 1].Kind = tkRParen);
+      if ok then
+      begin
+        Inc(j);                                   { j = the `)` }
+        np := (j - i - 1) div 2;
+        { a declaration starts here: `int`, `struct`, `register`, a typedef
+          name... (C base types are their own token kinds, not tkIdent) }
+        nm := CKnRName(j + 1);
+        ok := not ((Tokens[j + 1].Kind = tkSemicolon) or (Tokens[j + 1].Kind = tkComma) or
+                   (Tokens[j + 1].Kind = tkBegin) or (Tokens[j + 1].Kind = tkLParen) or
+                   (Tokens[j + 1].Kind = tkRParen) or (Tokens[j + 1].Kind = tkAssign) or
+                   (Tokens[j + 1].Kind = tkLBrack) or (Tokens[j + 1].Kind = tkEOF)) and
+              (nm <> '__attribute__') and (nm <> '__attribute') and (nm <> 'asm') and
+              (nm <> '__asm__') and (nm <> '__asm');
+      end;
+    end;
+    brIdx := -1;
+    if ok then
+    begin
+      { declarations up to the body's opening brace: no braces, no `=` }
+      k := j + 1; pd := 0;
+      while ok and (brIdx < 0) and (k <= toIdx) do
+      begin
+        if (Tokens[k].Kind = tkBegin) and (pd = 0) then brIdx := k
+        else if (Tokens[k].Kind = tkBegin) or (Tokens[k].Kind = tkEnd) or
+                (Tokens[k].Kind = tkAssign) then ok := False
+        else pd := pd + CKnROpens(Tokens[k].Kind);
+        Inc(k);
+      end;
+      ok := ok and (brIdx > j + 1) and (Tokens[brIdx - 1].Kind = tkSemicolon);
+    end;
+    if ok then
+    begin
+      SetLength(names, np); SetLength(pStart, np); SetLength(pEnd, np);
+      SetLength(pSpecA, np); SetLength(pSpecB, np);
+      for m := 0 to np - 1 do
+      begin
+        names[m] := CKnRName(i + 2 + 2 * m);
+        pStart[m] := -1; pEnd[m] := -1; pSpecA[m] := -1; pSpecB[m] := -1;
+      end;
+      a := j + 1;
+      while ok and (a < brIdx) do
+      begin
+        b := a; pd := 0;                          { the statement [a, b), b = `;` }
+        while (b < brIdx) and not ((Tokens[b].Kind = tkSemicolon) and (pd = 0)) do
+        begin
+          pd := pd + CKnROpens(Tokens[b].Kind); Inc(b);
+        end;
+        specB := -1; specA := a;
+        c := a;
+        while ok and (c < b) do
+        begin
+          e := c; pd := 0;                        { the declarator [c, e) }
+          while (e < b) and not ((Tokens[e].Kind = tkComma) and (pd = 0)) do
+          begin
+            pd := pd + CKnROpens(Tokens[e].Kind); Inc(e);
+          end;
+          q := -1; pi := -1;
+          for k := c to e - 1 do
+            if (q < 0) and (Tokens[k].Kind = tkIdent) then
+            begin
+              nm := CKnRName(k);
+              for m := 0 to np - 1 do
+                if (q < 0) and (names[m] = nm) then begin q := k; pi := m; end;
+            end;
+          if (q < 0) or (pStart[pi] >= 0) then ok := False
+          else
+          begin
+            if specB < 0 then
+            begin
+              ds := q;
+              while (ds > c) and ((Tokens[ds - 1].Kind = tkStar) or
+                    (Tokens[ds - 1].Kind = tkLParen) or
+                    (Tokens[ds - 1].Kind = tkConst) or
+                    ((Tokens[ds - 1].Kind = tkIdent) and CKnRIsQual(CKnRName(ds - 1)))) do
+                Dec(ds);
+              if ds = c then ok := False;         { no specifiers at all }
+              specB := ds; c := ds;
+            end;
+            pSpecA[pi] := specA; pSpecB[pi] := specB;
+            pStart[pi] := c; pEnd[pi] := e;
+          end;
+          c := e + 1;
+        end;
+        a := b + 1;
+      end;
+      for m := 0 to np - 1 do
+        if (pStart[m] < 0) and (not haveInt) then ok := False;
+    end;
+    if ok then
+    begin
+      n := 0;
+      Put(Tokens[i + 1]);                         { ( }
+      for m := 0 to np - 1 do
+      begin
+        if m > 0 then Put(Tokens[i + 3]);         { , (the list's own) }
+        if pStart[m] >= 0 then
+        begin
+          for k := pSpecA[m] to pSpecB[m] - 1 do Put(Tokens[k]);
+          for k := pStart[m] to pEnd[m] - 1 do Put(Tokens[k]);
+        end
+        else
+        begin
+          Put(intRaw); Put(Tokens[i + 2 + 2 * m]);
+        end;
+      end;
+      Put(Tokens[j]);                             { ) }
+      cnt := brIdx - i - 1;
+      RemoveTokens(i + 1, cnt);
+      InsertTokens(i + 1, out, n);
+      Result := Result + n - cnt;
+      toIdx := toIdx + n - cnt;
+      i := i + 1 + n;                             { the body's opening brace }
+    end
+    else
+    begin
+      case Tokens[i].Kind of
+        tkBegin: Inc(depth);
+        tkEnd: if depth > 0 then Dec(depth);
+        tkLParen: Inc(pdepth);
+        tkRParen: if pdepth > 0 then Dec(pdepth);
+      end;
+      Inc(i);
+    end;
+  end;
+end;
+
+{ A BRACED STRING INITIALISER for a char array, C11 6.7.9p14 (the literal
+  may be "optionally enclosed in braces"):
+
+    static const char Names[] = LBRACE "alice blue\0" "AliceBlue\0" ... RBRACE;
+
+  came out 1 byte long and empty (a sized `char C[8] = LBRACE "xyz" RBRACE`
+  was empty too), so TinyX's colour table, OsLookupColor, matched no name, and
+  st died on "could not allocate color 'black'". The braces are dropped in the
+  token stream, once, before pass 1, which leaves the unbraced spelling every
+  initialiser path already handles. It fires only when the declarator is
+  NAME[...] (one bracket group, no `*`) and the specifiers back to the
+  declaration start are char / signed / unsigned, qualifiers and storage
+  classes. So an array of pointers (`char *p[]`), a 2-D array (`char a[][4]`)
+  and a struct keep their braces.
+  bug-c-a-braced-string-initialiser-for-a-char-array-is-empty }
+function CBracedStrSpecOk(i: Integer): Boolean;
+var nm: AnsiString;
+begin
+  Result := Tokens[i].Kind in [tkChar_T, tkConst, tkCSigned, tkCUnsigned];
+  if (not Result) and (Tokens[i].Kind = tkIdent) then
+  begin
+    nm := CKnRName(i);
+    Result := (nm = 'static') or (nm = 'unsigned') or (nm = 'signed') or
+              (nm = 'volatile') or (nm = 'extern') or (nm = 'register') or
+              (nm = '__const');
+  end;
+end;
+
+function CRewriteBracedCharStrInit(fromIdx, toIdx: Integer): Integer;
+var i, j, k, e, nm, lb: Integer;
+    sawChar, ok: Boolean;
+begin
+  Result := 0;
+  i := fromIdx + 1;
+  while i + 3 <= toIdx do
+  begin
+    ok := (Tokens[i].Kind = tkAssign) and (Tokens[i + 1].Kind = tkBegin) and
+          (Tokens[i + 2].Kind = tkString) and (Tokens[i - 1].Kind = tkRBrack);
+    e := -1;
+    if ok then
+    begin
+      { the literals, an optional comma, then the closing brace }
+      j := i + 2;
+      while (j <= toIdx) and (Tokens[j].Kind = tkString) do Inc(j);
+      if (j <= toIdx) and (Tokens[j].Kind = tkComma) then e := j + 1 else e := j;
+      ok := (e <= toIdx) and (Tokens[e].Kind = tkEnd);
+    end;
+    if ok then
+    begin
+      { NAME [ ... ] : exactly one bracket group }
+      lb := i - 2;
+      while (lb > fromIdx) and (Tokens[lb].Kind <> tkLBrack) and
+            (Tokens[lb].Kind <> tkRBrack) and (Tokens[lb].Kind <> tkSemicolon) do Dec(lb);
+      ok := (Tokens[lb].Kind = tkLBrack) and (lb - 1 > fromIdx) and
+            (Tokens[lb - 1].Kind = tkIdent);
+      if ok then
+      begin
+        nm := lb - 1;
+        k := nm - 1; sawChar := False;
+        while (k >= fromIdx) and CBracedStrSpecOk(k) do
+        begin
+          if Tokens[k].Kind = tkChar_T then sawChar := True;
+          Dec(k);
+        end;
+        ok := sawChar and ((k < fromIdx) or (Tokens[k].Kind = tkSemicolon) or
+              (Tokens[k].Kind = tkBegin) or (Tokens[k].Kind = tkEnd));
+      end;
+    end;
+    if ok then
+    begin
+      { drop the closing brace (and a trailing comma), then the opening one }
+      RemoveTokens(j, e - j + 1);
+      RemoveTokens(i + 1, 1);
+      Result := Result - (e - j + 1) - 1;
+      toIdx := toIdx - (e - j + 1) - 1;
+    end;
+    Inc(i);
+  end;
+end;
+
 { FILE-SCOPE asm(...). It was skipped token by token like an attribute, so
   NetBSD's __strong_alias / __weak_alias (`.weak a` + `a = b`, ~1000 in rump)
   produced no symbol and the link failed or bound elsewhere -- and anything
@@ -17164,6 +17448,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
     xtInitThunk: Boolean;           { hosted xtensa object: .init_array thunk }
     ci, finiDtors: Integer;         { C constructors/destructors in the thunks }
+    knrDelta: Integer;              { token-count change of the K&R rewrite }
     finiRunner: Boolean;
 begin
   CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
@@ -18149,6 +18434,15 @@ begin
   CAggInitCount := 0;
   CScalInitCount := 0;
   CHasWideBitfield := False;
+
+  { K&R definitions become prototype definitions first (feature-c-k-and-r-function-definitions) }
+  knrDelta := CRewriteKnRDefs(firstIdx, userTokEnd);
+  knrDelta := knrDelta + CRewriteBracedCharStrInit(firstIdx, userTokEnd + knrDelta);
+  if knrDelta <> 0 then
+  begin
+    userTokEnd := userTokEnd + knrDelta;
+    TokPos := firstIdx; Next;
+  end;
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;

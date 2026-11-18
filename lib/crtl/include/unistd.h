@@ -140,6 +140,7 @@ int pipe(int fds[2]);
 unsigned int sleep(unsigned int seconds);
 int usleep(unsigned int usec);
 int getpagesize(void);
+int getdtablesize(void);
 
 /* 1 when fd refers to a terminal (the TCGETS ioctl), 0 otherwise. */
 int isatty(int fd);

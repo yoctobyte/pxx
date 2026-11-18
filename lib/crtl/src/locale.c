@@ -10,6 +10,28 @@ struct lconv *localeconv(void) {
   __crtl_lconv.decimal_point = ".";
   __crtl_lconv.thousands_sep = "";
   __crtl_lconv.grouping = "";
+  /* the "C" locale's monetary part: empty strings, CHAR_MAX (127) numbers */
+  __crtl_lconv.int_curr_symbol = "";
+  __crtl_lconv.currency_symbol = "";
+  __crtl_lconv.mon_decimal_point = "";
+  __crtl_lconv.mon_thousands_sep = "";
+  __crtl_lconv.mon_grouping = "";
+  __crtl_lconv.positive_sign = "";
+  __crtl_lconv.negative_sign = "";
+  __crtl_lconv.int_frac_digits = 127;
+  __crtl_lconv.frac_digits = 127;
+  __crtl_lconv.p_cs_precedes = 127;
+  __crtl_lconv.p_sep_by_space = 127;
+  __crtl_lconv.n_cs_precedes = 127;
+  __crtl_lconv.n_sep_by_space = 127;
+  __crtl_lconv.p_sign_posn = 127;
+  __crtl_lconv.n_sign_posn = 127;
+  __crtl_lconv.int_p_cs_precedes = 127;
+  __crtl_lconv.int_p_sep_by_space = 127;
+  __crtl_lconv.int_n_cs_precedes = 127;
+  __crtl_lconv.int_n_sep_by_space = 127;
+  __crtl_lconv.int_p_sign_posn = 127;
+  __crtl_lconv.int_n_sign_posn = 127;
   return &__crtl_lconv;
 }
 

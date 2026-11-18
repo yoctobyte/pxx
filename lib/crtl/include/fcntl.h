@@ -38,6 +38,9 @@
 #define O_NOATIME  01000000
 #define O_PATH     010000000
 #define O_NDELAY   O_NONBLOCK   /* the historical spelling; same bit */
+#define FNDELAY    O_NDELAY     /* BSD spellings, as glibc has them */
+#define FNONBLOCK  O_NONBLOCK
+#define FASYNC     O_ASYNC
 #define O_FSYNC    O_SYNC
 #define O_RSYNC    O_SYNC
 
@@ -75,6 +78,8 @@
 #define F_GETLK   5
 #define F_SETLK   6
 #define F_SETLKW  7
+#define F_SETOWN  8   /* SIGIO delivery: kdrive's input drivers set the owner, then O_ASYNC */
+#define F_GETOWN  9
 
 #define FD_CLOEXEC 1
 

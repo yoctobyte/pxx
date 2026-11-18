@@ -31,6 +31,7 @@
    on. */
 
 #include <stdint.h>
+#include <linux/types.h>   /* __u16/__u32, which the kernel's fb.h users expect it to bring */
 
 /* Ioctl commands. These are BARE NUMBERS in the kernel's header rather than
    _IOR/_IOW expressions -- fb predates the encoding scheme -- so they are

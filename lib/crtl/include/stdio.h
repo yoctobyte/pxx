@@ -104,6 +104,7 @@ int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, size_t size);
+void setlinebuf(FILE *stream);
 void setbuf(FILE *stream, char *buf);
 int remove(const char *path);
 int rename(const char *oldp, const char *newp);

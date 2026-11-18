@@ -28778,6 +28778,24 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_designator_ptr_array_count.c $(TESTTMP)/c_desigcnt26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_desigcnt26_gcc32 test/c_designator_ptr_array_count.c
 	tools/expect_same.sh c_desigcnt26_i386 "$$(timeout 20 $(TESTTMP)/c_desigcnt26_i386)" "$$(timeout 20 $(TESTTMP)/c_desigcnt26_gcc32)"
+	./$(COMPILER) test/c_knr_definitions.c $(TESTTMP)/c_knrdef26
+	@gcc -std=gnu89 -w -o $(TESTTMP)/c_knrdef26_gcc test/c_knr_definitions.c
+	tools/expect_same.sh c_knrdef26 "$$(timeout 20 $(TESTTMP)/c_knrdef26)" "$$(timeout 20 $(TESTTMP)/c_knrdef26_gcc)"
+	./$(COMPILER) --target=i386 test/c_knr_definitions.c $(TESTTMP)/c_knrdef26_i386
+	@gcc -m32 -std=gnu89 -w -o $(TESTTMP)/c_knrdef26_gcc32 test/c_knr_definitions.c
+	tools/expect_same.sh c_knrdef26_i386 "$$(timeout 20 $(TESTTMP)/c_knrdef26_i386)" "$$(timeout 20 $(TESTTMP)/c_knrdef26_gcc32)"
+	./$(COMPILER) test/c_crtl_bsd_lconv_bits.c $(TESTTMP)/c_bsdlconv26
+	@gcc -w -o $(TESTTMP)/c_bsdlconv26_gcc test/c_crtl_bsd_lconv_bits.c
+	tools/expect_same.sh c_bsdlconv26 "$$(timeout 20 $(TESTTMP)/c_bsdlconv26)" "$$(timeout 20 $(TESTTMP)/c_bsdlconv26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_bsd_lconv_bits.c $(TESTTMP)/c_bsdlconv26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_bsdlconv26_gcc32 test/c_crtl_bsd_lconv_bits.c
+	tools/expect_same.sh c_bsdlconv26_i386 "$$(timeout 20 $(TESTTMP)/c_bsdlconv26_i386)" "$$(timeout 20 $(TESTTMP)/c_bsdlconv26_gcc32)"
+	./$(COMPILER) test/c_braced_char_string_init.c $(TESTTMP)/c_brstrinit26
+	@gcc -w -o $(TESTTMP)/c_brstrinit26_gcc test/c_braced_char_string_init.c
+	tools/expect_same.sh c_brstrinit26 "$$(timeout 20 $(TESTTMP)/c_brstrinit26)" "$$(timeout 20 $(TESTTMP)/c_brstrinit26_gcc)"
+	./$(COMPILER) --target=i386 test/c_braced_char_string_init.c $(TESTTMP)/c_brstrinit26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_brstrinit26_gcc32 test/c_braced_char_string_init.c
+	tools/expect_same.sh c_brstrinit26_i386 "$$(timeout 20 $(TESTTMP)/c_brstrinit26_i386)" "$$(timeout 20 $(TESTTMP)/c_brstrinit26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

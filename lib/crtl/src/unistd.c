@@ -648,6 +648,8 @@ int usleep(unsigned int usec) {
 /* Linux is 4096 everywhere pxx targets. sysconf(_SC_PAGESIZE) is the portable
    spelling and returns the same thing. */
 int getpagesize(void) { return 4096; }
+/* BSD's descriptor-table size: the same number sysconf(_SC_OPEN_MAX) gives. */
+int getdtablesize(void) { return (int)sysconf(_SC_OPEN_MAX); }
 
 /* ---- pre-main initialization ---------------------------------------------
  *

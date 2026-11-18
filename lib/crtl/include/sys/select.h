@@ -31,6 +31,12 @@
 #define FD_SETSIZE 1024
 
 #define __NFDBITS (8 * (int)sizeof(long))
+/* the BSD spellings glibc also exports by default (TinyX's os/io.c) */
+typedef long fd_mask;
+#define NFDBITS __NFDBITS
+/* glibc's accessor for the bit array; X11's Xpoll.h uses it when it exists
+   and otherwise reaches for glibc's private member name __fds_bits */
+#define __FDS_BITS(set) ((set)->fds_bits)
 
 typedef struct {
   long fds_bits[FD_SETSIZE / (8 * (int)sizeof(long))];

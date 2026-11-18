@@ -1193,6 +1193,10 @@ int setvbuf(FILE *stream, char *buf, int mode, size_t size)
     return -1;   /* _IOFBF, _IOLBF: not available; anything else: invalid mode */
 }
 void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
+/* BSD's line-buffering request. Returns nothing, so it cannot fail like
+   setvbuf does; a stream that writes straight through already delivers every
+   line at least as early as line buffering would. */
+void setlinebuf(FILE *stream) { (void)stream; }
 
 /* ---- the _unlocked family ------------------------------------------------- */
 
