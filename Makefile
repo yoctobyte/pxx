@@ -28615,6 +28615,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_gppfn26 "$$(timeout 20 $(TESTTMP)/c_gppfn26)" "$$(timeout 20 $(TESTTMP)/c_gppfn26_gcc)"
 	./$(COMPILER) --target=i386 test/c_global_ptr_to_fnptr.c $(TESTTMP)/c_gppfn26_i386
 	tools/expect_same.sh c_gppfn26_i386 "$$(timeout 20 $(TESTTMP)/c_gppfn26_i386)" "$$(timeout 20 $(TESTTMP)/c_gppfn26_gcc)"
+	./$(COMPILER) --emit-obj --freestanding test/c_static_init_fold_data.c $(TESTTMP)/c_sifold26.o
+	@gcc -w -no-pie -o $(TESTTMP)/c_sifold26 test/c_static_init_fold_main.c $(TESTTMP)/c_sifold26.o
+	@gcc -w -c -o $(TESTTMP)/c_sifold26_gcc.o test/c_static_init_fold_data.c
+	@gcc -w -no-pie -o $(TESTTMP)/c_sifold26_gcc test/c_static_init_fold_main.c $(TESTTMP)/c_sifold26_gcc.o
+	tools/expect_same.sh c_sifold26 "$$(timeout 20 $(TESTTMP)/c_sifold26)" "$$(timeout 20 $(TESTTMP)/c_sifold26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

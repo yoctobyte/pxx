@@ -4670,10 +4670,45 @@ begin
   end;
 end;
 
+function CBakeIntValue(node: Integer; var v: Int64): Boolean; forward;
+
+{ An address that is a CONSTANT NUMBER, not a symbol: `&((T *)0)->f`,
+  `&((T *)0)->a[2]` -- how __builtin_offsetof arrives (NetBSD's
+  VOPARG_OFFSETOF in every vop_*_desc). The base is a dereferenced integer
+  constant; fields and constant subscripts add their offsets. rump-pxx g28. }
+function CBakeConstAddr(node: Integer; var off: Int64): Boolean;
+var rec, fi: Integer; k: Int64;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_DEREF:
+      Result := CBakeIntValue(ASTLeft[node], off);
+    AN_FIELD:
+      begin
+        if not CBakeConstAddr(ASTLeft[node], off) then Exit;
+        rec := ResolveNodeRec(ASTLeft[node]);
+        if rec < REC_UCLASS_BASE then Exit;
+        fi := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(node));
+        if fi < 0 then Exit;
+        off := off + UFldOff_[fi];
+        Result := True;
+      end;
+    AN_INDEX:
+      begin
+        if not CBakeIntValue(ASTRight[node], k) then Exit;
+        if ASTKind[ASTLeft[node]] <> AN_FIELD then Exit;   { an array member, not a pointer }
+        if not CBakeConstAddr(ASTLeft[node], off) then Exit;
+        off := off + k * IRArrayElemStride(ASTLeft[node]);
+        Result := True;
+      end;
+  end;
+end;
+
 function CBakeIntValue(node: Integer; var v: Int64): Boolean;
 { An integer constant expression, folded the way the store would compute it.
   Unsigned and signed agree on every bit here; the store keeps the low bytes. }
-var a, b: Int64;
+var a, b: Int64; ltk, rtk: TTypeKind; uns: Boolean;
 begin
   Result := False;
   if node < 0 then Exit;
@@ -4682,6 +4717,19 @@ begin
       begin
         v := ASTIVal[node];
         Result := True;
+      end;
+    AN_ADDR:
+      { `(size_t)&((T *)0)->f`: __builtin_offsetof }
+      Result := CBakeConstAddr(ASTLeft[node], v);
+    AN_TERNARY:
+      { `c ? a : b` with a constant condition: only the chosen arm need fold
+        (NetBSD's __BIT(n) guards its shift this way; every filterops'
+        `.f_flags = FILTEROP_ISFD | FILTEROP_MPSAFE`). rump-pxx g29. }
+      if (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_PAIR) and
+         CBakeIntValue(ASTLeft[node], a) then
+      begin
+        if a <> 0 then Result := CBakeIntValue(ASTLeft[ASTRight[node]], v)
+        else Result := CBakeIntValue(ASTRight[ASTRight[node]], v);
       end;
     AN_NEG:
       if CBakeIntValue(ASTLeft[node], a) then
@@ -4730,6 +4778,29 @@ begin
         end
         else if (ASTIVal[node] = Ord(tkDiv)) and (b <> 0) then v := a div b
         else if (ASTIVal[node] = Ord(tkMod)) and (b <> 0) then v := a mod b
+        else if (ASTIVal[node] >= Ord(tkEq)) and (ASTIVal[node] <= Ord(tkGe)) then
+        begin
+          { a comparison: 0 or 1, in the domain the operands' types select }
+          ltk := IntToTypeKind(ASTTk[ASTLeft[node]]);
+          rtk := IntToTypeKind(ASTTk[ASTRight[node]]);
+          uns := TypeCompareUnsigned(ltk, rtk);
+          if uns and (TypeSlotSize(ltk) <= 4) and (TypeSlotSize(rtk) <= 4) then
+          begin
+            a := a and $FFFFFFFF;
+            b := b and $FFFFFFFF;
+          end
+          else if uns then
+          begin
+            a := a xor (Int64(1) shl 63);   { unsigned order as signed order }
+            b := b xor (Int64(1) shl 63);
+          end;
+          if ASTIVal[node] = Ord(tkEq) then v := Ord(a = b)
+          else if ASTIVal[node] = Ord(tkNeq) then v := Ord(a <> b)
+          else if ASTIVal[node] = Ord(tkLt) then v := Ord(a < b)
+          else if ASTIVal[node] = Ord(tkLe) then v := Ord(a <= b)
+          else if ASTIVal[node] = Ord(tkGt) then v := Ord(a > b)
+          else v := Ord(a >= b);
+        end
         else Result := False;
       end;
   end;
@@ -4772,7 +4843,10 @@ begin
         target := sym;
         addend := off;
         Result := True;
-      end;
+      end
+      else if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_PROCADDR) then
+        { `&f` of a function is `f` (NetBSD __strict_weak_alias). rump-pxx g30 }
+        Result := CBakeAddrValue(ASTLeft[node], kind, target, addend);
     AN_IDENT:
       if (ASTIVal[node] >= 0) and (Syms[ASTIVal[node]].Kind = skGlobal) and
          Syms[ASTIVal[node]].IsArray and (SymTlsOffset[ASTIVal[node]] < 0) then
@@ -4841,6 +4915,19 @@ begin
   Inc(CDRCount);
 end;
 
+{ The shape below a node, as `kind(left right)` (`5:31` = a binop and its
+  operator token), three levels deep: enough to tell a refused initialiser's
+  construct without a debugger. }
+function CBakeNodeShape(node, depth: Integer): AnsiString;
+begin
+  if node < 0 then begin Result := '-'; Exit; end;
+  Result := AIntToStr(ASTKind[node]);
+  if ASTKind[node] = AN_BINOP then Result := Result + ':' + AIntToStr(ASTIVal[node]);
+  if (depth > 0) and ((ASTLeft[node] >= 0) or (ASTRight[node] >= 0)) then
+    Result := Result + '(' + CBakeNodeShape(ASTLeft[node], depth - 1) + ' ' +
+              CBakeNodeShape(ASTRight[node], depth - 1) + ')';
+end;
+
 function CBakeNodeDesc(node: Integer): AnsiString;
 { for the refusal: the node kind (and operator) the baker could not fold }
 begin
@@ -4848,6 +4935,7 @@ begin
   Result := 'AST node kind ' + AIntToStr(ASTKind[node]);
   if ASTKind[node] = AN_BINOP then
     Result := Result + ' (operator token ' + AIntToStr(ASTIVal[node]) + ')';
+  Result := Result + '; shape ' + CBakeNodeShape(node, 3);
 end;
 
 function CTryBakeGlobalInit(asn: Integer): Boolean;
