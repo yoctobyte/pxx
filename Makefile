@@ -28605,6 +28605,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_pathblibs26 "$$(timeout 20 $(TESTTMP)/c_pathblibs26)" "$$(timeout 20 $(TESTTMP)/c_pathblibs26_gcc)"
 	./$(COMPILER) --target=i386 test/c_crtl_pathb_libs.c $(TESTTMP)/c_pathblibs26_i386
 	tools/expect_same.sh c_pathblibs26_i386 "$$(timeout 20 $(TESTTMP)/c_pathblibs26_i386)" "$$(timeout 20 $(TESTTMP)/c_pathblibs26_gcc)"
+	./$(COMPILER) test/c_fn_typedef_struct_ret.c $(TESTTMP)/c_fntdsr26
+	@gcc -w -o $(TESTTMP)/c_fntdsr26_gcc test/c_fn_typedef_struct_ret.c
+	tools/expect_same.sh c_fntdsr26 "$$(timeout 20 $(TESTTMP)/c_fntdsr26)" "$$(timeout 20 $(TESTTMP)/c_fntdsr26_gcc)"
+	./$(COMPILER) --target=i386 test/c_fn_typedef_struct_ret.c $(TESTTMP)/c_fntdsr26_i386
+	tools/expect_same.sh c_fntdsr26_i386 "$$(timeout 20 $(TESTTMP)/c_fntdsr26_i386)" "$$(timeout 20 $(TESTTMP)/c_fntdsr26_gcc)"
+	./$(COMPILER) test/c_global_ptr_to_fnptr.c $(TESTTMP)/c_gppfn26
+	@gcc -w -o $(TESTTMP)/c_gppfn26_gcc test/c_global_ptr_to_fnptr.c
+	tools/expect_same.sh c_gppfn26 "$$(timeout 20 $(TESTTMP)/c_gppfn26)" "$$(timeout 20 $(TESTTMP)/c_gppfn26_gcc)"
+	./$(COMPILER) --target=i386 test/c_global_ptr_to_fnptr.c $(TESTTMP)/c_gppfn26_i386
+	tools/expect_same.sh c_gppfn26_i386 "$$(timeout 20 $(TESTTMP)/c_gppfn26_i386)" "$$(timeout 20 $(TESTTMP)/c_gppfn26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

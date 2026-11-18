@@ -6180,6 +6180,21 @@ begin
     ASTLeft[callee] := inner;
     ASTTk[callee] := Ord(tyPointer);
   end
+  else if (ASTKind[inner] = AN_BINOP) and (derefCount >= 1) and
+          ((ASTIVal[inner] = Ord(tkPlus)) or (ASTIVal[inner] = Ord(tkMinus))) and
+          (ASTKind[ASTLeft[inner]] = AN_IDENT) and
+          (SymElemProcSig[ASTIVal[ASTLeft[inner]]] >= 0) and
+          (SymProcSig[ASTIVal[ASTLeft[inner]]] < 0) then
+  begin
+    { `(*(p + i))(args)` -- `p[i]` spelled as pointer arithmetic on a
+      pointer-to-function-pointer (or a function-pointer array). One deref of
+      the sum is the load of the entry, as in the INCDEC arm above.
+      bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+    Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]];
+    callee := AllocNode(AN_DEREF);
+    ASTLeft[callee] := inner;
+    ASTTk[callee] := Ord(tyPointer);
+  end
   else if ASTKind[inner] = AN_PROCADDR then
     { `(name)(args)` — a parenthesized bare function name decayed to its address
       (AN_PROCADDR). Its own proc is the call signature; the callee value is the
@@ -13757,6 +13772,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     gFpNDims, gFpDi: Integer;
+    gFpPtrElemSig: Integer;   { `ret (**name)(..)`: the POINTEE's call signature }
     gFpDims: array[0..7] of Integer;
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok, paDeferTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
@@ -13868,6 +13884,7 @@ begin
       end;
     end;
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
+    gFpPtrElemSig := CTypePtrElemProcSig;
     wasArr := (CTypeFnPtrArrLen >= -1);
     { `(*h[R][C])(..)`: every dimension, taken now -- an initialiser's casts
       re-enter ParseCDeclType and reset the globals (Gibux irq.c) }
@@ -14012,6 +14029,10 @@ begin
           pointer keeps the old skip: out of this ticket's scope.
           bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
         if (not wasArr) and (gPaLen > 0) then paDeferTok := initStartTok;
+        { A pointer TO a function pointer (`int (**ops)(void *) = vec + 1;`,
+          `= &vec[1]`) is a plain data pointer and replays the same way; it
+          stayed nil. bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+        if (not wasArr) and (procIdx < 0) and (gFpPtrElemSig >= 0) then paDeferTok := initStartTok;
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
       end;
     end;
@@ -14119,6 +14140,16 @@ begin
       if wasArr then
       begin
         if procIdx >= 0 then SymElemProcSig[idx] := procIdx;
+      end
+      else if (procIdx < 0) and (gFpPtrElemSig >= 0) then
+      begin
+        { `extern int (**ops)(void *);` (NetBSD's vnode op vector): a pointer TO a
+          function pointer. The local declarator path already published the
+          pointee's signature; the global one dropped it, so `(*ops[i])(v)` and
+          `(*ops)(v)` had no callee -- "expected ')'" inside any parentheses.
+          bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+        SetSymPointerType(idx, tyPointer, REC_NONE, 1, Ord(tyPointer), REC_NONE);
+        SymElemProcSig[idx] := gFpPtrElemSig;
       end
       else
       begin
@@ -22072,6 +22103,16 @@ begin
     Inc(j);
   Result := (j + 1 < TokCount) and (Tokens[j].Kind = tkLParen) and
             (Tokens[j + 1].Kind = tkStar);
+  { A function TYPE returning the aggregate (or a pointer to it):
+    `typedef struct e *lk_t(struct t *, ...);`, and `(lk_t)` once
+    CUnparenTypedefName has stripped the parentheses (NetBSD if_llatbl.h).
+    The aggregate arm read NAME as a plain pointer typedef and dropped the
+    parameter list, so `lk_t *lk; t->lk(..)` had no call signature: "expected
+    ')'" inside any parentheses. The scalar arm registers function types.
+    bug-c-a-function-typedef-returning-a-struct-pointer-has-no-signature }
+  if not Result then
+    Result := (j + 1 < TokCount) and (Tokens[j].Kind = tkIdent) and
+              (Tokens[j + 1].Kind = tkLParen);
 end;
 
 { The `[N][M]..` after a typedef name, into that typedef's dims, the way the
@@ -22495,6 +22536,7 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     ftPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;
     ftRi: Integer;
+    ftRetElemTk, ftRetElemRec, ftRetRec: Integer;   { the result's record shape, before the params' parses overwrite it }
     tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
 begin
   CSplitDeclarators(True);
@@ -22674,6 +22716,9 @@ begin
     ftLParTok := TokPos - 1;
     ftRet := tk;
     if CTypeIsVoid then ftRet := tyInteger;
+    ftRetElemTk := CTypeElemTk;
+    ftRetElemRec := CTypeElemRec;
+    ftRetRec := CTypeBaseRec;
     ftNParams := 0;
     Next;                              { consume the parameter-list '(' }
     while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
@@ -22723,6 +22768,18 @@ begin
           Procs[ftSig].Params[ftRi].IsRef :=
             not ABICRecordParamByValue(ftPRecIds[ftRi]);
       end;
+    { The result's record, as the $cfnptr registration records it: without it
+      `f(i)->b` and `f(i).b` through a function-type typedef read offset 0.
+      bug-c-a-function-typedef-returning-a-struct-pointer-has-no-signature }
+    if (ftRet = tyPointer) and (ftRetElemRec >= REC_UCLASS_BASE) then
+    begin
+      ProcRetPtrElemTk[ftSig] := ftRetElemTk;
+      ProcRetPtrElemRec[ftSig] := ftRetElemRec;
+    end
+    else if ftRet = tyPointer then
+      ProcRetPtrElemTk[ftSig] := ftRetElemTk;
+    if (ftRet = tyRecord) and (ftRetRec >= 0) then
+      ProcRetRecId[ftSig] := ftRetRec;
     CTypeIsVoid := False;
     AddCTypedefFnPtr(nm, ftSig);
     ci := FindCTypedef(nm);
