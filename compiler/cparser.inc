@@ -7335,6 +7335,7 @@ begin
     CTypedefNDims[idx] := 0;
     CTypedefAlign[idx] := 0;
     CTypedefLongRank[idx] := newRank;
+    CTypedefIsUEnum[idx] := False;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -7358,6 +7359,7 @@ begin
   CTypedefNDims[CTypedefCount] := 0;
   CTypedefAlign[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
+  CTypedefIsUEnum[CTypedefCount] := False;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -7917,6 +7919,7 @@ begin
               for tdDimI := 0 to MAX_ARR_DIMS - 1 do
                 CTypeTypedefDims[tdDimI] := CTypedefDims[tdIdx * MAX_ARR_DIMS + tdDimI];
               tdLongRank := CTypedefLongRank[tdIdx];    { `long`/`long long` rank of the type this name denotes }
+              CTypeBaseIsEnum := CTypedefIsUEnum[tdIdx]; { an unsigned-enum typedef: its bitfields are unsigned }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -21800,6 +21803,7 @@ var nextVal, val: Int64; nm: AnsiString;
 begin
   Next; { consume the opening brace }
   nextVal := 0;
+  CEnumBodyHasNeg := False;
   while CBlockContinues do
   begin
     if CurTok.Kind = tkIdent then
@@ -21813,6 +21817,7 @@ begin
       else
         val := nextVal;
       AddConst(nm, tyInt32, val);
+      if val < 0 then CEnumBodyHasNeg := True;
       nextVal := val + 1;
       if CurTok.Kind = tkComma then Next;
     end
@@ -23688,7 +23693,7 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftRi: Integer;
     ftRetElemTk, ftRetElemRec, ftRetRec: Integer;   { the result's record shape, before the params' parses overwrite it }
     tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
-    isEnumFn: Boolean;
+    isEnumFn, tdEnumUnsigned: Boolean;
     k: Integer;
 begin
   CSplitDeclarators(True);
@@ -23836,7 +23841,12 @@ begin
   begin
     Next; { 'enum' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
-    if CurTok.Kind = tkBegin then ParseCEnumBody; { enumerators -> constants }
+    tdEnumUnsigned := False;
+    if CurTok.Kind = tkBegin then
+    begin
+      ParseCEnumBody; { enumerators -> constants }
+      tdEnumUnsigned := not CEnumBodyHasNeg;
+    end;
     { `typedef enum E *PE;` -- CSplitDeclarators writes exactly this for
       `typedef enum {..} E, *PE;`, and it registered nothing: the star was
       not a name. bug-c-a-multi-name-typedef-declares-only-its-first-name }
@@ -23850,7 +23860,13 @@ begin
     begin
       nm := CurTok.SVal; Next;
       if ptrStars > 0 then AddCTypedefEx(nm, tyPointer, Ord(tyInt32), REC_NONE)
-      else AddCTypedef(nm, tyInt32);
+      else
+      begin
+        AddCTypedef(nm, tyInt32);
+        { a bitfield of this type is unsigned when no enumerator is negative,
+          as in gcc. bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+        CTypedefIsUEnum[FindCTypedef(nm)] := tdEnumUnsigned;
+      end;
     end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
@@ -24023,7 +24039,13 @@ begin
         RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
     end
     else
+    begin
       AddCTypedef(nm, tk);
+      { `typedef side_t alias_t;` keeps the unsigned-enum mark.
+        bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+      if (CTypePtrDepth = 0) and CTypeBaseIsEnum then
+        CTypedefIsUEnum[FindCTypedef(nm)] := True;
+    end;
     if tdAlign > 0 then
     begin
       ci := FindCTypedef(nm);
