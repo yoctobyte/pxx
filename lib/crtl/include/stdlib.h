@@ -122,6 +122,41 @@ int atexit(void (*func)(void));
 
 #define MB_CUR_MAX 1
 
+/* Multibyte <-> wide in the C locale, which is ASCII (the same rule as
+   <wchar.h>'s mbrtowc): bytes 0..127 are their own wide characters, anything
+   above is an error (-1). All stateless, so a NULL string answers 0. libX11's
+   lcUTF8/lcGenConv call these. */
+int mblen(const char *s, size_t n);
+int mbtowc(wchar_t *pwc, const char *s, size_t n);
+int wctomb(char *s, wchar_t wc);
+size_t mbstowcs(wchar_t *dst, const char *src, size_t n);
+size_t wcstombs(char *dst, const wchar_t *src, size_t n);
+
+float strtof(const char *s, char **end);
+
+/* glibc 2.36's arc4random family, on getentropy(): expat seeds its hash salt
+   with arc4random_buf when configure finds it. */
+unsigned int arc4random(void);
+void arc4random_buf(void *buf, size_t n);
+unsigned int arc4random_uniform(unsigned int upper);
+
+/* glibc's reentrant random: fontconfig keeps its own state in a struct
+   random_data. glibc's algorithm and state layout (TYPE_0..TYPE_4 by state
+   size, under 8 bytes is EINVAL), so a seed gives glibc's sequence. */
+struct random_data {
+  int *fptr;
+  int *rptr;
+  int *state;
+  int rand_type;
+  int rand_deg;
+  int rand_sep;
+  int *end_ptr;
+};
+int random_r(struct random_data *buf, int *result);
+int srandom_r(unsigned int seed, struct random_data *buf);
+int initstate_r(unsigned int seed, char *statebuf, size_t statelen, struct random_data *buf);
+int setstate_r(char *statebuf, struct random_data *buf);
+
 /* gcc bit-scan builtins, renamed by the C frontend (__builtin_clz ->
  * __pxx_builtin_clz32, ...): cfront has no intrinsic lowering for them yet, so
  * they resolve to these plain-C loops via the normal crtl auto-pull.

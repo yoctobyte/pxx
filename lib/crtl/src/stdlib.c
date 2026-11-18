@@ -1370,3 +1370,212 @@ char *ptsname(int fd)
 		return 0;
 	return buf;
 }
+
+/* ---- multibyte, C locale --------------------------------------------------- */
+
+/* ASCII only, as <wchar.h>'s mbrtowc: see the note in <stdlib.h>. */
+int mbtowc(wchar_t *pwc, const char *s, size_t n)
+{
+  unsigned char c;
+  if (!s) return 0;                       /* stateless encoding */
+  if (n == 0) return -1;
+  c = (unsigned char)*s;
+  if (c > 127) { errno = EILSEQ; return -1; }
+  if (pwc) *pwc = (wchar_t)c;
+  return c ? 1 : 0;
+}
+
+int mblen(const char *s, size_t n) { return mbtowc(0, s, n); }
+
+int wctomb(char *s, wchar_t wc)
+{
+  if (!s) return 0;
+  if (wc < 0 || wc > 127) { errno = EILSEQ; return -1; }
+  *s = (char)wc;
+  return 1;
+}
+
+/* dst NULL: the length the conversion would have, n ignored (POSIX). */
+size_t mbstowcs(wchar_t *dst, const char *src, size_t n)
+{
+  size_t i = 0;
+  for (;;) {
+    unsigned char c = (unsigned char)src[i];
+    if (c > 127) { errno = EILSEQ; return (size_t)-1; }
+    if (dst) {
+      if (i >= n) return i;
+      dst[i] = (wchar_t)c;
+    }
+    if (!c) return i;
+    i++;
+  }
+}
+
+size_t wcstombs(char *dst, const wchar_t *src, size_t n)
+{
+  size_t i = 0;
+  for (;;) {
+    wchar_t wc = src[i];
+    if (wc < 0 || wc > 127) { errno = EILSEQ; return (size_t)-1; }
+    if (dst) {
+      if (i >= n) return i;
+      dst[i] = (char)wc;
+    }
+    if (!wc) return i;
+    i++;
+  }
+}
+
+/* float has no parser of its own: rounding the double gives the correctly
+   rounded float except in double-rounding corner cases (a decimal string
+   within half a double ulp of a float tie). ERANGE when the double fits but
+   the float overflows. */
+float strtof(const char *s, char **end)
+{
+  double d = strtod(s, end);
+  float f = (float)d;
+  if ((d > 3.4028234663852886e38 || d < -3.4028234663852886e38) && d == d) errno = ERANGE;
+  return f;
+}
+
+/* ---- arc4random, on getentropy --------------------------------------------- */
+
+/* glibc 2.36 reads the kernel each time too (a ChaCha20 buffer came later).
+   getentropy takes at most 256 bytes per call. If the kernel refuses there is
+   no safe answer, so abort, as OpenBSD's does. */
+void arc4random_buf(void *buf, size_t n)
+{
+  unsigned char *p = (unsigned char *)buf;
+  while (n > 0) {
+    size_t k = n > 256 ? 256 : n;
+    if (getentropy(p, k) != 0) abort();
+    p += k;
+    n -= k;
+  }
+}
+
+unsigned int arc4random(void)
+{
+  unsigned int v;
+  arc4random_buf(&v, sizeof v);
+  return v;
+}
+
+/* Uniform without modulo bias: reject the low (2^32 % upper) values. */
+unsigned int arc4random_uniform(unsigned int upper)
+{
+  unsigned int min, r;
+  if (upper < 2) return 0;
+  min = (0u - upper) % upper;
+  do r = arc4random(); while (r < min);
+  return r % upper;
+}
+
+/* ---- random_r: glibc's additive feedback generator --------------------------
+
+   The same algorithm, constants and state-buffer layout as glibc's
+   stdlib/random_r.c (re-written here, not copied): word -1 of the caller's
+   buffer records type and rear position, the rest is the table. TYPE_0 is the
+   plain LCG. Checked against glibc's output for the same seed. */
+
+static const int __pxx_rnd_deg[5] = { 0, 7, 15, 31, 63 };
+static const int __pxx_rnd_sep[5] = { 0, 3, 1, 3, 1 };
+
+int random_r(struct random_data *buf, int *result)
+{
+  int *state;
+  if (!buf || !result) { errno = EINVAL; return -1; }
+  state = buf->state;
+  if (buf->rand_type == 0) {
+    unsigned int v = ((unsigned int)state[0] * 1103515245u + 12345u) & 0x7fffffffu;
+    state[0] = (int)v;
+    *result = (int)v;
+  } else {
+    int *fptr = buf->fptr, *rptr = buf->rptr, *end = buf->end_ptr;
+    unsigned int v = (unsigned int)*fptr + (unsigned int)*rptr;
+    *fptr = (int)v;
+    *result = (int)(v >> 1);
+    ++fptr;
+    if (fptr >= end) { fptr = state; ++rptr; }
+    else { ++rptr; if (rptr >= end) rptr = state; }
+    buf->fptr = fptr;
+    buf->rptr = rptr;
+  }
+  return 0;
+}
+
+int srandom_r(unsigned int seed, struct random_data *buf)
+{
+  int type, *state, i, kc, discard;
+  long word;
+  if (!buf) { errno = EINVAL; return -1; }
+  type = buf->rand_type;
+  if (type < 0 || type > 4) { errno = EINVAL; return -1; }
+  state = buf->state;
+  if (seed == 0) seed = 1;
+  state[0] = (int)seed;
+  if (type == 0) return 0;
+  word = (long)(int)seed;
+  kc = buf->rand_deg;
+  for (i = 1; i < kc; i++) {
+    long hi = word / 127773, lo = word % 127773;
+    word = 16807 * lo - 2836 * hi;
+    if (word < 0) word += 2147483647;
+    state[i] = (int)word;
+  }
+  buf->fptr = &state[buf->rand_sep];
+  buf->rptr = &state[0];
+  for (i = kc * 10; i > 0; i--) random_r(buf, &discard);
+  return 0;
+}
+
+static void __pxx_rnd_save(struct random_data *buf)
+{
+  int *old = buf->state;
+  if (!old) return;
+  if (buf->rand_type == 0) old[-1] = 0;
+  else old[-1] = 5 * (int)(buf->rptr - old) + buf->rand_type;
+}
+
+int initstate_r(unsigned int seed, char *statebuf, size_t statelen, struct random_data *buf)
+{
+  int type, *state;
+  if (!buf || !statebuf) { errno = EINVAL; return -1; }
+  if (statelen >= 256) type = 4;
+  else if (statelen >= 128) type = 3;
+  else if (statelen >= 64) type = 2;
+  else if (statelen >= 32) type = 1;
+  else if (statelen >= 8) type = 0;
+  else { errno = EINVAL; return -1; }
+  __pxx_rnd_save(buf);
+  state = (int *)statebuf + 1;
+  buf->rand_type = type;
+  buf->rand_deg = __pxx_rnd_deg[type];
+  buf->rand_sep = __pxx_rnd_sep[type];
+  buf->state = state;
+  buf->end_ptr = &state[buf->rand_deg];
+  srandom_r(seed, buf);
+  state[-1] = type == 0 ? 0 : 5 * (int)(buf->rptr - state) + type;
+  return 0;
+}
+
+int setstate_r(char *statebuf, struct random_data *buf)
+{
+  int *state, type, rear;
+  if (!buf || !statebuf) { errno = EINVAL; return -1; }
+  state = (int *)statebuf + 1;
+  type = state[-1] % 5;
+  rear = state[-1] / 5;
+  if (type < 0 || type > 4) { errno = EINVAL; return -1; }
+  __pxx_rnd_save(buf);
+  buf->rand_type = type;
+  buf->rand_deg = __pxx_rnd_deg[type];
+  buf->rand_sep = __pxx_rnd_sep[type];
+  buf->state = state;
+  if (type != 0) {
+    buf->rptr = &state[rear];
+    buf->fptr = &state[(rear + buf->rand_sep) % buf->rand_deg];
+  }
+  buf->end_ptr = &state[buf->rand_deg];
+  return 0;
+}

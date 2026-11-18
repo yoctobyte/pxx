@@ -28600,6 +28600,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_builtin_va_list.c $(TESTTMP)/c_bvalist26
 	@gcc -w -o $(TESTTMP)/c_bvalist26_gcc test/c_builtin_va_list.c
 	tools/expect_same.sh c_bvalist26 "$$(timeout 20 $(TESTTMP)/c_bvalist26)" "$$(timeout 20 $(TESTTMP)/c_bvalist26_gcc)"
+	./$(COMPILER) test/c_crtl_pathb_libs.c $(TESTTMP)/c_pathblibs26
+	@gcc -w -o $(TESTTMP)/c_pathblibs26_gcc test/c_crtl_pathb_libs.c
+	tools/expect_same.sh c_pathblibs26 "$$(timeout 20 $(TESTTMP)/c_pathblibs26)" "$$(timeout 20 $(TESTTMP)/c_pathblibs26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_pathb_libs.c $(TESTTMP)/c_pathblibs26_i386
+	tools/expect_same.sh c_pathblibs26_i386 "$$(timeout 20 $(TESTTMP)/c_pathblibs26_i386)" "$$(timeout 20 $(TESTTMP)/c_pathblibs26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

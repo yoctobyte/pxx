@@ -211,6 +211,33 @@ struct in6_addr {
 #define s6_addr16 __in6_u.__u6_addr16
 #define s6_addr32 __in6_u.__u6_addr32
 
+/* RFC 3493 address tests, byte-wise so they need no byte order. Each takes a
+   `const struct in6_addr *`. libxcb's xcb_auth uses V4MAPPED. */
+#define __PXX_IN6_B(a, i) (((const unsigned char *)(a))[i])
+#define __PXX_IN6_Z(a, from, to) __pxx_in6_zero((const unsigned char *)(a), from, to)
+static inline int __pxx_in6_zero(const unsigned char *b, int from, int to)
+{
+  int i;
+  for (i = from; i < to; i++) if (b[i]) return 0;
+  return 1;
+}
+#define IN6_IS_ADDR_UNSPECIFIED(a) __PXX_IN6_Z(a, 0, 16)
+#define IN6_IS_ADDR_LOOPBACK(a) (__PXX_IN6_Z(a, 0, 15) && __PXX_IN6_B(a, 15) == 1)
+#define IN6_IS_ADDR_V4MAPPED(a) \
+  (__PXX_IN6_Z(a, 0, 10) && __PXX_IN6_B(a, 10) == 0xff && __PXX_IN6_B(a, 11) == 0xff)
+#define IN6_IS_ADDR_V4COMPAT(a) \
+  (__PXX_IN6_Z(a, 0, 12) && (__PXX_IN6_B(a, 15) > 1 || __PXX_IN6_B(a, 14) || __PXX_IN6_B(a, 13) || __PXX_IN6_B(a, 12)))
+#define IN6_IS_ADDR_MULTICAST(a) (__PXX_IN6_B(a, 0) == 0xff)
+#define IN6_IS_ADDR_LINKLOCAL(a) (__PXX_IN6_B(a, 0) == 0xfe && (__PXX_IN6_B(a, 1) & 0xc0) == 0x80)
+#define IN6_IS_ADDR_SITELOCAL(a) (__PXX_IN6_B(a, 0) == 0xfe && (__PXX_IN6_B(a, 1) & 0xc0) == 0xc0)
+static inline int __pxx_in6_eq(const unsigned char *x, const unsigned char *y)
+{
+  int i;
+  for (i = 0; i < 16; i++) if (x[i] != y[i]) return 0;
+  return 1;
+}
+#define IN6_ARE_ADDR_EQUAL(a, b) __pxx_in6_eq((const unsigned char *)(a), (const unsigned char *)(b))
+
 struct sockaddr_in6 {
   sa_family_t sin6_family;
   in_port_t   sin6_port;

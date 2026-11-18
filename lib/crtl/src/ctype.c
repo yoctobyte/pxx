@@ -185,3 +185,6 @@ int toupper(int c)
         return c + ('A' - 'a');
     return c;
 }
+
+int isascii(int c) { return (c & ~0x7f) == 0; }
+int toascii(int c) { return c & 0x7f; }

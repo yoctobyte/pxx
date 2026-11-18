@@ -17,4 +17,8 @@ int isxdigit(int c);
 int tolower(int c);
 int toupper(int c);
 
+/* XSI: 7-bit test and mask (libX11's lcCT/lcUTF8 call isascii). */
+int isascii(int c);
+int toascii(int c);
+
 #endif

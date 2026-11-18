@@ -79,6 +79,12 @@
 #define NAME_MAX 255
 #define PATH_MAX 4096
 
+/* XSI: the most iovecs one readv/writev takes -- UIO_MAXIOV on Linux, which
+   glibc exports as IOV_MAX. libxcb clamps its writev batches to it. */
+#ifndef IOV_MAX
+#define IOV_MAX 1024
+#endif
+
 /* POSIX's guaranteed MINIMUMS (<limits.h>, "Minimum Values"): fixed by the
    standard, not by the system, which is why they are constants. getconf lists
    them. Values generated from the numbers, one per name. */
