@@ -4632,9 +4632,11 @@ end;
   bytes go into Data[] (an address becomes a CDataReloc entry) and nothing is
   compiled. Anything else answers False and is compiled as before. }
 
+function CBakeIntValue(node: Integer; var v: Int64): Boolean; forward;
+
 function CBakeAddrOf(node: Integer; var sym: Integer; var off: Int64): Boolean;
 { A constant address: a global, plus constant indexes and fields. }
-var rec, fi: Integer;
+var rec, fi: Integer; k: Int64;
 begin
   Result := False;
   if node < 0 then Exit;
@@ -4650,11 +4652,14 @@ begin
       end;
     AN_INDEX:
       begin
-        if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) then Exit;
+        { any constant subscript, not only a literal: `&a[sizeof(a) /
+          sizeof(a[0])]`, NetBSD's __arraycount end pointer in every struct
+          domain (rump-pxx g36) }
+        if not CBakeIntValue(ASTRight[node], k) then Exit;
         if not CBakeAddrOf(ASTLeft[node], sym, off) then Exit;
         { a POINTER base is an indirection, not an array: no constant address }
         if (ASTKind[ASTLeft[node]] = AN_IDENT) and not Syms[sym].IsArray then Exit;
-        off := off + Int64(ASTIVal[ASTRight[node]]) * IRArrayElemStride(ASTLeft[node]);
+        off := off + k * IRArrayElemStride(ASTLeft[node]);
         Result := True;
       end;
     AN_FIELD:
@@ -4669,8 +4674,6 @@ begin
       end;
   end;
 end;
-
-function CBakeIntValue(node: Integer; var v: Int64): Boolean; forward;
 
 { An address that is a CONSTANT NUMBER, not a symbol: `&((T *)0)->f`,
   `&((T *)0)->a[2]` -- how __builtin_offsetof arrives (NetBSD's
@@ -4806,6 +4809,28 @@ begin
   end;
 end;
 
+{ A compound literal's initialiser chain (AN_SEQs of stores over its hidden
+  temp), folded into the temp's .data bytes. The zero-fill of the whole temp
+  needs nothing: placed data starts zeroed. }
+function CBakeInitChain(node, tmp: Integer): Boolean;
+begin
+  Result := True;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_SEQ then
+  begin
+    Result := CBakeInitChain(ASTLeft[node], tmp) and CBakeInitChain(ASTRight[node], tmp);
+    Exit;
+  end;
+  if (ASTKind[node] = AN_ASSIGN) and (ASTRight[node] >= 0) and
+     (ASTKind[ASTRight[node]] = AN_DEFAULT) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] = tmp) then
+    Exit;
+  if ASTKind[node] = AN_ASSIGN then
+    Result := CTryBakeGlobalInit(node)
+  else
+    Result := False;
+end;
+
 function CBakeAddrValue(node: Integer; var kind, target: Integer; var addend: Int64): Boolean;
 { A constant ADDRESS value: a string literal, a function, `&global...`, an
   array name (it decays), or one of those plus a byte offset the frontend has
@@ -4829,6 +4854,22 @@ begin
     AN_PTR_CAST:
       { `(void *)&x`, `(char *)buf`: the cast changes no bits }
       Result := CBakeAddrValue(ASTLeft[node], kind, target, addend);
+    AN_COMPOUND_LITERAL:
+      { `(const void *)(const uint8_t[]){ 0x40, .. }` at file scope: the
+        literal is an object of static storage, so its hidden temp goes to
+        .data with its stores folded, and the value is its address
+        (NetBSD nist_hash_drbg.c's KAT vectors). rump-pxx g37. }
+      begin
+        sym := ASTIVal[node];
+        if (sym < 0) or (sym >= SymCount) or (Syms[sym].Kind <> skGlobal) then Exit;
+        if not CSymIsStaticData(sym) then
+          if not CPlaceGlobalInData(sym, 0) then Exit;
+        if not CBakeInitChain(ASTLeft[node], sym) then Exit;
+        kind := CDR_SYM;
+        target := sym;
+        addend := 0;
+        Result := True;
+      end;
     AN_PROCADDR:
       begin
         kind := CDR_PROC;

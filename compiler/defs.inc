@@ -574,7 +574,7 @@ const
   SPECIAL_IN  = 999;
 
   MAX_UCLS_FLAT   = 1024;  { (class, flattened base) rows -- see UClsFlatOwner }
-  MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
+  MAX_UCLASS      = 16384;  { user-defined class/record slots (incl. imported C structs) }
   { TObject's root virtuals occupy FIXED leading VMT slots in EVERY class, so a
     receiver whose STATIC type is TObject — which has no class row of its own —
     can still dispatch to the dynamic class's override through a slot number

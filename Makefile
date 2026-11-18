@@ -28641,6 +28641,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_rump_small_fold.c $(TESTTMP)/c_rumpsm26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_rumpsm26_gcc32 test/c_rump_small_fold.c
 	tools/expect_same.sh c_rumpsm26_i386 "$$(timeout 20 $(TESTTMP)/c_rumpsm26_i386)" "$$(timeout 20 $(TESTTMP)/c_rumpsm26_gcc32)"
+	./$(COMPILER) test/c_many_struct_tags.c $(TESTTMP)/c_mstags26
+	@gcc -w -o $(TESTTMP)/c_mstags26_gcc test/c_many_struct_tags.c
+	tools/expect_same.sh c_mstags26 "$$(timeout 20 $(TESTTMP)/c_mstags26)" "$$(timeout 20 $(TESTTMP)/c_mstags26_gcc)"
+	./$(COMPILER) --target=i386 test/c_many_struct_tags.c $(TESTTMP)/c_mstags26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_mstags26_gcc32 test/c_many_struct_tags.c
+	tools/expect_same.sh c_mstags26_i386 "$$(timeout 20 $(TESTTMP)/c_mstags26_i386)" "$$(timeout 20 $(TESTTMP)/c_mstags26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

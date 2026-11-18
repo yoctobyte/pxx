@@ -15,3 +15,11 @@ const struct fo init_f = { .flags = BIT(0) | BIT(1) | BIT(70) | BIT(63),
 int init_def(int a) { return a + 1; }
 int init_alias(int);
 __typeof__(init_alias) *init_p = &init_def;
+/* rump-pxx g36: __arraycount end pointer; g37: an array compound literal */
+struct protosw { int pr_type; };
+static const struct protosw init_sw[] = { { 1 }, { 2 }, { 3 } };
+struct domain { const struct protosw *sw, *swend; };
+struct domain init_dom = { .sw = init_sw, .swend = &init_sw[sizeof(init_sw) / sizeof(init_sw[0])] };
+struct hvec { unsigned len; const void *base; };
+const struct hvec init_hv = { .len = 4, .base = (const void *)(const unsigned char[]) { 0x40, 0x41, 0x42, 0x43 } };
+const struct hvec init_hv2 = { 2, (const short[]) { -7, 300 } };

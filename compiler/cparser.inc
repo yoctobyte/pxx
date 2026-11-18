@@ -7090,11 +7090,26 @@ end;
 { Resolve a struct/union tag to its record id, creating a forward (empty)
   record if the tag has not been seen — so `struct Node *next;` inside Node and
   forward declarations resolve. }
+function CDefineCTag(const name: AnsiString): Integer; forward;
+
 function FindOrForwardCTag(const name: AnsiString): Integer;
 var rec, ci: Integer;
 begin
   rec := FindCTag(name);
   if rec >= 0 then begin Result := rec; Exit; end;
+  { A tag first named INSIDE A BLOCK with no visible declaration declares an
+    incomplete type in THAT block (C 6.7.2.3p8), so a definition later in the
+    same block completes it. It was forwarded at file scope instead, and the
+    block's definition made a second type: `struct pend_head { struct
+    pend_entry *slh_first; }` then `struct pend_entry {..}` left slh_first
+    pointing at an incomplete type (NetBSD kern_module.c). rump-pxx g39.
+    bug-c-a-block-scope-forward-tag-is-not-completed-by-its-block }
+  if (CBlockDepth > 0) and (CTagUndoCount <= High(CTagUndoIdx)) and
+     (UClsCount < MAX_UCLASS - 1) then
+  begin
+    Result := CDefineCTag(name);
+    Exit;
+  end;
   { Out of record-table headroom (e.g. GTK's thousands of tags): resolve the tag
     as opaque (REC_NONE) instead of allocating a UClass, so a macro-soup header
     degrades gracefully rather than overflowing MAX_UCLASS. }
