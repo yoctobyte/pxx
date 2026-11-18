@@ -20864,6 +20864,21 @@ test-core: $(COMPILER)
 	gcc -c test/c_attribute_section_link_set.c -o $(TESTTMP)/c_lset26_ga.o
 	gcc test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_ga.o $(TESTTMP)/c_lset26_b.o -o $(TESTTMP)/c_lset26_m
 	tools/expect_same.sh c_lset26_m "$$($(TESTTMP)/c_lset26_m)" "$$(cat test/c_attribute_section_link_set.expected)"
+	# file-scope asm aliases (__strong_alias/__weak_alias) in x86-64 objects, hosted and --freestanding (feature-c-file-scope-asm-symbol-aliases)
+	./$(COMPILER) --emit-obj test/c_file_scope_asm_alias.c $(TESTTMP)/c_fsalias26.o > /dev/null
+	gcc test/c_file_scope_asm_alias_main.c $(TESTTMP)/c_fsalias26.o -o $(TESTTMP)/c_fsalias26 2>/dev/null
+	tools/expect_same.sh c_fsalias26 "$$($(TESTTMP)/c_fsalias26)" "$$(cat test/c_file_scope_asm_alias.expected)"
+	./$(COMPILER) --emit-obj --freestanding --system-libs test/c_file_scope_asm_alias.c $(TESTTMP)/c_fsalias26_f.o > /dev/null
+	gcc test/c_file_scope_asm_alias_main.c $(TESTTMP)/c_fsalias26_f.o -o $(TESTTMP)/c_fsalias26_f 2>/dev/null
+	tools/expect_same.sh c_fsalias26_f "$$($(TESTTMP)/c_fsalias26_f)" "$$(cat test/c_file_scope_asm_alias.expected)"
+	# asm labels (feature-c-asm-labels-rename-the-symbol)
+	./$(COMPILER) --emit-obj test/c_asm_label.c $(TESTTMP)/c_asmlbl26.o > /dev/null
+	gcc test/c_asm_label_main.c $(TESTTMP)/c_asmlbl26.o -o $(TESTTMP)/c_asmlbl26
+	tools/expect_same.sh c_asmlbl26 "$$($(TESTTMP)/c_asmlbl26)" "$$(cat test/c_asm_label.expected)"
+	./$(COMPILER) -O2 --emit-obj --freestanding --system-libs test/c_asm_label.c $(TESTTMP)/c_asmlbl26_f.o > /dev/null
+	gcc test/c_asm_label_main.c $(TESTTMP)/c_asmlbl26_f.o -o $(TESTTMP)/c_asmlbl26_f
+	tools/expect_same.sh c_asmlbl26_f "$$($(TESTTMP)/c_asmlbl26_f)" "$$(cat test/c_asm_label.expected)"
+	tools/expect_same.sh c_fsalias26_refuse "$$(./$(COMPILER) --emit-obj test/c_file_scope_asm_code_refused.c $(TESTTMP)/c_fsalias26_r.o 2>&1 | grep -c 'file-scope asm: "myfunc:"')" "1"
 	# ++/-- on float/double/long double step by 1.0, on every target (awk in
 	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
 	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null

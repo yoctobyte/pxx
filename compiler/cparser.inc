@@ -16731,6 +16731,247 @@ begin
   TokPos := s0; Next;
 end;
 
+{ FILE-SCOPE asm(...). It was skipped token by token like an attribute, so
+  NetBSD's __strong_alias / __weak_alias (`.weak a` + `a = b`, ~1000 in rump)
+  produced no symbol and the link failed or bound elsewhere -- and anything
+  else written there vanished without a word. What is handled: .globl/.global
+  and .weak binds, `a = b` / `.set a, b` / `.equ a, b` aliases (the writer
+  emits them, writeELFRelX64General), .hidden/.type/.size (ignored, as
+  visibility is), and .pushsection blocks of .ident / .comment / .gnu.warning
+  / .copyright / .note strings (dropped: __KERNEL_RCSID, __warn_references).
+  Anything else is refused by name: an instruction or a data directive here
+  would have to be assembled, and dropping it is a silent miscompilation.
+  feature-c-file-scope-asm-symbol-aliases }
+procedure CFsaBind(const nm: AnsiString; kind: Integer);
+begin
+  if Length(CFsaBindName) <= CFsaBindCount then
+  begin
+    SetLength(CFsaBindName, CFsaBindCount + 32);
+    SetLength(CFsaBindKind, CFsaBindCount + 32);
+  end;
+  CFsaBindName[CFsaBindCount] := nm;
+  CFsaBindKind[CFsaBindCount] := kind;
+  Inc(CFsaBindCount);
+end;
+
+procedure CFsaAlias(const a, b: AnsiString);
+begin
+  if Length(CFsaAliasName) <= CFsaAliasCount then
+  begin
+    SetLength(CFsaAliasName, CFsaAliasCount + 32);
+    SetLength(CFsaAliasTarget, CFsaAliasCount + 32);
+  end;
+  CFsaAliasName[CFsaAliasCount] := a;
+  CFsaAliasTarget[CFsaAliasCount] := b;
+  Inc(CFsaAliasCount);
+end;
+
+function CFsaTrim(const s: AnsiString): AnsiString;
+var a, b: Integer;
+begin
+  a := 1; b := Length(s);
+  while (a <= b) and (s[a] in [' ', #9, #13]) do Inc(a);
+  while (b >= a) and (s[b] in [' ', #9, #13]) do Dec(b);
+  CFsaTrim := Copy(s, a, b - a + 1);
+end;
+
+function CFsaIsName(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  CFsaIsName := False;
+  if s = '' then Exit;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '$']) then Exit;
+  if s[1] in ['0'..'9'] then Exit;
+  CFsaIsName := True;
+end;
+
+procedure CAsmLabel(const cname, lname: AnsiString);
+begin
+  if Length(CAsmLblFrom) <= CAsmLblCount then
+  begin
+    SetLength(CAsmLblFrom, CAsmLblCount + 16);
+    SetLength(CAsmLblTo, CAsmLblCount + 16);
+  end;
+  CAsmLblFrom[CAsmLblCount] := cname;
+  CAsmLblTo[CAsmLblCount] := lname;
+  Inc(CAsmLblCount);
+end;
+
+{ the first `#` outside quotes: gas's x86 line comment }
+function CFsaCommentPos(const s: AnsiString): Integer;
+var i: Integer; q: Boolean;
+begin
+  CFsaCommentPos := 0;
+  q := False;
+  for i := 1 to Length(s) do
+  begin
+    if (s[i] = '"') and ((i = 1) or (s[i - 1] <> '\')) then q := not q
+    else if (s[i] = '#') and not q then begin CFsaCommentPos := i; Exit; end;
+  end;
+end;
+
+{ `asm("name")` at the cursor (on the asm keyword): returns the name }
+function CReadAsmLabelString: AnsiString;
+begin
+  Result := '';
+  Next;
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('C: an asm label expects a string');
+  while CurTok.Kind = tkString do
+  begin
+    Result := Result + CurTok.SVal;
+    Next;
+  end;
+  Expect(tkRParen, ')');
+end;
+
+procedure CParseFileScopeAsm;
+var text, line, w, rest, a, b, sec: AnsiString;
+    i, p, k: Integer;
+    skipping, inQ: Boolean;
+
+  procedure Refuse(const why: AnsiString);
+  begin
+    Error('C: file-scope asm: ' + why + ' -- pxx handles symbol aliases (.globl/.weak, a = b,'
+          + ' .set) and .ident/.gnu.warning strings there; anything else would have to be'
+          + ' assembled into the object, and dropping it would be silent');
+  end;
+
+  procedure SplitWord(const s: AnsiString; var first, tail: AnsiString);
+  var j: Integer;
+  begin
+    j := 1;
+    while (j <= Length(s)) and not (s[j] in [' ', #9]) do Inc(j);
+    first := Copy(s, 1, j - 1);
+    tail := CFsaTrim(Copy(s, j, Length(s)));
+  end;
+
+  procedure BindList(const tail: AnsiString; kind: Integer);
+  var j, st: Integer; nm: AnsiString;
+  begin
+    st := 1;
+    for j := 1 to Length(tail) + 1 do
+      if (j > Length(tail)) or (tail[j] = ',') then
+      begin
+        nm := CFsaTrim(Copy(tail, st, j - st));
+        if not CFsaIsName(nm) then Refuse('"' + line + '"');
+        CFsaBind(nm, kind);
+        st := j + 1;
+      end;
+  end;
+
+begin
+  { `time_t time_second_legacy asm("time_second");` (kern_tc.c): the variable
+    parser stops at `asm`, right after the declarator's name -- an asm LABEL,
+    not a file-scope statement. The variable is the global just declared.
+    feature-c-asm-labels-rename-the-symbol }
+  if (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkIdent) then
+  begin
+    a := GetTokenStrFromRaw(Tokens[TokPos - 2].SOffset, Tokens[TokPos - 2].SLen);
+    b := CReadAsmLabelString;
+    if CurTok.Kind <> tkSemicolon then
+      Error('C: an asm label on variable ' + a + ' must end its declaration (`T ' + a
+            + ' asm("' + b + '");`); an initialiser or a second declarator after it is not supported');
+    Next;
+    CAsmLabel(a, b);
+    Exit;
+  end;
+  Next;   { asm / __asm / __asm__ }
+  while (CurTok.Kind = tkIdent) and
+        ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
+         (CurTok.SVal = '__volatile')) do Next;
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('C: file-scope asm expects a string');
+  text := '';
+  while CurTok.Kind = tkString do
+  begin
+    text := text + CurTok.SVal;
+    Next;
+  end;
+  Expect(tkRParen, ')');
+  if CurTok.Kind = tkSemicolon then Next;
+
+  skipping := False;
+  text := text + #10;
+  p := 1;
+  inQ := False;
+  for i := 1 to Length(text) do
+  begin
+    { a `;` or `#` inside a quoted .ascii string is text, not a separator or
+      a comment (libprop's __warn_references messages) }
+    if inQ then
+    begin
+      if (text[i] = '\') and (i < Length(text)) then Continue;
+      if (text[i] = '"') and ((i = 1) or (text[i - 1] <> '\')) then inQ := False;
+      if text[i] <> #10 then Continue;
+    end
+    else if text[i] = '"' then begin inQ := True; Continue; end;
+    if (text[i] = #10) or (text[i] = ';') then
+    begin
+      inQ := False;
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if line = '' then Continue;
+      SplitWord(line, w, rest);
+      if skipping then
+      begin
+        if w = '.popsection' then skipping := False
+        else if (w <> '.ascii') and (w <> '.asciz') and (w <> '.string') then
+          Refuse('"' + line + '" in a dropped string section');
+        Continue;
+      end;
+      if (w = '.globl') or (w = '.global') then BindList(rest, 1)
+      else if w = '.weak' then BindList(rest, 2)
+      else if (w = '.hidden') or (w = '.protected') or (w = '.internal') or
+              (w = '.size') or (w = '.ident') then
+        { visibility is not honoured elsewhere either; .size/.ident carry nothing }
+      else if w = '.type' then
+      begin
+        if Pos('indirect_function', rest) > 0 then Refuse('an ifunc ("' + line + '")');
+      end
+      else if (w = '.set') or (w = '.equ') then
+      begin
+        k := Pos(',', rest);
+        if k = 0 then Refuse('"' + line + '"');
+        a := CFsaTrim(Copy(rest, 1, k - 1));
+        b := CFsaTrim(Copy(rest, k + 1, Length(rest)));
+        if not (CFsaIsName(a) and CFsaIsName(b)) then Refuse('"' + line + '" (only name = name)');
+        CFsaAlias(a, b);
+      end
+      else if (w = '.pushsection') or (w = '.section') then
+      begin
+        SplitWord(rest, sec, a);
+        k := Pos(',', sec);
+        if k > 0 then sec := Copy(sec, 1, k - 1);
+        if (Copy(sec, 1, 6) = '.ident') or (Copy(sec, 1, 8) = '.comment') or
+           (Copy(sec, 1, 12) = '.gnu.warning') or (Copy(sec, 1, 10) = '.copyright') or
+           (Copy(sec, 1, 5) = '.note') then
+        begin
+          if w = '.section' then Refuse('".section ' + sec + '" (use .pushsection/.popsection)');
+          skipping := True;
+        end
+        else
+          Refuse('section "' + sec + '"');
+      end
+      else if Pos('=', line) > 0 then
+      begin
+        k := Pos('=', line);
+        a := CFsaTrim(Copy(line, 1, k - 1));
+        b := CFsaTrim(Copy(line, k + 1, Length(line)));
+        if not (CFsaIsName(a) and CFsaIsName(b)) then Refuse('"' + line + '" (only name = name)');
+        CFsaAlias(a, b);
+      end
+      else
+        Refuse('"' + line + '"');
+    end;
+  end;
+  if skipping then Refuse('a .pushsection with no .popsection');
+end;
+
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
@@ -16755,6 +16996,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     finiRunner: Boolean;
 begin
   CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
+  CFsaAliasCount := 0; CFsaBindCount := 0; CAsmLblCount := 0;
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
     around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive
@@ -17759,6 +18001,9 @@ begin
     end
     else if (CurTok.Kind = tkSemicolon) or ((TokPos - 1) >= userTokEnd) then
       Next  { stray top-level `;` (empty decl, legal C), or an appended pulled-unit token }
+    else if (CurTok.Kind = tkIdent) and
+            ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CParseFileScopeAsm   { feature-c-file-scope-asm-symbol-aliases }
     else if (CurTok.Kind = tkIdent) and
             ((CurTok.SVal = '_Static_assert') or (CurTok.SVal = 'static_assert')) then
       { EVALUATED, not skipped. It is still in CIsTopLevelSkipIdent so the
@@ -19324,9 +19569,16 @@ begin
   if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
 
-  { If it is just a declaration (ends with ';'), we are done! }
+  { If it is just a declaration (ends with ';'), we are done! An asm label in
+    the tail (`int foo(int) __asm("bar");`, NetBSD's __RENAME) renames the
+    link symbol; it was skipped with the rest. feature-c-asm-labels-rename-the-symbol }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
-        (CurTok.Kind <> tkEOF) do Next;
+        (CurTok.Kind <> tkEOF) do
+    if (CurTok.Kind = tkIdent) and
+       ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CAsmLabel(Procs[procIdx].Name, CReadAsmLabelString)
+    else
+      Next;
   if CurTok.Kind = tkSemicolon then
   begin
     { Pure declaration (prototype). Mark external EXCEPT in a C-program pass 2,

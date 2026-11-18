@@ -350,9 +350,21 @@ end;
   resolved the alias and the three --emit-obj writers did not, which is
   `bug-a-emit-obj-ignores-external-name`; sizing a string table and writing it
   are two separate callers of this, so they cannot drift apart either. }
+{ A C asm label's link name for C name nm, or '' (CAsmLbl*, cparser.inc).
+  feature-c-asm-labels-rename-the-symbol }
+function CAsmLabelOf(const nm: AnsiString): AnsiString;
+var k: Integer;
+begin
+  CAsmLabelOf := '';
+  for k := CAsmLblCount - 1 downto 0 do
+    if CAsmLblFrom[k] = nm then begin CAsmLabelOf := CAsmLblTo[k]; Exit; end;
+end;
+
 function ExternalLinkName(extIdx: Integer): AnsiString;
 begin
-  if ProcExtName[ExternalProc[extIdx]] >= 0 then
+  if (CAsmLblCount > 0) and (CAsmLabelOf(Procs[ExternalProc[extIdx]].Name) <> '') then
+    Result := CAsmLabelOf(Procs[ExternalProc[extIdx]].Name)
+  else if ProcExtName[ExternalProc[extIdx]] >= 0 then
     Result := Strs[ProcExtName[ExternalProc[extIdx]]].Text
   else
     Result := Procs[ExternalProc[extIdx]].Name;
@@ -7287,6 +7299,116 @@ begin
     end;
 end;
 
+{ File-scope asm aliases (CFsaAlias*, cparser.inc): each becomes a GLOBAL or
+  WEAK symbol at its target's section and offset, appended after every other
+  symbol (no relocation names it). The target must be defined in this
+  object; an alias name the object also imports would be two symbols of one
+  name, and is refused rather than guessed at. feature-c-file-scope-asm-symbol-aliases }
+var
+  OFsaProc, OFsaSym, OFsaBind, OFsaStrOff: array of Integer;
+  OFsaCount: Integer;
+  OFsaExtOf, OFsaImpOf: array of Integer;   { by external / Syms index: the alias defining it, or -1 }
+  OFsaSlot: array of Boolean;               { the alias took over an import's slot }
+
+function ObjFsaBindOf(const nm: AnsiString): Integer;
+var k: Integer;
+begin
+  ObjFsaBindOf := 0;
+  for k := 0 to CFsaBindCount - 1 do
+    if CFsaBindName[k] = nm then
+      if CFsaBindKind[k] > ObjFsaBindOf then ObjFsaBindOf := CFsaBindKind[k];
+end;
+
+procedure ObjPlanFsaAliases(var strSize: Integer);
+var k, j, b: Integer; a, t: AnsiString;
+begin
+  OFsaCount := 0;
+  SetLength(OFsaExtOf, ExternalCount + 1);
+  for j := 0 to ExternalCount - 1 do OFsaExtOf[j] := -1;
+  SetLength(OFsaImpOf, SymCount + 1);
+  for j := 0 to SymCount - 1 do OFsaImpOf[j] := -1;
+  if CFsaAliasCount = 0 then Exit;
+  SetLength(OFsaProc, CFsaAliasCount); SetLength(OFsaSym, CFsaAliasCount);
+  SetLength(OFsaBind, CFsaAliasCount); SetLength(OFsaStrOff, CFsaAliasCount);
+  SetLength(OFsaSlot, CFsaAliasCount);
+  for k := 0 to CFsaAliasCount - 1 do
+  begin
+    a := CFsaAliasName[k];
+    t := CFsaAliasTarget[k];
+    b := ObjFsaBindOf(a);
+    if b = 0 then
+      ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ' has no .globl or .weak:'
+                 + ' a local alias is not supported');
+    OFsaProc[k] := -1; OFsaSym[k] := -1;
+    for j := 0 to ProcCount - 1 do
+      if (Procs[j].Name = t) and ObjProcIsDefined(j) then begin OFsaProc[k] := j; Break; end;
+    if OFsaProc[k] < 0 then
+      for j := 0 to SymCount - 1 do
+        if (Syms[j].Name = t) and (ObjDataIsLocal(j) or ObjDataIsExport(j)) then
+        begin OFsaSym[k] := j; Break; end;
+    if (OFsaProc[k] < 0) and (OFsaSym[k] < 0) then
+      ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ': ' + t
+                 + ' is not defined in this translation unit');
+    for j := 0 to ProcCount - 1 do
+      if (Procs[j].Name = a) and ObjProcIsDefined(j) then
+        ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ': ' + a + ' is also defined here');
+    { The file also CALLS or READS the alias by name (locks.c calls
+      mutex_spin_exit, vm.c reads uvm_vnodeops): that import's symbol becomes
+      the definition, so its relocations bind to it and the name is in the
+      symbol table once. }
+    OFsaSlot[k] := False;
+    for j := 0 to ExternalCount - 1 do
+      if ExternalLinkName(j) = a then begin OFsaExtOf[j] := k; OFsaSlot[k] := True; end;
+    for j := 0 to SymCount - 1 do
+      if (Syms[j].Name = a) and ObjDataIsImport(j) and ObjDataIsReferenced(j) then
+      begin OFsaImpOf[j] := k; OFsaSlot[k] := True; end;
+    if b = 2 then OFsaBind[k] := 2 else OFsaBind[k] := 1;
+    if not OFsaSlot[k] then
+    begin
+      OFsaStrOff[k] := strSize;
+      strSize := strSize + Length(a) + 1;
+      Inc(OFsaCount);
+    end;
+  end;
+end;
+
+{$ifdef FPC}
+procedure ObjWriteFsaAliasSym(var f: File; strOff, k: Integer);
+{$else}
+procedure ObjWriteFsaAliasSym(f: Integer; strOff, k: Integer);
+{$endif}
+begin
+  if OFsaProc[k] >= 0 then
+    writeSym64(f, strOff, Byte((OFsaBind[k] shl 4) or 2),
+               ObjTextShndx(Procs[OFsaProc[k]].BodyAddr),
+               ObjTextRel(Procs[OFsaProc[k]].BodyAddr), ObjProcSize(OFsaProc[k]))
+  else
+    writeSym64(f, strOff, Byte((OFsaBind[k] shl 4) or 1),
+               ObjDataSymShndx(OFsaSym[k]), ObjDataSymValue(OFsaSym[k]), SymAllocSize[OFsaSym[k]]);
+end;
+
+{ asm labels: a DEFINED function or global takes its label as its symbol name
+  in this object (imports get it through ExternalLinkName). Renamed in place
+  once, here, after every lookup by C name is done.
+  feature-c-asm-labels-rename-the-symbol }
+procedure ObjApplyAsmLabels;
+var j: Integer; nm: AnsiString;
+begin
+  if CAsmLblCount = 0 then Exit;
+  for j := 0 to ProcCount - 1 do
+    if ObjProcIsDefined(j) then
+    begin
+      nm := CAsmLabelOf(Procs[j].Name);
+      if nm <> '' then Procs[j].Name := nm;
+    end;
+  for j := 0 to SymCount - 1 do
+    if (Syms[j].Kind = skGlobal) then
+    begin
+      nm := CAsmLabelOf(Syms[j].Name);
+      if nm <> '' then Syms[j].Name := nm;
+    end;
+end;
+
 procedure writeELFRelX64General(const outPath: AnsiString);
 var
   i, wkI: Integer;
@@ -7335,6 +7457,7 @@ begin
         FunctionSections := True;
         Break;
       end;
+  ObjApplyAsmLabels;       { before any symbol name is measured }
   CRegisterCDataImports;   { before anything counts ExternalCount }
   ObjBssPlanImportDrops;   { before any .bss offset is written out }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
@@ -7441,6 +7564,8 @@ begin
   extSym0 := firstGlobal + numExportProcs + numExportData;
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
+  ObjPlanFsaAliases(strSize);
+  numSyms := numSyms + OFsaCount;
 
   ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym + nSecSym);
 
@@ -7645,13 +7770,22 @@ begin
     if ObjDataIsExport(i) then
       writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
-    writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
+    if OFsaExtOf[i] >= 0 then
+      ObjWriteFsaAliasSym(f, ObjExtStrOff[i], OFsaExtOf[i])
+    else
+      writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
     size lives on the DEFINITION in another TU -- `extern char b[];` carries
     none -- so emitting anything but 0 here would be inventing it. }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      writeSym64(f, ObjDataStrOff[i], ObjDataImpBind(i), 0, 0, 0);
+    begin
+      if OFsaImpOf[i] >= 0 then ObjWriteFsaAliasSym(f, ObjDataStrOff[i], OFsaImpOf[i])
+      else writeSym64(f, ObjDataStrOff[i], ObjDataImpBind(i), 0, 0, 0);
+    end;
+  { file-scope asm aliases, last (ObjPlanFsaAliases) }
+  for i := 0 to CFsaAliasCount - 1 do
+    if not OFsaSlot[i] then ObjWriteFsaAliasSym(f, OFsaStrOff[i], i);
 
   { .strtab, in the same order }
   writeU8(f, 0);
@@ -7668,6 +7802,8 @@ begin
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   if initThunkSym >= 0 then writeStrZ(f, OBJ_INIT_THUNK_NAME);
   if finiThunkSym >= 0 then writeStrZ(f, OBJ_FINI_THUNK_NAME);
+  for i := 0 to CFsaAliasCount - 1 do
+    if not OFsaSlot[i] then writeStrZ(f, CFsaAliasName[i]);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: the head's entries (all of them, unsplit) -- collected above }

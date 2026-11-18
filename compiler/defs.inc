@@ -7809,6 +7809,19 @@ var
   CCtorProcs, CDtorProcs : array of Integer;
   CCtorCount, CDtorCount : Integer;
   CCtorInMain : Integer;   { constructors main's init proc calls (an executable) }
+  { File-scope asm (`__asm(".weak a\na = b")`, NetBSD's __weak_alias /
+    __strong_alias): the aliases and the .globl/.weak binds it named, for the
+    object writer. feature-c-file-scope-asm-symbol-aliases }
+  CFsaAliasName, CFsaAliasTarget : array of AnsiString;
+  CFsaAliasCount : Integer;
+  CFsaBindName : array of AnsiString;
+  CFsaBindKind : array of Integer;   { 1 = .globl, 2 = .weak }
+  CFsaBindCount : Integer;
+  { asm labels (`int foo(int) __asm("bar");`, `T v asm("sym");` -- NetBSD's
+    __RENAME, kern_tc.c's time_second): C name -> link name.
+    feature-c-asm-labels-rename-the-symbol }
+  CAsmLblFrom, CAsmLblTo : array of AnsiString;
+  CAsmLblCount : Integer;
   { __attribute__((section("name"))): the lexer files the name in
     CAttrSecNames and the next token carries its index + 1 in CAttrAlignValues
     bits 17..23 (CDeclSectionName reads it). SymSectionName / ProcIram are
