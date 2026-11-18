@@ -21019,6 +21019,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_objth "$$(timeout 20 $(TESTTMP)/c_objth)" "$$(cat test/c_obj_thread.expected)"
 	gcc -o $(TESTTMP)/c_objth_g $(TESTTMP)/c_objth_a.o $(TESTTMP)/c_objth_b.o -lpthread
 	tools/expect_same.sh c_objth_g "$$(timeout 20 $(TESTTMP)/c_objth_g)" "$$(cat test/c_obj_thread.expected)"
+	# a refused relocation leaves no output (bug-a-link-leaves-a-truncated-executable-after-a-refused-relocation)
+	gcc -c -O2 -fno-pie -fcf-protection=none -fno-asynchronous-unwind-tables test/c_link_refused_reloc_gcc.c -o $(TESTTMP)/c_lnkref26_g.o
+	$(COMPILER) --emit-obj test/c_link_refused_reloc_main.c $(TESTTMP)/c_lnkref26_m.o > /dev/null
+	rm -f $(TESTTMP)/c_lnkref26
+	! $(COMPILER) --link -o $(TESTTMP)/c_lnkref26 $(TESTTMP)/c_lnkref26_m.o $(TESTTMP)/c_lnkref26_g.o > /dev/null
+	tools/expect_same.sh c_lnkref26 "$$(test -e $(TESTTMP)/c_lnkref26 && echo present || echo absent)" "absent"
 	# rump-pxx's silent gaps (S5 S6 S7 S10 S11): accepted, and the program was wrong
 	$(COMPILER) test/c_rump_silent.c $(TESTTMP)/c_rumps > /dev/null
 	tools/expect_same.sh c_rumps "$$($(TESTTMP)/c_rumps)" "$$(cat test/c_rump_silent.expected)"

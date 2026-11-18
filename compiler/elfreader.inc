@@ -1110,6 +1110,20 @@ begin
 {$endif}
 end;
 
+function ElfRtUnlink(const path: AnsiString): Integer; forward;
+
+{ An error after the output was opened: the link streams .text as it
+  relocates, so a refused relocation in the third object left a file with a
+  header and no section table, which then segfaulted when run and read as a
+  miscompile. Remove it, as the undefined-reference path writes nothing.
+  bug-a-link-leaves-a-truncated-executable-after-a-refused-relocation }
+procedure ElfLnkAbort(const tag, path: AnsiString);
+begin
+  ElfLnkClose(path);
+  ElfRtUnlink(path);
+  WriteLn(tag, ': nothing written');
+end;
+
 procedure ElfLnkWrite(const buf: array of Byte; n: Int64);
 begin
   if n <= 0 then Exit;
@@ -1848,7 +1862,7 @@ begin
      or (ElfLnkOutSize[ELFLNK_K_NOTE] > 0) then
     if not ElfLnkFillRo(tag) then
     begin
-      ElfLnkClose(outPath);
+      ElfLnkAbort(tag, outPath);
       Exit;
     end;
   cur := ImageBase + ELFLNK_PAGE;
@@ -1867,7 +1881,7 @@ begin
     if ElfRdErr <> '' then
     begin
       WriteLn(tag, ': ', ElfLnkObjPath[o], ': cannot re-read the object: ', ElfRdErr);
-      ElfLnkClose(outPath);
+      ElfLnkAbort(tag, outPath);
       Exit;
     end;
     nsec := ElfRdShNum;
@@ -1896,7 +1910,7 @@ begin
         if not ElfLnkRelocate(o, nsec, i, relaOf[i], ElfLnkTb, 0) then
         begin
           WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
-          ElfLnkClose(outPath);
+          ElfLnkAbort(tag, outPath);
           Exit;
         end;
         ElfLnkWriteZeros(ElfLnkSecAddr[slot] - cur);
@@ -1911,7 +1925,7 @@ begin
                               ElfLnkSecAddr[slot] - rwStart) then
         begin
           WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
-          ElfLnkClose(outPath);
+          ElfLnkAbort(tag, outPath);
           Exit;
         end;
       end;
