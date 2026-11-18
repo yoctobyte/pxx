@@ -28,6 +28,11 @@ typedef struct __pxx_va_elem va_list[1];
 #else
 typedef struct __pxx_va_elem va_list;
 #endif
+/* gcc's name for the same type, which code written for gcc spells without any
+   header (NetBSD's sys/ansi.h: `typedef __builtin_va_list __va_list;`). The
+   preprocessor pulls this header in when such a unit first uses the name.
+   bug-c-builtin-va-list-needs-stdarg */
+typedef va_list __builtin_va_list;
 
 /* 176-byte register-save area. The variadic prologue stores the incoming arg
    registers here; one of these is declared as a hidden local in every variadic

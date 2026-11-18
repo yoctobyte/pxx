@@ -20908,6 +20908,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_weak_g "$$($(TESTTMP)/c_weak_g)" "$$(cat test/c_weak_strong.expected)"
 	$(COMPILER) --link -o $(TESTTMP)/c_weak_l $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o > /dev/null
 	tools/expect_same.sh c_weak_l "$$($(TESTTMP)/c_weak_l)" "$$(cat test/c_weak_strong.expected)"
+	# weak DATA: WEAK UND for an undefined weak extern (file and block scope), WEAK for a weak definition.
+	# gcc links non-PIE: a PIE link needs a GOT reference for weak undefined data, which pxx does not emit
+	# yet (bug-c-weak-data-references-bind-locally-and-skip-the-got).
+	$(COMPILER) --emit-obj test/c_weak_data_a.c $(TESTTMP)/c_wkd_a.o > /dev/null
+	$(COMPILER) --emit-obj test/c_weak_data_b.c $(TESTTMP)/c_wkd_b.o > /dev/null
+	tools/expect_same.sh c_wkd_nm "$$(readelf -sW $(TESTTMP)/c_wkd_a.o | awk '$$8 ~ /^(maybe_v|__stop_maybe|wv)$$/ {print $$5" "($$7=="UND"?"UND":"DEF")" "$$8}' | LC_ALL=C sort | tr '\n' ' ')" "WEAK DEF wv WEAK UND __stop_maybe WEAK UND maybe_v "
+	gcc -no-pie -o $(TESTTMP)/c_wkd_g $(TESTTMP)/c_wkd_a.o
+	tools/expect_same.sh c_wkd_g "$$($(TESTTMP)/c_wkd_g)" "1 1 4"
+	@# Not asserted yet: linking c_weak_data_b.c's strong wv should print `1 1 40`; pxx's
+	@# own reference to wv binds locally and prints 4 (same ticket).
 	# an aligned typedef aligns members, aliases, _Alignof and globals
 	$(COMPILER) test/c_typedef_aligned.c $(TESTTMP)/c_tdal > /dev/null
 	tools/expect_same.sh c_tdal "$$($(TESTTMP)/c_tdal)" "$$(cat test/c_typedef_aligned.expected)"
@@ -28555,6 +28565,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_call_incdec_fnptr.c $(TESTTMP)/c_callincfp26
 	@gcc -w -o $(TESTTMP)/c_callincfp26_gcc test/c_call_incdec_fnptr.c
 	tools/expect_same.sh c_callincfp26 "$$(timeout 20 $(TESTTMP)/c_callincfp26)" "$$(timeout 20 $(TESTTMP)/c_callincfp26_gcc)"
+	# gcc builtins with no header: __builtin_memcpy & co., __builtin_ffs, __builtin_va_list (NetBSD rump).
+	./$(COMPILER) test/c_builtin_no_header.c $(TESTTMP)/c_bnohdr26
+	@gcc -w -o $(TESTTMP)/c_bnohdr26_gcc test/c_builtin_no_header.c
+	tools/expect_same.sh c_bnohdr26 "$$(timeout 20 $(TESTTMP)/c_bnohdr26)" "$$(timeout 20 $(TESTTMP)/c_bnohdr26_gcc)"
+	./$(COMPILER) test/c_builtin_va_list.c $(TESTTMP)/c_bvalist26
+	@gcc -w -o $(TESTTMP)/c_bvalist26_gcc test/c_builtin_va_list.c
+	tools/expect_same.sh c_bvalist26 "$$(timeout 20 $(TESTTMP)/c_bvalist26)" "$$(timeout 20 $(TESTTMP)/c_bvalist26_gcc)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

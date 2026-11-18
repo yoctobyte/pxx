@@ -14043,6 +14043,11 @@ begin
       function-pointer global needs to be linkable is decided here; nothing
       about it made it invisible except which branch registered it. }
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
+    { `extern T x __attribute__((weak));` -- at file scope or hoisted from a
+      block -- is an OPTIONAL reference: WEAK undefined, 0 when nothing defines
+      it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
+      bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
+    if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
     CApplyThreadLocalStorage(idx, declSawThread);
     if (idx >= 0) and wasArr and (gFpNDims >= 2) then
     begin
@@ -14537,6 +14542,11 @@ begin
     else if (baseTk = tyRecord) and (gStars = 0) then
       CGrowGlobalRecord(idx, recId, gAlign);
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
+    { `extern T x __attribute__((weak));` -- at file scope or hoisted from a
+      block -- is an OPTIONAL reference: WEAK undefined, 0 when nothing defines
+      it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
+      bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
+    if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
     CApplyThreadLocalStorage(idx, declSawThread);
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.

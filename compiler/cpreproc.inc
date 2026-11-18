@@ -3881,8 +3881,70 @@ begin
   if from <= n then CPrepOutAppendStr(Copy(t, from, n - from + 1));
 end;
 
+{ gcc's `__builtin_va_list` is a type every gcc knows with no header. pxx's
+  va_list is its own struct, declared -- with the helper routines va_start and
+  va_arg lower onto -- in crtl's <stdarg.h>, whose stdarg.c is auto-pulled. A
+  unit that never includes that header (NetBSD: `-nostdinc`, and sys/ansi.h's
+  `typedef __builtin_va_list __va_list;`) had none of it: "undeclared
+  identifier 'va_list'". The first live line that mentions the name now pulls
+  pxx's <stdarg.h> in just above itself, by absolute path (so -nostdinc does
+  not hide it), exactly as if an #include stood there; that header also names
+  its va_list `__builtin_va_list`. Once per unit, and never once <stdarg.h> is
+  in (PXX_CRTL_STDARG_H). bug-c-builtin-va-list-needs-stdarg }
+var CPBuiltinVaDone: Boolean;
+    CPAsmSource: Boolean;   { see its note above CPreprocess; set by gasfront.inc }
+
+function CPCrtlHeaderAbs(const name: AnsiString): AnsiString;
+var hdir: AnsiString;
+begin
+  hdir := PxxGetEnv('PXX_HOME');
+  if Length(hdir) = 0 then hdir := PxxCfgHome;
+  if Length(hdir) > 0 then
+  begin
+    if hdir[Length(hdir)] <> '/' then hdir := hdir + '/';
+    Result := hdir + 'lib/crtl/include/' + name;
+    if ElfRtFileExists(Result) then Exit;
+  end;
+  if ExeDir <> '' then
+  begin
+    Result := ExeDir + '../lib/crtl/include/' + name;
+    if ElfRtFileExists(Result) then Exit;
+    Result := ExeDir + '../../lib/crtl/include/' + name;
+    if ElfRtFileExists(Result) then Exit;
+  end;
+  Result := 'lib/crtl/include/' + name;
+  if not ElfRtFileExists(Result) then Result := '';
+end;
+
+{ Its own function, not an inline Pos at the call: CPProcessText has a local
+  `pos`, which hides Pos under FPC (the seed build). }
+function CPMentionsBuiltinVaList(const s: AnsiString): Boolean;
+begin
+  Result := Pos('__builtin_va_list', s) > 0;
+end;
+
+procedure CPMaybePullBuiltinVaList(const expanded, baseDir: AnsiString; depth: Integer);
+var guard, path: AnsiString;
+begin
+  if CPBuiltinVaDone or CPAsmSource then Exit;
+  if Pos('__builtin_va_list', expanded) = 0 then Exit;
+  CPBuiltinVaDone := True;
+  guard := 'PXX_CRTL_STDARG_H';
+  if CPMacroDefined(guard, 1, Length(guard)) then Exit;
+  path := CPCrtlHeaderAbs('stdarg.h');
+  if path = '' then Exit;      { no crtl tree: the old "undeclared" error stands }
+  { ExeDir is relative when pxx was started as `./compiler/pascal26`, and a
+    quoted include resolves a relative name against the SOURCE's directory.
+    /proc/self/cwd names the working directory absolutely (the compiler runs
+    on Linux hosts). }
+  if path[1] <> '/' then path := '/proc/self/cwd/' + path;
+  path := '"' + path + '"';
+  CPInclude(path, 1, Length(path), depth, baseDir);
+end;
+
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
+    vaLine: AnsiString;
     savedFileId, savedLine, savedDepth: Integer;
     savedPath, savedBaseDir: AnsiString;
 begin
@@ -4001,6 +4063,12 @@ begin
       begin
         SetLength(CPrepLineExp, 0);
         CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+        if (not CPBuiltinVaDone) and CPMentionsBuiltinVaList(CPrepLineExp) then
+        begin
+          vaLine := CPrepLineExp;   { the include below reuses the global line buffers }
+          CPMaybePullBuiltinVaList(vaLine, baseDir, depth);
+          CPrepLineExp := vaLine;
+        end;
         CPSyncLine;
         CPEmitExpanded(CPrepLineExp);
         CPrepOutAppendCh(#10);
@@ -4052,7 +4120,7 @@ end;
 { True while gasfront.inc preprocesses a `.S` file: gcc's
   -x assembler-with-cpp defines __ASSEMBLER__, which headers shared between C
   and assembly (Gibux's layout.h) test to hide their C declarations. }
-var CPAsmSource: Boolean;
+{ (CPAsmSource itself is declared above CPMaybePullBuiltinVaList, which reads it.) }
 
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
 var i: Integer; cmdInc: AnsiString;
@@ -4065,6 +4133,7 @@ begin
   for i := 0 to CPREP_MACRO_HASH_SIZE - 1 do CPMHashHead[i] := -1;
   CPPCount := 0;
   CPCondCount := 0;
+  CPBuiltinVaDone := False;
   CPActiveMacroCount := 0;
   CPPushCount := 0;
   CPAddLiteral('__linux__', '01');
@@ -4405,7 +4474,68 @@ begin
   else if nm = 'bswap64' then Result := 'unsigned long long __pxx_builtin_bswap64(unsigned long long x){return ((unsigned long long)__pxx_builtin_bswap32((unsigned int)x)<<32)|__pxx_builtin_bswap32((unsigned int)(x>>32));}';
 end;
 
+{ A HOSTED unit normally gets these helpers from crtl: <stdlib.h> declares them
+  and its stdlib.c body is auto-pulled. A hosted unit that includes no
+  <stdlib.h> had neither -- NetBSD's rump code calls __builtin_ffs with no
+  header at all -- and failed with "call to undeclared function". It now gets
+  the same static copies as a --freestanding one, but ONLY for helpers whose
+  crtl declaration is absent from the (already preprocessed) text: where
+  <stdlib.h> was included, stdlib.c is auto-pulled and a static copy of the same
+  name would collide with it. bug-c-builtin-needs-a-header-in-a-hosted-unit }
+procedure CAddBitBuiltins(var src: AnsiString; hosted: Boolean); forward;
+
 procedure CAddFreestandingBuiltins(var src: AnsiString);
+begin
+  CAddBitBuiltins(src, False);
+end;
+
+procedure CAddHostedBuiltins(var src: AnsiString);
+begin
+  CAddBitBuiltins(src, True);
+end;
+
+{ gcc knows the library builtins (`__builtin_memcpy`, `__builtin_strlen`, ...)
+  without any header: each means its library function, called through the
+  standard prototype. cparser renames them to the plain names, which were then
+  undeclared in a unit that includes no header -- NetBSD's sys/endian.h
+  (be16enc) calls __builtin_memcpy that way. For each one the unit MENTIONS, the
+  standard extern prototype goes on line 1 (no line number moves), so the call
+  is an ordinary external call, as gcc emits it. A later <string.h> redeclares
+  the same type, which C allows. }
+procedure CAddLibBuiltinDecls(var src: AnsiString);
+const N = 17;
+  nm: array[0..N - 1] of AnsiString = ('memcpy', 'memmove', 'memset', 'memcmp',
+    'strlen', 'strcmp', 'strncmp', 'strcpy', 'strncpy', 'strchr', 'strrchr',
+    'strcat', 'abort', 'exit', 'malloc', 'calloc', 'free');
+  pr: array[0..N - 1] of AnsiString = (
+    'void *memcpy(void *, const void *, __typeof__(sizeof 0));',
+    'void *memmove(void *, const void *, __typeof__(sizeof 0));',
+    'void *memset(void *, int, __typeof__(sizeof 0));',
+    'int memcmp(const void *, const void *, __typeof__(sizeof 0));',
+    '__typeof__(sizeof 0) strlen(const char *);',
+    'int strcmp(const char *, const char *);',
+    'int strncmp(const char *, const char *, __typeof__(sizeof 0));',
+    'char *strcpy(char *, const char *);',
+    'char *strncpy(char *, const char *, __typeof__(sizeof 0));',
+    'char *strchr(const char *, int);',
+    'char *strrchr(const char *, int);',
+    'char *strcat(char *, const char *);',
+    'void abort(void);',
+    'void exit(int);',
+    'void *malloc(__typeof__(sizeof 0));',
+    'void *calloc(__typeof__(sizeof 0), __typeof__(sizeof 0));',
+    'void free(void *);');
+var k: Integer; protos: AnsiString;
+begin
+  if Pos('__builtin_', src) = 0 then Exit;
+  protos := '';
+  for k := 0 to N - 1 do
+    if Pos('__builtin_' + nm[k] + '(', src) + Pos('__builtin_' + nm[k] + ' ', src) > 0 then
+      protos := protos + pr[k] + ' ';
+  if protos <> '' then src := protos + src;
+end;
+
+procedure CAddBitBuiltins(var src: AnsiString; hosted: Boolean);
 var fams: array[0..5] of AnsiString; f, w, k: Integer; nm, body, protos, bodies, lw: AnsiString;
     want: array[0..12] of Boolean; names: array[0..12] of AnsiString;
 begin
@@ -4430,6 +4560,11 @@ begin
   if Pos('__builtin_bswap16', src) > 0 then want[10] := True;
   if Pos('__builtin_bswap32', src) > 0 then want[11] := True;
   if Pos('__builtin_bswap64', src) > 0 then begin want[11] := True; want[12] := True; end;
+  { hosted: crtl's declaration in the text means stdlib.h is in and its body
+    is auto-pulled -- no copy (see the note above CAddFreestandingBuiltins) }
+  if hosted then
+    for k := 0 to 12 do
+      if want[k] and (Pos('__pxx_builtin_' + names[k] + '(', src) > 0) then want[k] := False;
   protos := '';
   bodies := '';
   for k := 0 to 12 do

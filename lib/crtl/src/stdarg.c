@@ -6,8 +6,13 @@
    (CrtlSrcPulled in defs.inc), so including stdarg.h twice is now free.
 
    External linkage is required, not stylistic: cparser.inc resolves each of
-   these by name via FindProc when lowering __builtin_va_start / __builtin_va_arg. */
-#include <stdarg.h>
+   these by name via FindProc when lowering __builtin_va_start / __builtin_va_arg.
+
+   The header is named by its path relative to this file, not as <stdarg.h>:
+   this body is pulled into -nostdinc units too (NetBSD rump code, through
+   `__builtin_va_list`), whose <> search list does not reach crtl.
+   bug-c-builtin-va-list-needs-stdarg */
+#include "../include/stdarg.h"
 
 /* va_start, in plain C: seed the control block with the BYTE offsets at which
    the first variadic argument of each class sits inside the register save area,

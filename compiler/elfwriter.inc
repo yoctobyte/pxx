@@ -3763,6 +3763,15 @@ function ObjDataIsImport(i: Integer): Boolean; forward;
 function ObjDataIsReferenced(i: Integer): Boolean; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
 
+{ st_info for an imported VARIABLE's UND symbol: $10 GLOBAL NOTYPE, or $20 WEAK
+  for a C `extern` declared __attribute__((weak)) -- the data twin of ObjExtBind.
+  bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
+function ObjDataImpBind(i: Integer): Byte;
+begin
+  if (i < Length(SymObjDataWeak)) and SymObjDataWeak[i] then ObjDataImpBind := $20
+  else ObjDataImpBind := $10;
+end;
+
 function ObjExtBind(extIdx: Integer): Byte;
 { st_info for an imported function's UND symbol: $10 GLOBAL NOTYPE, or $20
   WEAK NOTYPE for a `weakexternal`. The dynamic writers already honoured the
@@ -4416,7 +4425,7 @@ begin
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
     begin
-      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
+      writeSym32(f, impStr, 0, 0, ObjDataImpBind(i), 0);  { imported variable: NOTYPE UNDEF, GLOBAL or WEAK }
       impStr := impStr + Length(Syms[i].Name) + 1;
     end;
 
@@ -4807,7 +4816,7 @@ begin
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
     begin
-      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
+      writeSym32(f, impStr, 0, 0, ObjDataImpBind(i), 0);  { imported variable: NOTYPE UNDEF, GLOBAL or WEAK }
       impStr := impStr + Length(Syms[i].Name) + 1;
     end;
 
@@ -5762,7 +5771,7 @@ function ObjDataExportInfo(i: Integer): Byte;
   The runtime's state is weak for the same reason its code is -- see
   ObjProcBind, which carries the argument and the measurement. }
 begin
-  if SymObjRuntimeCopy[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
+  if SymObjRuntimeCopy[i] or SymObjDataWeak[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
 end;
 
 function ObjDataIsExport(i: Integer): Boolean;
@@ -7574,7 +7583,7 @@ begin
     none -- so emitting anything but 0 here would be inventing it. }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      writeSym64(f, ObjDataStrOff[i], $10, 0, 0, 0);
+      writeSym64(f, ObjDataStrOff[i], ObjDataImpBind(i), 0, 0, 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);
@@ -8277,7 +8286,7 @@ begin
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      writeSym32(f, ObjDataStrOff[i], 0, 0, $10, 0);
+      writeSym32(f, ObjDataStrOff[i], 0, 0, ObjDataImpBind(i), 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);

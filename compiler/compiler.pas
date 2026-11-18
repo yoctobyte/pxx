@@ -3914,7 +3914,9 @@ begin
 {$else}
     AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
     CPreprocess(Source, SourceFileDir);
-    if FreestandingMode then CAddFreestandingBuiltins(Source);
+    if FreestandingMode then CAddFreestandingBuiltins(Source)
+    else CAddHostedBuiltins(Source);   { only helpers whose crtl declaration is absent }
+    CAddLibBuiltinDecls(Source);       { __builtin_memcpy & co. with no header: the standard prototype }
     CAddAtomicBuiltins(Source);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;

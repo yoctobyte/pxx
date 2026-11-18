@@ -5831,6 +5831,8 @@ var
     exactly today's behaviour -- every global a definition.
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   SymObjDataExternOnly : array of Boolean;
+  SymObjDataWeak : array of Boolean;  { a C `__attribute__((weak))` global: WEAK in the object
+                                       (an undefined one resolves to 0). bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
   { Some IR loads, stores or takes the address of this global. Set by IRAppend
     for every target, so an executable can refuse a C `extern` variable
     that nothing defines but something uses, as ld does ("undefined reference"),

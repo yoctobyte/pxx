@@ -6653,7 +6653,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymObjDataExternOnly, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   SetLength(SymArrAi, n);
@@ -6844,7 +6844,7 @@ begin
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
   SymCLongRank[SymCount]  := 0;
-  SymObjDataExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
+  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymIRReached[SymCount] := False;
   SymCStaticLink[SymCount] := False;
   SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
@@ -7296,7 +7296,7 @@ begin
   Syms[SymCount].Kind     := skParam;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -7883,7 +7883,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -8025,7 +8025,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -8139,7 +8139,7 @@ begin
   SymPtrElemAlias[SymCount] := -1;
   SymSetElemTk[SymCount] := 0; SymSetElemLo[SymCount] := 0; SymSetElemHi[SymCount] := -1;
   SymCLongRank[SymCount] := 0;
-  SymObjDataExternOnly[SymCount] := False;
+  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;
   SymIRReached[SymCount] := False;
   SymCStaticLink[SymCount] := False;
   SymObjDataScope[SymCount] := False;

@@ -4959,6 +4959,13 @@ end;
 function CHeaderUsesSystemLib(const name: AnsiString): Boolean;
 var stem: AnsiString;
 begin
+  { <stdarg.h> is COMPILER SUPPORT, not a library: its stdarg.c holds the
+    __pxx_va_* helpers va_start/va_arg lower onto, which no system libc exports.
+    Under --system-libs its impl was not pulled, so every variadic DEFINITION
+    failed ("__pxx_va_start_impl is a pxx-internal runtime symbol and cannot be
+    imported dynamically"). NetBSD's rump code builds with --system-libs.
+    bug-c-builtin-va-list-needs-stdarg }
+  if name = 'stdarg' then begin Result := False; Exit; end;
   Result := CUseSystemLibs or CHeaderDefaultSystem(name);
   if Result then Exit;
   if CHeaderStem(name, stem) then
