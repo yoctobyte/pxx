@@ -22503,7 +22503,7 @@ begin
 end;
 
 procedure CSplitDeclarators(isTypedef: Boolean);
-var s0, sp, k, c, semi, depth, ds, g, firstGroup, b, e, n, i, j, kw: Integer;
+var s0, sb, sp, k, c, semi, depth, ds, g, firstGroup, b, e, n, i, j, kw: Integer;
     w, tag: AnsiString;
     out: array of TRawToken;
     src: array of Integer;
@@ -22647,6 +22647,13 @@ begin
       Inc(b); Inc(e); Inc(c); Inc(semi); Inc(ds);
     end;
   end;
+  sb := sp;
+  if not isTypedef then
+    while (sb > 0) and (Tokens[sb - 1].Kind = tkIdent) and
+          CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen)) and
+          (GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen) <> '__attribute__') and
+          (GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen) <> '__attribute') do
+      Dec(sb);
   { split at every top-level comma, last to first so indices stay valid; the
     `;` is copied now, because each insertion moves it }
   semiTok := Tokens[semi];
@@ -22662,7 +22669,14 @@ begin
         begin
           n := 0;
           SetLength(out, 16); SetLength(src, 16);
-          if isTypedef then Put(s0);       { typedef }
+          if isTypedef then Put(s0)        { typedef }
+          else
+            { the storage-class words the caller consumed before SPEC
+              (`static HANDLER h0, h1;`): each copy repeats them, or every
+              name after the first lost `static` -- expat's xmlrole.c had 41
+              handlers become undefined externals.
+              bug-c-split-declarators-drop-static-after-the-first-name }
+            for j := sb to sp - 1 do Put(j);
           for j := sp to ds - 1 do
             if (b < 0) or (j < b) or (j > e) then Put(j);
           t := semiTok;

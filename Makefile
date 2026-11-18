@@ -28667,6 +28667,22 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_block_struct_array_init.c $(TESTTMP)/c_bsainit26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_bsainit26_gcc32 test/c_block_struct_array_init.c
 	tools/expect_same.sh c_bsainit26_i386 "$$(timeout 20 $(TESTTMP)/c_bsainit26_i386)" "$$(timeout 20 $(TESTTMP)/c_bsainit26_gcc32)"
+	./$(COMPILER) test/c_static_split_declarators.c $(TESTTMP)/c_ssdecl26
+	@gcc -w -o $(TESTTMP)/c_ssdecl26_gcc test/c_static_split_declarators.c
+	tools/expect_same.sh c_ssdecl26 "$$(timeout 20 $(TESTTMP)/c_ssdecl26)" "$$(timeout 20 $(TESTTMP)/c_ssdecl26_gcc)"
+	./$(COMPILER) --target=i386 test/c_static_split_declarators.c $(TESTTMP)/c_ssdecl26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_ssdecl26_gcc32 test/c_static_split_declarators.c
+	tools/expect_same.sh c_ssdecl26_i386 "$$(timeout 20 $(TESTTMP)/c_ssdecl26_i386)" "$$(timeout 20 $(TESTTMP)/c_ssdecl26_gcc32)"
+	./$(COMPILER) --emit-obj --shared-runtime test/c_static_split_declarators.c $(TESTTMP)/c_ssdecl26.o >/dev/null
+	tools/expect_same.sh c_ssdecl26_obj_undef "$$(nm $(TESTTMP)/c_ssdecl26.o | grep -cE ' U (h[0-9]|last_fn)$$')" "0"
+	./$(COMPILER) test/c_module_range_shift.c $(TESTTMP)/c_modrs26
+	@gcc -w -o $(TESTTMP)/c_modrs26_gcc test/c_module_range_shift.c
+	tools/expect_same.sh c_modrs26 "$$(timeout 20 $(TESTTMP)/c_modrs26)" "$$(timeout 20 $(TESTTMP)/c_modrs26_gcc)"
+	./$(COMPILER) --target=i386 test/c_module_range_shift.c $(TESTTMP)/c_modrs26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_modrs26_gcc32 test/c_module_range_shift.c
+	tools/expect_same.sh c_modrs26_i386 "$$(timeout 20 $(TESTTMP)/c_modrs26_i386)" "$$(timeout 20 $(TESTTMP)/c_modrs26_gcc32)"
+	./$(COMPILER) --emit-obj --shared-runtime test/c_module_range_shift.c $(TESTTMP)/c_modrs26.o >/dev/null
+	tools/expect_same.sh c_modrs26_obj_undef "$$(nm $(TESTTMP)/c_modrs26.o | grep -cE ' U (h[0-9]|last_fn)$$')" "0"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

@@ -219,6 +219,16 @@ begin
   for i := 0 to DbgRangeCount - 1 do
     if DbgRangeStart[i] >= atPos then
       DbgRangeStart[i] := DbgRangeStart[i] + delta;
+  { ...and the C module table, which answers "whose `static` is this". It did
+    not move: a declaration split near the end of an included `.c` pushed the
+    file's last definition past its module's end, into the main source, where
+    it became a second row -- `static` prototype in one, body in the other, and
+    every reference before the body an undefined symbol. freetype's unity
+    type1.c lost T1_Get_Track_Kerning this way.
+    bug-c-token-edits-do-not-move-the-c-module-ranges }
+  for i := 0 to CModRangeCount - 1 do
+    if CModRangeStart[i] >= atPos then
+      CModRangeStart[i] := CModRangeStart[i] + delta;
 end;
 
 { A token-stream SPLICE pastes tokens that came from ANOTHER FILE into the
