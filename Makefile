@@ -28636,6 +28636,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_rump_small_fold.c $(TESTTMP)/c_rumpsm26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_rumpsm26_gcc32 test/c_rump_small_fold.c
 	tools/expect_same.sh c_rumpsm26_i386 "$$(timeout 20 $(TESTTMP)/c_rumpsm26_i386)" "$$(timeout 20 $(TESTTMP)/c_rumpsm26_gcc32)"
+	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
+	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
+	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"
+	./$(COMPILER) --threadsafe --system-libs test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26_sys
+	tools/expect_same.sh c_ptrw26_sys "$$(timeout 30 $(TESTTMP)/c_ptrw26_sys)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"
+	./$(COMPILER) --threadsafe --target=i386 test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26_i386
+	@gcc -m32 -w -pthread -o $(TESTTMP)/c_ptrw26_gcc32 test/c_pthread_layout_rwlock.c
+	tools/expect_same.sh c_ptrw26_i386 "$$(timeout 30 $(TESTTMP)/c_ptrw26_i386)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc32)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

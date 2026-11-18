@@ -19,6 +19,33 @@
 
 #include <time.h>   /* struct timespec for pthread_cond_timedwait */
 
+/* GLIBC'S SIZES AND ALIGNMENT, on the targets where pxx code can meet glibc.
+ * Under --system-libs these declarations are still the header, but
+ * pthread_mutex_lock & co. bind to glibc, which writes its own layout: crtl's
+ * 24-byte mutex against glibc's 40, a 4-byte cond against 48 and attr against
+ * 56 meant glibc wrote past every one (found by frank-user, rumpuser bio.c).
+ * And a struct holding one, shared with a gcc-built object, must lay out the
+ * same. crtl's own fields come first; the padding only fills to glibc's size.
+ * Measured with gcc against glibc on x86-64 and i386; the other targets keep
+ * crtl's own sizes (no glibc to check against here).
+ * bug-c-crtl-pthread-types-are-smaller-than-glibc-s */
+#if defined(__x86_64__)
+#define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
+#define __PXX_PT_COND_PAD    int __pxx_pad[9]; long long __pxx_align;
+#define __PXX_PT_ATTR_PAD    int __pxx_pad[11]; long long __pxx_align;
+#define __PXX_PT_RWLOCK_PAD  int __pxx_pad[7]; long long __pxx_align;
+#elif defined(__i386__)
+#define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
+#define __PXX_PT_COND_PAD    int __pxx_pad[11];
+#define __PXX_PT_ATTR_PAD    int __pxx_pad[8];
+#define __PXX_PT_RWLOCK_PAD  int __pxx_pad[3];
+#else
+#define __PXX_PT_MUTEX_PAD
+#define __PXX_PT_COND_PAD
+#define __PXX_PT_ATTR_PAD
+#define __PXX_PT_RWLOCK_PAD
+#endif
+
 /* Thread identity = the kernel tid; copyable by value, compared with ==. */
 typedef long pthread_t;
 
@@ -27,14 +54,14 @@ typedef long pthread_t;
  * The type, owner tid and depth after it are C-side only and make a RECURSIVE
  * mutex re-lockable by its owner. Zeroed == a free NORMAL mutex, so a {0}
  * static initialiser and MallocZero both yield a valid unlocked mutex. */
-typedef struct { int __state; int __type; long __owner; int __count; } pthread_mutex_t;
+typedef struct { int __state; int __type; long __owner; int __count; __PXX_PT_MUTEX_PAD } pthread_mutex_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0 }
 
 /* The type is honoured for RECURSIVE; ERRORCHECK locks like NORMAL. It used
  * to be accepted and ignored, so stock threadsafe SQLite (which re-locks a
  * recursive mutex) deadlocked on its first statement. */
 typedef struct { int __type; } pthread_mutexattr_t;
-typedef struct { int __unused; } pthread_attr_t;
+typedef struct { int __unused; __PXX_PT_ATTR_PAD } pthread_attr_t;
 #define PTHREAD_MUTEX_NORMAL     0
 #define PTHREAD_MUTEX_RECURSIVE  1
 #define PTHREAD_MUTEX_ERRORCHECK 2
@@ -60,7 +87,7 @@ int pthread_once(pthread_once_t *guard, void (*init_routine)(void));
  * attribute is accepted and ignored: timedwait measures a RELATIVE budget on
  * the monotonic clock, which is what CLOCK_MONOTONIC callers (QuickJS) want;
  * CLOCK_REALTIME absolute deadlines are approximated the same way. */
-typedef struct { int __seq; } pthread_cond_t;
+typedef struct { int __seq; __PXX_PT_COND_PAD } pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER { 0 }
 typedef struct { int __clock; } pthread_condattr_t;
 
@@ -76,6 +103,35 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m);
 int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
                            const struct timespec *abstime);
 
+/* Reader-writer lock, over the same futex mutex and condvar words: any number
+ * of readers or one writer; a waiting writer holds off new readers so a
+ * stream of readers cannot starve it. Zeroed == unlocked. rumpuser's
+ * locks (librumpuser) are built on it. glibc's size under --system-libs. */
+typedef struct {
+  int __lock;     /* futex mutex word guarding the fields below */
+  int __seq;      /* condvar word: state changed */
+  int __readers;  /* readers holding it */
+  int __writer;   /* 1 while a writer holds it */
+  int __wwait;    /* writers waiting */
+  __PXX_PT_RWLOCK_PAD
+} pthread_rwlock_t;
+#if defined(__x86_64__)
+typedef struct { long __kind; } pthread_rwlockattr_t;               /* glibc: 8, aligned 8 */
+#else
+typedef struct { int __kind; int __pxx_pad; } pthread_rwlockattr_t; /* 8, aligned 4 */
+#endif
+#define PTHREAD_RWLOCK_INITIALIZER { 0 }
+
+int pthread_rwlock_init(pthread_rwlock_t *rw, const pthread_rwlockattr_t *attr);
+int pthread_rwlock_destroy(pthread_rwlock_t *rw);
+int pthread_rwlock_rdlock(pthread_rwlock_t *rw);
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rw);
+int pthread_rwlock_wrlock(pthread_rwlock_t *rw);
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rw);
+int pthread_rwlock_unlock(pthread_rwlock_t *rw);
+int pthread_rwlockattr_init(pthread_rwlockattr_t *a);
+int pthread_rwlockattr_destroy(pthread_rwlockattr_t *a);
+
 pthread_t pthread_self(void);
 int  pthread_equal(pthread_t a, pthread_t b);
 
@@ -89,8 +145,10 @@ int  pthread_equal(pthread_t a, pthread_t b);
  * included -- reaches crtl's copy, all objects still share ONE weak copy of
  * the family and its registry, and the import reaches libc or nothing.
  * bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import */
+#ifndef __PXX_SYSTEM_PTHREAD__   /* --system-libs: libc's own, by their names */
 #define pthread_create __pxx_crtl_pthread_create
 #define pthread_join   __pxx_crtl_pthread_join
+#endif
 int  pthread_create(pthread_t *t, const pthread_attr_t *attr,
                     void *(*start)(void *), void *arg);
 int  pthread_join(pthread_t t, void **retval);

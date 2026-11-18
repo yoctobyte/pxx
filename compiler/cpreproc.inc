@@ -4517,6 +4517,11 @@ begin
     bug-c-assert-under-system-libs-imports-pxx-assert-fail }
   if CHeaderUsesSystemLib('assert') then
     CPAddLiteral('__PXX_SYSTEM_ASSERT__', '1');
+  { <pthread.h> likewise: on the system path its bodies are libc's, and
+    pthread_create/join must keep their own names rather than crtl's
+    __pxx_crtl_* (rumpuser bio.c). bug-c-crtl-pthread-types-are-smaller-than-glibc-s }
+  if CHeaderUsesSystemLib('pthread') then
+    CPAddLiteral('__PXX_SYSTEM_PTHREAD__', '1');
   { Command-line `-D<name>[=<value>]` predefines, applied AFTER the built-ins so
     a `-D` overrides them (newest-wins lookup); then `-U<name>` removals last so
     an explicit undefine beats any define of the same name. `-D<name>` with no

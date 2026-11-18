@@ -83,6 +83,60 @@ int pthread_mutexattr_settype(pthread_mutexattr_t *a, int t) {
   return 0;
 }
 
+/* ---- reader-writer lock (see pthread.h) ---- */
+
+int pthread_rwlock_init(pthread_rwlock_t *rw, const pthread_rwlockattr_t *attr) {
+  (void)attr;
+  __pxx_pmutex_init(&rw->__lock);
+  __pxx_pcond_init(&rw->__seq);
+  rw->__readers = 0; rw->__writer = 0; rw->__wwait = 0;
+  return 0;
+}
+int pthread_rwlock_destroy(pthread_rwlock_t *rw) { (void)rw; return 0; }
+
+int pthread_rwlock_rdlock(pthread_rwlock_t *rw) {
+  __pxx_pmutex_lock(&rw->__lock);
+  while (rw->__writer || rw->__wwait) __pxx_pcond_wait(&rw->__seq, &rw->__lock);
+  rw->__readers++;
+  __pxx_pmutex_unlock(&rw->__lock);
+  return 0;
+}
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rw) {
+  int r = 16;   /* EBUSY */
+  __pxx_pmutex_lock(&rw->__lock);
+  if (!rw->__writer && !rw->__wwait) { rw->__readers++; r = 0; }
+  __pxx_pmutex_unlock(&rw->__lock);
+  return r;
+}
+int pthread_rwlock_wrlock(pthread_rwlock_t *rw) {
+  __pxx_pmutex_lock(&rw->__lock);
+  rw->__wwait++;
+  while (rw->__writer || rw->__readers) __pxx_pcond_wait(&rw->__seq, &rw->__lock);
+  rw->__wwait--;
+  rw->__writer = 1;
+  __pxx_pmutex_unlock(&rw->__lock);
+  return 0;
+}
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rw) {
+  int r = 16;   /* EBUSY */
+  __pxx_pmutex_lock(&rw->__lock);
+  if (!rw->__writer && !rw->__readers) { rw->__writer = 1; r = 0; }
+  __pxx_pmutex_unlock(&rw->__lock);
+  return r;
+}
+/* Whichever kind it held: a writer clears the flag, the last reader leaves.
+   Broadcast, since readers and a writer may both be waiting. */
+int pthread_rwlock_unlock(pthread_rwlock_t *rw) {
+  __pxx_pmutex_lock(&rw->__lock);
+  if (rw->__writer) rw->__writer = 0;
+  else if (rw->__readers > 0) rw->__readers--;
+  __pxx_pcond_broadcast(&rw->__seq);
+  __pxx_pmutex_unlock(&rw->__lock);
+  return 0;
+}
+int pthread_rwlockattr_init(pthread_rwlockattr_t *a)    { a->__kind = 0; return 0; }
+int pthread_rwlockattr_destroy(pthread_rwlockattr_t *a) { (void)a; return 0; }
+
 /* ---- once + condition variables (QuickJS js_once/js_cond surface) ---- */
 
 int pthread_once(pthread_once_t *guard, void (*init_routine)(void)) {
