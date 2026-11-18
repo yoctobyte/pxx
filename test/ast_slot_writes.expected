@@ -1156,6 +1156,7 @@ AN_PAIR Left fin
 AN_PAIR Left flCall
 AN_PAIR Left flRaiseCall
 AN_PAIR Left getCall
+AN_PAIR Left gt
 AN_PAIR Left hix
 AN_PAIR Left identNode
 AN_PAIR Left initN
@@ -1249,6 +1250,7 @@ AN_SEQ Left GenMakeAssign(destNode, GenMakeIdent(tmpSym, Syms[tmpSym].TypeKind))
 AN_SEQ Left asgN
 AN_SEQ Left asn
 AN_SEQ Left assignNode
+AN_SEQ Left blk
 AN_SEQ Left call
 AN_SEQ Left callNode
 AN_SEQ Left cp
@@ -1259,6 +1261,7 @@ AN_SEQ Left fnLoop
 AN_SEQ Left forcAssign
 AN_SEQ Left forcLoop
 AN_SEQ Left frAsn
+AN_SEQ Left ifn
 AN_SEQ Left initAssignNode
 AN_SEQ Left lblNode
 AN_SEQ Left nd

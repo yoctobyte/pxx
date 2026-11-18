@@ -9964,6 +9964,7 @@ begin
   CAsmClobCC := False;
   CAsmClobRegs := '';
   CAsmIsGoto := False;
+  CAsmGotoCount := 0;
 end;
 
 { Split a constraint into its modifiers and its class letters. `=` and `+` mark
@@ -10209,12 +10210,104 @@ end;
 
 { The `asm goto` label section: bare identifiers. Captured only so the refusal
   below can be specific; nothing reads them. }
+{ %lN / %l[name] -> `<ASMGOTO_LBL+k>f`, and the exit stubs appended. Done on
+  the TEXT so the AT&T reader's own numeric-label machinery resolves every
+  jump; only jmp/jcc to a %l operand is meaningful (a `.quad %l1` jump table
+  would reach the reader as a label it cannot place, and refuse there). }
+const ASMGOTO_LBL = 99900; ASMGOTO_DONE = 99899;
+function CAsmGotoRewrite(const t: AnsiString; slot: Integer): AnsiString;
+var i, j, n, k, firstLbl: Integer; nm: AnsiString;
+begin
+  firstLbl := CAsmOpCount - 1;     { the hidden operand sits at the user's label base }
+  Result := '';
+  i := 1;
+  while i <= Length(t) do
+  begin
+    if (t[i] = '%') and (i < Length(t)) and (t[i + 1] = '%') then
+    begin
+      Result := Result + '%%';
+      Inc(i, 2);
+      Continue;
+    end;
+    if (t[i] = '%') and (i + 1 < Length(t)) and (t[i + 1] = 'l') and
+       ((t[i + 2] = '[') or ((t[i + 2] >= '0') and (t[i + 2] <= '9'))) then
+    begin
+      k := -1;
+      if t[i + 2] = '[' then
+      begin
+        j := i + 3; nm := '';
+        while (j <= Length(t)) and (t[j] <> ']') do begin nm := nm + t[j]; Inc(j); end;
+        for n := 0 to CAsmGotoCount - 1 do
+          if CAsmGotoName[n] = nm then k := n;
+        if k < 0 then Error('C: inline asm goto names no label [' + nm + ']');
+        i := j + 1;
+      end
+      else
+      begin
+        j := i + 2; n := 0;
+        while (j <= Length(t)) and (t[j] >= '0') and (t[j] <= '9') do
+        begin n := n * 10 + Ord(t[j]) - Ord('0'); Inc(j); end;
+        k := n - firstLbl;
+        if (k < 0) or (k >= CAsmGotoCount) then
+          Error('C: inline asm goto template names %l' + AIntToStr(n)
+                + ', which is not one of its labels');
+        i := j;
+      end;
+      Result := Result + AIntToStr(ASMGOTO_LBL + k) + 'f';
+      Continue;
+    end;
+    Result := Result + t[i];
+    Inc(i);
+  end;
+  Result := Result + #10'movl $0, %' + AIntToStr(slot) + #10'jmp '
+            + AIntToStr(ASMGOTO_DONE) + 'f';
+  for k := 0 to CAsmGotoCount - 1 do
+    Result := Result + #10 + AIntToStr(ASMGOTO_LBL + k) + ':'#10'movl $'
+              + AIntToStr(k + 1) + ', %' + AIntToStr(slot) + #10'jmp '
+              + AIntToStr(ASMGOTO_DONE) + 'f';
+  Result := Result + #10 + AIntToStr(ASMGOTO_DONE) + ':';
+end;
+
+{ The asm block, then `if (exit == k+1) goto label_k;` per label: ordinary
+  AST, so a C label anywhere in the function resolves the usual way. }
+function CAsmGotoDispatch(blk, sym: Integer): Integer;
+var k, idn, lit, cond, gt, pairN, ifn, sq, head, tail: Integer;
+begin
+  sq := AllocNode(AN_SEQ); ASTLeft[sq] := blk; ASTRight[sq] := -1;
+  head := sq; tail := sq;
+  for k := 0 to CAsmGotoCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyInteger);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := k + 1; ASTTk[lit] := Ord(tyInteger);
+    cond := AllocNode(AN_BINOP); ASTIVal[cond] := Ord(tkEq);
+    ASTLeft[cond] := idn; ASTRight[cond] := lit; ASTTk[cond] := Ord(tyBoolean);
+    gt := AllocNode(AN_GOTO);
+    ASTSOffset[gt] := CAsmGotoOff[k];
+    ASTSLen[gt] := CAsmGotoLen[k];
+    pairN := AllocNode(AN_PAIR); ASTLeft[pairN] := gt; ASTRight[pairN] := -1;
+    ifn := AllocNode(AN_IF); ASTLeft[ifn] := cond; ASTRight[ifn] := pairN;
+    sq := AllocNode(AN_SEQ); ASTLeft[sq] := ifn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq; tail := sq;
+  end;
+  Result := AllocNode(AN_BLOCK);
+  ASTLeft[Result] := head;
+end;
+
 procedure CAsmParseLabelSection;
+var lo, ll: Integer;
 begin
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
   begin
     if CurTok.Kind <> tkIdent then
       Error('C: inline asm goto expects a label name');
+    if CAsmGotoCount > High(CAsmGotoOff) then
+      Error('C: inline asm goto names more than ' + AIntToStr(High(CAsmGotoOff) + 1)
+            + ' labels');
+    CLabelSpan(TokPos - 1, lo, ll);
+    CAsmGotoOff[CAsmGotoCount] := lo;
+    CAsmGotoLen[CAsmGotoCount] := ll;
+    CAsmGotoName[CAsmGotoCount] := CurTok.SVal;
+    Inc(CAsmGotoCount);
     Next;
     if CurTok.Kind = tkComma then Next else Break;
   end;
@@ -11401,6 +11494,7 @@ end;
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    asmGotoSym, asmGotoIdx, asmGotoIdn: Integer;   { asm goto: its hidden exit index (CAsmGotoRewrite) }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
     bsMark: Integer;   { SymCount before a block-scope static declaration: CNoteBlockStatics }
@@ -11773,8 +11867,36 @@ begin
       behind them: every path out of here either encodes the template or says
       which construct it could not. }
     if CAsmIsGoto then
-      Error('C: inline asm goto is not supported'
-            + ' — the jump out of the template would have no target');
+    begin
+      if TargetArch <> TARGET_X86_64 then
+        Error('C: inline asm goto is not supported on this target');
+      if CAsmOutCount > 0 then
+        Error('C: inline asm goto with outputs is not supported'
+              + ' — every jump out of the template would have to store them');
+      if CAsmGotoCount = 0 then
+        Error('C: inline asm goto names no labels');
+      if CAsmOpCount >= MAX_CASM_OPERANDS then
+        Error('C: inline asm goto has no operand left for its exit index');
+      { the hidden exit index: an int local, bound as an "m" input to its own
+        slot (no copy in or out). %l numbering is gcc's: labels follow every
+        operand the source wrote, so the hidden one goes after them in the
+        operand table and the template never names it by number. }
+      asmGotoSym := AllocVar('', tyInteger);
+      asmGotoIdx := CAsmOpCount;
+      asmGotoIdn := AllocNode(AN_IDENT);
+      ASTIVal[asmGotoIdn] := asmGotoSym;
+      ASTTk[asmGotoIdn] := Ord(tyInteger);
+      CAsmOps[CAsmOpCount].Cons := 'm';
+      CAsmOps[CAsmOpCount].Raw := 'm';
+      CAsmOps[CAsmOpCount].IsOut := False;
+      CAsmOps[CAsmOpCount].IsInOut := False;
+      CAsmOps[CAsmOpCount].Early := False;
+      CAsmOps[CAsmOpCount].SymName := '';
+      CAsmOps[CAsmOpCount].TiedTo := -1;
+      CAsmOps[CAsmOpCount].Expr := asmGotoIdn;
+      Inc(CAsmOpCount);
+      CAsmTemplate := CAsmGotoRewrite(CAsmTemplate, asmGotoIdx);
+    end;
     if not asmEmpty then
     begin
       CAsmRefuseUnsupported;
@@ -11817,6 +11939,7 @@ begin
       if CAsmOpCount > 0 then
       begin
         Result := CAsmBuildBlock(asmSections > 0);
+        if CAsmIsGoto then Result := CAsmGotoDispatch(Result, asmGotoSym);
         Exit;
       end;
       AttSinkText := TargetArch = TARGET_I386;

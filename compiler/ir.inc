@@ -11518,6 +11518,19 @@ begin
     Result := (ASTIVal[n] <> 0) and IsIntTypeKind(IntToTypeKind(ASTTk[n]));
 end;
 
+{ An lvalue's ADDRESS, typed as the pointer it is. IRLowerAddress types an
+  element or field address with the ELEMENT's type (a double element's
+  IR_INDEX is tk=double), which is harmless where it feeds a load or store
+  directly but not where the address itself is stored: `arr[2]++` and
+  `v.number++` on doubles kept their pointer temp as a FLOAT value and
+  dereferenced garbage (SIGSEGV), on every target.
+  bug-c-increment-and-decrement-of-a-double-add-integer-bits }
+function IRAddressAsPointer(n: Integer): Integer;
+begin
+  if (n >= 0) and TypeIsFloat(IntToTypeKind(IRTk[n])) then IRTk[n] := Ord(tyPointer);
+  Result := n;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var foaSym, foaSave: Integer;
     left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
@@ -11546,7 +11559,7 @@ var foaSym, foaSave: Integer;
     ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
     lenArg: Integer;   { Length(<wide string>): the arg node, to halve the byte count }
     dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
-    isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
+    isRefArg: Boolean; argTk, stepTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     hidDest: Integer;   { hidden aggregate/variant destination, BUILT BEFORE the call node -- see IRBuildHiddenDest }
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
     recCmpId, recCmpSymA, recCmpSymB: Integer;   { field-wise record equality — see the tkEq/tkNeq record arm }
@@ -19290,15 +19303,24 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       if argTk = tyUnknown then argTk := tyInteger;
       if argTk = tyPointer then foldK := ASTIVal[node] * IRPointerStride(left)
       else foldK := ASTIVal[node];
+      { The step is an INTEGER constant typed as an integer when the operand is
+        floating -- exactly what `x += 1` lowers to, and the float binop
+        converts it. It used to be typed as the operand's own float type, and
+        the IR reads a float-typed constant as an IEEE BIT PATTERN: x++ added
+        the double whose bits are 1 (4.9e-324), so `n++` from 0 gave
+        4.94066e-324, `a++` from 5 stayed 5, and `b--` gave NaN. awk's every
+        ++/-- in a pxx-built BusyBox (pxx, on Nilix).
+        bug-c-increment-and-decrement-of-a-double-add-integer-bits }
+      if TypeIsFloat(argTk) then stepTk := tyInteger else stepTk := argTk;
       varIdx := AllocVar('', tyPointer);                 { paddr = &lvalue, once }
-      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      IRAppend(IR_STORE_SYM, varIdx, IRAddressAsPointer(IRLowerAddress(left)), -1, 0, Ord(tyPointer));
       slot := AllocVar('', argTk);                       { old value }
       IRAppend(IR_STORE_SYM, slot,
         IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
                  -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
       IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
         IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
-                 IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(argTk)),
+                 IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(stepTk)),
                  Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
       if ASTSOffset[node] = 1 then
         Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk))   { postfix: old }
@@ -19318,7 +19340,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       argTk := IntToTypeKind(ASTTk[left]);
       if argTk = tyUnknown then argTk := tyInteger;
       varIdx := AllocVar('', tyPointer);
-      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      IRAppend(IR_STORE_SYM, varIdx, IRAddressAsPointer(IRLowerAddress(left)), -1, 0, Ord(tyPointer));
       right := IRLowerAST(ASTRight[node]);
       if ASTIVal[node] = Ord(tkAssign) then
         value := right

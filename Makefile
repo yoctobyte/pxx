@@ -19501,9 +19501,12 @@ test-core: $(COMPILER)
 	# asserts what the file does: compiles, and the register round trip keeps 0.
 	./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 > /dev/null
 	tools/expect_same.sh casm_plus_r_accepted "$$($(TESTTMP)/casmfail26)" "0"
-	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
-	  | grep -q 'inline asm goto is not supported' \
-	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
+	# asm goto GRADUATED 2026-11-18 (feature-c-inline-asm-goto): x86-64 accepts
+	# it, so this file now compiles there; i386 still refuses it by name.
+	./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 > /dev/null
+	@./$(COMPILER) --target=i386 test/casm_goto_fails.c $(TESTTMP)/casmgoto_i386 2>&1 \
+	  | grep -q 'inline asm goto is not supported on this target' \
+	  || { echo 'casm_goto_fails: FAIL - i386 accepted asm goto, or refused it as something else'; exit 1; }
 	# A template with no operands to substitute IS read now (compiler/asmatt.inc).
 	# The oracle is gas on the same AT&T text, compared instruction by
 	# instruction through objdump -- not byte-for-byte, because gas picks the
@@ -20818,6 +20821,23 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asmrump26 "$$($(TESTTMP)/c_asmrump26)" "$$(cat test/c_inline_asm_rump_operand_forms.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_rump_operand_forms.c $(TESTTMP)/c_asmrump26_o2 > /dev/null
 	tools/expect_same.sh c_asmrump26_o2 "$$($(TESTTMP)/c_asmrump26_o2)" "$$(cat test/c_inline_asm_rump_operand_forms.expected)"
+	# asm goto (x86-64): %l by number and name, backward and never-taken labels.
+	./$(COMPILER) test/c_inline_asm_goto.c $(TESTTMP)/c_asmgoto26 > /dev/null
+	tools/expect_same.sh c_asmgoto26 "$$($(TESTTMP)/c_asmgoto26)" "$$(cat test/c_inline_asm_goto.expected)"
+	./$(COMPILER) -O2 test/c_inline_asm_goto.c $(TESTTMP)/c_asmgoto26_o2 > /dev/null
+	tools/expect_same.sh c_asmgoto26_o2 "$$($(TESTTMP)/c_asmgoto26_o2)" "$$(cat test/c_inline_asm_goto.expected)"
+	# ++/-- on float/double/long double step by 1.0, on every target (awk in
+	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
+	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null
+	tools/expect_same.sh c_fincdec26 "$$($(TESTTMP)/c_fincdec26)" "$$(cat test/c_float_increment_decrement.expected)"
+	./$(COMPILER) -O2 test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26_o2 > /dev/null
+	tools/expect_same.sh c_fincdec26_o2 "$$($(TESTTMP)/c_fincdec26_o2)" "$$(cat test/c_float_increment_decrement.expected)"
+	./$(COMPILER) --target=aarch64 test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec_a64 > /dev/null
+	tools/expect_same.sh c_fincdec_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_fincdec_a64)" "$$(cat test/c_float_increment_decrement.expected)"
+	./$(COMPILER) --target=i386 test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec_i386 > /dev/null
+	tools/expect_same.sh c_fincdec_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_fincdec_i386)" "$$(cat test/c_float_increment_decrement.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec_xt > /dev/null
+	tools/expect_same.sh c_fincdec_xt "$$(tools/run_target.sh xtensa $(TESTTMP)/c_fincdec_xt)" "$$(cat test/c_float_increment_decrement.expected)"
 	./$(COMPILER) test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz26 > /dev/null
 	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
 	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null

@@ -7226,6 +7226,9 @@ var
   CAsmClobCC   : Boolean;    { "cc" }
   CAsmClobRegs : AnsiString; { the register clobbers, space-separated }
   CAsmIsGoto   : Boolean;    { `asm goto` — a 4th section of label names }
+  CAsmGotoCount : Integer;   { its labels: token span for the AN_GOTO, and the name for %l[name] }
+  CAsmGotoOff, CAsmGotoLen : array[0..15] of Integer;
+  CAsmGotoName : array[0..15] of AnsiString;
   { aarch64 C inline asm (casm_a64.inc): what each block's codegen must move.
     An AN_ASM node with ASTIVal = b + 1 (IR_ASM with IRIVal = b + 1) is block
     b. Its bindings are CAsmA64Bind*[First .. First + In + Out): the first In

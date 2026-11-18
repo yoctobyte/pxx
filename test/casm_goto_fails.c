@@ -1,4 +1,10 @@
-/* `asm goto` must be refused BY NAME, not as "a non-empty template".
+/* GRADUATED 2026-11-18 (feature-c-inline-asm-goto): x86-64 now COMPILES this
+ * file; the Makefile row checks that, and that i386 still refuses it by name.
+ * The prune hazard described below does not arise: the block's exits lower
+ * to ordinary C `goto`s after it (CAsmGotoDispatch), so AN_ASM never holds
+ * a label that pruning could miss. Kept for history.
+ *
+ * `asm goto` must be refused BY NAME, not as "a non-empty template".
  *
  * It is a genuinely separate feature from the operand work: the template jumps
  * OUT of itself to a C label, so the label has to be visible to the encoder and
