@@ -4,8 +4,8 @@ track: A
 tags: [O]
 type: bug
 prio: 30
-status: open
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-24
 found-by: frank (split out of the muluh ticket, whose wall half is closed)
 blocked-by: []
@@ -399,3 +399,28 @@ WriteLn of an integer still needs the flag.
 The working design for the two that remain is the riscv32/xtensa one: a demand
 flag set by the consumer, not a new IR pass. The {$Q+} coupling recorded above
 holds there too.
+
+## Closed 2026-11-19: all four 32-bit backends
+
+riscv32 (d236b0481d) and xtensa (a433449a66) already had low-32 demand. arm32
+and i386 now have it too, in the same shape: a store to an integer of at most
+4 bytes sets a demand flag. IREmitNode reads and clears it at entry. A
+non-{$Q+} + - * and or xor of word operands under it takes the 32-bit arm,
+and passes the demand to its operands.
+
+Measured on --emit-obj objects, per function (multiplies, instructions):
+
+| | Integer*Integer | Integer*1000 | SmallInt*SmallInt | Int64*Int64 |
+| --- | --- | --- | --- | --- |
+| i386 before | 3, 35 | 3, 33 | 3, 35 | 3, 41 |
+| i386 after | 1, 26 | 1, 24 | 1, 26 | 3, 41 (unchanged, needed) |
+| arm32 before | 3 (mul, mul, umull), 58 words | 3, 51 | 3, 58 | 62 |
+| arm32 after | 1 mul, 52 words | 1, 45 | 1, 52 | 62 |
+
+The values are the claim. test/test_o_low32_binops_on_32_bit_targets.pas
+covers wrapping, negative operands, LongWord, SmallInt and Byte stores, an
+Int64 product, INT_MIN * -1, pointer arithmetic and an array loop. It matches
+x86-64 on i386 and arm32 (rows i386/low32, arm32/low32). The count is row
+i386/low32-mulcount (1). The {$Q+} population (test_overflow_checks_qplus,
+test_overflow_qplus_narrow, test_overflow_succ_pred) is identical to x86-64 on
+both targets.

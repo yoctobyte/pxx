@@ -31743,6 +31743,14 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# 32-bit integer arithmetic where the store keeps 4 bytes or less: the values
+	# match x86-64 (bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough)
+	./$(COMPILER) --target=i386 test/test_o_low32_binops_on_32_bit_targets.pas $(TESTTMP)/test_low32_i386 > /dev/null
+	tools/expect_same.sh i386/low32 "$$(tools/run_target.sh i386 $(TESTTMP)/test_low32_i386)" "$$(cat test/test_o_low32_binops_on_32_bit_targets.expected)"
+	# ...and an Integer * Integer stored to an Integer is ONE multiply (was three)
+	printf 'program m;\nfunction MulIt(x, y: Integer): Integer; cdecl; begin Result := x * y; end;\nbegin WriteLn(MulIt(ParamCount, 3)); end.\n' > $(TESTTMP)/test_low32_mul.pas
+	./$(COMPILER) --target=i386 --emit-obj $(TESTTMP)/test_low32_mul.pas $(TESTTMP)/test_low32_mul_i386.o > /dev/null
+	tools/expect_same.sh i386/low32-mulcount "$$(objdump -d --disassemble=MulIt $(TESTTMP)/test_low32_mul_i386.o | grep -cE '\s(imul|mul)l?\s')" "1"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
 	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
@@ -37864,6 +37872,10 @@ test-xtensa: $(COMPILER)
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)
+	# 32-bit integer arithmetic where the store keeps 4 bytes or less: the values
+	# match x86-64 (bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough)
+	./$(COMPILER) --target=arm32 test/test_o_low32_binops_on_32_bit_targets.pas $(TESTTMP)/test_low32_arm32 > /dev/null
+	tools/expect_same.sh arm32/low32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_low32_arm32)" "$$(cat test/test_o_low32_binops_on_32_bit_targets.expected)"
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
 	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.

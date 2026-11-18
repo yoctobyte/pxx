@@ -578,6 +578,37 @@ begin
                        (IRC[addrNode] = 1);
 end;
 
+{ Low-32 demand, riscv32's (d236b0481d) and xtensa's (a433449a66) ported.
+  Pascal integer arithmetic is typed Int64, so `q := i * j` over Integers ran
+  the r0:r1 pair path -- umull plus two cross multiplies and two adds -- and
+  the store kept r0 only. A store to an integer of at most 4 bytes says so
+  (Arm32Low32Demand, read and cleared at the top of IREmitNodeArm32, so it
+  reaches exactly the next node), and a binop under it takes the 32-bit arm
+  when that yields the same low word: + - * and or xor of word operands.
+  Never under {$Q+} (IRIVal = 1): its check reads the high word.
+  bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough }
+var
+  Arm32Low32Demand: Boolean;
+
+function Arm32NarrowBinop(node: Integer): Boolean;
+var op: Integer; tk, lk, rk: TTypeKind;
+begin
+  Result := False;
+  if IRIVal[node] = 1 then Exit;
+  tk := IntToTypeKind(IRTk[node]);
+  if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
+  op := IRC[node];
+  if not ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+          (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor))) then Exit;
+  lk := IRValueKind(IRA[node]);
+  rk := IRValueKind(IRB[node]);
+  { a pointer or class operand is one word as well, and so is a constant }
+  Result := (TypeIsMachineInt(lk) or (lk = tyPointer) or (lk = tyClass) or
+             (IRKind[IRA[node]] = IR_CONST_INT)) and
+            (TypeIsMachineInt(rk) or (rk = tyPointer) or (rk = tyClass) or
+             (IRKind[IRB[node]] = IR_CONST_INT));
+end;
+
 procedure EmitLoadVar64Arm32(idx: Integer);
 { Load an 8-byte slot into r0:r1 (lo:hi). r9 is the address scratch. }
 begin
@@ -1473,7 +1504,11 @@ var
   sVal: AnsiString;
   tk: TTypeKind;
   sgn, savedLValueWrite: Boolean;
+  low32Dem: Boolean;   { the consumer keeps only r0 (Arm32Low32Demand) }
+  narrow32: Boolean;   { Arm32NarrowBinop, when low32Dem }
 begin
+  low32Dem := Arm32Low32Demand;
+  Arm32Low32Demand := False;
   { A write to StdErr: point the runtime writers at fd 2 for this ONE node
     (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
     the node as usual, then restore both. A stdout write never gets here, so its
@@ -1866,6 +1901,9 @@ begin
           EmitStoreVar64Arm32(IRA[node]);
           Exit;
         end;
+        { a store to an integer of at most 4 bytes keeps only r0 }
+        Arm32Low32Demand := TypeIsMachineInt(tk) and (not Syms[IRA[node]].IsArray) and
+                            (TypeSlotSize(tk) <= 4);
         IREmitNodeArm32(IRB[node]);
         { C double->int: a float RHS (in d0) stored to an integer slot truncates
           via VFP vcvt.s32.f64 (arm32 `long` is 32-bit, so 32-bit convert suffices)
@@ -2326,7 +2364,8 @@ begin
           failed to COMPILE on all four 32-bit backends. Handled below instead,
           where the element is narrowed safely first.
           bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
-        if (op <> Ord(tkIn)) and
+        narrow32 := low32Dem and Arm32NarrowBinop(node);
+        if (not narrow32) and (op <> Ord(tkIn)) and
            (Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk)) then
         begin
           EmitBinop64Arm32(left, right, op,
@@ -2350,6 +2389,7 @@ begin
                 TypeKindSpelling(tk) + ' (op token ' + AIntToStr(op) + ', operands ' +
                 TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
                 CurProcNoteForError);
+        Arm32Low32Demand := narrow32;
         IREmitNodeArm32(left);
         { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
           word -- $FFFFFFFF for a negative included -- is out of range. Saturate
@@ -2362,6 +2402,7 @@ begin
           EmitI32($13A00C01);                { movne r0, #256 }
         end;
         EmitI32($E92D0001); { push {r0} }
+        Arm32Low32Demand := narrow32;
         IREmitNodeArm32(right);
         EmitI32($E1A01000); { mov r1, r0 }
         EmitI32($E8BD0001); { pop {r0} }

@@ -79,3 +79,23 @@ feature-rv32-constant-64-bit-shifts-and-literal-inline-arguments landed:
 code 280,930 -> 277,562 B on the app as it is today (data/bss unchanged).
 BmpTemp 1,804 -> 1,028, BmpPress 3,276 -> 1,976 (opening numbers: 3,564 and
 6,536). Not yet remeasured: the linked image and OTA headroom.
+
+## Remeasured 2026-11-19 (thermostat session, METER=1, latest-34474d4b4f)
+
+**The slot pressure that opened this ticket is gone.** C3: pxx code
+277,562 B, image 889,292 B = **68%** of the 0x140000 slot (was 91%). S3: pxx
+code 428,951 B, image 1,048,119 B = **80%** (was 95%). DRAM/DIRAM 30-31% on
+both, so RAM is not an issue. No libgcc helpers in `nm -u`.
+
+What is big now (C3 / S3 bytes): ConfigParse 7,720/8,744, Serve 6,648/10,652,
+StateJson 5,840/10,548, MotaHandle 4,888/9,168, RelayRun 4,336/7,088,
+ConfigToText 3,672/7,576, Handle2 3,676/7,336. String building and JSON
+dominate. The BMP Int64 routines are no longer near the top. Runtime: Value
+3,324/4,352, PXXDynArrayReleaseDepth 1,576/2,104, PXXDynArrayRetainImmediate
+1,384/1,824, PXXStrAppend 1,280/1,836.
+
+The largest remaining lever is xtensa itself. S3 code is 1.55x C3, with 2.1x
+the instruction count (182k vs 88k, 62% already narrow). That is
+feature-xtensa-codegen-density-before-register-allocation, and register
+allocation is waiting on the owner. Lowered in urgency: nothing here is a wall
+now.

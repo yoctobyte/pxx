@@ -1215,6 +1215,35 @@ begin
   Result := (tk = tyInt64) or (tk = tyUInt64);
 end;
 
+{ Low-32 demand, as riscv32 (d236b0481d), xtensa (a433449a66) and arm32 have
+  it. Pascal integer arithmetic is typed Int64, so `q := i * j` over Integers
+  ran the edx:eax pair path (cdq twice, two imuls and a mul) and the store
+  kept eax only. A store to an integer of at most 4 bytes says so
+  (I386Low32Demand, read and cleared at the top of IREmitNode386), and a
+  binop under it takes the 32-bit arm for + - * and or xor of word operands.
+  Never under {$Q+} (IRIVal = 1).
+  bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough }
+var
+  I386Low32Demand: Boolean;
+
+function I386NarrowBinop(node: Integer): Boolean;
+var op: Integer; tk, lk, rk: TTypeKind;
+begin
+  Result := False;
+  if IRIVal[node] = 1 then Exit;
+  tk := IntToTypeKind(IRTk[node]);
+  if not ((tk = tyInt64) or (tk = tyUInt64)) then Exit;
+  op := IRC[node];
+  if not ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+          (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor))) then Exit;
+  lk := IRValueKind(IRA[node]);
+  rk := IRValueKind(IRB[node]);
+  Result := (TypeIsMachineInt(lk) or (lk = tyPointer) or (lk = tyClass) or
+             (IRKind[IRA[node]] = IR_CONST_INT)) and
+            (TypeIsMachineInt(rk) or (rk = tyPointer) or (rk = tyClass) or
+             (IRKind[IRB[node]] = IR_CONST_INT));
+end;
+
 procedure EmitNode64_386(node: Integer);
 { Emit node and guarantee its full 64-bit value sits in edx:eax. A 32-bit
   source is widened in place: sign-extend (cdq) when signed, else zero-extend. }
@@ -1844,7 +1873,11 @@ var
   tk, lhsTk, rhsTk: TTypeKind;
   sgn, savedLValueWrite: Boolean;
   pNilLhs, pLoopLhs, pNilRhs, pLoopRhs, pCap, nextJmp, nextJmp2, falseJmp: Integer;
+  low32Dem: Boolean;   { the consumer keeps only eax (I386Low32Demand) }
+  narrow32: Boolean;   { I386NarrowBinop, when low32Dem }
 begin
+  low32Dem := I386Low32Demand;
+  I386Low32Demand := False;
   { A write to StdErr: point the runtime writers at fd 2 for this ONE node
     (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
     the node as usual, then restore both. A stdout write never gets here, so its
@@ -2455,6 +2488,9 @@ begin
           end;
           Exit;
         end;
+        { a store to an integer of at most 4 bytes keeps only eax }
+        I386Low32Demand := TypeIsMachineInt(tk) and (not Syms[si].IsArray) and
+                           (TypeSlotSize(tk) <= 4);
         IREmitNode386(IRB[node]);
         { C double->int: a float RHS (in xmm0) stored into an integer slot must
           truncate (cvttsd2si), not reinterpret whatever is in eax. Mirrors the
@@ -3286,7 +3322,8 @@ begin
           raised "64-bit binop operator not yet supported" -- `q in s` with an
           Int64 q failed to COMPILE on all four 32-bit backends. It is handled
           below, where the element is narrowed safely first. }
-        if (op <> Ord(tkIn)) and
+        narrow32 := low32Dem and I386NarrowBinop(node);
+        if (not narrow32) and (op <> Ord(tkIn)) and
            (Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk)) then
         begin
           EmitBinop64_386(left, right, op,
@@ -3312,6 +3349,7 @@ begin
                 TypeKindSpelling(tk) + ' (op token ' + AIntToStr(op) + ', operands ' +
                 TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
                 CurProcNoteForError);
+        I386Low32Demand := narrow32;
         IREmitNode386(left);
         { A 64-bit element reaching `in`: the membership test below is 32-bit
           and a set holds only 0..255, so any nonzero high dword -- including
@@ -3330,6 +3368,7 @@ begin
           ]);
         end;
         EmitAsm386('push eax');
+        I386Low32Demand := narrow32;
         IREmitNode386(right);
         EmitAsm386([
           'mov ecx, eax',
