@@ -28630,6 +28630,12 @@ test-core: $(COMPILER)
 	@gcc -w -c -o $(TESTTMP)/c_sifold26_gcc.o test/c_static_init_fold_data.c
 	@gcc -w -no-pie -o $(TESTTMP)/c_sifold26_gcc test/c_static_init_fold_main.c $(TESTTMP)/c_sifold26_gcc.o
 	tools/expect_same.sh c_sifold26 "$$(timeout 20 $(TESTTMP)/c_sifold26)" "$$(timeout 20 $(TESTTMP)/c_sifold26_gcc)"
+	./$(COMPILER) test/c_rump_small_fold.c $(TESTTMP)/c_rumpsm26
+	@gcc -w -o $(TESTTMP)/c_rumpsm26_gcc test/c_rump_small_fold.c
+	tools/expect_same.sh c_rumpsm26 "$$(timeout 20 $(TESTTMP)/c_rumpsm26)" "$$(timeout 20 $(TESTTMP)/c_rumpsm26_gcc)"
+	./$(COMPILER) --target=i386 test/c_rump_small_fold.c $(TESTTMP)/c_rumpsm26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_rumpsm26_gcc32 test/c_rump_small_fold.c
+	tools/expect_same.sh c_rumpsm26_i386 "$$(timeout 20 $(TESTTMP)/c_rumpsm26_i386)" "$$(timeout 20 $(TESTTMP)/c_rumpsm26_gcc32)"
 	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
 	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
 	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle

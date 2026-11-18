@@ -406,11 +406,58 @@ begin
   end;
 end;
 
+{ `text` with every whole identifier `from` (outside string and character
+  literals and pp-numbers) replaced by `into`. }
+function CPRenameIdent(const text, from, into: AnsiString): AnsiString;
+var i, j: Integer; q: Char;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(text) do
+  begin
+    if (text[i] = '"') or (text[i] = #39) then
+    begin
+      q := text[i];
+      j := i + 1;
+      while (j <= Length(text)) and (text[j] <> q) do
+      begin
+        if (text[j] = #92) and (j < Length(text)) then Inc(j);
+        Inc(j);
+      end;
+      Result := Result + Copy(text, i, j - i + 1);
+      i := j + 1;
+    end
+    else if CPIsIdentStart(text[i]) then
+    begin
+      j := i;
+      while (j <= Length(text)) and CPIsIdentChar(text[j]) do Inc(j);
+      if Copy(text, i, j - i) = from then Result := Result + into
+      else Result := Result + Copy(text, i, j - i);
+      i := j;
+    end
+    else if (text[i] >= '0') and (text[i] <= '9') then
+    begin
+      j := i;
+      while (j <= Length(text)) and (CPIsIdentChar(text[j]) or (text[j] = '.')) do Inc(j);
+      Result := Result + Copy(text, i, j - i);
+      i := j;
+    end
+    else
+    begin
+      Result := Result + text[i];
+      Inc(i);
+    end;
+  end;
+end;
+
 procedure CPDefine(const line: AnsiString; p, last: Integer);
 var
   mi, nameStart, nameEnd, valueStart, valueEnd, paramStart, paramEnd, j: Integer;
   reuse, oldBase, oldCnt: Integer;
+  vaName, body: AnsiString;   { GNU named variadic `args...`: its name, the renamed body }
+  q: Integer;
 begin
+  vaName := '';
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   if (p > last) or not CPIsIdentStart(line[p]) then Exit;
   nameStart := p;
@@ -464,6 +511,23 @@ begin
         CPPNameLen[CPPCount] := paramEnd - paramStart + 1;
         Inc(CPPCount);
         CPMParamCount[mi] := CPMParamCount[mi] + 1;
+        { GNU `name...`: a NAMED variadic parameter. It is __VA_ARGS__ under
+          another name -- not a parameter of its own -- so it comes off the
+          list and the body says __VA_ARGS__ wherever it says `name`; then
+          `, ## name` with no variadic arguments drops the comma like
+          `, ## __VA_ARGS__` (NetBSD SPPP_LOG). It was bound as an ordinary
+          parameter, and omitted it was "undeclared identifier".
+          rump-pxx g33. bug-c-gnu-named-variadic-macro-parameter }
+        q := p;
+        while (q <= last) and (line[q] in [' ', #9]) do Inc(q);
+        if (q + 2 <= last) and (line[q] = '.') and (line[q + 1] = '.') and (line[q + 2] = '.') then
+        begin
+          vaName := Copy(line, paramStart, paramEnd - paramStart + 1);
+          Dec(CPPCount);
+          CPMParamCount[mi] := CPMParamCount[mi] - 1;
+          CPMVariadic[mi] := True;
+          p := q + 3;
+        end;
       end
       else if (p <= last) and (line[p] = '.') then
       begin
@@ -492,11 +556,20 @@ begin
   valueStart := p;
   valueEnd := last;
   while (valueEnd >= valueStart) and (line[valueEnd] in [' ', #9]) do Dec(valueEnd);
-  CPMValueOff[mi] := CPStoreRange(line, valueStart, valueEnd);
-  if valueEnd >= valueStart then
-    CPMValueLen[mi] := valueEnd - valueStart + 1
+  if (vaName <> '') and (valueEnd >= valueStart) then
+  begin
+    body := CPRenameIdent(Copy(line, valueStart, valueEnd - valueStart + 1), vaName, '__VA_ARGS__');
+    CPMValueOff[mi] := CPStoreRange(body, 1, Length(body));
+    CPMValueLen[mi] := Length(body);
+  end
   else
-    CPMValueLen[mi] := 0;
+  begin
+    CPMValueOff[mi] := CPStoreRange(line, valueStart, valueEnd);
+    if valueEnd >= valueStart then
+      CPMValueLen[mi] := valueEnd - valueStart + 1
+    else
+      CPMValueLen[mi] := 0;
+  end;
   if DebugTrace then
   begin
     write('C preprocessor: define #', mi, ' name=');
@@ -1929,6 +2002,7 @@ procedure CPExpandFunction(mi: Integer; const src: AnsiString;
 var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
     pasteNext: Boolean;   { previous body token was `##` — next operand is pasted }
     vaEmpty: Boolean;     { `, ## __VA_ARGS__` with no variadic arguments }
+    vaSp, vaAny: Boolean; { `#__VA_ARGS__`: white space seen since the last character }
 begin
   pasteNext := False;
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
@@ -2032,6 +2106,31 @@ begin
       a := q;
       while (q <= last) and CPIsIdentChar(CPrepChars[q]) do Inc(q);
       b := q - 1;
+      { `#__VA_ARGS__` (also what `#args` of a GNU named variadic becomes):
+        the variadic arguments' text, commas included, with each run of
+        white space one space (C 6.10.3.2). It was left as literal text, so
+        `#__VA_ARGS__` swallowed the rest of the file into a string.
+        bug-c-gnu-named-variadic-macro-parameter }
+      if (b >= a) and CPMVariadic[mi] and CPRangeIsVaArgs(a, b) then
+      begin
+        AppendChar(dst, '"');
+        if argCount > CPMParamCount[mi] then
+        begin
+          vaSp := False; vaAny := False;
+          for k := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
+          begin
+            if src[k] = #1 then Continue;
+            if src[k] in [' ', #9, #10, #13] then begin vaSp := True; Continue; end;
+            if vaSp and vaAny then AppendChar(dst, ' ');
+            vaSp := False; vaAny := True;
+            if (src[k] = '"') or (src[k] = '\') then AppendChar(dst, '\');
+            AppendChar(dst, src[k]);
+          end;
+        end;
+        AppendChar(dst, '"');
+        p := q;
+        Continue;
+      end;
       if b >= a then
       begin
         ai := CPParamIndex(mi, a, b - a + 1);

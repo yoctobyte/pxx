@@ -647,6 +647,7 @@ AN_BINOP Left tc
 AN_BINOP Left unpCnt
 AN_BINOP Left valNode
 AN_BINOP Left vlaDim
+AN_BINOP Left vlaExt
 AN_BINOP Left vtGuardCall
 AN_BINOP Right ASTLeft[argSeq]
 AN_BINOP Right ASTLeft[node]
@@ -714,6 +715,7 @@ AN_BINOP Right tl
 AN_BINOP Right unpElem
 AN_BINOP Right unpHi
 AN_BINOP Right valNode
+AN_BINOP Right vlaLitN
 AN_BINOP Right vlaSzLit
 AN_BINOP Right zero
 AN_BINOP Right zeroNode

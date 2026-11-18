@@ -4522,6 +4522,7 @@ var szK, szN: Integer; szWide: Boolean;
     szTdI: Integer;   { walks an array typedef's inherent dims for a type-name operand }
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
+    vlaExt, vlaExtPos, vlaMulN, vlaLitN: Integer;   { `sizeof(T [n])`: the run-time extents' product }
     saRec: Integer;   { the general path's field-access base record, REC_NONE if none }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
@@ -4529,6 +4530,7 @@ begin
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;
+  vlaExt := -1;
   if CSizeofOperandHasTrailingPostfix then
   begin
     node := ParseCUnary;
@@ -4663,9 +4665,35 @@ begin
           Expect(tkRBrack, ']')
         else
         begin
+          { A RUN-TIME extent, `sizeof(struct s [n - 1])` (NetBSD
+            rumpdev_bus_dma.c): a VLA type, sized at run time as C 6.5.3.4
+            says. It was folded with n as 0 and refused as a negative
+            dimension. Same rewind as the declaration's VLA arm.
+            bug-c-sizeof-of-a-vla-type-name-folds-the-extent rump-pxx g31 }
+          CConstExprSawNonConst := False;
+          vlaExtPos := TokPos;
+          CConstExprAllowCall := True;
           cArrLen := CEvalConstExpr;   { extent }
-          CCheckArrayExtent(cArrLen);
-          sz := sz * cArrLen;
+          CConstExprAllowCall := False;
+          if CConstExprSawNonConst then
+          begin
+            TokPos := vlaExtPos - 1; Next;
+            node := ParseCExpr;
+            if vlaExt < 0 then vlaExt := node
+            else
+            begin
+              vlaMulN := AllocNode(AN_BINOP); ASTIVal[vlaMulN] := Ord(tkStar);
+              ASTLeft[vlaMulN] := vlaExt; ASTRight[vlaMulN] := node;
+              ASTTk[vlaMulN] := Ord(tyNativeUInt);
+              vlaExt := vlaMulN;
+            end;
+            node := -1;
+          end
+          else
+          begin
+            CCheckArrayExtent(cArrLen);
+            sz := sz * cArrLen;
+          end;
           Expect(tkRBrack, ']');
         end;
       end;
@@ -5040,6 +5068,19 @@ begin
     ASTIVal[node] := vlaSz;
     ASTTk[node] := Ord(tyInt64);
     Result := node;
+    Exit;
+  end;
+  if vlaExt >= 0 then
+  begin
+    { the constant part (element size times any constant extents) times the
+      run-time extents; size_t, as the literal below }
+    vlaLitN := AllocNode(AN_INT_LIT);
+    ASTIVal[vlaLitN] := sz;
+    ASTTk[vlaLitN] := Ord(tyNativeUInt);
+    vlaMulN := AllocNode(AN_BINOP); ASTIVal[vlaMulN] := Ord(tkStar);
+    ASTLeft[vlaMulN] := vlaExt; ASTRight[vlaMulN] := vlaLitN;
+    ASTTk[vlaMulN] := Ord(tyNativeUInt);
+    Result := vlaMulN;
     Exit;
   end;
   { C 6.5.3.4: sizeof yields size_t, which is UNSIGNED. This said tyInteger, and
@@ -20721,6 +20762,23 @@ begin
   end;
 end;
 
+{ The arm a constant condition did NOT select: read for its tokens and its
+  type, never as a constraint on the whole. NetBSD's ilog2(x) is
+  `__builtin_constant_p(x) ? <constant arithmetic> : fls64(x) - 1`, used as an
+  array size; gcc never evaluates the call, and refusing it ("a constant
+  expression cannot call one") or letting it mark the dimension run-time was
+  wrong. rump-pxx g32. bug-c-a-dead-ternary-arm-is-held-to-constant-rules }
+function CEvalConstDeadArm: Int64;
+var savedAllow, savedNonConst: Boolean;
+begin
+  savedAllow := CConstExprAllowCall;
+  savedNonConst := CConstExprSawNonConst;
+  CConstExprAllowCall := True;
+  Result := CEvalConstExpr;
+  CConstExprAllowCall := savedAllow;
+  CConstExprSawNonConst := savedNonConst;
+end;
+
 function CEvalConstTernary: Int64;
 var t, e: Int64; tu, tw: Boolean;
 begin
@@ -20728,10 +20786,14 @@ begin
   if CurTok.Kind = tkQuestion then
   begin
     Next;
-    t := CEvalConstExpr;            { then-branch is a full expression }
+    if CConstExprSawNonConst then t := CEvalConstExpr   { a run-time condition: both arms count }
+    else if Result <> 0 then t := CEvalConstExpr
+    else t := CEvalConstDeadArm;    { then-branch is a full expression }
     tu := CConstUns; tw := CConstWide;
     if CurTok.Kind = tkColon then Next;
-    e := CEvalConstExpr;            { else-branch }
+    if CConstExprSawNonConst then e := CEvalConstExpr
+    else if Result = 0 then e := CEvalConstExpr
+    else e := CEvalConstDeadArm;    { else-branch }
     CConstConv(tu, tw, CConstUns, CConstWide);
     if Result <> 0 then Result := t else Result := e;
     Result := CConstWrap(Result, CConstUns, CConstWide);
