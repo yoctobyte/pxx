@@ -4411,6 +4411,13 @@ begin
   CPAddLiteral('__STDC__', '01');
   CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
   CPAddLiteral('__STDC_HOSTED__', '01');
+  { <assert.h> on the system-library path: its impl (__pxx_assert_fail) is
+    not pulled there and no libc exports it, so the header binds assert() to
+    the libc's own __assert_fail instead (glibc and musl share its signature).
+    NetBSD rumpuser's sp.c and bio.c, built --freestanding --system-libs.
+    bug-c-assert-under-system-libs-imports-pxx-assert-fail }
+  if CHeaderUsesSystemLib('assert') then
+    CPAddLiteral('__PXX_SYSTEM_ASSERT__', '1');
   { Command-line `-D<name>[=<value>]` predefines, applied AFTER the built-ins so
     a `-D` overrides them (newest-wins lookup); then `-U<name>` removals last so
     an explicit undefine beats any define of the same name. `-D<name>` with no

@@ -20832,6 +20832,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asmx87_26 "$$($(TESTTMP)/c_asmx87_26)" "$$(cat test/c_inline_asm_x87_and_system.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_x87_and_system.c $(TESTTMP)/c_asmx87_26_o2 > /dev/null
 	tools/expect_same.sh c_asmx87_26_o2 "$$($(TESTTMP)/c_asmx87_26_o2)" "$$(cat test/c_inline_asm_x87_and_system.expected)"
+	# <assert.h> under --system-libs binds to libc's __assert_fail
+	# (bug-c-assert-under-system-libs-imports-pxx-assert-fail)
+	./$(COMPILER) --system-libs test/c_assert_system_libs.c $(TESTTMP)/c_assert_syslibs26 > /dev/null
+	tools/expect_same.sh c_assert_syslibs26 "$$($(TESTTMP)/c_assert_syslibs26)" "assert passed"
 	# ++/-- on float/double/long double step by 1.0, on every target (awk in
 	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
 	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null
