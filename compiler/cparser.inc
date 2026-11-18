@@ -8080,22 +8080,6 @@ begin
     end;
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
     CTypePtrBaseRec := baseRec;
-    { A star over a POINTER typedef (or typeof of a pointer): `dtp *q` is
-      `dt_t **q`, and must carry what that carries -- depth 2 over the
-      typedef's pointee. It counted depth 1 with the typedef's own Pointer as
-      the base, so `**q`, sizeof(**q) and typeof(*q) lost the struct: NetBSD's
-      atomic_load_consume(&fdp->fd_dt)->dt_ff[0] (a typeof_unqual of
-      `const volatile __typeof__(*p) *`) read 8 bytes past a pointer and
-      rump's fd_free KASSERT failed at boot. A function-pointer typedef is
-      left alone (its pointee is a signature, not a kind).
-      bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down }
-    if isTypedef and (Result = tyPointer) and (not tdIsFnType) and
-       (CTypePtrElemProcSig < 0) and (IntToTypeKind(tdElemTk) <> tyUnknown) then
-    begin
-      CTypePtrBaseTk := tdElemTk;
-      CTypePtrBaseRec := tdElemRec;
-      CTypePtrDepth := 1;
-    end;
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);

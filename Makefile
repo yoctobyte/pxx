@@ -20894,8 +20894,8 @@ test-core: $(COMPILER)
 	gcc test/c_fnptr_global_cast_init_main.c $(TESTTMP)/c_fpcast26_f.o -o $(TESTTMP)/c_fpcast26_f
 	tools/expect_same.sh c_fpcast26_f "$$($(TESTTMP)/c_fpcast26_f)" "$$(cat test/c_fnptr_global_cast_init.expected)"
 	# a pointer to a pointer typedef keeps its pointee (bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down)
-	./$(COMPILER) test/c_pointer_to_pointer_typedef_pointee.c $(TESTTMP)/c_pptd26 > /dev/null
-	tools/expect_same.sh c_pptd26 "$$($(TESTTMP)/c_pptd26)" "$$(cat test/c_pointer_to_pointer_typedef_pointee.expected)"
+	./$(COMPILER) test/c_pointer_to_pointer_typedef_pointee.c $(TESTTMP)/c_pptdee26 > /dev/null
+	tools/expect_same.sh c_pptdee26 "$$($(TESTTMP)/c_pptdee26)" "$$(cat test/c_pointer_to_pointer_typedef_pointee.expected)"
 	# an external only dead code called is not required (bug-c-objects-require-externals-only-dead-code-called)
 	./$(COMPILER) --emit-obj test/c_dead_extern_not_required.c $(TESTTMP)/c_deadext26.o > /dev/null
 	tools/expect_same.sh c_deadext26_rel "$$(readelf -rW $(TESTTMP)/c_deadext26.o | grep -c never_defined)" "0"
