@@ -1058,6 +1058,12 @@ begin
          or CaseEqual(b,'fxsave64') or CaseEqual(b,'fxrstor64')
          or CaseEqual(b,'fxsave') or CaseEqual(b,'fxrstor')
          or CaseEqual(b,'ldmxcsr') or CaseEqual(b,'stmxcsr')
+         { x87 control/state (NetBSD cpufunc.h, rump g26) and lldt }
+         or CaseEqual(b,'fnstcw') or CaseEqual(b,'fstcw') or CaseEqual(b,'fldcw')
+         or CaseEqual(b,'fnstsw') or CaseEqual(b,'fstsw')
+         or CaseEqual(b,'fnstenv') or CaseEqual(b,'fstenv') or CaseEqual(b,'fldenv')
+         or CaseEqual(b,'fnsave') or CaseEqual(b,'fsave') or CaseEqual(b,'frstor')
+         or CaseEqual(b,'lldt')
          or CaseEqual(b,'xsave64') or CaseEqual(b,'xrstor64')
          or CaseEqual(b,'xsaveopt64') or CaseEqual(b,'xsavec64')
          or CaseEqual(b,'xsave') or CaseEqual(b,'xrstor')

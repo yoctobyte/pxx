@@ -20826,6 +20826,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asmgoto26 "$$($(TESTTMP)/c_asmgoto26)" "$$(cat test/c_inline_asm_goto.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_goto.c $(TESTTMP)/c_asmgoto26_o2 > /dev/null
 	tools/expect_same.sh c_asmgoto26_o2 "$$($(TESTTMP)/c_asmgoto26_o2)" "$$(cat test/c_inline_asm_goto.expected)"
+	# NetBSD cpufunc.h's x87/system instructions, and "m" operands of a
+	# pointer-to-array deref (feature-c-inline-asm-x87-and-system-instructions)
+	./$(COMPILER) test/c_inline_asm_x87_and_system.c $(TESTTMP)/c_asmx87_26 > /dev/null
+	tools/expect_same.sh c_asmx87_26 "$$($(TESTTMP)/c_asmx87_26)" "$$(cat test/c_inline_asm_x87_and_system.expected)"
+	./$(COMPILER) -O2 test/c_inline_asm_x87_and_system.c $(TESTTMP)/c_asmx87_26_o2 > /dev/null
+	tools/expect_same.sh c_asmx87_26_o2 "$$($(TESTTMP)/c_asmx87_26_o2)" "$$(cat test/c_inline_asm_x87_and_system.expected)"
 	# ++/-- on float/double/long double step by 1.0, on every target (awk in
 	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
 	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null

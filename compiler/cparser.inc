@@ -10562,6 +10562,22 @@ end;
   admit it. Deliberately narrow -- it is about output operands, and every
   output a real block writes is a name, a subscript, a field, or a dereference
   of those. }
+{ `*q` for q a pointer-to-array: the decay node `q + 0` (stamped, see
+  CIsDecayedDerefOfPtrToArr), with q a plain pointer or a cast's `(t = e, t)`.
+  Its value IS the array's address, which an "m" operand must bind by address. }
+function CAsmIsPtrToArrDeref(node: Integer): Boolean;
+var q: Integer;
+begin
+  Result := False;
+  if CIsDecayedDerefOfPtrToArr(node) then begin Result := True; Exit; end;
+  if (node < 0) or (ASTKind[node] <> AN_BINOP) or (ASTIVal[node] <> Ord(tkPlus)) then Exit;
+  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) or
+     (ASTIVal[ASTRight[node]] <> 0) then Exit;
+  q := CCommaValue(ASTLeft[node]);
+  Result := (q >= 0) and (ASTKind[q] = AN_IDENT) and (ASTIVal[q] >= 0) and
+            (SymPtrElemArrLen[ASTIVal[q]] > 0);
+end;
+
 function CAsmExprIsPure(node: Integer): Boolean;
 begin
   Result := False;
@@ -10573,6 +10589,18 @@ begin
       Result := CAsmExprIsPure(ASTLeft[node]);
     AN_INDEX, AN_BINOP:
       Result := CAsmExprIsPure(ASTLeft[node]) and CAsmExprIsPure(ASTRight[node]);
+    { `(t = e, t)` with t a HIDDEN temp: how a cast to a pointer-to-array
+      `(char (*)[512])p` is built. Storing the same pure e into a temp nobody
+      else names, twice, is unobservable, so the pair is as pure as e. NetBSD's
+      fxsave/xsave/fnsave write exactly `"=m" (*(char (*)[N])area)`.
+      feature-c-inline-asm-x87-and-system-instructions }
+    AN_COMMA:
+      Result := (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_ASSIGN) and
+                (ASTLeft[ASTLeft[node]] >= 0) and (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
+                (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_IDENT) and
+                (ASTIVal[ASTRight[node]] = ASTIVal[ASTLeft[ASTLeft[node]]]) and
+                (ASTIVal[ASTRight[node]] >= 0) and (Syms[ASTIVal[ASTRight[node]]].Name = '') and
+                CAsmExprIsPure(ASTRight[ASTLeft[node]]);
   end;
 end;
 
@@ -10833,7 +10861,12 @@ begin
     if (TargetArch = TARGET_X86_64) and (i >= CAsmOutCount) and
        (CAsmOps[i].TiedTo < 0) and (CAsmOps[i].Cons = 'm') and
        ((ASTKind[CAsmOps[i].Expr] = AN_DEREF) or (ASTKind[CAsmOps[i].Expr] = AN_INDEX) or
-        (ASTKind[CAsmOps[i].Expr] = AN_FIELD)) then
+        (ASTKind[CAsmOps[i].Expr] = AN_FIELD) or
+        { `*(char (*)[512])p` is the decay node `x + 0`, not an AN_DEREF: its
+          VALUE is the address, so the carrier copy handed the template the
+          pointer. NetBSD's frstor/fxrstor/xrstor restored FPU state from the
+          bytes of a pointer. bug-c-an-m-input-of-a-pointer-to-array-deref-reads-the-pointer }
+        CAsmIsPtrToArrDeref(CAsmOps[i].Expr)) then
       memReg[i] := True;
     if (TargetArch = TARGET_X86_64) and (i < CAsmOutCount) and
        (CAsmOps[i].Cons = 'm') then

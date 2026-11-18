@@ -698,6 +698,57 @@ begin
     { rdtscp: edx:eax = TSC, ecx = IA32_TSC_AUX (Linux puts the CPU number
       there). 0F 01 F9. }
     if CaseEqual(mn,'rdtscp')  then begin AsmB($0F); AsmB($01); AsmB($F9); Exit; end;
+    { NetBSD x86/include/cpufunc.h (rump g26): the x87 control ops, the cache
+      and task-switch privileged ops, rdpmc and monitor/mwait. The "f" forms
+      without n are the n form behind an fwait (9B), as gas assembles them.
+      feature-c-inline-asm-x87-and-system-instructions }
+    if CaseEqual(mn,'fnclex')  then begin AsmB($DB); AsmB($E2); Exit; end;
+    if CaseEqual(mn,'fclex')   then begin AsmB($9B); AsmB($DB); AsmB($E2); Exit; end;
+    if CaseEqual(mn,'finit')   then begin AsmB($9B); AsmB($DB); AsmB($E3); Exit; end;
+    if CaseEqual(mn,'fwait') or CaseEqual(mn,'wait') then begin AsmB($9B); Exit; end;
+    if CaseEqual(mn,'clts')    then begin AsmB($0F); AsmB($06); Exit; end;
+    if CaseEqual(mn,'invd')    then begin AsmB($0F); AsmB($08); Exit; end;
+    if CaseEqual(mn,'wbinvd')  then begin AsmB($0F); AsmB($09); Exit; end;
+    if CaseEqual(mn,'rdpmc')   then begin AsmB($0F); AsmB($33); Exit; end;
+    if CaseEqual(mn,'monitor') then begin AsmB($0F); AsmB($01); AsmB($C8); Exit; end;
+    if CaseEqual(mn,'mwait')   then begin AsmB($0F); AsmB($01); AsmB($C9); Exit; end;
+    { pushf/popf are 64-bit in long mode with no REX; gas spells them pushfq }
+    if CaseEqual(mn,'pushfq') or CaseEqual(mn,'pushf') then begin AsmB($9C); Exit; end;
+    if CaseEqual(mn,'popfq') or CaseEqual(mn,'popf') then begin AsmB($9D); Exit; end;
+  end;
+
+  { fnstsw %ax: DF E0, the only register form of the status-word store }
+  if (CaseEqual(mn,'fnstsw') or CaseEqual(mn,'fstsw')) and (nops = 1) and
+     (AsmOpKind[0] = AOP_REG) then
+  begin
+    if (AsmOpReg[0] <> 0) or (AsmOpSize[0] <> 2) then
+      Error('asm: ' + mn + ' stores to %ax or to memory only');
+    if CaseEqual(mn,'fstsw') then AsmB($9B);
+    AsmB($DF); AsmB($E0);
+    Exit;
+  end;
+  { x87 environment and control-word memory ops: opcode byte + /digit, no REX.W.
+    fnstcw D9 /7, fldcw D9 /5, fnstenv D9 /6, fldenv D9 /4, fnstsw DD /7,
+    fnsave DD /6, frstor DD /4; the non-n spellings add the fwait. }
+  ext := -1; rm := 0;
+  if CaseEqual(mn,'fnstcw') or CaseEqual(mn,'fstcw') then begin rm := $D9; ext := 7; end
+  else if CaseEqual(mn,'fldcw') then begin rm := $D9; ext := 5; end
+  else if CaseEqual(mn,'fnstenv') or CaseEqual(mn,'fstenv') then begin rm := $D9; ext := 6; end
+  else if CaseEqual(mn,'fldenv') then begin rm := $D9; ext := 4; end
+  else if CaseEqual(mn,'fnstsw') or CaseEqual(mn,'fstsw') then begin rm := $DD; ext := 7; end
+  else if CaseEqual(mn,'fnsave') or CaseEqual(mn,'fsave') then begin rm := $DD; ext := 6; end
+  else if CaseEqual(mn,'frstor') then begin rm := $DD; ext := 4; end;
+  if (ext >= 0) and (nops = 1) then
+  begin
+    if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
+            (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_RIPLBL)) then
+      Error('asm: ' + mn + ' needs a memory operand');
+    if CaseEqual(mn,'fstcw') or CaseEqual(mn,'fstenv') or CaseEqual(mn,'fstsw')
+       or CaseEqual(mn,'fsave') then AsmB($9B);
+    AsmPrefixAndREX(0, ext, 0, 0);
+    AsmB(rm);
+    AsmModRM(ext, 0);
+    Exit;
   end;
 
   { rdpid r64: F3 (REX.B) 0F C7 /7, register only. The F3 is a mandatory
@@ -886,6 +937,23 @@ begin
     AsmPrefixAndREX(0, ext, 0, 0);
     AsmB($0F); AsmB($01);
     AsmModRM(ext, 0);
+    Exit;
+  end;
+  { lldt r/m16: 0F 00 /2, ltr's sibling (NetBSD cpufunc.h) }
+  if CaseEqual(mn,'lldt') and (nops = 1) then
+  begin
+    if AsmOpKind[0] = AOP_REG then
+    begin
+      if AsmOpReg[0] >= 8 then AsmB($41);
+      AsmB($0F); AsmB($00);
+      AsmB($C0 or (2 shl 3) or (AsmOpReg[0] and 7));
+    end
+    else
+    begin
+      AsmPrefixAndREX(0, 2, 0, 0);
+      AsmB($0F); AsmB($00);
+      AsmModRM(2, 0);
+    end;
     Exit;
   end;
   if CaseEqual(mn,'ltr') and (nops = 1) then

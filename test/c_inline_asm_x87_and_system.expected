@@ -1,0 +1,12 @@
+cw after fninit 037f
+cw after fldcw 0f7f
+sw after fnclex 0000
+fnsave stored cw 0f7f, live cw 037f
+cw after frstor 0f7f
+fxsave fcw 0f7f
+cw after fxrstor 0f7f
+fxsave round trip same
+rflags bit 1 1
+m input cast 1122334455667788
+m input var 1122334455667788
+m output cast 42
