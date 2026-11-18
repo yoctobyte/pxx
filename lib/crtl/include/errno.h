@@ -15,7 +15,11 @@
    falling back to the main thread's block -- so nothing that compiles today
    stops compiling. See TargetHasTlsBlock in compiler/thread_emit.inc.
    bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure */
-#ifdef __pxx_thread_local__
+#if defined(__pxx_host_errno__) && !defined(__pxx_thread_local__)
+/* an --emit-obj --system-libs object: the host libc's errno (cpreproc.inc) */
+extern int *__errno_location(void);
+#define errno (*__errno_location())
+#elif defined(__pxx_thread_local__)
 extern __thread int errno;
 #else
 /* GUARDED, and the guard is about NOISE rather than correctness: where

@@ -5800,6 +5800,30 @@ begin
                      not (SymObjRuntimeCopy[i] and ObjRuntimeIsPrivate);
 end;
 
+{ -fcommon: an exported C global that no declaration initialised, in no
+  named section, not thread-local and not weak, is SHN_COMMON -- value = its
+  alignment, size = its size -- and the linker merges every object's copy
+  with the one real definition. Its .bss slot stays and is unnamed; every
+  reference already names the symbol (ObjDataExportSymForOff).
+  feature-c-fcommon-tentative-definitions-are-common-symbols }
+function ObjDataIsCommon(i: Integer): Boolean;
+begin
+  ObjDataIsCommon := CObjCommon and ObjDataIsExport(i) and
+                     (i < Length(SymCHasInit)) and (not SymCHasInit[i]) and
+                     (not SymOffIsData(Syms[i].Offset)) and (not SymElfTls[i]) and
+                     (not SymObjDataWeak[i]) and (SymAllocSize[i] > 0) and
+                     ((i >= Length(SymSectionName)) or (SymSectionName[i] = ''));
+end;
+
+function ObjCommonAlign(i: Integer): Integer;
+var a: Integer;
+begin
+  a := 1;
+  while (a < 16) and (SymAllocSize[i] mod (a * 2) = 0) do a := a * 2;
+  if a > 8 then a := 8;
+  ObjCommonAlign := a;
+end;
+
 { A typed const that DCE left unreferenced goes to .rodata. Baking
   (TryBakeConstArrayIntoData) puts a literal array in .data -- SRAM on
   ESP-IDF -- and keeps it writable because {$J+} lets a program assign it.
@@ -7822,7 +7846,12 @@ begin
     SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
+    begin
+      if ObjDataIsCommon(i) then
+        writeSym64(f, ObjDataStrOff[i], $11, $FFF2, ObjCommonAlign(i), SymAllocSize[i])
+      else
+        writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
+    end;
   for i := 0 to ExternalCount-1 do
     if OFsaExtOf[i] >= 0 then
       ObjWriteFsaAliasSym(f, ObjExtStrOff[i], OFsaExtOf[i])

@@ -4349,6 +4349,13 @@ begin
     too, or the macro becomes a name that is not the thing. }
   if TargetHasTlsBlock and not (EmitObjMode or EmitSharedMode) then
     CPAddLiteral('__pxx_thread_local__', '01');
+  { An --emit-obj --system-libs object is linked against the host libc, whose
+    errno is ITS per-thread one: errno.h then reads it as glibc/musl spell it,
+    (*__errno_location()). A plain `extern int errno` was a non-TLS reference
+    to glibc's TLS errno, which ld refuses (rumpnic's virtif_user.c).
+    feature-c-thread-local-in-x86-64-objects }
+  if CUseSystemLibs and EmitObjMode and not EmitSharedMode then
+    CPAddLiteral('__pxx_host_errno__', '01');
   { The shared-runtime marker (decide-a-is-a-pxx-object-a-self-contained-
     runtime-or-a-translation-unit): one symbol per runtime VARIANT -- target,
     and --threadsafe, which changes errno to a thread-local and adds pthread.

@@ -5913,6 +5913,10 @@ var
     SymTlsOffset stays -1 for it -- pxx's own gs block is not involved.
     feature-c-thread-local-in-x86-64-objects }
   SymElfTls      : array of Boolean;
+  { A C file-scope declaration of this name had an initialiser. With -fcommon
+    the rest (tentative definitions) are SHN_COMMON in an x86-64 object.
+    feature-c-fcommon-tentative-definitions-are-common-symbols }
+  SymCHasInit    : array of Boolean;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -7748,6 +7752,7 @@ var
   TlsStrictUsed   : Boolean;     { a Pascal `threadvar` got a slot, or `__pxxTlsBase` was named. Neither has ever compiled with a shared copy, so the ELF writer REFUSES the dynamic fallback for these, where C's `__thread` only warns. }
   BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
+  CObjCommon      : Boolean;     { -fcommon: tentative C definitions are COMMON symbols }
   ElfTlsUsed      : Boolean;     { a SymElfTls variable exists: ThreadVarRewriteRange must run }
   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }

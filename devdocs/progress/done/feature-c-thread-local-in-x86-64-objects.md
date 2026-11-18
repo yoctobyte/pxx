@@ -50,11 +50,20 @@ which is what gcc's objects use. So in an x86-64 object (`--emit-obj`, not
 Neither access model is valid in a `dlopen()`ed shared object (that needs
 general-dynamic). `--shared` is not routed here.
 
+**Only under `--system-libs`** (follow-up, same day). Such an object is for a
+host libc's link, whose loader sets fs. pxx's own `--link` has no PT_TLS and no
+TPOFF/GOTTPOFF resolution, and crtl's `--threadsafe` runtime has a
+`static __thread`; that link failed on `.tdata.pxx_key_val` until this
+condition was added (reported by pxx2). Under `--system-libs` an object's
+`errno` is also the host's, `(*__errno_location())` (crtl errno.h,
+`__pxx_host_errno__`). A plain `extern int errno` was a non-TLS reference to
+glibc's TLS errno, which ld refused when linking rumpnic's `virtif_user.c`.
+
 ## Proof
 
 `test/c_thread_local_object.c` covers a global, an initialised `static`, an
 array, a struct, a `static` pointer to another thread-local, and an `extern`
 defined by the gcc main. Four threads each count to 2000 in their own copy,
 and the addresses differ. It matches gcc's object exactly as an
-`-O2 --freestanding` object (initialiser baked) and as a hosted object with
+`-O2 --freestanding` object (initialiser baked) and as a hosted `--system-libs` object with
 `-DTL_NO_INIT`. Rows: c_tlsobj26_f, c_tlsobj26.

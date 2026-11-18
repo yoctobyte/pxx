@@ -20883,7 +20883,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O2 --emit-obj --freestanding --system-libs test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26_f.o > /dev/null
 	gcc test/c_thread_local_object_main.c $(TESTTMP)/c_tlsobj26_f.o -o $(TESTTMP)/c_tlsobj26_f -lpthread
 	tools/expect_same.sh c_tlsobj26_f "$$($(TESTTMP)/c_tlsobj26_f)" "$$(cat test/c_thread_local_object.expected)"
-	./$(COMPILER) --emit-obj -DTL_NO_INIT test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26.o > /dev/null
+	./$(COMPILER) --emit-obj --system-libs -DTL_NO_INIT test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26.o > /dev/null
 	gcc test/c_thread_local_object_main.c $(TESTTMP)/c_tlsobj26.o -o $(TESTTMP)/c_tlsobj26 -lpthread
 	tools/expect_same.sh c_tlsobj26 "$$($(TESTTMP)/c_tlsobj26)" "$$(cat test/c_thread_local_object.expected)"
 	# a cast function name initialises a function-pointer global (bug-c-a-cast-function-name-initialiser-of-a-function-pointer-global-is-dropped)
@@ -20896,6 +20896,18 @@ test-core: $(COMPILER)
 	# a pointer to a pointer typedef keeps its pointee (bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down)
 	./$(COMPILER) test/c_pointer_to_pointer_typedef_pointee.c $(TESTTMP)/c_pptdee26 > /dev/null
 	tools/expect_same.sh c_pptdee26 "$$($(TESTTMP)/c_pptdee26)" "$$(cat test/c_pointer_to_pointer_typedef_pointee.expected)"
+	# a block-scope extern list with one known name (bug-c-a-block-scope-extern-list-hoists-only-when-its-last-name-is-new)
+	./$(COMPILER) --emit-obj test/c_block_extern_list_partly_known.c $(TESTTMP)/c_bextl26.o > /dev/null
+	gcc test/c_block_extern_list_partly_known_main.c $(TESTTMP)/c_bextl26.o -o $(TESTTMP)/c_bextl26
+	tools/expect_same.sh c_bextl26 "$$($(TESTTMP)/c_bextl26)" "42"
+	# -fcommon (feature-c-fcommon-tentative-definitions-are-common-symbols)
+	./$(COMPILER) --emit-obj -fcommon test/c_fcommon_tentative.c $(TESTTMP)/c_fcommon26.o > /dev/null
+	gcc test/c_fcommon_tentative_main.c $(TESTTMP)/c_fcommon26.o -o $(TESTTMP)/c_fcommon26
+	tools/expect_same.sh c_fcommon26 "$$($(TESTTMP)/c_fcommon26)" "42"
+	tools/expect_same.sh c_fcommon26_sym "$$(nm $(TESTTMP)/c_fcommon26.o | grep -c ' C ')" "3"
+	./$(COMPILER) --emit-obj -fcommon --freestanding --system-libs test/c_fcommon_tentative.c $(TESTTMP)/c_fcommon26_f.o > /dev/null
+	gcc test/c_fcommon_tentative_main.c $(TESTTMP)/c_fcommon26_f.o -o $(TESTTMP)/c_fcommon26_f
+	tools/expect_same.sh c_fcommon26_f "$$($(TESTTMP)/c_fcommon26_f)" "42"
 	# an external only dead code called is not required (bug-c-objects-require-externals-only-dead-code-called)
 	./$(COMPILER) --emit-obj test/c_dead_extern_not_required.c $(TESTTMP)/c_deadext26.o > /dev/null
 	tools/expect_same.sh c_deadext26_rel "$$(readelf -rW $(TESTTMP)/c_deadext26.o | grep -c never_defined)" "0"

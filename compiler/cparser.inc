@@ -14059,8 +14059,13 @@ begin
     rump's curlwp is `__thread`: shared, a second thread's
     KASSERT(curlwp == NULL) panicked at boot.
     feature-c-thread-local-in-x86-64-objects }
+  { ONLY UNDER --system-libs: the object is then for a host libc's link,
+    whose loader sets fs. pxx's own --link has no PT_TLS and no TPOFF/GOTTPOFF
+    resolution, and crtl's --threadsafe runtime object has a `static
+    __thread` -- that link failed on ".tdata.pxx_key_val" until this
+    condition. Without --system-libs a __thread keeps the degraded shared copy. }
   if EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_X86_64) and
-     CProgramMode and (CStaticDataMode or not hasInit) then
+     CUseSystemLibs and CProgramMode and (CStaticDataMode or not hasInit) then
   begin
     SymElfTls[idx] := True;
     ElfTlsUsed := True;
@@ -14119,7 +14124,9 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
     gSecPlace: Boolean;     { __attribute__((section)) placed this global (CApplyGlobalSection) }
     gCastK, gCastD: Integer; { the end of a `(T)` cast in front of a function name }
+    gHadInit: Boolean;       { the function-pointer declarator has `= ...` }
 begin
+  gHadInit := False;
   { PXXDBG=c.staticdata turns CStaticDataMode on for a whole test run, which
     is how the C corpus exercises the baker without a flag on every row. }
   if (not CStaticDataMode) and PxxDbgEnabled('c.staticdata') then CStaticDataMode := True;
@@ -14212,6 +14219,7 @@ begin
       if gFpDi <= 7 then gFpDims[gFpDi] := CTypeFnPtrDims[gFpDi];
     nArrElems := 0;
     paDeferTok := -1;
+    gHadInit := CurTok.Kind = tkAssign;
     if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
     begin
       Next; Next;                        { consume assign and opening brace }
@@ -14459,7 +14467,8 @@ begin
       it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
       bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
-    CApplyThreadLocalStorage(idx, declSawThread, True);
+    CApplyThreadLocalStorage(idx, declSawThread, gHadInit);
+    if (idx >= 0) and gHadInit then SymCHasInit[idx] := True;
     if (idx >= 0) and wasArr and (gFpNDims >= 2) then
     begin
       SymArrNDims[idx] := gFpNDims;
@@ -14973,6 +14982,7 @@ begin
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
     CApplyThreadLocalStorage(idx, declSawThread,
                              (CurTok.Kind = tkAssign) or gPreScanInit);
+    if (idx >= 0) and ((CurTok.Kind = tkAssign) or gPreScanInit) then SymCHasInit[idx] := True;
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
@@ -19147,7 +19157,7 @@ procedure CHoistBlockScopeExterns;
   hoisted.
   bug-c-a-block-scope-function-prototype-is-not-a-declaration }
 var k, e, depth, savedPos, nameTok: Integer;
-    hasParen: Boolean;
+    hasParen, anyNew: Boolean;
 begin
   savedPos := TokPos - 1;     { CurTok = the body's opening brace }
   depth := 0;
@@ -19169,17 +19179,25 @@ begin
       e := k + 1;
       hasParen := False;
       nameTok := -1;
+      { ANY declarator the file has not declared: `extern struct domain
+        arpdomain, inetdomain;` with only inetdomain at file scope tested the
+        LAST name, found it, and left arpdomain undeclared (rump's
+        netinet_component.c). Re-declaring a known extern is harmless.
+        bug-c-a-block-scope-extern-list-hoists-only-when-its-last-name-is-new }
+      anyNew := False;
       while (e < TokCount) and (Tokens[e].Kind <> tkSemicolon) and
             (Tokens[e].Kind <> tkBegin) and (Tokens[e].Kind <> tkEnd) do
       begin
         if Tokens[e].Kind = tkLParen then hasParen := True;
         if (Tokens[e].Kind = tkIdent) and (Tokens[e + 1].Kind in [tkSemicolon, tkLBrack, tkComma]) then
+        begin
           nameTok := e;
+          if FindSym(GetTokenStrFromRaw(Tokens[e].SOffset, Tokens[e].SLen)) < 0 then anyNew := True;
+        end;
         Inc(e);
       end;
       if (e < TokCount) and (Tokens[e].Kind = tkSemicolon) and (not hasParen) and
-         (nameTok > k + 1) and
-         (FindSym(GetTokenStrFromRaw(Tokens[nameTok].SOffset, Tokens[nameTok].SLen)) < 0) then
+         (nameTok > k + 1) and anyNew then
       begin
         TokPos := k + 1; Next;     { CurTok = the type, `extern` just behind it }
         ParseCGlobalVarDecl;

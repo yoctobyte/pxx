@@ -2808,6 +2808,15 @@ begin
       StrictOverload := False;
       Inc(i);
     end
+    else if (option = '-fcommon') or (option = '-fno-common') then
+    begin
+      { -fcommon: a C tentative definition (`int x;` at file scope) is a COMMON
+        symbol in an x86-64 object, so several objects may each have one, as
+        NetBSD's net_stub.c relies on. Default -fno-common, as gcc 10+.
+        feature-c-fcommon-tentative-definitions-are-common-symbols }
+      CObjCommon := option = '-fcommon';
+      Inc(i);
+    end
     else if option = '-fsigned-char' then
     begin
       { Override the target psABI's plain-`char` signedness; real projects pass
