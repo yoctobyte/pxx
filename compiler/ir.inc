@@ -539,8 +539,14 @@ begin
     load or store of the WHOLE array never happens in C (arrays are not
     assignable), so those kinds reaching here would be a new path, refused.
     feature-c-thread-local-arrays }
-  if (a >= 0) and CTlsReachedByAddress(a) then
+  if (a >= 0) and (CTlsReachedByAddress(a) or CElfTlsByAddress(a)) then
   begin
+    if ((kind = IR_LEA) or (kind = IR_SLOTADDR)) and SymElfTls[a] then
+    begin
+      Result := IRAppend(IR_TLSBASE, -1, -1, -1, -(a + 1), Ord(tyPointer));
+      SymIRReached[a] := True;
+      Exit;
+    end;
     if (kind = IR_LEA) or (kind = IR_SLOTADDR) then
     begin
       tlsBase := IRAppend(IR_TLSBASE, -1, -1, -1, 0, Ord(tyPointer));

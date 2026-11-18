@@ -20879,6 +20879,28 @@ test-core: $(COMPILER)
 	gcc test/c_asm_label_main.c $(TESTTMP)/c_asmlbl26_f.o -o $(TESTTMP)/c_asmlbl26_f
 	tools/expect_same.sh c_asmlbl26_f "$$($(TESTTMP)/c_asmlbl26_f)" "$$(cat test/c_asm_label.expected)"
 	tools/expect_same.sh c_fsalias26_refuse "$$(./$(COMPILER) --emit-obj test/c_file_scope_asm_code_refused.c $(TESTTMP)/c_fsalias26_r.o 2>&1 | grep -c 'file-scope asm: "myfunc:"')" "1"
+	# C __thread in an x86-64 object is ELF TLS (feature-c-thread-local-in-x86-64-objects)
+	./$(COMPILER) -O2 --emit-obj --freestanding --system-libs test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26_f.o > /dev/null
+	gcc test/c_thread_local_object_main.c $(TESTTMP)/c_tlsobj26_f.o -o $(TESTTMP)/c_tlsobj26_f -lpthread
+	tools/expect_same.sh c_tlsobj26_f "$$($(TESTTMP)/c_tlsobj26_f)" "$$(cat test/c_thread_local_object.expected)"
+	./$(COMPILER) --emit-obj -DTL_NO_INIT test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26.o > /dev/null
+	gcc test/c_thread_local_object_main.c $(TESTTMP)/c_tlsobj26.o -o $(TESTTMP)/c_tlsobj26 -lpthread
+	tools/expect_same.sh c_tlsobj26 "$$($(TESTTMP)/c_tlsobj26)" "$$(cat test/c_thread_local_object.expected)"
+	# a cast function name initialises a function-pointer global (bug-c-a-cast-function-name-initialiser-of-a-function-pointer-global-is-dropped)
+	./$(COMPILER) --emit-obj test/c_fnptr_global_cast_init.c $(TESTTMP)/c_fpcast26.o > /dev/null
+	gcc test/c_fnptr_global_cast_init_main.c $(TESTTMP)/c_fpcast26.o -o $(TESTTMP)/c_fpcast26
+	tools/expect_same.sh c_fpcast26 "$$($(TESTTMP)/c_fpcast26)" "$$(cat test/c_fnptr_global_cast_init.expected)"
+	./$(COMPILER) --emit-obj --freestanding --system-libs test/c_fnptr_global_cast_init.c $(TESTTMP)/c_fpcast26_f.o > /dev/null
+	gcc test/c_fnptr_global_cast_init_main.c $(TESTTMP)/c_fpcast26_f.o -o $(TESTTMP)/c_fpcast26_f
+	tools/expect_same.sh c_fpcast26_f "$$($(TESTTMP)/c_fpcast26_f)" "$$(cat test/c_fnptr_global_cast_init.expected)"
+	# a pointer to a pointer typedef keeps its pointee (bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down)
+	./$(COMPILER) test/c_pointer_to_pointer_typedef_pointee.c $(TESTTMP)/c_pptd26 > /dev/null
+	tools/expect_same.sh c_pptd26 "$$($(TESTTMP)/c_pptd26)" "$$(cat test/c_pointer_to_pointer_typedef_pointee.expected)"
+	# an external only dead code called is not required (bug-c-objects-require-externals-only-dead-code-called)
+	./$(COMPILER) --emit-obj test/c_dead_extern_not_required.c $(TESTTMP)/c_deadext26.o > /dev/null
+	tools/expect_same.sh c_deadext26_rel "$$(readelf -rW $(TESTTMP)/c_deadext26.o | grep -c never_defined)" "0"
+	gcc test/c_dead_extern_not_required_main.c $(TESTTMP)/c_deadext26.o -o $(TESTTMP)/c_deadext26
+	tools/expect_same.sh c_deadext26 "$$($(TESTTMP)/c_deadext26)" "42"
 	# ++/-- on float/double/long double step by 1.0, on every target (awk in
 	# every pxx BusyBox; bug-c-increment-and-decrement-of-a-double-add-integer-bits).
 	./$(COMPILER) test/c_float_increment_decrement.c $(TESTTMP)/c_fincdec26 > /dev/null

@@ -1,0 +1,6 @@
+thread 0: 2006 count 2000
+thread 1: 2119 count 2000
+thread 2: 2232 count 2000
+thread 3: 2345 count 2000
+distinct copies: 1
+main: 2797 0

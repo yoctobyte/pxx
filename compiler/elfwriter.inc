@@ -3782,6 +3782,8 @@ function ObjDataImpBind(i: Integer): Byte;
 begin
   if (i < Length(SymObjDataWeak)) and SymObjDataWeak[i] then ObjDataImpBind := $20
   else ObjDataImpBind := $10;
+  { STT_TLS: ld refuses a TLS relocation against a non-TLS symbol }
+  if (i < Length(SymElfTls)) and SymElfTls[i] then ObjDataImpBind := ObjDataImpBind or 6;
 end;
 
 function ObjExtBind(extIdx: Integer): Byte;
@@ -5784,6 +5786,7 @@ function ObjDataExportInfo(i: Integer): Byte;
   ObjProcBind, which carries the argument and the measurement. }
 begin
   if SymObjRuntimeCopy[i] or SymObjDataWeak[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
+  if SymElfTls[i] then ObjDataExportInfo := (ObjDataExportInfo and $F0) or 6;  { STT_TLS }
 end;
 
 function ObjDataIsExport(i: Integer): Boolean;
@@ -7018,6 +7021,30 @@ begin
       if dsym >= 0 then
         dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
     end;
+    { ELF TLS (EmitElfTlsAddr). Initial-exec names the variable's symbol with
+      the -4 PC addend, so it needs a symbol: an import or an export. Local-exec
+      is S + A - TP, so the cut's section symbol plus the offset serves a
+      `static` one. feature-c-thread-local-in-x86-64-objects }
+    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 2) then
+    begin
+      if dsym < 0 then
+        ErrorNoPos('--emit-obj: internal: an initial-exec __thread reference has no symbol');
+      ObjRelPush(GlobFix[i].CodePos, dsym, 22, -4);
+      Continue;
+    end;
+    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 1) then
+    begin
+      if dsym >= 0 then
+        ObjRelPush(GlobFix[i].CodePos, dsym, 23, 0)
+      else
+      begin
+        if not SymOffIsData(GlobFix[i].BSSoff) then
+          ErrorNoPos('--emit-obj: internal: a local-exec __thread variable is not in .tdata');
+        ObjDRef(0, SymOffDataPart(GlobFix[i].BSSoff), csym, crel);
+        ObjRelPush(GlobFix[i].CodePos, csym, 23, crel);
+      end;
+      Continue;
+    end;
     if dsym >= 0 then
     begin
       if GlobFixPCRel[i] then
@@ -7427,6 +7454,7 @@ var
   dataRelaOff, dataRelaCount, dshstr: Integer;
   machine, rAbs64: Integer;
   cdrSym: Integer; cdrAdd: Int64;   { a CDataReloc entry's symbol and addend }
+  extLive: array of Boolean;         { an external a live site still uses }
 {$ifdef FPC}
   f: File;
 {$else}
@@ -7610,8 +7638,29 @@ begin
       ObjDRelPush(MethodFixups[i].DataPos,
                   ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
                   ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
+  { ONLY A LIVE EXTERNAL'S SLOT IS RELOCATED. Every external the parse
+    reached got a slot, including ones only a header's static inline or a
+    since-removed body called; gcc emits neither, so those calls never exist
+    there. The slot's relocation made the object REQUIRE the symbol anyway:
+    rump's librump, linked whole, wanted 18 functions no rump library defines
+    (pmap_pv_remove, vm_map_lock, ...). Live = a call or load through the
+    slot that survived DCE (DynCall*), or a C initialiser naming it (CDR).
+    A dead slot stays zero, and its UND symbol is left unreferenced, which no
+    linker resolves. bug-c-objects-require-externals-only-dead-code-called }
+  SetLength(extLive, ExternalCount + 1);
+  for i := 0 to ExternalCount - 1 do extLive[i] := False;
+  for i := 0 to DynCallCount - 1 do
+    if (DynCallExtIdx[i] >= 0) and (DynCallExtIdx[i] < ExternalCount) then
+      extLive[DynCallExtIdx[i]] := True;
+  for i := 0 to CDRCount-1 do
+  begin
+    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
+    if (cdrSym >= extSym0) and (cdrSym < extSym0 + ExternalCount) then
+      extLive[cdrSym - extSym0] := True;
+  end;
   for i := 0 to ExternalCount-1 do
-    ObjDRelPush(ExternalGotOff[i], extSym0 + i, rAbs64, 0);
+    if extLive[i] then
+      ObjDRelPush(ExternalGotOff[i], extSym0 + i, rAbs64, 0);
   for i := 0 to CDRCount-1 do
   begin
     ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
@@ -7743,7 +7792,12 @@ begin
     pass which simply exports everything. }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-      writeSym64(f, ObjDataStrOff[i], $01, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
+    begin
+      if SymElfTls[i] then
+        writeSym64(f, ObjDataStrOff[i], $06, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i])
+      else
+        writeSym64(f, ObjDataStrOff[i], $01, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
+    end;
   { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
     data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
     -- a thunk is code no proc owns and its extent is recorded nowhere, so
@@ -7927,6 +7981,10 @@ begin
   for c := 0 to ODCCount - 1 do
     if ODCSec[c] = 0 then
     begin
+      { SHF_TLS on a C `__thread` variable's .tdata.<name> }
+      if Copy(ODCFull[c], 1, 6) = '.tdata' then
+        writeShdrA64(f, ODCNm[c] + 5, 1, $403, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c])
+      else
       writeShdrA64(f, ODCNm[c] + 5, 1, 3, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c]);
       writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);
       if ODCRelN[c] > 0 then

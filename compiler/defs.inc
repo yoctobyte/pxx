@@ -4905,6 +4905,10 @@ var
   { Bytes of the instruction that FOLLOW the 4-byte displacement -- an immediate
     on a C7/81/83 form. The rip-relative correction is -(4 + this). }
   GlobFixTrail : array of Integer;
+  { 0, or an ELF TLS site (EmitElfTlsAddr): 1 = local-exec, R_X86_64_TPOFF32 on
+    `lea rax,[rax+disp32]`; 2 = initial-exec, R_X86_64_GOTTPOFF on
+    `mov rax,[rip+disp32]`. Parallel by index; dce.inc carries it. }
+  GlobFixTls : array of Byte;
   { Parallel to Fixups, same reason as GlobFixPCRel: TFixup is a bootstrap
     record (REC_TFIXUP, size asserted at 16). True = the site is a 4-byte
     rip-relative displacement from a rewritten `movabs`, not an 8-byte
@@ -5903,6 +5907,11 @@ var
     rewrites the reference before any consumer sees it -- and this is the
     failure mode if one ever does. }
   SymTlsOffset   : array of Integer;
+  { A C `__thread` in an x86-64 object: real ELF TLS, a .tdata.<name> cut and
+    STT_TLS, reached through fs as gcc's code reaches it (EmitElfTlsAddr).
+    SymTlsOffset stays -1 for it -- pxx's own gs block is not involved.
+    feature-c-thread-local-in-x86-64-objects }
+  SymElfTls      : array of Boolean;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -7738,6 +7747,7 @@ var
   TlsStrictUsed   : Boolean;     { a Pascal `threadvar` got a slot, or `__pxxTlsBase` was named. Neither has ever compiled with a shared copy, so the ELF writer REFUSES the dynamic fallback for these, where C's `__thread` only warns. }
   BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
+  ElfTlsUsed      : Boolean;     { a SymElfTls variable exists: ThreadVarRewriteRange must run }
   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }
   TlsBlockSize    : Integer;     { DERIVED, never spelled twice: TLS_USER_FIRST_OFF + TlsUserBytes. The slot map plus the threadvar area; what EmitTlsMainInstall reserves, what the clone stub carves, and what __pxxTlsBlockSize folds to. }

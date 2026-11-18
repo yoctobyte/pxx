@@ -1230,6 +1230,7 @@ begin
     SetLength(GlobFix, gfN);
     SetLength(GlobFixPCRel, gfN);
     SetLength(GlobFixTrail, gfN);
+    SetLength(GlobFixTls, gfN);
     SetLength(GlobFixPicDelta, gfN);
     SetLength(GlobFixHiLo, gfN);
     SetLength(GlobFixLoStore, gfN);
@@ -1237,6 +1238,7 @@ begin
   end;
   GlobFixPCRel[GlobFixCount] := False;
   GlobFixTrail[GlobFixCount] := 0;
+  GlobFixTls[GlobFixCount] := 0;
   GlobFixPicDelta[GlobFixCount] := 0;
   GlobFixHiLo[GlobFixCount] := False;
   GlobFixLoStore[GlobFixCount] := False;
@@ -1320,6 +1322,35 @@ begin
   Inc(GlobFixCount); EmitI32(0);
   { see EmitDataRef: the store wrapper's `pop` belongs after the disp32 }
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
+end;
+
+procedure EmitElfTlsAddr(sym: Integer);
+{ rax = the address of C `__thread` variable `sym` in the CALLING thread, as an
+  x86-64 object for a gcc/ld link reaches it: through fs, glibc's (or any ELF
+  libc's) thread pointer, whose word 0 is the TCB's self-pointer.
+  A `static` one is defined in this object, so local-exec:
+      mov rax, fs:[0] ; lea rax, [rax + x@tpoff]          (R_X86_64_TPOFF32)
+  Anything else may be defined in another object, so initial-exec:
+      mov rax, [rip + x@gottpoff] ; add rax, fs:[0]       (R_X86_64_GOTTPOFF)
+  which ld relaxes to local-exec when it links an executable. Neither is valid
+  in a dlopen()ed shared object (that needs general-dynamic); --shared is not
+  routed here. The writer picks the relocation from GlobFixTls.
+  feature-c-thread-local-in-x86-64-objects }
+begin
+  if SymCStaticLink[sym] then
+  begin
+    EmitB($64); EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);
+    EmitB($48); EmitB($8D); EmitB($80);
+    EmitGlobRef(Syms[sym].Offset);
+    GlobFixTls[GlobFixCount - 1] := 1;
+  end
+  else
+  begin
+    EmitB($48); EmitB($8B); EmitB($05);
+    EmitGlobRef(Syms[sym].Offset);
+    GlobFixTls[GlobFixCount - 1] := 2;
+    EmitB($64); EmitB($48); EmitB($03); EmitB($04); EmitB($25); EmitI32(0);
+  end;
 end;
 
 { The TLS segment override and disp32 of a hand-encoded `gs:[disp]` operand

@@ -8726,7 +8726,9 @@ begin
         the installer parked at offset 0 -- the same trick glibc and musl use.
         GS because fs belongs to libc; see EmitTlsMainInstall. }
       begin
-        if TlsViaTeb then EmitTlsSelfLoad(0)
+        { a negative ival names a C `__thread` symbol in an object (ELF TLS) }
+        if IRIVal[node] < 0 then EmitElfTlsAddr(Integer(-IRIVal[node] - 1))
+        else if TlsViaTeb then EmitTlsSelfLoad(0)
         else EmitAsmX64(['mov rax, gs:[%]', 0]);
       end;
 
@@ -16108,7 +16110,7 @@ procedure ThreadVarRewriteRange;
   line. }
 var i, sym, addrNode: Integer;
 begin
-  if TlsUserUsed = 0 then Exit;
+  if (TlsUserUsed = 0) and not ElfTlsUsed then Exit;
   if ThreadVarRewriteHigh > ASTArenaFloor then ThreadVarRewriteHigh := ASTArenaFloor;
   { THE INLINE RESERVE IS NOT THIS ROUTINE'S TO TOUCH, and leaving it out is a
     correctness rule rather than a saving. [0..INLINE_AST_RESERVE) holds the
@@ -16135,11 +16137,19 @@ begin
     begin
       sym := ASTIVal[i];
       { a C array keeps its symbol; IRAppend redirects its address }
-      if (sym >= 0) and (sym < SymCount) and (SymTlsOffset[sym] >= 0)
-         and not CTlsReachedByAddress(sym) then
+      if (sym >= 0) and (sym < SymCount) and
+         (((SymTlsOffset[sym] >= 0) and not CTlsReachedByAddress(sym)) or
+          (SymElfTls[sym] and not CElfTlsByAddress(sym))) then
       begin
         addrNode := AllocNode(AN_TLSBASE);
         ASTTk[addrNode]   := Ord(tyPointer);
+        if SymElfTls[sym] then
+        begin
+          { the symbol rides in ASTSLen, which lowers to IR_TLSBASE's ival }
+          ASTIVal[addrNode] := 0;
+          ASTSLen[addrNode] := -(sym + 1);
+        end
+        else
         ASTIVal[addrNode] := SymTlsOffset[sym];
         ASTLine[addrNode] := ASTLine[i];
         ASTFile[addrNode] := ASTFile[i];

@@ -2854,6 +2854,15 @@ begin
   TryAssignThreadVarStorage := True;
 end;
 
+function CElfTlsByAddress(sym: Integer): Boolean;
+{ The ELF TLS twin of CTlsReachedByAddress: an array or struct `__thread` in an
+  x86-64 object keeps its symbol, and IRAppend redirects its address.
+  feature-c-thread-local-in-x86-64-objects }
+begin
+  Result := CProgramMode and (sym >= 0) and (sym < SymCount) and SymElfTls[sym]
+            and (Syms[sym].IsArray or (Syms[sym].TypeKind = tyRecord));
+end;
+
 function CTlsReachedByAddress(sym: Integer): Boolean;
 { A C thread-local that keeps its symbol (an array or a struct): IRAppend
   redirects its address and ThreadVarRewriteRange leaves it alone. Scalars

@@ -1963,6 +1963,7 @@ begin
       GlobFixHiLo[j] := GlobFixHiLo[i];
       GlobFixLoStore[j] := GlobFixLoStore[i];
       GlobFixTrail[j] := GlobFixTrail[i];
+      GlobFixTls[j] := GlobFixTls[i];
       GlobFixPicDelta[j] := GlobFixPicDelta[i];
       Inc(j);
     end;

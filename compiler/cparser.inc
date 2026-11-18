@@ -7819,10 +7819,23 @@ begin
                 its own body is the function's RESULT variable }
               base := ParseCDeclType();
               if CTypeIsVoid then isVoid := True;
+              { `typeof(T *) *p`: the pointee, as the expression arm records it }
+              if (base = tyPointer) and (CTypePtrDepth = 1) and (CTypeProcSig < 0) then
+              begin
+                tdElemTk := CTypeElemTk;
+                tdElemRec := CTypeElemRec;
+              end;
             end
             else
             begin
               tyNode := ParseCExpr;
+              { `*(&x)` is x: NetBSD's atomic_load_*(&fdp->fd_dt) spell
+                __typeof__(*(&fdp->fd_dt)), and the pointee/record readers
+                below know the field, not the round trip through its address.
+                bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down }
+              while (tyNode >= 0) and (ASTKind[tyNode] = AN_DEREF) and (ASTLeft[tyNode] >= 0) and
+                    (ASTKind[ASTLeft[tyNode]] = AN_ADDR) and (ASTLeft[ASTLeft[tyNode]] >= 0) do
+                tyNode := ASTLeft[ASTLeft[tyNode]];
               base := IntToTypeKind(ASTTk[tyNode]);
               { A struct takes the record the node resolves to; a pointer its
                 pointee kind and record, the same pair a pointer typedef
@@ -8066,6 +8079,22 @@ begin
     end;
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
     CTypePtrBaseRec := baseRec;
+    { A star over a POINTER typedef (or typeof of a pointer): `dtp *q` is
+      `dt_t **q`, and must carry what that carries -- depth 2 over the
+      typedef's pointee. It counted depth 1 with the typedef's own Pointer as
+      the base, so `**q`, sizeof(**q) and typeof(*q) lost the struct: NetBSD's
+      atomic_load_consume(&fdp->fd_dt)->dt_ff[0] (a typeof_unqual of
+      `const volatile __typeof__(*p) *`) read 8 bytes past a pointer and
+      rump's fd_free KASSERT failed at boot. A function-pointer typedef is
+      left alone (its pointee is a signature, not a kind).
+      bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down }
+    if isTypedef and (Result = tyPointer) and (not tdIsFnType) and
+       (CTypePtrElemProcSig < 0) and (IntToTypeKind(tdElemTk) <> tyUnknown) then
+    begin
+      CTypePtrBaseTk := tdElemTk;
+      CTypePtrBaseRec := tdElemRec;
+      CTypePtrDepth := 1;
+    end;
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);
@@ -8084,6 +8113,8 @@ begin
         `TString **p = G(L)->strcache[i]; getstr(p[j])`). }
       CTypeElemTk := Ord(tyPointer);
       CTypeElemRec := baseRec;
+      { typeof(ptr-expr) sets no baseRec; its pointee record is the base's }
+      if CTypeElemRec = REC_NONE then CTypeElemRec := CTypePtrBaseRec;
     end;
     { `mat4 *m` / `vec4 *v` -- ONE star over an ARRAY typedef is a pointer to
       array, the same type as `float (*m)[4][4]`, and must carry the same row
@@ -13863,7 +13894,7 @@ begin
 end;
 
 
-procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
+procedure CApplyThreadLocalStorage(idx: Integer; sawThread, hasInit: Boolean);
 { Give one `__thread` / `_Thread_local` global its per-thread slot, or leave it
   on the shared storage it has today and say why.
 
@@ -13931,6 +13962,24 @@ var why: AnsiString; reason: Integer;
 begin
   if not sawThread then Exit;
   if idx < 0 then Exit;
+  { AN x86-64 OBJECT GETS REAL ELF TLS. There is no pxx entry point to install
+    pxx's gs block (TLSREFUSE_NOINSTALL), but the program that links the object
+    has an ELF libc or kernel that sets fs, and gcc's own objects reach their
+    `__thread` through it. The variable becomes its own .tdata.<name> section,
+    so whatever links it gives each thread a copy of its bytes. AN INITIALISER
+    MUST THEN BE IN THOSE BYTES: under CStaticDataMode it is baked; otherwise
+    it would be a store in the init thunk that only the main thread's copy
+    sees, so such a declaration keeps the shared-copy degradation below.
+    rump's curlwp is `__thread`: shared, a second thread's
+    KASSERT(curlwp == NULL) panicked at boot.
+    feature-c-thread-local-in-x86-64-objects }
+  if EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_X86_64) and
+     CProgramMode and (CStaticDataMode or not hasInit) then
+  begin
+    SymElfTls[idx] := True;
+    ElfTlsUsed := True;
+    Exit;
+  end;
   if TryAssignThreadVarStorage(idx, '__thread', why, reason) then Exit;
 
   { THE ONE REASON THE PROGRAMMER CAN FIX IS THE ONE THAT STOPS. `why` already
@@ -13983,6 +14032,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
     gSecPlace: Boolean;     { __attribute__((section)) placed this global (CApplyGlobalSection) }
+    gCastK, gCastD: Integer; { the end of a `(T)` cast in front of a function name }
 begin
   { PXXDBG=c.staticdata turns CStaticDataMode on for a whole test run, which
     is how the C corpus exercises the baker without a flag on every row. }
@@ -14181,6 +14231,34 @@ begin
         the pointer stayed 0 and calling it SIGSEGV'd). }
       Next;
       initStartTok := TokPos - 1;         { the expression, for paDeferTok below }
+      { `= (void *)nullop;` / `= (fn_t)f;` -- a CAST in front of the function
+        name is the same address. It fell to the skip below and the pointer
+        stayed 0: rump's `rump_proc_vfs_init = (void *)nullop` was nil and the
+        first lwproc_newproc called through it. Taken only when a function
+        name (optionally `&`) and the end of the declarator follow the `)`, so
+        `(f)(x)` or `(void *)f + 1` still reach the skip.
+        bug-c-a-cast-function-name-initialiser-of-a-function-pointer-global-is-dropped }
+      if CurTok.Kind = tkLParen then
+      begin
+        gCastK := TokPos; gCastD := 1;
+        while (gCastK < TokCount) and (gCastD > 0) and (Tokens[gCastK].Kind <> tkSemicolon) do
+        begin
+          if Tokens[gCastK].Kind = tkLParen then Inc(gCastD)
+          else if Tokens[gCastK].Kind = tkRParen then Dec(gCastD);
+          Inc(gCastK);
+        end;
+        if (gCastD = 0) and (gCastK + 2 < TokCount) then
+        begin
+          if Tokens[gCastK].Kind = tkAmp then Inc(gCastK);
+          if (Tokens[gCastK].Kind = tkIdent) and
+             ((Tokens[gCastK + 1].Kind = tkSemicolon) or (Tokens[gCastK + 1].Kind = tkComma)) then
+          begin
+            gCastD := TokPos - 1;              { the '(' -- rewind point }
+            while TokPos - 1 < gCastK do Next;
+            if FindProc(CurTok.SVal) < 0 then begin TokPos := gCastD; Next; end;
+          end;
+        end;
+      end;
       if CurTok.Kind = tkAmp then Next;   { optional `&` before the function name }
       if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
       begin
@@ -14295,7 +14373,7 @@ begin
       it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
       bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
-    CApplyThreadLocalStorage(idx, declSawThread);
+    CApplyThreadLocalStorage(idx, declSawThread, True);
     if (idx >= 0) and wasArr and (gFpNDims >= 2) then
     begin
       SymArrNDims[idx] := gFpNDims;
@@ -14309,8 +14387,10 @@ begin
     { its initialiser (already consumed above) is baked into .data -- see the
       same call in the main declarator path below }
     if (idx >= 0) then CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), False);
+    if (idx >= 0) and SymElfTls[idx] and not declSawExtern then
+      CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
     if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
-       (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
+       ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
@@ -14805,11 +14885,16 @@ begin
       it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
       bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
-    CApplyThreadLocalStorage(idx, declSawThread);
+    CApplyThreadLocalStorage(idx, declSawThread,
+                             (CurTok.Kind = tkAssign) or gPreScanInit);
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
     gSecPlace := CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), declSawExtern);
+    { an ELF TLS definition is its own .tdata.<name> section, PROGBITS so a
+      baked initialiser is the image every thread's copy starts from }
+    if (idx >= 0) and SymElfTls[idx] and not declSawExtern then
+      gSecPlace := CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
     { A section("name") global on an x86-64 object is .data even without
       static data: in .bss its section would be NOBITS, and ld puts a NOBITS
       input in an output section of its own, apart from gcc's PROGBITS one of
@@ -14818,7 +14903,7 @@ begin
       feature-c-section-attribute-on-x86-64-objects }
     if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64))) and
        ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
-       (not declSawThread) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
+       ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and

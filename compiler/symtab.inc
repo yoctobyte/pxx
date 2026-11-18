@@ -6664,7 +6664,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(SymElfTls, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   SetLength(SymArrAi, n);
@@ -6863,6 +6863,7 @@ begin
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
   SymAllocSize[SymCount] := 0;         { set by whichever reservation path takes global storage }
   SymTlsOffset[SymCount] := -1;        { not a threadvar; the `threadvar` section is the only writer }
+  SymElfTls[SymCount] := False;
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -7211,6 +7212,7 @@ var sz, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymElfTls[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
@@ -7765,6 +7767,7 @@ var elemSize, totalSize, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymElfTls[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   if LastTypeElemDynDepth > 0 then
   begin
@@ -7951,6 +7954,7 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymElfTls[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name        := name;
   Syms[SymCount].TypeKind    := elemType;
@@ -8103,6 +8107,7 @@ end;
 function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
+  SymElfTls[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
