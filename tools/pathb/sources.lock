@@ -21,3 +21,4 @@ dwm-6.5.tar.gz             21d79ebfa9f2fb93141836c2666cb81f4784c69d64e7f1b2352f9
 dejavu-fonts-ttf-2.37.tar.bz2 fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7 https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2
 font-misc-misc-1.1.3.tar.xz 79abe361f58bb21ade9f565898e486300ce1cc621d5285bec26e14b6a8618fed https://www.x.org/releases/individual/font/font-misc-misc-1.1.3.tar.xz
 font-cursor-misc-1.0.4.tar.xz 25d9c9595013cb8ca08420509993a6434c917e53ca1fec3f63acd45a19d4f982 https://www.x.org/releases/individual/font/font-cursor-misc-1.0.4.tar.xz
+lvgl-9.2.2.tar.gz          129b4e00e06639fa79d7e8a6cab3c1ecce2445b1a246652ccd34f22e7b17ad6f https://github.com/lvgl/lvgl/archive/refs/tags/v9.2.2.tar.gz

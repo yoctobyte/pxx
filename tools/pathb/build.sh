@@ -1,7 +1,7 @@
 #!/bin/sh
 # Path B end to end: pinned sources -> gcc reference build (its make logs are
 # the recipe) -> every compile replayed through pxx -> st, dwm and Xfbdev
-# linked by pxx -> pixx's desktop bundle.
+# linked by pxx, plus LVGL's framebuffer demo -> pixx's desktop bundle.
 #   PATHB_WORK=/some/dir tools/pathb/build.sh
 # Env: PXXC (default: this tree's compiler/pascal26), JOBS (default 8).
 set -e
@@ -18,4 +18,5 @@ bash $T/gccbuild.sh
 python3 $T/replay-cc.py xorgproto libXau xtrans libxcb libX11 libXext libXrender expat \
   freetype fontconfig libXft zlib libfontenc libXfont tinyx
 sh $T/link.sh
+bash $T/lvgl.sh
 sh $T/make_bundle.sh

@@ -10,6 +10,8 @@ R=$O/root
 mkdir -p $R/usr/bin $R/etc/fonts $R/usr/share/fonts/X11/misc \
          $R/usr/share/fonts/truetype/dejavu $R/usr/share/licenses/pathb
 cp $B/bin/Xfbdev $B/bin/dwm $B/bin/st $R/usr/bin/
+# LVGL's widgets demo, no X: straight on /dev/fb0 (lvgl.sh)
+[ -x $B/bin/lvgl-demo ] && cp $B/bin/lvgl-demo $R/usr/bin/lvgl-demo
 install -m 755 $T/files/startx-pixx $R/usr/bin/startx-pixx
 cp $T/files/fonts.conf $R/etc/fonts/fonts.conf
 X=$(mktemp -d)
@@ -37,6 +39,7 @@ done
 cp $B/src/freetype/docs/FTL.TXT $L/freetype.FTL.TXT
 cp $B/src/st-0.9.2/LICENSE $L/st.LICENSE
 cp $B/src/dwm-6.5/LICENSE $L/dwm.LICENSE
+[ -f $B/src/lvgl/LICENCE.txt ] && cp $B/src/lvgl/LICENCE.txt $L/lvgl.LICENCE.txt
 cp $T/files/README.bundle $L/README
 cp $T/patches/*.patch $L/
 # a reproducible tarball: fixed owner, order and mtime

@@ -9,6 +9,10 @@ own C runtime (crtl), not glibc:
   /usr/bin/dwm           dwm 6.5 window manager
   /usr/bin/st            st 0.9.2 terminal
   /usr/bin/startx-pixx   starts Xfbdev, then st, then dwm (busybox sh)
+  /usr/bin/lvgl-demo     LVGL 9.2.2 widgets demo, no X: run it on the console
+                         as root; it draws straight into /dev/fb0.
+                         LV_EVDEV=/dev/input/eventN gives it a pointer, and
+                         LV_FBDEV picks another framebuffer.
 
 Libraries linked in: libX11 1.8.10, libxcb 1.17, libXau, libXext, libXrender,
 libXft 2.3.8, fontconfig 2.15, freetype 2.13.3, expat 2.6.4, libXfont 1.5.4,

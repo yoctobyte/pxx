@@ -26,7 +26,11 @@ root-relative tree, with its `.sha256` next to it. pixx pins that tarball.
    - `xfb_objs.py` collects the objects on gcc's Xfbdev link line.
    - `drop_dups.py` pulls library members by ld's archive rule.
    It also builds gcc versions of st and dwm (`bin/*_gcc`) for comparison.
-5. `make_bundle.sh` adds `files/startx-pixx`, `files/fonts.conf`, the core X
+5. `lvgl.sh` builds LVGL 9.2.2's widgets demo with pxx as `bin/lvgl-demo`:
+   no X server, it draws straight into `/dev/fb0`. Set
+   `LV_EVDEV=/dev/input/eventN` for a pointer and `LV_FBDEV` for another
+   framebuffer. Its `lv_conf.h` is LVGL's template with ten checked edits.
+6. `make_bundle.sh` adds `files/startx-pixx`, `files/fonts.conf`, the core X
    fonts (built from the X.org BDF sources with `bdftopcf`), DejaVu, and
    every licence.
 
@@ -52,6 +56,8 @@ and python3-PIL.
   libXfont's `weak` macro is empty and its fallbacks for server symbols come
   out strong. `drop_dups.py` makes the losing copies local, which is the same
   result as gcc's weak resolution.
+- **LVGL demo:** in QEMU it is pixel-identical to a gcc build of the same
+  sources, on the first screen and after a click on the Analytics tab.
 - **Checked in QEMU on /dev/fb0:** the all-pxx stack is pixel-identical to
   the same clients on a gcc-built Xfbdev, and pxx's st and dwm match gcc's on
   Xvfb. Keyboard and mouse work.
