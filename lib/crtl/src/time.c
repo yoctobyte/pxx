@@ -425,6 +425,24 @@ int clock_gettime(int clk_id, struct timespec *tp) {
   return 0;
 }
 
+/* clock_nanosleep(2) over nanosleep: an absolute deadline (TIMER_ABSTIME)
+   becomes the time left on that clock, and a deadline already past returns at
+   once. The result is the error number, 0 on success. */
+int clock_nanosleep(clockid_t clk, int flags, const struct timespec *req, struct timespec *rem) {
+  struct timespec now, d;
+  if (req->tv_nsec < 0 || req->tv_nsec >= 1000000000L) return EINVAL;
+  if (!(flags & TIMER_ABSTIME)) {
+    if (clock_gettime(clk, &now) != 0) return EINVAL;
+    return nanosleep(req, rem) == 0 ? 0 : EINTR;
+  }
+  if (clock_gettime(clk, &now) != 0) return EINVAL;
+  d.tv_sec = req->tv_sec - now.tv_sec;
+  d.tv_nsec = req->tv_nsec - now.tv_nsec;
+  if (d.tv_nsec < 0) { d.tv_nsec += 1000000000L; d.tv_sec--; }
+  if (d.tv_sec < 0) return 0;
+  return nanosleep(&d, 0) == 0 ? 0 : EINTR;
+}
+
 /* ---- asctime / ctime / timegm ------------------------------------------- */
 
 /* timegm(3): the inverse of gmtime — a struct tm interpreted as UTC, with the

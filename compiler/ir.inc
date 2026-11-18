@@ -4885,8 +4885,11 @@ begin
         addend := off;
         Result := True;
       end
-      else if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_PROCADDR) then
-        { `&f` of a function is `f` (NetBSD __strict_weak_alias). rump-pxx g30 }
+      else if (ASTLeft[node] >= 0) and
+              ((ASTKind[ASTLeft[node]] = AN_PROCADDR) or
+               (ASTKind[ASTLeft[node]] = AN_COMPOUND_LITERAL)) then
+        { `&f` of a function is `f` (NetBSD __strict_weak_alias, rump-pxx g30);
+          `&(struct T){..}` is the literal's address (nist_hash_drbg.c) }
         Result := CBakeAddrValue(ASTLeft[node], kind, target, addend);
     AN_IDENT:
       if (ASTIVal[node] >= 0) and (Syms[ASTIVal[node]].Kind = skGlobal) and

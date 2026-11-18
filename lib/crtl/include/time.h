@@ -103,6 +103,13 @@ extern time_t __crtl_time(time_t *t);
 #define time(t) __crtl_time(t)
 clock_t clock(void);
 int nanosleep(const struct timespec *req, struct timespec *rem);
+#ifndef __pxx_clockid_t_defined
+#define __pxx_clockid_t_defined
+typedef int clockid_t;
+#endif
+#define TIMER_ABSTIME 1
+/* clock_nanosleep(2): returns the error number, not -1 */
+int clock_nanosleep(clockid_t clk, int flags, const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);
 /* Privileged: expect EPERM unless the caller is root. */
 int clock_settime(int clk_id, const struct timespec *tp);

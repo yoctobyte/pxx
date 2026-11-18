@@ -10,6 +10,12 @@
  * record vs C struct layout never has to match.
  */
 
+#include <pthread.h>
+#include <setjmp.h>   /* pthread_exit unwinds to the thread's trampoline */
+#include <stdlib.h>
+#include <string.h>
+#include <sched.h>
+
 /* Pascal bridge (lib/rtl/palpthread.pas), bound case-insensitively by name. */
 extern void      __pxx_pmutex_init(void *m);
 extern void      __pxx_pmutex_lock(void *m);
@@ -210,6 +216,7 @@ struct pxx_thr_slot {
   void        *(*start)(void *);     /* the caller's start routine and arg, */
   void          *arg;                /* run by pxx_thr_trampoline, which    */
   void          *ret;                /* keeps the return value for join     */
+  jmp_buf        exit_jb;            /* pthread_exit's way back to it       */
 };
 static struct pxx_thr_slot pxx_thr_reg[PXX_PTHREAD_MAX];
 static pthread_mutex_t pxx_thr_reg_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -219,10 +226,139 @@ static pthread_mutex_t pxx_thr_reg_lock = PTHREAD_MUTEX_INITIALIZER;
  * The slot stays owned by this thread until join frees it, so the store needs
  * no lock; join reads it only after __pxx_pthread_join has seen the thread
  * exit. */
+/* ---- thread-specific data ----
+ * A key's values live in a __thread array, so every thread has its own and a
+ * get is one load. Destructors run when a crtl thread ends, by return or by
+ * pthread_exit, up to PTHREAD_DESTRUCTOR_ITERATIONS rounds as POSIX says. */
+static void (*pxx_key_dtor[PTHREAD_KEYS_MAX])(void *);
+static unsigned char pxx_key_used[PTHREAD_KEYS_MAX];
+static __thread void *pxx_key_val[PTHREAD_KEYS_MAX];
+static pthread_mutex_t pxx_key_lock = PTHREAD_MUTEX_INITIALIZER;
+
+int pthread_key_create(pthread_key_t *k, void (*destructor)(void *)) {
+  int i;
+  __pxx_pmutex_lock(&pxx_key_lock);
+  for (i = 0; i < PTHREAD_KEYS_MAX; i++)
+    if (!pxx_key_used[i]) {
+      pxx_key_used[i] = 1;
+      pxx_key_dtor[i] = destructor;
+      __pxx_pmutex_unlock(&pxx_key_lock);
+      pxx_key_val[i] = 0;
+      *k = (pthread_key_t)i;
+      return 0;
+    }
+  __pxx_pmutex_unlock(&pxx_key_lock);
+  return 11;                                              /* EAGAIN */
+}
+
+int pthread_key_delete(pthread_key_t k) {
+  if (k >= PTHREAD_KEYS_MAX || !pxx_key_used[k]) return 22;   /* EINVAL */
+  __pxx_pmutex_lock(&pxx_key_lock);
+  pxx_key_used[k] = 0;
+  pxx_key_dtor[k] = 0;
+  __pxx_pmutex_unlock(&pxx_key_lock);
+  return 0;
+}
+
+void *pthread_getspecific(pthread_key_t k) {
+  return k < PTHREAD_KEYS_MAX ? pxx_key_val[k] : 0;
+}
+
+int pthread_setspecific(pthread_key_t k, const void *v) {
+  if (k >= PTHREAD_KEYS_MAX || !pxx_key_used[k]) return 22;   /* EINVAL */
+  pxx_key_val[k] = (void *)v;
+  return 0;
+}
+
+static void pxx_key_run_dtors(void) {
+  int round, i, again;
+  for (round = 0; round < PTHREAD_DESTRUCTOR_ITERATIONS; round++) {
+    again = 0;
+    for (i = 0; i < PTHREAD_KEYS_MAX; i++) {
+      void *v = pxx_key_val[i];
+      void (*d)(void *) = pxx_key_dtor[i];
+      if (v && d && pxx_key_used[i]) {
+        pxx_key_val[i] = 0;
+        d(v);
+        again = 1;
+      }
+    }
+    if (!again) break;
+  }
+}
+
+/* ---- spin locks: one int word ---- */
+int pthread_spin_init(pthread_spinlock_t *l, int pshared) { (void)pshared; *l = 0; return 0; }
+int pthread_spin_destroy(pthread_spinlock_t *l) { (void)l; return 0; }
+int pthread_spin_lock(pthread_spinlock_t *l) {
+  while (__sync_lock_test_and_set((int *)l, 1))
+    while (*l) { }
+  return 0;
+}
+int pthread_spin_trylock(pthread_spinlock_t *l) {
+  return __sync_lock_test_and_set((int *)l, 1) ? 16 : 0;   /* EBUSY */
+}
+int pthread_spin_unlock(pthread_spinlock_t *l) { __sync_lock_release((int *)l); return 0; }
+
+/* ---- attributes: the detach state is used, the stack size is kept ---- */
+int pthread_attr_init(pthread_attr_t *a) {
+  memset(a, 0, sizeof *a);
+  a->__stacksize = 8UL * 1024 * 1024;
+  return 0;
+}
+int pthread_attr_destroy(pthread_attr_t *a) { (void)a; return 0; }
+int pthread_attr_setdetachstate(pthread_attr_t *a, int st) {
+  if (st != PTHREAD_CREATE_JOINABLE && st != PTHREAD_CREATE_DETACHED) return 22;
+  a->__detach = st;
+  return 0;
+}
+int pthread_attr_getdetachstate(const pthread_attr_t *a, int *st) { *st = a->__detach; return 0; }
+int pthread_attr_setstacksize(pthread_attr_t *a, unsigned long size) {
+  if (size < PTHREAD_STACK_MIN) return 22;
+  a->__stacksize = size;
+  return 0;
+}
+int pthread_attr_getstacksize(const pthread_attr_t *a, unsigned long *size) {
+  *size = a->__stacksize;
+  return 0;
+}
+
+/* A name is advice; this runtime keeps none. */
+int pthread_setname_np(pthread_t t, const char *name) { (void)t; (void)name; return 0; }
+int pthread_getname_np(pthread_t t, char *name, unsigned long len) {
+  (void)t;
+  if (len) name[0] = 0;
+  return 0;
+}
+
+/* The running crtl thread's slot, for pthread_exit; 0 on the main thread and
+ * on threads crtl did not start. */
+static __thread struct pxx_thr_slot *pxx_thr_cur;
+
 static void *pxx_thr_trampoline(void *p) {
   struct pxx_thr_slot *s = (struct pxx_thr_slot *)p;
-  s->ret = s->start(s->arg);
+  pxx_thr_cur = s;
+  if (setjmp(s->exit_jb) == 0)
+    s->ret = s->start(s->arg);
+  pxx_key_run_dtors();
   return s->ret;
+}
+
+/* pthread_exit unwinds to the trampoline, which runs the key destructors and
+ * returns the value to the PAL as if start had returned it. On the main thread
+ * the process ends once every other crtl thread has ended, as glibc's does. */
+void pthread_exit(void *retval) {
+  struct pxx_thr_slot *s = pxx_thr_cur;
+  int i;
+  if (s) {
+    s->ret = retval;
+    longjmp(s->exit_jb, 1);
+  }
+  pxx_key_run_dtors();
+  for (i = 0; i < PXX_PTHREAD_MAX; i++)
+    if (pxx_thr_reg[i].used)
+      while (!__pxx_pthread_exited(pxx_thr_reg[i].h)) sched_yield();
+  exit(0);
 }
 
 /* A detached thread's slot holds its handle, and the kernel writes that handle
@@ -246,7 +382,6 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
                    void *(*start)(void *), void *arg) {
   int i, slot = -1;
   long long tid;
-  (void)attr;
 
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
   pxx_thr_reap_detached();
@@ -257,7 +392,7 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
 
   /* Spawn under the registry lock: PalThreadCreate fills the handle bytes and
      returns the child tid. Serialising spawns is fine for test-scale fan-out. */
-  pxx_thr_reg[slot].detached = 0;
+  pxx_thr_reg[slot].detached = attr && attr->__detach == PTHREAD_CREATE_DETACHED;
   pxx_thr_reg[slot].start = start;
   pxx_thr_reg[slot].arg   = arg;
   pxx_thr_reg[slot].ret   = 0;

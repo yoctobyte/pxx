@@ -49,5 +49,6 @@ int mallopt(int param, int value);
    that library is already built to survive.
    bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile */
 size_t malloc_usable_size(void *ptr);
+void *memalign(size_t align, size_t size);
 
 #endif

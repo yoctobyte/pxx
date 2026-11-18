@@ -23,3 +23,7 @@ struct domain init_dom = { .sw = init_sw, .swend = &init_sw[sizeof(init_sw) / si
 struct hvec { unsigned len; const void *base; };
 const struct hvec init_hv = { .len = 4, .base = (const void *)(const unsigned char[]) { 0x40, 0x41, 0x42, 0x43 } };
 const struct hvec init_hv2 = { 2, (const short[]) { -7, 300 } };
+const struct hvec *const init_hvp[] = {
+	[0] = &(const struct hvec) { .len = 3, .base = (const void *)(const unsigned char[]) { 0x61, 0x62, 0x63 } },
+	[1] = &(const struct hvec) { 1, "z" },
+};

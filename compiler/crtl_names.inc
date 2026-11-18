@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  735 functions across 73 headers. }
+  740 functions across 73 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -19,10 +19,11 @@ begin
     'a': Result :=
       ' abort:stdlib.h abs:stdlib.h accept:sys/socket.h access:unistd.h acct:unistd.h ' +
       ' acos:math.h acosf:math.h acosh:math.h addmntent:mntent.h adjtimex:sys/timex.h ' +
-      ' alarm:unistd.h alphasort:dirent.h arc4random:stdlib.h arc4random_buf:stdlib.h ' +
-      ' arc4random_uniform:stdlib.h asctime:time.h asctime_r:time.h asin:math.h asinf:math.h ' +
-      ' asinh:math.h asprintf:stdio.h atan:math.h atan2:math.h atan2f:math.h atanf:math.h ' +
-      ' atanh:math.h atexit:stdlib.h atof:stdlib.h atoi:stdlib.h atol:stdlib.h atoll:stdlib.h ';
+      ' alarm:unistd.h aligned_alloc:stdlib.h alphasort:dirent.h arc4random:stdlib.h ' +
+      ' arc4random_buf:stdlib.h arc4random_uniform:stdlib.h asctime:time.h asctime_r:time.h ' +
+      ' asin:math.h asinf:math.h asinh:math.h asprintf:stdio.h atan:math.h atan2:math.h ' +
+      ' atan2f:math.h atanf:math.h atanh:math.h atexit:stdlib.h atof:stdlib.h atoi:stdlib.h ' +
+      ' atol:stdlib.h atoll:stdlib.h ';
     'b': Result :=
       ' basename:libgen.h bind:sys/socket.h bsearch:stdlib.h btowc:wchar.h ';
     'c': Result :=
@@ -31,9 +32,10 @@ begin
       ' cfgetospeed:termios.h cfmakeraw:termios.h cfsetispeed:termios.h cfsetospeed:termios.h ' +
       ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chown:unistd.h chroot:unistd.h ' +
       ' clearenv:stdlib.h clearerr:stdio.h clearerr_unlocked:stdio.h clock:time.h ' +
-      ' clock_gettime:time.h clock_settime:time.h close:unistd.h closedir:dirent.h ' +
-      ' closelog:syslog.h confstr:unistd.h connect:sys/socket.h copysign:math.h cos:math.h ' +
-      ' cosf:math.h cosh:math.h creat:fcntl.h crypt:crypt.h ctime:time.h ctime_r:time.h ';
+      ' clock_gettime:time.h clock_nanosleep:time.h clock_settime:time.h close:unistd.h ' +
+      ' closedir:dirent.h closelog:syslog.h confstr:unistd.h connect:sys/socket.h ' +
+      ' copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h crypt:crypt.h ' +
+      ' ctime:time.h ctime_r:time.h ';
     'd': Result :=
       ' daemon:unistd.h difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h ' +
       ' dlclose:dlfcn.h dlerror:dlfcn.h dlopen:dlfcn.h dlsym:dlfcn.h dn_comp:resolv.h ' +
@@ -117,9 +119,9 @@ begin
     'm': Result :=
       ' madvise:sys/mman.h malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h ' +
       ' mblen:stdlib.h mbrlen:wchar.h mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h ' +
-      ' mbtowc:stdlib.h memccpy:string.h memchr:string.h memcmp:string.h memcpy:string.h ' +
-      ' memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h memset:string.h ' +
-      ' mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
+      ' mbtowc:stdlib.h memalign:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
+      ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
+      ' memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
       ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
       ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
       ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
@@ -141,12 +143,12 @@ begin
     'p': Result :=
       ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
       ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
-      ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_openpt:stdlib.h ' +
-      ' pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h ' +
-      ' printf:stdio.h prlimit:sys/resource.h pthread_kill:signal.h ptsname:stdlib.h ' +
-      ' ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
-      ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h ' +
-      ' pwritev:sys/uio.h ';
+      ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
+      ' posix_openpt:stdlib.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
+      ' pread:unistd.h preadv:sys/uio.h printf:stdio.h prlimit:sys/resource.h ' +
+      ' pthread_kill:signal.h ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h ' +
+      ' putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h putenv:stdlib.h ' +
+      ' puts:stdio.h pututxline:utmpx.h pwrite:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
@@ -207,9 +209,9 @@ begin
       ' unshare:sched.h uselocale:locale.h usleep:unistd.h utime:utime.h utimensat:time.h ' +
       ' utimes:sys/time.h utmpxname:utmpx.h ';
     'v': Result :=
-      ' vasprintf:stdio.h vdprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vfscanf:stdio.h ' +
-      ' vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h vsprintf:stdio.h vsscanf:stdio.h ' +
-      ' vsyslog:syslog.h ';
+      ' valloc:stdlib.h vasprintf:stdio.h vdprintf:stdio.h vfork:unistd.h vfprintf:stdio.h ' +
+      ' vfscanf:stdio.h vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h vsprintf:stdio.h ' +
+      ' vsscanf:stdio.h vsyslog:syslog.h ';
     'w': Result :=
       ' wait:sys/wait.h wait3:sys/wait.h wait4:sys/wait.h waitpid:sys/wait.h wcrtomb:wchar.h ' +
       ' wcslen:wchar.h wcstombs:stdlib.h wcswidth:wchar.h wctob:wchar.h wctomb:stdlib.h ' +
@@ -228,9 +230,9 @@ function CrtlNameLenMask(c: Char): Integer;
 begin
   case c of
     '_': Result := 32;
-    'a': Result := 280568;
+    'a': Result := 288760;
     'b': Result := 432;
-    'c': Result := 143352;
+    'c': Result := 176120;
     'd': Result := 3064;
     'e': Result := 30712;
     'f': Result := 65520;
@@ -243,7 +245,7 @@ begin
     'm': Result := 263664;
     'n': Result := 360376;
     'o': Result := 208;
-    'p': Result := 114680;
+    'p': Result := 131064;
     'q': Result := 32;
     'r': Result := 8176;
     's': Result := 4620280;

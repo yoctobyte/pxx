@@ -13,6 +13,9 @@ void *calloc(size_t count, size_t size);
 void *realloc(void *ptr, size_t size);
 void *reallocarray(void *ptr, size_t nmemb, size_t size);
 void free(void *ptr);
+int   posix_memalign(void **out, size_t align, size_t size);
+void *aligned_alloc(size_t align, size_t size);
+void *valloc(size_t size);
 
 int atoi(const char *s);
 long atol(const char *s);

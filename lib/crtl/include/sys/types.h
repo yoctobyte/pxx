@@ -29,6 +29,10 @@ typedef __time_t time_t;
    bytes past where shmctl(IPC_STAT) fills it -- measured against glibc,
    offset 88 against 84 on x86-64. */
 typedef int pid_t;
+#ifndef __pxx_clockid_t_defined
+#define __pxx_clockid_t_defined
+typedef int clockid_t;
+#endif
 typedef unsigned int mode_t;
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;

@@ -28647,6 +28647,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_many_struct_tags.c $(TESTTMP)/c_mstags26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_mstags26_gcc32 test/c_many_struct_tags.c
 	tools/expect_same.sh c_mstags26_i386 "$$(timeout 20 $(TESTTMP)/c_mstags26_i386)" "$$(timeout 20 $(TESTTMP)/c_mstags26_gcc32)"
+	./$(COMPILER) --threadsafe test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26
+	@gcc -w -pthread -o $(TESTTMP)/c_rumpapi26_gcc test/c_crtl_rumpuser_apis.c
+	tools/expect_same.sh c_rumpapi26 "$$(timeout 30 $(TESTTMP)/c_rumpapi26)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc)"
+	./$(COMPILER) --threadsafe --system-libs -DRUA_MAIN_RETURNS test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_sys
+	tools/expect_same.sh c_rumpapi26_sys "$$(timeout 30 $(TESTTMP)/c_rumpapi26_sys)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc)"
+	./$(COMPILER) --threadsafe --target=i386 test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_i386
+	@gcc -m32 -w -pthread -o $(TESTTMP)/c_rumpapi26_gcc32 test/c_crtl_rumpuser_apis.c
+	tools/expect_same.sh c_rumpapi26_i386 "$$(timeout 30 $(TESTTMP)/c_rumpapi26_i386)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

@@ -9,6 +9,7 @@ struct domain { const struct protosw *sw, *swend; };
 extern struct domain init_dom;
 struct hvec { unsigned len; const void *base; };
 extern const struct hvec init_hv, init_hv2;
+extern const struct hvec *const init_hvp[];
 int main(void)
 {
   int i;
@@ -19,5 +20,7 @@ int main(void)
   printf("%d %d %d\n", (int)(init_dom.swend - init_dom.sw), init_dom.sw[2].pr_type, init_dom.swend[-1].pr_type);
   printf("%u %.4s %d %d\n", init_hv.len, (const char *)init_hv.base,
          ((const short *)init_hv2.base)[0], ((const short *)init_hv2.base)[1]);
+  printf("%u %.3s %u %s\n", init_hvp[0]->len, (const char *)init_hvp[0]->base,
+         init_hvp[1]->len, (const char *)init_hvp[1]->base);
   return 0;
 }

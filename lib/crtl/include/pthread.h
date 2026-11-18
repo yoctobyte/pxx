@@ -32,12 +32,12 @@
 #if defined(__x86_64__)
 #define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
 #define __PXX_PT_COND_PAD    int __pxx_pad[9]; long long __pxx_align;
-#define __PXX_PT_ATTR_PAD    int __pxx_pad[11]; long long __pxx_align;
+#define __PXX_PT_ATTR_PAD    long __pxx_pad[5];
 #define __PXX_PT_RWLOCK_PAD  int __pxx_pad[7]; long long __pxx_align;
 #elif defined(__i386__)
 #define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
 #define __PXX_PT_COND_PAD    int __pxx_pad[11];
-#define __PXX_PT_ATTR_PAD    int __pxx_pad[8];
+#define __PXX_PT_ATTR_PAD    int __pxx_pad[6];
 #define __PXX_PT_RWLOCK_PAD  int __pxx_pad[3];
 #else
 #define __PXX_PT_MUTEX_PAD
@@ -61,7 +61,35 @@ typedef struct { int __state; int __type; long __owner; int __count; __PXX_PT_MU
  * to be accepted and ignored, so stock threadsafe SQLite (which re-locks a
  * recursive mutex) deadlocked on its first statement. */
 typedef struct { int __type; } pthread_mutexattr_t;
-typedef struct { int __unused; __PXX_PT_ATTR_PAD } pthread_attr_t;
+/* crtl's fields first, then the pad to glibc's size (56 / 36). */
+typedef struct { int __detach; int __flags; unsigned long __stacksize; __PXX_PT_ATTR_PAD } pthread_attr_t;
+#define PTHREAD_CREATE_JOINABLE  0
+#define PTHREAD_CREATE_DETACHED  1
+#define PTHREAD_PROCESS_PRIVATE  0
+#define PTHREAD_PROCESS_SHARED   1
+#define PTHREAD_STACK_MIN        16384
+int pthread_attr_init(pthread_attr_t *a);
+int pthread_attr_destroy(pthread_attr_t *a);
+int pthread_attr_setdetachstate(pthread_attr_t *a, int state);
+int pthread_attr_getdetachstate(const pthread_attr_t *a, int *state);
+int pthread_attr_setstacksize(pthread_attr_t *a, unsigned long size);
+int pthread_attr_getstacksize(const pthread_attr_t *a, unsigned long *size);
+
+/* glibc's: a plain int word */
+typedef volatile int pthread_spinlock_t;
+int pthread_spin_init(pthread_spinlock_t *l, int pshared);
+int pthread_spin_destroy(pthread_spinlock_t *l);
+int pthread_spin_lock(pthread_spinlock_t *l);
+int pthread_spin_trylock(pthread_spinlock_t *l);
+int pthread_spin_unlock(pthread_spinlock_t *l);
+
+typedef unsigned int pthread_key_t;
+#define PTHREAD_KEYS_MAX               128
+#define PTHREAD_DESTRUCTOR_ITERATIONS  4
+int   pthread_key_create(pthread_key_t *k, void (*destructor)(void *));
+int   pthread_key_delete(pthread_key_t k);
+void *pthread_getspecific(pthread_key_t k);
+int   pthread_setspecific(pthread_key_t k, const void *v);
 #define PTHREAD_MUTEX_NORMAL     0
 #define PTHREAD_MUTEX_RECURSIVE  1
 #define PTHREAD_MUTEX_ERRORCHECK 2
@@ -153,5 +181,8 @@ int  pthread_create(pthread_t *t, const pthread_attr_t *attr,
                     void *(*start)(void *), void *arg);
 int  pthread_join(pthread_t t, void **retval);
 int  pthread_detach(pthread_t t);
+void pthread_exit(void *retval) __attribute__((__noreturn__));
+int  pthread_setname_np(pthread_t t, const char *name);
+int  pthread_getname_np(pthread_t t, char *name, unsigned long len);
 
 #endif /* _PXX_PTHREAD_H */

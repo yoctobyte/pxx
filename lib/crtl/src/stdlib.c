@@ -32,14 +32,85 @@ extern void  __pxx_atexit_run(void);
 
 /* ---- heap ----------------------------------------------------------------- */
 
+/* Aligned blocks. The pool aligns to 8 and nothing more, so posix_memalign &
+   co. over-allocate and hand out an aligned address inside the block. The two
+   words below that address say so: [a-16] is the pool block, [a-8] is
+   PXX_ALIGNED_TAG. A pool block's own word at [p-8] is its size, a multiple of
+   8 (on i386 its low half is), and the tag is odd, so the two never meet. */
+#define PXX_ALIGNED_TAG 0x5A11A11EDA11A11FULL
+static int pxx_is_aligned_blk(void *p) {
+  return p && *(unsigned long long *)((char *)p - 8) == PXX_ALIGNED_TAG;
+}
+static void *pxx_aligned_base(void *p) { return *(void **)((char *)p - 16); }
+
+static void *pxx_alloc_aligned(size_t align, size_t size) {
+  char *raw;
+  size_t a;
+  if (align <= 8) return __pxx_malloc((long)size);
+  if (size > (size_t)-1 - align - 16) return 0;
+  raw = (char *)__pxx_malloc((long)(size + align + 16));
+  if (!raw) return 0;
+  a = ((size_t)raw + 16 + align - 1) & ~(align - 1);
+  *(void **)(a - 16) = raw;
+  *(unsigned long long *)(a - 8) = PXX_ALIGNED_TAG;
+  return (void *)a;
+}
+
 void *malloc(size_t size) { return __pxx_malloc((long)size); }
-void  free(void *ptr)     { __pxx_free(ptr); }
-void *realloc(void *ptr, size_t size) { return __pxx_realloc(ptr, (long)size); }
+void  free(void *ptr) {
+  if (pxx_is_aligned_blk(ptr)) {
+    void *raw = pxx_aligned_base(ptr);
+    *(unsigned long long *)((char *)ptr - 8) = 0;   /* a stale tag must not outlive it */
+    __pxx_free(raw);
+    return;
+  }
+  __pxx_free(ptr);
+}
 
 /* Reads the block's own header through the bridge -- see malloc.h for why this
    is the rounded-up TRUE size and not the requested one. NULL and an
    implausible header both answer 0. */
-size_t malloc_usable_size(void *ptr) { return (size_t)__pxx_malloc_usable_size(ptr); }
+size_t malloc_usable_size(void *ptr) {
+  if (pxx_is_aligned_blk(ptr)) {
+    char *raw = (char *)pxx_aligned_base(ptr);
+    return (size_t)__pxx_malloc_usable_size(raw) - (size_t)((char *)ptr - raw);
+  }
+  return (size_t)__pxx_malloc_usable_size(ptr);
+}
+
+/* An aligned block moves to an ordinary one, as glibc's realloc does. */
+void *realloc(void *ptr, size_t size) {
+  if (pxx_is_aligned_blk(ptr)) {
+    size_t have = malloc_usable_size(ptr);
+    void *n = __pxx_malloc((long)size);
+    if (!n) return 0;
+    memcpy(n, ptr, have < size ? have : size);
+    free(ptr);
+    return n;
+  }
+  return __pxx_realloc(ptr, (long)size);
+}
+
+int posix_memalign(void **out, size_t align, size_t size) {
+  void *p;
+  if (align < sizeof(void *) || (align & (align - 1))) return EINVAL;
+  p = pxx_alloc_aligned(align, size);
+  if (!p) return ENOMEM;
+  *out = p;
+  return 0;
+}
+
+void *aligned_alloc(size_t align, size_t size) {
+  if (align == 0 || (align & (align - 1))) { errno = EINVAL; return 0; }
+  return pxx_alloc_aligned(align, size);
+}
+
+void *memalign(size_t align, size_t size) {
+  if (align == 0 || (align & (align - 1))) { errno = EINVAL; return 0; }
+  return pxx_alloc_aligned(align, size);
+}
+
+void *valloc(size_t size) { return pxx_alloc_aligned(4096, size); }
 
 void *calloc(size_t count, size_t size) {
   /* PXXAlloc already zeroes; just guard the multiply overflow. */
@@ -51,7 +122,7 @@ void *calloc(size_t count, size_t size) {
 void *reallocarray(void *ptr, size_t nmemb, size_t size) {
   size_t total = nmemb * size;
   if (size != 0 && total / size != nmemb) return 0;
-  return __pxx_realloc(ptr, (long)total);
+  return realloc(ptr, total);
 }
 
 /* ---- process control ------------------------------------------------------ */
