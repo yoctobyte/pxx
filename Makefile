@@ -21951,17 +21951,24 @@ test-core: $(COMPILER)
 	        cat $(TESTTMP)/c_incmember.log; exit 1; }
 	# PER ARM, NOT IN TOTAL: one check that collapsed both wordings into one
 	# message would still produce six diagnostics and pass a total.
-	# THE OPAQUE ARM IS A WARNING NOW (b3c5f711ea): an aligned() argument
-	# pxx cannot evaluate takes gcc's biggest alignment and keeps the layout
-	# (x86-64: 16, as gcc), so that access compiles and only the warning is
-	# counted. i386 differs from gcc there: bug-c-aligned-alignof-long-double-on-i386.
+	# THE OPAQUE ARM IS GONE: an aligned() argument pxx cannot evaluate takes
+	# gcc's biggest alignment with a warning (b3c5f711ea), and this file's,
+	# __alignof__(long double), is evaluated per target since
+	# bug-c-aligned-alignof-long-double-on-i386 -- so that access compiles
+	# with neither a refusal nor a warning (layout: c_aligned_ld26 below).
 	@test "$$(grep -c 'INCOMPLETE type' $(TESTTMP)/c_incmember.log)" = 3 \
 	   && test "$$(grep -c 'no member named' $(TESTTMP)/c_incmember.log)" = 3 \
 	   && test "$$(grep -c 'OPAQUE' $(TESTTMP)/c_incmember.log)" = 0 \
-	   && test "$$(grep -c 'cannot evaluate the argument of __attribute__((aligned' $(TESTTMP)/c_incmember.log)" = 1 \
-	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type and 3 no-such-member refusals and 1 aligned() warning, one per access'; \
+	   && test "$$(grep -c 'cannot evaluate the argument of __attribute__((aligned' $(TESTTMP)/c_incmember.log)" = 0 \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type and 3 no-such-member refusals and no aligned() warning, one per access'; \
 	        cat $(TESTTMP)/c_incmember.log; exit 1; } \
-	   && echo "c_incomplete_type_member_refused: 7 accesses, 3+3 refusals, 1 warning"
+	   && echo "c_incomplete_type_member_refused: 7 accesses, 3+3 refusals"
+	# aligned(__alignof__(long double)) as gcc lays it out: x86-64 16, i386 4.
+	# bug-c-aligned-alignof-long-double-on-i386
+	./$(COMPILER) test/c_aligned_alignof_long_double.c $(TESTTMP)/c_aligned_ld26 > /dev/null
+	tools/expect_same.sh c_aligned_ld26 "$$($(TESTTMP)/c_aligned_ld26)" "16 16 7 9 8 8"
+	./$(COMPILER) --target=i386 test/c_aligned_alignof_long_double.c $(TESTTMP)/c_aligned_ld_i386 > /dev/null
+	tools/expect_same.sh c_aligned_ld_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_aligned_ld_i386)" "8 4 7 9 8 8"
 	# THE CASE THAT MUST NOT BREAK, and it matters more than the refusal: a
 	# pointer to an incomplete type is how every opaque handle is spelled, and a
 	# forward declaration that is later defined is not incomplete when a member

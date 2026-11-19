@@ -44,7 +44,7 @@ everything stale was graduated in the freebsd ticket's commit. These four are le
    crypt_data (libxcrypt layout), or the test names the host libcrypt
    explicitly.
 
-4. **i386 aligned(__alignof__(long double))**: see
+4. **FIXED 2026-11-19 (rd). i386 aligned(__alignof__(long double))**: see
    bug-c-aligned-alignof-long-double-on-i386. The test-core row counts the
    warning on x86-64, where the result matches gcc, so the row itself is
    green; it is listed here because it is the one place the 2026-11-19 sweep

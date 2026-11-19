@@ -3,8 +3,8 @@ slug: bug-c-aligned-alignof-long-double-on-i386
 track: C
 prio: 50
 type: bug
-status: backlog
-owner: unassigned
+status: done
+owner: rd
 created: 2026-11-19
 found-by: rd, classifying c_incomplete_type_member_refused in the 2026-11-19 test-core sweep
 tags: [cfront, attributes, abi, i386]
@@ -31,3 +31,13 @@ CAttrAlignExprAt (x86-64/aarch64/riscv32 16, i386 4, arm32/xtensa 8). It
 would also be right to make CAttrAlignExprAt tell sizeof from alignof: today
 both return the size, so `__alignof__(long long)` on i386 answers 8 where
 gcc says 4.
+
+## Fixed (2026-11-19, rd)
+
+CAttrAlignExprAt answers long double per target, as gcc lays it out:
+sizeof/alignof x86-64, aarch64, riscv32 16/16; i386 12/4; arm32, xtensa
+8/8. `__alignof__` and `sizeof` are told apart for it (only long double
+differs; double and long long are 8 under gcc -m32 `__alignof__` too).
+test/c_aligned_alignof_long_double.c: x86-64 "16 16 7 9 8 8", i386
+"8 4 7 9 8 8", both gcc's. c_incomplete_type_member_refused no longer
+warns at all. aarch64 checked against the AAPCS64 value (no cross gcc).

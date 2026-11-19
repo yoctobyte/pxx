@@ -53,8 +53,9 @@ int inc_arrow(struct nosuchtype *p) { return p->field; }
    SINCE b3c5f711ea (2026-11-14) this arm is a WARNING, not a refusal: an
    argument pxx cannot evaluate takes the target's biggest alignment, gcc's
    meaning of a bare `aligned`, and the layout is kept -- 16 here, as gcc,
-   so `v.a' reads its own field. On i386 gcc says 4 for __alignof__(long
-   double) and pxx's 16 differs: bug-c-aligned-alignof-long-double-on-i386. */
+   so `v.a' reads its own field. And since
+   bug-c-aligned-alignof-long-double-on-i386 this argument is evaluated per
+   target (i386: 4, as gcc), so it no longer even warns. */
 struct dropped { int a; int b; } __attribute__((aligned(__alignof__(long double))));
 int opaque_read(void) { struct dropped v; return v.a; }
 

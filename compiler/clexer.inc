@@ -79,7 +79,7 @@ end;
   s->crc32table and crashed (reported by pixx-f2).
   bug-c-an-aligned-attribute-with-a-sizeof-argument-makes-the-struct-opaque }
 function CAttrAlignExprAt(const s: AnsiString; var j: Integer): Integer;
-var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer;
+var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer; isAlign: Boolean;
 
   procedure SkipWs;
   begin
@@ -130,6 +130,7 @@ var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer;
     end;
     if (w <> 'sizeof') and (w <> '_alignof') and (w <> '__alignof__') and (w <> '__alignof') then
       Exit;
+    isAlign := w <> 'sizeof';
     SkipWs;
     if (j > Length(s)) or (s[j] <> '(') then Exit;
     Inc(j);
@@ -152,7 +153,21 @@ var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer;
     if CStrContains(w, ' long long ') then k := 8
     else if CStrContains(w, ' double ') then
     begin
-      if CStrContains(w, ' long ') then k := 0 else k := 8;   { long double: unknown here }
+      if CStrContains(w, ' long ') then
+      begin
+        { long double as gcc lays it out (an attribute decides a struct's
+          ABI layout, so gcc's answer, not pxx's own 8-byte long double):
+          x86-64, aarch64 and riscv32 16/16, i386 12/4 (__alignof__ is 4
+          there, unlike double and long long), arm32 and xtensa 8/8.
+          bug-c-aligned-alignof-long-double-on-i386 }
+        if TargetArch = TARGET_I386 then
+        begin
+          if isAlign then k := 4 else k := 12;
+        end
+        else if (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_XTENSA) then k := 8
+        else k := 16;
+      end
+      else k := 8;
     end
     else if CStrContains(w, ' long ') then k := ptrSz
     else if CStrContains(w, ' short ') then k := 2
