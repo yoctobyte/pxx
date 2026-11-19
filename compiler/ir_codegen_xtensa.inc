@@ -1446,6 +1446,28 @@ begin
   end;
 end;
 
+function XtNoEffects(n, depth: Integer): Boolean;
+{ Evaluating n writes nothing and calls nothing a variable read could see:
+  an allowlist (constant, variable read, memory read, integer binop of such),
+  so an IR kind nobody considered answers False. Lets a commutative binop
+  evaluate its non-leaf right side BEFORE reading its leaf left. }
+var tk: TTypeKind;
+begin
+  Result := False;
+  if (depth <= 0) or (n < 0) or (n >= IRCount) then Exit;
+  case IRKind[n] of
+    IR_CONST_INT, IR_LOAD_SYM: Result := True;
+    IR_LOAD_MEM: Result := XtNoEffects(IRA[n], depth - 1);
+    IR_BINOP:
+      begin
+        tk := IntToTypeKind(IRTk[n]);
+        if not (TypeIsMachineInt(tk) or (tk = tyPointer) or (tk = tyBoolean)) then Exit;
+        if IsFloatXtensa(IRValueKind(IRA[n])) or IsFloatXtensa(IRValueKind(IRB[n])) then Exit;
+        Result := XtNoEffects(IRA[n], depth - 1) and XtNoEffects(IRB[n], depth - 1);
+      end;
+  end;
+end;
+
 procedure EmitLeafXtensa(rd, n: Integer);
 { rd := leaf n (XtLeafOperand). A 64-bit constant gives its low word: the
   32-bit arms that take a leaf use only that word (XtNarrowBinop). }
@@ -2601,6 +2623,7 @@ var
   low32Dem: Boolean;   { the consumer keeps only a2 (XtLow32Demand) }
   imm: Integer;        { IR_INDEX: a constant index folded to a byte offset }
   narrow: Integer;     { XtNarrowBinop, when low32Dem }
+  xtSwap: Boolean;     { commutative binop: computed right first, leaf left after }
 begin
   low32Dem := XtLow32Demand;
   XtLow32Demand := False;
@@ -3786,6 +3809,20 @@ begin
         if (op = Ord(tkPlus)) and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
           Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
+        { a COMMUTATIVE op with a leaf on the left and a computed right with no
+          effects: the right first, then the leaf straight into a3 -- the left
+          never goes through the expression stack (`s += i * b`) }
+        xtSwap := ((op = Ord(tkPlus)) or (op = Ord(tkStar)) or (op = Ord(tkAnd)) or
+                   (op = Ord(tkOr)) or (op = Ord(tkXor))) and
+                  XtLeafOperand(left) and not XtLeafOperand(right) and XtNoEffects(right, 8);
+        if xtSwap then
+        begin
+          XtLow32Demand := narrow = 1;
+          IREmitNodeXtensa(right);
+          EmitLeafXtensa(reg_xtensa_a3, left);
+        end
+        else
+        begin
         XtLow32Demand := narrow = 1;
         IREmitNodeXtensa(left);
         { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
@@ -3828,7 +3865,8 @@ begin
           xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
         end;
         end;
-        { a2 = left, a3 = right }
+        end;
+        { a2 = left, a3 = right (swapped for a commutative xtSwap, same result) }
 
         if op = Ord(tkPlus) then xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkMinus) then xtensa_sub(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)

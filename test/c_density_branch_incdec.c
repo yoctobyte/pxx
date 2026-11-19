@@ -93,6 +93,22 @@ static long addk(int x)
     return s;
 }
 
+/* commutative ops with a leaf left and a computed, effect-free right: the
+   right is evaluated first and the leaf read after (xtensa XtNoEffects) */
+static long commute(int a, int b, const int *p)
+{
+    long s = 0;
+    int t = 3;
+    s += a + b * 7;
+    s += t * (a - b);
+    s += g_i & (p[1] | 6);
+    s += t | (p[0] ^ a);
+    s += g_i ^ (*p + b * a);
+    s += a + (b + (a * t));
+    s += (long)(unsigned)(t * (p[2] >> 1)) + a;
+    return s;
+}
+
 int main(void)
 {
     int i, j, n;
@@ -105,6 +121,7 @@ int main(void)
         mix(cmp_const(vals[i]));
         mix(cmp_char((unsigned char)vals[i], (signed char)vals[i]));
         mix(addk(vals[i]));
+        mix(commute(vals[i], vals[(i + 3) % 12], g_arr + (i % 3)));
     }
     printf("cmp %08x\n", h);
 
