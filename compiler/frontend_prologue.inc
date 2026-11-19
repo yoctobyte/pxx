@@ -179,7 +179,7 @@ begin
     ParseUsesUnitAmbient(KernelAbiUnit);
 end;
 
-procedure PullTargetRuntimeUnitsEx(writesReals: Boolean);
+procedure PullTargetRuntimeUnitsEx(needsHeapHere: Boolean);
 { Pull the units this TARGET's codegen calls into, for a driver whose language
   has no `uses` clause to say so.
 
@@ -218,14 +218,14 @@ begin
     cost for something unrelated. Before: the Fortran and Algol skeletons were
     refused on i386 with `compiler error: float writer helper not found`.
 
-    ONLY FOR A DRIVER THAT SAYS IT WRITES REALS (writesReals). The first
-    version pulled on i386 for every skeleton driver, and a unit-free
-    `10 PRINT "hello"` went from 4,224 to 265,824 bytes on i386 (BASIC, Ada,
-    Rust, Zig, Erlang, LOLCODE and Whitespace alike) for a helper none of them
-    calls. Fortran and Algol pass True; everyone else calls the plain form.
+    ONLY FOR A DRIVER THAT SAYS SO (needsHeapHere). The first version pulled
+    on i386 for every skeleton driver, and a unit-free `10 PRINT "hello"` went
+    from 4,224 to 265,824 bytes on i386 (BASIC, Ada, Rust, Zig, Erlang, LOLCODE
+    and Whitespace alike) for a helper none of them calls. Fortran and Algol
+    pass `TargetArch = TARGET_I386` (they write REALs); BASIC passes whether
+    its source operates on strings; everyone else calls the plain form.
     bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real }
-  if not (TargetCodegenCallsHeapRuntime or
-          (writesReals and (TargetArch = TARGET_I386))) then Exit;
+  if not (TargetCodegenCallsHeapRuntime or needsHeapHere) then Exit;
   PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   ParseUsesUnitAmbient('builtin');

@@ -9494,6 +9494,10 @@ test-threads: $(COMPILER)
 	./$(COMPILER) --target=i386 $(TESTTMP)/basi386sz.bas $(TESTTMP)/basi386sz >/dev/null
 	@sz=$$(stat -c%s $(TESTTMP)/basi386sz); test "$$sz" -lt 16384 \
 	  || { echo "basi386sz: FAIL - unit-free BASIC on i386 is $$sz bytes (want < 16384): a runtime unit is being pulled it never calls"; exit 1; }
+	./$(COMPILER) test/test_a_unit_free_basic_program_concatenates_and_compares_strings.bas $(TESTTMP)/basstrops26
+	tools/expect_same.sh basstrops26 "$$($(TESTTMP)/basstrops26)" "$$(cat test/test_a_unit_free_basic_program_concatenates_and_compares_strings.expected)"
+	./$(COMPILER) --target=i386 test/test_a_unit_free_basic_program_concatenates_and_compares_strings.bas $(TESTTMP)/basstrops386_26
+	tools/expect_same.sh basstrops386_26 "$$($(TESTTMP)/basstrops386_26)" "$$(cat test/test_a_unit_free_basic_program_concatenates_and_compares_strings.expected)"
 	# THE NILPY ARM of the same saving, and it rests on a different argument
 	# from the Pascal one. There is no text scan and nothing for one to find:
 	# the language has no thread-local declaration, so no NilPy source can

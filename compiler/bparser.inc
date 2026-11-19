@@ -762,11 +762,105 @@ begin
     end;
 end;
 
+function BSourceOperatesOnStrings: Boolean;
+{ Does this program CONCATENATE or COMPARE strings? Those lower onto
+  PXXStrConcat / PXXStrEq through the emitted AnsiString shims, whose bodies are
+  builtinheap procedures. On riscv32, xtensa, aarch64 and arm32 the target pull
+  brings builtinheap anyway; on x86-64 and i386 nothing did. `DIM s = "abc" /
+  DIM t = "def" / PRINT s + t` was `call to a runtime stub that was never
+  emitted` on x86-64 and `PXXStrConcat not found` on i386, and printed abcdef
+  on the other four.
+
+  A TOKEN scan, because the answer is needed before the parse (see
+  PullTargetRuntimeUnits' position comment below: pulling after any AST exists
+  moves the symbol table under it). It is deliberately an OVER-approximation
+  in one direction only. A false True costs size (the program links
+  builtinheap, as it would on four targets anyway); a false False is the
+  compiler error above. So:
+    string-valued names: a name assigned (statement-start `name =`, after
+    DIM/LET/THEN/ELSE/a line number) from an expression that contains a
+    string literal or another string-valued name, iterated to a fixpoint;
+    an operation: `+` or a comparison with a string literal or a
+    string-valued name directly on either side, an assignment `=` excepted.
+  `PRINT "x"` and `DIM b = "hello" / PRINT b` stay False: printing and
+  storing a string need no builtinheap body, and those programs keep their
+  4 KB size.
+  bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error }
+const MAXSN = 256;
+var names: array[0..MAXSN-1] of AnsiString;
+    nNames, i, j, k: Integer; changed, isStr: Boolean; nm: AnsiString;
+
+  function BStrStmtStart(t: Integer): Boolean;
+  begin
+    if t <= 0 then begin BStrStmtStart := True; Exit; end;
+    case Tokens[t-1].Kind of
+      tkSemicolon, tkVar, tkThen, tkElse: BStrStmtStart := True;
+      tkInteger: BStrStmtStart := (t-1 = 0) or (Tokens[t-2].Kind = tkSemicolon);
+    else BStrStmtStart := False;
+    end;
+  end;
+
+  function BStrIsAssignEq(t: Integer): Boolean;
+  begin
+    BStrIsAssignEq := (Tokens[t].Kind = tkEq) and (t >= 1) and
+                  (Tokens[t-1].Kind = tkIdent) and BStrStmtStart(t-1);
+  end;
+
+  function BStrKnown(const n: AnsiString): Boolean;
+  var q: Integer;
+  begin
+    BStrKnown := False;
+    for q := 0 to nNames - 1 do
+      if names[q] = n then begin BStrKnown := True; Exit; end;
+  end;
+
+  function BStrStringish(t: Integer): Boolean;
+  begin
+    BStrStringish := False;
+    if (t < 0) or (t >= TokCount) then Exit;
+    if Tokens[t].Kind = tkString then BStrStringish := True
+    else if Tokens[t].Kind = tkIdent then BStrStringish := BStrKnown(ULower(GetTokenStr(t)));
+  end;
+
+begin
+  BSourceOperatesOnStrings := False;
+  nNames := 0;
+  repeat
+    changed := False;
+    for i := 1 to TokCount - 1 do
+      if BStrIsAssignEq(i) then
+      begin
+        nm := ULower(GetTokenStr(i-1));
+        if BStrKnown(nm) then Continue;
+        isStr := False;
+        j := i + 1;
+        while (j < TokCount) and not (Tokens[j].Kind in [tkSemicolon, tkEOF, tkElse]) do
+        begin
+          if BStrStringish(j) then begin isStr := True; Break; end;
+          Inc(j);
+        end;
+        if isStr then
+        begin
+          if nNames >= MAXSN then begin BSourceOperatesOnStrings := True; Exit; end;
+          names[nNames] := nm; Inc(nNames); changed := True;
+        end;
+      end;
+  until not changed;
+  for k := 0 to TokCount - 1 do
+    if (Tokens[k].Kind in [tkPlus, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) and
+       not BStrIsAssignEq(k) and (BStrStringish(k - 1) or BStrStringish(k + 1)) then
+    begin
+      BSourceOperatesOnStrings := True;
+      Exit;
+    end;
+end;
+
 procedure ParseBProgram;
 var
   stmtList: Integer;
   jmpPatch, i: Integer;
   bPullsBuiltinHeap: Boolean;   { see its computation -- USES *or* the target }
+  bStrOps: Boolean;             { BSourceOperatesOnStrings, computed once }
 begin
   { The whole starting checklist, in one call. This driver is the reason the
     routine exists: it was caught missing SIX of these steps, one at a time,
@@ -801,7 +895,11 @@ begin
     -- which 523833fde retired, as BSourceUsesAUnit's own header already
     records. A dead call under a stale justification is the arrangement where
     the next reader repairs the comment and wires the call back in. }
-  bPullsBuiltinHeap := BSourceUsesAUnit or TargetCodegenCallsHeapRuntime;
+  { THIRD DOOR (2026-11-19): a source that concatenates or compares strings
+    gets builtinheap on every target, not only where the backend needs it.
+    bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error }
+  bStrOps := BSourceOperatesOnStrings;
+  bPullsBuiltinHeap := BSourceUsesAUnit or TargetCodegenCallsHeapRuntime or bStrOps;
   EmitProgramPrologue(False, bPullsBuiltinHeap, True, jmpPatch);
 
   { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
@@ -840,7 +938,7 @@ begin
 
     Self-guards on TargetCodegenCallsHeapRuntime, so x86-64/i386 pay nothing.
     bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
-  PullTargetRuntimeUnits;
+  PullTargetRuntimeUnitsEx(bStrOps);
 
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate

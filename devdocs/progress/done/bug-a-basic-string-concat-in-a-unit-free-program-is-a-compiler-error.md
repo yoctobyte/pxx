@@ -5,8 +5,8 @@ track: A
 prio: 35
 type: bug
 blocked-by: [decide-how-much-string-machinery-the-basic-frontend-gets]
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-08-24
 summary: "Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over."
 ---
@@ -106,3 +106,31 @@ still `call to a runtime stub that was never emitted`, and on i386
 `PXXStrConcat not found`. So the open half is exactly the two targets whose
 codegen is inline. The fix shape follows: let bparser decide from the
 SOURCE (a string op seen in the prescan) the way it decides from the target.
+
+
+# Fixed 2026-11-19 (claude-dupwt): a third door, decided from the source
+
+This takes the ticket's own reasoning one step further. The shims cannot be
+emitted unless builtinheap ARRIVES, so the fix is to make it arrive when the
+source needs it. BSourceOperatesOnStrings (bparser.inc) is a token scan run
+before the parse, at the same position as the target pull:
+- string-valued names: a statement-start assignment (after DIM/LET/THEN/ELSE/a
+  line number) whose expression holds a string literal or another
+  string-valued name, iterated to a fixpoint;
+- an operation: `+`, `=`, `<>`, `<`, `<=`, `>` or `>=` (assignment `=`
+  excepted) with a string literal or string-valued name directly on either
+  side.
+If it is true, bPullsBuiltinHeap is true (shims emitted) and
+PullTargetRuntimeUnitsEx(True) pulls the units on every target. It
+over-approximates only toward a bigger binary, never toward the compiler error.
+
+Measured: the new fixture prints `abcdef / eq / match / 3 / xyz` on x86-64,
+i386, aarch64 and riscv32, all equal to native. Before, x86-64 and i386
+refused. No existing fixture changed size: all seven test/*.bas compile to
+exactly the published compiler's sizes, and `PRINT "x"`,
+`DIM b = "hello" / PRINT b` and a numeric `IF n = 5` stay at 4,288 bytes. A
+program that does operate on strings is ~147 KB on x86-64. That is the
+builtinheap cost every aarch64/riscv32 build of it already paid.
+
+Rows: basstrops26 (native) and basstrops386_26 (i386). The old compiler fails
+both rows at compile time.
