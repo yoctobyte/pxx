@@ -8,6 +8,7 @@ created: 2026-11-18
 found-by: pxx2 session, rump-pxx g21 follow-up (frank-user found the strong UND)
 tags: [cfront, emit-obj, link, weak, rump]
 blocked-by: []
+owner: claude-dupwt
 summary: "Weak DATA symbols now have the right binding in an object (WEAK UND for an undefined weak extern, WEAK for a weak definition), but three gaps remain: (a) a reference to weak undefined data is R_X86_64_PC32, which a PIE link refuses (gcc uses GOTPCREL); (b) a reference inside the same object to a weak data DEFINITION is bound locally, so another object's strong definition does not replace it (gcc and pxx --link both print the weak value); (c) a pxx PROGRAM refuses an undefined weak extern instead of resolving its address to 0."
 ---
 
