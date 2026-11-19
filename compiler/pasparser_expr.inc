@@ -3736,7 +3736,13 @@ begin
         ParseExpr;
         Expect(tkRParen, ')');
         { CurASTNode and LastExprTk are the operand's, untouched -- that IS the
-          intrinsic. Nothing is emitted and nothing is wrapped. }
+          intrinsic. Nothing is emitted and nothing is wrapped. A dereference
+          is MARKED, though: on a strict-alignment target (xtensa, arm32) a
+          plain l32i at an odd address bus-errors, and the mark is what sends
+          IRLowerAddress's AN_DEREF arm down the ragged byte path.
+          bug-a-unaligned-dereference-bus-errors-on-xtensa }
+        if (CurASTNode >= 0) and (ASTKind[CurASTNode] = AN_DEREF) then
+          ASTUnaligned[CurASTNode] := True;
         Exit;
       end;
       szBitScale := 1;

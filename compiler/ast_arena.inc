@@ -27,7 +27,7 @@ begin
   SetLength(ASTSLen, n);       SetLength(ASTCLongRank, n); SetLength(ASTLeft, n);
   SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
   SetLength(ASTCallParenless, n);
-  SetLength(ASTSemId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
+  SetLength(ASTSemId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n); SetLength(ASTUnaligned, n);
   SetLength(ASTFile, n);       SetLength(ASTTok, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
   SetLength(ASTNilChk, n);
@@ -69,6 +69,7 @@ begin
   ASTCallParenless[ASTNodeCount] := False;
   ASTSemId[ASTNodeCount]  := -1;
   ASTQChk[ASTNodeCount]    := False;
+  ASTUnaligned[ASTNodeCount] := False;
   { AN_ASSIGN carries its {$R+} region state from birth — one central tag
     instead of 27 build sites. Anchored at the enclosing STATEMENT's first
     token (StmtRChecks), not the current token: a directive between the RHS
@@ -239,6 +240,7 @@ begin
   ASTFile[Result]     := ASTFile[node];
   ASTTok[Result]      := ASTTok[node];
   ASTQChk[Result]     := ASTQChk[node];
+  ASTUnaligned[Result] := ASTUnaligned[node];
   ASTRChk[Result]     := ASTRChk[node];
   ASTIChk[Result]     := ASTIChk[node];
   ASTNilChk[Result]   := ASTNilChk[node];

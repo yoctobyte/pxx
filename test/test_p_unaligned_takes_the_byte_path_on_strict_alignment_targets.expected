@@ -1,0 +1,13 @@
+read dword ok
+read word ok
+read qword ok
+write dword b0 ok
+write dword b1 ok
+write dword b4 ok
+write dword b5 ok
+write word ok
+write qword lo ok
+write qword hi ok
+write qword after ok
+read back dword ok
+fails=0

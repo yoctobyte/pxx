@@ -8309,6 +8309,9 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
+        { the store side of the mark the rvalue arm sets (pasparser_expr.inc) }
+        if (valNode >= 0) and (ASTKind[valNode] = AN_DEREF) then
+          ASTUnaligned[valNode] := True;
         Expect(tkRParen, ')');
         Expect(tkAssign, ':=');
         ParseExpr;

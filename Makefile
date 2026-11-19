@@ -20289,6 +20289,10 @@ test-core: $(COMPILER)
 	done
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_c_float_to_int_implicit.c $(TESTTMP)/cf2i_xt
 	tools/expect_same.sh xtensa/cf2i "$$(tools/run_target.sh xtensa $(TESTTMP)/cf2i_xt)" "$$(cat test/test_c_float_to_int_implicit.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_p_unaligned_takes_the_byte_path_on_strict_alignment_targets.pas $(TESTTMP)/unal_xt
+	tools/expect_same.sh xtensa/unaligned "$$(tools/run_target.sh xtensa $(TESTTMP)/unal_xt)" "$$(cat test/test_p_unaligned_takes_the_byte_path_on_strict_alignment_targets.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-abi=call0 -O0 --xtensa-soft-mulhigh test/test_p_unaligned_takes_the_byte_path_on_strict_alignment_targets.pas $(TESTTMP)/unal_xt0
+	tools/expect_same.sh xtensa/unaligned_call0_O0 "$$(tools/run_target.sh xtensa $(TESTTMP)/unal_xt0)" "$$(cat test/test_p_unaligned_takes_the_byte_path_on_strict_alignment_targets.expected)"
 	@# A struct/union tag DEFINED in a block shadows the outer tag until '}'.
 	@# The tag table was global, so the inner body hit the redefinition guard and
 	@# its members resolved against the OUTER layout (refused, or read at the

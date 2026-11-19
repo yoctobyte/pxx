@@ -3698,6 +3698,16 @@ begin
        (IntToTypeKind(ASTDerefFrozenTk(node)) <> tyString) and
        not TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
       IRTk[Result] := ASTDerefFrozenTk(node);
+    { `Unaligned(p^)`: the address is a ragged IR_FIELD at offset 0, the same
+      shape a packed record's misaligned field already has, so the xtensa and
+      arm32 load/store arms (XtensaAddrIsRagged, Arm32AddrIsRagged) use their
+      byte path. Only there: every other target either does misaligned access
+      in hardware or does not read the bit, and an extra offset-0 node would
+      only perturb its code.
+      bug-a-unaligned-dereference-bus-errors-on-xtensa }
+    if ASTUnaligned[node] and
+       ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_ARM32)) then
+      Result := IRAppend(IR_FIELD, Result, -1, 1, 0, Ord(tyPointer));
   end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
