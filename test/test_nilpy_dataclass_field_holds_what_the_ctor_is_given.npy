@@ -1,0 +1,41 @@
+# A @dataclass field holds what its generated constructor is GIVEN, as in
+# CPython: `x: float` given a str keeps the str, given an int keeps the int
+# (the field becomes a variant). Before, the annotation alone typed the field
+# and the str's pointer bits printed as 2.457953e-317, the int as 3.0. A call
+# that passes what the annotation says keeps the fast field: the Makefile row
+# checks r_fast's q is a double (tk=19). Keyword and star arguments too.
+# bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-annotation
+from dataclasses import dataclass, field
+
+
+@dataclass
+class V:
+    x: float
+
+
+@dataclass
+class W:
+    x: float
+    y: float = 0.5
+
+
+@dataclass
+class Fast:
+    x: float
+    y: float
+
+
+def mk(a):
+    return a
+
+
+def r_fast(f: Fast) -> float:
+    q = f.x * 2.0 + f.y
+    return q
+
+
+print(V(mk("hi")).x, V(mk(3)).x)
+print(W(1.5).y, W(2.5, y=mk("kw")).y)
+print(r_fast(Fast(1.5, 2.5)))
+args = [7]
+print(V(*args).x)

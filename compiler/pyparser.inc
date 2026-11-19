@@ -401,6 +401,12 @@ var
     PyRegisterClassMembers, which is where the four methods are registered.
     bug-nilpy-dataclass-keyword-arguments-do-not-parse }
   PyDcOrder: array[0..MAX_UCLASS-1] of Boolean;
+  { Recorded by the DETECT sweep (phase 0) for PyFJJoinDataclassCtorCalls:
+    whether the class is a @dataclass, and its body's token span, so the
+    generated constructor's field order can be read before anything is laid
+    out. bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-annotation }
+  PyDcIs: array[0..MAX_UCLASS-1] of Boolean;
+  PyDcBodyLo, PyDcBodyHi: array[0..MAX_UCLASS-1] of Integer;
   { the four generated comparison methods, ci*4 + (0=lt, 1=le, 2=gt, 3=ge);
     -1 where the class hand-wrote one, which WINS as it does for __eq__ }
   PyDcCmpProc: array[0..MAX_UCLASS*4-1] of Integer;
@@ -49586,6 +49592,153 @@ begin
   end;
 end;
 
+procedure PyFJJoinDataclassCtorCalls;
+{ A @dataclass's GENERATED constructor stores each argument into its field,
+  but those stores are not `self.NAME = ...` statements, so neither
+  PyCollectClassFieldJoins nor PyFJJoinForeignStores saw them: the field was
+  typed by its annotation alone, and `x: float` given a str stored the str's
+  pointer bits as a double (V(mk("hi")).x printed 2.457953e-317; CPython: hi),
+  an int came back 3.0 (CPython: 3). Python does not enforce annotations.
+
+  So a call `V(a, b, x=c)` is joined like the stores it performs: positional
+  arguments into the fields in declaration order (a dataclass base's first, as
+  CPython orders them), keywords by name, each typed by the same
+  PyFJForeignRhsTk a foreign store uses. An argument the tokens cannot type
+  makes a scalar or class field a variant, as an untypable foreign store does;
+  a star argument may reach any field, so it does that to all of them. The
+  dataclass arm then widens the annotation by this join, so `V(1.5, 2.0)`
+  keeps a double and only a call that needs it pays for a variant.
+  bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-annotation }
+var k, ci, q, d, close, nItems, it, lo, hi, fi, f: Integer;
+    items: array[0..63] of Integer;
+    fields: array[0..127] of AnsiString;
+    nf: Integer;
+    rtk: TTypeKind;
+    star: Boolean;
+
+  procedure AddFields(c, depth: Integer);
+  var j, dd, x: Integer;
+      nm: AnsiString;
+      dup: Boolean;
+  begin
+    if (c < 0) or (depth > 32) then Exit;
+    if (PyFJParent[c] >= 0) and PyDcIs[PyFJParent[c]] then
+      AddFields(PyFJParent[c], depth + 1);
+    j := PyDcBodyLo[c];
+    dd := 0;
+    if (j < PyDcBodyHi[c]) and (Tokens[j].Kind = tkIndent) then Inc(j);
+    while j < PyDcBodyHi[c] do
+    begin
+      if Tokens[j].Kind = tkIndent then Inc(dd)
+      else if Tokens[j].Kind = tkDedent then Dec(dd)
+      else if (dd = 0) and (Tokens[j].Kind = tkIdent) and (j + 2 < PyDcBodyHi[c]) and
+              (Tokens[j + 1].Kind = tkColon) and
+              ((j = PyDcBodyLo[c]) or (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+              not ((Tokens[j + 2].Kind = tkIdent) and TokenCaseEqual(j + 2, 'ClassVar')) then
+      begin
+        nm := GetTokenStr(j);
+        dup := False;
+        for x := 0 to nf - 1 do
+          if fields[x] = nm then dup := True;   { a redeclared base field keeps its place }
+        if (not dup) and (nf < 128) then
+        begin
+          fields[nf] := nm;
+          Inc(nf);
+        end;
+      end;
+      Inc(j);
+    end;
+  end;
+
+  procedure Join(const nm: AnsiString; t: TTypeKind);
+  var e: Integer;
+  begin
+    if t = tyUnknown then
+    begin
+      e := PyFJFind(ci, nm);
+      if (e < 0) or PyFJWidensOnUnknown(IntToTypeKind(PyFJTk[e])) then
+        PyFJNote(ci, nm, tyVariant);
+      Exit;
+    end;
+    if t = tyString then t := tyAnsiString;
+    PyFJNote(ci, nm, t);
+  end;
+
+begin
+  k := PyScanLo;
+  while k < MainProgramTokCount - 1 do
+  begin
+    if (Tokens[k].Kind = tkIdent) and (Tokens[k + 1].Kind = tkLParen) and
+       ((k = 0) or not (Tokens[k - 1].Kind in [tkClass, tkFunction])) then
+    begin
+      ci := FindUClass(GetTokenStr(k));
+      if (ci >= 0) and PyDcIs[ci] then
+      begin
+        nf := 0;
+        AddFields(ci, 0);
+        { the argument list: items split at depth 0 }
+        q := k + 2;
+        d := 0;
+        close := -1;
+        nItems := 0;
+        lo := q;
+        while q < MainProgramTokCount do
+        begin
+          if Tokens[q].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+          else if Tokens[q].Kind in [tkRParen, tkRBrack, tkEnd] then
+          begin
+            if d = 0 then begin close := q; Break; end;
+            Dec(d);
+          end
+          else if (d = 0) and (Tokens[q].Kind = tkComma) then
+          begin
+            if (q > lo) and (nItems < 32) then
+            begin
+              items[nItems * 2] := lo; items[nItems * 2 + 1] := q; Inc(nItems);
+            end;
+            lo := q + 1;
+          end;
+          Inc(q);
+        end;
+        if (close > lo) and (nItems < 32) then
+        begin
+          items[nItems * 2] := lo; items[nItems * 2 + 1] := close; Inc(nItems);
+        end;
+        if close >= 0 then
+        begin
+          star := False;
+          fi := 0;
+          for it := 0 to nItems - 1 do
+          begin
+            lo := items[it * 2];
+            hi := items[it * 2 + 1];
+            if Tokens[lo].Kind = tkStar then
+              star := True
+            else if (hi - lo >= 3) and (Tokens[lo].Kind = tkIdent) and
+                    (Tokens[lo + 1].Kind = tkAssign) then
+              Join(GetTokenStr(lo), PyFJForeignRhsTk(lo + 2, hi, k))
+            else
+            begin
+              if fi < nf then
+              begin
+                rtk := PyFJForeignRhsTk(lo, hi, k);
+                Join(fields[fi], rtk);
+              end;
+              Inc(fi);
+            end;
+          end;
+          if star then
+            for f := 0 to nf - 1 do Join(fields[f], tyUnknown);
+          if PxxDbgEnabled('n.fjdcctor') then
+            WriteLn('PXXDBG n.fjdcctor line ', Tokens[k].Line, ' ', GetTokenStr(k),
+                    ' fields=', nf, ' args=', nItems, PyIfStrU(star, ' star', ''));
+        end;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 { Would making baseCi the parent of ci close a LOOP in the class hierarchy?
   True when ci is baseCi or any of its ancestors. Every walk up UClsParent
   assumes the chain ends, so a loop is not a wrong answer but a compiler that
@@ -52478,7 +52631,12 @@ begin
             { DETECT — record what every class assigns to every field, laying
               nothing out. Nothing here may depend on a class registered later,
               which is the whole reason the pass exists. }
-            PyCollectClassFieldJoins(ci, bs, be)
+          begin
+            PyCollectClassFieldJoins(ci, bs, be);
+            PyDcIs[ci] := isDC;
+            PyDcBodyLo[ci] := bs;
+            PyDcBodyHi[ci] := be;
+          end
           else
           begin
             PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
@@ -52536,6 +52694,7 @@ begin
   PyFJReset;
   PyClassHeaderSweep(0);
   PyFJJoinForeignStores;
+  PyFJJoinDataclassCtorCalls;
   PyFJPropagate;
   PyInHeaderSweep := True;
   PyClassHeaderSweep(1);

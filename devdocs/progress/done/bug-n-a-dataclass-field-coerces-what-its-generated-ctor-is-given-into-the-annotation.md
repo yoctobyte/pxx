@@ -3,8 +3,8 @@ slug: bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-
 track: N
 prio: 65
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: rd
 created: 2026-11-19
 found-by: rd
 tags: [nilpy, dataclass, annotation, wrong-value]
@@ -54,3 +54,27 @@ Join the construction sites' argument types into the field, the way the
 plain class's stores are joined: a call `V(a)` is a store of `a` into
 `V.x`. A variant argument then makes the field a variant, and the common
 case (`V(1.5)`) stays a double. Refusing would be wrong: CPython accepts it.
+
+## Resolution (2026-11-20, rd)
+
+As the direction above says: `PyFJJoinDataclassCtorCalls` (pyparser.inc,
+run after PyFJJoinForeignStores in the detect phase) treats every call
+`V(...)` to a dataclass as the stores its generated constructor performs.
+Positional arguments go into the fields in declaration order (a dataclass
+base's fields first, as CPython orders them; a redeclared base field keeps
+its place), keywords go by name, and each argument is typed by
+PyFJForeignRhsTk. An argument it cannot type, or any star argument, makes a
+scalar or class field a variant. The dataclass arm already widened its
+annotation by the join; now the join has something in it. The phase-0 sweep
+records `PyDcIs` and the body span per class for this.
+
+Measured, on test/test_nilpy_dataclass_field_holds_what_the_ctor_is_given.npy
+(a test-nilpy row, diffed against CPython): `V(mk("hi")).x` gives hi and
+`V(mk(3)).x` gives 3, a keyword `y=mk("kw")` and `V(*args)` are right, and
+`Fast(1.5, 2.5)` keeps `r_fast`'s q a double (tk=19, pinned by the row).
+
+Not covered: a construction the token scan cannot see as `V(...)` (through
+an alias, `cls(...)` in a classmethod, `dataclasses.replace`) still has only
+the annotation. Separately found and filed:
+bug-n-a-dataclass-that-inherits-a-dataclass-segfaults-on-construction
+(already on master before this change).

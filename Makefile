@@ -4832,6 +4832,12 @@ test-nilpy: $(COMPILER)
 	 echo "$$o" | grep -qE '^PXXDBG n.locals r_v q tk=19 ' && \
 	 tools/expect_same.sh test_nilpy_plainann_tk "$$(echo "$$o" | grep -E '^PXXDBG n.locals r_p q ' | sed 's/ | .*//; s/ r_p / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals r_v q ' | sed 's/ | .*//; s/ r_v / _ /')"
 	tools/expect_same.sh test_nilpy_plainann26 "$$($(TESTTMP)/test_nilpy_plainann26)" "$$(python3 test/test_nilpy_plain_class_field_annotation_is_typed.npy)"
+	@# a @dataclass field holds what its generated ctor is given (a str stays a
+	@# str), and a call that passes the annotated type keeps the double field
+	@# bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-annotation
+	o=$$(PXXDBG=n.locals ./$(COMPILER) test/test_nilpy_dataclass_field_holds_what_the_ctor_is_given.npy $(TESTTMP)/test_nilpy_dcctor26 2>&1); \
+	 tools/expect_same.sh test_nilpy_dcctor_tk "$$(echo "$$o" | grep -E '^PXXDBG n.locals r_fast q ' | sed 's/ rec=.*//')" "PXXDBG n.locals r_fast q tk=19"
+	tools/expect_same.sh test_nilpy_dcctor26 "$$($(TESTTMP)/test_nilpy_dcctor26)" "$$(python3 test/test_nilpy_dataclass_field_holds_what_the_ctor_is_given.npy)"
 	@# a def that returns None on one path and a value on another answers Any:
 	@# `return None` beside `return 7` used to store a plain 0, so `x is None` was
 	@# False and str(x) printed 0. Diffed against CPython.
