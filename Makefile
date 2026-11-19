@@ -28966,6 +28966,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_dunder_signed.c $(TESTTMP)/c_dsigned26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_dsigned26_gcc32 test/c_dunder_signed.c
 	tools/expect_same.sh c_dsigned26_i386 "$$(timeout 20 $(TESTTMP)/c_dsigned26_i386)" "$$(timeout 20 $(TESTTMP)/c_dsigned26_gcc32)"
+	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
+	# 16-aligned, and above 16 needs frame realignment -- both still open on
+	# feature-c-an-over-aligned-local-is-not-aligned).
+	./$(COMPILER) test/c_aligned_local.c $(TESTTMP)/c_alocal26
+	@gcc -w -o $(TESTTMP)/c_alocal26_gcc test/c_aligned_local.c
+	tools/expect_same.sh c_alocal26 "$$(timeout 20 $(TESTTMP)/c_alocal26)" "$$(timeout 20 $(TESTTMP)/c_alocal26_gcc)"
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

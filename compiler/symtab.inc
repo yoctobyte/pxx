@@ -7066,6 +7066,10 @@ begin
     end
     else
     begin
+      { C aligned(N) on a LOCAL, up to the frame pointer's own alignment:
+        the slot offset is a multiple of N from a 16-aligned frame.
+        feature-c-an-over-aligned-local-is-not-aligned }
+      if AllocMinAlign > align then align := AllocMinAlign;
       FrameSize := AlignTo(FrameSize + sz, align);
       Syms[SymCount].Kind   := skLocal;
       Syms[SymCount].Offset := -FrameSize;
@@ -7950,6 +7954,7 @@ begin
   end
   else
   begin
+    if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) on a local array: see AllocVar }
     FrameSize := AlignTo(FrameSize + totalSize, align);
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;

@@ -8710,6 +8710,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
     hadStar: Boolean;
     tdLvl: Integer;   { CTypeTdLvl of the base: levels a `T **` typedef put into ptrDepth }
+    lclTypeTok, lclEnd, lclDepth: Integer;   { the declaration's type token, and one declarator's extent, for aligned(N) }
     sibTdLvl, sibTdBaseTk, sibTdBaseRec: Integer;   { siblings over a pointer typedef: its extra level and pointee }
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
@@ -8737,6 +8738,8 @@ begin
   cliOuterTop := CLIArrTop;
   cliBase := CLIArrTop;
   CDeclLeaveParenPtrArr := True;
+  lclTypeTok := TokPos - 1;
+  AllocMinAlign := 0;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   lParenPtrArr := False;
   CTypeTypedefArrLenAtEntry := CTypeTypedefArrLen;
@@ -9131,6 +9134,24 @@ begin
     end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    { aligned(N) for THIS declarator: on the specifiers, an aligned typedef, or
+      after the declarator (`char b[5] __attribute__((aligned(64)))` -- the
+      lexer marks the token after the attribute, so the scan runs to the `,`
+      `;` or `=` that ends the declarator). AllocVar/AllocArray's local branch
+      honour it. feature-c-an-over-aligned-local-is-not-aligned }
+    lclEnd := TokPos - 1; lclDepth := 0;
+    while lclEnd < TokCount do
+    begin
+      case Tokens[lclEnd].Kind of
+        tkLParen, tkLBrack, tkBegin: Inc(lclDepth);
+        tkRParen, tkRBrack, tkEnd: Dec(lclDepth);
+      end;
+      if (lclDepth <= 0) and ((Tokens[lclEnd].Kind = tkComma) or
+         (Tokens[lclEnd].Kind = tkSemicolon) or (Tokens[lclEnd].Kind = tkAssign)) then Break;
+      if lclDepth < 0 then Break;
+      Inc(lclEnd);
+    end;
+    AllocMinAlign := CDeclAttrAlign(lclTypeTok, lclEnd);
     if lParenName and (CurTok.Kind = tkRParen) then begin Next; lParenName := False; end;
     if CurTok.Kind = tkLParen then
     begin
@@ -10117,7 +10138,10 @@ begin
   if CurTok.Kind = tkSemicolon then
     Next
   else if IsCTypeTok then
-    initNode := ParseCLocalDeclAST
+  begin
+    initNode := ParseCLocalDeclAST;
+    AllocMinAlign := 0;   { a local's aligned(N) ends with its declaration }
+  end
   else
   begin
     initNode := ParseCCommaStmt;
@@ -12132,6 +12156,7 @@ begin
       CLocalThreadSymCount := 0;
       bsMark := SymCount;
       Result := ParseCLocalDeclAST;
+      AllocMinAlign := 0;
       CLocalStaticDecl := False;
       CNoteBlockStatics(bsMark);
       CLocalThreadDecl := False;
@@ -12145,6 +12170,7 @@ begin
   begin
     CLocalStaticDecl := False;
     Result := ParseCLocalDeclAST;
+    AllocMinAlign := 0;
     Exit;
   end;
 
