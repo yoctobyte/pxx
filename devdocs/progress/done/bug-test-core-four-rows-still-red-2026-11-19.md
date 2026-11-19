@@ -3,13 +3,13 @@ slug: bug-test-core-four-rows-still-red-2026-11-19
 track: T
 prio: 30
 type: bug
-status: backlog
-owner: unassigned
+status: done
+owner: rd, claude-dupwt
 created: 2026-11-19
 found-by: rd, full `make -i test-core` on b2cd388a0c (after bug-test-core-stops-at-freebsd-kernel-entries-5-not-2)
 tags: [test-core, cfront, inline-asm, crtl]
 blocked-by: []
-summary: "Four test-core rows are still red after the 2026-11-19 sweep, each a real gap rather than a stale row: casmmpress26 (nine dereferenced \"m\" operands exceed the inline-asm pool, regression from b3c5f711ea), c_host_header_needs_cdefs_glue (crtl's sigset_t conflicts with glibc's bits/types/sigset_t.h through <spawn.h>; red since at least v455), test_c_crypt26 (`uses crypt` wants libxcrypt's crypt_r/crypt_data, but crtl's own <crypt.h> shadows the host one since b1b534c3c6; red at v455 too), and c_incomplete_type_member_refused's i386 side (bug-c-aligned-alignof-long-double-on-i386). test-core still stops at the first of them that it reaches."
+summary: "DONE 2026-11-19: all four fixed (1 casmmpress fdbbbe701a dupwt; 2 sigset_t glue, 3 crypt_r, 4 aligned long double 36b9f00975, rd). Was: four test-core rows still red after the 2026-11-19 sweep, each a real gap rather than a stale row: casmmpress26 (nine dereferenced \"m\" operands exceed the inline-asm pool, regression from b3c5f711ea), c_host_header_needs_cdefs_glue (crtl's sigset_t conflicts with glibc's bits/types/sigset_t.h through <spawn.h>; red since at least v455), test_c_crypt26 (`uses crypt` wants libxcrypt's crypt_r/crypt_data, but crtl's own <crypt.h> shadows the host one since b1b534c3c6; red at v455 too), and c_incomplete_type_member_refused's i386 side (bug-c-aligned-alignof-long-double-on-i386). test-core still stops at the first of them that it reaches."
 ---
 
 # test-core: four rows still red (2026-11-19)
