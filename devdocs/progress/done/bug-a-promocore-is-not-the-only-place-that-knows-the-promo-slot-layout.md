@@ -72,3 +72,16 @@ call for whoever owns the emitter.
 
 Track A's usual: `make compiler/pascal26` (fixedpoint) plus, if the blob is
 touched at all, a variant/promo repro on x86-64.
+
+
+## 2026-11-19 (claude-dupwt): fixed with option 1, and why not option 2
+
+The +8 in the three x86-64 blobs is not promo-specific: it is the generic
+variant payload offset, read the same way for strings and objects, in every
+backend's variant emitters. A promo-only constant for three sites would
+suggest promo has its own slot layout, which it does not. The claim is now
+true as written: promocore owns the promo VALUE representation; the
+{tag(8), payload(8)} SLOT is shared runtime layout, encoded across the
+emitters (the x86-64 blobs named) and guarded by PXX_RTL_LAYOUT_VERSION,
+whose defs.inc header already lists the variant slot shape. Comment-only;
+the compiler binary hash is unchanged.

@@ -16606,8 +16606,16 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       { PROMOTABLE INT store. Handled before every other assignment shape so no
         integer path ever sees the {tag, payload} slot. A promo source is COPIED
         (which retains its managed heap payload); an ordinary integer source is
-        boxed. Both go through promocore.pas, the only place that knows the
-        layout. }
+        boxed. Both go through promocore.pas, which owns the promo VALUE
+        representation (inline tier vs. a managed decimal payload). It does
+        NOT own the {tag(8), payload(8)} variant SLOT: that shape is shared
+        runtime layout, encoded in every backend's variant emitters too --
+        x86-64's clear/retain/print blobs in ir_codegen.inc read the payload
+        as a literal [rax+8] after the VT_PROMO_BASE..VT_PROMO_LAST range
+        test -- and guarded by PXX_RTL_LAYOUT_VERSION (defs.inc). A slot
+        layout change is a version bump plus those emitters, not a promocore
+        edit alone.
+        bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout }
       { The destination is any promo LVALUE, not only an identifier -- an array
         element, a field and a deref are destinations too, and until IRPromoLValueAddr
         existed they fell PAST this arm into the ordinary integer store, which
