@@ -10694,6 +10694,12 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_dvis_ok "$$($(TESTTMP)/test_dvis_ok | tr '\n' ' ')" "conv 30 elem 7 6 nested 5 call 5 ptr 3 str hi "
 	! ./$(COMPILER) test/test_dynarray_value_into_scalar_refused.pas $(TESTTMP)/test_dvis_rf > $(TESTTMP)/test_dvis_rf.log 2>&1 || exit 1
 	tools/expect_same.sh test_dvis_refused "$$(grep -c 'cannot assign a dynamic array to' $(TESTTMP)/test_dvis_rf.log)" "8"
+	# PXXDBG=a.ir:* covers the program's main body (as "main"), and a topic that
+	# matched no body says so instead of printing nothing.
+	# bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
+	@printf 'program airm;\nvar x: Integer;\nprocedure Foo; begin x := 2; end;\nbegin x := 41; Foo; WriteLn(x); end.\n' > $(TESTTMP)/test_airm.pas
+	tools/expect_same.sh test_air_star "$$(PXXDBG='a.ir:*' ./$(COMPILER) $(TESTTMP)/test_airm.pas $(TESTTMP)/test_airm 2>&1 | grep '^PXXDBG a.ir ' | tr '\n' '|')" "PXXDBG a.ir Foo|PXXDBG a.ir main (program body)|"
+	tools/expect_same.sh test_air_nomatch "$$(PXXDBG='a.ir:Nope' ./$(COMPILER) $(TESTTMP)/test_airm.pas $(TESTTMP)/test_airm 2>&1 | grep -c 'matched no IR-lowered body')" "1"
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

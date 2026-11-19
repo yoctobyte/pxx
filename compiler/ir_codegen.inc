@@ -16449,10 +16449,25 @@ begin
   IRMarkRedundantReloads;
   { PXXDBG=a.ir:<proc> — the IR of ONE routine, no rebuild and no wading through
     every body in the program. IRDump already runs per body with CurProc in
-    scope, so this is a condition rather than a refactor. `a.ir:*` is --dump-ir. }
-  if DumpIR or ((CurProc >= 0) and PxxDbgWants('a.ir', Procs[CurProc].Name)) then
+    scope, so this is a condition rather than a refactor.
+
+    The program's MAIN BODY has no CurProc and answers to the name `main`, so
+    `a.ir:*` covers every body --dump-ir does and `a.ir:main` selects it. Until
+    2026-11-19 the gate required CurProc >= 0, `a.ir:*` silently skipped the
+    main body while this comment called it --dump-ir, and a program with only a
+    main body printed nothing at all. Every match is counted; compiler.pas says
+    so when a topic matched no body, so "no match" is no longer the same output
+    as "bad flag". bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body }
+  if DumpIR then
+    IRDump
+  else if ((CurProc >= 0) and PxxDbgWants('a.ir', Procs[CurProc].Name)) or
+          ((CurProc < 0) and PxxDbgWants('a.ir', 'main')) then
   begin
-    if CurProc >= 0 then WriteLn('PXXDBG a.ir ', Procs[CurProc].Name);
+    if CurProc >= 0 then
+      WriteLn('PXXDBG a.ir ', Procs[CurProc].Name)
+    else
+      WriteLn('PXXDBG a.ir main (program body)');
+    Inc(PxxDbgIrDumps);
     IRDump;
   end;
   IREmitMachineCode;

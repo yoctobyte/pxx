@@ -7145,6 +7145,7 @@ var
     memory only in [2^39, 2^40), and its ld.so already sits at 0x400000. }
   ImageBase      : Int64;
   ElfCodeVA      : Int64;   { code VA writeELF used; -1 until it runs (--proc-map) }
+  PxxDbgIrDumps  : Integer; { bodies PXXDBG=a.ir dumped; 0 at the end = say so }
   { --load-offset: --link --freestanding writes p_paddr = p_vaddr - LoadOffset
     on every PT_LOAD and the PT_NOTE (GNU ld's AT(ADDR(sec) - KERNEL_VMA)), so
     a PVH loader places a kernel-half image at its physical address. 0 = off. }

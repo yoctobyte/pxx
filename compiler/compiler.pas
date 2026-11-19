@@ -1745,6 +1745,7 @@ begin
   LinkEntryName := '';
   ImageBase := LOAD_ADDR;
   ElfCodeVA := -1;
+  PxxDbgIrDumps := 0;
   LoadOffset := 0;
   LdsoRunnable := False;
   LinkGcSections := True;
@@ -4454,6 +4455,12 @@ begin
     recomputed the offset from CODE_OFFSET and missed the dynamic header
     delta, so every line was 0x70 low and vgsym.py named the PRECEDING
     routine. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
+  { PXXDBG=a.ir:<name> that matched no body: say so, or a misspelled routine,
+    a body the IR path never lowers and a wrong flag all print nothing.
+    bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body }
+  if (PxxDbgArg('a.ir') <> '') and (PxxDbgIrDumps = 0) and not DumpIR then
+    writeln(StdErr, 'PXXDBG a.ir: "', PxxDbgArg('a.ir'),
+            '" matched no IR-lowered body (the main body is "main")');
   if DumpProcMap and (TargetArch = TARGET_X86_64) then
   begin
     if ElfCodeVA < 0 then

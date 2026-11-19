@@ -4,7 +4,8 @@ title: "PXXDBG=a.ir:* silently skips a program's main body, and a comment says i
 track: A
 type: bug
 prio: 30
-status: backlog
+status: done
+owner: claude-dupwt
 found: 2026-08-28
 found-by: frankwasm (cost two silent runs), verified by frank-coordinator
 ---
@@ -50,3 +51,19 @@ Same family as `feature-a-a-refusal-is-a-claim-with-a-date-on-it` — a state ca
 information because several conditions read identically — and specifically its **face nine**
 (an inert flag, with the false claim living in a comment). This is that shape in a diagnostic
 tool: the comment asserts a property the code does not have, and the tool's silence hides it.
+
+
+## 2026-11-19 (claude-dupwt): fixed, both halves
+
+The ticket offered two fixes; both landed. The main body (CurProc < 0) answers
+to the name `main`, so `a.ir:*` covers every body `--dump-ir` does and
+`a.ir:main` selects it; its header reads `PXXDBG a.ir main (program body)`.
+And every match is counted: if PXXDBG names an a.ir topic and no body matched,
+compiler.pas prints `PXXDBG a.ir: "<name>" matched no IR-lowered body (the
+main body is "main")`, so no-match is no longer the same output as a bad flag.
+The false comment is rewritten. Measured on a two-body program: `*` dumps Foo
+and main (the --dump-ir lines plus two headers), `main` and `Foo` one each,
+`Nope` the new line. Two Makefile rows assert the `*` headers and the no-match
+line. debug-switches.md and the playbook's "wrap it in a procedure" wrinkle are
+updated. Other PxxDbgWants topics still carry a CurProc >= 0 guard (the
+playbook's next paragraph); not changed here. Gate quick passes.

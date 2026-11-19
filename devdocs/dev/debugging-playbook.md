@@ -3105,11 +3105,13 @@ before the first rebuild. It settled
 nodes, same numbering at `-O2` and `-O3`), where a site-by-site probe of nine
 `OptLevel >= 3` gates was the alternative at ~20s per rebuild each.
 
-*The wrinkle that makes it look like the tool does not apply:* `a.ir:<proc>`
-takes a ROUTINE NAME, and a program's MAIN BODY has none, so a top-level repro
-prints every routine but the one you care about. **Wrap the repro in a
-`procedure` first** — if the bug survives that (check, do not assume), you can
-ask for it by name.
+*The main body is `main` (since 2026-11-19).* `a.ir:<proc>` takes a ROUTINE
+NAME, and a program's MAIN BODY has none, so until 2026-11-19 a top-level repro
+printed every routine but the one you cared about, and `a.ir:*` skipped it too.
+It now answers to `a.ir:main` and is included in `a.ir:*`, and a topic that
+matched no body prints `PXXDBG a.ir: "<name>" matched no IR-lowered body`
+instead of nothing. On an older compiler, wrap the repro in a `procedure`.
+bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 
 **A CHANNEL SPELLED WITHOUT ITS `:` PRINTS NOTHING AND EXITS 0, and there are
 two kinds of channel.** `PxxDbgEnabled` takes a bare topic (`PXXDBG=n.locals`);
