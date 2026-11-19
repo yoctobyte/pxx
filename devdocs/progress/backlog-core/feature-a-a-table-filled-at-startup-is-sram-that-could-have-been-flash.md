@@ -76,3 +76,41 @@ this structure with the flash cache off?** ESP objects deliberately keep class
 RTTI and Pascal VMTs in `.data` for exactly that reason. Any table moved to
 flash acquires that hazard, so the per-item question is reachability first and
 size second.
+
+
+## 2026-11-19 (claude-dupwt): step 1 done, the population is measured
+
+`PXXDBG=a.datamap` now attributes .bss (ObjBssCensus in elfwriter.inc):
+the named variables largest first, and the space no symbol covers as gaps
+with offsets. NilPy print demo, `--target=riscv32 --platform=esp
+--no-signals`, object only (no --dce), master at 2026-11-19:
+
+```
+.bss 50688B: named 50505B in 106 variables, unnamed 152B in 3 gaps
+  32768B PyAttrLkSlot       pylib   attribute-lookup cache, 8192 slots
+   8192B PyLkSlot           pyeval  lookup cache, 2048 slots
+   4096B PyDynAttrNameSeen  pylib   array[0..4095] of Byte
+   1536B TokCache           pyeval  eval tokenizer cache, 64 entries
+   1024B PyChar1Tab         pylib   CONST array[0..255] of AnsiString
+   1024B PyBoxKindCache     pylib   256-entry cache
+   1024B PyFinKindCache     pylib   256-entry cache
+   (everything else 64 B or less)
+```
+
+(.data is 8,520 B in this build, so .bss is 86% of the object's SRAM; the
+89 KB of September is already down to 50.7 KB.)
+
+**The hypothesis mostly fails.** 49 KB of the 50.7 KB are run-time CACHES
+written during the run (lookup caches filled on a miss); they are mutable
+by design and cannot move to flash. The one constant-after-init table is
+**PyChar1Tab**, 1 KB: a typed `const` array of 256 one-character strings that
+still reaches .bss, i.e. is filled by startup code, because its elements are
+string handles rather than plain literals (the a.constdata all-or-nothing
+refusal). Baking it needs data relocations to the literal handles; worth
+1 KB of SRAM plus the fill code.
+
+**The real SRAM lever is cache SIZING on ESP**, not placement: the caches
+are sized for desktop (PyAttrLkSlot alone is 65% of .bss). Owner direction
+(ESP: RAM beats flash; ESP is not optimised for maximum performance) points
+that way, but it is a speed/RAM trade on the chip and is tracked as its own
+item: feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram.
