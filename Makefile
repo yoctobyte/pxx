@@ -36798,6 +36798,8 @@ test-xtensa: $(COMPILER)
 	# bug-a-nil-python-does-not-build-for-xtensa-call0
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_call0_wide_argument_block.pas $(TESTTMP)/xt_wide_c0
 	tools/expect_same.sh xtensa/test_xtensa_call0_wide_argument_block "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wide_c0)" "$$(cat test/test_xtensa_call0_wide_argument_block.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_sweep_thunk_relax.pas $(TESTTMP)/xt_sweep_c0
+	tools/expect_same.sh xtensa/test_xtensa_sweep_thunk_relax "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sweep_c0)" "$$(cat test/test_xtensa_sweep_thunk_relax.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_c0
 	tools/expect_same.sh xtensa-call0/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_c0)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_w

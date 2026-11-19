@@ -127,6 +127,25 @@ static long commute(int a, int b, const int *p)
     return s;
 }
 
+/* if-bodies longer than a conditional branch reaches: past bxx/bxxi's
+   8-bit field (about 127 bytes) and past bxxz's 12 bits (about 2 KB), so a
+   direct branch to the label must fall back to the skip-over-a-J form on a
+   second pass (xtensa XtBrFar) */
+#define R1(x) x
+#define R4(x) x x x x
+#define R16(x) R4(R4(x))
+#define R256(x) R16(R16(x))
+static int far_if(int a, int b)
+{
+    int r = 1;
+    if (a > 3) { R16(r = r * 3 + a;) }
+    if (a < b) { R16(r = r * 5 - b;) }
+    if (a) { R256(r = r * 7 + b;) }
+    if (a == 5) { R256(r = r * 3 - a;) } else { r += 11; }
+    while (b > 0) { R16(r = r * 3 + b;) b--; }
+    return r;
+}
+
 int main(void)
 {
     int i, j, n;
@@ -139,6 +158,7 @@ int main(void)
         mix(cmp_const(vals[i]));
         mix(cmp_char((unsigned char)vals[i], (signed char)vals[i]));
         mix(addk(vals[i]));
+        mix(far_if(vals[i] & 15, vals[i] & 3));
         mix(commute(vals[i], vals[(i + 3) % (int)(sizeof vals / sizeof vals[0])], g_arr + (i % 3)));
     }
     printf("cmp %08x\n", h);

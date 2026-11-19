@@ -7008,6 +7008,31 @@ begin
   if XtLabelFollows(j, lblId) then Result := j;
 end;
 
+function XtDirectBranch(irIdx, lblId, br, bs, bt, pos: Integer): Boolean;
+{ The pending branch at pos (XtEmitBr) taken straight to lblId, when that
+  is forward and was not found out of reach on an earlier pass: recorded
+  for the check after the pass (XtBrFix*). False: the caller keeps its
+  skip-over-a-J form. }
+begin
+  Result := False;
+  if (LabelPositions[lblId] <> -1) or XtBrFar[irIdx] then Exit;
+  if XtBrFixCount >= MAX_IR then Exit;
+  Patch24(pos, XtEncodeBr(br, bs, bt, 6));
+  XtBrFixPos[XtBrFixCount] := pos;
+  XtBrFixLbl[XtBrFixCount] := lblId;
+  XtBrFixEnc[XtBrFixCount] := br * 256 + bs * 16 + bt;
+  XtBrFixIR[XtBrFixCount] := irIdx;
+  Inc(XtBrFixCount);
+  Result := True;
+end;
+
+function XtBrReaches(br, offset: Integer): Boolean;
+{ offset = target - branch position; each form's own field width }
+begin
+  if (br >= 100) and (br < 200) then Result := (offset - 4 >= -2048) and (offset - 4 <= 2047)
+  else Result := (offset - 4 >= -128) and (offset - 4 <= 127);
+end;
+
 procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
 { Rewrite the branch at `pos` to skip everything emitted since. r is the branch
   flavour's own field: 9 = BNE, 1 = BEQ, matching xtensa_bne/xtensa_beq. }
@@ -7040,6 +7065,7 @@ procedure IREmitMachineCodeXtensa;
   too, or the discarded pass leaves relocations pointing into overwritten code. }
 var i, lblId, pos, f, procIdx, skipPos, si, sz, br, bs, bt, skipJumpAt: Integer;
     LabelFixupCount: Integer;
+    jWidened: Boolean;
     fpChosen: Integer;
     saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
     saveCallFix, saveDynCall, saveIramFix, saveProcAddrFix: Integer;
@@ -7058,6 +7084,8 @@ begin
   saveSpillMax := XtSpillMax;
   for i := 0 to IRLabelCount - 1 do
     XtWideLabel[i] := False;
+  for i := 0 to IRCount - 1 do
+    XtBrFar[i] := False;
   { Call0 alloca base: carved ONCE, outside the relaxation retry, because a
     second pass must address the same slot rather than grow the frame again.
     Main has no patched frame, so its base is a BSS word. }
@@ -7077,11 +7105,18 @@ begin
           XtAllocaBaseOff := -FrameSize;
         end;
   attempt := 0;
+  jWidened := False;
   fpChosen := XT_FP_BIAS;
 
   repeat
   Inc(attempt);
   CodeLen := saveCodeLen;
+  { The out-of-line return sweep is emitted at the first return of a pass
+    and called from the rest: an address from the previous pass lies inside
+    this body's range still, so ProcSweepThunkUsable would take it and every
+    later return would call into the middle of other code. Forgotten with the
+    rest of the pass. }
+  if CurProc >= 0 then ProcSweepThunkAddr[CurProc] := 0;
   CodeRefCount := saveCodeRef;
   FixCount := saveFix;
   GlobFixCount := saveGlobFix;
@@ -7162,6 +7197,7 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  XtBrFixCount := 0;
   XtAllocaLitCount := 0;
   { Call0: record where the expression stack starts, for IR_ALLOCA's relocation. }
   if XtAllocaBaseOff <> 0 then
@@ -7205,12 +7241,17 @@ begin
             skipJumpAt := XtJumpThenLabel(i, lblId);
             if skipJumpAt >= 0 then
             begin
-              { false falls through to L; true takes the jump to M }
-              EmitXtensaJumpToLabel(IRA[skipJumpAt], LabelFixupCount);
-              XtPatchBr(skipPos, XtNegBr(br), bs, bt);
+              { false falls through to L; true goes to M -- straight there
+                when it reaches, else over one J }
+              if not XtDirectBranch(i, IRA[skipJumpAt], br, bs, bt, skipPos) then
+              begin
+                EmitXtensaJumpToLabel(IRA[skipJumpAt], LabelFixupCount);
+                XtPatchBr(skipPos, XtNegBr(br), bs, bt);
+              end;
             end
-            else
+            else if not XtDirectBranch(i, lblId, XtNegBr(br), bs, bt, skipPos) then
             begin
+              { false goes to the label: straight there when it reaches }
               EmitXtensaJumpToLabel(lblId, LabelFixupCount);
               XtPatchBr(skipPos, br, bs, bt);
             end;
@@ -7227,8 +7268,12 @@ begin
           { Conditional branch range is only +-127 bytes, so branch over an
             18-bit J: if cond <> 0 skip the J, else J label. }
           XtEmitBr(101, reg_xtensa_a2, 0, skipPos);         { bnez, patched below }
-          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
-          XtPatchBr(skipPos, 101, reg_xtensa_a2, 0);
+          { false: beqz straight to the label when it reaches }
+          if not XtDirectBranch(i, lblId, 100, reg_xtensa_a2, 0, skipPos) then
+          begin
+            EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+            XtPatchBr(skipPos, 101, reg_xtensa_a2, 0);
+          end;
           end;
         end;
 
@@ -7428,6 +7473,23 @@ begin
   { Did every three-byte guess hold? A slot that did not reach is not an error
     any more -- it is the input to the next pass. }
   needRetry := False;
+  { direct conditional branches: patch the ones that reach; one that does
+    not is emitted over a J on the next pass }
+  for f := 0 to XtBrFixCount - 1 do
+  begin
+    lblId := XtBrFixLbl[f];
+    if LabelPositions[lblId] = -1 then
+      Error('Unresolved forward branch in Xtensa IR codegen');
+    pos := XtBrFixPos[f];
+    if XtBrReaches(XtBrFixEnc[f] div 256, LabelPositions[lblId] - pos) then
+      Patch24(pos, XtEncodeBr(XtBrFixEnc[f] div 256, (XtBrFixEnc[f] div 16) and 15,
+                              XtBrFixEnc[f] and 15, LabelPositions[lblId] - pos))
+    else
+    begin
+      XtBrFar[XtBrFixIR[f]] := True;
+      needRetry := True;
+    end;
+  end;
   for f := 0 to LabelFixupCount - 1 do
   begin
     lblId := LabelFixupTarget[f];
@@ -7437,6 +7499,7 @@ begin
        not XtensaJReaches(LabelFixupPos[f], LabelPositions[lblId]) then
     begin
       XtWideLabel[lblId] := True;
+      jWidened := True;
       needRetry := True;
     end;
   end;
@@ -7489,7 +7552,10 @@ begin
     A body whose frame-pointer bias moved takes exactly one extra pass for
     that alone (chosen once, after pass 1), which is not a relaxation, so it
     is not counted here. }
-  if (attempt > 1 + Ord(fpChosen <> XT_FP_BIAS)) and
+  { jWidened: a body re-emitted only because a direct conditional branch
+    fell back to its skip-over form (XtBrFar) widened no jump, and is not
+    what this instrument counts. }
+  if jWidened and (attempt > 1 + Ord(fpChosen <> XT_FP_BIAS)) and
      PxxDbgWants('a.xtrelax', XtRelaxBodyName) then
   begin
     pos := 0;

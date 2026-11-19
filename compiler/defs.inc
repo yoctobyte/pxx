@@ -6367,6 +6367,17 @@ var
     different sizes. }
   LabelFixupAnchor : array[0..MAX_IR-1] of Integer;
   XtWideLabel : array[0..MAX_IR-1] of Boolean;
+  { Xtensa only, the same retry for CONDITIONAL branches: a compare that
+    decides a jump branches straight to its label (bxx, bxxz, bxxi) when it
+    reaches, else over a J. A forward one is a guess like a J slot: recorded
+    in XtBrFix* (position, label, the pending branch packed as
+    br*256 + bs*16 + bt, the IR index) and checked after the pass; one that
+    does not reach marks XtBrFar[IR index] and the body is emitted again with
+    the skip-over form there. Keyed by IR index, which every pass walks alike.
+    feature-xtensa-codegen-density-before-register-allocation }
+  XtBrFar : array[0..MAX_IR-1] of Boolean;
+  XtBrFixPos, XtBrFixLbl, XtBrFixEnc, XtBrFixIR : array[0..MAX_IR-1] of Integer;
+  XtBrFixCount : Integer;
   MaxStackFrameSize : Integer; { effective oversized-stack-frame warn threshold in
                                  bytes (0 = disabled). Init to MAX_STACK_FRAME_SIZE;
                                  overridable via --max-stack-frame=N / {$MAXSTACKFRAME n}. }
