@@ -41955,7 +41955,11 @@ test-emit-obj: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_rv.o
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'REL (Relocatable file)'
 	readelf -h $(TESTTMP)/test_emit_obj_rv.o | grep -q 'RISC-V'
-	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	# plain --target=riscv32 is a hosted (posix) object, and a posix object
+	# with no C main has a WEAK app_main by design (ObjAppMainIsWeak,
+	# a55b04eef3: one program, many objects, one entry); --target=xtensa
+	# defaults to the ESP platform and stays GLOBAL above.
+	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'FUNC    WEAK   DEFAULT    1 app_main'
 	readelf -s $(TESTTMP)/test_emit_obj_rv.o | grep -q 'UND ext_notify'
 	# bug-a-emit-obj-ignores-external-name: the alias must be the UND symbol,
 	# and the Pascal identifier must appear nowhere. The negative is the half
@@ -41989,7 +41993,11 @@ test-emit-obj: $(COMPILER)
 	readelf -r $(TESTTMP)/cxtensa_obj_xt.o | grep -q 'R_XTENSA_32'
 	./$(COMPILER) --target=riscv32 test/cxtensa_obj.c $(TESTTMP)/cxtensa_obj_rv.o
 	readelf -h $(TESTTMP)/cxtensa_obj_rv.o | grep -q 'REL (Relocatable file)'
-	readelf -s $(TESTTMP)/cxtensa_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	# plain --target=riscv32 is a hosted (posix) object, and a posix object
+	# with no C main has a WEAK app_main by design (ObjAppMainIsWeak,
+	# a55b04eef3: one program, many objects, one entry); --target=xtensa
+	# defaults to the ESP platform and stays GLOBAL above.
+	readelf -s $(TESTTMP)/cxtensa_obj_rv.o | grep -q 'FUNC    WEAK   DEFAULT    1 app_main'
 	./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_xt_windowed.o
 	readelf -h $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'REL (Relocatable file)'
 	readelf -h $(TESTTMP)/test_emit_obj_xt_windowed.o | grep -q 'Xtensa'
