@@ -853,6 +853,39 @@ begin
   Result := (((offset - 4) and $FFF) shl 12) or (s shl 8) or $16;
 end;
 
+function XtensaB4ConstIndex(v: Int64; uns: Boolean): Integer;
+{ The index of v in the b4const table (beqi/bnei/blti/bgei) or, with uns,
+  b4constu (bltui/bgeui); -1 when v is not there. }
+const
+  K: array[0..15] of Integer = (-1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32, 64, 128, 256);
+  KU: array[0..15] of Integer = (32768, 65536, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 32, 64, 128, 256);
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to 15 do
+    if (uns and (KU[i] = v)) or ((not uns) and (K[i] = v)) then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
+
+function EncodeXtensaBI(kind, s, idx, offset: Integer): Integer;
+{ BRI8 compare with an immediate from b4const / b4constu: kind 0 BEQI,
+  1 BNEI, 2 BLTI, 3 BGEI, 4 BLTUI, 5 BGEUI (each one's negation is kind xor
+  1); idx the table index (XtensaB4ConstIndex). Layout imm8[23:16] r[15:12]
+  s[11:8] m[7:6] n[5:4] op0=6, n = 2 (signed and equality) or 3 (unsigned).
+  Checked against xtensa-esp32s3-elf-as: `beqi a2, 5, .+18` is 0e5226,
+  `bltui a2, 32768` 0202b6 (n=3, m=2, idx 0), `bgeui a2, 2` ..22f6. }
+var m, n: Integer;
+begin
+  XtensaRelCheck(offset - 4, -128, 127, 'bxxi');
+  if kind < 4 then begin m := kind; n := 2; end
+  else begin m := kind - 2; n := 3; end;
+  Result := (((offset - 4) and $FF) shl 16) or (idx shl 12) or (s shl 8) or
+            (m shl 6) or (n shl 4) or 6;
+end;
+
 function EncodeXtensaBZ(m, s, offset: Integer): Integer;
 { The BRI12 compare-with-zero family EncodeXtensaBEQZ documents, m selecting
   BEQZ(0) / BNEZ(1) / BLTZ(2) / BGEZ(3); m = 0 is exactly EncodeXtensaBEQZ. }

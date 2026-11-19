@@ -6848,15 +6848,19 @@ end;
 { A pending branch is (br, bs, bt): br < 100 an RRI8 bxx with that r field
   on bs, bt; br >= 100 the BRI12 compare-with-zero form m = br - 100
   (EncodeXtensaBZ) on bs. Each has its negation one bit away. }
+{ br >= 200: the BRI8 immediate form, kind (br - 200) of EncodeXtensaBI, with
+  bt holding the b4const index. }
 function XtNegBr(br: Integer): Integer;
 begin
-  if br >= 100 then Result := 100 + ((br - 100) xor 1)
+  if br >= 200 then Result := 200 + ((br - 200) xor 1)
+  else if br >= 100 then Result := 100 + ((br - 100) xor 1)
   else Result := br xor 8;
 end;
 
 function XtEncodeBr(br, bs, bt, offset: Integer): Integer;
 begin
-  if br >= 100 then Result := EncodeXtensaBZ(br - 100, bs, offset)
+  if br >= 200 then Result := EncodeXtensaBI(br - 200, bs, bt, offset)
+  else if br >= 100 then Result := EncodeXtensaBZ(br - 100, bs, offset)
   else Result := EncodeXtensaBranch(br, bs, bt, offset);
 end;
 
@@ -6881,7 +6885,7 @@ procedure XtEmitBranchIfTrue(n: Integer; var pos, br, bs, bt: Integer);
   comparison n holds, to a target not yet known: its position in pos, its r
   field (BEQ 1, BLT 2, BLTU 3, BNE 9, BGE 10, BGEU 11) and operand order in
   br/bs/bt, for XtensaPatchSkipOver. }
-var left, right, op, v: Integer; uns: Boolean;
+var left, right, op, v, ki, kk: Integer; uns: Boolean; kv: Int64;
 begin
   left := IRA[n]; right := IRB[n]; op := IRC[n];
   { `c == 0` / `c != 0` of a comparison c -- how the C front end spells every
@@ -6914,6 +6918,33 @@ begin
     else br := 103;
     XtEmitBr(br, bs, bt, pos);
     Exit;
+  end;
+  { against a small constant in the b4const / b4constu table: beqi, bnei,
+    blti, bgei, bltui, bgeui on a2 and the table index. a > k is a >= k+1
+    and a <= k is a < k+1, so those take the next constant. }
+  if (IRKind[right] = IR_CONST_INT) and XtLeafOperand(right) then
+  begin
+    kv := Low32(IRIVal[right]);
+    if uns then kv := kv and $FFFFFFFF;
+    kk := -1;
+    if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+    begin
+      ki := XtensaB4ConstIndex(Low32(IRIVal[right]), False);
+      if op = Ord(tkEq) then kk := 0 else kk := 1;
+    end
+    else
+    begin
+      if (op = Ord(tkGt)) or (op = Ord(tkLe)) then kv := kv + 1;
+      ki := XtensaB4ConstIndex(kv, uns);
+      if (op = Ord(tkLt)) or (op = Ord(tkLe)) then kk := 2 else kk := 3;
+      if uns then kk := kk + 2;
+    end;
+    if ki >= 0 then
+    begin
+      bs := reg_xtensa_a2; bt := ki; br := 200 + kk;
+      XtEmitBr(br, bs, bt, pos);
+      Exit;
+    end;
   end;
   if XtLeafOperand(right) then
     EmitLeafXtensa(reg_xtensa_a3, right)

@@ -4,7 +4,7 @@
 test/c_density_branch_incdec.c (branch-context compares of every kind, the
 `c == 0` fold, x +- k at addi's limits, ++/-- whose value is unused on every
 scalar kind) must print what gcc prints (.expected) as a hosted call0
-program, and exit with gcc's h & 255 (143) as a windowed --emit-obj linked
+program, and exit with gcc's h & 255 (248) as a windowed --emit-obj linked
 with test/c_xtensa_windowed_start.S (-DDENSITY_BARE). Then
 test/c_xtensa_density_loop.c's f, windowed, must stay at most MAX
 instructions: 74 before (feature-xtensa-codegen-density-before-register-
@@ -21,7 +21,7 @@ import sys
 SRC = 'test/c_density_branch_incdec.c'
 LOOP = 'test/c_xtensa_density_loop.c'
 START = 'test/c_xtensa_windowed_start.S'
-WANT_BARE = 143
+WANT_BARE = 248
 MAX = 40
 HOSTED = ['--target=xtensa', '--platform=posix', '--xtensa-soft-mulhigh', '--xtensa-long-calls']
 

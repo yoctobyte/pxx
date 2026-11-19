@@ -26,7 +26,7 @@ unsigned short g_us = 65534;
 long long g_ll = 0x7fffffffLL;
 int g_arr[6] = { 10, 20, 30, 40, 50, 60 };
 
-static int vals[] = { -2147483647 - 1, -129, -128, -127, -1, 0, 1, 2, 127, 128, 255, 2147483647 };
+static int vals[] = { -2147483647 - 1, -129, -128, -127, -2, -1, 0, 1, 2, 7, 8, 9, 10, 127, 128, 255, 256, 257, 300, 32767, 32768, 65535, 65536, 2147483647 };
 
 static int cmp_signed(int a, int b)
 {
@@ -58,6 +58,13 @@ static int cmp_unsigned(unsigned a, unsigned b)
     if ((a >= b) == 0) r |= 64;
     if (a < 3u) r |= 128;
     if (a > 200u) r |= 256;
+    if (a < 32768u) r |= 512;
+    if (a >= 65536u) r |= 1024;
+    if (a <= 32767u) r |= 2048;
+    if (a > 65535u) r |= 4096;
+    if (a < 2u) r |= 8192;
+    if (a >= 256u) r |= 16384;
+    if (a <= 0xFFFFFFFFu) r |= 32768;
     return r;
 }
 
@@ -71,6 +78,17 @@ static int cmp_const(int a)
     if (a <= 128) r |= 16;
     if (a != 100000) r |= 32;
     if (a < -100000) r |= 64;
+    /* the b4const immediates and their neighbours (a > k is a >= k+1) */
+    if (a == 1) r |= 128;
+    if (a != -1) r |= 256;
+    if (a < 8) r |= 512;
+    if (a >= 10) r |= 1024;
+    if (a > 255) r |= 2048;
+    if (a <= 127) r |= 4096;
+    if (a > -2) r |= 8192;
+    if (a <= 9) r |= 16384;
+    if (a == 256) r |= 32768;
+    if (a > 300) r |= 65536;
     return r;
 }
 
@@ -121,7 +139,7 @@ int main(void)
         mix(cmp_const(vals[i]));
         mix(cmp_char((unsigned char)vals[i], (signed char)vals[i]));
         mix(addk(vals[i]));
-        mix(commute(vals[i], vals[(i + 3) % 12], g_arr + (i % 3)));
+        mix(commute(vals[i], vals[(i + 3) % (int)(sizeof vals / sizeof vals[0])], g_arr + (i % 3)));
     }
     printf("cmp %08x\n", h);
 
