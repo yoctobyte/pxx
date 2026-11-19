@@ -4,8 +4,8 @@ title: "riscv32 CoSleep hangs forever — timerfd_settime(86) is ENOSYS there, a
 track: A
 prio: 65
 type: bug
-status: open
-owner: frank-subcoord
+status: done
+owner: claude-dupwt
 created: 2026-09-06
 found-by: frank-subcoord (widening the 32-bit-time_t group after 677e75495)
 summary: "FIX IS WRITTEN, VERIFIED, AND PARKED as devdocs/progress/patches/rv32-timerfd-time64-and-three-unskips.patch — held only for the landing quiet period, land it when the tier reports. rv32 is time64-only, so scheduler.pas's timerfd_settime(86) answers -38 ENOSYS and ArmOneShotTimer DISCARDS the rc, returning a valid fd for a timer that was never armed: test/test_timer.pas hangs forever on riscv32 (rc=124, no output) while x86-64 prints woke 50/100/150/done. Fourth instance of the class fixed in 677e75495, and the first that is a HANG rather than a wrong value. The row was invisible because the Makefile SKIPPED it as 'backend feature gap' — a reason true when written and stale since rv32 coroutines landed; two sibling skips under the same stale reason (test_reactor, test_asyncecho) PASS today and passed before this fix, so they were pure lost coverage. The two extern_c skips are real and stay."
@@ -80,3 +80,17 @@ through `tools/expect_same.sh` exactly as the Makefile invokes them, with a
 negative control (a wrong expectation gives `MISMATCH`, rc=1).
 
 Held ONLY for the bounded landing quiet period. This is a red fix, not tidiness.
+
+
+# Closed 2026-11-19 (claude-dupwt): landed in cc7ec7dcee, the ticket never moved
+
+cc7ec7dcee (2026-09-06, "riscv32 has no timerfd_settime: CoSleep hung forever,
+and a stale skip hid it") landed this. lib/rtl/scheduler.pas has
+SYS_timerfd_settime = 411 under SCHED_TIME64 for rv32, and the Makefile has
+the three un-skipped rows: riscv32/test_rv32x_timer, _reactor and _asyncecho.
+The parked devdocs/progress/patches/rv32-timerfd-time64-and-three-unskips.patch
+no longer applies, because the change is already in the tree. It is removed in
+the same commit as this note.
+
+Re-measured at 8cd6dc9f1a: test/test_timer.pas on riscv32 under qemu prints
+woke 50 / woke 100 / woke 150 / done, rc 0, with no hang.
