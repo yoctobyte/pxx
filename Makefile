@@ -21698,6 +21698,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh wasm32/test_nilpy_an_imported_modules_top_level_runs_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/pymodinit.wasm)" "$$(cat test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_semicolons_at_an_imported_modules_top_level.npy $(TESTTMP)/semimod.wasm
 	tools/expect_same.sh wasm32/test_nilpy_semicolons_at_an_imported_modules_top_level "$$(tools/run_target.sh wasm32 $(TESTTMP)/semimod.wasm)" "$$(cat test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_a_function_named_main_builds_for_wasm32.npy $(TESTTMP)/pymain.wasm
+	tools/expect_same.sh wasm32/test_nilpy_a_function_named_main_builds_for_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/pymain.wasm)" "$$(cat test/test_nilpy_a_function_named_main_builds_for_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_semicolons_in_a_class_body.npy $(TESTTMP)/semicls.wasm
 	tools/expect_same.sh wasm32/test_nilpy_semicolons_in_a_class_body "$$(tools/run_target.sh wasm32 $(TESTTMP)/semicls.wasm)" "$$(cat test/test_nilpy_semicolons_in_a_class_body.expected)"
 	./$(COMPILER) --target=wasm32 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin.wasm

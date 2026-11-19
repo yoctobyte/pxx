@@ -1,0 +1,13 @@
+# `def main()` is the first thing a Python program defines. On wasm32 the
+# routine took the plain export name `main`, and the module entry wrapper then
+# failed with `duplicate export "main"`; every other target built it. Module
+# export names are now reserved and the routine is suffixed.
+# bug-a-a-nilpy-function-named-main-is-refused-on-wasm32-only
+def main():
+    print("hello from main")
+    return 3
+
+def _start():
+    return 4
+
+print(main() + _start())

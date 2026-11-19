@@ -7913,9 +7913,17 @@ begin
     parameters would not compile at all before the resume landed. That refusal
     was doing its job — it is the guard that catches a body lowered more than
     once — so the fix is not to relax it but to stop asking. }
+  { The MODULE's own export names are reserved: the entry wrapper exports
+    `main` and `_start` at write time, after every routine, and `memory`/`sp`
+    are exported up front. A user routine of one of those names (a NilPy
+    `def main()`, the most likely name in a Python program) took the plain
+    `main` first, and the wrapper then failed with `duplicate export "main"`
+    on wasm32 only. The routine is suffixed like any other collision.
+    bug-a-a-nilpy-function-named-main-is-refused-on-wasm32-only }
   if resumed then
     { already exported by the first chunk of this body }
-  else if WasmExportTaken(nm) then
+  else if WasmExportTaken(nm) or (nm = 'main') or (nm = '_start') or
+          (nm = 'memory') or (nm = 'sp') then
     WasmAddExport(nm + '$' + WasmIntStr(WasmCurSlot), WEK_FUNC,
                   WasmCurSlot)
   else
