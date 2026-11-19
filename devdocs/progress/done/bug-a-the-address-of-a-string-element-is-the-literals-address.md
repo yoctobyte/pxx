@@ -4,8 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`@s[i]` on a string variable assigned a STRING LITERAL answers the LITERAL's address, not the variable's. Three variables assigned 'abcd' — two shortstrings and an AnsiString — all report `@x[1]` = the same address, where fpc reports three. The VALUES are independently correct (`f[1] := 'Z'` leaves the others alone), so the storage is separate and only the address is wrong: taking the address of a string element does not uniquify the string. Every consumer that merely READS through it gets the right characters, which is why this has survived; a consumer that WRITES through it corrupts every other variable holding that literal."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # The address of a string element is the literal's address
@@ -77,3 +77,37 @@ through one leaving the other unchanged — asserted as a RELATION (`@f[1] <>
 FPC calls `UniqueString` where a string's element address is taken or the string
 is passed by reference; the shape of the fix is likely that, at the point `@s[i]`
 is lowered, rather than anything about the literal.
+
+
+# Closed 2026-11-19 (claude-dupwt): not a defect; the repro compared two string models
+
+The repro has no `{$H+}`, so in fpc's default mode `string` is a 256-byte
+ShortString. Each variable owns its characters, and fpc reports three addresses.
+pxx's bare `string` is the managed string (SizeOf 8), which is the documented,
+chosen divergence in devdocs/dev/type-identity-side-channel.md ("the
+managed-string model this compiler chose"). So the comparison was ShortString
+in fpc against AnsiString in pxx.
+
+Measured at ca6f1a7213 against fpc 3.2.2, one program with
+`f: string; g: AnsiString`, both assigned 'abcd', comparing `@g[1] = @f[1]`:
+
+| | SizeOf(f) | @f[1] = @g[1] |
+| --- | --- | --- |
+| fpc, default mode | 256 | FALSE |
+| pxx, default | 8 | TRUE |
+| fpc, `{$H+}` | 8 | **TRUE** |
+| pxx, `{$H+}` | 8 | TRUE |
+| pxx, `{$H-}` | 256 | FALSE |
+
+So pxx and fpc agree whenever they agree on the type. Under `{$H+}` fpc also
+returns the shared literal's address, because `@s[i]` does not uniquify an
+AnsiString in fpc either. Writing through it (`p := @h[2]; p^ := 'X'`)
+crashes fpc with runtime error 216 on the read-only literal, as it does in pxx.
+For explicit ShortStrings, `@f[1]` is the variable's own storage (offset 1 from
+`@f`) in both compilers, and a write through it changes only that variable.
+
+The string-slice refusal in ir.inc that cites this ticket ("A STRING BASE IS
+REFUSED") stays. A slice's `var` copy-out WRITES through `@s[lo]`, and for a
+managed string that write would land in a shared literal, so keeping the
+refusal is still right. Lifting it would need a uniquify before the copy-out,
+which is a separate feature with no caller today.
