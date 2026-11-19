@@ -1622,7 +1622,7 @@ end;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode, procMapRoShift: Integer;
+var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
     dmI, dmK, dmBest, dmRank: Integer; dmNamed, dmBestSz: Int64;   { PXXDBG a.datamap's walk of the global-symbol BSS rows }
@@ -1744,6 +1744,7 @@ begin
   LinkOutPath := '';
   LinkEntryName := '';
   ImageBase := LOAD_ADDR;
+  ElfCodeVA := -1;
   LoadOffset := 0;
   LdsoRunnable := False;
   LinkGcSections := True;
@@ -4224,21 +4225,6 @@ begin
   if DebugTrace then
     for i := 0 to ProcCount - 1 do
       writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  { --proc-map: one "HEXVADDR name" line per emitted routine, for feeding a
-    profiler (perf script | awk lookup) — pxx binaries carry no .symtab. x86-64
-    static layout only (the optimization work targets the host first); the VA
-    matches the non-dynamic ELF entry math (LOAD_ADDR + CODE_OFFSET + BodyAddr;
-    a dynamic build shifts by the dynamic header delta). }
-  { The read-only data segment adds a program header, so code starts one
-    header later -- the writer decides that on exactly these facts. }
-  procMapRoShift := 0;
-  if (not NoRoData) and (RoRangeCount > 0) then procMapRoShift := PROG_HEADER_SIZE;
-  if LdsoRunnable and (ExternalCount = 0) then
-    procMapRoShift := procMapRoShift + PROG_HEADER_SIZE + LDSO_BLOCK_SIZE;
-  if DumpProcMap and (TargetArch = TARGET_X86_64) then
-    for i := 0 to ProcCount - 1 do
-      if Procs[i].BodyAddr >= 0 then
-        writeln(StdErr, 'PROC ', IntToHexStr(ImageBase + CODE_OFFSET + procMapRoShift + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
   if MeasureRegcall then
   begin
     writeln(StdErr, 'REGCALL-MEASURE: bodies-with-params=', RegcallProcsWithParams,
@@ -4447,6 +4433,25 @@ begin
     writePE(outFile)
   else
     writeELF(outFile);
+
+  { --proc-map: one "HEXVADDR name" line per emitted routine, for feeding a
+    profiler (perf script | awk lookup) -- pxx binaries carry no .symtab.
+    x86-64 executables only. The base is the code VA writeELF actually used
+    (ElfCodeVA), so a dynamic build (an external, -dPXX_LIBC_HEAP, --system-libs),
+    a read-only segment, a FreeBSD note or an ldso block are all accounted
+    for by the one routine that decides them. Until 2026-11-19 this site
+    recomputed the offset from CODE_OFFSET and missed the dynamic header
+    delta, so every line was 0x70 low and vgsym.py named the PRECEDING
+    routine. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
+  if DumpProcMap and (TargetArch = TARGET_X86_64) then
+  begin
+    if ElfCodeVA < 0 then
+      writeln(StdErr, 'warning: --proc-map: this output kind has no executable code address; no PROC lines')
+    else
+      for i := 0 to ProcCount - 1 do
+        if Procs[i].BodyAddr >= 0 then
+          writeln(StdErr, 'PROC ', IntToHexStr(ElfCodeVA + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
+  end;
 
   if EmitAsmTextMode then
   begin

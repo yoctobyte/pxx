@@ -69,7 +69,15 @@ routine; `tools/vgsym.py <map>` is a stdin→stdout filter that rewrites every
 the `PROC <addr> <name>` one, which is why the wrong input below produced wrong
 answers instead of an error.
 
-### Do not use `--proc-map` here — it is 0x70 low on exactly this profile
+### `--proc-map` was 0x70 low on exactly this profile (fixed 2026-11-19)
+
+> **Fixed 2026-11-19.** `--proc-map` now takes its base from the code address
+> writeELF actually used, so it agrees with `<out>.map` on static and dynamic
+> builds alike (`tools/check_proc_map.sh`, run by a test-threads row). The `.map` file is
+> still the simpler input for `vgsym.py`; the history below is kept because it
+> explains why a pre-fix binary's `--proc-map` output names the wrong routine.
+> bug-a-proc-map-emits-static-addresses-for-a-dynamic-build
+
 
 `--proc-map` is a *profiler* flag: it prints `PROC <addr> <name>` to **stderr**,
 computing each address as `LOAD_ADDR + CODE_OFFSET + BodyAddr`, and

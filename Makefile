@@ -10683,6 +10683,9 @@ test-threads: $(COMPILER)
 	  ./$(COMPILER) --target=$$a --platform=posix $$x test/test_sysopen_shortstring_param_paths.pas $(TESTTMP)/test_sospp_$$a >/dev/null || exit 1; \
 	  tools/expect_same.sh $$a/test_sospp "$$(tools/run_target.sh $$a $(TESTTMP)/test_sospp_$$a; echo "exit=$$?")" "$$($(TESTTMP)/test_sospp26; echo "exit=$$?")" || exit 1; \
 	done
+	# --proc-map agrees with the --map file on a static and a dynamic build
+	# (bug-a-proc-map-emits-static-addresses-for-a-dynamic-build).
+	tools/expect_same.sh test_proc_map "$$(tools/check_proc_map.sh ./$(COMPILER) $(TESTTMP) | tail -1)" "PROC MAP OK"
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

@@ -2448,6 +2448,7 @@ begin
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := ImageBase + codeOffset + CodeLen;
+  ElfCodeVA := ImageBase + codeOffset;   { --proc-map reads this. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
@@ -2757,6 +2758,7 @@ begin
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := ImageBase + codeOffset + CodeLen;
+  ElfCodeVA := ImageBase + codeOffset;   { --proc-map reads this. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies

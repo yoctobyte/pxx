@@ -2,7 +2,8 @@
 track: A
 prio: 30
 type: bug
-status: backlog
+status: done
+owner: claude-dupwt
 found: 2026-08-30
 found-by: frankD
 blocked-by: []
@@ -97,3 +98,22 @@ compiler's output, not a run. Whoever fixes this can settle it in one command.
 ## Gate
 Track A: `make compiler/pascal26` + compile one program dynamic and static, diff
 the `--proc-map` stderr against `<out>.map` — they must agree in both modes.
+
+
+## 2026-11-19 (claude-dupwt): fixed
+
+The dump moved from before the writer to after it, and its base is now
+ElfCodeVA: the ImageBase + codeOffset that writeELF itself computed (set in
+both writeELF copies beside dataBase). Every layout fact the writer accounts
+for (a dynamic header, a read-only segment, a FreeBSD note, an ldso block) is
+therefore in the map, and the separate recomputation in compiler.pas is gone.
+An output kind that never runs writeELF (object files, PE) prints a warning
+instead of guessed addresses.
+
+Measured with a program importing getpid from libc.so.6: the old compiler maps
+Foo at 0x40031f, the map file and the fixed --proc-map at 0x40038f (0x70).
+tools/check_proc_map.sh compares --proc-map with the --map file for a static
+and a dynamic build; it fails on the previous published compiler and passes
+now, and a Makefile row runs it. devdocs/dev/valgrind.md marks the section fixed.
+Note: -dPXX_LIBC_HEAP alone no longer produces a dynamic binary for a trivial
+program (no PT_INTERP), so the check uses an explicit libc import.
