@@ -50,3 +50,22 @@ This is the order pxx takes them in, and why.
 Each fixed gap gets its own done ticket with the repro as a test.
 
 Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).
+
+## Re-measured 2026-11-19 (rd)
+
+Rainyday docs/rump-pxx/repros/run.sh against pxx at 8d21004d32 plus the
+visibility fix: all 53 repros (g01..g40, s01..s12) compile. Checked the
+s* repros' CHECK lines against gcc's objects:
+- s02 (constructors), s03 (file-scope asm: feature-c-file-scope-asm-that-defines-code),
+  s04, s05, s10, s11, s12: symbols match gcc's.
+- s06 `8 1` and s07 `5`: gcc's output.
+- s08: .tdata with R_X86_64_GOTTPOFF (initial-exec; gcc writes local-exec
+  TPOFF32 for an executable-bound object; both link).
+- s09: fixed here (bug-c-visibility-attribute-was-ignored).
+- s01: the section and __start_/__stop_ work; the pointed-to
+  `static const struct ls lsv` is .bss filled at start-up in a hosted object
+  and .data with --freestanding, where gcc uses .rodata. Writable rather than
+  read-only, same values.
+What is left is the real link of the rump libraries, which needs the
+Rainyday side to try it again.
+

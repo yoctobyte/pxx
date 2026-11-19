@@ -21219,6 +21219,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_weak_g "$$($(TESTTMP)/c_weak_g)" "$$(cat test/c_weak_strong.expected)"
 	$(COMPILER) --link -o $(TESTTMP)/c_weak_l $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o > /dev/null
 	tools/expect_same.sh c_weak_l "$$($(TESTTMP)/c_weak_l)" "$$(cat test/c_weak_strong.expected)"
+	# visibility("hidden"/"protected") reaches st_other as gcc writes it (rump s09: it was DEFAULT),
+	# and the object still links. bug-c-visibility-attribute-was-ignored
+	$(COMPILER) --emit-obj test/c_visibility_attribute.c $(TESTTMP)/c_vis.o > /dev/null
+	gcc -c test/c_visibility_attribute.c -o $(TESTTMP)/c_vis_gcc.o
+	tools/expect_same.sh c_visibility_attribute "$$(readelf -sW $(TESTTMP)/c_vis.o | awk '$$8 ~ /^(hid|proto_hid|prot|plain|hvar|pvar)$$/ {print $$8"="$$6}' | LC_ALL=C sort | tr '\n' ' ')" "$$(readelf -sW $(TESTTMP)/c_vis_gcc.o | awk '$$8 ~ /^(hid|proto_hid|prot|plain|hvar|pvar)$$/ {print $$8"="$$6}' | LC_ALL=C sort | tr '\n' ' ')"
+	gcc -o $(TESTTMP)/c_vis_x test/c_visibility_attribute_main.c $(TESTTMP)/c_vis.o
+	tools/expect_same.sh c_visibility_attribute_link "$$($(TESTTMP)/c_vis_x)" "6 6"
 	# weak DATA: WEAK UND for an undefined weak extern (file and block scope), WEAK for a weak definition.
 	# Undefined weak data is reached through the GOT (REX_GOTPCRELX), so a PIE link works; a weak
 	# definition's initialiser is .data bytes, so a strong one elsewhere wins (1 1 40); pxx --link relaxes

@@ -5360,6 +5360,7 @@ var
     failing to start when it is not. A fully static link bakes the same zero.
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   ProcWeakExternal : array of Boolean;
+  ProcCVis : array of Byte;   { a C declaration's visibility attribute, as ELF st_other (0 default) -- the object's symbol carries it }
   ProcCWeakDef : array of Boolean;   { a C DEFINITION said __attribute__((weak)): the object binds it STB_WEAK }
   { This proc row has NO Self parameter although it IS a method -- the `static`
     directive. Read by GenMakeStaticMethodCall so that every call site building
@@ -5860,6 +5861,7 @@ var
   DataResvLen : Integer;
   DataResvDrop : Boolean;
   SymPtrPointeeConst : array of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
+  SymCVis : array of Byte;   { a C global's visibility attribute, as ELF st_other -- see ProcCVis }
   { C integer symbol's LONG RANK, for _Generic: 0 = none, 1 = `long`, 2 = `long long`.
     TTypeKind cannot carry this. On ILP32 `long` is 32-bit, so it collapses onto the
     same tyInt32 as `int`; on LP64 `long long` collapses onto the same tyInt64 as
@@ -7913,6 +7915,7 @@ var
   CAttrAlignValue : Integer;
   CLexSawInline   : Boolean;   { `inline`/`__inline`/`__inline__` was dropped before the next token: rides it as CAttrFlags bit $400 }
   CAttrGnuInline  : Boolean;   { __attribute__((gnu_inline)): rides the next token as CAttrFlags bit $800 }
+  CAttrVis        : Integer;   { __attribute__((visibility("..."))): the ELF st_other value (1 internal, 2 hidden, 3 protected); rides the next token as CAttrFlags bits 12..13. bug-c-visibility-attribute-was-ignored }
   CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
   { __attribute__((constructor)) = 1, ((destructor)) = 2: rides the next token
     as CAttrFlags bits 8..9. The parser files the function in CCtorProcs /

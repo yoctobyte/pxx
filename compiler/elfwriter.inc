@@ -902,6 +902,13 @@ begin
   writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
   writeU64(f, value); writeU64(f, size);
 end;
+{ ...with st_other: a C visibility attribute (ProcCVis/SymCVis).
+  bug-c-visibility-attribute-was-ignored }
+procedure writeSym64O(var f: File; name: Integer; info, other, shndx: Integer; value, size: Int64);
+begin
+  writeU32(f, name); writeU8(f, info); writeU8(f, other); writeU16(f, shndx);
+  writeU64(f, value); writeU64(f, size);
+end;
 procedure writeRela64(var f: File; offset: Int64; symIdx, rtype: Integer; addend: Int64);
 begin
   writeU64(f, offset);
@@ -1084,6 +1091,13 @@ end;
 procedure writeSym64(f: Integer; name: Integer; info, shndx: Integer; value, size: Int64);
 begin
   writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
+  writeU64(f, value); writeU64(f, size);
+end;
+{ ...with st_other: a C visibility attribute (ProcCVis/SymCVis).
+  bug-c-visibility-attribute-was-ignored }
+procedure writeSym64O(f: Integer; name: Integer; info, other, shndx: Integer; value, size: Int64);
+begin
+  writeU32(f, name); writeU8(f, info); writeU8(f, other); writeU16(f, shndx);
   writeU64(f, value); writeU64(f, size);
 end;
 procedure writeRela64(f: Integer; offset: Int64; symIdx, rtype: Integer; addend: Int64);
@@ -8002,7 +8016,7 @@ begin
     writeSym64(f, 0, $03, ODCShndx[c], 0, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-      writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ObjTextShndx(Procs[i].BodyAddr),
+      writeSym64O(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ProcCVis[i], ObjTextShndx(Procs[i].BodyAddr),
                  ObjTextRel(Procs[i].BodyAddr), ObjProcSize(i));
   { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
     (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
@@ -8013,7 +8027,7 @@ begin
       if ObjDataIsCommon(i) then
         writeSym64(f, ObjDataStrOff[i], $11, $FFF2, ObjCommonAlign(i), SymAllocSize[i])
       else
-        writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
+        writeSym64O(f, ObjDataStrOff[i], ObjDataExportInfo(i), SymCVis[i], ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
     end;
   for i := 0 to ExternalCount-1 do
     if OFsaExtOf[i] >= 0 then

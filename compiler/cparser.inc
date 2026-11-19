@@ -264,6 +264,7 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
+function CDeclVisibility(typeIdx: Integer): Integer; forward;
 function CDeclSectionName(typeIdx: Integer): AnsiString; forward;
 function CDeclCtorKind(typeIdx: Integer): Integer; forward;
 procedure CRegisterCtor(procIdx, kind: Integer); forward;
@@ -14745,6 +14746,7 @@ begin
       it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
       bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
+    if (idx >= 0) and (CDeclVisibility(declTypeTok) <> 0) then SymCVis[idx] := CDeclVisibility(declTypeTok);
     CApplyThreadLocalStorage(idx, declSawThread, gHadInit);
     if (idx >= 0) and gHadInit then SymCHasInit[idx] := True;
     if (idx >= 0) and wasArr and (gFpNDims >= 2) then
@@ -15264,6 +15266,7 @@ begin
       it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
       bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
     if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
+    if (idx >= 0) and (CDeclVisibility(declTypeTok) <> 0) then SymCVis[idx] := CDeclVisibility(declTypeTok);
     CApplyThreadLocalStorage(idx, declSawThread,
                              (CurTok.Kind = tkAssign) or gPreScanInit);
     if (idx >= 0) and ((CurTok.Kind = tkAssign) or gPreScanInit) then SymCHasInit[idx] := True;
@@ -19958,6 +19961,7 @@ var
   mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   procSawWeak: Boolean;
+  procVis: Integer;      { CDeclVisibility: ELF st_other for the symbol }
   procCtorKind: Integer;
   procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
@@ -20034,6 +20038,7 @@ begin
   procGnuInline := CDeclTokFlag(TokPos - 1, $800);
   procSawExtern := CDeclSawExtern(TokPos - 1);
   procSawWeak := CDeclSawWeak(TokPos - 1);
+  procVis := CDeclVisibility(TokPos - 1);
   procCtorKind := CDeclCtorKind(TokPos - 1);
   procSecName := CDeclSectionName(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
@@ -20650,6 +20655,8 @@ begin
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  { a visibility on the prototype or the definition holds for the symbol }
+  if procVis <> 0 then ProcCVis[procIdx] := procVis;
   { A `static` PROTOTYPE already gives the name internal linkage (C 6.2.2p3).
     It was recorded only at the definition, so RUNG X (a) took the forward
     `static int sp_parse(...);` for an external row and split the definition
@@ -23930,6 +23937,28 @@ end;
   open brace that ends it, so a trailing `__attribute__((gnu_inline))` counts. The
   lexer drops `inline` and marks the token after it ($400), and marks the
   token after a gnu_inline attribute ($800). }
+{ The visibility attribute on a declaration, as ELF st_other (0 default),
+  scanned as CDeclTokFlag scans. bug-c-visibility-attribute-was-ignored }
+function CDeclVisibility(typeIdx: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := 0;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if ((CAttrFlags[k] shr 12) and 3) <> 0 then begin Result := (CAttrFlags[k] shr 12) and 3; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 function CDeclTokFlag(typeIdx, mask: Integer): Boolean;
 var k, depth: Integer;
 begin

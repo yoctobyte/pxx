@@ -6674,7 +6674,7 @@ begin
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
-  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n); SetLength(SymCConstObj, n);
+  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n); SetLength(SymCConstObj, n); SetLength(SymCVis, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(SymElfTls, n);  SetLength(SymCHasInit, n);  SetLength(ObjDataStrOff, n);
@@ -6870,7 +6870,7 @@ begin
   SymCLongRank[SymCount]  := 0;
   SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False;
+  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False; SymCVis[SymCount] := 0;
   SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
@@ -8232,7 +8232,7 @@ begin
   SymCLongRank[SymCount] := 0;
   SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False;
+  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False; SymCVis[SymCount] := 0;
   SymObjDataScope[SymCount] := False;
   SymObjRuntimeCopy[SymCount] := False;
   SymAllocSize[SymCount] := 0;
@@ -14916,7 +14916,7 @@ begin
   SetLength(DceWhy, n);  SetLength(DceVia, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcCWeakDef, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);  SetLength(ProcCInlineDef, n);  SetLength(ProcCExtDecl, n);  SetLength(ProcCGnuExtInline, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcCWeakDef, n); SetLength(ProcCVis, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);  SetLength(ProcCInlineDef, n);  SetLength(ProcCExtDecl, n);  SetLength(ProcCGnuExtInline, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcWinCb, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
@@ -15005,7 +15005,7 @@ begin
   ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCStaticLink[ProcCount] := False;      { set when the C definition said `static` }
   ProcCInlineDef[ProcCount] := False;  ProcCExtDecl[ProcCount] := False;  ProcCGnuExtInline[ProcCount] := False;
-  ProcCWeakDef[ProcCount] := False;
+  ProcCWeakDef[ProcCount] := False; ProcCVis[ProcCount] := 0;
   ProcCaseSensitive[ProcCount] := DeclCaseSensitive;
   ProcOverloadDirective[ProcCount] := False;
   ProcFlexColumn[ProcCount]   := False;

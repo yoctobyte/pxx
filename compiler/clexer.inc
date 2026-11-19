@@ -424,6 +424,14 @@ begin
           else if (CAttrModeName(attrText) = 'word') or (CAttrModeName(attrText) = 'pointer') then
             CAttrModeBytes := TARGET_PTR_SIZE;
           if CAttrHasWord(attrText, 'weak') then CAttrWeak := True;
+          { visibility("hidden") was skipped: the symbol stayed DEFAULT, where
+            gcc marks it HIDDEN (rump repro s09). bug-c-visibility-attribute-was-ignored }
+          if CAttrHasWord(attrText, 'visibility') or CAttrHasWord(attrText, '__visibility__') then
+          begin
+            if CStrContains(attrText, '"hidden"') then CAttrVis := 2
+            else if CStrContains(attrText, '"protected"') then CAttrVis := 3
+            else if CStrContains(attrText, '"internal"') then CAttrVis := 1;
+          end;
           if CAttrHasWord(attrText, 'gnu_inline') then CAttrGnuInline := True;
           if CAttrHasWord(attrText, 'constructor') then CAttrCtor := CAttrCtor or 1;
           if CAttrHasWord(attrText, 'destructor') then CAttrCtor := CAttrCtor or 2;
@@ -1234,7 +1242,7 @@ begin
   CAttrAligned := False;
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
-  CAttrWeak := False;
+  CAttrWeak := False; CAttrVis := 0;
   CLexSawInline := False;
   CAttrGnuInline := False;
   CAttrCtor := 0;
@@ -1268,6 +1276,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrVis <> 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or (CAttrVis shl 12);
+      CAttrVis := 0;
     end;
     if CLexSawInline then
     begin
@@ -1340,7 +1353,7 @@ begin
   CAttrAligned := False;
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
-  CAttrWeak := False;
+  CAttrWeak := False; CAttrVis := 0;
   CLexSawInline := False;
   CAttrGnuInline := False;
   CAttrCtor := 0;
@@ -1397,6 +1410,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CAttrVis <> 0 then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or (CAttrVis shl 12);
+      CAttrVis := 0;
     end;
     if CLexSawInline then
     begin
