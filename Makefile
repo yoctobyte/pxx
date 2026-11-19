@@ -40759,11 +40759,14 @@ test-emit-obj: $(COMPILER)
 	  || { echo "c_function_sections: the PLAIN object already relocates a call -- this test cannot show the flag doing anything"; exit 1; }
 	@test $$(readelf -r -W $(TESTTMP)/cfs.o | sed -n "/Relocation section '.rela.text/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -gt 0 \
 	  || { echo "c_function_sections: --function-sections emitted no relocation for the call to deep2"; exit 1; }
+	# --no-c-static-data on the flagged arm: on x86-64, --function-sections also turns on
+	# baked C initialisers by default (compiler.pas), which changes .text and .data by design.
+	# This identity is about relocated calls only.
 	@if command -v gcc >/dev/null 2>&1; then \
 	  ./$(COMPILER) --emit-obj test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
 	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_off || { echo "c_function_sections: plain object failed to link"; exit 1; }; \
-	  ./$(COMPILER) --emit-obj --function-sections test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
-	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_on || { echo "c_function_sections: --function-sections object failed to link"; exit 1; }; \
+	  ./$(COMPILER) --emit-obj --function-sections --no-c-static-data test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
+	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_on ||{ echo "c_function_sections: --function-sections object failed to link"; exit 1; }; \
 	  tools/expect_same.sh cfs_off "$$($(TESTTMP)/cfs_off)" "13" || exit 1; \
 	  tools/expect_same.sh cfs_on "$$($(TESTTMP)/cfs_on)" "13" || exit 1; \
 	  tools/elf_alloc_same.sh $(TESTTMP)/cfs_off $(TESTTMP)/cfs_on 3 > $(TESTTMP)/cfs_alloc.log 2>&1 \
