@@ -2037,6 +2037,7 @@ var
   hdr, subCi, arrCount, mKind, typeRef: Integer;
   depth, baseKind, elSize, baseTypeRef, k, dynIdx, cCi: Integer;
   targetPtrSize, layStart: Integer;
+  mm, side, sIdx, sb, mp: Integer;   { kind-8 members }
 
 
 
@@ -2094,6 +2095,10 @@ begin
             if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
               Inc(dCount);
           end;
+          { a kind-8 member is ADDITIONAL to whatever kind the same field
+            already has (a TBar with a string is kind 3 for the string AND
+            kind 8 for its operators) }
+          if FieldMgmtOpRec(fi) >= 0 then Inc(mCount);
         end;
         cCi := UClsParent[cCi];
       end;
@@ -2289,7 +2294,10 @@ begin
         base := UClsFBase[cCi];
         cnt := UClsFCount[cCi];
         for i := 0 to cnt - 1 do
+        begin
           if ClassFieldNeedsFinal(base + i) then Inc(mCount);
+          if FieldMgmtOpRec(base + i) >= 0 then Inc(mCount);   { kind 8 }
+        end;
         cCi := UClsParent[cCi];
       end;
 
@@ -2415,6 +2423,62 @@ begin
           end;
         end;
         cCi := UClsParent[cCi];
+      end;
+      { KIND 8: a field whose record declares Initialize/Finalize. +0 offset,
+        +4 kind, +8 element count (a fixed array's flat length, else 1), +12 a
+        self-relative reference to a 24-byte side block {Initialize code
+        pointer: 8, Finalize code pointer: 8, stride: 4, class depth: 4}.
+        +8..+15 are NOT free in a member (arrCount and typeRef), so the two code
+        pointers cannot live in the member itself; the side block is placed
+        8-aligned after the descriptor because a code-pointer relocation must
+        be (xtensa/riscv32 fault on a misaligned word load). Members are written
+        in descriptor order -- derived class first, declaration order within a
+        class -- which IS fpc 3.2.2's Finalize order; Initialize runs the
+        classes the other way round, which the depth word lets the runtime do.
+        Inert to every other walk: each is a `case kind of` with no else arm.
+        feature-pascal-management-operators-on-a-class-field }
+      mm := ClassMgmtFieldCount(ci);
+      if mm > 0 then
+      begin
+        while (DataLen and 7) <> 0 do DataPutZeros(1);
+        side := DataLen;
+        DataPutZeros(mm * 24);
+        RttiRoMark(side, DataLen);
+        sIdx := 0;
+        depth := 0;
+        cCi := ci;
+        while cCi >= 0 do
+        begin
+          base := UClsFBase[cCi];
+          cnt := UClsFCount[cCi];
+          for i := 0 to cnt - 1 do
+          begin
+            fi := base + i;
+            subCi := FieldMgmtOpRec(fi);
+            if subCi < 0 then Continue;
+            mHdr := hdr + REC_DESC_HDR_SIZE + k * 16;
+            sb := side + sIdx * 24;
+            PatchDataI32(mHdr + 0, UFldOff_[fi]);
+            PatchDataI32(mHdr + 4, 8);
+            DescKindSeen[8] := True;   { DceCutDeadKindArms }
+            if UFldIsArray[fi] then
+              PatchDataI32(mHdr + 8, UFldArrLen[fi])
+            else
+              PatchDataI32(mHdr + 8, 1);
+            PatchDataI32(mHdr + 12, sb - (mHdr + 12));
+            AddDataRelFix(mHdr + 12, sb);
+            mp := FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), subCi);
+            if mp >= 0 then AddMethodFix(sb + 0, mp, MFK_MGMTOP);
+            mp := FindOpOverload(OPK_FINALIZE, Ord(tyRecord), subCi);
+            if mp >= 0 then AddMethodFix(sb + 8, mp, MFK_MGMTOP);
+            PatchDataI32(sb + 16, UClsSize_[subCi - REC_UCLASS_BASE]);
+            PatchDataI32(sb + 20, depth);
+            Inc(sIdx);
+            Inc(k);
+          end;
+          Inc(depth);
+          cCi := UClsParent[cCi];
+        end;
       end;
       PatchDataI32(hdr + 8, k); { MemberCount }
 

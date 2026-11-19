@@ -782,6 +782,9 @@ procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: NativeInt; depth: In
   CALLER is already guarded, so nothing under PXX_ESP loses a symbol it uses. }
 procedure PXXClassFinalize(inst: Pointer);
 {$endif}
+{ Run the record Initialize operators of a fresh instance's kind-8 fields
+  (base class first), between the VMT stamp and the constructor body. feature-pascal-management-operators-on-a-class-field }
+procedure PXXClassInitialize(inst: Pointer);
 
 implementation
 
@@ -6091,6 +6094,94 @@ begin
   PXXRecordRelease(inst, desc);
 end;
 
+type
+  TPXXMgmtOp = procedure(rec: Pointer);
+
+procedure PXXClassMgmtRun(inst: Pointer; doInit: Boolean);
+{ Walk a class layout descriptor's KIND-8 members: fields whose record type
+  declares Initialize/Finalize. Member: +0 offset, +8 element count, +12 a
+  self-relative reference to a side block {Initialize code: ptr @0, Finalize
+  code: ptr @8, stride: i32 @16, class depth: i32 @20} (rtti_emit.inc pass 2b).
+
+  ORDER, measured against fpc 3.2.2: Finalize runs the members as written --
+  derived class first, declaration order within a class; Initialize runs the
+  CLASSES the other way round (base first) but still in declaration order
+  within each, so it walks one depth at a time from the deepest.
+
+  This runs USER code, which may allocate, so it must never be reached from
+  PXXRecordRelease / PXXClassFinalizeManaged, whose callers may hold the heap
+  lock: it is called from PXXClassFinalize's unlocked part and from the
+  construction site. feature-pascal-management-operators-on-a-class-field }
+var
+  vmt, desc, side, code: Pointer;
+  memberCount, i, j, kind, cnt, stride, dep, maxDep, d: Integer;
+  memberPtr: Int64;
+  op: TPXXMgmtOp;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PMachineWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PMachineWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  maxDep := -1;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
+  i := 0;
+  while i < memberCount do
+  begin
+    if PInt32(memberPtr + 4)^ = 8 then
+    begin
+      side := Pointer(memberPtr + 12 + PInt32(memberPtr + 12)^);
+      dep := PInt32(Int64(side) + 20)^;
+      if dep > maxDep then maxDep := dep;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+  if maxDep < 0 then Exit;
+  if doInit then d := maxDep else d := 0;
+  while (d >= 0) and (d <= maxDep) do
+  begin
+    memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
+    i := 0;
+    while i < memberCount do
+    begin
+      kind := PInt32(memberPtr + 4)^;
+      if kind = 8 then
+      begin
+        side := Pointer(memberPtr + 12 + PInt32(memberPtr + 12)^);
+        if PInt32(Int64(side) + 20)^ = d then
+        begin
+          if doInit then
+            code := Pointer(PMachineWord(side)^)
+          else
+            code := Pointer(PMachineWord(Pointer(Int64(side) + 8))^);
+          if code <> nil then
+          begin
+            op := TPXXMgmtOp(code);
+            cnt := PInt32(memberPtr + 8)^;
+            stride := PInt32(Int64(side) + 16)^;
+            j := 0;
+            while j < cnt do
+            begin
+              op(Pointer(Int64(inst) + PInt32(memberPtr)^ + Int64(j) * stride));
+              j := j + 1;
+            end;
+          end;
+        end;
+      end;
+      memberPtr := memberPtr + 16;
+      i := i + 1;
+    end;
+    if doInit then d := d - 1 else d := d + 1;
+  end;
+end;
+
+procedure PXXClassInitialize(inst: Pointer);
+begin
+  PXXClassMgmtRun(inst, True);
+end;
+
 procedure PXXClassFinalize(inst: Pointer);
 { Release a CLASS instance's managed fields on destruction, by its RUNTIME
   class: [inst] = VMT, [VMT-16] = the layout descriptor EmitLayoutRTTI emitted
@@ -6139,6 +6230,13 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+
+  { Kind 8: the fields' record Finalize operators. AFTER the Destroy chain
+    (the desugar ran it before this call) and BEFORE the managed members are
+    released, which is fpc's order: the operator still sees its record's
+    strings. User code, so here in the unlocked part and never in
+    PXXClassFinalizeManaged. feature-pascal-management-operators-on-a-class-field }
+  PXXClassMgmtRun(inst, False);
 
   { NO {$ifndef PXX_TS_HARDLOCK} ANY MORE. It was here because on x86-64
     --threadsafe the heap lock is the codegen spinlock and this call's own

@@ -1,29 +1,25 @@
 program test_mgmt_operators_class_field_refused;
-{ A CLASS whose field is a managed record is refused, and it is NOT the record
-  case with a different kind on it -- it is a different LIFETIME and therefore a
-  different insertion point.
+{ A class field whose record holds a management-operator record only one level
+  DEEPER is still refused. A field of the operator-declaring record itself (or
+  a fixed array of it) is run at Create/Free from the class layout descriptor
+  (test_mgmt_operators_class_field.pas); the nested shape needs the record's
+  own field walk at object lifetime, which is not built, and compiling it
+  would silently never run the inner Initialize.
 
-  Measured against fpc 3.2.2: for `c: TCls` with a managed record field, fpc
-  runs the field's Initialize inside `TCls.Create` and its Finalize inside
-  `Free`. Nothing happens at scope entry or scope exit. So the scope-bound
-  try/finally this pass emits would finalize a LIVE heap object every time the
-  variable's scope ended, and would never run at all for an object that outlives
-  it. Wrong in both directions, which is why this stays a refusal rather than
-  being folded into the field walk beside it.
-
-  The fpc testsuite row usually cited for "the nested-field arm", tmoperator4,
-  is actually THIS shape -- its `TA`/`TB` are classes -- so the corpus demand
-  sits here and not on the record case that now works.
-  feature-pascal-management-operators-nested-and-array }
+  Re-aimed 2026-11-20 when the direct shape landed: this fixture used to refuse
+  the direct shape. feature-pascal-management-operators-on-a-class-field }
 {$mode objfpc}{$H+}{$modeswitch advancedrecords}
 type
   TFoo = record
     n: Integer;
     class operator Initialize(var a: TFoo);
   end;
+  TWrap = record
+    inner: TFoo;
+  end;
   TCls = class
   public
-    f: TFoo;
+    w: TWrap;
   end;
 class operator TFoo.Initialize(var a: TFoo);
 begin a.n := 0; end;

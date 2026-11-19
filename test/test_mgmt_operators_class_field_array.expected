@@ -1,0 +1,46 @@
+create 1
+  TFoo.Initialize -> v=1
+  TFoo.Initialize -> v=2
+  TFoo.Initialize -> v=3
+  TCls.Create tag=1 f.v=1 arr=2,3
+free 1
+  TCls.Destroy tag=1
+  TFoo.Finalize v=1
+  TFoo.Finalize v=2
+  TFoo.Finalize v=3
+Keep: create 2
+  TFoo.Initialize -> v=4
+  TFoo.Initialize -> v=5
+  TFoo.Initialize -> v=6
+  TCls.Create tag=2 f.v=4 arr=5,6
+Keep: return
+main has b tag=2
+create der 3
+  TFoo.Initialize -> v=7
+  TFoo.Initialize -> v=8
+  TFoo.Initialize -> v=9
+  TBar.Initialize
+  TCls.Create tag=3 f.v=7 arr=8,9
+der g.w=77 g.s=bar
+  TCls.Destroy tag=3
+  TBar.Finalize w=77 s=bar
+  TFoo.Finalize v=7
+  TFoo.Finalize v=8
+  TFoo.Finalize v=9
+metaclass 4
+  TFoo.Initialize -> v=10
+  TFoo.Initialize -> v=11
+  TFoo.Initialize -> v=12
+  TBar.Initialize
+  TCls.Create tag=4 f.v=10 arr=11,12
+  TCls.Destroy tag=4
+  TBar.Finalize w=77 s=bar
+  TFoo.Finalize v=10
+  TFoo.Finalize v=11
+  TFoo.Finalize v=12
+free 2
+  TCls.Destroy tag=2
+  TFoo.Finalize v=4
+  TFoo.Finalize v=5
+  TFoo.Finalize v=6
+done

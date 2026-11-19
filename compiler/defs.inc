@@ -3389,6 +3389,7 @@ const
   MFK_RTTIPROP = 2;   { published property getter/setter }
   MFK_RTTIMETH = 3;   { TMethInfo.Code }
   MFK_PYSIG    = 4;   { NilPy ProcSig Code word }
+  MFK_MGMTOP   = 5;   { a class field's record Initialize/Finalize (layout kind 8) }
 
 type
   TMethodFixup = record
@@ -4789,9 +4790,10 @@ var
     the DCE counts a live reference to it as a reference to a class. }
   RttiSpanS, RttiSpanE, TiSpanS, TiSpanE : Integer;
   { DescKindSeen[k]: some record or class descriptor carries a member of
-    kind k (1 string .. 7 promo). A dispatch arm for a kind no descriptor
-    carries cannot run, and the DCE cuts its calls (DceCutDeadKindArms). }
-  DescKindSeen : array[0..7] of Boolean;
+    kind k (1 string .. 7 promo, 8 a class field's management-operator
+    record). A dispatch arm for a kind no descriptor carries cannot run, and
+    the DCE cuts its calls (DceCutDeadKindArms). }
+  DescKindSeen : array[0..8] of Boolean;
   { ElemKindSeen[k]: ManagedElemKind answered k for some element type -- the
     baseKind every container element walk switches on (0 .. 6). }
   ElemKindSeen : array[0..7] of Boolean;

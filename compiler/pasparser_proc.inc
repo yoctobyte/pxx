@@ -497,6 +497,97 @@ begin
       + '(feature-pascal-management-operators-nested-and-array)';
 end;
 
+{ A CLASS field whose record type declares Initialize/Finalize itself, as a
+  plain field or a fixed array of one: the record id, else -1. These are what a
+  class layout descriptor carries as member kind 8, run by PXXClassInitialize
+  after the VMT stamp and by PXXClassFinalize after the Destroy chain -- an
+  OBJECT lifetime, which is why the scope desugar never touches them.
+  A record that only CONTAINS one deeper is not this shape and is refused at
+  the use site (ClassMgmtFieldRefusal). feature-pascal-management-operators-on-a-class-field }
+function FieldMgmtOpRec(fi: Integer): Integer;
+begin
+  Result := -1;
+  if IntToTypeKind(UFldTk[fi]) <> tyRecord then Exit;
+  if UFldIsArray[fi] and not FldIsLoopableManagedArray(fi) then Exit;
+  if RecHasScopeManagementOp(UFldRec_[fi]) then Result := UFldRec_[fi];
+end;
+
+{ How many kind-8 members the class `ci` carries, its parents' fields included
+  (one flat descriptor covers the chain). 0 = construction needs no
+  PXXClassInitialize. }
+function ClassMgmtFieldCount(ci: Integer): Integer;
+var c, i: Integer;
+begin
+  Result := 0;
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to UClsFCount[c] - 1 do
+      if FieldMgmtOpRec(UClsFBase[c] + i) >= 0 then Inc(Result);
+    c := UClsParent[c];
+  end;
+end;
+
+{ Any class in the program with a kind-8 member: a metaclass construction
+  (class known only at run time) calls PXXClassInitialize iff this holds. }
+function AnyClassHasMgmtFields: Boolean;
+var c: Integer;
+begin
+  Result := False;
+  for c := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[c]) and (not UClsIsInterface[c]) and
+       (ClassMgmtFieldCount(c) > 0) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+{ The class shapes still refused: a field (at any level of the chain) whose
+  record holds a management-operator record only DEEPER, or a dynamic /
+  unsized array of one. '' = nothing refused. }
+function ClassMgmtFieldRefusal(ci: Integer): String;
+var c, i, fi, r: Integer;
+begin
+  Result := '';
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to UClsFCount[c] - 1 do
+    begin
+      fi := UClsFBase[c] + i;
+      if IntToTypeKind(UFldTk[fi]) <> tyRecord then Continue;
+      r := UFldRec_[fi];
+      if not (RecHasScopeManagementOp(r) or RecContainsManagementOp(r, 0)) then Continue;
+      if FieldMgmtOpRec(fi) >= 0 then
+      begin
+        { the field itself is served; a management record nested INSIDE it
+          is not }
+        if RecContainsManagementOp(r, 0) then
+        begin
+          Result := 'a class field whose record holds a record with a management '
+            + 'operator one level further down is not managed yet: only a field '
+            + '(or fixed array) of the operator-declaring record itself is run at '
+            + 'Create/Free (' + 'feature-pascal-management-operators-on-a-class-field' + ')';
+          Exit;
+        end;
+      end
+      else
+      begin
+        if UFldIsArray[fi] and ((UFldDynDepth[fi] > 0) or (UFldArrLen[fi] = -1)) then
+          Result := UnreachableManagedArrayMsg(UMF_DYN, 'class field')
+        else if UFldIsArray[fi] then
+          Result := UnreachableManagedArrayMsg(UMF_UNSIZED, 'class field')
+        else
+          Result := 'a class field whose record holds a record with a management '
+            + 'operator is not managed yet (' + 'feature-pascal-management-operators-on-a-class-field' + ')';
+        Exit;
+      end;
+    end;
+    c := UClsParent[c];
+  end;
+end;
+
 { Does `recId` contain a managed field the FIELD WALK below cannot reach?
 
   The walk descends plain record-typed fields, and since 2026-09-07 it also
@@ -842,16 +933,18 @@ begin
       if SymIsLoopableManagedArray(i) and
          RecContainsUnreachableManagedField(mrec, 0, umfWhy) then
         Error(UnreachableManagedArrayMsg(umfWhy, 'array field'));
-      { A CLASS field is still refused, and it is not the same shape at all: a
-        class instance's lifetime is not scope-bound. Measured against fpc
-        3.2.2 -- for `c: TCls` whose field is a managed record, fpc runs the
-        field's Initialize at TCls.Create and NEVER runs Finalize, because
-        nothing frees the object. Emitting a scope-bound try/finally here would
-        finalize a live heap object at every scope exit, which is worse than
-        refusing. }
-      if (Syms[i].TypeKind = tyClass) and RecContainsManagementOp(mrec, 0) then
-        Error('a field of a record with a management operator is not managed yet '
-              + '(feature-pascal-management-operators-nested-and-array)');
+      { A CLASS field is not this pass's job: a class instance's lifetime is
+        not scope-bound, so nothing is emitted here for it. Measured against
+        fpc 3.2.2: the field's Initialize runs at construction, before the
+        constructor body, and its Finalize at Free, after the Destroy chain.
+        Those run from the class layout descriptor (member kind 8,
+        PXXClassInitialize / PXXClassFinalize). What that does not cover --
+        an operator record nested deeper inside a field, or a dynamic array
+        of one -- is still refused, by the same predicate the descriptor
+        writer uses. feature-pascal-management-operators-on-a-class-field }
+      if (Syms[i].TypeKind = tyClass) and (mrec >= REC_UCLASS_BASE) and
+         (ClassMgmtFieldRefusal(mrec - REC_UCLASS_BASE) <> '') then
+        Error(ClassMgmtFieldRefusal(mrec - REC_UCLASS_BASE));
       { ...and a DYNAMIC or MULTI-DIMENSIONAL array field at any depth needs
         bounds this pass cannot read, exactly as the array SYMBOL above does,
         so it keeps the same refusal. A fixed 1-D one is iterated by the walk. }

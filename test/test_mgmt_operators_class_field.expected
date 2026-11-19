@@ -1,0 +1,30 @@
+create 1
+  TFoo.Initialize -> v=1
+  TCls.Create tag=1 f.v=1
+free 1
+  TCls.Destroy tag=1
+  TFoo.Finalize v=1
+Keep: create 2
+  TFoo.Initialize -> v=2
+  TCls.Create tag=2 f.v=2
+Keep: return
+main has b tag=2
+create der 3
+  TFoo.Initialize -> v=3
+  TBar.Initialize
+  TCls.Create tag=3 f.v=3
+der g.w=77 g.s=bar
+  TCls.Destroy tag=3
+  TBar.Finalize w=77 s=bar
+  TFoo.Finalize v=3
+metaclass 4
+  TFoo.Initialize -> v=4
+  TBar.Initialize
+  TCls.Create tag=4 f.v=4
+  TCls.Destroy tag=4
+  TBar.Finalize w=77 s=bar
+  TFoo.Finalize v=4
+free 2
+  TCls.Destroy tag=2
+  TFoo.Finalize v=2
+done

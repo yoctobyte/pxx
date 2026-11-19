@@ -11883,6 +11883,62 @@ begin
   Result := n;
 end;
 
+{ Call PXXClassInitialize(inst) for its effect: the record Initialize
+  operators of the instance's kind-8 fields, after the VMT stamp and before
+  the constructor body. feature-pascal-management-operators-on-a-class-field }
+procedure IRAppendClassInitialize(instSym: Integer);
+var ciPi: Integer;
+begin
+  ciPi := FindProc('PXXClassInitialize');
+  if ciPi < 0 then Error('PXXClassInitialize (builtinheap) not loaded');
+  IRMarkStatementNode(IRAppendCall(ciPi,
+    IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+             -1, -1, 0, Ord(tyPointer)),
+    -1, Ord(tyNativeInt)));
+end;
+
+{ The argument chain of a constructor call made as an ORDINARY call on an
+  instance already allocated and stamped: Self = instSym, then the explicit
+  args hanging off `item` (an AN_ARG chain). Param-aware lowering and the
+  managed-string temp, the same shape as the NilPy construction arm and
+  AN_METACLASS_NEW's ctor-arg loop. Returns the first IR_ARG. }
+function IRLowerCtorArgsAfterSelf(cpi, instSym, item: Integer): Integer;
+var first, last, pathIdx, value, argNode, hiddenArgSym: Integer;
+    isRefArg, argIsManagedTemp: Boolean;
+begin
+  first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyClass));
+  last := first;
+  pathIdx := 1;
+  while item <> -1 do
+  begin
+    IRCoerceCharArgToString(cpi, pathIdx, item);
+    isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+    value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+    argIsManagedTemp :=
+      (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
+      (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+      (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+      (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+      (ASTKind[ASTLeft[item]] <> AN_DEREF);
+    if argIsManagedTemp then
+    begin
+      hiddenArgSym := AllocVar('', tyAnsiString);
+      SymIsHiddenArgTemp[hiddenArgSym] := True;
+      IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+      value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+      argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+    end
+    else
+      argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
+    IRB[last] := argNode;
+    last := argNode;
+    item := ASTRight[item];
+    Inc(pathIdx);
+  end;
+  Result := first;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var foaSym, foaSave: Integer;
     left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
@@ -18662,6 +18718,42 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         the header. The units' manual `.Free` sites (FreeMem on the instance
         pointer — wrong base for a headered block) are converted to
         PXXObjRelease in pyeval; Pascal-mode compilations are untouched. }
+      { ...and a PASCAL class whose fields include a record with
+        Initialize/Finalize takes the same route, with the plain allocator: the
+        fields' Initialize must run between the VMT stamp and the constructor
+        body, and the inline per-backend arm has no place for it. Every other
+        Pascal construction keeps the inline arm.
+        feature-pascal-management-operators-on-a-class-field }
+      if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
+         (not isNilPy) and (ClassMgmtFieldCount(classIdx - REC_UCLASS_BASE) > 0) then
+      begin
+        mcInstSym := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, mcInstSym,
+                 IRAppend(IR_CALL, -Ord(tkGetMem),
+                          IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]),
+                                   -1, -1, 0, Ord(tyInteger)),
+                          -1, 0, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_MEM,
+                 IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
+                 IRAppend(IR_VMTADDR, classIdx - REC_UCLASS_BASE, -1, -1, 0, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
+        IRAppendClassInitialize(mcInstSym);
+        slot := FindUCtorOverloadArgs(classIdx - REC_UCLASS_BASE, ASTRight[ASTLeft[node]]);
+        if slot >= 0 then
+          cpi := UMthProc_[slot]
+        else
+        begin
+          cpi := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+          if cpi >= 0 then cpi := UMthProc_[cpi];
+        end;
+        if cpi >= 0 then
+          IRMarkStatementNode(IRAppendCall(cpi,
+            IRLowerCtorArgsAfterSelf(cpi, mcInstSym, ASTRight[ASTLeft[node]]),
+            -1, Ord(tyClass)));
+        Result := IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, ASTTk[node]);
+        Exit;
+      end;
       if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
          isNilPy then
       begin
@@ -21134,6 +21226,11 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       IRAppend(IR_STORE_MEM,
                IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
                mcVmt, -1, 0, Ord(tyPointer));
+      { the dynamic class is known only now, so the call is emitted whenever
+        ANY class carries a kind-8 member; it no-ops on one that does not.
+        Pascal only: a NilPy instance is finalized by PXXObjFree. feature-pascal-management-operators-on-a-class-field }
+      if (not isNilPy) and AnyClassHasMgmtFields then
+        IRAppendClassInitialize(mcInstSym);
 
       { cpi = -1: the class declares no constructor, so `Create` is FPC's empty
         TObject.Create. Allocating and stamping the VMT above IS the whole

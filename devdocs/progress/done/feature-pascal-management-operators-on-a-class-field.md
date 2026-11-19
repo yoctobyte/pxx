@@ -4,8 +4,8 @@ title: "A class field of a managed record type is never initialized or finalized
 track: P
 prio: 30
 type: feature
-status: open
-owner: ""
+status: done
+owner: claude-dupwt
 blocked-by: []
 summary: "DESIGNED 2026-09-09 (frankS), NOT implemented -- the design section carries the fpc oracle, the two insertion points, and the one hazard that makes the obvious implementation a DEADLOCK rather than a wrong value: the Finalize half must NOT go in PXXRecordRelease (`nothing here runs user code` is what lets it be called with the heap lock held; a management operator is user code and may allocate -- this is what cb2ed843 was reverted for) but one function up, in PXXClassFinalize's already-unlocked kind-4 pass. Initialize needs a NEW BUILTIN because TDer declaring no constructor has no body to wrap and AN_METACLASS_NEW knows its class only at runtime. Descriptor: a new member KIND (8 is free) is bootstrap-safe by defs.inc's own note where a header field is not, and bytes +8..+15 of a 16-byte member are unread by kinds 1-7. ORIGINAL: `c: TCls` where TCls has a field of a record with `class operator Initialize/Finalize`: pxx REFUSES it, naming feature-pascal-management-operators-nested-and-array. It was carved out of that ticket 2026-09-06 because it is a DIFFERENT MECHANISM, not a remaining case of the same one. Measured against fpc 3.2.2: a class field's Initialize runs inside Create and its Finalize inside Free -- an OBJECT lifetime, not a scope one. The desugar that serves records is `Initialize(v); try BODY finally Finalize(v)` around the declaring routine's body, and applying it here would finalize a live heap object at every scope exit and never run at all for one that outlives the scope, which is worse than the refusal. The insertion points are the constructor and destructor paths, so the shape is closer to how a class's ARC/interface fields are already handled than to anything in the record desugar. CORPUS: fpc testsuite tmoperator4 stops at line 81 on this refusal, and its TA/TB are CLASSES -- that row was mis-attributed to the record nested-field arm, which had no corpus row at all."
 ---
@@ -166,3 +166,76 @@ Lift the refusal in `pasparser_proc.inc` (the `tyClass` arm, ~line 851) and
 re-aim `test/test_mgmt_operators_class_field_refused.pas` into an output test.
 `tmoperator4.pp` (conformance) stops at line 81 on this refusal and is the
 acceptance row.
+
+## 2026-11-20 (claude-dupwt): done
+
+A class field of a record that declares Initialize/Finalize, as a plain field
+or a fixed array of one, now runs at an OBJECT lifetime. `tmoperator4.pp`
+passes, so its pxx.skip row is gone.
+
+### Corrections to the design above
+
+- **Bytes +8..+15 of a member are NOT free.** +8 is arrCount and +12 is
+  typeRef, and kinds 1-7 read both. So kind 8 uses them as the other kinds do:
+  +8 is the element count (a fixed array's flat length), and +12 is a
+  self-relative reference to a 24-byte side block {Initialize code: 8,
+  Finalize code: 8, stride: 4, class depth: 4}. The side block is appended
+  8-aligned after the descriptors, because a code-pointer relocation must be
+  aligned. The code pointers are AddMethodFix slots (new MFK_MGMTOP), so DCE
+  roots the operator bodies.
+- **Initialize is not a new per-backend arm.** A Pascal `TCls.Create(...)`
+  whose class (chain included) carries a kind-8 member is lowered in ir.inc
+  as target-independent IR, the NilPy / AN_METACLASS_NEW idiom: plain GetMem,
+  VMT stamp, `PXXClassInitialize(inst)`, then the resolved ctor as an
+  ordinary call. Every other Pascal construction keeps the inline arm
+  unchanged. AN_METACLASS_NEW calls PXXClassInitialize when any class in the
+  program has a kind-8 member.
+- **Finalize lives in PXXClassFinalize's unlocked part, as designed.** It
+  runs after the kind-4 pass and before PXXClassFinalizeManaged, so the
+  operator still sees its record's strings (fpc's order). It is never reached
+  from PXXRecordRelease, and kind 8 is inert there: the case has no arm for it.
+
+### Order (fpc 3.2.2, measured)
+
+Initialize runs base class first; Finalize runs derived class first. Within a
+class, both go in declaration order. The descriptor lists derived first, so
+Finalize walks it as written, and Initialize walks one class depth at a time
+from the deepest.
+
+### One deliberate divergence
+
+fpc 3.2.2 never INITIALIZES the elements of a fixed array of such records in
+a class field, but it does FINALIZE them. pxx runs both operators on every
+element, as it already does for a fixed array in a record field or a local.
+test_mgmt_operators_class_field_array.pas says so in its header. Its
+.expected is pxx's output; the array-free test_mgmt_operators_class_field is
+fpc's output byte for byte.
+
+### Still refused (narrowed, with its own message)
+
+A class field whose record holds an operator record only DEEPER (`w: TWrap`
+where `TWrap = record inner: TFoo end`), and a dynamic array of one. The
+refusal fixture was re-aimed at the nested shape. Known hole: the refusal is
+checked at a variable of the class type (as before). A class reached only
+through a variable of an ANCESTOR type is not checked, and its nested inner
+Initialize would not run.
+
+NilPy is not covered. Its construction keeps PXXObjAlloc and does not call
+PXXClassInitialize; a NilPy class holding a Pascal operator record would be
+finalized but not initialized.
+
+### Measured
+
+- x86-64, i386, arm32, aarch64, riscv32, hosted xtensa (`--xtensa-soft-mulhigh`)
+  and wasm32: both new tests and tmoperator4 match. ESP32-S3 and ESP32-C3
+  (esp_run.sh, Espressif QEMU) match too. On wasm32 the leak program does not
+  build because of SysUtils; that is unrelated.
+- Leaks: `-dPXX_ALLOC_CENSUS`, a class holding a string-carrying operator
+  record plus a fixed array of 3. Live at exit is 7 at N=1 and 6 at N=50, and
+  Finalize ran 4x per object.
+- Size: the kind-8 walk is cut by DCE (DescKindSeen[8]) when nothing uses it.
+  test_class_str is +12 B on C3 and +8 B on S3. On x86-64 it is +885 B,
+  because DceCutDeadKindArms is gated on DceClassSlotsWithholdable, which is
+  off there. RAM: unchanged; the descriptor and side block are RTTI .rodata.
+- Fixedpoint converged in 1 round. Gate quick GREEN. The existing
+  test_mgmt_operators{,_nested_field,_array_field,_copy} still match.

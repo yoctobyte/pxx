@@ -1543,6 +1543,10 @@ begin
   DceCutCalls('PXXRecordRetain', 'PXXVarRetain', DescKindSeen[5], 'no member descriptor has kind 5', nop);
   DceCutCalls('', 'PXXRecordReleaseIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
   DceCutCalls('', 'PXXRecordRetainIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
+  { kind 8: PXXClassFinalize's management-operator walk, ~0.9 KB of riscv32
+    .text in every program that has a class and no such field.
+    feature-pascal-management-operators-on-a-class-field }
+  DceCutCalls('PXXClassFinalize', 'PXXClassMgmtRun', DescKindSeen[8], 'no member descriptor has kind 8', nop);
   { the container element walks: baseKind comes only from ManagedElemKind }
   DceCutCalls('PXXDynArrayReleaseDepth', 'PXXVarClear', ElemKindSeen[6], 'no element kind 6', nop);
   DceCutCalls('PXXDynArrayReleaseDepth', 'PXXIntfRelease', ElemKindSeen[4], 'no element kind 4', nop);
