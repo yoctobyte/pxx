@@ -6565,10 +6565,10 @@ begin
       silently meant nothing. }
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(TokPos), 'private') or
-        CaseEqual(GetTokenStr(TokPos), 'protected')) then
+       (TokenCaseEqual(TokPos, 'private') or
+        TokenCaseEqual(TokPos, 'protected')) then
     begin
-      if CaseEqual(GetTokenStr(TokPos), 'protected') and not isObjectType then
+      if TokenCaseEqual(TokPos, 'protected') and not isObjectType then
         Error('a record cannot have protected members (records do not inherit)');
       curStrictVis := True;   { the section marker one token ahead consumes this }
       Next;
@@ -6669,8 +6669,8 @@ begin
       bug-p-a-class-constructor-is-accepted-and-never-runs }
     if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(TokPos), 'constructor') or
-        CaseEqual(GetTokenStr(TokPos), 'destructor')) then
+       (TokenCaseEqual(TokPos, 'constructor') or
+        TokenCaseEqual(TokPos, 'destructor')) then
     begin
       Next;
       RecordMethodClassPrefix := True;
@@ -6688,7 +6688,7 @@ begin
       feature-p-threadvar-is-not-supported-at-any-scope }
     if ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'threadvar')) or
        ((CurTok.Kind = tkClass) and (TokPos < TokCount) and
-        (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'threadvar')) then
+        (Tokens[TokPos].Kind = tkIdent) and TokenCaseEqual(TokPos, 'threadvar')) then
       Error('threadvar is not allowed in a class or record body: it declares '
           + 'per-thread storage with the lifetime of the program, and a record body '
           + 'declares members of a VALUE. FPC rejects the plain form here too. '
@@ -6700,7 +6700,7 @@ begin
       definition does not; it is parsed and discarded, and the `class operator TPt.+(...)`
       DEFINITION (top level) is what actually registers it. Skip to the terminating ';'. }
     if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
+       (Tokens[TokPos].Kind = tkIdent) and TokenCaseEqual(TokPos, 'operator') then
     begin
       { Skip to the ';' that ENDS the signature — the one at paren depth 0. A
         parameter list separates groups with ';' too, so a depth-blind scan
@@ -7424,8 +7424,8 @@ begin
   if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkIdent) and IsCallConvName(GetTokenStr(TokPos)) then
   begin
-    if CaseEqual(GetTokenStr(TokPos), 'cdecl') then ProcCdecl[mpi] := True;
-    if CaseEqual(GetTokenStr(TokPos), 'stdcall') and (TargetKernel = KERNEL_WINDOWS) and
+    if TokenCaseEqual(TokPos, 'cdecl') then ProcCdecl[mpi] := True;
+    if TokenCaseEqual(TokPos, 'stdcall') and (TargetKernel = KERNEL_WINDOWS) and
        TargetSelectsCdecl then ProcCdecl[mpi] := True;
     Next;   { consume ';' }
     Next;   { consume the directive }
@@ -8652,8 +8652,8 @@ begin
           curStrictVis := False;
           if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
-             (CaseEqual(GetTokenStr(TokPos), 'private') or
-              CaseEqual(GetTokenStr(TokPos), 'protected')) then
+             (TokenCaseEqual(TokPos, 'private') or
+              TokenCaseEqual(TokPos, 'protected')) then
           begin curStrictVis := True; Next; end;
 
           { Visibility section markers. Not reserved words, so treat as section

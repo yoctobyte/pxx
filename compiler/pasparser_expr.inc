@@ -7958,7 +7958,7 @@ begin
              (((FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) >= 0) and
                UMthIsCtor[FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos))]) or
               ((FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) and
-               CaseEqual(GetTokenStr(TokPos), 'Create'))) then
+               TokenCaseEqual(TokPos, 'Create'))) then
           begin
             mcCtorCi := AliasElemRec[aliasIdx] - REC_UCLASS_BASE;
             mcCtorNm := GetTokenStr(TokPos);

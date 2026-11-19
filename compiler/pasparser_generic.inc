@@ -70,7 +70,7 @@ begin
   while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
         IsHintDirectiveName(GetTokenStr(k)) do
   begin
-    if CaseEqual(GetTokenStr(k), 'deprecated') then
+    if TokenCaseEqual(k, 'deprecated') then
     begin
       Inc(k);
       if (k < TokCount) and (Tokens[k].Kind = tkString) then Inc(k);
@@ -1227,7 +1227,7 @@ begin
   begin
     if j >= TokCount then Exit;
     if Tokens[j].Kind <> tkIdent then Exit;
-    if not CaseEqual(GetTokenStr(j),
+    if not TokenCaseEqual(j,
                      TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k]) then Exit;
     Inc(j);
     if k < np - 1 then
@@ -1268,11 +1268,11 @@ var gEnd: Integer;
 begin
   DelphiSelfSpecNeedsKeyword := False;
   if Tokens[cur].Kind <> tkIdent then Exit;
-  if not CaseEqual(GetTokenStr(cur), templateName) then Exit;
+  if not TokenCaseEqual(cur, templateName) then Exit;
   if (cur + 1 >= limit) or (Tokens[cur + 1].Kind <> tkLt) then Exit;
   { already spelled `specialize TOuter<...>`: nothing to normalise }
   if (cur > 0) and (Tokens[cur - 1].Kind = tkIdent) and
-     CaseEqual(GetTokenStr(cur - 1), 'specialize') then Exit;
+     TokenCaseEqual(cur - 1, 'specialize') then Exit;
   gEnd := TokSpecGroupEnd(cur + 1);
   if (gEnd < 0) or (gEnd >= limit) then Exit;
   if TokGroupIsTemplateOwnParams(ti, cur + 1) then Exit;
@@ -1439,17 +1439,17 @@ begin
     Exit;
   end;
   if (Tokens[at + 1].Kind = tkIdent) and
-     (CaseEqual(GetTokenStr(at + 1), 'operator') or
-      CaseEqual(GetTokenStr(at + 1), 'constructor') or
-      CaseEqual(GetTokenStr(at + 1), 'destructor')) then
+     (TokenCaseEqual(at + 1, 'operator') or
+      TokenCaseEqual(at + 1, 'constructor') or
+      TokenCaseEqual(at + 1, 'destructor')) then
   begin
     ClassTokOpensBody := False;
     Exit;
   end;
   k := at + 1;
   while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
-        (CaseEqual(GetTokenStr(k), 'abstract') or
-         CaseEqual(GetTokenStr(k), 'sealed')) do Inc(k);
+        (TokenCaseEqual(k, 'abstract') or
+         TokenCaseEqual(k, 'sealed')) do Inc(k);
   if (k < TokCount) and (Tokens[k].Kind = tkLParen) then
   begin
     pdepth := 0;
@@ -1482,13 +1482,13 @@ begin
   j := afterEq;
   { `packed record`, `bitpacked record` }
   while (j < TokCount) and (Tokens[j].Kind = tkIdent) and
-        (CaseEqual(GetTokenStr(j), 'packed') or CaseEqual(GetTokenStr(j), 'bitpacked')) do
+        (TokenCaseEqual(j, 'packed') or TokenCaseEqual(j, 'bitpacked')) do
     Inc(j);
   if j >= TokCount then begin resumeAt := TokCount; Exit; end;
 
   if (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkRecord) or
      ((Tokens[j].Kind = tkIdent) and
-      (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object'))) then
+      (TokenCaseEqual(j, 'interface') or TokenCaseEqual(j, 'object'))) then
   begin
     depth := 0;
     inTypeSec := False;
@@ -1502,7 +1502,7 @@ begin
       else if (Tokens[j].Kind = tkRecord) or (Tokens[j].Kind = tkCase) then
         Inc(depth)
       else if (Tokens[j].Kind = tkIdent) and
-              (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object')) then
+              (TokenCaseEqual(j, 'interface') or TokenCaseEqual(j, 'object')) then
         Inc(depth)
       else if Tokens[j].Kind = tkClass then
       begin
@@ -1527,8 +1527,8 @@ begin
               (Tokens[j].Kind = tkProcedure) or (Tokens[j].Kind = tkFunction) or
               (Tokens[j].Kind = tkProperty) then inTypeSec := False
       else if (Tokens[j].Kind = tkIdent) and
-              (CaseEqual(GetTokenStr(j), 'constructor') or
-               CaseEqual(GetTokenStr(j), 'destructor')) then inTypeSec := False
+              (TokenCaseEqual(j, 'constructor') or
+               TokenCaseEqual(j, 'destructor')) then inTypeSec := False
       else if inTypeSec and (Tokens[j].Kind = tkIdent) and
               (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkEq) then
       begin
@@ -1644,7 +1644,7 @@ begin
          ((i = 0) or (Tokens[i-1].Kind = tkType) or
           (Tokens[i-1].Kind = tkSemicolon) or
           ((Tokens[i-1].Kind = tkIdent) and
-           CaseEqual(GetTokenStr(i-1), 'generic'))) then
+           TokenCaseEqual(i-1, 'generic'))) then
       begin
         { a header -- keep the parameter names, then harvest the names its BODY
           declares, and resume past the whole declaration }
@@ -2394,13 +2394,13 @@ begin
       87/88). The binder form `X = specialize TFoo<...>;` stays with the
       native ParseSpecialization path (previous token = '='). }
     specB := (i + 2 < TokCount) and (Tokens[i].Kind = tkIdent) and
-             CaseEqual(GetTokenStr(i), 'specialize') and
-             (Tokens[i+1].Kind = tkIdent) and CaseEqual(GetTokenStr(i+1), tname) and
+             TokenCaseEqual(i, 'specialize') and
+             (Tokens[i+1].Kind = tkIdent) and TokenCaseEqual(i+1, tname) and
              (Tokens[i+2].Kind = tkLt) and
              ((i = 0) or (Tokens[i-1].Kind <> tkEq));
     if specB or
        (delphiPattern and (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkLt) and
-        CaseEqual(GetTokenStr(i), tname) and
+        TokenCaseEqual(i, tname) and
         { ...but NOT when the previous round already put `specialize` in front of
           this very group. The paramform arm below REWRITES `TFoo<T>` into
           `specialize TFoo<T>` in place; on the next round specB matches the new
@@ -2416,7 +2416,7 @@ begin
           to be IDEMPOTENT, and this one silently was not.
           bug-a-the-delphi-generic-rewrite-is-not-idempotent }
         ((i = 0) or (Tokens[i-1].Kind <> tkIdent) or
-         (not CaseEqual(GetTokenStr(i-1), 'specialize')))) then
+         (not TokenCaseEqual(i-1, 'specialize')))) then
     begin
       { collect the <...> argument list }
       ok := True; na := 0;
@@ -2751,7 +2751,7 @@ begin
   while i + 2 < TokCount do
   begin
     if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLt) and
-       CaseEqual(GetTokenStr(i), nm) and (PasSrcOfTok(i) = here) then
+       TokenCaseEqual(i, nm) and (PasSrcOfTok(i) = here) then
     begin
       { walk the `<...>` group; a parameter list may carry `,` `;` `:`, the
         `class`/`record` constraint keywords and nested `<`, and nothing else.
@@ -3487,7 +3487,7 @@ begin
   bodyless := False;
   cur := TokPos;
   if (Tokens[startTok].Kind = tkClass) or
-     ((Tokens[startTok].Kind = tkIdent) and CaseEqual(GetTokenStr(startTok), 'interface')) then
+     ((Tokens[startTok].Kind = tkIdent) and TokenCaseEqual(startTok, 'interface')) then
   begin
     if (Tokens[startTok].Kind = tkClass) and (cur < TokCount) and (Tokens[cur].Kind = tkOf) then
     begin
@@ -3511,8 +3511,8 @@ begin
         This is the sibling of the same omission in CollectNestedTypeNames
         above -- one decision, two hand-rolled copies. }
       while (scan < TokCount) and (Tokens[scan].Kind = tkIdent) and
-            (CaseEqual(GetTokenStr(scan), 'abstract') or
-             CaseEqual(GetTokenStr(scan), 'sealed')) do Inc(scan);
+            (TokenCaseEqual(scan, 'abstract') or
+             TokenCaseEqual(scan, 'sealed')) do Inc(scan);
       if (scan < TokCount) and (Tokens[scan].Kind = tkLParen) then
       begin
         depth := 0;
@@ -5668,7 +5668,7 @@ begin
   begin
     if (i > 0) and (Tokens[i].Kind = tkIdent) and
        ((Tokens[i - 1].Kind = tkFunction) or (Tokens[i - 1].Kind = tkProcedure)) and
-       CaseEqual(GetTokenStr(i), fname) and (Tokens[i + 1].Kind = tkLt) then
+       TokenCaseEqual(i, fname) and (Tokens[i + 1].Kind = tkLt) then
     begin
       k := 1;
       j := i + 2;
@@ -5737,7 +5737,7 @@ begin
       is what keeps an objfpc program's comparisons from being eaten.
       feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
     hasKw := (i + 5 < TokCount) and
-             (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'specialize');
+             (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'specialize');
     if hasKw then base := i + 1 else base := i;
     { A DECLARATION is not a use, and in the Delphi surface the two are spelled
       identically: `function UAdd<T>(` in a unit matches the use pattern token
@@ -5758,7 +5758,7 @@ begin
     nArg := 0;
     if (hasKw or GenericFuncIsDelphi[gfi]) and (not isDecl) and
        (base + 4 < TokCount) and
-       (Tokens[base].Kind = tkIdent) and CaseEqual(GetTokenStr(base), fname) and
+       (Tokens[base].Kind = tkIdent) and TokenCaseEqual(base, fname) and
        (Tokens[base + 1].Kind = tkLt) then
     begin
       j := base + 2;
@@ -5824,7 +5824,7 @@ begin
           matched := (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkGt) and
                      ((Tokens[j + 2].Kind = tkLParen) or
                       (hasKw and not ((Tokens[j + 2].Kind = tkIdent) and
-                                      CaseEqual(GetTokenStr(j + 2), 'as'))));
+                                      TokenCaseEqual(j + 2, 'as'))));
           j := j + 1;   { j now indexes the `>` }
           Break;
         end;
@@ -6176,7 +6176,7 @@ end;
 function IsGenericKwTok(at: Integer): Boolean;
 begin
   IsGenericKwTok := (Tokens[at].Kind = tkIdent) and
-                    CaseEqual(GetTokenStr(at), 'generic');
+                    TokenCaseEqual(at, 'generic');
 end;
 
 function GenericKwAt(at: Integer): Integer;
@@ -6480,13 +6480,13 @@ begin
   while (j + 4 < TokCount) and (implStart < 0) do
   begin
     i := j;
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'generic') then Inc(i);
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'generic') then Inc(i);
     if Tokens[i].Kind = tkClass then Inc(i);
     if ((Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkProcedure)) and
        (i + 4 < TokCount) and
-       (Tokens[i + 1].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 1), cls) and
+       (Tokens[i + 1].Kind = tkIdent) and TokenCaseEqual(i + 1, cls) and
        (Tokens[i + 2].Kind = tkDot) and
-       (Tokens[i + 3].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 3), mname) and
+       (Tokens[i + 3].Kind = tkIdent) and TokenCaseEqual(i + 3, mname) and
        (Tokens[i + 4].Kind = tkLt) then
     begin
       implStart := i;
@@ -6515,7 +6515,7 @@ begin
   i := 1;
   while i + 3 < TokCount do
   begin
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), mname) and
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, mname) and
        (Tokens[i + 1].Kind = tkLt) and
        IsConcreteTypeArgKind(Tokens[i + 2].Kind) and (Tokens[i + 3].Kind = tkGt) and
        not ((i >= 3) and (Tokens[i - 1].Kind = tkDot) and
@@ -6524,7 +6524,7 @@ begin
     begin
       ok := Tokens[i - 1].Kind = tkDot;
       if (not ok) and (i >= 2) and (Tokens[i - 1].Kind = tkIdent) and
-         CaseEqual(GetTokenStr(i - 1), 'specialize') and (Tokens[i - 2].Kind = tkDot) then
+         TokenCaseEqual(i - 1, 'specialize') and (Tokens[i - 2].Kind = tkDot) then
         ok := True;
       if ok then
       begin
@@ -6545,7 +6545,7 @@ begin
         end;
         useName[nUse] := i;
         useKw[nUse]   := (Tokens[i - 1].Kind = tkIdent) and
-                         CaseEqual(GetTokenStr(i - 1), 'specialize');
+                         TokenCaseEqual(i - 1, 'specialize');
         useSpec[nUse] := k;
         Inc(nUse);
       end;
@@ -6794,7 +6794,7 @@ begin
       { `.`-prefixed, so a free routine of the same name is not swept up; the
         excluded shape above is a DEFINITION header, which is dot-prefixed too. }
       kwAt := (i >= 2) and (Tokens[i - 1].Kind = tkIdent) and
-              CaseEqual(GetTokenStr(i - 1), 'specialize') and
+              TokenCaseEqual(i - 1, 'specialize') and
               (Tokens[i - 2].Kind = tkDot);
       if (Tokens[i - 1].Kind = tkDot) or kwAt then
       begin

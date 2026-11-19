@@ -8137,7 +8137,7 @@ begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
       { A unit (e.g. coroutine.pas) using the low-level __pxxcoswitch intrinsic
         needs the CoSwitch stub emitted before its body compiles. }
-      if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), '__pxxcoswitch') then
+      if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, '__pxxcoswitch') then
         EnableCoroutineRuntime;
       { A unit that references the Text file type needs the implicit textfile RTL
         too — the program-level pre-scan only sees the program's own tokens, so a
@@ -8146,10 +8146,10 @@ begin
         (Assign)` (bug-textfile-primitives-not-ambient-in-units). }
       if (Tokens[i].Kind = tkIdent) and
          ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 8)) then
-        if CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile') or
-           CaseEqual(GetTokenStr(i), 'ioresult') or
+        if TokenCaseEqual(i, 'text') or TokenCaseEqual(i, 'textfile') or
+           TokenCaseEqual(i, 'ioresult') or
            { `file of T` / untyped `file` — FileRec lives in the same unit }
-           CaseEqual(GetTokenStr(i), 'file') then
+           TokenCaseEqual(i, 'file') then
           unitNeedsText := True;
       { ...and the TObject ROOT METHODS, for exactly the reason above. `o.Equals(x)`
         / `.GetHashCode` / `.ToString` resolve through rows EnsureTObjectRootMethods
@@ -8162,8 +8162,8 @@ begin
         merely DECLARES a ToString does not drag 42 KB in. }
       if (Tokens[i].Kind = tkIdent) and (i > startPos) and (Tokens[i - 1].Kind = tkDot) and
          (RootVMTSlotCount > 0) and
-         (CaseEqual(GetTokenStr(i), 'equals') or CaseEqual(GetTokenStr(i), 'gethashcode')
-          or CaseEqual(GetTokenStr(i), 'tostring')) and
+         (TokenCaseEqual(i, 'equals') or TokenCaseEqual(i, 'gethashcode')
+          or TokenCaseEqual(i, 'tostring')) and
          { ...but a QUALIFIED IMPLEMENTATION HEADER is dot-preceded too, and it is
            a definition, not a call: `function TJSONValue.ToString(...)` in
            lib/rtl/json.pas fired this and pulled `builtin` + the root-method rows

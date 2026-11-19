@@ -9821,7 +9821,7 @@ begin
               ASTTk[CurASTNode] := Ord(tyClass);
               if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
                  (Tokens[TokPos].Kind = tkIdent) and
-                 CaseEqual(GetTokenStr(TokPos), 'Free') and
+                 TokenCaseEqual(TokPos, 'Free') and
                  (Tokens[TokPos+1].Kind in [tkSemicolon, tkEnd, tkElse]) then
               begin
                 Next; Next;   { '.', 'Free' }
@@ -9846,7 +9846,7 @@ begin
               { `TClass(expr).Free;` — plain form only, like obj.Free above }
               if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
                  (Tokens[TokPos].Kind = tkIdent) and
-                 CaseEqual(GetTokenStr(TokPos), 'Free') and
+                 TokenCaseEqual(TokPos, 'Free') and
                  (Tokens[TokPos+1].Kind in [tkSemicolon, tkEnd, tkElse]) and
                  (FindUMeth(smci, 'Free') < 0) then
               begin
@@ -10058,7 +10058,7 @@ begin
               if (idx >= 0) and (Syms[idx].RecName >= REC_UCLASS_BASE) and
                  (not UClsIsRecord[Syms[idx].RecName - REC_UCLASS_BASE]) and
                  (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-                 CaseEqual(GetTokenStr(TokPos+1), 'Free') and
+                 TokenCaseEqual(TokPos+1, 'Free') and
                  (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd, tkElse]) and
                  (FindUMeth(Syms[idx].RecName - REC_UCLASS_BASE, 'Free') < 0) then
               begin
@@ -10088,7 +10088,7 @@ begin
                 `FDelayedOptions.Free`). Same plain-form restriction. }
               if (idx < 0) and (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and
                  (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-                 CaseEqual(GetTokenStr(TokPos+1), 'Free') and
+                 TokenCaseEqual(TokPos+1, 'Free') and
                  (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd, tkElse]) then
               begin
                 smci := CurSelfClass - REC_UCLASS_BASE;

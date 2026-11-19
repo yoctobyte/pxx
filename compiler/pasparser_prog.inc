@@ -230,7 +230,7 @@ begin
       question underneath it, and the answer belongs one layer down:
       feature-a-pull-builtinheap-on-demand-instead-of-predicting-it. }
     if ((Tokens[i].Kind = tkRecord) or
-        ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'object'))) and
+        ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'object'))) and
        TargetCodegenCallsHeapRuntime then
       needsHeap := True;
     { `string` is a KEYWORD here, not an identifier: paslexer.inc maps it to
@@ -1602,7 +1602,7 @@ begin
     the compiler's own PXX_NODEFAULTRTL self-build never reaches for it. }
   if (not NoDefaultRtl) then
     for i := 0 to TokCount - 1 do
-      if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'tarray') then
+      if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'tarray') then
       begin needsSysGenerics := True; Break; end;
   { ESP-class targets (xtensa always, riscv32 under --esp-profile=bare) have no
     FPU codegen at all: every float op lowers to a __pxx_* soft-float kernel that
@@ -1659,7 +1659,7 @@ begin
     for i := 0 to TokCount - 1 do
       if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 6) and
          (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
-         CaseEqual(GetTokenStr(i), 'assert') then
+         TokenCaseEqual(i, 'assert') then
       begin needsEspAssert := True; Break; end;
   end;
   { wasm32: the sys* file intrinsics have no instruction to lower to on this
@@ -1688,18 +1688,18 @@ begin
     begin
       if (Tokens[i].Kind = tkIdent) and
          (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
-         (((Tokens[i].SLen = 7) and (CaseEqual(GetTokenStr(i), 'SysOpen') or
-                                     CaseEqual(GetTokenStr(i), 'SysRead'))) or
-          ((Tokens[i].SLen = 8) and (CaseEqual(GetTokenStr(i), 'SysWrite') or
-                                     CaseEqual(GetTokenStr(i), 'SysClose'))) or
-          ((Tokens[i].SLen = 9) and CaseEqual(GetTokenStr(i), 'SysFchmod'))) then
+         (((Tokens[i].SLen = 7) and (TokenCaseEqual(i, 'SysOpen') or
+                                     TokenCaseEqual(i, 'SysRead'))) or
+          ((Tokens[i].SLen = 8) and (TokenCaseEqual(i, 'SysWrite') or
+                                     TokenCaseEqual(i, 'SysClose'))) or
+          ((Tokens[i].SLen = 9) and TokenCaseEqual(i, 'SysFchmod'))) then
       begin needsWasiFile := True; Break; end;
       { LoadFile is a builtin spelled as an identifier, not a token, so it needs
         the `math`-style name scan. Require the '(' for the same reason `math`
         does -- a variable named `loadfile` must not pull a unit. }
       if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 8) and
          (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
-         CaseEqual(GetTokenStr(i), 'LoadFile') then
+         TokenCaseEqual(i, 'LoadFile') then
       begin needsWasiFile := True; Break; end;
     end;
   end;
@@ -1976,9 +1976,9 @@ begin
       code offset 0. Trigger on the declaration itself, which is the same
       evidence the desugar will act on.
       feature-pascal-class-management-operators }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'finalize') and
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'finalize') and
        (i > 0) and (Tokens[i - 1].Kind = tkIdent) and
-       CaseEqual(GetTokenStr(i - 1), 'operator') then
+       TokenCaseEqual(i - 1, 'operator') then
       hasExceptions := True;
     { THE SIBLING OF THE ARM ABOVE, and it had two instances, one of them years
       old. `for X in ...` desugars to a try/finally whenever the source owns
@@ -2013,13 +2013,13 @@ begin
       program that never names the type keeps them unreachable and DCE drops
       them — the "no size growth" half of the feature's own gate. }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'promoint') or CaseEqual(GetTokenStr(i), 'promoint64')
-        or CaseEqual(GetTokenStr(i), 'promoint32')) then
+       (TokenCaseEqual(i, 'promoint') or TokenCaseEqual(i, 'promoint64')
+        or TokenCaseEqual(i, 'promoint32')) then
       needsPromoInt := True;
     { The coroutine context-switch stub must be emitted before the main body
       (it is reached only by `call`), so detect any use of the low-level
       __pxxcoswitch intrinsic up front. }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), '__pxxcoswitch') then
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, '__pxxcoswitch') then
       hasCoroutine := True;
     { Pull in the builtin unit (Str/Val backing) only if the program calls
       Str(...) or Val(...) — name immediately followed by '(', so plain
@@ -2049,7 +2049,7 @@ begin
       feature-bare-esp-supports-uses-builtin }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
+       (TokenCaseEqual(i, 'str') or TokenCaseEqual(i, 'val')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { ...and the NON-FLOAT half of that on the bare ESP profile, which links no
@@ -2069,7 +2069,7 @@ begin
       feature-a-non-float-str-on-the-bare-esp-profile }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       CaseEqual(GetTokenStr(i), 'str') and
+       TokenCaseEqual(i, 'str') and
        EspBareBoot and (not NoDefaultRtl) then
       needsStrFmt := True;
     { `x.Equals(...)` / `x.GetHashCode` / `x.ToString` pulls the builtin unit:
@@ -2079,8 +2079,8 @@ begin
       ToString should not drag 42 KB in. feature-a-tobject-root-method-vmt-slots }
     if (Tokens[i].Kind = tkIdent) and (i > 0) and (Tokens[i - 1].Kind = tkDot) and
        (RootVMTSlotCount > 0) and (not TargetIsEspClass) and
-       (CaseEqual(GetTokenStr(i), 'equals') or CaseEqual(GetTokenStr(i), 'gethashcode')
-        or CaseEqual(GetTokenStr(i), 'tostring')) then
+       (TokenCaseEqual(i, 'equals') or TokenCaseEqual(i, 'gethashcode')
+        or TokenCaseEqual(i, 'tostring')) then
       needsBuiltin := True;
     { A VARIANT anywhere in the program pulls the builtin unit, because assigning
       a variant to a scalar lowers to VariantToInt64/Double/Bool/Char/Str and
@@ -2093,7 +2093,7 @@ begin
       (bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross). Same ESP
       exclusions as the Str/Val pull above — those targets cannot compile the
       unit, and there a variant program fails at the call site instead. }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'variant') and
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'variant') and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `Copy(...)` on a string lowers to the __pxxStrCopy substring helper in
@@ -2101,7 +2101,7 @@ begin
       the string-vs-dynarray decision is made at the call site, so a dynarray-only
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
-       (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
+       (Tokens[i + 1].Kind = tkLParen) and TokenCaseEqual(i, 'copy') and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { WideChar / UCS4Char / UnicodeChar: pulled on ANY mention, because each is
@@ -2145,10 +2145,10 @@ begin
       loud here (a build abort, not a wrong answer), which is the only reason
       this one is cheap to find. bug-p-a-wide-string-element-is-typed-tychar }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'widechar') or CaseEqual(GetTokenStr(i), 'ucs4char') or
-        CaseEqual(GetTokenStr(i), 'unicodechar') or
-        CaseEqual(GetTokenStr(i), 'widestring') or
-        CaseEqual(GetTokenStr(i), 'unicodestring')) and
+       (TokenCaseEqual(i, 'widechar') or TokenCaseEqual(i, 'ucs4char') or
+        TokenCaseEqual(i, 'unicodechar') or
+        TokenCaseEqual(i, 'widestring') or
+        TokenCaseEqual(i, 'unicodestring')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)
@@ -2171,8 +2171,8 @@ begin
       feature-a-rdrand-cpuid-compiler-builtins
       bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), '__pxxcpuhashwrandom') or
-        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) then
+       (TokenCaseEqual(i, '__pxxcpuhashwrandom') or
+        TokenCaseEqual(i, '__pxxhwrandom64')) then
       needsEntropy := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /
       __pxxMethodName in the builtin unit (see ParseLValueAST) — FPC has them on
@@ -2180,20 +2180,20 @@ begin
       that name shadows at the call site, leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname') or
+       (TokenCaseEqual(i, 'methodaddress') or TokenCaseEqual(i, 'methodname') or
         { Supports(obj, IFoo, Intf) lowers to the same __pxxGetInterface — the
           two-argument form does not, but an unused helper is dropped anyway. }
-        CaseEqual(GetTokenStr(i), 'supports') or
-        CaseEqual(GetTokenStr(i), 'getinterface')) and (not TargetIsEspClass) then
+        TokenCaseEqual(i, 'supports') or
+        TokenCaseEqual(i, 'getinterface')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { `x.ClassName` lowers to __pxxClassName (+ __pxxRttiOf for an instance) — see
       GenMakeClassNameCall. Unlike the helpers above it takes NO arguments, so it is
       normally written with no '(' and must be matched on the bare name. A class with
       a member of that name shadows at the call site, leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom') or
-        CaseEqual(GetTokenStr(i), 'classparent') or
-        CaseEqual(GetTokenStr(i), 'instancesize') or CaseEqual(GetTokenStr(i), 'classnameis') or
+       (TokenCaseEqual(i, 'classname') or TokenCaseEqual(i, 'inheritsfrom') or
+        TokenCaseEqual(i, 'classparent') or
+        TokenCaseEqual(i, 'instancesize') or TokenCaseEqual(i, 'classnameis') or
         { `unitname` and `classinfo` are the same bare-name shape and BOTH were
           missing from this list. classinfo is new; unitname landed 2026-08-25
           without its trigger, and the gap is real rather than theoretical:
@@ -2205,13 +2205,13 @@ begin
           unit. It survived because its own test `uses` a helper unit and every
           other UnitName caller in the tree writes ClassName too, so the
           trigger was always pulled by a neighbour. }
-        CaseEqual(GetTokenStr(i), 'unitname') or CaseEqual(GetTokenStr(i), 'classinfo') or
+        TokenCaseEqual(i, 'unitname') or TokenCaseEqual(i, 'classinfo') or
         { `E is <class-reference VALUE>` lowers to __pxxInheritsFrom (see ParseExpr).
           Whether the right-hand side is a class NAME (compile-time, no helper) or a
           TClass value (runtime, helper) is not knowable from the tokens, so the
           soft-keyword `is` pulls the unit. An unused helper is dropped by the linker
           path anyway; a missing one would silently disable the operator. }
-        CaseEqual(GetTokenStr(i), 'is')) and (not TargetIsEspClass) then
+        TokenCaseEqual(i, 'is')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { A write/writeln with a VARIABLE field width pre-formats through
       StrInt/StrFloat/StrChar/StrStrW/StrBool, which live in the builtin unit —
@@ -2246,7 +2246,7 @@ begin
       site, leaving the helpers unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
+       (TokenCaseEqual(i, 'delete') or TokenCaseEqual(i, 'insert')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { `InterLocked*(...)` resolve to the wrappers in the builtin unit — FPC
@@ -2265,16 +2265,16 @@ begin
       routine of the same name shadows. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'abs') or CaseEqual(GetTokenStr(i), 'sqr')) and
+       (TokenCaseEqual(i, 'abs') or TokenCaseEqual(i, 'sqr')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `UpCase(...)` / `Pos(...)` lower to __pxxUpCase / __pxxPos in the
       builtin unit (see ParseFactor); pull it so they resolve. ESP can't. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos') or
-        CaseEqual(GetTokenStr(i), 'roldword') or CaseEqual(GetTokenStr(i), 'rordword') or
-        CaseEqual(GetTokenStr(i), 'rolqword') or CaseEqual(GetTokenStr(i), 'rorqword')) and
+       (TokenCaseEqual(i, 'upcase') or TokenCaseEqual(i, 'pos') or
+        TokenCaseEqual(i, 'roldword') or TokenCaseEqual(i, 'rordword') or
+        TokenCaseEqual(i, 'rolqword') or TokenCaseEqual(i, 'rorqword')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `Move(...)` / `FillChar(...)`: System memory primitives live in the
@@ -2283,10 +2283,10 @@ begin
       site. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'assert') or
-        CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
-        CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
-        CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar') or
+       (TokenCaseEqual(i, 'assert') or
+        TokenCaseEqual(i, 'move') or TokenCaseEqual(i, 'fillchar') or
+        TokenCaseEqual(i, 'fillbyte') or TokenCaseEqual(i, 'filldword') or
+        TokenCaseEqual(i, 'comparebyte') or TokenCaseEqual(i, 'comparechar') or
         { The rest of the Index/Compare family, at the widths FPC's System
           declares them. `comparebyte` was here alone and the other six were
           NOT, which is a half-wired door: the declarations existed in
@@ -2300,9 +2300,9 @@ begin
           width under a {$if}, so both arms must resolve for either to
           compile. test_p_index_and_compare_family.pas deliberately names
           none of the pre-existing entries, so reverting this hunk fails it. }
-        CaseEqual(GetTokenStr(i), 'indexbyte') or CaseEqual(GetTokenStr(i), 'indexword') or
-        CaseEqual(GetTokenStr(i), 'indexdword') or CaseEqual(GetTokenStr(i), 'indexqword') or
-        CaseEqual(GetTokenStr(i), 'compareword') or CaseEqual(GetTokenStr(i), 'comparedword') or
+        TokenCaseEqual(i, 'indexbyte') or TokenCaseEqual(i, 'indexword') or
+        TokenCaseEqual(i, 'indexdword') or TokenCaseEqual(i, 'indexqword') or
+        TokenCaseEqual(i, 'compareword') or TokenCaseEqual(i, 'comparedword') or
         { …and Prefetch, which is a System memory primitive of the same family:
           FPC declares it in systemh.inc as an internproc and its own compiler
           sources call it bare. Ours is a real (empty) procedure, so the unit has
@@ -2310,7 +2310,7 @@ begin
           declared and never dragged in is `undefined variable`, which is what
           this scan exists to prevent. Call-shaped, so a variable named
           `prefetch` does not pull the unit in. }
-        CaseEqual(GetTokenStr(i), 'prefetch')) and
+        TokenCaseEqual(i, 'prefetch')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { FPC System surface living in builtin as plain Pascal: the PRNG
@@ -2321,41 +2321,41 @@ begin
       site, leaving the unit's version unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and
        (((i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
-         (CaseEqual(GetTokenStr(i), 'random') or CaseEqual(GetTokenStr(i), 'hexstr') or
-          CaseEqual(GetTokenStr(i), 'octstr') or CaseEqual(GetTokenStr(i), 'binstr') or
+         (TokenCaseEqual(i, 'random') or TokenCaseEqual(i, 'hexstr') or
+          TokenCaseEqual(i, 'octstr') or TokenCaseEqual(i, 'binstr') or
           { FPC System bit scan — one name per width, so eight names. Only the
             call form: `bsfbyte` is not a plausible variable, but the '(' rule
             is the one every other name here follows. }
-          CaseEqual(GetTokenStr(i), 'bsfbyte') or CaseEqual(GetTokenStr(i), 'bsrbyte') or
-          CaseEqual(GetTokenStr(i), 'bsfword') or CaseEqual(GetTokenStr(i), 'bsrword') or
-          CaseEqual(GetTokenStr(i), 'bsfdword') or CaseEqual(GetTokenStr(i), 'bsrdword') or
-          CaseEqual(GetTokenStr(i), 'bsfqword') or CaseEqual(GetTokenStr(i), 'bsrqword') or
+          TokenCaseEqual(i, 'bsfbyte') or TokenCaseEqual(i, 'bsrbyte') or
+          TokenCaseEqual(i, 'bsfword') or TokenCaseEqual(i, 'bsrword') or
+          TokenCaseEqual(i, 'bsfdword') or TokenCaseEqual(i, 'bsrdword') or
+          TokenCaseEqual(i, 'bsfqword') or TokenCaseEqual(i, 'bsrqword') or
           { FPC System names we had only in SysUtils, so a no-uses program could
             not reach them at all -- task-b-nineteen-sysutils-names-that-fpc-keeps-in-system.
             Declared in builtin and MOVED out of sysutils, so there is one copy;
             any `uses` clause already pulls this unit, which is why existing
             code is unaffected. }
-          CaseEqual(GetTokenStr(i), 'dynarraysize') or
-          CaseEqual(GetTokenStr(i), 'allocmem') or CaseEqual(GetTokenStr(i), 'setstring') or
-          CaseEqual(GetTokenStr(i), 'utf8decode') or CaseEqual(GetTokenStr(i), 'utf8encode') or
-          CaseEqual(GetTokenStr(i), 'runerror') or CaseEqual(GetTokenStr(i), 'uniquestring') or
+          TokenCaseEqual(i, 'dynarraysize') or
+          TokenCaseEqual(i, 'allocmem') or TokenCaseEqual(i, 'setstring') or
+          TokenCaseEqual(i, 'utf8decode') or TokenCaseEqual(i, 'utf8encode') or
+          TokenCaseEqual(i, 'runerror') or TokenCaseEqual(i, 'uniquestring') or
           { ...and StringOfChar, declared in builtin with its sysutils copy
             KEPT for the pinned lib/rtl build (see its declaration). }
-          CaseEqual(GetTokenStr(i), 'stringofchar') or
-          CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
-          CaseEqual(GetTokenStr(i), 'swap'))) or
+          TokenCaseEqual(i, 'stringofchar') or
+          TokenCaseEqual(i, 'lo') or TokenCaseEqual(i, 'hi') or
+          TokenCaseEqual(i, 'swap'))) or
         { sLineBreak is the one BARE name of that group: FPC declares it as a
           const and our spelling is a paramless function, so it is written
           without parentheses and the call-shaped rule cannot see it. Same
           exception randseed/randomize already are. }
-        CaseEqual(GetTokenStr(i), 'slinebreak') or
-        CaseEqual(GetTokenStr(i), 'randseed') or CaseEqual(GetTokenStr(i), 'randomize')) and
+        TokenCaseEqual(i, 'slinebreak') or
+        TokenCaseEqual(i, 'randseed') or TokenCaseEqual(i, 'randomize')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
       x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
       and cannot compile the full builtin unit yet. }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') and
+    if (Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'Variant') and
        (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
     if (Tokens[i].Kind = tkUses) and (not TargetIsEspClass) then
@@ -2367,7 +2367,7 @@ begin
       compiler's own PXX_NODEFAULTRTL self-build (uses PChar heavily, ships its own
       builtins) never drags in builtin.pas. ESP can't compile builtin. }
     if (not NoDefaultRtl) and (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'pchar') or CaseEqual(GetTokenStr(i), 'pansichar')) and
+       (TokenCaseEqual(i, 'pchar') or TokenCaseEqual(i, 'pansichar')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { …and the same rule for a static `array of Char`, which IS a string in both
@@ -2714,7 +2714,7 @@ begin
           feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
         begin PreScanPass := False; ParseGenericFunctionDef; PreScanPass := True; end
       else if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
-         (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
+         (Tokens[TokPos].Kind = tkIdent) and TokenCaseEqual(TokPos, 'operator') then
       begin
         { `class operator TPt.+ (const a, b: TPt): TPt;` — an advanced-record operator
           DEFINITION. Like a plain `operator` definition it emits its body in place and

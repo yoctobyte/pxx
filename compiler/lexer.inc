@@ -372,6 +372,31 @@ begin
   TokCapacity := n;
 end;
 
+procedure MoveTokParallelRun(fromPos, toPos, n: Integer);
+{ Block-move `n` entries of the thirteen token-parallel arrays from fromPos to
+  toPos, overlap-safe (Move is memmove). The element-at-a-time loop this
+  replaced walked thirteen streams in lockstep and was 31% of a compiler
+  self-build's samples (InsertTokens + ShiftTokParallel, pxx_pc_sample, 200
+  samples, 2026-11-19). Same list as EnsureTokCapacity and the gap fill below:
+  a new parallel array goes in all three.
+  perf-p-the-pascal-parser-allocates-a-string-per-identifier-token-to-throw-it-away }
+begin
+  if n <= 0 then Exit;
+  Move(TokPackRecords[fromPos], TokPackRecords[toPos], n * SizeOf(TokPackRecords[0]));
+  Move(TokQChecks[fromPos], TokQChecks[toPos], n * SizeOf(TokQChecks[0]));
+  Move(TokAssertions[fromPos], TokAssertions[toPos], n * SizeOf(TokAssertions[0]));
+  Move(TokRChecks[fromPos], TokRChecks[toPos], n * SizeOf(TokRChecks[0]));
+  Move(TokIChecks[fromPos], TokIChecks[toPos], n * SizeOf(TokIChecks[0]));
+  Move(TokNChecks[fromPos], TokNChecks[toPos], n * SizeOf(TokNChecks[0]));
+  Move(TokScopedEnums[fromPos], TokScopedEnums[toPos], n * SizeOf(TokScopedEnums[0]));
+  Move(TokPackEnum[fromPos], TokPackEnum[toPos], n * SizeOf(TokPackEnum[0]));
+  Move(TokHMinus[fromPos], TokHMinus[toPos], n * SizeOf(TokHMinus[0]));
+  Move(TokSrcOff[fromPos], TokSrcOff[toPos], n * SizeOf(TokSrcOff[0]));
+  Move(TokSrcLen[fromPos], TokSrcLen[toPos], n * SizeOf(TokSrcLen[0]));
+  Move(CAttrFlags[fromPos], CAttrFlags[toPos], n * SizeOf(CAttrFlags[0]));
+  Move(CAttrAlignValues[fromPos], CAttrAlignValues[toPos], n * SizeOf(CAttrAlignValues[0]));
+end;
+
 procedure ShiftTokParallel(atPos, delta: Integer);
 { Move the ELEVEN token-parallel arrays to match a shift of Tokens[] by `delta` at
   `atPos` -- positive for an insert, negative for a remove. Call it with the OLD
@@ -404,22 +429,7 @@ var i, src: Integer;
 begin
   if delta > 0 then
   begin
-    for i := TokCount - 1 downto atPos do
-    begin
-      TokPackRecords[i + delta] := TokPackRecords[i];
-      TokQChecks[i + delta]     := TokQChecks[i];
-      TokAssertions[i + delta]  := TokAssertions[i];
-      TokRChecks[i + delta]     := TokRChecks[i];
-      TokIChecks[i + delta]     := TokIChecks[i];
-      TokNChecks[i + delta]     := TokNChecks[i];
-      TokScopedEnums[i + delta] := TokScopedEnums[i];
-      TokPackEnum[i + delta]    := TokPackEnum[i];
-      TokHMinus[i + delta]      := TokHMinus[i];
-      TokSrcOff[i + delta]      := TokSrcOff[i];
-      TokSrcLen[i + delta]      := TokSrcLen[i];
-      CAttrFlags[i + delta]     := CAttrFlags[i];
-      CAttrAlignValues[i + delta] := CAttrAlignValues[i];
-    end;
+    MoveTokParallelRun(atPos, atPos + delta, TokCount - atPos);
     { THE GAP, and the two halves of it are filled DIFFERENTLY on purpose.
 
       Directive state is LEXICALLY CONTINUOUS, so a spliced token inherits the
@@ -468,22 +478,7 @@ begin
       end;
   end
   else if delta < 0 then
-    for i := atPos to TokCount + delta - 1 do
-    begin
-      TokPackRecords[i] := TokPackRecords[i - delta];
-      TokQChecks[i]     := TokQChecks[i - delta];
-      TokAssertions[i]  := TokAssertions[i - delta];
-      TokRChecks[i]     := TokRChecks[i - delta];
-      TokIChecks[i]     := TokIChecks[i - delta];
-      TokNChecks[i]     := TokNChecks[i - delta];
-      TokScopedEnums[i] := TokScopedEnums[i - delta];
-      TokPackEnum[i]    := TokPackEnum[i - delta];
-      TokHMinus[i]      := TokHMinus[i - delta];
-      TokSrcOff[i]      := TokSrcOff[i - delta];
-      TokSrcLen[i]      := TokSrcLen[i - delta];
-      CAttrFlags[i]     := CAttrFlags[i - delta];
-      CAttrAlignValues[i] := CAttrAlignValues[i - delta];
-    end;
+    MoveTokParallelRun(atPos - delta, atPos, TokCount + delta - atPos);
 end;
 
 procedure StashTokParallel(dst, src: Integer);
@@ -1040,8 +1035,8 @@ var i: Integer;
 begin
   EnsureTokCapacity(TokCount + count + 1);
   { Shift right }
-  for i := TokCount - 1 downto insertPos do
-    Tokens[i + count] := Tokens[i];
+  if TokCount > insertPos then
+    Move(Tokens[insertPos], Tokens[insertPos + count], (TokCount - insertPos) * SizeOf(Tokens[0]));
   { Copy }
   ShiftTokParallel(insertPos, count);
   for i := 0 to count - 1 do
@@ -1054,11 +1049,10 @@ end;
 { Remove `count` tokens starting at atPos (mirror of InsertTokens). Used by
   the mode-Delphi generics desugar to excise `<...>` groups it rewrote. }
 procedure RemoveTokens(atPos, count: Integer);
-var i: Integer;
 begin
   ShiftTokParallel(atPos, -count);
-  for i := atPos to TokCount - count - 1 do
-    Tokens[i] := Tokens[i + count];
+  if TokCount - count > atPos then
+    Move(Tokens[atPos + count], Tokens[atPos], (TokCount - count - atPos) * SizeOf(Tokens[0]));
   Dec(TokCount, count);
   AdjustPass2Spans(atPos, -count);
   AdjustSrcRanges(atPos, -count);

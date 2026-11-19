@@ -5660,7 +5660,7 @@ begin
       Tokens[TokCount].SOffset := RStoredName(mangledName);
       Tokens[TokCount].SLen := Length(mangledName);
     end
-    else if (Tokens[srcIdx].Kind = tkIdent) and CaseEqual(GetTokenStr(srcIdx), RGenericFuncs[gfi].ParamName) then
+    else if (Tokens[srcIdx].Kind = tkIdent) and TokenCaseEqual(srcIdx, RGenericFuncs[gfi].ParamName) then
     begin
       Tokens[TokCount].SOffset := concreteOff;
       Tokens[TokCount].SLen := concreteLen;
