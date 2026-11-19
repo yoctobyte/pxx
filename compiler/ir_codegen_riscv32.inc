@@ -235,7 +235,14 @@ begin
     Error('compiler error: signal dispatch stub out of addi range (riscv32)');
   rv32_addi(reg_t0, reg_t0, adrDelta);
   rv32_sw(reg_t0, reg_t1, 0);                     { handler = dispatch }
-  rv32_lui(reg_t0, $18000);                       { SA_RESTART|SA_ONSTACK = $18000000 (lui imm = val>>12) }
+  { rv32_lui takes the VALUE with its low 12 bits clear (EmitUType masks with
+    $FFFFF000), not the 20-bit field. This line used to pass $18000 under a
+    comment saying "lui imm = val>>12", which loaded $00018000: riscv32 never
+    set SA_RESTART or SA_ONSTACK, the handler ran on the faulting stack, and a
+    stack overflow killed the process -- blamed on qemu for three months.
+    Measured by reading the action back: flags $00018004.
+    bug-a-riscv32-sa-onstack-has-no-effect-under-qemu }
+  rv32_lui(reg_t0, $18000000);                    { SA_RESTART|SA_ONSTACK }
   rv32_addi(reg_t0, reg_t0, 4);                   { ...or SA_SIGINFO -> $18000004 }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
     a1/a2 — without it the fault CAUSE is unknowable (si_code is the only

@@ -5,7 +5,8 @@ prio: 12
 type: bug
 blocked-by: []
 summary: "riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware."
-status: backlog
+status: done
+owner: claude-dupwt
 ---
 
 # riscv32: SA_ONSTACK is registered but has no effect under qemu
@@ -78,3 +79,30 @@ unhandleable, which is exactly the case the alt stack exists for.
 
 The `Halt(9)` probe exiting 9 under riscv32, and `test_stack_overflow_raise`
 promoted to all five targets.
+
+
+## 2026-11-19 (claude-dupwt): it was ours, not qemu's
+
+qemu's linux-user/riscv/signal.c (v10.2.0) picks the frame with
+`target_sigsp(sp, ka)`, which honours TARGET_SA_ONSTACK = 0x08000000, the
+generic value. So qemu would switch, if asked. A probe asked qemu what it
+held instead of decoding the binary by hand:
+
+- `sigaltstack(nil, &old)`: ss_sp/size exactly as installed, ss_flags 0, and
+  still 0 INSIDE the hook (not SS_ONSTACK); the hook's local on the guest stack.
+- `rt_sigaction(11, nil, &old)`: flags = **$00018004**, not $18000004.
+
+The install stub called `rv32_lui(reg_t0, $18000)` under the comment
+"lui imm = val>>12", but rv32_lui (EmitUType, `imm and $FFFFF000`) has always
+taken the full value. So the stub loaded $00018000: SA_SIGINFO plus two
+meaningless bits, and neither SA_RESTART nor SA_ONSTACK, ever (the earlier
+SA_RESTART-only `$10000` had the same error). The "verified" word in this
+ticket came from reading `0x000182B7` as `lui t0, 0x18`; its 20-bit field is
+0x00018, i.e. 0x18000. Fixed to `rv32_lui(reg_t0, $18000000)`.
+
+After: flags $18000004, ss_flags 1 in the hook, the hook's frame in the BSS
+alt stack, the Halt(9) probe exits 9, and test_stack_overflow_raise prints the
+caught-overflow lines on riscv32. A test-riscv32 row now asserts it (the
+fifth hosted target), all eight riscv32 signal rows pass, gate quick passes.
+Side effect, intended: riscv32 now restarts interrupted syscalls (SA_RESTART)
+like the other targets.

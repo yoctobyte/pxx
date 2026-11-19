@@ -22,18 +22,16 @@ program test_stack_overflow_raise;
   printed — it depends on RLIMIT_STACK and on frame layout, exactly the kind of
   environment-dependent number that makes a test flap.
 
-  Four of the five hosted targets: x86-64, i386, arm32, aarch64. All four now
+  All five hosted targets: x86-64, i386, arm32, aarch64 and riscv32. All now
   install with sigaltstack + SA_ONSTACK
   (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
 
-  riscv32 is excluded and it is NOT the SP rewrite that fails there — its
-  registration is correct and verified (the sigaltstack syscall succeeds, and
-  the flags word assembles to $18000004 in the emitted binary), but the handler
-  still runs on the FAULTING stack under qemu-riscv32, so for a stack overflow
-  it never runs at all. The identical construction works under qemu-i386,
-  qemu-arm and qemu-aarch64 of the same build, which points at qemu-user's
-  riscv signal frame rather than at us; unverifiable without hardware. Filed as
-  bug-a-riscv32-sa-onstack-has-no-effect-under-qemu.
+  riscv32 joined on 2026-11-19. It had been excluded as a qemu-user defect,
+  with the flags word "verified" as $18000004 -- but that came from decoding
+  the lui by hand, and the encoder takes the full value: the stub loaded
+  $00018000, so neither SA_RESTART nor SA_ONSTACK was ever set. Reading the
+  action back with rt_sigaction(11, nil, &old) showed $00018004 at once.
+  bug-a-riscv32-sa-onstack-has-no-effect-under-qemu
 
   The per-arch SP offset itself is covered on all five by test_signal_sp_rewrite,
   which faults in a way that leaves the handler a stack.

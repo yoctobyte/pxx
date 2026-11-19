@@ -34992,6 +34992,12 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_riscv32_halt "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
 	tools/expect_same.sh riscv32/test_riscv32_sprw "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	# A STACK-OVERFLOW SIGSEGV is caught here too: the alt stack takes now that
+	# the install stub sets SA_ONSTACK (it loaded $00018000 for $18000000 and
+	# the handler ran on the faulting stack, blamed on qemu until 2026-11-19).
+	# bug-a-riscv32-sa-onstack-has-no-effect-under-qemu
+	./$(COMPILER) --target=riscv32 test/test_stack_overflow_raise.pas $(TESTTMP)/test_riscv32_sovf
+	tools/expect_same.sh riscv32/test_riscv32_sovf "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_riscv32_recwide
