@@ -11391,6 +11391,8 @@ begin
   { …and the scope the header was WRITTEN in, which the re-parse cannot recover
     from the tokens. See PendNestRtnParent. }
   PendNestRtnParent[PendNestRtnCount] := CurProc;
+  PendNestRtnSrcId[PendNestRtnCount] := PasSrcIdOfTok(nestedStart);
+  PendNestRtnDbgFile[PendNestRtnCount] := DbgFileOfTok(nestedStart);
   Inc(PendNestRtnCount);
   for i := nestedStart to finalCur - 1 do
   begin
@@ -11485,6 +11487,11 @@ begin
     DeclItemEnd[DeclItemCount]   := rtnEnd;
     DeclItemOwnerProc[DeclItemCount] := PendNestRtnParent[r];
     Inc(DeclItemCount);
+    { the routine's own file, not whichever file was lexed last (see
+      PendNestRtnSrcId) }
+    if PendNestRtnSrcId[r] >= 0 then
+      PasMarkTokFile(rtnStart, KeyStrs[PendNestRtnSrcId[r]]);
+    DbgMarkTokFile(rtnStart, PendNestRtnDbgFile[r]);
   end;
   PendNestCount := 0;
   PendNestRtnCount := 0;

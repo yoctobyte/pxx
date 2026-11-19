@@ -6606,6 +6606,8 @@ begin
   if PendNestRtnCount >= MAX_LIFTS then Error('parallel for: too many synthesized routines in one body');
   PendNestRtnStart[PendNestRtnCount] := PendNestCount;
   PendNestRtnParent[PendNestRtnCount] := CurProc;   { restored above to the enclosing routine }
+  PendNestRtnSrcId[PendNestRtnCount] := PasSrcIdOfTok(TokPos - 1);
+  PendNestRtnDbgFile[PendNestRtnCount] := DbgFileOfTok(TokPos - 1);
   Inc(PendNestRtnCount);
   ptrCastOff := ptrOff;   { reuse interned 'Pointer' / 'NativeInt' for the casts }
   niCastOff  := niOff;

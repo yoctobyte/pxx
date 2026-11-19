@@ -3751,6 +3751,14 @@ var
     column is what LiftedScopeProc is filled from.
     bug-p-a-lifted-nested-routines-signature-cannot-see-the-enclosing-routines-local-type }
   PendNestRtnParent  : array[0..MAX_LIFTS-1] of Integer;
+  { ...and the SOURCE FILE each came from (PasSrcRange key id, -1 = none, and
+    the DWARF file id). The flush appends the stashed tokens at the END of the
+    stream, after every builtin unit, where the token->file map names the last
+    file lexed: an error inside a lifted routine said `in: builtinheap.pas` for
+    the author's own line. The flush plants these at each routine's new start.
+    bug-p-a-bodiless-procedure-declaration-is-accepted-and-swallows-the-next-routine }
+  PendNestRtnSrcId   : array[0..MAX_LIFTS-1] of Integer;
+  PendNestRtnDbgFile : array[0..MAX_LIFTS-1] of Integer;
   PendNestRtnCount   : Integer;
   { Lambda-lift descriptors: a nested routine that captures enclosing state is
     given a mangled unique name; ParseSubroutine looks the name up here (both at

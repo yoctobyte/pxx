@@ -15885,6 +15885,17 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:21: error: undefined variable' \
 	   && test ! -e $(TESTTMP)/test_diagspec26 \
 	  || { echo "test_diag_in_specialized_body_names_the_template_file_fail: FAIL - rc=$$rc (want rc=1, line 21, in: test/units/ugenericbad.pas, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@out=$$(./$(COMPILER) test/test_diag_in_a_nested_routine_names_the_authors_file_fail.pas $(TESTTMP)/test_diagnest26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:9: error: undefined variable (UpperCase)' \
+	   && ! printf '%s\n' "$$out" | grep -q '  in: ' \
+	  || { echo "test_diag_in_a_nested_routine_names_the_authors_file_fail: FAIL - rc=$$rc (want rc=1, line 9, no in: line)"; printf '%s\n' "$$out"; exit 1; }
+	@out=$$(./$(COMPILER) test/test_diag_a_bodiless_routine_that_swallows_the_main_block_fail.pas $(TESTTMP)/test_diagbodiless26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:15: error: expected the main program.s begin, but this end. closes a routine.s body' \
+	  || { echo "test_diag_a_bodiless_routine_that_swallows_the_main_block_fail: FAIL - rc=$$rc (want rc=1, line 15, the swallowed-main-block message)"; printf '%s\n' "$$out"; exit 1; }
 	@# bug-p-the-delphi-generic-rewrite-rewrites-a-shadowing-declaration-as-a-use:
 	@# the mode-Delphi rewrite matched a generic DECLARATION whose name was
 	@# already registered as a template and spliced `specialize` in front of it,

@@ -2,7 +2,7 @@
 track: P
 prio: 40
 type: bug
-status: open
+status: done
 found: 2026-09-22
 found-by: frankb-8e
 blocked-by: []
@@ -93,3 +93,41 @@ Whether `function` has the same shape, whether a bodiless declaration inside a
 `cdecl`-imported routines take a different path that this must not disturb.
 Each is one probe; none was run, because the ticket is filed from the
 measurement that happened rather than from a survey.
+
+
+# Fixed 2026-11-19 (claude-dupwt): two causes, both fixed
+
+**Re-measured first.** The bodiless declaration is NOT accepted. A program whose
+swallowed routines contain no error fails at the final `.` (`expected 'begin'
+before '.'`), as fpc 3.2.2 does (`";" expected but "." found`). The misleading
+part was elsewhere, and it is independent of bodiless routines:
+
+**1. Any error inside a NESTED routine named the wrong file**, when the bad name
+existed somewhere in the RTL (UpperCase, LowerCase, IntToStr; `Nope` was fine).
+A well-formed `procedure A; procedure B; begin WriteLn(UpperCase('x')) end; ...`
+said `in: compiler/builtin/builtinheap.pas` plus the "appended to your program"
+note. PXXDBG=a.srcmap showed the token index was 22127 in a 30-token program:
+the nested-routine lift stashes the body and FlushPendingNestedProcs appends it
+after every builtin unit, where the token->file map names the last file lexed.
+Both stash sites (the lift, and parallel-for's worker) now record the routine's
+source (PasSrcRange key id and DWARF file id), and the flush plants both at the
+routine's new start. Checked: main file prints no `in:` line, a nested routine
+in a used unit still says `in: nu.pas`, and a -g build's line table is unchanged.
+
+**2. The `.` error now names the cause.** When the main block's `begin` is
+expected and the token is `.` right after `end`, the message reads `expected
+the main program's begin, but this end. closes a routine's body: a routine
+declared with no body (missing forward;, or a duplicated header) took the
+routines after it as nested ones and the main block as its own body`. That is
+the 2026-09-22 emit.inc slip described in plain words.
+
+Tests (both `_fail`, rc=1 plus the message):
+- test_diag_in_a_nested_routine_names_the_authors_file_fail (row
+  test_diagnest26): line 9, no `in:` line;
+- test_diag_a_bodiless_routine_that_swallows_the_main_block_fail (row
+  test_diagbodiless26): line 15, the new message.
+
+Not done: fpc's own wording (`Forward declaration not solved: A`). It needs the
+parser to know at `end.` which header had no body, which means tracking
+headers that were never completed. The new message gives the reader the same
+lead.

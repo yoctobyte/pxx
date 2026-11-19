@@ -300,6 +300,19 @@ begin
             ' src=', KeyStrs[srcKeyId], ' resumes=', destKeyId);
 end;
 
+{ PasSrcOfTok's key id rather than its string, -1 when no range covers t. }
+function PasSrcIdOfTok(t: Integer): Integer;
+var i: Integer;
+begin
+  PasSrcIdOfTok := -1;
+  for i := PasSrcRangeCount - 1 downto 0 do
+    if t >= PasSrcRangeStart[i] then
+    begin
+      PasSrcIdOfTok := PasSrcRangeId[i];
+      Exit;
+    end;
+end;
+
 function PasSrcOfTok(t: Integer): AnsiString;
 { The Pascal source a token came from, or '' when no range covers it (the main
   file before its first marker, and every token of a frontend that plants no

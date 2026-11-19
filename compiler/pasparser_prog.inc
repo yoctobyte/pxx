@@ -2919,6 +2919,18 @@ begin
   end
   else
   begin
+    { `end.` where the main block should start: the program's own block was
+      already eaten as a ROUTINE's body. The usual cause is a header with no
+      body (`procedure A;` without `forward;`, or a header an edit left behind):
+      what follows parses as A's nested routines, then the main block as A's
+      body. Say so, because `expected 'begin' before '.'` sends the reader to
+      the last line, and an error inside the swallowed routines can point at
+      a file the reader never wrote.
+      bug-p-a-bodiless-procedure-declaration-is-accepted-and-swallows-the-next-routine }
+    if (CurTok.Kind = tkDot) and (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkEnd) then
+      Error('expected the main program''s begin, but this end. closes a routine''s body: ' +
+            'a routine declared with no body (missing forward;, or a duplicated header) ' +
+            'took the routines after it as nested ones and the main block as its own body');
     Expect(tkBegin, 'begin');
     DbgMainBodyStart := CodeLen;   { -g: program-body code range → main subprogram }
     ParseBlock;
