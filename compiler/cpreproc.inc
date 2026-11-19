@@ -4416,6 +4416,14 @@ begin
   if (TargetPlatform = PLATFORM_ESP) and
      ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
     CPAddEspGccTypePredefs;
+  { The compiler writes vfork's body itself (EmitCVforkStub) on exactly this
+    condition -- the same one its two emission sites in cparser.inc test --
+    so crtl asks this macro rather than re-deriving it. It used to test
+    `__xtensa__ && __linux__`, and __linux__ is predefined on every target,
+    IDF included: crtl's system()/popen() called a vfork nobody wrote and
+    every C program on the S3 under IDF failed to link. bug-c-s3-idf-c-programs-fail-to-link-vfork }
+  if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
+    CPAddLiteral('__PXX_VFORK_STUB__', '1');
   if TargetPlatform = PLATFORM_POSIX then
   begin
     if TargetArch = TARGET_X86_64 then CPAddHostedGccTypePredefs64

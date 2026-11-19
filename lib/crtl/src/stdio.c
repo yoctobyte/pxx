@@ -1946,7 +1946,7 @@ FILE *popen(const char *command, const char *mode) {
 
   if (pipe(fds) != 0) return 0;
 
-#if defined(__xtensa__) && defined(__linux__)
+#if defined(__PXX_VFORK_STUB__)   /* bug-c-s3-idf-c-programs-fail-to-link-vfork */
   pid = vfork();   /* as system(): the child only dup2s, closes and execs */
 #else
   pid = fork();

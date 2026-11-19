@@ -430,7 +430,7 @@ pid_t fork(void) {
    child can no longer corrupt the parent's stack. The cost is that vfork's
    performance reason for existing is gone, which is a fair trade for a
    runtime that has no copy-on-write-free path to offer anyway. */
-#if !(defined(__xtensa__) && defined(__linux__))
+#if !defined(__PXX_VFORK_STUB__)   /* set exactly when the compiler emits vfork; bug-c-s3-idf-c-programs-fail-to-link-vfork */
 pid_t vfork(void) {
   return fork();
 }
