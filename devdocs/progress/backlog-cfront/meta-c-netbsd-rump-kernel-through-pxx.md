@@ -8,7 +8,7 @@ created: 2026-11-15
 found-by: pxx (Nilix seat) trial build at 4225bfacc1
 tags: [cfront, nilix, freestanding, inline-asm, link]
 blocked-by: []
-summary: "NetBSD's rump kernel (USB/xHCI/umass/if_wm, Nilix's route to real-hardware drivers) through pxx: 126/485 compiles, nothing links. The full gap list, with minimal gcc-accepted repros, is ~/nilix/docs/rump-pxx/README.md and repros/ (run.sh; PXX= picks the compiler). Lockstep: Nilix waits, and no workarounds go in Nilix. g25 (extern incomplete array, then defined, under --freestanding) is fixed by 1f87a71427; nothing else changed there."
+summary: "STATUS 2026-11-19 (rd): the summary below this line was stale. A librump built entirely by pxx LINKS AND BOOTS since ac091638d7 (2026-11-18, frank-user: 229/229 objects renamed and archived as NetBSD does, gcc's librumpuser, \"rump kernel init complete, rv 0\"); 487/488 compile at 7deee32b0f. Every repro in Rainyday docs/rump-pxx compiles and its silent-gap check matches gcc (re-measured 2026-11-19, below; s09 fixed in 7dade5d0b0). Open: the driver libraries Rainyday wants (usb/xhci/umass/if_wm) linked and attached from pxx objects, and .rodata for C const objects in x86-64 objects (s01). Original: 126/485 compiled, nothing linked."
 ---
 
 # NetBSD rump kernel through pxx
