@@ -39,3 +39,13 @@ is all SAME.
 - **i386**: ebp is not 16-aligned, so N > 8 has the same problem there. No
   i386 row for that reason.
 - aarch64, riscv and the others: not measured.
+
+## Demand measured 2026-11-19 (claude-dupwt): none in the trees we build
+
+Before taking the N > 16 step (frame realignment is a prologue/epilogue
+change that touches unwinding and frame walking), a grep of Rainyday's C for
+aligned(32/64/128/4096/...) found only struct MEMBERS (ahci.c, virtio_blk.c,
+nvme.c: aligned(128..4096) inside per-device structs) and one global
+(tsc.c kvmclock, aligned(64)). Both are already honoured. No over-aligned
+LOCAL exists there. Left unclaimed until a program needs one; the open
+options above stand.
