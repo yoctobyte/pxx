@@ -20880,6 +20880,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 --emit-obj test/c_weak_b.c $(TESTTMP)/c_weak386_b.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_weak386 $(TESTTMP)/c_weak386_a.o $(TESTTMP)/c_weak386_b.o
 	tools/expect_same.sh i386/c_weak386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_weak386)" "$$(cat test/c_weak_strong.expected)"
+	# ...and a weak DATA definition's value is .data bytes on i386 too, so a strong one elsewhere wins
+	./$(COMPILER) --target=i386 --emit-obj test/c_weak_data_a.c $(TESTTMP)/c_wkd386_a.o > /dev/null
+	./$(COMPILER) --target=i386 --emit-obj test/c_weak_data_b.c $(TESTTMP)/c_wkd386_b.o > /dev/null
+	tools/pxx_link_i386.sh -o $(TESTTMP)/c_wkd386 $(TESTTMP)/c_wkd386_a.o $(TESTTMP)/c_wkd386_b.o
+	tools/expect_same.sh i386/c_wkd386 "$$($(TESTTMP)/c_wkd386)" "1 1 40"
+	tools/pxx_link_i386.sh -o $(TESTTMP)/c_wkd386_a $(TESTTMP)/c_wkd386_a.o
+	tools/expect_same.sh i386/c_wkd386_a "$$($(TESTTMP)/c_wkd386_a)" "1 1 4"
 	./$(COMPILER) test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes26 > /dev/null
 	tools/expect_same.sh c_tbshapes26 "$$($(TESTTMP)/c_tbshapes26)" "$$(cat test/c_toybox_compiler_shapes.expected)"
 	./$(COMPILER) --target=i386 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_i386 > /dev/null

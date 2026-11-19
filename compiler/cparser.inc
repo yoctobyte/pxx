@@ -14668,9 +14668,11 @@ begin
       CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
     { a weak definition too: see the main declarator path below }
     if (CStaticDataMode or ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and
-                            (TargetArch = TARGET_X86_64))) and
+                            ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)))) and
        ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
-       ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
+       ((not declSawThread) or SymElfTls[idx]) and
+       ((TargetArch = TARGET_X86_64) or EspFreestandingObj or
+        ((TargetArch = TARGET_I386) and SymObjDataWeak[idx] and EmitObjMode)) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
@@ -15191,9 +15193,12 @@ begin
       is simply discarded with that copy.
       bug-c-weak-data-references-bind-locally-and-skip-the-got }
     if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64)) or
-        ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and (TargetArch = TARGET_X86_64))) and
+        ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and
+         ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)))) and
        ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
-       ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
+       ((not declSawThread) or SymElfTls[idx]) and
+       ((TargetArch = TARGET_X86_64) or EspFreestandingObj or
+        ((TargetArch = TARGET_I386) and SymObjDataWeak[idx] and EmitObjMode)) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and

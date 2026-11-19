@@ -8591,9 +8591,16 @@ begin
     one decision taken in ObjPlanHostedSymbols. If only one writer emitted them
     the counts that writer returns would no longer describe the table it wrote,
     which is exactly the truncated object this loop was added to fix. }
+  { a variable CPlaceGlobalInData moved to .data (a weak definition's baked
+    initialiser) carries a TAGGED offset: its value is the .data part and its
+    section is .data (3), not .bss (5) -- written raw it was a .bss symbol at
+    0x200006c8 and the program segfaulted. bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
+      if SymOffIsData(Syms[i].Offset) then
+        writeSym32(f, ObjDataStrOff[i], SymOffDataPart(Syms[i].Offset), SymAllocSize[i], $01, 3)
+      else
+        writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
   { The arm32 GOT-slot locals, LAST in the local half and therefore immediately
     before firstGlobal. $01 = STB_LOCAL | STT_OBJECT; shndx 3 is .data; the
     slot is 8 bytes wide because the .data layout is shared with the 64-bit
@@ -8623,7 +8630,10 @@ begin
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), Byte(ObjProcBind(i) or 2), 1);
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
+      if SymOffIsData(Syms[i].Offset) then
+        writeSym32(f, ObjDataStrOff[i], SymOffDataPart(Syms[i].Offset), SymAllocSize[i], ObjDataExportInfo(i), 3)
+      else
+        writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   for i := 0 to SymCount-1 do

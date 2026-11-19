@@ -5194,6 +5194,10 @@ begin
     Exit;
   end;
   pos := SymOffDataPart(Syms[sym].Offset) + Integer(off);
+  { the i386 object writer has no baked-address relocations (CDataReloc), so
+    a weak definition's ADDRESS initialiser stays a start-up store there; only
+    plain values are baked. bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object }
+  if (tk = tyPointer) and (not CStaticDataMode) and (TargetArch <> TARGET_X86_64) then Exit;
   if (tk = tyPointer) and (bitW = 0) and
      CBakeAddrValue(value, kind, rtarget, addend) then
   begin
