@@ -5,7 +5,7 @@ prio: 20
 type: feature
 blocked-by: []
 summary: "Umbrella for Nilix, the owner's x86-64 kernel (githome:nilix, kept off GitHub): `make TOOLCHAIN=pxx test` in nilix/kernel must print `nilix: PASS (pxx)` from the same sources gcc builds. The inline asm and --emit-obj --freestanding parts are done, and so are va_arg under --freestanding and fs/procfs.c's parse error. File-scope initialisers are now .data (item 1), and all 30 kernel C files compile under --emit-obj --freestanding. `--link --freestanding -e start32` links an image that boots to user space (item 4; boot.S/entry.S still assembled by gas). Still open: (5) the .S (GAS) frontend; (6) an extern array declaration reserves .bss in every object."
-status: open
+status: done
 owner: unassigned
 ---
 
@@ -126,3 +126,13 @@ passing. The kernel Makefile's pxx lines are the assumed command lines:
    wrong behaviour.
 
 Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).
+
+## Done 2026-11-19
+
+The acceptance has held since 2026-11-13: the kernel builds with pxx alone
+and passes `make test`, test-sh, the unit tests (51/51, also with -smp 4)
+and screentest (measured again on 2026-11-18 at Rainyday d0d6fff with
+latest). The esp32s3 profile builds with pxx too and boots in QEMU. Item 7
+moved to feature-c-freestanding-vla-frame-slots-and-sse-refusal.
+
+Nilix is named Rainyday since 2026-11-18 (githome:rainyday).

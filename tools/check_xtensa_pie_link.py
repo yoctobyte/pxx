@@ -7,7 +7,9 @@ R_XTENSA_RELATIVE dynamic relocations, and an R+X PT_LOAD that holds .text
 alone. Before the object carried .xt.lit, ld refused every literal with
 "dynamic relocation in read-only section". Also: the linked .text equals the
 object's except at the relocated words (ld relaxed nothing), and every
-pointer in data is word-aligned. Exits 0, saying
+pointer in data is word-aligned. And a C program with main()
+(test/c_xtensa_pie_main.c, crtl included) links with `-e app_main` to the
+same shape (feature-xtensa-gibux-user-programs-as-et-dyn-pie). Exits 0, saying
 so, without the xtensa binutils (~/.espressif).
 usage: tools/check_xtensa_pie_link.py <compiler> <tmpdir>
 feature-xtensa-objects-carry-a-literal-table
@@ -34,6 +36,35 @@ def unaligned_data_relocs(readelf, obj):
         if m and sec and 'text' not in sec and 'xt.lit' not in sec and int(m.group(1), 16) % 4:
             bad.append('%s+0x%x' % (sec, int(m.group(1), 16)))
     return bad
+
+
+def pie_shape(b, elf):
+    """None when elf is ET_DYN, has no PT_INTERP and only RELATIVE relocations;
+    else what is wrong"""
+    hl = subprocess.run([b + 'readelf', '-hlW', elf], capture_output=True, text=True).stdout
+    if 'DYN (' not in hl:
+        return 'not ET_DYN'
+    if 'INTERP' in hl:
+        return 'has PT_INTERP'
+    rel = subprocess.run([b + 'readelf', '-rW', elf], capture_output=True, text=True).stdout
+    types = set(re.findall(r'\b(R_XTENSA_\w+)', rel))
+    if types != {'R_XTENSA_RELATIVE'}:
+        return 'relocation types %s' % sorted(types)
+    return None
+
+
+def main_program(cc, b, tmp):
+    obj = os.path.join(tmp, 'c_xt_pie_main.o')
+    elf = os.path.join(tmp, 'c_xt_pie_main.elf')
+    subprocess.run([cc, '--target=xtensa', '--platform=posix', '--xtensa-soft-mulhigh',
+                    '--xtensa-abi=windowed', '--no-ro-data', '--emit-obj',
+                    'test/c_xtensa_pie_main.c', obj], check=True, stdout=subprocess.DEVNULL)
+    r = subprocess.run([b + 'ld', '-pie', '--no-dynamic-linker', '-e', 'app_main',
+                        '-T', 'test/xtensa_pie_prog.ld', obj, '-o', elf],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return 'ld: ' + (r.stderr.strip().splitlines() or ['?'])[0]
+    return pie_shape(b, elf)
 
 
 def main():
@@ -93,6 +124,10 @@ def main():
     diff = sum(1 for i in range(0, len(a), 4) if a[i:i + 4] != e[i:i + 4])
     if len(a) != len(e) or diff > nrel:
         print('check_xtensa_pie_link: FAIL, ld changed .text (%d vs %d bytes, %d words)' % (len(a), len(e), diff))
+        return 1
+    why = main_program(cc, b, tmp)
+    if why:
+        print('check_xtensa_pie_link: FAIL, the main() program: ' + why)
         return 1
     print('check_xtensa_pie_link: OK')
     return 0

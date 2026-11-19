@@ -5,7 +5,7 @@ prio: 60
 type: feature
 blocked-by: []
 summary: "pxx should build Nilix user programs on ESP32-S3. The shape is a 32-bit ET_DYN with no PT_INTERP and only R_XTENSA_RELATIVE relocations, using Linux xtensa syscalls (number in a2, arguments in a6 a3 a4 a5 a8 a9). It needs separate PT_LOADs: .text+.literal (with the ELF and program headers) in R E, everything else in RW, because the S3 runs SRAM through an instruction-bus alias that allows aligned 32-bit loads only. The gcc reference is ~/nilix/tests/xtensa/prog.ld with -fPIE -pie --no-dynamic-linker -nostdlib. The GNU ld route WORKS since feature-xtensa-objects-carry-a-literal-table (2026-11-17): --emit-obj --no-ro-data, then ld -pie --no-dynamic-linker -T prog.ld. Left: a C entry that hands argc/argv/environ to main(), and a first run on Nilix."
-status: open
+status: done
 owner: unassigned
 ---
 
@@ -45,3 +45,22 @@ Left:
 - **pxx writing the ET_DYN itself** (no GNU ld). Optional now.
 
 Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).
+
+## Done 2026-11-19
+
+- The C entry for main() exists: a windowed posix object's app_main is a
+  process entry (feature-xtensa-posix-objects-get-a-process-entry). It reads
+  argc/argv/envp from the initial stack, sets environ, runs the
+  initializers and calls main.
+- Run on Rainyday (QEMU, Rainyday 5115b9b, gcc esp32s3 kernel): a pxx-built
+  main() program (printf, malloc, environ, vfork/execve/waitpid), linked
+  with `ld -pie --no-dynamic-linker -e app_main -T tests/xtensa/prog.ld`,
+  prints argv/environ correctly in parent and exec'd child and PMAIN-OK.
+  pxx-built BusyBox runs there too (Rainyday tools/esp32-exec.sh).
+- Test: test/c_xtensa_pie_main.c in tools/check_xtensa_pie_link.py, which
+  links it with `-e app_main` and checks ET_DYN, no PT_INTERP and only
+  R_XTENSA_RELATIVE. Its non-PIE control fails as it should.
+- Not done, optional: pxx writing the ET_DYN itself without GNU ld. That is
+  in rainy-day/feature-xtensa-pxx-links-rainyday-pie-programs-itself.
+
+Nilix is named Rainyday since 2026-11-18 (githome:rainyday).
