@@ -3728,86 +3728,6 @@ begin
     WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
 end;
 
-procedure ObjBssCensus;
-{ PXXDBG=a.datamap: .bss attributed. The DATA segment already had a breakdown;
-  .bss was one lump, and on an ESP image it is most of the SRAM. Named rows are
-  the variables (Syms) whose slot is in .bss, largest first; the space no
-  symbol covers is reported as GAPS with their offsets, because the runtime's
-  own blocks (the TLS block, heap tables, I/O buffers) are allocated by bumping
-  BSSSize directly and have no symbol -- a gap's offset is what finds its
-  allocating site. Measurement only; nothing is moved.
-  feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
-const TOPN = 40;
-var n, i, j, t, covered, cur, gapN, gapB: Integer;
-    idx: array of Integer;
-    gapS, gapE: array of Integer;
-begin
-  n := 0;
-  SetLength(idx, SymCount);
-  for i := 0 to SymCount - 1 do
-    if (Syms[i].Kind = skGlobal) and (not SymOffIsData(Syms[i].Offset)) and
-       (Syms[i].Offset >= 0) and (Syms[i].Offset < BSSSize) and
-       (i < Length(SymAllocSize)) and (SymAllocSize[i] > 0) then
-    begin
-      idx[n] := i;
-      Inc(n);
-    end;
-  { by offset, to find what no symbol covers }
-  for i := 1 to n - 1 do
-  begin
-    t := idx[i]; j := i;
-    while (j > 0) and (Syms[idx[j - 1]].Offset > Syms[t].Offset) do
-    begin idx[j] := idx[j - 1]; Dec(j); end;
-    idx[j] := t;
-  end;
-  covered := 0; cur := 0; gapN := 0; gapB := 0;
-  SetLength(gapS, n + 1); SetLength(gapE, n + 1);
-  for i := 0 to n - 1 do
-  begin
-    if Syms[idx[i]].Offset > cur + 15 then
-    begin
-      gapS[gapN] := cur; gapE[gapN] := Syms[idx[i]].Offset; Inc(gapN);
-      gapB := gapB + Syms[idx[i]].Offset - cur;
-    end;
-    if Syms[idx[i]].Offset + SymAllocSize[idx[i]] > cur then
-    begin
-      if Syms[idx[i]].Offset >= cur then covered := covered + SymAllocSize[idx[i]]
-      else covered := covered + Syms[idx[i]].Offset + SymAllocSize[idx[i]] - cur;
-      cur := Syms[idx[i]].Offset + SymAllocSize[idx[i]];
-    end;
-  end;
-  if BSSSize > cur + 15 then
-  begin
-    gapS[gapN] := cur; gapE[gapN] := BSSSize; Inc(gapN);
-    gapB := gapB + BSSSize - cur;
-  end;
-  WriteLn('PXXDBG a.datamap .bss ', BSSSize, 'B: named ', covered, 'B in ', n,
-          ' variables, unnamed ', gapB, 'B in ', gapN, ' gaps');
-  { largest named first }
-  for i := 1 to n - 1 do
-  begin
-    t := idx[i]; j := i;
-    while (j > 0) and (SymAllocSize[idx[j - 1]] < SymAllocSize[t]) do
-    begin idx[j] := idx[j - 1]; Dec(j); end;
-    idx[j] := t;
-  end;
-  for i := 0 to n - 1 do
-    if i < TOPN then
-      WriteLn('PXXDBG a.datamap   bss var ', SymAllocSize[idx[i]]:8, 'B @', Syms[idx[i]].Offset, ' ',
-              Syms[idx[i]].Name);
-  { largest gaps first }
-  for i := 1 to gapN - 1 do
-  begin
-    t := gapS[i]; cur := gapE[i]; j := i;
-    while (j > 0) and (gapE[j - 1] - gapS[j - 1] < cur - t) do
-    begin gapS[j] := gapS[j - 1]; gapE[j] := gapE[j - 1]; Dec(j); end;
-    gapS[j] := t; gapE[j] := cur;
-  end;
-  for i := 0 to gapN - 1 do
-    if i < TOPN then
-      WriteLn('PXXDBG a.datamap   bss gap ', gapE[i] - gapS[i]:8, 'B @', gapS[i], '..', gapE[i]);
-end;
-
 procedure ObjRoPrepare;
 var i, p, t: Integer;
 begin
@@ -3815,7 +3735,6 @@ begin
   ObjRoAdoptDeadTypedConsts;
   ObjRoKeepIramLiteralsWritable;
   ObjRoDropDeadStrings;
-  if PxxDbgEnabled('a.datamap') then ObjBssCensus;
   RoLayoutPrepare(True, 0);
   if not RoSplitActive then Exit;
   for i := 0 to DataRelFixCount-1 do

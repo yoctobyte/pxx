@@ -80,9 +80,11 @@ size second.
 
 ## 2026-11-19 (claude-dupwt): step 1 done, the population is measured
 
-`PXXDBG=a.datamap` now attributes .bss (ObjBssCensus in elfwriter.inc):
-the named variables largest first, and the space no symbol covers as gaps
-with offsets. NilPy print demo, `--target=riscv32 --platform=esp
+`PXXDBG=a.datamap` ALREADY attributed .bss per named global (c6c5f5f1be,
+2026-09-20, in compiler.pas: `bss=...B named globals ...`); this ticket's
+"one lump" text predated it. I added a second census (ObjBssCensus,
+46d93a872d) before noticing, and removed it the same day: it only added gap
+offsets, and the unnamed remainder is 183 B. NilPy print demo, `--target=riscv32 --platform=esp
 --no-signals`, object only (no --dce), master at 2026-11-19:
 
 ```
