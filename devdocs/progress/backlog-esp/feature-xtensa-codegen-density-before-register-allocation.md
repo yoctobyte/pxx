@@ -52,6 +52,23 @@ c-testsuite 220/220 on x86-64 and on hosted xtensa call0, both as latest;
 tools/check_xtensa_density.py (new, test-core): test/c_density_branch_incdec.c
 against gcc on call0 and windowed, and the loop at most 45 instructions.
 
-Still open, cheap next steps before step 4: `jump_if_false L; jump M; L:`
-(the C for/while shape) as one inverted branch; beqz/bnez/bxxi forms for a
-zero or small-constant right side; the same three steps on riscv32.
+## Follow-ups done (2026-11-19, same seat)
+
+- xtensa: `jump_if_false L; jump M; L:` (every C loop head) is one inverted
+  branch over `j M` (XtJumpThenLabel); a jump to the very next instruction
+  (an `if` without `else`) is not emitted (XtLabelFollows); against the
+  constant 0 the BRI12 forms beqz/bnez/bltz/bgez (EncodeXtensaBZ), and a
+  plain truth test is bnez instead of movi + bne.
+- riscv32: steps 1 and 3 were already there (leaf operands through
+  LeafLoadSymFoldsRISCV32; ++ now through the shared IR). Step 2 existed as
+  Rv32EmitCmpBranch but missed the C front end's `c == 0` / `c != 0`
+  wrapper and materialised c with slt; it now folds (Rv32EmitCmpBranchOn).
+  The ticket's loop: 48 -> 47 on esp32c3.
+- Measured: loop f 41 -> 40 on xtensa; Rainyday S3 kernel .text 1,091,557
+  -> 1,067,424 (-20.6% against the 1,344,586 of the start); boots in QEMU.
+  make test-xtensa and test-riscv32 green; c-testsuite 220/220 on hosted
+  xtensa and riscv32, as latest.
+
+Still open before step 4: a forward conditional branch straight to its
+label when it reaches (needs relaxation like J's); bxxi for small
+constants; the riscv32 C3 kernel measured.

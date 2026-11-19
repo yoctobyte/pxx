@@ -6807,6 +6807,37 @@ begin
   Result := True;
 end;
 
+{ A pending branch is (br, bs, bt): br < 100 an RRI8 bxx with that r field
+  on bs, bt; br >= 100 the BRI12 compare-with-zero form m = br - 100
+  (EncodeXtensaBZ) on bs. Each has its negation one bit away. }
+function XtNegBr(br: Integer): Integer;
+begin
+  if br >= 100 then Result := 100 + ((br - 100) xor 1)
+  else Result := br xor 8;
+end;
+
+function XtEncodeBr(br, bs, bt, offset: Integer): Integer;
+begin
+  if br >= 100 then Result := EncodeXtensaBZ(br - 100, bs, offset)
+  else Result := EncodeXtensaBranch(br, bs, bt, offset);
+end;
+
+procedure XtPatchBr(pos, br, bs, bt: Integer);
+{ the pending branch at pos skips everything emitted since }
+begin
+  Patch24(pos, XtEncodeBr(br, bs, bt, CodeLen - pos));
+end;
+
+procedure XtEmitBr(br, bs, bt: Integer; var pos: Integer);
+var v: Integer;
+begin
+  pos := CodeLen;
+  v := XtEncodeBr(br, bs, bt, 6);                       { patched by the caller }
+  EmitB(v and $FF);
+  EmitB((v shr 8) and $FF);
+  EmitB((v shr 16) and $FF);
+end;
+
 procedure XtEmitBranchIfTrue(n: Integer; var pos, br, bs, bt: Integer);
 { Emit n's operands (a2 = left, a3 = right) and a branch, taken when the
   comparison n holds, to a target not yet known: its position in pos, its r
@@ -6825,13 +6856,27 @@ begin
     XtEmitBranchIfTrue(left, pos, br, bs, bt);
     if op = Ord(tkEq) then
     begin
-      br := br xor 8;
-      v := EncodeXtensaBranch(br, bs, bt, 6);
-      Patch24(pos, v);
+      br := XtNegBr(br);
+      Patch24(pos, XtEncodeBr(br, bs, bt, 6));
     end;
     Exit;
   end;
   IREmitNodeXtensa(left);
+  uns := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+  { against the constant 0, signed (or = / <>): beqz / bnez / bltz / bgez on
+    a2, no right operand at all }
+  if (IRKind[right] = IR_CONST_INT) and XtLeafOperand(right) and (Low32(IRIVal[right]) = 0) and
+     ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or
+      (not uns and ((op = Ord(tkLt)) or (op = Ord(tkGe))))) then
+  begin
+    bs := reg_xtensa_a2; bt := 0;
+    if op = Ord(tkEq) then br := 100
+    else if op = Ord(tkNeq) then br := 101
+    else if op = Ord(tkLt) then br := 102
+    else br := 103;
+    XtEmitBr(br, bs, bt, pos);
+    Exit;
+  end;
   if XtLeafOperand(right) then
     EmitLeafXtensa(reg_xtensa_a3, right)
   else
@@ -6841,7 +6886,6 @@ begin
     xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
     XtensaPopA2;
   end;
-  uns := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
   bs := reg_xtensa_a2; bt := reg_xtensa_a3;
   if op = Ord(tkEq) then br := 1
   else if op = Ord(tkNeq) then br := 9
@@ -6855,11 +6899,44 @@ begin
     if (op = Ord(tkLt)) or (op = Ord(tkGt)) then br := 2 else br := 10;
     if uns then Inc(br);
   end;
-  pos := CodeLen;
-  v := EncodeXtensaBranch(br, bs, bt, 6);               { patched by the caller }
-  EmitB(v and $FF);
-  EmitB((v shr 8) and $FF);
-  EmitB((v shr 16) and $FF);
+  XtEmitBr(br, bs, bt, pos);
+end;
+
+function XtLabelFollows(j, lblId: Integer): Boolean;
+{ Label lblId comes right after node j, across nodes that emit nothing at
+  statement level: a jump at j to it is a jump to the next instruction. }
+var k: Integer;
+begin
+  { other labels in between emit nothing either: they mark the same address }
+  Result := False;
+  k := j + 1;
+  while k < IRCount do
+  begin
+    if IRKind[k] = IR_LABEL then
+    begin
+      if Integer(IRIVal[k]) = lblId then begin Result := True; Exit; end;
+    end
+    else if not (((IRKind[k] = IR_NOP) or (IRKind[k] = IR_CONST_INT) or
+                  (IRKind[k] = IR_LOAD_SYM) or (IRKind[k] = IR_BLOCK)) and
+                 not IRKindIsStatement(IRKind[k])) then
+      Exit;
+    Inc(k);
+  end;
+end;
+
+function XtJumpThenLabel(i, lblId: Integer): Integer;
+{ The shape every C loop and `if` takes: `jump_if_false L` at i, then
+  `jump M`, then -- across nodes that emit nothing at statement level --
+  `L:`. Returns the jump's index, or -1. The caller branches on the INVERTED
+  condition over one `j M` and the jump is not emitted again: two
+  instructions where there were three, and one taken branch fewer.
+  feature-xtensa-codegen-density-before-register-allocation }
+var j: Integer;
+begin
+  Result := -1;
+  j := i + 1;
+  if (j >= IRCount) or (IRKind[j] <> IR_JUMP) then Exit;
+  if XtLabelFollows(j, lblId) then Result := j;
 end;
 
 procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
@@ -6892,7 +6969,7 @@ procedure IREmitMachineCodeXtensa;
   touches the data section at all, and LibcSyscallCallCount is x86-64 only.
   Anything added to this backend that appends to a NEW table must be saved here
   too, or the discarded pass leaves relocations pointing into overwritten code. }
-var i, lblId, pos, f, procIdx, skipPos, si, sz, br, bs, bt: Integer;
+var i, lblId, pos, f, procIdx, skipPos, si, sz, br, bs, bt, skipJumpAt: Integer;
     LabelFixupCount: Integer;
     fpChosen: Integer;
     saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
@@ -7027,6 +7104,7 @@ begin
     xtensa_s32i(reg_xtensa_sp, reg_xtensa_a8, 0);
   end;
 
+  skipJumpAt := -1;
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
@@ -7038,7 +7116,10 @@ begin
         end;
 
       IR_JUMP:
-        EmitXtensaJumpToLabel(IRA[i], LabelFixupCount);
+        { not the jump a fused branch already took, and not a jump to the
+          very next instruction (an `if` without `else` ends in one) }
+        if (i <> skipJumpAt) and not XtLabelFollows(i, IRA[i]) then
+          EmitXtensaJumpToLabel(IRA[i], LabelFixupCount);
 
       IR_JUMP_IF_FALSE:
         begin
@@ -7052,8 +7133,18 @@ begin
           begin
             { density step 2: the comparison's own bxx skips the J }
             XtEmitBranchIfTrue(IRB[i], skipPos, br, bs, bt);
-            EmitXtensaJumpToLabel(lblId, LabelFixupCount);
-            XtensaPatchSkipOver(skipPos, br, bs, bt);
+            skipJumpAt := XtJumpThenLabel(i, lblId);
+            if skipJumpAt >= 0 then
+            begin
+              { false falls through to L; true takes the jump to M }
+              EmitXtensaJumpToLabel(IRA[skipJumpAt], LabelFixupCount);
+              XtPatchBr(skipPos, XtNegBr(br), bs, bt);
+            end
+            else
+            begin
+              EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+              XtPatchBr(skipPos, br, bs, bt);
+            end;
           end
           else
           begin
@@ -7066,11 +7157,9 @@ begin
             IREmitNodeXtensa(IRB[i]);
           { Conditional branch range is only +-127 bytes, so branch over an
             18-bit J: if cond <> 0 skip the J, else J label. }
-          xtensa_movi(reg_xtensa_a4, 0);
-          skipPos := CodeLen;
-          xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);      { patched below }
+          XtEmitBr(101, reg_xtensa_a2, 0, skipPos);         { bnez, patched below }
           EmitXtensaJumpToLabel(lblId, LabelFixupCount);
-          XtensaPatchSkipOver(skipPos, 9, reg_xtensa_a2, reg_xtensa_a4);
+          XtPatchBr(skipPos, 101, reg_xtensa_a2, 0);
           end;
         end;
 

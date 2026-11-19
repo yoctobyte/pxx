@@ -853,6 +853,14 @@ begin
   Result := (((offset - 4) and $FFF) shl 12) or (s shl 8) or $16;
 end;
 
+function EncodeXtensaBZ(m, s, offset: Integer): Integer;
+{ The BRI12 compare-with-zero family EncodeXtensaBEQZ documents, m selecting
+  BEQZ(0) / BNEZ(1) / BLTZ(2) / BGEZ(3); m = 0 is exactly EncodeXtensaBEQZ. }
+begin
+  XtensaRelCheck(offset - 4, -2048, 2047, 'bxxz');
+  Result := (((offset - 4) and $FFF) shl 12) or (s shl 8) or (m shl 6) or $16;
+end;
+
 procedure xtensa_bne(s, t, offset: Integer);
 var val: Integer;
 begin

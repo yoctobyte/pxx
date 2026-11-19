@@ -6498,13 +6498,23 @@ begin
   Rv32PendBrCount := n;
 end;
 
-procedure Rv32EmitCmpBranch(node, lblId: Integer; var fixCount: Integer);
+procedure Rv32EmitCmpBranchOn(node, lblId: Integer; var fixCount: Integer; whenTrue: Boolean);
 { left -> a0, right -> a1 (or x0 for a literal 0), then ONE branch to the
-  label, taken when the comparison is FALSE (Rv32BranchToLabel). Operands as
-  the generic binop arm evaluates them. }
+  label, taken when the comparison is FALSE -- or TRUE, with whenTrue
+  (Rv32BranchToLabel). Operands as the generic binop arm evaluates them.
+  `c == 0` / `c != 0` of a plain comparison c -- how the C front end spells
+  every condition -- is c's own branch, the opposite way for `== 0`; before,
+  c was materialised (slt) and tested again.
+  feature-xtensa-codegen-density-before-register-allocation (riscv32) }
 var left, right, op, rs2, f3: Integer; sgn: Boolean;
 begin
   left := IRA[node]; right := IRB[node]; op := IRC[node];
+  if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and Rv32IsZeroConst(right) and
+     Rv32PlainCmp32(left) then
+  begin
+    Rv32EmitCmpBranchOn(left, lblId, fixCount, whenTrue xor (op = Ord(tkEq)));
+    Exit;
+  end;
   IREmitNodeRISCV32(left);
   rs2 := reg_a1;
   if Rv32IsZeroConst(right) then
@@ -6531,10 +6541,16 @@ begin
   else if (op = Ord(tkLt)) or (op = Ord(tkLe)) then f3 := 5
   else f3 := 4;                        { tkGe, tkGt }
   if not sgn and (f3 >= 4) then f3 := f3 + 2;
+  if whenTrue then f3 := f3 xor 1;     { beq/bne, blt/bge, bltu/bgeu }
   if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
     Rv32BranchToLabel(f3 xor 1, rs2, reg_a0, lblId, fixCount)
   else
     Rv32BranchToLabel(f3, reg_a0, rs2, lblId, fixCount);
+end;
+
+procedure Rv32EmitCmpBranch(node, lblId: Integer; var fixCount: Integer);
+begin
+  Rv32EmitCmpBranchOn(node, lblId, fixCount, False);
 end;
 
 
