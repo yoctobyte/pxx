@@ -3,7 +3,8 @@ slug: bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it
 track: A
 prio: 30
 type: bug
-status: open
+status: done
+owner: claude-dupwt
 blocked-by: []
 created: 2026-09-05
 found-by: frankS (closing bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-open-nothing)
@@ -81,3 +82,9 @@ New test test_sysopen_shortstring_param_paths.pas covers a local, a string[N],
 a value and a var parameter, and a missing file. Its row runs all five cross
 targets against x86-64. The three refusal rows became run rows against
 x86-64. All 8 cross runs match; gate quick passes.
+
+**Correction to 2092d9436f's title ("all seven targets"): SIX are measured.**
+wasm32 is still unmeasured. Under tools/run_target.sh wasm32 the sandbox
+exposes no /etc, so even an AnsiString SysOpen('/etc/passwd') returns -2
+(ENOENT); the test cannot tell a wrong path from an invisible one there.
+Measuring it needs a path inside a preopened directory.
