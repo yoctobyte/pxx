@@ -22026,6 +22026,19 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj test/c_struct_return_across_objects_use.c $(TESTTMP)/csret_x_use.o > /dev/null
 	./$(COMPILER) --link -o $(TESTTMP)/csret_x $(TESTTMP)/csret_x_def.o $(TESTTMP)/csret_x_use.o > /dev/null
 	tools/expect_same.sh csret_x "$$($(TESTTMP)/csret_x)" "$$(printf 'var 5 1\narg 5\nbig 7 14 21 28\nfield 12')"
+	@# SysV struct returns against gcc, all four link directions. Before
+	@# ABIX64SysVRet, pxx->gcc and gcc->pxx both segfaulted (r10 vs SysV).
+	@# bug-c-a-struct-returned-by-value-across-a-gcc-object-boundary-crashes
+	@d=$(TESTTMP)/csret_sysv; mkdir -p $$d && \
+	  gcc -w -c test/c_struct_return_sysv_callee.c -o $$d/cg.o && \
+	  gcc -w -c test/c_struct_return_sysv_caller.c -o $$d/mg.o && \
+	  ./$(COMPILER) --emit-obj test/c_struct_return_sysv_callee.c $$d/cp.o >/dev/null && \
+	  ./$(COMPILER) --emit-obj test/c_struct_return_sysv_caller.c $$d/mp.o >/dev/null && \
+	  gcc $$d/mg.o $$d/cg.o -o $$d/gg && gcc $$d/mp.o $$d/cg.o -o $$d/pg && \
+	  gcc $$d/mg.o $$d/cp.o -o $$d/gp && gcc $$d/mp.o $$d/cp.o -o $$d/pp && \
+	  tools/expect_same.sh csret_sysv_pxx_to_gcc "$$($$d/pg)" "$$($$d/gg)" && \
+	  tools/expect_same.sh csret_sysv_gcc_to_pxx "$$($$d/gp)" "$$($$d/gg)" && \
+	  tools/expect_same.sh csret_sysv_pxx_to_pxx "$$($$d/pp)" "$$($$d/gg)"
 	./$(COMPILER) test/cstatic_two_modules_distinct.c $(TESTTMP)/cstatic_distinct26 > $(TESTTMP)/cstatic_distinct.log 2>&1
 	tools/expect_same.sh cstatic_distinct.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_distinct.log)" "0"
 	tools/expect_same.sh cstatic_distinct26 "$$($(TESTTMP)/cstatic_distinct26)" "$$(printf '1 1\n2 2\n3 1\n4 2\n5 1')"

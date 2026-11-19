@@ -10406,3 +10406,13 @@ var
     and not the program again. MainProgramTokCount is its upper bound and is
     likewise re-pointed for the module. }
   PyScanLo: Integer;
+
+const
+  { SysV x86-64 eightbyte classes (psABI 3.2.3), answered by abi.inc's
+    classifier and read by the record-return epilogue in symtab.inc. Here
+    rather than in abi.inc because the FPC seed build is single-pass and
+    symtab.inc is included first. }
+  SYSV_CLS_NONE    = 0;
+  SYSV_CLS_INTEGER = 1;
+  SYSV_CLS_SSE     = 2;
+  SYSV_CLS_MEMORY  = 3;

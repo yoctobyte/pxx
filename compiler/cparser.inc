@@ -20251,6 +20251,10 @@ begin
     ProcRetPtrElemDims[procIdx * MAX_ARR_DIMS + retPaK] := retPaDims[retPaK];
   if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
+  { A SysV MEMORY-class result takes rdi before any named argument, so a
+    variadic function's va_start must count it as a used GP register. }
+  if wasNewProc and isVariadic and (ABIX64SysVRet(procIdx, retPaK, gli) = 0) then
+    Inc(ProcNamedGP[procIdx]);
 
   { If it is just a declaration (ends with ';'), we are done! An asm label in
     the tail (`int foo(int) __asm("bar");`, NetBSD's __RENAME) renames the

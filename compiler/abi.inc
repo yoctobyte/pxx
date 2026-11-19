@@ -161,11 +161,8 @@ end;
   the 32-bit targets another again; asking here on those returns -1 so a caller
   that forgets to check the target refuses instead of applying the wrong ABI.
   --------------------------------------------------------------------------- }
-const
-  SYSV_CLS_NONE    = 0;
-  SYSV_CLS_INTEGER = 1;
-  SYSV_CLS_SSE     = 2;
-  SYSV_CLS_MEMORY  = 3;
+{ SYSV_CLS_NONE/INTEGER/SSE/MEMORY live in defs.inc: symtab.inc's epilogue
+  reads them too, and the FPC seed build is single-pass. }
 
 { psABI 3.2.3 step 4's merge, minus the X87 rows we refuse before reaching. }
 function ABISysVMergeCls(a, b: Integer): Integer;
@@ -475,6 +472,38 @@ begin
   if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
   ABIRetViaHiddenDestProc := RetViaHiddenDest(Procs[procIdx].RetType) or
                              (ProcRetFixedArrBytes[procIdx] > 0);
+end;
+
+{ How does a C-ABI routine return its RECORD on x86-64? SysV's answer, asked
+  by BOTH sides so they agree by construction:
+    -1  not a SysV-classified return: pxx's own convention (hidden destination
+        in r10, filled by the epilogue, returned in rax). Every non-C routine,
+        every other target, --os=nt (its adapter has its own rule), and any
+        record the classifier refuses or that carries managed fields.
+     0  MEMORY (> 16 bytes, or a MEMORY-class field): the caller's destination
+        is the hidden FIRST integer argument, rdi, every integer argument
+        shifts by one, and the callee answers it in rax.
+   1/2  that many eightbytes, returned in registers: INTEGER ones in rax then
+        rdx, SSE ones in xmm0 then xmm1. No destination crosses the call.
+  Before this a C struct return used pxx's r10 convention against gcc in both
+  directions, and every one crashed: the caller copied from rax, which held
+  the struct's VALUE, as if it were an address.
+  bug-c-a-struct-returned-by-value-across-a-gcc-object-boundary-crashes }
+function ABIX64SysVRet(procIdx: Integer; var cls0, cls1: Integer): Integer;
+var r: Integer;
+begin
+  ABIX64SysVRet := -1;
+  cls0 := SYSV_CLS_NONE; cls1 := SYSV_CLS_NONE;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if TargetKernel = KERNEL_WINDOWS then Exit;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  if not ProcCdecl[procIdx] then Exit;
+  if Procs[procIdx].RetType <> tyRecord then Exit;
+  if ProcRetFixedArrBytes[procIdx] > 0 then Exit;
+  r := ProcRetRecId[procIdx];
+  if r < REC_UCLASS_BASE then Exit;
+  if RecordHasManagedFields(r) then Exit;
+  ABIX64SysVRet := ABISysVRecordEightbytes(r, cls0, cls1);
 end;
 
 

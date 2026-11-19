@@ -17451,13 +17451,15 @@ begin
     Error('compiler error: EmitZeroFrameSlot: unhandled target');
 end;
 
+function ABIX64SysVRet(procIdx: Integer; var cls0, cls1: Integer): Integer; forward;
+
 { Stash the caller's hidden aggregate-result destination pointer (passed in the
   per-target indirect-result register) into the proc's dest-sym frame slot, right
   after the prologue and before the param-copy loop can clobber that register.
   Shared by the Pascal (pasparser_*.inc) and C (cparser.inc) routine emitters so an
   aggregate-returning C function uses the same convention as a Pascal one. }
 procedure EmitAggregateDestStash(procIdx: Integer);
-var idx: Integer;
+var idx, sc0, sc1: Integer;
 begin
   if (procIdx < 0) or (ProcAggregateDestSym[procIdx] < 0) then Exit;
   idx := ProcAggregateDestSym[procIdx];
@@ -17520,6 +17522,9 @@ begin
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a9, 0);
     end;
   end
+  else if ABIX64SysVRet(procIdx, sc0, sc1) = 0 then
+    { SysV MEMORY: the destination is the hidden first argument }
+    begin EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[idx].Offset); end { mov [rbp+off], rdi }
   else
     begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
 end;
@@ -17615,7 +17620,7 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz, i, procIdx, mek: Integer;
+var sz, i, procIdx, mek, sc0, sc1, sc, gp, xm: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -18324,7 +18329,31 @@ begin
 
   if retSymIdx >= 0 then
   begin
-    if ABIRetViaHiddenDestProc(CurProc) and
+    if (ABIX64SysVRet(CurProc, sc0, sc1) > 0) and (Syms[retSymIdx].Kind = skLocal) then
+    begin
+      { SysV register-class record: the eightbytes go back in registers,
+        INTEGER ones in rax then rdx and SSE ones in xmm0 then xmm1; the
+        caller has passed no destination. The second load may read past a
+        12-byte Result into the frame, which only fills bits the caller
+        ignores. }
+      gp := 0; xm := 0;
+      for i := 0 to ABIX64SysVRet(CurProc, sc0, sc1) - 1 do
+      begin
+        if i = 0 then sc := sc0 else sc := sc1;
+        if sc = SYSV_CLS_SSE then
+        begin
+          EmitAsmX64(['movsd %xmm, [rbp+%]', xm, Syms[retSymIdx].Offset + 8 * i]);
+          Inc(xm);
+        end
+        else
+        begin
+          if gp = 0 then EmitAsmX64(['mov rax, [rbp+%]', Syms[retSymIdx].Offset + 8 * i])
+          else EmitAsmX64(['mov rdx, [rbp+%]', Syms[retSymIdx].Offset + 8 * i]);
+          Inc(gp);
+        end;
+      end;
+    end
+    else if ABIRetViaHiddenDestProc(CurProc) and
        (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
     begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.

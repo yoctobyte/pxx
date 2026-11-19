@@ -2408,6 +2408,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     rvBase, rvOff: Integer;  { the riscv32 arm's spill base: s0 + slot, or t0 = slot }
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
+    retC0, retC1: Integer;               { ABIX64SysVRet's eightbyte classes }
     a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
     a64Ind, a64Agg: Boolean;             { ...a pointer to a caller copy / its own bytes }
     a64NRegs, a64Size, a64K, a64ES: Integer;
@@ -3324,6 +3325,9 @@ begin
       routine, and that case must keep the Pascal prologue.
       So edit here and only here. }
     intIdx := 0;
+    { SysV MEMORY-class record result: rdi is the hidden destination, so the
+      declared integer arguments start at rsi (ABIX64SysVRet). }
+    if ABIX64SysVRet(procIdx, retC0, retC1) = 0 then intIdx := 1;
     sseIdx := 0;
     stackOff := 16;
     { PARAM vs SLOT on the CALLEE side, the mirror of the caller split in the
@@ -8350,6 +8354,35 @@ end;
 
 {$I ir_codegen_i128.inc}
 
+{ After a call whose record result came back in registers (ABIX64SysVRet > 0):
+  store the eightbytes at the destination and answer its address in rax, which
+  is what pxx's own convention leaves there, so every consumer downstream is
+  unchanged. rax/rdx are parked in r11/rcx first, because evaluating the
+  destination clobbers rax; that evaluation is an address computation and
+  touches no xmm register. }
+procedure IREmitSysVRetStore(destNode, n, c0, c1: Integer);
+var i, gp, xm, c: Integer;
+begin
+  EmitAsmX64(['mov r11, rax', 'mov rcx, rdx']);
+  IREmitNode(destNode);                         { rax = destination }
+  gp := 0; xm := 0;
+  for i := 0 to n - 1 do
+  begin
+    if i = 0 then c := c0 else c := c1;
+    if c = SYSV_CLS_SSE then
+    begin
+      EmitAsmX64(['movsd [rax+%], %xmm', 8 * i, xm]);
+      Inc(xm);
+    end
+    else
+    begin
+      if gp = 0 then EmitAsmX64(['mov [rax+%], r11', 8 * i])
+      else EmitAsmX64(['mov [rax+%], rcx', 8 * i]);
+      Inc(gp);
+    end;
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
@@ -8443,6 +8476,7 @@ var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
       1/2/4/8 come back in rax, a larger one through a hidden pointer in the
       FIRST argument slot (rcx), which shifts every argument by one. }
     winRetBytes: Integer;
+    sysvRet, retC0, retC1: Integer;      { ABIX64SysVRet for this call's target }
     aggIsRef, aggIsArr: Boolean;
     aggRec, sysvSlots, aggK, aggPj: Integer;
     aggTk: TTypeKind;
@@ -8852,6 +8886,8 @@ begin
             spill (>6 int / >8 float), by-value structs and varargs are not
             modelled yet. Lets a dlsym'd C function with float args call right. }
           intIdx := 0; sseIdx := 0;
+          sysvRet := ABIX64SysVRet(cpi, retC0, retC1);
+          if (sysvRet = 0) and (IRCallDest[node] >= 0) then intIdx := 1;
           argNode := IRB[node]; i := 0;
           while argNode <> -1 do
           begin
@@ -9070,6 +9106,7 @@ begin
               after the register pops (clobbers rax), before the vararg count. }
             IREmitNode(IRCallDest[node]);
             EmitAsmX64(['mov r10, rax']);
+            if sysvRet = 0 then EmitAsmX64(['mov rdi, rax']);   { SysV MEMORY }
           end;
           EmitAsmX64(['mov eax, %', sseIdx]); { mov eax, #vector-regs (vararg ABI) }
           { Callee: the saved-P slot sits above the pad + stack args. }
@@ -9092,6 +9129,8 @@ begin
           end;
           EmitRestoreCallerRspX64(mStack * 8 + padBytes);
           EmitAsmX64(['add rsp, 8']); { (pop callee) }
+          if (sysvRet > 0) and (IRCallDest[node] >= 0) then
+            IREmitSysVRetStore(IRCallDest[node], sysvRet, retC0, retC1);
           if TypeIsFloat(Procs[cpi].RetType) then
           begin
             if Procs[cpi].RetType = tySingle then
@@ -11814,6 +11853,10 @@ begin
             end;
             intIdx := 0; sseIdx := 0; mStack := 0; nSlots := 0;
             winRetBytes := 0;
+            { SysV record result (ABIX64SysVRet): MEMORY takes rdi for the
+              destination, so the arguments start at rsi. }
+            sysvRet := ABIX64SysVRet(procIdx, retC0, retC1);
+            if sysvRet = 0 then intIdx := 1;
             if (TargetKernel = KERNEL_WINDOWS) and ProcExternal[procIdx] and
                ABIRetViaHiddenDestProc(procIdx) then
             begin
@@ -12151,6 +12194,9 @@ begin
                 answers it in rax, which is what the caller reads below. }
               if (winRetBytes > 0) and not (winRetBytes in [1, 2, 4, 8]) then
                 EmitAsmX64(['mov rdi, rax']);
+              { SysV MEMORY: the destination is the hidden first argument. r10
+                stays set too; a SysV callee ignores it. }
+              if sysvRet = 0 then EmitAsmX64(['mov rdi, rax']);
             end;
             { Variadic ABI: AL = number of vector registers used. Set
               unconditionally (0 for all-integer calls) so variadic callees
@@ -12187,6 +12233,7 @@ begin
                 EmitAsmX64(['mov [rax], r11']);
               end;
             end;
+            if sysvRet > 0 then IREmitSysVRetStore(IRC[node], sysvRet, retC0, retC1);
             if TypeIsFloat(Procs[procIdx].RetType) then
             begin
               { float/double returned in xmm0; the value model carries doubles,
@@ -16206,7 +16253,7 @@ begin
 end;
 
 procedure CompileAST(node: Integer);
-var iZeroTmp: Integer;
+var iZeroTmp, iZeroC0, iZeroC1: Integer;
 begin
   { Once a diagnostic has been RECOVERED, stop lowering. The claim that "nothing
     poisoned can reach codegen" rested on the driver's ErrCount halt, and that
@@ -16254,6 +16301,7 @@ begin
     twice, so that shape keeps its fresh local.
     bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize }
   if (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) and
+     (ABIX64SysVRet(CurProc, iZeroC0, iZeroC1) <= 0) and
      (Procs[CurProc].RetType = tyRecord) and (Procs[CurProc].RetSymIdx >= 0) and
      (RecHasScopeManagementOp(ProcRetRecId[CurProc]) or
       RecContainsManagementOp(ProcRetRecId[CurProc], 0)) and
