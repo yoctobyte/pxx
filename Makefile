@@ -4824,6 +4824,14 @@ test-nilpy: $(COMPILER)
 	 tools/expect_same.sh test_nilpy_annret_b "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> b ' | sed 's/ | .*//; s/ b / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> a ' | sed 's/ | .*//; s/ a / _ /')" && \
 	 tools/expect_same.sh test_nilpy_annret_c "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> c ' | sed 's/ | .*//; s/ c / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> a ' | sed 's/ | .*//; s/ a / _ /')"
 	tools/expect_same.sh test_nilpy_annret26 "$$($(TESTTMP)/test_nilpy_annret26)" "$$(python3 test/test_nilpy_annotated_returned_local_keeps_the_class.npy)"
+	@# `x: float` in a PLAIN class body: the field is typed by its stores, and
+	@# r_p's q (plain class) must carry r_v's type (dataclass): a double
+	@# (tk=19), or two variants would agree. Values diffed against CPython.
+	@# bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
+	o=$$(PXXDBG=n.locals ./$(COMPILER) test/test_nilpy_plain_class_field_annotation_is_typed.npy $(TESTTMP)/test_nilpy_plainann26 2>&1); \
+	 echo "$$o" | grep -qE '^PXXDBG n.locals r_v q tk=19 ' && \
+	 tools/expect_same.sh test_nilpy_plainann_tk "$$(echo "$$o" | grep -E '^PXXDBG n.locals r_p q ' | sed 's/ | .*//; s/ r_p / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals r_v q ' | sed 's/ | .*//; s/ r_v / _ /')"
+	tools/expect_same.sh test_nilpy_plainann26 "$$($(TESTTMP)/test_nilpy_plainann26)" "$$(python3 test/test_nilpy_plain_class_field_annotation_is_typed.npy)"
 	@# a def that returns None on one path and a value on another answers Any:
 	@# `return None` beside `return 7` used to store a plain 0, so `x is None` was
 	@# False and str(x) printed 0. Diffed against CPython.

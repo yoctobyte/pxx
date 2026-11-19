@@ -1,0 +1,60 @@
+# A class-level field annotation in a PLAIN class: what the field holds is what
+# its stores put there, exactly as in CPython, and a field typed by its stores
+# reads as that type. The Makefile row checks the TYPE as a relation: r_p's q
+# (plain class) carries what r_v's q (@dataclass) does, and that is a double.
+# The values are diffed against CPython, including the shapes where trusting
+# the annotation would be WRONG: P(1) keeps an int, R keeps a str, and Bare's
+# annotation binds nothing (AttributeError).
+# bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
+from dataclasses import dataclass
+
+
+@dataclass
+class V:
+    x: float
+    y: float
+
+
+class P:                 # the SAME declaration, no decorator
+    x: float
+    y: float
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+
+class R:
+    x: float
+
+    def __init__(self, x):
+        self.x = x
+
+
+class Bare:
+    v: int
+
+    def get(self):
+        return self.v
+
+
+def r_v(v: V) -> float:
+    q = v.x * 2.0
+    return q
+
+
+def r_p(v: P) -> float:
+    q = v.x * 2.0
+    return q
+
+
+def mk(a):
+    return a
+
+
+print(r_v(V(1.0, 2.0)), r_p(P(1.0, 2.0)), r_p(P(1.5, 2.5)))
+print(R(mk("hi")).x, R(mk(3)).x)
+try:
+    print(Bare().get())
+except AttributeError:
+    print("bare annotation binds nothing")

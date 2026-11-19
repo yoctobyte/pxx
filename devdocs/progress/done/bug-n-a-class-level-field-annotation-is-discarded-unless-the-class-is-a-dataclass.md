@@ -241,3 +241,36 @@ treating the annotation as authoritative (as the module level and dataclasses
 already do) gains the speed and costs exactness for any caller that passes an
 int where the annotation says float. Until that is decided, annotating the
 `__init__` parameter (`x: float`) is the exact route and already gives `tk=19`.
+
+## Resolution (2026-11-20, rd): already typed; the prescribed fix would be WRONG
+
+**The measured symptom is gone on master.** The ticket's own two classes at
+2755a79344: `r_p q tk=19`, the same as the dataclass `r_v`. The field join
+over `self.NAME = ...` stores (PyCollectClassFieldJoins / PyFJ*) and
+call-site parameter inference landed after this was filed (2026-09-15), and
+`P(1.0, 2.0)` now types the field double from its stores.
+
+**"Drop `isDC`" was built, and measured as wrong against CPython.** Opening
+the dataclass arm to a plain class's bare `x: float` made pxx trust an
+annotation that Python never enforces:
+
+- `class Bare: v: int`, never stored: CPython raises AttributeError, and pxx
+  read `0` (test_nilpy_annotated_class_attribute went red).
+- `x: float` with `P(1)`: CPython holds the int `1`. Widening the annotation
+  by the int store made the field a variant (correct value, slower than
+  the int field master gives).
+- the dataclass arm itself shows where trusting the annotation leads:
+  `V(mk("hi")).x` prints `2.457953e-317` (CPython: `hi`), filed as
+  bug-n-a-dataclass-field-coerces-what-its-generated-ctor-is-given-into-the-annotation.
+
+Once the AttributeError case is guarded (no store, so no field), the
+annotation adds nothing the stores don't already say. A field set only from
+outside the class (`n.x = v` in a free def or at module level) is a variant
+with OR without the annotation, because that store doesn't reach the join.
+That is a join-coverage question, not this ticket's.
+
+So the compiler change was reverted, unpushed. What landed is the guard:
+test_nilpy_plain_class_field_annotation_is_typed (test-nilpy) pins `r_p`'s
+type to the dataclass's double, and diffs against CPython the values where
+trusting the annotation would lie: an int kept as an int, a str kept as a
+str, and Bare's AttributeError.
