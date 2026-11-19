@@ -965,6 +965,30 @@ int rand_r(unsigned int *seed) {
   return result;
 }
 
+/* GNU qsort_r, the same insertion sort as qsort below with the caller's
+   `arg' handed to every comparison. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+void qsort_r(void *base, size_t nmemb, size_t size,
+             int (*cmp)(const void *, const void *, void *), void *arg) {
+  char *a = (char *)base;
+  size_t i, j;
+  for (i = 1; i < nmemb; i++) {
+    for (j = i; j > 0; j--) {
+      char *cur = a + j * size;
+      char *prv = a + (j - 1) * size;
+      if (cmp(prv, cur, arg) <= 0) break;
+      __crtl_swap(prv, cur, size);
+    }
+  }
+}
+
+/* secure_getenv: NULL when the real and effective ids differ, which is
+   glibc's AT_SECURE condition for every case a set-id binary produces. */
+extern unsigned int getuid(void), geteuid(void), getgid(void), getegid(void);
+char *secure_getenv(const char *name) {
+  if (getuid() != geteuid() || getgid() != getegid()) return (char *)0;
+  return getenv(name);
+}
+
 void qsort(void *base, size_t nmemb, size_t size,
            int (*cmp)(const void *, const void *)) {
   char *a = (char *)base;

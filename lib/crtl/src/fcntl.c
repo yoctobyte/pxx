@@ -85,6 +85,12 @@ int open64(const char *path, int flags, ...) {
     mode = va_arg(ap, int);
     va_end(ap);
   }
+#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 4
+  /* what makes it open64 on ILP32: without O_LARGEFILE the kernel refuses a
+     write or seek past 2 GiB (EFBIG/EOVERFLOW). 64-bit kernels force it.
+     feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+  flags |= O_LARGEFILE;
+#endif
   return sysret(__pxx_open(path, flags, mode));
 }
 

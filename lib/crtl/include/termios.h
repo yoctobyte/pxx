@@ -306,4 +306,8 @@ __pid_t tcgetsid(int fd);
 __pid_t tcgetpgrp(int fd);
 int tcsetpgrp(int fd, __pid_t pgrp);
 
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE '\0'   /* feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+#endif
+
 #endif

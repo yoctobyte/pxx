@@ -66,6 +66,13 @@ typedef __daddr_t daddr_t;
 typedef unsigned long long dev_t;
 typedef unsigned long long ino_t;
 
+/* The LFS64 names (_LARGEFILE64_SOURCE). off_t is `long', so 32 bits on the
+   ILP32 targets; off64_t is 64 everywhere, which is the whole point of it.
+   feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+typedef long long off64_t;
+typedef unsigned long long ino64_t;
+typedef long long blkcnt64_t;
+
 /* loff_t IS `long long' ON EVERY ARCHITECTURE and must not be spelled `long'
    or `off_t'. It is the kernel's 64-bit file offset -- <linux/types.h> here
    already says `typedef long long __kernel_loff_t' for the same reason, and

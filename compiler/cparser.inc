@@ -16792,9 +16792,17 @@ begin
   { --shared-runtime: environ lives in the runtime object, whose own init
     thunk fills it once; this unit only references it. }
   if SharedRuntime and EmitObjMode then Exit;
+  { `environ`, and GNU's program_invocation_name/_short_name (argv[0], set in
+    the same pre-main shell; crtl's <err.h> prints the short one).
+    feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools }
   for i := 0 to TokCount - 1 do
-    if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 7) and
-       (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ') then
+    if (Tokens[i].Kind = tkIdent) and
+       (((Tokens[i].SLen = 7) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ')) or
+        ((Tokens[i].SLen = 23) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'program_invocation_name')) or
+        ((Tokens[i].SLen = 29) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'program_invocation_short_name'))) then
     begin
       Result := True;
       Exit;

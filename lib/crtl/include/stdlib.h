@@ -92,6 +92,8 @@ int mkostemp(char *tmpl, int flags);
 char *mkdtemp(char *tmpl);
 
 char *getenv(const char *name);
+/* GNU: getenv, but NULL in a set-user/group-ID process. */
+char *secure_getenv(const char *name);
 
 /* Environment write side. These mutate the SAME buffer getenv() reads, so a C
    program sees its own writes. NOTE they do not reach the Pascal RTL's spawn
@@ -113,6 +115,9 @@ char *realpath(const char *path, char *resolved);
 int system(const char *command);
 
 void qsort(void *base, size_t nmemb, size_t size, int (*cmp)(const void *, const void *));
+/* GNU qsort_r: the comparator's THIRD argument is `arg' (BSD's differs). */
+void qsort_r(void *base, size_t nmemb, size_t size,
+             int (*cmp)(const void *, const void *, void *), void *arg);
 void *bsearch(const void *key, void *base, size_t nmemb, size_t size, int (*cmp)(const void *, const void *));
 
 void abort(void);

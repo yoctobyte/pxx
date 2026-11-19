@@ -90,6 +90,21 @@ void CPU_ZERO_S(size_t setsize, cpu_set_t *setp);
 int  CPU_COUNT_S(size_t setsize, const cpu_set_t *setp);
 #define CPU_COUNT(setp) CPU_COUNT_S(sizeof(cpu_set_t), setp)
 
+/* The sized forms, for a set CPU_ALLOC made: a cpu past `setsize' bytes is
+   out of the set, as in glibc. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+#define CPU_SET_S(cpu, setsize, setp) \
+  ((size_t)(cpu) / 8 < (size_t)(setsize) ? ((setp)->__bits[__CPUELT(cpu)] |= __CPUMASK(cpu)) : 0)
+#define CPU_CLR_S(cpu, setsize, setp) \
+  ((size_t)(cpu) / 8 < (size_t)(setsize) ? ((setp)->__bits[__CPUELT(cpu)] &= ~__CPUMASK(cpu)) : 0)
+#define CPU_ISSET_S(cpu, setsize, setp) \
+  ((size_t)(cpu) / 8 < (size_t)(setsize) ? (((setp)->__bits[__CPUELT(cpu)] & __CPUMASK(cpu)) != 0) : 0)
+#define CPU_ALLOC_SIZE(count) \
+  ((((size_t)(count) + __NCPUBITS - 1) / __NCPUBITS) * sizeof(__cpu_mask))
+cpu_set_t *__sched_cpualloc(size_t count);
+void __sched_cpufree(cpu_set_t *set);
+#define CPU_ALLOC(count) __sched_cpualloc(count)
+#define CPU_FREE(set) __sched_cpufree(set)
+
 int sched_yield(void);
 int sched_getaffinity(pid_t pid, size_t cpusetsize, cpu_set_t *mask);
 int sched_setaffinity(pid_t pid, size_t cpusetsize, const cpu_set_t *mask);

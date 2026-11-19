@@ -21,7 +21,7 @@ int main(void) {
     if (fd < 0) return 1;
     if (write(fd, "hello", 5) != 5) return 2;
 
-    struct stat st;
+    struct stat64 st;
     if (fstat64(fd, &st) != 0) return 3;
     if (st.st_size != 5) return 4;
 
@@ -29,7 +29,7 @@ int main(void) {
     if (fcntl64(fd, F_SETFD, 0) < 0) return 5;
     close(fd);
 
-    struct stat st2;
+    struct stat64 st2;
     if (stat64(path, &st2) != 0) return 6;
     if (st2.st_size != 5) return 7;
     if (lstat64(path, &st2) != 0) return 8;

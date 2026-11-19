@@ -230,6 +230,7 @@ const
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
+  SYS__llseek = 140;   { the 64-bit seek: plain lseek's offset is 32 bits here }
   SYS_sync = 36;       { asm/unistd_32.h __NR_sync }
   SYS_setsid = 66; SYS_getgroups = 205;    { asm/unistd_32.h: getgroups32, NOT the 16-bit-gid getgroups(80) -- the same *32 choice this file already makes for getuid }
   SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { asm/unistd_32.h }
@@ -288,6 +289,7 @@ const
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
+  SYS__llseek = 140;   { the 64-bit seek: plain lseek's offset is 32 bits here }
   SYS_sync = 36;       { arm EABI keeps the legacy low numbers, as i386 does }
   SYS_setsid = 66; SYS_getgroups = 205;    { arm EABI, getgroups32 as on i386 }
   SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { arm EABI, the legacy numbers as on i386 }
@@ -634,7 +636,7 @@ begin
 end;
 
 function PalBackendSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
-{$ifdef CPU_RISCV32}
+{$if defined(CPU_RISCV32) or defined(CPU_I386) or defined(CPU_ARM32)}
 var res: Int64; r: Int64;
 {$endif}
 begin
@@ -648,7 +650,19 @@ begin
                        offset and $FFFFFFFF, Int64(@res), whence);
   if r < 0 then Result := r else Result := res;
 {$else}
+{$if defined(CPU_I386) or defined(CPU_ARM32)}
+  { PalBackendSeek takes and returns a 64-bit offset, and plain lseek(2) on
+    these ILP32 ABIs carries 32 bits each way: a seek past 2 GiB was EINVAL or
+    EOVERFLOW, so crtl's lseek64 could not reach the offsets it exists for.
+    _llseek splits the offset and returns the position through a pointer, the
+    same shape as rv32's 62 above. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools }
+  res := 0;
+  r := __pxxrawsyscall(SYS__llseek, handle, (offset shr 32) and $FFFFFFFF,
+                       offset and $FFFFFFFF, Int64(@res), whence);
+  if r < 0 then Result := r else Result := res;
+{$else}
   Result := __pxxrawsyscall(SYS_lseek, handle, offset, whence, 0, 0, 0);
+{$endif}
 {$endif}
 end;
 

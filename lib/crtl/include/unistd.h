@@ -36,6 +36,21 @@ ssize_t write(int fd, const void *buf, size_t count);
 off_t lseek(int fd, off_t offset, int whence);
 ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+/* LFS64: a 64-bit offset on every target (off_t is 32 bits on ILP32). */
+off64_t lseek64(int fd, off64_t offset, int whence);
+ssize_t pread64(int fd, void *buf, size_t count, off64_t offset);
+ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t offset);
+/* The program break. pxx's heap is mmap-backed, so these move a break
+   nothing else uses. ENOSYS where the target has no brk. */
+int brk(void *addr);
+void *sbrk(long increment);
+/* GNU: argv[0] and its basename, set before main (glibc declares them in
+   <errno.h>; both headers are fine). */
+extern char *program_invocation_name;
+extern char *program_invocation_short_name;
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE '\0'   /* disables a termios special character */
+#endif
 int fsync(int fd);
 /* fdatasync: the data only. NOT an alias for fsync -- see src/unistd.c. It is
    PAL_ERR_UNSUPPORTED on esp and wasi (no data-only primitive there) and on

@@ -98,12 +98,63 @@ int lstat(const char *path, struct stat *buf) {
   return -1;
 }
 
-/* LFS (_LARGEFILE64_SOURCE) aliases sqlite's os_unix.c imports. On LP64 st_size
-   is already 64-bit and `struct stat64` == `struct stat`, so the *64 calls share
-   the base path — the PAL statx already returns a 64-bit size. */
-int fstat64(int fd, struct stat *buf)          { return fstat(fd, buf); }
-int stat64(const char *path, struct stat *buf) { return stat(path, buf); }
-int lstat64(const char *path, struct stat *buf){ return lstat(path, buf); }
+/* LFS (_LARGEFILE64_SOURCE): struct stat64 is struct stat with a 64-bit
+   st_size. On LP64 the two are the same layout, so the *64 calls go through
+   the base path (the PAL's, right on every OS) and copy. On ILP32 Linux the
+   base path's off_t is 32 bits and would truncate a file past 2 GiB, so the
+   *64 calls ask statx directly (fstatat64 below), whose size is 64-bit.
+   sqlite's os_unix.c imports these; e2fsprogs and util-linux use the type.
+   feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+static void crtl_stat_widen(struct stat64 *d, const struct stat *s)
+{
+  d->st_dev = s->st_dev;     d->st_ino = s->st_ino;     d->st_mode = s->st_mode;
+  d->st_nlink = s->st_nlink; d->st_uid = s->st_uid;     d->st_gid = s->st_gid;
+  d->st_rdev = s->st_rdev;   d->st_size = s->st_size;   d->st_blksize = s->st_blksize;
+  d->st_blocks = s->st_blocks;
+  d->st_atim = s->st_atim;   d->st_mtim = s->st_mtim;   d->st_ctim = s->st_ctim;
+}
+
+#if defined(SYS_statx) && defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 4
+#define CRTL_STAT64_STATX 1
+#endif
+
+int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags);
+
+int fstat64(int fd, struct stat64 *buf)
+{
+#ifdef CRTL_STAT64_STATX
+  return fstatat64(fd, "", buf, 0x1000 /* AT_EMPTY_PATH */);
+#else
+  struct stat s;
+  if (fstat(fd, &s) != 0) return -1;
+  crtl_stat_widen(buf, &s);
+  return 0;
+#endif
+}
+
+int stat64(const char *path, struct stat64 *buf)
+{
+#ifdef CRTL_STAT64_STATX
+  return fstatat64(-100 /* AT_FDCWD */, path, buf, 0);
+#else
+  struct stat s;
+  if (stat(path, &s) != 0) return -1;
+  crtl_stat_widen(buf, &s);
+  return 0;
+#endif
+}
+
+int lstat64(const char *path, struct stat64 *buf)
+{
+#ifdef CRTL_STAT64_STATX
+  return fstatat64(-100 /* AT_FDCWD */, path, buf, 0x100 /* AT_SYMLINK_NOFOLLOW */);
+#else
+  struct stat s;
+  if (lstat(path, &s) != 0) return -1;
+  crtl_stat_widen(buf, &s);
+  return 0;
+#endif
+}
 
 /* The PAL returns the raw kernel convention (0, or a NEGATIVE errno). These two
    forwarded it straight out, so mkdir() on a missing parent returned -2 with
@@ -245,4 +296,37 @@ int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev)
 int mkfifoat(int dirfd, const char *path, mode_t mode)
 {
   return mknodat(dirfd, path, mode | S_IFIFO, 0);
+}
+
+/* fstatat64: statx's fields straight into the 64-bit struct where statx is
+   there (the same offsets fstatat reads above), else fstatat and widen. */
+int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags)
+{
+#ifdef SYS_statx
+  unsigned char sx[256];
+  if (syscall(SYS_statx, (long)dirfd, path, (long)flags, 0x7ffL, sx) < 0)
+    return -1;
+  buf->st_mode    = (mode_t)(sx_u32(sx, 0x1C) & 0xFFFF);
+  buf->st_blksize = (blksize_t)sx_u32(sx, 0x04);
+  buf->st_nlink   = (nlink_t)sx_u32(sx, 0x10);
+  buf->st_uid     = (uid_t)sx_u32(sx, 0x14);
+  buf->st_gid     = (gid_t)sx_u32(sx, 0x18);
+  buf->st_ino     = (ino64_t)sx_s64(sx, 0x20);
+  buf->st_size    = (off64_t)sx_s64(sx, 0x28);
+  buf->st_blocks  = (blkcnt64_t)sx_s64(sx, 0x30);
+  buf->st_atim.tv_sec  = (long)sx_s64(sx, 0x40);
+  buf->st_atim.tv_nsec = (long)sx_u32(sx, 0x48);
+  buf->st_ctim.tv_sec  = (long)sx_s64(sx, 0x60);
+  buf->st_ctim.tv_nsec = (long)sx_u32(sx, 0x68);
+  buf->st_mtim.tv_sec  = (long)sx_s64(sx, 0x70);
+  buf->st_mtim.tv_nsec = (long)sx_u32(sx, 0x78);
+  buf->st_rdev = makedev(sx_u32(sx, 0x80), sx_u32(sx, 0x84));
+  buf->st_dev  = makedev(sx_u32(sx, 0x88), sx_u32(sx, 0x8C));
+  return 0;
+#else
+  struct stat s;
+  if (fstatat(dirfd, path, &s, flags) != 0) return -1;
+  crtl_stat_widen(buf, &s);
+  return 0;
+#endif
 }

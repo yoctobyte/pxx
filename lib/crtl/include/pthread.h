@@ -109,6 +109,9 @@ int  pthread_mutexattr_settype(pthread_mutexattr_t *a, int type);
 typedef int pthread_once_t;
 #define PTHREAD_ONCE_INIT 0
 int pthread_once(pthread_once_t *guard, void (*init_routine)(void));
+/* Handlers around fork(): prepare in reverse registration order, parent and
+   child in registration order (POSIX). */
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
 
 /* Condition variable — palsync's seq-futex condvar (first word = the futex
  * generation counter). Zeroed == valid, so {0} static init works. The clock

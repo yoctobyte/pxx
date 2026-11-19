@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sched.h>
+#include <errno.h>    /* ENOMEM from pthread_atfork */
+#include <unistd.h>   /* fork() and __crtl_atfork_hook live in unistd.c */
 
 /* Pascal bridge (lib/rtl/palpthread.pas), bound case-insensitively by name. */
 extern void      __pxx_pmutex_init(void *m);
@@ -144,6 +146,40 @@ int pthread_rwlockattr_init(pthread_rwlockattr_t *a)    { a->__kind = 0; return 
 int pthread_rwlockattr_destroy(pthread_rwlockattr_t *a) { (void)a; return 0; }
 
 /* ---- once + condition variables (QuickJS js_once/js_cond surface) ---- */
+
+/* pthread_atfork: up to 32 handler triples, run by fork() in unistd.c through
+   __crtl_atfork_hook. Registration is under no lock: it happens at library
+   init in every real caller, before threads exist. ENOMEM past 32, as a
+   failed allocation would give. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+#define CRTL_ATFORK_MAX 32
+static void (*crtl_af_prepare[CRTL_ATFORK_MAX])(void);
+static void (*crtl_af_parent[CRTL_ATFORK_MAX])(void);
+static void (*crtl_af_child[CRTL_ATFORK_MAX])(void);
+static int crtl_af_count;
+extern void (*__crtl_atfork_hook)(int phase);
+
+static void crtl_atfork_run(int phase) {
+  int i;
+  if (phase == 0) {
+    for (i = crtl_af_count - 1; i >= 0; i--)
+      if (crtl_af_prepare[i]) crtl_af_prepare[i]();
+  } else {
+    for (i = 0; i < crtl_af_count; i++) {
+      if (phase == 1 && crtl_af_parent[i]) crtl_af_parent[i]();
+      if (phase == 2 && crtl_af_child[i]) crtl_af_child[i]();
+    }
+  }
+}
+
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void)) {
+  if (crtl_af_count >= CRTL_ATFORK_MAX) return ENOMEM;
+  crtl_af_prepare[crtl_af_count] = prepare;
+  crtl_af_parent[crtl_af_count] = parent;
+  crtl_af_child[crtl_af_count] = child;
+  crtl_af_count++;
+  __crtl_atfork_hook = crtl_atfork_run;
+  return 0;
+}
 
 int pthread_once(pthread_once_t *guard, void (*init_routine)(void)) {
   __pxx_ponce(guard, init_routine);

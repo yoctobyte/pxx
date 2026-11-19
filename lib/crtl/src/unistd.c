@@ -137,6 +137,72 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t off) {
 }
 #endif
 
+/* LFS64. __pxx_seek takes a 64-bit offset on every target, so lseek64 is
+   the PAL call as it is; lseek narrows it to off_t. pread64/pwrite64 are
+   pread/pwrite on LP64, and the same seek-based emulation with the full
+   offset on ILP32. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+off64_t lseek64(int fd, off64_t offset, int whence) {
+  long long rc = __pxx_seek(fd, (long long)offset, whence);
+  if (rc < 0) { errno = (int)-rc; return (off64_t)-1; }
+  return (off64_t)rc;
+}
+
+#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+ssize_t pread64(int fd, void *buf, size_t count, off64_t off) {
+  return pread(fd, buf, count, (off_t)off);
+}
+ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t off) {
+  return pwrite(fd, buf, count, (off_t)off);
+}
+#else
+ssize_t pread64(int fd, void *buf, size_t count, off64_t off) {
+  long long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  long long s, r;
+  if (cur < 0) { errno = (int)-cur; return -1; }
+  s = __pxx_seek(fd, (long long)off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = (int)-s; return -1; }
+  r = __pxx_read(fd, buf, (long long)count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = (int)-r; return -1; }
+  return (ssize_t)r;
+}
+ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t off) {
+  long long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  long long s, r;
+  if (cur < 0) { errno = (int)-cur; return -1; }
+  s = __pxx_seek(fd, (long long)off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = (int)-s; return -1; }
+  r = __pxx_write(fd, (void *)buf, (long long)count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = (int)-r; return -1; }
+  return (ssize_t)r;
+}
+#endif
+
+/* brk/sbrk: the kernel's program break, raw. pxx's own heap is mmap-backed,
+   so nothing else moves it. brk(2) answers with the break it ended up at, and
+   failure is an answer that is not the address asked for. */
+#ifdef SYS_brk
+static char *crtl_brk_cur;
+int brk(void *addr) {
+  long r = syscall(SYS_brk, (long)addr);
+  crtl_brk_cur = (char *)r;
+  if ((char *)r != (char *)addr) { errno = ENOMEM; return -1; }
+  return 0;
+}
+void *sbrk(long increment) {
+  char *old;
+  if (!crtl_brk_cur) crtl_brk_cur = (char *)syscall(SYS_brk, 0L);
+  if (increment == 0) return crtl_brk_cur;
+  old = crtl_brk_cur;
+  if (brk(old + increment) < 0) { crtl_brk_cur = old; return (void *)-1; }
+  return old;
+}
+#else
+int brk(void *addr) { (void)addr; errno = ENOSYS; return -1; }
+void *sbrk(long increment) { (void)increment; errno = ENOSYS; return (void *)-1; }
+#endif
+
 /* The PAL returns the raw kernel convention (0/positive, or a NEGATIVE errno).
    Most of this file already translates that to C's -1 + errno inline; the
    one-line forwards below did not, so fsync/dup/dup2/chdir/symlink/link/pipe
@@ -335,9 +401,22 @@ int chroot(const char *path) {
 
 extern int __pxx_fork(void);
 
+/* pthread_atfork's handlers run around fork through this hook, which
+   pthread.c sets on the first registration: phase 0 prepare (before), 1 the
+   parent after, 2 the child after. A program with no handler pays nothing.
+   feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+void (*__crtl_atfork_hook)(int phase);
+
 pid_t fork(void) {
-  int rc = __pxx_fork();
-  if (rc < 0) { errno = -rc; return -1; }
+  int rc;
+  if (__crtl_atfork_hook) __crtl_atfork_hook(0);
+  rc = __pxx_fork();
+  if (rc < 0) {
+    if (__crtl_atfork_hook) __crtl_atfork_hook(1);
+    errno = -rc;
+    return -1;
+  }
+  if (__crtl_atfork_hook) __crtl_atfork_hook(rc == 0 ? 2 : 1);
   return (pid_t)rc;
 }
 
@@ -713,10 +792,24 @@ extern __pxx_initfn __init_array_start[];
 extern __pxx_initfn __init_array_end[];
 #endif
 
+/* GNU program_invocation_name / _short_name: argv[0] and its basename, as
+   glibc sets them before main. err.c prints the short one. A shared library
+   has no initial stack, so they stay NULL there and err.c asks /proc.
+   feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+char *program_invocation_name;
+char *program_invocation_short_name;
+
 void __pxx_run_initializers(long *sp)
 {
   long argc = sp[0];
   __pxx_set_environ((char **)(sp + argc + 2));
+  if (argc > 0 && sp[1]) {
+    char *a0 = (char *)sp[1], *p;
+    program_invocation_name = a0;
+    program_invocation_short_name = a0;
+    for (p = a0; *p; p++)
+      if (*p == '/') program_invocation_short_name = p + 1;
+  }
 #if defined(__xtensa__) && defined(__PXXRT_MARKER)
   {
     __pxx_initfn *p;

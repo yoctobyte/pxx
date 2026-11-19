@@ -28981,6 +28981,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_dunder_signed.c $(TESTTMP)/c_dsigned26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_dsigned26_gcc32 test/c_dunder_signed.c
 	tools/expect_same.sh c_dsigned26_i386 "$$(timeout 20 $(TESTTMP)/c_dsigned26_i386)" "$$(timeout 20 $(TESTTMP)/c_dsigned26_gcc32)"
+	# crtl LFS64 (a sparse write at 3 GiB), qsort_r, secure_getenv, sbrk,
+	# CPU_*_S, _POSIX_VDISABLE and <err.h>, against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_crtl_lfs_gnu_gaps.c $(TESTTMP)/c_lfsgnu26
+	@gcc -w -o $(TESTTMP)/c_lfsgnu26_gcc test/c_crtl_lfs_gnu_gaps.c
+	tools/expect_same.sh c_lfsgnu26 "$$(timeout 20 $(TESTTMP)/c_lfsgnu26)" "$$(timeout 20 $(TESTTMP)/c_lfsgnu26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_lfs_gnu_gaps.c $(TESTTMP)/c_lfsgnu26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_lfsgnu26_gcc32 test/c_crtl_lfs_gnu_gaps.c
+	tools/expect_same.sh c_lfsgnu26_i386 "$$(timeout 20 $(TESTTMP)/c_lfsgnu26_i386)" "$$(timeout 20 $(TESTTMP)/c_lfsgnu26_gcc32)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).

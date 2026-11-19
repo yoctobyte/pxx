@@ -161,3 +161,17 @@ int sched_getparam(pid_t pid, struct sched_param *param)
   return -1;
 #endif
 }
+
+/* CPU_ALLOC/CPU_FREE: a zeroed set of CPU_ALLOC_SIZE(count) bytes, as glibc's
+   __sched_cpualloc gives (it zeroes nothing; zeroing is free here and keeps a
+   CPU_ISSET_S before CPU_ZERO_S from reading garbage). feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+extern void *calloc(size_t n, size_t size);
+extern void free(void *p);
+cpu_set_t *__sched_cpualloc(size_t count)
+{
+  return (cpu_set_t *)calloc(1, CPU_ALLOC_SIZE(count));
+}
+void __sched_cpufree(cpu_set_t *set)
+{
+  free(set);
+}

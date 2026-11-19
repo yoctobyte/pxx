@@ -34,6 +34,29 @@ struct stat {
   struct timespec st_mtim;
   struct timespec st_ctim;
 };
+/* struct stat with a 64-bit st_size on every target: the same layout as
+   struct stat on LP64, wider on ILP32 (where off_t is 32 bits). dev_t, ino_t
+   and blkcnt_t are already 64-bit. feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools */
+struct stat64 {
+  dev_t     st_dev;
+  ino64_t   st_ino;
+  mode_t    st_mode;
+  nlink_t   st_nlink;
+  uid_t     st_uid;
+  gid_t     st_gid;
+  dev_t     st_rdev;
+  off64_t   st_size;
+  blksize_t st_blksize;
+  blkcnt64_t st_blocks;
+  struct timespec st_atim;
+  struct timespec st_mtim;
+  struct timespec st_ctim;
+};
+extern int stat64(const char *path, struct stat64 *buf);
+extern int fstat64(int fd, struct stat64 *buf);
+extern int lstat64(const char *path, struct stat64 *buf);
+extern int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags);
+
 #define st_atime st_atim.tv_sec
 #define st_mtime st_mtim.tv_sec
 #define st_ctime st_ctim.tv_sec
