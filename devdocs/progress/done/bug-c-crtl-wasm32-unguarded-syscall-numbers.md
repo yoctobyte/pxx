@@ -28,3 +28,6 @@ c_wasm32_math_h still differs: `isnan(NAN)` gives 0. That is a separate bug
 from the same commit. On wasm32, C file-scope initialisers never run once they
 moved into `__pxx_c_main_init` (CEmitMainInitProc); git bisect run names
 b3c5f711ea. It was handed to frank-user, whose commit it is.
+
+Follow-up: frank-user fixed the initialiser bug in dc9ad070c3. All three C
+wasm32 rows (hosted_stdio, math_h, variadic) match gcc there.
