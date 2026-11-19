@@ -4,7 +4,7 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "The tool's own self-description disagrees with the tool: `--help` advertises 24 long options and the parser accepts 68, so 44 work and are not listed (re-measured 2026-09-11 at 13ae05f85; frankD had 45 on 08-30). THE HEADLINE INSTANCE IS FIXED AND THE CLASS IS NOT -- `--strict-fpc`, `--strict` and `--strict-visibility` were listed by d7021131d on 09-05, while `--xtensa-long-calls` (08-31) and `--no-assertions` (09-04) arrived undocumented in BOTH `--help` and `docs/`, so 13 are now documented nowhere where 11 were. 45-3+2=44: the gap is static because it is being repaired and refilled at about the same rate, which is the argument for generating `--help` from the parser table rather than listing flags by hand. The failure mode is not a missing line of text: a reader reasoning from `--help` concludes the flag DOES NOT EXIST and goes to correct whatever cited it."
-status: backlog
+status: done
 ---
 
 # `--help` does not advertise flags the compiler accepts
@@ -373,3 +373,33 @@ the help text. Anchor on the accepted set and test membership per flag instead, 
 keep the negative control in both directions — a nonexistent flag must answer
 `unknown option`, and a flag everyone uses (`-Fu`) must be present — or the
 instrument certifies whatever it is pointed at.
+
+
+# Fixed 2026-11-19 (claude-dupwt): the set first, then a detector
+
+Taken from the artefact, as asked: tools/help_coverage.py enumerates every
+long option compiler.pas compares `option` against (exact and `--x=` prefix
+forms).
+
+| | count |
+| --- | --- |
+| accepted by the parser | 99 |
+| printed by `--help` | 35 |
+| in docs/reference/cli.md, not `--help` | 54 |
+| **in neither** | **10** |
+
+`--strict-fpc`, this ticket's example, is now in `--help` (someone added it
+since). `--help` is curated on purpose and already said "the full option list
+lives in docs/". So the contract that can be held is `--help` UNION
+cli.md, not "print 99 flags". The ten in neither were the real defect:
+`--entry --gibix --image-base --ldso-runnable --load-offset --rv32-rvc
+--no-rv32-rvc --rv32-long-calls --rv32-short-calls --xtensa-no-fp-rebias`.
+All ten are now documented in cli.md from their parser comments.
+
+- `--help`'s last line names docs/reference/cli.md and says that a flag
+  missing from `--help` is not a flag that does not exist.
+- Gate step "every accepted flag is in --help or cli.md" runs
+  help_coverage.py --self-check. An injected accepted flag must be flagged and
+  nothing else may be missing. It refuses if `--help` stops naming cli.md, or
+  if the parser pattern matches fewer than 90 flags (pattern rot). A new flag
+  added without documentation now turns the gate RED and names the flag.

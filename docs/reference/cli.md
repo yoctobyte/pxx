@@ -223,6 +223,14 @@ effect where one exists.
 | `--xtensa-long-calls` | Reserve the long call form at every forward call, so a callee more than 512 KiB ahead is reachable. Off by default; the Nil Python example builds for the Xtensa chips pass it. |
 | `--xtensa-no-density` | Emit only 3-byte instructions. By default the commonest instructions (`movi`, `l32i`, `s32i`, `mov`, `addi`, `add`) use their 2-byte density form when the operands fit, which every ESP32 Xtensa core supports. For size comparisons and for ruling density out when chasing a miscompile. |
 | `--xtensa-soft-mulhigh` | Replace the 32-bit multiply-high instruction with a software routine, for QEMU's Xtensa cores, which lack it. |
+| `--xtensa-no-fp-rebias` | Keep the frame pointer at its fixed bias instead of choosing one per routine (at `-O1` and above the bias is picked so more frame slots fit the short load/store offsets). For size comparisons and miscompile hunts. |
+| `--rv32-rvc` / `--no-rv32-rvc` | RV32C compressed instructions on riscv32. On by default for `--platform=esp` (the C3 is RV32IMC), opt-in elsewhere. |
+| `--rv32-long-calls` / `--rv32-short-calls` | On `--platform=esp` riscv32, internal calls and forward jumps are one 4-byte `jal` (±1 MiB) by default, except in a Nil Python program, which defaults to the 8-byte long pair because pylib is large before DCE. `--rv32-long-calls` forces the long form everywhere; `--rv32-short-calls` opts a Nil Python program into the short one. A short site whose target is out of range is a compile error naming `--rv32-long-calls`, never a truncated offset. Hosted riscv32 always uses the long form. |
+| `--image-base=N` | x86-64: load the executable at `N` (`0x…`, `$…` or decimal, `_` ignored). Must be page-aligned, non-zero and below 2^47. |
+| `--ldso-runnable` | Add a minimal `PT_DYNAMIC` to a static executable so a dynamic loader can start it as `ld.so prog args`. |
+| `--gibix` | Both of the above for the Rainyday kernel (formerly Gibix): `--image-base=0x8000000000 --ldso-runnable`, since its user memory is `[2^39, 2^40)` and a program written at runtime is started through musl's `ld.so`. |
+| `--entry=SYM` (with `--link`; also `-e SYM`) | Enter at `SYM` instead of `_start`, as ld's `-e`: a kernel enters at its own start symbol. |
+| `--load-offset=N` (with `--link --freestanding`) | Write `p_paddr = p_vaddr - N` on every `PT_LOAD` (GNU ld's `AT(ADDR(sec) - KERNEL_VMA)`), so a PVH loader places a kernel-half image at its physical address. All 64 bits can be written, e.g. `0xFFFFFFFF80000000`. |
 
 `--experimental-ir-codegen` is accepted as a deprecated no-op (IR is the only
 backend). `-fno-auto-var`, `-fno-lazy-var` and `-fno-unhandled-handler` are

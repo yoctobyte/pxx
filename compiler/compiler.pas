@@ -1397,7 +1397,13 @@ begin
   WriteLn('  PXXDBG=<topics>       compiler-internal probes; PXXDBG=help lists the form');
   WriteLn('  --where prints every one of these as resolved, so start there.');
   WriteLn;
-  WriteLn('The full option list lives in docs/; these are the ones worth remembering.');
+  { NAME THE FILE. "lives in docs/" sent a reader checking a flag to a tree
+    of ~300 pages, and the cheaper check -- this text -- then said the flag
+    did not exist. tools/help_coverage.py (gate) holds every accepted flag to
+    this text UNION that file, and refuses if this line stops naming it.
+    bug-a-help-does-not-advertise-flags-the-compiler-accepts }
+  WriteLn('These are the ones worth remembering. EVERY accepted flag is listed in');
+  WriteLn('docs/reference/cli.md; a flag missing here is not a flag that does not exist.');
 end;
 
 { THE `ok:` LINE IS THE ONE INSTRUMENT EVERY HARNESS AND EVERY AGENT TRUSTS,

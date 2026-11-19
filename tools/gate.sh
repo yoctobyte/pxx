@@ -888,6 +888,14 @@ else
   RC=1
 fi
 
+# Every flag the argument parser accepts is printed by --help or documented in
+# docs/reference/cli.md. A flag nobody can find reads as "does not exist", and
+# a true reference then gets "corrected" away. --self-check injects one
+# undocumented flag and requires exactly it to be flagged. Builds nothing; <1s.
+# bug-a-help-does-not-advertise-flags-the-compiler-accepts
+step "every accepted flag is in --help or docs/reference/cli.md" "$LOGDIR/help-coverage.log" \
+     python3 tools/help_coverage.py --self-check                                || RC=1
+
 # A LIB UNIT WITH A PYTHON SURFACE MUST BE REACHABLE BY A BARE NilPy IMPORT.
 # A bare `import X` has three routes and only ONE is silent: mimic_X.pas is a
 # substitution and says so ("note: X -> mimic_X"), a name in
