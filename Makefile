@@ -21178,6 +21178,12 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_freestanding_struct.py $(COMPILER) $(TESTTMP)
 	# ...and on riscv32 (esp32c3): Rv32InlineMem and the extern hidden result pointer
 	python3 -I tools/check_riscv32_freestanding_struct.py $(COMPILER) $(TESTTMP)
+	# xtensa density steps 1-3 (branch compares, leaf operands, ++ as a
+	# store): right on both ABIs against gcc, and the ticket's loop stays small.
+	# The ++/-- lowering is shared IR, so the same program runs here too.
+	python3 -I tools/check_xtensa_density.py $(COMPILER) $(TESTTMP)
+	./$(COMPILER) test/c_density_branch_incdec.c $(TESTTMP)/c_density_x64 >/dev/null
+	tools/expect_same.sh c_density_branch_incdec "$$($(TESTTMP)/c_density_x64)" "$$(cat test/c_density_branch_incdec.expected)"
 	# crtl on xtensa issues the time64 syscalls (Nilix implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
 	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed
@@ -37540,13 +37546,14 @@ test-xtensa: $(COMPILER)
 	# outside the encodable range`. A `repeat` is deliberate -- its back-edge is
 	# the long jump, and its exit test stays SHORT, so this row isolates the
 	# backward case, which is the half that can be widened at emit time because
-	# the target is already known. GENERATED: the source has to be ~130 KB.
+	# the target is already known. GENERATED: the body has to stay over 128 KiB of CODE (6000 tests since the
+	# density work of 2026-11-19 shrank each one; 3000 fell under the wall).
 	# bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi (the wall behind)
 	@awk 'BEGIN{print "program backjump;"; print "var n, r: Integer;"; \
 	  print "procedure Loop(x: Integer);"; print "var i, acc: Integer;"; \
 	  print "begin"; print "  acc := 0;"; print "  i := 0;"; \
 	  print "  repeat"; print "    Inc(i);"; \
-	  for(k=0;k<3000;k++) printf "    if x = %d then acc := acc + %d;\n", k, k; \
+	  for(k=0;k<6000;k++) printf "    if x = %d then acc := acc + %d;\n", k, k; \
 	  print "  until i >= 3;"; print "  n := acc;"; print "  r := i;"; print "end;"; \
 	  print "begin"; print "  Loop(7);"; \
 	  print "  Writeln(\"acc=\", n, \" iters=\", r);"; print "end."}' \

@@ -6,7 +6,7 @@ type: feature
 blocked-by: []
 summary: "pxx's xtensa code is about 6x gcc -O2 on a simple loop (about 160 bytes against 27), and the pxx-built Nilix kernel boots in 480 ms on the S3 where gcc's boots in 39 ms. The owner asked (relayed by pxx2) for register allocation for xtensa, then riscv32, then the density .n forms, then literal pool sharing. Most of the bytes come from expression emission, not from allocation, so this ticket stages the work: leaf operands loaded straight into a scratch register, fused compare-and-branch, increments without an address temporary, and only then scalar locals kept in registers."
 status: backlog
-owner: unassigned
+owner: unassigned (steps 1-3 done 2026-11-19; step 4 is the owner's call)
 ---
 
 # xtensa: expression codegen first, then register-resident locals
@@ -24,3 +24,34 @@ Measure each step with qemu executed-instruction counts and text size on test/c_
 After xtensa: the same steps for riscv32, then the density `.n` forms, then literal pool sharing.
 
 Nilix was named Gibux until 2026-11-17 (githome:gibux is frozen; the ticket slug keeps the old name).
+
+## Steps 1-3 done (2026-11-19, pxx Rainyday seat)
+
+- **Step 1, leaf operands.** XtLeafOperand / EmitLeafXtensa: a right operand
+  that is an integer constant or a scalar variable is loaded straight into a3
+  (EmitLoadVarRegXtensa, the old EmitLoadVarXtensa with a destination; it
+  touches only rd, a8, a9). `x + k` / `x - k` with |k| <= 127 is one addi.
+- **Step 2, compare and branch.** IR_JUMP_IF_FALSE on a 32-bit integer
+  comparison (XtBranchCompare: not string, float, 64-bit or `in`) is the
+  comparison's own bxx over the J (XtEmitBranchIfTrue), signed or unsigned.
+  `c == 0` / `c != 0` of a comparison, which is how the C front end spells
+  every condition, folds into c's branch (negated through the r field's bit 3).
+- **Step 3, increments.** Shared IR (ir.inc): `v++` / `v--` / `++v` whose
+  value is unused (a statement, a for step, a comma's left operand) on a
+  plain scalar variable lowers to `v = v + step` (IRLowerForEffect), no
+  address temp and no old-value slot. Every backend gets it.
+
+Measured: the loop above is 41 instructions (was 74), its body 18 (about
+50). Rainyday S3 kernel (290661b, esp32s3 profile) .text 1,344,586 ->
+1,091,557 bytes (-18.8%); it boots and runs init in QEMU, "halted after"
+457 -> 376 ms (wall, noisy).
+
+Checked: make test-xtensa (whole target; the long backward-jump row's
+generated body grew from 3000 to 6000 tests because it fell under 128 KiB),
+c-testsuite 220/220 on x86-64 and on hosted xtensa call0, both as latest;
+tools/check_xtensa_density.py (new, test-core): test/c_density_branch_incdec.c
+against gcc on call0 and windowed, and the loop at most 45 instructions.
+
+Still open, cheap next steps before step 4: `jump_if_false L; jump M; L:`
+(the C for/while shape) as one inverted branch; beqz/bnez/bxxi forms for a
+zero or small-constant right side; the same three steps on riscv32.

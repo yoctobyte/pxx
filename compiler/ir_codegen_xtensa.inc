@@ -499,7 +499,9 @@ begin
   end;
 end;
 
-procedure EmitLoadVarXtensa(idx: Integer);
+procedure EmitLoadVarRegXtensa(rd, idx: Integer);
+{ rd := the value of symbol idx (one word or less). Touches rd, a8 and a9
+  only, so a held value in any other register survives it (XtLeafOperand). }
 var tk: TTypeKind; sz, adj: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
@@ -517,33 +519,38 @@ begin
   if Syms[idx].Kind = skGlobal then
   begin
     EmitLoadGlobAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
-    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+    EmitSizedLoadXtensa(rd, reg_xtensa_a8, sz, sgn);
   end
   else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
           XtFrameDirect(Syms[idx].Offset, 4, adj) then
   begin
     xtensa_l32i(reg_xtensa_a8, reg_xtensa_a7, adj);
-    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+    EmitSizedLoadXtensa(rd, reg_xtensa_a8, sz, sgn);
   end
   else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
           XtFrameDirect(Syms[idx].Offset, sz, adj) then
-    EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a7, adj, sz, sgn)
+    EmitSizedLoadOffXtensa(rd, reg_xtensa_a7, adj, sz, sgn)
   else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
           XtFrameFar(Syms[idx].Offset, 4, reg_xtensa_a8, adj) then
   begin
     xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, adj);
-    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+    EmitSizedLoadXtensa(rd, reg_xtensa_a8, sz, sgn);
   end
   else if not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) and
           XtFrameFar(Syms[idx].Offset, sz, reg_xtensa_a8, adj) then
-    EmitSizedLoadOffXtensa(reg_xtensa_a2, reg_xtensa_a8, adj, sz, sgn)
+    EmitSizedLoadOffXtensa(rd, reg_xtensa_a8, adj, sz, sgn)
   else
   begin
     EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
       xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);
-    EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a8, sz, sgn);
+    EmitSizedLoadXtensa(rd, reg_xtensa_a8, sz, sgn);
   end;
+end;
+
+procedure EmitLoadVarXtensa(idx: Integer);
+begin
+  EmitLoadVarRegXtensa(reg_xtensa_a2, idx);
 end;
 
 procedure EmitStoreVarXtensa(idx: Integer);
@@ -1414,6 +1421,41 @@ function IsFloatXtensa(tk: TTypeKind): Boolean;
 begin
   Result := (tk = tySingle) or (tk = tyDouble);
 end;
+
+{ DENSITY, step 1 (feature-xtensa-codegen-density-before-register-allocation):
+  a binop's right operand that is a LEAF -- an integer constant, or a scalar
+  variable the IR_LOAD_SYM arm reads with EmitLoadVarXtensa -- is loaded
+  straight into a3, with the left operand left in a2. Its load touches only
+  a3, a8 and a9, so the left needs no s32i/l32i round trip through the
+  expression stack. Exactly the loads IREmitNodeXtensa would emit, into
+  another register. }
+function XtLeafOperand(n: Integer): Boolean;
+var si: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IRKind[n] = IR_CONST_INT then
+    Result := not IsFloatXtensa(IntToTypeKind(IRTk[n])) and not IsFloatXtensa(IRValueKind(n))
+  else if IRKind[n] = IR_LOAD_SYM then
+  begin
+    si := IRA[n];
+    tk := Syms[si].TypeKind;
+    Result := (tk <> tyVariant) and not Is64BitXtensa(tk) and
+              not ((tk = tyRecord) and not Syms[si].IsArray and
+                   (RecSize(SymTR[si].RecId) > 4) and (RecSize(SymTR[si].RecId) <= 8));
+  end;
+end;
+
+procedure EmitLeafXtensa(rd, n: Integer);
+{ rd := leaf n (XtLeafOperand). A 64-bit constant gives its low word: the
+  32-bit arms that take a leaf use only that word (XtNarrowBinop). }
+begin
+  if IRKind[n] = IR_CONST_INT then
+    EmitLoadConstXtensa(rd, Low32(IRIVal[n]))
+  else
+    EmitLoadVarRegXtensa(rd, IRA[n]);
+end;
+
 
 { --- Low-32 demand (the riscv32 design, ir_codegen_riscv32.inc) --------------
   Pascal integer arithmetic is typed at 64 bits (Integer + Integer is an Int64
@@ -3756,6 +3798,20 @@ begin
                          'beq a3, a9, .inrange',
                          'movi a2, 256',
                          '.inrange:']);
+        { a leaf right operand plus or minus: x + k, x - k with k in addi's
+          range is one addi on a2 (density step 3: i++ and x += c) }
+        if ((op = Ord(tkPlus)) or (op = Ord(tkMinus))) and (IRKind[right] = IR_CONST_INT) and
+           XtLeafOperand(right) and (Low32(IRIVal[right]) >= -127) and
+           (Low32(IRIVal[right]) <= 127) then
+        begin
+          if op = Ord(tkPlus) then xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, Low32(IRIVal[right]))
+          else xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -Low32(IRIVal[right]));
+          Exit;
+        end;
+        if XtLeafOperand(right) then
+          EmitLeafXtensa(reg_xtensa_a3, right)          { density step 1 }
+        else
+        begin
         XtensaPushA2;
         XtLow32Demand := narrow = 1;
         IREmitNodeXtensa(right);
@@ -3770,6 +3826,7 @@ begin
         begin
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);
           xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+        end;
         end;
         { a2 = left, a3 = right }
 
@@ -6725,6 +6782,86 @@ begin
   Result := bestB;
 end;
 
+{ DENSITY, step 2 (feature-xtensa-codegen-density-before-register-allocation):
+  a comparison that only decides a branch is ONE bxx on its operands. The
+  value form builds 0/1 (movi, bxx, movi, mov) and IR_JUMP_IF_FALSE then
+  compared that against 0 (movi, bne). XtBranchCompare says whether node n is
+  a comparison the generic 32-bit integer arm of IR_BINOP would compute, and
+  so the operands it would take: not a string, float or 64-bit compare (each
+  has its own arm above that one) and not `in`. }
+function XtBranchCompare(n: Integer): Boolean;
+var op: Integer; lk, rk: TTypeKind;
+begin
+  Result := False;
+  if (n < 0) or (IRKind[n] <> IR_BINOP) then Exit;
+  op := IRC[n];
+  if not ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+          (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) then Exit;
+  lk := IntToTypeKind(IRTk[IRA[n]]);
+  rk := IntToTypeKind(IRTk[IRB[n]]);
+  if (lk = tyAnsiString) or (rk = tyAnsiString) or TypeIsFrozenString(lk) or
+     TypeIsFrozenString(rk) then Exit;
+  if IsFloatXtensa(IntToTypeKind(IRTk[n])) or IsFloatXtensa(IRValueKind(IRA[n])) or
+     IsFloatXtensa(IRValueKind(IRB[n])) then Exit;
+  if Is64BitXtensa(IntToTypeKind(IRTk[n])) or Is64BitXtensa(lk) or Is64BitXtensa(rk) then Exit;
+  Result := True;
+end;
+
+procedure XtEmitBranchIfTrue(n: Integer; var pos, br, bs, bt: Integer);
+{ Emit n's operands (a2 = left, a3 = right) and a branch, taken when the
+  comparison n holds, to a target not yet known: its position in pos, its r
+  field (BEQ 1, BLT 2, BLTU 3, BNE 9, BGE 10, BGEU 11) and operand order in
+  br/bs/bt, for XtensaPatchSkipOver. }
+var left, right, op, v: Integer; uns: Boolean;
+begin
+  left := IRA[n]; right := IRB[n]; op := IRC[n];
+  { `c == 0` / `c != 0` of a comparison c -- how the C front end spells every
+    condition -- is c's own branch, the opposite one for `== 0`: each
+    condition has its negation in the r field's bit 3 (BEQ/BNE, BLT/BGE,
+    BLTU/BGEU) }
+  if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and (IRKind[right] = IR_CONST_INT) and
+     (IRIVal[right] = 0) and XtBranchCompare(left) then
+  begin
+    XtEmitBranchIfTrue(left, pos, br, bs, bt);
+    if op = Ord(tkEq) then
+    begin
+      br := br xor 8;
+      v := EncodeXtensaBranch(br, bs, bt, 6);
+      Patch24(pos, v);
+    end;
+    Exit;
+  end;
+  IREmitNodeXtensa(left);
+  if XtLeafOperand(right) then
+    EmitLeafXtensa(reg_xtensa_a3, right)
+  else
+  begin
+    XtensaPushA2;
+    IREmitNodeXtensa(right);
+    xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+    XtensaPopA2;
+  end;
+  uns := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+  bs := reg_xtensa_a2; bt := reg_xtensa_a3;
+  if op = Ord(tkEq) then br := 1
+  else if op = Ord(tkNeq) then br := 9
+  else
+  begin
+    { a > b is b < a; a <= b is b >= a }
+    if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
+    begin
+      bs := reg_xtensa_a3; bt := reg_xtensa_a2;
+    end;
+    if (op = Ord(tkLt)) or (op = Ord(tkGt)) then br := 2 else br := 10;
+    if uns then Inc(br);
+  end;
+  pos := CodeLen;
+  v := EncodeXtensaBranch(br, bs, bt, 6);               { patched by the caller }
+  EmitB(v and $FF);
+  EmitB((v shr 8) and $FF);
+  EmitB((v shr 16) and $FF);
+end;
+
 procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
 { Rewrite the branch at `pos` to skip everything emitted since. r is the branch
   flavour's own field: 9 = BNE, 1 = BEQ, matching xtensa_bne/xtensa_beq. }
@@ -6755,7 +6892,7 @@ procedure IREmitMachineCodeXtensa;
   touches the data section at all, and LibcSyscallCallCount is x86-64 only.
   Anything added to this backend that appends to a NEW table must be saved here
   too, or the discarded pass leaves relocations pointing into overwritten code. }
-var i, lblId, pos, f, procIdx, skipPos, si, sz: Integer;
+var i, lblId, pos, f, procIdx, skipPos, si, sz, br, bs, bt: Integer;
     LabelFixupCount: Integer;
     fpChosen: Integer;
     saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
@@ -6911,6 +7048,15 @@ begin
             crtl's %llx printed nothing (c-testsuite 00204 on esp32s3).
             bug-32bit-truthiness-high-half -- riscv32, arm32, i386 and wasm32
             carry this fix; xtensa was the backend nobody visited. }
+          if XtBranchCompare(IRB[i]) and not Is64BitXtensa(IntToTypeKind(IRTk[IRB[i]])) then
+          begin
+            { density step 2: the comparison's own bxx skips the J }
+            XtEmitBranchIfTrue(IRB[i], skipPos, br, bs, bt);
+            EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+            XtensaPatchSkipOver(skipPos, br, bs, bt);
+          end
+          else
+          begin
           if Is64BitXtensa(IntToTypeKind(IRTk[IRB[i]])) then
           begin
             EmitNode64Xtensa(IRB[i]);
@@ -6925,6 +7071,7 @@ begin
           xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);      { patched below }
           EmitXtensaJumpToLabel(lblId, LabelFixupCount);
           XtensaPatchSkipOver(skipPos, 9, reg_xtensa_a2, reg_xtensa_a4);
+          end;
         end;
 
       IR_CALL:

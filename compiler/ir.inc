@@ -1340,6 +1340,23 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+
+{ `i++` / `i--` / `++i` whose VALUE nobody uses -- a statement, a for-loop
+  step, a comma's left operand -- on a plain scalar variable is just
+  `i = i + 1`: one store of a load plus the step. The general AN_INCDEC
+  lowering keeps an address temp and an old-value temp for the value it
+  yields, and every backend paid three stack slots for them. IRLowerForEffect
+  sets IRIncDecForEffect for exactly one AN_INCDEC node, which reads and
+  clears it first thing. feature-xtensa-codegen-density-before-register-allocation, step 3 }
+var
+  IRIncDecForEffect: Boolean;
+
+function IRLowerForEffect(node: Integer): Integer;
+begin
+  IRIncDecForEffect := (node >= 0) and (ASTKind[node] = AN_INCDEC);
+  Result := IRLowerAST(node);
+  IRIncDecForEffect := False;
+end;
 function IRLowerCondJump(n, falseLabel, trueLabel: Integer): Integer; forward;
 function IRIsShortCircuitBool(n: Integer): Boolean; forward;
 var
@@ -3794,7 +3811,7 @@ begin
       refuses. The only thing that changes is that a comma stops hiding an
       operand this routine could already handle. }
   begin
-    IRDiscardValue(ASTLeft[node], IRLowerAST(ASTLeft[node]));
+    IRDiscardValue(ASTLeft[node], IRLowerForEffect(ASTLeft[node]));
     Result := IRLowerAddress(ASTRight[node]);
   end
   else if ASTNodeIsCall(node) and
@@ -7193,7 +7210,7 @@ begin
     SymSyncTypeRef(tmpSym);
     while ASTKind[argAST] = AN_COMMA do
     begin
-      IRDiscardValue(ASTLeft[argAST], IRLowerAST(ASTLeft[argAST]));
+      IRDiscardValue(ASTLeft[argAST], IRLowerForEffect(ASTLeft[argAST]));
       argAST := ASTRight[argAST];
     end;
     value := IRLowerAST(argAST);
@@ -8021,7 +8038,7 @@ begin
       walked from its roots, so a node evaluated purely for its side effects has to be
       marked or it is an orphan and never gets emitted at all -- `f((bump(), s))` would
       silently not call bump(). }
-    IRDiscardValue(ASTLeft[argAST], IRLowerAST(ASTLeft[argAST]));
+    IRDiscardValue(ASTLeft[argAST], IRLowerForEffect(ASTLeft[argAST]));
     argAST := ASTRight[argAST];
     cmHad := True;
   end;
@@ -16586,7 +16603,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         Right-nested, so peel one operand at a time. }
       while ASTKind[ASTRight[node]] = AN_COMMA do
       begin
-        IRDiscardValue(ASTLeft[ASTRight[node]], IRLowerAST(ASTLeft[ASTRight[node]]));
+        IRDiscardValue(ASTLeft[ASTRight[node]], IRLowerForEffect(ASTLeft[ASTRight[node]]));
         ASTRight[node] := ASTRight[ASTRight[node]];
       end;
 
@@ -19684,6 +19701,26 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         ++/-- in a pxx-built BusyBox (pxx, on Nilix).
         bug-c-increment-and-decrement-of-a-double-add-integer-bits }
       if TypeIsFloat(argTk) then stepTk := tyInteger else stepTk := argTk;
+      { value unused, operand a plain scalar variable: `v = v + step`
+        (IRLowerForEffect). The kinds the AN_IDENT value arm reads with a bare
+        IR_LOAD_SYM, and that IR_STORE_SYM writes back as is. }
+      if IRIncDecForEffect and (ASTKind[left] = AN_IDENT) then
+      begin
+        slot := Integer(ASTIVal[left]);
+        if (slot >= 0) and (slot < SymCount) and not Syms[slot].IsArray and not Syms[slot].IsRef and
+           (SymCellPtr[slot] < 0) and (Syms[slot].TypeKind = argTk) and
+           (TypeIsMachineInt(argTk) or (argTk = tyPointer)) and
+           not TypeIsPromoInt(argTk) then
+        begin
+          IRIncDecForEffect := False;
+          Result := IRAppend(IR_STORE_SYM, slot,
+            IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
+                     IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(stepTk)),
+                     Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
+          Exit;
+        end;
+      end;
+      IRIncDecForEffect := False;
       varIdx := AllocVar('', tyPointer);                 { paddr = &lvalue, once }
       IRAppend(IR_STORE_SYM, varIdx, IRAddressAsPointer(IRLowerAddress(left)), -1, 0, Ord(tyPointer));
       slot := AllocVar('', argTk);                       { old value }
@@ -19732,7 +19769,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
     begin
       { C comma operator: evaluate Left for its side effects (discard the value),
         yield Right. Right-nested, so each Left peels one operand off the front. }
-      IRDiscardValue(ASTLeft[node], IRLowerAST(ASTLeft[node]));
+      IRDiscardValue(ASTLeft[node], IRLowerForEffect(ASTLeft[node]));
       Result := IRLowerAST(ASTRight[node]);
     end;
 
@@ -20825,7 +20862,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       begin
         if ASTKind[seq] = AN_SEQ then
         begin
-          item := IRDropManagedResult(ASTLeft[seq], IRLowerAST(ASTLeft[seq]));
+          item := IRDropManagedResult(ASTLeft[seq], IRLowerForEffect(ASTLeft[seq]));
           IRDiscardValue(ASTLeft[seq], item);
           { The terminator itself is lowered above; only what FOLLOWS it goes.
             Same decision as the AN_SEQ spine and deliberately the same call --
@@ -20836,7 +20873,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         end
         else
         begin
-          item := IRDropManagedResult(seq, IRLowerAST(seq));
+          item := IRDropManagedResult(seq, IRLowerForEffect(seq));
           IRDiscardValue(seq, item);
           seq := -1;
         end;
