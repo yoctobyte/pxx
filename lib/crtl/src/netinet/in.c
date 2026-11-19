@@ -248,8 +248,16 @@ int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t
   return __crtl_sock_fail(__pxx_setsockopt(sockfd, level, optname, (void *)optval, (int)optlen));
 }
 
+/* getsockopt(2). 64-bit targets with the Linux call numbers ask the kernel
+   for every option (SO_PEERCRED, SO_TYPE, SO_DOMAIN, SO_ACCEPTCONN, TCP_*,
+   ...), as gcc+glibc does; the option numbers in <sys/socket.h> are Linux's.
+   The other targets answer SO_ERROR alone, through the PAL. */
 int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
   int err;
+#if defined(__CRTL_RAW_SOCKADDR) && defined(SYS_getsockopt)
+  return (int)syscall(SYS_getsockopt, (long)sockfd, (long)level, (long)optname,
+                      (long)optval, (long)optlen);
+#endif
   (void)level;
   if (optname != SO_ERROR || !optval || !optlen || *optlen < sizeof(int)) {
     errno = EINVAL;

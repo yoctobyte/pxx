@@ -1,7 +1,10 @@
 /* bind, connect, accept, sendto, recvfrom, getsockname and getpeername with
    address families other than AF_INET: lib/crtl/src/netinet/in.c used to
    refuse every one of them with EINVAL before any system call (busybox ip's
-   AF_NETLINK, udhcpc's AF_PACKET). Linux x86-64; the output is gcc's. */
+   AF_NETLINK, udhcpc's AF_PACKET). Also getsockopt beyond SO_ERROR:
+   SO_PEERCRED, SO_TYPE, SO_DOMAIN, SO_ACCEPTCONN (feature-c-crtl-af-unix-
+   sockets). Linux x86-64; the output is gcc's. */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -34,6 +37,27 @@ static void unix_stream(void) {
   gl = sizeof got; memset(&got, 0xff, sizeof got);
   acc = accept(srv, (struct sockaddr *)&got, &gl);
   printf("unix accept %d family=%d\n", acc >= 0, got.sun_family);
+  {
+    struct ucred cr;
+    int v;
+    socklen_t vl;
+    vl = sizeof cr; memset(&cr, 0, sizeof cr);
+    rc = getsockopt(acc, SOL_SOCKET, SO_PEERCRED, &cr, &vl);
+    printf("unix SO_PEERCRED %d len=%d pid=%d uid=%d gid=%d\n", rc, (int)vl,
+           cr.pid == getpid(), cr.uid == getuid(), cr.gid == getgid());
+    vl = sizeof v; v = -1;
+    rc = getsockopt(cli, SOL_SOCKET, SO_TYPE, &v, &vl);
+    printf("unix SO_TYPE %d %d\n", rc, v == SOCK_STREAM);
+    vl = sizeof v; v = -1;
+    rc = getsockopt(cli, SOL_SOCKET, SO_DOMAIN, &v, &vl);
+    printf("unix SO_DOMAIN %d %d\n", rc, v == AF_UNIX);
+    vl = sizeof v; v = -1;
+    rc = getsockopt(srv, SOL_SOCKET, SO_ACCEPTCONN, &v, &vl);
+    printf("unix SO_ACCEPTCONN srv %d %d\n", rc, v);
+    vl = sizeof v; v = -1;
+    rc = getsockopt(cli, SOL_SOCKET, SO_ERROR, &v, &vl);
+    printf("unix SO_ERROR %d %d\n", rc, v);
+  }
   gl = sizeof got; memset(&got, 0, sizeof got);
   rc = getpeername(cli, (struct sockaddr *)&got, &gl);
   printf("unix getpeername %d same=%d\n", rc, strcmp(got.sun_path, path) == 0);
