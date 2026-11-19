@@ -94,3 +94,15 @@ plus this program compiling AND printing `abcdef`, plus
 `test/test_basic_unit_free_string_literal.bas` staying small (it asserts the
 unit-free path, and pulling builtinheap unconditionally would defeat it without
 failing it).
+
+
+## Re-measured 2026-11-19 (claude-dupwt): x86-64 and i386 only now
+
+`DIM s = "abc" / DIM t = "def" / PRINT s + t` plus `IF s = "abc"` builds and
+prints `abcdef / eq` on aarch64 and riscv32. There, e7e9251938's target pull
+brings in builtinheap, and bPullsBuiltinHeap includes
+TargetCodegenCallsHeapRuntime, so the shims are emitted. On x86-64 it is
+still `call to a runtime stub that was never emitted`, and on i386
+`PXXStrConcat not found`. So the open half is exactly the two targets whose
+codegen is inline. The fix shape follows: let bparser decide from the
+SOURCE (a string op seen in the prescan) the way it decides from the target.

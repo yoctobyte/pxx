@@ -387,7 +387,7 @@ begin
     statement too late. It goes BEFORE PatchProgramEntryJump, so the unit bodies
     land between the ELF entry and the patch point and the entry jump, which aims
     at CodeLen at the moment it is patched, clears them. }
-  PullTargetRuntimeUnits;
+  PullTargetRuntimeUnitsEx(True);   { writes REALs: i386 needs the float writer }
   PatchProgramEntryJump(jmpPatch);
 
   FEatSep;

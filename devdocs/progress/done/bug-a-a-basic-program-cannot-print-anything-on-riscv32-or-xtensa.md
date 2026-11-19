@@ -2,8 +2,8 @@
 prio: 40
 track: A
 summary: "ANY `PRINT` IN A BASIC PROGRAM REFUSES ON riscv32 AND xtensa -- `compiler error: PXXWriteDecW not found` -- so the BASIC frontend cannot produce output at all on those two targets. Measured 2026-09-22 at binary 81bf5f94fb6f, one row per target: `10 LET A = 7 / 20 PRINT A` and `10 PRINT \"hi\"` both BREAK on riscv32 and xtensa and build on arm32, aarch64, i386 and x86-64; a BASIC program with no PRINT builds on all six, which is the row that says this is about the write path and not about the frontend generally. PRE-EXISTING, NOT A REGRESSION, AND THE CONTROL IS THE REASON THAT SENTENCE IS HERE: the PINNED compiler refuses identically on both targets, so this is not 523833fde (the needsAnsiRuntime evidence scan) even though bparser.inc's own comment records that commit retiring the flag BASIC used to ride on. CAUSE, from a two-file census and not a guess: riscv32 routes EVERY ordinal write through builtinheap's PXXWriteDecW and xtensa reaches it the same way -- the mechanism `TargetCodegenCallsHeapRuntime` (emit.inc) owns and names -- and `compiler/bparser.inc` NEVER CALLS `PullTargetRuntimeUnits`, which is the one routine that pulls builtinheap for a driver whose language has no `uses` clause to say so. Every other skeleton frontend calls it: fparser.inc:388, aparser.inc:389, gparser.inc:402, zparser.inc:2063. BASIC is the only one of the five that does not, and it is a ONE-LINE call in the same position. THE ONE-LINE FIX IS NOT OBVIOUSLY SAFE AND THAT IS WHY THIS IS A TICKET: `BSourceUsesAUnit` (bparser.inc:710) decides whether the AnsiString shims may be emitted, and its stated contract is that `will builtinheap be here` and `does this source say USES` are THE SAME QUESTION for BASIC. Pulling builtinheap ambiently makes the first true while the second stays false, so the two stop being the same question and that function's premise -- which its own comment argues at length and tells you not to replace -- becomes stale. Whoever fixes this must say what `BSourceUsesAUnit` means afterwards, in that comment, in the same commit."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # A BASIC program cannot print anything on riscv32 or xtensa
@@ -97,3 +97,15 @@ it turned up a third instance of the class — the first being
 causes, one shape, which is the argument for
 [[feature-a-pull-builtinheap-on-demand-instead-of-predicting-it]] rather than a
 fourth prediction site.
+
+
+# Closed 2026-11-19 (claude-dupwt): fixed by e7e9251938
+
+The same commit fixed this and guards it: test-core's cross .bas row runs five
+fixtures over `i386 aarch64 arm32 riscv32 xtensa`, and xtensa uses
+`--platform=posix --xtensa-soft-mulhigh` (the reason is in the row's comment).
+Re-measured today: `10 PRINT "hi" / LET A = 7 / 20 / PRINT A` builds on all
+six targets with those xtensa flags, and the riscv32 output equals native.
+Note for the next prober: WITHOUT the posix flag, xtensa refuses with
+`external (dynamic) symbols are not supported`. That is the IDF-profile
+default, not this bug.

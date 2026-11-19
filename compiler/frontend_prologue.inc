@@ -179,7 +179,7 @@ begin
     ParseUsesUnitAmbient(KernelAbiUnit);
 end;
 
-procedure PullTargetRuntimeUnits;
+procedure PullTargetRuntimeUnitsEx(writesReals: Boolean);
 { Pull the units this TARGET's codegen calls into, for a driver whose language
   has no `uses` clause to say so.
 
@@ -215,15 +215,26 @@ begin
     backend but x86-64, and i386 is the one target that predicate does not
     already cover. Folding i386 into it would make every Pascal program with a
     record pull builtinheap on i386 (pasparser_prog.inc asks it), which is a
-    cost for something unrelated. A skeleton driver has no way to say "this
-    program writes a float", so on i386 it pulls the unit, as the other four
-    targets already do. Before: the Fortran and Algol skeletons were refused
-    on i386 with `compiler error: float writer helper not found`.
+    cost for something unrelated. Before: the Fortran and Algol skeletons were
+    refused on i386 with `compiler error: float writer helper not found`.
+
+    ONLY FOR A DRIVER THAT SAYS IT WRITES REALS (writesReals). The first
+    version pulled on i386 for every skeleton driver, and a unit-free
+    `10 PRINT "hello"` went from 4,224 to 265,824 bytes on i386 (BASIC, Ada,
+    Rust, Zig, Erlang, LOLCODE and Whitespace alike) for a helper none of them
+    calls. Fortran and Algol pass True; everyone else calls the plain form.
     bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real }
-  if not (TargetCodegenCallsHeapRuntime or (TargetArch = TARGET_I386)) then Exit;
+  if not (TargetCodegenCallsHeapRuntime or
+          (writesReals and (TargetArch = TARGET_I386))) then Exit;
   PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   ParseUsesUnitAmbient('builtin');
+end;
+
+procedure PullTargetRuntimeUnits;
+{ The common case: a driver whose programs write no REAL on i386. }
+begin
+  PullTargetRuntimeUnitsEx(False);
 end;
 
 procedure EmitProgramEpilogue;

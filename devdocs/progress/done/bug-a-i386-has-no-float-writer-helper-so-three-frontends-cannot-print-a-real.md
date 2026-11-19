@@ -81,3 +81,18 @@ their native output under qemu-i386. Control: the previous compiler, invoked
 directly, refuses both. test-skeleton-frontends-cross-target is GREEN with 54
 (program, target) pairs. The two new i386 pairs are the regression guard;
 the suite runs i386 in its target loop already.
+
+
+# Follow-up 2026-11-19: the first fix was a size regression, narrowed
+
+8bd233d512 pulled builtinheap on i386 inside PullTargetRuntimeUnits, which
+NINE skeleton drivers call. A unit-free `10 PRINT "hello"` (BASIC) went from
+4,224 to 265,824 bytes on i386, and every row stayed green. That one did
+not need the float writer at all. It also made unit-free BASIC string concat
+"work" on i386, by accident.
+
+Now: PullTargetRuntimeUnitsEx(writesReals). Only fparser and gparser pass True;
+the other seven call the plain PullTargetRuntimeUnits (= Ex(False)). Measured:
+BASIC hello on i386 is 4,224 bytes again, and Fortran and Algol on i386 still
+equal native. New Makefile row basi386sz: unit-free BASIC on i386 must be
+< 16384 bytes. It fails on the 8bd233d512-era compiler (261,728) and passes now.

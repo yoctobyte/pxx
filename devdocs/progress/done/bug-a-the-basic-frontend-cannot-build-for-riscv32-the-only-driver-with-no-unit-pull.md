@@ -2,8 +2,8 @@
 track: A
 prio: 35
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-07
 found-by: frankA
 tags: [basic, riscv32, cross-target, softfloat]
@@ -47,3 +47,16 @@ symbol was not identified.
 riscv32 joins BASIC's row in `test-skeleton-frontends-cross-target` **and i386,
 aarch64 and arm32 stay green in the same run**. That second half is the whole
 requirement: the reverted attempt would have passed a riscv32-only check.
+
+
+# Closed 2026-11-19 (claude-dupwt): fixed by e7e9251938, now measured here too
+
+e7e9251938 (2026-09-22) placed PullTargetRuntimeUnits before BASIC's prescan.
+That is the third position, after the two that fail (its comment records both).
+It did not close this ticket, and it left this ticket's KNOWN GAP in
+test-skeleton-frontends-cross-target. Re-measured today:
+test_basic_comprehensive.bas built for i386, aarch64, arm32 and riscv32 is
+byte-identical to native under qemu. That is the acceptance, riscv32 joining
+with the other three staying green. The gap entry is removed and the suite's
+floor is raised from 52 to 55 pairs, so this pair is now counted rather than
+excused.

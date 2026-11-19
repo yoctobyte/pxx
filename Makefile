@@ -9485,6 +9485,15 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_tlsnonebas26 "$$($(TESTTMP)/test_tlsnonebas26)" "1152"
 	./$(COMPILER) test/test_a_basic_program_with_a_unit_pays_the_full_threadvar_area.bas $(TESTTMP)/test_tlsusesbas26
 	tools/expect_same.sh test_tlsusesbas26 "$$($(TESTTMP)/test_tlsusesbas26)" "4224"
+	@# A unit-free BASIC program on i386 pulls no runtime unit. 8bd233d512
+	@# pulled builtinheap on i386 for EVERY skeleton driver (for the Fortran and
+	@# Algol float writer) and `10 PRINT "hello"` went from 4,224 to 265,824
+	@# bytes with every row green. The ceiling is 4x the measured size.
+	@# bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real
+	@printf '10 PRINT "hello"\n' > $(TESTTMP)/basi386sz.bas
+	./$(COMPILER) --target=i386 $(TESTTMP)/basi386sz.bas $(TESTTMP)/basi386sz >/dev/null
+	@sz=$$(stat -c%s $(TESTTMP)/basi386sz); test "$$sz" -lt 16384 \
+	  || { echo "basi386sz: FAIL - unit-free BASIC on i386 is $$sz bytes (want < 16384): a runtime unit is being pulled it never calls"; exit 1; }
 	# THE NILPY ARM of the same saving, and it rests on a different argument
 	# from the Pascal one. There is no text scan and nothing for one to find:
 	# the language has no thread-local declaration, so no NilPy source can
@@ -39584,11 +39593,6 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	      riscv32) run="qemu-riscv32" ;; \
 	      *)       run="" ;; \
 	    esac; \
-	    case "$$nm:$$t" in \
-	      test_basic_comprehensive.bas:riscv32) \
-	        echo "test-skeleton-frontends-cross-target: $$nm:$$t is a KNOWN GAP -- bug-a-the-basic-frontend-cannot-build-for-riscv32-the-only-driver-with-no-unit-pull"; \
-	        continue ;; \
-	    esac; \
 	    if [ -n "$$run" ] && ! command -v $$run >/dev/null 2>&1; then \
 	      echo "test-skeleton-frontends-cross-target: $$t SKIPPED ($$run absent) -- $$nm NOT verified"; \
 	      continue; \
@@ -39607,7 +39611,7 @@ test-skeleton-frontends-cross-target: $(COMPILER)
 	    tools/expect_same.sh "xtarget-$$nm-$$t" "$$got" "$$nat" || overall=1; \
 	  done; \
 	done; \
-	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 52 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
+	tools/expect_same.sh xtarget-rows-ran "$$([ $$ran -ge 55 ] && echo enough || echo "only $$ran")" "enough" || overall=1; \
 	if [ $$overall -ne 0 ]; then echo "test-skeleton-frontends-cross-target: RED"; exit 1; fi; \
 	echo "test-skeleton-frontends-cross-target: GREEN -- $$ran (program,target) pairs matched their native run"
 
