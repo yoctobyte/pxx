@@ -5,7 +5,7 @@
  * this arm is the worse one.
  *
  * C 6.2.2 gives a file-scope `static` internal linkage, so `v` in
- * fixtures/cstatic_var_mod_a.c and `v` in cstatic_var_mod_b.c are two distinct
+ * fixtures/as_crtl/lib/crtl/cstatic_var_mod_a.c and `v` in cstatic_var_mod_b.c are two distinct
  * objects that merely share a spelling. pxx's preprocessor inlines every
  * module into ONE buffer and tells them apart by module attribution, which is
  * how it emulates separate translation units.
@@ -51,7 +51,11 @@
  * scope in one TU is a redefinition. That asymmetry is the whole reason the
  * oracle needs -DSEPARATE_TU, and it is the same note the function arm carries.
  * bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias
- */
+
+ * FIXTURE PATH (2026-11-19): the module fixtures live under
+ * test/fixtures/as_crtl/lib/crtl/ because since b3c5f711ea only a .c whose
+ * path contains lib/crtl/ is a module of its own; an #included user .c joins
+ * the includer's translation unit, as in C. */
 #include <stdio.h>
 
 #ifdef SEPARATE_TU
@@ -64,8 +68,8 @@ extern int  mb_get(void);
 extern int  mb_size(void);
 #else
 /* The path under test: one buffer, told apart by module attribution. */
-#include "fixtures/cstatic_var_mod_a.c"
-#include "fixtures/cstatic_var_mod_b.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_var_mod_a.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_var_mod_b.c"
 #endif
 
 int main(void)

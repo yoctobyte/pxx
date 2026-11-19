@@ -13,13 +13,17 @@
    order), and with -DSTATIC_FIRST the static module first. The oracle is
    gcc building the modules as separate TUs:
      gcc -DSEPARATE_TU test/c_static_vs_external_same_name.c \
-         test/fixtures/cstatic_ext_priv.c test/fixtures/cstatic_ext_pub.c
+         test/fixtures/as_crtl/lib/crtl/cstatic_ext_priv.c test/fixtures/cstatic_ext_pub.c
    prints "10 1005 1007 14 10".
-*/
+
+ * FIXTURE PATH (2026-11-19): the module fixtures live under
+ * test/fixtures/as_crtl/lib/crtl/ because since b3c5f711ea only a .c whose
+ * path contains lib/crtl/ is a module of its own; an #included user .c joins
+ * the includer's translation unit, as in C. */
 extern int printf(const char *, ...);
 
 #if defined(STATIC_FIRST) && !defined(SEPARATE_TU)
-#include "fixtures/cstatic_ext_priv.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_ext_priv.c"
 #endif
 
 int tag(int);
@@ -27,7 +31,7 @@ int priv_user(int);
 int (*priv_addr(void))(int);
 
 #if !defined(STATIC_FIRST) && !defined(SEPARATE_TU)
-#include "fixtures/cstatic_ext_priv.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_ext_priv.c"
 #endif
 
 int main(void)

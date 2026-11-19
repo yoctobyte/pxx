@@ -11703,16 +11703,23 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh rtl_libc_output "$$(PXX_RTL_LIBC_TMP=$$d $$d/libc 2>&1; echo exit=$$?)" "$$(PXX_RTL_LIBC_TMP=$$d $$d/raw 2>&1; echo exit=$$?)" && \
 	  tools/expect_same.sh rtl_libc_kernel_entries "$$(python3 tools/syscall_scan.py $$d/libc | grep -o '[0-9]* kernel-entry')" "1 kernel-entry"
 	# --os=freebsd, build-only (the run is `make test-freebsd`, which needs the
-	# VM): branded FreeBSD, and exactly two raw kernel entries -- the
-	# translator's own and the never-reached rt_sigreturn. A third means some
-	# site bypassed the thunk and would issue a LINUX number on FreeBSD.
+	# VM): branded FreeBSD, and exactly FIVE raw kernel entries: the
+	# translator's own (FbRawA), the never-reached rt_sigreturn in the entry
+	# stub, and FbClearTidExit's three (_umtx_op wake twice, thr_exit: FreeBSD
+	# numbers, registers only, because the joiner may unmap the stack the
+	# moment the tid word is clear -- compiler/builtin/fbsdabi.pas). The row
+	# said two from before FbClearTidExit (2026-11-12) and had been red since,
+	# stopping test-core at its ninth row. A sixth means some site bypassed
+	# the thunk and would issue a LINUX number on FreeBSD:
+	# `tools/syscall_scan.py BIN --list` names it.
+	# bug-test-core-stops-at-freebsd-kernel-entries-5-not-2
 	@d=$(TESTTMP)/os_freebsd26; mkdir -p $$d && \
 	  ./$(COMPILER) --os=freebsd test/test_rtl_libc_torture.pas $$d/fb >/dev/null && \
 	  tools/expect_same.sh freebsd_osabi "$$(od -An -tu1 -j7 -N1 $$d/fb | tr -d ' ')" "9" && \
 	  tools/expect_same.sh freebsd_abi_note "$$(readelf -nW $$d/fb | grep -c 'FreeBSD *0x00000004')" "1" && \
-	  tools/expect_same.sh freebsd_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fb | grep -o '[0-9]* kernel-entry')" "2 kernel-entry" && \
+	  tools/expect_same.sh freebsd_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fb | grep -o '[0-9]* kernel-entry')" "5 kernel-entry" && \
 	  ./$(COMPILER) --os=freebsd test/c_os_freebsd_runtime.c $$d/fbc >/dev/null && \
-	  tools/expect_same.sh freebsd_c_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fbc | grep -o '[0-9]* kernel-entry')" "2 kernel-entry"
+	  tools/expect_same.sh freebsd_c_kernel_entries "$$(python3 tools/syscall_scan.py $$d/fbc | grep -o '[0-9]* kernel-entry')" "5 kernel-entry"
 	# 100 -I roots, the header in the LAST one: an ESP-IDF translation unit
 	# passes 81, and MAX_C_INCLUDE_DIRS / MAX_PAS_UNIT_DIRS were 64 (pin v452:
 	# "too many -I include directories"). museum_landkaart's header import.
@@ -19699,8 +19706,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cfsi_rt "$$($(TESTTMP)/cfsi_rt)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
 	./$(COMPILER) --c-static-data test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_sd > /dev/null
 	tools/expect_same.sh cfsi_sd "$$($(TESTTMP)/cfsi_sd)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
-	./$(COMPILER) --emit-obj --freestanding test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_fs.o > /dev/null
-	gcc -no-pie -o $(TESTTMP)/cfsi_fs $(TESTTMP)/cfsi_fs.o
+	# -DNO_SSE: --freestanding refuses SSE (28c9b6aa10), so a gcc helper
+	# prints the baked float/double; the expected output is unchanged.
+	./$(COMPILER) --emit-obj --freestanding -DNO_SSE test/c_file_scope_initialisers_are_data.c $(TESTTMP)/cfsi_fs.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/cfsi_fs $(TESTTMP)/cfsi_fs.o test/fixtures/cfsi_show_fp.c
 	tools/expect_same.sh cfsi_fs "$$($(TESTTMP)/cfsi_fs)" "$$(cat test/c_file_scope_initialisers_are_data.expected)"
 	# A block-scope extern naming something no file-scope declaration gives.
 	./$(COMPILER) test/c_block_scope_extern_with_no_file_scope_declaration.c $(TESTTMP)/cbse > /dev/null
@@ -19827,7 +19836,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh csyncat26 "$$($(TESTTMP)/csyncat26)" "$$(cat test/c_sync_atomic_builtins.expected)"
 	./$(COMPILER) --target=aarch64 test/c_sync_atomic_builtins.c $(TESTTMP)/csyncat_a64
 	tools/expect_same.sh csyncat_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/csyncat_a64)" "$$(cat test/c_sync_atomic_builtins.expected)"
-	tools/expect_same.sh csyncat_a64_order "$$(od -An -tx1 -v $(TESTTMP)/csyncat_a64 | tr -d '\n' | grep -o '20 fc 5f 88 1f 00 02 6b 61 00 00 54 23 fc 04 88 84 ff ff 35 bf 3b 03 d5' | wc -l | tr -d ' ')" "3"
+	tools/expect_same.sh csyncat_a64_order "$$(od -An -tx1 -v $(TESTTMP)/csyncat_a64 | tr -d '\n' | grep -o '20 fc 5f 88 1f 00 02 6b 61 00 00 54 23 fc 04 88 84 ff ff 35 bf 3b 03 d5' | wc -l | tr -d ' ')" "4"
+	# ^ four 32-bit ldaxr/stlxr/dmb-ish sites: __pxx_a_cas_1, _2, _4 and
+	#   __pxx_a_fence, which is a cas32 on a local (cpreproc.inc
+	#   CAtomicWidthBodies). The row said 3 from before the fence used it.
 	# 8-byte atomics on the ILP32 targets run under a spinlock (cpreproc.inc
 	# CAtomicWidthBodies), so is_lock_free(8) is 0 there (gcc -m32: 1, cmpxchg8b).
 	# feature-c-8-byte-atomics-on-32-bit-targets
@@ -19839,8 +19851,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cstdatomic26 "$$($(TESTTMP)/cstdatomic26)" "$$(cat test/c_stdatomic.expected)"
 	./$(COMPILER) --target=aarch64 test/c_stdatomic.c $(TESTTMP)/cstdatomic_a64
 	tools/expect_same.sh cstdatomic_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cstdatomic_a64)" "$$(cat test/c_stdatomic.expected)"
-	printf 'static _Atomic(int) z;\nint main(void){return 0;}\n' > $(TESTTMP)/catomic_spec.c
-	tools/expect_same.sh catomic_spec "$$(./$(COMPILER) $(TESTTMP)/catomic_spec.c $(TESTTMP)/catomic_spec 2>&1 | grep -c '_Atomic(type) specifier is not supported')" "1"
+	# _Atomic(type) was refused here; 5239196c40 supports it (gcc: "7 4").
+	printf 'static _Atomic(int) z;\nextern int printf(const char *, ...);\nint main(void){ z = 5; z += 2; printf("%%d %%d\\n", z, (int)sizeof z); return 0; }\n' > $(TESTTMP)/catomic_spec.c
+	./$(COMPILER) $(TESTTMP)/catomic_spec.c $(TESTTMP)/catomic_spec > /dev/null
+	tools/expect_same.sh catomic_spec "$$($(TESTTMP)/catomic_spec)" "7 4"
 	./$(COMPILER) --emit-obj --freestanding test/c_freestanding_atomics.c $(TESTTMP)/c_fs_atomics.o > /dev/null
 	tools/expect_same.sh c_fs_atomics_undef "$$(nm $(TESTTMP)/c_fs_atomics.o | grep -c ' U ')" "0"
 	gcc -no-pie -pthread -o $(TESTTMP)/c_fs_atomics test/c_freestanding_atomics_main.c $(TESTTMP)/c_fs_atomics.o
@@ -21058,7 +21072,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O2 --emit-obj --freestanding --system-libs test/c_asm_label.c $(TESTTMP)/c_asmlbl26_f.o > /dev/null
 	gcc test/c_asm_label_main.c $(TESTTMP)/c_asmlbl26_f.o -o $(TESTTMP)/c_asmlbl26_f
 	tools/expect_same.sh c_asmlbl26_f "$$($(TESTTMP)/c_asmlbl26_f)" "$$(cat test/c_asm_label.expected)"
-	tools/expect_same.sh c_fsalias26_refuse "$$(./$(COMPILER) --emit-obj test/c_file_scope_asm_code_refused.c $(TESTTMP)/c_fsalias26_r.o 2>&1 | grep -c 'file-scope asm: "myfunc:"')" "1"
+	# code in file-scope asm is assembled now (it was refused here): myfunc is
+	# defined, alias2 stays weak. feature-c-file-scope-asm-that-defines-code
+	./$(COMPILER) --emit-obj test/c_file_scope_asm_code_refused.c $(TESTTMP)/c_fsalias26_r.o > /dev/null
+	tools/expect_same.sh c_fsalias26_code "$$(nm $(TESTTMP)/c_fsalias26_r.o | grep -wE 'myfunc|alias2' | awk '{print $$2" "$$3}' | LC_ALL=C sort | tr '\n' ' ')" "T myfunc W alias2 "
 	# C __thread in an x86-64 object is ELF TLS (feature-c-thread-local-in-x86-64-objects)
 	./$(COMPILER) -O2 --emit-obj --freestanding --system-libs test/c_thread_local_object.c $(TESTTMP)/c_tlsobj26_f.o > /dev/null
 	gcc test/c_thread_local_object_main.c $(TESTTMP)/c_tlsobj26_f.o -o $(TESTTMP)/c_tlsobj26_f -lpthread
@@ -21385,10 +21402,12 @@ test-core: $(COMPILER)
 	#    body and NOWHERE ELSE in the translation unit is still unknown. That is
 	#    a real gap against C and this row pins where it surfaces: at the NAME,
 	#    not at `extern`. If someone later makes this fold to 0 instead, the row
-	#    fires rather than the wrong value shipping.
+	#    fires rather than the wrong value shipping. Since 500c41069d the name
+	#    is known and the build refuses it as gcc's link does: nothing defines
+	#    it. Either refusal names `nowhere`; a compile that succeeds fails here.
 	printf 'int main(void){ extern int nowhere; return nowhere; }\n' > $(TESTTMP)/bsx_unk.c
 	! ./$(COMPILER) $(TESTTMP)/bsx_unk.c $(TESTTMP)/bsx_unk >$(TESTTMP)/bsx_unk.err 2>&1
-	@grep -q "undeclared identifier 'nowhere'" $(TESTTMP)/bsx_unk.err || { echo "c_block_scope_extern: FAIL - an extern-only name did not report at the NAME"; cat $(TESTTMP)/bsx_unk.err; exit 1; }
+	@grep -qE "undeclared identifier 'nowhere'|undefined reference to extern variable .nowhere'" $(TESTTMP)/bsx_unk.err || { echo "c_block_scope_extern: FAIL - an extern-only name did not report at the NAME"; cat $(TESTTMP)/bsx_unk.err; exit 1; }
 	# 4. AND THE SPURIOUS SECOND DIAGNOSTIC IS GONE. `extern __thread int g;` is
 	#    the exact spelling row 5 above tells the programmer to write, and error
 	#    RECOVERY used to reach `__thread` after refusing `extern` and deliver
@@ -21610,6 +21629,14 @@ test-core: $(COMPILER)
 	# (or load). Expected output is gcc -O0's.
 	./$(COMPILER) test/c_literal_compare_folds_in_and_chain.c $(TESTTMP)/clitcmp26
 	tools/expect_same.sh clitcmp26 "$$($(TESTTMP)/clitcmp26)" "$$(printf '1008 1022 1007\nhas 1 0')"
+	# THE MODULE FIXTURES LIVE UNDER test/fixtures/as_crtl/lib/crtl/ (moved
+	# 2026-11-19). Since b3c5f711ea a USER .c that another .c #includes is
+	# part of the includer's translation unit, as in C (busybox's bzip2), and
+	# only a path with lib/crtl/ in it stays a module of its own -- which is
+	# what this model exists for. Under test/fixtures/ these rows tested a
+	# unity build gcc rejects and went red; under that path they test the
+	# crtl module model again. cstatic_ext_pub.c stays a user file: in the
+	# dropbear case only the private static (crypt.c) is crtl's.
 	# A `static` in one module and an EXTERNAL function of the same name in
 	# another are two functions. They shared one row and the static won, so
 	# crtl crypt.c's private sha512_init captured dropbear's calls to
@@ -21622,14 +21649,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cstaticext26b "$$($(TESTTMP)/cstaticext26b)" "10 1005 1007 14 10"
 	./$(COMPILER) --emit-obj --function-sections test/c_static_vs_external_same_name.c $(TESTTMP)/cstaticext26.o > /dev/null
 	tools/expect_same.sh cstaticext26.o "$$(readelf -sW $(TESTTMP)/cstaticext26.o | awk '$$4 == "FUNC" && $$8 == "tag" {print $$5}' | sort | tr '\n' ' ')" "GLOBAL LOCAL "
-	# __attribute__((mode(TI))) is a 128-bit integer pxx does not have. It was
-	# skipped, so libtommath's mp_word became 64 bits and every product lost its
-	# high half (dropbear's RSA keygen never terminated). Refused by name now;
-	# the narrower modes and a `nomode_` identifier still compile.
+	# __attribute__((mode(TI))) is a 128-bit integer. It was skipped, so
+	# libtommath's mp_word became 64 bits and every product lost its high half
+	# (dropbear's RSA keygen never terminated). x86-64 has __int128 since
+	# 9620c9a69b, so there it compiles; a 32-bit target has no lowering and
+	# must still REFUSE it by name. The narrower modes and a `nomode_`
+	# identifier compile everywhere.
 	./$(COMPILER) test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26 > /dev/null
-	@./$(COMPILER) -dMODE_TI_ROW test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26b 2>&1 \
-	  | grep -qF 'mode(TI))) asks for a 128-bit type' \
-	  || { echo 'c_attribute_mode_ti_is_refused: FAIL - mode(TI) was accepted, or refused without naming itself'; exit 1; }
+	./$(COMPILER) -dMODE_TI_ROW test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26b > /dev/null
+	@./$(COMPILER) --target=i386 -dMODE_TI_ROW test/c_attribute_mode_ti_is_refused.c $(TESTTMP)/cmodeti26c 2>&1 \
+	  | grep -qF '__attribute__((mode(TI))) asks for a type pxx has no lowering for on this target' \
+	  || { echo 'c_attribute_mode_ti_is_refused: FAIL - mode(TI) on i386 was accepted, or refused without naming itself'; exit 1; }
 	# `&x` POINTS AT THE WHOLE OBJECT. `&x + 1` stepped one byte for every x,
 	# `&a` of an array had no pointer-to-array type (`sizeof *&a` the element),
 	# `&m[1]` of a row stepped an element, `sizeof((m[0]))` answered a pointer,
@@ -21921,12 +21951,17 @@ test-core: $(COMPILER)
 	        cat $(TESTTMP)/c_incmember.log; exit 1; }
 	# PER ARM, NOT IN TOTAL: one check that collapsed both wordings into one
 	# message would still produce six diagnostics and pass a total.
+	# THE OPAQUE ARM IS A WARNING NOW (b3c5f711ea): an aligned() argument
+	# pxx cannot evaluate takes gcc's biggest alignment and keeps the layout
+	# (x86-64: 16, as gcc), so that access compiles and only the warning is
+	# counted. i386 differs from gcc there: bug-c-aligned-alignof-long-double-on-i386.
 	@test "$$(grep -c 'INCOMPLETE type' $(TESTTMP)/c_incmember.log)" = 3 \
 	   && test "$$(grep -c 'no member named' $(TESTTMP)/c_incmember.log)" = 3 \
-	   && test "$$(grep -c 'OPAQUE' $(TESTTMP)/c_incmember.log)" = 1 \
-	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type, 3 no-such-member and 1 opaque diagnostic, one per access'; \
+	   && test "$$(grep -c 'OPAQUE' $(TESTTMP)/c_incmember.log)" = 0 \
+	   && test "$$(grep -c 'cannot evaluate the argument of __attribute__((aligned' $(TESTTMP)/c_incmember.log)" = 1 \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type and 3 no-such-member refusals and 1 aligned() warning, one per access'; \
 	        cat $(TESTTMP)/c_incmember.log; exit 1; } \
-	   && echo "c_incomplete_type_member_refused: 7 accesses, 3+3+1 refusals"
+	   && echo "c_incomplete_type_member_refused: 7 accesses, 3+3 refusals, 1 warning"
 	# THE CASE THAT MUST NOT BREAK, and it matters more than the refusal: a
 	# pointer to an incomplete type is how every opaque handle is spelled, and a
 	# forward declaration that is later defined is not incomplete when a member
@@ -22133,12 +22168,14 @@ test-core: $(COMPILER)
 	# diagnostic wholesale passes the first and costs the true positive above.
 	# bug-c-static-functions-in-different-crtl-modules-collide
 	./$(COMPILER) test/c_crtl_prototype_pull_module_split.c $(TESTTMP)/c_protopull26 > $(TESTTMP)/c_protopull.log 2>&1
+	# (fixtures under test/fixtures/as_crtl/lib/crtl/: see the note at
+	# cstaticext26 -- an #included USER .c is no module since b3c5f711ea.)
 	# THE FOURTH FILE IN THAT FAMILY, and the only one whose two bodies DIFFER.
 	# cstatic_two_modules.c uses crtl's real pair -- `static int sysret` in
 	# fcntl.c and unistd.c -- whose bodies are BYTE-IDENTICAL, so it cannot tell
 	# a correct bind from a wrong one and would pass with every call bound to
-	# the other module's copy. Its modules are test/fixtures/cstatic_mod_a.c and
-	# test/fixtures/cstatic_mod_b.c, which return 1 and 2.
+	# the other module's copy. Its modules are test/fixtures/as_crtl/lib/crtl/cstatic_mod_a.c and
+	# test/fixtures/as_crtl/lib/crtl/cstatic_mod_b.c, which return 1 and 2.
 	#
 	# ORACLE IS GCC COMPILING IT AS THREE TRANSLATION UNITS (-DSEPARATE_TU),
 	# because that is the semantics pxx's single-buffer module attribution
@@ -22222,7 +22259,7 @@ test-core: $(COMPILER)
 	# Do NOT run gcc the way pxx runs this file: a unity build really is one TU
 	# and gcc correctly rejects two file-scope `static int v` as a redefinition.
 	# bug-c-two-same-named-file-scope-static-variables-share-one-syms-row-and-alias
-	gcc -std=gnu99 -DSEPARATE_TU -o $(TESTTMP)/cstatic_vars_gcc test/cstatic_two_modules_vars_distinct.c test/fixtures/cstatic_var_mod_a.c test/fixtures/cstatic_var_mod_b.c
+	gcc -std=gnu99 -DSEPARATE_TU -o $(TESTTMP)/cstatic_vars_gcc test/cstatic_two_modules_vars_distinct.c test/fixtures/as_crtl/lib/crtl/cstatic_var_mod_a.c test/fixtures/as_crtl/lib/crtl/cstatic_var_mod_b.c
 	./$(COMPILER) test/cstatic_two_modules_vars_distinct.c $(TESTTMP)/cstatic_vars26 > $(TESTTMP)/cstatic_vars.log 2>&1
 	tools/expect_same.sh cstatic_vars26 "$$($(TESTTMP)/cstatic_vars26)" "$$($(TESTTMP)/cstatic_vars_gcc)"
 	# A POINTER TO A TYPEDEF'D ARRAY describes the POINTEE. `typedef double
@@ -29754,8 +29791,11 @@ test-core: $(COMPILER)
 	# later row too, so the output interleaved two processes and the whole
 	# assertion became unreadable rather than merely wrong by one line.
 	# feature-c-corpus-busybox-applet
+	# 2026-11-19: all five are real syscalls now, so the row compares with
+	# gcc's build of the same file (EPERM unprivileged) instead of ENOSYS.
 	./$(COMPILER) test/c_crtl_enosys_stubs.c $(TESTTMP)/c_crtl_enosys26
-	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$(printf 'chroot: -1 1\nsetuid: -1 1\nsetgid: -1 1\nseteuid: -1 1\nsetegid: -1 1')"
+	gcc -w -o $(TESTTMP)/c_crtl_enosys_gcc test/c_crtl_enosys_stubs.c
+	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$($(TESTTMP)/c_crtl_enosys_gcc)"
 	# crtl's termios, over the general PalIoctl bridge -- REAL, not stubs, and
 	# exercisable without a terminal (under the harness fd 0 is a pipe). The
 	# cfmakeraw bits, the ENOTTY path and the c_cc subscripts all match a
@@ -31430,8 +31470,9 @@ test-core: $(COMPILER)
 	# version waits the right 2s BY ACCIDENT), and dirtying the stack from a caller
 	# did not move it either. Only a tv_sec above 2^32 separates them, by minutes:
 	# killed at 8s versus returning in 1117ms. The row's right answer therefore
-	# DIFFERS BY TARGET -- must-not-return on x86-64/aarch64/riscv32, a CORRECT
-	# 32-bit truncation to -110 on i386/arm32/xtensa (2^32+1 seconds is simply
+	# DIFFERS BY TARGET -- must-not-return on x86-64/aarch64/riscv32/xtensa
+	# (xtensa since c6e9247e2c moved it to futex_time64), a CORRECT
+	# 32-bit truncation to -110 on i386/arm32 (2^32+1 seconds is simply
 	# unrepresentable in their futex ABI), and -38 on wasm32. riscv32 sitting
 	# with the 64-bit group while BEING a 32-bit target is the assertion, and
 	# asserting both directions pins the width instead of catching one error.
@@ -31462,7 +31503,7 @@ test-core: $(COMPILER)
 	    tools/expect_same.sh fxpal/$$t-shortsec "$$($$run $$bin shortsec)" "shortsec=-110" || exit 1; \
 	    out="$$(timeout 6 $$run $$bin longsec 2>&1)"; rc=$$?; \
 	    case $$t in \
-	      native|aarch64|riscv32) \
+	      native|aarch64|riscv32|xtensa) \
 	        if [ "$$rc" = "124" ] && [ -z "$$out" ]; then echo "  fxpal: PASS $$t (2^32+1 s did not return -- tv_sec is 64-bit)"; \
 	        else echo "  fxpal: FAIL $$t longsec rc=$$rc out=[$$out] -- tv_sec TRUNCATED to 32 bits"; exit 1; fi;; \
 	      *) \

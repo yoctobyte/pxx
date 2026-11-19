@@ -17,6 +17,15 @@
    red: fork() SUCCEEDING means the CHILD ran the remaining rows too, so the
    output interleaved two processes and no row after it could be read at all.
 
+   ALL FIVE ROWS LEFT ON 2026-11-19, the same way: chroot became a real
+   SYS_chroot call (54c5b98b5f) and the set*id calls real syscalls on Linux,
+   so as an unprivileged user each now says -1/EPERM -- which this file's
+   ENOSYS contract would have called a failure. They stay as a GCC
+   DIFFERENTIAL instead (the Makefile row builds this file with gcc and
+   compares): the silent-success case it exists to catch is still caught,
+   since a stub that returned 0 would differ from glibc's -1. Built with
+   -DENOSYS_CONTRACT the file is the old contract, for a target without them.
+
    errno is read in a statement of its own: argument evaluation order is
    unspecified, so `printf("%d %d", fork(), errno == ENOSYS)` may read errno
    BEFORE the call that sets it — which is how an earlier draft of this file
@@ -25,9 +34,16 @@
 #include <unistd.h>
 #include <errno.h>
 
+#ifdef ENOSYS_CONTRACT
 #define ENOSYS_ROW(name, call) \
   do { int r; errno = 0; r = (call); \
        printf("%s: %d %d\n", name, r, errno == ENOSYS); } while (0)
+#else
+#define ENOSYS_ROW(name, call) \
+  do { int r, e; errno = 0; r = (call); e = errno; \
+       printf("%s: %d %s\n", name, r, e == 0 ? "ok" : e == EPERM ? "EPERM" : \
+              e == ENOSYS ? "ENOSYS" : "other"); } while (0)
+#endif
 
 int main(void)
 {

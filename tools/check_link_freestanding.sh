@@ -115,12 +115,12 @@ ndiff=$(cmp -l "$W/k.elf" "$W/kp.elf" | awk '$1 > 64 + 4 * 56 { n++ } END { prin
 [ "$ndiff" = 0 ] || fail "--load-offset changed $ndiff byte(s) outside the program headers"
 
 # ---- controls ------------------------------------------------------------------
-# A VLA's code borrows the red zone, so --freestanding refuses it by name
-# rather than emitting it.
+# A VLA under --freestanding was refused here while its code borrowed the
+# red zone; since 28c9b6aa10 it uses frame slots and compiles (that the code
+# leaves the red zone alone is tools/check_freestanding_vla_sse.py's job).
 printf 'long f(int n) { char b[n]; b[0] = 1; return b[0]; }\n' > "$W/vla.c"
-"$PXX" --emit-obj --freestanding "$W/vla.c" "$W/vla.o" > "$W/c0.log" 2>&1
-grep -q "variable-length array is not supported yet" "$W/c0.log" \
-  || { cat "$W/c0.log"; fail "a VLA under --freestanding was not refused"; }
+"$PXX" --emit-obj --freestanding "$W/vla.c" "$W/vla.o" > "$W/c0.log" 2>&1 \
+  || { cat "$W/c0.log"; fail "a VLA under --freestanding did not compile"; }
 "$PXX" --link --image-base=0x400000 -e start32 -o "$W/k2.elf" "$W/kboot.o" "$W/kmain.o" > "$W/c1.log" 2>&1
 grep -q "allocated section '.multiboot' is not one pxx emits" "$W/c1.log" \
   || { cat "$W/c1.log"; fail "without --freestanding, .multiboot was not refused by name"; }

@@ -2,11 +2,11 @@
 
    THE SEMANTICS BEING ASSERTED ARE THE MULTI-TU ONES, and the oracle is gcc
    compiling it that way. C gives a file-scope `static` internal linkage, so
-   `who` in fixtures/cstatic_mod_a.c and `who` in fixtures/cstatic_mod_b.c are
+   `who` in fixtures/as_crtl/lib/crtl/cstatic_mod_a.c and `who` in fixtures/as_crtl/lib/crtl/cstatic_mod_b.c are
    two distinct functions when those files are two translation units:
 
      gcc -DSEPARATE_TU test/cstatic_two_modules_distinct.c \
-         test/fixtures/cstatic_mod_a.c test/fixtures/cstatic_mod_b.c
+         test/fixtures/as_crtl/lib/crtl/cstatic_mod_a.c test/fixtures/as_crtl/lib/crtl/cstatic_mod_b.c
      -> 1 1 / 2 2 / 3 1 / 4 2 / 5 1
 
    pxx reaches those same answers from ONE buffer. It has to: the preprocessor
@@ -57,7 +57,12 @@
    `sysret`), 0 with the fix, and two LOCAL `who` symbols at different
    addresses in .symtab, which is what gcc emits for the multi-TU build.
 
-   feature-c-two-same-named-file-scope-statics-share-one-procs-row */
+   feature-c-two-same-named-file-scope-statics-share-one-procs-row
+
+ * FIXTURE PATH (2026-11-19): the module fixtures live under
+ * test/fixtures/as_crtl/lib/crtl/ because since b3c5f711ea only a .c whose
+ * path contains lib/crtl/ is a module of its own; an #included user .c joins
+ * the includer's translation unit, as in C. */
 
 extern int printf(const char *, ...);
 
@@ -69,8 +74,8 @@ extern int (*a_addr(void))(void);
 extern int (*b_addr(void))(void);
 #else
 /* The pxx build: one buffer, two modules. */
-#include "fixtures/cstatic_mod_a.c"
-#include "fixtures/cstatic_mod_b.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_mod_a.c"
+#include "fixtures/as_crtl/lib/crtl/cstatic_mod_b.c"
 #endif
 
 int main(void) {

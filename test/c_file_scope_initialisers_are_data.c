@@ -53,12 +53,25 @@ static uint8_t fxa[512] __attribute__((aligned(64)));
 
 static int later(int x) { return x + 100; }
 
+#ifdef NO_SSE
+void cfsi_show_fp(const double *r, const float *h, const double *f);
+#endif
+
 int main(void)
 {
     printf("%d %llx %o %d %ld %lu %d\n", next_pid, (unsigned long long)vmalloc_next,
            mode, mixed, divmod, ushr, en);
+#ifdef NO_SSE
+    /* --freestanding refuses SSE in its own code (gcc -mgeneral-regs-only
+       too), and a double passed to printf travels in an SSE register. The
+       baked bits are what is tested, so a gcc-built helper prints them:
+       fixtures/cfsi_show_fp.c */
+    printf("%x %x %s ", broadcast[0], broadcast[5], banner);
+    cfsi_show_fp(&ratio, &half, &from_int);
+#else
     printf("%x %x %s %.2f %.2f %.1f\n", broadcast[0], broadcast[5], banner, ratio,
            (double)half, from_int);
+#endif
     printf("%s %s %s %d\n", opt_cwd, init_argv[0], init_argv[1], init_argv[2] == 0);
     printf("%s %s\n", names[1], names[2]);
     printf("%d %d %d %s %d\n", console_file.kind, console_file.refs,

@@ -28,15 +28,18 @@ program test_cross_futex_through_the_pal;
              it is the one row whose right answer DIFFERS BY TARGET -- which is
              what makes it able to fail. Three groups:
 
-               64-bit tv_sec  x86-64, aarch64, riscv32   must NOT return
-               32-bit tv_sec  i386, arm32, xtensa        returns -110 in ~1s
+               64-bit tv_sec  x86-64, aarch64, riscv32,  must NOT return
+                              xtensa
+               32-bit tv_sec  i386, arm32                returns -110 in ~1s
                no futex       wasm32                     -38, immediately
 
              riscv32 belongs to the FIRST group despite being a 32-bit target,
              and that is the entire point of this row: it has no plain futex at
              all, only futex_time64, so its tv_sec is 64-bit while its NativeInt
              is 4 bytes. With the shared `array[0..1] of NativeInt` it truncated
-             to 1 and answered like i386. The 32-bit group truncating is CORRECT
+             to 1 and answered like i386. xtensa joined that group on
+             2026-11-17 (c6e9247e2c: the runtime issues futex_time64 there,
+             with a 64-bit timespec), so its old "-110 in ~1s" was retired. The 32-bit group truncating is CORRECT
              -- 2^32+1 seconds is unrepresentable in their ABI -- so asserting
              both directions pins the width instead of only catching one error.
 

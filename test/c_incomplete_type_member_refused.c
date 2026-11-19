@@ -49,7 +49,12 @@ int inc_arrow(struct nosuchtype *p) { return p->field; }
    every member reads at offset 0, so `v.a=7; v.b=9' PRINTS 9 9. Staying quiet
    here was tried and reintroduced this ticket's own bug.
    The trigger was a bare `aligned` until pxx learned that one (it is 16, as
-   in gcc); an alignment given by an expression is still not parsed. */
+   in gcc); an alignment given by an expression is still not parsed.
+   SINCE b3c5f711ea (2026-11-14) this arm is a WARNING, not a refusal: an
+   argument pxx cannot evaluate takes the target's biggest alignment, gcc's
+   meaning of a bare `aligned`, and the layout is kept -- 16 here, as gcc,
+   so `v.a' reads its own field. On i386 gcc says 4 for __alignof__(long
+   double) and pxx's 16 differs: bug-c-aligned-alignof-long-double-on-i386. */
 struct dropped { int a; int b; } __attribute__((aligned(__alignof__(long double))));
 int opaque_read(void) { struct dropped v; return v.a; }
 
