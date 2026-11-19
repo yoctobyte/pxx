@@ -2036,12 +2036,13 @@ var
   ci, i, fi, base, cnt, mCount, dCount, mHdr, dynDescOff: Integer;
   hdr, subCi, arrCount, mKind, typeRef: Integer;
   depth, baseKind, elSize, baseTypeRef, k, dynIdx, cCi: Integer;
-  targetPtrSize: Integer;
+  targetPtrSize, layStart: Integer;
 
 
 
 begin
   targetPtrSize := TARGET_PTR_SIZE;
+  layStart := DataLen;
 
   { Pass 1: pre-allocate RTTI offsets in Data[] }
   for ci := 0 to UClsCount - 1 do
@@ -2103,6 +2104,11 @@ begin
       end;
     end;
   end;
+  { Passes 1 and 1b lay the descriptors down back to back with nothing
+    interned between them, and pass 2 only patches them: never written at run
+    time, so RTTI for placement (read-only in an executable, a flash candidate
+    in an ESP object). feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
+  RttiRoMark(layStart, DataLen);
 
   { Pass 2: fill descriptors }
   for ci := 0 to UClsCount - 1 do

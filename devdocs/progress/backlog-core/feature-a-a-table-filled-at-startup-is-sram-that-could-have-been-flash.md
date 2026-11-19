@@ -136,3 +136,23 @@ Result: .data 8,520 to 6,528 B; our SRAM 18,632 to 16,640 B; qemu-assert
 OK; gate quick, the TypeInfo/RTTI tests and test-emit-obj pass.
 
 Next: the 4,164 B writable part of the RTTI span.
+
+## 2026-11-19 (claude-dupwt): the writable RTTI part, to flash
+
+The 4,164 B was record and class layout descriptors (EmitLayoutRTTI passes
+1/1b, 3,676 B) plus anonymous dyn-array descriptors (20 B each, emitted in
+ir_codegen). Neither was RttiRoMark'd. Marking only the layout block did
+nothing on ESP: ObjRoAdoptRttiCandidates dropped it, because a writable
+anon dyn-array descriptor holds a self-relative pointer (+16) into it.
+Marking the anon descriptors too (they are only patched at compile time)
+removes that crossing edge, and the adoption pass then keeps the block and
+everything that hung on it.
+
+nilpy-c3 on esp32c3 (QEMU): .data 6,528 to 1,104 B; our SRAM 16,640 to
+11,216 B; free DRAM pool 327,744 B; qemu-assert OK. Gate quick and
+test-emit-obj pass.
+
+Running total for this ticket and its sizing sibling, on the same demo:
+our object's SRAM 59,208 to 11,216 B (-48 KB). What is left is .bss
+(10,112 B, now mostly small caches and stdio records) and 1,104 B of .data
+(Python signature defaults plus runtime slots).

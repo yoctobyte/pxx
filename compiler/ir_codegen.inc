@@ -794,6 +794,7 @@ begin
   end;
 
   SymRTTIOff[symIdx] := AnonDynArrayOff[anonIdx];
+  RttiRoMark(AnonDynArrayOff[anonIdx], DataLen);   { never written at run time: RTTI for placement, so a record layout it points at can go to flash too. feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
   Inc(AnonDynArrayCount);
   Result := SymRTTIOff[symIdx];
 end;
@@ -923,6 +924,7 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
+  RttiRoMark(AnonDynArrayOff[anonIdx], DataLen);   { never written at run time: RTTI for placement, so a record layout it points at can go to flash too. feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
   Inc(AnonDynArrayCount);
   Result := AnonDynArrayOff[anonIdx];
 end;
@@ -947,6 +949,7 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
+  RttiRoMark(AnonDynArrayOff[anonIdx], DataLen);   { never written at run time: RTTI for placement, so a record layout it points at can go to flash too. feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
   Inc(AnonDynArrayCount);
   Result := AnonDynArrayOff[anonIdx];
 end;
@@ -14128,6 +14131,7 @@ begin
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
+        RttiRoMark(AnonDynArrayOff[anonIdx], DataLen);   { see the first such mark }
         Inc(AnonDynArrayCount);
 
         savedLValueWrite := InLValueWrite; InLValueWrite := True;
