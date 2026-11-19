@@ -99,3 +99,25 @@ The harness header now says so. An earlier attempt at 563f6937f9 was abandoned
 midway because a push pulled compiler/builtin/builtinheap.pas, a per-program
 compile input, into the tree under the s3 half; the compiler binary sha did not
 change, which is why the binary sha alone would not have caught it.
+
+
+## 2026-11-19 (claude-dupwt): rerun, both chips, two months later
+
+Population: the 220 files of c-testsuite single-exec (read from ~/pxx's copy
+via ESP_CONF_SUITE), sequential, one QEMU, nice 15.
+
+| chip | compiler | tree | result |
+|---|---|---|---|
+| esp32c3 | 07882b2e2a05 | 5f83cc97c1 | 219 pass / 0 fail / 1 skip (00187) |
+| esp32s3 | 3bb15a3f5b45 | 40c7fe24e0 | 219 pass / 0 fail / 1 skip (00187) |
+
+Same as 2026-09-25, across RV32C, the xtensa density work and the size work.
+
+The FIRST s3 attempt (07882b2e2a05) ran zero tests: the harness's initial IDF
+link failed on an undefined vfork from crtl's system()/popen(). Since
+4099c798f4 crtl tested `__xtensa__ && __linux__`, and `__linux__` is
+predefined under IDF too, while the compiler writes vfork only for xtensa on
+POSIX. Every C program on the S3 under IDF failed to link. Fixed in
+40c7fe24e0 (done/bug-c-s3-idf-c-programs-fail-to-link-vfork); the s3 row
+above is that compiler. Nothing on the gate builds a C program for the S3
+under IDF, which is why two days passed unseen.
