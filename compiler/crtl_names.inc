@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  784 functions across 74 headers. }
+  785 functions across 75 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -147,10 +147,10 @@ begin
       ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
       ' posix_openpt:stdlib.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
       ' pread:unistd.h pread64:unistd.h preadv:sys/uio.h printf:stdio.h prlimit:sys/resource.h ' +
-      ' pselect:sys/select.h pthread_kill:signal.h ptsname:stdlib.h ptsname_r:stdlib.h ' +
-      ' putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h ' +
-      ' putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h pwrite64:unistd.h ' +
-      ' pwritev:sys/uio.h ';
+      ' pselect:sys/select.h pthread_kill:signal.h ptrace:sys/ptrace.h ptsname:stdlib.h ' +
+      ' ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
+      ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h ' +
+      ' pwrite64:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h qsort_r:stdlib.h ';
     'r': Result :=

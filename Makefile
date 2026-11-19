@@ -27614,6 +27614,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_crypt_r.c $(TESTTMP)/c_crypt_r26 > /dev/null
 	gcc -o $(TESTTMP)/c_crypt_r_gcc test/c_crypt_r.c -lcrypt
 	tools/expect_same.sh c_crypt_r26 "$$($(TESTTMP)/c_crypt_r26)" "$$($(TESTTMP)/c_crypt_r_gcc)"
+	# crtl's <sys/ptrace.h> + ptrace() after <sys/types.h>, against gcc + glibc
+	# (bug-crtl-sys-ptrace-h-missing-and-pid-t-long, from Rainyday)
+	./$(COMPILER) test/c_crtl_ptrace.c $(TESTTMP)/c_crtl_ptrace26 > /dev/null
+	gcc -o $(TESTTMP)/c_crtl_ptrace_gcc test/c_crtl_ptrace.c
+	tools/expect_same.sh c_crtl_ptrace26 "$$($(TESTTMP)/c_crtl_ptrace26)" "$$($(TESTTMP)/c_crtl_ptrace_gcc)"
 	./$(COMPILER) test/test_c_dlopen.pas $(TESTTMP)/test_c_dlopen26
 	$(TESTTMP)/test_c_dlopen26 | grep -q "All dynamic loading and dlsym tests passed successfully!"
 	./$(COMPILER) test/test_c_gtk.pas $(TESTTMP)/test_c_gtk26
