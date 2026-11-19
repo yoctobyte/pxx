@@ -1325,6 +1325,7 @@ run_realargs_cases() {   # $1 = runner, $2 = install dir
   printf 'a\tb\tc\n1\t2\t3\n'                    > "$c/tabs"
   printf 'The quick brown fox\njumps over 42 dogs\n' > "$c/prose"
   printf '\000\001\002\377binary\n'               > "$c/bin"
+  printf 'I: Bus=0011\nH: Handlers=kbd event1\n\nI: Bus=0011\nH: Handlers=mouse0 event4\n' > "$c/devices"
 
   # uname: the row that caught the offsetof miscompile. -a is the one that
   # walks the whole offset table; the singles pin down WHICH field is wrong
@@ -1368,6 +1369,11 @@ run_realargs_cases() {   # $1 = runner, $2 = install dir
   has_applet grep   && { printf '### grep -c\n';     ra_one "$runner" "$dir" grep -c alpha "$c/words"; printf '### exit=%d\n' "$?"; }
   has_applet grep   && { printf '### grep -E\n';     ra_one "$runner" "$dir" grep -E '^(alpha|beta)$' "$c/words"; printf '### exit=%d\n' "$?"; }
   has_applet awk    && { printf '### awk\n';         ra_one "$runner" "$dir" awk '{ n += NF } END { print NR, n }' "$c/prose"; printf '### exit=%d\n' "$?"; }
+  # A loop whose body is an `if` that is false on some pass, with an `exit`
+  # inside: an older pxx built an awk that SPUN here forever (pixx's mouse
+  # probe stalled init). timeout turns a hang into exit 124, not a stuck run.
+  has_applet awk    && { printf '### awk loop-if-exit\n'; ( cd "$dir" && printf 'piped-stdin\n' | timeout 60 $runner ./awk '/^H:/ && /mouse/ { for (i = 1; i <= NF; i++) if ($i ~ /^event/) { print "/dev/input/" $i; exit } }' "$c/devices" ); printf '### exit=%d\n' "$?"; }
+  has_applet awk    && { printf '### awk for-if-never\n'; ( cd "$dir" && printf 'piped-stdin\n' | timeout 60 $runner ./awk 'BEGIN { for (i = 1; i <= 3; i++) if (i == 9) exit; print "after", i }' ); printf '### exit=%d\n' "$?"; }
   # Arithmetic and string edges -- integer width, overflow and sign live here.
   has_applet seq    && { printf '### seq\n';         ra_one "$runner" "$dir" seq 1 2 9;              printf '### exit=%d\n' "$?"; }
   has_applet factor && { printf '### factor\n';      ra_one "$runner" "$dir" factor 4294967297;      printf '### exit=%d\n' "$?"; }
