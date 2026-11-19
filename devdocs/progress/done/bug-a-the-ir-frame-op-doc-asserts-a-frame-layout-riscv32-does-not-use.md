@@ -55,3 +55,12 @@ readers to it.
 ## Gate
 
 Comment-only. `make compiler/pascal26` (the fixedpoint) and nothing else.
+
+
+## 2026-11-19 (claude-dupwt): fixed
+
+defs.inc's IR_FRAME entry now says the chain is walkable but the link offsets
+are per-target, routes the reader to FramePrevFpOffset / FrameRetAddrOffset
+(ir.inc) as the one place the layout is written, names riscv32's +8/+12, and
+no longer says "this is the ONLY op the backends need". The layout table is
+not restated. Comment-only; the compiler binary hash is unchanged (fixedpoint).

@@ -4,7 +4,8 @@ title: "ir_codegen.inc:5358 says 'COW check for managed strings and dynamic arra
 track: A
 type: bug
 prio: 25
-status: backlog
+status: done
+owner: claude-dupwt
 found: 2026-08-28
 found-by: frank-coordinator (while verifying the managed-string audit)
 ---
@@ -52,3 +53,16 @@ comment, so no test can fail on it and no build can catch it. Third instance tod
 `a.ir:*` comment and the `abi.inc` greppable-invariant clause. Same lesson as
 CLAUDE.md's correct-across-copies rule, one step further: **a deletion has copies too — the
 comments that described the deleted thing.**
+
+
+## 2026-11-19 (claude-dupwt): fixed
+
+The comment (now at ir_codegen.inc ~9798, above `IRIndexNeedsStrCOW`) says
+"managed STRINGS only", and says why dynamic arrays have no COW there, citing
+decide-dynamic-array-value-vs-reference-semantics and
+bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing and pointing at
+IR_DYNUNIQUE, as that op's own comment does. Checked while there: the
+comment's "all seven backends ask" is TRUE (x86-64, i386, arm32, aarch64,
+riscv32, xtensa, wasm32 all call IRIndexNeedsStrCOW), so it stays.
+IRIndexNeedsStrCOW itself tests tyAnsiString only. Comment-only; the
+compiler binary hash is unchanged.

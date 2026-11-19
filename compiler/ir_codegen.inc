@@ -9795,8 +9795,15 @@ begin
 
         IREmitNode(baseAddr);
 
-        { COW check for managed strings and dynamic arrays — the rule itself
-          lives in IRIndexNeedsStrCOW, which all seven backends now ask. }
+        { COW check for managed STRINGS only -- the rule itself lives in
+          IRIndexNeedsStrCOW, which all seven backends ask. Dynamic arrays have
+          NO copy-on-write here, deliberately: they follow FPC reference
+          semantics, and their clone was deleted when that was decided
+          (decide-dynamic-array-value-vs-reference-semantics, landed as
+          bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing; see
+          IR_DYNUNIQUE, whose name is historical). This comment used to say
+          "strings and dynamic arrays" after the array arm was gone.
+          bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted }
         isAnsiStr := IRIndexNeedsStrCOW(baseAddr, elemSize);
 
         if isAnsiStr and InLValueWrite then
