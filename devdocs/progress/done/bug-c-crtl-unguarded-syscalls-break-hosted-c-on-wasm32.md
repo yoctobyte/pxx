@@ -5,8 +5,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "Hosted C on wasm32 has not compiled since b3c5f711ea (2026-11-14, the toybox commit): `lib/crtl/src/fcntl.c:56: undeclared identifier 'SYS_openat'`. sys/syscall.h deliberately names no SYS_* on wasm32 and expects callers to guard with `#ifdef SYS_x` and fail ENOSYS. That commit added ~18 unguarded syscall(SYS_x, ...) calls. test/c_wasm32_hosted_stdio.c fails to compile, and so presumably does c_wasm32_math_h; c_wasm32_variadic (no crtl) still passes."
-status: open
-owner:
+status: done
+owner: pxx2
 ---
 
 # Unguarded crtl syscalls break hosted C on wasm32
@@ -42,3 +42,10 @@ again under wasmtime, and toybox still builds on x86-64.
 
 Lane: crtl (pxx2). Offered to pxx2 on 2026-11-19, and no crtl file was touched
 before their answer.
+
+## Closed 2026-11-19
+
+Fixed in 89e01b7a10: 24 call sites guarded `#ifdef SYS_x ... ENOSYS`. Details
+in done/bug-c-crtl-wasm32-unguarded-syscall-numbers.md. c_wasm32_math_h then
+showed a second bug from the same commit (C file-scope initialisers did not run
+on wasm32), which frank-user fixed in dc9ad070c3. All three C wasm32 rows match gcc.
