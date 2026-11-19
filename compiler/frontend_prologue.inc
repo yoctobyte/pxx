@@ -210,7 +210,17 @@ procedure PullTargetRuntimeUnits;
   bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
 begin
   PullKernelAbiUnit;
-  if not TargetCodegenCallsHeapRuntime then Exit;
+  { THIRD MECHANISM, kept OUT of TargetCodegenCallsHeapRuntime on purpose: a
+    REAL write lowers onto PXXWriteFloatNat/Fixed/Sci in builtinheap on every
+    backend but x86-64, and i386 is the one target that predicate does not
+    already cover. Folding i386 into it would make every Pascal program with a
+    record pull builtinheap on i386 (pasparser_prog.inc asks it), which is a
+    cost for something unrelated. A skeleton driver has no way to say "this
+    program writes a float", so on i386 it pulls the unit, as the other four
+    targets already do. Before: the Fortran and Algol skeletons were refused
+    on i386 with `compiler error: float writer helper not found`.
+    bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real }
+  if not (TargetCodegenCallsHeapRuntime or (TargetArch = TARGET_I386)) then Exit;
   PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   ParseUsesUnitAmbient('builtin');

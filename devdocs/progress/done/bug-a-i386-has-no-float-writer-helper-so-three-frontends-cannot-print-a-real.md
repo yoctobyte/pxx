@@ -2,8 +2,8 @@
 track: A
 prio: 40
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-07
 found-by: frankA
 tags: [i386, float, cross-target, fortran, algol, basic]
@@ -56,3 +56,28 @@ i386 entry comes out of both refusal lists in the same commit. The row is
 already written: `test-skeleton-frontends-cross-target` covers both fixtures and
 currently reports them REFUSED for i386, by name — so the reading flips from
 "refused on purpose" to a compared row without a new harness.
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+**The helper exists on i386; the skeleton drivers never pulled it in.**
+PXXWriteFloatNat/Fixed/Sci live in builtinheap, and every backend except
+x86-64 lowers a REAL write onto them. Pascal pulls builtinheap from its own
+token scan, which is why Pascal reals always printed on i386, and BASIC
+decides for itself. The other skeleton drivers rely on
+PullTargetRuntimeUnits, which pulls only when TargetCodegenCallsHeapRuntime
+says so. That predicate lists two hidden-call mechanisms (PXXWriteDecW,
+PXXMemMove) whose union is aarch64/arm32/riscv32/xtensa. The float writer is a
+THIRD mechanism, and i386 was the one target it adds.
+
+The fix is in PullTargetRuntimeUnits (frontend_prologue.inc), not in the
+predicate: `TargetCodegenCallsHeapRuntime or (TargetArch = TARGET_I386)`.
+Folding i386 into the predicate itself would make every Pascal program with a
+record pull builtinheap on i386, because pasparser_prog.inc asks it for
+records. The Fortran and Algol drivers now admit i386.
+
+Measured: test_fortran_skeleton.f90 and test_algol_skeleton.alg print exactly
+their native output under qemu-i386. Control: the previous compiler, invoked
+directly, refuses both. test-skeleton-frontends-cross-target is GREEN with 54
+(program, target) pairs. The two new i386 pairs are the regression guard;
+the suite runs i386 in its target loop already.

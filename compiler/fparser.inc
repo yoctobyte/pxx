@@ -358,13 +358,15 @@ begin
     and therefore a bug rather than a refusal. The three 32-bit-adjacent targets
     that DO work are what make it a defect rather than a width story.
     bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real
+    FIXED 2026-11-19: PullTargetRuntimeUnits now pulls builtinheap on i386,
+    and i386 is admitted below (measured: output identical to x86-64).
 
     xtensa and wasm32 stay refused as UNMEASURED, which is a different fact
     from broken and is said here rather than left to be inferred from a list.
     bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
   if not (TargetArch in [TARGET_X86_64, TARGET_AARCH64, TARGET_ARM32,
-                       TARGET_RISCV32]) then
-    Error('Fortran frontend: the skeleton supports x86-64, aarch64, arm32 and riscv32; i386 cannot write a float (compiler error: float writer helper not found) (feature-esoteric-fortran)');
+                       TARGET_RISCV32, TARGET_I386]) then
+    Error('Fortran frontend: the skeleton supports x86-64, i386, aarch64, arm32 and riscv32 (feature-esoteric-fortran)');
 
   { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
     its patchable jump, the div-by-zero stub, the signal runtime, the
