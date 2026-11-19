@@ -1,0 +1,26 @@
+# A string LITERAL handed straight to a pylib routine on wasm32. NilPy's
+# direct arms (`"ab" * n` -> pystr_repeat) pass the literal itself, and the
+# wasm backend passed its blob address where a managed handle belongs, so the
+# callee read the length from the 8 bytes before the blob and every one of
+# these trapped out of bounds. x86-64 converts at the call; wasm32 now does too.
+# bug-a-a-nilpy-generator-slice-faults-out-of-bounds-under-wasm32
+
+def rep(n):
+    return "ab" * n
+
+def g(n):
+    s = "a" * n
+    t = s + "b"
+    yield len(t)
+    u = t + "c"
+    yield len(u)
+
+n = 3
+print("ab" * 2)
+print("a" * n)
+print(3 * "xy")
+print(len("q" * 10))
+print(rep(4))
+print("" * 5 + "|")
+for x in g(3):
+    print(x)

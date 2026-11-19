@@ -4,9 +4,9 @@ title: "`check_nilpy_generator_slot.sh` faults `memory access out of bounds` und
 track: A
 prio: 45
 type: bug
-status: backlog
+status: done
 created: 2026-09-22
-owner: ""
+owner: claude-dupwt
 summary: "test/wasm/check_nilpy_generator_slot.sh is RED at HEAD and has nothing to do with --dce: the slice traps `RuntimeError: memory access out of bounds` in the wasm runtime rather than printing its two lines. ESTABLISHED PRE-EXISTING BY STASH-AND-REBUILD, not by reasoning: stashed an unrelated wasm change, rebuilt to `converged after 1 round(s)`, and the check fails identically -- so it is not the wasm32 --dce work landing beside it. The check was written for a WRONG-VALUE defect (`4 2` against `4 5`) and now dies before printing anything, so whatever it originally caught is masked by a fault that arrived later; its own header records the value defect and no longer describes what happens. Found while running the wasm suite for an unrelated change, which is the only reason anyone looked -- check_all.sh reports `at least one check FAILED` and exits 0, so nothing upstream reddens on it."
 ---
 
@@ -105,3 +105,41 @@ The cursor calls the step function through a pointer (`TPyGenStep(FGenStep)`
 in pylib.pas). wasm checks the signature at an indirect call, and the step
 function's emitted type evidently differs from TPyGenStep's. That fits this
 ticket's out-of-bounds fault and may be the same defect.
+
+
+# Fixed 2026-11-19 (claude-dupwt): not the generator, a string literal argument
+
+Reduced first. The generator is incidental: `print("ab" * 2)` alone traps,
+and so does `"a" * n`. `x = "a"; x * 3` works. So the fault is a string
+LITERAL reaching pystr_repeat. It is old: the 10-31 build (master-a7c7ff69b7)
+and rv32-a traps the same way.
+
+Cause: NilPy's str-repeat arm (ir.inc, IR_BINOP `*`) passes the literal to
+pystr_repeat's `const s: AnsiString` as itself, an IR_CONST_STR tagged
+tyString. Its value is the blob address, [len:8][chars]. A managed handle
+points at the chars. The register backends convert at the call
+(EmitAnsiStrFromInlineStringOf, taking EmitStaticLitHandle's static block).
+wasm32's WasmEmitCall argument loop did not, so the callee read its length
+from the 8 bytes before the blob. Pascal never hit it, because its front end
+converts a literal before the call.
+
+Fix (ir_codegen_wasm32.inc): a by-value AnsiString parameter whose argument is
+an IR_CONST_STR gets WasmEmitLitHandle. That is EmitStaticLitHandle's rule:
+blob+8 for a non-empty literal (any literal under NilPy), with no allocation
+and no retain, since the block is static; nil for an empty Pascal literal.
+
+Measured: test/wasm/check_nilpy_generator_slot.sh passes (`4` then `5`).
+New test test_nilpy_a_string_literal_repeated_runs_on_wasm32 (row
+pyrepeat.wasm) equals CPython on wasm32 and x86-64. The published compiler
+traps on it.
+
+## Found beside it, not fixed here
+
+- `print(list(g(2)))` for a generator traps on wasm32 with `indirect call
+  type mismatch`. That is a different fault, now ticketed separately.
+- test/wasm/ holds 46 check scripts and check_all.sh, and NOTHING runs them
+  (no Makefile target, no gate step). That is how this check stayed RED. Two
+  others are red today, both before this change and on the 10-31 build:
+  check_phase1 (wasmenc_selftest.pas uses `OutOpen`, which no longer exists)
+  and check_exc (exc_slice.pas segfaults NATIVELY on x86-64). Ticketed
+  separately, so check_all can be wired into a suite once they are green.

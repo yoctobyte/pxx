@@ -4101,6 +4101,21 @@ begin
   WasmGlobalSet(WasmGSp);
 end;
 
+{ A string literal as a managed-string HANDLE: blob+8 for a non-empty literal
+  (any literal under NilPy), the nil handle for an empty Pascal one. The
+  register backends' EmitStaticLitHandle rule, without its -O2 gate: this
+  target has no other way to make the handle. }
+procedure WasmEmitLitHandle(node: Integer);
+var sVal: AnsiString; si: Integer;
+begin
+  sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
+  si := InternStr(sVal);
+  if (Length(sVal) > 0) or isNilPy then
+    WasmDataAddr(Strs[si].Offset + 8)
+  else
+    WasmI32Const(0);
+end;
+
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
     isInstr: Boolean; instrOp: Byte; savedLVW, savedCRA: Boolean;
@@ -4218,7 +4233,24 @@ begin
     InLValueWrite := Procs[p].Params[i].IsRef;
     WasmConstRefArg := InLValueWrite and (i < MAX_PROC_PARAMS) and
                        ProcParamIsConst[p * MAX_PROC_PARAMS + i];
-    WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + Procs[p].Name);
+    { A string LITERAL reaching a by-value AnsiString parameter as itself.
+      Its value is the blob address -- [len:8][chars] -- and a managed handle
+      points at the chars, so the callee read its length from the 8 bytes
+      BEFORE the blob. The register backends convert here
+      (EmitAnsiStrFromInlineStringOf, which takes EmitStaticLitHandle's static
+      block); this loop did not. Pascal never noticed, because its front end
+      converts a literal before the call, but NilPy's direct pylib arms hand
+      the literal over raw: `"ab" * 2` (pystr_repeat) trapped out of bounds.
+      Same rule as EmitStaticLitHandle: a non-empty literal (any literal under
+      NilPy) IS a static managed string, so its handle is blob+8 with no
+      allocation and no retain; an empty Pascal literal is the nil handle.
+      bug-a-a-nilpy-generator-slice-faults-out-of-bounds-under-wasm32 }
+    if (Procs[p].Params[i].TypeKind = tyAnsiString) and
+       (not Procs[p].Params[i].IsRef) and
+       (IRA[argNode] >= 0) and (IRKind[IRA[argNode]] = IR_CONST_STR) then
+      WasmEmitLitHandle(IRA[argNode])
+    else
+      WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + Procs[p].Name);
     InLValueWrite := savedLVW;
     WasmConstRefArg := savedCRA;
     Inc(i);
