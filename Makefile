@@ -19507,6 +19507,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dyncopy_managed_hd26 "$$($(TESTTMP)/test_dyncopy_managed_hd26)" "checks 2211 fails 0"
 	./$(COMPILER) test/test_val_builtin.pas $(TESTTMP)/test_val_builtin26
 	tools/expect_same.sh test_val_builtin26 "$$($(TESTTMP)/test_val_builtin26)" "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 2\n1000000000000 0\n0')"
+	# Val on a Double is correctly rounded, on the BITS, against CPython over
+	# 6000 repr() strings incl. subnormals (was 973/6000 on this sample).
+	# bug-b-val-of-a-float-is-not-correctly-rounded-while-strtofloat-of-the-same-string-is
+	./$(COMPILER) test/test_val_float_correctly_rounded.pas $(TESTTMP)/test_val_float_cr26
+	@if command -v python3 >/dev/null 2>&1; then \
+	  tools/expect_same.sh test_val_float_cr26 "$$(python3 test/test_val_float_correctly_rounded_gen.py | $(TESTTMP)/test_val_float_cr26)" "val-float: 6000 / 6000 exact"; \
+	else echo "  test-core: python3 absent, skipping the Val bits differential"; fi
 	./$(COMPILER) test/test_hilo_swap.pas $(TESTTMP)/test_hilo_swap26
 	tools/expect_same.sh test_hilo_swap26 "$$($(TESTTMP)/test_hilo_swap26)" "$$(printf '10 11 43776\n0 5 1280\n255 170 -21761\n0 86 22016\n18 52 13330\n237 204 -13075\n4660 22136 1450709556\n60875 43400 -1450644021\n39612 57072 3740310204\n287454020 1432778632 6153737367135073092\n4294967295 4294967295 -1\n2291772091 3437096703 14762217934866197179\n12 8 51200\n18 52 13330\n0 5 1280\n12 8 51200\n18 52 13330\n156 64 16540\n4660 22136 1450709556\n287454020 1432778632 6153737367135073092')"
 	./$(COMPILER) test/test_overload_no_narrowing.pas $(TESTTMP)/test_overload_no_narrowing26

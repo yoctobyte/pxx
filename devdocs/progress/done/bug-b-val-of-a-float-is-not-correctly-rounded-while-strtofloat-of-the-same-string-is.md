@@ -3,8 +3,8 @@ slug: bug-b-val-of-a-float-is-not-correctly-rounded-while-strtofloat-of-the-same
 track: B
 prio: 60
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: rd
 created: 2026-09-10
 found-by: frankB
 tags: [rtl, builtin, float, parsing, two-mechanisms-one-concept]
@@ -105,3 +105,41 @@ compared on the BITS: `Val(repr(d)) = d` for every double in the sample. A
 printed comparison cannot see this — the values differ in the last place or
 two, and our own float formatter prints the shortest round-tripping decimal,
 which will print the WRONG double's shortest form perfectly happily.
+
+## Resolution (2026-11-19, rd): option 1, one parser
+
+The correctly rounded core (ParseFloatCore with Clinger, Eisel-Lemire and the
+exact BigF/ExDec fallbacks, plus ExDecDigits, which the formatters share)
+moved out of sysutils, verbatim, into `lib/rtl/decfloat.pas`. sysutils `uses`
+it, and so does builtin, in its implementation section. ValFloat keeps its own
+scan, so acceptance and FPC's error position (`code`) are unchanged, and takes
+the VALUE from ParseFloatCore. There is no second value path left to drift.
+
+The "wall" above was narrower than stated. builtin cannot use SYSUTILS (too
+big, and it would cycle through platform), but builtin loaded ambiently
+reaches lib/rtl units fine. Measured with `uses wideint` on x86-64, i386 and
+aarch64. decfloat depends on wideint only; the two places that called
+IntToStr and Trim spell them out, so nothing cycles back into builtin.
+
+Measured (a seeded 6000-string sample, compared on the bits against CPython,
+guard below):
+- old Val: 973 / 6000 exact. new: 6000 / 6000 on x86-64, i386 (32-bit
+  MulHiU64 fallback) and aarch64 (qemu).
+- error codes: identical to the old ValFloat on '1e', '1.5x', '', '.5', '1.'
+  and the leading-space and sign forms.
+- StrToFloat: unchanged. STRTOFLOAT-ROUNDTRIP OK, FLOATTOSTR OK, CPython
+  oracle 112207/112207.
+
+The guard the ticket asked for is test/test_val_float_correctly_rounded.pas,
+fed by `..._gen.py` (repr + bits, subnormals and extremes included). It is a
+test-core row.
+
+COST, said plainly: a program that pulls builtin (any Val or Str) now carries
+the Eisel-Lemire power-of-ten tables, +11 KB of data, even for integer-only
+Val. Code is unchanged unless Val on a float is actually called (then about
++20 KB, the same correct parser StrToFloat users already carry). DCE drops
+dead procedures but not dead typed consts from an executable's data. On
+ESP-IDF objects, ObjRoAdoptDeadTypedConsts already moves an unreferenced
+typed const to .rodata, so there it is flash, not SRAM. Executables generally
+eliminating dead typed consts would take this back; that is a DCE feature,
+not part of this fix.

@@ -576,6 +576,9 @@ function __pxxTObjectToString(Inst: Pointer): AnsiString;
 
 implementation
 
+{ decfloat: ValFloat takes its value from the shared correctly rounded parser }
+uses decfloat;
+
 { Advance the xorshift32 state living in RandSeed. State 0 is a fixed point of
   xorshift, so it maps to an arbitrary nonzero constant (RandSeed = 0 and
   RandSeed = that constant give the same sequence — harmless). }
@@ -2261,65 +2264,46 @@ end;
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 { Parse [sign] digits [.digits] [(e|E)[sign]digits] into a Double. code = 0 on
   success, else the 1-based position of the first offending character (FPC
-  convention). Pure float arithmetic — no libc. }
+  convention).
+
+  This routine only SCANS: it decides acceptance and the error position. The
+  value comes from decfloat's ParseFloatCore -- the same correctly rounded
+  parser StrToFloat uses -- because the old value path here (multiply by ten
+  per digit, then per decade of exponent) rounded once per step and returned a
+  nearby double for 1574 of 6000 repr() strings.
+  bug-b-val-of-a-float-is-not-correctly-rounded-while-strtofloat-of-the-same-string-is }
 var
   i, len, ndig: Integer;
-  neg, eneg, started: Boolean;
-  mant, scale: Double;
-  exp, expval, d: Integer;
-  c: Char;
+  started: Boolean;
 begin
   v := 0;
   code := 0;
-  mant := 0;
-  neg := False;
   started := False;
   len := Length(s);
   i := 1;
   while (i <= len) and (s[i] = ' ') do Inc(i);
-  if (i <= len) and ((s[i] = '-') or (s[i] = '+')) then
-  begin
-    neg := s[i] = '-';
-    Inc(i);
-  end;
-  { integer part. NOTE: float literals (10.0/1.0) are used throughout — a plain
-    integer literal assigned/multiplied into a Double currently misses the
-    int->float conversion (see feature-int-to-float-assign); 0.0 is safe because
-    its bit pattern is identical. }
+  if (i <= len) and ((s[i] = '-') or (s[i] = '+')) then Inc(i);
   while (i <= len) and (s[i] >= '0') and (s[i] <= '9') do
   begin
-    mant := mant * 10.0 + (Ord(s[i]) - Ord('0'));
     started := True;
     Inc(i);
   end;
-  { fractional part }
-  scale := 1.0;
   if (i <= len) and (s[i] = '.') then
   begin
     Inc(i);
     while (i <= len) and (s[i] >= '0') and (s[i] <= '9') do
     begin
-      mant := mant * 10.0 + (Ord(s[i]) - Ord('0'));
-      scale := scale * 10.0;
       started := True;
       Inc(i);
     end;
   end;
-  { exponent }
-  exp := 0;
-  eneg := False;
   if (i <= len) and ((s[i] = 'e') or (s[i] = 'E')) then
   begin
     Inc(i);
-    if (i <= len) and ((s[i] = '-') or (s[i] = '+')) then
-    begin
-      eneg := s[i] = '-';
-      Inc(i);
-    end;
+    if (i <= len) and ((s[i] = '-') or (s[i] = '+')) then Inc(i);
     ndig := 0;
     while (i <= len) and (s[i] >= '0') and (s[i] <= '9') do
     begin
-      exp := exp * 10 + (Ord(s[i]) - Ord('0'));
       Inc(ndig);
       Inc(i);
     end;
@@ -2328,20 +2312,15 @@ begin
   if (not started) or (i <= len) then
   begin
     code := i;
-    v := 0;
     Exit;
   end;
-  mant := mant / scale;
-  if neg then mant := -mant;
-  { apply exponent by repeated multiply/divide (exact powers of ten) }
-  expval := exp;
-  while expval > 0 do
+  { the scan above accepts a subset of what ParseFloatCore accepts, so this
+    cannot fail; if it ever did, report it rather than answer a wrong value }
+  if not ParseFloatCore(s, v) then
   begin
-    if eneg then mant := mant / 10.0 else mant := mant * 10.0;
-    Dec(expval);
+    v := 0;
+    code := 1;
   end;
-  v := mant;
-  code := 0;
 end;
 
 function PCharToString(p: PChar): AnsiString;
