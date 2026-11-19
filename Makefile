@@ -38016,6 +38016,14 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=esp32s3 --xtensa-abi=call0 --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/test_xt_abi_c0.o
 	cmp $(TESTTMP)/test_xt_abi_default.o $(TESTTMP)/test_xt_abi_win.o
 	! cmp -s $(TESTTMP)/test_xt_abi_default.o $(TESTTMP)/test_xt_abi_c0.o
+	# A freestanding ESP object's .data starts with the first user variable:
+	# the unreferenced fixed low block is dropped, a static const array is in
+	# .rodata, and no hole is left where it was. Was counter at 0x38, .data
+	# 0x48. bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data
+	./$(COMPILER) --target=esp32s3 --freestanding --emit-obj test/c_esp_obj_data_layout.c $(TESTTMP)/c_espdl_s3.o > /dev/null
+	tools/expect_same.sh c_esp_obj_data_layout-esp32s3 "$$(readelf -sW $(TESTTMP)/c_espdl_s3.o | awk '$$8=="counter"{print $$2}') $$(readelf -SW $(TESTTMP)/c_espdl_s3.o | sed -n 's/.* \.data  *PROGBITS  *[0-9a-f]* [0-9a-f]* \([0-9a-f]*\).*/\1/p')" "00000000 000010"
+	./$(COMPILER) --target=esp32c3 --freestanding --emit-obj test/c_esp_obj_data_layout.c $(TESTTMP)/c_espdl_c3.o > /dev/null
+	tools/expect_same.sh c_esp_obj_data_layout-esp32c3 "$$(readelf -sW $(TESTTMP)/c_espdl_c3.o | awk '$$8=="counter"{print $$2}') $$(readelf -SW $(TESTTMP)/c_espdl_c3.o | sed -n 's/.* \.data  *PROGBITS  *[0-9a-f]* [0-9a-f]* \([0-9a-f]*\).*/\1/p')" "00000000 000010"
 	# COROUTINES ON THE WINDOWED ABI, vs the same x86-64 oracle. The deep row is
 	# the one that matters most: it yields with twenty frames live, far more
 	# than the 64-register file holds, so every switch crosses spilled windows

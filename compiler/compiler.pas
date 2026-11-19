@@ -3746,6 +3746,17 @@ begin
   DataLen      := 0;
   DataEnsure(STR_INIT_OFFSET);
   DataLen      := STR_INIT_OFFSET;
+  { an ESP object may drop this block (ObjRoDropDeadStrings): 32 bytes, so
+    what follows keeps its residue mod 16. Zero elsewhere: nothing changes. }
+  DataResvLen := 0;
+  DataResvDrop := False;
+  if EmitObjMode and (TargetPlatform = PLATFORM_ESP) and (not NoRoData) and
+     ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) then
+  begin
+    DataResvLen := 32;
+    DataEnsure(DataResvLen);
+    while DataLen < DataResvLen do begin Data[DataLen] := 0; Inc(DataLen); end;
+  end;
   SpacesOffset := -1;
   Data[MINUS_OFFSET]   := Ord('-');
   Data[NEWLINE_OFFSET] := 10;

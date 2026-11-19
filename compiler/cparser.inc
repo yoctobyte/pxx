@@ -14387,7 +14387,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
     gNameTok: Integer;    { token index of THIS declarator's name }
-    gHadStar: Boolean;    { the first declarator's pointer came from a LITERAL star }
+    gHadStar: Boolean;
+    gBaseConst: Boolean;  { the declaration's base type is const (CTypeBaseConst) -- SymCConstObj }    { the first declarator's pointer came from a LITERAL star }
     gScalarTk, gFirstTk: TTypeKind;
     gScalarRec, gFirstRec, gFirstPtrDepth, gFirstElemTk, gFirstElemRec,
     gFirstPtrBaseTk, gFirstPtrBaseRec, gFirstPtrElemSig: Integer;
@@ -14868,6 +14869,7 @@ begin
     loop top from its own stars. A pointer from a TYPEDEF (no literal star) is
     the whole type and applies to every sibling. }
   gHadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
+  gBaseConst := CTypeBaseConst;
   gFirstTk := baseTk; gFirstRec := recId;
   gFirstPtrDepth := CTypePtrDepth; gFirstElemTk := CTypeElemTk;
   gFirstElemRec := CTypeElemRec; gFirstPtrBaseTk := CTypePtrBaseTk;
@@ -15265,6 +15267,11 @@ begin
     CApplyThreadLocalStorage(idx, declSawThread,
                              (CurTok.Kind = tkAssign) or gPreScanInit);
     if (idx >= 0) and ((CurTok.Kind = tkAssign) or gPreScanInit) then SymCHasInit[idx] := True;
+    { the object itself is const: a const base, no star of its own, and not a
+      pointer from the first declarator or a typedef (`const char *a, b[]`
+      leaves b unmarked: conservative) -- SymCConstObj }
+    if (idx >= 0) and gBaseConst and (gStars = 0) and (gFirstTk <> tyPointer) then
+      SymCConstObj[idx] := True;
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }

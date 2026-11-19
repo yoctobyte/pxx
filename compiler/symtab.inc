@@ -6673,7 +6673,7 @@ begin
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
-  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
+  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n); SetLength(SymCConstObj, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(SymElfTls, n);  SetLength(SymCHasInit, n);  SetLength(ObjDataStrOff, n);
@@ -6869,7 +6869,7 @@ begin
   SymCLongRank[SymCount]  := 0;
   SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False;
+  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False;
   SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
@@ -8231,7 +8231,7 @@ begin
   SymCLongRank[SymCount] := 0;
   SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False;
+  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False;
   SymObjDataScope[SymCount] := False;
   SymObjRuntimeCopy[SymCount] := False;
   SymAllocSize[SymCount] := 0;

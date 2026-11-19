@@ -8,7 +8,7 @@ created: 2026-11-19
 found-by: rd (Rainyday kernel seat), building Rainyday's tests/xtensa with pxx
 tags: [cfront, inline-asm, file-scope-asm, xtensa, rainyday, rump]
 blocked-by: []
-summary: "XTENSA DONE 2026-11-19 (rd): a top-level asm with .text and global labels assembles in place; each global label is a frameless function C can call (a prior prototype binds to it); entry/retw/call0/4/8/12 name (resolved after the unit, the slot keeps its n), local labels and two-register branches, .align/.space/.section .text*. All 10 Rainyday tests/xtensa programs now compile with pxx; signal and selfexe pass on the S3 kernel; fixed.c's asm is right but it fails on data layout (bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data). OPEN: x86-64 and the other targets still refuse (rump repro s03: `.globl myfunc; myfunc: movl $42,%eax; ret`)."
+summary: "XTENSA DONE 2026-11-19 (rd): a top-level asm with .text and global labels assembles in place; each global label is a frameless function C can call (a prior prototype binds to it); entry/retw/call0/4/8/12 name (resolved after the unit, the slot keeps its n), local labels and two-register branches, .align/.space/.section .text*. All 10 Rainyday tests/xtensa programs now compile with pxx; signal, selfexe and fixed pass on the S3 kernel (fixed.c also needed bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data, done). OPEN: x86-64 and the other targets still refuse (rump repro s03: `.globl myfunc; myfunc: movl $42,%eax; ret`)."
 ---
 
 # C: file-scope asm that defines code

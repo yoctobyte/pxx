@@ -79,6 +79,76 @@ begin
   RoPieceAddEx(old, isRo, False);
 end;
 
+{ The modulus an RW piece [a, e) must keep its offset in, in an ESP object.
+  RO_RESIDUE (16) is the safe default: it keeps any alignment an emitter
+  asked for relative to Data[0]. But when every byte of the piece belongs to
+  a data symbol, or is padding shorter than 16 bytes before the next one,
+  each symbol's own alignment divides its old offset, so the largest power of
+  two dividing each start (capped at 16) is enough. Without this, a C const
+  object moved to .rodata left its residue behind: `counter` after a 28-byte
+  `greeting` landed at .data+12 where gcc puts it at 0 (Rainyday
+  tests/xtensa/fixed.c checks the address).
+  bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
+function RwPieceModulus(a, e: Integer): Integer;
+var k, d, z, m, x, gapFrom: Integer;
+    cov: array of Boolean;
+    any: Boolean;
+begin
+  Result := RO_RESIDUE;
+  if (DataResvLen = 0) or (e <= a) then Exit;
+  SetLength(cov, e - a);
+  for x := 0 to e - a - 1 do cov[x] := False;
+  m := 1;
+  any := False;
+  for k := 0 to SymCount - 1 do
+    if (Syms[k].Kind = skGlobal) and SymOffIsData(Syms[k].Offset) and (SymAllocSize[k] > 0) then
+    begin
+      d := SymOffDataPart(Syms[k].Offset);
+      if (d < a) or (d >= e) then Continue;
+      if d + SymAllocSize[k] > e then Exit;      { straddles the piece end: unknown }
+      any := True;
+      for x := d to d + SymAllocSize[k] - 1 do cov[x - a] := True;
+      { its alignment divides its offset -- and, in C, its size too (sizeof
+        is a multiple of alignof), so the smaller bound holds. A C global in
+        .data is an initialised one (SymCHasInit); CProgramMode is already
+        reset when the object is written. }
+      z := 1;
+      while (z < RO_RESIDUE) and ((d mod (z * 2)) = 0) and
+            (not ((k < Length(SymCHasInit)) and SymCHasInit[k]) or
+             ((SymAllocSize[k] mod (z * 2)) = 0)) do z := z * 2;
+      if z > m then m := z;
+    end;
+  if not any then Exit;
+  { An uncovered run is alignment padding only if its bytes are zero and it
+    is shorter than the alignment of the symbol after it (shorter than 16 at
+    the piece's end). Anything else may be an object that is not a symbol --
+    a runtime slot -- whose alignment is unknown, so the default stands. }
+  gapFrom := -1;
+  for x := 0 to e - a do
+    if (x < e - a) and (not cov[x]) then
+    begin
+      if gapFrom < 0 then gapFrom := x;
+      if Data[a + x] <> 0 then Exit;
+    end
+    else if gapFrom >= 0 then
+    begin
+      if x < e - a then
+      begin
+        z := 1;
+        while (z < RO_RESIDUE) and (((a + x) mod (z * 2)) = 0) do z := z * 2;
+        if x - gapFrom >= z then Exit;
+      end
+      else if x - gapFrom >= RO_RESIDUE then Exit;
+      gapFrom := -1;
+    end;
+  Result := m;
+end;
+
+function RoResidueUpM(pos, old, m: Integer): Integer;
+begin
+  Result := pos + ((((old - pos) mod m) + m) mod m);
+end;
+
 { Decide the split and lay it out. Must run AFTER the last append to Data[]
   (PrepareDynamicData appends) and BEFORE anything resolves a data address. }
 procedure RoLayoutPrepare(wanted: Boolean; page: Integer);
@@ -86,9 +156,17 @@ var i, cur, pos, len, d, a: Integer;
 begin
   RoSplitActive := False;
   RoPieceCount := 0;
-  if (not wanted) or NoRoData or (RoRangeCount = 0) then Exit;
+  if (not wanted) or NoRoData or ((RoRangeCount = 0) and not DataResvDrop) then Exit;
   cur := 0;
   d := 0;
+  { the unreferenced fixed low block: a dropped RW piece, never addressed }
+  if DataResvDrop then
+  begin
+    if (RoRangeCount > 0) and (RoRangeStart[0] < DataResvLen) then
+      ErrorNoPos('internal: a read-only range starts inside the fixed low block');
+    RoPieceAddEx(0, False, True);
+    cur := DataResvLen;
+  end;
   for i := 0 to RoRangeCount - 1 do
   begin
     if RoRangeEnd[i] > DataLen then
@@ -129,9 +207,9 @@ begin
   RwFileStart := AlignTo(RoImageLen, RO_RESIDUE);
   pos := RwFileStart;
   for i := 0 to RoPieceCount - 1 do
-    if not RoPieceIsRo[i] then
+    if (not RoPieceIsRo[i]) and (not RoPieceDrop[i]) then
     begin
-      pos := RoResidueUp(pos, RoPieceOld[i]);
+      pos := RoResidueUpM(pos, RoPieceOld[i], RwPieceModulus(RoPieceOld[i], RoPieceOld[i + 1]));
       RoPieceNew[i] := pos + RwVaShift;
       len := RoPieceOld[i + 1] - RoPieceOld[i];
       pos := pos + len;
@@ -3728,6 +3806,20 @@ begin
   end;
   if PxxDbgEnabled('a.datamap') then
     WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
+  { The fixed low block (INTBUF, '-', #10): a freestanding C object that
+    never writes a number references none of it, and it sat ahead of the
+    first user variable -- gcc's .data starts with that variable (Rainyday
+    tests/xtensa/fixed.c checks its address). DataResvLen is 32 here, so the
+    drop keeps every later offset's residue. }
+  DataResvDrop := False;
+  if DataResvLen > 0 then
+  begin
+    DataResvDrop := True;
+    for i := 0 to DataResvLen - 1 do
+      if hit[i] then DataResvDrop := False;
+    if DataResvDrop and PxxDbgEnabled('a.datamap') then
+      WriteLn('PXXDBG a.datamap   unreferenced fixed low block dropped: ', DataResvLen, 'B');
+  end;
 end;
 
 function DataMapRoBytes(s, e: Integer): Integer;
@@ -5855,9 +5947,35 @@ end;
   DceRun compacted them, which is what makes "dead" mean unreachable rather
   than merely unwritten. Exported and imported names are never candidates:
   code outside this object can reach them. Called from ObjRoPrepare. }
+{ A C const object moved to .rodata takes the zero padding after it, up to
+  the next data symbol, when that is shorter than 16 bytes and no other
+  read-only range starts in it. Left behind, the padding would begin the RW
+  piece, which keeps the padding's residue and not the next variable's
+  (RwPieceModulus). }
+function ConstObjPaddedEnd(e: Integer): Integer;
+var k, d, nxt, x: Integer;
+begin
+  Result := e;
+  nxt := DataLen;
+  for k := 0 to SymCount - 1 do
+    if (Syms[k].Kind = skGlobal) and SymOffIsData(Syms[k].Offset) and (SymAllocSize[k] > 0) then
+    begin
+      d := SymOffDataPart(Syms[k].Offset);
+      if (d >= e) and (d < nxt) then nxt := d;
+    end;
+  if (nxt <= e) or (nxt - e >= RO_RESIDUE) then Exit;
+  for x := e to nxt - 1 do
+    if Data[x] <> 0 then Exit;
+  for k := 0 to RoRangeCount - 1 do
+    if (RoRangeStart[k] >= e) and (RoRangeStart[k] < nxt) then Exit;
+  for k := 0 to RoAddCount - 1 do
+    if (RoAddS[k] >= e) and (RoAddS[k] < nxt) then Exit;
+  Result := nxt;
+end;
+
 procedure ObjRoAdoptDeadTypedConsts;
 var k, i, j, d, e, t: Integer;
-    live: Boolean;
+    live, relTouch: Boolean;
 
   { Half-open. An address equal to `e` is the NEXT object's start far more
     often than this one's end -- a pointer stored right after TableB in the
@@ -5899,10 +6017,21 @@ begin
         Inc(i);
       end;
       i := 0;
-      while (not live) and (i < DataRelFixCount) do
+      relTouch := False;
+      while (not relTouch) and (i < DataRelFixCount) do
       begin
-        if DeadConstRefIn(DataRelFixPos[i]) or DeadConstRefIn(DataRelFixTarget[i]) then live := True;
+        if DeadConstRefIn(DataRelFixPos[i]) or DeadConstRefIn(DataRelFixTarget[i]) then relTouch := True;
         Inc(i);
+      end;
+      { A C object whose type is const goes to .rodata referenced or not, as
+        gcc puts it -- unless a self-relative word has an end in it (both ends
+        must share a section; ObjRoPrepare refuses the split otherwise).
+        bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
+      if relTouch then live := True
+      else if (k < Length(SymCConstObj)) and SymCConstObj[k] then
+      begin
+        live := False;
+        e := ConstObjPaddedEnd(e);
       end;
       if not live then RoAddPush(d, e);
     end;

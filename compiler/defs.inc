@@ -5849,6 +5849,16 @@ var
   CTypeBaseConst : Boolean;  { last ParseCDeclType: the BASE type carried `const` (=> pointee-const once a star follows). Additive, C-mode only. }
   CTypeLongLong  : Boolean;  { last ParseCDeclType: base was `long long` (TTypeKind collapses it into tyInt64; _Generic needs the distinction). }
   CTypeLong      : Boolean;  { last ParseCDeclType: base was exactly one `long` (on ILP32 TTypeKind collapses it onto tyInt32 = int; _Generic needs the distinction). }
+  { A C object whose own type is const (`static const char g[] = "x";`, no
+    star in its declarator): gcc puts it in .rodata, and an ESP object puts it
+    there too (ObjRoAdoptDeadTypedConsts), referenced or not.
+    bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
+  SymCConstObj : array of Boolean;
+  { An ESP object reserves the fixed low block of .data (INTBUF, '-', #10)
+    as 32 bytes, not 26, so that dropping it when nothing references it
+    (ObjRoDropDeadStrings) keeps every later offset's residue mod 16. }
+  DataResvLen : Integer;
+  DataResvDrop : Boolean;
   SymPtrPointeeConst : array of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
   { C integer symbol's LONG RANK, for _Generic: 0 = none, 1 = `long`, 2 = `long long`.
     TTypeKind cannot carry this. On ILP32 `long` is 32-bit, so it collapses onto the
