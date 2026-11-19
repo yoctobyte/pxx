@@ -5524,7 +5524,8 @@ end;
 
 { ===== 32-bit call argument marshalling: the shared DECISION =====
 
-  Every 32-bit backend (i386, arm32, riscv32) marshals by-value call arguments
+  Every 32-bit backend (i386, arm32, riscv32, and xtensa through
+  XtensaPushArgByClass) marshals by-value call arguments
   with a ladder of special cases, and each writes that ladder out once per call
   KIND: direct, indirect (proc-var), and virtual. Three backends x three kinds,
   nine copies that were never meant to differ — and they drifted. IR_VIRTUAL_CALL

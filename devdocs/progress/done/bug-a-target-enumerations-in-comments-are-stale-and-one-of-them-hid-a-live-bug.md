@@ -2,7 +2,8 @@
 track: A
 prio: 20
 type: bug
-status: open
+status: done
+owner: claude-dupwt
 found: 2026-08-29
 found-by: frankD
 summary: "Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts."
@@ -124,3 +125,24 @@ should not read as though a script needs fixing.
 
 Comment-only for #1's count and #2; #3 is a question for A, not an edit.
 `make compiler/pascal26` byte-identical.
+
+
+## 2026-11-19 (claude-dupwt): closed
+
+1. PXXStrCmp3 / xtensa: already fixed and closed
+   (bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle).
+2. builtin.pas PXXVarBinOp: "the other four targets' half" now says "the cross
+   backends' half" and NAMES the five rather than counting them.
+3. symtab.inc Arg32Class: xtensa has since joined the shared decision
+   (XtensaPushArgByClass calls Arg32Class), so "Every 32-bit backend (i386,
+   arm32, riscv32)" had become an undercount the other way; xtensa is named.
+
+The open question, answered by measurement: the "one word per argument"
+counting the ticket cites in the xtensa ctor path no longer exists there; the
+two remaining `Inc(nArgs)` one-word loops are the raw syscall and atomic
+lowerings, where every argument IS one word. test_ctor_wide_args_cross.pas
+(Int64, Double, QWord, managed and 32-bit ctor arguments, direct and via
+inherited) matches x86-64 on all five cross targets; a Makefile row keeps it.
+Not touched: ir_codegen.inc's "four cross backends" sentence, which describes
+the reach of one specific historical fix rather than enumerating backends.
+Comment-only compiler change; the compiler binary hash is unchanged.

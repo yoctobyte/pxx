@@ -10700,6 +10700,14 @@ test-threads: $(COMPILER)
 	@printf 'program airm;\nvar x: Integer;\nprocedure Foo; begin x := 2; end;\nbegin x := 41; Foo; WriteLn(x); end.\n' > $(TESTTMP)/test_airm.pas
 	tools/expect_same.sh test_air_star "$$(PXXDBG='a.ir:*' ./$(COMPILER) $(TESTTMP)/test_airm.pas $(TESTTMP)/test_airm 2>&1 | grep '^PXXDBG a.ir ' | tr '\n' '|')" "PXXDBG a.ir Foo|PXXDBG a.ir main (program body)|"
 	tools/expect_same.sh test_air_nomatch "$$(PXXDBG='a.ir:Nope' ./$(COMPILER) $(TESTTMP)/test_airm.pas $(TESTTMP)/test_airm 2>&1 | grep -c 'matched no IR-lowered body')" "1"
+	# Int64/Double/QWord constructor arguments on every cross target, against x86-64.
+	# bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug
+	./$(COMPILER) test/test_ctor_wide_args_cross.pas $(TESTTMP)/test_ctwa26 >/dev/null
+	for a in i386 aarch64 arm32 riscv32 xtensa; do \
+	  x=""; [ $$a = xtensa ] && x=--xtensa-soft-mulhigh; \
+	  ./$(COMPILER) --target=$$a --platform=posix $$x test/test_ctor_wide_args_cross.pas $(TESTTMP)/test_ctwa_$$a >/dev/null || exit 1; \
+	  tools/expect_same.sh $$a/test_ctwa "$$(tools/run_target.sh $$a $(TESTTMP)/test_ctwa_$$a; echo "exit=$$?")" "$$($(TESTTMP)/test_ctwa26; echo "exit=$$?")" || exit 1; \
+	done
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

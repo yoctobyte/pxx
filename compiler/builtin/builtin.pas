@@ -1281,7 +1281,9 @@ function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: Nati
 
   x86-64 hand-emits the same two halves in EmitVarBinOp and was fixed on
   2026-08-20 (bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number);
-  this is the other four targets' half.
+  this is the cross backends' half (all five call it: i386, aarch64, arm32,
+  riscv32 and xtensa -- named rather than counted, because a count is what
+  went stale here: bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug).
 
   NilPy must NOT reach this: Python's rules for these pairs are different in
   every case ('5' * 3 is '555', '5' + 3 is a TypeError). The choice is made at
