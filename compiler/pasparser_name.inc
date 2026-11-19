@@ -464,6 +464,21 @@ begin
     scope, where the module really does win. }
   if (CurrentUnitIdx >= 0) and (FindUClassInUnit(name, CurrentUnitIdx) >= 0) then Exit;
 
+  { …and a VISIBLE CLASS beats a unit that this scope never named in its own
+    `uses`. In fpc a unit's name is in scope only where that unit is used, so
+    for `program r; uses collide;` the unit `widget` that collide uses is not
+    a name r can qualify with at all, and `Widget.Create(7)` is the class
+    `Widget` collide exports. pxx took it as a unit qualifier and reported
+    `undefined variable (Create)`. Pascal only: a NilPy import binds module
+    names by its own rules, handled above. Skipped when the uses-edge table
+    has saturated, since it can no longer say "never named".
+    bug-a-a-class-named-after-a-used-unit-cannot-be-constructed-from-outside-that-unit }
+  if (not isNilPy) and (UsesEdgeCount < MAX_USES_EDGES) and (FindUClass(name) >= 0) then
+  begin
+    u := PyFindUnitDotted(name);
+    if (u >= 0) and (u <> CurrentUnitIdx) and (UsesRankOf(CurrentUnitIdx, u) < 0) then Exit;
+  end;
+
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }

@@ -15907,6 +15907,8 @@ test-core: $(COMPILER)
 	# (fpc -O2 -Tlinux -Px86_64, run side by side).
 	./$(COMPILER) -Futest/units test/test_a_unit_qualified_read_of_a_same_named_global.pas $(TESTTMP)/test_qualres26
 	$(TESTTMP)/test_qualres26 | diff -u test/test_a_unit_qualified_read_of_a_same_named_global.expected -
+	./$(COMPILER) -Futest/units test/test_a_class_named_after_a_unit_the_importer_does_not_use.pas $(TESTTMP)/test_clsunitname26
+	tools/expect_same.sh test_clsunitname26 "$$($(TESTTMP)/test_clsunitname26)" "7 40 TRUE"
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
 	tools/expect_same.sh test_genshadow26 "$$($(TESTTMP)/test_genshadow26)" "shadow 12 10"
 	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias

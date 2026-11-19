@@ -5,11 +5,11 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: new
+status: done
 created: 2026-09-14
 found: 2026-09-14
 found-by: frankb-56, while building lib/rtl/pil.pas
-owner: ""
+owner: claude-dupwt
 summary: "MEASURED 2026-09-14, reduced to two 20-line units. A class declared in unit X whose NAME equals the name of a unit X uses cannot be constructed from any other unit: `Widget.Create(7)` answers `undefined variable (Create)`, because the unit qualifier wins over the locally-declared type. FPC resolves this the other way -- a type declared in the current unit shadows a used unit's NAME -- and the dialect is the target, so this is a real divergence rather than a style question. THE COLLISION IS NOT HYPOTHETICAL AND CANNOT ALWAYS BE DESIGNED AWAY: lib/rtl/pil.pas has to declare a class called `Image` because Python writes `from PIL import Image` and `Image.new(...)`, and it has to use lib/rtl/image.pas because that is where TImage lives. Both names are forced by something outside our control. IT IS LOUD FROM OUTSIDE AND THAT IS THE GOOD CASE -- a caller gets a refusal naming `Create`. Inside the declaring unit the same spelling compiles and does something else, which is filed separately and is the dangerous half; the two were originally diagnosed as one bug and are not (see bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout, which turned out to be the actual cause of the misbehaviour inside the unit). WORKAROUND IN USE: declare the class under an internal name and expose the Python-facing name as a type alias (`TPILImage = class ... end; Image = TPILImage;`), which works and through which NilPy still resolves the class correctly. Registered in devdocs/dev/track-b-workarounds.md. PRIO 45 rather than higher because it refuses instead of miscompiling, the workaround is one line, and the collision needs a deliberate name clash to hit."
 ---
 
@@ -80,3 +80,30 @@ Verified: construction works, and NilPy still reaches the class through the
 alias (`m.Widget(7)` binds, methods dispatch, fields read back). It costs one
 line and a comment. Registered in `devdocs/dev/track-b-workarounds.md` so it is
 deleted when this is fixed rather than becoming folklore.
+
+
+# Fixed 2026-11-19 (claude-dupwt), and a correction to the premise
+
+**fpc does not "resolve this the other way": it refuses the declaration.**
+fpc 3.2.2 compiles `collide` (mode objfpc) to `collide.pas(6,12) Error:
+Duplicate identifier "widget"`. A class named after a unit that the same unit
+uses is not legal fpc. pxx accepts it on purpose, because NilPy shims need it
+(pil.pas: class `Image` beside unit `image`), and inside the declaring unit the
+class already won (the FindUClassInUnit arm of ConsumeUnitQualifier).
+
+What was wrong is the importer's view. In fpc a unit's name is in scope only
+where that unit is used. `program r; uses collide;` does not use `widget`, so
+`widget` is not a qualifier there, and `Widget` can only be the class. pxx
+treated any loaded unit as a qualifier. ConsumeUnitQualifier now lets a VISIBLE
+CLASS win over a unit the current scope never named in its own `uses`. This
+applies to Pascal only (NilPy keeps its import-binding rules) and only while
+the uses-edge table is complete.
+
+Unchanged on purpose: a program that uses BOTH units (`uses widget, collide`)
+still reads `Widget.` as the unit, which matches fpc's scoping wherever both
+names are in scope. `widget.TThing` qualified access still works.
+
+Test: test_a_class_named_after_a_unit_the_importer_does_not_use with
+test/units/ucnwidget.pas and ucncollide.pas (row test_clsunitname26) prints
+`7 40 TRUE`. It constructs from outside, constructs inside via MakeHere, and
+checks `is`.
