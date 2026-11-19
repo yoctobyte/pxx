@@ -3,8 +3,8 @@ slug: bug-a-fourteen-compiler-internal-record-names-are-reserved-in-every-user-p
 track: A
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-06
 found-by: frankD
 blocked-by: []
@@ -89,3 +89,34 @@ Check while writing it: the self-host fixedpoint is the acceptance test and it
 is cheap (`make compiler/pascal26`, ~12s), but it proves only that
 `compiler.pas` still resolves. A program that declares `TProc` as a record and
 one that declares it as a class both need a row.
+
+
+# Fixed 2026-11-19 (claude-dupwt): the builtin id needs a declaration
+
+Scoped to the self-host as this ticket asked, without a self-host flag:
+compiler.pas DECLARES all fourteen records, so the self-host always reaches
+IsRecordType's existing arm for a declared record of the builtin shape. The
+only other way in was a name with NO visible declaration, which handed a user
+program the compiler's record. That arm now answers REC_NONE, so the ordinary
+unknown-type and forward-pointer paths answer.
+
+Measured against fpc 3.2.2:
+
+| program | before | now = fpc |
+| --- | --- | --- |
+| `PToken = ^TToken; TToken = record kind: Byte end` then `p^.kind` | `"kind": no such member` | `7 1 1` |
+| `var t: TParam` with no TParam declared | compiles, SizeOf 40 | `unknown type: TParam` |
+| `TProc = object a, b: Integer end` | `8 3` | `8 3` |
+
+**The self-host is untouched, proven rather than assumed.** The old compiler
+and the new one, compiling the same new compiler.pas, give byte-identical
+output (cf7973899df2). Nothing in lib/ or compiler/builtin mentions any of the
+fourteen names.
+
+Tests: test_a_a_compiler_internal_record_name_is_an_ordinary_user_name (row
+internalrecname26, fpc's output; the old compiler fails it at line 17) and
+an inline `var t: TParam` refusal (internalrecname_u).
+
+Not changed: the comparison is still case-sensitive (`lo = 'TToken'`). With
+the declaration requirement that no longer matters for user code: a
+differently-cased user declaration is just a user record.

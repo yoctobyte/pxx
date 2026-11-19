@@ -70,3 +70,31 @@ program without one.
 Found while fixing `regression-test-core-test-promoint-bitwise`; not a
 regression in the sense of a working thing broken — before `10e670503` this
 shape did not compile at all.
+
+## Re-measured 2026-11-19 (claude-dupwt): it is not only literals
+
+A QWord VARIABLE has the same defect, so this is not a literal-predicate
+question at all:
+
+```pascal
+var v: Variant; q: QWord;
+q := 18446744073709551615; v := q; writeln(v, ' ', VarType(v));
+```
+
+| | pxx | fpc 3.2.2 |
+| --- | --- | --- |
+| `v := 18446744073709551615` | -1 | 18446744073709551615 |
+| `v := 9223372036854775808` | -9223372036854775808 | 9223372036854775808 |
+| `v := q` (QWord, all bits set) | `-1 20` | `18446744073709551615 21` |
+
+fpc boxes a QWord source as varQWord (21); pxx boxes it as VT_INT64 and
+reports varInt64 (20). The ticket's "variant that carries unsignedness" arm
+is therefore the fix for both rows: a VT_QWORD tag that boxing picks for a
+tyUInt64 source, literal or not.
+
+Sized, not started: `VT_INT64` appears at ~80 sites. That covers ir.inc (9),
+ir_codegen.inc (8) and one line in each other backend, builtin.pas,
+builtinheap.pas, promocore.pas (8), pylib.pas (16), pyeval.pas,
+pyparser.inc (7), lib/rtl/variants.pas, json.pas and mimic_sqlite3.pas. Each
+reader of the tag (print, compare, arithmetic, VarType, conversions) needs a
+QWord arm, so this needs its own session.

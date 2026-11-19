@@ -13765,6 +13765,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh ansicast_frozen26 "$$($(TESTTMP)/ansicast_frozen26)" "$$(cat test/test_p_ansistring_cast_of_a_frozen_string_is_a_conversion.expected)"
 	./$(COMPILER) test/test_p_include_info_macros_expand_to_strings.pas $(TESTTMP)/infomacro26
 	tools/expect_same.sh infomacro26 "$$($(TESTTMP)/infomacro26)" "$$(cat test/test_p_include_info_macros_expand_to_strings.expected)"
+	./$(COMPILER) test/test_a_a_compiler_internal_record_name_is_an_ordinary_user_name.pas $(TESTTMP)/internalrecname26
+	tools/expect_same.sh internalrecname26 "$$($(TESTTMP)/internalrecname26)" "$$(cat test/test_a_a_compiler_internal_record_name_is_an_ordinary_user_name.expected)"
+	@out=$$(printf 'program u;\nvar t: TParam;\nbegin WriteLn(SizeOf(t)); end.\n' > $(TESTTMP)/internalrecname_u.pas; ./$(COMPILER) $(TESTTMP)/internalrecname_u.pas $(TESTTMP)/internalrecname_u 2>&1); rc=$$?; \
+	 test "$$rc" = "1" && printf '%s\n' "$$out" | grep -q '^pascal26:2: error: unknown type: TParam' \
+	  || { echo "internalrecname_u: FAIL - rc=$$rc (want rc=1, unknown type: TParam; an undeclared compiler-internal name must not be a type)"; printf '%s\n' "$$out"; exit 1; }
 	@out=$$(printf 'program d;\nconst d = {$$I %%DATE%%};\nbegin WriteLn(d); end.\n' > $(TESTTMP)/infomacro_date.pas; ./$(COMPILER) $(TESTTMP)/infomacro_date.pas $(TESTTMP)/infomacro_date 2>&1); rc=$$?; \
 	 test "$$rc" = "1" && printf '%s\n' "$$out" | grep -q '^pascal26:2: error: the include macro %DATE% is not implemented' \
 	  || { echo "infomacro_date: FAIL - rc=$$rc (want rc=1 and the %DATE% refusal on line 2)"; printf '%s\n' "$$out"; exit 1; }

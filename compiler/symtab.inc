@@ -3229,7 +3229,18 @@ begin
     else if (Result = REC_NONE) or not UserRecordIsBuiltinShape(ci, Result) then
       Result := REC_UCLASS_BASE + ci;
   end
-  else if (Result <> REC_NONE) and (FindEnumType(lo2) >= 0) then
+  else
+    { NO declaration of the name is visible: the builtin id is not the user's
+      type. These fourteen ids exist so compiler.pas's OWN records keep known
+      ids across the self-host, and compiler.pas declares every one of them, so
+      that path is the arm above (a declared record of the builtin shape). A
+      user program that merely MENTIONS the name got a compiler-internal
+      record: `var t: TParam` with no TParam anywhere was a silent 40-byte
+      record (fpc: identifier not found), and `PToken = ^TToken` ahead of the
+      user's own `TToken = record kind: Byte end` bound the pointer to the
+      builtin, so `p^.kind` was "no such member". REC_NONE lets the ordinary
+      unknown-type and forward-pointer paths answer instead.
+      bug-a-fourteen-compiler-internal-record-names-are-reserved-in-every-user-program }
     Result := REC_NONE;
 end;
 
