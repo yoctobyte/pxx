@@ -239,3 +239,34 @@ finalized but not initialized.
   off there. RAM: unchanged; the descriptor and side block are RTTI .rodata.
 - Fixedpoint converged in 1 round. Gate quick GREEN. The existing
   test_mgmt_operators{,_nested_field,_array_field,_copy} still match.
+
+## 2026-11-20, later (claude-dupwt): nested records, and the ancestor-variable hole closed
+
+**The hole was real.** I reproduced it: a class with a field `w: TWrap`
+(`TWrap = record inner: TFoo end`), built and held through a `TBase`
+variable, compiled with no refusal and printed 0 where fpc prints 42.
+
+**Nested records are now served instead of refused.** The descriptor writer
+flattens them: one kind-8 member per operator-declaring record instance at
+its absolute offset. A leaf record (declares operators, holds none deeper)
+takes one member for any fixed-array length; a record that holds more is
+flattened once per element. The members are emitted by MgmtEmitRec and
+counted by RecMgmtFlatCount, member for member.
+
+**Order, measured against fpc 3.2.2:** inside a CLASS, a record runs
+PRE-ORDER for both operators. The outer Initialize runs before its fields'
+(TWrap.Initialize sees k=0), and the outer Finalize runs before its fields'.
+That is not the post-order Initialize a LOCAL record gets from the scope
+desugar. Because both operators share one order, one member list serves both.
+test_mgmt_operators_class_field_nested is fpc's output byte for byte.
+
+**Still refused:** a dynamic (or unsized) array of an operator record
+anywhere inside a class field, and a class that flattens past 4096 members.
+The refusal is now also checked at every static Pascal construction, so an
+ancestor-typed variable no longer lets the class through. The refusal fixture
+was re-aimed at that exact shape. A metaclass construction of such a class
+is still checked only at variables, as before.
+
+**Measured:** the new tests plus hole/nest/tmoperator4 pass on x86-64, i386,
+arm32, aarch64, riscv32, wasm32, hosted xtensa, and ESP32-S3/C3 (qemu). Gate
+quick GREEN. test_class_str on C3 stays at 7338 B.

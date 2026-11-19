@@ -18724,6 +18724,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         body, and the inline per-backend arm has no place for it. Every other
         Pascal construction keeps the inline arm.
         feature-pascal-management-operators-on-a-class-field }
+      { the shapes the descriptor cannot serve are refused HERE too, not
+        only at a variable of the class type: a class built and held through
+        an ancestor-typed variable reached no refusal and silently skipped its
+        nested Initialize. }
+      if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and (not isNilPy) and
+         (ClassMgmtFieldRefusal(classIdx - REC_UCLASS_BASE) <> '') then
+        Error(ClassMgmtFieldRefusal(classIdx - REC_UCLASS_BASE));
       if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
          (not isNilPy) and (ClassMgmtFieldCount(classIdx - REC_UCLASS_BASE) > 0) then
       begin

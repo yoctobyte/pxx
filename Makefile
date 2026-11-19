@@ -24308,6 +24308,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_mgmt_op_cls26 | diff -u test/test_mgmt_operators_class_field.expected -
 	./$(COMPILER) test/test_mgmt_operators_class_field_array.pas $(TESTTMP)/test_mgmt_op_clsa26
 	$(TESTTMP)/test_mgmt_op_clsa26 | diff -u test/test_mgmt_operators_class_field_array.expected -
+	./$(COMPILER) test/test_mgmt_operators_class_field_nested.pas $(TESTTMP)/test_mgmt_op_clsn26
+	$(TESTTMP)/test_mgmt_op_clsn26 | diff -u test/test_mgmt_operators_class_field_nested.expected -
 	# ...and MULTI-DIMENSIONAL, symbol and field, because storage is flat
 	# row-major and the recorded extent is the FLAT count, so one loop walks any
 	# dimensionality. What changes with the dimension count is the INDEX SPACE:
@@ -24394,7 +24396,7 @@ test-core: $(COMPILER)
 	  echo "FAIL: a record holding a managed record in a DYNAMIC array field compiled -- its extent is a runtime length the desugar cannot read"; exit 1; \
 	fi
 	if ./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 >/dev/null 2>&1; then \
-	  echo "FAIL: a class field holding a management-operator record one level DEEPER compiled -- its inner Initialize would never run"; exit 1; \
+	  echo "FAIL: a DYNAMIC array of a management-operator record inside a class field compiled -- its elements follow SetLength, not the object"; exit 1; \
 	fi
 	if ./$(COMPILER) test/test_mgmt_operators_addref_small_refused.pas $(TESTTMP)/test_mgmt_op_ar26 >/dev/null 2>&1; then \
 	  echo "FAIL: a management operator on a record passed by value at <=8 bytes compiled -- there is no address for it to act on and the callee gets a pointer where its ABI says bytes"; exit 1; \
@@ -24412,7 +24414,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
 	  | grep -q "a DYNAMIC array field holding"
 	./$(COMPILER) test/test_mgmt_operators_class_field_refused.pas $(TESTTMP)/test_mgmt_op_cfld26 2>&1 \
-	  | grep -q "a class field whose record holds a record with a management operator"
+	  | grep -q "a DYNAMIC array field holding"
 	# Matches the SIZE wording, not just the ticket slug: the blanket
 	# "AddRef is recognised but not dispatched" refusal this fixture used to
 	# assert ALSO cites that slug, so a slug-only grep would score the old

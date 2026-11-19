@@ -1,36 +1,34 @@
 program test_mgmt_operators_class_field_refused;
-{ A class field whose record holds a management-operator record only one level
-  DEEPER is still refused. A field of the operator-declaring record itself (or
-  a fixed array of it) is run at Create/Free from the class layout descriptor
-  (test_mgmt_operators_class_field.pas); the nested shape needs the record's
-  own field walk at object lifetime, which is not built, and compiling it
-  would silently never run the inner Initialize.
+{ A DYNAMIC array of a management-operator record inside a class field is
+  refused: its elements come and go with SetLength, not with the object, so the
+  class layout descriptor has nothing fixed to walk. Every fixed shape -- a
+  plain field, a fixed array, a record nested at any depth -- runs at
+  Create/Free (test_mgmt_operators_class_field*.pas).
 
-  Re-aimed 2026-11-20 when the direct shape landed: this fixture used to refuse
-  the direct shape. feature-pascal-management-operators-on-a-class-field }
-{$mode objfpc}{$H+}{$modeswitch advancedrecords}
+  The class is constructed through an ANCESTOR-typed variable on purpose: the
+  refusal used to be checked only at a variable of the class's own type, so
+  this exact program compiled and silently skipped its Initialize.
+
+  Re-aimed twice: it refused the direct shape until 2026-11-20 and the nested
+  shape until the flattening landed the same day.
+  feature-pascal-management-operators-on-a-class-field }
+{$mode objfpc}{$modeswitch advancedrecords}
 type
   TFoo = record
     n: Integer;
     class operator Initialize(var a: TFoo);
   end;
-  TWrap = record
-    inner: TFoo;
+  TW = record
+    d: array of TFoo;
   end;
-  TCls = class
-  public
-    w: TWrap;
+  TBase = class end;
+  TCls = class(TBase)
+    w: TW;
   end;
 class operator TFoo.Initialize(var a: TFoo);
-begin a.n := 0; end;
-
-procedure P;
-var c: TCls;
+begin a.n := 1; end;
+var b: TBase;
 begin
-  c := nil;
-  if c <> nil then WriteLn('no');
-end;
-
-begin
-  P;
+  b := TCls.Create;
+  b.Free;
 end.

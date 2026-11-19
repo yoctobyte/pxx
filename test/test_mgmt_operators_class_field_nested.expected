@@ -1,0 +1,15 @@
+create
+  Wrap.Init k=0
+  Foo.Init 1
+  Foo.Init 2
+  Foo.Init 3
+  Foo.Init 4
+w.k=0 z=4
+free
+  Destroy
+  Foo.Fin 3
+  Foo.Fin 4
+  Wrap.Fin k=0
+  Foo.Fin 1
+  Foo.Fin 2
+end

@@ -2031,6 +2031,62 @@ begin
     end;
 end;
 
+{ One kind-8 member and its side block: `cnt` consecutive instances of record
+  `rec` at instance offset `off`, run with rec's own Initialize/Finalize.
+  Layout in EmitLayoutRTTI's pass 2b comment. feature-pascal-management-operators-on-a-class-field }
+procedure MgmtEmitMember(off, cnt, rec, depth, hdr, side: Integer; var k, sIdx: Integer);
+var mHdr, sb, mp: Integer;
+begin
+  mHdr := hdr + REC_DESC_HDR_SIZE + k * 16;
+  sb := side + sIdx * 24;
+  PatchDataI32(mHdr + 0, off);
+  PatchDataI32(mHdr + 4, 8);
+  DescKindSeen[8] := True;   { DceCutDeadKindArms }
+  PatchDataI32(mHdr + 8, cnt);
+  PatchDataI32(mHdr + 12, sb - (mHdr + 12));
+  AddDataRelFix(mHdr + 12, sb);
+  mp := FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), rec);
+  if mp >= 0 then AddMethodFix(sb + 0, mp, MFK_MGMTOP);
+  mp := FindOpOverload(OPK_FINALIZE, Ord(tyRecord), rec);
+  if mp >= 0 then AddMethodFix(sb + 8, mp, MFK_MGMTOP);
+  PatchDataI32(sb + 16, UClsSize_[rec - REC_UCLASS_BASE]);
+  PatchDataI32(sb + 20, depth);
+  Inc(sIdx);
+  Inc(k);
+end;
+
+{ Flatten one instance of record `r` at instance offset `off`, PRE-ORDER: r's
+  own operators first, then each participating field in declaration order.
+  That is fpc 3.2.2's order for a record inside a CLASS, for BOTH operators
+  (measured: the outer Initialize runs before its fields', and so does the
+  outer Finalize) -- not the post-order Initialize a LOCAL gets from the
+  scope desugar. A leaf (declares operators, holds none deeper) is one member
+  for any array length; a record holding more is flattened per element.
+  Member for member what RecMgmtFlatCount counts. feature-pascal-management-operators-on-a-class-field }
+procedure MgmtEmitRec(r, off, depth, nest, hdr, side: Integer; var k, sIdx: Integer);
+var ci, i, fi, fr, n, e: Integer;
+begin
+  if nest > 8 then Exit;
+  if RecHasScopeManagementOp(r) then
+    MgmtEmitMember(off, 1, r, depth, hdr, side, k, sIdx);
+  ci := r - REC_UCLASS_BASE;
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    fi := UClsFBase[ci] + i;
+    fr := FieldMgmtOpRec(fi);
+    if fr < 0 then Continue;
+    if UFldIsArray[fi] then n := UFldArrLen[fi] else n := 1;
+    if RecContainsManagementOp(fr, 0) then
+    begin
+      for e := 0 to n - 1 do
+        MgmtEmitRec(fr, off + UFldOff_[fi] + e * UClsSize_[fr - REC_UCLASS_BASE],
+                    depth, nest + 1, hdr, side, k, sIdx);
+    end
+    else
+      MgmtEmitMember(off + UFldOff_[fi], n, fr, depth, hdr, side, k, sIdx);
+  end;
+end;
+
 procedure EmitLayoutRTTI;
 var
   ci, i, fi, base, cnt, mCount, dCount, mHdr, dynDescOff: Integer;
@@ -2098,7 +2154,7 @@ begin
           { a kind-8 member is ADDITIONAL to whatever kind the same field
             already has (a TBar with a string is kind 3 for the string AND
             kind 8 for its operators) }
-          if FieldMgmtOpRec(fi) >= 0 then Inc(mCount);
+          mCount := mCount + FieldMgmtFlatCount(fi);
         end;
         cCi := UClsParent[cCi];
       end;
@@ -2296,7 +2352,7 @@ begin
         for i := 0 to cnt - 1 do
         begin
           if ClassFieldNeedsFinal(base + i) then Inc(mCount);
-          if FieldMgmtOpRec(base + i) >= 0 then Inc(mCount);   { kind 8 }
+          mCount := mCount + FieldMgmtFlatCount(base + i);   { kind 8 }
         end;
         cCi := UClsParent[cCi];
       end;
@@ -2432,9 +2488,10 @@ begin
         pointers cannot live in the member itself; the side block is placed
         8-aligned after the descriptor because a code-pointer relocation must
         be (xtensa/riscv32 fault on a misaligned word load). Members are written
-        in descriptor order -- derived class first, declaration order within a
-        class -- which IS fpc 3.2.2's Finalize order; Initialize runs the
-        classes the other way round, which the depth word lets the runtime do.
+        derived class first, declaration order within a class, and a nested
+        record flattened PRE-ORDER (MgmtEmitRec) -- which IS fpc 3.2.2's
+        Finalize order; Initialize runs the classes the other way round, which
+        the depth word lets the runtime do.
         Inert to every other walk: each is a `case kind of` with no else arm.
         feature-pascal-management-operators-on-a-class-field }
       mm := ClassMgmtFieldCount(ci);
@@ -2456,25 +2513,15 @@ begin
             fi := base + i;
             subCi := FieldMgmtOpRec(fi);
             if subCi < 0 then Continue;
-            mHdr := hdr + REC_DESC_HDR_SIZE + k * 16;
-            sb := side + sIdx * 24;
-            PatchDataI32(mHdr + 0, UFldOff_[fi]);
-            PatchDataI32(mHdr + 4, 8);
-            DescKindSeen[8] := True;   { DceCutDeadKindArms }
-            if UFldIsArray[fi] then
-              PatchDataI32(mHdr + 8, UFldArrLen[fi])
+            if UFldIsArray[fi] then mm := UFldArrLen[fi] else mm := 1;
+            if RecContainsManagementOp(subCi, 0) then
+            begin
+              for mp := 0 to mm - 1 do
+                MgmtEmitRec(subCi, UFldOff_[fi] + mp * UClsSize_[subCi - REC_UCLASS_BASE],
+                            depth, 1, hdr, side, k, sIdx);
+            end
             else
-              PatchDataI32(mHdr + 8, 1);
-            PatchDataI32(mHdr + 12, sb - (mHdr + 12));
-            AddDataRelFix(mHdr + 12, sb);
-            mp := FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), subCi);
-            if mp >= 0 then AddMethodFix(sb + 0, mp, MFK_MGMTOP);
-            mp := FindOpOverload(OPK_FINALIZE, Ord(tyRecord), subCi);
-            if mp >= 0 then AddMethodFix(sb + 8, mp, MFK_MGMTOP);
-            PatchDataI32(sb + 16, UClsSize_[subCi - REC_UCLASS_BASE]);
-            PatchDataI32(sb + 20, depth);
-            Inc(sIdx);
-            Inc(k);
+              MgmtEmitMember(UFldOff_[fi], mm, subCi, depth, hdr, side, k, sIdx);
           end;
           Inc(depth);
           cCi := UClsParent[cCi];

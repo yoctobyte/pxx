@@ -497,19 +497,60 @@ begin
       + '(feature-pascal-management-operators-nested-and-array)';
 end;
 
-{ A CLASS field whose record type declares Initialize/Finalize itself, as a
-  plain field or a fixed array of one: the record id, else -1. These are what a
-  class layout descriptor carries as member kind 8, run by PXXClassInitialize
-  after the VMT stamp and by PXXClassFinalize after the Destroy chain -- an
-  OBJECT lifetime, which is why the scope desugar never touches them.
-  A record that only CONTAINS one deeper is not this shape and is refused at
-  the use site (ClassMgmtFieldRefusal). feature-pascal-management-operators-on-a-class-field }
+{ A CLASS field that takes part in object-lifetime management: a record (or a
+  fixed array of one) that declares Initialize/Finalize itself or holds one at
+  any depth. Answers the record id, else -1. Its operators run from the class
+  layout descriptor (member kind 8) -- PXXClassInitialize after the VMT stamp,
+  PXXClassFinalize after the Destroy chain -- never from the scope desugar.
+  Also used for a FIELD OF SUCH A RECORD while flattening. feature-pascal-management-operators-on-a-class-field }
 function FieldMgmtOpRec(fi: Integer): Integer;
+var r: Integer;
 begin
   Result := -1;
   if IntToTypeKind(UFldTk[fi]) <> tyRecord then Exit;
   if UFldIsArray[fi] and not FldIsLoopableManagedArray(fi) then Exit;
-  if RecHasScopeManagementOp(UFldRec_[fi]) then Result := UFldRec_[fi];
+  r := UFldRec_[fi];
+  if RecHasScopeManagementOp(r) or RecContainsManagementOp(r, 0) then Result := r;
+end;
+
+{ How many kind-8 members ONE instance of record r flattens to: one for r's
+  own operators, then, per participating field, one member covering a whole
+  leaf (a record that declares operators and holds none deeper, any array
+  length, via the member's element count) or, for a record that holds more,
+  its own flattening once per element. Must agree with rtti_emit.inc's
+  MgmtEmitRec member for member. }
+function RecMgmtFlatCount(r, depth: Integer): Integer;
+var ci, i, fi, fr, n: Integer;
+begin
+  Result := 0;
+  if (r < REC_UCLASS_BASE) or (depth > 8) then Exit;
+  if RecHasScopeManagementOp(r) then Inc(Result);
+  ci := r - REC_UCLASS_BASE;
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    fi := UClsFBase[ci] + i;
+    fr := FieldMgmtOpRec(fi);
+    if fr < 0 then Continue;
+    if UFldIsArray[fi] then n := UFldArrLen[fi] else n := 1;
+    if RecContainsManagementOp(fr, 0) then
+      Result := Result + n * RecMgmtFlatCount(fr, depth + 1)
+    else
+      Inc(Result);
+  end;
+end;
+
+{ ...the same for a field of a CLASS (UFldOff_ is absolute there). }
+function FieldMgmtFlatCount(fi: Integer): Integer;
+var fr, n: Integer;
+begin
+  Result := 0;
+  fr := FieldMgmtOpRec(fi);
+  if fr < 0 then Exit;
+  if UFldIsArray[fi] then n := UFldArrLen[fi] else n := 1;
+  if RecContainsManagementOp(fr, 0) then
+    Result := n * RecMgmtFlatCount(fr, 1)
+  else
+    Result := 1;
 end;
 
 { How many kind-8 members the class `ci` carries, its parents' fields included
@@ -523,7 +564,7 @@ begin
   while c >= 0 do
   begin
     for i := 0 to UClsFCount[c] - 1 do
-      if FieldMgmtOpRec(UClsFBase[c] + i) >= 0 then Inc(Result);
+      Result := Result + FieldMgmtFlatCount(UClsFBase[c] + i);
     c := UClsParent[c];
   end;
 end;
@@ -541,51 +582,6 @@ begin
       Result := True;
       Exit;
     end;
-end;
-
-{ The class shapes still refused: a field (at any level of the chain) whose
-  record holds a management-operator record only DEEPER, or a dynamic /
-  unsized array of one. '' = nothing refused. }
-function ClassMgmtFieldRefusal(ci: Integer): String;
-var c, i, fi, r: Integer;
-begin
-  Result := '';
-  c := ci;
-  while c >= 0 do
-  begin
-    for i := 0 to UClsFCount[c] - 1 do
-    begin
-      fi := UClsFBase[c] + i;
-      if IntToTypeKind(UFldTk[fi]) <> tyRecord then Continue;
-      r := UFldRec_[fi];
-      if not (RecHasScopeManagementOp(r) or RecContainsManagementOp(r, 0)) then Continue;
-      if FieldMgmtOpRec(fi) >= 0 then
-      begin
-        { the field itself is served; a management record nested INSIDE it
-          is not }
-        if RecContainsManagementOp(r, 0) then
-        begin
-          Result := 'a class field whose record holds a record with a management '
-            + 'operator one level further down is not managed yet: only a field '
-            + '(or fixed array) of the operator-declaring record itself is run at '
-            + 'Create/Free (' + 'feature-pascal-management-operators-on-a-class-field' + ')';
-          Exit;
-        end;
-      end
-      else
-      begin
-        if UFldIsArray[fi] and ((UFldDynDepth[fi] > 0) or (UFldArrLen[fi] = -1)) then
-          Result := UnreachableManagedArrayMsg(UMF_DYN, 'class field')
-        else if UFldIsArray[fi] then
-          Result := UnreachableManagedArrayMsg(UMF_UNSIZED, 'class field')
-        else
-          Result := 'a class field whose record holds a record with a management '
-            + 'operator is not managed yet (' + 'feature-pascal-management-operators-on-a-class-field' + ')';
-        Exit;
-      end;
-    end;
-    c := UClsParent[c];
-  end;
 end;
 
 { Does `recId` contain a managed field the FIELD WALK below cannot reach?
@@ -640,6 +636,48 @@ begin
       end;
     end;
   end;
+end;
+
+{ The class shapes still refused: a DYNAMIC (or unsized) array of a
+  management-operator record, as a class field or anywhere inside one -- its
+  elements come and go with SetLength, not with the object. And a flattening
+  past 4096 members, which would be descriptor bloat rather than a program.
+  '' = nothing refused. Checked at a variable of the class type AND at every
+  static construction, so a class reached only through an ancestor-typed
+  variable is not let through. feature-pascal-management-operators-on-a-class-field }
+function ClassMgmtFieldRefusal(ci: Integer): String;
+var c, i, fi, r, why: Integer;
+begin
+  Result := '';
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to UClsFCount[c] - 1 do
+    begin
+      fi := UClsFBase[c] + i;
+      if IntToTypeKind(UFldTk[fi]) <> tyRecord then Continue;
+      r := UFldRec_[fi];
+      if not (RecHasScopeManagementOp(r) or RecContainsManagementOp(r, 0)) then Continue;
+      if UFldIsArray[fi] and not FldIsLoopableManagedArray(fi) then
+      begin
+        if (UFldDynDepth[fi] > 0) or (UFldArrLen[fi] = -1) then
+          Result := UnreachableManagedArrayMsg(UMF_DYN, 'class field')
+        else
+          Result := UnreachableManagedArrayMsg(UMF_UNSIZED, 'class field');
+        Exit;
+      end;
+      if RecContainsUnreachableManagedField(r, 0, why) then
+      begin
+        Result := UnreachableManagedArrayMsg(why, 'array field');
+        Exit;
+      end;
+    end;
+    c := UClsParent[c];
+  end;
+  if ClassMgmtFieldCount(ci) > 4096 then
+    Result := 'this class holds more than 4096 records with management operators '
+      + '(fixed arrays included); its layout descriptor would carry one entry each, '
+      + 'so it is refused rather than emitted (' + 'feature-pascal-management-operators-on-a-class-field' + ')';
 end;
 
 { Append one management-operator call for `argNode` to a seq chain. The two
