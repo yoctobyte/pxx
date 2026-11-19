@@ -5128,7 +5128,7 @@ begin
   Result := Result + '; shape ' + CBakeNodeShape(node, 3);
 end;
 
-function CTryBakeGlobalInit(asn: Integer): Boolean;
+function CTryBakeGlobalInitBody(asn: Integer): Boolean;
 var target, value, sym, rec, fi, size, pos, b, bitW, bitSh, kind, rtarget: Integer;
     off, v, addend, mask, cur: Int64;
     tk: TTypeKind;
@@ -5249,6 +5249,19 @@ begin
   for b := 0 to size - 1 do
     Data[pos + b] := Byte((v shr (8 * b)) and $FF);
   Result := True;
+end;
+
+function CTryBakeGlobalInit(asn: Integer): Boolean;
+{ The one door, plus a record of every store it turned away: such a store is
+  compiled into the init thunk, so its global is written at start-up and the
+  object writer must not put it in .rodata however const it is.
+  feature-c-const-objects-go-to-rodata-in-x86-64-objects }
+var sym: Integer; off: Int64;
+begin
+  Result := CTryBakeGlobalInitBody(asn);
+  if (not Result) and (asn >= 0) and (ASTKind[asn] = AN_ASSIGN) and
+     CBakeAddrOf(ASTLeft[asn], sym, off) and (sym < Length(SymCInitByCode)) then
+    SymCInitByCode[sym] := True;
 end;
 
 { The size of the C OBJECT an lvalue node designates -- what `sizeof` answers

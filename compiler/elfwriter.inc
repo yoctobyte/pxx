@@ -6265,6 +6265,11 @@ var
   ODCEndT  : array of Integer;     { the global's own end (planning only) }
   ODCName  : array of AnsiString;
   ODCFull  : array of AnsiString;  { a C section("name") global: the section's whole name; '' = .data.<ODCName> }
+  { a const C object whose bytes are all baked: .rodata.<ODCName>, SHF_ALLOC
+    only. A candidate at planning; ObjNumberDataCuts keeps it only when the
+    cut has no relocation (gcc's .data.rel.ro case stays writable).
+    feature-c-const-objects-go-to-rodata-in-x86-64-objects }
+  ODCRo    : array of Boolean;
   ODCShndx : array of Integer;
   ODCSym   : array of Integer;     { its STT_SECTION symbol }
   ODCRelAt : array of Integer;     { first index of its entries in ODR* }
@@ -6388,13 +6393,14 @@ begin
     n := Length(ODCOff) * 2;
     if n < 64 then n := 64;
     SetLength(ODCSec, n); SetLength(ODCOff, n); SetLength(ODCEndT, n);
-    SetLength(ODCName, n); SetLength(ODCFull, n);
+    SetLength(ODCName, n); SetLength(ODCFull, n); SetLength(ODCRo, n);
   end;
   ODCSec[ODCCount] := sec;
   ODCOff[ODCCount] := off;
   ODCEndT[ODCCount] := en;
   ODCName[ODCCount] := nm;
   ODCFull[ODCCount] := '';
+  ODCRo[ODCCount] := False;
   Inc(ODCCount);
 end;
 
@@ -6406,13 +6412,14 @@ begin
 end;
 
 procedure ObjDCutSwap(a, b: Integer);
-var t: Integer; s: AnsiString;
+var t: Integer; s: AnsiString; bo: Boolean;
 begin
   t := ODCSec[a]; ODCSec[a] := ODCSec[b]; ODCSec[b] := t;
   t := ODCOff[a]; ODCOff[a] := ODCOff[b]; ODCOff[b] := t;
   t := ODCEndT[a]; ODCEndT[a] := ODCEndT[b]; ODCEndT[b] := t;
   s := ODCName[a]; ODCName[a] := ODCName[b]; ODCName[b] := s;
   s := ODCFull[a]; ODCFull[a] := ODCFull[b]; ODCFull[b] := s;
+  bo := ODCRo[a]; ODCRo[a] := ODCRo[b]; ODCRo[b] := bo;
 end;
 
 { The data cuts and their symbol indices; section indices come later
@@ -6461,7 +6468,15 @@ begin
           the linker makes __start_/__stop_ for a C-identifier name).
           feature-c-section-attribute-on-x86-64-objects }
         if (i < Length(SymSectionName)) and (SymSectionName[i] <> '') then
-          ODCFull[ODCCount - 1] := SymSectionName[i];
+          ODCFull[ODCCount - 1] := SymSectionName[i]
+        { A const C object whose initialiser was baked whole (no store ran as
+          code) is .rodata.<name>, as gcc places it -- a candidate here, kept
+          only if the cut turns out to carry no relocation. }
+        else if (sec = 0) and CStaticDataMode and
+                (i < Length(SymCConstObj)) and SymCConstObj[i] and
+                not ((i < Length(SymCInitByCode)) and SymCInitByCode[i]) and
+                (SymTlsOffset[i] < 0) then
+          ODCRo[ODCCount - 1] := True;
       end;
     end;
   { Every interned string is an entry of its own, [EntryStart, EntryEnd), and
@@ -6486,6 +6501,7 @@ begin
     begin
       ODCSec[k] := ODCSec[i]; ODCOff[k] := ODCOff[i];
       ODCEndT[k] := ODCEndT[i]; ODCName[k] := ODCName[i]; ODCFull[k] := ODCFull[i];
+      ODCRo[k] := ODCRo[i];
     end;
     prevSec := ODCSec[k];
     prevEnd := ODCEndT[k];
@@ -6500,8 +6516,11 @@ begin
   nNamed := 0;
   nAll := ODCCount;
   for i := 0 to nAll - 1 do
-    if ODCFull[i] <> '' then
+    if (ODCFull[i] <> '') or ODCRo[i] then
     begin
+      { a read-only cut is split the same way, for a different reason: the
+        bytes after the object may be something writable with no symbol of
+        its own, and they must not become read-only with it }
       Inc(nNamed);
       if (i + 1 < nAll) and (ODCSec[i + 1] = ODCSec[i]) then en := ODCOff[i + 1]
       else en := ObjDSecEnd(ODCSec[i]);
@@ -6528,6 +6547,7 @@ begin
       j := i - ODCFirstBss;
       ODCSec[j] := ODCSec[i]; ODCOff[j] := ODCOff[i];
       ODCEndT[j] := ODCEndT[i]; ODCName[j] := ODCName[i]; ODCFull[j] := ODCFull[i];
+      ODCRo[j] := ODCRo[i];
     end;
     ODCCount := ODCCount - ODCFirstBss;
     ODCFirstBss := 0;
@@ -6622,6 +6642,11 @@ begin
   n := firstShndx;
   for c := 0 to ODCCount - 1 do
   begin
+    { the read-only decision, now that the relocations are grouped: a const
+      object holding an address stays writable (gcc's .data.rel.ro; a
+      relocation in a read-only section is a text relocation under PIE) }
+    ODCRo[c] := ODCRo[c] and (ODCSec[c] = 0) and (ODCRelN[c] = 0) and
+                (ODCFull[c] = '') and not ODCDroppedData;
     ODCShndx[c] := n;
     Inc(n);
     if (ODCSec[c] = 0) and (ODCRelN[c] > 0) then Inc(n);
@@ -7931,6 +7956,7 @@ begin
       if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCFull[c]) + 6
       else shstrSize := shstrSize + Length(ODCFull[c]) + 1;
     end
+    else if ODCRo[c] then shstrSize := shstrSize + Length(ODCName[c]) + 14
     else if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCName[c]) + 12
     else shstrSize := shstrSize + Length(ODCName[c]) + 6;
   end;
@@ -8128,6 +8154,7 @@ begin
       if ODCSec[c] = 0 then writeStrZ(f, '.rela' + ODCFull[c])
       else writeStrZ(f, ODCFull[c]);
     end
+    else if ODCRo[c] then writeStrZ(f, '.rela.rodata.' + ODCName[c])
     else if ODCSec[c] = 0 then writeStrZ(f, '.rela.data.' + ODCName[c])
     else writeStrZ(f, '.bss.' + ODCName[c]);
   writePad(f, shOff - (shstrOff + shstrSize));
@@ -8190,6 +8217,8 @@ begin
       { SHF_TLS on a C `__thread` variable's .tdata.<name> }
       if Copy(ODCFull[c], 1, 6) = '.tdata' then
         writeShdrA64(f, ODCNm[c] + 5, 1, $403, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c])
+      else if ODCRo[c] then
+        writeShdrA64(f, ODCNm[c] + 5, 1, 2, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c])
       else
       writeShdrA64(f, ODCNm[c] + 5, 1, 3, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c]);
       writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);

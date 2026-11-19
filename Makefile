@@ -42597,6 +42597,15 @@ test-emit-obj: $(COMPILER)
 	./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj test/c_freestanding_on_bare_esp_needs_no_rtl.c $(TESTTMP)/c_free_xt.o
 	./$(COMPILER) --target=riscv32 --esp-profile=bare --emit-obj test/c_freestanding_on_bare_esp_needs_no_rtl.c $(TESTTMP)/c_free_rv.o
 	nm $(TESTTMP)/c_free_xt.o | grep -q ' T add$$'
+	# A baked C const object is .rodata.<name>, SHF_ALLOC only, as gcc puts it;
+	# one holding an address (.data.rel.ro in gcc) or mutated stays writable.
+	# Values checked against a gcc main linked to the pxx object.
+	# feature-c-const-objects-go-to-rodata-in-x86-64-objects
+	./$(COMPILER) --emit-obj --function-sections test/c_obj_const_rodata.c $(TESTTMP)/c_ocr.o >/dev/null
+	gcc test/c_obj_const_rodata_main.c $(TESTTMP)/c_ocr.o -o $(TESTTMP)/c_ocr
+	tools/expect_same.sh c_obj_const_rodata.run "$$($(TESTTMP)/c_ocr)" "735 736 0"
+	tools/expect_same.sh c_obj_const_rodata.ro "$$(readelf -SW $(TESTTMP)/c_ocr.o | awk '$$2 ~ /^\.rodata\./ && $$8 == "A" {print $$2}' | sort | tr '\n' ' ')" ".rodata.a .rodata.al .rodata.arr .rodata.big .rodata.ga .rodata.s .rodata.third "
+	tools/expect_same.sh c_obj_const_rodata.rw "$$(readelf -SW $(TESTTMP)/c_ocr.o | awk '$$8 == "WA" && ($$2 == ".data.tab" || $$2 == ".data.pp" || $$2 == ".data.counter") {print $$2}' | sort | tr '\n' ' ')" ".data.counter .data.pp .data.tab "
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

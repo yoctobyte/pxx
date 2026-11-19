@@ -5855,6 +5855,11 @@ var
     there too (ObjRoAdoptDeadTypedConsts), referenced or not.
     bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
   SymCConstObj : array of Boolean;
+  { An initialiser store into this global could not be baked and runs as
+    code (CTryBakeGlobalInit answered False for it), so its bytes are
+    written at start-up and it must stay writable even when const.
+    feature-c-const-objects-go-to-rodata-in-x86-64-objects }
+  SymCInitByCode : array of Boolean;
   { An ESP object reserves the fixed low block of .data (INTBUF, '-', #10)
     as 32 bytes, not 26, so that dropping it when nothing references it
     (ObjRoDropDeadStrings) keeps every later offset's residue mod 16. }
