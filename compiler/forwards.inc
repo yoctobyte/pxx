@@ -19,6 +19,8 @@ function TypeIsPromoInt(tk: TTypeKind): Boolean; forward;
 function TypeIsInt128(tk: TTypeKind): Boolean; forward;
 function RegcallScalarType(tk: TTypeKind): Boolean; forward;
 function GenMakeSeq(stmt, next: Integer): Integer; forward;
+function GenMakeIdent(symIdx: Integer; tk: TTypeKind): Integer; forward;
+function GenMakeAssign(lhs, rhs: Integer): Integer; forward;
 {$ifndef PXX_NO_CFRONT}function CNodeDecaysToPointer(node: Integer): Boolean; forward;{$endif}
 function IRLowerAddress(node: Integer): Integer; forward;
 { TryParseInitValForm's set arm (pasparser_expr.inc) folds a set value through

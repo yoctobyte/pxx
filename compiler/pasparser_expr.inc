@@ -801,6 +801,7 @@ end;
 
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
+    soTmp, soAsn: Integer;   { SysOpen of an element path: the hidden AnsiString copy and its store }
     strSymIdx: Integer;   { the same-named symbol a string const is weighed against -- see SymScopeHops }
     i64v: Int64;         { a compiler constant answered as a literal (__pxxTlsBlockSize et al) }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
@@ -5841,8 +5842,27 @@ begin
         if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
         idx := FindSym(CurTok.SVal); Next;
         valNode := ParseLValueAST(idx, TokPos - 2);
-        if (idx < 0) or ((not TypeIsFrozenString(Syms[idx].TypeKind)) and
-                         (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
+        if idx < 0 then Error('SysOpen: not a string var');
+        if (ASTKind[valNode] = AN_IDENT) and (not Syms[idx].IsArray) and
+           (not TypeIsFrozenString(Syms[idx].TypeKind)) and
+           (Syms[idx].TypeKind <> tyAnsiString) then Error('SysOpen: not a string var');
+        { An ELEMENT or FIELD path (`arr[0]`, `r.path`): every backend takes the
+          path from the SYMBOL, so it read the array base. x86-64 segfaulted,
+          riscv32 and xtensa answered False for an existing file. Copy it into a
+          hidden AnsiString local, the shape every backend handles, and pass
+          that: `(tmp := arr[0], SysOpen(tmp, flags))`. Parse-time locals get
+          the ordinary nil-init and scope-exit release.
+          bug-a-an-indexed-shortstring-sysopen-path-segfaults-on-x86-64 }
+        soTmp := -1;
+        if (ASTKind[valNode] <> AN_IDENT) or Syms[idx].IsArray then
+        begin
+          if not (TypeIsFrozenString(IntToTypeKind(ASTTk[valNode])) or
+                  (IntToTypeKind(ASTTk[valNode]) = tyAnsiString)) then
+            Error('SysOpen: not a string var');
+          soTmp := AllocVar('', tyAnsiString);
+          soAsn := GenMakeAssign(GenMakeIdent(soTmp, tyAnsiString), valNode);
+          valNode := GenMakeIdent(soTmp, tyAnsiString);
+        end;
         Expect(tkComma, ',');
 
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
@@ -5854,6 +5874,14 @@ begin
         node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
         ASTTk[node] := Ord(tyInteger);   { an fd / a byte count -- typed so it can be an ARGUMENT, not only an assignment source }
         ASTLeft[node] := argSeq;
+        if soTmp >= 0 then
+        begin
+          argSeq := AllocNode(AN_COMMA);
+          ASTLeft[argSeq] := soAsn;
+          ASTRight[argSeq] := node;
+          ASTTk[argSeq] := Ord(tyInteger);
+          node := argSeq;
+        end;
         CurASTNode := node;
         Exit;
       end;

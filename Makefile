@@ -10444,6 +10444,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_sosp26.1 "$$($(TESTTMP)/test_sosp26 | tail -1)" "SYSOPEN SHORTSTRING PATH OK"
 	tools/expect_same.sh test_sosp26.2 "$$($(TESTTMP)/test_sosp26 | head -2 | tail -1)" "short open  TRUE"
 	tools/expect_same.sh test_sosp26.3 "$$($(TESTTMP)/test_sosp26 | head -3 | tail -1)" "short read  5 PXX26"
+	# an ELEMENT/FIELD path: copied into a hidden AnsiString by the parser.
+	# bug-a-an-indexed-shortstring-sysopen-path-segfaults-on-x86-64
+	./$(COMPILER) test/test_sysopen_element_path.pas $(TESTTMP)/test_soelem26
+	tools/expect_same.sh test_soelem26 "$$($(TESTTMP)/test_soelem26)" "$$(cat test/test_sysopen_element_path.expected)"
 	tools/expect_same.sh test_sosp26.4 "$$($(TESTTMP)/test_sosp26 | head -4 | tail -1)" "short miss  TRUE"
 	# `@obj.Method` into a METHOD's TMethod parameter: bare, Self-qualified and
 	# virtual spellings must all reach the override with the instance, and the
@@ -10519,6 +10523,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_sosp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_sosp_rv32; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_xt
 	tools/expect_same.sh xtensa/test_sosp "$$(tools/run_target.sh xtensa $(TESTTMP)/test_sosp_xt; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_sysopen_element_path.pas $(TESTTMP)/test_soelem_rv32
+	tools/expect_same.sh riscv32/test_soelem "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_soelem_rv32)" "$$(cat test/test_sysopen_element_path.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_sysopen_element_path.pas $(TESTTMP)/test_soelem_xt
+	tools/expect_same.sh xtensa/test_soelem "$$(tools/run_target.sh xtensa $(TESTTMP)/test_soelem_xt)" "$$(cat test/test_sysopen_element_path.expected)"
 	# EVERY ARM OF A VARIANT PART BEGINS AT THE SAME OFFSET, on every target.
 	# bug-a-xtensa-variant-record-arms-start-at-different-offsets, and it was
 	# three targets rather than the one the slug names: the variant part was laid

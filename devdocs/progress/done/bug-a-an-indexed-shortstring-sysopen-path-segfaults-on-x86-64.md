@@ -3,7 +3,7 @@ slug: bug-a-an-indexed-shortstring-sysopen-path-segfaults-on-x86-64
 track: A
 prio: 55
 type: bug
-status: open
+status: done
 blocked-by: []
 created: 2026-09-05
 found-by: frankS (closing bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-open-nothing)
@@ -91,3 +91,21 @@ and (2) only on demand.
 declines the case it cannot lower rather than lowering it wrongly. Removing that
 check would turn riscv32/xtensa's wrong answer into a wrong answer at a
 different address, not into a fix.
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+Fixed in the parser, not in seven backends. When the path argument is not a
+plain string variable (an array element, a record field, an array of
+AnsiString), SysOpen now parses to `(tmp := <path>, SysOpen(tmp, flags))`. Here
+tmp is a hidden AnsiString local, and the comma is AN_COMMA. Every backend
+already handles an AnsiString variable path, and a local allocated at parse
+time gets the ordinary nil-init and release at scope exit. The type check moved
+with it: a field or element path is checked by its own type, so a record field
+`r.path` is accepted. A plain variable is checked by its symbol, as before.
+
+test_sysopen_element_path covers arr[0] (exists), arr[1] (missing), an
+AnsiString array element, a record field used as a call argument, and a loop
+over AnsiString elements with SysClose. The output is identical on x86-64,
+i386, aarch64, arm32, riscv32 and xtensa (posix), and at -O2. Rows:
+test_soelem26, riscv32/test_soelem and xtensa/test_soelem.

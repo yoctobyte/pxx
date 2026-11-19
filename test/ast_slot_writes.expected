@@ -897,6 +897,7 @@ AN_COMMA Left post
 AN_COMMA Left pyPrintNode
 AN_COMMA Left right
 AN_COMMA Left setTmpAssign
+AN_COMMA Left soAsn
 AN_COMMA Left tmpAssign
 AN_COMMA Left wAsg
 AN_COMMA Right ASTLeft[lastArg]
