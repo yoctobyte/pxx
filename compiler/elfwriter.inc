@@ -5170,6 +5170,7 @@ var i: Integer;
 begin
   Result := False;
   if ProcCStaticLink[procIdx] then Exit;
+  if CProcInlineOnly(procIdx) then Exit;   { C99 inline definition: no external one here }
   if ObjProcShadowsAnImport(procIdx) then Exit;
   if ProcCdecl[procIdx] then begin Result := True; Exit; end;
   if ObjProcIsBuiltinRtl(procIdx) then begin Result := True; Exit; end;

@@ -5358,6 +5358,9 @@ var
     bug-p-a-static-class-functions-address-carries-a-hidden-self }
   ProcNoSelf : array of Boolean;
   ProcObjRuntimeCopy : array of Boolean;   { this proc's BODY came from lib/crtl -- see SymObjRuntimeCopy }
+  ProcCInlineDef : array of Boolean;   { a C DEFINITION was a C99 INLINE DEFINITION (`inline`, neither static nor extern): it provides no external definition (6.7.4p7), so the object binds it LOCAL unless ProcCExtDecl. bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object }
+  ProcCExtDecl : array of Boolean;     { some file-scope declaration of the function asked for the external definition (`extern`, or no `inline`): ProcCInlineDef no longer makes it local }
+  ProcCGnuExtInline : array of Boolean; { a gnu_inline `extern inline` DEFINITION: never the external one, whatever else is declared (gcc's gnu_inline rule) }
   ProcCStaticLink : array of Boolean;   { C `static` on a FUNCTION: internal linkage, so a LOCAL symbol, never exported -- the proc-side twin of SymCStaticLink }
   ProcCModule : array of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
   ProcCaseSensitive : array of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
@@ -7854,6 +7857,8 @@ var
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
+  CLexSawInline   : Boolean;   { `inline`/`__inline`/`__inline__` was dropped before the next token: rides it as CAttrFlags bit $400 }
+  CAttrGnuInline  : Boolean;   { __attribute__((gnu_inline)): rides the next token as CAttrFlags bit $800 }
   CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
   { __attribute__((constructor)) = 1, ((destructor)) = 2: rides the next token
     as CAttrFlags bits 8..9. The parser files the function in CCtorProcs /

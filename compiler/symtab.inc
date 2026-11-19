@@ -14858,7 +14858,7 @@ begin
   SetLength(DceWhy, n);  SetLength(DceVia, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcCWeakDef, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcCWeakDef, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);  SetLength(ProcCInlineDef, n);  SetLength(ProcCExtDecl, n);  SetLength(ProcCGnuExtInline, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcWinCb, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
@@ -14902,6 +14902,22 @@ begin
   ProcCapacity := n;
 end;
 
+
+{ A C function whose only definition here is an INLINE DEFINITION (C99
+  6.7.4p7): no external definition in this translation unit, so its symbol is
+  LOCAL, as gcc emits nothing global for it. Two objects that include a header
+  defining `inline int twice(int)` both exported a strong `twice`, and --link
+  refused the pair. One `extern` (or non-inline) declaration anywhere makes the
+  definition external again; a gnu_inline `extern inline` never is.
+  bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object }
+function CProcInlineOnly(pi: Integer): Boolean;
+begin
+  Result := False;
+  if (pi < 0) or (pi >= Length(ProcCInlineDef)) then Exit;
+  if ProcCGnuExtInline[pi] then begin Result := True; Exit; end;
+  Result := ProcCInlineDef[pi] and (not ProcCExtDecl[pi]);
+end;
+
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
   retType: TTypeKind; nParams: Integer;
   const pnames: array of AnsiString; const ptypes: array of TTypeKind): Integer;
@@ -14930,6 +14946,7 @@ begin
   ProcNoSelf[ProcCount]       := False;
   ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCStaticLink[ProcCount] := False;      { set when the C definition said `static` }
+  ProcCInlineDef[ProcCount] := False;  ProcCExtDecl[ProcCount] := False;  ProcCGnuExtInline[ProcCount] := False;
   ProcCWeakDef[ProcCount] := False;
   ProcCaseSensitive[ProcCount] := DeclCaseSensitive;
   ProcOverloadDirective[ProcCount] := False;

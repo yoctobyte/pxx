@@ -28942,6 +28942,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_ptr_ptr_typedef.c $(TESTTMP)/c_ppstruct26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_ppstruct26_gcc32 test/c_ptr_ptr_typedef.c
 	tools/expect_same.sh c_ppstruct26_i386 "$$(timeout 20 $(TESTTMP)/c_ppstruct26_i386)" "$$(timeout 20 $(TESTTMP)/c_ppstruct26_gcc32)"
+	# C99 6.7.4p7: an inline definition in a header provides no external definition,
+	# so two objects that include it link; a.c holds the one external definition.
+	# bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object
+	./$(COMPILER) --emit-obj test/c_inline_hdr_a.c $(TESTTMP)/c_inlhdr_a.o > /dev/null
+	./$(COMPILER) --emit-obj test/c_inline_hdr_b.c $(TESTTMP)/c_inlhdr_b.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_inlhdr26 $(TESTTMP)/c_inlhdr_a.o $(TESTTMP)/c_inlhdr_b.o > /dev/null
+	@gcc -w -o $(TESTTMP)/c_inlhdr26_gcc test/c_inline_hdr_a.c test/c_inline_hdr_b.c
+	tools/expect_same.sh c_inlhdr26 "$$(timeout 20 $(TESTTMP)/c_inlhdr26)" "$$(timeout 20 $(TESTTMP)/c_inlhdr26_gcc)"
+	# ...and each linkage case by its symbol: T external, t local (gcc emits nothing
+	# for the inline-only ones; a local copy links the same way).
+	./$(COMPILER) --emit-obj test/c_inline_linkage.c $(TESTTMP)/c_inllink.o > /dev/null
+	tools/expect_same.sh c_inllink-binding "$$(for n in only_inline later_extern proto_first st_inl ext_inl gnu_ext gnu_plain dunder_inline; do nm $(TESTTMP)/c_inllink.o | awk -v n=$$n '$$3==n && $$2!="U" {printf "%s=%s ", n, $$2}'; done)" "only_inline=t later_extern=T proto_first=T st_inl=t ext_inl=T gnu_ext=t gnu_plain=T dunder_inline=t "
+	./$(COMPILER) test/c_inline_linkage.c $(TESTTMP)/c_inllink26
+	tools/expect_same.sh c_inllink26 "$$(timeout 20 $(TESTTMP)/c_inllink26)" "36"
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

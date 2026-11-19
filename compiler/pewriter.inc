@@ -391,7 +391,7 @@ function PeDllExports(pi: Integer): Boolean;
 begin
   Result := False;
   if not ObjProcIsDefined(pi) then Exit;
-  if ProcCStaticLink[pi] or ProcVariadic[pi] then Exit;
+  if ProcCStaticLink[pi] or CProcInlineOnly(pi) or ProcVariadic[pi] then Exit;
   if Pos('$', Procs[pi].Name) > 0 then Exit;
   if PeDllNamed(pi) then begin Result := True; Exit; end;
   if ProcUnitIdx[pi] >= 0 then Exit;          { a unit's routine: the runtime }

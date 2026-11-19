@@ -424,6 +424,7 @@ begin
           else if (CAttrModeName(attrText) = 'word') or (CAttrModeName(attrText) = 'pointer') then
             CAttrModeBytes := TARGET_PTR_SIZE;
           if CAttrHasWord(attrText, 'weak') then CAttrWeak := True;
+          if CAttrHasWord(attrText, 'gnu_inline') then CAttrGnuInline := True;
           if CAttrHasWord(attrText, 'constructor') then CAttrCtor := CAttrCtor or 1;
           if CAttrHasWord(attrText, 'destructor') then CAttrCtor := CAttrCtor or 2;
           if CAttrHasWord(attrText, 'section') then CAttrSection := CAttrSectionOf(attrText);
@@ -443,6 +444,7 @@ begin
               (s = '__const') or (s = '__const__') then
       begin
         SrcPos := p;
+        if (s = 'inline') or (s = '__inline') or (s = '__inline__') then CLexSawInline := True;
         idDone := True;
       end
       else if s = '_Atomic' then
@@ -1228,6 +1230,8 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CLexSawInline := False;
+  CAttrGnuInline := False;
   CAttrCtor := 0;
   CAttrSection := '';
   TokCount := 0; TokCharLen := 0;
@@ -1259,6 +1263,16 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CLexSawInline then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $400;
+      CLexSawInline := False;
+    end;
+    if CAttrGnuInline then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $800;
+      CAttrGnuInline := False;
     end;
     if CAttrCtor <> 0 then
     begin
@@ -1322,6 +1336,8 @@ begin
   CAttrAlignValue := 0;
   CAttrModeBytes := 0;
   CAttrWeak := False;
+  CLexSawInline := False;
+  CAttrGnuInline := False;
   CAttrCtor := 0;
   CAttrSection := '';
   SavedLexSource := Source;
@@ -1376,6 +1392,16 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CLexSawInline then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $400;
+      CLexSawInline := False;
+    end;
+    if CAttrGnuInline then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $800;
+      CAttrGnuInline := False;
     end;
     if CAttrCtor <> 0 then
     begin

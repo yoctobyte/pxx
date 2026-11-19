@@ -274,6 +274,8 @@ procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forwa
 procedure CRefuseIncompleteSizeof(recId: Integer); forward;
 procedure CCheckIncompleteGlobals; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
+function CDeclTokFlag(typeIdx, mask: Integer): Boolean; forward;
+procedure CNoteInlineLinkage(pi: Integer; sawInline, sawExtern, gnuInline, isDef: Boolean); forward;
 function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer; forward;
 function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
@@ -19479,6 +19481,7 @@ var
   procCtorKind: Integer;
   procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
+  procSawInline, procSawExtern, procGnuInline: Boolean;   { C99 inline linkage (CNoteInlineLinkage) }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
@@ -19547,6 +19550,9 @@ begin
     ordinary case, a static defined in a .c the user named.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   procSawStatic := CDeclSawStatic(TokPos - 1);
+  procSawInline := CDeclTokFlag(TokPos - 1, $400);
+  procGnuInline := CDeclTokFlag(TokPos - 1, $800);
+  procSawExtern := CDeclSawExtern(TokPos - 1);
   procSawWeak := CDeclSawWeak(TokPos - 1);
   procCtorKind := CDeclCtorKind(TokPos - 1);
   procSecName := CDeclSectionName(TokPos - 1);
@@ -20288,6 +20294,8 @@ begin
       that resolves to 0 when nothing defines it, so `maybe ? maybe() : 0`
       works. It was a required import. bug-c-attribute-weak-was-ignored }
     if procSawWeak and (Procs[procIdx].BodyAddr < 0) then ProcWeakExternal[procIdx] := True;
+    if not procSawStatic then
+      CNoteInlineLinkage(procIdx, procSawInline, procSawExtern, procGnuInline, False);
     CApplyProcSection(procIdx, procSecName);
     CRegisterCtor(procIdx, procCtorKind);
     Next;
@@ -20380,7 +20388,8 @@ begin
     inherits the internal linkage of an earlier `static` one, so a plain
     redeclaration must not turn the symbol global again.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
-  if procSawStatic then ProcCStaticLink[procIdx] := True;
+  if procSawStatic then ProcCStaticLink[procIdx] := True
+  else CNoteInlineLinkage(procIdx, procSawInline, procSawExtern, procGnuInline, True);
   { ...and a weak DEFINITION, which another object's strong one may replace
     (ObjProcBind). bug-c-attribute-weak-was-ignored }
   if procSawWeak or ProcWeakExternal[procIdx] then ProcCWeakDef[procIdx] := True;
@@ -23434,6 +23443,54 @@ begin
       Inc(CDtorCount);
     end;
   end;
+end;
+
+{ A CAttrFlags bit on any token of the declaration: the storage-class run
+  before the type (the same backward walk as CDeclSawWeak) through the `;` or
+  open brace that ends it, so a trailing `__attribute__((gnu_inline))` counts. The
+  lexer drops `inline` and marks the token after it ($400), and marks the
+  token after a gnu_inline attribute ($800). }
+function CDeclTokFlag(typeIdx, mask: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrFlags[k] and mask) <> 0 then begin Result := True; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ C99 6.7.4p7 for one file-scope declaration of a function. An INLINE
+  DEFINITION (`inline`, no `extern`) provides no external definition; any
+  declaration with `extern`, or without `inline`, asks for one. gnu_inline
+  reverses the two: its `extern inline` definition is never external and its
+  plain `inline` one is. The flags are only ever set, so the answer does not
+  depend on declaration order or on which pass is running; CProcInlineOnly
+  reads them. bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object }
+procedure CNoteInlineLinkage(pi: Integer; sawInline, sawExtern, gnuInline, isDef: Boolean);
+begin
+  if pi < 0 then Exit;
+  if gnuInline then
+  begin
+    if isDef and sawInline and sawExtern then ProcCGnuExtInline[pi] := True
+    else if isDef then ProcCExtDecl[pi] := True;
+  end
+  else if sawInline and (not sawExtern) then
+  begin
+    if isDef then ProcCInlineDef[pi] := True;
+  end
+  else
+    ProcCExtDecl[pi] := True;
 end;
 
 function CDeclSawWeak(typeIdx: Integer): Boolean;
