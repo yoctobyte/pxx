@@ -10,6 +10,15 @@ program Pascal26;
 {$CASESENSITIVE ON}
 {$NESTEDCOMMENTS ON}
 
+{ A duplicate case label in the compiler is always a mistake: the first arm
+  silently wins and the second is dead. pxx's dialect keeps first-match for
+  user code on purpose (306a75277f, --strict-case is opt-in), so the compiler
+  opts in for its OWN source, and the self-host build now catches what only
+  the FPC seed canary used to (two `IR_ASM:` arms in IREmitNodeAarch64,
+  2026-11-14). Real FPC rejects duplicates anyway, hence the ifndef.
+  bug-p-a-duplicate-case-label-compiles-and-the-first-arm-wins }
+{$ifndef FPC}{$STRICT_CASE ON}{$endif}
+
 { The compiler relies on builtins only and must not pull the default
   standard-unit surface (textfile drags the PAL platform_backend onto a search
   path the bootstrap does not provide). This define opts out, the same as the
