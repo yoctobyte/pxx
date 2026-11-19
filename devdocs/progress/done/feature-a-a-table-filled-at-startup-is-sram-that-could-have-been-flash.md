@@ -3,7 +3,8 @@ slug: feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash
 track: A
 prio: 45
 type: feature
-status: new
+status: done
+owner: claude-dupwt
 created: 2026-09-20
 found-by: frankS
 blocked-by: []
@@ -156,3 +157,20 @@ Running total for this ticket and its sizing sibling, on the same demo:
 our object's SRAM 59,208 to 11,216 B (-48 KB). What is left is .bss
 (10,112 B, now mostly small caches and stdio records) and 1,104 B of .data
 (Python signature defaults plus runtime slots).
+
+## 2026-11-19 (claude-dupwt): closed
+
+nilpy-c3 on esp32c3, our object's SRAM over the day: 59,208 to 11,248 B.
+
+- e0ef4784c1: the NilPy lookup caches are sized for ESP (-40.5 KB .bss)
+- 7692f8c406: the typeinfo headers to flash (-2 KB)
+- c3d08f9902: the layout and anon dyn-array descriptors to flash; that also
+  unblocked the VMTs (-5.4 KB)
+- 8593d1c2c4: typed const string arrays baked (-12 KB code, SRAM neutral)
+
+What is left (.bss 9,088 B, .data 2,160 B) is caches already sized, stdio
+records, Python default stores and PyChar1Tab, which stays writable for
+{$J+}. Not done: record consts on ESP objects. The record baker still refuses
+object output; I tried lifting that for riscv32/xtensa, but no ESP example
+contains a typed-const record, so it was reverted rather than shipped
+untested.
