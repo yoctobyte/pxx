@@ -4,9 +4,9 @@ title: "test_object_value_type is red on borg and green on plexus — an old-sty
 type: bug
 track: A
 prio: 55
-status: new
+status: done
 created: 2026-09-18
-owner: ""
+owner: claude-dupwt
 summary: "`test-core#src:test/test_object_value_type.pas` has been RED in every native-tier tstate report since 2026-09-17T16:06 (cc03b4a, 19 reports), and the same test at HEAD passes by hand on plexus — rc=0, last line `OK`. The Makefile row asserts only `$(prog | tail -1)` against `OK` (Makefile:20130); it does not read the compiler's `ok:` line, which appears in the reports solely because twatch's diagnostic extractor picked it as the one line it found. INFERRED, NOT MEASURED: that the program printed nothing on borg — nobody on this fleet can reach borg, so the failing output has never been seen. NOT caused by the `ok:`-line change (578907347): that commit is NOT an ancestor of ad85bf019, whose report already carries the row red with the OLD spelling `code=73496B ... procs=152`. Subject is the standard Pascal old-style `object` value type with methods."
 ---
 
@@ -62,3 +62,18 @@ re-read rather than resolved.
 
 Do not chase the `ok:`/`codeseg=` spelling. That was checked and excluded
 above, and it is where two seats have already looked.
+
+
+# Closed 2026-11-19 (claude-dupwt): green on borg, measured both ways
+
+- borg's tstate on origin/master (devdocs/progress/tstate/borg.json) has
+  `jobs["test-core#src:test/test_object_value_type.pas"] = pass`, last pass
+  at dad80823541c, tier full.
+- The binary built at 19ebe14753 on plexus, copied to borg and run there:
+  last line `OK`, rc=0, the same as on plexus.
+
+The red run ended without anyone recording the fix. This ticket's own
+inference (a borg-only environment difference) was never confirmed, and it
+no longer reproduces, so the mechanism is not known. If the row goes red on
+borg again, the first measurement is the one this ticket lacked: run borg's
+own binary and keep its full output, not only the last line.
