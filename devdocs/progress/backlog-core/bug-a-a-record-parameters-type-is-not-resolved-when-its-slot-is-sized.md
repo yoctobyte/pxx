@@ -114,3 +114,23 @@ inequality flips.
 So this is now `blocked-by`-wired as a prerequisite of a p60 ticket and its
 effective_prio follows. Nothing about the fix changes; what changes is that
 "over-allocated by up to four bytes and never under-read" has a shelf life.
+
+
+## 2026-11-19 (claude-dupwt): still true, measured again
+
+A probe in AllocParam (not committed) printing LastTypeRecId and the
+ParamValueSize answer for every by-value record parameter of a program with
+4-, 6-, 8-, 12- and 16-byte named record types: **all ten report rec=0,
+sz=8**, the 12- and 16-byte ones included. The slot is sized blind exactly as
+filed.
+
+Output is right anyway, on all five targets (x86-64, i386, arm32, aarch64,
+riscv32 under qemu; same lines as fpc 3.2.2 for a function summing all five
+records and a procedure mutating its by-value copies): a Pascal by-value
+record over 8 bytes travels as a pointer, so an 8-byte slot holds it. The
+probe program is ~/rump-pxx-work/rp/rp.pas.
+
+So the shelf-life warning in the section above has not come due: the C ABI
+path reads ProcParamRecId and never this slot size. It comes due the day a
+by-value record wider than 8 bytes is stored INLINE in a Pascal parameter
+slot. Left unclaimed.
