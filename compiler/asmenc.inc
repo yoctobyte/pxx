@@ -692,6 +692,10 @@ begin
     if CaseEqual(mn,'rdmsr')   then begin AsmB($0F); AsmB($32); Exit; end;
     if CaseEqual(mn,'wrmsr')   then begin AsmB($0F); AsmB($30); Exit; end;
     if CaseEqual(mn,'swapgs')  then begin AsmB($0F); AsmB($01); AsmB($F8); Exit; end;
+    { SMAP: stac/clac set and clear EFLAGS.AC around a kernel's user-memory
+      access (Rainyday ticket 0024). 0F 01 CB / 0F 01 CA. }
+    if CaseEqual(mn,'stac')    then begin AsmB($0F); AsmB($01); AsmB($CB); Exit; end;
+    if CaseEqual(mn,'clac')    then begin AsmB($0F); AsmB($01); AsmB($CA); Exit; end;
     if CaseEqual(mn,'iretq')   then begin AsmB($48); AsmB($CF); Exit; end;
     if CaseEqual(mn,'lretq')   then begin AsmB($48); AsmB($CB); Exit; end;
     if CaseEqual(mn,'sysretq') then begin AsmB($48); AsmB($0F); AsmB($07); Exit; end;

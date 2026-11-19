@@ -1336,6 +1336,7 @@ begin
   else if mn = 'lfence' then b := #$0F#$AE#$E8 else if mn = 'mfence' then b := #$0F#$AE#$F0
   else if mn = 'sfence' then b := #$0F#$AE#$F8
   else if mn = 'swapgs' then b := #$0F#$01#$F8 else if mn = 'syscall' then b := #$0F#$05
+  else if mn = 'stac' then b := #$0F#$01#$CB else if mn = 'clac' then b := #$0F#$01#$CA   { SMAP }
   else if (mn = 'sysretq') then b := #$48#$0F#$07 else if (mn = 'sysretl') or (mn = 'sysret') then b := #$0F#$07
   else if (mn = 'sysexit') then b := #$0F#$35 else if (mn = 'sysenter') then b := #$0F#$34
   else if (mn = 'pushfq') or ((mn = 'pushf') and not GasCode32) then b := #$9C

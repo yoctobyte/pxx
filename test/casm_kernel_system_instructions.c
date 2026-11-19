@@ -15,6 +15,8 @@ void k_halt(void)   { __asm__ volatile ("cli; hlt"); }
 void k_swapgs(void) { __asm__ volatile ("swapgs"); }
 void k_iretq(void)  { __asm__ volatile ("iretq"); }
 void k_sysretq(void){ __asm__ volatile ("sysretq"); }
+void k_stac(void)   { __asm__ volatile ("stac" ::: "memory"); }   /* SMAP (Rainyday 0024) */
+void k_clac(void)   { __asm__ volatile ("clac" ::: "memory"); }
 
 void k_outb(uint16_t port, uint8_t v)  { __asm__ volatile ("outb %0, %1" : : "a"(v), "Nd"(port)); }
 void k_outw(uint16_t port, uint16_t v) { __asm__ volatile ("outw %0, %1" : : "a"(v), "Nd"(port)); }

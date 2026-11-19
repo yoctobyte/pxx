@@ -62,4 +62,7 @@ gas_enc:
         cmpb $3,%bh
         orb $1,%ah
         sarb %cl,%ah
+        # SMAP around a kernel's user-memory access (Rainyday ticket 0024)
+        stac
+        clac
         ret

@@ -84,4 +84,14 @@ objdump -d "$W"_encp.o | grep '^ ' | cut -f2- > "$W"_encp.txt
 objdump -d "$W"_encg.o | grep '^ ' | cut -f2- > "$W"_encg.txt
 [ "$(wc -l < "$W"_encg.txt)" -gt 40 ] || fail "the x64 encodings listing is too short to mean anything"
 diff "$W"_encp.txt "$W"_encg.txt > "$W"_enc.diff || { cat "$W"_enc.diff; fail "x86-64 encodings differ from gas"; }
+# 6. test/gas_frontend_extable.S: stac/clac and an __ex_table section of code
+#    addresses (Rainyday 0024), byte-identical .text and the same relocations
+"$PXX" --emit-obj test/gas_frontend_extable.S "$W"_exp.o > "$W"_exp.log 2>&1 || { cat "$W"_exp.log; fail "pxx could not assemble test/gas_frontend_extable.S"; }
+gcc -c test/gas_frontend_extable.S -o "$W"_exg.o || fail "gas could not assemble test/gas_frontend_extable.S"
+for t in p g; do objcopy -O binary -j .text "$W"_ex$t.o "$W"_ex$t.bin; done
+cmp "$W"_exp.bin "$W"_exg.bin || fail "test/gas_frontend_extable.S: .text differs from gas"
+exrel() { readelf -rW "$1" | sed -n '/__ex_table/,/^$/p' | awk '/R_X86_64/ {print $1, $3, $5, $6, $7}'; }
+[ "$(exrel "$W"_exg.o | wc -l)" -eq 2 ] || fail "gas's __ex_table has not 2 relocations"
+diff <(exrel "$W"_exp.o) <(exrel "$W"_exg.o) || fail "__ex_table relocations differ from gas"
+readelf -SW "$W"_exp.o | grep -q ' __ex_table .* A ' || fail "__ex_table is not an allocated section"
 echo "check_gas_frontend: OK"
