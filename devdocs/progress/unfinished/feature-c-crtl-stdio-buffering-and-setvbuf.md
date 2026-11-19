@@ -102,3 +102,14 @@ win on a putchar loop first.
 setvbuf fixed; buffering needs the Track A writeln hook, see summary
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-11-19 (pxx2): the READ half is done
+
+Reads from fopen/fdopen/popen streams are now buffered (4 KiB); see
+`done/feature-c-crtl-stdio-read-buffer.md`. An fgetc loop over 10 MB went
+from 18.2 s to 0.32 s. stdin stays unbuffered for the same interleaving
+reason this ticket gives for stdout: Pascal ReadLn reads fd 0 itself.
+Before any write, a stream gives its unread bytes back to the fd, so a write
+buffer added here later must keep that order: drop the read buffer first,
+then buffer the write. What remains here is the write half and the flush
+registry, unchanged.

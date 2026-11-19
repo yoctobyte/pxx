@@ -28830,6 +28830,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_typedef_enum_bitfield.c $(TESTTMP)/c_tdenumbf26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_tdenumbf26_gcc32 test/c_typedef_enum_bitfield.c
 	tools/expect_same.sh c_tdenumbf26_i386 "$$(timeout 20 $(TESTTMP)/c_tdenumbf26_i386)" "$$(timeout 20 $(TESTTMP)/c_tdenumbf26_gcc32)"
+	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
+	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
+	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_rdbuf26_gcc32 test/c_crtl_read_buffer.c
+	tools/expect_same.sh c_rdbuf26_i386 "$$(timeout 20 $(TESTTMP)/c_rdbuf26_i386)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc32)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"

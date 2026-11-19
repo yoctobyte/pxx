@@ -102,8 +102,22 @@ struct PxxCrtlFile {
      which is what ungetc's -1 return is for. */
   unsigned char ungetbuf[PXX_UNGET_MAX];
   int ungetn;  /* how many are pending; they come back LAST-pushed-first */
+  /* READ BUFFER, for streams from fopen/fdopen/popen only (rbuffered = 1).
+     Unbuffered, an fgetc loop was one read() per byte: 18 s for 10 MB where
+     glibc takes 0.09 s. stdin stays unbuffered on purpose: a mixed program's
+     Pascal ReadLn reads fd 0 itself, and bytes parked here would be lost to it.
+     Writes stay unbuffered (feature-c-crtl-stdio-buffering-and-setvbuf: the
+     ordering against Pascal writeln). Before any write, seek or flush, unread
+     bytes are given back to the fd (__crtl_rdrop), so the descriptor's
+     position is the stream's logical one again. Static initialisers above
+     list fewer fields: these default to zero, i.e. unbuffered. */
+  int rbuffered;
+  unsigned char *rbuf;  /* PXX_RBUF_SIZE bytes, allocated on first read */
+  int rpos, rlen;       /* next unread byte; bytes valid in rbuf */
 };
 typedef struct PxxCrtlFile FILE;
+
+#define PXX_RBUF_SIZE 4096
 
 static FILE __crtl_stdin  = { 0, 0, 0, 0, { 0 }, 0 };
 static FILE __crtl_stdout = { 1, 0, 0, 0, { 0 }, 0 };
@@ -113,6 +127,32 @@ static FILE __crtl_files[16];
 FILE *stdin  = &__crtl_stdin;
 FILE *stdout = &__crtl_stdout;
 FILE *stderr = &__crtl_stderr;
+
+/* Give unread buffered bytes back: seek the fd back over them (a pipe cannot
+   seek; there they are simply dropped, as glibc does) and empty the buffer. */
+static void __crtl_rdrop(FILE *s) {
+  if (s->rlen > s->rpos)
+    __pxx_seek(s->fd, -(long long)(s->rlen - s->rpos), SEEK_CUR);
+  s->rpos = 0;
+  s->rlen = 0;
+}
+
+/* Refill the read buffer: > 0 bytes now available, 0 end of file, < 0 error.
+   No buffer memory: read nothing here and let the caller go unbuffered. */
+static long __crtl_rfill(FILE *s) {
+  long r;
+  if (!s->rbuf) {
+    s->rbuf = (unsigned char *)__pxx_malloc(PXX_RBUF_SIZE);
+    if (!s->rbuf) { s->rbuffered = 0; return -2; }
+  }
+  s->rpos = 0;
+  s->rlen = 0;
+  r = __pxx_read(s->fd, s->rbuf, PXX_RBUF_SIZE);
+  if (r < 0) { s->err = 1; return -1; }
+  if (r == 0) { s->eof = 1; return 0; }
+  s->rlen = (int)r;
+  return r;
+}
 
 static FILE *__crtl_alloc_file(void) {
   int i;
@@ -829,6 +869,7 @@ static int __crtl_vfdprintf(int fd, const char *fmt, va_list ap) {
 }
 
 int vfprintf(FILE *stream, const char *fmt, va_list ap) {
+  if (stream->rlen) __crtl_rdrop(stream);
   return __crtl_vfdprintf(stream->fd, fmt, ap);
 }
 
@@ -839,6 +880,7 @@ int vprintf(const char *fmt, va_list ap) {
 int fprintf(FILE *stream, const char *fmt, ...) {
   va_list ap; int r;
   va_start(ap, fmt);
+  if (stream->rlen) __crtl_rdrop(stream);
   r = __crtl_vfdprintf(stream->fd, fmt, ap);
   va_end(ap);
   return r;
@@ -858,6 +900,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   unsigned long total = (unsigned long)size * (unsigned long)nmemb;
   long w;
   if (total == 0) return 0;
+  if (stream->rlen) __crtl_rdrop(stream);
   w = __pxx_write(stream->fd, ptr, total);
   if (w <= 0) { stream->err = 1; return 0; }
   if (size == 0) return 0;
@@ -867,6 +910,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
 int fputs(const char *s, FILE *stream) {
   unsigned long n = 0;
   while (s[n]) n++;
+  if (stream->rlen) __crtl_rdrop(stream);
   if (__pxx_write(stream->fd, s, n) < 0) { stream->err = 1; return -1; }
   return (int)n;
 }
@@ -881,6 +925,7 @@ int puts(const char *s) {
 
 int fputc(int c, FILE *stream) {
   char ch = (char)c;
+  if (stream->rlen) __crtl_rdrop(stream);
   if (__pxx_write(stream->fd, &ch, 1) < 0) { stream->err = 1; return -1; }
   return c & 0xFF;
 }
@@ -905,6 +950,24 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     got++;
   }
   if (got == total) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+  /* Buffered stream: hand out what is buffered, then read a large remainder
+     straight into the caller's memory and a small one through the buffer. */
+  if (stream->rbuffered) {
+    while (got < total) {
+      unsigned long avail = (unsigned long)(stream->rlen - stream->rpos), k;
+      if (avail == 0) {
+        if (total - got >= PXX_RBUF_SIZE) break;   /* the direct loop below */
+        r = __crtl_rfill(stream);
+        if (r == -2) break;                        /* no memory: unbuffered */
+        if (r <= 0) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+        avail = (unsigned long)r;
+      }
+      k = total - got < avail ? total - got : avail;
+      memcpy((unsigned char *)ptr + got, stream->rbuf + stream->rpos, k);
+      stream->rpos += (int)k;
+      got += k;
+    }
+  }
   /* LOOP until the request is satisfied or the source is exhausted. A single
      read() call is not fread: a short read is normal on a pipe, socket or tty
      and returning early there hands the caller fewer elements than were
@@ -928,6 +991,12 @@ int fgetc(FILE *stream) {
   long r;
   if (stream->ungetn > 0)             /* pending pushback (see ungetc) */
     return (int)stream->ungetbuf[--stream->ungetn];
+  if (stream->rbuffered) {
+    if (stream->rpos < stream->rlen) return (int)stream->rbuf[stream->rpos++];
+    r = __crtl_rfill(stream);
+    if (r > 0) return (int)stream->rbuf[stream->rpos++];
+    if (r != -2) return -1;           /* eof or err already set */
+  }
   r = __pxx_read(stream->fd, &ch, 1);
   if (r <= 0) { stream->eof = 1; return -1; }
   return (int)ch;
@@ -1010,6 +1079,9 @@ FILE *fopen(const char *path, const char *mode) {
   f->err = 0;
   f->eof = 0;
   f->ungetn = 0;
+  f->rbuffered = 1;
+  f->rpos = 0;
+  f->rlen = 0;
   return f;
 }
 
@@ -1025,6 +1097,9 @@ FILE *fdopen(int fd, const char *mode) {
   f->err = 0;
   f->eof = 0;
   f->ungetn = 0;
+  f->rbuffered = 1;
+  f->rpos = 0;
+  f->rlen = 0;
   return f;
 }
 
@@ -1040,6 +1115,8 @@ FILE *freopen(const char *path, const char *mode, FILE *stream) {
   fd = __pxx_open(path, flags, 438);
   if (fd < 0) { errno = -fd; stream->err = 1; return 0; }
   if (stream->fd >= 0) __pxx_close(stream->fd);
+  stream->rpos = 0;
+  stream->rlen = 0;
   stream->fd = fd;
   stream->err = 0;
   stream->eof = 0;
@@ -1051,6 +1128,10 @@ int fclose(FILE *stream) {
   int rc;
   if (!stream) { errno = EINVAL; return -1; }
   rc = __pxx_close(stream->fd);
+  if (stream->rbuf) { __pxx_free(stream->rbuf); stream->rbuf = 0; }
+  stream->rbuffered = 0;
+  stream->rpos = 0;
+  stream->rlen = 0;
   stream->fd = -1;
   stream->err = 0;
   stream->eof = 0;
@@ -1067,6 +1148,9 @@ int fseek(FILE *stream, long off, int whence) {
      characters. Keeping them would deliver bytes from the old position after
      a seek to a new one. */
   stream->ungetn = 0;
+  if (whence == SEEK_CUR) off -= (long)(stream->rlen - stream->rpos);
+  stream->rpos = 0;
+  stream->rlen = 0;
   r = __pxx_seek(stream->fd, off, whence);
   if (r < 0) { errno = -r; stream->err = 1; return -1; }
   stream->eof = 0;
@@ -1082,7 +1166,7 @@ long ftell(FILE *stream) {
      CALLER WILL READ FROM is that many bytes earlier. Ignoring this reports a
      spot the next fgetc will not read from -- the plausible-wrong-value shape,
      and exactly what a scanf that unreads its lookahead would leave behind. */
-  return r - (long)stream->ungetn;
+  return r - (long)stream->ungetn - (long)(stream->rlen - stream->rpos);
 }
 
 /* fseeko/ftello: the off_t forms. Identical here -- this stdio has no buffer
@@ -1094,6 +1178,9 @@ int fseeko(FILE *stream, off_t off, int whence) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
   stream->ungetn = 0;                 /* as fseek: a seek discards the pushback */
+  if (whence == SEEK_CUR) off -= (off_t)(stream->rlen - stream->rpos);
+  stream->rpos = 0;
+  stream->rlen = 0;
   r = __pxx_seek(stream->fd, (long long)off, whence);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
   stream->eof = 0;
@@ -1105,7 +1192,7 @@ off_t ftello(FILE *stream) {
   if (!stream) { errno = EINVAL; return -1; }
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
-  return (off_t)(r - (long long)stream->ungetn);   /* as ftell */
+  return (off_t)(r - (long long)stream->ungetn - (long long)(stream->rlen - stream->rpos));   /* as ftell */
 }
 
 /* getdelim/getline (POSIX.1-2008). The buffer is grown with realloc and handed
@@ -1156,6 +1243,9 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
 
 void rewind(FILE *stream) {
   if (stream) {
+    stream->ungetn = 0;
+    stream->rpos = 0;
+    stream->rlen = 0;
     if (__pxx_seek(stream->fd, 0, SEEK_SET) < 0) stream->err = 1;
     else stream->eof = 0;
   }
@@ -1174,7 +1264,15 @@ int rename(const char *oldp, const char *newp) { int rc = __pxx_rename(oldp, new
 
 /* ---- buffering / status (unbuffered model: no-ops) ------------------------ */
 
-int fflush(FILE *stream) { (void)stream; return 0; }
+int fflush(FILE *stream) {
+  /* Output is unbuffered, so there is nothing to write. A READ-buffered
+     stream gives its unread bytes back to the fd, as glibc does for a
+     seekable input file: after fflush the descriptor's position is the
+     stream's, which is what a caller that then reads the fd directly or
+     forks a child onto it expects. */
+  if (stream && stream->rlen) __crtl_rdrop(stream);
+  return 0;
+}
 int feof(FILE *stream) { return stream->eof; }
 int ferror(FILE *stream) { return stream->err; }
 void clearerr(FILE *stream) { stream->err = 0; stream->eof = 0; }
@@ -1189,7 +1287,11 @@ int setvbuf(FILE *stream, char *buf, int mode, size_t size)
 {
     (void)buf; (void)size;
     if (!stream) return -1;
-    if (mode == _IONBF) return 0;
+    if (mode == _IONBF) {
+        if (stream->rlen) __crtl_rdrop(stream);
+        stream->rbuffered = 0;   /* reads go straight to the fd again */
+        return 0;
+    }
     return -1;   /* _IOFBF, _IOLBF: not available; anything else: invalid mode */
 }
 void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
