@@ -3924,12 +3924,27 @@ begin
     savedStrCap := LastTypeStrCap;
     LastTypeStrCap := IRHiddenRetStrCap(procIdx);   { see IRBuildHiddenDest }
     { see IRBuildHiddenDest: a fixed-array result needs the whole array }
-    if ProcRetFixedArrBytes[procIdx] > 0 then
+    if IRForcedRetTmp > 0 then
+    begin
+      scratchSym := IRForcedRetTmp - 1;   { initialised at entry, finalised at exit }
+      IRForcedRetTmp := 0;
+    end
+    else if ProcRetFixedArrBytes[procIdx] > 0 then
       scratchSym := AllocArray('', tyUInt8, 0, ProcRetFixedArrBytes[procIdx] - 1)
     else
       scratchSym := AllocVar('', Procs[procIdx].RetType);
     LastTypeRecId := savedRecId;
     LastTypeStrCap := savedStrCap;
+    { `x := F` with a managed-operator result: F starts from x (see
+      CollectManagedResultTemps). Built here, before the call node. }
+    if (IRForcedPrefill > 0) and (Procs[procIdx].RetType = tyRecord) then
+    begin
+      IRAppend(IR_COPY_REC,
+        IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer)),
+        IRLowerAddress(IRForcedPrefill - 1),
+        -1, RecSize(ProcRetRecId[procIdx]), Ord(tyRecord));
+      IRForcedPrefill := 0;
+    end;
     { This hidden aggregate-result temp is allocated during IR lowering, after the
       parser's prologue zero-init pass. If the call sits on a branch that is not
       taken (e.g. `Result := F(0); Exit` in an untaken early-exit), the temp is
@@ -19109,7 +19124,20 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           Result := IRAppend(IR_LOAD_SYM, ASTLiftedVar[node], -1, -1, 0, ASTTk[node]);
       end
       else
+      begin
+        { a managed-record result's per-call-site temp (WrapManagementOps) }
+        IRForcedRetTmp := ManagedResultTempOf(node);
+        if IRForcedRetTmp < -1 then
+        begin
+          IRForcedPrefill := -1 - IRForcedRetTmp;   { lhs + 1 }
+          IRForcedRetTmp := 0;
+        end
+        else
+          IRForcedRetTmp := IRForcedRetTmp + 1;
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+        IRForcedRetTmp := 0;
+        IRForcedPrefill := 0;
+      end;
       { Length(<managed string>) returns the header's [-8] field, which is a BYTE
         count -- that is what the header has always held and what every backend's
         tyAnsiString Length path loads. A UTF-16 string stores 2 bytes per element,

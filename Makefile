@@ -24143,6 +24143,8 @@ test-core: $(COMPILER)
 	# gap the PINNED compiler shares. The fixture header names them.
 	./$(COMPILER) test/test_mgmt_operators_addref_nonlvalue_arg.pas $(TESTTMP)/test_mgmt_operators_addref_nonlvalue26
 	tools/expect_same.sh test_mgmt_operators_addref_nonlvalue26 "$$($(TESTTMP)/test_mgmt_operators_addref_nonlvalue26)" "$$(cat test/test_mgmt_operators_addref_nonlvalue_arg.expected)"
+	./$(COMPILER) test/test_a_managed_record_function_result_lifecycle.pas $(TESTTMP)/mgmt_result_lifecycle26
+	tools/expect_same.sh mgmt_result_lifecycle26 "$$($(TESTTMP)/mgmt_result_lifecycle26)" "$$(cat test/test_a_managed_record_function_result_lifecycle.expected)"
 	# The four declaration shapes with no implementation header to repair the
 	# parameter row (interface method, virtual;abstract, record method, proc
 	# type) -- the population frankB measured and fixed in 74e823da0. The

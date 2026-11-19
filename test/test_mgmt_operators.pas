@@ -5,21 +5,18 @@ program test_mgmt_operators;
   the declaring routine's body (and around the main body, for globals), which is
   why Exit and an exception both still finalize.
 
-  Every line below is FPC 3.2.2's own output, byte for byte, with exactly two
-  deliberate divergences — both measured, both recorded in
+  Every line below is FPC 3.2.2's own output, byte for byte, with exactly one
+  deliberate divergence, measured and recorded in
   feature-pascal-class-management-operators:
 
    1. the two trailing `fin` lines. FPC initializes a record-typed GLOBAL and
       then never finalizes it; pxx (and Delphi) do. A Finalize that never runs
       is a leak by construction, so this is one FPC line missing rather than
       one of ours too many.
-   2. the `Mk` block. FPC materialises a returned record in a hidden temp in
-      the CALLER and manages that temp too, so it prints an extra init/fin
-      pair around the call. A compiler temporary is not a user lifetime; pxx
-      has no such temp and emits neither.
-
-  What the `Mk` block DOES pin down is shared with FPC: the function's own
-  Result slot is not initialized on entry.
+  The `Mk` block used to be a second divergence: FPC manages the caller's
+  hidden temp for a returned record (an init/fin pair around the call) and pxx
+  did not. Since 2026-11-19 pxx does, and the block is FPC's byte for byte.
+  bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize
 
   Not exercised HERE, because they have their own fixtures now: a record with a
   managed record FIELD at any depth (test_mgmt_operators_nested_field) and an

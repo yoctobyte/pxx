@@ -4,7 +4,7 @@ title: "i386: esi and edi are callee-saved in the System V ABI and scratch in ir
 track: A
 prio: 40
 type: bug
-status: open
+status: done
 created: 2026-09-04
 found-by: frankC
 summary: "The i386 System V ABI makes **eax, ecx and edx** the scratch registers and **ebx, esi, edi and ebp** callee-saved. `ir_codegen386.inc` treats esi and edi as scratch throughout — `mov esi, eax` (line 64), `test esi, esi`, `mov [edi], al`, `inc esi` / `inc edi` in the string paths — and saves neither, while it DOES push and pop ebx explicitly wherever it needs it (lines 472, 486). So a pxx-compiled i386 function preserves ebx and does not preserve esi/edi. **Nothing in the busybox corpus is hurt by this**, because every translation unit there is pxx-compiled and pxx is self-consistent; it bites only where a pxx-compiled i386 function is called from code built by another compiler, which is the direction `--emit-obj` exists to make possible. Found while adding the i386 inline-asm register pool (`bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386`), which matches the backend rather than the document and says so; the pool is not the defect and changing it alone would not fix this."
@@ -67,3 +67,23 @@ resolves toward the ABI, those two are part of the same change — and until it
 does, making the pool three registers on its own would refuse busybox's
 `tls_pstm_mul_comba.c` while fixing nothing, since the enclosing function would
 still clobber esi and edi on its own account.
+
+# Closed 2026-11-19 (claude-dupwt): already resolved by 7a30658e7e
+
+`EmitProcPrologue` (symtab.inc) spills ebx, esi and edi into the frame on
+EVERY i386 procedure, and EmitProcEpilog reloads them on every return path.
+That landed in 7a30658e7e (2026-08-31, bug-a-i386-clobbers-ebx-across-a-cdecl-
+exported-function), whose own measurement found all three clobbered. This
+ticket's "saves neither" reading predates or missed it: the string paths still
+use esi and edi as scratch, but inside a frame that restores them.
+
+Re-measured at d7e79354c3:
+- A gcc -m32 caller holds 0x11111111 in esi and 0x22222222 in edi across a
+  call into a pxx --emit-obj C function that does memcpy, a loop, strcpy and
+  strlen. Both come back intact ("preserved").
+- A STATIC comparator, not exported, is passed to glibc's qsort and called
+  back from foreign code. It sorts correctly when pxx links with --system-libs
+  and when gcc -m32 links the pxx object. Its prologue has the same three spills.
+
+Nothing to change in CAsmPool386 / CAsmRegIsCalleeSaved either: an inline asm
+that clobbers esi or edi is covered by the enclosing function's own spill.

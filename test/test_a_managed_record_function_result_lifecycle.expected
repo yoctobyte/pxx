@@ -1,0 +1,35 @@
+  Init
+P1 arg
+  Make body, Result.id was 0
+  callee id=10
+P1 end
+  Fin id=10
+  Init
+P2 assign
+  Make body, Result.id was 0
+  x.id=20
+  Make body, Result.id was 20
+  x.id=30
+P2 end
+  Fin id=30
+  Init
+P3 discard
+  Make body, Result.id was 0
+P3 end
+  Fin id=40
+loop sum=15 live=2
+after loop live=1
+v1:1 v2:2 v3:3 3 live=3
+after strs live=1
+outer 4 8 10 live=3
+after outer live=1
+meth 101 102 live=3
+after meth live=1
+exc 1
+exc 2
+exc caught boom live=2
+after exc live=1
+pair 34
+pair 56
+after pair live=1
+main 9 live=1

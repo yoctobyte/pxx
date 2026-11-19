@@ -4,8 +4,8 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "MEASURED 2026-09-06. A record with `class operator Initialize`/`Finalize` returned BY VALUE from a function runs NEITHER operator for the function's own Result variable: fpc Initializes it on entry and Finalizes the caller-side temp when the statement ends, pxx does neither. So a managed record's invariant does not hold for the one value a factory function produces, which is the ordinary way such a record is constructed -- `function NewFoo: TFoo` returns something Initialize never saw, and any handle it owns is never released. PRE-EXISTING AND NOT THE AddRef WORK: verified against the PINNED compiler on the same program with the AddRef operator removed (the pin refuses that declaration), and the pin omits the identical two lines. Distinct from the by-value PARAMETER event, which is now correct in both argument shapes. It is the whole reason test_mgmt_operators_addref_nonlvalue_arg.expected is not fpc's output byte for byte -- the two missing lines are exactly this defect, named there, and that fixture MUST go red when this is fixed."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # A managed record function result runs neither Initialize nor Finalize
@@ -78,3 +78,44 @@ Found while closing the AddRef half of
 one fixture from being byte-identical to fpc. Parked rather than folded in: it is
 a different mechanism (result lifetime, not parameter lifetime) and it needs the
 double-finalize question above answered before it is safe.
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+Three parts, each measured against fpc 3.2.2.
+
+1. **The caller's temp** (`CollectManagedResultTemps`, pasparser_proc.inc). Before
+   the declaring routine is wrapped, a call whose record result has
+   Initialize/Finalize (own or in a field) and is NOT the right side of an
+   assignment gets a named local of the result type. The existing local wrap
+   then Initializes it at entry and Finalizes it at exit (Exit and exceptions
+   included). IR lowering hands it to IRAppendCall as the hidden destination
+   (`IRForcedRetTmp`). One temp per record type, reused from statement to
+   statement as fpc does. A temp is free again only once the statement that last
+   used it has been walked, so `Pair(MakeCnt(3), MakeCnt(4))` keeps two temps,
+   and a value an enclosing statement still holds is not shared with the
+   statements inside it.
+2. **The callee starts from the destination** (CompileAST, ir_codegen.inc). fpc's
+   Result aliases the caller's slot. pxx's Result is a local copied out at return,
+   so it now also copies the destination IN at entry (raw IR_COPY_REC).
+3. **`x := F` seeds the scratch from x** (IRAppendCall prefill). fpc passes x
+   itself, so `Result.id` reads x's old value. pxx returns into a scratch and then
+   copies, so the scratch is pre-copied from x. This is done for a plain-name
+   destination only, since re-reading it must have no side effect.
+
+Parts 2 and 3 skip records with ARC-managed fields (strings, interfaces): a raw
+duplicate of a reference would be released twice. Those keep their fresh local.
+
+Remaining divergences, both fpc temp-allocation details and both documented in
+the test: fpc Finalizes a DISCARDED call's temp twice (at the end of the
+statement and at exit, after one Initialize), where pxx does it once. And fpc
+reuses one temp for two calls inside a single statement, where pxx keeps two.
+
+Tests: test_a_managed_record_function_result_lifecycle (row mgmt_result_lifecycle26)
+covers an argument, an assignment, a discard, a loop, a string-field record, a
+containing record, a method result, an exception mid-loop, two results in one
+expression and the main body. Output is identical on x86-64, i386, aarch64,
+arm32 and riscv32, and at -O2. test_mgmt_operators_addref_nonlvalue_arg is now
+byte-identical to fpc: its header asked for the two lines to be added when this
+landed. test_mgmt_operators lost its `Mk` divergence. All 11 tests that declare
+these operators and have an .expected pass.

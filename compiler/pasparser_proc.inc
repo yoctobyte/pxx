@@ -1235,8 +1235,140 @@ begin
     WriteLn('PXXDBG p.paramstays ', Procs[procIdx].Name, ' ', bits);
 end;
 
+{ FPC gives a call whose record result is not stored straight into a variable
+  (an argument, a discarded call, a field read) a temp owned by the CALLING
+  routine: Initialize at that routine's entry, Finalize at its exit, and the
+  same temp on every trip of a loop, so the callee's Result starts as the
+  previous trip's value. `x := Make` passes x itself. Measured against fpc
+  3.2.2: pxx ran neither operator for the temp. A named local of the result's
+  type is exactly what the wrap below already handles, so allocate one per
+  call site here and let IR lowering use it as the hidden destination.
+  bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize }
+procedure CollectManagedResultTemps(node: Integer; isAssignRhs: Boolean);
+var p, r, t, savedRec, i, savedStmt: Integer;
+begin
+  if node < 0 then Exit;
+  { ONE TEMP PER RECORD TYPE, REUSED ACROSS STATEMENTS, as FPC does (measured:
+    two `Make` calls in two statements Initialize once and Finalize once). A
+    temp is free again once the statement that last used it has been walked
+    completely, so two calls in one expression keep two temps, and a value an
+    enclosing statement still holds (`with Make do ...`) is not shared with
+    the statements inside it. }
+  if ASTKind[node] = AN_SEQ then
+  begin
+    savedStmt := CallRetCurStmt;
+    if CallRetStmtCount >= Length(CallRetStmtOpen) then
+      SetLength(CallRetStmtOpen, CallRetStmtCount * 2 + 64);
+    CallRetCurStmt := CallRetStmtCount;
+    CallRetStmtOpen[CallRetCurStmt] := True;
+    Inc(CallRetStmtCount);
+    CollectManagedResultTemps(ASTLeft[node], False);
+    CallRetStmtOpen[CallRetCurStmt] := False;
+    CallRetCurStmt := savedStmt;
+    CollectManagedResultTemps(ASTRight[node], False);
+    Exit;
+  end;
+  if (ASTKind[node] = AN_CALL) and (not isAssignRhs) and (ASTLiftedVar[node] < 0) then
+  begin
+    p := Integer(ASTIVal[node]);
+    if (p >= 0) and (p < ProcCount) and (Procs[p].RetType = tyRecord) then
+    begin
+      r := ProcRetRecId[p];
+      if RecHasScopeManagementOp(r) or RecContainsManagementOp(r, 0) then
+      begin
+        t := -1;
+        for i := CallRetTmpCount - 1 downto 0 do
+          if (CallRetTmpSym[i] >= 0) and (ProcRetRecId[CallRetTmpProc[i]] = r) and
+             (CallRetTmpStmt[i] >= 0) and (CallRetTmpStmt[i] <> CallRetCurStmt) and
+             (not CallRetStmtOpen[CallRetTmpStmt[i]]) then
+          begin
+            t := CallRetTmpSym[i];
+            { this sym's earlier entries must not offer it again in this statement }
+            CallRetTmpStmt[i] := CallRetCurStmt;
+            Break;
+          end;
+        if t < 0 then
+        begin
+          savedRec := LastTypeRecId;
+          LastTypeRecId := r;
+          t := AllocVar('', tyRecord);
+          LastTypeRecId := savedRec;
+          Syms[t].RecName := r;
+          SymSyncTypeRef(t);
+        end;
+        if CallRetTmpCount >= Length(CallRetTmpNode) then
+        begin
+          SetLength(CallRetTmpNode, CallRetTmpCount * 2 + 16);
+          SetLength(CallRetTmpSym, CallRetTmpCount * 2 + 16);
+          SetLength(CallRetTmpProc, CallRetTmpCount * 2 + 16);
+          SetLength(CallRetTmpStmt, CallRetTmpCount * 2 + 16);
+        end;
+        CallRetTmpStmt[CallRetTmpCount] := CallRetCurStmt;
+        CallRetTmpNode[CallRetTmpCount] := node;
+        CallRetTmpSym[CallRetTmpCount] := t;
+        CallRetTmpProc[CallRetTmpCount] := p;
+        Inc(CallRetTmpCount);
+      end;
+    end;
+  end;
+  if (ASTKind[node] = AN_ASSIGN) and (ASTRight[node] >= 0) and
+     (ASTKind[ASTRight[node]] = AN_CALL) then
+  begin
+    { `x := F`: FPC hands x itself to F as Result. pxx returns into a scratch
+      and copies, so seed the scratch from x and F starts from x's old value.
+      A plain name only (re-reading it has no side effect), and plain-field
+      records only, as the callee's copy-in. }
+    p := Integer(ASTIVal[ASTRight[node]]);
+    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+       (ASTLiftedVar[ASTRight[node]] < 0) and
+       (p >= 0) and (p < ProcCount) and (Procs[p].RetType = tyRecord) and
+       (RecHasScopeManagementOp(ProcRetRecId[p]) or
+        RecContainsManagementOp(ProcRetRecId[p], 0)) and
+       not RecordHasManagedFields(ProcRetRecId[p]) then
+    begin
+      if CallRetTmpCount >= Length(CallRetTmpNode) then
+      begin
+        SetLength(CallRetTmpNode, CallRetTmpCount * 2 + 16);
+        SetLength(CallRetTmpSym, CallRetTmpCount * 2 + 16);
+        SetLength(CallRetTmpProc, CallRetTmpCount * 2 + 16);
+        SetLength(CallRetTmpStmt, CallRetTmpCount * 2 + 16);
+      end;
+      CallRetTmpStmt[CallRetTmpCount] := -1;
+      CallRetTmpNode[CallRetTmpCount] := ASTRight[node];
+      CallRetTmpSym[CallRetTmpCount] := -2 - ASTLeft[node];
+      CallRetTmpProc[CallRetTmpCount] := p;
+      Inc(CallRetTmpCount);
+    end;
+    CollectManagedResultTemps(ASTChildLeft(node), False);
+    CollectManagedResultTemps(ASTRight[node], True);
+    Exit;
+  end;
+  CollectManagedResultTemps(ASTChildLeft(node), False);
+  CollectManagedResultTemps(ASTChildRight(node), False);
+end;
+
+{ The temp CollectManagedResultTemps gave this call node, else -1. Node indices
+  are reused once a routine is lowered, so the callee is checked too. A value
+  below -1 is not a temp: it is -2 - (the AST of x) for `x := F`. }
+function ManagedResultTempOf(node: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to CallRetTmpCount - 1 do
+    if (CallRetTmpNode[i] = node) and (ASTKind[node] = AN_CALL) and
+       (Integer(ASTIVal[node]) = CallRetTmpProc[i]) then
+    begin
+      Result := CallRetTmpSym[i];
+      Exit;
+    end;
+end;
+
 function WrapManagementOps(procIdx, bodyNode: Integer): Integer;
 begin
+  CallRetTmpCount := 0;
+  CallRetStmtCount := 0;
+  CallRetCurStmt := -1;
+  if procIdx >= 0 then CollectManagedResultTemps(bodyNode, False);
   if procIdx < 0 then Result := bodyNode
   else Result := WrapManagementOpsRange(Procs[procIdx].ScopeBase, SymCount - 1,
                                         Procs[procIdx].RetSymIdx, False, bodyNode);
@@ -1248,6 +1380,10 @@ end;
   the pass is one walk of the symbol table. }
 function WrapMainBodyManagementOps(bodyNode: Integer): Integer;
 begin
+  CallRetTmpCount := 0;
+  CallRetStmtCount := 0;
+  CallRetCurStmt := -1;
+  CollectManagedResultTemps(bodyNode, False);
   Result := WrapManagementOpsRange(0, SymCount - 1, -1, True, bodyNode);
 end;
 

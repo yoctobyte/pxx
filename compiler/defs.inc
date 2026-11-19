@@ -7758,6 +7758,19 @@ var
   { an initialised flexible array member (bug-c-an-initialised-flexible-array-
     member-is-dropped): while CInitFamOpen, the aggregate walker gives a FAM no
     bound and CInitFamMax records the bytes its elements reach }
+  { A call returning a record with Initialize/Finalize, whose value is not
+    stored straight into a variable, gets a named per-call-site temp from
+    WrapManagementOps, so the local wrap initialises it at routine entry and
+    finalises it at exit (FPC's rule). IR lowering finds it by node here;
+    IRForcedRetTmp hands it to IRAppendCall (sym + 1; 0 = none).
+    bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize }
+  CallRetTmpNode, CallRetTmpSym, CallRetTmpProc: array of Integer;
+  CallRetTmpCount: Integer;
+  CallRetTmpStmt: array of Integer;     { statement that last used the temp }
+  CallRetStmtOpen: array of Boolean;    { by statement number: still being walked }
+  CallRetStmtCount, CallRetCurStmt: Integer;
+  IRForcedRetTmp: Integer;
+  IRForcedPrefill: Integer;   { 1 + AST of `x` in `x := F`, 0 = none: copied into F's scratch first }
   CInitFamOpen: Boolean;
   CInitFamMax: Integer;
   ElfTlsUsed      : Boolean;     { a SymElfTls variable exists: ThreadVarRewriteRange must run }

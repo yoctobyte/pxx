@@ -16242,6 +16242,26 @@ begin
     for iZeroTmp := 0 to Procs[CurProc].ParamCount - 1 do
       if SymOwnedValueParam(Procs[CurProc].Params[iZeroTmp].SymIdx) then
         IREmitOwnedParamRetain(Procs[CurProc].Params[iZeroTmp].SymIdx);
+  { A RESULT RECORD WITH Initialize/Finalize STARTS AS THE CALLER'S DESTINATION.
+    FPC's Result aliases the caller's slot, which the caller initialised (a
+    per-call-site temp, see CollectManagedResultTemps) or which is the assigned
+    variable itself, so `Result.id` reads 0 or x's old value before the body
+    writes it. pxx's Result is a local copied out at return; copying the
+    destination IN at entry gives the body the same starting value. A raw copy
+    on purpose: the copy-out is raw too, so ownership just passes through, and
+    FPC runs no Copy/AddRef here either. NOT for a record with ARC fields: a
+    raw duplicate of the destination's string or interface would be released
+    twice, so that shape keeps its fresh local.
+    bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize }
+  if (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) and
+     (Procs[CurProc].RetType = tyRecord) and (Procs[CurProc].RetSymIdx >= 0) and
+     (RecHasScopeManagementOp(ProcRetRecId[CurProc]) or
+      RecContainsManagementOp(ProcRetRecId[CurProc], 0)) and
+     not RecordHasManagedFields(ProcRetRecId[CurProc]) then
+    IRAppend(IR_COPY_REC,
+      IRAppend(IR_LEA, Procs[CurProc].RetSymIdx, -1, -1, 0, Ord(tyPointer)),
+      IRAppend(IR_LOAD_SYM, ProcAggregateDestSym[CurProc], -1, -1, 0, Ord(tyPointer)),
+      -1, RecSize(ProcRetRecId[CurProc]), Ord(tyRecord));
   IRLowerAST(node);
   { THE LANDING-PAD GATE, ASKED WHERE IT CAN SEE THE ANSWER. IRLowerAST has just
     minted this body's hidden argument temps as Syms[] entries, and no machine

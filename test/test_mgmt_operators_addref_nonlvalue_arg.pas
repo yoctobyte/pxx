@@ -20,24 +20,13 @@ program test_mgmt_operators_addref_nonlvalue_arg;
   that cannot reach the arm is not a control, which is why this file exists
   rather than four more rows over there.
 
-  NOT BYTE-IDENTICAL TO FPC, DELIBERATELY, AND THE SIBLING FILE IS -- do not
-  "fix" this one to match it. Exactly two lines differ and BOTH belong to a
-  separate, pre-existing defect that has nothing to do with management
-  operators on parameters:
-
-      fpc, and pxx does not print:   `  Init`            (before the first row)
-      fpc, and pxx does not print:   `  Fin    id=7`     (in the const section)
-
-  Both are the lifecycle of `Make`'s own RESULT variable, which pxx neither
-  Initializes nor Finalizes -- see
-  bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize.
-  Verified against the PINNED compiler on a copy of this program with the AddRef
-  operator removed: the pin omits the same two lines, so the gap predates this
-  work and is not something the AddRef hook introduced.
-
-  WHEN THAT TICKET LANDS THIS FILE MUST FAIL, and the fix is to add the two
-  lines to the .expected -- not to reopen the operator dispatch. Every OTHER
-  line here is fpc 3.2.2's, byte for byte. }
+  BYTE-IDENTICAL TO FPC 3.2.2 since 2026-11-19. Until then two lines were
+  missing, `  Init` before the first row and `  Fin    id=7` in the const
+  section: the lifecycle of the caller's temp for `Make`'s result, which pxx
+  neither Initialized nor Finalized. That was
+  bug-a-a-managed-record-function-result-runs-neither-initialize-nor-finalize,
+  a separate defect from the operator dispatch tested here; the two lines were
+  added to the .expected when it landed, as this header asked. }
 {$mode objfpc}{$H+}{$modeswitch advancedrecords}
 type
   TFoo = record

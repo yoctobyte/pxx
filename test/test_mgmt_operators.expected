@@ -34,8 +34,10 @@ Method
   fin 42
 Mk
   init
+  init
   in Mk
   r.n=9
+  fin 9
   fin 9
 main end
   fin 0

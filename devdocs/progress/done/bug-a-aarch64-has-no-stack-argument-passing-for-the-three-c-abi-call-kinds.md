@@ -3,10 +3,10 @@ slug: bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds
 track: A
 prio: 30
 type: bug
-status: new
+status: done
 found: 2026-08-31
 found-by: frankA
-owner: ""
+owner: claude-dupwt
 blocked-by: []
 summary: "TWO OF THE THREE KINDS LANDED 2026-08-31; the CDECL INDIRECT call is what is left. The external-direct call and the variadic external call now place arguments past the banks in an AAPCS64 stack area, and so does the callee (EmitParamSpillsForTarget's ProcCdecl arm, which had the same refusal). All of them ask ONE oracle -- ABIA64CdeclArgSlot in abi.inc -- instead of each counting its own lo/hi, which is what let the register half be right and the stack half be absent three times over. Measured against gcc on a 12-argument mixed int/double signature and a 10-double one, both banks overflowing: pxx now matches gcc exactly on x86-64, aarch64, arm32, i386 and riscv32. STILL OPEN: ir_codegen_aarch64.inc:3574 refuses a cdecl INDIRECT call past 8 arguments -- a different restructure, because that block has an injected Self and the callee address pushed below arg0. The old summary said \'nothing reaches it today\'; that was false and is corrected in the body -- a nine-int C function reaches it, lua/src/lcode.c has one, and it broke lua and sqlite on aarch64 the moment a C function always used the C ABI."
 ---
@@ -143,3 +143,18 @@ and the ticket stays open for it:
 Closing this ticket on two kinds out of three would be the false-green this
 repo keeps naming. The remaining kind is one refusal, at one line, with the
 oracle it needs already written.
+
+## Closed 2026-11-19 (claude-dupwt): the last kind landed in 53e470d691
+
+53e470d691 (2026-08-31, "aarch64 cdecl INDIRECT calls past 8 arguments, the
+last of the four refusals") removed the remaining guard on the same day this
+ticket's summary was written. The ticket was never moved. ir_codegen_aarch64.inc
+has no "more than 8" or "exceeds 8" refusal left.
+
+Re-measured at d7e79354c3 under qemu-aarch64, against gcc on x86-64:
+- C, a nine-int function through a function pointer: 285 = gcc.
+- C, a 20-argument mixed int/double/long function through a function pointer,
+  overflowing both banks: 1540.0 = gcc.
+- Pascal, a ten-argument cdecl procedural variable: 385, the same as x86-64.
+- Pascal, a nine-argument cdecl method pointer (`of object`, with injected
+  Self): 1285, the same as x86-64.
