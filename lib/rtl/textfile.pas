@@ -538,7 +538,20 @@ begin
     the exact shape this work exists to remove from setvbuf. }
   if f.Buffered then want := f.BufSize else want := 1;
   if want < 1 then want := 1;
-  n := PalRead(f.Handle, f.BufPtr, want);
+  { Unbuffered stdin shares fd 0 with the console reader: take the byte it
+    holds before reading past it (PXXStdinTakeHook in builtinheap is the other
+    half). bug-p-eof-of-input-on-a-pipe-loses-the-first-line-and-never-ends }
+  n := -1;
+  {$ifdef PXX_BUILTIN_STDIN_HOOK}
+  if (f.Handle = 0) and (not f.Buffered) then n := PXXStdinTakeConsole;
+  {$endif}
+  if n >= 0 then
+  begin
+    f.BufPtr[0] := Byte(n);
+    n := 1;
+  end
+  else
+    n := PalRead(f.Handle, f.BufPtr, want);
   if n > 0 then
   begin
     f.BufLen := Integer(n);
@@ -551,6 +564,19 @@ begin
     f.HitEof := True;
     Result := False;
   end;
+end;
+
+{ The console reader's half of the fd-0 handshake: the byte Input holds,
+  consumed, or -1. Installed as PXXStdinTakeHook below. }
+function TFStdinTake: Int64;
+begin
+  if (Input.Handle = 0) and (Input.BufPos < Input.BufLen) then
+  begin
+    Result := Input.BufPtr[Input.BufPos];
+    Inc(Input.BufPos);
+  end
+  else
+    Result := -1;
 end;
 
 function TFFill(var f: Text): Boolean;
@@ -1329,6 +1355,9 @@ initialization
   Input.Buffered := False;
   TFEnsureBuf(Input);
   TFResetBuf(Input);
+  {$ifdef PXX_BUILTIN_STDIN_HOOK}
+  PXXStdinTakeHook := @TFStdinTake;   { see PXX_BUILTIN_STDIN_HOOK in paslexer.inc }
+  {$endif}
   Output.Handle := 1;
   Output.Name := '';
   Output.HitEof := False;

@@ -998,6 +998,14 @@ begin
   PasDefine(name);
   name := 'PXX_MANAGED_STRING';
   PasDefine(name);
+  { The builtin carries the stdin handshake (PXXStdinTakeHook /
+    PXXStdinTakeConsole), which lib/rtl/textfile.pas uses. The PINNED compiler
+    builds live lib/rtl against its OWN older builtin, which lacks both, so
+    textfile guards its references with this: the pin compiles the old
+    behaviour, the live compiler the new. Retire it, and the guard, once a pin
+    carries the handshake. bug-p-eof-of-input-on-a-pipe-loses-the-first-line-and-never-ends }
+  name := 'PXX_BUILTIN_STDIN_HOOK';
+  PasDefine(name);
   name := 'CPU64';
   PasDefine(name);
   name := 'CPUX86_64';

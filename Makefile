@@ -25890,6 +25890,8 @@ test-core: $(COMPILER)
 	# pin: c3=52, rest=[2], count=2. Values are FPC 3.2.2's under {$$H+}.
 	./$(COMPILER) test/test_read_char_preserves_the_line_terminator.pas $(TESTTMP)/test_readterm26
 	tools/expect_same.sh test_readterm26 "$$(printf 'ab\n42\nxy\n' | $(TESTTMP)/test_readterm26)" "$$(printf 'c1=97\nc2=98\nc3=10\nrest=[42]\n<120><121><10>\ncount=3')"
+	./$(COMPILER) test/test_p_eof_of_input_shares_stdin_with_the_console_reader.pas $(TESTTMP)/test_eofinput26
+	tools/expect_same.sh test_eofinput26 "$$(printf 'xhello\n3 4\nab\n\ncd\nl1\nl2\n' | timeout 10 $(TESTTMP)/test_eofinput26)" "$$(cat test/test_p_eof_of_input_shares_stdin_with_the_console_reader.expected)"
 	# ...and reading into a FROZEN string, at BOTH doors, which had no test at
 	# all. From a Text file it SEGFAULTED (a `var AnsiString` RTL parameter
 	# handed an inline [len][chars] slot); from stdin it silently wrote the

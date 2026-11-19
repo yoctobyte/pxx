@@ -3355,6 +3355,83 @@ begin
   Result := PByte(Int64(PXXLineBuf) + i)^;
 end;
 
+type
+  TPXXStdinTake = function: Int64;
+var
+  { ONE STDIN, TWO READERS. The console reader here (bare read/readln/Eof) and
+    textfile's `Input` (Eof(Input), ReadLn(Input, s)) both read fd 0, and each
+    may hold a byte the other has not seen: this side a peeked byte or the rest
+    of a line, textfile a byte Eof(Input) peeked. Each used to read fd 0 behind
+    the other's back, so `while not Eof(Input) do ReadLn(s)` lost the first byte
+    of the input and then looped for ever on the byte stuck in Input (fpc reads
+    a b c). textfile installs this hook to hand over the byte it holds, and
+    takes ours through PXXStdinTakeConsole before it reads fd 0. nil without
+    textfile, which reads exactly as before.
+    bug-p-eof-of-input-on-a-pipe-loses-the-first-line-and-never-ends }
+  PXXStdinTakeHook: TPXXStdinTake;
+
+{ One byte of stdin for the console reader: textfile's held byte first, then
+  fd 0. Same answer shape as PXXSysRead(0, @b, 1). }
+function PXXStdinReadByte(var b: Byte): Int64;
+var v: Int64;
+begin
+  if PXXStdinTakeHook <> nil then
+  begin
+    v := PXXStdinTakeHook();
+    if v >= 0 then
+    begin
+      b := Byte(v);
+      Result := 1;
+      Exit;
+    end;
+  end;
+  Result := PXXSysRead(0, Int64(@b), 1);
+end;
+
+{ The console reader's pending byte (the rest of the current line, else the
+  byte Eof peeked), consumed, or -1 when it holds none. textfile asks this
+  before reading fd 0 for Input. }
+function PXXStdinTakeConsole: Int64;
+begin
+  if PXXLinePos < PXXLineLen then
+  begin
+    Result := PXXLineAt(PXXLinePos);
+    PXXLinePos := PXXLinePos + 1;
+  end
+  else if PXXPeekValid <> 0 then
+  begin
+    Result := PXXPeekByte;
+    PXXPeekValid := 0;
+  end
+  else
+    Result := -1;
+end;
+
+{ Take back the byte textfile holds BEFORE reading our own pending bytes. That
+  byte is always the OLDEST unread one: textfile only holds a byte it took from
+  us (the front of what we hold) or read from fd 0 while we held nothing. So it
+  goes back in front: into the slot it came from when it came out of the middle
+  of a line, else into the peek slot. Measured on `Read(c)` / `Eoln(Input)`
+  alternating over 'ab': without this the console read the line's #10 ahead of
+  the 'b' textfile had peeked. }
+procedure PXXStdinReclaim;
+var v: Int64;
+begin
+  if PXXStdinTakeHook = nil then Exit;
+  v := PXXStdinTakeHook();
+  if v < 0 then Exit;
+  if (PXXLinePos > 0) and (PXXLinePos < PXXLineLen) then
+  begin
+    PXXLinePos := PXXLinePos - 1;
+    PByte(Int64(PXXLineBuf) + PXXLinePos)^ := Byte(v);
+  end
+  else
+  begin
+    PXXPeekByte := Byte(v);
+    PXXPeekValid := 1;
+  end;
+end;
+
 procedure PXXReadLine;
 { THE #10 TERMINATOR IS STORED IN THE BUFFER, and that is a fix and not a
   detail. Stripping it made `read(c: Char)` — the canonical Pascal text-scan
@@ -3376,6 +3453,7 @@ procedure PXXReadLine;
   there and `read(c)` past it still yields #0. }
 var n: Int64; b: Byte; more: Boolean;
 begin
+  PXXStdinReclaim;
   if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
   PXXLinePos := 0;
   PXXLineLen := 0;
@@ -3391,7 +3469,7 @@ begin
       n := 1;
     end
     else
-      n := PXXSysRead(0, Int64(@b), 1);
+      n := PXXStdinReadByte(b);
     if n <= 0 then
     begin
       more := False;                      { EOF / error: no terminator to store }
@@ -3417,9 +3495,10 @@ end;
 function PXXStdinEof: Boolean;
 var n: Int64;
 begin
+  PXXStdinReclaim;
   if PXXLinePos < PXXLineLen then begin Result := False; Exit; end;
   if PXXPeekValid <> 0 then begin Result := False; Exit; end;
-  n := PXXSysRead(0, Int64(@PXXPeekByte), 1);
+  n := PXXStdinReadByte(PXXPeekByte);
   if n <= 0 then
     Result := True
   else
@@ -3431,6 +3510,7 @@ end;
 
 procedure PXXReadDiscard;
 begin
+  PXXStdinReclaim;
   PXXLinePos := PXXLineLen;
 end;
 
