@@ -4971,9 +4971,26 @@ begin
                 corpus ask for, are identical either way, and there is no channel
                 carrying a narrowed range into the legacy enum blob. Widen it the
                 day a row asserts the bounds. tenum3 }
-              if (tiAlias >= 0) and AliasIsSub[tiAlias] and (AliasSemId[tiAlias] <> 0) then
+              { ...and so does a plain ALIAS of an enum (`TMyColour = TColour`),
+                which fpc treats as the same type: TypeInfo answers the SAME
+                pointer. It answered an Integer header (Kind 1, "Integer"), so
+                GetEnumName on it crashed. A plain alias of a RECORD likewise
+                answers the record's own header. It used to get an alias header
+                with no name, which crashed its NamePtr reader. A DISTINCT type
+                (`= type T`) keeps its own entry.
+                bug-a-typeinfo-does-not-return-one-shape-of-pointer }
+              if (tiAlias >= 0) and (AliasSemId[tiAlias] <> 0) and
+                 (AliasIsSub[tiAlias] or not AliasIsDistinct[tiAlias]) then
               begin
                 i := AliasSemId[tiAlias] - 1;
+                tiAlias := -1;
+              end
+              else if (tiAlias >= 0) and (AliasTk[tiAlias] = Ord(tyRecord)) and
+                      (AliasProcSig[tiAlias] < 0) and (not AliasIsDistinct[tiAlias]) and
+                      (AliasElemRec[tiAlias] >= REC_UCLASS_BASE) and
+                      (AliasElemRec[tiAlias] - REC_UCLASS_BASE < UClsCount) then
+              begin
+                ci := AliasElemRec[tiAlias] - REC_UCLASS_BASE;
                 tiAlias := -1;
               end;
             end;
@@ -5095,8 +5112,11 @@ begin
         Expect(tkRParen, ')');
         node := AllocNode(AN_TYPEINFO);
         if i >= 0 then
-          { legacy enum path: ASTLeft stays -1, ASTIVal = enum type id, exactly as before }
-          ASTIVal[node] := i
+        begin
+          { an enum takes a HEADER like every other type (TYPEINFO_REQ_CAT_ENUM) }
+          ASTLeft[node] := 1;
+          ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ENUM, i);
+        end
         else if ci >= 0 then
         begin
           ASTLeft[node] := 1;

@@ -2257,6 +2257,13 @@ const
     ArrTypeIsDyn is the whole kind decision — 21 tkDynArray vs 12 tkArray. An
     array type always DEFINES something, so it always keeps its own name. }
   TYPEINFO_REQ_CAT_ARRAY  = 5;
+  { An ENUM, key = enum type id. A header like every other category: Kind 3
+    (tkEnumeration), the enum's name, DataPtr = the enum's own RTTI blob (what
+    GetEnumName reads). Until 2026-11-19 TypeInfo(TEnum) returned the BLOB
+    itself, so TypeInfo had two shapes and a header reader crashed on an enum.
+    typinfo.pas's enum readers accept either shape (EnumBlobOf).
+    bug-a-typeinfo-does-not-return-one-shape-of-pointer }
+  TYPEINFO_REQ_CAT_ENUM   = 6;
   MAX_TYPEINFO_REQ = 512;
   { The TTypeData payload a TypeInfo header's DataPtr points at: TEN uniform
     8-byte slots, the same discipline TTypeInfoHdr itself uses

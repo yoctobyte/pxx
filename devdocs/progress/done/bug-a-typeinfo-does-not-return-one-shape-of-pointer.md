@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`TypeInfo(T)` returns two structurally different pointers depending on T. An ENUM resolves to the enum's own RTTI blob (what GetEnumName reads); every other type resolves to a TTypeInfo header (kind, name, DataPtr). Nothing in the type, the operator or typinfo.pas says which one you got, so a routine that reads one shape CRASHES on the other rather than answering wrongly — measured: `GetEnumName(TypeInfo(TRange1), 2)` on a subrange of an enum segfaulted, walking a member table over a subrange's typedata. That instance is fixed; the two-shapes fact is not, and the next alias or type family that reaches GetEnumName has the same crash waiting. THE `Ord(PTypeInfo(TypeInfo(TEnum))^.Kind)`-IS-AN-ADDRESS TELL IS RETIRED (frankS, 2026-09-06, on frankA's measurement): it was never the invariant, it was the SYMPTOM of the first instance, and it was written into this summary as though it were the property. It is ONE-DIRECTIONAL and the defect is not -- an enum ALIAS has a plausible small Kind and a record ALIAS has the RIGHT Kind, and a reader following the tell certifies both as clean. A one-directional tell on a two-directional defect is worse than none. THE INVARIANT THAT SURVIVES ALL THREE INSTANCES IS ABOUT THE SHAPE, NOT ANY FIELD: TypeInfo must return ONE kind of pointer, and the check a caller can actually run is `does the type I asked about answer the SAME pointer as the type it aliases` -- the five SAME rows of the census in bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses, which is this ticket's acceptance test. TWO MORE INSTANCES ADDED 2026-09-06 (frankA), from the alias census: an ordinary ALIAS OF AN ENUM (TMyColour = TColour) yields a HEADER with Kind=1 named \"Integer\" instead of the enum blob -- the OPPOSITE direction to the subrange instance, so a fix that only detects \"blob where header expected\" misses it; and an alias of a RECORD yields a correct Kind=13 and SEGFAULTS on its own NamePtr, which the Kind tell cannot detect at all because Kind is right. The standing Ord(Kind)-is-an-address tell covers NEITHER. Meets bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses in one table; fix neither without reading the other."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # TypeInfo does not return one shape of pointer
@@ -166,3 +166,48 @@ did not, segfaulted on row 6, and reported nothing about rows 7–13 — which i
 where both of these live. A probe that dies partway through reads as a short
 table rather than as an error.
 
+
+
+# Fixed 2026-11-19 (claude-dupwt): one shape, chosen as "give the enum a real header"
+
+The census this ticket asked for came first. The raw enum blob has three kinds
+of reader, all in lib/rtl:
+- GetEnumName, GetEnumNameCount and GetEnumValue (typinfo.pas);
+- the published-property TypeRef readers in typinfo.pas (about a dozen:
+  Get/SetEnumProp, the set-property string helpers), whose TypeRef stays a blob;
+- two GetEnumValue(PEnumRTTI(p^.TypeRef)) calls in classes_lite.pas.
+
+No library reads a header from an enum, and no test or library code casts
+TypeInfo(enum) to a blob and then reads it without going through those readers.
+test_typeinfo_widen casts and calls GetEnumName, which still works.
+
+The change:
+- **TypeInfo(TEnum) is a header** (TYPEINFO_REQ_CAT_ENUM): Kind 3 =
+  tkEnumeration, the enum's name, and DataPtr = the enum's existing blob. Only
+  the Pascal arm changed; NilPy's TypeInfo keeps the legacy blob.
+- **typinfo.pas's enum readers take either shape** (EnumBlobOf). The first word
+  tells them apart: a header starts with Kind, which is below 64, and a blob
+  starts with NamePtr, an address. So the property TypeRef path and NilPy are
+  unaffected.
+- **A plain alias answers its target's pointer**, as fpc's does. An enum alias
+  (AliasSemId, now also for a non-subrange alias) resolves to the enum, and a
+  record alias (AliasTk = tyRecord, AliasElemRec) to the record. A distinct
+  `= type T` keeps its own entry.
+
+All three instances are fixed, measured against fpc 3.2.2 and byte-identical
+in test_a_typeinfo_returns_one_shape_of_pointer (row typeinfo_one_shape26):
+- `Kind`/`Name` of TypeInfo(TColour) = 3 / TColour;
+- the enum alias gives the SAME pointer, with GetEnumName on it;
+- the record alias gives the SAME pointer, Kind 13, with a readable name.
+
+The output is identical on x86-64, i386, aarch64, arm32 and riscv32.
+test_typeinfo_widen also passes on i386 and arm32. 52 of the tests that use
+TypeInfo, GetEnumName, GetEnumValue or published pass. The other 3 are a
+negative test and two that need --threadsafe.
+
+Left for the sibling ticket, which is NOT fixed here: `TMyInt = Integer` still
+answers its own pointer named "Integer", where fpc answers Integer's pointer,
+named "LongInt". That is
+bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses,
+whose scalar-alias naming rule (the ALIAS arm's "plain rename" comment) is its
+own decision.

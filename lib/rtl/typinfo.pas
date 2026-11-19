@@ -1076,9 +1076,26 @@ begin
     GetTypeData := PTypeData(TypeInfo^.DataPtr);
 end;
 
+{ The enum blob behind EITHER shape a caller may hold. TypeInfo(TEnum) is a
+  TTypeInfoHdr since 2026-11-19 (Kind 3, DataPtr = the blob); a published
+  property's TypeRef and NilPy's TypeInfo still hand over the blob itself. The
+  first word tells them apart: a header starts with Kind, a small ordinal, and a
+  blob starts with NamePtr, an address, which is never below 64.
+  bug-a-typeinfo-does-not-return-one-shape-of-pointer }
+function EnumBlobOf(p: Pointer): PEnumRTTI;
+var k: Int64;
+begin
+  EnumBlobOf := PEnumRTTI(p);
+  if p = nil then Exit;
+  k := PInt64(p)^;
+  if (k >= 0) and (k < 64) then
+    EnumBlobOf := PEnumRTTI(PTypeInfo(p)^.DataPtr);
+end;
+
 { Map an enum member name to its ordinal via the enum RTTI. -1 if not found. }
 function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
 begin
+  TypeInfo := EnumBlobOf(TypeInfo);
   if TypeInfo = nil then
     GetEnumNameCount := 0
   else
@@ -1091,6 +1108,7 @@ var
   sp: PString;
 begin
   GetEnumName := '';
+  TypeInfo := EnumBlobOf(TypeInfo);
   if TypeInfo = nil then Exit;
   if (Value < 0) or (Value >= Integer(TypeInfo^.Count)) then Exit;
   arr := PEnumValArr(TypeInfo^.ValuesPtr);
@@ -1107,6 +1125,7 @@ var
   i: Integer;
 begin
   GetEnumValue := -1;
+  et := EnumBlobOf(et);
   if et = nil then Exit;
   arr := PEnumValArr(et^.ValuesPtr);
   if arr = nil then Exit;

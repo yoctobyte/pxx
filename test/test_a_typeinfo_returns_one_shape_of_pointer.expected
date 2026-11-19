@@ -1,0 +1,7 @@
+enum kind 3 TColour
+alias kind 3 TColour
+alias same TRUE
+enum name green blue blue
+rec kind 13 TRec
+recalias 13 TRec TRUE
+getenumvalue 2

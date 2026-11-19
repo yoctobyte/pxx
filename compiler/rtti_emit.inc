@@ -1800,8 +1800,9 @@ end;
   request collected during parsing (RegisterTypeInfoReq). Runs right after
   EmitRTTI so class/record requests can point DataPtr at the ALREADY-emitted
   UClsRTTIOff[ci] blob (the same TClassRTTI/layout-descriptor typinfo.pas
-  already reads). Enum TypeInfo() does not go through here at all -- see the
-  pasparser_*.inc comment at the TypeInfo() call site. }
+  already reads). Pascal's TypeInfo(TEnum) comes through here too since
+  2026-11-19 (TYPEINFO_REQ_CAT_ENUM); NilPy's still takes the legacy blob
+  path, which typinfo.pas's enum readers also accept. }
 procedure EmitTypeInfoHeaders;
 var i, hdr, strIdx, ci, kind: Integer; nm: AnsiString;
     tdOff, elemTk, elemEnum, elemRec, elemSz: Integer;
@@ -1979,6 +1980,21 @@ begin
                               ElemRTTIOff(elemEnum, elemRec));
         EmitTypeDataDims(tdOff, ci);
       end;
+    end
+    else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ENUM then
+    begin
+      { TYPEINFO_REQ_CAT_ENUM: the one-shape contract. DataPtr is the blob
+        EmitRTTI has already emitted for every enum. }
+      ci := TypeInfoReqKey[i];
+      PatchDataU64(hdr + 0, 3); { tkEnumeration }
+      nm := GetSliceName(EnumTypeNOff[ci], EnumTypeNLen[ci]);
+      if nm <> '' then
+      begin
+        strIdx := InternStr(nm);
+        AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      end;
+      if EnumTypeRTTIOff[ci] >= 0 then
+        AddDataPtrFix(hdr + 16, EnumTypeRTTIOff[ci]);
     end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_RECORD then
     begin

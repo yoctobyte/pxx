@@ -80,8 +80,10 @@ begin
   piRec := PTypeInfo(TypeInfo(TPoint));
   Check(piRec^.Kind = 13, 'TypeInfo(TPoint).Kind <> tkRecord');
 
-  { REGRESSION: enum TypeInfo() must be completely untouched -- still the bare
-    PEnumRTTI address, not the new header, so fpjson's GetEnumName stays green. }
+  { Enum TypeInfo() is a HEADER since 2026-11-19 (Kind 3 = tkEnumeration), and
+    the enum readers still answer when handed it, cast or not, so fpjson's
+    GetEnumName stays green. bug-a-typeinfo-does-not-return-one-shape-of-pointer }
+  Check(PTypeInfo(TypeInfo(TColor))^.Kind = 3, 'TypeInfo(TColor).Kind <> tkEnumeration');
   piEnum := PEnumRTTI(TypeInfo(TColor));
   Check(GetEnumNameCount(piEnum) = 3, 'enum TypeInfo() regression: count');
   Check(GetEnumName(piEnum, 0) = 'cRed', 'enum TypeInfo() regression: name0');
