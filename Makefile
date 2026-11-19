@@ -13757,6 +13757,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_typeinfo_widen26 "$$($(TESTTMP)/test_typeinfo_widen26)" "test_typeinfo_widen: OK"
 	./$(COMPILER) test/test_a_typeinfo_returns_one_shape_of_pointer.pas $(TESTTMP)/typeinfo_one_shape26
 	tools/expect_same.sh typeinfo_one_shape26 "$$($(TESTTMP)/typeinfo_one_shape26)" "$$(cat test/test_a_typeinfo_returns_one_shape_of_pointer.expected)"
+	./$(COMPILER) test/test_a_plain_type_alias_answers_its_targets_typeinfo.pas $(TESTTMP)/typeinfo_alias_same26
+	tools/expect_same.sh typeinfo_alias_same26 "$$($(TESTTMP)/typeinfo_alias_same26)" "$$(cat test/test_a_plain_type_alias_answers_its_targets_typeinfo.expected)"
 	# An ordinal TYPE as a whole array index (`array[Byte]`, `array[TKind]`,
 	# `array[Char]`, `array[Boolean]`) in a RECORD field, a CLASS field, and as
 	# dim 1 of an N-D field. The var section took these via ParseArrayDimBounds;

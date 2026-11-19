@@ -1,0 +1,12 @@
+int     TRUE
+long    TRUE
+str     TRUE
+dbl     TRUE
+byte    TRUE
+bool    TRUE
+enum    TRUE
+rec     TRUE
+ptr     TRUE
+var m   TRUE
+var s   TRUE
+DISTINCT FALSE

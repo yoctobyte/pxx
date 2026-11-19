@@ -4,8 +4,8 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "WIDENED 2026-09-06 BY CENSUS at 0e3558e5a4d4: pxx has NO alias identity mechanism at all. Filed as `type TMyInt = Integer` minting its own RTTI blob; measured across six spellings, pxx answers DIFFER on EVERY row -- plain scalar alias, synonym (LongInt vs Integer), alias of an ENUM, of a STRING and of a RECORD -- where fpc 3.2.2 answers SAME on all five. Every named type mints its own descriptor. THE ONE ROW PXX GETS RIGHT (`= type Integer`, which SHOULD differ) IT GETS RIGHT BY HAVING NO OPINION, so it is the obvious control, it passes today, and it passes after a wrong fix too -- do not use it as the control; the five SAME rows discriminate. Breaks the standard RTTI dispatch idiom `if p = TypeInfo(Integer)`: a variable declared through an alias matches NOTHING while name and kind both say it should. SELF-INCONSISTENT, NO ORACLE NEEDED. TWO FURTHER DEFECTS FROM THE SAME CENSUS: (1) an alias of an ENUM yields an INTEGER header (Kind=1, name "Integer") instead of the enum blob, so GetEnumName gets a header where its PEnumRTTI signature says blob -- a second live instance of bug-a-typeinfo-does-not-return-one-shape-of-pointer, reached by an ordinary alias rather than a subrange; (2) an alias of a RECORD yields Kind=13 and SEGFAULTS on its own NamePtr. NOT frankS's variable path, which is correct. CORRECTS A PREMISE IN decide-typeinfo-scalar-name-spelling (the label is identical and the behaviour differs, exactly inverting its dismissal of option 3); that decision is about the NAME STRING and is NOT reopened."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # A plain type alias gets its own RTTI blob, so `TypeInfo` pointer dispatch misses
@@ -174,3 +174,37 @@ at least silent and recoverable.
 cut did not and segfaulted on row 6, reporting nothing about rows 7–13 — where
 both defects above live. A probe that dies partway through reads as a short
 table, not as an error.
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+pxx now has an alias identity rule for TypeInfo: a PLAIN alias answers its
+target's request. Rows below are re-measured against fpc 3.2.2.
+
+| row | fpc | pxx before | pxx now |
+| --- | --- | --- | --- |
+| `TMyInt = Integer` | SAME | DIFFER | SAME |
+| `TMyLong = LongInt` | SAME | DIFFER | SAME |
+| `TMyStr = string` | SAME | DIFFER | SAME |
+| `TMyDbl = Double`, `= Byte`, `= Boolean` | SAME | DIFFER | SAME |
+| `TP = Pointer` | SAME | DIFFER | SAME |
+| alias of an ENUM | SAME | DIFFER (Integer header) | SAME |
+| alias of a RECORD | SAME | DIFFER (crash on NamePtr) | SAME |
+| `var m: TMyInt; TypeInfo(m)`, likewise for a string | SAME | DIFFER | SAME |
+| `= type Integer` (distinct) | DIFFER | DIFFER | DIFFER |
+
+The enum and record rows came with bug-a-typeinfo-does-not-return-one-shape-of-pointer
+(cb72fc3a12). The scalar rows are one canonicalisation just before the
+AN_TYPEINFO node (pasparser_expr.inc), so the type-name and variable paths
+share it. Anything that DEFINES a type keeps its own entry: distinct, subrange,
+string[N], a set, a procedural type, a file, a typed pointer, a WideString-family
+alias. Checked before and after on a subrange, string[20], a set, ^Integer, a
+procedural type and WideString: names and Kinds are unchanged.
+
+NOT changed: `TypeInfo(LongInt) = TypeInfo(Integer)` (fpc SAME, pxx DIFFER).
+That is two builtin kinds (tyInt32 / tyInteger) with two spellings, which is
+decide-typeinfo-scalar-name-spelling's territory, and this ticket says not to
+reopen it. The test leaves that row out on purpose.
+
+test_a_plain_type_alias_answers_its_targets_typeinfo (row typeinfo_alias_same26)
+is fpc's output, line for line. 53 TypeInfo/GetEnumName/published tests pass.

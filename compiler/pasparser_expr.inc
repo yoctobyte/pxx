@@ -5110,6 +5110,29 @@ begin
           Error('TypeInfo expects a type name');
         Next;
         Expect(tkRParen, ')');
+        { A PLAIN SCALAR ALIAS IS ITS TARGET (`TMyInt = Integer`, `TS = string`,
+          `TP = Pointer`), reached by name or through a variable declared with it.
+          fpc answers the target's own pointer, so `if p = TypeInfo(Integer)`
+          dispatch matches; pxx minted a separate header with the same name and
+          Kind, which matched nothing. Answer the target's kind request instead.
+          Anything that DEFINES a type keeps its own entry: a distinct
+          `= type T`, a subrange, string[N], a set, a procedural type, a file, a
+          typed pointer, a non-byte string element. The enum and record aliases
+          are routed above.
+          bug-a-a-plain-type-alias-gets-its-own-rtti-blob-so-typeinfo-pointer-dispatch-misses }
+        if (tiAlias >= 0) and (not AliasIsDistinct[tiAlias]) and
+           (not AliasIsSub[tiAlias]) and (AliasProcSig[tiAlias] < 0) and
+           (AliasStrCap[tiAlias] = 0) and (AliasFileRecSize[tiAlias] = 0) and
+           (AliasSemId[tiAlias] = 0) and
+           ((AliasStrElemTk[tiAlias] = 0) or (AliasStrElemTk[tiAlias] = Ord(tyChar))) and
+           (AliasTk[tiAlias] <> Ord(tySet)) and (AliasTk[tiAlias] <> Ord(tyRecord)) and
+           (AliasTk[tiAlias] <> Ord(tyClass)) and (AliasTk[tiAlias] <> Ord(tyUnknown)) and
+           ((AliasTk[tiAlias] <> Ord(tyPointer)) or
+            ((AliasPtrDepth[tiAlias] = 0) and (AliasElemRec[tiAlias] < REC_UCLASS_BASE))) then
+        begin
+          tiTk := IntToTypeKind(AliasTk[tiAlias]);
+          tiAlias := -1;
+        end;
         node := AllocNode(AN_TYPEINFO);
         if i >= 0 then
         begin
