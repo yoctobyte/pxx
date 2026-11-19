@@ -16322,6 +16322,38 @@ begin
           ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
             'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
             ' to ' + TypeKindSpelling(asgDstTk));
+        { A DYNAMIC-ARRAY VALUE INTO A VALUE DESTINATION. The rule above never
+          sees it: AssignSideKind abstains on an array side because an array's
+          kind is its element's. So `r := p` (p: array of TRec, r: TRec),
+          `r := p + q` and `i := a` (a: array of LongInt) all compiled and stored
+          the array HANDLE -- `i := a` printed a heap address. fpc refuses each:
+          `Incompatible types: got "TRecArr" expected "TRec"`.
+
+          The DESTINATION is what makes this decidable without typing the array
+          side: a value record, an ordinal, a float or a string can never hold
+          a dynamic array, while a Pointer, a Variant or anything this cannot
+          type keeps the old accept (`pp := p` is a legal round-trip). A
+          conversion operator keyed on the array (REC_ARRAY_OPERAND) is a
+          legal store, and the rewrite below calls it.
+          bug-a-a-dynamic-array-value-can-be-assigned-to-a-record-variable }
+        if (NodeDynDepth(ASTRight[node]) > 0) and
+           AssignSideKind(ASTLeft[node], asgDstTk) and
+           ((asgDstTk = tyRecord) or
+            (TypeIsOrdinal(asgDstTk) and (asgDstTk <> tyPointer)) or
+            TypeIsFloat(asgDstTk) or
+            { an array of CHAR into an AnsiString is a pxx extension that
+              works (it builds the string; fpc refuses it), so it stays. Into a
+              FROZEN string the same store printed blanks at the full capacity
+              (measured: ShortString length 255, string[10] length 10), so it
+              is refused with every other string case. }
+            (TypeIsAnyString(asgDstTk) and
+             not ((asgDstTk = tyAnsiString) and
+                  TypeIsCharKind(IntToTypeKind(ASTTk[ASTRight[node]]))))) and
+           (FindOpConvToDest(ASTTk[ASTRight[node]], REC_ARRAY_OPERAND,
+                             Ord(asgDstTk), AssignSideRecOf(ASTLeft[node]), 0) < 0) then
+          ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
+            'incompatible types: cannot assign a dynamic array to ' +
+            TypeKindSpelling(asgDstTk));
       end;
 
       { PXXDBG=a.wholearr — the census for the not-yet-landed refusal of a
@@ -16622,8 +16654,20 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         to a DIFFERENT-typed target converts through the overload
         (toperator11's `i := a`). Rewrite RHS to the conversion CALL and fall
         through to the ordinary assign of the result type. }
+      { An ARRAY source whose element kind equals the destination's kind still
+        needs the lookup: `r := p` with `operator :=(a: TRecArr): TRec` is
+        tyRecord into tyRecord by kind, so the conversion was never asked for
+        and the raw store ran (pxx printed 0 where fpc prints 30). Only for a
+        non-array destination, so an array-to-array store never matches an
+        array-to-element conversion. The source is keyed through
+        OperandRecOfNode, which is ResolveNodeRec except that a whole array
+        keys as REC_ARRAY_OPERAND, the key the declaration registered under.
+        bug-a-a-dynamic-array-value-can-be-assigned-to-a-record-variable }
       if (lhsTk <> tyUnknown) and (lhsTk <> tyAuto) and
-         (IntToTypeKind(ASTTk[ASTRight[node]]) <> lhsTk) then
+         ((IntToTypeKind(ASTTk[ASTRight[node]]) <> lhsTk) or
+          ((NodeDynDepth(ASTRight[node]) > 0) and
+           (NodeDynDepth(ASTLeft[node]) = 0) and
+           not ASTNodeIsWholeArray(ASTLeft[node]))) then
       begin
         { Keyed on the DESTINATION as well as the source. The destination is what
           makes widening the source sound — see FindOpConvToDest — and it also
@@ -16649,7 +16693,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           literal tyInteger and Integer prefers the signed parameter. fpc types
           the constant Byte and takes the Byte one. }
         varIdx := FindOpConvToDestAmb(OpConvSrcTkOfNode(ASTRight[node]),
-                                      ResolveNodeRec(ASTRight[node]),
+                                      OperandRecOfNode(ASTRight[node]),
                                       Ord(lhsTk), ResolveNodeRec(ASTLeft[node]), 0,
                                       convAmbig);
         { AMBIGUOUS IS A REFUSAL, AND THIS IS THE SITE FPC REFUSES AT. Two

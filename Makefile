@@ -10686,6 +10686,14 @@ test-threads: $(COMPILER)
 	# --proc-map agrees with the --map file on a static and a dynamic build
 	# (bug-a-proc-map-emits-static-addresses-for-a-dynamic-build).
 	tools/expect_same.sh test_proc_map "$$(tools/check_proc_map.sh ./$(COMPILER) $(TESTTMP) | tail -1)" "PROC MAP OK"
+	# A dynamic-array value into a record/ordinal/float/string destination is
+	# refused (it stored the array handle); its legal neighbours, including an
+	# array-keyed conversion operator, still compile and answer right.
+	# bug-a-a-dynamic-array-value-can-be-assigned-to-a-record-variable
+	./$(COMPILER) test/test_dynarray_value_into_scalar_ok.pas $(TESTTMP)/test_dvis_ok >/dev/null
+	tools/expect_same.sh test_dvis_ok "$$($(TESTTMP)/test_dvis_ok | tr '\n' ' ')" "conv 30 elem 7 6 nested 5 call 5 ptr 3 str hi "
+	! ./$(COMPILER) test/test_dynarray_value_into_scalar_refused.pas $(TESTTMP)/test_dvis_rf > $(TESTTMP)/test_dvis_rf.log 2>&1 || exit 1
+	tools/expect_same.sh test_dvis_refused "$$(grep -c 'cannot assign a dynamic array to' $(TESTTMP)/test_dvis_rf.log)" "8"
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

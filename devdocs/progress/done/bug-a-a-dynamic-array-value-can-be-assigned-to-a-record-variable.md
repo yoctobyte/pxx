@@ -5,7 +5,8 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-status: open
+status: done
+owner: claude-dupwt
 created: 2026-09-09
 found-by: frankH
 summary: "`var p, q: array of TRec; r: TRec;` then `r := p + q` COMPILES and stores the concatenation's array handle into r. Pre-existing and DELIBERATE at the point it is decided: AssignSideKind bails on any node with NodeDynDepth > 0, because it cannot type an array side and its own header ranks a false reject as the worse defect. So the abstention is principled and the accept is the cost of it. fpc 3.2.2 refuses (`Operator is not overloaded: TRecArr + TRecArr`) but for a different reason -- fpc has no dyn-array `+` without {$modeswitch arrayoperators}, while pxx's concatenation is a deliberate feature, so this is NOT a parity row and must not be fixed by removing concatenation. Verified pre-existing against pin `stable_linux_amd64/default/pinned`. The fix is for the assignment check to be able to TYPE an array side, which is the same missing concept as bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand: an array's TypeKind IS its element's, so nothing downstream can tell `array of TRec` from `TRec`."
@@ -69,3 +70,40 @@ dyn-array arm fired. A right answer from a wrong match, on a program whose
 declaration has nothing to do with it. Keying array operands separately removes
 the wrong match, and with it the accidental error, leaving the shape consistent
 with the one that never had a record operator in scope.
+
+
+## 2026-11-19 (claude-dupwt): fixed, and it was wider than a record
+
+Measured first, pxx beside fpc 3.2.2. The pinned behaviour accepted more than
+the ticket's `r := p + q`:
+
+| store | old pxx | fpc |
+| --- | --- | --- |
+| `r := p + q`, `r := p`, `r := m[0]`, `r := Mk` | compiles, r reads the handle | refuses |
+| `i := ia` (array of LongInt) | compiles, prints a heap address | refuses |
+| `ss := ca`, `s10 := ca` (array of Char into a frozen string) | blanks, length 255 / 10 | refuses |
+| `r := p` with `operator :=(a: TRecArr): TRec` | **0** (operator never called) | 30 |
+| `s := ca` (array of Char into AnsiString) | `hi` (works) | refuses |
+
+**The refusal** (ir.inc, beside the AN_ASSIGN kind check) decides from the
+DESTINATION, which is what the abstaining AssignSideKind could not do from the
+array side: a dynamic-array value (NodeDynDepth > 0) into a value record, an
+ordinal other than Pointer, a float or a string is refused as `incompatible
+types: cannot assign a dynamic array to <kind>`, unless a conversion operator
+keyed on the array (REC_ARRAY_OPERAND) exists. Pointer, Variant and anything
+untypeable keep the old accept. Array of Char into an AnsiString is kept on
+purpose: it is a working pxx extension, and the function's own rule ranks a
+false reject as the worse defect.
+
+**The conversion**: the rewrite only looked for an implicit operator when the
+two KINDS differed, and an array's kind is its element's, so an array-to-element
+operator was never asked for. It now also runs for an array source into a
+non-array destination, and keys the source through OperandRecOfNode (the key
+the declaration registered under) instead of ResolveNodeRec.
+
+False-reject oracle: all 2,850 tracked test/ and examples/ .pas files compiled
+with the new compiler; 0 produce the new message (positive control: the same
+command finds all 8 in the refusal test). Self-host fixedpoint clean, gate
+quick passes. Tests: test_dynarray_value_into_scalar_ok.pas (six legal shapes
+with values) and test_dynarray_value_into_scalar_refused.pas (eight refusals,
+counted).
