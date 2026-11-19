@@ -20925,6 +20925,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asmmderef26 "$$($(TESTTMP)/c_asmmderef26)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
 	./$(COMPILER) -O2 test/c_inline_asm_m_deref_and_clflush.c $(TESTTMP)/c_asmmderef26_o2 > /dev/null
 	tools/expect_same.sh c_asmmderef26_o2 "$$($(TESTTMP)/c_asmmderef26_o2)" "$$(cat test/c_inline_asm_m_deref_and_clflush.expected)"
+	# the same on i386: "m"(*p) names the object, not a copy (gcc -m32's output)
+	# bug-c-an-m-operand-dereference-on-i386-still-binds-a-copy
+	./$(COMPILER) --target=i386 test/c_inline_asm_m_deref_i386.c $(TESTTMP)/c_asmmderef386 > /dev/null
+	tools/expect_same.sh c_asmmderef386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asmmderef386)" "$$(cat test/c_inline_asm_m_deref_i386.expected)"
+	./$(COMPILER) --target=i386 -O2 test/c_inline_asm_m_deref_i386.c $(TESTTMP)/c_asmmderef386_o2 > /dev/null
+	tools/expect_same.sh c_asmmderef386_o2 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asmmderef386_o2)" "$$(cat test/c_inline_asm_m_deref_i386.expected)"
 	# Memory outputs "=m"/"+m" on x86-64: the template writes the object itself
 	# (feature-c-inline-asm-plus-m-read-write-memory-operand). gcc's output.
 	./$(COMPILER) test/c_inline_asm_memory_outputs.c $(TESTTMP)/c_asmmemout26 > /dev/null

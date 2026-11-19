@@ -11287,13 +11287,16 @@ begin
     reads the same bytes; for clflush, invlpg, lgdt or a lock-prefixed RMW the
     ADDRESS is the operand, and the copy flushed a stack temporary while the
     page-table line the IOMMU reads stayed dirty (Gibux vtd.c). So the address
-    is computed into a pool register and %N is `(reg)`. x86-64 only: the i386
-    text sink has no such operand form yet and keeps the copy.
-    bug-c-an-m-operand-that-is-a-dereference-binds-a-copy }
+    is computed into a pool register and %N is `(reg)`. On i386 too: its text
+    sink writes that as `[reg]` (AttRender386's AOP_MEMR arm), and before it
+    did, `addl %1, %0` / `movb $7, %0` on "m"(*p) wrote a copy silently.
+    bug-c-an-m-operand-that-is-a-dereference-binds-a-copy,
+    bug-c-an-m-operand-dereference-on-i386-still-binds-a-copy }
   for i := 0 to CAsmOpCount - 1 do
   begin
     memReg[i] := False;
-    if (TargetArch = TARGET_X86_64) and (i >= CAsmOutCount) and
+    if ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) and
+       (i >= CAsmOutCount) and
        (CAsmOps[i].TiedTo < 0) and (CAsmOps[i].Cons = 'm') and
        ((ASTKind[CAsmOps[i].Expr] = AN_DEREF) or (ASTKind[CAsmOps[i].Expr] = AN_INDEX) or
         (ASTKind[CAsmOps[i].Expr] = AN_FIELD) or
@@ -11303,8 +11306,11 @@ begin
           bytes of a pointer. bug-c-an-m-input-of-a-pointer-to-array-deref-reads-the-pointer }
         CAsmIsPtrToArrDeref(CAsmOps[i].Expr)) then
       memReg[i] := True;
-    if (TargetArch = TARGET_X86_64) and (i < CAsmOutCount) and
-       (CAsmOps[i].Cons = 'm') then
+    { an "=m" OUTPUT on i386 keeps its copy, which is stored back after the
+      block and so writes the right object; it would otherwise cost one of
+      the five pool registers. }
+    if (TargetArch = TARGET_X86_64) and
+       (i < CAsmOutCount) and (CAsmOps[i].Cons = 'm') then
     begin
       memReg[i] := True;
       if ASTKind[CAsmOps[i].Expr] = AN_IDENT then
@@ -11422,10 +11428,10 @@ begin
     AttEmitPushPop(saveReg[i], True);
   for i := 0 to CAsmOutCount - 1 do
     if memReg[i] then
-      AttEmitFrameMove(opReg[i], 8, Syms[tmpSym[i]].Offset, True);
+      AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
     if memReg[i] then
-      AttEmitFrameMove(opReg[i], 8, Syms[tmpSym[i]].Offset, True)
+      AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True)
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
   AttEncodeTemplateInner(CAsmTemplate, isExt);
