@@ -50,3 +50,16 @@ ELF32 REL is the remaining option A, not needed for toybox.
   Not chased here. The size is the obvious next step (function sections in
   the i386 object writer); see also
   bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object.
+
+## The size: --shared-runtime (same day)
+
+`tools/pxx_link_i386.sh --shared-runtime -o OUT *.o`, for objects built with
+`--shared-runtime`, compiles the one runtime object they share
+(pxx/runtime_all.h) and links it in, as `pascal26 --link` does on x86-64.
+toybox 0.8.15 i386: 205/205 units, **11.6 MB** (against 167 MB
+self-contained). Suite: 1496 pass / 108 fail / 24 skip. Against the
+self-contained i386 build: the four `id` failures return (exactly the
+x86-64 set, so they follow the runtime layout, not the target), and
+`ls -ou` / `ls -otu` pass (time-sensitive). Row i386/c_i386lnk_rt.
+Function sections for the i386 writer (which would shrink the
+self-contained form too, and make weak calls relocatable) remain open.
