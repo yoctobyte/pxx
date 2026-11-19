@@ -109,6 +109,13 @@ Check verdicts by the job's own printed line (for example "gate: GREEN" or
 `tools/testmgr.py --tier full --list` (names look like `test-nilpy#01`; the
 `--tier` is required).
 
+A test target such as `make test-core` is one target with thousands of
+recipe lines. Plain `make` stops at the first failing line and says nothing
+about the rest, and `make -k` does not change that. To run all of it and get
+every failure named: `PXX_ALLOW_FULL_SUITE=1 tools/test_tally.py test-core`.
+It exits 0 (all passed), 1 (failures, listed) or 2 (make itself stopped
+early).
+
 ## Leaks — how to check
 
 - Pascal/NilPy on the host: build with -dPXX_ALLOC_CENSUS and compare

@@ -3,10 +3,10 @@ slug: bug-t-a-one-target-test-recipe-truncates-silently-on-its-first-failure
 track: T
 type: bug
 prio: 60
-status: backlog
+status: done
 found: 2026-09-22
 found-by: franks-5b
-owner: ""
+owner: rd
 blocked-by: []
 summary: "A make target whose recipe is one long list of test lines ABORTS AT THE FIRST FAILURE and runs none of the rest, and NOTHING IN THE OUTPUT SAYS HOW MUCH DID NOT RUN. `make -k` does not reach it -- it continues past failed TARGETS, and this is one target. So any standing red converts the tail of that target into silent non-coverage for every seat that runs it, and a seat reading RED believes it gated. MECHANISM, not a row: this springs whenever a one-target recipe carries a red, whoever left it and wherever it sits; the earlier the red, the more is lost. Measured 2026-09-22 on test-nilpy (Makefile:511, recipe 512-7189, 6614 recipe lines): a red at Makefile:4718 left 2470 lines -- 37.3% -- unexecuted, with the run reporting only the one mismatch. The remedy is a harness property (run all, report a tally) and does NOT require narrowing or removing any test. THE TERRITORY BEHIND THE RED IS MEASURED AND GREEN: a `make -i` run the same day reached the end of the recipe with EXACTLY ONE failure, the red itself -- so this asks for a harness that can TELL you that, not for an investigation of what is hiding."
 ---
@@ -103,3 +103,21 @@ reason it was not taken.
 zero worse, deliberately left standing with the reasoning in the LOGBOOK. It is
 the **occasion**, not the cause. When it is settled this ticket stays true, and
 the next standing red springs it again.
+
+## Resolution (2026-11-19, rd)
+
+`tools/test_tally.py TARGET [LOG]` runs `make -i TARGET` (every recipe line
+runs) and names each failure from the log: the nearest `expect_same:
+MISMATCH [label]`, else a `...FAIL...` line, else the last command. Exit 0
+when the recipe ran to its end clean, 1 with failures (listed), 2 when make
+itself stopped (a `***` error), which it says in so many words, so a
+truncated run cannot read as complete. Nothing is narrowed or skipped.
+
+Measured on the 2026-11-19 test-core sweep's log: all 28 failures found and
+named (bug-test-core-stops-at-freebsd-kernel-entries-5-not-2, done). On a
+toy Makefile: a MISMATCH and a bare `false` both named (exit 1), a clean
+target exit 0, a missing prerequisite exit 2. AGENTS.md says when to use it.
+
+Not changed: plain `make test-*` and testmgr's jobs still stop at the first
+failing line. Making testmgr report "N lines not run" (or call this) is the
+remaining step, and it is testmgr's owner's call.
