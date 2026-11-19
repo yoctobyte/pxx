@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken."
-status: backlog
+status: done
 ---
 
 # `test -x` on the pinned stable passes on a foreign architecture
@@ -88,3 +88,21 @@ about the guard lying.** Do not widen it into the port.
 machine execute it"*. Those are near-neighbour questions and the instrument
 returns success either way, which is what makes it invisible. Third instance in
 one day of the same failure — see the standing rule in the roster.
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+The four Makefile guards that run the pinned stable (seed-from-stable,
+test-fpjson, selfcheck, pxx-stable-check) now call `tools/stable_runs.sh
+$(PXX_STABLE) "<hint>"` instead of `test -x`. The script separates the two
+problems this ticket says one message conflated:
+- not there or not executable: `No pinned stable at <path>. <hint>`, as before;
+- present but `--version` will not run: `The pinned stable at <path> exists but
+  does not run on this host (<uname -m>): <file's format>`, followed by
+  `This is an architecture mismatch, not a missing compiler.`
+
+Checked on plexus. The real pin passes (pxx-stable-check prints its report);
+/nonexistent gives the missing message with rc=1; and a copy of the compiler
+with e_machine patched to SPARC gives `exists but does not run on this host
+(x86_64): ELF 64-bit LSB executable, SPARC` with rc=1. A plain aarch64 binary
+is NOT a valid foreign probe on plexus: qemu binfmt runs it.

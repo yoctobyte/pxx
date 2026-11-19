@@ -64,3 +64,12 @@ Do not bolt a third star parser onto the ctor loop. The ticket above removed two
 relative to allocation, and a class whose `__init__` has no defaults, plus the
 existing `test_nilpy_ctor_kwargs` / `test_nilpy_ctor_star_and_kwargs` staying
 green. Then `tools/gate.sh quick`.
+
+
+# Closed 2026-11-19 (claude-dupwt): already fixed by 3525a2d57d
+
+`fix(N): **kwargs and *xs at a construction site` landed the fix and the guard
+(test_nilpy_ctor_star_and_kwargs, row test_nilpy_ctorargs26) but did not
+close this ticket. Re-measured on today's master against CPython: `C(**d)`,
+`C(*lst)` and `C(*[7])` on a class with an ordinary `__init__(self, a, b=2)`
+print 6, 7 and 9, the same as python3.

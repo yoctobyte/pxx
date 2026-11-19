@@ -9060,8 +9060,7 @@ test-fpc-seed-checked: fpc-seed-checked $(COMPILER)
 # fresh checkout instead of `make bootstrap` (which rebuilds gen0 from FPC and is
 # only needed for a pure-source build that ships no binary).
 seed-from-stable:
-	@test -x $(PXX_STABLE) || \
-	  (echo "No pinned stable at $(PXX_STABLE). Run: make bootstrap (needs FPC) once."; exit 1)
+	@tools/stable_runs.sh $(PXX_STABLE) "Run: make bootstrap (needs FPC) once."
 	cp $(PXX_STABLE) $(COMPILER)
 	@echo "seeded $(COMPILER) from $(PXX_STABLE) (no FPC). Run 'make test' to self-host."
 
@@ -40111,7 +40110,7 @@ test-fgl: $(COMPILER)
 # Skips if the gitignored tree is absent (tools/install_lib_candidates.sh fcl-json).
 FCLJSON_SRC ?= library_candidates/fcl-json/packages
 test-fpjson:
-	@test -x $(PXX_STABLE) || { echo "test-fpjson: no stable compiler at $(PXX_STABLE)"; exit 1; }
+	@tools/stable_runs.sh $(PXX_STABLE) "(test-fpjson)"
 	@if [ ! -f "$(FCLJSON_SRC)/fcl-json/src/fpjson.pp" ]; then \
 	  echo "test-fpjson: SKIP — no fcl-json tree at $(FCLJSON_SRC) (tools/install_lib_candidates.sh fcl-json)"; \
 	  exit 0; \
@@ -44329,7 +44328,7 @@ check-stable:
 # full determinism, and cross-target byte-identity -- stays in `make test` +
 # `make cross-bootstrap`, run by the release workflow.
 selfcheck: check-stable
-	@test -x $(PXX_STABLE) || (echo "No executable stable at $(PXX_STABLE)"; exit 1)
+	@tools/stable_runs.sh $(PXX_STABLE) "(selfcheck)"
 	@echo "=== selfcheck: self-host from committed stable $(PXX_STABLE) ==="
 	$(PXX_STABLE) $(COMPILER_SRC) $(TESTTMP)/pxx-sc-g1
 	$(TESTTMP)/pxx-sc-g1 $(COMPILER_SRC) $(TESTTMP)/pxx-sc-g2
@@ -44430,8 +44429,7 @@ distclean: clean
 
 # Guard + report which stable the library track is pinned to.
 pxx-stable-check:
-	@test -x $(PXX_STABLE) || \
-	  (echo "No pinned stable at $(PXX_STABLE). Run: make stabilize && make pin"; exit 1)
+	@tools/stable_runs.sh $(PXX_STABLE) "Run: make stabilize && make pin"
 	@PV=$$(readlink $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo '?'); \
 	 LV=$$(readlink $(STABLE_DEFAULT_DIR)/latest 2>/dev/null || echo '?'); \
 	 echo "lib track pinned to: $(PXX_STABLE) -> $$PV   (newest checkpoint: latest -> $$LV)"; \
