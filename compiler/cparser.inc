@@ -7336,6 +7336,8 @@ begin
     CTypedefAlign[idx] := 0;
     CTypedefLongRank[idx] := newRank;
     CTypedefIsUEnum[idx] := False;
+    CTypedefPtrDepth[idx] := 0;
+    CTypedefPtrBaseTk[idx] := Ord(tyUnknown);
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -7360,6 +7362,8 @@ begin
   CTypedefAlign[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
   CTypedefIsUEnum[CTypedefCount] := False;
+  CTypedefPtrDepth[CTypedefCount] := 0;
+  CTypedefPtrBaseTk[CTypedefCount] := Ord(tyUnknown);
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -7694,6 +7698,7 @@ var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
+  tdPtrDepth, tdPtrBaseTk: Integer;   { a `T **` typedef's own depth and the kind under its stars (CTypedefPtrDepth) }
   tyNode, tyCallee: Integer;   { typeof(expr): the expression's node (and CNodeProcSig's callee out-param) }
   tdLongRank: Integer;   { long rank carried by a typedef-name base; see the CTypeLong assignment }
   tdDimI: Integer;       { copies an array typedef's dims out of CTypedefDims into CTypeTypedefDims }
@@ -7731,6 +7736,8 @@ begin
   CTypeBaseIsEnum := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
+  tdPtrDepth := 0; tdPtrBaseTk := Ord(tyUnknown);
+  CTypeTdLvl := 0;
   tdIsFnType := False;
   CTypeProcSig := -1;
   CTypePtrElemProcSig := -1;
@@ -7910,6 +7917,8 @@ begin
               baseRec := CTypedefRec[tdIdx];
               tdElemTk := CTypedefElemTk[tdIdx];
               tdElemRec := CTypedefRec[tdIdx];
+              tdPtrDepth := CTypedefPtrDepth[tdIdx];
+              tdPtrBaseTk := CTypedefPtrBaseTk[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               CTypePtrElemProcSig := CTypedefPtrElemProcSig[tdIdx]; { ptr-to-fn-ptr typedef: the pointee's }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
@@ -8032,6 +8041,23 @@ begin
     CTypeElemTk := tdElemTk;
     CTypeElemRec := tdElemRec;
   end;
+  { A TYPEDEF OF `T **` (or deeper) carries its depth: `PPD q` is `struct D
+    **q`, and without the depth it was a pointer to an unknown pointer --
+    `q[0]->w` read a stray word and `(*q)->v` the wrong one. The stars below
+    add to it (`PPD *x` is three levels). One-level pointer typedefs keep
+    depth 0 and their own readers (the cast's and the declarator's).
+    bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+  CTypeTdLvl := 0;
+  if isTypedef and (Result = tyPointer) and (tdPtrDepth >= 2) and (not tdIsFnType) then
+  begin
+    CTypeTdLvl := tdPtrDepth;
+    CTypePtrDepth := tdPtrDepth;
+    CTypeElemTk := Ord(tyPointer);
+    CTypeElemRec := tdElemRec;
+    CTypePtrBaseTk := tdPtrBaseTk;
+    CTypePtrBaseRec := tdElemRec;
+    baseRec := tdElemRec;
+  end;
   { Function-TYPE typedef `typedef R N(args)` used as `N *p`: the star is the
     C function-to-pointer DECAY, not an extra indirection — `N *p` is the
     callable pointer, same as a fn-pointer typedef's `N p`. Absorb one star,
@@ -8081,8 +8107,17 @@ begin
       CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
       CTypePtrBaseTk := Ord(Result);
     end;
-    CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
-    CTypePtrBaseRec := baseRec;
+    if CTypeTdLvl = 0 then
+    begin
+      CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
+      CTypePtrBaseRec := baseRec;
+    end
+    else
+    begin
+      { stars over a `T **` typedef: the base stays the typedef's (above) }
+      CTypeElemTk := Ord(tyPointer);
+      CTypePtrBaseTk := tdPtrBaseTk;
+    end;
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);
@@ -8672,6 +8707,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
     hadStar: Boolean;
+    tdLvl: Integer;   { CTypeTdLvl of the base: levels a `T **` typedef put into ptrDepth }
     sibTdLvl, sibTdBaseTk, sibTdBaseRec: Integer;   { siblings over a pointer typedef: its extra level and pointee }
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
@@ -8712,6 +8748,7 @@ begin
   elemTkOrd := CTypeElemTk;
   elemRec := CTypeElemRec;
   ptrDepth := CTypePtrDepth;
+  tdLvl := CTypeTdLvl;
   ptrBaseTk := CTypePtrBaseTk;
   ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
@@ -8930,7 +8967,7 @@ begin
     recover the pre-star scalar base; each later declarator gets its own stars.
     A pointer from a *literal* star (elemTk known) is redistributable; a pointer
     from a typedef (no star) is the whole type and applies to every sibling. }
-  hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
+  hadStar := (baseTk = tyPointer) and (CTypePtrDepth > tdLvl);   { a `T **` typedef's own depth is no star }
   if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
   { A POINTER TYPEDEF base (`IP pv = v, *ip;` / `Line *a, *b;`): every
@@ -8939,7 +8976,12 @@ begin
     is the typedef's POINTEE then, and a sibling without stars is the typedef.
     bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee }
   sibTdLvl := 0; sibTdBaseTk := Ord(tyUnknown); sibTdBaseRec := REC_NONE;
-  if hadStar and CTypeTdPtrFolded then
+  if tdLvl >= 2 then
+  begin
+    { `PPD a, *b, c;`: every sibling stands over the typedef's own levels }
+    sibTdLvl := tdLvl; sibTdBaseTk := ptrBaseTk; sibTdBaseRec := ptrBaseRec;
+  end
+  else if hadStar and CTypeTdPtrFolded then
   begin
     sibTdLvl := 1; sibTdBaseTk := ptrBaseTk; sibTdBaseRec := ptrBaseRec;
   end
@@ -9007,6 +9049,13 @@ begin
           declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
           declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
           declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if (declPtr = 0) and hadStar and (sibTdLvl >= 2) then
+        begin
+          declTk := tyPointer; declPtrDepth := sibTdLvl;
+          declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+          declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
           declProcSig := -1; declPtrElemSig := -1;
         end
         else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
@@ -9895,6 +9944,14 @@ begin
         declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
         declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
         declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if (declPtr = 0) and hadStar and (sibTdLvl >= 2) then
+      begin
+        { `PPD *a, b;`: b is the two-level typedef itself }
+        declTk := tyPointer; declPtrDepth := sibTdLvl;
+        declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+        declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
         declProcSig := -1; declPtrElemSig := -1;
       end
       else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
@@ -23762,6 +23819,26 @@ begin
   end;
 end;
 
+
+{ `typedef struct D **PPD;` -- TWO OR MORE stars over a struct. These arms
+  counted the stars and registered `struct D *` whatever the count, so PPD was
+  one level short: `q[0]` was the struct itself and `q[0]->w` dereferenced its
+  first field. Recorded as the general path records a `T **` typedef: a pointer
+  element over the record, with the depth and the kind under the stars
+  (ParseCDeclType reads them). bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+procedure CAddStructPtrPtrTypedef(const nm: AnsiString; nmOff, nmLen, stars, rec: Integer);
+var ti: Integer;
+begin
+  AddCTypedefEx(nm, tyPointer, Ord(tyPointer), rec);
+  ti := FindCTypedef(nm);
+  if ti >= 0 then
+  begin
+    CTypedefPtrDepth[ti] := stars;
+    CTypedefPtrBaseTk[ti] := Ord(tyRecord);
+  end;
+  RegisterPtrAlias(nmOff, nmLen, Ord(tyPointer), rec, 0, 0);
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
@@ -23846,7 +23923,9 @@ begin
         nmOff := Tokens[TokPos-1].SOffset;
         nmLen := Tokens[TokPos-1].SLen;
         nm := CurTok.SVal; Next;
-        if ptrStars > 0 then
+        if ptrStars >= 2 then
+          CAddStructPtrPtrTypedef(nm, nmOff, nmLen, ptrStars, REC_UCLASS_BASE + ci)
+        else if ptrStars > 0 then
         begin
           { typedef struct {..} *Name; — the record stays anonymous, Name is a
             pointer to it (both for the C parser and as a Pascal pointer type). }
@@ -23884,7 +23963,9 @@ begin
       if hasTag then
       begin
         ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE;
-        if ptrStars > 0 then
+        if ptrStars >= 2 then
+          CAddStructPtrPtrTypedef(nm, nmOff, nmLen, ptrStars, REC_UCLASS_BASE + ci)
+        else if ptrStars > 0 then
         begin
           AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
           RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
@@ -24114,6 +24195,15 @@ begin
     begin
       AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
       if CTypeProcSig >= 0 then CTypedefProcSig[FindCTypedef(nm)] := CTypeProcSig;
+      { `typedef struct D **PPD;` -- two or more levels: keep the depth and the
+        kind under the stars, so `PPD q` is `struct D **q` (ParseCDeclType).
+        One level needs neither: its pointee is CTypedefElemTk/Rec already.
+        bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+      if (CTypeProcSig < 0) and (CTypePtrElemProcSig < 0) and (CTypePtrDepth >= 2) then
+      begin
+        CTypedefPtrDepth[FindCTypedef(nm)] := CTypePtrDepth;
+        CTypedefPtrBaseTk[FindCTypedef(nm)] := CTypePtrBaseTk;
+      end;
       { `typedef ft *ftl;` -- a table of function pointers (Xlib's
         XcmsFuncListPtr). Keep the pointee signature for the typedef's users.
         bug-c-call-through-an-incremented-pointer-to-function-pointer }

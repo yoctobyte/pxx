@@ -5624,6 +5624,7 @@ var
                                alone -- hence this flag. }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
   CTypeTdPtrFolded : Boolean;   { the last ParseCDeclType added a POINTER TYPEDEF's own level under its stars (`Line *l` = `Glyph **l`) }
+  CTypeTdLvl : Integer;  { the levels a `T **`-or-deeper POINTER TYPEDEF put into the last ParseCDeclType's CTypePtrDepth (`PPD q` = 2, `PPD *x` = 2 of 3); 0 = none. CTypePtrDepth = CTypeTdLvl means no star was written, so a multi-declarator must not read the depth as the first declarator's own stars. bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
   CTypePtrBaseTk : Integer;  { ultimate pointed-at base TTypeKind ordinal when CTypePtrDepth>0 }
@@ -5785,6 +5786,8 @@ var
   CTypedefDims : array[0..MAX_CTYPEDEF*MAX_ARR_DIMS-1] of Integer; { the dimensions themselves, flat: typedef i, dim d is at i*MAX_ARR_DIMS + d. Flat rather than 2-D because nothing else in this file is 2-D and the self-host subset is the thing that has to compile it. }
   CTypedefLongRank : array[0..MAX_CTYPEDEF-1] of Integer; { 0 = not a long-family base, 1 = `long`, 2 = `long long`. TTypeKind COLLAPSES these -- both are tyInt64 on a 64-bit target -- so the kind alone cannot tell `typedef long T` from `typedef long long T`, and gcc rejects that pair at BOTH widths. Same distinction SymCLongRank already keeps for _Generic. }
   CTypedefIsUEnum : array[0..MAX_CTYPEDEF-1] of Boolean; { the typedef names an ENUM (no pointer) whose body has no negative enumerator: a bitfield of it is UNSIGNED, as gcc lays it out (LVGL's `lv_draw_sw_mask_line_side_t side : 2` holding 2 read back -2). bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+  CTypedefPtrDepth : array[0..MAX_CTYPEDEF-1] of Integer; { a POINTER typedef's own star count (`typedef struct D **PPD` = 2); 0 = not a pointer typedef or not recorded. CTypedefElemTk alone says only `pointer to pointer`, so every use of PPD lost the struct and `q[0]->w` read a stray word. bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+  CTypedefPtrBaseTk : array[0..MAX_CTYPEDEF-1] of Integer; { with CTypedefPtrDepth >= 2: the kind under ALL the stars (tyRecord for PPD; its record is CTypedefRec) }
   CEnumBodyHasNeg : Boolean;  { the last ParseCEnumBody saw a negative enumerator }
   CTypedefRedefArmed : Boolean; { set only while a C `typedef` STATEMENT is registering a name, so the conflicting-redefinition check fires for source typedefs and never for builtin/crtl registration. Consumed and cleared by AddCTypedefEx. }
   CTypedefPendingRank : Integer; { long rank for the row AddCTypedefEx is about to write; consumed and cleared with the flag above }

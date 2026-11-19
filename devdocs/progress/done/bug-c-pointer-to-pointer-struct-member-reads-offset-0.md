@@ -37,3 +37,29 @@ Related: bug-c-a-pointer-typedef-loses-its-base-under-indexing (a pointer
 typedef as the base of a further pointer). The cast fix in cparser.inc
 deliberately stops at one level (`castElemTk <> tyPointer`) because a `T **`
 typedef records no depth; this ticket is where the depth has to come from.
+
+## Fixed 2026-11-19 (pxx2)
+
+There were three faults, and the ticket's two lines hit different ones:
+
+1. **`typedef struct D **PPD` was registered as `struct D *`.** The two
+   struct-typedef arms of ParseCTypedef (with a body, and tag-only) counted the
+   stars and ignored the count, so `q[0]` was the struct itself. Two or more
+   stars now go through CAddStructPtrPtrTypedef.
+2. **No typedef recorded its pointer depth.** New CTypedefPtrDepth and
+   CTypedefPtrBaseTk fields. ParseCDeclType gives a `T **` typedef its depth
+   and base whether it is used bare (`PPD q` is `struct D **q`) or under more
+   stars (`PPD *x` is three levels). CTypeTdLvl tells the multi-declarator code
+   that this depth is not a star the first declarator wrote, so
+   `PPD a, *b, c;` gives each sibling the right level.
+3. **`((struct D **)p)[0]->w`, and every index-then-arrow three levels deep
+   (`z[0][0]->w` and `(*z)[0]->w` over `struct D ***z`), with no typedef
+   involved.** ResolveNodeRec's deref-of-index arm handled only an identifier
+   or a field under the index. It now handles a cast, and counts deeper
+   index/deref chains against the declared depth, the same rule as the
+   implicit-deref arm.
+
+Test: test/c_ptr_ptr_typedef.c, rows c_ppstruct26 and c_ppstruct26_i386,
+matching gcc. It covers variables, aliases, siblings, three levels, casts,
+parameters, members, sizeof and stride. A differential sweep of all 48
+standalone test/c_*{typedef,ptr,struct}*.c files against gcc is all SAME.

@@ -28918,6 +28918,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_typedef_enum_bitfield.c $(TESTTMP)/c_tdenumbf26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_tdenumbf26_gcc32 test/c_typedef_enum_bitfield.c
 	tools/expect_same.sh c_tdenumbf26_i386 "$$(timeout 20 $(TESTTMP)/c_tdenumbf26_i386)" "$$(timeout 20 $(TESTTMP)/c_tdenumbf26_gcc32)"
+	./$(COMPILER) test/c_ptr_ptr_typedef.c $(TESTTMP)/c_ppstruct26
+	@gcc -w -o $(TESTTMP)/c_ppstruct26_gcc test/c_ptr_ptr_typedef.c
+	tools/expect_same.sh c_ppstruct26 "$$(timeout 20 $(TESTTMP)/c_ppstruct26)" "$$(timeout 20 $(TESTTMP)/c_ppstruct26_gcc)"
+	./$(COMPILER) --target=i386 test/c_ptr_ptr_typedef.c $(TESTTMP)/c_ppstruct26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_ppstruct26_gcc32 test/c_ptr_ptr_typedef.c
+	tools/expect_same.sh c_ppstruct26_i386 "$$(timeout 20 $(TESTTMP)/c_ppstruct26_i386)" "$$(timeout 20 $(TESTTMP)/c_ppstruct26_gcc32)"
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

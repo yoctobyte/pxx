@@ -21471,6 +21471,45 @@ begin
         else
           Result := REC_NONE;
       end
+      else if (ASTKind[innerNode] = AN_PTR_CAST) and (Integer(ASTIVal[innerNode]) >= 0) then
+      begin
+        { `((struct D **)p)[i]->w`: the index takes one level and the deref the
+          other, so a TWO-level cast lands on its ultimate base. No arm here
+          was REC_NONE and `->w` read offset 0, while `(*(struct D **)p)->w`
+          (the AN_PTR_CAST arm below) was right.
+          bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+        if AliasPtrDepth[Integer(ASTIVal[innerNode])] = 2 then
+          Result := AliasPtrBaseRec[Integer(ASTIVal[innerNode])]
+        else
+          Result := AliasElemRec[Integer(ASTIVal[innerNode])];
+      end
+      else if (ASTKind[innerNode] = AN_INDEX) or (ASTKind[innerNode] = AN_DEREF) then
+      begin
+        { THREE OR MORE LEVELS: `z[0][0]->w`, `(*z)[0]->w` over `struct D ***z`.
+          Each subscript and each deref takes one level; when they add up to
+          the declared depth the value is the ULTIMATE base, the same counted
+          rule as the implicit-deref arm below. These fell to REC_NONE and the
+          member read offset 0, while `(**z)->w` was right.
+          bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+        dwDepth := 2;
+        while (innerNode >= 0) and
+              ((ASTKind[innerNode] = AN_INDEX) or (ASTKind[innerNode] = AN_DEREF)) do
+        begin
+          Inc(dwDepth);
+          innerNode := ASTLeft[innerNode];
+        end;
+        Result := REC_NONE;
+        if innerNode >= 0 then
+        begin
+          if (ASTKind[innerNode] = AN_IDENT) and (Integer(ASTIVal[innerNode]) >= 0) and
+             (Integer(ASTIVal[innerNode]) < SymCount) and
+             (SymPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
+            Result := SymPtrBaseRec[Integer(ASTIVal[innerNode])]
+          else if (ASTKind[innerNode] = AN_PTR_CAST) and (Integer(ASTIVal[innerNode]) >= 0) and
+                  (AliasPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
+            Result := AliasPtrBaseRec[Integer(ASTIVal[innerNode])];
+        end;
+      end
       else
         Result := REC_NONE;
     end
