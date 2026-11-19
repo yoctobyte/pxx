@@ -24119,6 +24119,8 @@ test-core: $(COMPILER)
 	# bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator
 	./$(COMPILER) test/test_mgmt_operators_copy_contained.pas $(TESTTMP)/test_mgmt_op_copyc26
 	$(TESTTMP)/test_mgmt_op_copyc26 | diff -u test/test_mgmt_operators_copy_contained.expected -
+	./$(COMPILER) test/test_mgmt_operators_copy_beside_a_managed_field.pas $(TESTTMP)/test_mgmt_op_copyarc26
+	$(TESTTMP)/test_mgmt_op_copyarc26 | diff -u test/test_mgmt_operators_copy_beside_a_managed_field.expected -
 	# ...and the SECOND site, which is a second MECHANISM: a whole static-ARRAY
 	# assignment is one block copy and never enters the per-element assign path,
 	# so even a non-nested element with its own Copy was skipped. Both controls

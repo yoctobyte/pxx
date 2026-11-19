@@ -4,7 +4,7 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "MEASURED 2026-09-07. A record holding an ARC field (AnsiString, dynamic array, COM interface) ALONGSIDE a field whose type declares `class operator Copy` does not run that operator on assignment -- it takes the fused IR_COPY_REC_MANAGED byte copy instead. `TMixed = record s: AnsiString; a: TA; k: Integer` with TA declaring Copy: fpc 3.2.2 prints `A.Copy src=42 dst-on-entry=99` and leaves `m2.a.id=99`; pxx prints nothing and leaves `m2.a.id=42`. THIS IS A DELIBERATE REFUSAL, NOT AN OVERSIGHT: IRRecCopyWithHoles and IRArrayElemCopyOps both exit on RecordHasManagedFields, because the hole-punching they do needs the copy expressed as BYTE RANGES and IR_COPY_REC_MANAGED is a single fused retain-release-copy op implemented on six backends that takes a RECORD ID and walks that record's layout descriptor. It cannot be handed a range. THE REFUSAL IS THE OUTER RECORD'S ANSWER and RecordHasManagedFields recurses, so a record whose only managed member sits INSIDE the operator field is refused too -- conservative in the direction that preserves today's behaviour. TWO ROUTES OUT, neither costed: a second descriptor kind describing a SUBRANGE of a record, or an unrolled per-field ARC sequence at the IR level for the mixed case only. The non-ARC halves are fixed and pinned (test_mgmt_operators_copy_contained, test_mgmt_operators_copy_array); this is what is left of bug-a-a-whole-record-assignment-does-not-run-a-contained-fields-copy-operator."
-status: open
+status: done
 ---
 
 # A record mixing an ARC field with a `Copy`-operator field skips the operator
@@ -72,3 +72,26 @@ for this ticket must leave both byte-identical and add the mixed rows to one of
 them. **The operator must PRINT** — a value check cannot see this defect, since
 an operator that dutifully copies its fields is indistinguishable from the byte
 copy that would have moved the same bytes.
+
+
+# Fixed 2026-11-19 (claude-dupwt): a third route, save/restore around the fused op
+
+Neither costed route was needed for the shape this ticket reports. When every
+Copy-operator field is itself UNMANAGED, IRRecCopyWithHoles now:
+1. saves each operator field's DESTINATION bytes into a temp (AllocRecVar of
+   the field's record);
+2. runs IR_COPY_REC_MANAGED over the WHOLE record, unchanged, so every
+   AnsiString is retained and released exactly as before;
+3. puts each saved field back and calls its operator on (src field, dst field).
+The operator therefore sees the destination's OLD value, which is fpc's
+measured order. Raw save/restore is sound only because those fields hold no
+handle. A Copy field with a managed member would get a released handle back, so
+that shape (the conservative half of "why it is refused") still falls back
+to the fused op with the operator skipped, as before.
+
+Measured against fpc 3.2.2, byte-identical: two operator fields between two
+AnsiStrings, 2,000 repeated assignments and a function result, all with
+`A.Copy src=42 dst-on-entry=99`. HeapLiveBytes shows no growth over 10,000
+assignments. test_mgmt_operators_copy_contained and _copy_array (this ticket's
+controls) are unchanged. New test test_mgmt_operators_copy_beside_a_managed_field
+(row test_mgmt_op_copyarc26); the previous compiler fails its first line.

@@ -10773,12 +10773,62 @@ function IRRecCopyWithHoles(recId, dstAddr, srcAddr: Integer): Integer;
   EVERY REFUSAL RETURNS BEFORE A SINGLE NODE IS APPENDED, which is what makes
   the caller's `if < 0 then fall back` shape legal: `dstAddr` and `srcAddr` are
   still unreferenced, so the fallback IR_COPY_REC can take them. }
-var symD, symS, total: Integer;
+var symD, symS, total, i, last: Integer;
+    holeTmp: array[0..REC_COPY_UNROLL_MAX-1] of Integer;
 begin
   IRRecCopyWithHoles := -1;
   if recId = REC_NONE then Exit;
   if recId < REC_UCLASS_BASE then Exit;
-  if RecordHasManagedFields(recId) then Exit;
+  if RecordHasManagedFields(recId) then
+  begin
+    { THE ARC CASE, served when every Copy-operator field is itself
+      unmanaged. Rather than punch the fused op, it runs WHOLE (so the
+      record's AnsiStrings and other handles are retained/released exactly as
+      before), and the operator fields are made to look untouched: their
+      destination bytes are saved before the fused copy and put back after it,
+      and then each operator runs on (src field, dst field). That is fpc's
+      observable order. The operator sees the destination's OLD value, and the
+      field's bytes are whatever it leaves there. Raw save/restore is sound
+      ONLY because the operator field holds no handle. A field with a managed
+      member would get a released handle back, so that shape keeps refusing.
+      Measured against fpc 3.2.2: `A.Copy src=42 dst-on-entry=99`, and
+      m2.a.id=99 with m2.s and m2.k copied.
+      bug-a-a-record-mixing-an-arc-field-with-a-copy-operator-field-skips-the-operator }
+    RecCopyHoleCount := 0;
+    if not RecCollectCopyHoles(recId, 0, 0) then Exit;
+    if RecCopyHoleCount = 0 then Exit;
+    if RecCopyHoleCount > REC_COPY_UNROLL_MAX then Exit;
+    for i := 0 to RecCopyHoleCount - 1 do
+      if RecordHasManagedFields(RecCopyHoleRec[i]) then Exit;
+    total := RecSize(recId);
+    if total <= 0 then Exit;
+    symD := AllocVar('', tyPointer);
+    symS := AllocVar('', tyPointer);
+    IRAppend(IR_STORE_SYM, symD, dstAddr, -1, 0, Ord(tyPointer));
+    IRAppend(IR_STORE_SYM, symS, srcAddr, -1, 0, Ord(tyPointer));
+    for i := 0 to RecCopyHoleCount - 1 do
+    begin
+      holeTmp[i] := AllocRecVar('', RecCopyHoleRec[i]);
+      IRAppend(IR_COPY_REC, IRAppend(IR_LEA, holeTmp[i], -1, -1, 0, Ord(tyPointer)),
+               IRRecHoleAddr(symD, RecCopyHoleOff[i]), -1,
+               RecCopyHoleSize[i], Ord(tyRecord));
+    end;
+    last := IRAppend(IR_COPY_REC_MANAGED,
+                     IRAppend(IR_LOAD_SYM, symD, -1, -1, 0, Ord(tyPointer)),
+                     IRAppend(IR_LOAD_SYM, symS, -1, -1, 0, Ord(tyPointer)),
+                     recId, total, Ord(tyRecord));
+    for i := 0 to RecCopyHoleCount - 1 do
+    begin
+      IRAppend(IR_COPY_REC, IRRecHoleAddr(symD, RecCopyHoleOff[i]),
+               IRAppend(IR_LEA, holeTmp[i], -1, -1, 0, Ord(tyPointer)), -1,
+               RecCopyHoleSize[i], Ord(tyRecord));
+      last := IRRecCopyOpCall(RecCopyHoleRec[i],
+                              IRRecHoleAddr(symD, RecCopyHoleOff[i]),
+                              IRRecHoleAddr(symS, RecCopyHoleOff[i]));
+    end;
+    IRRecCopyWithHoles := last;
+    Exit;
+  end;
   RecCopyHoleCount := 0;
   if not RecCollectCopyHoles(recId, 0, 0) then Exit;
   if RecCopyHoleCount = 0 then Exit;

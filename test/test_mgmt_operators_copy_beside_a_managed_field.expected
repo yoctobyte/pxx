@@ -1,0 +1,6 @@
+A.Copy src=42 dst-on-entry=99
+A.Copy src=43 dst-on-entry=98
+m2.s=from-one m2.a.id=1099 m2.k=7 m2.t=xy m2.b.id=1098
+m2.s still from-one
+n4 n5 calls=4002
+q! tail-q 2002099 2002098
