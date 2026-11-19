@@ -2589,6 +2589,10 @@ begin
         The prefix width comes from FrozenStrPrefixSize by way of these two
         helpers, so this site adds no sixth place for a layout change to miss. }
       EmitSlotAddrRISCV32(reg_a0, pathSym);
+      { a PARAMETER's slot holds the caller's buffer address: load it (see
+        the xtensa twin). }
+      if ABIParamSlotHoldsValueAddr(pathSym) then
+        rv32_lw(reg_a0, reg_a0, 0);
       EmitLoadStrLenRISCV32(reg_a1, reg_a0, Syms[pathSym].TypeKind);
       EmitLeaStrDataRISCV32(reg_a2, reg_a0, Syms[pathSym].TypeKind);
       rv32_add(reg_a1, reg_a2, reg_a1);

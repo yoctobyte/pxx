@@ -2049,6 +2049,25 @@ begin
   end;
 end;
 
+procedure EmitFrozenSysPathA64(si: Integer);
+{ x0 := a NUL-terminated path from the frozen (length-prefixed) string symbol
+  si: its buffer address the way IR_LEA computes it, then NUL at data+len, then
+  the DATA address. riscv32's EmitSysBuiltinRISCV32 shape. bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it }
+begin
+  if ABIParamSlotHoldsValueAddr(si) and not Syms[si].IsRef then
+  begin
+    EmitLoadVarAddrA64(si);
+    EmitI32($F9400000);                 { ldr x0, [x0] = caller's buffer }
+  end
+  else
+    EmitLoadVarAddrA64(si);
+  EmitLoadStrLenA64(1, 0, Syms[si].TypeKind);
+  EmitLeaStrDataA64(2, 0, Syms[si].TypeKind);
+  EmitI32($8B010041);                   { add x1, x2, x1 }
+  EmitI32($3900003F);                   { strb wzr, [x1] }
+  EmitI32($AA0203E0);                   { mov x0, x2 }
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -3692,9 +3711,14 @@ begin
             { AArch64 has openat, not open: openat(AT_FDCWD, path, flags, 0). }
             argNode := IRB[node];
             valNode := IRA[argNode];
-            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
-              Error('target aarch64: SysOpen expects a managed AnsiString path');
-            IREmitNodeAarch64(valNode);        { x0 = path }
+            if SysPathFrozenSym(argNode) >= 0 then
+              EmitFrozenSysPathA64(SysPathFrozenSym(argNode))   { x0 = path }
+            else
+            begin
+              if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+                Error('target aarch64: SysOpen expects a string path');
+              IREmitNodeAarch64(valNode);      { x0 = path }
+            end;
             EmitI32($F81F0FE0);                { push path }
             argNode := IRB[argNode];
             IREmitNodeAarch64(IRA[argNode]);   { x0 = flags }

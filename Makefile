@@ -10666,15 +10666,22 @@ test-threads: $(COMPILER)
 	# platform still Error at codegen".
 	! ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/lib_signals_fpc.pas $(TESTTMP)/sig_xtw > $(TESTTMP)/sig_xtw.log 2>&1 || exit 1
 	tools/expect_same.sh xtensa-windowed/lib_signals_refusal "$$(grep -c "error: __pxxSigNum needs SA_SIGINFO" $(TESTTMP)/sig_xtw.log)" "1"
-	# The other three REFUSE this shape by name. Asserted, not assumed: a refusal
-	# that silently became a miscompile is exactly the transition riscv32 and
-	# xtensa had already made when nobody was asserting them. These rows pin the
-	# refusal so that growing the arm on any of the three is a deliberate edit
-	# here rather than a row that quietly starts passing.
+	# The other three used to REFUSE this shape by name, and these rows pinned the
+	# refusal; the arm is grown now (the deliberate edit they asked for), so they
+	# RUN it against x86-64 like riscv32 and xtensa above.
 	# bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it
 	for a in i386 aarch64 arm32; do \
-	  ! ./$(COMPILER) --target=$$a --platform=posix test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_$$a > $(TESTTMP)/test_sosp_$$a.log 2>&1 || exit 1; \
-	  tools/expect_same.sh $$a/test_sosp_refusal "$$(grep -c "error: target $$a: SysOpen expects a managed AnsiString path" $(TESTTMP)/test_sosp_$$a.log)" "1" || exit 1; \
+	  ./$(COMPILER) --target=$$a --platform=posix test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_$$a >/dev/null || exit 1; \
+	  tools/expect_same.sh $$a/test_sosp "$$(tools/run_target.sh $$a $(TESTTMP)/test_sosp_$$a; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")" || exit 1; \
+	done
+	# ...and the path in a local, a string[N], a value and a var parameter, on all
+	# five cross targets against x86-64 (riscv32/xtensa failed the two
+	# parameter cases until 2026-11-19).
+	./$(COMPILER) test/test_sysopen_shortstring_param_paths.pas $(TESTTMP)/test_sospp26
+	for a in i386 aarch64 arm32 riscv32 xtensa; do \
+	  x=""; [ $$a = xtensa ] && x=--xtensa-soft-mulhigh; \
+	  ./$(COMPILER) --target=$$a --platform=posix $$x test/test_sysopen_shortstring_param_paths.pas $(TESTTMP)/test_sospp_$$a >/dev/null || exit 1; \
+	  tools/expect_same.sh $$a/test_sospp "$$(tools/run_target.sh $$a $(TESTTMP)/test_sospp_$$a; echo "exit=$$?")" "$$($(TESTTMP)/test_sospp26; echo "exit=$$?")" || exit 1; \
 	done
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the

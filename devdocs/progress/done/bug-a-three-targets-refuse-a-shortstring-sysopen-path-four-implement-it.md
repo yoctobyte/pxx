@@ -60,3 +60,24 @@ per-backend part is six instructions.
 Related: `bug-a-an-indexed-shortstring-sysopen-path-segfaults-on-x86-64`, which
 is the same "address comes from the symbol, not from the lvalue the parser
 built" root cause seen from the other side.
+
+
+## 2026-11-19 (claude-dupwt): done, and two more targets were wrong
+
+i386, aarch64 and arm32 now implement the arm instead of refusing. Each has an
+EmitFrozenSysPath helper that takes the buffer address the way that backend's
+IR_LEA computes it (global, a parameter slot holding the caller's buffer, or
+a local), stores NUL at data+len and passes the data pointer: riscv32's
+shape, built from each backend's existing length/data helpers. The refusal
+remains for a path that is neither an AnsiString nor a frozen-string variable.
+
+Testing the variants turned up a defect in the targets that already
+"worked": riscv32 and xtensa took the parameter SLOT's address for a value or
+var ShortString parameter, so SysOpen(p) inside a routine opened the slot's
+bytes and failed. Both now load through the slot when
+ABIParamSlotHoldsValueAddr says it holds the caller's buffer.
+
+New test test_sysopen_shortstring_param_paths.pas covers a local, a string[N],
+a value and a var parameter, and a missing file. Its row runs all five cross
+targets against x86-64. The three refusal rows became run rows against
+x86-64. All 8 cross runs match; gate quick passes.

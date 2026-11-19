@@ -1853,6 +1853,23 @@ begin
   EmitB($81); EmitB($C4); EmitI32(8);             { add esp, 8 }
 end;
 
+procedure EmitFrozenSysPath386(si: Integer);
+{ eax := a NUL-terminated path from the frozen string symbol si: its buffer
+  address as IR_LEA computes it here (global abs32, a slot holding the caller's
+  buffer, or the local's own address), NUL at data+len, then the DATA address.
+  bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it }
+begin
+  if Syms[si].Kind = skGlobal then
+    begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end            { mov eax, abs32 }
+  else if ABIParamSlotHoldsValueAddr(si) then
+    begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end    { mov eax, [ebp+off] }
+  else
+    begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end;   { lea eax, [ebp+off] }
+  EmitLoadStrLen386(1, 0, Syms[si].TypeKind);                      { ecx = len }
+  EmitLeaStrData386(0, Syms[si].TypeKind);                         { eax = data }
+  EmitB($C6); EmitB($04); EmitB($08); EmitB($00);                  { mov byte [eax+ecx], 0 }
+end;
+
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
@@ -4006,9 +4023,14 @@ begin
           begin
             argNode := IRB[node];
             valNode := IRA[argNode];
-            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
-              Error('target i386: SysOpen expects a managed AnsiString path');
-            IREmitNode386(valNode);          { eax = path }
+            if SysPathFrozenSym(argNode) >= 0 then
+              EmitFrozenSysPath386(SysPathFrozenSym(argNode))   { eax = path }
+            else
+            begin
+              if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+                Error('target i386: SysOpen expects a string path');
+              IREmitNode386(valNode);        { eax = path }
+            end;
             EmitAsm386('push eax');  { push path }
             argNode := IRB[argNode];
             IREmitNode386(IRA[argNode]);     { eax = flags }

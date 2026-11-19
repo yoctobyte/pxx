@@ -1488,6 +1488,20 @@ begin
   end;
 end;
 
+procedure EmitFrozenSysPathArm32(si: Integer);
+{ r0 := a NUL-terminated path from the frozen string symbol si: its buffer
+  address as IR_LEA computes it here, NUL at data+len, then the DATA address.
+  bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it }
+begin
+  EmitLoadVarAddrArm32(si);
+  EmitLoadStrLenArm32(1, 0, Syms[si].TypeKind);
+  EmitLeaStrDataArm32(2, 0, Syms[si].TypeKind);
+  EmitI32($E0821001);                   { add r1, r2, r1 }
+  EmitI32($E3A03000);                   { mov r3, #0 }
+  EmitI32($E5C13000);                   { strb r3, [r1] }
+  EmitI32($E1A00002);                   { mov r0, r2 }
+end;
+
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
@@ -3053,9 +3067,14 @@ begin
               r2=mode. Managed AnsiString handles are nul-terminated paths. }
             argNode := IRB[node];
             valNode := IRA[argNode];
-            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
-              Error('target arm32: SysOpen expects a managed AnsiString path');
-            IREmitNodeArm32(valNode);       { r0 = path handle }
+            if SysPathFrozenSym(argNode) >= 0 then
+              EmitFrozenSysPathArm32(SysPathFrozenSym(argNode))   { r0 = path }
+            else
+            begin
+              if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+                Error('target arm32: SysOpen expects a string path');
+              IREmitNodeArm32(valNode);     { r0 = path handle }
+            end;
             EmitI32($E92D0001);             { push {r0} path }
             argNode := IRB[argNode];
             IREmitNodeArm32(IRA[argNode]);  { r0 = flags }

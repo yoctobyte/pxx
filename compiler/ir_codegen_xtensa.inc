@@ -2486,6 +2486,12 @@ begin
         evaluation: what a generic load leaves in a register for a frozen
         string is a per-backend convention, the slot address is not. }
       EmitSlotAddrXtensa(reg_xtensa_a2, pathSym);
+      { a PARAMETER's slot holds the caller's buffer address (value or var
+        ShortString), not the buffer: load it. Without this a path passed
+        as a parameter opened the slot's bytes and failed (found by the
+        i386/aarch64/arm32 arms' variant test, 2026-11-19). }
+      if ABIParamSlotHoldsValueAddr(pathSym) then
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       EmitLoadStrLenXtensa(reg_xtensa_a3, reg_xtensa_a2, Syms[pathSym].TypeKind);
       EmitLeaStrDataXtensa(reg_xtensa_a4, reg_xtensa_a2, Syms[pathSym].TypeKind);
       xtensa_add(reg_xtensa_a3, reg_xtensa_a4, reg_xtensa_a3);
