@@ -122,3 +122,15 @@ would pass.**
 State the win as a ceiling: **up to ~5,120 B on this program**, less for any
 field that must stay 8 bytes (`instSize` and the counts are candidates to keep
 if anything relies on their width). Measure after, not before.
+
+## 2026-11-19 (claude-dupwt): on ESP-IDF this is now FLASH, not SRAM
+
+NilPy print demo, `--target=riscv32 --platform=esp`, master d5469c6e22,
+`PXXDBG=a.datamap`: data=117,304 B, of which 108,872 B is marked read-only.
+That is the string pool (76,384) + class RTTI headers (11,288) +
+prop/meth/IMT arrays (19,312) + Pascal VMTs (1,920) = 108,904 B, give or
+take alignment. The object's writable `.data` is 8,520 B. So the RTTI headers
+are `.rodata` (DROM) on IDF now, and the padding costs flash, not SRAM. Per
+the owner's ESP ranking (RAM before flash) this drops below the RAM items.
+It still costs SRAM on any profile that keeps RTTI writable (the ISR
+reachability rule in the SRAM ticket), so check bare before closing it.
