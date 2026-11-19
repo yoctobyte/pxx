@@ -3,8 +3,8 @@ slug: bug-a-unary-minus-on-a-variant-loses-the-sign-of-zero-because-the-correct-
 track: A
 prio: 35
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-10
 found-by: frankB
 tags: [variant, float, negative-zero, half-wired-door, nilpy]
@@ -70,3 +70,22 @@ A row wrote `math.atan(-x)` while looping `for x in xs`, and the `x = 0.0`
 iteration disagreed with CPython. The test now writes every sign out longhand
 and records the absence in its header rather than asserting a known divergence
 against a CPython-generated oracle.
+
+
+# Fixed 2026-11-19 (claude-dupwt): Pascal rewrites `-v` as `v * -1`
+
+Re-measured first. The NilPy half is already right in every shape, including a
+`def f(a)` parameter and a list element, which print -0.0. The Pascal Variant
+arm was still wrong: ir.inc's AN_NEG lowering rewrote `-v` to `0 - v`, and
+IEEE gives 0 - (+0.0) = +0.0. pyneg_v is in pylib, which a Pascal program
+does not have, so the fix is the rewrite rather than wiring that helper.
+-1 * (+0.0) is -0.0.
+
+Measured before choosing it: in pxx, `0 - v` and `v * -1` give the same value
+AND VarType for string ('5'), int, bool and double payloads, and for
+Low(Int64)/High(Int64). NilPy keeps `0 - v`, because there `str * int` is
+repetition and `-"ab"` would answer '' instead of TypeError (re-checked: still
+TypeError).
+
+test_a_unary_minus_on_a_variant_keeps_the_sign_of_zero (row varnegzero26) is
+fpc's output line for line; the previous compiler fails its first line.

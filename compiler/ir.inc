@@ -14325,15 +14325,33 @@ begin
           runtime tag dispatch decides the arithmetic. Unboxing to a fixed
           scalar here would have to guess int vs double and would print -7.0
           for an int payload; IR_NEG on the raw 8 bytes negated the TAG.
-          (bug-a-nilpy-variant-element-not-usable-as-scalar.) }
+          (bug-a-nilpy-variant-element-not-usable-as-scalar.)
+
+          PASCAL: `v * -1`, NOT `0 - v`. IEEE gives 0 - (+0.0) = +0.0, so
+          `-v` on a Variant holding +0.0 lost the sign that a plain Double's
+          `-d` keeps (and FPC's Variant keeps). -1 * (+0.0) is -0.0. Measured
+          in pxx: the two forms agree on value AND VarType for string, int,
+          bool and double payloads. NilPy keeps `0 - v`: there `str * int`
+          is repetition, so `-"ab"` would answer '' instead of TypeError.
+          bug-a-unary-minus-on-a-variant-loses-the-sign-of-zero-because-the-correct-helper-is-not-wired }
         first := AllocNode(AN_INT_LIT);
-        ASTIVal[first] := 0;
         ASTTk[first] := Ord(tyInteger);
         last := AllocNode(AN_BINOP);
-        ASTIVal[last] := Ord(tkMinus);
-        ASTLeft[last] := first;
-        ASTRight[last] := ASTLeft[node];
         ASTTk[last] := Ord(tyVariant);
+        if isNilPy then
+        begin
+          ASTIVal[first] := 0;
+          ASTIVal[last] := Ord(tkMinus);
+          ASTLeft[last] := first;
+          ASTRight[last] := ASTLeft[node];
+        end
+        else
+        begin
+          ASTIVal[first] := -1;
+          ASTIVal[last] := Ord(tkStar);
+          ASTLeft[last] := ASTLeft[node];
+          ASTRight[last] := first;
+        end;
         Result := IRLowerAST(last);
         Exit;
       end;

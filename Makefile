@@ -6324,6 +6324,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -
 	./$(COMPILER) test/test_nilpy_unary_operators_and_abs_on_a_bool_answer_an_int.npy $(TESTTMP)/boolabs26
 	$(TESTTMP)/boolabs26 | diff -u test/test_nilpy_unary_operators_and_abs_on_a_bool_answer_an_int.expected -
+	./$(COMPILER) test/test_a_unary_minus_on_a_variant_keeps_the_sign_of_zero.pas $(TESTTMP)/varnegzero26
+	$(TESTTMP)/varnegzero26 | diff -u test/test_a_unary_minus_on_a_variant_keeps_the_sign_of_zero.expected -
 	# f(**d) with no leading *args: `**` is two tkStar and only the TRAILING star
 	# pair looked ahead for the second. Last two rows are the regression risks --
 	# dict(**d) and f(*lst) reach the call machinery by different paths.
