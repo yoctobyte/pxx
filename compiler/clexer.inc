@@ -945,6 +945,11 @@ begin
       AppendChar(s, Source[SrcPos]);
       Inc(SrcPos);
     end;
+    { gcc's alternate spellings of `signed` (e2fsprogs ext2_types.h:
+      `typedef __signed__ short __s16`). Not macros in gcc, so `#ifdef
+      __signed__` must stay false: renamed here, after preprocessing.
+      bug-c-the-signed-keyword-spelling-dunder-signed-is-not-recognised }
+    if (s = '__signed__') or (s = '__signed') then s := 'signed';
     CurTok.Kind := CKeyword(s);
     CurTok.SVal := s;
     Exit;

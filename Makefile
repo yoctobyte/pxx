@@ -28960,6 +28960,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_inllink-binding "$$(for n in only_inline later_extern proto_first st_inl ext_inl gnu_ext gnu_plain dunder_inline; do nm $(TESTTMP)/c_inllink.o | awk -v n=$$n '$$3==n && $$2!="U" {printf "%s=%s ", n, $$2}'; done)" "only_inline=t later_extern=T proto_first=T st_inl=t ext_inl=T gnu_ext=t gnu_plain=T dunder_inline=t "
 	./$(COMPILER) test/c_inline_linkage.c $(TESTTMP)/c_inllink26
 	tools/expect_same.sh c_inllink26 "$$(timeout 20 $(TESTTMP)/c_inllink26)" "36"
+	./$(COMPILER) test/c_dunder_signed.c $(TESTTMP)/c_dsigned26
+	@gcc -w -o $(TESTTMP)/c_dsigned26_gcc test/c_dunder_signed.c
+	tools/expect_same.sh c_dsigned26 "$$(timeout 20 $(TESTTMP)/c_dsigned26)" "$$(timeout 20 $(TESTTMP)/c_dsigned26_gcc)"
+	./$(COMPILER) --target=i386 test/c_dunder_signed.c $(TESTTMP)/c_dsigned26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_dsigned26_gcc32 test/c_dunder_signed.c
+	tools/expect_same.sh c_dsigned26_i386 "$$(timeout 20 $(TESTTMP)/c_dsigned26_i386)" "$$(timeout 20 $(TESTTMP)/c_dsigned26_gcc32)"
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"
