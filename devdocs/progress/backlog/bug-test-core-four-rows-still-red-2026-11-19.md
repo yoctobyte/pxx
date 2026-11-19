@@ -29,7 +29,7 @@ everything stale was graduated in the freebsd ticket's commit. These four are le
    `disp(reg)`, as gcc writes them. See
    done/bug-c-m-operands-of-one-base-each-took-a-pool-register.
 
-2. **c_host_header_needs_cdefs_glue**: `#include <spawn.h>` resolves from
+2. **FIXED 2026-11-19 (rd): crtl's signal.h defines __sigset_t (tagged __pxx_sigset) and sigset_t under glibc's guards. c_host_header_needs_cdefs_glue**: `#include <spawn.h>` resolves from
    /usr/include and pulls glibc's `bits/types/sigset_t.h`
    (`typedef __sigset_t sigset_t`), which conflicts with crtl's
    `signal.h` `typedef struct { unsigned long __val[16]; } sigset_t`. At

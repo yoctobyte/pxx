@@ -93,7 +93,18 @@ int pthread_kill(long thread, int sig);
    sigaltstack are LINK-ONLY STUBS for now (no rt_sigaction PAL bridge yet), so
    handlers registered through them never fire. Enough for tcc's optional
    crash-backtrace setup to compile and run inert. */
-typedef struct { unsigned long __val[16]; } sigset_t;
+/* Spelled as glibc spells it (__sigset_t, then sigset_t) and under glibc's
+   own guards, so a host header crtl does not ship (<spawn.h> pulls
+   bits/types/sigset_t.h) sees the type defined and skips its copy rather
+   than conflicting. test/c_host_header_needs_cdefs_glue.c */
+#ifndef ____sigset_t_defined
+#define ____sigset_t_defined
+typedef struct __pxx_sigset { unsigned long __val[16]; } __sigset_t;
+#endif
+#ifndef __sigset_t_defined
+#define __sigset_t_defined 1
+typedef __sigset_t sigset_t;
+#endif
 
 /* The kernel's siginfo: three ints, then a union whose alignment is a long's,
    so it starts at byte 16 on LP64 and byte 12 on ILP32 -- the earlier
