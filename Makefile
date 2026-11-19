@@ -21156,6 +21156,9 @@ test-core: $(COMPILER)
 	gcc -no-pie $(TESTTMP)/c_fsd_main.c $(TESTTMP)/c_fsd.o -o $(TESTTMP)/c_fsd
 	tools/expect_same.sh c_fsd "$$($(TESTTMP)/c_fsd)" "$$(cat test/c_freestanding_static_data.expected)"
 	python3 -I tools/check_xtensa_freestanding_obj.py $(COMPILER) $(TESTTMP)
+	# x86-64 --freestanding (kernel code): VLA/alloca without the red zone, run
+	# against gcc; float/double arithmetic refused (the SSE registers)
+	python3 -I tools/check_freestanding_vla_sse.py $(COMPILER) $(TESTTMP)
 	# __attribute__((section)) there: .iram1* functions, any-name data sections
 	python3 -I tools/check_esp_section_attr.py $(COMPILER) $(TESTTMP)
 	# struct copy / zero with no RTL underneath: inline loops, run under qemu

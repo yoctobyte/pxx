@@ -11490,14 +11490,6 @@ begin
           The rounding is not decoration -- `and rsp, -16` in a call sequence
           assumes rsp's 16-alignment is invariant across argument evaluation,
           and an odd alloca(1) would break that for the CALL rather than here. }
-        { The register parking below borrows the red zone, which a kernel does
-          not have: an interrupt arrives on the same stack and overwrites
-          everything below rsp (gcc builds Gibux with -mno-red-zone). Refused
-          rather than miscompiled until the three registers get frame slots. }
-        if FreestandingMode then
-          Error('--freestanding: alloca() / a variable-length array is not supported yet -- '
-              + 'its code parks registers in the red zone below rsp, which an interrupt '
-              + 'on the same stack overwrites');
         IREmitNode(IRA[node]);
         EmitAsmX64([
           'add rax, 15',
@@ -11506,16 +11498,17 @@ begin
           Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
               + 'IREmitMachineCode''s body-entry scan did not see this node');
         EmitAsmX64(['sub rsp, rax']);
-        { rdx/r10/r11 park in the red zone BELOW the new rsp for the duration.
-          The copy only ever writes above rsp and no call can intervene, so 24
-          of the 128 red-zone bytes are free scratch -- and borrowing them is
+        { rdx/r10/r11 park in three FRAME slots just above the alloca base
+          (reserved with it at body entry) for the duration -- saving them is
           what lets this run without knowing which registers the value model
-          has live, which a static push-depth counter would have required. }
-        EmitAsmX64([
-          'mov [rsp-8], rdx',
-          'mov [rsp-16], r10',
-          'mov [rsp-24], r11',
-          'mov r11, [rbp+%]', X64AllocaBaseOff]);
+          has live. They used to borrow the red zone below rsp, which a kernel
+          does not have (an interrupt arrives on the same stack; gcc builds
+          Rainyday with -mno-red-zone), so --freestanding refused alloca/VLA.
+          rbp-relative slots do not move with rsp. }
+        EmitAsmX64(['mov [rbp+%], rdx', X64AllocaBaseOff + 8]);
+        EmitAsmX64(['mov [rbp+%], r10', X64AllocaBaseOff + 16]);
+        EmitAsmX64(['mov [rbp+%], r11', X64AllocaBaseOff + 24]);
+        EmitAsmX64(['mov r11, [rbp+%]', X64AllocaBaseOff]);
         EmitAsmX64([
           'mov rdx, rsp',                        { (dst cursor) }
           'mov r10, rsp',
@@ -11539,10 +11532,9 @@ begin
         EmitAsmX64(['done:']);
         AsmScopeEnd;
         EmitAsmX64(['mov rax, r11']); { (the hole = the new base) }
-        EmitAsmX64([
-          'mov r11, [rsp-24]',
-          'mov r10, [rsp-16]',
-          'mov rdx, [rsp-8]']);
+        EmitAsmX64(['mov r11, [rbp+%]', X64AllocaBaseOff + 24]);
+        EmitAsmX64(['mov r10, [rbp+%]', X64AllocaBaseOff + 16]);
+        EmitAsmX64(['mov rdx, [rbp+%]', X64AllocaBaseOff + 8]);
       end;
 
     IR_FPU_MASK:
@@ -14993,7 +14985,10 @@ begin
   for i := 0 to IRCount - 1 do
     if (IRKind[i] = IR_ALLOCA) and (X64AllocaBaseOff = 0) then
     begin
-      FrameSize := AlignTo(FrameSize + 8, 8);
+      { the base, then three qwords above it where IR_ALLOCA parks rdx, r10
+        and r11 while it moves the live expression stack (frame slots, not
+        the red zone: a kernel has none) }
+      FrameSize := AlignTo(FrameSize + 32, 8);
       X64AllocaBaseOff := -FrameSize;
       EmitB($48); EmitB($89); EmitB($A5); EmitI32(X64AllocaBaseOff);  { mov [rbp+base], rsp }
     end;

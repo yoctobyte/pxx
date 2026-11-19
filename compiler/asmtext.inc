@@ -1671,6 +1671,23 @@ var
 begin
   AsmLblCount := 0; AsmFwCount := 0;
   n := Length(items);
+  { KERNEL CODE MUST NOT TOUCH THE SSE REGISTERS: they hold the interrupted
+    program's state (gcc builds Rainyday with -mgeneral-regs-only, which
+    refuses a float in an SSE register and calls libgcc's soft-float for the
+    rest -- a kernel links no libgcc). pxx has no soft-float on x86-64, and
+    every SSE instruction its code generator emits passes through here as
+    text, so --freestanding refuses at this one place. Inline asm does not come
+    this way: what a kernel writes in asm is its own business. The units the
+    compiler appends itself (compiler/builtin/) are exempt: they are compiled
+    into every program and dead-code elimination drops what the program does
+    not call, and C under --freestanding pulls no runtime to call them.
+    feature-c-freestanding-vla-frame-slots-and-sse-refusal }
+  if FreestandingMode and not PathIsAppendedBuiltin(PasSrcOfTok(TokPos - 1)) then
+    for i := 0 to n - 1 do
+      if (items[i].VType = vtAnsiString) and
+         (Pos('xmm', AsmTextCStr(items[i].VAnsiString)) > 0) then
+        Error('--freestanding: float/double arithmetic is not supported -- it needs the '
+            + 'SSE registers, which kernel code must leave alone (gcc: -mgeneral-regs-only)');
   cmSlot := -1;
   if (not EncToAsmBuffer) and (n >= 1) and (items[0].VType = vtAnsiString) then
     if AsmCallMemoProbe(items, cmSlot) then Exit;
