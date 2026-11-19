@@ -10967,6 +10967,24 @@ end;
 { `*q` for q a pointer-to-array: the decay node `q + 0` (stamped, see
   CIsDecayedDerefOfPtrToArr), with q a plain pointer or a cast's `(t = e, t)`.
   Its value IS the array's address, which an "m" operand must bind by address. }
+function CAsmMemIdxKey(node: Integer; var k: Int64): Boolean;
+{ `base[k]` with base a plain identifier, k an integer constant and the
+  element a scalar whose array stride is its slot size: the shape whose
+  address is the base's plus k strides, so two of them share one register.
+  bug-test-core-four-rows-still-red-2026-11-19 (casmmpress) }
+var tk: TTypeKind; sz: Integer;
+begin
+  Result := False;
+  if (node < 0) or (ASTKind[node] <> AN_INDEX) then Exit;
+  if (ASTLeft[node] < 0) or (ASTKind[ASTLeft[node]] <> AN_IDENT) then Exit;
+  if ASTIVal[ASTLeft[node]] < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if not TypeIsOrdinal(tk) then Exit;
+  sz := TypeSlotSize(tk);
+  if (sz <> 1) and (sz <> 2) and (sz <> 4) and (sz <> 8) then Exit;
+  Result := CAsmImmValue(ASTRight[node], k);
+end;
+
 function CAsmIsPtrToArrDeref(node: Integer): Boolean;
 var q: Integer;
 begin
@@ -11098,6 +11116,10 @@ var
   saveCount: Integer;
   tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
   memReg: array[0..MAX_CASM_OPERANDS-1] of Boolean;   { "m" reached through an address register }
+  { an "m" dereference that shares an earlier operand's address register:
+    the leader's index, and this operand's byte displacement from it }
+  memLead, memDisp: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  memKi, memKj: Int64;
   head, tail, nd, idn, asn, sq, blk, val, adr: Integer;
   cls, nm, rest: AnsiString;
   dummySize: Integer;
@@ -11325,6 +11347,35 @@ begin
     end;
   end;
 
+  { ---- "m" dereferences of ONE base at constant indexes share a register ----
+    `"m"(v[0]) ... "m"(v[8])` is nine objects at fixed distances from one
+    address. gcc writes them as `(%rax)`, `8(%rax)`, ... off one register; a
+    register each overflowed the nine-entry pool (test/casm_m_operand_pressure.c,
+    red since b3c5f711ea made a dereference bind its object). The follower
+    takes the leader's register and renders as `disp(reg)`. Only a plain
+    identifier base and a scalar element whose stride is its slot size are
+    grouped; anything else keeps a register of its own, as before.
+    bug-test-core-four-rows-still-red-2026-11-19 (casmmpress) }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    memLead[i] := -1;
+    memDisp[i] := 0;
+    if not memReg[i] or (i < CAsmOutCount) then Continue;
+    if not CAsmMemIdxKey(CAsmOps[i].Expr, memKi) then Continue;
+    for j := CAsmOutCount to i - 1 do
+      if memReg[j] and (memLead[j] < 0) and
+         CAsmMemIdxKey(CAsmOps[j].Expr, memKj) and
+         (ASTTk[CAsmOps[j].Expr] = ASTTk[CAsmOps[i].Expr]) and
+         (ASTIVal[ASTLeft[CAsmOps[j].Expr]] = ASTIVal[ASTLeft[CAsmOps[i].Expr]]) and
+         (Abs(memKi - memKj) < 65536) then
+      begin
+        memLead[i] := j;
+        memDisp[i] := Integer(memKi - memKj) *
+                      TypeSlotSize(IntToTypeKind(ASTTk[CAsmOps[i].Expr]));
+        Break;
+      end;
+  end;
+
   { ---- and the rest, pinned from the caller-saved pool ---- }
   { An `"m"` operand is DELIBERATELY not in this loop: it is encoded as a frame
     slot, so it consumes no pool entry. It used to take one to hold its address,
@@ -11334,6 +11385,7 @@ begin
   for i := 0 to CAsmOpCount - 1 do
   begin
     if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
+    if memLead[i] >= 0 then Continue;
     if not (CAsmClassWantsReg(CAsmOps[i].Cons) or memReg[i]) then Continue;
     while (poolNext < CAsmPoolCount) and used[CAsmPoolReg(poolNext)] do Inc(poolNext);
     if poolNext >= CAsmPoolCount then
@@ -11345,6 +11397,8 @@ begin
   end;
   for i := 0 to CAsmOpCount - 1 do
     if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+  for i := 0 to CAsmOpCount - 1 do
+    if memLead[i] >= 0 then opReg[i] := opReg[memLead[i]];
 
   { ---- widths, and a local to carry each value ----
 
@@ -11376,6 +11430,13 @@ begin
         tmpSym[i] := j;
     end;
     opOwn[i] := tmpSym[i] < 0;
+    if memLead[i] >= 0 then
+    begin
+      { no carrier: the leader's carrier loads the shared address }
+      tmpSym[i] := -1;
+      opOwn[i] := False;
+      Continue;
+    end;
     if memReg[i] then
     begin
       { the carrier holds the ADDRESS, so any width of object is fine }
@@ -11410,7 +11471,7 @@ begin
       AttBindImmOperand(i, immV);
     end
     else if memReg[i] then
-      AttBindOperand(i, ATTBIND_MEMREG, opReg[i], opSz[i], 0)
+      AttBindOperand(i, ATTBIND_MEMREG, opReg[i], opSz[i], memDisp[i])
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i], 0)
     else
@@ -11431,7 +11492,9 @@ begin
     if memReg[i] then
       AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
-    if memReg[i] then
+    if memLead[i] >= 0 then
+      { shares the leader's register, filled by the leader's move }
+    else if memReg[i] then
       AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True)
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);

@@ -851,7 +851,8 @@ begin
     AsmOpReg[slot] := AttBindReg[n];
     AsmOpIndex[slot] := -1;
     AsmOpScale[slot] := 1;
-    AsmOpVal[slot] := 0;
+    { 0, or a follower's distance from the operand whose register it shares }
+    AsmOpVal[slot] := AttBindOff[n];
     AsmOpSize[slot] := AttBindSize[n];
   end
   else

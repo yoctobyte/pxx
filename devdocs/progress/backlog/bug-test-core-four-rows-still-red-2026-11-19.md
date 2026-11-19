@@ -24,6 +24,10 @@ everything stale was graduated in the freebsd ticket's commit. These four are le
    nine such operands exhaust the pool. Fix direction: an "m" on `*p` where p
    is already a register or a frame slot needs no extra register (address it
    in place), or spill to the frame when the pool runs out. gcc compiles it.
+   **FIXED 2026-11-19 (claude-dupwt)**: "m" dereferences of one identifier
+   base at constant indexes share the first one's register, each rendered
+   `disp(reg)`, as gcc writes them. See
+   done/bug-c-m-operands-of-one-base-each-took-a-pool-register.
 
 2. **c_host_header_needs_cdefs_glue**: `#include <spawn.h>` resolves from
    /usr/include and pulls glibc's `bits/types/sigset_t.h`
