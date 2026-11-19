@@ -20868,6 +20868,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_crtlsurf26 "$$($(TESTTMP)/c_crtlsurf26 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
 	./$(COMPILER) --target=i386 test/c_crtl_toybox_surface.c $(TESTTMP)/c_crtlsurf_i386 > /dev/null
 	tools/expect_same.sh i386/c_crtlsurf_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_crtlsurf_i386 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
+	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
+	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
+	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o
+	tools/expect_same.sh i386/c_i386lnk "$$( (PXXT=yes tools/run_target.sh i386 $(TESTTMP)/c_i386lnk one; echo " rc=$$?") | tr -d '\n')" "argc=2 argv1=one ctor=1 env=yesatexit ran rc=5"
 	./$(COMPILER) test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes26 > /dev/null
 	tools/expect_same.sh c_tbshapes26 "$$($(TESTTMP)/c_tbshapes26)" "$$(cat test/c_toybox_compiler_shapes.expected)"
 	./$(COMPILER) --target=i386 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_i386 > /dev/null
