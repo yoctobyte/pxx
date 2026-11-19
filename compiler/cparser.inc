@@ -20015,9 +20015,65 @@ begin
   ASTLeft[Result] := seq; ASTRight[Result] := -1;
 end;
 
+function CSspRecHasArray(recId, depth: Integer): Boolean;
+{ A struct/union holding an array, directly or through a nested record field:
+  gcc's strong rule protects a local of such a type like an array. }
+var ci, base, i: Integer;
+begin
+  Result := False;
+  if (depth > 64) or (recId < REC_UCLASS_BASE) then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    if UFldIsArray[base + i] then begin Result := True; Exit; end;
+    if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
+       CSspRecHasArray(UFldRec_[base + i], depth + 1) then
+      begin Result := True; Exit; end;
+  end;
+end;
+
+function CSspNeedsProtection(procIdx, firstNode: Integer): Boolean;
+{ gcc's -fstack-protector-strong rule, read after the body is parsed and before
+  any of its code is generated: protect a function that has a local array, a
+  local struct/union holding one, a local or parameter whose address is taken,
+  or an alloca/VLA. Locals of inner blocks are still in Syms (a block's end
+  only unlinks their names), and the body's AST is exactly the nodes allocated
+  since firstNode.
+  feature-c-stack-protector-strong-global-guard }
+var i, n, b: Integer;
+begin
+  Result := True;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and (i <> CSspSlot) then
+    begin
+      if Syms[i].IsArray then Exit;
+      if (Syms[i].TypeKind = tyRecord) and CSspRecHasArray(SymTR[i].RecId, 0) then Exit;
+    end;
+  for n := firstNode to ASTNodeCount - 1 do
+  begin
+    if ASTKind[n] = AN_ALLOCA then Exit;
+    if ASTKind[n] = AN_ADDR then
+    begin
+      { descend through member selection to the object whose address it is;
+        a dereference or an index stops it (that is the pointee's address, and
+        an indexed ARRAY is protected by the rule above already) }
+      b := ASTLeft[n];
+      while (b >= 0) and (ASTKind[b] = AN_FIELD) do b := ASTLeft[b];
+      if (b >= 0) and (ASTKind[b] = AN_IDENT) and (ASTIVal[b] >= Procs[procIdx].ScopeBase) and
+         (ASTIVal[b] < SymCount) and
+         ((Syms[ASTIVal[b]].Kind = skLocal) or (Syms[ASTIVal[b]].Kind = skParam)) then
+        Exit;
+    end;
+  end;
+  Result := False;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
+  sspFirstNode, sspGuard: Integer;   { -fstack-protector-strong, see the body }
   name, extLib, hdrLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
@@ -20969,6 +21025,15 @@ begin
   GotoFixupCount := 0;
   for gli := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[gli] := -1;
   Procs[procIdx].ScopeBase := SymCount;
+  { -fstack-protector-strong: the canary slot is the FIRST local, so it sits at
+    rbp-8 directly under the saved rbp, with every parameter spill, local and
+    later reservation below it -- an overflow running up from a local array
+    reaches it before the return address. Reserved for every C function under
+    the flag (the strong decision needs the parsed body); only a protected one
+    ever writes or checks it. feature-c-stack-protector-strong-global-guard }
+  CSspProc := -1;
+  CSspSlot := -1;
+  if CSspStrong then CSspSlot := AllocVar('__pxx_ssp_canary', tyInt64);
   
   { PXXDBG=a.sysvplace -- the placement oracle's answer for this whole
     signature, printed so it can be diffed against `gcc -S` for the same
@@ -21703,11 +21768,28 @@ begin
   end;
 
   { Parse & Compile Body }
+  sspFirstNode := ASTNodeCount;
   node := ParseCBlockAST;
+  { -fstack-protector-strong: the body is parsed and none of its code is
+    generated yet, so this store is the first thing the body runs (the
+    parameter spills above it only write their own slots). r11: the argument
+    registers were spilled already, and r11 is nobody's. }
+  if (CSspSlot >= 0) and CSspNeedsProtection(procIdx, sspFirstNode) then
+  begin
+    sspGuard := FindSym('__stack_chk_guard');
+    if (sspGuard < 0) or (Syms[sspGuard].Kind <> skGlobal) then
+      Error('-fstack-protector-strong: __stack_chk_guard is not a global here');
+    if Syms[CSspSlot].Offset <> -8 then
+      Error('-fstack-protector-strong: the canary slot is not at rbp-8');
+    EmitAsmX64(['mov r11, [@glob]', Syms[sspGuard].Offset,
+                'mov [rbp+%], r11', Syms[CSspSlot].Offset]);
+    CSspProc := procIdx;
+  end;
   CompileAST(node);
 
   { Epilogue }
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  CSspProc := -1;   { no other body's epilogue checks this one's slot }
   PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }

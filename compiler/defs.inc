@@ -7839,6 +7839,16 @@ var
   BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
   CObjCommon      : Boolean;     { -fcommon: tentative C definitions are COMMON symbols }
+  { -fstack-protector-strong with -mstack-protector-guard=global (x86-64 C).
+    CSspStrong is the flag; CSspGuardGlobal records that the guard is the global
+    __stack_chk_guard, the only guard implemented. CSspProc is the C function
+    being compiled when it IS protected (else -1), and CSspSlot its canary slot
+    at rbp-8 -- read by EmitProcEpilog's check on every return.
+    feature-c-stack-protector-strong-global-guard }
+  CSspStrong      : Boolean;
+  CSspGuardGlobal : Boolean;
+  CSspProc        : Integer;
+  CSspSlot        : Integer;
   { an initialised flexible array member (bug-c-an-initialised-flexible-array-
     member-is-dropped): while CInitFamOpen, the aggregate walker gives a FAM no
     bound and CInitFamMax records the bytes its elements reach }

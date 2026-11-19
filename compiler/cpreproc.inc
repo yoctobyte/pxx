@@ -4520,6 +4520,9 @@ begin
     inline-asm support, not a smaller version claim.
     feature-c-corpus-busybox-multi-applet }
   CPAddLiteral('__GNUC__', '2');
+  { gcc defines it under -fstack-protector-strong; code tests it to know the
+    protector is on (Rainyday's smashtest does) }
+  if CSspStrong then CPAddLiteral('__SSP_STRONG__', '3');   { gcc: __SSP__ 1, _ALL__ 2, _STRONG__ 3 }
   CPAddLiteral('__GNUC_MINOR__', '7');
   CPAddLiteral('__GNUC_PATCHLEVEL__', '0');
   CPAddLiteral('__STDC__', '01');
@@ -4620,6 +4623,19 @@ end;
   crtl declaration is absent from the (already preprocessed) text: where
   <stdlib.h> was included, stdlib.c is auto-pulled and a static copy of the same
   name would collide with it. bug-c-builtin-needs-a-header-in-a-hosted-unit }
+procedure CAddSspDecls(var src: AnsiString);
+{ -fstack-protector-strong: the two names a protected epilogue references, the
+  guard word and the failure call, declared on line 1 like the builtin
+  prototypes (so no line number moves). gcc needs no declaration because it
+  references them below the language; here they are ordinary C declarations so
+  the object writer makes the guard an undefined data symbol and the call a
+  relocated external call. A TU that declares or defines either itself (a
+  kernel's panic path) just sees a compatible redeclaration.
+  feature-c-stack-protector-strong-global-guard }
+begin
+  src := 'extern unsigned long __stack_chk_guard; void __stack_chk_fail(void); ' + src;
+end;
+
 procedure CAddBitBuiltins(var src: AnsiString; hosted: Boolean); forward;
 
 procedure CAddFreestandingBuiltins(var src: AnsiString);

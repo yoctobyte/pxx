@@ -18544,6 +18544,25 @@ begin
     EmitB($4C); EmitB($8B); EmitB($A5); EmitI32(CsSaveOff12);  { mov r12, [rbp+off] }
     EmitB($4C); EmitB($8B); EmitB($AD); EmitI32(CsSaveOff13);  { mov r13, [rbp+off] }
   end;
+  { -fstack-protector-strong: the canary check, on every return of a protected
+    C function (each `return` and the fall-through reach here). Last before the
+    frame teardown, with r11 only: the result is already in rax/rdx/xmm0-1.
+    __stack_chk_fail does not return, so clobbering the result there is fine.
+    feature-c-stack-protector-strong-global-guard }
+  if CSspStrong and (CSspProc >= 0) and (CSspProc = CurProc) and (CSspSlot >= 0) then
+  begin
+    i := FindSym('__stack_chk_guard');
+    procIdx := FindProc('__stack_chk_fail');
+    if (i < 0) or (procIdx < 0) then
+      Error('-fstack-protector-strong: __stack_chk_guard/__stack_chk_fail are not declared');
+    EmitAsmX64(['mov r11, [rbp+%]', Syms[CSspSlot].Offset,
+                'cmp r11, [@glob]', Syms[i].Offset]);
+    EmitB($74); sz := CodeLen; EmitB(0);          { je ok (patched below) }
+    EmitCallProc(procIdx);
+    if CodeLen - sz - 1 > 127 then
+      Error('-fstack-protector-strong: the failure call does not fit a short jump');
+    Code[sz] := CodeLen - sz - 1;                 { ok: }
+  end;
   EmitB($C9); EmitB($C3);
 end;
 

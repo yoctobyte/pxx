@@ -2845,6 +2845,39 @@ begin
       CObjCommon := option = '-fcommon';
       Inc(i);
     end
+    else if (option = '-fstack-protector-strong') or
+            (option = '-fno-stack-protector') then
+    begin
+      { gcc's strong stack protector, x86-64 C, global guard only: a function
+        with a local array (or a struct holding one), an address-taken local or
+        alloca keeps a copy of __stack_chk_guard at rbp-8 and calls
+        __stack_chk_fail() if it changed by the time it returns. The LAST of the
+        two flags wins, as in gcc, so a Makefile can switch one file off.
+        feature-c-stack-protector-strong-global-guard }
+      CSspStrong := option = '-fstack-protector-strong';
+      CSspProc := -1;
+      Inc(i);
+    end
+    else if (option = '-fstack-protector') or (option = '-fstack-protector-all') or
+            (option = '-fstack-protector-explicit') then
+    begin
+      { refused, not ignored: accepting a protector flag and protecting less
+        than it says is the one failure a hardening flag must not have }
+      writeln(StdErr, 'unsupported option: ', option,
+              ' (only -fstack-protector-strong with -mstack-protector-guard=global is implemented)');
+      Halt(1);
+    end
+    else if Copy(option, 1, 24) = '-mstack-protector-guard=' then
+    begin
+      if option <> '-mstack-protector-guard=global' then
+      begin
+        writeln(StdErr, 'unsupported option: ', option,
+                ' (only -mstack-protector-guard=global is implemented)');
+        Halt(1);
+      end;
+      CSspGuardGlobal := True;
+      Inc(i);
+    end
     else if option = '-fsigned-char' then
     begin
       { Override the target psABI's plain-`char` signedness; real projects pass
@@ -3961,10 +3994,23 @@ begin
     Halt(1);
 {$else}
     AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
+    if CSspStrong and not CSspGuardGlobal then
+    begin
+      { gcc's default guard is the TLS slot fs:0x28; only the global one is
+        implemented, and protecting with a guard nobody set is no protection }
+      writeln(StdErr, '-fstack-protector-strong needs -mstack-protector-guard=global (the TLS guard is not implemented)');
+      Halt(1);
+    end;
+    if CSspStrong and (TargetArch <> TARGET_X86_64) then
+    begin
+      writeln(StdErr, '-fstack-protector-strong is implemented for x86-64 only');
+      Halt(1);
+    end;
     CPreprocess(Source, SourceFileDir);
     if FreestandingMode then CAddFreestandingBuiltins(Source)
     else CAddHostedBuiltins(Source);   { only helpers whose crtl declaration is absent }
     CAddLibBuiltinDecls(Source);       { __builtin_memcpy & co. with no header: the standard prototype }
+    if CSspStrong then CAddSspDecls(Source);   { __stack_chk_guard / __stack_chk_fail }
     CAddAtomicBuiltins(Source);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;

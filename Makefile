@@ -21130,6 +21130,24 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj -fcommon --freestanding --system-libs test/c_fcommon_tentative.c $(TESTTMP)/c_fcommon26_f.o > /dev/null
 	gcc test/c_fcommon_tentative_main.c $(TESTTMP)/c_fcommon26_f.o -o $(TESTTMP)/c_fcommon26_f
 	tools/expect_same.sh c_fcommon26_f "$$($(TESTTMP)/c_fcommon26_f)" "42"
+	# -fstack-protector-strong -mstack-protector-guard=global (Rainyday's kernel
+	# build). An overflow of a protected frame must reach __stack_chk_fail (exit
+	# 42), at -O0 and -O3; the strong rule must pick exactly gcc's functions; the
+	# guard and the failure call are undefined symbols of a freestanding object;
+	# -fno-stack-protector given last turns it off; the modes not implemented
+	# are refused, never silently weaker.
+	# feature-c-stack-protector-strong-global-guard
+	./$(COMPILER) -fstack-protector-strong -mstack-protector-guard=global test/c_stack_protector_strong.c $(TESTTMP)/c_ssp26 > /dev/null
+	tools/expect_same.sh c_ssp26 "$$($(TESTTMP)/c_ssp26; echo rc=$$?)" "$$(printf 'ssp 3\nin bounds 65 43\nstack smashed\nrc=42')"
+	./$(COMPILER) -O3 -fstack-protector-strong -mstack-protector-guard=global test/c_stack_protector_strong.c $(TESTTMP)/c_ssp26_o3 > /dev/null
+	tools/expect_same.sh c_ssp26_o3 "$$($(TESTTMP)/c_ssp26_o3; echo rc=$$?)" "$$(printf 'ssp 3\nin bounds 65 43\nstack smashed\nrc=42')"
+	./$(COMPILER) --emit-obj --freestanding -fstack-protector-strong -mstack-protector-guard=global test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_rule.o > /dev/null
+	tools/expect_same.sh c_ssp26_rule "$$(objdump -dr $(TESTTMP)/c_ssp26_rule.o | awk '/^[0-9a-f]+ <[a-z]+>:$$/ {f=$$2; gsub(/[<>:]/, "", f)} /__stack_chk_guard/ {print f}' | uniq | tr '\n' ' ')" "arr nested addr saddr sarr "
+	tools/expect_same.sh c_ssp26_und "$$(readelf -sW $(TESTTMP)/c_ssp26_rule.o | awk '$$7 == "UND" && $$8 ~ /^__stack_chk_/ {print $$8}' | sort | tr '\n' ' ')" "__stack_chk_fail __stack_chk_guard "
+	./$(COMPILER) --emit-obj --freestanding -fstack-protector-strong -mstack-protector-guard=global -fno-stack-protector test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_off.o > /dev/null
+	tools/expect_same.sh c_ssp26_off "$$(readelf -sW $(TESTTMP)/c_ssp26_off.o | grep -c __stack_chk_)" "0"
+	tools/expect_same.sh c_ssp26_refuse "$$(./$(COMPILER) --emit-obj -fstack-protector-all test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_x.o 2>&1; echo rc=$$?)" "$$(printf 'unsupported option: -fstack-protector-all (only -fstack-protector-strong with -mstack-protector-guard=global is implemented)\nrc=1')"
+	tools/expect_same.sh c_ssp26_tls "$$(./$(COMPILER) --emit-obj -fstack-protector-strong test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_x.o 2>&1; echo rc=$$?)" "$$(printf -- '-fstack-protector-strong needs -mstack-protector-guard=global (the TLS guard is not implemented)\nrc=1')"
 	# an external only dead code called is not required (bug-c-objects-require-externals-only-dead-code-called)
 	./$(COMPILER) --emit-obj test/c_dead_extern_not_required.c $(TESTTMP)/c_deadext26.o > /dev/null
 	tools/expect_same.sh c_deadext26_rel "$$(readelf -rW $(TESTTMP)/c_deadext26.o | grep -c never_defined)" "0"
