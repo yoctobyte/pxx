@@ -18878,6 +18878,24 @@ begin
       and the runtime object `--link` adds supplies them. dropbear's
       common-channel.c and mlkem768.c hit this the day the flag became that
       tool's default. }
+    { ...and on a build that EXCLUDES the runtime on purpose (a bare ESP
+      profile, --no-default-rtl), the missing body is that exclusion, not a
+      lost `uses`: say so, as FindHeapHelperOrRefuse does for PXXMemZero.
+      Since the bare xtensa/riscv32 backends copy and zero aggregates inline
+      (8e478eab32), C reaching crtl on bare is refused HERE, at its first
+      bridge call (__pxx_open in fcntl.c), instead of at PXXMemZero.
+      bug-a-the-bare-esp-crtl-refusal-moved-to-a-pxx-bridge-symbol-and-lost-its-profile }
+    if (Copy(enm, 1, 6) = '__pxx_') and not (SharedRuntime and EmitObjMode) and
+       (NoDefaultRtl or TargetIsEspClass) then
+      Error(enm + ' is part of pxx''s runtime bridge, and this build excludes '
+            + 'the default RTL, so nothing here can provide it. That exclusion is '
+            + 'deliberate: --esp-profile=bare (and --no-default-rtl) produce a '
+            + 'freestanding image. This translation unit is not freestanding -- it '
+            + 'calls into crtl, which needs the runtime. Either build it for the '
+            + 'ESP-IDF profile (drop --esp-profile=bare), where the RTL is pulled '
+            + 'and crtl is reachable, or keep the unit freestanding and do not call '
+            + 'into crtl (in C, that means no <stdio.h>/<stdlib.h>/<fcntl.h> calls '
+            + 'such as printf, malloc or open).');
     if (Copy(enm, 1, 6) = '__pxx_') and not (SharedRuntime and EmitObjMode) then
       Error(enm + ' is a pxx-internal runtime symbol and cannot be imported '
             + 'dynamically: no library exports it, so this build would link '

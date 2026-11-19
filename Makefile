@@ -42461,7 +42461,9 @@ test-emit-obj: $(COMPILER)
 	@# programmer could act on, which is the ticket's remaining half, so the
 	@# message is expected to change and the contract is not.
 	! ./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_bare.o >$(TESTTMP)/c_crtl_bare.err 2>&1
-	grep -q "PXXMemZero" $(TESTTMP)/c_crtl_bare.err
+	@# The symbol is whichever runtime piece is demanded FIRST: PXXMemZero until the bare
+	@# backends zeroed aggregates inline (8e478eab32), now a crtl bridge call (__pxx_open).
+	grep -qE "PXXMemZero|__pxx_[a-z_]+ is part of pxx's runtime bridge" $(TESTTMP)/c_crtl_bare.err
 	# AND IT IS A REFUSAL, NOT AN INTERNAL ASSERTION. Until 2026-09-24 this said
 	# `compiler error: PXXMemZero not found (xtensa)` -- the spelling this tree
 	# reserves for internal faults -- naming a compiler-private symbol with no
