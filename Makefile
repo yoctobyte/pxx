@@ -3044,6 +3044,19 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname_a64 >/dev/null || exit 1; \
 	  tools/expect_same.sh aarch64/test_nilpy_unhname_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_unhname_a64 2>&1; echo "rc=$$?")" "$$(printf 'Unhandled exception: OSError: [Errno 24] Too many open files\nrc=217')" || exit 1; \
 	else echo "=== test_nilpy_unhandled_names_the_exception: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
+	@# i386, arm32 and riscv32 printed a bare "Unhandled exception" until
+	@# bug-a-an-unhandled-exception-prints-no-class-or-message-on-the-cross-backends.
+	@# The second program raises a class that is not an Exception, which prints
+	@# its name alone (no message field to read), as on x86-64.
+	@printf 'program unhcls;\ntype TMine = class end;\nbegin\n  raise TMine.Create;\nend.\n' > $(TESTTMP)/test_unhcls26.pas
+	@for t in i386 arm32 riscv32; do \
+	  q=qemu-$$t; [ $$t = arm32 ] && q=qemu-arm; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "=== unhandled-names: $$q absent, $$t NOT verified ==="; continue; fi; \
+	  ./$(COMPILER) --target=$$t test/test_nilpy_unhandled_names_the_exception.npy $(TESTTMP)/test_nilpy_unhname_$$t >/dev/null || exit 1; \
+	  tools/expect_same.sh $$t/test_nilpy_unhname "$$(tools/run_target.sh $$t $(TESTTMP)/test_nilpy_unhname_$$t 2>&1; echo "rc=$$?")" "$$(printf 'Unhandled exception: OSError: [Errno 24] Too many open files\nrc=217')" || exit 1; \
+	  ./$(COMPILER) --target=$$t $(TESTTMP)/test_unhcls26.pas $(TESTTMP)/test_unhcls_$$t >/dev/null || exit 1; \
+	  tools/expect_same.sh $$t/test_unhcls "$$(tools/run_target.sh $$t $(TESTTMP)/test_unhcls_$$t 2>&1; echo "rc=$$?")" "$$(printf 'Unhandled exception: TMine\nrc=217')" || exit 1; \
+	done
 	# Extended-slice assignment, `x[lo:hi:step] = src`. The .expected IS python3's
 	# output -- the load-bearing property is that the assign writes EXACTLY the
 	# positions the matching READ selects, which only an oracle can check.

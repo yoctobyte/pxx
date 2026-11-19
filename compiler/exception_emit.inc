@@ -419,6 +419,55 @@ begin
         'int 128'
       ]);
 
+      { The detail line, `: <ClassName>: <Message>`, as the x86-64 and aarch64
+        blocks print it (the same reads, the same range guards). 32-bit layout,
+        measured on i386: blob = [[obj] - 8], name = [blob] with an 8-byte
+        length prefix and chars at +8, message handle at obj+8 with its length
+        at -8. int 0x80 returns in eax only, so esi/edi/ebp survive the writes;
+        ebp is free because this path exits.
+        bug-a-an-unhandled-exception-prints-no-class-or-message-on-the-cross-backends }
+      siColon := InternStr(': ');
+      EmitMovGlobAcc($A1, BSS_EXC_OBJ);                        { mov eax, [BSS_EXC_OBJ] }
+      EmitAsm386(['mov esi, eax', 'xor edi, edi', 'cmp esi, 65536']);
+      EmitB($0F); EmitB($82); jo1 := CodeLen; EmitI32(0);   { jb objbad }
+      EmitAsm386(['mov eax, [esi]', 'test eax, eax']);
+      EmitB($0F); EmitB($84); jo2 := CodeLen; EmitI32(0);   { je objbad }
+      EmitAsm386('mov edi, [eax-8]');
+      Patch32(jo1, CodeLen - (jo1 + 4));
+      Patch32(jo2, CodeLen - (jo2 + 4));
+      EmitAsm386('test edi, edi');
+      EmitB($0F); EmitB($84); jc1 := CodeLen; EmitI32(0);   { je noclass }
+      EmitAsm386(['mov ebp, [edi]', 'test ebp, ebp']);
+      EmitB($0F); EmitB($84); jc2 := CodeLen; EmitI32(0);   { je noclass }
+      EmitAsm386(['mov edx, [ebp]', 'cmp edx, 0']);
+      EmitB($0F); EmitB($8E); jc3 := CodeLen; EmitI32(0);   { jle noclass }
+      EmitAsm386('cmp edx, 256');
+      EmitB($0F); EmitB($83); jc4 := CodeLen; EmitI32(0);   { jae noclass }
+      EmitAsm386(['mov eax, 4', 'mov ebx, 2']);
+      EmitB($B9); EmitDataRef(Strs[siColon].Offset + 8);        { mov ecx, ": " }
+      EmitAsm386(['mov edx, %', Strs[siColon].Len, 'int 128']);
+      EmitAsm386(['mov eax, 4', 'mov ebx, 2', 'lea ecx, [ebp+8]', 'mov edx, [ebp]', 'int 128']);
+      Patch32(jc1, CodeLen - (jc1 + 4));
+      Patch32(jc2, CodeLen - (jc2 + 4));
+      Patch32(jc3, CodeLen - (jc3 + 4));
+      Patch32(jc4, CodeLen - (jc4 + 4));
+      EmitAsm386('cmp esi, 65536');
+      EmitB($0F); EmitB($82); jm1 := CodeLen; EmitI32(0);   { jb nomsg }
+      EmitAsm386(['mov ebp, [esi+8]', 'cmp ebp, 65536']);
+      EmitB($0F); EmitB($82); jm2 := CodeLen; EmitI32(0);   { jb nomsg }
+      EmitAsm386(['mov edx, [ebp-8]', 'cmp edx, 0']);
+      EmitB($0F); EmitB($8E); jm3 := CodeLen; EmitI32(0);   { jle nomsg }
+      EmitAsm386('cmp edx, 4096');
+      EmitB($0F); EmitB($83); jm4 := CodeLen; EmitI32(0);   { jae nomsg }
+      EmitAsm386(['mov eax, 4', 'mov ebx, 2']);
+      EmitB($B9); EmitDataRef(Strs[siColon].Offset + 8);        { mov ecx, ": " }
+      EmitAsm386(['mov edx, %', Strs[siColon].Len, 'int 128']);
+      EmitAsm386(['mov eax, 4', 'mov ebx, 2', 'mov ecx, ebp', 'mov edx, [ebp-8]', 'int 128']);
+      Patch32(jm1, CodeLen - (jm1 + 4));
+      Patch32(jm2, CodeLen - (jm2 + 4));
+      Patch32(jm3, CodeLen - (jm3 + 4));
+      Patch32(jm4, CodeLen - (jm4 + 4));
+
       EmitB($B8); EmitI32(4);
       EmitB($BB); EmitI32(2);
       EmitB($B9); EmitDataRef(NEWLINE_OFFSET);
@@ -486,6 +535,81 @@ begin
       EmitDataRef(Strs[si].Offset + 8);
       EmitLoadImmArm32(2, Strs[si].Len);                        { r2 = len }
       EmitI32($EF000000);                                       { svc #0 }
+
+      { The detail line, `: <ClassName>: <Message>`, as the x86-64 and aarch64
+        blocks print it (the same reads, the same range guards). 32-bit layout,
+        measured on arm32: blob = [[obj] - 8], name = [blob] with an 8-byte
+        length prefix and chars at +8, message handle at obj+8 with its length
+        at -8. svc returns in r0 only, so r4-r8 survive the writes.
+        r4 = the object, r5 = its class RTTI blob, r6 = 65536, r8 = a string.
+        bug-a-an-unhandled-exception-prints-no-class-or-message-on-the-cross-backends }
+      siColon := InternStr(': ');
+      EmitI32($E59F1000);                                    { ldr r1, [pc] }
+      EmitI32($EA000000);                                    { b .+8 }
+      EmitGlobRef(BSS_EXC_OBJ);
+      EmitI32($E5914000);                                    { ldr r4, [r1] }
+      EmitI32($E3A05000);                                    { mov r5, #0 }
+      EmitI32($E3A06801);                                    { mov r6, #65536 }
+      EmitI32($E1540006);                                    { cmp r4, r6 }
+      jo1 := CodeLen; EmitI32($3A000000);                      { blo objbad }
+      EmitI32($E5940000);                                    { ldr r0, [r4] }
+      EmitI32($E3500000);                                    { cmp r0, #0 }
+      jo2 := CodeLen; EmitI32($0A000000);                      { beq objbad }
+      EmitI32($E5105008);                                    { ldr r5, [r0, #-8] }
+      Patch32(jo1, $3A000000 or ((((CodeLen - jo1) div 4) - 2) and $00ffffff));
+      Patch32(jo2, $0A000000 or ((((CodeLen - jo2) div 4) - 2) and $00ffffff));
+      EmitI32($E3550000);                                    { cmp r5, #0 }
+      jc1 := CodeLen; EmitI32($0A000000);                      { beq noclass }
+      EmitI32($E5958000);                                    { ldr r8, [r5] }
+      EmitI32($E3580000);                                    { cmp r8, #0 }
+      jc2 := CodeLen; EmitI32($0A000000);                      { beq noclass }
+      EmitI32($E5982000);                                    { ldr r2, [r8] }
+      EmitI32($E3520000);                                    { cmp r2, #0 }
+      jc3 := CodeLen; EmitI32($DA000000);                      { ble noclass }
+      EmitI32($E3520C01);                                    { cmp r2, #256 }
+      jc4 := CodeLen; EmitI32($2A000000);                      { bhs noclass }
+      EmitI32($E3A07004);                                    { mov r7, #4 }
+      EmitI32($E3A00002);                                    { mov r0, #2 }
+      EmitI32($E59F1000);                                    { ldr r1, [pc] }
+      EmitI32($EA000000);                                    { b .+8 }
+      EmitDataRef(Strs[siColon].Offset + 8);
+      EmitLoadImmArm32(2, Strs[siColon].Len);
+      EmitI32($EF000000);                                    { svc #0 }
+      EmitI32($E3A07004);                                    { mov r7, #4 }
+      EmitI32($E3A00002);                                    { mov r0, #2 }
+      EmitI32($E2881008);                                    { add r1, r8, #8 }
+      EmitI32($E5982000);                                    { ldr r2, [r8] }
+      EmitI32($EF000000);                                    { svc #0 }
+      Patch32(jc1, $0A000000 or ((((CodeLen - jc1) div 4) - 2) and $00ffffff));
+      Patch32(jc2, $0A000000 or ((((CodeLen - jc2) div 4) - 2) and $00ffffff));
+      Patch32(jc3, $DA000000 or ((((CodeLen - jc3) div 4) - 2) and $00ffffff));
+      Patch32(jc4, $2A000000 or ((((CodeLen - jc4) div 4) - 2) and $00ffffff));
+      EmitI32($E1540006);                                    { cmp r4, r6 }
+      jm1 := CodeLen; EmitI32($3A000000);                      { blo nomsg }
+      EmitI32($E5948008);                                    { ldr r8, [r4, #8] }
+      EmitI32($E1580006);                                    { cmp r8, r6 }
+      jm2 := CodeLen; EmitI32($3A000000);                      { blo nomsg }
+      EmitI32($E5182008);                                    { ldr r2, [r8, #-8] }
+      EmitI32($E3520000);                                    { cmp r2, #0 }
+      jm3 := CodeLen; EmitI32($DA000000);                      { ble nomsg }
+      EmitI32($E3520A01);                                    { cmp r2, #4096 }
+      jm4 := CodeLen; EmitI32($2A000000);                      { bhs nomsg }
+      EmitI32($E3A07004);                                    { mov r7, #4 }
+      EmitI32($E3A00002);                                    { mov r0, #2 }
+      EmitI32($E59F1000);                                    { ldr r1, [pc] }
+      EmitI32($EA000000);                                    { b .+8 }
+      EmitDataRef(Strs[siColon].Offset + 8);
+      EmitLoadImmArm32(2, Strs[siColon].Len);
+      EmitI32($EF000000);                                    { svc #0 }
+      EmitI32($E3A07004);                                    { mov r7, #4 }
+      EmitI32($E3A00002);                                    { mov r0, #2 }
+      EmitI32($E1A01008);                                    { mov r1, r8 }
+      EmitI32($E5182008);                                    { ldr r2, [r8, #-8] }
+      EmitI32($EF000000);                                    { svc #0 }
+      Patch32(jm1, $3A000000 or ((((CodeLen - jm1) div 4) - 2) and $00ffffff));
+      Patch32(jm2, $3A000000 or ((((CodeLen - jm2) div 4) - 2) and $00ffffff));
+      Patch32(jm3, $DA000000 or ((((CodeLen - jm3) div 4) - 2) and $00ffffff));
+      Patch32(jm4, $2A000000 or ((((CodeLen - jm4) div 4) - 2) and $00ffffff));
 
       EmitI32($E3A07004);                                       { mov r7, #4 }
       EmitI32($E3A00002);                                       { mov r0, #2 }
@@ -704,6 +828,79 @@ begin
       EmitLoadImmRISCV32(reg_a2, Strs[si].Len);
       rv32_addi(reg_a7, reg_zero, 64);                          { write }
       EmitI32($00000073);
+      { The detail line, `: <ClassName>: <Message>`, as the x86-64 and aarch64
+        blocks print it (the same reads, the same range guards). The 32-bit
+        layout is the 64-bit one with 4-byte loads, measured on i386, arm32
+        and riscv32: blob = [[obj] - 8], name = [blob] with an 8-byte length
+        prefix and chars at +8, message handle at obj+8 with its length at -8.
+        An ecall clobbers only a0, so t2-t6 survive the writes.
+        t3 = the object, t4 = its class RTTI blob, t5 = 65536.
+        bug-a-an-unhandled-exception-prints-no-class-or-message-on-the-cross-backends }
+      siColon := InternStr(': ');
+      RvAlignLiteral;
+      rv32_auipc(reg_t1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitGlobRef(BSS_EXC_OBJ);
+      rv32_lw(reg_t1, reg_t1, 8);
+      rv32_lw(reg_t3, reg_t1, 0);                               { t3 = the object }
+      rv32_addi(reg_t4, reg_zero, 0);
+      EmitLoadImmRISCV32(reg_t5, 65536);
+      jo1 := CodeLen; EmitI32(0);   { patched: 6 }
+      rv32_lw(reg_t6, reg_t3, 0);                               { the VMT }
+      jo2 := CodeLen; EmitI32(0);   { patched: 0 }
+      rv32_lw(reg_t4, reg_t6, -8);                              { the RTTI blob }
+      Patch32(jo1, EncodeRISCVBranch(6, reg_t3, reg_t5, CodeLen - jo1));
+      Patch32(jo2, EncodeRISCVBranch(0, reg_t6, reg_zero, CodeLen - jo2));
+      jc1 := CodeLen; EmitI32(0);   { patched: 0 }
+      rv32_lw(reg_t2, reg_t4, 0);                               { the name }
+      jc2 := CodeLen; EmitI32(0);   { patched: 0 }
+      rv32_lw(reg_a2, reg_t2, 0);                               { its length }
+      jc3 := CodeLen; EmitI32(0);   { patched: 5 }
+      EmitLoadImmRISCV32(reg_t0, 256);
+      jc4 := CodeLen; EmitI32(0);   { patched: 7 }
+      rv32_addi(reg_a0, reg_zero, 2);
+      RvAlignLiteral;
+      rv32_auipc(reg_a1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitDataRef(Strs[siColon].Offset + 8);
+      rv32_lw(reg_a1, reg_a1, 8);
+      EmitLoadImmRISCV32(reg_a2, Strs[siColon].Len);
+      rv32_addi(reg_a7, reg_zero, 64);
+      EmitI32($00000073);
+      rv32_addi(reg_a1, reg_t2, 8);
+      rv32_lw(reg_a2, reg_t2, 0);
+      rv32_addi(reg_a0, reg_zero, 2);
+      rv32_addi(reg_a7, reg_zero, 64);
+      EmitI32($00000073);                                       { write(2, a1, a2) }
+      Patch32(jc1, EncodeRISCVBranch(0, reg_t4, reg_zero, CodeLen - jc1));
+      Patch32(jc2, EncodeRISCVBranch(0, reg_t2, reg_zero, CodeLen - jc2));
+      Patch32(jc3, EncodeRISCVBranch(5, reg_zero, reg_a2, CodeLen - jc3));
+      Patch32(jc4, EncodeRISCVBranch(7, reg_a2, reg_t0, CodeLen - jc4));
+      jm1 := CodeLen; EmitI32(0);   { patched: 6 }
+      rv32_lw(reg_t2, reg_t3, 8);                               { the message handle }
+      jm2 := CodeLen; EmitI32(0);   { patched: 6 }
+      rv32_lw(reg_a2, reg_t2, -8);                              { its length }
+      jm3 := CodeLen; EmitI32(0);   { patched: 5 }
+      EmitLoadImmRISCV32(reg_t0, 4096);
+      jm4 := CodeLen; EmitI32(0);   { patched: 7 }
+      rv32_addi(reg_a0, reg_zero, 2);
+      RvAlignLiteral;
+      rv32_auipc(reg_a1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitDataRef(Strs[siColon].Offset + 8);
+      rv32_lw(reg_a1, reg_a1, 8);
+      EmitLoadImmRISCV32(reg_a2, Strs[siColon].Len);
+      rv32_addi(reg_a7, reg_zero, 64);
+      EmitI32($00000073);
+      rv32_addi(reg_a1, reg_t2, 0);
+      rv32_lw(reg_a2, reg_t2, -8);
+      rv32_addi(reg_a0, reg_zero, 2);
+      rv32_addi(reg_a7, reg_zero, 64);
+      EmitI32($00000073);                                       { write(2, a1, a2) }
+      Patch32(jm1, EncodeRISCVBranch(6, reg_t3, reg_t5, CodeLen - jm1));
+      Patch32(jm2, EncodeRISCVBranch(6, reg_t2, reg_t5, CodeLen - jm2));
+      Patch32(jm3, EncodeRISCVBranch(5, reg_zero, reg_a2, CodeLen - jm3));
+      Patch32(jm4, EncodeRISCVBranch(7, reg_a2, reg_t0, CodeLen - jm4));
       rv32_addi(reg_a0, reg_zero, 2);
       RvAlignLiteral;
       rv32_auipc(reg_a1, 0);

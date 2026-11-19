@@ -5,7 +5,8 @@ summary: "x86-64 prints `Unhandled exception: Exception: frame chain is intact` 
 track: A
 type: bug
 prio: 30
-status: backlog
+status: done
+owner: claude-dupwt
 found: 2026-09-28
 found-by: frankD (Pascal cross-target differential over the test corpus)
 ---
@@ -36,3 +37,26 @@ the bare line and a newline only. wasm32 has its own detail printer
 Port the guarded detail read to each backend, or better, call one RTL routine
 (Pascal, in the runtime) that formats the line from the object, so the five
 arms stop being five copies. Measure against the x86-64 text on each target.
+
+## 2026-11-19 (claude-dupwt): done
+
+aarch64 had been fixed in the meantime. i386, arm32 and riscv32 now print the
+same detail line as x86-64 and aarch64: the same reads and the same range
+guards, emitted with each backend's helpers (EmitAsm386 plus patched jcc,
+hand-encoded arm32 words, rv32_* plus EncodeRISCVBranch). The 32-bit layout
+was measured before writing anything, and it is the 64-bit one with 4-byte
+loads: blob = [[obj] - 8], name = [blob] with an 8-byte length prefix,
+message handle at obj+8 with its length at -8.
+
+Checked under qemu on each target, with output identical to x86-64:
+
+- `raise Exception.Create('frame chain is intact')` prints
+  `Unhandled exception: Exception: frame chain is intact`
+- a class that is not an Exception prints `Unhandled exception: TMine`
+- an empty message prints `Unhandled exception: Exception`
+- NilPy OSError prints `Unhandled exception: OSError: [Errno 24] Too many open files`
+
+All exit 217. The test-nilpy row next to the aarch64 one now covers the
+three targets (the NilPy case plus the non-Exception class). Gate quick
+passes. ESP xtensa/riscv32 bare prints nothing by design (no syscalls), and
+ESP IDF reports through PXXReportUnhandled in Pascal.
