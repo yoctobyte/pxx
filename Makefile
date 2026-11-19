@@ -36322,6 +36322,13 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/constrefarg "$$(tools/run_target.sh wasm32 $(TESTTMP)/constrefarg_wasm32 | grep -v '^pxx-census')" "$$(cat test/test_a_const_by_ref_argument_does_not_clone_its_string.expected)"
 	tools/assert_no_leak.sh wasm32/const_by_ref_argument 20 tools/run_target.sh wasm32 $(TESTTMP)/constrefarg_wasm32
 	@echo "wasm32: 57 rows green (46 default + 7 shortstring + 4 leak; 0 excluded)"
+	@# test/wasm/'s 45 lane checks. Until 2026-11-19 NOTHING ran them, and three
+	@# were red unseen (generator slot, exc slice, phase1 selftest). They need node
+	@# and wasm-validate; a box without them says so instead of passing silently.
+	@# bug-a-the-test-wasm-checks-are-run-by-nothing-and-two-are-red
+	@if command -v node >/dev/null 2>&1 && command -v wasm-validate >/dev/null 2>&1; then \
+	  sh test/wasm/check_all.sh; \
+	else echo "wasm32: SKIP test/wasm/check_all.sh (needs node and wasm-validate)"; fi
 test-xtensa: $(COMPILER)
 	# DENSITY FORMS: movi.n/addi.n/l32i.n/s32i.n/mov.n/add.n on both sides of
 	# every narrow boundary, procedure spills from sp+0, calls of 7..30 words

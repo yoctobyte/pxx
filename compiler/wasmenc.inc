@@ -317,6 +317,20 @@ var
 var
   WasmEncBodyName : AnsiString;
 
+{$ifdef WASMENC_STANDALONE}
+{ The compiler's OutOpen (util.inc) is not reachable from the standalone
+  self-test (test/wasm/wasmenc_selftest.pas), which includes this file
+  directly. WasmSaveModule moved to OutOpen when the writers learned to
+  replace a running program, and from then on check_phase1 failed to compile
+  with `undefined variable (OutOpen)`, unseen, because nothing ran it. The
+  plain open is all a self-test needs.
+  bug-a-the-test-wasm-checks-are-run-by-nothing-and-two-are-red }
+function OutOpen(const path: AnsiString): Integer;
+begin
+  OutOpen := sysopen(path, 577);   { O_WRONLY | O_CREAT | O_TRUNC }
+end;
+{$endif}
+
 procedure WasmFail(const msg: AnsiString);
 { ErrorNoPos, not Error, and it is the SAME mistake compiler.pas:3033 already
   records against the --emit-obj refusal -- third instance of one class.

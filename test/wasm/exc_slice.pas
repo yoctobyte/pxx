@@ -160,6 +160,12 @@ begin
     else writeln('G-unreachable-2');
   end;
 
+  { A FRESH object. A handled exception is freed when its except block ends
+    (FPC's rule, and pxx's natively), so raising `b` a second time raised a
+    freed object: the native build of this slice segfaulted here, fpc gives
+    runtime error 216, and check_exc was red at its first native step.
+    bug-a-the-test-wasm-checks-are-run-by-nothing-and-two-are-red }
+  b := TBeta.Create;
   try
     raise b;
   except
