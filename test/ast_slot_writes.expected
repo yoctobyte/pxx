@@ -879,6 +879,7 @@ AN_CLASSREF Right 0
 AN_CLASSREF Right 1
 AN_CLASS_CAST Left CurASTNode
 AN_CLASS_CAST Left unboxCall
+AN_COMMA Left GenMakeAssign(GenMakeIdent(acTmp, tyAnsiString), CurASTNode)
 AN_COMMA Left Result
 AN_COMMA Left arm
 AN_COMMA Left asg
@@ -905,6 +906,7 @@ AN_COMMA Right ASTLeft[n]
 AN_COMMA Right AllocNode(AN_INT_LIT)
 AN_COMMA Right CMakeBinop(Ord(tkNeq), fraArg, fraIdn)
 AN_COMMA Right CurASTNode
+AN_COMMA Right GenMakeIdent(acTmp, tyAnsiString)
 AN_COMMA Right ParseCExpr
 AN_COMMA Right PyMakeIdent(setTmpSym)
 AN_COMMA Right PyMakeIdent(tmpSym)

@@ -802,6 +802,7 @@ end;
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     soTmp, soAsn: Integer;   { SysOpen of an element path: the hidden AnsiString copy and its store }
+    acTmp: Integer;          { AnsiString(frozen): the hidden managed copy }
     strSymIdx: Integer;   { the same-named symbol a string const is weighed against -- see SymScopeHops }
     i64v: Int64;         { a compiler constant answered as a literal (__pxxTlsBlockSize et al) }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
@@ -8227,6 +8228,26 @@ begin
             begin
               CurASTNode := vcNode;
               LastExprTk := castTk;
+              Exit;
+            end;
+            { `AnsiString(<frozen string>)` is a CONVERSION, not a retag. The
+              reinterpret below tagged a frozen literal tyAnsiString, so
+              `PChar(AnsiString('hello'))` took the managed-handle route and
+              pointed at the literal's LENGTH prefix (fpc: hello, pxx: #5).
+              Store into a hidden AnsiString and yield it, so the tag tells the
+              truth. Every other consumer of the old tag (assign, Length,
+              WriteLn) already coerced and gives the same answer.
+              bug-p-pchar-of-an-ansistring-cast-of-a-literal-yields-one-garbage-byte }
+            if (castTk = tyAnsiString) and
+               TypeIsFrozenString(IntToTypeKind(ASTTk[CurASTNode])) then
+            begin
+              acTmp := AllocVar('', tyAnsiString);
+              node := AllocNode(AN_COMMA);
+              ASTLeft[node] := GenMakeAssign(GenMakeIdent(acTmp, tyAnsiString), CurASTNode);
+              ASTRight[node] := GenMakeIdent(acTmp, tyAnsiString);
+              ASTTk[node] := Ord(tyAnsiString);
+              CurASTNode := node;
+              LastExprTk := tyAnsiString;
               Exit;
             end;
             node := AllocNode(AN_PTR_CAST);

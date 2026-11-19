@@ -4,8 +4,8 @@ title: "`PChar(AnsiString('lit'))` yields one garbage byte, silently"
 track: P
 prio: 45
 type: bug
-status: open
-owner: ""
+status: done
+owner: claude-dupwt
 found-by: franks-ee
 created: 2026-09-16
 tags: [typecast, strings, managed-strings, pchar, silent-wrong-value]
@@ -169,3 +169,27 @@ this must use a literal of **length ≥ 2**, and the assertion must read bytes.
 
 *(frank-user, toko watch 2026-09-16. Probes in scratch only; nothing added to `test/`
 because the fix is parked and a test for an unfixed defect belongs with the fix.)*
+
+
+# Fixed 2026-11-19 (claude-dupwt)
+
+The seam the ticket named: the built-in identifier cast built
+`AN_PTR_CAST ival=-1 tk=tyAnsiString` over a FROZEN operand, which is a retag
+and not a conversion, so the tag lied about the representation. `String(x)` was
+never affected, because it keeps the operand's own kind.
+
+`AnsiString(<frozen string>)` (literal, `string[N]`, ShortString) now stores
+into a hidden AnsiString and yields it (AN_COMMA, the same shape as the SysOpen
+element-path fix). The tag and the value now agree, so every consumer sees a
+real managed string. Operands that were already managed, pointers and Variants
+are unchanged.
+
+Measured against fpc 3.2.2, all equal: `Ord(p[0])` for 'hello' (104), 'ab'
+(97), '' (0), 'a' (97); PChar of AnsiString of a `string[20]` and of a
+ShortString; `AnsiString('x') + AnsiString('yz')`; `Length(AnsiString(..))`;
+overload choice between `F(ShortString)` and `F(AnsiString)` (ansi, as fpc);
+`=` and `Pos`. The previous compiler gives 5 and 2 on the first two rows.
+
+Test: test_p_ansistring_cast_of_a_frozen_string_is_a_conversion (row
+ansicast_frozen26). test/ast_slot_writes.expected gained the two AN_COMMA
+writes.
