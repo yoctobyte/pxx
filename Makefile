@@ -6328,6 +6328,14 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/varnegzero26 | diff -u test/test_a_unary_minus_on_a_variant_keeps_the_sign_of_zero.expected -
 	./$(COMPILER) test/test_a_char_array_converts_to_a_string_by_its_lower_bound.pas $(TESTTMP)/chararrlo26
 	$(TESTTMP)/chararrlo26 | cmp - test/test_a_char_array_converts_to_a_string_by_its_lower_bound.expected
+	@# PXX_HOME is READ: pointed at an empty tree, a `uses` cannot resolve. Before,
+	@# the exe-dir defaults won silently and removing a unit from PXX_HOME changed
+	@# nothing. bug-a-pxx-home-is-advertised-but-not-honoured
+	@mkdir -p $(TESTTMP)/pxxhome_empty
+	@printf 'program u;\nuses strutils;\nbegin end.\n' > $(TESTTMP)/pxxhome_u.pas
+	@out=$$(PXX_HOME=$(TESTTMP)/pxxhome_empty ./$(COMPILER) $(TESTTMP)/pxxhome_u.pas $(TESTTMP)/pxxhome_u 2>&1); rc=$$?; \
+	 test "$$rc" != "0" && printf '%s\n' "$$out" | grep -q 'unit source not found' \
+	  || { echo "pxxhome_u: FAIL - rc=$$rc; PXX_HOME at an empty tree still resolved units, so it is not being read"; printf '%s\n' "$$out"; exit 1; }
 	# f(**d) with no leading *args: `**` is two tkStar and only the TRAILING star
 	# pair looked ahead for the second. Last two rows are the regression risks --
 	# dict(**d) and f(*lst) reach the call machinery by different paths.

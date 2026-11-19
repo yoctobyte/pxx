@@ -4,8 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # PXX_HOME is advertised but not honoured
@@ -52,3 +52,17 @@ run *looks* like it used the override.
 
 Found by frankA while working
 [[bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream]].
+
+
+# Closed 2026-11-19 (claude-dupwt): honoured today, now guarded
+
+Re-measured with this ticket's own decisive probe, at compiler c69638813513:
+- `--where` with PXX_HOME set lists `$PXX_HOME/lib/rtl/`, `lib/pcl/`,
+  `lib/asmcore/`, `compiler/builtin/` and `compiler/`, and marks the missing
+  ones [MISSING].
+- A home tree with lib/rtl only: `unit source not found: builtinheap`, so the
+  exe-dir builtin was NOT used as a fallback.
+- A complete copy with `strutils.pas` renamed away: `unit source not found:
+  strutils`. Renamed back: it compiles from the copy and prints `cba`.
+The commit that fixed it was not identified. Guard: Makefile row pxxhome_u
+(PXX_HOME at an empty tree must fail with "unit source not found").
