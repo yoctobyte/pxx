@@ -36856,6 +36856,11 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_sweep_thunk_relax "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sweep_c0)" "$$(cat test/test_xtensa_sweep_thunk_relax.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_asm_register_variables.c $(TESTTMP)/xt_asmregvar
 	tools/expect_same.sh xtensa/c_asm_register_variables "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_asmregvar)" "$$(cat test/c_asm_register_variables.expected)"
+	# file-scope asm that defines code: global labels are functions, local
+	# labels branch, .space pads, call0 reaches a C function defined later.
+	# feature-c-file-scope-asm-that-defines-code
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_file_scope_asm_code.c $(TESTTMP)/xt_fsacode
+	tools/expect_same.sh xtensa/c_file_scope_asm_code "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fsacode)" "$$(cat test/c_file_scope_asm_code.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_c0
 	tools/expect_same.sh xtensa-call0/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_c0)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_w

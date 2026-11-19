@@ -17608,6 +17608,257 @@ begin
   Expect(tkRParen, ')');
 end;
 
+{ ---- file-scope asm that DEFINES CODE (xtensa) ----------------------------
+  `__asm__(".text\n.align 4\n.global _start\n_start:\nentry a1, 32\n...")`:
+  Rainyday's tests/xtensa entry stubs and signal restorer. Each GLOBAL label
+  opens a frameless procedure of that name (found by name, so a C
+  `extern void my_restorer(void);` binds to it, or registered new), and the
+  lines up to the next global label are its body, assembled by the xtensa
+  text engine right here, where a C body would be emitted. Local labels are
+  scoped to the whole asm statement. On top of the inline-asm engine:
+  `entry`, `retw`, and `call0/4/8/12 name`, which is recorded
+  (CFsaCallPos) and becomes an internal call once the unit is parsed.
+  Directives: .text, a .section/.pushsection that is .text or .text.*, and
+  .previous/.popsection stay in this one code stream; .align N pads with zero
+  bytes; .space/.skip/.zero N emit N zero bytes. Anything else refuses.
+  feature-c-file-scope-asm-that-defines-code }
+function CFsaIsCodeText(const text: AnsiString): Boolean;
+{ Does this file-scope asm define code: a `.text` or a label line? }
+var i, p, k: Integer; line: AnsiString;
+begin
+  Result := False;
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if (line = '.text') or ((Length(line) >= 2) and (line[Length(line)] = ':')) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+end;
+
+procedure CFsaEmitCodeXtensa(const text: AnsiString);
+var i, p, k, curProc, n, reg, nGlob, pi: Integer;
+    line, w, rest, nm, a: AnsiString;
+    globs: array of AnsiString;
+    noNames: array[0..0] of AnsiString;
+    noTypes: array[0..0] of TTypeKind;
+    dummyHoles: array[0..0] of Int64;
+
+  procedure Refuse(const why: AnsiString);
+  begin
+    Error('C: file-scope asm (code): ' + why + ' -- pxx assembles .text code here (global'
+          + ' labels, the xtensa instructions inline asm knows, entry/retw/callN name,'
+          + ' .align/.space); anything else would be dropped silently');
+  end;
+
+  function IsGlob(const s: AnsiString): Boolean;
+  var j: Integer;
+  begin
+    Result := False;
+    for j := 0 to nGlob - 1 do
+      if globs[j] = s then begin Result := True; Exit; end;
+  end;
+
+  procedure CloseProc;
+  begin
+    if curProc >= 0 then SetProcBodyEndHere(curProc);
+    curProc := -1;
+  end;
+
+  procedure NeedProc;
+  begin
+    if curProc < 0 then Refuse('"' + line + '" before any global label');
+  end;
+
+  function NumOr(const t: AnsiString): Integer;
+  var v, code: Integer;
+  begin
+    Val(t, v, code);
+    if (code <> 0) or (t = '') then Result := -1 else Result := v;
+  end;
+
+  procedure FsaZeroFill(cnt: Integer);
+  var j: Integer;
+  begin
+    for j := 1 to cnt do EmitB(0);
+  end;
+
+begin
+  { the global names first: a label is a procedure only if it is exported }
+  nGlob := 0;
+  SetLength(globs, 0);
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := CFsaTrim(Copy(text, p, i - p));
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := CFsaTrim(Copy(line, 1, k - 1));
+      w := line; rest := '';
+      k := Pos(' ', line);
+      if k = 0 then k := Pos(#9, line);
+      if k > 0 then begin w := Copy(line, 1, k - 1); rest := CFsaTrim(Copy(line, k + 1, Length(line))); end;
+      if (w = '.global') or (w = '.globl') or (w = '.weak') then
+      begin
+        if not CFsaIsName(rest) then Refuse('"' + line + '" (one name per line)');
+        SetLength(globs, nGlob + 1);
+        globs[nGlob] := rest;
+        Inc(nGlob);
+        if w = '.weak' then CFsaBind(rest, 2);
+      end;
+    end;
+
+  curProc := -1;
+  AsmXtensaBlockBegin;
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if line = '' then Continue;
+      w := line; rest := '';
+      k := 1;
+      while (k <= Length(line)) and not (line[k] in [' ', #9]) do Inc(k);
+      w := Copy(line, 1, k - 1);
+      rest := CFsaTrim(Copy(line, k, Length(line)));
+      if (w = '.global') or (w = '.globl') or (w = '.weak') or (w = '.text') or
+         (w = '.previous') or (w = '.popsection') or (w = '.type') or (w = '.size') or
+         (w = '.literal_position') then
+        Continue;
+      if (w = '.section') or (w = '.pushsection') then
+      begin
+        a := rest;
+        k := Pos(',', a); if k > 0 then a := Copy(a, 1, k - 1);
+        a := CFsaTrim(a);
+        if (a <> '.text') and (Copy(a, 1, 6) <> '.text.') then
+          Refuse('section "' + a + '" (only .text and .text.* are code here)');
+        Continue;
+      end;
+      if w = '.align' then
+      begin
+        n := NumOr(rest);
+        if (n < 1) or (n > 4096) then Refuse('"' + line + '"');
+        if curProc >= 0 then
+          while (CodeLen mod n) <> 0 do EmitB(0);
+        Continue;     { a procedure start is aligned to 4 anyway }
+      end;
+      if (w = '.space') or (w = '.skip') or (w = '.zero') then
+      begin
+        NeedProc;
+        n := NumOr(rest);
+        if (n < 0) or (n > 16 * 1024 * 1024) then Refuse('"' + line + '" (a plain byte count)');
+        FsaZeroFill(n);
+        Continue;
+      end;
+      { a label (before the directive check: `.Lpos:` starts with a dot) }
+      if (Length(line) >= 2) and (line[Length(line)] = ':') then
+      begin
+        nm := Copy(line, 1, Length(line) - 1);
+        if IsGlob(nm) then
+        begin
+          CloseProc;
+          pi := CFindProcFromModule(nm);
+          if (pi >= 0) and (Procs[pi].BodyAddr >= 0) then
+            Refuse('"' + nm + '" is already defined');
+          if pi < 0 then
+          begin
+            pi := RegisterProc(nm, False, tyUnknown, 0, noNames, noTypes);
+            ProcCdecl[pi] := True;
+          end;
+          { what a C definition sets (ParseCSubroutine): a prototype seen
+            first left the row external, and the object would import it }
+          ProcWeakExternal[pi] := False;
+          ProcExternal[pi] := False;
+          CProcHasLocalDef[pi] := True;
+          ProcCModule[pi] := CModuleOfTok(TokPos - 1);
+          SetProcBodyAddrHere(pi);
+          curProc := pi;
+        end
+        else
+        begin
+          NeedProc;
+          AsmXtensaProcessLine(line, dummyHoles, 0);
+        end;
+        Continue;
+      end;
+      if (w <> '') and (w[1] = '.') then Refuse('"' + line + '"');
+      NeedProc;
+      if w = 'entry' then
+      begin
+        k := Pos(',', rest);
+        if (k = 0) or not AsmXtensaRegNum(CFsaTrim(Copy(rest, 1, k - 1)), reg) then
+          Refuse('"' + line + '"');
+        n := NumOr(CFsaTrim(Copy(rest, k + 1, Length(rest))));
+        if (n < 0) or (n > 32760) or ((n mod 8) <> 0) then Refuse('"' + line + '" (frame 0..32760, a multiple of 8)');
+        xtensa_entry(reg, n);
+        Continue;
+      end;
+      if (w = 'retw') or (w = 'retw.n') then
+      begin
+        if rest <> '' then Refuse('"' + line + '"');
+        xtensa_retw;
+        Continue;
+      end;
+      if (w = 'call0') or (w = 'call4') or (w = 'call8') or (w = 'call12') then
+      begin
+        if not CFsaIsName(rest) then Refuse('"' + line + '" (a call to a name)');
+        if w = 'call0' then n := 0 else if w = 'call4' then n := 1
+        else if w = 'call8' then n := 2 else n := 3;
+        if Length(CFsaCallPos) <= CFsaCallCount then
+        begin
+          SetLength(CFsaCallPos, CFsaCallCount + 16);
+          SetLength(CFsaCallName, CFsaCallCount + 16);
+        end;
+        CFsaCallPos[CFsaCallCount] := CodeLen;
+        CFsaCallName[CFsaCallCount] := rest;
+        Inc(CFsaCallCount);
+        EmitB((n shl 4) or 5); EmitB(0); EmitB(0);   { CALLn, offset patched by ApplyCallFixups }
+        Continue;
+      end;
+      if not AsmXtensaLineKnown(line) then
+        Refuse('"' + line + '" is not an instruction the xtensa assembler in pxx encodes');
+      AsmXtensaProcessLine(line, dummyHoles, 0);
+    end;
+  AsmXtensaBlockResolve;
+  CloseProc;
+end;
+
+{ The calls file-scope asm made, by name, now that every body is in place. }
+procedure CFsaResolveCalls;
+var i, pi: Integer;
+begin
+  for i := 0 to CFsaCallCount - 1 do
+  begin
+    pi := CFindProcFromModule(CFsaCallName[i]);
+    if (pi < 0) or (Procs[pi].BodyAddr < 0) then
+      ErrorNoPos('C: file-scope asm calls "' + CFsaCallName[i] + '", which this unit does'
+                 + ' not define -- a call into another object is not supported there');
+    RecordInternalCallAt(pi, CFsaCallPos[i], -1);
+    if Length(CFsaSlotPos) <= CFsaSlotCount then
+    begin
+      SetLength(CFsaSlotPos, CFsaSlotCount + 16);
+      SetLength(CFsaSlotN, CFsaSlotCount + 16);
+    end;
+    CFsaSlotPos[CFsaSlotCount] := CFsaCallPos[i];
+    CFsaSlotN[CFsaSlotCount] := (Code[CFsaCallPos[i]] shr 4) and 3;
+    Inc(CFsaSlotCount);
+  end;
+  CFsaCallCount := 0;
+end;
+
 procedure CParseFileScopeAsm;
 var text, line, w, rest, a, b, sec: AnsiString;
     i, p, k: Integer;
@@ -17673,6 +17924,11 @@ begin
   end;
   Expect(tkRParen, ')');
   if CurTok.Kind = tkSemicolon then Next;
+  if (TargetArch = TARGET_XTENSA) and CFsaIsCodeText(text) then
+  begin
+    CFsaEmitCodeXtensa(text);
+    Exit;
+  end;
 
   skipping := False;
   text := text + #10;
@@ -17779,7 +18035,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     finiRunner: Boolean;
 begin
   CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
-  CFsaAliasCount := 0; CFsaBindCount := 0; CAsmLblCount := 0;
+  CFsaAliasCount := 0; CFsaBindCount := 0; CAsmLblCount := 0; CFsaCallCount := 0;
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
     around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive
@@ -19119,6 +19375,7 @@ begin
   end;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   FillRootVMTSlotDefaults;   { the reserved root slots, as ParseProgram and the NilPy epilogue fill them }
+  CFsaResolveCalls;          { file-scope asm's callN name -- feature-c-file-scope-asm-that-defines-code }
   ApplyCallFixups;
 
   { Object mode emitted no entry stub, so there is nothing to patch and no

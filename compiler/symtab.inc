@@ -20564,6 +20564,19 @@ begin
   if pi >= 0 then EmitCallProc(pi);
 end;
 
+{ The window increment a file-scope asm `callN name` slot asked for, or -1
+  when the slot at pos is an ordinary compiler-emitted call. Kept as a list
+  of positions, not read back from the bytes: an ordinary slot holds a
+  provisional encoding that could look like any CALLn.
+  feature-c-file-scope-asm-that-defines-code }
+function CFsaCallSlotN(pos: Integer): Integer;
+var j: Integer;
+begin
+  Result := -1;
+  for j := 0 to CFsaSlotCount - 1 do
+    if CFsaSlotPos[j] = pos then begin Result := CFsaSlotN[j]; Exit; end;
+end;
+
 procedure ApplyCallFixups;
 var i, procIdx, rvHi, rvLo, tgt: Integer;
 begin
@@ -20608,7 +20621,13 @@ begin
               + '--xtensa-long-calls, which reserves the long form at every '
               + 'forward call site (bigger and slower, and the only thing that '
               + 'builds an image this large today)');
-      if XtensaABI = XTENSA_ABI_WINDOWED then
+      { A CALLn slot file-scope asm wrote (CFsaEmitCodeXtensa: call0/4/8/12
+        name) keeps its own n; only the offset is ours to patch. Every other
+        slot takes the ABI's call. feature-c-file-scope-asm-that-defines-code }
+      if CFsaCallSlotN(CallFix[i].CodePos) >= 0 then
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt)
+                or (CFsaCallSlotN(CallFix[i].CodePos) shl 4))
+      else if XtensaABI = XTENSA_ABI_WINDOWED then
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else
         Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt));

@@ -7298,6 +7298,19 @@ var
   CRegVarName, CRegVarReg : array of AnsiString;
   CRegVarBase : array of Integer;
   CRegVarCount : Integer;
+  { File-scope asm that defines code (xtensa): each `callN name` it makes,
+    at a code position, resolved by name once the unit is parsed (the callee
+    may be a C function defined further down) into an internal call fixup.
+    feature-c-file-scope-asm-that-defines-code }
+  CFsaCallPos : array of Integer;
+  CFsaCallName : array of AnsiString;
+  CFsaCallCount : Integer;
+  { ...and, once resolved, each slot's window increment (0..3), which the
+    ApplyCallFixups patch keeps. Not reset per unit: positions stay valid
+    for the whole image. }
+  CFsaSlotPos : array of Integer;
+  CFsaSlotN : array of Integer;
+  CFsaSlotCount : Integer;
   CAsmOutCount : Integer;    { operands [0..CAsmOutCount) came from section 0 }
   CAsmTemplate : AnsiString; { adjacent string literals already concatenated }
   CAsmClobMem  : Boolean;    { "memory" }
