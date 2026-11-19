@@ -19926,6 +19926,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asm_register_variables "$$($(TESTTMP)/c_asmregvar)" "$$(cat test/c_asm_register_variables.expected)"
 	./$(COMPILER) --target=i386 test/c_asm_register_variables.c $(TESTTMP)/c_asmregvar386
 	tools/expect_same.sh c_asm_register_variables-i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asmregvar386)" "$$(cat test/c_asm_register_variables.expected)"
+	# __thread across threads: per-thread and initialised in a static build
+	# (gcc's output); a --system-libs build starts libc's threads, which share
+	# the main block, and must say so (it was silent).
+	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
+	./$(COMPILER) --threadsafe test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr > /dev/null
+	tools/expect_same.sh c_tls_threads_static "$$($(TESTTMP)/c_tlsthr)" "$$(cat test/c_tls_threads_libc_warns.expected)"
+	tools/expect_same.sh c_tls_threads_libc_warns "$$(./$(COMPILER) --threadsafe --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn 2>&1 | grep -c 'starts threads with the loaded libc')" "1"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.

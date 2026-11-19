@@ -18853,6 +18853,31 @@ begin
     end;
   end;
 
+  { x86-64 has its own block in gs, and a thread pxx starts gets a fresh
+    one (PxxPthreadStart). A thread the LOADED LIBC starts does not: a C
+    program built with --system-libs calls the host's pthread_create
+    directly, and its threads inherit the creator's gs, so every __thread
+    read and write lands in the main thread's block. Measured 2026-11-19:
+    `__thread int tl = 7;` set to 9 in such a thread reads 9 in main, where
+    gcc keeps 7. It was silent. It warns now, on the same terms as the other
+    targets; the fix is routing those threads through PxxPthreadStart.
+    bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+  if (ExternalCount > 0) and (TargetArch = TARGET_X86_64) and (TlsUserUsed > 0)
+     and (not KernelLibc) and (not TlsSharedWarned) then
+    for i := 0 to ExternalCount - 1 do
+      if CaseEqual(Procs[ExternalProc[i]].Name, 'pthread_create') or
+         CaseEqual(Procs[ExternalProc[i]].Name, 'thrd_create') then
+      begin
+        TlsSharedWarned := True;
+        Inc(WarnCount);
+        writeln('pascal26: warning: this program starts threads with the loaded '
+          + 'libc''s ' + Procs[ExternalProc[i]].Name + ', and those threads do not '
+          + 'get pxx''s per-thread block: its thread-local variables (__thread, '
+          + '_Thread_local, threadvar) get ONE copy shared by them and the main '
+          + 'thread. Threads will read and write each other''s values.');
+        Break;
+      end;
+
   { No "pxx threads share glibc's thread pointer" warning any more: every
     target with threads takes palthread.pas's pthread route whenever a shared
     library is linked, which is exactly when the hazard existed.

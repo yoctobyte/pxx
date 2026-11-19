@@ -1,5 +1,5 @@
 ---
-summary: "SILENT HALF, measured 2026-09-24 on x86-64 at pin v423 and HEAD: an INITIALISED `__thread int tl = 7;` reads 7 in main and 0 in a pthread_create'd thread (gcc: 7 in both). New threads get a zeroed block, not the .tdata image. A fix is PARKED as `git stash` entry 'frankS: tls init image WIP', set aside for release-readiness work. STATE 2026-09-24 (frankS). A file-scope SCALAR `__thread` gets real per-thread storage wherever TargetHasTlsBlock holds and the binary installs a block: x86-64 (gs) always, and aarch64 (tpidr_el0) and arm32 (TPIDRURO, set_tls) in a STATIC binary. It still gets ONE shared copy in these cases: (1) a target with no block install (riscv32 and the rest, which have no threads; i386 installs one in fs since 2026-09-27); (2) a DYNAMIC binary on aarch64/arm32, because glibc owns the one thread register, so reads fall back to the main thread's block and a link-time warning fires when the program also creates threads; (3) an array or a non-scalar type; (4) --emit-obj/--shared, which have no entry point to install a block; (5) function scope, which is feature-c-a-function-scope-thread-local-gets-real-per-thread-storage. Each of these warns. The pieces that would close each case: glibc ELF TLS (PT_TLS) for dynamic binaries; symbol-path support for arrays; per-thread init/final hooks for managed types."
+summary: "RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history."
 type: bug
 track: C
 prio: 40
@@ -170,3 +170,29 @@ a warning only when it cannot be placed:
 feature-c-a-function-scope-thread-local-gets-real-per-thread-storage. Still
 open here: (1) targets with no block, (2) dynamic aarch64/arm32 binaries, and
 (4) --emit-obj/--shared.
+
+## Re-measured 2026-11-19 (rd)
+
+Test: one program, four `__thread` shapes, a pthread that reads and then
+writes them, and main reading them again afterwards. Compared with gcc's
+output.
+
+| build | x86-64 | i386 | aarch64 | arm32 |
+|---|---|---|---|---|
+| static, --threadsafe | same as gcc | same | same | same |
+| --system-libs (dynamic) | **shared, was silent** (now warns) | -- | shared, warns | shared, warns |
+
+In the dynamic case on x86-64, the thread is libc's: `U pthread_create` in
+the binary. It inherits the creator's gs block. af94ac7dba adopts a fresh
+block for such a thread only at a Pascal `try` entry, so a C `__thread`
+access never adopts one. ResolveSynthImportLibraries now warns when an
+x86-64 dynamic binary has per-thread storage (TlsUserUsed > 0) and imports
+pthread_create or thrd_create. test-core row: c_tls_threads_libc_warns.
+
+The fix, not done here. Either:
+- route a --system-libs C program's pthread_create through pxx's start
+  trampoline (PxxPthreadStart), which installs and initialises a block; or
+- give pxx's own dynamic link real ELF TLS: PT_TLS, .tdata/.tbss, and
+  fs-relative local-exec accesses, so glibc builds every thread's block.
+  The object path already emits this (ac091638d7).
+
