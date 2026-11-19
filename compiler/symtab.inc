@@ -7443,7 +7443,8 @@ function TryBakeConstArrayIntoData(symIdx, firstPI, bssBefore, bssAfterAlloc: In
   a 114-entry errno byte table cost 7.7 KB of startup stores under
   --emit-obj. The x86-64/aarch64/i386/arm32 object writers carry an arm too
   but no test has run one, so they stay refused until one does. }
-var k, n, esz, base, b: Integer; v: Int64; elemTk: TTypeKind;
+var k, n, esz, base, b, si: Integer; v: Int64; elemTk: TTypeKind;
+    isStr: Boolean;
 begin
   Result := False;
   if EmitSharedMode then Exit;
@@ -7454,10 +7455,21 @@ begin
   if n <= 0 then Exit;
   if PendingInitCount - firstPI <> n then Exit;
   elemTk := Syms[symIdx].ElemType;
-  if not TypedConstBakeable(elemTk) then Exit;
+  { An AnsiString element whose every initialiser is a LITERAL is bakeable
+    too: the startup store puts the interned literal's static handle in the
+    slot (InternStr lays it down complete with [meta][rc][len] and the static
+    refcount, so retain/release no-op on it), and a data pointer fixup puts
+    the same word there at link time. The startup path cost ~40 B of code per
+    element: 10.6 KB for a 256-entry table (measured on riscv32 ESP), and
+    pylib's PyChar1Tab is one, in every NilPy image. tyAnsiString only (what
+    `string` and `AnsiString` elements are); not ShortString/string[N], which
+    are inline buffers, not handles.
+    feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
+  isStr := (elemTk = tyAnsiString) and (SymStrCap[symIdx] <= 0);
+  if (not isStr) and (not TypedConstBakeable(elemTk)) then Exit;
   if SymElemDynDepth[symIdx] > 0 then Exit;
   if SymIsSub[symIdx] then Exit;    { a subrange element still stores its ordinal, but leave the narrow cases alone until one is measured }
-  esz := TypeSlotSize(elemTk);
+  if isStr then esz := TARGET_PTR_SIZE else esz := TypeSlotSize(elemTk);
 
   { Every recorded init must be a plain literal for THIS array, in element
     order, covering the whole extent. Kind 0 is an ordinal, kind 3 a float
@@ -7466,7 +7478,11 @@ begin
   begin
     if PendingInitSym[k] <> symIdx then Exit;
     if PendingInitFOff[k] <> -1 then Exit;
-    if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
+    if isStr then
+    begin
+      if PendingInitKind[k] <> 1 then Exit;
+    end
+    else if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
     if PendingInitElem[k] <> Syms[symIdx].ConstVal + (k - firstPI) then Exit;
   end;
 
@@ -7480,6 +7496,41 @@ begin
     false and the fallback is gone -- promotion no longer depends on how much
     .data the rest of the compile happened to use first.
     feature-dynamic-compiler-tables }
+  if isStr then
+  begin
+    { The literals first: InternStr appends to Data, so the slots are laid
+      down after every literal exists, then each slot gets its fixup. }
+    { '' stays a zero slot: an empty AnsiString is NIL, and code compares
+      against '' by testing for nil, so a pointer to an interned empty literal
+      would read as non-empty (the self-host caught exactly that). }
+    for k := firstPI to PendingInitCount - 1 do
+      if GetTokenStrFromRaw(PendingInitVal[k], PendingInitValAux[k]) = '' then
+        PendingInitValAux[k] := -1
+      else
+        PendingInitValAux[k] := InternStr(GetTokenStrFromRaw(PendingInitVal[k], PendingInitValAux[k]));
+    base := AlignTo(DataLen, TARGET_PTR_SIZE);
+    DataEnsure(base - DataLen + n * esz);
+    for k := DataLen to base + n * esz - 1 do Data[k] := 0;
+    DataLen := base + n * esz;
+    for k := firstPI to PendingInitCount - 1 do
+    begin
+      si := PendingInitValAux[k];
+      if si >= 0 then
+        AddDataPtrFix(base + (k - firstPI) * esz, Strs[si].Offset + 8);
+    end;
+    { The slots are about to be REWOUND (PendingInitCount := firstPI below) and
+      reused by the next declaration, and the numeric element path does not set
+      PendingInitKind -- it relies on 0. A Kind of 1 left here made the next
+      Byte array's elements startup-store as strings (the compiler's own STUB
+      table, caught by the self-host). }
+    for k := firstPI to PendingInitCount - 1 do
+    begin
+      PendingInitKind[k] := 0;
+      PendingInitValAux[k] := 0;
+    end;
+  end
+  else
+  begin
   DataEnsure(base - DataLen + n * esz);
   for k := firstPI to PendingInitCount - 1 do
   begin
@@ -7491,6 +7542,7 @@ begin
       Data[base + (k - firstPI) * esz + b] := Byte((v shr (8 * b)) and $FF);
   end;
   DataLen := base + n * esz;
+  end;
 
   Syms[symIdx].Offset := DATA_SYM_BIAS + base;
   PendingInitCount := firstPI;
