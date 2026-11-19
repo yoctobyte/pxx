@@ -69,6 +69,19 @@ against gcc on call0 and windowed, and the loop at most 45 instructions.
   make test-xtensa and test-riscv32 green; c-testsuite 220/220 on hosted
   xtensa and riscv32, as latest.
 
-Still open before step 4: a forward conditional branch straight to its
-label when it reaches (needs relaxation like J's); bxxi for small
-constants; the riscv32 C3 kernel measured.
+## Follow-ups done, second round (2026-11-19, same seat)
+
+- 3187230470: a commutative binop (+ * and or xor) with a leaf left and a
+  computed, effect-free right emits the right first and loads the left into
+  a3, so `s += i * b` no longer spills. Loop f 40 -> 37.
+- c277872bbc: compare against a constant in b4const / b4constu is one
+  beqi/bnei/blti/bgei/bltui/bgeui (a > k, a <= k take k+1). S3 kernel
+  .text 1,066,020 -> 1,064,144.
+- 1c91859cdd: a forward conditional branch goes straight to its label when
+  it reaches (XtBrFix*, checked after the pass; one that does not reach
+  sets XtBrFar[IR index] and the body re-emits with the skip-over form).
+  Loop f 37 -> 36; S3 kernel .text 1,064,144 -> 1,036,909 (-22.9% against
+  the start). The retry exposed a latent call0 bug: ProcSweepThunkAddr
+  survived into the next pass (fixed; test_xtensa_sweep_thunk_relax).
+
+Still open before step 4: the riscv32 C3 kernel measured.
