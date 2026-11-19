@@ -9920,6 +9920,74 @@ begin
   AppendChar(IncExpanded, #10);
 end;
 
+{ fpc's `{$I %NAME%}` compile-time info macro: the STRING it expands to, as
+  fpc 3.2.2 answers it (measured, see the ticket's table). `nm` is the name
+  without the percent signs, `selfPath` the file the directive sits in, `line`
+  its line there. %DATE% and %TIME% need a clock the compiler does not have yet
+  and are REFUSED, never left at 0: this used to compile `const d = ;` as the
+  Integer 0 with no word, because this pass left the directive "for the lexer"
+  and the lexer had no handler for it.
+  bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero }
+function PasInfoMacro(const nm, selfPath: AnsiString; line: Integer): AnsiString;
+var k, slash: Integer; v: AnsiString;
+begin
+  v := '';
+  if CaseEqual(nm, 'FILE') then
+  begin
+    slash := 0;
+    for k := 1 to Length(selfPath) do
+      if selfPath[k] = '/' then slash := k;
+    for k := slash + 1 to Length(selfPath) do AppendChar(v, selfPath[k]);
+  end
+  else if CaseEqual(nm, 'LINE') then
+    v := IncSmallIntStr(line)
+  else if CaseEqual(nm, 'FPCVERSION') then
+    v := '3.2.2'                     { the dialect pxx follows; same as VER3_2_2 under --mimic-fpc }
+  else if CaseEqual(nm, 'FPCTARGET') or CaseEqual(nm, 'FPCTARGETCPU') then
+  begin
+    case TargetArch of
+      TARGET_X86_64:  v := 'x86_64';
+      TARGET_I386:    v := 'i386';
+      TARGET_AARCH64: v := 'aarch64';
+      TARGET_ARM32:   v := 'arm';
+      TARGET_XTENSA:  v := 'xtensa';
+      TARGET_RISCV32: v := 'riscv32';
+      TARGET_WASM32:  v := 'wasm32';
+    else
+      v := TargetArchName(TargetArch);
+    end;
+  end
+  else if CaseEqual(nm, 'FPCTARGETOS') then
+  begin
+    if TargetPlatform = PLATFORM_ESP then v := 'FreeRTOS'
+    else if TargetPlatform = PLATFORM_WASI then v := 'WASI'
+    else
+      case TargetKernel of
+        KERNEL_FREEBSD:   v := 'FreeBSD';
+        KERNEL_OPENBSD:   v := 'OpenBSD';
+        KERNEL_NETBSD:    v := 'NetBSD';
+        KERNEL_DRAGONFLY: v := 'DragonFly';
+        KERNEL_MINIX:     v := 'Minix';
+        KERNEL_WINDOWS:   v := 'Win64';
+      else
+        v := 'Linux';
+      end;
+  end
+  else if CaseEqual(nm, 'DATE') or CaseEqual(nm, 'TIME') then
+  begin
+    ErrorAt(line, 'the include macro %' + nm + '% is not implemented in pxx (no compile-time clock yet); ' +
+               'fpc expands it to the build date/time. Use a const string instead');
+  end
+  else
+  begin
+    { fpc: any other name is that ENVIRONMENT variable, '' plus a warning when unset. }
+    v := PxxGetEnv(nm);
+    if v = '' then
+      WarnAt(line, 'Include environment "' + nm + '" not found in environment');
+  end;
+  PasInfoMacro := v;
+end;
+
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString);
 { Replace active dollar-include directives with file contents, RECURSIVELY: an
   include inside an include is ordinary Pascal and FPC expands it, so we must
@@ -9948,6 +10016,7 @@ var
   wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
   incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
+  macName, macVal: AnsiString; macLine: Integer;   { a {$I %MACRO%} expansion (PasInfoMacro) }
   cond, active, outermost, savedNestedComments, optOn: Boolean;
   savedCondQuiet: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
@@ -10198,12 +10267,35 @@ begin
 {$endif}
           Inc(j);
         end;
-        if (Length(fname) = 1) and ((fname[1] = '+') or (fname[1] = '-')) or
+        if (Length(fname) >= 2) and (fname[1] = '%') and
+           (fname[Length(fname)] = '%') and (j <= Length(src)) then
+        begin
+          { `{$I %MACRO%}`: fpc's compile-time info macro, expanded HERE to the
+            quoted string literal it stands for (PasInfoMacro). The lexer never
+            had a handler for it, so leaving it "for the lexer" compiled
+            `const d = ;` as 0. }
+          macName := '';
+          for k := 2 to Length(fname) - 1 do AppendChar(macName, fname[k]);
+          macLine := 1;
+          for k := 1 to i - 1 do
+            if src[k] = #10 then Inc(macLine);
+          macVal := PasInfoMacro(macName, selfPath, macLine);
+          AppendChar(IncExpanded, '''');
+          for k := 1 to Length(macVal) do
+          begin
+            if macVal[k] = '''' then AppendChar(IncExpanded, '''');
+            AppendChar(IncExpanded, macVal[k]);
+          end;
+          AppendChar(IncExpanded, '''');
+          i := j + 1;                   { past the closing brace }
+        end
+        else if (Length(fname) = 1) and ((fname[1] = '+') or (fname[1] = '-')) or
            ((Length(fname) > 0) and (fname[1] = '%')) then
         begin
-          { NOT an include: `{$I+}` / `{$I-}` IO-checking switches and
-            `{$I %MACRO%}` compile-time info macros — leave them in the text
-            for the lexer (the hard miss-error below must not fire on them). }
+          { NOT an include: `{$I+}` / `{$I-}` IO-checking switches -- leave them
+            in the text for the lexer (the hard miss-error below must not fire
+            on them). A malformed macro with no closing percent sign stays
+            here too. }
           AppendChar(IncExpanded, src[i]);
           Inc(i);
         end

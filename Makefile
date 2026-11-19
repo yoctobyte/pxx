@@ -13761,6 +13761,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh typeinfo_alias_same26 "$$($(TESTTMP)/typeinfo_alias_same26)" "$$(cat test/test_a_plain_type_alias_answers_its_targets_typeinfo.expected)"
 	./$(COMPILER) test/test_p_ansistring_cast_of_a_frozen_string_is_a_conversion.pas $(TESTTMP)/ansicast_frozen26
 	tools/expect_same.sh ansicast_frozen26 "$$($(TESTTMP)/ansicast_frozen26)" "$$(cat test/test_p_ansistring_cast_of_a_frozen_string_is_a_conversion.expected)"
+	./$(COMPILER) test/test_p_include_info_macros_expand_to_strings.pas $(TESTTMP)/infomacro26
+	tools/expect_same.sh infomacro26 "$$($(TESTTMP)/infomacro26)" "$$(cat test/test_p_include_info_macros_expand_to_strings.expected)"
+	@out=$$(printf 'program d;\nconst d = {$$I %%DATE%%};\nbegin WriteLn(d); end.\n' > $(TESTTMP)/infomacro_date.pas; ./$(COMPILER) $(TESTTMP)/infomacro_date.pas $(TESTTMP)/infomacro_date 2>&1); rc=$$?; \
+	 test "$$rc" = "1" && printf '%s\n' "$$out" | grep -q '^pascal26:2: error: the include macro %DATE% is not implemented' \
+	  || { echo "infomacro_date: FAIL - rc=$$rc (want rc=1 and the %DATE% refusal on line 2)"; printf '%s\n' "$$out"; exit 1; }
 	# An ordinal TYPE as a whole array index (`array[Byte]`, `array[TKind]`,
 	# `array[Char]`, `array[Boolean]`) in a RECORD field, a CLASS field, and as
 	# dim 1 of an N-D field. The var section took these via ParseArrayDimBounds;

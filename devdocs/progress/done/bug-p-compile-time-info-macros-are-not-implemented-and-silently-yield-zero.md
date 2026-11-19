@@ -4,8 +4,8 @@ title: "`{$I %DATE%}` and the other compile-time info macros silently yield 0"
 track: P
 prio: 55
 type: bug
-status: open
-owner: ""
+status: done
+owner: claude-dupwt
 found-by: franks-ee
 created: 2026-09-16
 tags: [directives, preprocessor, lexer, silent-wrong-value, fpc-corpus]
@@ -92,3 +92,40 @@ loudly on every macro not implemented** rather than leaving any of them at 0 —
 refusing a program fpc accepts is a smaller harm than compiling a different one,
 and it is the half of this ticket that can land before the clock question is
 settled.
+
+
+# Fixed 2026-11-19 (claude-dupwt), in the shape this ticket suggested
+
+ExpandIncludes now substitutes `{$I %NAME%}` with the quoted string literal fpc
+gives (PasInfoMacro in elfwriter.inc, quotes doubled). Measured against fpc
+3.2.2, identical output:
+
+| macro | pxx now |
+| --- | --- |
+| `%FILE%` | the source file's basename |
+| `%LINE%` | the directive's line in its own file |
+| `%FPCVERSION%` | `3.2.2` (the dialect pxx follows; matches VER3_2_2 under --mimic-fpc) |
+| `%FPCTARGET%`, `%FPCTARGETCPU%` | fpc's CPU spelling of `--target` (x86_64, i386, aarch64, arm, riscv32, xtensa, wasm32) |
+| `%FPCTARGETOS%` | Linux / FreeBSD / OpenBSD / NetBSD / DragonFly / Minix / Win64, FreeRTOS for --platform=esp, WASI |
+| any other name | that environment variable (PxxGetEnv); unset gives `''` plus fpc's warning `Include environment "X" not found in environment` |
+| `%DATE%`, `%TIME%` | REFUSED at the directive's line: `the include macro %DATE% is not implemented in pxx (no compile-time clock yet)`. Never 0. |
+
+One deliberate difference: an environment value containing `'` is doubled.
+fpc pastes it raw and fails its own parse (`";" expected but "identifier S"
+found`, measured with `it's`).
+
+Still open, in the ticket's own words: the clock. %DATE%/%TIME% need a
+host clock on both build paths plus civil-from-days arithmetic. That needs a
+decision (local vs UTC, and whether SOURCE_DATE_EPOCH should win for
+reproducible builds), so it is refused rather than guessed. The general
+defect, `const d = ;` compiling as 0, is not reachable through this path any
+more. Whether an empty const initialiser is refused elsewhere was not
+re-measured here.
+
+Build hazard found on the way: the pre-pass scans the COMPILER's own source,
+so a string literal spelling a percent macro inside an include-directive
+brace would now be EXPANDED. The refusal message is worded to avoid that.
+Comments are skipped (the self-build prints no environment warnings).
+
+Tests: test_p_include_info_macros_expand_to_strings (row infomacro26, fpc's
+output) and an inline `%DATE%` refusal check (infomacro_date).
