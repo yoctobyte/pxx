@@ -67620,7 +67620,11 @@ begin
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
         ASTLeft[CurASTNode] := argSeq;
         if TypeIsFloat(IntToTypeKind(ASTTk[node])) then ASTTk[CurASTNode] := Ord(tyDouble)
-        else if CaseEqual(name, 'Abs') then ASTTk[CurASTNode] := ASTTk[node]
+        { abs() keeps an int operand's width, but NOT a bool's: abs(True) is the
+          int 1 in CPython, and keeping tyBoolean re-rendered it as True.
+          bug-n-unary-operators-and-abs-on-a-bool-keep-the-bool-tag-so-minus-true-is-true }
+        else if CaseEqual(name, 'Abs') and (IntToTypeKind(ASTTk[node]) <> tyBoolean) then
+          ASTTk[CurASTNode] := ASTTk[node]
         else ASTTk[CurASTNode] := Ord(tyInt64);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         Exit;

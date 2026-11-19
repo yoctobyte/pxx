@@ -4,8 +4,8 @@ title: "`-True` is `True` instead of `-1` — the unary operators and `abs()` ha
 track: N
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-22
 found-by: franks-5b
 blocked-by: []
@@ -66,3 +66,18 @@ Found while closing
 whose `abs()` fix is in the same function. **Not caused by it** — stashed that
 change, rebuilt, re-ran: these four rows are byte-identical before and after,
 and only the `Low(Int64)` row moved.
+
+
+# Fixed 2026-11-19 (claude-dupwt): the last arm was abs() of a static bool
+
+Re-measured first: -True, +True and ~True already answer -1, 1 and -2 (fixed
+since this ticket), and abs() of a bool behind a VARIANT already went through
+pyabs_v, which converts to int. The one remaining arm was the static path in
+pyparser's Abs lowering: `ASTTk[call] := ASTTk[node]` kept tyBoolean, so
+abs(True) printed True and abs(False) printed False. A bool operand now gets
+tyInt64; every other int keeps its width.
+
+test_nilpy_unary_operators_and_abs_on_a_bool_answer_an_int (row boolabs26)
+covers -x, +x, abs() of a static and a list-held bool, type(abs(True)) and
+abs(True) + 1. Its expected file is CPython's output; the previous compiler
+fails it.

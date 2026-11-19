@@ -1,0 +1,11 @@
+# Unary operators and abs() on a bool answer an INT, as CPython does: -True is
+# -1 and abs(True) is 1, not True. Negation was fixed earlier; abs() of a
+# statically typed bool kept the bool type and printed True / False.
+# bug-n-unary-operators-and-abs-on-a-bool-keep-the-bool-tag-so-minus-true-is-true
+x = True
+y = False
+print(-x, +x, abs(x), abs(y))
+print(type(abs(x)).__name__, abs(x) + 1)
+b = [True, False]
+print(-b[0], abs(b[0]), abs(b[1]))
+print(abs(-3), abs(2.5))

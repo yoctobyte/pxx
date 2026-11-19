@@ -3,8 +3,8 @@ slug: bug-p-a-procvar-named-like-a-routine-calls-nil
 track: P
 prio: 50
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-28
 found-by: frankD (writing test_param_cap_at_the_limit.pas; FPC refused the file and pxx segfaulted at run time)
 tags: [pascal, scope, procvar, silently-wrong]
@@ -49,3 +49,13 @@ shape.
 Measure what `@F` evaluates to when a same-named (case-insensitively) procvar
 is in scope: the variable's address, or nil. Then choose between refusing the
 declaration, as FPC does, and resolving `@F` to the routine.
+
+
+# Closed 2026-11-19 (claude-dupwt): refused since 5f11a77638
+
+`pascal: a var may not redeclare any name of its own scope` (2026-11-10) took
+the first of this ticket's two options, FPC's: the repro is now refused at
+the declaration with `duplicate identifier "f": already declared in this scope
+as a routine`, so there is no `@F` to mis-evaluate and no nil call.
+Re-measured today. test_a_var_may_not_redeclare_any_name_of_its_own_scope
+(Makefile row test_vardup26) asserts the routine arm by text.
