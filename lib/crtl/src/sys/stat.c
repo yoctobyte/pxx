@@ -174,8 +174,13 @@ int fstatat(int dirfd, const char *path, struct stat *buf, int flags)
 {
   unsigned char sx[256];
   /* STATX_BASIC_STATS (0x7ff): the fields struct stat has, nothing more */
+#ifdef SYS_statx
   if (syscall(SYS_statx, (long)dirfd, path, (long)flags, 0x7ffL, sx) < 0)
     return -1;
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   buf->st_mode    = (mode_t)(sx_u32(sx, 0x1C) & 0xFFFF);
   buf->st_blksize = (blksize_t)sx_u32(sx, 0x04);
   buf->st_nlink   = (nlink_t)sx_u32(sx, 0x10);
@@ -209,17 +214,32 @@ int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
     return -1;
 #endif
   }
+#ifdef SYS_fchmodat
   return (int)syscall(SYS_fchmodat, (long)dirfd, path, (long)mode);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int mkdirat(int dirfd, const char *path, mode_t mode)
 {
+#ifdef SYS_mkdirat
   return (int)syscall(SYS_mkdirat, (long)dirfd, path, (long)mode);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev)
 {
+#ifdef SYS_mknodat
   return (int)syscall(SYS_mknodat, (long)dirfd, path, (long)mode, (long)dev);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int mkfifoat(int dirfd, const char *path, mode_t mode)

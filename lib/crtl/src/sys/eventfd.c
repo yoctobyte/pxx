@@ -7,7 +7,12 @@
 
 int eventfd(unsigned int initval, int flags)
 {
+#ifdef SYS_eventfd2
   return (int)syscall(SYS_eventfd2, (long)initval, (long)flags);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 /* glibc's helpers: 0 on a full 8-byte transfer, -1 otherwise */

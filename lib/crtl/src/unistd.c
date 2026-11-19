@@ -1694,18 +1694,33 @@ int fexecve(int fd, char *const argv[], char *const envp[]) {
 
 int unlinkat(int dirfd, const char *path, int flags)
 {
+#ifdef SYS_unlinkat
   return (int)syscall(SYS_unlinkat, (long)dirfd, path, (long)flags);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsz)
 {
+#ifdef SYS_readlinkat
   return (ssize_t)syscall(SYS_readlinkat, (long)dirfd, path, buf, (long)bufsz);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int fchownat(int dirfd, const char *path, uid_t owner, gid_t group, int flags)
 {
+#ifdef SYS_fchownat
   return (int)syscall(SYS_fchownat, (long)dirfd, path, (long)owner, (long)group,
                       (long)flags);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 /* faccessat(2) has NO flags argument -- glibc emulates AT_EACCESS and
@@ -1721,18 +1736,33 @@ int faccessat(int dirfd, const char *path, int mode, int flags)
     if (r == 0 || errno != ENOSYS) return (int)r;
 #endif
   }
+#ifdef SYS_faccessat
   return (int)syscall(SYS_faccessat, (long)dirfd, path, (long)mode);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags)
 {
+#ifdef SYS_linkat
   return (int)syscall(SYS_linkat, (long)olddirfd, oldpath, (long)newdirfd, newpath,
                       (long)flags);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int symlinkat(const char *target, int newdirfd, const char *linkpath)
 {
+#ifdef SYS_symlinkat
   return (int)syscall(SYS_symlinkat, target, (long)newdirfd, linkpath);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 /* renameat(3). aarch64 and riscv never had renameat(2), only renameat2. */
@@ -1741,7 +1771,12 @@ int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpat
 #ifdef SYS_renameat
   return (int)syscall(SYS_renameat, (long)olddirfd, oldpath, (long)newdirfd, newpath);
 #else
+#ifdef SYS_renameat2
   return (int)syscall(SYS_renameat2, (long)olddirfd, oldpath, (long)newdirfd, newpath, 0L);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 #endif
 }
 
@@ -1752,11 +1787,17 @@ int getentropy(void *buf, size_t len)
 {
   char *p = (char *)buf;
   if (len > 256) { errno = EIO; return -1; }
+#ifdef SYS_getrandom
   while (len) {
     long r = syscall(SYS_getrandom, p, (long)len, 0L);
     if (r < 0) { if (errno == EINTR) continue; return -1; }
     p += r; len -= (size_t)r;
   }
+#else
+  (void)p;
+  errno = ENOSYS;
+  return -1;
+#endif
   return 0;
 }
 
@@ -1766,7 +1807,11 @@ int getentropy(void *buf, size_t len)
 static long crtl_count_cpus(void)
 {
   unsigned long m[16];
+#ifdef SYS_sched_getaffinity
   long r = syscall(SYS_sched_getaffinity, 0L, (long)sizeof m, m);
+#else
+  long r = -1;                       /* no kernel to ask: one CPU */
+#endif
   long n = 0, i;
   if (r <= 0) return 1;
   for (i = 0; i < r / (long)sizeof(unsigned long); i++) {
@@ -1784,7 +1829,12 @@ static long crtl_sysinfo_pages(int avail)
      program that includes <unistd.h>. */
   long b[32];
   unsigned long n, unit;
+#ifdef SYS_sysinfo
   if (syscall(SYS_sysinfo, b) < 0) return -1;
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   n = (unsigned long)b[avail ? 5 : 4];
   unit = *(unsigned int *)((char *)b + (sizeof(long) == 8 ? 104 : 52));
   if (unit == 0) unit = 1;
@@ -1797,9 +1847,11 @@ static long crtl_sysconf_more(int name)
   case _SC_ARG_MAX: {
     /* the kernel's rule: a quarter of the stack limit, never below 128 KiB */
     unsigned long long lim[2];
+#ifdef SYS_prlimit64
     if (syscall(SYS_prlimit64, 0L, 3L /* RLIMIT_STACK */, 0L, lim) == 0 &&
         lim[0] != ~0ULL && lim[0] / 4 > 131072)
       return (long)(lim[0] / 4 > 0x7fffffffULL ? 0x7fffffffULL : lim[0] / 4);
+#endif
     return 131072;
   }
   case _SC_NPROCESSORS_CONF:
@@ -1858,7 +1910,12 @@ static long crtl_pathconf(int name)
 long pathconf(const char *path, int name)
 {
   /* F_OK: the path must exist (ENOENT otherwise), readable or not */
+#ifdef SYS_faccessat
   if (syscall(SYS_faccessat, -100L, path, 0L) < 0) return -1;
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   return crtl_pathconf(name);
 }
 

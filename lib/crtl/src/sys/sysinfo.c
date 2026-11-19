@@ -18,5 +18,10 @@
 #include <unistd.h>
 
 int sysinfo(struct sysinfo *info) {
+#ifdef SYS_sysinfo
   return (int)syscall(SYS_sysinfo, (long)info);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }

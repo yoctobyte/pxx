@@ -152,10 +152,20 @@ int munlock(const void *addr, size_t len)
 
 int mlockall(int flags)
 {
+#ifdef SYS_mlockall
   return (int)syscall(SYS_mlockall, (long)flags);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int munlockall(void)
 {
+#ifdef SYS_munlockall
   return (int)syscall(SYS_munlockall);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }

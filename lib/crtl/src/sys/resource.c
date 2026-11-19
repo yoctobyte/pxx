@@ -70,8 +70,13 @@ int prlimit(pid_t pid, int resource, const struct rlimit *new_limit,
   }
   out.rlim_cur = 0;
   out.rlim_max = 0;
+#ifdef SYS_prlimit64
   rc = syscall(SYS_prlimit64, (long)pid, (long)resource, new_limit ? &in : 0,
                old_limit ? &out : 0);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   if (rc < 0) return -1;            /* syscall() has set errno */
   if (old_limit) {
     old_limit->rlim_cur = narrow(out.rlim_cur);

@@ -98,14 +98,24 @@ static int pxx_narrow(const struct __pxx_kstatfs64 *k, struct statfs *b)
 int statfs(const char *path, struct statfs *buf)
 {
   struct __pxx_kstatfs64 k;
+#ifdef SYS_statfs64
   if (syscall(SYS_statfs64, (long)path, (long)sizeof(k), (long)&k) < 0) return -1;
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   return pxx_narrow(&k, buf);
 }
 
 int fstatfs(int fd, struct statfs *buf)
 {
   struct __pxx_kstatfs64 k;
+#ifdef SYS_fstatfs64
   if (syscall(SYS_fstatfs64, (long)fd, (long)sizeof(k), (long)&k) < 0) return -1;
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
   return pxx_narrow(&k, buf);
 }
 

@@ -53,7 +53,12 @@ int openat(int dirfd, const char *path, int flags, ...) {
      dirfd but AT_FDCWD with EBADF -- sqlite never passes one, a tree walker
      passes nothing else. */
   if (dirfd == AT_FDCWD) return sysret(__pxx_open(path, flags, mode));
+#ifdef SYS_openat
   return (int)syscall(SYS_openat, (long)dirfd, path, (long)flags, (long)mode);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 int creat(const char *path, mode_t mode) {
