@@ -19905,6 +19905,14 @@ test-core: $(COMPILER)
 	  echo "=== casmgnu386: no gcc -m32, the i386 asm ORACLE did not run (it still compiled and ran) ==="; \
 	  tools/run_target.sh i386 $(TESTTMP)/casmgnu386 >/dev/null || { echo 'casmgnu386: i386 run FAILED'; exit 1; }; \
 	fi
+	# Local register variables (`register long r10 __asm__("r10")`) pinned at
+	# their inline-asm operands: a syscall wrapper and a template that reads the
+	# bound registers by name. Expected output is gcc's, x86-64 and -m32.
+	# feature-c-asm-register-variables
+	./$(COMPILER) test/c_asm_register_variables.c $(TESTTMP)/c_asmregvar
+	tools/expect_same.sh c_asm_register_variables "$$($(TESTTMP)/c_asmregvar)" "$$(cat test/c_asm_register_variables.expected)"
+	./$(COMPILER) --target=i386 test/c_asm_register_variables.c $(TESTTMP)/c_asmregvar386
+	tools/expect_same.sh c_asm_register_variables-i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asmregvar386)" "$$(cat test/c_asm_register_variables.expected)"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.
@@ -36800,6 +36808,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_call0_wide_argument_block "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wide_c0)" "$$(cat test/test_xtensa_call0_wide_argument_block.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_sweep_thunk_relax.pas $(TESTTMP)/xt_sweep_c0
 	tools/expect_same.sh xtensa/test_xtensa_sweep_thunk_relax "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sweep_c0)" "$$(cat test/test_xtensa_sweep_thunk_relax.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_asm_register_variables.c $(TESTTMP)/xt_asmregvar
+	tools/expect_same.sh xtensa/c_asm_register_variables "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_asmregvar)" "$$(cat test/c_asm_register_variables.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_c0
 	tools/expect_same.sh xtensa-call0/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_c0)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_w

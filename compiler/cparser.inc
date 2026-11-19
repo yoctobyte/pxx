@@ -254,6 +254,7 @@ function ParseCStatementAST: Integer; forward;
 function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
+function CReadAsmLabelString: AnsiString; forward;
 procedure ParseCSubroutine; forward;
 function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDecl asks it ~900 lines above its body }
 { Both called from ParseCGlobalVarDecl ~2500 lines above their bodies, for the
@@ -8697,6 +8698,37 @@ end;
   AN_BLOCK whose AN_SEQ chain holds the initialiser assignments (an empty block
   when there are no initialisers). Increment-1 scope: scalar declarators; array
   and per-declarator pointer-depth handling come later. }
+{ The register a local register variable is bound to, when symbol idx is
+  one (see CRegVarName), else ''. }
+function CRegVarOf(idx: Integer): AnsiString;
+var k, j: Integer;
+begin
+  Result := '';
+  if (idx < 0) or (idx >= SymCount) then Exit;
+  for k := CRegVarCount - 1 downto 0 do
+    if (CRegVarBase[k] <= idx) and (Syms[idx].Name = CRegVarName[k]) then
+    begin
+      j := CRegVarBase[k];
+      while (j < idx) and (Syms[j].Name <> CRegVarName[k]) do Inc(j);
+      if j = idx then Result := CRegVarReg[k];
+      Exit;
+    end;
+end;
+
+procedure CRegVarAdd(const nm, reg: AnsiString);
+begin
+  if Length(CRegVarName) <= CRegVarCount then
+  begin
+    SetLength(CRegVarName, CRegVarCount + 16);
+    SetLength(CRegVarReg, CRegVarCount + 16);
+    SetLength(CRegVarBase, CRegVarCount + 16);
+  end;
+  CRegVarName[CRegVarCount] := nm;
+  CRegVarReg[CRegVarCount] := reg;
+  CRegVarBase[CRegVarCount] := SymCount;
+  Inc(CRegVarCount);
+end;
+
 function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
@@ -9134,6 +9166,11 @@ begin
     end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    { `register long a2 __asm__("a2")`: a local register variable, bound at
+      inline-asm operands (CRegVarOf). feature-c-asm-register-variables }
+    if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'asm') or
+       (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CRegVarAdd(name, CReadAsmLabelString);
     { aligned(N) for THIS declarator: on the specifiers, an aligned typedef, or
       after the declarator (`char b[5] __attribute__((aligned(64)))` -- the
       lexer marks the token after the attribute, so the scan runs to the `,`
@@ -10550,6 +10587,7 @@ begin
     CAsmOps[CAsmOpCount].Early := early;
     CAsmOps[CAsmOpCount].SymName := sym;
     CAsmOps[CAsmOpCount].TiedTo := tied;
+    CAsmOps[CAsmOpCount].FixReg := '';
     if cls = 'i' then
     begin
       { An immediate is a constant expression -- `FOUR * 10`, `KERNEL_CS`,
@@ -10581,6 +10619,19 @@ begin
         ASTLeft[addrN] := CAsmOps[CAsmOpCount].Expr;
         ASTTk[addrN] := Ord(tyPointer);
         CAsmOps[CAsmOpCount].Expr := addrN;
+      end;
+      { a local register variable as a register-class operand: that register,
+        which is what gcc guarantees for it. feature-c-asm-register-variables }
+      if ((cls = 'r') or (cls = 'g') or (cls = 'rm') or (cls = 'mr')) and
+         (ASTKind[CAsmOps[CAsmOpCount].Expr] = AN_IDENT) then
+      begin
+        CAsmOps[CAsmOpCount].FixReg := CRegVarOf(ASTIVal[CAsmOps[CAsmOpCount].Expr]);
+        if (CAsmOps[CAsmOpCount].FixReg <> '') and
+           (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) and
+           (TargetArch <> TARGET_XTENSA) then
+          Error('C: inline asm operand "' + CAsmOps[CAsmOpCount].Raw + '" is the'
+                + ' register variable bound to "' + CAsmOps[CAsmOpCount].FixReg
+                + '"; pxx pins register variables on x86-64, i386 and xtensa only');
       end;
     end;
     Inc(CAsmOpCount);
@@ -11119,6 +11170,12 @@ begin
     opReg[i] := -1;
     if CAsmOps[i].TiedTo >= 0 then Continue;
     fixed := CAsmFixedReg(CAsmOps[i].Cons);
+    if CAsmOps[i].FixReg <> '' then
+    begin
+      if not AsmRegNum(CAsmOps[i].FixReg, fixed, dummySize) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+              + CAsmOps[i].FixReg + '", which is not a register this backend knows');
+    end;
     if fixed >= 0 then
     begin
       if used[fixed] then
@@ -11648,13 +11705,38 @@ begin
     used[reg] := True;
   end;
 
-  poolNext := 0;
+  { register variables first, so the pool below works around them. Inputs
+    are loaded straight into their register by a load that touches nothing
+    else (EmitLoadVarOwnXtensa); outputs are stored back through a2, the one
+    bound to a2 first, by a store that uses a8 and a9 -- so an output may not
+    be bound to those two. feature-c-asm-register-variables }
   for i := 0 to CAsmOpCount - 1 do
   begin
     opReg[i] := -1;
+    if (CAsmOps[i].TiedTo >= 0) or (CAsmOps[i].FixReg = '') then Continue;
+    if not AsmXtensaRegNum(CAsmOps[i].FixReg, reg) then
+      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which is not a general register');
+    if (reg < 2) or (reg = 7) or (reg >= 12) then
+      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '"; a register variable may name a2..a6 and a8..a11');
+    if CAsmOps[i].IsOut and ((reg = 8) or (reg = 9)) then
+      Error('C: xtensa inline asm output "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which this frontend uses to store outputs back;'
+            + ' an output register variable may name a2..a6, a10 or a11');
+    if used[reg] then
+      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which another operand or a clobber already uses');
+    opReg[i] := reg;
+    used[reg] := True;
+  end;
+  poolNext := 0;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
     tmpSym[i] := -1;
     opImm[i] := 0;
     if CAsmOps[i].TiedTo >= 0 then Continue;
+    if opReg[i] >= 0 then Continue;
     cls := CAsmOps[i].Cons;
     if (cls = 'i') or (cls = 'n') then
     begin
@@ -11686,10 +11768,15 @@ begin
     if (sz <> 1) and (sz <> 2) and (sz <> 4) then
       Error('C: xtensa inline asm operand is ' + AIntToStr(sz) + ' bytes wide,'
             + ' which does not fit one address register');
-    if CAsmOps[i].TiedTo < 0 then
-      tmpSym[i] := AllocVar('', IntToTypeKind(tk))
+    { a signed byte travels in a 32-bit temporary: the register then holds
+      it sign-extended, which the old load produced and the input load
+      (EmitLoadVarOwnXtensa) cannot do without a scratch register }
+    if CAsmOps[i].TiedTo >= 0 then
+      tmpSym[i] := tmpSym[CAsmOps[i].TiedTo]
+    else if (sz = 1) and TypeSigned(IntToTypeKind(tk)) then
+      tmpSym[i] := AllocVar('', tyInteger)
     else
-      tmpSym[i] := tmpSym[CAsmOps[i].TiedTo];
+      tmpSym[i] := AllocVar('', IntToTypeKind(tk));
   end;
 
   { the template: every %N / %[name] becomes its register or its value }
@@ -12329,6 +12416,7 @@ begin
         CAsmOps[CAsmOpCount].Early := False;
         CAsmOps[CAsmOpCount].SymName := '';
         CAsmOps[CAsmOpCount].TiedTo := asmI;
+        CAsmOps[CAsmOpCount].FixReg := '';
         CAsmOps[CAsmOpCount].Expr := CloneAST(CAsmOps[asmI].Expr);
         Inc(CAsmOpCount);
         CAsmOps[asmI].IsInOut := False;
@@ -12367,6 +12455,7 @@ begin
       CAsmOps[CAsmOpCount].Early := False;
       CAsmOps[CAsmOpCount].SymName := '';
       CAsmOps[CAsmOpCount].TiedTo := -1;
+      CAsmOps[CAsmOpCount].FixReg := '';
       CAsmOps[CAsmOpCount].Expr := asmGotoIdn;
       Inc(CAsmOpCount);
       CAsmTemplate := CAsmGotoRewrite(CAsmTemplate, asmGotoIdx);

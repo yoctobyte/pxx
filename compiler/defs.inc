@@ -2928,6 +2928,9 @@ type
     Expr    : Integer;      { AST node of the bound C expression }
     SymName : AnsiString;   { `[name]` symbolic operand, '' when positional }
     TiedTo  : Integer;      { digit constraint's target operand, else -1 }
+    FixReg  : AnsiString;   { a register-class operand that is a local register
+                              variable (`register long a2 __asm__("a2")`): the
+                              register it is pinned to, else '' }
   end;
 
   TCallFix = record
@@ -7286,6 +7289,15 @@ var
     feature-c-gnu-inline-asm-with-a-non-empty-template }
   CAsmOps      : array[0..MAX_CASM_OPERANDS-1] of TCAsmOperand;
   CAsmOpCount  : Integer;
+  { Local register variables, `register T x __asm__("reg")`: the name, the
+    register, and SymCount when it was declared -- the variable is the first
+    symbol of that name allocated from there (CRegVarOf). gcc guarantees the
+    binding only where the variable is an operand of an inline asm, and that
+    is the only place pxx honours it; elsewhere it is an ordinary local.
+    feature-c-asm-register-variables }
+  CRegVarName, CRegVarReg : array of AnsiString;
+  CRegVarBase : array of Integer;
+  CRegVarCount : Integer;
   CAsmOutCount : Integer;    { operands [0..CAsmOutCount) came from section 0 }
   CAsmTemplate : AnsiString; { adjacent string literals already concatenated }
   CAsmClobMem  : Boolean;    { "memory" }

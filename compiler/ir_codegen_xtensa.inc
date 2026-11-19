@@ -548,6 +548,34 @@ begin
   end;
 end;
 
+procedure EmitLoadVarOwnXtensa(rd, idx: Integer);
+{ rd := symbol idx, a word or less and not a var parameter, with rd itself
+  as the address register: touches rd and nothing else, so it can fill any
+  register while every other one holds a value -- an inline asm's register
+  variables may pin a2, a8 and a9, which EmitLoadVarRegXtensa uses. A signed
+  byte is refused: its sign extension takes a9 (CAsmBuildBlockXtensa widens
+  its operands to a word first). feature-c-asm-register-variables }
+var tk: TTypeKind; sz, adj: Integer; sgn: Boolean;
+begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSlotSize(tk);
+  sgn := TypeSigned(tk);
+  if ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) or (sgn and (sz = 1)) then
+    Error('compiler error: EmitLoadVarOwnXtensa on a var parameter or a signed byte');
+  if Syms[idx].Kind = skGlobal then
+  begin
+    EmitLoadGlobAddrXtensa(rd, Syms[idx].Offset);
+    EmitSizedLoadXtensa(rd, rd, sz, sgn);
+  end
+  else if XtFrameDirect(Syms[idx].Offset, sz, adj) then
+    EmitSizedLoadOffXtensa(rd, reg_xtensa_a7, adj, sz, sgn)
+  else
+  begin
+    EmitFrameAddrXtensa(rd, Syms[idx].Offset);
+    EmitSizedLoadXtensa(rd, rd, sz, sgn);
+  end;
+end;
+
 procedure EmitLoadVarXtensa(idx: Integer);
 begin
   EmitLoadVarRegXtensa(reg_xtensa_a2, idx);
@@ -2603,7 +2631,7 @@ procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
-  asmBlk, asmK: Integer;   { IR_ASM: the C inline-asm binding block, and a cursor }
+  asmBlk, asmK, asmPass: Integer;   { IR_ASM: the C inline-asm binding block, and a cursor }
   isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
   r4: Integer;      { the string-marshalling quad's FOURTH register -- a7 on
                       Call0, a3 under windowed, because a7 is the windowed
@@ -5846,11 +5874,10 @@ begin
         if IRIVal[node] > 0 then
         begin
           asmBlk := Integer(IRIVal[node]) - 1;
+          { straight into each register, by a load that touches nothing
+            else: register variables may pin a2, a8 and a9 too }
           for asmK := CAsmA64BlkFirst[asmBlk] to CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] - 1 do
-          begin
-            EmitLoadVarXtensa(CAsmA64BindSym[asmK]);
-            xtensa_mov(CAsmA64BindReg[asmK], reg_xtensa_a2);
-          end;
+            EmitLoadVarOwnXtensa(CAsmA64BindReg[asmK], CAsmA64BindSym[asmK]);
         end;
         { Inline asm block: replay the parse-time-captured text lines
           (AsmParseBodyTextXtensa, asmenc.inc) through the xtensa text engine.
@@ -5865,12 +5892,17 @@ begin
         if IRIVal[node] > 0 then
         begin
           asmBlk := Integer(IRIVal[node]) - 1;
-          for asmK := CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] to
-                      CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] + CAsmA64BlkOut[asmBlk] - 1 do
-          begin
-            xtensa_mov(reg_xtensa_a2, CAsmA64BindReg[asmK]);
-            EmitStoreVarXtensa(CAsmA64BindSym[asmK]);
-          end;
+          { an output in a2 (a register variable) is stored first, before
+            a2 carries the others }
+          for asmPass := 0 to 1 do
+            for asmK := CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] to
+                        CAsmA64BlkFirst[asmBlk] + CAsmA64BlkIn[asmBlk] + CAsmA64BlkOut[asmBlk] - 1 do
+              if Ord(CAsmA64BindReg[asmK] <> reg_xtensa_a2) = asmPass then
+              begin
+                if CAsmA64BindReg[asmK] <> reg_xtensa_a2 then
+                  xtensa_mov(reg_xtensa_a2, CAsmA64BindReg[asmK]);
+                EmitStoreVarXtensa(CAsmA64BindSym[asmK]);
+              end;
         end;
       end;
 

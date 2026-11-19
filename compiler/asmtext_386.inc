@@ -252,6 +252,19 @@ begin
     Exit;
   end;
 
+  { int $imm8: CD ib -- `int $0x80`, the i386 Linux system call, and what
+    every hand-rolled syscall wrapper there is. Always CD, as gas emits it for
+    `int $3` too (int3, CC, is its own mnemonic). feature-c-asm-register-variables }
+  if (Length(op1) = 0) and CaseEqual(mnem, 'int') then
+  begin
+    if (AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 1) or
+       (imm0 < 0) or (imm0 > 255) then
+      Error('EmitAsm386: int expects an immediate in 0..255');
+    EncB($CD);
+    EncB(Integer(imm0));
+    Exit;
+  end;
+
   { call reg (indirect, FF /2) }
   if CaseEqual(mnem, 'call') then
   begin
