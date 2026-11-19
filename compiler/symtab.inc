@@ -20621,7 +20621,7 @@ begin
               + '--xtensa-long-calls, which reserves the long form at every '
               + 'forward call site (bigger and slower, and the only thing that '
               + 'builds an image this large today)');
-      { A CALLn slot file-scope asm wrote (CFsaEmitCodeXtensa: call0/4/8/12
+      { A CALLn slot file-scope asm wrote (CFsaEmitCode: call0/4/8/12
         name) keeps its own n; only the offset is ours to patch. Every other
         slot takes the ABI's call. feature-c-file-scope-asm-that-defines-code }
       if CFsaCallSlotN(CallFix[i].CodePos) >= 0 then

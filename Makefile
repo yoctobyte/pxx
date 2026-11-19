@@ -19957,6 +19957,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asm_register_variables "$$($(TESTTMP)/c_asmregvar)" "$$(cat test/c_asm_register_variables.expected)"
 	./$(COMPILER) --target=i386 test/c_asm_register_variables.c $(TESTTMP)/c_asmregvar386
 	tools/expect_same.sh c_asm_register_variables-i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_asmregvar386)" "$$(cat test/c_asm_register_variables.expected)"
+	# file-scope asm that defines code, x86-64 (rump repro s03's shape), at
+	# -O0 and -O2. feature-c-file-scope-asm-that-defines-code
+	./$(COMPILER) test/c_file_scope_asm_code_x86_64.c $(TESTTMP)/c_fsacode64 > /dev/null
+	tools/expect_same.sh c_file_scope_asm_code_x86_64 "$$($(TESTTMP)/c_fsacode64)" "$$(cat test/c_file_scope_asm_code_x86_64.expected)"
+	./$(COMPILER) -O2 test/c_file_scope_asm_code_x86_64.c $(TESTTMP)/c_fsacode64o2 > /dev/null
+	tools/expect_same.sh c_file_scope_asm_code_x86_64-O2 "$$($(TESTTMP)/c_fsacode64o2)" "$$(cat test/c_file_scope_asm_code_x86_64.expected)"
 	# __thread across threads: per-thread and initialised in a static build
 	# (gcc's output); a --system-libs build starts libc's threads, which share
 	# the main block, and must say so (it was silent).

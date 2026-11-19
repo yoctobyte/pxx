@@ -3,12 +3,12 @@ slug: feature-c-file-scope-asm-that-defines-code
 track: C
 prio: 35
 type: feature
-status: backlog
+status: done
 created: 2026-11-19
 found-by: rd (Rainyday kernel seat), building Rainyday's tests/xtensa with pxx
 tags: [cfront, inline-asm, file-scope-asm, xtensa, rainyday, rump]
 blocked-by: []
-summary: "XTENSA DONE 2026-11-19 (rd): a top-level asm with .text and global labels assembles in place; each global label is a frameless function C can call (a prior prototype binds to it); entry/retw/call0/4/8/12 name (resolved after the unit, the slot keeps its n), local labels and two-register branches, .align/.space/.section .text*. All 10 Rainyday tests/xtensa programs now compile with pxx; signal, selfexe and fixed pass on the S3 kernel (fixed.c also needed bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data, done). OPEN: x86-64 and the other targets still refuse (rump repro s03: `.globl myfunc; myfunc: movl $42,%eax; ret`)."
+summary: "DONE 2026-11-19 (rd) on xtensa and x86-64, the two targets that asked. A top-level asm with .text and global labels is assembled in place: each global label is a function C can call or link against (a prior prototype binds to it), `call`/`jmp name` (x86-64) and `call0/4/8/12 name` (xtensa) reach C functions through the call fixups, local labels branch, .align/.p2align/.space/.section .text* are handled, anything else refuses. All 10 Rainyday tests/xtensa programs build with pxx and pass on the esp32s3 kernel; rump s03's shape builds as an object gcc links against. i386, aarch64, arm32 and riscv32 still refuse it (loudly), as before."
 ---
 
 # C: file-scope asm that defines code
@@ -78,4 +78,21 @@ signal prints `signal: ok`, selfexe `selfexe: ok`. fixed.c's code layout is
 right (far_main on the second 64 KiB page, past the 70000-byte pad); it
 fails its data check, a different gap, ticketed separately.
 test-xtensa row: xtensa/c_file_scope_asm_code (call0 ABI under qemu).
+
+## x86-64, done 2026-11-19 (rd)
+
+The same routine (CFsaEmitCode). On x86-64 a body's instruction lines and
+numeric local labels collect into one AT&T template, encoded by the inline
+asm reader (AttEncodeTemplate, so `jns 1f` reaches `1:`) and copied into the
+code with IR_ASM's global-ref fixups, at each global label, `call/jmp name`,
+.align/.space and the end. `call name` / `jmp name` are E8/E9 rel32 sites
+recorded by name and resolved before ApplyCallFixups. A non-numeric local
+label refuses on x86-64 (the template reader knows numeric ones only).
+.align pads x86 .text with nops, as gas does.
+
+Measured: test/c_file_scope_asm_code_x86_64.c (s03's `myfunc`, a branch to
+a local label, a call into C, a tail jump) prints gcc's `42 0 9 43 16` at
+-O0 and -O2; --emit-obj of s03's shape exports `myfunc`/`via_c` as T, and a
+gcc-compiled main linked against it prints `42 11`.
+Rows: c_file_scope_asm_code_x86_64 (-O0, -O2).
 

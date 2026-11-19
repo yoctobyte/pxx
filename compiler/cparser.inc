@@ -17651,9 +17651,16 @@ begin
     end;
 end;
 
-procedure CFsaEmitCodeXtensa(const text: AnsiString);
-var i, p, k, curProc, n, reg, nGlob, pi: Integer;
-    line, w, rest, nm, a: AnsiString;
+procedure CFsaEmitCode(const text: AnsiString);
+{ xtensa, and x86-64 (rump repro s03: `.globl myfunc; myfunc: movl $42,%eax;
+  ret`). On x86-64 the instruction lines and numeric local labels of a body
+  collect into one AT&T template, encoded by the inline-asm reader
+  (AttEncodeTemplate, so `jne 1f` reaches `1:`) at each global label,
+  `call/jmp name`, .align/.space, and the end; `call name` and `jmp name`
+  are E8/E9 rel32 sites resolved like xtensa's callN. }
+var i, p, k, curProc, n, reg, nGlob, pi, st, ln, j: Integer;
+    line, w, rest, nm, a, pend: AnsiString;
+    x86, gf: Boolean;
     globs: array of AnsiString;
     noNames: array[0..0] of AnsiString;
     noTypes: array[0..0] of TTypeKind;
@@ -17674,8 +17681,33 @@ var i, p, k, curProc, n, reg, nGlob, pi: Integer;
       if globs[j] = s then begin Result := True; Exit; end;
   end;
 
+  { x86-64: encode the collected template and copy it into the code, with
+    the global-ref fixups IR_ASM's blit applies }
+  procedure FlushX86;
+  var q: Integer;
+  begin
+    if (not x86) or (pend = '') then Exit;
+    AttResetBindings;
+    AttEncodeTemplate(pend, False, st, ln);
+    j := 0;
+    while j < ln do
+    begin
+      gf := False;
+      for q := 0 to AsmGlobFixCount - 1 do
+        if AsmGlobFix[q].AsmOff = st + j then
+        begin
+          EmitGlobRef(AsmGlobFix[q].BSSoff);
+          gf := True;
+        end;
+      if gf then Inc(j, 4)
+      else begin EmitB(AsmBytes[st + j]); Inc(j); end;
+    end;
+    pend := '';
+  end;
+
   procedure CloseProc;
   begin
+    FlushX86;
     if curProc >= 0 then SetProcBodyEndHere(curProc);
     curProc := -1;
   end;
@@ -17725,7 +17757,9 @@ begin
     end;
 
   curProc := -1;
-  AsmXtensaBlockBegin;
+  x86 := TargetArch = TARGET_X86_64;
+  pend := '';
+  if not x86 then AsmXtensaBlockBegin;
   p := 1;
   for i := 1 to Length(text) + 1 do
     if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
@@ -17754,17 +17788,25 @@ begin
           Refuse('section "' + a + '" (only .text and .text.* are code here)');
         Continue;
       end;
-      if w = '.align' then
+      if (w = '.align') or (w = '.balign') or (w = '.p2align') then
       begin
         n := NumOr(rest);
+        if w = '.p2align' then
+        begin
+          if (n < 0) or (n > 12) then Refuse('"' + line + '"');
+          n := 1 shl n;
+        end;
         if (n < 1) or (n > 4096) then Refuse('"' + line + '"');
+        FlushX86;
         if curProc >= 0 then
-          while (CodeLen mod n) <> 0 do EmitB(0);
+          while (CodeLen mod n) <> 0 do
+            if x86 then EmitB($90) else EmitB(0);   { gas pads x86 .text with nops }
         Continue;     { a procedure start is aligned to 4 anyway }
       end;
       if (w = '.space') or (w = '.skip') or (w = '.zero') then
       begin
         NeedProc;
+        FlushX86;
         n := NumOr(rest);
         if (n < 0) or (n > 16 * 1024 * 1024) then Refuse('"' + line + '" (a plain byte count)');
         FsaZeroFill(n);
@@ -17794,6 +17836,13 @@ begin
           SetProcBodyAddrHere(pi);
           curProc := pi;
         end
+        else if x86 then
+        begin
+          NeedProc;
+          if (nm = '') or not (nm[1] in ['0'..'9']) then
+            Refuse('"' + line + '" (on x86-64 a local label is numeric: `1:` with `jne 1f`)');
+          pend := pend + line + #10;
+        end
         else
         begin
           NeedProc;
@@ -17803,6 +17852,26 @@ begin
       end;
       if (w <> '') and (w[1] = '.') then Refuse('"' + line + '"');
       NeedProc;
+      if x86 then
+      begin
+        if ((w = 'call') or (w = 'callq') or (w = 'jmp') or (w = 'jmpq')) and CFsaIsName(rest) then
+        begin
+          FlushX86;
+          if (w = 'call') or (w = 'callq') then EmitB($E8) else EmitB($E9);
+          if Length(CFsaCallPos) <= CFsaCallCount then
+          begin
+            SetLength(CFsaCallPos, CFsaCallCount + 16);
+            SetLength(CFsaCallName, CFsaCallCount + 16);
+          end;
+          CFsaCallPos[CFsaCallCount] := CodeLen;     { the rel32, as ApplyCallFixups patches it }
+          CFsaCallName[CFsaCallCount] := rest;
+          Inc(CFsaCallCount);
+          EmitB(0); EmitB(0); EmitB(0); EmitB(0);
+        end
+        else
+          pend := pend + line + #10;
+        Continue;
+      end;
       if w = 'entry' then
       begin
         k := Pos(',', rest);
@@ -17839,7 +17908,7 @@ begin
         Refuse('"' + line + '" is not an instruction the xtensa assembler in pxx encodes');
       AsmXtensaProcessLine(line, dummyHoles, 0);
     end;
-  AsmXtensaBlockResolve;
+  if not x86 then AsmXtensaBlockResolve;
   CloseProc;
 end;
 
@@ -17854,6 +17923,7 @@ begin
       ErrorNoPos('C: file-scope asm calls "' + CFsaCallName[i] + '", which this unit does'
                  + ' not define -- a call into another object is not supported there');
     RecordInternalCallAt(pi, CFsaCallPos[i], -1);
+    if TargetArch <> TARGET_XTENSA then Continue;   { x86-64: a plain rel32 }
     if Length(CFsaSlotPos) <= CFsaSlotCount then
     begin
       SetLength(CFsaSlotPos, CFsaSlotCount + 16);
@@ -17931,9 +18001,9 @@ begin
   end;
   Expect(tkRParen, ')');
   if CurTok.Kind = tkSemicolon then Next;
-  if (TargetArch = TARGET_XTENSA) and CFsaIsCodeText(text) then
+  if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_X86_64)) and CFsaIsCodeText(text) then
   begin
-    CFsaEmitCodeXtensa(text);
+    CFsaEmitCode(text);
     Exit;
   end;
 
