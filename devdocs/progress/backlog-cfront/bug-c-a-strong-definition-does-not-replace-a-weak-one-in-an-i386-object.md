@@ -8,7 +8,7 @@ created: 2026-11-19
 found-by: claude-dupwt, while linking i386 objects for feature-c-i386-link-for-c-objects
 tags: [cfront, emit-obj, link, weak, i386]
 blocked-by: []
-summary: "In an i386 object a weak definition is WEAK, but references to it inside the object do not go through the symbol, so another object's strong definition does not replace it. Weak FUNCTION: c_weak_a.o + c_weak_b.o linked with tools/pxx_link_i386.sh print `2 -1 3 1`, against `20 -1 3 1` from the x86-64 objects and gcc. The call to wk has no relocation (the i386 writer has no function sections, which is what makes such a call relocatable on x86-64). Weak DATA: c_weak_data_a.o + _b.o print `1 1 4`, against `1 1 40`. The references are R_386_PC32 against wv, but the initialiser is a start-up store, the cause fixed for x86-64 in 4251456a9a, whose .data baking is gated to x86-64."
+summary: "DATA half only (the function half is done: bug-c-a-call-to-a-weak-function-in-an-i386-object-binds-locally). In an i386 object a weak data definition's initialiser is a start-up store through the symbol, so another object's strong definition is overwritten: c_weak_data_a.o + _b.o print `1 1 4`, gcc `1 1 40`. The x86-64 fix (4251456a9a, bake the value into .data) cannot simply be widened: the i386 writer does not handle a C global placed in .data by CPlaceGlobalInData. Measured: it wrote wv as a .bss symbol with the raw tagged offset 0x200006c8, and the program segfaulted."
 ---
 
 # A strong definition does not replace a weak one in an i386 object
@@ -39,3 +39,20 @@ and `__stop_maybe` are WEAK UND.
 
 Not a link blocker: the link succeeds and the weak copy is used. Whether
 anything in toybox depends on a cross-unit override has not been checked.
+
+
+## 2026-11-19 (claude-dupwt): the function half is fixed, the data half measured
+
+The function half landed separately
+(bug-c-a-call-to-a-weak-function-in-an-i386-object-binds-locally).
+
+For data, widening the x86-64 gates (both CPlaceGlobalInData sites in
+cparser.inc, plus CTryBakeGlobalInit) to TARGET_I386 gave `1 1 40` for a+b,
+but a.o ALONE segfaulted. writeELFRel386General writes every data symbol
+as `Syms[i].Offset` in shndx 5 (.bss), and an offset CPlaceGlobalInData
+moved is tagged (SymOffIsData, 0x20000000), so `wv` became a .bss symbol at
+0x200006c8. The i386 writer needs the x86-64 writer's data-part handling
+(SymOffIsData -> shndx 3, SymOffDataPart value) for its local, export and
+GlobFix paths before the gates can be widened. It also has no CDataReloc
+(baked address) output, so an address-valued weak initialiser must stay a
+store until it does. Reverted, not committed.

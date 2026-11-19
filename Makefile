@@ -20875,6 +20875,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 --emit-obj --shared-runtime test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk_rt.o > /dev/null
 	PXX=./$(COMPILER) tools/pxx_link_i386.sh --shared-runtime -o $(TESTTMP)/c_i386lnk_rt $(TESTTMP)/c_i386lnk_rt.o
 	tools/expect_same.sh i386/c_i386lnk_rt "$$( (PXXT=yes tools/run_target.sh i386 $(TESTTMP)/c_i386lnk_rt one; echo " rc=$$?") | tr -d '\n')" "argc=2 argv1=one ctor=1 env=yesatexit ran rc=5"
+	# a call to a weak definition in an i386 object is relocated, so a strong one elsewhere wins
+	./$(COMPILER) --target=i386 --emit-obj test/c_weak_a.c $(TESTTMP)/c_weak386_a.o > /dev/null
+	./$(COMPILER) --target=i386 --emit-obj test/c_weak_b.c $(TESTTMP)/c_weak386_b.o > /dev/null
+	tools/pxx_link_i386.sh -o $(TESTTMP)/c_weak386 $(TESTTMP)/c_weak386_a.o $(TESTTMP)/c_weak386_b.o
+	tools/expect_same.sh i386/c_weak386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_weak386)" "$$(cat test/c_weak_strong.expected)"
 	./$(COMPILER) test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes26 > /dev/null
 	tools/expect_same.sh c_tbshapes26 "$$($(TESTTMP)/c_tbshapes26)" "$$(cat test/c_toybox_compiler_shapes.expected)"
 	./$(COMPILER) --target=i386 test/c_toybox_compiler_shapes.c $(TESTTMP)/c_tbshapes_i386 > /dev/null

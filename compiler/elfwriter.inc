@@ -8138,7 +8138,7 @@ procedure ObjBuildTextRelocs386(firstGlobal, impSym0, numExportProcs: Integer);
 
   The control for the lift is byte-identity: the i386 objects this produces
   must be the files they were before it. }
-var i, dsym: Integer;
+var i, dsym, n, p: Integer; expIdx: array of Integer;
 begin
   for i := 0 to FixCount-1 do
     ObjRelPush(Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]), 0);
@@ -8170,6 +8170,36 @@ begin
     ObjRelPush(DynCallCodePos[i], 2, Rel386Type(DynCallPCRel[i]), 0);
   for i := 0 to ProcAddrFixCount-1 do
     ObjRelPush(ProcAddrFix[i].CodePos, 1, Rel386Type(ProcAddrPCRel[i]), 0);
+  { A CALL TO A WEAK DEFINITION goes through the callee's symbol, so a strong
+    definition in another object replaces it at link time. This object has
+    one .text, so every other call is a resolved rel32 to its own copy, and so
+    was this one: c_weak_a.o + c_weak_b.o printed 2 where gcc and the x86-64
+    objects print 20. On x86-64 the same thing comes from --function-sections
+    (ObjCallFixIsRelocatable), which this writer does not have. R_386_PC32 is
+    REL, so the addend lives in the code word: -4, the rel32 bias. The symbol
+    is the callee's GLOBAL row, numbered as the table below emits them.
+    bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object }
+  SetLength(expIdx, ProcCount);
+  n := 0;
+  for i := 0 to ProcCount-1 do
+  begin
+    expIdx[i] := -1;
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+    begin
+      expIdx[i] := firstGlobal + n;
+      Inc(n);
+    end;
+  end;
+  for i := 0 to CallFixCount-1 do
+  begin
+    p := CallFix[i].ProcIdx;
+    if (p >= 0) and (p < ProcCount) and ProcCWeakDef[p] and (expIdx[p] >= 0) and
+       ((CallFixTarget[i] < 0) or (CallFixTarget[i] = Procs[p].BodyAddr)) then
+    begin
+      Patch32(CallFix[i].CodePos, -4);
+      ObjRelPush(CallFix[i].CodePos, expIdx[p], 2, 0);   { R_386_PC32 }
+    end;
+  end;
 end;
 
 procedure ObjBuildTextRelocsArm32(firstGlobal, gotSym0, impSym0,
