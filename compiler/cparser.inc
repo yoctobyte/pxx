@@ -14666,7 +14666,10 @@ begin
     if (idx >= 0) then CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), False);
     if (idx >= 0) and SymElfTls[idx] and not declSawExtern then
       CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
-    if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
+    { a weak definition too: see the main declarator path below }
+    if (CStaticDataMode or ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and
+                            (TargetArch = TARGET_X86_64))) and
+       ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
        ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
@@ -15179,7 +15182,16 @@ begin
       the same name -- a link set mixing the two lost entries. Its initialiser
       may still be a store in the init thunk; the bytes are the section's.
       feature-c-section-attribute-on-x86-64-objects }
-    if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64))) and
+{ A WEAK DATA DEFINITION is baked into .data in an x86-64 object even
+      without CStaticDataMode. Its initialiser used to be a store in the
+      object's start-up code, and that store goes through the SYMBOL: when
+      another object's strong definition wins the link, the weak object's
+      start-up code still wrote its own value into the winner (gcc prints
+      `1 1 40`, pxx printed `1 1 4`). As bytes in the weak copy, the value
+      is simply discarded with that copy.
+      bug-c-weak-data-references-bind-locally-and-skip-the-got }
+    if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64)) or
+        ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and (TargetArch = TARGET_X86_64))) and
        ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
        ((not declSawThread) or SymElfTls[idx]) and ((TargetArch = TARGET_X86_64) or EspFreestandingObj) and
        (not EmitSharedMode) then

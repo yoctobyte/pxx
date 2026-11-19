@@ -1324,6 +1324,45 @@ begin
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
 end;
 
+function ObjDataIsImport(i: Integer): Boolean; forward;   { elfwriter.inc }
+
+function CWeakDataViaGot(sym: Integer): Boolean;
+{ An undefined WEAK variable in an x86-64 object (`extern T x
+  __attribute__((weak))`): its address is read from the GOT, as gcc does
+  (R_X86_64_REX_GOTPCRELX). A PC32 reference to it is refused by a PIE link
+  ("relocation R_X86_64_PC32 against undefined symbol ... can not be used when
+  making a PIE object"), because the address may be 0, and 0 is not within
+  reach of a rip-relative displacement. IRAppend sends every
+  access to such a symbol through IR_LEA, and the x86-64 IR_LEA emits
+  EmitWeakDataGotAddr. bug-c-weak-data-references-bind-locally-and-skip-the-got }
+begin
+  Result := EmitObjMode and (TargetArch = TARGET_X86_64) and
+            (sym >= 0) and (sym < SymCount) and (sym < Length(SymObjDataWeak)) and
+            (Syms[sym].Kind = skGlobal) and SymObjDataWeak[sym] and ObjDataIsImport(sym);
+end;
+
+function CWeakDataIsNull(sym: Integer): Boolean;
+{ An undefined WEAK variable in an EXECUTABLE pxx links itself: nothing can
+  define it later, so its address is 0, as ld makes it. IRAppend lowers the
+  address as the constant and every load or store through it. The variable
+  used to be refused (CheckUndefinedExternData), and letting it through alone
+  would have given it its own nonzero private slot. bug-c-weak-data-references-bind-locally-and-skip-the-got }
+begin
+  Result := (not EmitObjMode) and (not EmitSharedMode) and
+            (sym >= 0) and (sym < SymCount) and (sym < Length(SymObjDataWeak)) and
+            (Syms[sym].Kind = skGlobal) and SymObjDataWeak[sym] and ObjDataIsImport(sym);
+end;
+
+procedure EmitWeakDataGotAddr(sym: Integer);
+{ rax := &sym, read from its GOT slot: mov rax, [rip + sym@GOTPCREL]. The
+  writer gives GlobFixTls = 3 an R_X86_64_REX_GOTPCRELX against the symbol;
+  ld relaxes it to a lea when the symbol turns out to be defined. }
+begin
+  EmitB($48); EmitB($8B); EmitB($05);
+  EmitGlobRef(Syms[sym].Offset);
+  GlobFixTls[GlobFixCount - 1] := 3;
+end;
+
 procedure EmitElfTlsAddr(sym: Integer);
 { rax = the address of C `__thread` variable `sym` in the CALLING thread, as an
   x86-64 object for a gcc/ld link reaches it: through fs, glibc's (or any ELF

@@ -21116,15 +21116,24 @@ test-core: $(COMPILER)
 	$(COMPILER) --link -o $(TESTTMP)/c_weak_l $(TESTTMP)/c_weak_a.o $(TESTTMP)/c_weak_b.o > /dev/null
 	tools/expect_same.sh c_weak_l "$$($(TESTTMP)/c_weak_l)" "$$(cat test/c_weak_strong.expected)"
 	# weak DATA: WEAK UND for an undefined weak extern (file and block scope), WEAK for a weak definition.
-	# gcc links non-PIE: a PIE link needs a GOT reference for weak undefined data, which pxx does not emit
-	# yet (bug-c-weak-data-references-bind-locally-and-skip-the-got).
+	# Undefined weak data is reached through the GOT (REX_GOTPCRELX), so a PIE link works; a weak
+	# definition's initialiser is .data bytes, so a strong one elsewhere wins (1 1 40); pxx --link relaxes
+	# the GOT load; a program resolves the undefined weak to 0 (bug-c-weak-data-references-bind-locally-and-skip-the-got).
 	$(COMPILER) --emit-obj test/c_weak_data_a.c $(TESTTMP)/c_wkd_a.o > /dev/null
 	$(COMPILER) --emit-obj test/c_weak_data_b.c $(TESTTMP)/c_wkd_b.o > /dev/null
 	tools/expect_same.sh c_wkd_nm "$$(readelf -sW $(TESTTMP)/c_wkd_a.o | awk '$$8 ~ /^(maybe_v|__stop_maybe|wv)$$/ {print $$5" "($$7=="UND"?"UND":"DEF")" "$$8}' | LC_ALL=C sort | tr '\n' ' ')" "WEAK DEF wv WEAK UND __stop_maybe WEAK UND maybe_v "
 	gcc -no-pie -o $(TESTTMP)/c_wkd_g $(TESTTMP)/c_wkd_a.o
 	tools/expect_same.sh c_wkd_g "$$($(TESTTMP)/c_wkd_g)" "1 1 4"
-	@# Not asserted yet: linking c_weak_data_b.c's strong wv should print `1 1 40`; pxx's
-	@# own reference to wv binds locally and prints 4 (same ticket).
+	gcc -o $(TESTTMP)/c_wkd_gpie $(TESTTMP)/c_wkd_a.o
+	tools/expect_same.sh c_wkd_gpie "$$($(TESTTMP)/c_wkd_gpie)" "1 1 4"
+	gcc -o $(TESTTMP)/c_wkd_gab $(TESTTMP)/c_wkd_a.o $(TESTTMP)/c_wkd_b.o
+	tools/expect_same.sh c_wkd_gab "$$($(TESTTMP)/c_wkd_gab)" "1 1 40"
+	$(COMPILER) --link -o $(TESTTMP)/c_wkd_l $(TESTTMP)/c_wkd_a.o > /dev/null
+	tools/expect_same.sh c_wkd_l "$$($(TESTTMP)/c_wkd_l)" "1 1 4"
+	$(COMPILER) --link -o $(TESTTMP)/c_wkd_lab $(TESTTMP)/c_wkd_a.o $(TESTTMP)/c_wkd_b.o > /dev/null
+	tools/expect_same.sh c_wkd_lab "$$($(TESTTMP)/c_wkd_lab)" "1 1 40"
+	$(COMPILER) test/c_weak_data_a.c $(TESTTMP)/c_wkd_p > /dev/null
+	tools/expect_same.sh c_wkd_p "$$($(TESTTMP)/c_wkd_p)" "1 1 4"
 	# an aligned typedef aligns members, aliases, _Alignof and globals
 	$(COMPILER) test/c_typedef_aligned.c $(TESTTMP)/c_tdal > /dev/null
 	tools/expect_same.sh c_tdal "$$($(TESTTMP)/c_tdal)" "$$(cat test/c_typedef_aligned.expected)"

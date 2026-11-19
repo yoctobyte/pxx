@@ -9596,7 +9596,9 @@ begin
     IR_LEA:
       begin
         symIdx := IRA[node];
-        if Syms[symIdx].Kind = skGlobal then
+        if CWeakDataViaGot(symIdx) then
+          EmitWeakDataGotAddr(symIdx)   { bug-c-weak-data-references-bind-locally-and-skip-the-got }
+        else if Syms[symIdx].Kind = skGlobal then
         begin
           { Dynamic array slot holds a heap data pointer; load it (mov), not its
              address (lea), so indexing/Length operate on the heap block. A

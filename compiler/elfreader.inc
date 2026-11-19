@@ -1418,10 +1418,12 @@ begin
     if rtype = 1 then width := 8
     else if (rtype = 2) or (rtype = 4) or (rtype = 11) then width := 4
     else if FreestandingMode and (rtype = 10) then width := 4
+    else if (rtype = 9) or (rtype = 41) or (rtype = 42) then width := 4   { GOTPCREL, relaxed below }
     else
     begin
       ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfRdSecName(target)
-                + ' -- pxx emits R_X86_64_64, R_X86_64_PC32, R_X86_64_PLT32 and R_X86_64_32S only'
+                + ' -- pxx emits R_X86_64_64, R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_32S'
+                + ' and R_X86_64_REX_GOTPCRELX only'
                 + ' (R_X86_64_32 too under --link --freestanding)';
       Exit;
     end;
@@ -1438,6 +1440,40 @@ begin
       target L is the symbol itself, so it is PC32 -- as GNU ld resolves it.
       pxx's own .asm frontend writes it for every extern reference. }
     if (rtype = 2) or (rtype = 4) then v := S + add - P else v := S + add;
+    { R_X86_64_GOTPCREL / GOTPCRELX / REX_GOTPCRELX on `mov reg, [rip+X]`
+      (what pxx emits for an undefined weak variable, and gcc for any extern
+      under -fPIE). This image has no GOT, so the load is RELAXED the way
+      GNU ld relaxes it. A defined symbol makes the mov a `lea reg, [rip+X]`,
+      PC32 to the symbol. An undefined weak symbol (S = 0) makes it
+      `mov reg, imm32` with an immediate of 0, in the same seven bytes, the
+      REX.R bit moving to REX.B with the register. Any other instruction
+      under a GOT relocation needs a real GOT and is refused.
+      bug-c-weak-data-references-bind-locally-and-skip-the-got }
+    if (rtype = 9) or (rtype = 41) or (rtype = 42) then
+    begin
+      if (off < 2) or (buf[bufOff + off - 2] <> $8B) or
+         ((buf[bufOff + off - 1] and $C7) <> $05) then
+      begin
+        ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target) + '+'
+                  + AIntToStr(off) + ' is not on a `mov reg, [rip+disp32]`, and pxx --link'
+                  + ' builds no GOT';
+        Exit;
+      end;
+      if S <> 0 then
+      begin
+        buf[bufOff + off - 2] := $8D;               { mov -> lea }
+        v := S + add - P;
+      end
+      else
+      begin
+        buf[bufOff + off - 1] := $C0 or ((buf[bufOff + off - 1] shr 3) and 7);
+        buf[bufOff + off - 2] := $C7;               { mov r/m, imm32 }
+        if (rtype = 42) and (off >= 3) and ((buf[bufOff + off - 3] and $F0) = $40) then
+          buf[bufOff + off - 3] := (buf[bufOff + off - 3] and $FA) or
+                                   ((buf[bufOff + off - 3] shr 2) and 1);   { REX.R -> REX.B }
+        v := 0;
+      end;
+    end;
     if ((rtype = 10) and ((v < 0) or (v > $FFFFFFFF)))
        or ((rtype <> 10) and (width = 4) and ((v < -2147483648) or (v > 2147483647))) then
     begin

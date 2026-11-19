@@ -4922,8 +4922,14 @@ var
   GlobFixTrail : array of Integer;
   { 0, or an ELF TLS site (EmitElfTlsAddr): 1 = local-exec, R_X86_64_TPOFF32 on
     `lea rax,[rax+disp32]`; 2 = initial-exec, R_X86_64_GOTTPOFF on
-    `mov rax,[rip+disp32]`. Parallel by index; dce.inc carries it. }
+    `mov rax,[rip+disp32]`; 3 = an undefined weak variable's GOT slot,
+    R_X86_64_REX_GOTPCRELX on `mov rax,[rip+disp32]` (EmitWeakDataGotAddr,
+    not TLS, but the same channel). Parallel by index; dce.inc carries it. }
   GlobFixTls : array of Byte;
+  { an undefined weak C variable whose address an EXECUTABLE lowered as the
+    constant 0 (CWeakDataIsNull). Grown on demand; CheckUndefinedExternData
+    refuses one a later declaration defined. bug-c-weak-data-references-bind-locally-and-skip-the-got }
+  SymWeakNulled : array of Boolean;
   { Parallel to Fixups, same reason as GlobFixPCRel: TFixup is a bootstrap
     record (REC_TFIXUP, size asserted at 16). True = the site is a 4-byte
     rip-relative displacement from a rewritten `movabs`, not an 8-byte

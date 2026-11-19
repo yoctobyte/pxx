@@ -530,6 +530,47 @@ end;
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
 var tlsBase: Integer;
 begin
+  { An undefined WEAK variable in an x86-64 object is reached only through its
+    address, and its address comes from the GOT (CWeakDataViaGot). This is
+    the same single door the thread-local arm below uses. bug-c-weak-data-references-bind-locally-and-skip-the-got }
+  if ((kind = IR_LEA) or (kind = IR_LOAD_SYM) or (kind = IR_STORE_SYM) or
+      (kind = IR_SLOTADDR) or (kind = IR_ZERO_SYM)) and CWeakDataIsNull(a) then
+  begin
+    { ...and in an executable its address is simply 0 (CWeakDataIsNull) }
+    if a >= Length(SymWeakNulled) then SetLength(SymWeakNulled, SymCount + 64);
+    SymWeakNulled[a] := True;
+    SymIRReached[a] := True;
+    if (kind = IR_LEA) or (kind = IR_SLOTADDR) then
+      Result := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer))
+    else if kind = IR_LOAD_SYM then
+      Result := IRAppend(IR_LOAD_MEM, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)), b, c, ival, tk)
+    else if kind = IR_STORE_SYM then
+      Result := IRAppend(IR_STORE_MEM, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)), b, c, ival, tk)
+    else
+    begin
+      Error('internal: weak extern ' + Syms[a].Name + ' reached by a whole-symbol zeroing (' + 'bug-c-weak-data-references-bind-locally-and-skip-the-got' + ')');
+      Result := -1;
+    end;
+    Exit;
+  end;
+  if ((kind = IR_LOAD_SYM) or (kind = IR_STORE_SYM) or (kind = IR_SLOTADDR) or
+      (kind = IR_ZERO_SYM)) and CWeakDataViaGot(a) then
+  begin
+    if kind = IR_LOAD_SYM then
+      Result := IRAppend(IR_LOAD_MEM, IRAppend(IR_LEA, a, -1, -1, 0, Ord(tyPointer)), b, c, ival, tk)
+    else if kind = IR_STORE_SYM then
+      Result := IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, a, -1, -1, 0, Ord(tyPointer)), b, c, ival, tk)
+    else if kind = IR_SLOTADDR then
+      Result := IRAppend(IR_LEA, a, -1, -1, 0, Ord(tyPointer))
+    else
+    begin
+      Error('internal: weak extern ' + Syms[a].Name + ' reached by a whole-symbol zeroing; '
+            + 'only its address is redirected (' + 'bug-c-weak-data-references-bind-locally-and-skip-the-got' + ')');
+      Result := -1;
+    end;
+    SymIRReached[a] := True;
+    Exit;
+  end;
   { A C `__thread` ARRAY keeps its AN_IDENT (ThreadVarRewriteRange skips it):
     C reaches an array through its SYMBOL on dozens of paths -- decay to a
     pointer argument, pointer arithmetic strides, row decay, ptr-to-array
@@ -5077,11 +5118,15 @@ var target, value, sym, rec, fi, size, pos, b, bitW, bitSh, kind, rtarget: Integ
     d: Double; pd: ^Int64;
 begin
   Result := False;
-  if (not CStaticDataMode) or (asn < 0) or (ASTKind[asn] <> AN_ASSIGN) then Exit;
+  if (asn < 0) or (ASTKind[asn] <> AN_ASSIGN) then Exit;
   target := ASTLeft[asn];
   value := ASTRight[asn];
   if not CBakeAddrOf(target, sym, off) then Exit;
   if not CSymIsStaticData(sym) then Exit;
+  { outside CStaticDataMode only a weak definition was placed in .data for
+    baking (the declarator's placement site says why) }
+  if not CStaticDataMode and
+     not ((sym < Length(SymObjDataWeak)) and SymObjDataWeak[sym]) then Exit;
   { a thread-local's bytes live in each thread's block, never in .data }
   if SymTlsOffset[sym] >= 0 then Exit;
   { the leaf: its type, width and (for a bit-field) its bits }

@@ -3771,7 +3771,6 @@ function ObjEspImportCount: Integer; forward;
 function ObjEspImportStrLen: Integer; forward;
 function ObjEspImportSymForOff(bssOff: Integer; var addend: Integer): Integer; forward;
 function ObjDataImportOrdinal(symIdx: Integer): Integer; forward;
-function ObjDataIsImport(i: Integer): Boolean; forward;
 function ObjDataIsReferenced(i: Integer): Boolean; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
 
@@ -6485,9 +6484,17 @@ procedure CheckUndefinedExternData;
 var i, n: Integer; names, more: AnsiString;
 begin
   if EmitObjMode or EmitSharedMode then Exit;
+  { an undefined WEAK one is 0, not an error (CWeakDataIsNull); but one lowered
+    as 0 that a LATER declaration defined has code that ignores the definition }
+  for i := 0 to Length(SymWeakNulled) - 1 do
+    if (i < SymCount) and SymWeakNulled[i] and not ObjDataIsImport(i) then
+      ErrorNoPos('weak variable `' + Syms[i].Name + ''' is defined after a use that ' +
+                 'was compiled as an undefined weak reference (address 0). Move the ' +
+                 'definition above its first use (bug-c-weak-data-references-bind-locally-and-skip-the-got)');
   n := 0; names := '';
   for i := 0 to SymCount - 1 do
-    if ObjDataIsImport(i) and SymIRReached[i] then
+    if ObjDataIsImport(i) and SymIRReached[i] and
+       not ((i < Length(SymObjDataWeak)) and SymObjDataWeak[i]) then
     begin
       if n < 8 then
       begin
@@ -7068,6 +7075,14 @@ begin
         ObjDRef(0, SymOffDataPart(GlobFix[i].BSSoff), csym, crel);
         ObjRelPush(GlobFix[i].CodePos, csym, 23, crel);
       end;
+      Continue;
+    end;
+    { an undefined weak variable's GOT slot (EmitWeakDataGotAddr) }
+    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 3) then
+    begin
+      if dsym < 0 then
+        ErrorNoPos('--emit-obj: internal: a weak variable''s GOT reference has no symbol');
+      ObjRelPush(GlobFix[i].CodePos, dsym, 42, -4);   { R_X86_64_REX_GOTPCRELX }
       Continue;
     end;
     if dsym >= 0 then
