@@ -524,11 +524,19 @@ begin
   else if FreestandingMode and ((nm = '.rodata') or (Copy(nm, 1, 8) = '.rodata.')) then
     begin k := ELFLNK_K_RODATA; wantTy := 1; wantFl := 2; end
   else if FreestandingMode and ((nm = '.note') or (Copy(nm, 1, 6) = '.note.')) then
-    begin k := ELFLNK_K_NOTE; wantTy := 7; wantFl := 2; end;
+    begin k := ELFLNK_K_NOTE; wantTy := 7; wantFl := 2; end
+  { `.rodata.<name>` is pxx's own too since a const C object with baked bytes
+    goes there (feature-c-const-objects-go-to-rodata-in-x86-64-objects). The
+    hosted image has no read-only data segment of its own, so it lands with
+    .data: read-only bytes in a writable page read the same. A bare `.rodata`
+    is still a foreign toolchain's and still refused (the elf_reader_vs_readelf
+    control). bug-a-pxx-own-linker-refused-its-rodata-cuts }
+  else if Copy(nm, 1, 8) = '.rodata.' then
+    begin k := ELFLNK_K_DATA; wantTy := 1; wantFl := 2; end;
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
-              + 'links pxx''s own objects (.text .text.* .data .data.* .bss .bss.* .init_array .fini_array), '
+              + 'links pxx''s own objects (.text .text.* .data .data.* .rodata.* .bss .bss.* .init_array .fini_array), '
               + 'not a third-party toolchain''s';
     Exit;
   end;
