@@ -27565,6 +27565,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pthread_header26 "$$($(TESTTMP)/test_pthread_header26)" "pthread loaded successfully"
 	./$(COMPILER) test/test_c_crypt.pas $(TESTTMP)/test_c_crypt26
 	$(TESTTMP)/test_c_crypt26 | grep -q "All crypt tests passed successfully!"
+	# crtl's crypt_r / struct crypt_data against gcc + the host's libxcrypt
+	# (bug-test-core-four-rows-still-red-2026-11-19, item 3)
+	./$(COMPILER) test/c_crypt_r.c $(TESTTMP)/c_crypt_r26 > /dev/null
+	gcc -o $(TESTTMP)/c_crypt_r_gcc test/c_crypt_r.c -lcrypt
+	tools/expect_same.sh c_crypt_r26 "$$($(TESTTMP)/c_crypt_r26)" "$$($(TESTTMP)/c_crypt_r_gcc)"
 	./$(COMPILER) test/test_c_dlopen.pas $(TESTTMP)/test_c_dlopen26
 	$(TESTTMP)/test_c_dlopen26 | grep -q "All dynamic loading and dlsym tests passed successfully!"
 	./$(COMPILER) test/test_c_gtk.pas $(TESTTMP)/test_c_gtk26

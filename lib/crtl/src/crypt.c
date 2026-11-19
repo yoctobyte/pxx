@@ -260,7 +260,7 @@ static const unsigned char perm512[21][3] = {
 /* "$6$rounds=" + 9 digits + "$" + 16 salt + "$" + 86 hash + NUL, rounded up. */
 static char crypt_result[128];
 
-static char *sha_crypt(const char *key, const char *setting, int is512)
+static char *sha_crypt(const char *key, const char *setting, int is512, char *out)
 {
   const char *prefix = is512 ? "$6$" : "$5$";
   const int hl = is512 ? 64 : 32;
@@ -331,7 +331,7 @@ static char *sha_crypt(const char *key, const char *setting, int is512)
     h_final(&c, a);
   }
 
-  o = crypt_result;
+  o = out;
   strcpy(o, prefix);
   o += 3;
   if (rounds_custom) {
@@ -366,14 +366,26 @@ static char *sha_crypt(const char *key, const char *setting, int is512)
   memset(a, 0, sizeof a); memset(b, 0, sizeof b);
   memset(dp, 0, sizeof dp); memset(ds, 0, sizeof ds);
   memset(&c, 0, sizeof c); memset(&alt, 0, sizeof alt);
-  return crypt_result;
+  return out;
 }
 
 char *crypt(const char *key, const char *setting)
 {
   if (!key || !setting) { errno = EINVAL; return 0; }
-  if (strncmp(setting, "$6$", 3) == 0) return sha_crypt(key, setting, 1);
-  if (strncmp(setting, "$5$", 3) == 0) return sha_crypt(key, setting, 0);
+  if (strncmp(setting, "$6$", 3) == 0) return sha_crypt(key, setting, 1, crypt_result);
+  if (strncmp(setting, "$5$", 3) == 0) return sha_crypt(key, setting, 0, crypt_result);
+  errno = EINVAL;
+  return 0;
+}
+
+/* The reentrant form (libxcrypt's API, struct crypt_data in <crypt.h>): the
+   result lands in data->output, so two threads with two data areas do not
+   share crypt()'s static buffer. test/test_c_crypt.pas. */
+char *crypt_r(const char *key, const char *setting, struct crypt_data *data)
+{
+  if (!key || !setting || !data) { errno = EINVAL; return 0; }
+  if (strncmp(setting, "$6$", 3) == 0) return sha_crypt(key, setting, 1, data->output);
+  if (strncmp(setting, "$5$", 3) == 0) return sha_crypt(key, setting, 0, data->output);
   errno = EINVAL;
   return 0;
 }

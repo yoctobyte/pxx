@@ -11,4 +11,20 @@
 
 char *crypt(const char *key, const char *salt);
 
+/* libxcrypt's reentrant interface, with its layout (32768 bytes in all), so
+   an object built against the host's <crypt.h> agrees with this one. */
+#define CRYPT_OUTPUT_SIZE 384
+#define CRYPT_MAX_PASSPHRASE_SIZE 512
+#define CRYPT_DATA_RESERVED_SIZE 767
+#define CRYPT_DATA_INTERNAL_SIZE 30720
+struct crypt_data {
+  char output[CRYPT_OUTPUT_SIZE];
+  char setting[CRYPT_OUTPUT_SIZE];
+  char input[CRYPT_MAX_PASSPHRASE_SIZE];
+  char reserved[CRYPT_DATA_RESERVED_SIZE];
+  char initialized;
+  char internal[CRYPT_DATA_INTERNAL_SIZE];
+};
+char *crypt_r(const char *key, const char *salt, struct crypt_data *data);
+
 #endif

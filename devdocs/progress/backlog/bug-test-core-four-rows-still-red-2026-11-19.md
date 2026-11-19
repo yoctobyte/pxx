@@ -38,7 +38,7 @@ everything stale was graduated in the freebsd ticket's commit. These four are le
    host ones it took), or the conflict check accepts two structurally
    identical structs. The first matches the "no host headers" direction.
 
-3. **test_c_crypt26** (`test/test_c_crypt.pas`, `uses crypt`): unknown type
+3. **FIXED 2026-11-19 (rd): crtl has crypt_r and libxcrypt's struct crypt_data (32768 bytes); hashes match gcc + -lcrypt (test/c_crypt_r.c). test_c_crypt26** (`test/test_c_crypt.pas`, `uses crypt`): unknown type
    crypt_data, undefined crypt_r. crtl's `<crypt.h>` (added for dropbear in
    b1b534c3c6) has only `crypt()`. Either crtl grows crypt_r and struct
    crypt_data (libxcrypt layout), or the test names the host libcrypt
