@@ -736,6 +736,7 @@ AN_BLOCK Left oHead
 AN_BLOCK Left seq
 AN_BLOCK Left seq1
 AN_BLOCK Left stmtList
+AN_BLOCK Right -1
 AN_CALL Left -1
 AN_CALL Left ASTRight[lnArg]
 AN_CALL Left a

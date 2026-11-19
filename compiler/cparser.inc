@@ -19351,6 +19351,22 @@ begin
   Result := initIdx;
 end;
 
+function CCallStmtBlock(procIdx: Integer): Integer;
+{ `proc();` as a one-statement block, the shape the parser builds for an
+  expression statement. A bare AN_CALL compiled on its own is lowered as a
+  discarded VALUE, which wasm32 drops entirely, so the call never happens. }
+var call, seq: Integer;
+begin
+  call := AllocNode(AN_CALL);
+  ASTIVal[call] := procIdx;
+  ASTLeft[call] := -1; ASTRight[call] := -1;
+  ASTTk[call] := Ord(Procs[procIdx].RetType);
+  seq := AllocNode(AN_SEQ);
+  ASTLeft[seq] := call; ASTRight[seq] := -1;
+  Result := AllocNode(AN_BLOCK);
+  ASTLeft[Result] := seq; ASTRight[Result] := -1;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
@@ -20268,7 +20284,15 @@ begin
   CRegisterCtor(procIdx, procCtorKind);
   ProcWeakExternal[procIdx] := False;
   mainInitIdx := -1;
-  if name = 'main' then mainInitIdx := CEmitMainInitProc;
+  { Not on wasm32: there a body is a wasm function built by the backend, and
+    this hand-emitted procedure and its call never became one, so EVERY
+    initialised file-scope variable read 0 (`static int si = 7` printed 0, and
+    math.h's NAN, a static const union, read 0.0). wasm32 keeps the inline
+    form below, and its stack is not main's frame, so the frame-size reason
+    this proc exists for does not apply.
+    bug-c-wasm32-file-scope-initialisers-read-zero }
+  if (name = 'main') and (TargetArch <> TARGET_WASM32) then
+    mainInitIdx := CEmitMainInitProc;
   SetProcBodyAddrHere(procIdx);
   
   { Save scope }
@@ -20994,8 +21018,25 @@ begin
        (TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
       EmitZeroLocalSlotForTarget(Procs[procIdx].RetSymIdx,
                                  TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
-    { the initialisers, out of line (CEmitMainInitProc says why) }
-    if mainInitIdx >= 0 then EmitCallProc(mainInitIdx);
+    { the initialisers, out of line (CEmitMainInitProc says why) -- or, on
+      wasm32, inline as they were before b3c5f711ea (see mainInitIdx above) }
+    if mainInitIdx >= 0 then EmitCallProc(mainInitIdx)
+    else if TargetArch = TARGET_WASM32 then
+    begin
+      CompilePendingGlobalInits;
+      CEmitDeferredCAggInits;
+      { AN_CALL statements, not EmitCallProc: a raw call never reaches the
+        wasm backend, which builds the body from IR. Constructors had never
+        run on wasm32 for exactly that reason. }
+      if (not EmitObjMode) and (not EmitSharedMode) then
+      begin
+        for i := 0 to CCtorCount - 1 do
+        begin
+          CompileAST(CCallStmtBlock(CCtorProcs[i]));
+        end;
+        CCtorInMain := CCtorCount;
+      end;
+    end;
   end;
 
   { Parse & Compile Body }

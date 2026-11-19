@@ -21689,6 +21689,9 @@ test-core: $(COMPILER)
 	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_math_gcc test/c_wasm32_math_h.c -lm
 	./$(COMPILER) --target=wasm32 test/c_wasm32_math_h.c $(TESTTMP)/c_wasm32_math.wasm
 	@tools/expect_same.sh c_wasm32_math_h "$$(tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_math.wasm)" "$$($(TESTTMP)/c_wasm32_math_gcc)"
+	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_fsinit_gcc test/c_wasm32_file_scope_initialisers_and_constructors.c
+	./$(COMPILER) --target=wasm32 test/c_wasm32_file_scope_initialisers_and_constructors.c $(TESTTMP)/c_wasm32_fsinit.wasm
+	@tools/expect_same.sh c_wasm32_fsinit "$$(tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_fsinit.wasm)" "$$($(TESTTMP)/c_wasm32_fsinit_gcc)"
 	./$(COMPILER) --target=wasm32 test/test_stderr_separation.pas $(TESTTMP)/stderrsep.wasm
 	tools/expect_same.sh wasm32/test_stderr_separation.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/stderrsep.wasm 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
 	tools/expect_same.sh wasm32/test_stderr_separation.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/stderrsep.wasm 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
