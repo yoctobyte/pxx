@@ -18095,7 +18095,11 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling }
       if (cpi >= 0) and (cpi < Length(ProcAsmPoison)) and (ProcAsmPoison[cpi] <> '') then
       begin
-        if CHeaderMode and (CurProc >= 0) then
+        { a caller gcc may itself never emit -- one in an imported header, or a
+          C `static` one -- inherits the poison instead of refusing: only a
+          call that is really compiled for use refuses }
+        if (CurProc >= 0) and (CHeaderMode or
+           ((CurProc < Length(ProcCStaticLink)) and ProcCStaticLink[CurProc])) then
         begin
           if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
           ProcAsmPoison[CurProc] := ProcAsmPoison[cpi];

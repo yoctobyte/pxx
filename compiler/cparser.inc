@@ -10925,6 +10925,34 @@ end;
   Pascal local takes -- which is possible only because AllocVar assigns a C
   local its frame offset at DECLARATION time, so the offset is already final
   while the block is still being encoded. }
+{ x86 inline asm in a routine gcc may never emit -- a `static` one (the arch
+  header's static inline: rump's invpcid in x86/cpufunc.h) or one from an
+  imported header -- does not stop the compile on an instruction the encoder
+  lacks. AttEncodeOne records it in AttUnknown instead, and the routine is
+  POISONED with it, as the xtensa path does: a call to it refuses with this
+  text, and an uncalled one costs nothing. Anywhere else the routine is
+  compiled for use and the compile stops at the instruction, as before. }
+function CAsmMayPoison: Boolean;
+begin
+  Result := (CurProc >= 0) and (CHeaderMode or
+            ((CurProc < Length(ProcCStaticLink)) and ProcCStaticLink[CurProc]));
+end;
+
+{ After the template: True when it held an unknown instruction. The span it
+  encoded is dropped (its bytes, or its i386 lines) and the routine poisoned. }
+function CAsmX86Poisoned(spanStart: Integer): Boolean;
+begin
+  Result := AttUnknown <> '';
+  AttPoisonable := False;
+  if not Result then Exit;
+  if AttSinkText then InlineAsmLineCount := spanStart
+  else AsmBytesCount := spanStart;
+  if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+  ProcAsmPoison[CurProc] := 'its inline asm uses "' + AttUnknown + '", which the '
+      + TargetArchName(TargetArch) + ' assembler in pxx does not encode';
+  AttUnknown := '';
+end;
+
 function CAsmBuildBlock(isExt: Boolean): Integer;
 var
   i, j, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
@@ -11245,6 +11273,8 @@ begin
   end;
 
   { ---- encode: loads, the template, stores ---- }
+  AttPoisonable := CAsmMayPoison;
+  AttUnknown := '';
   AttBeginBlock(startOff);
   { Saves first and restores last, so a callee-saved register is live as an
     operand for the whole block including the moves that fill and drain it. }
@@ -11265,6 +11295,11 @@ begin
   for i := saveCount - 1 downto 0 do
     AttEmitPushPop(saveReg[i], False);
   AttEndBlock(startOff, blkLen);
+  if CAsmX86Poisoned(startOff) then
+  begin
+    Result := AllocNode(AN_BLOCK); ASTLeft[Result] := -1;
+    Exit;
+  end;
 
   { ---- and the ordinary statements around it ---- }
   head := -1; tail := -1;
@@ -12298,7 +12333,15 @@ begin
       end;
       AttSinkText := TargetArch = TARGET_I386;
       AttResetBindings;
+      AttPoisonable := CAsmMayPoison;
+      AttUnknown := '';
       AttEncodeTemplate(CAsmTemplate, asmSections > 0, asmStart, asmLen);
+      if CAsmX86Poisoned(asmStart) then
+      begin
+        node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+        Result := node;
+        Exit;
+      end;
       node := AllocNode(AN_ASM);
       ASTLeft[node] := asmStart;
       ASTRight[node] := asmLen;

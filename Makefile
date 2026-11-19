@@ -21139,6 +21139,9 @@ test-core: $(COMPILER)
 	# GNU C inline asm on xtensa: operands, ties, names, s32c1i/l32ai/s32ri under
 	# qemu (call0, the hosted ABI); the privileged forms by disassembly (Nilix)
 	tools/check_casm_xtensa.sh $(COMPILER) $(TESTTMP)
+	# x86-64/i386: an instruction pxx lacks in an uncalled static inline poisons
+	# the routine instead of stopping the compile (rump-pxx g20); a call refuses
+	python3 -I tools/check_casm_unknown_poison.py $(COMPILER) $(TESTTMP)
 	@if command -v qemu-xtensa >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_xtensa_inline_asm.c $(TESTTMP)/c_xtasm >/dev/null || { echo "c_xtensa_inline_asm compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh xtensa/c_xtasm "$$(tools/run_target.sh xtensa $(TESTTMP)/c_xtasm)" "$$(cat test/c_xtensa_inline_asm.expected)" || exit 1; \

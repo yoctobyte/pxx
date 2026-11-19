@@ -137,6 +137,27 @@ end;
 
 var
   AttSinkText: Boolean;   { render Intel lines for asmtext_386 instead of bytes }
+  { Set by the C parser around a template of a routine gcc may never emit (a
+    `static` one, or one from an imported header): an instruction the encoder
+    does not know is then RECORDED in AttUnknown (the first one) instead of
+    stopping the compile, and the parser poisons the routine with it. }
+  AttPoisonable: Boolean;
+  AttUnknown: AnsiString;
+
+procedure AttUnsupported(const mn: AnsiString);
+begin
+  if AttPoisonable then
+  begin
+    if AttUnknown = '' then AttUnknown := mn;
+    { past the rest of this instruction, so its operands are not read as
+      the next one; the span is dropped anyway }
+    while (AttPos <= Length(AttSrc)) and (AttSrc[AttPos] <> ';')
+          and (AttSrc[AttPos] <> #10) do
+      Inc(AttPos);
+    Exit;
+  end;
+  Error('C: inline asm template has an unsupported instruction: ' + mn);
+end;
 
 function AttRegName386(num, size: Integer): AnsiString;
 begin
@@ -1329,7 +1350,10 @@ begin
   if AttAtSeparator then
   begin
     if not AttEmitInstr(mn, 0) then
-      Error('C: inline asm template has an unsupported instruction: ' + mn);
+    begin
+      AttUnsupported(mn);
+      Exit;
+    end;
     AttNoteRipFix;
     Exit;
   end;
@@ -1381,7 +1405,10 @@ begin
     size := 0;
   end
   else if not AttSplitMnemonic(mn, base, size) then
-    Error('C: inline asm template has an unsupported instruction: ' + mn);
+  begin
+    AttUnsupported(mn);
+    Exit;
+  end;
 
   { Cleared per INSTRUCTION, which is what makes the flag safe to read from
     AsmPrefixAndREX without knowing how many operands this instruction has:
@@ -1480,7 +1507,10 @@ begin
     base := 'mov';
   end;
   if not AttEmitInstr(base, nops) then
-    Error('C: inline asm template has an unsupported instruction: ' + mn);
+  begin
+    AttUnsupported(mn);
+    Exit;
+  end;
   AttNoteRipFix;
 end;
 
