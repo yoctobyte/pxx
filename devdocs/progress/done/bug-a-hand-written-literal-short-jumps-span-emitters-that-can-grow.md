@@ -4,10 +4,10 @@ title: "Hand-written literal short jumps span emitters that can grow, and land m
 track: A
 prio: 35
 type: bug
-status: open
+status: done
 created: 2026-09-01
 found-by: frankA
-owner: ""
+owner: claude-dupwt
 blocked-by: []
 summary: "Short jumps in the backends carry a hand-counted literal displacement over a span emitted by other code; when that span changes size the jump stays IN RANGE and lands mid-sequence, so nothing errors. FOUR converted, and TWO were ALREADY WRONG on master -- both silent wrong values on x86-64, fixed at 14bc9d218: `Write(s:w)` on a ShortString with w <= Length(s) truncated (`WriteLn(s:2)` for 'abcdef' printed nothing; FPC prints abcdef), and LoadFile into a ShortString returned an EMPTY string for every successful read. Both overshot by exactly 8 bytes. DROPPED 70 -> 35 because the CLASS is now guarded, not because the sweep is finished: gate row 74ed877f2 (tools/rel8_literal_span_check.py) fails any literal displacement spanning non-fixed-size emission, with the pre-fix tree as its positive control, and all 41 remaining sites span EmitB/EmitI32 only. Remaining work is converting those 41 for uniformity -- preventive, low expected yield, and safe to leave. Census settled at 42 (now 41) by a POSITION rule that agreed with the comment rule 108/108; the earlier 'about 25' and 142 both came from a grep matching ModRM bytes."
 ---
@@ -182,3 +182,20 @@ Do not treat identity as a pass on its own — a program that never reaches the
 site is byte-identical too, so assert the site is exercised, by searching the
 artifact for the opcode and its displacement byte. That is how the two live ones
 were found: identity was the expected result, so the differing byte WAS the bug.
+
+
+# Closed 2026-11-19 (claude-dupwt): the census is zero
+
+The November raw-asm conversion (EmitAsmX64 / EmitAsm386 and the text
+assembler's computed labels) had already removed 37 of the 41 remaining sites.
+tools/rel8_literal_span_check.py found the last four, all in
+ir_codegen386.inc's string-equality decompose: `jz +3` over the 3-byte
+`mov ecx, [edx-8]` that loads a non-nil AnsiString's length. Each now records
+the placeholder (`nilLenJz := CodeLen; EmitB(0)`) and calls PatchRel8 after
+the load.
+
+Byte-identical: an i386 program comparing AnsiStrings, a ShortString, and
+empty strings both ways compiles to the same bytes as the pre-change compiler
+(latest, d0dd63963b) and prints the same. The census now reads
+"0 literal short jumps", so the gate row guards a class that has no members
+left. Any new hand-counted displacement fails that row.

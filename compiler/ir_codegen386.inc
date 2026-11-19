@@ -1874,6 +1874,7 @@ var
   sgn, savedLValueWrite: Boolean;
   pNilLhs, pLoopLhs, pNilRhs, pLoopRhs, pCap, nextJmp, nextJmp2, falseJmp: Integer;
   low32Dem: Boolean;   { the consumer keeps only eax (I386Low32Demand) }
+  nilLenJz: Integer;   { PatchRel8 slot of the string-compare nil-length skip }
   narrow32: Boolean;   { I386NarrowBinop, when low32Dem }
 begin
   low32Dem := I386Low32Demand;
@@ -3133,7 +3134,8 @@ begin
             if IntToTypeKind(IRTk[right]) = tyAnsiString then
             begin
               EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-              EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+              EmitB($74); nilLenJz := CodeLen; EmitB(0);   { jz: a nil string keeps len 0 }
+              EmitB($8B); EmitB($4A); EmitB($F8); PatchRel8(nilLenJz);   { mov ecx, [edx-8] }
             end
             else
             begin
@@ -3152,7 +3154,8 @@ begin
             if IntToTypeKind(IRTk[left]) = tyAnsiString then
             begin
               EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-              EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+              EmitB($74); nilLenJz := CodeLen; EmitB(0);   { jz: a nil string keeps len 0 }
+              EmitB($8B); EmitB($4A); EmitB($F8); PatchRel8(nilLenJz);   { mov ecx, [edx-8] }
             end
             else
             begin
@@ -3216,7 +3219,8 @@ begin
           if rhsTk = tyAnsiString then
           begin
             EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            EmitB($74); nilLenJz := CodeLen; EmitB(0);   { jz: a nil string keeps len 0 }
+              EmitB($8B); EmitB($4A); EmitB($F8); PatchRel8(nilLenJz);   { mov ecx, [edx-8] }
           end
           else
           begin
@@ -3235,7 +3239,8 @@ begin
           if lhsTk = tyAnsiString then
           begin
             EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            EmitB($74); nilLenJz := CodeLen; EmitB(0);   { jz: a nil string keeps len 0 }
+              EmitB($8B); EmitB($4A); EmitB($F8); PatchRel8(nilLenJz);   { mov ecx, [edx-8] }
           end
           else
           begin
