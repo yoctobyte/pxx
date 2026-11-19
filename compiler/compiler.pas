@@ -196,6 +196,15 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
 {$include thread_emit.inc}
 {$include asmenc.inc}
 {$include asmatt.inc}   { the AT&T reader for GNU templates — needs asmenc's AsmDispatch and AsmOp* }
+{ asmtext.inc's one question to the compiler (the standalone .inc harnesses
+  answer it False): does --freestanding refuse an SSE instruction emitted for
+  the code at the current token? Yes for the user's own sources, no for the
+  units the compiler appends (compiler/builtin/), which dead-code elimination
+  drops when unused. feature-c-freestanding-vla-frame-slots-and-sse-refusal }
+function AsmFreestandingRefusesSSE: Boolean;
+begin
+  Result := FreestandingMode and not PathIsAppendedBuiltin(PasSrcOfTok(TokPos - 1));
+end;
 {$include asmtext.inc}
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
 {$include asmtext_rv32.inc}

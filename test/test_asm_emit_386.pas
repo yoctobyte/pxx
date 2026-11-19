@@ -39,6 +39,14 @@ var
   CallFixCount: Integer = 0;      { read by asmtext.inc's whole-call memo guard }
   ProcAddrFixCount: Integer = 0;
 
+
+{ asmtext.inc asks the compiler whether --freestanding refuses SSE here
+  (compiler.pas); a harness is never freestanding. }
+function AsmFreestandingRefusesSSE: Boolean;
+begin
+  Result := False;
+end;
+
 procedure EmitB(b: Byte);
 begin
   Code[CodeLen] := b;

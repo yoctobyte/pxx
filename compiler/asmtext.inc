@@ -1682,7 +1682,7 @@ begin
     into every program and dead-code elimination drops what the program does
     not call, and C under --freestanding pulls no runtime to call them.
     feature-c-freestanding-vla-frame-slots-and-sse-refusal }
-  if FreestandingMode and not PathIsAppendedBuiltin(PasSrcOfTok(TokPos - 1)) then
+  if AsmFreestandingRefusesSSE then
     for i := 0 to n - 1 do
       if (items[i].VType = vtAnsiString) and
          (Pos('xmm', AsmTextCStr(items[i].VAnsiString)) > 0) then
