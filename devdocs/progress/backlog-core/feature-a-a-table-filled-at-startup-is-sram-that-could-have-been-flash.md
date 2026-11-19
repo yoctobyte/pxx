@@ -116,3 +116,23 @@ are sized for desktop (PyAttrLkSlot alone is 65% of .bss). Owner direction
 (ESP: RAM beats flash; ESP is not optimised for maximum performance) points
 that way, but it is a speed/RAM trade on the chip and is tracked as its own
 item: feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram.
+
+## 2026-11-19 (claude-dupwt): the writable .data, attributed; typeinfo headers to flash
+
+`a.datamap` now prints the spans around EmitRTTI, EmitPySignatures and
+EmitTypeInfoHeaders, each with its read-only share. On the NilPy C3 demo, the
+8,520 B of writable .data was:
+
+| piece | bytes | |
+| --- | --- | --- |
+| RTTI span, writable part (layout descriptors, registry, ...) | 4,164 | open |
+| typeinfo headers (83 x 24 B) | 1,992 | **moved to flash** |
+| Pascal VMTs | 1,920 | writable on purpose (ISR rule) |
+| Python signatures | 292 | must stay writable (def-time default stores) |
+
+The typeinfo headers are filled at compile time only, so they are now
+RttiRoMark'd: read-only on executables, flash candidates on ESP objects.
+Result: .data 8,520 to 6,528 B; our SRAM 18,632 to 16,640 B; qemu-assert
+OK; gate quick, the TypeInfo/RTTI tests and test-emit-obj pass.
+
+Next: the 4,164 B writable part of the RTTI span.

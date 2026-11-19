@@ -3728,6 +3728,22 @@ begin
     WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
 end;
 
+function DataMapRoBytes(s, e: Integer): Integer;
+{ a.datamap: how many bytes of Data[s..e) a RoRangeAdd marked read-only. The
+  ranges stay in Data[] coordinates through RoPermuteData, so this is valid
+  after the object is written. }
+var r, a, b: Integer;
+begin
+  Result := 0;
+  if (s < 0) or (e <= s) then Exit;
+  for r := 0 to RoRangeCount - 1 do
+  begin
+    a := RoRangeStart[r]; if a < s then a := s;
+    b := RoRangeEnd[r];   if b > e then b := e;
+    if b > a then Result := Result + (b - a);
+  end;
+end;
+
 procedure ObjRoPrepare;
 var i, p, t: Integer;
 begin

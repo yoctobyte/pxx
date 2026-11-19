@@ -1831,6 +1831,12 @@ begin
   begin
     hdr := DataLen;
     DataPutZeros(24);
+    { Never written at run time (kind, name and DataPtr are filled here and by
+      the backlink pass below), so it is RTTI for placement purposes: read-only
+      on an executable, a flash candidate on an ESP object. Marked before the
+      name is interned so ranges ascend. 83 headers, 1,992 B of SRAM on the
+      NilPy C3 demo. feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
+    RttiRoMark(hdr, hdr + 24);
     if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ORD then
     begin
       kind := PxxTkToFPCKind(TypeInfoReqKey[i]);

@@ -4551,6 +4551,21 @@ begin
       and the rows above say how big each structure is -- two different
       questions, and on --emit-obj the answers differ. }
     WriteLn('PXXDBG a.datamap   of which marked ro   ', RoRangeBytes, 'B');
+    { The spans around EmitRTTI and EmitTypeInfoHeaders, so the unattributed
+      row has somewhere to point: the RTTI span holds the headers and arrays
+      above plus record layout descriptors (EmitLayoutRTTI) and the class
+      registry; Python signatures sit between the two spans. Each with its
+      read-only share, because on ESP the writable part is the SRAM. }
+    if RttiSpanE > RttiSpanS then
+    begin
+      WriteLn('PXXDBG a.datamap   RTTI span            ', RttiSpanE - RttiSpanS,
+              'B (ro ', DataMapRoBytes(RttiSpanS, RttiSpanE), 'B; layout descs + registry ',
+              RttiSpanE - RttiSpanS - DataMapRttiHdr - DataMapRttiArr, 'B of it)');
+      WriteLn('PXXDBG a.datamap   py signatures        ', TiSpanS - RttiSpanE,
+              'B (ro ', DataMapRoBytes(RttiSpanE, TiSpanS), 'B)');
+      WriteLn('PXXDBG a.datamap   typeinfo headers     ', TiSpanE - TiSpanS,
+              'B (ro ', DataMapRoBytes(TiSpanS, TiSpanE), 'B)');
+    end;
 
     { BSS, which on ESP is the LARGER half of SRAM and which the rows above
       cannot see at all: .bss has no contents, so nothing marks it and no
