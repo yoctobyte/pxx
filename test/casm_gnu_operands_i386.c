@@ -159,6 +159,16 @@ static void cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
 	);
 }
 
+/* bswap with an "+r" operand (a 32-bit unsigned long on i386), the shape
+ * byte-order helpers write. It was refused ("unsupported instruction: bswap")
+ * while x86-64 encoded it.
+ * bug-c-i386-inline-asm-bswap-with-an-r-operand-is-refused */
+static unsigned long swap32(unsigned long x)
+{
+	__asm volatile("bswap %0" : "+r"(x));
+	return x;
+}
+
 int main(void)
 {
 	sp_digit a[8], b[8], r[8];
@@ -200,5 +210,6 @@ int main(void)
 		   this same box rather than a literal. */
 		printf("cpuid %u %08x %08x %08x\n", ea, eb, ec, ed);
 	}
+	printf("bswap %08lx %08lx\n", swap32(0x01020304UL), swap32(0xA0B0C0D0UL));
 	return 0;
 }

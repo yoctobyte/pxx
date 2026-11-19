@@ -240,6 +240,18 @@ begin
     Exit;
   end;
 
+  { bswap r32: 0F C8+r, the register in the opcode (no ModRM). A 32-bit
+    register only: gas refuses a 16-bit one and i386 has no 64-bit one.
+    bug-c-i386-inline-asm-bswap-with-an-r-operand-is-refused }
+  if (Length(op1) = 0) and CaseEqual(mnem, 'bswap') then
+  begin
+    if (AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0) or (s0 <> 4) then
+      Error('EmitAsm386: bswap expects a 32-bit register');
+    EncB($0F);
+    EncB($C8 + r0);
+    Exit;
+  end;
+
   { call reg (indirect, FF /2) }
   if CaseEqual(mnem, 'call') then
   begin

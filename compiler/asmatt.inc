@@ -253,7 +253,7 @@ begin
     or CaseEqual(mn,'xor') or CaseEqual(mn,'cmp') or CaseEqual(mn,'test')
     or CaseEqual(mn,'mul') or CaseEqual(mn,'imul') or CaseEqual(mn,'div')
     or CaseEqual(mn,'idiv') or CaseEqual(mn,'neg') or CaseEqual(mn,'not')
-    or CaseEqual(mn,'inc') or CaseEqual(mn,'dec')
+    or CaseEqual(mn,'inc') or CaseEqual(mn,'dec') or CaseEqual(mn,'bswap')
     or CaseEqual(mn,'shl') or CaseEqual(mn,'sal') or CaseEqual(mn,'shr')
     or CaseEqual(mn,'sar') or CaseEqual(mn,'rol') or CaseEqual(mn,'ror')
     or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
