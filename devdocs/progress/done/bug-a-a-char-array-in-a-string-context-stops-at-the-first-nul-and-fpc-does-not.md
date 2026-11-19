@@ -4,8 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`__pxxCharArrayToStr` stops at the first #0 within the array's capacity, and its own comment says that is FPC's rule. Measured 2026-09-06 against fpc 3.2.2: it is not. For `a: array[1..4] of Char = 'pq'` (bytes 112 113 0 0 on BOTH compilers — the padding is identical), fpc's `Writeln(a)` emits all four bytes and `Length(string(a))` is 4; pxx emits two and answers 2. Two observables, one cause. The comment is the load-bearing part of this ticket: it asserts a measurement that is false, so a reader who checks it stops looking."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-dupwt
 ---
 
 # A Char array in a string context stops at the first #0 and FPC does not
@@ -59,3 +59,28 @@ that is the work here, not the one-line change.
 Correct the comment. It costs nothing, it removes the false attribution, and it
 is what stops the next reader concluding the behaviour is already verified
 against FPC.
+
+
+# Fixed 2026-11-19 (claude-dupwt): FPC's rule is the LOWER BOUND
+
+The open question, "which behaviour does real Pascal code want", has a
+measured answer: FPC 3.2.2 already has both, chosen by the array's lower bound.
+- `array[0..3] of Char = 'pq'`: Write emits `pq`, Length(s) is 2 (PChar reading).
+- `array[1..4]` and `array[2..5]` = 'pq': Write emits `pq#0#0`, Length(s) is 4,
+  and `'a' + o` is 5.
+The C-interop buffers the old behaviour protected are `array[0..N]`, so they
+keep it. This ticket's own example happened to be 1-based.
+
+WrapCharArrayToStringExpr now passes -cap when ASTCharArrayLow(node) <> 0.
+Rank 1 reads the bound from Syms[].ConstVal, rank >= 2 from SymArrDimLo,
+fields from RecFieldArrLo and pointees from DerefPtrArrayInfo; a 2-D row or a
+parameter answers 0. __pxxCharArrayToStr takes a negative cap as "copy all
+-cap characters". The signature is unchanged, so a pinned compiler building
+this builtin still passes positive caps.
+
+The self-host is untouched: the old and new compilers compile the new
+compiler.pas byte-identically (c69638813513). Test
+test_a_char_array_converts_to_a_string_by_its_lower_bound (row chararrlo26,
+fpc's bytes compared with cmp) covers zero-, one- and two-based globals, both
+record-field shapes, a pointee and a zero-based buffer with bytes after the
+NUL. The previous compiler fails it.

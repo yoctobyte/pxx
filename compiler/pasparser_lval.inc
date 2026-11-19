@@ -7715,6 +7715,38 @@ begin
   end;
 end;
 
+function ASTCharArrayLow(node: Integer): Integer;
+{ The LOWER BOUND of the char array ASTCharArrayCap measured, where it is
+  known; 0 where it is not (a 2-D row), which keeps the PChar reading there.
+  It decides FPC's conversion rule, see WrapCharArrayToStringExpr. }
+var sym, rec, ec, lo, flat: Integer;
+begin
+  Result := 0;
+  if (node < 0) or (node >= ASTNodeCount) then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    sym := ASTIVal[node];
+    { Rank 1 keeps its bound in ConstVal (Low()'s own arm reads it there);
+      SymArrDimLo is filled for rank >= 2. A parameter keeps the PChar
+      reading: its ConstVal is not a bound. }
+    if (sym >= 0) and (sym < SymCount) and (Syms[sym].Kind <> skParam) then
+    begin
+      if SymArrNDims[sym] <= 1 then Result := Syms[sym].ConstVal
+      else Result := SymArrDimLo[sym * MAX_ARR_DIMS];
+    end;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    rec := ResolveNodeRec(ASTLeft[node]);
+    if rec <> REC_NONE then
+      Result := RecFieldArrLo(rec, GetASTIdentName(node));
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    if DerefPtrArrayInfo(node, ec, lo, flat) then Result := lo;
+  end;
+end;
+
 function WrapCharArrayToStringExpr(node: Integer): Integer;
 { `a` in a string context -> __pxxCharArrayToStr(@a, cap). The helper stops at
   the first #0 within cap: an array[0..7] holding 'ABC'#0'EFGH' is the
@@ -7729,12 +7761,23 @@ function WrapCharArrayToStringExpr(node: Integer): Integer;
   after the NUL are garbage rather than data; only the attribution was wrong,
   and a false attribution in the one place a reader would check is what stops
   them looking. Which behaviour real Pascal code wants has not been asked:
-  bug-a-a-char-array-in-a-string-context-stops-at-the-first-nul-and-fpc-does-not }
+  bug-a-a-char-array-in-a-string-context-stops-at-the-first-nul-and-fpc-does-not
+
+  RESOLVED 2026-11-19: FPC'S RULE IS THE LOWER BOUND, measured against 3.2.2.
+  A ZERO-BASED char array converts as a PChar, stopping at the first #0 within
+  cap (`array[0..3] = 'pq'` -> 'pq', Length 2). Any other lower bound converts
+  ALL cap characters (`array[1..4]` and `array[2..5]` = 'pq' -> 'pq'#0#0,
+  Length 4), and that holds for Write, assignment and concatenation alike. The
+  C-interop buffers the old behaviour protected are `array[0..N]`, so they
+  keep it. The helper's signature is unchanged: a NEGATIVE cap means "take all
+  -cap characters", so a pinned compiler that builds this builtin still
+  passes positive caps and gets the PChar reading it always had. }
 var procIdx, cap, addrNode, a0, a1, capNode, callNode: Integer;
 begin
   Result := node;
   cap := ASTCharArrayCap(node);
   if cap < 0 then Exit;
+  if ASTCharArrayLow(node) <> 0 then cap := -cap;
   procIdx := FindProc('__pxxCharArrayToStr');
   if procIdx < 0 then
     Error('a Char array in a string context needs __pxxCharArrayToStr (builtin unit not loaded)');

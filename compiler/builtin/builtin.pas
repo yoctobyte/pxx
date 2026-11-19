@@ -173,10 +173,11 @@ function PCharToString(p: PChar): AnsiString;
   these two are that conversion. `cap` is the array's element count.
 
   __pxxCharArrayToStr stops at the first #0 within cap and otherwise takes all
-  cap characters -- FPC's rule, verified against 3.2.2: an
-  `array[0..7] of Char` holding 'ABC'#0'EFGH' converts to the 3-character
-  'ABC', while the same array holding eight non-NUL characters converts to all
-  eight. So it is PCharToString with a hard length bound, not a plain memcpy.
+  cap characters, which is FPC's rule for a ZERO-BASED array (verified against
+  3.2.2): an `array[0..7] of Char` holding 'ABC'#0'EFGH' converts to the
+  3-character 'ABC'. A NEGATIVE cap is the other half of the rule. FPC converts
+  a non-zero-based array in full, NULs included, and the compiler passes -cap
+  for one.
 
   __pxxStrToCharArray copies Min(Length(s), cap) characters and ZERO-fills the
   rest, which is what makes `a := 'abc'` on an 8-element array leave
@@ -2365,6 +2366,15 @@ var i: Integer;
 begin
   Result := '';
   if p = nil then Exit;
+  { A negative cap: a char array whose lower bound is not 0, which FPC
+    converts in full, NULs included (WrapCharArrayToStringExpr).
+    bug-a-a-char-array-in-a-string-context-stops-at-the-first-nul-and-fpc-does-not }
+  if cap < 0 then
+  begin
+    SetLength(Result, -cap);
+    for i := 1 to -cap do Result[i] := p[i - 1];
+    Exit;
+  end;
   i := 0;
   while (i < cap) and (p[i] <> #0) do
   begin
