@@ -116,6 +116,7 @@ procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadDataRefRISCV32(rd, dataOff: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
+procedure Rv32InlineMem(n: Integer; isCopy: Boolean); forward;
 procedure EmitFrameAddrRISCV32(rd: Integer; off: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 { The xtensa twin of EmitSlotAddrRISCV32 four lines up, and it is here for the
@@ -18231,10 +18232,14 @@ begin
         EmitSlotAddrRISCV32(reg_a1, retSymIdx);              { a1 = &Result (src) }
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
+        if EspBareBoot then Rv32InlineMem(sz, True)           { no RTL: inline }
+        else
+        begin
         EmitLoadImmRISCV32(reg_a2, sz);                       { a2 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
+        end;
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest (return value) }
       end
       else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and

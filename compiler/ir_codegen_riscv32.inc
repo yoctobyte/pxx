@@ -1169,6 +1169,66 @@ begin
   ]);
 end;
 
+{ INLINE ZERO / COPY of n bytes (n a compile-time constant) for an image with
+  no RTL underneath -- a bare boot or a freestanding object (EspBareBoot) has
+  no PXXMemZero / PXXMemMove, and a struct assignment, a struct returned by
+  value or `struct x = {0}` must not need one. The riscv32 port of
+  XtensaInlineMem. dest in a0, src in a1 (copy). Clobbers a0, a1, t3..t6 only,
+  a subset of what the helper call it replaces clobbers. Words when n is a
+  multiple of 4 AND both pointers are 4-aligned at run time (the C3 faults on
+  a misaligned lw/sw, and a struct of chars may sit anywhere); bytes
+  otherwise. Forward copy: C struct assignment has no partial overlap.
+  bug-c-struct-copy-and-zero-in-a-freestanding-riscv32-object }
+procedure Rv32InlineMem(n: Integer; isCopy: Boolean);
+var pAlign, pSkip: Integer;
+  procedure RvMemLoop(step: Integer);
+  var top: Integer;
+  begin
+    { t3 = end = a0 + n; do { ...; a0 += step } while a0 <> t3 }
+    EmitLoadImmRISCV32(reg_t5, n);
+    rv32_add(reg_t3, reg_a0, reg_t5);
+    top := CodeLen;
+    if isCopy then
+    begin
+      if step = 4 then rv32_lw(reg_t4, reg_a1, 0) else rv32_lbu(reg_t4, reg_a1, 0);
+      rv32_addi(reg_a1, reg_a1, step);
+      if step = 4 then rv32_sw(reg_t4, reg_a0, 0) else rv32_sb(reg_t4, reg_a0, 0);
+    end
+    else if step = 4 then rv32_sw(reg_zero, reg_a0, 0)
+    else rv32_sb(reg_zero, reg_a0, 0);
+    rv32_addi(reg_a0, reg_a0, step);
+    rv32_bne(reg_a0, reg_t3, top - CodeLen);
+  end;
+begin
+  if n <= 0 then Exit;
+  if (n and 3) <> 0 then begin RvMemLoop(1); Exit; end;
+  { t6 = (dest | src) & 3; nonzero -> the byte loop }
+  if isCopy then rv32_or(reg_t6, reg_a0, reg_a1)
+  else rv32_addi(reg_t6, reg_a0, 0);
+  rv32_andi(reg_t6, reg_t6, 3);
+  pAlign := CodeLen;
+  rv32_bne(reg_t6, reg_zero, 0);                        { -> bytes, patched }
+  RvMemLoop(4);
+  pSkip := CodeLen;
+  rv32_jal(reg_zero, 0);                                { -> done, patched }
+  Patch32(pAlign, EncodeRISCVBNE(reg_t6, reg_zero, CodeLen - pAlign));
+  RvMemLoop(1);
+  Patch32(pSkip, EncodeRISCVJAL(reg_zero, CodeLen - pSkip));
+end;
+
+{ Does a DIRECT call to procIdx pass the hidden aggregate-result destination
+  (in t1)? An external was excluded, taken to be a gcc-built routine. In a
+  FREESTANDING object an external C function is another pxx object, whose
+  body reads t1 like any local one (EmitAggregateDestStash). Without it the
+  callee stored its result through whatever t1 held. The riscv32 port of
+  XtensaCallHasHiddenDest; the push, the call and the pop below all ask this,
+  so they agree. bug-c-struct-copy-and-zero-in-a-freestanding-riscv32-object }
+function Rv32CallHasHiddenDest(procIdx: Integer): Boolean;
+begin
+  Result := (procIdx >= 0) and ((not ProcExternal[procIdx]) or EspFreestandingObj) and
+            ABIRetViaHiddenDestProc(procIdx);
+end;
+
 procedure EmitOvfTrapRISCV32;
 { {$Q+} overflow trap, riscv32 leg: t3 = 1 means the just-computed pair op
   wrapped — branch around a PXXOverflow call otherwise (the branch is
@@ -4718,8 +4778,7 @@ begin
           (deepest), so it survives arg evaluation; loaded into t1 just before the
           call. riscv has no dedicated indirect-result register, so t1 (a
           caller-saved temp) carries it; the callee prologue reads t1 first. }
-        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           ABIRetViaHiddenDestProc(procIdx) then
+        if Rv32CallHasHiddenDest(procIdx) then
         begin
           IREmitNodeRISCV32(IRC[node]);                  { a0 = hidden dest addr }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
@@ -4975,8 +5034,7 @@ begin
           EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-             ABIRetViaHiddenDestProc(procIdx) then
+          if Rv32CallHasHiddenDest(procIdx) then
           begin
             rv32_lw(reg_t1, reg_sp, nArgs * 4);        { hidden dest (deepest) }
             EmitCallProc(procIdx);
@@ -5005,8 +5063,7 @@ begin
         for i := 0 to keptWords - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (keptWords - 1 - i) * 4);
 
-        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           ABIRetViaHiddenDestProc(procIdx) then
+        if Rv32CallHasHiddenDest(procIdx) then
         begin
           rv32_lw(reg_t1, reg_sp, keptWords * 4);          { hidden dest (pushed deepest) }
           rv32_addi(reg_sp, reg_sp, (keptWords + 1) * 4);  { free args + hidden dest }
@@ -5339,9 +5396,13 @@ begin
         { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
+        if EspBareBoot then Rv32InlineMem(Integer(IRIVal[node]), False)
+        else
+        begin
         EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));  { a1 = byte count }
         procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
         EmitCallProc(procIdx);
+        end;
       end;
 
     IR_COPY_REC:
@@ -5352,10 +5413,14 @@ begin
         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
         IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
         rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = src }
+        if EspBareBoot then Rv32InlineMem(Integer(IRIVal[node]), True)
+        else
+        begin
         EmitLoadImmRISCV32(reg_a2, Integer(IRIVal[node]));          { a2 = count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
+        end;
       end;
 
     IR_COSWITCH:
@@ -6493,9 +6558,13 @@ begin
            (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           EmitSlotAddrRISCV32(reg_a0, i);
+          if EspBareBoot then Rv32InlineMem(RecSize(SymTR[i].RecId), False)
+          else
+          begin
           EmitLoadImmRISCV32(reg_a1, RecSize(SymTR[i].RecId));
           procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
           EmitCallProc(procIdx);
+          end;
         end
         else
         begin
@@ -6711,9 +6780,13 @@ begin
             else if sz > 0 then
             begin
               EmitSlotAddrRISCV32(reg_a0, si);
+              if EspBareBoot then Rv32InlineMem(sz, False)
+              else
+              begin
               EmitLoadImmRISCV32(reg_a1, sz);
               procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
               EmitCallProc(procIdx);
+              end;
             end;
           end;
         end;

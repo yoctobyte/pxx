@@ -21163,6 +21163,8 @@ test-core: $(COMPILER)
 	python3 -I tools/check_esp_section_attr.py $(COMPILER) $(TESTTMP)
 	# struct copy / zero with no RTL underneath: inline loops, run under qemu
 	python3 -I tools/check_xtensa_freestanding_struct.py $(COMPILER) $(TESTTMP)
+	# ...and on riscv32 (esp32c3): Rv32InlineMem and the extern hidden result pointer
+	python3 -I tools/check_riscv32_freestanding_struct.py $(COMPILER) $(TESTTMP)
 	# crtl on xtensa issues the time64 syscalls (Nilix implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
 	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed
