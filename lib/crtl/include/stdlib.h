@@ -119,6 +119,17 @@ void abort(void);
 void exit(int status);
 void _Exit(int status);
 int atexit(void (*func)(void));
+#ifdef __PXX_SYSTEM_STDLIB__
+/* --system-libs: glibc keeps atexit in libc_nonshared.a, not in libc.so, so
+ * it cannot be imported. It is __cxa_atexit with no argument and no DSO
+ * handle, exactly as libc_nonshared.a writes it (a pxx executable is the
+ * main program: handle 0). bug-c-system-libs-atexit-is-not-in-libc-so */
+int __cxa_atexit(void (*func)(void *), void *arg, void *dso);
+static int __pxx_sys_atexit(void (*func)(void)) {
+  return __cxa_atexit((void (*)(void *))func, (void *)0, (void *)0);
+}
+#define atexit(func) __pxx_sys_atexit(func)
+#endif
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1

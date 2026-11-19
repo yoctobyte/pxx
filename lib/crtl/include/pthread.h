@@ -185,4 +185,59 @@ void pthread_exit(void *retval) __attribute__((__noreturn__));
 int  pthread_setname_np(pthread_t t, const char *name);
 int  pthread_getname_np(pthread_t t, char *name, unsigned long len);
 
+#ifdef __PXX_SYSTEM_PTHREAD__
+/* --system-libs: pthread_exit ON THE MAIN THREAD. glibc unwinds the main
+ * thread to a buffer __libc_start_main set up; a pxx executable enters at its
+ * own _start, so there is none and glibc segfaults demangling it. On every
+ * other thread libc's pthread_exit is right (start_thread has its buffer).
+ * On main this does what glibc does from there: the process lives on until
+ * the last thread is gone, then exits with status 0, running atexit. "The
+ * last thread" is read from /proc/self/stat (num_threads); without /proc the
+ * main thread just ends (SYS_exit), and the process still lives until the
+ * others finish, with status 0 but no atexit. Not run here: the main
+ * thread's own pthread_key destructors.
+ * bug-c-system-libs-pthread-exit-on-the-main-thread-crashes */
+#include <sys/syscall.h>
+long syscall(long number, ...);
+void exit(int status);
+
+static int __pxx_sys_nthreads(void) {
+  char b[512];
+  long fd, n, i;
+  int field = 2, num = 0;
+  fd = syscall(SYS_openat, -100L /* AT_FDCWD */, "/proc/self/stat", 0L);
+  if (fd < 0) return -1;
+  n = syscall(SYS_read, fd, b, (long)sizeof b - 1);
+  syscall(SYS_close, fd);
+  if (n <= 0) return -1;
+  /* comm, field 2, is in parentheses and may hold spaces: count from the
+     LAST ')'. num_threads is field 20. */
+  for (i = n - 1; i > 0 && b[i] != ')'; i--) ;
+  for (i++; i < n; i++) {
+    if (b[i] != ' ') continue;
+    if (++field == 20) {
+      for (i++; i < n && b[i] >= '0' && b[i] <= '9'; i++) num = num * 10 + (b[i] - '0');
+      return num;
+    }
+  }
+  return -1;
+}
+
+static void __pxx_sys_pthread_exit(void *retval) {
+  long pause[2];
+  int n;
+  if (syscall(SYS_gettid) != syscall(SYS_getpid))
+    (pthread_exit)(retval);           /* not main: libc's own */
+  pause[0] = 0;
+  pause[1] = 1000000;                 /* 1 ms */
+  for (;;) {
+    n = __pxx_sys_nthreads();
+    if (n == 1) exit(0);
+    if (n < 0) for (;;) syscall(SYS_exit, 0L);
+    syscall(SYS_nanosleep, pause, 0L);
+  }
+}
+#define pthread_exit(retval) __pxx_sys_pthread_exit(retval)
+#endif
+
 #endif /* _PXX_PTHREAD_H */

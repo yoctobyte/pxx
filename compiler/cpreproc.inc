@@ -4529,6 +4529,13 @@ begin
     __pxx_crtl_* (rumpuser bio.c). bug-c-crtl-pthread-types-are-smaller-than-glibc-s }
   if CHeaderUsesSystemLib('pthread') then
     CPAddLiteral('__PXX_SYSTEM_PTHREAD__', '1');
+  { <stdlib.h> likewise: glibc's atexit is NOT in libc.so but in the static
+    libc_nonshared.a (`atexit(f)` is `__cxa_atexit(f, 0, __dso_handle)` there),
+    so an import of atexit failed at load ("undefined symbol: atexit"). The
+    header maps it onto __cxa_atexit, which libc.so exports.
+    bug-c-system-libs-atexit-is-not-in-libc-so }
+  if CHeaderUsesSystemLib('stdlib') then
+    CPAddLiteral('__PXX_SYSTEM_STDLIB__', '1');
   { Command-line `-D<name>[=<value>]` predefines, applied AFTER the built-ins so
     a `-D` overrides them (newest-wins lookup); then `-U<name>` removals last so
     an explicit undefine beats any define of the same name. `-D<name>` with no

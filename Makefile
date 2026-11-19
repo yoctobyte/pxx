@@ -28740,7 +28740,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) --threadsafe test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26
 	@gcc -w -pthread -o $(TESTTMP)/c_rumpapi26_gcc test/c_crtl_rumpuser_apis.c
 	tools/expect_same.sh c_rumpapi26 "$$(timeout 30 $(TESTTMP)/c_rumpapi26)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc)"
-	./$(COMPILER) --threadsafe --system-libs -DRUA_MAIN_RETURNS test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_sys
+	./$(COMPILER) --threadsafe --system-libs test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_sys
 	tools/expect_same.sh c_rumpapi26_sys "$$(timeout 30 $(TESTTMP)/c_rumpapi26_sys)" "$$(timeout 30 $(TESTTMP)/c_rumpapi26_gcc)"
 	./$(COMPILER) --threadsafe --target=i386 test/c_crtl_rumpuser_apis.c $(TESTTMP)/c_rumpapi26_i386
 	@gcc -m32 -w -pthread -o $(TESTTMP)/c_rumpapi26_gcc32 test/c_crtl_rumpuser_apis.c
@@ -28838,6 +28838,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_rdbuf26_gcc32 test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26_i386 "$$(timeout 20 $(TESTTMP)/c_rdbuf26_i386)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc32)"
+	./$(COMPILER) --threadsafe --system-libs test/c_system_libs_main_pthread_exit.c $(TESTTMP)/c_sysmainpte26
+	@gcc -w -pthread -o $(TESTTMP)/c_sysmainpte26_gcc test/c_system_libs_main_pthread_exit.c
+	tools/expect_same.sh c_sysmainpte26 "$$(timeout 20 $(TESTTMP)/c_sysmainpte26; echo rc=$$?)" "$$(timeout 20 $(TESTTMP)/c_sysmainpte26_gcc; echo rc=$$?)"
+	./$(COMPILER) --threadsafe --system-libs --target=i386 test/c_system_libs_main_pthread_exit.c $(TESTTMP)/c_sysmainpte26_i386
+	@gcc -m32 -w -pthread -o $(TESTTMP)/c_sysmainpte26_gcc32 test/c_system_libs_main_pthread_exit.c
+	tools/expect_same.sh c_sysmainpte26_i386 "$$(timeout 20 $(TESTTMP)/c_sysmainpte26_i386; echo rc=$$?)" "$$(timeout 20 $(TESTTMP)/c_sysmainpte26_gcc32; echo rc=$$?)"
 	./$(COMPILER) --threadsafe test/c_pthread_layout_rwlock.c $(TESTTMP)/c_ptrw26
 	@gcc -w -pthread -o $(TESTTMP)/c_ptrw26_gcc test/c_pthread_layout_rwlock.c
 	tools/expect_same.sh c_ptrw26 "$$(timeout 30 $(TESTTMP)/c_ptrw26)" "$$(timeout 30 $(TESTTMP)/c_ptrw26_gcc)"
