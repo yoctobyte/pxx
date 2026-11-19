@@ -11505,6 +11505,28 @@ begin
       Exit;
     end;
   end;
+  { A COMPILER-INTERNAL KERNEL (`__pxx_*`) is found in ANY loaded unit, not
+    only where `uses` makes it visible. The backends ask for these by name
+    (riscv32/xtensa soft-float, arm32's 64-bit converts) from inside whatever
+    unit is being compiled, and a float in a unit that did not itself name
+    softfloat failed with "add `uses softfloat` to the program", even after the
+    program did. That advice could not work, because the PROGRAM's uses are
+    not the unit's. Such a name is never a user's routine, so no scope can
+    legitimately hide it.
+    bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help }
+  if (Length(name) > 6) and (Copy(name, 1, 6) = '__pxx_') then
+  begin
+    i := ProcChainHead(name);
+    while i >= 0 do
+    begin
+      if Procs[i].Name = name then
+      begin
+        Result := i;
+        Exit;
+      end;
+      i := ProcHashNext[i];
+    end;
+  end;
   Result := -1;
 end;
 

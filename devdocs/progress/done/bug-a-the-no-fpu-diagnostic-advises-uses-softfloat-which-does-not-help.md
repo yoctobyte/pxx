@@ -2,7 +2,7 @@
 track: A
 prio: 35
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: claude-A
 ---
@@ -158,3 +158,36 @@ table is still true and still bounds the failure (generic float on bare ESP is
 fine); it simply could not see this. Recorded because the same confound will
 catch the next person: **to test this, the program must contain no float at
 all.**
+
+
+# Fixed 2026-11-19 (claude-dupwt): candidate 1, the check could not see the kernels
+
+Determined before touching the string, as asked. The ticket's own repro no
+longer reaches the message: a plain bare-ESP program with a float now builds,
+with or without `uses softfloat`, because the frontend pulls softfloat on
+demand when its token scan sees a float. (An explicit `uses builtin` on bare
+fails for an unrelated reason: builtin needs builtinheap.)
+
+The message survives for the scan's blind spot, a float reaching codegen
+through a name it cannot see, and there the advice really did not work:
+
+| shape (esp32c3, bare) | before |
+| --- | --- |
+| unit `uf` does `x / 2` on `TF = Double`; program `uses uf` | refused in uf.pas |
+| ...program `uses softfloat, uf` (the advice) | **same error, in uf.pas** |
+| ...unit itself `uses softfloat` | unit compiles, program refused |
+| ...both name softfloat | builds |
+
+The backends look kernels up with FindProc, which applies `uses` visibility.
+softfloat was loaded, but invisible from inside a unit that did not name
+it, so the program-level remedy could not reach the unit's body.
+
+Fix: FindProc finds a `__pxx_*` name in any loaded unit when ordinary
+visibility does not. These are compiler-internal kernels the backends ask for
+by name, never a user's routine. Now the advised `uses softfloat` in the
+program is sufficient (esp32c3 and esp32s3 build). With softfloat truly
+absent, the message still fires, and its advice is now correct. The self-host
+is byte-identical old vs new (997f49b04780).
+
+Rows: sfunit_c3, sfunit_s3 (build), sfunit_none (the message still names the
+remedy). Unit test/units/usfalias.pas.

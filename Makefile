@@ -15960,6 +15960,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_qualres26 | diff -u test/test_a_unit_qualified_read_of_a_same_named_global.expected -
 	./$(COMPILER) -Futest/units test/test_a_class_named_after_a_unit_the_importer_does_not_use.pas $(TESTTMP)/test_clsunitname26
 	tools/expect_same.sh test_clsunitname26 "$$($(TESTTMP)/test_clsunitname26)" "7 40 TRUE"
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 -Futest/units test/test_a_float_in_a_unit_finds_the_programs_softfloat.pas $(TESTTMP)/sfunit_c3 >/dev/null
+	./$(COMPILER) --esp-profile=bare --target=esp32s3 -Futest/units test/test_a_float_in_a_unit_finds_the_programs_softfloat.pas $(TESTTMP)/sfunit_s3 >/dev/null
+	@# ...and with softfloat ABSENT the advice still fires, naming the remedy that now works.
+	@sed 's/uses softfloat, usfalias;/uses usfalias;/' test/test_a_float_in_a_unit_finds_the_programs_softfloat.pas > $(TESTTMP)/sfunit_none.pas
+	@out=$$(./$(COMPILER) --esp-profile=bare --target=esp32c3 -Futest/units $(TESTTMP)/sfunit_none.pas $(TESTTMP)/sfunit_none 2>&1); rc=$$?; \
+	 test "$$rc" != "0" && printf '%s\n' "$$out" | grep -q 'add `uses softfloat` to the program' \
+	  || { echo "sfunit_none: FAIL - rc=$$rc; a no-FPU float with softfloat absent must name the remedy"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
 	tools/expect_same.sh test_genshadow26 "$$($(TESTTMP)/test_genshadow26)" "shadow 12 10"
 	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias
