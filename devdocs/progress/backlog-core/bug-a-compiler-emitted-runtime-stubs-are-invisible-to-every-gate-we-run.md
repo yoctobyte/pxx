@@ -124,3 +124,29 @@ indistinguishable while the row is green.**
 So the promotion was refused by the TIER, and the tier is the only instrument
 in this repo that could have refused it. That is this ticket's thesis with a
 worked example attached.
+
+## 2026-11-19 (claude-dupwt): the bytes probe for the heap-lock async refusal exists
+
+tools/check_heaplock_async_refusal.py counts the grant path's refusal in a
+binary (sectionless, so disassembled as a raw image). It answers the open
+question with "a bytes assertion per stub": it matches the shape, not
+addresses. The shape is mov rsp,rcx; two rip-relative leas exactly
+SIG_ALTSTACK_SIZE apart, each followed by cmp rax,rcx; jb then jae; then jmp.
+The TLS tid check beside it (mov rsp,rcx then two compares against
+0x10/0x18(%rsi)) is the decoy the ticket warned about, and it does not match.
+
+Controls, all run:
+- --threadsafe build: 1
+- the same source with --no-signals (no handler, so no refusal): 0
+- a compiler built with the refusal block deleted (`if False and ...`): 0
+- the wrong alt-stack size given to the checker: 0
+- a non-threadsafe build: 0
+
+Rows in test-threads, after the 212-diagnosis row: the diag binary must
+score 1, and test_threadsafe_heap_magazine.pas built --no-signals must score
+0. Non-blocking, as the ticket asks: test-threads is not a gate tier.
+
+Still open: the other stubs on the springing list (signal runtime, div0,
+float-error hook, the per-arch emitters) have no such probe. The
+--fpc-float-errors/--fpc-mem-errors --dce casualties above have rows now
+(e.g. test_fpc_ferr_dce26).

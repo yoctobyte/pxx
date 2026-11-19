@@ -9181,6 +9181,19 @@ test-threads: $(COMPILER)
 	  tools/expect_same.sh test_ts_hl_diag26_exit "$$rc" "212" && \
 	  tools/expect_same.sh test_ts_hl_diag26_control "$$(printf '%s\n' "$$out" | sed -n 1p)" "contention-workers-finished=12" && \
 	  tools/expect_same.sh test_ts_hl_diag26_named "$$(printf '%s\n' "$$out" | sed -n 2p)" "Runtime error 212: the heap lock was never released."
+	# THE SAME REFUSAL, READ FROM THE BYTES. The row above catches a lost
+	# refusal only by winning a race; that is how 12d6c86f0's regression sat for
+	# three days while the self-host fixedpoint said "converged" (the heap-lock
+	# stubs are codegen compiler.pas never makes it emit). The checker matches
+	# the exact shape -- mov rsp,rcx; the two rip-relative alt-stack bounds,
+	# SIG_ALTSTACK_SIZE apart; jb/jae; jmp -- and NOT the TLS tid check beside it,
+	# which also compares rsp against two bounds. Controls run 2026-11-19: a
+	# compiler with the refusal deleted gives 0, and so does --no-signals (no
+	# handler, no refusal), which is the negative control kept here.
+	# bug-a-compiler-emitted-runtime-stubs-are-invisible-to-every-gate-we-run
+	tools/expect_same.sh test_ts_hl_async_refusal_bytes "$$(python3 -I tools/check_heaplock_async_refusal.py $(TESTTMP)/test_ts_hl_diag26 32768)" "1"
+	./$(COMPILER) --threadsafe --no-signals test/test_threadsafe_heap_magazine.pas $(TESTTMP)/test_ts_hl_nosig26
+	tools/expect_same.sh test_ts_hl_async_refusal_bytes_nosig "$$(python3 -I tools/check_heaplock_async_refusal.py $(TESTTMP)/test_ts_hl_nosig26 32768)" "0"
 	# ...and THE OTHER SIDE OF THAT REFUSAL. The row above asserts a handler that
 	# allocates while the flow HELD the lock is named; this asserts a handler that
 	# allocates while it held NOTHING is still SERVED. Both used to take the same
