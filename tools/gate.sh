@@ -552,6 +552,30 @@ pinned_rtl_canary() {
     fi
   fi
 
+  # THE CONSUMER HALF. The sweep's population is lib/rtl itself, so a name
+  # MOVED from lib/rtl into compiler/builtin cannot reach it: no lib/rtl unit
+  # uses the name, the pin builds lib/rtl fine, and the breakage lands in code
+  # OUTSIDE lib/rtl (0ffe185bb, external/synapse, with this row GREEN). The
+  # fixture is a consumer that names those moved builtins; grow it on a move.
+  # Same seam rule as above: RED only where the pin fails and HEAD compiles.
+  # bug-a-the-pinned-compiler-cannot-build-live-lib-rtl-and-nothing-tracks-it
+  local cprobe=test/pinned_rtl_consumer_probe.pas
+  if [ -f "$cprobe" ] &&
+     ! "$pinabs" "$cprobe" "$work/consumer.bin" > "$work/consumer.log" 2>&1; then
+    if [ -x compiler/pascal26 ] &&
+       ./compiler/pascal26 "$cprobe" "$work/consumer_head.bin" >/dev/null 2>&1; then
+      echo "^^ the PINNED binary cannot compile $cprobe, a program OUTSIDE lib/rtl"
+      echo "   that uses names moved into compiler/builtin; a compiler built from"
+      echo "   THIS TREE compiles it. A consumer of lib/rtl's surface (external/,"
+      echo "   apps) breaks the same way under \$(PXX_STABLE) until a pin:"
+      sed 's/^/     /' "$work/consumer.log" | head -5
+      return 1
+    fi
+    echo "note: $cprobe fails under the pin AND compiler/pascal26: the fixture is"
+    echo "   broken, not the seam:"
+    sed 's/^/     /' "$work/consumer.log" | head -5
+  fi
+
   # ...and then RUN one. Near-zero, and it is a different question: the compile
   # answers "does the frozen builtin still satisfy lib/rtl's references", the
   # run answers "does the result work". A pinned RTL that compiles and then

@@ -4,7 +4,7 @@ title: "`gate.sh quick`'s `pinned builds live lib/rtl` row has been RED for hour
 track: A
 type: bug
 prio: 60
-status: backlog
+status: done
 found: 2026-09-06
 found-by: frank-coordinator (announced the red to the fleet), frankD (confirmed no artefact existed, and that its own diff is not the cause)
 summary: "RECURRED 2026-09-14 WITH A NEW CAUSE, and the 2026-09-06 one below is CLEARED -- pin v408 carried it. Today the pinned compiler cannot PARSE lib/rtl/palthread.pas at all: `expected 'begin' before 'weakexternal'`. Same documented shape as every previous instance -- a commit added compiler syntax (`weakexternal`, plus the `__pxxTlsBlockSize`/`__pxxSigAltStackSize` builtins) and used it from lib/rtl, which self-hosts and is right, and breaks every $(PXX_STABLE) build until someone pins. Track B and E cannot build lib/rtl until then. ORIGINAL 2026-09-06 TEXT FOLLOWS, kept because the mechanism is the same and the shape is what recurs: The PINNED compiler cannot compile `lib/rtl/mimic_string` or `mimic_urllib_request`: `undefined variable (pyvar_is_objtag)` / `(pyvar_is_inttag)`. A commit added a builtin and used it from `lib/rtl` without a pin, which is the documented shape. A compiler built from HEAD compiles all 54 units cleanly, so nothing in the tree is broken — the pin is behind the source it has to build. Every `$(PXX_STABLE)` consumer carries it, so Track B and E build against a compiler that cannot build the RTL they depend on. NOT DISPATCHABLE as coded work: `make pin` is owner-only and no agent may run it. This ticket exists so the red has an artefact and a date rather than living in whichever session last ran the gate. IT IS NOT ONLY `gate.sh quick`: Track T's newest FULL tier at `b77ac29` (2026-09-06T04:08:52Z) is RED with `lib-test#src:tools/crtl_reachability.py` failing on those same two identifiers, so the fleet's headline verdict carries it too. The non-ancestry is measured, not inferred: the fix is frankZ's `8374118ec` (2026-09-05 23:15) and pin v404 is `8844c8c42` (2026-09-05 20:17), three hours EARLIER -- `git merge-base --is-ancestor 8374118ec 8844c8c42` is false, so no pin carries it and no amount of rebuilding at HEAD will change that."
@@ -328,3 +328,33 @@ a revert."*
 **What is inert until the next pin:** `lib/rtl/palthread.pas`, and therefore
 Track B's `make lib-test` and `make demos` for anything threaded. `make pin` is
 owner-only; this is reported, not waited on.
+
+
+# Closed 2026-11-19 (claude-dupwt): the consumer half is armed
+
+The 2026-09-10 section's fix is landed, at the time it asked for: after a pin,
+while the row is green. Pin v455 compiles the new fixture.
+
+- `test/pinned_rtl_consumer_probe.pas`: outside lib/rtl, no `uses`. It uses
+  the six names that moved into compiler/builtin (SetString, AllocMem,
+  DynArraySize, sLineBreak, UTF8Decode, UTF8Encode) as a consumer would. Its
+  header says to add a name there when one moves.
+- `pinned_rtl_canary()` in tools/gate.sh compiles it with the pin after the
+  lib/rtl sweep, with the sweep's seam rule. It goes RED only when the pin
+  fails and compiler/pascal26 succeeds. If both fail, it prints a
+  "fixture is broken" note instead.
+
+Negative control: the fixture with a `{$ifndef PXX_BUILTIN_STDIN_HOOK}` call
+to a missing proc (that define is live-only, newer than v455) gives pin rc=1
+and HEAD rc=0, which is the red branch's predicate. The real fixture under the
+pin prints `abc 0 5 h 1`.
+
+What stays true and is not a defect: a commit that adds compiler syntax and
+uses it from lib/rtl still turns this row RED until the next pin. That is the
+row working. With this ticket closed, the row's own lookup will say "NO OPEN
+TICKET NAMES THIS ROW" on the next red, which is the prompt to file that
+instance.
+
+Side measurement, not filed: under PXX_WIDE_PAYLOAD-off, `UTF8Decode('hé')`
+has Length 3 where fpc says 2. UnicodeString is byte-backed by design, which
+the decide/chore wide-payload tickets already cover.
