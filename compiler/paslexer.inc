@@ -1231,6 +1231,15 @@ begin
     name := 'PXX_ESP_BARE';
     PasDefine(name);
   end;
+  { Any ESP-class target (IDF or bare): the runtime sizes its lookup caches
+    for SRAM instead of desktop RAM. feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram }
+  { TargetIsEspClass written out: util.inc is after this file in the FPC seed }
+  if (TargetPlatform = PLATFORM_ESP) or
+     (EspBareBoot and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32))) then
+  begin
+    name := 'PXX_ESP_TARGET';   { NOT PXX_ESP: builtinheap defines that locally, meaning bare }
+    PasDefine(name);
+  end;
   { --threadsafe on i386/aarch64: the runtime locks live in Pascal (builtinheap
     takes a spinlock in PXXAlloc/PXXFree, refcounts go through __pxxatomic_*)
     instead of x86-64's hand-emitted lock blobs. The define selects those paths;

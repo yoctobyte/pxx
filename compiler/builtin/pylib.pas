@@ -5248,6 +5248,15 @@ begin
   end;
 end;
 
+{ the "has any object ever stored a dynamic attribute of this name" byte map:
+  4 KB on desktop, 512 B on ESP. A collision only costs the full lookup.
+  feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram }
+{$ifdef PXX_ESP_TARGET}
+const PY_DYNATTR_SEEN = 512;
+{$else}
+const PY_DYNATTR_SEEN = 4096;
+{$endif}
+
 var
   PyDynAttrStore: TPyDict;   { lazily created; keys are "addr:name" }
   { A NEGATIVE FILTER in front of the store: one byte per hash of every NAME
@@ -5258,7 +5267,7 @@ var
     byte is clear has never been stored on any object, so the answer is no
     without the key. Bytes, not bits: a racing writer stores a whole byte and
     cannot clear another name's mark by a read-modify-write. }
-  PyDynAttrNameSeen: array[0..4095] of Byte;
+  PyDynAttrNameSeen: array[0..PY_DYNATTR_SEEN - 1] of Byte;   { PY_DYNATTR_SEEN: see PyDynAttrNameSlot }
 
 function PyDynAttrKey(obj: Pointer; const name: AnsiString): AnsiString;
 begin
@@ -5276,7 +5285,7 @@ begin
   if n > 0 then
     h := h + Ord(name[1]) * 31 + Ord(name[n]) * 7 + Ord(name[(n + 1) div 2]) * 17
            + Ord(name[(n + 2) div 3]) * 3;
-  Result := h and 4095;
+  Result := h and (PY_DYNATTR_SEEN - 1);
 end;
 
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
@@ -5551,7 +5560,16 @@ end;
   record keeps its own copy of the name, in the RTTI's length-prefixed
   layout, so PyNameEqAt verifies a miss exactly as it does a hit. Safe
   because a class's RTTI never changes after compilation. }
+{ ESP: 1024 slots (4 KB on a 32-bit chip) instead of 8192 (32 KB, 65% of an
+  ESP NilPy image's .bss, measured by PXXDBG=a.datamap). Any power of two is
+  correct: the index is masked, and a miss only walks the RTTI. An ESP program
+  has far fewer (class, attribute) pairs than the desktop sizing assumes.
+  feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram }
+{$ifdef PXX_ESP_TARGET}
+const PY_ATTRLK_SLOTS = 1024;
+{$else}
 const PY_ATTRLK_SLOTS = 8192;
+{$endif}
       PY_ATTRLK_PROBE = 4;   { slots tried from the hashed one, on lookup and fill }
 type PPyAttrLkRec = ^TPyAttrLkRec;
      TPyAttrLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer;

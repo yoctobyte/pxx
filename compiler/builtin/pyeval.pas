@@ -1034,7 +1034,11 @@ end;
   name's CONTENT -- see PyAttrLkIndex in pylib) only decides where to look,
   never what is true. A method MISS is cached too, with the record's own
   copy of the name to verify against (NameP); a field miss is not. }
+{$ifdef PXX_ESP_TARGET}
+const PY_LK_SLOTS = 256;    { ESP: 1 KB, not 8 KB of SRAM. feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram }
+{$else}
 const PY_LK_SLOTS = 2048;
+{$endif}
 type PPyLkRec = ^TPyLkRec;
      TPyLkRec = record Cls: Pointer; Hit: Pointer; Kind: NativeInt; NameP: Pointer; end;
 var PyLkSlot: array[0..PY_LK_SLOTS - 1] of PPyLkRec;
@@ -7997,7 +8001,11 @@ end;
   keyed by the raw source; a hit reuses the token arrays by reference. On a
   miss the live refs are NILLED first so Tokenize allocates fresh arrays and
   never mutates a cached buffer in place. }
+{$ifdef PXX_ESP_TARGET}
+const PYTOK_CACHE = 16;     { ESP: 384 B, not 1.5 KB of SRAM. feature-a-esp-sizes-the-nilpy-lookup-caches-for-sram }
+{$else}
 const PYTOK_CACHE = 64;
+{$endif}
 type
   TTokCacheEntry = record
     Src:    AnsiString;
