@@ -1072,7 +1072,7 @@ fi
 # from seven files. Both the uncommitted diff and the unpushed range are checked
 # -- CLAUDE.md's rule that quick's canary only fires on an UNCOMMITTED tree is a
 # footgun worth not copying.
-INC_TWO_CONFIGS='compiler/asmtext.*\.inc|compiler/x64enc\.inc|compiler/rv32enc\.inc|compiler/rel8\.inc'
+INC_TWO_CONFIGS='compiler/asmtext.*\.inc|compiler/x64enc\.inc|compiler/rv32enc\.inc|compiler/rel8\.inc|compiler/elfdynsym\.inc'
 inc_harness_touched() {
   git diff --name-only HEAD 2>/dev/null | grep -qE "$INC_TWO_CONFIGS" && return 0
   if git rev-parse --verify -q "origin/$GATE_BRANCH" >/dev/null 2>&1; then

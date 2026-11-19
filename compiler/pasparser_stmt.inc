@@ -7968,8 +7968,14 @@ begin
         ASTRight[argSeq] := exprNode;
         Expect(tkRParen, ')');
       end
-      else if CaseEqual(name, 'LoadFile') then
+      else if CaseEqual(name, 'LoadFile') and (FindProc(name) < 0) then
       begin
+        { The intrinsic, unless the program declares its own LoadFile: then
+          that routine is called like any other. Before, the intrinsic took
+          every call and parsed its path as a VARIABLE, so a user routine
+          called with a const path reported `undefined variable` for the
+          const (test/test_elfdynsym.pas, `LoadFile(SDL64, body)`).
+          bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-pxx }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
         valNode := ParseIntrinsicDestLValue(idx);

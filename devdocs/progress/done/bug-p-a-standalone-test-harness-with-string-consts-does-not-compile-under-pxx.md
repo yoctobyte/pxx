@@ -3,8 +3,8 @@ slug: bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-
 track: P
 prio: 30
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-10
 found-by: frankH
 tags: [pascal, const, harness, testing]
@@ -60,3 +60,33 @@ A program-level string const typed as `Integer` is not a diagnostic failure in
 general — here it happened to hit an overload set that refused it. Whether any
 shape exists where it silently folds to a number instead is **not established**,
 and is the question worth answering first. Start there, not at the harness.
+
+
+# Fixed 2026-11-19 (claude-dupwt): it was the NAME, not the string consts
+
+Reduced to 9 lines without SysUtils: a program that declares its own
+`procedure LoadFile(const path: AnsiString; var dst: AnsiString)` and calls it
+with a const path. Renaming the routine to anything else makes it compile, so
+the string consts were never the trigger, which is why none of the five
+reductions above reproduced.
+
+`LoadFile` is a pxx intrinsic (ASTIVal -100) and had two arms that ignored a
+user's routine:
+- **statement arm** (pasparser_stmt.inc): took every `LoadFile(` call and
+  parsed the path with ParseIntrinsicDestLValue, a VARIABLE parse, giving
+  `undefined variable (SDL64)` for a const. `Present(SDL64)` two lines
+  earlier was fine.
+- **ParseSubroutine** (pasparser_proc.inc): a routine NAMED LoadFile had its
+  body skipped and was never registered. That dates from 2026-06 (374e788b5d
+  only renamed the comparison). Nothing in lib/, compiler/builtin, examples or
+  test declares one any more.
+
+Now the skip is gone, and the intrinsic arm runs only when `FindProc('LoadFile')
+< 0`. The intrinsic itself is unchanged (checked: `LoadFile(p, s)` with no
+user routine still loads the file).
+
+`test/test_elfdynsym.pas` now builds with pxx and passes 14/14. It joins
+tools/standalone_inc_harnesses.sh, gate.sh's INC_TWO_CONFIGS gains
+compiler/elfdynsym.inc so a change there triggers that step, and the Makefile
+gains a pxx-built row (test_elfdynsym_pxx26) next to the FPC-built one, which
+stays.

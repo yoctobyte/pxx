@@ -31,7 +31,8 @@ mkdir -p "$OUT" || exit 2
 
 # harness : the compiler .inc files it compiles directly
 HARNESSES="test_asm_emit_a64 test_asm_emit_386 test_asm_emit_x64 \
-test_asm_emit_rv32 test_asm_emit_arm32 test_rel8_guard test_x64enc"
+test_asm_emit_rv32 test_asm_emit_arm32 test_rel8_guard test_x64enc \
+test_elfdynsym"
 
 rc=0
 n=0

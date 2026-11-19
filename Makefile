@@ -6305,11 +6305,11 @@ test-nilpy: $(COMPILER)
 	@# Every dual-architecture cache key on this box lists its x86-64 entry
 	@# first, so ElfIsNative64 never has to refuse anything the compiler asks it
 	@# about -- and the class byte is the only thing separating the libSDL2
-	@# twins. FPC-BUILT: pxx does not currently compile this harness
-	@# (`undefined variable` on its string consts, not isolated to a minimal
-	@# repro -- bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-pxx),
-	@# so it is not in tools/standalone_inc_harnesses.sh and this row is what
-	@# catches elfdynsym.inc drifting into a defs.inc reference.
+	@# twins. Built BOTH ways: by fpc here, and by pxx in the row right after
+	@# this block and in tools/standalone_inc_harnesses.sh. pxx could not
+	@# compile it until 2026-11-19: the harness declares its own LoadFile, and
+	@# the LoadFile intrinsic took the call and read the const path as a
+	@# variable (bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-pxx).
 	@if ! command -v $(FPC) >/dev/null 2>&1; then \
 	   echo "test_elfdynsym: SKIP - no $(FPC) on this box; the .dynsym reader's refusal arms are NOT covered by this run"; \
 	 else \
@@ -6317,6 +6317,8 @@ test-nilpy: $(COMPILER)
 	     || { echo "test_elfdynsym: FAIL - the standalone harness did not compile; elfdynsym.inc has probably grown a reference to defs.inc"; tail -5 $(TESTTMP)/test_elfdynsym.build.log; exit 1; }; \
 	   $(TESTTMP)/test_elfdynsym || exit 1; \
 	 fi
+	./$(COMPILER) -O2 test/test_elfdynsym.pas $(TESTTMP)/test_elfdynsym_pxx26
+	$(TESTTMP)/test_elfdynsym_pxx26
 	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy $(TESTTMP)/test_nilpy_ctorkwf26
 	$(TESTTMP)/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	$(TESTTMP)/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -

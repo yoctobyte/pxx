@@ -2896,24 +2896,11 @@ begin
     retType := tyBoolean;
   end;
 
-  if CaseEqual(name, 'LoadFile') then
-  begin
-    while not (CurTok.Kind in [tkBegin, tkEOF]) do Next;
-    if CurTok.Kind = tkBegin then
-    begin
-      depth := 1;
-      Next;
-      while (depth > 0) and (CurTok.Kind <> tkEOF) do
-      begin
-        if CurTok.Kind = tkBegin then Inc(depth)
-        else if CurTok.Kind = tkEnd then Dec(depth);
-        Next;
-      end;
-      Eat(tkSemicolon);
-    end;
-    MethImplOwnerCi := savedMIO;
-    Exit;
-  end;
+  { (A routine named LoadFile used to have its body SKIPPED here and was never
+    registered, a leftover from when the intrinsic had a source placeholder.
+    Nothing declares one any more; a user's own LoadFile is an ordinary routine
+    and wins over the intrinsic at the call, see the statement arm.
+    bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-pxx) }
 
   { Forward / interface declaration, or the declaration pre-scan pass. In all
     three cases the routine's signature is registered without emitting a body.
