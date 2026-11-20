@@ -92,6 +92,11 @@ begin
   Error('internal: PyNarrowIntMinMax reached in a build without the NilPy frontend');
 end;
 
+procedure PyProcCallValueIsNone;
+begin
+  Error('internal: PyProcCallValueIsNone reached in a build without the NilPy frontend');
+end;
+
 procedure PyParseFactorCore;
 begin
   Error('internal: PyParseFactorCore reached in a build without the NilPy frontend');
