@@ -104,14 +104,16 @@ function StaticArraySourceInfo(argAST: Integer; var cnt: Integer; var elemTk: TT
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
 {$ifndef PXX_NO_BASIC}{$include blexer.inc}{$endif}
-{ PXX_NO_NILPY IS NOT YET A WORKING DEFINE, and it is deliberately absent from
-  the thirteen listed in --help. The include guards, the driver refusal, the
-  `.py`-module refusal and the ParseArgExpr fallback are all in place and are
-  byte-identical no-ops in the default build; what is NOT in place is the
-  remaining NilPy code inside the shared Pascal expression chain. Measured
-  2026-08-31 with `fpc -dPXX_NO_NILPY`: 279 unresolved sites over 134 distinct
-  Py* symbols, in five routines of pasparser_expr.inc / _lval.inc / _stmt.inc.
-  That count IS the campaign's progress metric -- it is 0 when the define works.
+{ PXX_NO_NILPY builds (2026-11-20). The Py* routines the shared Pascal parser
+  still calls are stubbed in frontend_stubs.inc, one per name: most raise (their
+  call sites sit behind isNilPy / PyExprMode, which this build cannot set), and
+  the dozen the shared argument loops and lvalue paths reach for EVERY call carry
+  the real body's non-NilPy answer. Checked: no stub raises across the 3,618
+  test/*.pas, test/*.c and lib/rtl/*.pas sources; a sample of 191 programs
+  compiles byte-identical to the default compiler; and the reduced compiler
+  rebuilds the full compiler byte-identical. ~16% smaller (9.88 -> 8.33 MB).
+  A new Py* call in shared code breaks this build again -- the fix is one more
+  stub, and a stub that RAISES is the right default.
   feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
 { real body in pyparser.inc; pylexer.inc's decorator rewrite names its hidden
   def with it, and pylexer.inc is included HERE, ahead of forwards.inc. pxx

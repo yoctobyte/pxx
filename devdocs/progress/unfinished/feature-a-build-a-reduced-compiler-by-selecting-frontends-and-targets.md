@@ -2,8 +2,8 @@
 track: A
 prio: 25
 type: feature
-blocked-by: [refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]  # every remaining increment is parked: PXX_NO_NILPY behind the carve (2026-08-31), the target axis behind someone wanting a host-only build. The prose said so; the edge did not.
-summary: "Build-time selection of frontends and targets. Thirteen omission defines ship. PXX_NO_NILPY now has its INCLUDE GUARDS, driver refusal, `.py`-module refusal and ParseArgExpr fallback landed (byte-identical in the default build) but DOES NOT BUILD YET and is deliberately not advertised. The carve campaign it was parked behind has LANDED and did not finish the job: re-measured 2026-08-31, 134 symbols / 279 sites remain, down from 176/426 -- concentrated in five routines of the shared Pascal expression chain, as NilPy arms inside the shared ARGUMENT LOOPS (guarded by isNilPy, BELOW the PyParseFactorCore hook, which is why that hook did not close them). Parked again behind refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. Also, unchanged and still the headline: omitting frontends is NOT the size lever -- nine frontends buy 4.4%, three host backends buy 20.7%."
+blocked-by: []  # 2026-11-20: PXX_NO_NILPY BUILDS (stubs, not the carve -- see the last section); the target axis is still parked behind someone wanting a host-only build. Was: every remaining increment is parked: PXX_NO_NILPY behind the carve (2026-08-31), the target axis behind someone wanting a host-only build. The prose said so; the edge did not.
+summary: "2026-11-20 (claude-dupwt): PXX_NO_NILPY NOW BUILDS AND WORKS -- 175 Py* stubs in frontend_stubs.inc, a dozen with the real non-NilPy answer; ~16% smaller; byte-identical output and self-host; `make test-no-nilpy-build` (opt-in). Older text follows. Build-time selection of frontends and targets. Thirteen omission defines ship. PXX_NO_NILPY now has its INCLUDE GUARDS, driver refusal, `.py`-module refusal and ParseArgExpr fallback landed (byte-identical in the default build) but DOES NOT BUILD YET and is deliberately not advertised. The carve campaign it was parked behind has LANDED and did not finish the job: re-measured 2026-08-31, 134 symbols / 279 sites remain, down from 176/426 -- concentrated in five routines of the shared Pascal expression chain, as NilPy arms inside the shared ARGUMENT LOOPS (guarded by isNilPy, BELOW the PyParseFactorCore hook, which is why that hook did not close them). Parked again behind refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. Also, unchanged and still the headline: omitting frontends is NOT the size lever -- nine frontends buy 4.4%, three host backends buy 20.7%."
 status: unfinished
 owner: frankA
 ---
@@ -985,3 +985,49 @@ remaining work and it is why the existing hook did not close it.
 Filed as `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops`.
 This ticket goes back to `unfinished/` behind it, for the same reason as before
 and with a smaller number attached.
+
+---
+
+## 2026-11-20 (claude-dupwt) — `PXX_NO_NILPY` builds, by stubs rather than the carve
+
+Reported broken at origin/master by rd (21 undefined Py* errors at the cap; the
+real count was the 134-symbol figure above). Closed WITHOUT the carve: each Py*
+routine shared code still calls gets a stub in `compiler/frontend_stubs.inc`
+under `{$ifdef PXX_NO_NILPY}` — 175 of them, generated from the forwards in
+`pyforwards.inc` / `forwards.inc` and the headers in `pyparser.inc`, so every
+signature is the real one.
+
+**The ticket's "every stub is unreachable" premise was false for a dozen.** The
+shared argument loops call `PyKwArgIndex`, `PyBindKwArgs`, `PyPackStarArgs`,
+`PyKwDictArgNode`, `PyKwDictArgsHere`, `PyKwNamesTokPos`,
+`PyPromoteOverloadByStarAt`, `PyIsClassNameChainAhead`/`PyIsBareClassRefAhead`
+for every call, and the lvalue paths `PyAugBinTok`, `PyHoistPark`/`Restore`,
+`PyClsAttrOvrSlot`. Found the only reliable way: a build whose stubs LOG instead
+of raising, over every `test/*.pas`, `test/*.c` and `lib/rtl/*.pas` (3,618
+sources), iterated until nothing was logged. (A first pass whose logging stubs
+returned 0 hid `PyKwDictArgsHere`, because the real neutral answer is -1 and 0
+took another path — rerun with the real stubs.) Each reached stub returns its
+real body's answer when isNilPy is False, or IS the real body where that is
+language-neutral (`PyAugBinTok`, `PyKwNamesTokPos`). Six more whose bodies open
+with an isNilPy/PyExprMode test got the same treatment pre-emptively.
+
+Measured:
+
+    default compiler               9,875,728 bytes
+    -dPXX_NO_NILPY                 8,325,776 bytes   -15.7%
+
+- no stub raises across the 3,618 sources;
+- 191 sampled programs (1 in 15 of test/*.pas and test/*.c that build) compile
+  BYTE-IDENTICAL to the default compiler's output;
+- the reduced compiler rebuilds the full compiler byte-identical to
+  `compiler/pascal26`;
+- a `.py` source is refused at dispatch.
+
+`make test-no-nilpy-build` checks all but the sweep. It is opt-in, NOT in a gate
+tier: a new Py* call in shared code breaks the reduced build until one more
+stub is added, and putting that on every NilPy push is a cost nobody has asked
+for. A raising stub is the right default for the new name; give it a neutral
+body only if the sweep (or the target) shows it reached.
+
+[[refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops]] is
+still a worthwhile cleanup but no longer blocks this define.

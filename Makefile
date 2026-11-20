@@ -47808,3 +47808,19 @@ tls-native-seam-devtest: pxx-stable-check
 # needs the openssl CLI; not in the lib-test gate.
 urllib-https-devtest: $(COMPILER)
 	tools/urllib_https_devtest.sh
+
+# The reduced compiler without the NilPy frontend (-dPXX_NO_NILPY) still
+# builds, compiles Pascal and C, refuses a .py source, and rebuilds the FULL
+# compiler byte-identical to $(COMPILER). Opt-in, not in a gate tier: a new
+# Py* call in shared code breaks it until frontend_stubs.inc gets one more
+# stub. feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets
+test-no-nilpy-build: $(COMPILER)
+	@mkdir -p $(TESTTMP)
+	./$(COMPILER) -dPXX_NO_NILPY compiler/compiler.pas $(TESTTMP)/pascal26_nonilpy > /dev/null
+	$(TESTTMP)/pascal26_nonilpy test/test_tdoublerec_alias_cast.pas $(TESTTMP)/nonilpy_pas > /dev/null
+	$(TESTTMP)/nonilpy_pas | diff - test/test_tdoublerec_alias_cast.expected
+	printf 'print(1)\n' > $(TESTTMP)/nonilpy_x.py
+	! $(TESTTMP)/pascal26_nonilpy $(TESTTMP)/nonilpy_x.py $(TESTTMP)/nonilpy_x 2>&1 | grep -q '^ok'
+	$(TESTTMP)/pascal26_nonilpy compiler/compiler.pas $(TESTTMP)/pascal26_from_nonilpy > /dev/null
+	cmp $(TESTTMP)/pascal26_from_nonilpy $(COMPILER)
+	@echo "test-no-nilpy-build: PASS"

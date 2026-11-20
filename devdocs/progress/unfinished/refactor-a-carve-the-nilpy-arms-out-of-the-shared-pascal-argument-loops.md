@@ -376,3 +376,13 @@ taxonomy, and it is the reason this region was not a cheap first carve.
 
 **Next session:** design the two-entry hook before moving anything; do not start
 with the contiguous run, because landing it makes the region look done.
+
+---
+
+## 2026-11-20 (claude-dupwt) — no longer blocks PXX_NO_NILPY
+
+`PXX_NO_NILPY` now builds with stubs in `frontend_stubs.inc` (see
+[[feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets]]). The
+carve remains a code-ownership cleanup: the dozen REACHED stubs there are
+exactly the NilPy hooks inside these shared argument loops, so carving them
+out would let those stubs go back to raising.
