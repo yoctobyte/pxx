@@ -75,7 +75,18 @@ void *rawmemchr(const void *s, int c);
 void *memmem(const void *hay, size_t haylen, const void *ned, size_t nedlen);
 int   strverscmp(const char *a, const char *b);
 
-#if defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)
+/* glibc's rule, all of it: _DEFAULT_SOURCE (so __USE_MISC) is IMPLIED when
+   the unit asks for no particular standard and is not strict ISO. It was only
+   the explicit spellings here, so a plain `#include <string.h>` with no
+   feature macro -- which on glibc sees strcasecmp -- did not; xedit's
+   lisp/read.c is that. A unit that is strict (-std=c99 sets __STRICT_ANSI__)
+   or names a standard (_POSIX_C_SOURCE, _XOPEN_SOURCE, _ISOC99_SOURCE ...)
+   still does not get `index`. */
+#if defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE) || \
+    defined(_SVID_SOURCE) || \
+    (!defined(__STRICT_ANSI__) && !defined(_ISOC99_SOURCE) && !defined(_ISOC11_SOURCE) && \
+     !defined(_ISOC2X_SOURCE) && !defined(_POSIX_SOURCE) && !defined(_POSIX_C_SOURCE) && \
+     !defined(_XOPEN_SOURCE))
 #include <strings.h>
 #endif
 

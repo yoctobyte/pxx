@@ -94,6 +94,8 @@ char *mkdtemp(char *tmpl);
 char *getenv(const char *name);
 /* GNU: getenv, but NULL in a set-user/group-ID process. */
 char *secure_getenv(const char *name);
+/* BSD/GNU: the 1, 5 and 15 minute load averages (Linux /proc/loadavg). */
+int getloadavg(double loadavg[], int nelem);
 
 /* Environment write side. These mutate the SAME buffer getenv() reads, so a C
    program sees its own writes. NOTE they do not reach the Pascal RTL's spawn

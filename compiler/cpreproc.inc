@@ -3896,6 +3896,50 @@ begin
   end;
 end;
 
+{ Does a parenthesis still open in `line` belong to a FUNCTION-LIKE MACRO
+  CALL? The join below collects a macro invocation's arguments across a
+  directive (busybox's IF_SELINUX inside getopt32long's arguments), and that
+  is right only for a macro call: an ordinary open parenthesis, an `if (`
+  condition spanning lines, has to be expanded UP TO the directive before the
+  directive runs, or a `#undef`/`#define` in the middle rewrites the text
+  before it. libXt's Shell.c redefines NEQ inside one `if (... || ...)`, and
+  every NEQ in it took the LAST definition (no member named 'flags').
+  bug-c-a-define-inside-a-multi-line-expression-applies-to-the-text-before-it }
+function CPOpenParenIsMacroCall(const line: AnsiString): Boolean;
+var i, sp, a, e, mi: Integer; inStr, inCh: Boolean; c: Char;
+    stack: array of Integer;
+begin
+  Result := False;
+  SetLength(stack, 0); sp := 0;
+  inStr := False; inCh := False; i := 1;
+  while i <= Length(line) do
+  begin
+    c := line[i];
+    if inStr then begin if c = '\' then Inc(i) else if c = '"' then inStr := False; end
+    else if inCh then begin if c = '\' then Inc(i) else if c = '''' then inCh := False; end
+    else if c = '"' then inStr := True
+    else if c = '''' then inCh := True
+    else if c = '(' then
+    begin
+      if sp >= Length(stack) then SetLength(stack, sp * 2 + 8);
+      stack[sp] := i; Inc(sp);
+    end
+    else if (c = ')') and (sp > 0) then Dec(sp);
+    Inc(i);
+  end;
+  for i := 0 to sp - 1 do
+  begin
+    e := stack[i] - 1;
+    while (e >= 1) and (line[e] in [' ', #9]) do Dec(e);
+    if (e < 1) or not CPIsIdentChar(line[e]) then Continue;
+    a := e;
+    while (a > 1) and CPIsIdentChar(line[a - 1]) do Dec(a);
+    if not CPIsIdentStart(line[a]) then Continue;
+    mi := CPFindMacro(line, a, e);
+    if (mi >= 0) and CPMFunction[mi] then begin Result := True; Exit; end;
+  end;
+end;
+
 { Is the directive at line[p] (p at the '#') an #include? The same keyword
   scan CPDirective does, without acting on it. }
 function CPDirectiveIsInclude(const line: AnsiString; p: Integer): Boolean;
@@ -4140,6 +4184,19 @@ begin
             above: it does not re-enter this procedure. }
           if CPActive and CPDirectiveIsInclude(cont, q) then
           begin
+            SetLength(CPrepLineExp, 0);
+            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+            CPSyncLine;
+            CPEmitExpanded(CPrepLineExp);
+            CPrepOutAppendCh(#10);
+            CPDirective(cont, q, Length(cont), depth, baseDir);
+            CPrepLine := '';
+          end
+          else if CPActive and not CPOpenParenIsMacroCall(CPrepLine) then
+          begin
+            { an ordinary open parenthesis: expand what came before the
+              directive with the macros as they stand now, then obey it
+              (CPOpenParenIsMacroCall) }
             SetLength(CPrepLineExp, 0);
             CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
             CPSyncLine;

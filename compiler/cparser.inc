@@ -7742,6 +7742,7 @@ begin
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdPtrDepth := 0; tdPtrBaseTk := Ord(tyUnknown);
   CTypeTdLvl := 0;
+  CTypeSpelledStars := 0;
   tdIsFnType := False;
   CTypeProcSig := -1;
   CTypePtrElemProcSig := -1;
@@ -8069,6 +8070,7 @@ begin
     normally through the block below. }
   if tdIsFnType and (CurTok.Kind = tkStar) then
   begin
+    Inc(CTypeSpelledStars);
     Next;                         { consume the decay star }
     while CurTok.Kind = tkConst do Next;
     Result := tyPointer;          { CTypeProcSig stays set: directly callable }
@@ -8125,6 +8127,7 @@ begin
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);
+      Inc(CTypeSpelledStars);
       Next;
       { skip a pointer-level `const`/`volatile` qualifier: `char *const p`,
         `T * const * p` — without this the declarator name is never reached and
@@ -8765,6 +8768,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
     lParenName: Boolean; lParenEnd: Integer;   { `T *(name[N])`, see CParenDeclNameEnd }
     lParenPtrArr: Boolean;   { `T (*name[N])[M]`, see CParenPtrArrEnd }
+    lclNoStar: Boolean;      { this declarator wrote no `*`: an array typedef stays an array }
     CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry: Integer;
     CTypeTypedefDimsAtEntry: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
@@ -8779,6 +8783,7 @@ begin
   CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
   for di := 0 to MAX_ARR_DIMS - 1 do CTypeTypedefDimsAtEntry[di] := CTypeTypedefDims[di];
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
+  lclNoStar := CTypeSpelledStars = 0;   { the first declarator wrote no `*` (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
   tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
   for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDims[di];
   { Capture the pointer element type/record now — ParseCExpr below must not
@@ -9082,6 +9087,7 @@ begin
         Next;
         declPtr := 0;
         while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
+        lclNoStar := declPtr = 0;
         if (declPtr > 0) and (sibTdLvl > 0) then
         begin
           declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
@@ -9220,7 +9226,12 @@ begin
       declPtrDepth, not ptrDepth: it is the PER-DECLARATOR count, and
       `TA *a, b;` is a pointer and an array in one declaration.
       bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works }
-    if (CurTok.Kind = tkLBrack) or ((tdArrLen >= 1) and (declPtrDepth = 0)) then
+    { ...and a typedef of an array OF POINTERS, `typedef P T[16]; T x;`, has
+      depth 1 from P with no star written: an array, which the depth test
+      alone called a pointer to the array (libXt's CacheHashTable: every
+      cacheHashTable[i] strode the 72-byte record and read off the table).
+      bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array }
+    if (CurTok.Kind = tkLBrack) or ((tdArrLen >= 1) and ((declPtrDepth = 0) or lclNoStar)) then
     begin
       { fixed array  T name[N][M]...  — dimensions are constant expressions.
         Storage is flattened row-major for >=2 dimensions and tagged with
@@ -14450,12 +14461,15 @@ end;
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
+    gSpelled: Integer;   { CTypeSpelledStars of the first declarator }
     initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     gFpNDims, gFpDi: Integer;
     gFpPtrElemSig: Integer;   { `ret (**name)(..)`: the POINTEE's call signature }
     gFpDims: array[0..7] of Integer;
+    gFpNest: Integer; gFpMore: Boolean;   { braced rows in a fn-pointer table's initialiser }
+    gFpRow, gFpSpan: array[0..7] of Integer;
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok, paDeferTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     gTdDi: Integer;  { walks an array typedef's inherent dims }
@@ -14503,6 +14517,7 @@ begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
+  gSpelled := CTypeSpelledStars;   { stars the first declarator wrote (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
   { ...and all of its dims, copied before an initializer's casts re-run
     ParseCDeclType, for the pointee stamp of `mat4 *g` / `mat4 *g[2]` }
   gTdNDims := CTypeTypedefNDims;
@@ -14585,9 +14600,28 @@ begin
     begin
       Next; Next;                        { consume assign and opening brace }
       fnCurTgt := 0; fnHadDesig := False;
+      gFpNest := 0;
       while CBlockContinues do
       begin
         EnsureCGIArrCapacity(nArrElems);
+        { A BRACED ROW of a multi-dim table, `{ {fa, fb}, {fb, fa} }`: the
+          brace opens a sub-array spanning the inner dims. It was taken as one
+          element and skipped, a null slot, so libX11's SwapFunction[12][12]
+          (PutImage.c) was all nulls and every XPutImage of a bitmap called
+          nil. bug-c-a-braced-row-in-a-function-pointer-table-initialiser-is-a-null-slot }
+        while (CurTok.Kind = tkBegin) and (gFpNest < 7) and (gFpNest + 1 < gFpNDims) do
+        begin
+          Inc(gFpNest);
+          gFpSpan[gFpNest] := 1;
+          for gFpDi := gFpNest to gFpNDims - 1 do
+            if (gFpDi <= 7) and (gFpDims[gFpDi] > 0) then
+              gFpSpan[gFpNest] := gFpSpan[gFpNest] * gFpDims[gFpDi];
+          { a row starts on a row boundary }
+          fnCurTgt := ((fnCurTgt + gFpSpan[gFpNest] - 1) div gFpSpan[gFpNest]) * gFpSpan[gFpNest];
+          gFpRow[gFpNest] := fnCurTgt;
+          fnHadDesig := True;   { rows place elements by target, as a designator does }
+          Next;
+        end;
         { `[k] =` / `[lo ... hi] =` element designators (C 6.7.8 / GNU range) —
           the reloc-table shape `{[0 ... 2]=&sys_ni, [0]=one, ...}` (00216). }
         fnRangeHi := -1;
@@ -14604,6 +14638,11 @@ begin
           Expect(tkRBrack, ']');
           if CurTok.Kind = tkAssign then Next;
           if fnCurTgt < 0 then fnCurTgt := 0;
+          if gFpNest > 0 then          { inside a braced row: index within the row }
+          begin
+            fnCurTgt := gFpRow[gFpNest] + fnCurTgt;
+            if fnRangeHi >= 0 then fnRangeHi := gFpRow[gFpNest] + fnRangeHi;
+          end;
         end;
         if CurTok.Kind = tkAmp then Next;   { `&func` == `func` for a fn pointer }
         if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
@@ -14661,7 +14700,18 @@ begin
           end;
         end;
         Inc(fnCurTgt);
-        if CurTok.Kind = tkComma then begin Next; Continue; end;
+        gFpMore := False;
+        if CurTok.Kind = tkComma then begin Next; gFpMore := True; end;
+        { the end of a braced row: the next element starts the next row }
+        while (gFpNest > 0) and (CurTok.Kind = tkEnd) do
+        begin
+          Next;
+          fnCurTgt := gFpRow[gFpNest] + gFpSpan[gFpNest];
+          Dec(gFpNest);
+          gFpMore := False;
+          if CurTok.Kind = tkComma then begin Next; gFpMore := True; end;
+        end;
+        if gFpMore then Continue;
         Break;
       end;
       if nArrElems >= 0 then Eat(tkEnd)
@@ -14784,6 +14834,17 @@ begin
         entry count. Applying nArrElems there inflated `const fptr t[3]` to length 6
         -> sizeof/loop bound doubled -> `t[i]()` ran off the end into NULL (00216
         test_multi_relocs SIGSEGV). }
+    end;
+    { A multi-dim table holds WHOLE rows: `fp t[][2] = {{fa}, {fa}}` is two
+      rows, 4 slots, not the 3 its highest target gives; the row count is the
+      first dim. bug-c-a-braced-row-in-a-function-pointer-table-initialiser-is-a-null-slot }
+    if wasArr and (gFpNDims >= 2) then
+    begin
+      gFpSpan[0] := 1;
+      for gFpDi := 1 to gFpNDims - 1 do
+        if (gFpDi <= 7) and (gFpDims[gFpDi] > 0) then gFpSpan[0] := gFpSpan[0] * gFpDims[gFpDi];
+      arrLen := ((arrLen + gFpSpan[0] - 1) div gFpSpan[0]) * gFpSpan[0];
+      gFpDims[0] := arrLen div gFpSpan[0];
     end;
     idx := FindSym(name);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
@@ -15079,7 +15140,7 @@ begin
       ParseCDeclType, so it asks baseTk; later ones count their own.
       bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works }
     if (tdArrLen >= 1) and
-       (not (((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)))) then
+       (not (((gFirstDecl and (gSpelled > 0)) or (gStars > 0)))) then
     begin
       wasArr := True;
       { ALL the typedef's dims, same as the local path -- see its note. }
@@ -15413,7 +15474,7 @@ begin
         a multi-dim array the spans follow its own (CPtrElemSpanOff).
         bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
       if gFirstDecl then gPtrD := CTypePtrDepth else gPtrD := gStars;
-      if (tdArrLen >= 1) and ((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)) and
+      if (tdArrLen >= 1) and ((gFirstDecl and (gSpelled > 0)) or (gStars > 0)) and
          (gPtrD >= 1) and (gPtrD <= 2) and
          ((not wasArr) or (gPtrD = 1)) and
          (CPtrElemSpanOff(idx) + gTdNDims <= MAX_ARR_DIMS) then
@@ -24442,7 +24503,13 @@ begin
     bug-c-several-function-pointer-declarators-in-one-declaration }
   if not isTypedef then
   begin
-    fp := False;
+    { A PROTOTYPE as the first declarator, `T f(int), g(int), x;`, is split
+      too: ParseCSubroutine takes the prototype and skips to the `;`, so every
+      declarator after it was never declared. xedit.h declares
+      `FileAccess MaybeCreateFile(const char*), CheckFilePermissions(...);`.
+      A function declarator after a variable (`int x, f(int);`) already
+      worked. bug-c-declarators-after-a-prototype-are-dropped }
+    fp := (Tokens[ds].Kind = tkIdent) and (ds + 1 < c) and (Tokens[ds + 1].Kind = tkLParen);
     for k := sp to semi - 1 do
     begin
       if (Tokens[k].Kind = tkLParen) and (k + 1 < semi) and (Tokens[k + 1].Kind = tkStar) then fp := True;
@@ -24691,6 +24758,7 @@ begin
             pointer to it (both for the C parser and as a Pascal pointer type). }
           AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
           RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
+          CTypedefReadDims(nm);   { `typedef struct T *Tab[N];`: an array of pointers (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
         end
         else
         begin
@@ -24729,6 +24797,7 @@ begin
         begin
           AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
           RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
+          CTypedefReadDims(nm);   { `typedef struct T *Tab[N];`: an array of pointers (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
         end
         else
         begin
@@ -25004,7 +25073,12 @@ begin
       so a decl `name v` / `name v[k]` folds it in (bug-c-typedef-array-element-init;
       cglm `typedef float vec4[4]`). Only a single constant `[N]` is modelled;
       a multi-dim or unsized typedef array leaves it scalar (unchanged behavior). }
-    if (tk <> tyPointer) and (CurTok.Kind = tkLBrack) and
+    { A POINTER ELEMENT TOO: `typedef CachePtr CacheHashTable[256];` (CachePtr
+      a pointer typedef) is 256 pointers. The dims were skipped for a pointer
+      element, so the typedef was ONE pointer and libXt's cache table strode
+      the record it points to, 72 bytes, and read off the end.
+      bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array }
+    if (CurTok.Kind = tkLBrack) and
        (Tokens[TokPos].Kind <> tkRBrack) then
     begin
       { EVERY dimension, not just the first. This used to consume one `[N]` and

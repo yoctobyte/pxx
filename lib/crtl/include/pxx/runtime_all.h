@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <err.h>
 #include <fcntl.h>
 #include <fenv.h>
 #include <fnmatch.h>
@@ -28,6 +29,7 @@
 #include <inttypes.h>
 #include <langinfo.h>
 #include <libgen.h>
+#include <libintl.h>
 #include <linux/capability.h>
 #include <locale.h>
 #include <malloc.h>

@@ -3,6 +3,9 @@
 #define PXX_CRTL_LIMITS_H 1
 
 #define CHAR_BIT 8
+/* the longest multibyte character in any locale: 16, as glibc says (UTF-8
+   needs 4; xclock sizes an iconv buffer by it) */
+#define MB_LEN_MAX 16
 #define SCHAR_MIN (-128)
 #define SCHAR_MAX 127
 /* UCHAR_MAX and USHRT_MAX are INT constants, as in glibc and gcc's own

@@ -1109,6 +1109,10 @@ double scalbn(double x, int e) { return ldexp(x, e); }
 
 /* finite <=> x - x == 0 (inf - inf and nan - nan are NaN, NaN != 0). */
 int isfinite(double x) { double d = x - x; return d == d && d == 0.0; }
+int finite(double x) { return isfinite(x); }
+int finitef(float x) { return isfinite((double)x); }
+void sincos(double x, double *s, double *c) { *s = sin(x); *c = cos(x); }
+void sincosf(float x, float *s, float *c) { *s = (float)sin(x); *c = (float)cos(x); }
 
 /* IEEE bit-level sign/inf/next helpers. copysign/nextafter/isinf have NO
    Pascal RTL counterpart for the case-insensitive extern bind (unlike

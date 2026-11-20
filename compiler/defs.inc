@@ -5640,6 +5640,7 @@ var
                                alone -- hence this flag. }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
   CTypeTdPtrFolded : Boolean;   { the last ParseCDeclType added a POINTER TYPEDEF's own level under its stars (`Line *l` = `Glyph **l`) }
+  CTypeSpelledStars : Integer;  { `*` tokens the last ParseCDeclType consumed after its base -- the stars WRITTEN, apart from any a pointer typedef carries. `typedef P T[16]; T x;` (P a pointer typedef) writes none and is an array; `TA *x` writes one and is a pointer to the array. bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array }
   CTypeTdLvl : Integer;  { the levels a `T **`-or-deeper POINTER TYPEDEF put into the last ParseCDeclType's CTypePtrDepth (`PPD q` = 2, `PPD *x` = 2 of 3); 0 = none. CTypePtrDepth = CTypeTdLvl means no star was written, so a multi-declarator must not read the depth as the first declarator's own stars. bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }

@@ -119,6 +119,12 @@ extern double fmax(double a, double b);
  * double-typed call sites, which is all the corpus uses. */
 extern double scalbn(double x, int e);          /* == ldexp for binary FP */
 extern int    isfinite(double x);
+/* BSD finite() (isfinite's old name) and GNU sincos(): xedit's lisp and
+   xclock use them. */
+extern int    finite(double x);
+extern int    finitef(float x);
+extern void   sincos(double x, double *s, double *c);
+extern void   sincosf(float x, float *s, float *c);
 extern int    signbit(double x);
 extern double nan(const char *tag);
 extern double remainder(double x, double y);    /* IEEE remainder */

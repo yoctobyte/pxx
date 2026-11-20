@@ -981,6 +981,29 @@ void qsort_r(void *base, size_t nmemb, size_t size,
   }
 }
 
+/* getloadavg: up to three numbers from /proc/loadavg; the count read, or -1.
+   xload's only data source. */
+extern int __pxx_close(int fd);
+int getloadavg(double loadavg[], int nelem) {
+  char buf[128], *p, *e;
+  int fd, i;
+  long long n;
+  if (nelem < 0) { errno = EINVAL; return -1; }
+  fd = __pxx_open("/proc/loadavg", O_RDONLY, 0);
+  if (fd < 0) { errno = -fd; return -1; }
+  n = __pxx_read(fd, buf, sizeof buf - 1);
+  __pxx_close(fd);
+  if (n <= 0) return -1;
+  buf[n] = 0;
+  p = buf;
+  for (i = 0; i < nelem && i < 3; i++) {
+    loadavg[i] = strtod(p, &e);
+    if (e == p) break;
+    p = e;
+  }
+  return i;
+}
+
 /* secure_getenv: NULL when the real and effective ids differ, which is
    glibc's AT_SECURE condition for every case a set-id binary produces. */
 extern unsigned int getuid(void), geteuid(void), getgid(void), getegid(void);

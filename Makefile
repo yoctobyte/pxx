@@ -29323,6 +29323,41 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_crtl_lfs_gnu_gaps.c $(TESTTMP)/c_lfsgnu26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_lfsgnu26_gcc32 test/c_crtl_lfs_gnu_gaps.c
 	tools/expect_same.sh c_lfsgnu26_i386 "$$(timeout 20 $(TESTTMP)/c_lfsgnu26_i386)" "$$(timeout 20 $(TESTTMP)/c_lfsgnu26_gcc32)"
+	# declarators after a prototype in one declaration (xedit.h), against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_decls_after_prototype.c $(TESTTMP)/c_declproto26
+	@gcc -w -o $(TESTTMP)/c_declproto26_gcc test/c_decls_after_prototype.c
+	tools/expect_same.sh c_declproto26 "$$(timeout 20 $(TESTTMP)/c_declproto26)" "$$(timeout 20 $(TESTTMP)/c_declproto26_gcc)"
+	./$(COMPILER) --target=i386 test/c_decls_after_prototype.c $(TESTTMP)/c_declproto26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_declproto26_gcc32 test/c_decls_after_prototype.c
+	tools/expect_same.sh c_declproto26_i386 "$$(timeout 20 $(TESTTMP)/c_declproto26_i386)" "$$(timeout 20 $(TESTTMP)/c_declproto26_gcc32)"
+	# #undef/#define inside a multi-line expression (libXt Shell.c), against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_define_inside_expression.c $(TESTTMP)/c_defexpr26
+	@gcc -w -o $(TESTTMP)/c_defexpr26_gcc test/c_define_inside_expression.c
+	tools/expect_same.sh c_defexpr26 "$$(timeout 20 $(TESTTMP)/c_defexpr26)" "$$(timeout 20 $(TESTTMP)/c_defexpr26_gcc)"
+	./$(COMPILER) --target=i386 test/c_define_inside_expression.c $(TESTTMP)/c_defexpr26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_defexpr26_gcc32 test/c_define_inside_expression.c
+	tools/expect_same.sh c_defexpr26_i386 "$$(timeout 20 $(TESTTMP)/c_defexpr26_i386)" "$$(timeout 20 $(TESTTMP)/c_defexpr26_gcc32)"
+	# an array typedef of pointers is an array (libXt CacheHashTable), against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_array_typedef_of_pointers.c $(TESTTMP)/c_tdptrarr26
+	@gcc -w -o $(TESTTMP)/c_tdptrarr26_gcc test/c_array_typedef_of_pointers.c
+	tools/expect_same.sh c_tdptrarr26 "$$(timeout 20 $(TESTTMP)/c_tdptrarr26)" "$$(timeout 20 $(TESTTMP)/c_tdptrarr26_gcc)"
+	./$(COMPILER) --target=i386 test/c_array_typedef_of_pointers.c $(TESTTMP)/c_tdptrarr26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_tdptrarr26_gcc32 test/c_array_typedef_of_pointers.c
+	tools/expect_same.sh c_tdptrarr26_i386 "$$(timeout 20 $(TESTTMP)/c_tdptrarr26_i386)" "$$(timeout 20 $(TESTTMP)/c_tdptrarr26_gcc32)"
+	# crtl: finite, sincos, getloadavg, gettext, MB_LEN_MAX, strcasecmp, against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_crtl_x_app_gaps.c $(TESTTMP)/c_xappgaps26
+	@gcc -w -o $(TESTTMP)/c_xappgaps26_gcc test/c_crtl_x_app_gaps.c -lm
+	tools/expect_same.sh c_xappgaps26 "$$(timeout 20 $(TESTTMP)/c_xappgaps26)" "$$(timeout 20 $(TESTTMP)/c_xappgaps26_gcc)"
+	./$(COMPILER) --target=i386 test/c_crtl_x_app_gaps.c $(TESTTMP)/c_xappgaps26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_xappgaps26_gcc32 test/c_crtl_x_app_gaps.c -lm
+	tools/expect_same.sh c_xappgaps26_i386 "$$(timeout 20 $(TESTTMP)/c_xappgaps26_i386)" "$$(timeout 20 $(TESTTMP)/c_xappgaps26_gcc32)"
+	# a function-pointer table initialised in braced rows (libX11 SwapFunction), against gcc on x86-64 and i386.
+	./$(COMPILER) test/c_fnptr_table_braced_rows.c $(TESTTMP)/c_fptab26
+	@gcc -w -o $(TESTTMP)/c_fptab26_gcc test/c_fnptr_table_braced_rows.c
+	tools/expect_same.sh c_fptab26 "$$(timeout 20 $(TESTTMP)/c_fptab26)" "$$(timeout 20 $(TESTTMP)/c_fptab26_gcc)"
+	./$(COMPILER) --target=i386 test/c_fnptr_table_braced_rows.c $(TESTTMP)/c_fptab26_i386
+	@gcc -m32 -w -o $(TESTTMP)/c_fptab26_gcc32 test/c_fnptr_table_braced_rows.c
+	tools/expect_same.sh c_fptab26_i386 "$$(timeout 20 $(TESTTMP)/c_fptab26_i386)" "$$(timeout 20 $(TESTTMP)/c_fptab26_gcc32)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).
