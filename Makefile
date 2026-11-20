@@ -21412,6 +21412,8 @@ test-core: $(COMPILER)
 	@if command -v qemu-xtensa >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_xtensa_inline_asm.c $(TESTTMP)/c_xtasm >/dev/null || { echo "c_xtensa_inline_asm compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh xtensa/c_xtasm "$$(tools/run_target.sh xtensa $(TESTTMP)/c_xtasm)" "$$(cat test/c_xtensa_inline_asm.expected)" || exit 1; \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 -O2 test/c_uint64_constant_above_2_63_compares_unsigned.c $(TESTTMP)/c_xtu64cmp >/dev/null || { echo "c_uint64_constant xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh xtensa/c_xtu64cmp "$$(tools/run_target.sh xtensa $(TESTTMP)/c_xtu64cmp)" "$$(cat test/c_uint64_constant_above_2_63_compares_unsigned.expected)" || exit 1; \
 	else \
 	  echo "=== c_xtensa_inline_asm: qemu-xtensa absent, NOT verified ==="; \
 	fi
@@ -34990,6 +34992,13 @@ test-riscv32: $(COMPILER)
 	# variadic tail (it went out as an 8-byte pair: sscanf %llu segfaulted).
 	./$(COMPILER) --target=riscv32 test/c_vararg_address_of_64bit_element.c $(TESTTMP)/test_riscv32_va64addr
 	tools/expect_same.sh riscv32/va64addr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_va64addr)" "$$(printf '1 3 11 22 33\n2 2 -5 6\n3 1\n4 2 7 8\n5 8 4')"
+	# A uint64 constant >= 2^63 is not a 32-bit value: the compare narrowing read
+	# its bit pattern as signed (csmith seed 1130101). -O0 and -O2.
+	# bug-r-a-uint64-constant-above-2-63-narrows-to-a-negative-32-bit-compare
+	./$(COMPILER) --target=riscv32 test/c_uint64_constant_above_2_63_compares_unsigned.c $(TESTTMP)/test_riscv32_u64cmp
+	tools/expect_same.sh riscv32/u64cmp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_u64cmp)" "$$(cat test/c_uint64_constant_above_2_63_compares_unsigned.expected)"
+	./$(COMPILER) --target=riscv32 -O2 test/c_uint64_constant_above_2_63_compares_unsigned.c $(TESTTMP)/test_riscv32_u64cmp2
+	tools/expect_same.sh riscv32/u64cmp2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_u64cmp2)" "$$(cat test/c_uint64_constant_above_2_63_compares_unsigned.expected)"
 	./$(COMPILER) --target=riscv32 test/c_labels_as_values.c $(TESTTMP)/test_riscv32_labelval
 	tools/expect_same.sh riscv32/labelval "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	# statfs is where the syscall tables stop agreeing: asm-generic slot 43 is

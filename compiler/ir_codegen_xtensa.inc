@@ -1542,6 +1542,10 @@ begin
   begin
     if IsFloatXtensa(tk) or IsFloatXtensa(IntToTypeKind(IRTk[n])) then Exit;
     v := IRIVal[n];
+    { an unsigned 64-bit constant holds its bit pattern (see Rv32Exact32):
+      bug-r-a-uint64-constant-above-2-63-narrows-to-a-negative-32-bit-compare }
+    if (v < 0) and (TypeSlotSize(IntToTypeKind(IRTk[n])) = 8) and
+       not TypeSigned(IntToTypeKind(IRTk[n])) then Exit;
     if uns then Result := (v >= 0) and (v <= $FFFFFFFF)
     else Result := (v >= -2147483648) and (v <= 2147483647);
     Exit;

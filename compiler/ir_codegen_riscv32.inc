@@ -782,6 +782,12 @@ begin
   begin
     if IsFloatRISCV32(tk) or IsFloatRISCV32(IntToTypeKind(IRTk[n])) then Exit;
     v := IRIVal[n];
+    { An UNSIGNED 64-bit constant holds its bit pattern: -3 here is 2^64-3,
+      which no 32-bit register reproduces. Read as signed it passed the range
+      test, so `18446744073709551613UL < 0` compared -3 < 0 and was TRUE
+      (csmith seed 1130101). bug-r-a-uint64-constant-above-2-63-narrows-to-a-negative-32-bit-compare }
+    if (v < 0) and (TypeSlotSize(IntToTypeKind(IRTk[n])) = 8) and
+       not TypeSigned(IntToTypeKind(IRTk[n])) then Exit;
     if uns then Result := (v >= 0) and (v <= $FFFFFFFF)
     else Result := (v >= -2147483648) and (v <= 2147483647);
     Exit;
