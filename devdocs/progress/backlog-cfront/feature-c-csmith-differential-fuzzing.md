@@ -1175,3 +1175,29 @@ Compiler sha256 `ec3d2325ef7b` at `24972bb055`. That tree has the C tag
 block-scoping, the incomplete-type refusal and the file-scope declarator-list
 fix. This was a dry run on the default axis, so the next sitting should spend
 seeds on an untried axis rather than on 800000..800199 again.
+
+### Sitting 2026-11-20 (claude-dupwt): x86-64 1120000..1120199 and the riscv32 axis, TWO bugs, both fixed
+
+```
+tools/csmith_fuzz.py --iters 200 --seed-start 1120000                       # x86-64, --opts 0,2
+  168/200 agreed  (24 skipped)  MISCOMPILE_VS_GCC 8 (2 buckets)  PXX_SLOW 1 (1120168)
+tools/csmith_fuzz.py --iters 150 --seed-start 1130000 --target riscv32      # first 32-bit sitting
+  132/150 agreed  (17 skipped)  MISCOMPILE_VS_GCC 1 (1130101)
+```
+
+The compiler was sha256 `6fa5fbb81ca3`, at `b2f076bcb7`. Both findings were
+reduced with cvise. The interestingness test for the riscv32 one also required
+gcc -Werror=uninitialized, MSan and UBSan to be clean.
+
+- **x86-64, 8 seeds**: a struct of 16 bytes or less returned in rax/rdx was
+  stored at register width into a temp the size of the record. The high half of
+  rax overwrote the next local, here print_hash_value. Fixed in `21607d54bc`
+  (bug-c-a-struct-returned-in-registers-is-stored-at-register-width).
+- **riscv32, 1130101**: in the 32-bit compare narrowing, a uint64 constant
+  >= 2^63 was read as a signed 32-bit value. Fixed in `77bf598411`
+  (bug-r-a-uint64-constant-above-2-63-narrows-to-a-negative-32-bit-compare).
+
+All 9 red seeds now match gcc. The lists of seeds that matched on master are
+kept outside the repo at ~/rump-pxx-work/kf/csmith-ok-{x64,rv32}-master.txt, so
+peers can A/B against them. The 32-bit axis found a bug in its first 150 seeds,
+so the next sitting should spend seeds on arm32/i386, and on xtensa posix (call0).
