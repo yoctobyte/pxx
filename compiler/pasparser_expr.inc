@@ -910,6 +910,7 @@ begin
   begin
     PyParseFactorCore;
     PyNarrowIntMinMax;
+    PyProcCallValueIsNone;
     Exit;
   end;
   LastExprTk := tyInteger;

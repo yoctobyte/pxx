@@ -46,6 +46,7 @@ function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function PyUClassIsIterable(ci: Integer): Boolean; forward;  { __iter__ OR the old-style __getitem__ sequence protocol; asked by every make-this-iterable site }
 function PyBinOpDunderName(tk: TTokenKind): AnsiString; forward;  { raw-token operator -> dunder name; PyInferExprType asks it long before the body below }
 procedure PyNarrowIntMinMax; forward;  { an all-int or all-float min/max call, lowered inline (pyparser.inc) }
+procedure PyProcCallValueIsNone; forward;  { a Pascal PROCEDURE called in a NilPy expression yields None (pyparser.inc) }
 procedure PyParseFactorCore; forward;  { the NilPy half of ParseFactorCore, carved out into pyparser.inc — ParseFactorCore dispatches here on PyExprMode }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }

@@ -4698,6 +4698,48 @@ end;
   container and crashed (bug-nilpy-and-or-not-short-circuit). The ternary keeps
   short-circuit; class/variant-valued ternary arms are already handled (see the
   conditional-expression lowering below). }
+const PY_PROC_NONE_COMMA = 7331;   { ASTIVal tag on the (call, None) comma below; AN_COMMA reads no ASTIVal }
+
+function PyIsProcNoneComma(n: Integer): Boolean;
+{ Is n the `(call, None)` that PyProcCallValueIsNone wraps around a procedure
+  call? Its own test, so the expression-statement arm can take the bare call
+  back out and leave a statement exactly as it was. }
+begin
+  Result := (n >= 0) and (ASTKind[n] = AN_COMMA) and
+            (ASTIVal[n] = PY_PROC_NONE_COMMA) and (ASTLeft[n] >= 0);
+end;
+
+procedure PyProcCallValueIsNone;
+{ A Pascal PROCEDURE called where Python wants a value. CPython answers None
+  for a function that returns nothing. The call node was built as for a
+  function, so the value read was whatever sat in the result register: a
+  plausible number, no diagnostic. `print(sys.stdout.flush())` printed 1 until
+  that one shim became a function; a procedure in a Pascal shim unit printed
+  its argument (`print(m.poke(3))` -> 3), a procedure METHOD printed a pointer,
+  and `v = m.poke(4); v is None` was False.
+
+  Fixed for EVERY procedure rather than per shim, as the ticket asked: the
+  call becomes `(call, None)`. An expression statement unwraps it again
+  (PyBindDiscardedValue), so a procedure called as a statement is the bare
+  call it always was.
+  bug-n-a-procedure-shim-in-value-position-yields-a-number-not-none }
+var n, pi, c: Integer;
+begin
+  n := CurASTNode;
+  if n < 0 then Exit;
+  if (ASTKind[n] <> AN_CALL) and (ASTKind[n] <> AN_VIRTUAL_CALL) then Exit;
+  pi := ASTIVal[n];
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if Procs[pi].IsFunc then Exit;
+  c := AllocNode(AN_COMMA);
+  ASTLeft[c] := n;
+  ASTRight[c] := PyMakeNone;
+  ASTIVal[c] := PY_PROC_NONE_COMMA;
+  ASTTk[c] := ASTTk[ASTRight[c]];
+  CurASTNode := c;
+  LastExprTk := IntToTypeKind(ASTTk[c]);
+end;
+
 procedure PyNarrowIntMinMax;
 { `min(a, b)` / `max(a, b)` over two INTS, one of them a promotable int
   (`len(xs) - 2`, any int arithmetic): no pylib overload takes a PromoInt, so
@@ -28261,6 +28303,8 @@ end;
 function PyBindDiscardedValue(stmt: Integer): Integer;
 var discSym, discNew, node: Integer;
 begin
+  { a procedure called as a statement: the bare call (PyProcCallValueIsNone) }
+  if PyIsProcNoneComma(stmt) then stmt := ASTLeft[stmt];
   Result := stmt;
   { A CONSTRUCTION WHOSE VALUE GOES NOWHERE -- `P(1, 2)` as a bare statement --
     LEAKED IT, one instance per execution, forever. A construction is lowered
