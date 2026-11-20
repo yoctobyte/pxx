@@ -3408,8 +3408,14 @@ begin
     literal they name reachable from an .init_array root, so the per-global
     data sections (ObjPlanDataCuts) could drop nothing: toybox 0.8.15 with
     default objects went 9.47 MB -> 1.69 MB with both (5.12 MB with the cuts
-    alone). --no-c-static-data restores the stores. }
-  if EmitObjMode and FunctionSections and (TargetArch = TARGET_X86_64) and
+    alone). --no-c-static-data restores the stores.
+
+    EVERY x86-64 C object now, not only a --function-sections one: run as
+    stores, an initialiser is not there until .init_array has run, so a
+    NetBSD link-set entry (`p1 = &lsv` in link_set_foo) read NULL to anything
+    walking the set before constructors -- gcc's object has the bytes and the
+    relocation at load. feature-c-plain-emit-obj-bakes-c-initialisers }
+  if EmitObjMode and (TargetArch = TARGET_X86_64) and
      (not EmitSharedMode) and (not NoCStaticData) then
     CStaticDataMode := True;
 
