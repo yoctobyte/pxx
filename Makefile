@@ -29315,6 +29315,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_aligned_local.c $(TESTTMP)/c_alocal26
 	@gcc -w -o $(TESTTMP)/c_alocal26_gcc test/c_aligned_local.c
 	tools/expect_same.sh c_alocal26 "$$(timeout 20 $(TESTTMP)/c_alocal26)" "$$(timeout 20 $(TESTTMP)/c_alocal26_gcc)"
+	# A struct returned in registers is stored back at its own size (csmith seed
+	# 1120027: rax's high half landed on the next local). -O0 and -O2.
+	# bug-c-a-struct-returned-in-registers-is-stored-at-register-width
+	./$(COMPILER) test/c_struct_ret_in_regs_stores_its_own_size.c $(TESTTMP)/c_sretregs26
+	$(TESTTMP)/c_sretregs26 | diff -u test/c_struct_ret_in_regs_stores_its_own_size.expected -
+	./$(COMPILER) -O2 test/c_struct_ret_in_regs_stores_its_own_size.c $(TESTTMP)/c_sretregs26o2
+	$(TESTTMP)/c_sretregs26o2 | diff -u test/c_struct_ret_in_regs_stores_its_own_size.expected -
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

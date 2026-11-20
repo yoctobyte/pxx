@@ -8362,9 +8362,52 @@ end;
   is what pxx's own convention leaves there, so every consumer downstream is
   unchanged. rax/rdx are parked in r11/rcx first, because evaluating the
   destination clobbers rax; that evaluation is an address computation and
-  touches no xmm register. }
-procedure IREmitSysVRetStore(destNode, n, c0, c1: Integer);
-var i, gp, xm, c: Integer;
+  touches no xmm register.
+
+  EACH EIGHTBYTE AT ITS OWN WIDTH, and the last one is only what is left of the
+  record (sz). A whole-register store wrote 8 bytes for a 4-byte struct: the
+  hidden temp is sized to the record, so the high half of rax landed on the
+  next local -- csmith's `func_1();` (a discarded struct U0 { uint32_t }
+  result) turned main's print_hash_value into 32767, but only when a 4-byte
+  local sat next to the temp. The upper bytes of a returned register are
+  undefined in SysV, so they must not be stored at all.
+  bug-c-a-struct-returned-in-registers-is-stored-at-register-width }
+{ One GP eightbyte's leading `w` bytes (1, 2, 4 or 8) at [rax+off], from r11
+  (first GP eightbyte) or rcx (second). Every line literal, so the gate's static
+  assembler pass can read each one. }
+procedure IREmitSysVGpPiece(second: Boolean; w, off: Integer);
+begin
+  if not second then
+    case w of
+      8: EmitAsmX64(['mov [rax+%], r11', off]);
+      4: EmitAsmX64(['mov [rax+%], r11d', off]);
+      2: EmitAsmX64(['mov [rax+%], r11w', off]);
+      1: EmitAsmX64(['mov [rax+%], r11b', off]);
+    end
+  else
+    case w of
+      8: EmitAsmX64(['mov [rax+%], rcx', off]);
+      4: EmitAsmX64(['mov [rax+%], ecx', off]);
+      2: EmitAsmX64(['mov [rax+%], cx', off]);
+      1: EmitAsmX64(['mov [rax+%], cl', off]);
+    end;
+end;
+
+{ ...and the shift that brings the next piece down to the low bytes. }
+procedure IREmitSysVGpShift(second: Boolean; bits: Integer);
+begin
+  if not second then
+  begin
+    if bits = 32 then EmitAsmX64(['shr r11, 32']) else EmitAsmX64(['shr r11, 16']);
+  end
+  else
+  begin
+    if bits = 32 then EmitAsmX64(['shr rcx, 32']) else EmitAsmX64(['shr rcx, 16']);
+  end;
+end;
+
+procedure IREmitSysVRetStore(destNode, n, c0, c1, sz: Integer);
+var i, gp, xm, c, bytes, off: Integer;
 begin
   EmitAsmX64(['mov r11, rax', 'mov rcx, rdx']);
   IREmitNode(destNode);                         { rax = destination }
@@ -8372,15 +8415,39 @@ begin
   for i := 0 to n - 1 do
   begin
     if i = 0 then c := c0 else c := c1;
+    bytes := sz - 8 * i;
+    if bytes > 8 then bytes := 8;
     if c = SYSV_CLS_SSE then
     begin
-      EmitAsmX64(['movsd [rax+%], %xmm', 8 * i, xm]);
+      if bytes <= 4 then
+        EmitAsmX64(['movss [rax+%], %xmm', 8 * i, xm])
+      else
+        EmitAsmX64(['movsd [rax+%], %xmm', 8 * i, xm]);
       Inc(xm);
     end
     else
     begin
-      if gp = 0 then EmitAsmX64(['mov [rax+%], r11', 8 * i])
-      else EmitAsmX64(['mov [rax+%], rcx', 8 * i]);
+      off := 8 * i;
+      if bytes >= 8 then
+        IREmitSysVGpPiece(gp > 0, 8, off)
+      else
+      begin
+        { 1..7 bytes: 4, then 2, then 1, shifting the register down after each }
+        if bytes >= 4 then
+        begin
+          IREmitSysVGpPiece(gp > 0, 4, off);
+          Inc(off, 4); Dec(bytes, 4);
+          if bytes > 0 then IREmitSysVGpShift(gp > 0, 32);
+        end;
+        if bytes >= 2 then
+        begin
+          IREmitSysVGpPiece(gp > 0, 2, off);
+          Inc(off, 2); Dec(bytes, 2);
+          if bytes > 0 then IREmitSysVGpShift(gp > 0, 16);
+        end;
+        if bytes >= 1 then
+          IREmitSysVGpPiece(gp > 0, 1, off);
+      end;
       Inc(gp);
     end;
   end;
@@ -9133,7 +9200,8 @@ begin
           EmitRestoreCallerRspX64(mStack * 8 + padBytes);
           EmitAsmX64(['add rsp, 8']); { (pop callee) }
           if (sysvRet > 0) and (IRCallDest[node] >= 0) then
-            IREmitSysVRetStore(IRCallDest[node], sysvRet, retC0, retC1);
+            IREmitSysVRetStore(IRCallDest[node], sysvRet, retC0, retC1,
+                               RecSize(ProcRetRecId[cpi]));
           if TypeIsFloat(Procs[cpi].RetType) then
           begin
             if Procs[cpi].RetType = tySingle then
@@ -12237,7 +12305,8 @@ begin
                 EmitAsmX64(['mov [rax], r11']);
               end;
             end;
-            if sysvRet > 0 then IREmitSysVRetStore(IRC[node], sysvRet, retC0, retC1);
+            if sysvRet > 0 then IREmitSysVRetStore(IRC[node], sysvRet, retC0, retC1,
+                                                   RecSize(ProcRetRecId[procIdx]));
             if TypeIsFloat(Procs[procIdx].RetType) then
             begin
               { float/double returned in xmm0; the value model carries doubles,
