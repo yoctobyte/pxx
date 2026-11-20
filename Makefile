@@ -21440,6 +21440,12 @@ test-core: $(COMPILER)
 	python3 -I tools/check_xtensa_density.py $(COMPILER) $(TESTTMP)
 	./$(COMPILER) test/c_density_branch_incdec.c $(TESTTMP)/c_density_x64 >/dev/null
 	tools/expect_same.sh c_density_branch_incdec "$$($(TESTTMP)/c_density_x64)" "$$(cat test/c_density_branch_incdec.expected)"
+	# ...and with the VALUE used (`*d++ = *s++`, `x = (y += 4)`): no address
+	# temp on a plain variable; against gcc, at the default level and -O2
+	./$(COMPILER) test/c_incdec_value_on_a_plain_variable.c $(TESTTMP)/c_incval >/dev/null
+	tools/expect_same.sh c_incdec_value "$$($(TESTTMP)/c_incval)" "$$(cat test/c_incdec_value_on_a_plain_variable.expected)"
+	./$(COMPILER) -O2 test/c_incdec_value_on_a_plain_variable.c $(TESTTMP)/c_incval2 >/dev/null
+	tools/expect_same.sh c_incdec_value_o2 "$$($(TESTTMP)/c_incval2)" "$$(cat test/c_incdec_value_on_a_plain_variable.expected)"
 	# crtl on xtensa issues the time64 syscalls (Nilix implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
 	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed

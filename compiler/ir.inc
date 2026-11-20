@@ -19924,6 +19924,43 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           Exit;
         end;
       end;
+      { ...and the same operand with its value USED -- `*d++ = *s++`, the copy
+        loop every libc and kernel is made of. Through the address temp below
+        the variable's address is taken, which keeps it off the register path
+        the leaf-load and local-caching passes give a plain variable: Rainyday's
+        word memcpy ran 3.5x gcc -O2 and its byte loop 8.6x (ticket 0060).
+        Postfix keeps the old value in a temp and stores old+step; prefix
+        stores and yields the variable itself. }
+      if (not IRIncDecForEffect) and (ASTKind[left] = AN_IDENT) then
+      begin
+        slot := Integer(ASTIVal[left]);
+        if (slot >= 0) and (slot < SymCount) and not Syms[slot].IsArray and not Syms[slot].IsRef and
+           (SymCellPtr[slot] < 0) and (Syms[slot].TypeKind = argTk) and
+           (TypeIsMachineInt(argTk) or (argTk = tyPointer)) and
+           not TypeIsPromoInt(argTk) then
+        begin
+          if ASTSOffset[node] = 1 then
+          begin
+            varIdx := AllocVar('', argTk);               { old value }
+            IRAppend(IR_STORE_SYM, varIdx,
+              IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
+            IRAppend(IR_STORE_SYM, slot,
+              IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk)),
+                       IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(stepTk)),
+                       Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
+            Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
+          end
+          else
+          begin
+            IRAppend(IR_STORE_SYM, slot,
+              IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
+                       IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(stepTk)),
+                       Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
+            Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk));
+          end;
+          Exit;
+        end;
+      end;
       IRIncDecForEffect := False;
       varIdx := AllocVar('', tyPointer);                 { paddr = &lvalue, once }
       IRAppend(IR_STORE_SYM, varIdx, IRAddressAsPointer(IRLowerAddress(left)), -1, 0, Ord(tyPointer));
@@ -19952,6 +19989,32 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       if not IsASTLValue(left) then Error('assignment target is not an lvalue');
       argTk := IntToTypeKind(ASTTk[left]);
       if argTk = tyUnknown then argTk := tyInteger;
+      { A plain scalar or pointer VARIABLE as the target -- `n -= 32`,
+        `q += 4` in a copy loop's step -- is `v = v OP rhs` and yields v: no
+        address temp, so the variable keeps the register path a plain
+        assignment has (the AN_INCDEC arm above says why that matters).
+        The binop is the general path's own, with the variable loaded
+        directly instead of through the address, so pointer scaling and the
+        order (rhs, then the current value, then the store) are unchanged. }
+      if ASTKind[left] = AN_IDENT then
+      begin
+        slot := Integer(ASTIVal[left]);
+        if (slot >= 0) and (slot < SymCount) and not Syms[slot].IsArray and not Syms[slot].IsRef and
+           (SymCellPtr[slot] < 0) and (Syms[slot].TypeKind = argTk) and
+           (TypeIsMachineInt(argTk) or (argTk = tyPointer)) and
+           not TypeIsPromoInt(argTk) then
+        begin
+          right := IRLowerAST(ASTRight[node]);
+          if ASTIVal[node] = Ord(tkAssign) then
+            value := right
+          else
+            value := IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
+                              right, ASTIVal[node], 0, Ord(argTk));
+          IRAppend(IR_STORE_SYM, slot, value, -1, 0, Ord(argTk));
+          Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk));
+          Exit;
+        end;
+      end;
       varIdx := AllocVar('', tyPointer);
       IRAppend(IR_STORE_SYM, varIdx, IRAddressAsPointer(IRLowerAddress(left)), -1, 0, Ord(tyPointer));
       right := IRLowerAST(ASTRight[node]);
