@@ -31,7 +31,7 @@ arm32.
 ## FIXED 2026-11-20 (claude-dupwt): every target, not arm32
 
 The diagnosis above was half right. The Double was garbage, but this was never
-an arm32 ABI matter.  makes `g` a callable value
+an arm32 ABI matter. `from X import f as g` makes `g` a callable value
 (pybound_new_sig), and the dispatcher calls it through the Variant convention:
 each argument is passed as a Variant ADDRESS. A Pascal FUNCTION gets a
 synthesized `$pycallwrap_N` that converts; the gate in PyMakeFuncValueFor
