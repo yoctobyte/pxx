@@ -84,7 +84,7 @@ function DceBodyEnd(slot: Integer): Integer;
   body never recorded an end, which reads as "zero bytes I am sure about" and
   makes everything after it look like the always-live gap. Conservative on
   purpose: an unknown extent must not be guessed at. }
-var p: Integer;
+var p, q: Integer;
 begin
   p := DceOrder[slot];
   Result := ProcBodyEnd[p];
@@ -101,6 +101,31 @@ begin
       Result := Result + 2
     else
       Result := Procs[p].BodyAddr;
+  end;
+  { xtensa: the frontends record a body's end just BEFORE its closing RETW
+    (retw.n, or the 3-byte form), and the next body's 4-alignment pads
+    with 3-byte NOPs after it. A dropped body therefore left its RETW and
+    the padding behind as orphans in the always-live gap: ~2.4 KB of
+    `retw.n; nop; nop` per busybox object. The RETW is reached only by the
+    body's own jumps, so it is the body's; it is claimed together with the
+    NOPs ONLY when they bring the end exactly to a 4-aligned offset within
+    the slot's limit (the compaction moves what follows by a multiple of 4,
+    keeping L32R literals aligned) -- otherwise nothing changes.
+    feature-xtensa-dce-drops-a-dead-bodys-closing-retw-and-padding }
+  if (TargetArch = TARGET_XTENSA) and (Result > Procs[p].BodyAddr) and
+     ((Result mod 4) <> 0) then
+  begin
+    q := Result;
+    if (q + 2 <= DceLimit[slot]) and (q + 2 <= CodeLen) and
+       (Code[q] = $1D) and (Code[q + 1] = $F0) then
+      q := q + 2
+    else if (q + 3 <= DceLimit[slot]) and (q + 3 <= CodeLen) and
+       (Code[q] = $90) and (Code[q + 1] = $00) and (Code[q + 2] = $00) then
+      q := q + 3;
+    while ((q mod 4) <> 0) and (q + 3 <= DceLimit[slot]) and (q + 3 <= CodeLen) and
+          (Code[q] = $F0) and (Code[q + 1] = $20) and (Code[q + 2] = $00) do
+      q := q + 3;
+    if (q mod 4) = 0 then Result := q;
   end;
 end;
 
@@ -1068,8 +1093,9 @@ end;
   every data->data pointer (DataPtrFix, DataRelFix) from outside the class
   tables into them. NilPy ProcSig slots (MFK_PYSIG) are never withheld.
 
-  Gated to the ESP object targets, where those tables are the complete list of
-  ways code reaches data; elsewhere the slots stay unconditional roots. }
+  Gated to the ESP-family object writers (ESP and hosted xtensa/riscv32), where
+  those tables are the complete list of ways code reaches data; elsewhere the
+  slots stay unconditional roots. }
 var
   DceWithholdClassSlots: Boolean;
   DceClsS, DceClsE: array of Integer;
@@ -1107,9 +1133,16 @@ begin
     if (x >= RttiAllS[k]) and (x < RttiAllE[k]) then begin Result := True; Exit; end;
 end;
 
+{ The ESP-family object WRITERS, not the ESP platform: hosted xtensa/riscv32
+  objects (busybox per TU on Gibux, --platform=posix) go through the same two
+  writers and the same reference tables. Rooting there kept TInterfacedObject's
+  slots and the whole release chain behind them, ~14 KB in every C object
+  (17,936 B of text for an empty TU, ~3.3 MB over busybox's 182).
+  feature-xtensa-posix-objects-drop-unreferenced-class-slots }
 function DceClassSlotsWithholdable: Boolean;
 begin
-  Result := EmitObjMode and (TargetPlatform = PLATFORM_ESP) and
+  Result := EmitObjMode and
+            ((TargetPlatform = PLATFORM_ESP) or (TargetPlatform = PLATFORM_POSIX)) and
             ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA));
 end;
 
@@ -1325,7 +1358,12 @@ begin
     i := 0;
     while i < ProcCount do
     begin
-      if ObjProcIsDefined(i) and ObjProcIsExported(i) then DceMark(i);
+      { ...except the Pascal runtime's weak copies: exported so that the
+        linker can keep ONE, not because anything outside calls them. A
+        helper this object never reaches is not this object's to provide
+        (ObjProcIsBuiltinRtl; toybox's objects went 15 MB -> 52 MB rooted). }
+      if ObjProcIsDefined(i) and ObjProcIsExported(i) and
+         not ObjProcIsBuiltinRtl(i) then DceMark(i);
       Inc(i);
     end;
   end;
@@ -1505,6 +1543,10 @@ begin
   DceCutCalls('PXXRecordRetain', 'PXXVarRetain', DescKindSeen[5], 'no member descriptor has kind 5', nop);
   DceCutCalls('', 'PXXRecordReleaseIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
   DceCutCalls('', 'PXXRecordRetainIntf', DescKindSeen[4], 'no member descriptor has kind 4', nop);
+  { kind 8: PXXClassFinalize's management-operator walk, ~0.9 KB of riscv32
+    .text in every program that has a class and no such field.
+    feature-pascal-management-operators-on-a-class-field }
+  DceCutCalls('PXXClassFinalize', 'PXXClassMgmtRun', DescKindSeen[8], 'no member descriptor has kind 8', nop);
   { the container element walks: baseKind comes only from ManagedElemKind }
   DceCutCalls('PXXDynArrayReleaseDepth', 'PXXVarClear', ElemKindSeen[6], 'no element kind 6', nop);
   DceCutCalls('PXXDynArrayReleaseDepth', 'PXXIntfRelease', ElemKindSeen[4], 'no element kind 4', nop);
@@ -1925,6 +1967,7 @@ begin
       GlobFixHiLo[j] := GlobFixHiLo[i];
       GlobFixLoStore[j] := GlobFixLoStore[i];
       GlobFixTrail[j] := GlobFixTrail[i];
+      GlobFixTls[j] := GlobFixTls[i];
       GlobFixPicDelta[j] := GlobFixPicDelta[i];
       Inc(j);
     end;
