@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "compiler/pyparser.inc:44098 carries a byte-identical copy of the alias-cast postfix loop just fixed on the Pascal side: its `^` arm answers the pointee from the ORIGINAL cast's alias every time, so the second `^` in a `PRec(x)^.fld^` chain gets the type the CAST points at instead of the type the FIELD points at. The deref happens, only the tag is wrong, so the value is plausible and silently wrong."
-status: backlog
-owner: unassigned
+status: done
+owner: rd
 ---
 
 # N an inline cast's `^` chain answers every deref from the cast's alias
@@ -66,3 +66,26 @@ that file and the right outcome is deleting it, not porting a fix into it.
 ## Gate
 
 `make test-nilpy` green + self-host byte-identical, per Track N's lane rules.
+
+## Resolution (2026-11-20, rd): deleted, unreachable
+
+Taken the way the ticket asked: first establish whether NilPy can reach this
+code at all. It cannot.
+- pylexer lexes `^` as `tkXor`/`tkXorEq` (pylexer.inc, the `'^'` arm) and never
+  emits `tkCaret`. Only paslexer and rlexer do, and the C header lexer does not.
+- A Pascal unit pulled in by a NilPy program is parsed with `PyExprMode`
+  forced off (pasparser_proc.inc), so it never enters PyParseFactorCore.
+
+**Change:** the arm (the alias-cast suffix loop in PyParseFactorCore) is
+deleted, and `tkCaret` is dropped from that loop's condition. A comment in
+place records why.
+
+**Measured:**
+- `int(x) ^ 5` and `y ^= 3` still give CPython's 9 and 15.
+- Four NilPy tests (array module, delitem, dataclass inheritance, itertools)
+  compile to byte-identical binaries with and without the change.
+
+**Not done, for whoever wants it:** PyParseFactorCore and its neighbours have
+about seven more `tkCaret` arms from the same verbatim copy (f380d7cd00),
+equally unreachable. They are not wrong in a way anyone can observe, so they
+were left alone rather than swept up here.

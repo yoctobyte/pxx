@@ -68409,21 +68409,17 @@ begin
               Exit;
             end;
           end;
-          { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
-          while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+          { Run suffix loop: handle chains of .field and [i] on the cast result.
+            No `^` arm. This loop was copied from the Pascal parser, and the
+            copy kept a deref arm that answered every `^` from the cast's alias
+            (bug-n-inline-cast-deref-loses-a-pointer-fields-pointee). NilPy
+            cannot reach it: pylexer lexes `^` as tkXor/tkXorEq and never
+            emits tkCaret, and a Pascal unit is parsed with PyExprMode off
+            (pasparser_proc.inc), so it never comes here. Deleted rather than
+            fixed, as that ticket asked for unreachable code. }
+          while CurTok.Kind in [tkDot, tkLBrack] do
           begin
-            if CurTok.Kind = tkCaret then
-            begin
-              Next;
-              indexNode := AllocNode(AN_DEREF);
-              ASTLeft[indexNode] := node;
-              { After ^, type becomes the pointee }
-              tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
-              recName := AliasElemRec[aliasIdx];
-              ASTTk[indexNode] := StrValTk(tk);
-              node := indexNode;
-            end
-            else if CurTok.Kind = tkLBrack then
+            if CurTok.Kind = tkLBrack then
             begin
               Next;
               indexNode := AllocNode(AN_INDEX);
