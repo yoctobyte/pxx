@@ -1006,6 +1006,10 @@ begin
     carries the handshake. bug-p-eof-of-input-on-a-pipe-loses-the-first-line-and-never-ends }
   name := 'PXX_BUILTIN_STDIN_HOOK';
   PasDefine(name);
+  { …and PXXStdinUngetConsole, which pxxcio's C stdin bridge uses; same
+    reason, same retirement. bug-c-crtl-stdin-and-pascal-input-do-not-share-a-peeked-byte }
+  name := 'PXX_BUILTIN_STDIN_UNGET';
+  PasDefine(name);
   name := 'CPU64';
   PasDefine(name);
   name := 'CPUX86_64';

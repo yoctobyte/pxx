@@ -26249,6 +26249,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_readterm26 "$$(printf 'ab\n42\nxy\n' | $(TESTTMP)/test_readterm26)" "$$(printf 'c1=97\nc2=98\nc3=10\nrest=[42]\n<120><121><10>\ncount=3')"
 	./$(COMPILER) test/test_p_eof_of_input_shares_stdin_with_the_console_reader.pas $(TESTTMP)/test_eofinput26
 	tools/expect_same.sh test_eofinput26 "$$(printf 'xhello\n3 4\nab\n\ncd\nl1\nl2\n' | timeout 10 $(TESTTMP)/test_eofinput26)" "$$(cat test/test_p_eof_of_input_shares_stdin_with_the_console_reader.expected)"
+	# ...and crtl's stdin is the THIRD reader: getchar/fgets/fread take the byte
+	# Pascal's Eof/Eof(Input) peeked, and an ungetc on stdin is seen by ReadLn.
+	# Latest-97b51d1032 printed getchar=b, P:ac, ... end=90.
+	# bug-c-crtl-stdin-and-pascal-input-do-not-share-a-peeked-byte
+	./$(COMPILER) test/c_stdin_shared_with_pascal.c $(TESTTMP)/c_stdin_shared26 > /dev/null
+	tools/expect_same.sh c_stdin_shared26 "$$(printf 'abc\ndef\nghi\njk\n' | timeout 10 $(TESTTMP)/c_stdin_shared26)" "$$(cat test/c_stdin_shared_with_pascal.expected)"
+	# A Pascal unit's `initialization` runs under a C main (it never did: the
+	# stdin row above depends on textfile's).
+	# bug-c-a-pascal-units-initialization-never-runs-under-a-c-main
+	./$(COMPILER) test/c_pascal_unit_init_runs.c $(TESTTMP)/c_pasunit_init26 > /dev/null
+	tools/expect_same.sh c_pasunit_init26 "$$($(TESTTMP)/c_pasunit_init26)" "$$(printf 'unit init ran\nready=42')"
 	# ...and reading into a FROZEN string, at BOTH doors, which had no test at
 	# all. From a Text file it SEGFAULTED (a `var AnsiString` RTL parameter
 	# handed an inline [len][chars] slot); from stdin it silently wrote the

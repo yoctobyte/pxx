@@ -19986,6 +19986,15 @@ begin
   Procs[initIdx].FramePatch := patchPos;
   CompilePendingGlobalInits;
   CEmitDeferredCAggInits;
+  { ...then the `initialization` sections of the Pascal units this program
+    pulled in (`#include "u.pas"`, and pxxcio's own), in dependency order, as
+    ParseProgram runs them after its initialisers. They never ran under a C
+    main: textfile's never installed its stdin hook, so a byte Eof(Input)
+    peeked was invisible to getchar, and a unit's `initialization WriteLn`
+    printed nothing. Executable only, as the constructors below.
+    bug-c-a-pascal-units-initialization-never-runs-under-a-c-main }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+    for i := 0 to InitProcCount - 1 do EmitCallProc(InitProcs[i]);
   { An executable's constructors run here, after the initialisers, before
     main's body. An object or a shared library runs them from its init thunk
     instead (ParseCProgram), so they are not called twice when it holds main.

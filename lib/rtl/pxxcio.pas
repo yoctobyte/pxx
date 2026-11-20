@@ -19,6 +19,13 @@ uses platform, platform_types, builtinheap;
 
 function __pxx_write(fd: Integer; buf: Pointer; n: Int64): Int64;
 function __pxx_read(fd: Integer; buf: Pointer; n: Int64): Int64;
+{ ONE STDIN, THREE READERS: crtl's stdin asks these before it reads fd 0, so a
+  byte Pascal's Eof/Read peeked is not lost to getchar, and a C ungetc on stdin
+  is seen by ReadLn. take: the oldest byte Pascal holds (textfile's, then the
+  console's), or -1. unget: 1 when the console took c in front of everything,
+  0 when it had no room (crtl keeps it). bug-c-crtl-stdin-and-pascal-input-do-not-share-a-peeked-byte }
+function __pxx_stdin_take: Integer;
+function __pxx_stdin_unget(c: Integer): Integer;
 function __pxx_open(path: PChar; flags, mode: Integer): Integer;
 function __pxx_close(fd: Integer): Integer;
 function __pxx_seek(fd: Integer; offset: Int64; whence: Integer): Int64;
@@ -237,6 +244,23 @@ end;
 function __pxx_read(fd: Integer; buf: Pointer; n: Int64): Int64;
 begin
   Result := PalRead(fd, buf, Integer(n));
+end;
+
+function __pxx_stdin_take: Integer;
+begin
+  Result := -1;
+  {$ifdef PXX_BUILTIN_STDIN_UNGET}
+  if PXXStdinTakeHook <> nil then Result := Integer(PXXStdinTakeHook());
+  if Result < 0 then Result := Integer(PXXStdinTakeConsole);
+  {$endif}
+end;
+
+function __pxx_stdin_unget(c: Integer): Integer;
+begin
+  Result := 0;
+  {$ifdef PXX_BUILTIN_STDIN_UNGET}
+  if PXXStdinUngetConsole(c and $FF) then Result := 1;
+  {$endif}
 end;
 
 function __pxx_open(path: PChar; flags, mode: Integer): Integer;

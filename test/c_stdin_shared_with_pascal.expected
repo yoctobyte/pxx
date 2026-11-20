@@ -1,0 +1,12 @@
+eof=0
+getchar=a
+P:Xbc
+eofi=0
+getchar=d
+fgets=def
+PI:Yghi
+eofi=0
+getchar=j
+P:jk
+eof=1
+end=-1

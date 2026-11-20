@@ -3435,6 +3435,34 @@ begin
   end;
 end;
 
+{ C's ungetc(c, stdin), through pxxcio: put c in FRONT of every pending stdin
+  byte, so the next reader -- C's getchar, the console's ReadLn, textfile's
+  Eof(Input) -- sees it first. textfile's held byte is reclaimed first (it is
+  newer than c only if Pascal peeked after C read, and then it must follow c).
+  Room: the peek slot when the line is spent and the slot is free, else the
+  slot just consumed in a line still being read. NOT a spent line's slot:
+  that is the #10 terminator, past PXXLineTextLen, and ReadLn returned ''
+  with the byte left behind (measured). False when neither is free (a spent
+  line AND a held peek byte); crtl then keeps c on its own pushback stack, so
+  C still reads it first and only a Pascal reader misses it. bug-c-crtl-stdin-and-pascal-input-do-not-share-a-peeked-byte }
+function PXXStdinUngetConsole(b: Int64): Boolean;
+begin
+  PXXStdinReclaim;
+  Result := True;
+  if (PXXLinePos >= PXXLineLen) and (PXXPeekValid = 0) then
+  begin
+    PXXPeekByte := Byte(b);
+    PXXPeekValid := 1;
+  end
+  else if (PXXLinePos > 0) and (PXXLinePos < PXXLineLen) then
+  begin
+    PXXLinePos := PXXLinePos - 1;
+    PByte(Int64(PXXLineBuf) + PXXLinePos)^ := Byte(b);
+  end
+  else
+    Result := False;
+end;
+
 procedure PXXReadLine;
 { THE #10 TERMINATOR IS STORED IN THE BUFFER, and that is a fix and not a
   detail. Stripping it made `read(c: Char)` — the canonical Pascal text-scan

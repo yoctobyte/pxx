@@ -60,6 +60,10 @@ extern long __pxx_write(int fd, const void *buf, unsigned long n);
 extern void *__pxx_malloc(long n);
 extern void __pxx_free(void *p);
 extern long __pxx_read(int fd, void *buf, unsigned long n);
+/* fd 0 is shared with Pascal's readers (lib/rtl/pxxcio.pas): take the byte
+   they hold before reading the fd, and hand an ungetc to them. */
+extern int __pxx_stdin_take(void);
+extern int __pxx_stdin_unget(int c);
 extern int __pxx_open(const char *path, int flags, int mode);
 extern int __pxx_close(int fd);
 /* offset/return are 64-bit to match the Pascal bridge (__pxx_seek's `offset:
@@ -950,6 +954,12 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     got++;
   }
   if (got == total) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+  if (stream->fd == 0 && !(stream->rbuffered && stream->rpos < stream->rlen)) {
+    int t;   /* Pascal's held stdin bytes are older than anything on fd 0 */
+    while (got < total && (t = __pxx_stdin_take()) >= 0)
+      ((unsigned char *)ptr)[got++] = (unsigned char)t;
+    if (got == total) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+  }
   /* Buffered stream: hand out what is buffered, then read a large remainder
      straight into the caller's memory and a small one through the buffer. */
   if (stream->rbuffered) {
@@ -991,8 +1001,13 @@ int fgetc(FILE *stream) {
   long r;
   if (stream->ungetn > 0)             /* pending pushback (see ungetc) */
     return (int)stream->ungetbuf[--stream->ungetn];
+  if (stream->rbuffered && stream->rpos < stream->rlen)
+    return (int)stream->rbuf[stream->rpos++];
+  if (stream->fd == 0) {              /* a byte Pascal's Eof/Read peeked */
+    int t = __pxx_stdin_take();
+    if (t >= 0) return t;
+  }
   if (stream->rbuffered) {
-    if (stream->rpos < stream->rlen) return (int)stream->rbuf[stream->rpos++];
     r = __crtl_rfill(stream);
     if (r > 0) return (int)stream->rbuf[stream->rpos++];
     if (r != -2) return -1;           /* eof or err already set */
@@ -1011,6 +1026,15 @@ int fgetc(FILE *stream) {
 int ungetc(int c, FILE *stream) {
   if (c < 0 || !stream) return -1;
   if (stream->ungetn >= PXX_UNGET_MAX) return -1;
+  /* stdin: in front of Pascal's pending bytes, where ReadLn sees it too. Only
+     while nothing of crtl's own is ahead of it (pushback or buffered bytes):
+     else the order would break, and c stays on the stack. */
+  if (stream->fd == 0 && stream->ungetn == 0 &&
+      !(stream->rbuffered && stream->rpos < stream->rlen) &&
+      __pxx_stdin_unget(c)) {
+    stream->eof = 0;
+    return (unsigned char)c;
+  }
   stream->ungetbuf[stream->ungetn++] = (unsigned char)c;
   stream->eof = 0;
   return (unsigned char)c;
