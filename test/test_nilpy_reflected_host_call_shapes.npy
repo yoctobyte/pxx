@@ -50,6 +50,17 @@
 # lands the refused rows below become passing rows and this file's oracle is what
 # says so.
 #
+# THE WORD FAMILY LANDED 2026-11-20 on i386, arm32 and riscv32
+# (bug-a-pyeval-host-calls-pass-int64-words-to-one-word-params-on-32-bit-targets):
+# there every parameter travels as the machine words pxx's convention gives it,
+# in declaration order, so NEITHER face exists and every row below is a VALUE.
+# That is the third mode, `words`. It is decided by the order probe (`fi`), and
+# the width probe must then agree (`isx` accepted). The two rows added with it
+# -- `mx`, eight words with a double in the middle, past arm32's four argument
+# registers, and `half`, a Double RESULT -- are values in `words` mode and in
+# `wide` mode follow the 64-bit rules (mx is refused there: a non-double after
+# a double). xtensa and wasm32 were not measured and are not in the Makefile.
+#
 # THE MODE IS DECIDED BY ONE PROBE and every other width row must AGREE with it,
 # the same contract as test_subnormal_double_arithmetic.pas. The Makefile pins
 # the expected word per target, so a target that changes behaviour turns red
@@ -114,6 +125,20 @@ class W:
     def sf(self, a, b):
         notes.append("sf " + str(a) + " " + str(b))
 
+    # Eight words on a 32-bit target, a double in the MIDDLE.
+    def mx(self, a, b, c, d, e):
+        notes.append("mx " + str(a) + " " + str(b) + " " + str(c) + " " + str(d) + " " + str(e))
+
+    # A Double RESULT through a narrowed call.
+    def half(self, a, s):
+        notes.append("half " + s)
+        return a / 2
+
+    # Carries a reflected RESULT out to the oracle. Never called from compiled
+    # code, so its parameter stays Variant and it is not itself under test.
+    def keep(self, v):
+        notes.append("keep " + str(v))
+
     # NEVER called from compiled code: parameters stay Variant.
     def vv(self, a, b):
         notes.append("vv " + str(a) + " " + str(b))
@@ -134,6 +159,8 @@ w.if_(1, 2.5)
 w.iif(1, 2, 2.5)
 w.ifi(1, 2.5, 3)
 w.sf("S", 2.5)
+w.mx(1, "S", 2.5, 3, "T")
+w.half(1, "S")
 
 env = {"w": w}
 
@@ -173,17 +200,28 @@ check("ff", call("w.ff(9.5,8.5)") == "ff 9.5 8.5")
 check("if trailing double", call("w.if_(7,9.5)") == "if 7 9.5")
 check("iif trailing double", call("w.iif(7,8,9.5)") == "iif 7 8 9.5")
 
-# ---- Refused on EVERY target: a non-double AFTER a double. ----
-check("fi refused", call("w.fi(9.5,7)") == "REFUSED")
-# Double in the MIDDLE: position, not mixing. If this ever stops being refused
-# while `fi` still is, the rule has been rewritten as "first parameter" and is
-# wrong again.
-check("ifi refused", call("w.ifi(7,9.5,8)") == "REFUSED")
+# ---- A non-double AFTER a double: refused on 64-bit, a value in words mode. ----
+fiv = call("w.fi(9.5,7)")
+words = fiv != "REFUSED"
+if words:
+    check("fi value", fiv == "fi 9.5 7")
+    check("ifi value", call("w.ifi(7,9.5,8)") == "ifi 7 9.5 8")
+    check("mx value", call("w.mx(7,'A',9.5,8,'B')") == "mx 7 A 9.5 8 B")
+else:
+    # Double in the MIDDLE: position, not mixing. If this ever stops being
+    # refused while `fi` still is, the rule has been rewritten as "first
+    # parameter" and is wrong again.
+    check("ifi refused", call("w.ifi(7,9.5,8)") == "REFUSED")
+    check("mx refused", call("w.mx(7,'A',9.5,8,'B')") == "REFUSED")
+check("half result", call("w.keep(w.half(7,'X'))") == "keep 3.5")
 
 # ---- The width face: decide the mode from ONE probe. ----
 probe = call("w.isx(7,'X')")
 narrow = probe == "REFUSED"
-if narrow:
+if words:
+    check("words mode accepts isx", not narrow)
+    print("HOSTSHAPE-MODE words")
+elif narrow:
     print("HOSTSHAPE-MODE narrow")
 else:
     print("HOSTSHAPE-MODE wide")

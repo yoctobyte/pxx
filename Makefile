@@ -5929,6 +5929,10 @@ test-nilpy: $(COMPILER)
 	# row red until someone writes down that it did. `wide` = 64-bit, where every
 	# integer-class parameter is 8 bytes and only the ORDER face bites. `narrow` =
 	# a 32-bit target, where a parameter that is not 64-bit is refused.
+	# `words` = i386/arm32/riscv32 since 2026-11-20: every shape is a VALUE, through
+	# the word family (bug-a-pyeval-host-calls-pass-int64-words-to-one-word-params-
+	# on-32-bit-targets). No pinned target is `narrow` any more; the mode stays for
+	# a target whose layout is not measured (xtensa, wasm32).
 	#
 	# 32-BIT IS ONE WORD FOR THREE DIFFERENT BOUNDARIES, which is why the refusal
 	# is the union and not a per-target allow-list: (Int64, AnsiString) is correct
@@ -5954,7 +5958,7 @@ test-nilpy: $(COMPILER)
 	# diagnostic on stderr should not turn this row red for the wrong reason.
 	tools/expect_same.sh hostshape26/native "$$($(TESTTMP)/test_nilpy_hostshape26 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE wide\nHOSTSHAPE-CHECK failures=0')"
 	@for t in i386 riscv32 arm32 aarch64; do \
-	  case $$t in i386) q=qemu-i386; want=narrow;; riscv32) q=qemu-riscv32; want=narrow;; arm32) q=qemu-arm; want=narrow;; aarch64) q=qemu-aarch64; want=wide;; esac; \
+	  case $$t in i386) q=qemu-i386; want=words;; riscv32) q=qemu-riscv32; want=words;; arm32) q=qemu-arm; want=words;; aarch64) q=qemu-aarch64; want=wide;; esac; \
 	  if ! command -v $$q >/dev/null 2>&1; then echo "  hostshape: $$q absent, $$t NOT verified"; continue; fi; \
 	  ./$(COMPILER) --target=$$t --platform=posix test/test_nilpy_reflected_host_call_shapes.npy $(TESTTMP)/hostshape_$$t >/dev/null || { echo "hostshape $$t compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh hostshape/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/hostshape_$$t 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE %s\nHOSTSHAPE-CHECK failures=0' $$want)" || exit 1; \

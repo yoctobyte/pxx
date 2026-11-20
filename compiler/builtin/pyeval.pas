@@ -451,6 +451,13 @@ const
   PK_DEDENT = 8;
   PK_BIGINT = 9;   { integer/hex literal that overflows Int64; TkText = its text }
 
+{ Targets whose narrowed reflected host calls go through the WORD family (see
+  the TPW* types): the 32-bit ones whose word layout was measured. xtensa and
+  wasm32 were not, and keep the refusals in PyHostCall.
+  bug-a-pyeval-host-calls-pass-int64-words-to-one-word-params-on-32-bit-targets }
+{$ifdef CPUI386}{$define PY_HOST_WORDS}{$define PY_HOST_WORDS_HIFIRST}{$endif}
+{$ifdef CPUARM}{$define PY_HOST_WORDS}{$endif}
+{$ifdef CPURISCV32}{$define PY_HOST_WORDS}{$endif}
 type
   { Its own alias, not `builtin`'s. Every unit that needs a pointer alias
     declares one: they are deliberately NOT exported, because an alias in an
@@ -584,6 +591,68 @@ type
   TPSFn3 = function(self: Pointer; a, b, c: Int64): AnsiString;
   TPSFn4 = function(self: Pointer; a, b, c, d: Int64): AnsiString;
   TPSFn5 = function(self: Pointer; a, b, c, d, e: Int64): AnsiString;
+{$ifdef PY_HOST_WORDS}
+  { THE WORD FAMILY, 32-bit only. pxx's own convention on i386, arm32 and
+    riscv32 passes every parameter as consecutive machine WORDS in declaration
+    order: one per pointer-sized kind, two per Int64 AND per Double, packed --
+    no even-pair padding, no separate float file. The two halves of an 8-byte
+    value go lo-first on arm32 and riscv32 and HI-first on i386, whose
+    left-to-right pushes put the first word highest. Measured with a probe
+    calling the same callees through these thunks, 2026-11-20.
+
+    Called with EXACTLY the callee's word count: on i386, and on arm32 past
+    its four argument registers, the callee addresses its parameters from the
+    far end, so a trailing filler word shifts every argument by one.
+
+    This replaces BOTH 32-bit refusal faces. The width face is the 8-byte slot
+    that the pointer family gave a 4-byte parameter; the order face is the
+    mixed family passing doubles after non-doubles. Words in declaration order
+    have neither problem. }
+  TPWI_0 = function(self: Pointer): Int64;
+  TPWI_1 = function(self: Pointer; w0: NativeInt): Int64;
+  TPWI_2 = function(self: Pointer; w0, w1: NativeInt): Int64;
+  TPWI_3 = function(self: Pointer; w0, w1, w2: NativeInt): Int64;
+  TPWI_4 = function(self: Pointer; w0, w1, w2, w3: NativeInt): Int64;
+  TPWI_5 = function(self: Pointer; w0, w1, w2, w3, w4: NativeInt): Int64;
+  TPWI_6 = function(self: Pointer; w0, w1, w2, w3, w4, w5: NativeInt): Int64;
+  TPWI_7 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6: NativeInt): Int64;
+  TPWI_8 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7: NativeInt): Int64;
+  TPWI_9 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8: NativeInt): Int64;
+  TPWI_10 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8, w9: NativeInt): Int64;
+  TPWV_0 = function(self: Pointer): Variant;
+  TPWV_1 = function(self: Pointer; w0: NativeInt): Variant;
+  TPWV_2 = function(self: Pointer; w0, w1: NativeInt): Variant;
+  TPWV_3 = function(self: Pointer; w0, w1, w2: NativeInt): Variant;
+  TPWV_4 = function(self: Pointer; w0, w1, w2, w3: NativeInt): Variant;
+  TPWV_5 = function(self: Pointer; w0, w1, w2, w3, w4: NativeInt): Variant;
+  TPWV_6 = function(self: Pointer; w0, w1, w2, w3, w4, w5: NativeInt): Variant;
+  TPWV_7 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6: NativeInt): Variant;
+  TPWV_8 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7: NativeInt): Variant;
+  TPWV_9 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8: NativeInt): Variant;
+  TPWV_10 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8, w9: NativeInt): Variant;
+  TPWS_0 = function(self: Pointer): AnsiString;
+  TPWS_1 = function(self: Pointer; w0: NativeInt): AnsiString;
+  TPWS_2 = function(self: Pointer; w0, w1: NativeInt): AnsiString;
+  TPWS_3 = function(self: Pointer; w0, w1, w2: NativeInt): AnsiString;
+  TPWS_4 = function(self: Pointer; w0, w1, w2, w3: NativeInt): AnsiString;
+  TPWS_5 = function(self: Pointer; w0, w1, w2, w3, w4: NativeInt): AnsiString;
+  TPWS_6 = function(self: Pointer; w0, w1, w2, w3, w4, w5: NativeInt): AnsiString;
+  TPWS_7 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6: NativeInt): AnsiString;
+  TPWS_8 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7: NativeInt): AnsiString;
+  TPWS_9 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8: NativeInt): AnsiString;
+  TPWS_10 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8, w9: NativeInt): AnsiString;
+  TPWD_0 = function(self: Pointer): Double;
+  TPWD_1 = function(self: Pointer; w0: NativeInt): Double;
+  TPWD_2 = function(self: Pointer; w0, w1: NativeInt): Double;
+  TPWD_3 = function(self: Pointer; w0, w1, w2: NativeInt): Double;
+  TPWD_4 = function(self: Pointer; w0, w1, w2, w3: NativeInt): Double;
+  TPWD_5 = function(self: Pointer; w0, w1, w2, w3, w4: NativeInt): Double;
+  TPWD_6 = function(self: Pointer; w0, w1, w2, w3, w4, w5: NativeInt): Double;
+  TPWD_7 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6: NativeInt): Double;
+  TPWD_8 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7: NativeInt): Double;
+  TPWD_9 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8: NativeInt): Double;
+  TPWD_10 = function(self: Pointer; w0, w1, w2, w3, w4, w5, w6, w7, w8, w9: NativeInt): Double;
+{$endif}
 
   { THE MIXED FAMILY: a host method with DOUBLE parameters beside pointer-class
     ones -- `def at(self, x, z, outside=77.5)` once the call-site typing made
@@ -1285,6 +1354,91 @@ begin
   if cls^.NamePtr <> nil then Result := cls^.NamePtr^ else Result := '<unnamed class>';
 end;
 
+{$ifdef PY_HOST_WORDS}
+type TPyHostWords = array[0..9] of NativeInt;
+
+{ One 8-byte value as two words, in this target's order. }
+procedure PyHostPut64(v: Int64; var w: TPyHostWords; var nw: Integer);
+begin
+{$ifdef PY_HOST_WORDS_HIFIRST}
+  w[nw] := NativeInt(v shr 32);
+  w[nw + 1] := NativeInt(v and $FFFFFFFF);
+{$else}
+  w[nw] := NativeInt(v and $FFFFFFFF);
+  w[nw + 1] := NativeInt(v shr 32);
+{$endif}
+  Inc(nw, 2);
+end;
+
+function PyHostWordsI(code, self: Pointer; const w: TPyHostWords; nw: Integer): Int64;
+begin
+  case nw of
+    0: Result := TPWI_0(code)(self);
+    1: Result := TPWI_1(code)(self, w[0]);
+    2: Result := TPWI_2(code)(self, w[0], w[1]);
+    3: Result := TPWI_3(code)(self, w[0], w[1], w[2]);
+    4: Result := TPWI_4(code)(self, w[0], w[1], w[2], w[3]);
+    5: Result := TPWI_5(code)(self, w[0], w[1], w[2], w[3], w[4]);
+    6: Result := TPWI_6(code)(self, w[0], w[1], w[2], w[3], w[4], w[5]);
+    7: Result := TPWI_7(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6]);
+    8: Result := TPWI_8(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+    9: Result := TPWI_9(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]);
+    10: Result := TPWI_10(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]);
+  end;
+end;
+
+function PyHostWordsV(code, self: Pointer; const w: TPyHostWords; nw: Integer): Variant;
+begin
+  case nw of
+    0: Result := TPWV_0(code)(self);
+    1: Result := TPWV_1(code)(self, w[0]);
+    2: Result := TPWV_2(code)(self, w[0], w[1]);
+    3: Result := TPWV_3(code)(self, w[0], w[1], w[2]);
+    4: Result := TPWV_4(code)(self, w[0], w[1], w[2], w[3]);
+    5: Result := TPWV_5(code)(self, w[0], w[1], w[2], w[3], w[4]);
+    6: Result := TPWV_6(code)(self, w[0], w[1], w[2], w[3], w[4], w[5]);
+    7: Result := TPWV_7(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6]);
+    8: Result := TPWV_8(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+    9: Result := TPWV_9(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]);
+    10: Result := TPWV_10(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]);
+  end;
+end;
+
+function PyHostWordsS(code, self: Pointer; const w: TPyHostWords; nw: Integer): AnsiString;
+begin
+  case nw of
+    0: Result := TPWS_0(code)(self);
+    1: Result := TPWS_1(code)(self, w[0]);
+    2: Result := TPWS_2(code)(self, w[0], w[1]);
+    3: Result := TPWS_3(code)(self, w[0], w[1], w[2]);
+    4: Result := TPWS_4(code)(self, w[0], w[1], w[2], w[3]);
+    5: Result := TPWS_5(code)(self, w[0], w[1], w[2], w[3], w[4]);
+    6: Result := TPWS_6(code)(self, w[0], w[1], w[2], w[3], w[4], w[5]);
+    7: Result := TPWS_7(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6]);
+    8: Result := TPWS_8(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+    9: Result := TPWS_9(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]);
+    10: Result := TPWS_10(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]);
+  end;
+end;
+
+function PyHostWordsD(code, self: Pointer; const w: TPyHostWords; nw: Integer): Double;
+begin
+  case nw of
+    0: Result := TPWD_0(code)(self);
+    1: Result := TPWD_1(code)(self, w[0]);
+    2: Result := TPWD_2(code)(self, w[0], w[1]);
+    3: Result := TPWD_3(code)(self, w[0], w[1], w[2]);
+    4: Result := TPWD_4(code)(self, w[0], w[1], w[2], w[3]);
+    5: Result := TPWD_5(code)(self, w[0], w[1], w[2], w[3], w[4]);
+    6: Result := TPWD_6(code)(self, w[0], w[1], w[2], w[3], w[4], w[5]);
+    7: Result := TPWD_7(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6]);
+    8: Result := TPWD_8(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+    9: Result := TPWD_9(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]);
+    10: Result := TPWD_10(code)(self, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]);
+  end;
+end;
+
+{$endif}
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
                      args: TPyList; kwNames: TPyList; var res: Variant);
 var
@@ -1385,6 +1539,9 @@ var
     into a variant array. `-dPXX_HEAP_DEBUG` says WRITE AFTER FREE. }
   pvHold: array[0..4] of TPyRec;
   pret: Int64;
+{$ifdef PY_HOST_WORDS}
+  pw: TPyHostWords; nw, wa, wd: Integer; dq: Int64;
+{$endif}
   { The measured shape refusal below. sawDouble tracks whether a double has been
     seen yet while scanning the parameters left to right, which is all the order
     rule needs; shapeBad is empty for a shape this bridge passes correctly and
@@ -1612,6 +1769,9 @@ begin
                     + pystr_of(pk[i]) + ') is not 64-bit, so the arguments would '
                     + 'be misaligned: a reflected call with pointer-sized '
                     + 'parameters is not supported on 32-bit targets yet';
+{$ifdef PY_HOST_WORDS}
+    shapeBad := '';   { neither face exists for words in declaration order (TPW* types) }
+{$endif}
     if shapeBad <> '' then
       raise TypeError.Create('reflected call to ' + name + ' is refused: '
               + shapeBad + '. This shape returned WRONG VALUES, or crashed, '
@@ -1682,6 +1842,37 @@ begin
       end;
     end;
     code := mi^.Code;
+{$ifdef PY_HOST_WORDS}
+    { --- the WORD family (TPW* types): every parameter in declaration order,
+          non-doubles from pa[], doubles from pd[], each at its own width --- }
+    nw := 0; wa := 0; wd := 0;
+    for i := 1 to n do
+      if pk[i] = TK_DOUBLE then
+      begin
+        Move(pd[wd], dq, 8);
+        PyHostPut64(dq, pw, nw);
+        Inc(wd);
+      end
+      else
+      begin
+        if (pk[i] = 13) or (pk[i] = 14) then PyHostPut64(pa[wa], pw, nw)
+        else begin pw[nw] := NativeInt(pa[wa]); Inc(nw); end;
+        Inc(wa);
+      end;
+    if rk = TK_VARIANT then begin res := PyHostWordsV(code, vmobj, pw, nw); Exit; end;
+    if rk = 23 then begin res := MakeStr(PyHostWordsS(code, vmobj, pw, nw)); Exit; end;
+    if rk = TK_DOUBLE then begin res := MakeFloat(PyHostWordsD(code, vmobj, pw, nw)); Exit; end;
+    pret := PyNarrowRet(PyHostWordsI(code, vmobj, pw, nw), rk);
+    if (rk = 6) or (rk = 17) then
+    begin
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
+      PXXObjRetain(Pointer(NativeInt(pret)));   { slot owns +1 (magic-guarded) }
+    end
+    else if rk = 0 then res := MakeNone
+    else if rk = 2 then res := pyvar_of_bool(pret <> 0)
+    else res := pyvar_of_int(pret);
+    Exit;
+{$endif}
     { --- the mixed family (see the TPM* types): m pointer-class args in
           pa[], k doubles in pd[], one thunk per (m, k, result) --- }
     if hasDouble or ((rk = TK_DOUBLE) and (n > 0)) then
