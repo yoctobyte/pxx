@@ -4,10 +4,10 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-11
 found-by: frankuser
-owner: unassigned
+owner: rd
 summary: "`m.open(\"x\")` where a C header declares `int open(const char *, int)` fails with `no overload of open matches these arguments` -- the qualified member call is checked against the GLOBAL C overload set instead of the module's own member. Sibling of bug-n-a-field-assigned-a-class-or-none-in-two-methods-wont-widen, which fixed the INFERENCE walk's copy of this mistake; this is the CALL path and is still open. Found while trying to build a hermetic fixture for that bug: a hand-written two-parameter declaration of `open` fails at HEAD, and adding `...` to match glibc's variadic form does NOT fix it, so glibc's declaration differs from a hand-written one in some way that was NOT established."
 ---
 
@@ -87,3 +87,23 @@ system" warnings per run. A local header would have been hermetic, quiet, and
 independent of this box's glibc — and it pins a different bug. Fixing this
 ticket would let that fixture become hermetic, which is a second reason to want
 it done.
+
+## Closed stale (2026-11-20, rd)
+
+Does not reproduce. Measured at origin/master f784b38446 with the repro above,
+plus three variants:
+- the variadic declaration `int open(const char *, int, ...)`;
+- `m.open()` with no argument, and `m.open(name="kw")`;
+- the real `fcntl.h`.
+
+All print the module member's results (`tiled`, `x`, `kw`).
+
+The oldest build at hand also passes the repro: e29062c235, 2026-11-12. The
+fixing commit was not pinned down. The likeliest candidates are the
+module-scoped member lookups that landed for the from-import and qualified-call
+tickets in done/.
+
+Pinned so it stays fixed: test-nilpy row qmember26,
+`test_nilpy_a_qualified_member_call_ignores_a_c_function_of_the_same_name.py`,
+with fixture `test/nilpy_qmember/`. A negative check confirmed the header
+really is included: a wrong header path refuses the compile.
