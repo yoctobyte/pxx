@@ -10228,7 +10228,13 @@ begin
   c := ci;
   while (c >= 0) and (n < 64) do
   begin
-    if (c = ci) or ((c < PY_MAX_DC_FIELDS) and PyDcClassIsDc[c]) then
+    { PyDcIs, not PyDcClassIsDc: the detect sweep (phase 0) records it for
+      every class before any is registered, so a subclass registered by the
+      header sweep already sees its bases. PyDcClassIsDc is set only at the
+      class statement, and setting it earlier made the module-collect trial
+      parse fill `P()` from an expression default whose hidden global did not
+      exist yet (test_nilpy_dataclass_expr_default). }
+    if (c = ci) or PyDcIs[c] then
     begin
       chain[n] := c;
       Inc(n);
@@ -52766,10 +52772,6 @@ begin
           end
           else
           begin
-            { the flag PyParseClass sets, set here too: a dataclass SUBCLASS
-              registered by this sweep reads it on its bases to build its
-              ctor's flat field list (PyDcFlatChain), and the bases come first }
-            if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
             PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
             if hoist then PyMembersHoisted[ci] := True;
           end;

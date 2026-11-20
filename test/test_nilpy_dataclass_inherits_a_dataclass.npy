@@ -4,7 +4,7 @@
 # are regenerated for the subclass unless its OWN body defines one. Before,
 # Kid(1, 2.5) segfaulted (the ctor took Kid's own field only).
 # bug-n-a-dataclass-that-inherits-a-dataclass-segfaults-on-construction
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -63,3 +63,24 @@ class R(Base):
 
 
 print(R(1), R(1, "y", 4) == R(1, "y", 4))
+
+
+# an inherited EXPRESSION default and default_factory: the base's hidden
+# default global, evaluated at the base's class statement
+K = 4
+
+
+@dataclass
+class EB:
+    x: int = 2 + K
+    xs: list = field(default_factory=list)
+
+
+@dataclass
+class EC(EB):
+    y: int = K * 3
+
+
+ec = EC()
+ec.xs.append(1)
+print(ec.x, ec.xs, ec.y, EC(), EC(1, [2], 3))
