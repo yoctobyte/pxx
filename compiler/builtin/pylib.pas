@@ -14802,7 +14802,7 @@ function bytearray(const v: Variant): TPyBytes; overload;
   Deliberately the same tag tests, in the same order, as bytes(const v: Variant)
   — if one of them ever learns a new payload kind the other must too, and
   keeping them textually parallel is what makes that visible. }
-var p: PPyVarRec; o: TObject;
+var p: PPyVarRec; o: TObject; ul: TPyList;
 begin
   p := PPyVarRec(@v);
   if (p^.VType = 7) and (p^.Payload <> 0) then
@@ -14831,6 +14831,14 @@ begin
     if o is TPyIter then
     begin
       Result := bytearray(list(TPyIter(o)));
+      Exit;
+    end;
+    { a user iterable, as in bytes(const v) }
+    if PyUserObjIterable(o) then
+    begin
+      ul := pyseq_of_obj(o);
+      Result := bytearray(ul);
+      PXXObjRelease(Pointer(ul));
       Exit;
     end;
   end;
@@ -21285,7 +21293,7 @@ function bytes(const v: Variant): TPyBytes; overload;
 { See the declaration for why this exists. Dispatches on the RUNTIME tag,
   because a Variant is the one argument whose Python type is not knowable when
   the overload is chosen. }
-var p: PPyVarRec; o: TObject;
+var p: PPyVarRec; o: TObject; ul: TPyList;
 begin
   p := PPyVarRec(@v);
   if (p^.VType = 7) and (p^.Payload <> 0) then
@@ -21313,6 +21321,17 @@ begin
     if o is TPyIter then
     begin
       Result := bytes(list(TPyIter(o)));
+      Exit;
+    end;
+    { A USER class implementing the iteration protocol is an iterable of ints
+      too: drained through pyseq_of_obj, the one chain that already knows it.
+      bug-n-a-user-iterator-into-some-shims-and-builtins-crashes-or-answers-wrong.
+      Mirrored in bytearray(const v). }
+    if PyUserObjIterable(o) then
+    begin
+      ul := pyseq_of_obj(o);
+      Result := bytes(ul);
+      PXXObjRelease(Pointer(ul));
       Exit;
     end;
   end;

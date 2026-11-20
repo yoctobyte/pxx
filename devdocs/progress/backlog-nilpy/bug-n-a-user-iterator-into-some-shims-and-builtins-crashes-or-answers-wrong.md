@@ -47,3 +47,28 @@ print(bytes(Counter(3)))                                       # TypeError; CPyt
 - **bytes/bytearray/collections.Counter:** these match a Variant overload,
   whose run-time conversion does not walk a user iterator the way
   list/sorted/sum's already do.
+
+## Progress 2026-11-20
+
+- **bytes/bytearray: fixed.** The Variant overloads in compiler/builtin/pylib.pas
+  gained a `PyUserObjIterable` arm that drains through `pyseq_of_obj`. Test:
+  test_nilpy_bytes_of_a_user_iterable.py.
+- **collections.Counter: correct.** It was a name clash in the probe, not
+  iteration: the user class was ALSO named `Counter`. `collections.Counter(Ctr(3))`
+  is right. What remains is narrower and still a segfault. On 0ab6ae5f65 and
+  earlier:
+  ```python
+  import collections
+  class Counter:            # __init__/__iter__/__next__ as above
+      ...
+  w = collections.Counter(Counter(3))   # segfault
+  ```
+  The same line is correct if any earlier statement constructs `Counter(...)`.
+  The qualified call does not pass through PyFixIterableArgs.
+- **islice/takewhile: still open.** The same generators written in the user's
+  module work over a user iterator. So the shim compiled as its own unit is
+  what differs: its unannotated `iterable` arrives tyClass with rec 0
+  (PyParamTypeFromSites typing it from the user's call site).
+- While narrowing takewhile, I found that a parameter or local named `pred`
+  answers Pascal's Pred. Filed separately:
+  [[bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic]].

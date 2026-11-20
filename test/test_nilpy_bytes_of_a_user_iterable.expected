@@ -1,0 +1,5 @@
+b'ABC'
+bytearray(b'AB')
+b'hi'
+b'AB' b''
+ValueError
