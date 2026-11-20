@@ -17,8 +17,8 @@ summary: >
 track: A
 type: bug
 prio: 45
-owner: unassigned
-status: open
+owner: rd
+status: done
 blocked-by: []
 ---
 
@@ -50,3 +50,18 @@ The x86-64 instance was ranked 85 because it aborted the lekkerzeilen demo, on
 the host everybody develops on. These targets have no demo standing on them and
 a cross-built program linking a shared library is rare. It is the same defect and
 a smaller blast radius — rank the reach, not the mechanism.
+
+## Closed 2026-11-20 (rd): already fixed, the ticket was left open
+
+0ed2b7f6e1 (2026-09-27, "fix(A): pxx threads on i386, aarch64 and arm32 no
+longer share glibc's thread pointer") opened the pthread route on all three
+targets. lib/rtl/palthread.pas defines PXX_PTHREAD_ROUTE for CPUX86_64,
+CPUI386, CPUAARCH64 and CPUARM. That commit added the test-threads rows for
+test/thread_glibc_malloc_two_threads.pas on i386, aarch64 and arm32, beside
+the x86-64 one (Makefile, the test_tglibc2_* rows).
+
+Re-measured at 62ae6a37cd: the repro survives on i386, aarch64 and arm32, 3
+runs of 3 each. Before that commit it aborted 1/3, 2/3 and 3/3 of runs. The
+test-threads run for the alt-stack change (the same day) was 0 failures,
+these rows included. riscv32 has no threads (the --threadsafe gate), so it
+is out of scope rather than open.
