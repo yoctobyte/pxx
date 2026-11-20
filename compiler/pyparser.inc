@@ -23016,6 +23016,138 @@ begin
     Result := mname;
 end;
 
+function PyParamDefaultsSame(p1, p2, k: Integer): Boolean;
+{ Do two procs declare the SAME default for parameter slot k? Compared on the
+  recorded default, not on a built node. A non-constant default (a hidden
+  global apiece) is never "the same": each def evaluated its own. }
+var a, b, i: Integer;
+begin
+  Result := False;
+  if k >= MAX_PROC_PARAMS then Exit;
+  a := p1 * MAX_PROC_PARAMS + k;
+  b := p2 * MAX_PROC_PARAMS + k;
+  if not (ProcParamHasDefault[a] and ProcParamHasDefault[b]) then Exit;
+  if (ProcParamDefaultSym[a] >= 0) or (ProcParamDefaultSym[b] >= 0) then Exit;
+  if (ProcParamDefaultIsStr[a] <> ProcParamDefaultIsStr[b]) or
+     (ProcParamDefaultIsFloat[a] <> ProcParamDefaultIsFloat[b]) or
+     (ProcParamDefaultIsSet[a] <> ProcParamDefaultIsSet[b]) or
+     (ProcParamDefaultIsNone[a] <> ProcParamDefaultIsNone[b]) or
+     (ProcParamDefaultIsBool[a] <> ProcParamDefaultIsBool[b]) then Exit;
+  if ProcParamDefaultIsStr[a] then
+  begin
+    if ProcParamDefaultSLen[a] <> ProcParamDefaultSLen[b] then Exit;
+    for i := 0 to ProcParamDefaultSLen[a] - 1 do
+      if TokChars[ProcParamDefaultSOff[a] + i] <> TokChars[ProcParamDefaultSOff[b] + i] then Exit;
+    Result := True;
+  end
+  else
+    Result := ProcParamDefaultVal[a] = ProcParamDefaultVal[b];
+end;
+
+function PyOverrideAwareDefault(recv, mpi, k: Integer): Integer;
+{ The value an omitted argument k takes in a VIRTUAL method call on recv, or
+  -1 when the static callee's own default is the answer.
+
+  CPython reads the default from the function that RUNS. The call site used to
+  read it from the static callee alone, so inside `F.uses`, `self.m(10)` pushed
+  F.m's `b=1` and the dispatch then ran G.m's body with it: `G 10` where
+  CPython prints `G 20`.
+
+  Every class below the method's owner that declares its own override of the
+  slot is collected. If any declares a different default for k, the value is
+  chosen at run time, `G's if recv is G else F's`, deepest class first, so the
+  nearest override on the receiver's chain wins. When no override changes the
+  default, -1: the ordinary single node, as before.
+
+  Not covered, and the static default stays: a receiver that is not a pure
+  designator (it would be evaluated twice); defaults of different kinds across
+  the family (the arms of one conditional share a type); an override declared
+  in a module compiled after the call site, which is not registered yet.
+  bug-n-an-overrides-own-default-is-ignored-when-dispatched-through-the-base }
+const MAX_OVR = 32;
+var ovPi: array[0..MAX_OVR - 1] of Integer;
+    ovCi: array[0..MAX_OVR - 1] of Integer;
+    nOv, c, d, j, t, mmi, omi, ci, slot, cond, pair, tern, armNode, baseTk, baseNode, rr: Integer;
+    differs: Boolean;
+begin
+  Result := -1;
+  if (recv < 0) or (k >= MAX_PROC_PARAMS) then Exit;
+  if not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] then Exit;
+  if not PureDesignator(recv) then Exit;
+  if IntToTypeKind(ASTTk[recv]) <> tyClass then Exit;
+  { the method row and its owning class }
+  mmi := -1;
+  for j := 0 to UMthCount - 1 do
+    if UMthProc_[j] = mpi then begin mmi := j; Break; end;
+  if mmi < 0 then Exit;
+  slot := UMthVirSlot[mmi];
+  if slot < 0 then Exit;
+  ci := -1;
+  for c := 0 to UClsCount - 1 do
+    if (mmi >= UClsMBase[c]) and (mmi < UClsMBase[c] + UClsMCount[c]) then
+    begin ci := c; Break; end;
+  if ci < 0 then Exit;
+  { the receiver must be an instance of the owner's family }
+  rr := ResolveNodeRec(recv);
+  if rr < REC_UCLASS_BASE then Exit;
+  d := rr - REC_UCLASS_BASE;
+  while (d >= 0) and (d <> ci) do d := UClsParent[d];
+  if d <> ci then Exit;
+  nOv := 0;
+  differs := False;
+  for c := 0 to UClsCount - 1 do
+  begin
+    if c = ci then continue;
+    d := UClsParent[c];
+    while (d >= 0) and (d <> ci) do d := UClsParent[d];
+    if d <> ci then continue;
+    omi := -1;
+    for j := UClsMBase[c] to UClsMBase[c] + UClsMCount[c] - 1 do
+      if UMthVirSlot[j] = slot then begin omi := j; Break; end;
+    if omi < 0 then continue;
+    if (Procs[UMthProc_[omi]].ParamCount <> Procs[mpi].ParamCount) or
+       (not ProcParamHasDefault[UMthProc_[omi] * MAX_PROC_PARAMS + k]) then Exit;
+    if nOv >= MAX_OVR then Exit;
+    ovPi[nOv] := UMthProc_[omi];
+    ovCi[nOv] := c;
+    Inc(nOv);
+    if not PyParamDefaultsSame(mpi, UMthProc_[omi], k) then differs := True;
+  end;
+  if not differs then Exit;
+  { deepest first: a class below another override is tested before it }
+  for j := 1 to nOv - 1 do
+  begin
+    t := j;
+    while (t > 0) and (PyClassDepth(ovCi[t]) > PyClassDepth(ovCi[t - 1])) do
+    begin
+      c := ovCi[t]; ovCi[t] := ovCi[t - 1]; ovCi[t - 1] := c;
+      c := ovPi[t]; ovPi[t] := ovPi[t - 1]; ovPi[t - 1] := c;
+      Dec(t);
+    end;
+  end;
+  baseNode := DefaultArgValueNode(mpi, k);
+  baseTk := ASTTk[baseNode];
+  for j := 0 to nOv - 1 do
+    if ASTTk[DefaultArgValueNode(ovPi[j], k)] <> baseTk then Exit;
+  Result := baseNode;
+  for j := nOv - 1 downto 0 do
+  begin
+    armNode := DefaultArgValueNode(ovPi[j], k);
+    cond := AllocNode(AN_IS_TEST);
+    ASTLeft[cond] := CloneAST(recv);
+    ASTIVal[cond] := ovCi[j];
+    ASTTk[cond] := Ord(tyBoolean);
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := armNode;
+    ASTRight[pair] := Result;
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := cond;
+    ASTRight[tern] := pair;
+    ASTTk[tern] := baseTk;
+    Result := tern;
+  end;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs, kwCap: Integer;
     anyKw: Boolean;
@@ -23262,7 +23394,10 @@ begin
         ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
   begin
     argNode := AllocNode(AN_ARG);
-    ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
+    ASTLeft[argNode] := -1;
+    if (UMthVirSlot[mmi] >= 0) and PyClassInHierarchy(ci) then
+      ASTLeft[argNode] := PyOverrideAwareDefault(baseNode, mpi, k);
+    if ASTLeft[argNode] < 0 then ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
     ASTRight[argNode] := -1;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;

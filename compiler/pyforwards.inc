@@ -456,3 +456,20 @@ function PyBuiltinIntrinsicValue: Integer; forward; { Nil Python: that intrinsic
 
 {$endif}
 function PyStdProvidesMember(const dottedRoot, member: AnsiString): Boolean; forward; { star-import fallback in PyStdAliasLookup (pyparser.inc) }
+
+{ The default an omitted argument of a VIRTUAL NilPy method call takes, chosen
+  per the receiver's run-time class when an override declares its own; -1 when
+  the static callee's default is the answer (always, without NilPy). Asked by
+  the shared FillDefaultArgs, so every method-call spelling gets one rule.
+  bug-n-an-overrides-own-default-is-ignored-when-dispatched-through-the-base }
+{$ifndef PXX_NO_NILPY}
+function PyOverrideAwareDefault(recv, mpi, k: Integer): Integer; forward; { (pyparser.inc) }
+{$endif}
+function FrontendOverrideAwareDefault(recv, mpi, k: Integer): Integer;
+begin
+{$ifdef PXX_NO_NILPY}
+  FrontendOverrideAwareDefault := -1;
+{$else}
+  FrontendOverrideAwareDefault := PyOverrideAwareDefault(recv, mpi, k);
+{$endif}
+end;

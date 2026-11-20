@@ -1519,7 +1519,13 @@ begin
   k := fromIdx;
   while k <= Procs[mpi].ParamCount - 1 do
   begin
-    exprNode := DefaultArgValueNode(mpi, k);
+    { a NilPy VIRTUAL call: the default of the method that runs, which an
+      override may declare differently (FrontendOverrideAwareDefault) }
+    exprNode := -1;
+    if isNilPy and (ASTKind[callNode] = AN_VIRTUAL_CALL) and
+       (ASTLeft[callNode] >= 0) then
+      exprNode := FrontendOverrideAwareDefault(ASTLeft[ASTLeft[callNode]], mpi, k);
+    if exprNode < 0 then exprNode := DefaultArgValueNode(mpi, k);
     recSz := FileRecSizeArgOverride(mpi, k, ASTLeft[callNode]);
     if (recSz > 0) and (ASTKind[exprNode] = AN_INT_LIT) then
       ASTIVal[exprNode] := recSz;
