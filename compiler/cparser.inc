@@ -18218,6 +18218,16 @@ begin
     restore the mode for. Set once, at the top, before any registration. }
   CaseSensitiveMode := True;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+  { The --threadsafe heap lock's word: the TTAS fast path in
+    EmitAcquireHeapLock and its contended stub spin on it. The Pascal driver
+    allocates it in its BSS block and EmitProgramPrologue with the arena; the C
+    driver never did, so it stayed 0 and the lock word was whatever lives at
+    BSS offset 0. In a --system-libs program with an initialised `__thread`
+    that is the TLS init image: `__thread int tl = 7` made the lock read as
+    held, and the first Pascal GetMem died with Runtime error 212 ("the heap
+    lock was never released"), threads or not.
+    bug-c-the-c-driver-never-allocates-the-heap-lock-word }
+  BSS_HEAP_LOCK := BSSSize; Inc(BSSSize, 8);
 
   { Token count of the USER program, captured before any unit pull. The pulls
     below (pxxcio/crtl via CLexAppend) merge their tokens into one stream after
@@ -19114,6 +19124,8 @@ begin
       "PXXMemMove not found". Idempotent if already loaded. }
     ParseUsesUnitAmbient('builtinheap');
     ParseUsesUnitAmbient('pxxcio');
+    { the body behind the pthread_create rename (CHostPthreadRoute) }
+    if CHostPthreadRoute then ParseUsesUnitAmbient('palhostthread');
     PullKernelAbiUnit;
     { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
       palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/

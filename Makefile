@@ -20041,7 +20041,25 @@ test-core: $(COMPILER)
 	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
 	./$(COMPILER) --threadsafe test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr > /dev/null
 	tools/expect_same.sh c_tls_threads_static "$$($(TESTTMP)/c_tlsthr)" "$$(cat test/c_tls_threads_libc_warns.expected)"
-	tools/expect_same.sh c_tls_threads_libc_warns "$$(./$(COMPILER) --threadsafe --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn 2>&1 | grep -c 'starts threads with the loaded libc')" "1"
+	# --system-libs: the host pthread_create, routed through palhostthread
+	# (CHostPthreadRoute), so the thread gets its own block and the build no
+	# longer warns. Both builds print gcc's output; the --threadsafe one also
+	# needs the C driver's heap-lock word (it read the TLS init image at BSS 0).
+	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
+	# bug-c-the-c-driver-never-allocates-the-heap-lock-word
+	tools/expect_same.sh c_tls_threads_libc_nowarn "$$(./$(COMPILER) --threadsafe --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn 2>&1 | grep -c 'starts threads with the loaded libc')" "0"
+	tools/expect_same.sh c_tls_threads_libc_ts "$$($(TESTTMP)/c_tlsthr_dyn)" "$$(cat test/c_tls_threads_libc_warns.expected)"
+	./$(COMPILER) --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn2 > /dev/null
+	tools/expect_same.sh c_tls_threads_libc "$$($(TESTTMP)/c_tlsthr_dyn2)" "$$(cat test/c_tls_threads_libc_warns.expected)"
+	# i386 takes the same route (its block is on fs, glibc's on gs); latest-
+	# f784b38446 printed `main 9 30 50 14` there without a warning. Needs the
+	# host's i386 libc to run.
+	if [ -e /lib/i386-linux-gnu/libc.so.6 ]; then \
+	  ./$(COMPILER) --target=i386 --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn386 > /dev/null || exit 1; \
+	  tools/expect_same.sh c_tls_threads_libc_386 "$$($(TESTTMP)/c_tlsthr_dyn386)" "$$(cat test/c_tls_threads_libc_warns.expected)" || exit 1; \
+	else \
+	  echo "=== c_tls_threads_libc_386: no i386 libc on this host, NOT verified ==="; \
+	fi
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.

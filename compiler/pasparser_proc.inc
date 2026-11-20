@@ -4493,6 +4493,20 @@ begin
     if CStemMatches(CSystemLibs[i], stem) then begin Result := True; Exit; end;
 end;
 
+{ A C executable whose pthread_create is the HOST libc's (--system-libs, or
+  =pthread), on a target where pxx keeps its own per-thread block beside
+  glibc's (x86-64 gs, i386 fs). Its threads must be routed through palthread's
+  __pxx_host_pthread_create, which installs that block, or every __thread is
+  shared with the creator. The predefine (cpreproc.inc) and the unit pull
+  (ParseCProgram) both ask this. bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+function CHostPthreadRoute: Boolean;
+begin
+  Result := ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) and
+            TargetHasTlsBlock and CSystemLibStemSelected('pthread') and
+            (not EmitObjMode) and (not EmitSharedMode) and
+            (not FreestandingMode) and (not KernelLibc);
+end;
+
 procedure AddCSystemLibStem(const stem: AnsiString);
 var i: Integer;
 begin

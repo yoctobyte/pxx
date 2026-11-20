@@ -1,9 +1,12 @@
 /* __thread across threads: an initialised scalar, an array, a struct and a
    function-scope static. Statically linked, every thread has its own copy
    initialised from the image (gcc's output, x86-64/i386/aarch64/arm32 all
-   match, measured 2026-11-19). Under --system-libs on x86-64 the thread is
-   libc's and shares the main block -- that build must WARN, which is what the
-   test row checks. bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there */
+   match, measured 2026-11-19). Under --system-libs the thread is libc's: it
+   shared the main block (x86-64 warned, i386 printed `main 9 30 50 14` in
+   silence) until pthread_create was routed through palhostthread, which gives
+   it a block of its own. That build now prints gcc's output too, with and
+   without --threadsafe. (The file name keeps its history.)
+   bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there */
 #include <stdio.h>
 #include <pthread.h>
 __thread int tl = 7;

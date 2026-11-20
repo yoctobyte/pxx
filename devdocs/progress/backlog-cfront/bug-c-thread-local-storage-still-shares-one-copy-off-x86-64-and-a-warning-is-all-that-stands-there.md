@@ -1,9 +1,9 @@
 ---
-summary: "RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history."
+summary: "FIXED 2026-11-20 (claude-dupwt) for item (1), the --system-libs executable on x86-64 and i386: pthread_create is routed through palhostthread (see the bottom section); (2) and (3) below stay open. RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history."
 type: bug
 track: C
 prio: 40
-status: backlog
+status: open
 created: 2026-09-16
 found-by: frankb-56
 tags: [tls, threads, c-frontend]
@@ -196,3 +196,37 @@ The fix, not done here. Either:
   fs-relative local-exec accesses, so glibc builds every thread's block.
   The object path already emits this (ac091638d7).
 
+
+## Fixed 2026-11-20 (claude-dupwt): the --system-libs executable, item (1)
+
+A C executable whose pthread_create is the host libc's (`--system-libs`, or
+`=pthread`) on x86-64 or i386 now has `pthread_create` predefined to
+`__pxx_host_pthread_create` (cpreproc.inc, CHostPthreadRoute). The host
+header's prototype and every call bind to that name. It lives in the new unit
+lib/rtl/palhostthread.pas, which ParseCProgram pulls for such a program. It
+is not palthread, because palthread compiles __pxxclone and so needs
+--threadsafe. The wrapper calls the real pthread_create with a trampoline,
+which installs a block of the thread's own (PxxThreadBlockInstall, moved out
+of palthread's PxxPthreadStart, which now calls it too). It then runs the C
+start routine and returns its value to pthread_join. The weak libc imports
+`pthread_create`/`pthread_join` are now declared once, in palhostthread.
+
+test/c_tls_threads_libc_warns.c (initialised scalar, array, struct,
+function-scope static) prints gcc's output when built `--system-libs` and
+`--threadsafe --system-libs` on x86-64, and `--target=i386 --system-libs`.
+latest-f784b38446 printed `main 9 30 50 14` (shared) on both targets, and
+on i386 it did not even warn. The `--threadsafe` build also needed
+bug-c-the-c-driver-never-allocates-the-heap-lock-word (done, same commit).
+
+Still open:
+- (2) `--emit-obj`/`--shared` without `--system-libs`, and (3) riscv32/xtensa,
+  as before.
+- thrd_create: glibc's calls its own pthread_create internally, so it is not
+  routed and still warns.
+- A thread that leaves by pthread_exit, or is cancelled, skips the munmap of
+  its block (it leaks). The block is unmapped when the start routine returns,
+  so a pthread_key destructor written in pxx C that touches a thread-local
+  after that runs on no block. The Pascal pthread route has the same two
+  properties.
+
+Verified: gate quick GREEN; test-threads and test-c-conformance 0 failures; test-core: its only reds were two --threadsafe objects linking duplicate palhostthread symbols (c_objth/c_objth_g), fixed by making the unit a weak runtime unit like palthread (ObjProcIsBuiltinRtl); both rows then pass.

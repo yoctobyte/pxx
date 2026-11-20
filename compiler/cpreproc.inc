@@ -4356,6 +4356,12 @@ begin
     feature-c-thread-local-in-x86-64-objects }
   if CUseSystemLibs and EmitObjMode and not EmitSharedMode then
     CPAddLiteral('__pxx_host_errno__', '01');
+  { The host's pthread_create starts a thread on its creator's pxx block; the
+    rename routes the header's prototype and every call through palthread's
+    wrapper, which gives the thread its own (CHostPthreadRoute).
+    bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+  if CHostPthreadRoute then
+    CPAddLiteral('pthread_create', '__pxx_host_pthread_create');
   { The shared-runtime marker (decide-a-is-a-pxx-object-a-self-contained-
     runtime-or-a-translation-unit): one symbol per runtime VARIANT -- target,
     and --threadsafe, which changes errno to a thread-local and adds pthread.

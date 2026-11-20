@@ -16,7 +16,7 @@ unit palthread;
 
 interface
 
-uses palfutex, palsync;
+uses palfutex, palsync, palhostthread;
 
 type
   { A thread body: receives the opaque argument passed to PalThreadCreate. Runs on
@@ -300,12 +300,8 @@ end;
 {$ifdef CPUAARCH64}{$define PXX_PTHREAD_ROUTE}{$endif}
 {$ifdef CPUARM}{$define PXX_PTHREAD_ROUTE}{$endif}
 
-function c_pthread_create(th: Pointer; attr: Pointer; start: Pointer; arg: Pointer): Integer; cdecl;
-  weakexternal 'libc.so.6' name 'pthread_create';
-{ pthread_t is an unsigned long: pointer-sized. An Int64 here passed two words
-  on a 32-bit target, and pthread_join then read the high half as `retval`. }
-function c_pthread_join(th: PtrUInt; retval: Pointer): Integer; cdecl;
-  weakexternal 'libc.so.6' name 'pthread_join';
+{ c_pthread_create / c_pthread_join, the two weak libc imports, are declared
+  once, in palhostthread, which uses them as well (the C --system-libs route). }
 
 function PthreadRouteAvailable: Boolean;
 { Both halves, not one: a program that could create but not join would leak a
@@ -340,9 +336,7 @@ function PxxPthreadStart(a: Pointer): Pointer; cdecl;
   all-zero magazine IS "every size class empty". }
 var
   h: PThreadHandle;
-  blk, ignore, tlsBytes, altBytes, img, k: Int64;
-  ss: array[0..2] of Int64;
-  desc: array[0..3] of LongWord;               { i386's struct user_desc }
+  blk, ignore, tlsBytes, altBytes: Int64;
   fn: TThreadEntry;
 begin
   h := PThreadHandle(a);
@@ -359,96 +353,7 @@ begin
     zeroed, so on a target that installs nothing here it must still be set:
     before 2026-09-27 aarch64 and arm32 (and i386) reached that munmap with
     whatever the stack held. }
-  blk := 0;
-  tlsBytes := 0;
-  altBytes := 0;
-{$ifdef CPUX86_64}
-  { x86-64: pxx's block lives on gs, which glibc does not use. i386 has its
-    own arm below (fs). On aarch64 and arm32 the one thread register is
-    glibc's in the dynamic binary this route implies, so there is nothing of
-    pxx's to install (see the note at the weak imports). }
-  tlsBytes := __pxxTlsBlockSize;
-  altBytes := __pxxSigAltStackSize;
-  { The CREATOR's init-image pointer, read while gs is still the creator's
-    block. A raw pointer read, which the ordering rule above allows. The copy
-    below starts this block's thread-locals at their initial values rather than
-    at 0 (TLS_SLOT_INIT_IMAGE in the compiler). }
-  img := 0;
-{$ifdef PXX_HAS_TLS_INIT_IMAGE}
-  if __pxxTlsUserBytes > 0 then
-    img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
-{$endif}
-  blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes + altBytes,
-                         PROT_RW, MAP_STACK_PRIV, -1, 0);
-  if MmapOk(blk) then
-  begin
-    PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
-{$ifdef PXX_HAS_TLS_INIT_IMAGE}
-    if img <> 0 then
-    begin
-      k := 0;
-      while k < __pxxTlsUserBytes do
-      begin
-        PInt64(blk + __pxxTlsUserOff + k)^ := PInt64(img + k)^;
-        k := k + 8;
-      end;
-      PInt64(blk + __pxxTlsInitImageSlotOff)^ := img;
-    end;
-{$endif}
-    ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_SET_GS, blk, 0, 0, 0, 0);
-{$ifdef PXX_HAS_TLS_OWNER_FS}
-    { The owner marker (TLS_SLOT_OWNER_FS in the compiler): this thread's fs
-      base, so a thread IT later creates through libc, which inherits this gs,
-      is recognised as foreign at its first `try`. }
-    ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_GET_FS, blk + __pxxTlsOwnerFsSlotOff, 0, 0, 0, 0);
-{$endif}
-    ss[0] := blk + tlsBytes;                   { ss_sp }
-    ss[1] := 0;                                { ss_flags }
-    ss[2] := altBytes;                         { ss_size }
-    ignore := __pxxrawsyscall(SYS_sigaltstack, Int64(@ss[0]), 0, 0, 0, 0, 0);
-  end;
-{$endif}
-{$ifdef CPUI386}
-{$ifdef PXX_HAS_TLS_FS_ENTRY}
-  { i386: pxx's block lives on fs, which glibc (on gs) does not use. This
-    thread starts with the CREATOR's fs selector and a copy of its GDT TLS
-    entries, so fs still reaches the creator's block: read the entry number
-    and the init image through it, then point that same entry at a block of
-    this thread's own. set_thread_area on the entry fs already selects makes
-    the kernel reload fs. No alt stack: the i386 clone leg registers none
-    either. The ordering rule above applies unchanged. }
-  tlsBytes := __pxxTlsBlockSize;
-  img := 0;
-  if __pxxTlsUserBytes > 0 then
-    img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
-  k := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsFsEntrySlotOff)^;
-  blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes, PROT_RW, MAP_ANON_PRIV, -1, 0);
-  if MmapOk(blk) then
-  begin
-    PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
-    PInt64(blk + __pxxTlsFsEntrySlotOff)^ := k;
-    if img <> 0 then
-    begin
-      ss[0] := 0;
-      while ss[0] < __pxxTlsUserBytes do
-      begin
-        PInt64(blk + __pxxTlsUserOff + ss[0])^ := PInt64(img + ss[0])^;
-        ss[0] := ss[0] + 8;
-      end;
-      PInt64(blk + __pxxTlsInitImageSlotOff)^ := img;
-    end;
-    desc[0] := LongWord(k);                    { entry_number }
-    desc[1] := LongWord(blk);                  { base_addr }
-    desc[2] := $FFFFF;                         { limit, in pages }
-    desc[3] := $51;                            { seg_32bit | limit_in_pages | useable }
-    ignore := __pxxrawsyscall(SYS_set_thread_area, Int64(PtrUInt(@desc[0])), 0, 0, 0, 0, 0);
-    { Reload fs. Linux already did, for a selector naming the entry it just
-      changed; qemu-user did not, and every pthread-made thread ran on its
-      creator's block until this line existed. }
-    ignore := Int64(PtrUInt(__pxxTlsFsReload));
-  end;
-{$endif}
-{$endif}
+  blk := PxxThreadBlockInstall(tlsBytes, altBytes);
 
   { Publish identity, THEN wake the parent. PalThreadCreate blocks on this
     rather than returning Tid = 0: every existing consumer of the handle reads

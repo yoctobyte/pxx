@@ -18922,8 +18922,12 @@ begin
     directly, and its threads inherit the creator's gs, so every __thread
     read and write lands in the main thread's block. Measured 2026-11-19:
     `__thread int tl = 7;` set to 9 in such a thread reads 9 in main, where
-    gcc keeps 7. It was silent. It warns now, on the same terms as the other
-    targets; the fix is routing those threads through PxxPthreadStart.
+    gcc keeps 7. It was silent. It warned from then, and since 2026-11-20 a
+    C executable's pthread_create is renamed to palhostthread's wrapper
+    (CHostPthreadRoute), which installs the block, so its calls no longer reach
+    an external of this name. What still lands here: thrd_create (glibc's own
+    internal pthread_create is not routed), and a pthread_create reached by a
+    name the rename does not cover.
     bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
   if (ExternalCount > 0) and (TargetArch = TARGET_X86_64) and (TlsUserUsed > 0)
      and (not KernelLibc) and (not TlsSharedWarned) then

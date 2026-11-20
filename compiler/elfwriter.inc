@@ -5212,7 +5212,12 @@ begin
               global in every object -- two objects collided at a gcc link, and
               pxx --link kept one silently, which hung pthread_create from the
               second object (Gibux s13). Weak like the rest: one copy wins. }
-            (u = 'palthread');
+            (u = 'palthread') or
+            { its block install and PxxHostCThreadStart, cdecl too, moved out of
+              palthread (bug-c-thread-local-storage-still-shares-one-copy-off-
+              x86-64-and-a-warning-is-all-that-stands-there): the same collision
+              (c_objth_g, two --threadsafe objects at a gcc link) }
+            (u = 'palhostthread');
   { a unit's own initialisation/finalisation stays per object: each object's
     thunk runs its own, and a shared one would run N times }
   if Result and ((Copy(Procs[procIdx].Name, 1, 7) = '__fini_') or
