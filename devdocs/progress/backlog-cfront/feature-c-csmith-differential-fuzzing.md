@@ -1201,3 +1201,16 @@ All 9 red seeds now match gcc. The lists of seeds that matched on master are
 kept outside the repo at ~/rump-pxx-work/kf/csmith-ok-{x64,rv32}-master.txt, so
 peers can A/B against them. The 32-bit axis found a bug in its first 150 seeds,
 so the next sitting should spend seeds on arm32/i386, and on xtensa posix (call0).
+
+### Sitting 2026-11-20b (claude-dupwt): arm32 1140000..1140149 and i386 1150000..1150149, NULL
+
+```
+tools/csmith_fuzz.py --iters 150 --seed-start 1140000 --target arm32   134/150 agreed (16 skipped)  no findings
+tools/csmith_fuzz.py --iters 150 --seed-start 1150000 --target i386    130/150 agreed (20 skipped)  no findings
+```
+
+Run on master with both fixes above in (`3c364dd090`, compiler `5811dec5ffda`).
+This was the first sitting on either target. Neither repeats the riscv32 find,
+which fits: that bug was in riscv32's own narrowing. The harness's `--target`
+choices do not include xtensa, so the Xtensa guard is covered only by the
+c_xtu64cmp row.
