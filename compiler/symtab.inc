@@ -6442,6 +6442,26 @@ begin
   DbgCaseBindReport(hit, lo);
 end;
 
+{ NilPy: a bare name's binding is PER MODULE. When FindSym's first match is
+  ANOTHER .py module's global, the module being compiled may have its own
+  binding of that name further out in the chain, or may have from-imported it
+  from a different module than the newest one. PyRedirectForeignModuleGlobal
+  (pyparser.inc) answers which. Without it `from m import A` beside a later
+  `from n import A as NA` read n's A for a bare `A` (CPython: m's).
+  bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+{$ifndef PXX_NO_NILPY}
+function PyRedirectForeignModuleGlobal(i: Integer; const lo: AnsiString): Integer; forward;
+{$endif}
+
+{ The candidate test FindSym's walk applies, factored so the NilPy redirect
+  continues the walk with the same one. }
+function FindSymMatches(i: Integer; const lo: AnsiString): Boolean;
+begin
+  FindSymMatches := (StrEqual(Syms[i].Name, lo) or
+        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo)))
+       and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i);
+end;
+
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
@@ -6500,10 +6520,13 @@ begin
   i := SymHashHead[SymNameFoldHash(lo)];
   while i >= 0 do
   begin
-    if (StrEqual(Syms[i].Name, lo) or
-        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo)))
-       and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i) then
+    if FindSymMatches(i, lo) then
     begin
+{$ifndef PXX_NO_NILPY}
+      if PyProgramMode and (Syms[i].Kind = skGlobal) and (SymUnitIdx[i] >= 0) and
+         (SymUnitIdx[i] <> CurrentUnitIdx) and UnitIsPyModule(SymUnitIdx[i]) then
+        i := PyRedirectForeignModuleGlobal(i, lo);
+{$endif}
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
       { PXXDBG=a.casebind — see DbgCaseBindReport above. 1 is asked-and-off, so
         an unset PXXDBG costs one integer compare per resolution. }

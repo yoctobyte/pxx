@@ -1,5 +1,7 @@
 ---
 prio: 60
+status: done
+owner: rd
 track: N
 summary: "`from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis. The collision needs no alias: `from M import X` beside ANY other imported module that defines X reads the wrong one. PyImportedGlobalSym (source unit per from-import entry) resolves it correctly and the field pre-pass already uses it; the value door still does not."
 ---
@@ -321,3 +323,41 @@ Still open, measured the same day and older than this fix:
 - `from a import T`, use, then `from b import T`, use: both uses see the LATER
   class (`2 2`, CPython `1 2`). Class names bind statically.
 - Residue 1's module-global store (above) is unchanged.
+
+## 2026-11-20 (rd): residue 1 is fixed; the class rebinding is filed separately
+
+Both halves of residue 1 moved together, as the 11-11 section said they had
+to:
+
+- **A module's top-level store no longer lands on a main-program global.**
+  PyProgSym hides unit -1 GLOBALS while a .py module is compiled (its
+  parameters and locals stay), because Python gives a module no view of
+  `__main__`. A module's `A = 7` now makes the module's own A.
+- **The main program's bare reads are per-module.** In a NilPy program, when
+  FindSym's first match is another .py module's global,
+  PyRedirectForeignModuleGlobal (pyparser.inc, forwarded from symtab.inc)
+  continues the walk and prefers this unit's own binding or a param/local. If
+  there is none, it uses the symbol this unit from-imported under the name
+  (PyImportedGlobalSym). If that fails too, it keeps the flat answer, which a
+  re-export chain or a shim unit still relies on. FindSym's candidate test is
+  factored into FindSymMatches so the continued walk uses the same one. Pascal
+  is untouched: the redirect is gated on PyProgramMode.
+
+Measured against CPython (before = 62ae6a37cd):
+
+| shape | CPython | before | now |
+| --- | --- | --- | --- |
+| alias swap, then `from n import A as NA` (n: `A = 7`) | `18 5 7` | `18 5 18` | `18 5 7` |
+| `from m import A` / `from n import A as NA` → `A, NA` | `18 7` | `7 7` | `18 7` |
+
+The other eleven shapes probed (the three table rows above, two-module
+aliases, main rebinding an imported name, a module def reading its global
+before the assignment, `global` writes inside a module) were already right
+and are unchanged. test/test_nilpy_a_module_binds_its_own_global_beside_main_s.py
+(test-nilpy row aliasmain26, fixtures in test/nilpy_aliasmain/) is refused
+by the 62ae6a37cd compiler ("no member A came of the qualifier am_n") and
+matches CPython now.
+
+Filed rather than fixed here, because it is the class table, not the symbol
+table: bug-n-a-class-from-imported-twice-binds-every-use-to-the-later-one
+(`from a import T` / use / `from b import T` / use gives `2 2`, CPython `1 2`).

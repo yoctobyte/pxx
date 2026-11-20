@@ -5076,6 +5076,16 @@ var si: Integer;
 begin
   si := FindSym(name);
   if (si >= 0) and (SymUnitIdx[si] <> -1) and (SymUnitIdx[si] <> CurrentUnitIdx) then si := -1;
+  { ...and while a MODULE is compiled, the main program's GLOBALS are not its
+    names either: Python gives a module no view of __main__. Before this, a
+    main-program `A` bound before the module was parsed (an import alias does
+    that) took the module's own `A = 7`, the module got no A, and
+    `from n import A as NA` read main's value. Parameters and locals are the
+    module's own scopes and stay; FindSym's per-module redirect is what lets
+    the main program then read ITS `A` past the module's newer one.
+    bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+  if (si >= 0) and (CurrentUnitIdx >= 0) and (SymUnitIdx[si] = -1) and
+     UnitIsPyModule(CurrentUnitIdx) and (Syms[si].Kind = skGlobal) then si := -1;
   PyProgSym := si;
 end;
 
@@ -40704,6 +40714,37 @@ begin
         Result := FindSymInUnit(Strs[PyImpNameReal[i]].Text, PyImpNameSrc[i]);
       Exit;
     end;
+end;
+
+function PyRedirectForeignModuleGlobal(i: Integer; const lo: AnsiString): Integer;
+{ FindSym's first match `i` is ANOTHER .py module's global (see the forward in
+  symtab.inc). Python binds names per module, so answer in this order:
+    1. this unit's own binding of the name, or a parameter/local, further out
+       in the chain -- the newest-first chain put the foreign one first only
+       because that module was parsed later;
+    2. the symbol this unit from-imported under the name, looked up in the
+       unit the import named (PyImportedGlobalSym);
+    3. otherwise `i`, the flat answer, which is what an un-aliased
+       from-import whose source unit declares nothing (a re-export chain, a
+       shim unit) still relies on.
+  bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
+var j, imp: Integer;
+begin
+  Result := i;
+  j := SymHashPrev[i];
+  while j >= 0 do
+  begin
+    if FindSymMatches(j, lo) and
+       ((Syms[j].Kind = skParam) or (Syms[j].Kind = skLocal) or
+        (SymUnitIdx[j] = CurrentUnitIdx)) then
+    begin
+      Result := j;
+      Exit;
+    end;
+    j := SymHashPrev[j];
+  end;
+  imp := PyImportedGlobalSym(lo);
+  if imp >= 0 then Result := imp;
 end;
 
 function PyModuleGlobalIsDef(const name: AnsiString): Boolean;

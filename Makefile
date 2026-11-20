@@ -1333,6 +1333,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_randalias26 | diff -u test/test_nilpy_an_aliased_from_import_of_random_random_is_the_rng_class.expected -
 	./$(COMPILER) -Futest/nilpy_aliassrc test/test_nilpy_a_from_import_alias_reads_its_own_module.py $(TESTTMP)/test_nilpy_aliassrc26
 	$(TESTTMP)/test_nilpy_aliassrc26 | diff -u test/test_nilpy_a_from_import_alias_reads_its_own_module.expected -
+	@# a name is bound per module: a bare main-program read takes its own or its
+	@# from-imported binding, not the newest module's; a module's top-level store
+	@# never lands on a main-program global (residue 1 of the ticket below)
+	@# bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
+	./$(COMPILER) -Futest/nilpy_aliasmain test/test_nilpy_a_module_binds_its_own_global_beside_main_s.py $(TESTTMP)/test_nilpy_aliasmain26
+	$(TESTTMP)/test_nilpy_aliasmain26 | diff -u test/test_nilpy_a_module_binds_its_own_global_beside_main_s.expected -
 	./$(COMPILER) -Futest/nilpy_qdeffirst test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py $(TESTTMP)/test_nilpy_qdeffirst26
 	$(TESTTMP)/test_nilpy_qdeffirst26 | diff -u test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.expected -
 	./$(COMPILER) test/test_nilpy_the_2026_08_06_syntax_sweep_rows.py $(TESTTMP)/test_nilpy_sweep0806
