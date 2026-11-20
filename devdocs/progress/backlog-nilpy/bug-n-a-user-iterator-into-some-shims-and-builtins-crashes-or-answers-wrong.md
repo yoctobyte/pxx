@@ -6,7 +6,7 @@ type: bug
 status: new
 owner: ""
 blocked-by: []
-summary: "MEASURED 2026-11-20 on 0ab6ae5f65. A user class with __iter__/__next__ (Counter below) passed to: itertools.islice(c, 3) and itertools.takewhile(pred, c) -> SEGFAULT; collections.Counter(c) -> prints nothing (CPython Counter({1: 1, 2: 1, 3: 1})); bytes(c) / bytearray(c) -> TypeError 'cannot convert this value to bytes without an encoding'. itertools.chain(c, c), set, frozenset, dict.fromkeys, deque, heapq.nlargest are correct."
+summary: "NARROWED 2026-11-20: what remains is a user class named like a pylib function (Counter) typed as that function's result at a call site seen before the class is registered -- see feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed. Originally: MEASURED 2026-11-20 on 0ab6ae5f65. A user class with __iter__/__next__ (Counter below) passed to: itertools.islice(c, 3) and itertools.takewhile(pred, c) -> SEGFAULT; collections.Counter(c) -> prints nothing (CPython Counter({1: 1, 2: 1, 3: 1})); bytes(c) / bytearray(c) -> TypeError 'cannot convert this value to bytes without an encoding'. itertools.chain(c, c), set, frozenset, dict.fromkeys, deque, heapq.nlargest are correct."
 ---
 
 # A user iterator into some shims and builtins crashes or answers wrong
@@ -72,3 +72,45 @@ print(bytes(Counter(3)))                                       # TypeError; CPyt
 - While narrowing takewhile, I found that a parameter or local named `pred`
   answers Pascal's Pred. Filed separately:
   [[bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic]].
+
+## Narrowed 2026-11-20 (later): every remaining failure is a NAME CLASH
+
+All of them were probed with a user class named `Counter`. Renamed (`Ctr`),
+`itertools.islice`, `takewhile` and `chain` over a user iterator match
+CPython, and so does `collections.Counter(Ctr(3))`.
+
+With the class named `Counter`, PXXDBG=n.psites shows the shim's parameter
+typed from the user's call site as pylib's `Counter()` result:
+
+    PXXDBG n.psites islice.iterable mode=2 sites=1 gaveup=0 tk=6 cls=TPyDict
+
+The shim (mimic_itertools) is typed before the user module's classes are
+registered. So at that site `Counter(9)` is not yet the user's class, and the
+token-level inference (PyInferExprType's call arm) answers with the only
+`Counter` it knows. Then the Ctr object is read through TPyDict's layout:
+segfault.
+
+This is an instance of
+[[feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed]]
+(prio 75): sites are seen across the closure, classes one module at a time.
+What this ticket adds there is the shape: a user class named like a pylib
+FUNCTION (Counter, and by the same token any other) typed as that function's
+result at a site seen early.
+
+Repro, minimal:
+
+```python
+import itertools
+class Counter:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+    def __iter__(self):
+        return self
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return self.i
+print(list(itertools.islice(Counter(9), 3)))   # segfault; CPython [1, 2, 3]
+```
