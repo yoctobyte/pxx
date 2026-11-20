@@ -2878,6 +2878,123 @@ begin
       CSspGuardGlobal := True;
       Inc(i);
     end
+    { ---- gcc-driver spellings, so a C project's own compile line runs
+      unchanged: `$(CC) $(CFLAGS) -c $< -o $@` with Rainyday's kernel CFLAGS.
+      Each one either says what pxx already does or is refused; none is
+      swallowed. feature-c-accept-rainydays-gcc-kernel-cflags ---- }
+    else if option = '-c' then
+    begin
+      EmitObjMode := True;   { = --emit-obj }
+      Inc(i);
+    end
+    else if option = '-o' then
+    begin
+      if i + 1 > ParamCount then
+        begin writeln(StdErr, '-o: expected an output file name'); Halt(1); end;
+      if CGccOutFile <> '' then
+        begin writeln(StdErr, '-o given twice'); Halt(1); end;
+      CGccOutFile := ParamStr(i + 1);
+      Inc(i, 2);
+    end
+    else if option = '-ffreestanding' then
+    begin
+      { = --freestanding (kernel code, no runtime underneath), and gcc's
+        __STDC_HOSTED__ 0 }
+      FreestandingMode := True;
+      FunctionSections := True;
+      NoSignals := True;
+      CStaticDataMode := True;
+      CGccHostedZero := True;
+      Inc(i);
+    end
+    else if Copy(option, 1, 5) = '-std=' then
+    begin
+      if (option = '-std=c99') or (option = '-std=c9x') or (option = '-std=iso9899:1999') then
+        begin CGccStdVersion := '199901L'; CGccStrictAnsi := True; end
+      else if (option = '-std=gnu99') or (option = '-std=gnu9x') then
+        CGccStdVersion := '199901L'
+      else if (option = '-std=c11') or (option = '-std=c1x') or (option = '-std=iso9899:2011') then
+        begin CGccStdVersion := '201112L'; CGccStrictAnsi := True; end
+      else if (option = '-std=gnu11') or (option = '-std=gnu1x') then
+        CGccStdVersion := '201112L'
+      else if (option = '-std=c17') or (option = '-std=c18') or
+              (option = '-std=iso9899:2017') or (option = '-std=iso9899:2018') then
+        begin CGccStdVersion := '201710L'; CGccStrictAnsi := True; end
+      else if (option = '-std=gnu17') or (option = '-std=gnu18') then
+        CGccStdVersion := '201710L'
+      else
+      begin
+        { C89/C90 has no __STDC_VERSION__ and forbids what pxx's headers use;
+          C23 is not implemented. Refused rather than compiled as something
+          the flag did not ask for. }
+        writeln(StdErr, 'unsupported option: ', option,
+                ' (pxx C is C99 with C11 features: -std=c99/c11/c17 and their gnu forms are accepted)');
+        Halt(1);
+      end;
+      Inc(i);
+    end
+    else if (Copy(option, 1, 4) = '-Wl,') or (Copy(option, 1, 4) = '-Wa,') or
+            (Copy(option, 1, 4) = '-Wp,') then
+    begin
+      writeln(StdErr, 'unsupported option: ', option,
+              ' (no external assembler/linker/preprocessor to pass it to)');
+      Halt(1);
+    end
+    else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'W') then
+    begin
+      { -Wall, -Wextra, -Wno-x, -Werror=x: which DIAGNOSTICS to print. They
+        change no code, and pxx has its own (smaller) warning set, so they are
+        accepted and have no effect. -Werror itself is handled above. }
+      Inc(i);
+    end
+    else if (option = '-fno-pic') or (option = '-fno-PIC') or
+            (option = '-fno-pie') or (option = '-fno-PIE') then
+    begin
+      { what pxx objects already are: data is reached PC-relative or through
+        absolute 64-bit relocations, never through a GOT }
+      Inc(i);
+    end
+    else if (option = '-fno-asynchronous-unwind-tables') or
+            (option = '-fno-unwind-tables') then
+    begin
+      Inc(i);   { pxx emits no .eh_frame }
+    end
+    else if (option = '-fno-builtin') or (Copy(option, 1, 13) = '-fno-builtin-') then
+    begin
+      { pxx substitutes nothing for a call by its library NAME: memcpy(),
+        strlen() and the rest are ordinary external calls already, which is
+        all -fno-builtin asks. (`__builtin_memcpy` spelled out still means
+        memcpy, as under gcc.) }
+      Inc(i);
+    end
+    else if option = '-mno-red-zone' then
+    begin
+      CGccNoRedZone := True;   { checked against --freestanding below }
+      Inc(i);
+    end
+    else if option = '-mgeneral-regs-only' then
+    begin
+      CGccGeneralRegs := True;   { checked against --freestanding below }
+      Inc(i);
+    end
+    else if Copy(option, 1, 9) = '-mcmodel=' then
+    begin
+      { pxx's x86-64 code reaches data and code PC-relative (R_X86_64_PC32)
+        or through 64-bit absolutes (R_X86_64_64) -- never the zero-extended
+        32-bit absolute (R_X86_64_32) that ties `small` to the low 2 GiB nor
+        the sign-extended one kernel code may use. That is valid in the top
+        2 GiB (kernel) and the low 2 GiB (small) alike. medium/large promise
+        data BEYOND +-2 GiB of the code, which PC32 cannot reach: refused. }
+      if option = '-mcmodel=kernel' then CGccCmodelKernel := True
+      else if option <> '-mcmodel=small' then
+      begin
+        writeln(StdErr, 'unsupported option: ', option,
+                ' (-mcmodel=small and -mcmodel=kernel are what pxx code satisfies)');
+        Halt(1);
+      end;
+      CGccCmodelSet := True;
+      Inc(i);
+    end
     else if option = '-fsigned-char' then
     begin
       { Override the target psABI's plain-`char` signedness; real projects pass
@@ -3460,7 +3577,37 @@ begin
 {$endif}
   if (TargetKernel = KERNEL_WINDOWS) and EmitSharedMode then outFile := outFile + '.dll'
   else if TargetKernel = KERNEL_WINDOWS then outFile := outFile + '.exe';
-  if ParamCount >= i + 1 then
+  { gcc's order, `-c src.c -o out.o`: the ONE thing allowed after the source
+    is `-o <file>`; with -o anywhere, no positional output may follow.
+    feature-c-accept-rainydays-gcc-kernel-cflags }
+  if (ParamCount = i + 2) and (ParamStr(i + 1) = '-o') then
+  begin
+    if CGccOutFile <> '' then
+      begin writeln(StdErr, '-o given twice'); Halt(1); end;
+    CGccOutFile := ParamStr(i + 2);
+  end
+  else if (ParamCount > i) and (ParamStr(i + 1) = '-o') then
+  begin
+    writeln(StdErr, '-o after the source takes exactly one file name and ends the command line');
+    Halt(1);
+  end
+  else if (CGccOutFile <> '') and (ParamCount > i) then
+  begin
+    writeln(StdErr, 'with -o, the source is the last argument (or is followed only by -o <file>)');
+    for n := i + 1 to ParamCount do
+      writeln(StdErr, '  IGNORED: ', ParamStr(n));
+    Halt(1);
+  end;
+  if CGccOutFile <> '' then
+  begin
+    outFile := CGccOutFile;
+    if (Length(outFile) > 0) and (outFile[1] = '-') then
+    begin
+      writeln(StdErr, 'output path may not start with "-": ', outFile);
+      Halt(1);
+    end;
+  end
+  else if ParamCount >= i + 1 then
   begin
     { An OUTPUT PATH that starts with `-` is a mistyped flag, not a filename.
       pxx takes the output positionally (`pxx <source> [output]`), so
@@ -3505,7 +3652,7 @@ begin
     begin
       writeln(StdErr, 'output path may not start with "-": ', outFile);
       writeln(StdErr, '  pxx takes the output POSITIONALLY: pxx <source> [output]');
-      writeln(StdErr, '  there is no -o flag; write  pxx ', inFile, ' <output>');
+      writeln(StdErr, '  or gcc''s way:  pxx ', inFile, ' -o <output>');
       Halt(1);
     end;
     { ANYTHING AFTER THE OUTPUT WAS SILENTLY DISCARDED, INCLUDING FLAGS.
@@ -4004,6 +4151,27 @@ begin
     if CSspStrong and (TargetArch <> TARGET_X86_64) then
     begin
       writeln(StdErr, '-fstack-protector-strong is implemented for x86-64 only');
+      Halt(1);
+    end;
+    { -mno-red-zone / -mgeneral-regs-only are TRUE of x86-64 --freestanding
+      code -- float is refused there, the va_list save skips the XMM half,
+      alloca parks in frame slots, the fenv stubs are not emitted, and a
+      disassembly of all 93 Rainyday kernel objects finds no access below rsp
+      and no XMM register -- and are not of hosted code, whose runtime uses
+      both. So they are accepted where they hold and refused where they do not.
+      feature-c-accept-rainydays-gcc-kernel-cflags }
+    if (CGccNoRedZone or CGccGeneralRegs or CGccCmodelSet) and
+       (TargetArch <> TARGET_X86_64) then
+    begin
+      writeln(StdErr, '-mno-red-zone, -mgeneral-regs-only and -mcmodel= are x86-64 options');
+      Halt(1);
+    end;
+    if (CGccNoRedZone or CGccGeneralRegs) and not FreestandingMode then
+    begin
+      if CGccNoRedZone then
+        writeln(StdErr, '-mno-red-zone needs -ffreestanding (or --freestanding): hosted pxx code and its runtime use the red zone')
+      else
+        writeln(StdErr, '-mgeneral-regs-only needs -ffreestanding (or --freestanding): hosted pxx code uses the SSE registers for float');
       Halt(1);
     end;
     CPreprocess(Source, SourceFileDir);

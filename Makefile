@@ -21148,6 +21148,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_ssp26_off "$$(readelf -sW $(TESTTMP)/c_ssp26_off.o | grep -c __stack_chk_)" "0"
 	tools/expect_same.sh c_ssp26_refuse "$$(./$(COMPILER) --emit-obj -fstack-protector-all test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_x.o 2>&1; echo rc=$$?)" "$$(printf 'unsupported option: -fstack-protector-all (only -fstack-protector-strong with -mstack-protector-guard=global is implemented)\nrc=1')"
 	tools/expect_same.sh c_ssp26_tls "$$(./$(COMPILER) --emit-obj -fstack-protector-strong test/c_stack_protector_strong_rule.c $(TESTTMP)/c_ssp26_x.o 2>&1; echo rc=$$?)" "$$(printf -- '-fstack-protector-strong needs -mstack-protector-guard=global (the TLS guard is not implemented)\nrc=1')"
+	# Rainyday's x86-64 gcc kernel CFLAGS, unchanged, through the gcc-style
+	# `-c <src> -o <obj>`: predefines as gcc's (static asserts in the fixture),
+	# and the object holds what -mno-red-zone / -mgeneral-regs-only /
+	# -mcmodel=kernel promise -- nothing below rsp, no SSE, only PC32/64
+	# relocations. The CONTROL is a hosted object, whose fenv stubs the same
+	# scan must see. feature-c-accept-rainydays-gcc-kernel-cflags
+	./$(COMPILER) -std=c11 -O2 -Wall -Wextra -ffreestanding -fno-pic -mno-red-zone -mcmodel=kernel -mgeneral-regs-only -fno-asynchronous-unwind-tables -fno-builtin -c test/c_gcc_kernel_cflags.c -o $(TESTTMP)/c_gcckf26.o > /dev/null
+	tools/expect_same.sh c_gcckf26_scan "$$(objdump -d --no-show-raw-insn $(TESTTMP)/c_gcckf26.o | grep -c -E -- '-0x[0-9a-f]+\(%rsp\)|%xmm|%ymm|mxcsr')" "0"
+	tools/expect_same.sh c_gcckf26_rel "$$(readelf -rW $(TESTTMP)/c_gcckf26.o | awk '$$3 ~ /^R_X86_64/ && $$3 != "R_X86_64_PC32" && $$3 != "R_X86_64_64"' | wc -l)" "0"
+	./$(COMPILER) -c test/c_gcc_std_version.c -o $(TESTTMP)/c_gcckf26_ctl.o > /dev/null
+	tools/expect_same.sh c_gcckf26_ctl "$$(objdump -d --no-show-raw-insn $(TESTTMP)/c_gcckf26_ctl.o | grep -c -E -- '-0x[0-9a-f]+\(%rsp\)|%xmm|%ymm|mxcsr' | awk '{print ($$1 > 0) ? "seen" : "none"}')" "seen"
+	./$(COMPILER) -std=gnu11 -Wall test/c_gcc_std_version.c -o $(TESTTMP)/c_gccstd26 > /dev/null
+	tools/expect_same.sh c_gccstd26 "$$($(TESTTMP)/c_gccstd26)" "201112 1"
+	tools/expect_same.sh c_gcckf26_rz "$$(./$(COMPILER) -mno-red-zone -c test/c_gcc_std_version.c -o $(TESTTMP)/c_gcckf26_x.o 2>&1; echo rc=$$?)" "$$(printf -- '-mno-red-zone needs -ffreestanding (or --freestanding): hosted pxx code and its runtime use the red zone\nrc=1')"
+	tools/expect_same.sh c_gcckf26_large "$$(./$(COMPILER) -ffreestanding -mcmodel=large -c test/c_gcc_kernel_cflags.c -o $(TESTTMP)/c_gcckf26_x.o 2>&1; echo rc=$$?)" "$$(printf -- 'unsupported option: -mcmodel=large (-mcmodel=small and -mcmodel=kernel are what pxx code satisfies)\nrc=1')"
 	# an external only dead code called is not required (bug-c-objects-require-externals-only-dead-code-called)
 	./$(COMPILER) --emit-obj test/c_dead_extern_not_required.c $(TESTTMP)/c_deadext26.o > /dev/null
 	tools/expect_same.sh c_deadext26_rel "$$(readelf -rW $(TESTTMP)/c_deadext26.o | grep -c never_defined)" "0"

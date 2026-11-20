@@ -7847,6 +7847,15 @@ var
     feature-c-stack-protector-strong-global-guard }
   CSspStrong      : Boolean;
   CSspGuardGlobal : Boolean;
+  { gcc-driver spellings on a C compile line (feature-c-accept-rainydays-gcc-kernel-cflags) }
+  CGccOutFile        : AnsiString;  { -o <file>; '' = positional output }
+  CGccStdVersion     : AnsiString;  { -std=: __STDC_VERSION__ value, '' = pxx default }
+  CGccStrictAnsi     : Boolean;     { -std=c..  (not gnu..): __STRICT_ANSI__ }
+  CGccHostedZero     : Boolean;     { -ffreestanding: __STDC_HOSTED__ 0 }
+  CGccNoRedZone      : Boolean;     { -mno-red-zone }
+  CGccGeneralRegs    : Boolean;     { -mgeneral-regs-only }
+  CGccCmodelKernel   : Boolean;     { -mcmodel=kernel }
+  CGccCmodelSet      : Boolean;     { any accepted -mcmodel= }
   CSspProc        : Integer;
   CSspSlot        : Integer;
   { an initialised flexible array member (bug-c-an-initialised-flexible-array-

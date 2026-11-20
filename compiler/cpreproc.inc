@@ -4526,8 +4526,21 @@ begin
   CPAddLiteral('__GNUC_MINOR__', '7');
   CPAddLiteral('__GNUC_PATCHLEVEL__', '0');
   CPAddLiteral('__STDC__', '01');
-  CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
-  CPAddLiteral('__STDC_HOSTED__', '01');
+  { -std= names the standard, as gcc reports it; pxx's own default stays C99
+    (crtl ships C99 stdint/inttypes). feature-c-accept-rainydays-gcc-kernel-cflags }
+  if CGccStdVersion <> '' then
+    CPAddLiteral('__STDC_VERSION__', CGccStdVersion)
+  else
+    CPAddLiteral('__STDC_VERSION__', '199901L');
+  if CGccStrictAnsi then CPAddLiteral('__STRICT_ANSI__', '1');
+  { gcc: 0 under -ffreestanding. Only the gcc SPELLING sets it; pxx's own
+    --freestanding keeps the 1 it always reported, so no existing build
+    changes underneath. }
+  if CGccHostedZero then
+    CPAddLiteral('__STDC_HOSTED__', '0')
+  else
+    CPAddLiteral('__STDC_HOSTED__', '01');
+  if CGccCmodelKernel then CPAddLiteral('__code_model_kernel__', '1');
   { <assert.h> on the system-library path: its impl (__pxx_assert_fail) is
     not pulled there and no libc exports it, so the header binds assert() to
     the libc's own __assert_fail instead (glibc and musl share its signature).

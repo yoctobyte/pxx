@@ -19150,7 +19150,12 @@ begin
       program and a C unit disagree about which stubs exist. }
     if TargetArch <> TARGET_WASM32 then
       EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
-    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    { NOT in a --freestanding object: the x86-64 stubs are SSE (stmxcsr /
+      ldmxcsr) through the red zone below rsp, the two things kernel code
+      built -mgeneral-regs-only -mno-red-zone must not contain, and nothing
+      freestanding has the float formatter that calls them. A reference left
+      anyway is an undefined symbol that names itself. feature-c-accept-rainydays-gcc-kernel-cflags }
+    if (TargetArch <> TARGET_WASM32) and not FreestandingMode then EmitCFenvStubs;
     if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
       EmitCVforkStub;
   end;
@@ -25262,7 +25267,12 @@ begin
       program and a C unit disagree about which stubs exist. }
     if TargetArch <> TARGET_WASM32 then
       EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
-    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    { NOT in a --freestanding object: the x86-64 stubs are SSE (stmxcsr /
+      ldmxcsr) through the red zone below rsp, the two things kernel code
+      built -mgeneral-regs-only -mno-red-zone must not contain, and nothing
+      freestanding has the float formatter that calls them. A reference left
+      anyway is an undefined symbol that names itself. feature-c-accept-rainydays-gcc-kernel-cflags }
+    if (TargetArch <> TARGET_WASM32) and not FreestandingMode then EmitCFenvStubs;
     if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
       EmitCVforkStub;
   end;
