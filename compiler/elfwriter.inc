@@ -79,76 +79,6 @@ begin
   RoPieceAddEx(old, isRo, False);
 end;
 
-{ The modulus an RW piece [a, e) must keep its offset in, in an ESP object.
-  RO_RESIDUE (16) is the safe default: it keeps any alignment an emitter
-  asked for relative to Data[0]. But when every byte of the piece belongs to
-  a data symbol, or is padding shorter than 16 bytes before the next one,
-  each symbol's own alignment divides its old offset, so the largest power of
-  two dividing each start (capped at 16) is enough. Without this, a C const
-  object moved to .rodata left its residue behind: `counter` after a 28-byte
-  `greeting` landed at .data+12 where gcc puts it at 0 (Rainyday
-  tests/xtensa/fixed.c checks the address).
-  bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
-function RwPieceModulus(a, e: Integer): Integer;
-var k, d, z, m, x, gapFrom: Integer;
-    cov: array of Boolean;
-    any: Boolean;
-begin
-  Result := RO_RESIDUE;
-  if (DataResvLen = 0) or (e <= a) then Exit;
-  SetLength(cov, e - a);
-  for x := 0 to e - a - 1 do cov[x] := False;
-  m := 1;
-  any := False;
-  for k := 0 to SymCount - 1 do
-    if (Syms[k].Kind = skGlobal) and SymOffIsData(Syms[k].Offset) and (SymAllocSize[k] > 0) then
-    begin
-      d := SymOffDataPart(Syms[k].Offset);
-      if (d < a) or (d >= e) then Continue;
-      if d + SymAllocSize[k] > e then Exit;      { straddles the piece end: unknown }
-      any := True;
-      for x := d to d + SymAllocSize[k] - 1 do cov[x - a] := True;
-      { its alignment divides its offset -- and, in C, its size too (sizeof
-        is a multiple of alignof), so the smaller bound holds. A C global in
-        .data is an initialised one (SymCHasInit); CProgramMode is already
-        reset when the object is written. }
-      z := 1;
-      while (z < RO_RESIDUE) and ((d mod (z * 2)) = 0) and
-            (not ((k < Length(SymCHasInit)) and SymCHasInit[k]) or
-             ((SymAllocSize[k] mod (z * 2)) = 0)) do z := z * 2;
-      if z > m then m := z;
-    end;
-  if not any then Exit;
-  { An uncovered run is alignment padding only if its bytes are zero and it
-    is shorter than the alignment of the symbol after it (shorter than 16 at
-    the piece's end). Anything else may be an object that is not a symbol --
-    a runtime slot -- whose alignment is unknown, so the default stands. }
-  gapFrom := -1;
-  for x := 0 to e - a do
-    if (x < e - a) and (not cov[x]) then
-    begin
-      if gapFrom < 0 then gapFrom := x;
-      if Data[a + x] <> 0 then Exit;
-    end
-    else if gapFrom >= 0 then
-    begin
-      if x < e - a then
-      begin
-        z := 1;
-        while (z < RO_RESIDUE) and (((a + x) mod (z * 2)) = 0) do z := z * 2;
-        if x - gapFrom >= z then Exit;
-      end
-      else if x - gapFrom >= RO_RESIDUE then Exit;
-      gapFrom := -1;
-    end;
-  Result := m;
-end;
-
-function RoResidueUpM(pos, old, m: Integer): Integer;
-begin
-  Result := pos + ((((old - pos) mod m) + m) mod m);
-end;
-
 { Decide the split and lay it out. Must run AFTER the last append to Data[]
   (PrepareDynamicData appends) and BEFORE anything resolves a data address. }
 procedure RoLayoutPrepare(wanted: Boolean; page: Integer);
@@ -156,17 +86,9 @@ var i, cur, pos, len, d, a: Integer;
 begin
   RoSplitActive := False;
   RoPieceCount := 0;
-  if (not wanted) or NoRoData or ((RoRangeCount = 0) and not DataResvDrop) then Exit;
+  if (not wanted) or NoRoData or (RoRangeCount = 0) then Exit;
   cur := 0;
   d := 0;
-  { the unreferenced fixed low block: a dropped RW piece, never addressed }
-  if DataResvDrop then
-  begin
-    if (RoRangeCount > 0) and (RoRangeStart[0] < DataResvLen) then
-      ErrorNoPos('internal: a read-only range starts inside the fixed low block');
-    RoPieceAddEx(0, False, True);
-    cur := DataResvLen;
-  end;
   for i := 0 to RoRangeCount - 1 do
   begin
     if RoRangeEnd[i] > DataLen then
@@ -207,9 +129,9 @@ begin
   RwFileStart := AlignTo(RoImageLen, RO_RESIDUE);
   pos := RwFileStart;
   for i := 0 to RoPieceCount - 1 do
-    if (not RoPieceIsRo[i]) and (not RoPieceDrop[i]) then
+    if not RoPieceIsRo[i] then
     begin
-      pos := RoResidueUpM(pos, RoPieceOld[i], RwPieceModulus(RoPieceOld[i], RoPieceOld[i + 1]));
+      pos := RoResidueUp(pos, RoPieceOld[i]);
       RoPieceNew[i] := pos + RwVaShift;
       len := RoPieceOld[i + 1] - RoPieceOld[i];
       pos := pos + len;
@@ -428,21 +350,9 @@ end;
   resolved the alias and the three --emit-obj writers did not, which is
   `bug-a-emit-obj-ignores-external-name`; sizing a string table and writing it
   are two separate callers of this, so they cannot drift apart either. }
-{ A C asm label's link name for C name nm, or '' (CAsmLbl*, cparser.inc).
-  feature-c-asm-labels-rename-the-symbol }
-function CAsmLabelOf(const nm: AnsiString): AnsiString;
-var k: Integer;
-begin
-  CAsmLabelOf := '';
-  for k := CAsmLblCount - 1 downto 0 do
-    if CAsmLblFrom[k] = nm then begin CAsmLabelOf := CAsmLblTo[k]; Exit; end;
-end;
-
 function ExternalLinkName(extIdx: Integer): AnsiString;
 begin
-  if (CAsmLblCount > 0) and (CAsmLabelOf(Procs[ExternalProc[extIdx]].Name) <> '') then
-    Result := CAsmLabelOf(Procs[ExternalProc[extIdx]].Name)
-  else if ProcExtName[ExternalProc[extIdx]] >= 0 then
+  if ProcExtName[ExternalProc[extIdx]] >= 0 then
     Result := Strs[ProcExtName[ExternalProc[extIdx]]].Text
   else
     Result := Procs[ExternalProc[extIdx]].Name;
@@ -902,13 +812,6 @@ begin
   writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
   writeU64(f, value); writeU64(f, size);
 end;
-{ ...with st_other: a C visibility attribute (ProcCVis/SymCVis).
-  bug-c-visibility-attribute-was-ignored }
-procedure writeSym64O(var f: File; name: Integer; info, other, shndx: Integer; value, size: Int64);
-begin
-  writeU32(f, name); writeU8(f, info); writeU8(f, other); writeU16(f, shndx);
-  writeU64(f, value); writeU64(f, size);
-end;
 procedure writeRela64(var f: File; offset: Int64; symIdx, rtype: Integer; addend: Int64);
 begin
   writeU64(f, offset);
@@ -1091,13 +994,6 @@ end;
 procedure writeSym64(f: Integer; name: Integer; info, shndx: Integer; value, size: Int64);
 begin
   writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
-  writeU64(f, value); writeU64(f, size);
-end;
-{ ...with st_other: a C visibility attribute (ProcCVis/SymCVis).
-  bug-c-visibility-attribute-was-ignored }
-procedure writeSym64O(f: Integer; name: Integer; info, other, shndx: Integer; value, size: Int64);
-begin
-  writeU32(f, name); writeU8(f, info); writeU8(f, other); writeU16(f, shndx);
   writeU64(f, value); writeU64(f, size);
 end;
 procedure writeRela64(f: Integer; offset: Int64; symIdx, rtype: Integer; addend: Int64);
@@ -2314,12 +2210,7 @@ begin
     displacement pointing at it was wrong.
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   PatchDynCallSites(dataBase, codeVA);
-  { Not for --shared either: the .so writer emits its own .rela.dyn and never
-    ran PrepareDynamicData, so DynamicRelaOff is 0 there and this wrote the
-    executable-shaped rela table over the first bytes of Data[] -- measured on
-    an --os=openbsd --shared library (it imports libc): WriteLn's newline
-    constant at .data+0x19 became '?', byte 1 of a GOT slot address. }
-  if (ExternalCount > 0) and (TargetKernel <> KERNEL_WINDOWS) and not EmitSharedMode then   { PE: PatchPEImports }
+  if ExternalCount > 0 then
     PatchDynamicData(dataBase);
 
   for i := 0 to MethodFixCount-1 do
@@ -2540,7 +2431,6 @@ begin
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := ImageBase + codeOffset + CodeLen;
-  ElfCodeVA := ImageBase + codeOffset;   { --proc-map reads this. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
@@ -2850,7 +2740,6 @@ begin
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := ImageBase + codeOffset + CodeLen;
-  ElfCodeVA := ImageBase + codeOffset;   { --proc-map reads this. bug-a-proc-map-emits-static-addresses-for-a-dynamic-build }
   CheckDataBaseAligned(dataBase);
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
@@ -3536,9 +3425,6 @@ begin
     if ObjDataIsRo(DataPtrFix[i].DataPos) = wantRo then Inc(Result);
   for i := 0 to MethodFixCount-1 do
     if ObjDataIsRo(MethodFixups[i].DataPos) = wantRo then Inc(Result);
-  { the baked C initialisers; only the ESP writers call this }
-  for i := 0 to CDRCount-1 do
-    if ObjDataIsRo(CDRPos[i]) = wantRo then Inc(Result);
 end;
 
 { Fold RoAddS/RoAddE[0..RoAddCount) -- ascending, outside every existing
@@ -3782,13 +3668,6 @@ begin
     MarkRef(DataRelFixTarget[i]);
   end;
   for i := 0 to MethodFixCount - 1 do MarkRef(MethodFixups[i].DataPos);
-  { a C initialiser baked into .data (a freestanding object's
-    `const char *g = "x";`) holds the literal's address in its slot }
-  for i := 0 to CDRCount - 1 do
-  begin
-    MarkRef(CDRPos[i]);
-    if CDRKind[i] = CDR_DATA then MarkRef(CDRTarget[i]);
-  end;
 
   n := 0; bytes := 0;
   r := 0;
@@ -3820,36 +3699,6 @@ begin
   end;
   if PxxDbgEnabled('a.datamap') then
     WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
-  { The fixed low block (INTBUF, '-', #10): a freestanding C object that
-    never writes a number references none of it, and it sat ahead of the
-    first user variable -- gcc's .data starts with that variable (Rainyday
-    tests/xtensa/fixed.c checks its address). DataResvLen is 32 here, so the
-    drop keeps every later offset's residue. }
-  DataResvDrop := False;
-  if DataResvLen > 0 then
-  begin
-    DataResvDrop := True;
-    for i := 0 to DataResvLen - 1 do
-      if hit[i] then DataResvDrop := False;
-    if DataResvDrop and PxxDbgEnabled('a.datamap') then
-      WriteLn('PXXDBG a.datamap   unreferenced fixed low block dropped: ', DataResvLen, 'B');
-  end;
-end;
-
-function DataMapRoBytes(s, e: Integer): Integer;
-{ a.datamap: how many bytes of Data[s..e) a RoRangeAdd marked read-only. The
-  ranges stay in Data[] coordinates through RoPermuteData, so this is valid
-  after the object is written. }
-var r, a, b: Integer;
-begin
-  Result := 0;
-  if (s < 0) or (e <= s) then Exit;
-  for r := 0 to RoRangeCount - 1 do
-  begin
-    a := RoRangeStart[r]; if a < s then a := s;
-    b := RoRangeEnd[r];   if b > e then b := e;
-    if b > a then Result := Result + (b - a);
-  end;
 end;
 
 procedure ObjRoPrepare;
@@ -3895,19 +3744,9 @@ function ObjEspImportCount: Integer; forward;
 function ObjEspImportStrLen: Integer; forward;
 function ObjEspImportSymForOff(bssOff: Integer; var addend: Integer): Integer; forward;
 function ObjDataImportOrdinal(symIdx: Integer): Integer; forward;
+function ObjDataIsImport(i: Integer): Boolean; forward;
 function ObjDataIsReferenced(i: Integer): Boolean; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
-
-{ st_info for an imported VARIABLE's UND symbol: $10 GLOBAL NOTYPE, or $20 WEAK
-  for a C `extern` declared __attribute__((weak)) -- the data twin of ObjExtBind.
-  bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
-function ObjDataImpBind(i: Integer): Byte;
-begin
-  if (i < Length(SymObjDataWeak)) and SymObjDataWeak[i] then ObjDataImpBind := $20
-  else ObjDataImpBind := $10;
-  { STT_TLS: ld refuses a TLS relocation against a non-TLS symbol }
-  if (i < Length(SymElfTls)) and SymElfTls[i] then ObjDataImpBind := ObjDataImpBind or 6;
-end;
 
 function ObjExtBind(extIdx: Integer): Byte;
 { st_info for an imported function's UND symbol: $10 GLOBAL NOTYPE, or $20
@@ -3936,398 +3775,6 @@ begin
   if (TargetArch = TARGET_RISCV32) and RvcOn then Result := 1 else Result := 0;
 end;
 
-{ The ESP object writers' view of the C initialisers baked into .data
-  (CStaticDataMode, which a freestanding ESP object turns on --
-  EspFreestandingObj): each CDataReloc slot is one data word relocated with
-  R_XTENSA_32 / R_RISCV_32 (type 1 on both). Section symbols differ between
-  the two writers, so the caller passes them: text, iram text (-1 when the
-  writer has none), data, bss, rodata.
-  feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
-{ NAMED DATA SECTIONS: a C global with __attribute__((section("x"))) in a
-  freestanding ESP object (CApplyGlobalSection, cparser.inc) gets an ELF
-  section of exactly that name, holding a copy of its bytes -- what gcc does,
-  and what an IDF app descriptor in .rodata_desc needs (esp32s3.ld KEEPs it
-  first in DROM). One section per variable; several of one name are legal in
-  a relocatable object and ld concatenates them. The bytes keep a dead twin in
-  .data, as an IRAM routine keeps one in .text, so no Data[] offset moves;
-  every reference to the variable relocates against its own section instead
-  (ObjEspDataRef). Only writeELF32RelIram emits them: writeELF32Rel routes
-  there when ObjNsCount > 0.
-  feature-c-section-attribute-on-esp }
-var
-  ObjNsSym, ObjNsOff, ObjNsLen, ObjNsFileOff, ObjNsNameOff: array of Integer;
-  ObjNsCount, ObjNsSym0, ObjNsShndx0: Integer;
-
-procedure ObjNsCollect;
-var i, k: Integer;
-  procedure ObjNsRefuseIn(pos: Integer);
-  var j: Integer;
-  begin
-    for j := 0 to ObjNsCount - 1 do
-      if (pos >= ObjNsOff[j]) and (pos < ObjNsOff[j] + ObjNsLen[j]) then
-        ErrorNoPos('C global ' + Syms[ObjNsSym[j]].Name + ' in section "' +
-                   SymSectionName[ObjNsSym[j]] + '" holds an address, and a named' +
-                   ' data section carries no relocations yet -- keep pointers out of it');
-  end;
-begin
-  ObjNsCount := 0;
-  if not EspFreestandingObj then Exit;
-  for i := 0 to SymCount - 1 do
-    if (i < Length(SymSectionName)) and (SymSectionName[i] <> '') and
-       SymOffIsData(Syms[i].Offset) and (SymAllocSize[i] > 0) then
-    begin
-      if ObjNsCount >= Length(ObjNsSym) then
-      begin
-        SetLength(ObjNsSym, ObjNsCount + 16); SetLength(ObjNsOff, ObjNsCount + 16);
-        SetLength(ObjNsLen, ObjNsCount + 16); SetLength(ObjNsFileOff, ObjNsCount + 16);
-        SetLength(ObjNsNameOff, ObjNsCount + 16);
-      end;
-      ObjNsSym[ObjNsCount] := i;
-      ObjNsOff[ObjNsCount] := SymOffDataPart(Syms[i].Offset);
-      ObjNsLen[ObjNsCount] := SymAllocSize[i];
-      Inc(ObjNsCount);
-    end;
-  if ObjNsCount = 0 then Exit;
-  for k := 0 to DataPtrFixCount - 1 do ObjNsRefuseIn(DataPtrFix[k].DataPos);
-  for k := 0 to MethodFixCount - 1 do ObjNsRefuseIn(MethodFixups[k].DataPos);
-  for k := 0 to CDRCount - 1 do ObjNsRefuseIn(CDRPos[k]);
-end;
-
-function ObjNsOf(o: Integer): Integer;
-var k: Integer;
-begin
-  Result := -1;
-  for k := 0 to ObjNsCount - 1 do
-    if (o >= ObjNsOff[k]) and (o < ObjNsOff[k] + ObjNsLen[k]) then begin Result := k; Exit; end;
-end;
-
-{ symbol + addend for a reference to Data[] offset o }
-procedure ObjEspDataRef(o, sData, sRo: Integer; var sym: Integer; var addend: Int64);
-var k: Integer;
-begin
-  k := ObjNsOf(o);
-  if k >= 0 then
-  begin
-    sym := ObjNsSym0 + k;
-    addend := o - ObjNsOff[k];
-  end
-  else
-  begin
-    sym := ObjDataSym(o, sData, sRo);
-    addend := ObjDataOff(o);
-  end;
-end;
-
-{ .BSS WITHOUT THE IMPORTS' STORAGE. A C global every declaration of which
-  said `extern` (ObjDataIsImport) got a .bss slot at parse time -- the fold
-  that makes it an import runs only here, after every declaration is seen --
-  and every reference to it relocates against its UND symbol. The slot was
-  dead, and it was in EVERY object that included the header: Gibux's 61
-  ESP32-S3 objects carried 1.9 MB of .bss against gcc's 120 KB, on a chip with
-  512 KB of SRAM. The ESP writers now cut those ranges out: each live offset
-  moves down by the cut bytes below it. Cuts are whole 16-byte granules
-  (ObjBssGran), so every shift is a multiple of 16 and no surviving variable
-  loses its alignment; a small import costs at most its granule remainders.
-  bug-c-extern-declarations-get-bss-in-every-object }
-const ObjBssGran = 16;
-var
-  ObjBssCutOff, ObjBssCutLen: array of Integer;
-  ObjBssCutCount, ObjBssCutTotal: Integer;
-
-
-procedure ObjBssPlan;
-var i, j, lo, hi, t: Integer;
-  procedure ObjBssAddCut(a, b: Integer);
-  begin
-    if ObjBssCutCount >= Length(ObjBssCutOff) then
-    begin
-      SetLength(ObjBssCutOff, ObjBssCutCount + 64);
-      SetLength(ObjBssCutLen, ObjBssCutCount + 64);
-    end;
-    ObjBssCutOff[ObjBssCutCount] := a;
-    ObjBssCutLen[ObjBssCutCount] := b - a;
-    Inc(ObjBssCutCount);
-  end;
-begin
-  ObjBssCutCount := 0;
-  ObjBssCutTotal := 0;
-  for i := 0 to SymCount - 1 do
-    if ObjDataIsImport(i) and (not SymOffIsData(Syms[i].Offset)) and
-       (Syms[i].Offset >= 0) and (SymAllocSize[i] > 0) then
-    begin
-      lo := AlignTo(Syms[i].Offset, ObjBssGran);
-      hi := ((Syms[i].Offset + SymAllocSize[i]) div ObjBssGran) * ObjBssGran;
-      if hi > BSSSize then hi := (BSSSize div ObjBssGran) * ObjBssGran;
-      if hi > lo then ObjBssAddCut(lo, hi);
-    end;
-  { sort by offset, then merge overlaps (two names folded onto one slot) }
-  for i := 1 to ObjBssCutCount - 1 do
-  begin
-    j := i;
-    while (j > 0) and (ObjBssCutOff[j - 1] > ObjBssCutOff[j]) do
-    begin
-      t := ObjBssCutOff[j]; ObjBssCutOff[j] := ObjBssCutOff[j - 1]; ObjBssCutOff[j - 1] := t;
-      t := ObjBssCutLen[j]; ObjBssCutLen[j] := ObjBssCutLen[j - 1]; ObjBssCutLen[j - 1] := t;
-      Dec(j);
-    end;
-  end;
-  j := 0;
-  for i := 0 to ObjBssCutCount - 1 do
-    if (j > 0) and (ObjBssCutOff[i] <= ObjBssCutOff[j - 1] + ObjBssCutLen[j - 1]) then
-    begin
-      if ObjBssCutOff[i] + ObjBssCutLen[i] > ObjBssCutOff[j - 1] + ObjBssCutLen[j - 1] then
-        ObjBssCutLen[j - 1] := ObjBssCutOff[i] + ObjBssCutLen[i] - ObjBssCutOff[j - 1];
-    end
-    else
-    begin
-      ObjBssCutOff[j] := ObjBssCutOff[i];
-      ObjBssCutLen[j] := ObjBssCutLen[i];
-      Inc(j);
-    end;
-  ObjBssCutCount := j;
-  for i := 0 to ObjBssCutCount - 1 do ObjBssCutTotal := ObjBssCutTotal + ObjBssCutLen[i];
-end;
-
-{ a live .bss offset, after the cuts below it }
-function ObjBssOff(o: Integer): Integer;
-var k: Integer;
-begin
-  Result := o;
-  for k := 0 to ObjBssCutCount - 1 do
-    if ObjBssCutOff[k] + ObjBssCutLen[k] <= o then Result := Result - ObjBssCutLen[k];
-end;
-
-function ObjProcIsDefined(procIdx: Integer): Boolean; forward;
-procedure ObjEspCdrRel(i, extSym0, sText, sIram, sData, sBss, sRo: Integer;
-                       var sym: Integer; var addend: Int64);
-var p, k: Integer; rel: Int64;
-begin
-  addend := CDRAddend[i];
-  p := CDRTarget[i];
-  case CDRKind[i] of
-    CDR_DATA:
-      begin
-        ObjEspDataRef(p, sData, sRo, sym, rel);
-        addend := addend + rel;
-      end;
-    CDR_PROC:
-      if ObjProcIsDefined(p) then
-      begin
-        if (sIram >= 0) and ProcIram[p] then
-        begin
-          sym := sIram;
-          addend := addend + ObjProcIramOff[p];
-        end
-        else
-        begin
-          sym := sText;
-          addend := addend + Procs[p].BodyAddr;
-        end;
-      end
-      else
-      begin
-        sym := -1;
-        for k := 0 to ExternalCount - 1 do
-          if ExternalProc[k] = p then sym := extSym0 + k;
-        if sym < 0 then
-          ErrorNoPos('internal: a C initialiser names ' + Procs[p].Name +
-                     ', which has neither a body nor an import (CRegisterCDataImports)');
-      end;
-  else
-    if ObjDataIsImport(p) then
-      sym := extSym0 + ExternalCount + ObjDataImportOrdinal(p)
-    else if SymOffIsData(Syms[p].Offset) then
-    begin
-      ObjEspDataRef(SymOffDataPart(Syms[p].Offset), sData, sRo, sym, rel);
-      addend := addend + rel;
-    end
-    else
-    begin
-      sym := sBss;
-      addend := addend + ObjBssOff(Syms[p].Offset);
-    end;
-  end;
-end;
-
-{ A data symbol this object defines: in .data (or .rodata) when the C
-  initialiser placed it there, else in .bss. }
-procedure ObjEspDataSymLoc(i, shData, shBss, shRo: Integer; var shndx, value: Integer);
-var k: Integer;
-begin
-  k := -1;
-  if SymOffIsData(Syms[i].Offset) then k := ObjNsOf(SymOffDataPart(Syms[i].Offset));
-  if k >= 0 then
-  begin
-    shndx := ObjNsShndx0 + k;
-    value := SymOffDataPart(Syms[i].Offset) - ObjNsOff[k];
-  end
-  else if SymOffIsData(Syms[i].Offset) then
-  begin
-    if ObjDataIsRo(SymOffDataPart(Syms[i].Offset)) then shndx := shRo else shndx := shData;
-    value := ObjDataOff(SymOffDataPart(Syms[i].Offset));
-  end
-  else
-  begin
-    shndx := shBss;
-    value := ObjBssOff(Syms[i].Offset);
-  end;
-end;
-
-{ XTENSA LITERAL TABLE (.xt.lit): the ranges of .text / .iram1.text that are
-  literal words, as gcc's objects carry. ld needs it to accept a dynamic
-  relocation in a read-only section: linking a PIE (-pie, as Gibux's user
-  programs are linked, tests/xtensa/prog.ld) turns every R_XTENSA_32 into
-  R_XTENSA_RELATIVE, and outside a listed literal range that is the error
-  "dangerous relocation: dynamic relocation in read-only section". Every
-  relocated word in pxx's code IS a literal (both ESP backends route each
-  absolute address through an l32r slot), so the table is exactly the
-  relocated words, coalesced into runs. Entries are (address, size) pairs with
-  an R_XTENSA_32 on the address against the code section's symbol.
-  feature-xtensa-objects-carry-a-literal-table }
-var
-  ObjXtLitStart, ObjXtLitLen, ObjXtLitSym: array of Integer;
-  ObjXtLitCount: Integer;
-  ObjXtLitMarkT, ObjXtLitMarkI: array of Boolean;
-
-procedure ObjXtLitMark(pos: Integer; iram: Boolean);
-var m: Integer;
-begin
-  if iram then
-  begin
-    m := CodePosToIramOff(pos);
-    if m >= 0 then
-    begin
-      ObjXtLitMarkI[m div 4] := True;
-      Exit;
-    end;
-  end;
-  ObjXtLitMarkT[pos div 4] := True;
-end;
-
-procedure ObjXtLitAdd(start, len, sym: Integer);
-begin
-  if ObjXtLitCount >= Length(ObjXtLitStart) then
-  begin
-    SetLength(ObjXtLitStart, ObjXtLitCount * 2 + 64);
-    SetLength(ObjXtLitLen, ObjXtLitCount * 2 + 64);
-    SetLength(ObjXtLitSym, ObjXtLitCount * 2 + 64);
-  end;
-  ObjXtLitStart[ObjXtLitCount] := start;
-  ObjXtLitLen[ObjXtLitCount] := len;
-  ObjXtLitSym[ObjXtLitCount] := sym;
-  Inc(ObjXtLitCount);
-end;
-
-procedure ObjXtLitPlan(iram: Boolean; iramSize: Integer);
-var i, k, run, n: Integer;
-begin
-  ObjXtLitCount := 0;
-  if TargetArch <> TARGET_XTENSA then Exit;
-  n := CodeLen div 4 + 1;
-  SetLength(ObjXtLitMarkT, n);
-  for i := 0 to n - 1 do ObjXtLitMarkT[i] := False;
-  if iram then
-  begin
-    SetLength(ObjXtLitMarkI, iramSize div 4 + 1);
-    for i := 0 to iramSize div 4 do ObjXtLitMarkI[i] := False;
-  end;
-  for i := 0 to FixCount-1 do ObjXtLitMark(Fixups[i].CodePos, iram);
-  for i := 0 to GlobFixCount-1 do ObjXtLitMark(GlobFix[i].CodePos, iram);
-  for i := 0 to DynCallCount-1 do ObjXtLitMark(DynCallCodePos[i], iram);
-  if iram then
-  begin
-    for i := 0 to IramCallFixCount-1 do ObjXtLitMark(IramCallFix[i].CodePos, True);
-    for i := 0 to ProcAddrFixCount-1 do ObjXtLitMark(ProcAddrFix[i].CodePos, True);
-  end;
-  k := 0;
-  while k < n do
-  begin
-    if ObjXtLitMarkT[k] then
-    begin
-      run := 0;
-      while (k + run < n) and ObjXtLitMarkT[k + run] do Inc(run);
-      ObjXtLitAdd(k * 4, run * 4, 1);
-      k := k + run;
-    end
-    else Inc(k);
-  end;
-  if iram then
-  begin
-    n := iramSize div 4 + 1;
-    k := 0;
-    while k < n do
-    begin
-      if ObjXtLitMarkI[k] then
-      begin
-        run := 0;
-        while (k + run < n) and ObjXtLitMarkI[k + run] do Inc(run);
-        ObjXtLitAdd(k * 4, run * 4, 2);
-        k := k + run;
-      end
-      else Inc(k);
-    end;
-  end;
-end;
-
-{$ifdef FPC}
-procedure ObjXtLitWrite(var f: File);
-{$else}
-procedure ObjXtLitWrite(f: Integer);
-{$endif}
-var k: Integer;
-begin
-  for k := 0 to ObjXtLitCount - 1 do
-  begin
-    writeU32(f, 0);
-    writeU32(f, ObjXtLitLen[k]);
-  end;
-  for k := 0 to ObjXtLitCount - 1 do
-    writeRela32(f, k * 8, ObjXtLitSym[k], 1, ObjXtLitStart[k]);
-end;
-
-{ app_main is WEAK in a freestanding object (see writeELF32RelIram), and in a
-  posix object with no `main`: a program linked from several posix objects
-  (busybox, one per translation unit) has exactly one main, and only that
-  object's process entry may define app_main; every other object's stub would
-  be a duplicate definition. feature-xtensa-posix-objects-get-a-process-entry }
-{ The binding of an exported proc in the ESP-family (xtensa/riscv32) object
-  writers: GLOBAL, except WEAK for a C definition that asked for it
-  (ProcCWeakDef, which these writers used to drop) and for the crtl copies a
-  --shared-runtime object still carries (stdarg, setjmp: compiler support,
-  stateless, one per object by design), so that N objects and the runtime
-  object link -- measured: `multiple definition of __pxx_va_start_impl`.
-  NOT ObjProcBind's weak-everything: these writers resolve a call inside the
-  object when they emit it, so a weak crtl copy that loses still runs for its
-  own object's callers, with its own state -- two heaps, two stdouts, and a
-  clean link. Self-contained objects stay GLOBAL and collide loudly; on
-  xtensa and riscv32 a multi-object program takes --shared-runtime.
-  feature-xtensa-shared-runtime-objects-link }
-function ObjEspProcBind(procIdx: Integer): Byte;
-begin
-  if ProcCWeakDef[procIdx] or (ProcObjRuntimeCopy[procIdx] and SharedRuntime) then
-    Result := $20
-  else
-    Result := $10;
-end;
-
-{ A hosted xtensa object whose file-scope initialisers need code (pxx keeps
-  most initialised globals in .bss and fills them at run time) gets one
-  .init_array slot pointing at its init thunk, as the x86-64 writer does.
-  Before, only the object holding main ran its initialisers -- at the top of
-  main -- and every other object's globals read zero: busybox's bb_banner and
-  every libbb table. crtl's __pxx_run_initializers walks the array before main.
-  feature-xtensa-objects-run-their-initialisers }
-function ObjInitArrHas: Boolean;
-begin
-  Result := (TargetArch = TARGET_XTENSA) and (InitThunkOff >= 0);
-end;
-
-function ObjAppMainIsWeak: Boolean;
-begin
-  Result := EspFreestandingObj or
-            ((TargetPlatform = PLATFORM_POSIX) and (FindProc('main') < 0));
-end;
-
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -4350,9 +3797,6 @@ var
   relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
-  cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
-  xtLitOff, xtLitName, xtLitShndx: Integer;
-  iaOff, iaName, iaShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4366,24 +3810,13 @@ begin
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
     begin
-      { Keep each body at its Code[] address modulo 4: an L32R reads the
-        word-ALIGNED address its offset names, and the inline pools were laid
-        out for the body's Code[] position. Packed end to end, a body after
-        one of odd length shifted its pools off the word and read garbage --
-        Gibux's caches_init loaded 0x81000000 as its frame size and faulted.
-        It also keeps a CALLn target word-aligned. ObjIramPad writes the gap.
-        bug-esp-iram-bodies-packed-off-their-literal-alignment }
-      while (iramSize and 3) <> (Procs[i].BodyAddr and 3) do Inc(iramSize);
       ObjProcIramOff[i] := iramSize;
       iramSize := iramSize + (ProcBodyEnd[i] - Procs[i].BodyAddr);
     end;
 
   ObjRoPrepare;
-  ObjBssPlan;
   if RoSplitActive then nSecSyms := 5 else nSecSyms := 4;
-  ObjNsCollect;
-  ObjNsSym0 := nSecSyms + 1;
-  ObjPlanEspSymbols(nSecSyms + ObjNsCount, strSize, numLocalProcs, numExportProcs, numExportData,
+  ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
   numSyms := extSym0 + ExternalCount + ObjEspImportCount;
 
@@ -4421,30 +3854,6 @@ begin
     shnum := 11;
     shstrSize := 95;
   end;
-  ObjNsShndx0 := shnum;
-  for i := 0 to ObjNsCount - 1 do
-  begin
-    ObjNsNameOff[i] := shstrSize;
-    shstrSize := shstrSize + Length(SymSectionName[ObjNsSym[i]]) + 1;
-  end;
-  shnum := shnum + ObjNsCount;
-  { .xt.lit + .rela.xt.lit, after the named sections (ObjXtLitPlan) }
-  ObjXtLitPlan(True, iramSize);
-  xtLitShndx := shnum;
-  xtLitName := shstrSize;                { '.rela.xt.lit'; +5 is '.xt.lit' }
-  if ObjXtLitCount > 0 then
-  begin
-    shnum := shnum + 2;
-    shstrSize := shstrSize + 13;
-  end;
-  { .init_array + .rela.init_array (ObjInitArrHas) }
-  iaShndx := shnum;
-  iaName := shstrSize;                   { '.rela.init_array'; +5 is '.init_array' }
-  if ObjInitArrHas then
-  begin
-    shnum := shnum + 2;
-    shstrSize := shstrSize + 17;
-  end;
 
   textOff := ELF32_HEADER_SIZE;
   iramOff := AlignTo(textOff + CodeLen, 4);
@@ -4456,17 +3865,8 @@ begin
   relaIramOff := relaTextOff + relaTextCount * 12;
   relaDataOff := relaIramOff + relaIramCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
-  xtLitOff := relaRoOff + relaRoCount * 12;
-  iaOff := xtLitOff + ObjXtLitCount * 20;
-  shstrOff := iaOff;
-  if ObjInitArrHas then shstrOff := iaOff + 16;  { the 4-byte slot + one RELA }
-  shOff := shstrOff + shstrSize;
-  for i := 0 to ObjNsCount - 1 do
-  begin
-    ObjNsFileOff[i] := AlignTo(shOff, 8);
-    shOff := ObjNsFileOff[i] + ObjNsLen[i];
-  end;
-  shOff := AlignTo(shOff, 4);
+  shstrOff := relaRoOff + relaRoCount * 12;
+  shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -4491,27 +3891,17 @@ begin
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
-  impAdd := 0;   { bytes of .iram1.text written so far }
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
-    begin
-      writePad(f, ObjProcIramOff[i] - impAdd);
       Blockwrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
-      impAdd := ObjProcIramOff[i] + ProcBodyEnd[i] - Procs[i].BodyAddr;
-    end;
   writePad(f, rodataOff - (iramOff + iramSize));
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
   if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
-  impAdd := 0;   { bytes of .iram1.text written so far }
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
-    begin
-      writePad(f, ObjProcIramOff[i] - impAdd);
       OutWrite(f, Code, Procs[i].BodyAddr, ProcBodyEnd[i] - Procs[i].BodyAddr);
-      impAdd := ObjProcIramOff[i] + ProcBodyEnd[i] - Procs[i].BodyAddr;
-    end;
   writePad(f, rodataOff - (iramOff + iramSize));
   if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
 {$endif}
@@ -4526,8 +3916,6 @@ begin
   writeSym32(f, 0, 0, 0, 3, 7);   { .bss }
   if RoSplitActive then
     writeSym32(f, 0, 0, 0, 3, 11); { .rodata }
-  for i := 0 to ObjNsCount - 1 do
-    writeSym32(f, 0, 0, 0, 3, ObjNsShndx0 + i);   { a named data section (ObjNsCollect) }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
     begin
@@ -4536,33 +3924,27 @@ begin
       else
         writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC in .text }
     end;
-  { a freestanding object has no IDF to call it: WEAK, so two objects never
-    collide over it and the kernel's own app_main, if any, wins }
-  if ObjAppMainIsWeak then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: ObjAppMainIsWeak }
-  else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
+  writeSym32(f, appMainOff, 0, 0, $12, 1);
   { The MARKED surface, and only it: a cdecl routine keeps its section -- an
     iram proc stays in .iram1.text -- so exporting it does not move its code. }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
     begin
       if ProcIram[i] then
-        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, ObjEspProcBind(i) or 2, 3)
+        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, $12, 3)
       else
-        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, ObjEspProcBind(i) or 2, 1);
+        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1);
     end;
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
-    begin
-      ObjEspDataSymLoc(i, 5, 7, 11, cdrSh, cdrVal);
-      writeSym32(f, ObjDataStrOff[i], cdrVal, SymAllocSize[i], $11, cdrSh);
-    end;
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 7);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   impStr := strSize - ObjEspImportStrLen;
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
     begin
-      writeSym32(f, impStr, 0, 0, ObjDataImpBind(i), 0);  { imported variable: NOTYPE UNDEF, GLOBAL or WEAK }
+      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
       impStr := impStr + Length(Syms[i].Name) + 1;
     end;
 
@@ -4590,14 +3972,12 @@ begin
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-      begin
-        ObjEspDataRef(SymOffDataPart(GlobFix[i].BSSoff), 3, 5, cdrSym, cdrAdd);
-        writeRelaRef32(f, GlobFix[i].CodePos, cdrSym, Integer(cdrAdd), GlobFixHiLo[i], GlobFixLoStore[i]);
-      end
+        writeRelaRef32(f, GlobFix[i].CodePos, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i], GlobFixLoStore[i])
       else if impK >= 0 then
         writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, GlobFix[i].CodePos, 4, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, GlobFix[i].CodePos, 4, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) < 0 then
@@ -4625,14 +4005,12 @@ begin
     begin
       impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
       if SymOffIsData(GlobFix[i].BSSoff) then      { baked typed const: .data/.rodata }
-      begin
-        ObjEspDataRef(SymOffDataPart(GlobFix[i].BSSoff), 3, 5, cdrSym, cdrAdd);
-        writeRelaRef32(f, mapped, cdrSym, Integer(cdrAdd), GlobFixHiLo[i], GlobFixLoStore[i]);
-      end
+        writeRelaRef32(f, mapped, ObjDataSym(SymOffDataPart(GlobFix[i].BSSoff), 3, 5),
+                    ObjDataOff(SymOffDataPart(GlobFix[i].BSSoff)), GlobFixHiLo[i], GlobFixLoStore[i])
       else if impK >= 0 then
         writeRelaRef32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, mapped, 4, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, mapped, 4, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
@@ -4672,19 +4050,6 @@ begin
           writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
                       Procs[MethodFixups[i].ProcIdx].BodyAddr);
       end;
-    for i := 0 to CDRCount-1 do
-      if ObjDataIsRo(CDRPos[i]) = (pass = 1) then
-      begin
-        ObjEspCdrRel(i, extSym0, 1, 2, 3, 4, 5, cdrSym, cdrAdd);
-        writeRela32(f, ObjDataOff(CDRPos[i]), cdrSym, 1, Integer(cdrAdd));
-      end;
-  end;
-
-  ObjXtLitWrite(f);
-  if ObjInitArrHas then
-  begin
-    writeU32(f, 0);                                  { RELA: the value is the addend }
-    writeRela32(f, 0, 1, 1, InitThunkOff);           { R_XTENSA_32 / R_RISCV_32 vs .text }
   end;
 
   { .shstrtab: 95-byte blob, 116 with the split }
@@ -4704,21 +4069,7 @@ begin
     writeStrZ(f, '.rodata');        { 95 }
     writeStrZ(f, '.rela.rodata');   { 103 }
   end;
-  for i := 0 to ObjNsCount - 1 do writeStrZ(f, SymSectionName[ObjNsSym[i]]);
-  if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
-  if ObjInitArrHas then writeStrZ(f, '.rela.init_array');
-  impAdd := shstrOff + shstrSize;   { the file position, from here on }
-  for i := 0 to ObjNsCount - 1 do
-  begin
-    writePad(f, ObjNsFileOff[i] - impAdd);
-{$ifdef FPC}
-    Blockwrite(f, Data[Integer(DataRemap(ObjNsOff[i]))], ObjNsLen[i]);   { RoPermuteData moved it }
-{$else}
-    OutWrite(f, Data, Integer(DataRemap(ObjNsOff[i])), ObjNsLen[i]);
-{$endif}
-    impAdd := ObjNsFileOff[i] + ObjNsLen[i];
-  end;
-  writePad(f, shOff - impAdd);
+  writePad(f, shOff - (shstrOff + shstrSize));
 
   { Section headers. $40 = SHF_INFO_LINK on rela sections. }
   writeShdrA(f, 0, 0, 0, 0, 0);                              writeShdrB(f, 0, 0, 0, 0);
@@ -4728,7 +4079,7 @@ begin
   writeShdrA(f, 30, 4, $40, relaIramOff, relaIramCount*12);  writeShdrB(f, 8, 3, 4, 12);
   writeShdrA(f, 47, 1, 3, dataOff, ObjRwLen);                writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 53, 4, $40, relaDataOff, relaDataCount*12);  writeShdrB(f, 8, 5, 4, 12);
-  writeShdrA(f, 64, 8, 3, rodataOff + DataFileLen, BSSSize - ObjBssCutTotal); writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 64, 8, 3, rodataOff + DataFileLen, BSSSize); writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 69, 2, 0, symOff, numSyms*16);               writeShdrB(f, 9, firstGlobal, 4, 16);
   writeShdrA(f, 77, 3, 0, strOff, strSize);                  writeShdrB(f, 0, 0, 1, 0);
   writeShdrA(f, 85, 3, 0, shstrOff, shstrSize);              writeShdrB(f, 0, 0, 1, 0);
@@ -4736,30 +4087,6 @@ begin
   begin
     writeShdrA(f, 95, 1, 2, rodataOff, RoImageLen);          writeShdrB(f, 0, 0, 8, 0);
     writeShdrA(f, 103, 4, $40, relaRoOff, relaRoCount*12);   writeShdrB(f, 8, 11, 4, 12);
-  end;
-  { the named data sections: SHF_ALLOC, plus SHF_WRITE unless .rodata* or a
-    variable the read-only split put in the RO part }
-  for i := 0 to ObjNsCount - 1 do
-  begin
-    if (Copy(SymSectionName[ObjNsSym[i]], 1, 7) = '.rodata') or ObjDataIsRo(ObjNsOff[i]) then
-      writeShdrA(f, ObjNsNameOff[i], 1, 2, ObjNsFileOff[i], ObjNsLen[i])
-    else
-      writeShdrA(f, ObjNsNameOff[i], 1, 3, ObjNsFileOff[i], ObjNsLen[i]);
-    writeShdrB(f, 0, 0, 8, 0);
-  end;
-  if ObjXtLitCount > 0 then
-  begin
-    writeShdrA(f, xtLitName + 5, 1, 0, xtLitOff, ObjXtLitCount*8);           { .xt.lit }
-    writeShdrB(f, 0, 0, 4, 0);
-    writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
-    writeShdrB(f, 8, xtLitShndx, 4, 12);   { link: .symtab is section 8 here }
-  end;
-  if ObjInitArrHas then
-  begin
-    writeShdrA(f, iaName + 5, 14, 3, iaOff, 4);      { .init_array: SHT_INIT_ARRAY, WA }
-    writeShdrB(f, 0, 0, 4, 4);
-    writeShdrA(f, iaName, 4, $40, iaOff + 4, 12);    { .rela.init_array }
-    writeShdrB(f, 8, iaShndx, 4, 12);
   end;
 
 {$ifdef FPC}
@@ -4794,9 +4121,6 @@ var
   relaTextCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
   impStr, impK, impAdd: Integer;
-  cdrSym, cdrSh, cdrVal: Integer; cdrAdd: Int64;
-  xtLitOff, xtLitName, xtLitShndx: Integer;
-  iaOff, iaName, iaShndx: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4817,13 +4141,6 @@ begin
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
     ErrorNoPos('internal: writeELF32Rel serves --target=xtensa and --target=riscv32 '
         + 'only, but was dispatched for --target=' + TargetArchName(TargetArch));
-  { ...and so do named data sections (ObjNsCollect), which only it emits }
-  ObjNsCollect;
-  if ObjNsCount > 0 then
-  begin
-    writeELF32RelIram(outPath);
-    Exit;
-  end;
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
@@ -4845,7 +4162,6 @@ begin
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   ObjRoPrepare;
-  ObjBssPlan;
   if RoSplitActive then nSecSyms := 4 else nSecSyms := 3;
   ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
@@ -4865,23 +4181,6 @@ begin
     shnum := 9;
     shstrSize := 66;
   end;
-  { .xt.lit + .rela.xt.lit, appended after every fixed index (ObjXtLitPlan) }
-  ObjXtLitPlan(False, 0);
-  xtLitShndx := shnum;
-  xtLitName := shstrSize;                        { '.rela.xt.lit'; +5 is '.xt.lit' }
-  if ObjXtLitCount > 0 then
-  begin
-    shnum := shnum + 2;
-    shstrSize := shstrSize + 13;
-  end;
-  { .init_array + .rela.init_array (ObjInitArrHas) }
-  iaShndx := shnum;
-  iaName := shstrSize;                           { '.rela.init_array'; +5 is '.init_array' }
-  if ObjInitArrHas then
-  begin
-    shnum := shnum + 2;
-    shstrSize := shstrSize + 17;
-  end;
 
   textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
   rodataOff := AlignTo(textOff + CodeLen, 8);
@@ -4891,10 +4190,7 @@ begin
   relaTextOff := AlignTo(strOff + strSize, 4);
   relaDataOff := relaTextOff + relaTextCount * 12;
   relaRoOff := relaDataOff + relaDataCount * 12;
-  xtLitOff := relaRoOff + relaRoCount * 12;
-  iaOff := xtLitOff + ObjXtLitCount * 20;
-  shstrOff := iaOff;
-  if ObjInitArrHas then shstrOff := iaOff + 16;  { the 4-byte slot + one RELA }
+  shstrOff := relaRoOff + relaRoCount * 12;
   shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
@@ -4936,24 +4232,20 @@ begin
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
-  if ObjAppMainIsWeak then writeSym32(f, appMainOff, 0, 0, $22, 1)   { WEAK: ObjAppMainIsWeak }
-  else writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
+  writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
-      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, ObjEspProcBind(i) or 2, 1); { FUNC, ObjEspProcBind }
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1); { GLOBAL FUNC }
   for i := 0 to SymCount-1 do
     if ObjDataStrOff[i] >= 0 then
-    begin
-      ObjEspDataSymLoc(i, 3, 5, 9, cdrSh, cdrVal);
-      writeSym32(f, ObjDataStrOff[i], cdrVal, SymAllocSize[i], $11, cdrSh);
-    end;
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0); { NOTYPE UNDEF, GLOBAL or WEAK }
   impStr := strSize - ObjEspImportStrLen;
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
     begin
-      writeSym32(f, impStr, 0, 0, ObjDataImpBind(i), 0);  { imported variable: NOTYPE UNDEF, GLOBAL or WEAK }
+      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
       impStr := impStr + Length(Syms[i].Name) + 1;
     end;
 
@@ -4989,7 +4281,7 @@ begin
       if impK >= 0 then
         writeRelaRef32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), impAdd, GlobFixHiLo[i], GlobFixLoStore[i])
       else
-        writeRelaRef32(f, GlobFix[i].CodePos, 3, ObjBssOff(GlobFix[i].BSSoff), GlobFixHiLo[i], GlobFixLoStore[i]);
+        writeRelaRef32(f, GlobFix[i].CodePos, 3, GlobFix[i].BSSoff, GlobFixHiLo[i], GlobFixLoStore[i]);
     end;
   end;
   for i := 0 to DynCallCount-1 do
@@ -5010,19 +4302,6 @@ begin
       if ObjDataIsRo(MethodFixups[i].DataPos) = (pass = 1) then
         writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
                     Procs[MethodFixups[i].ProcIdx].BodyAddr);
-    for i := 0 to CDRCount-1 do
-      if ObjDataIsRo(CDRPos[i]) = (pass = 1) then
-      begin
-        ObjEspCdrRel(i, extSym0, 1, -1, 2, 3, 4, cdrSym, cdrAdd);
-        writeRela32(f, ObjDataOff(CDRPos[i]), cdrSym, 1, Integer(cdrAdd));
-      end;
-  end;
-
-  ObjXtLitWrite(f);
-  if ObjInitArrHas then
-  begin
-    writeU32(f, 0);                                  { RELA: the value is the addend }
-    writeRela32(f, 0, 1, 1, InitThunkOff);           { R_XTENSA_32 / R_RISCV_32 vs .text }
   end;
 
   { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
@@ -5040,8 +4319,6 @@ begin
     writeStrZ(f, '.rodata');      { 66 }
     writeStrZ(f, '.rela.rodata'); { 74 }
   end;
-  if ObjXtLitCount > 0 then writeStrZ(f, '.rela.xt.lit');
-  if ObjInitArrHas then writeStrZ(f, '.rela.init_array');
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .data, 4 .rela.data, 5 .bss,
@@ -5056,7 +4333,7 @@ begin
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 24, 4, $40, relaDataOff, relaDataCount*12);
   writeShdrB(f, 6, 3, 4, 12);
-  writeShdrA(f, 35, 8, 3, rodataOff + DataFileLen, BSSSize - ObjBssCutTotal);
+  writeShdrA(f, 35, 8, 3, rodataOff + DataFileLen, BSSSize);
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 40, 2, 0, symOff, numSyms*16);
   writeShdrB(f, 7, firstGlobal, 4, 16);
@@ -5070,20 +4347,6 @@ begin
     writeShdrB(f, 0, 0, 8, 0);
     writeShdrA(f, 74, 4, $40, relaRoOff, relaRoCount*12); { 10 .rela.rodata }
     writeShdrB(f, 6, 9, 4, 12);
-  end;
-  if ObjXtLitCount > 0 then
-  begin
-    writeShdrA(f, xtLitName + 5, 1, 0, xtLitOff, ObjXtLitCount*8);           { .xt.lit }
-    writeShdrB(f, 0, 0, 4, 0);
-    writeShdrA(f, xtLitName, 4, $40, xtLitOff + ObjXtLitCount*8, ObjXtLitCount*12); { .rela.xt.lit }
-    writeShdrB(f, 6, xtLitShndx, 4, 12);
-  end;
-  if ObjInitArrHas then
-  begin
-    writeShdrA(f, iaName + 5, 14, 3, iaOff, 4);      { .init_array: SHT_INIT_ARRAY, WA }
-    writeShdrB(f, 0, 0, 4, 4);
-    writeShdrA(f, iaName, 4, $40, iaOff + 4, 12);    { .rela.init_array }
-    writeShdrB(f, 6, iaShndx, 4, 12);
   end;
 
 {$ifdef FPC}
@@ -5182,90 +4445,6 @@ begin
   Result := (Procs[procIdx].BodyAddr >= 0) and (not ProcExternal[procIdx]);
 end;
 
-{ Is this routine the PASCAL runtime -- a body from one of the compiler's own
-  builtin units (heap, strings, interfaces, exceptions, ...), compiled into
-  every object the way crtl is?
-
-  The same argument ObjProcBind makes for crtl applies, and it was never
-  applied here: LOCAL copies mean one allocator AND ONE HEAP PER OBJECT for
-  Pascal-level allocation, and ~14 KB of identical helpers per object that no
-  linker may fold (toybox: 205 objects, 2.9 MB). WEAK keeps one copy, and that
-  copy carries its own state's addresses, so every caller reaches the same
-  heap. Only on the hosted x86-64/aarch64 object route; an ESP image keeps its
-  runtime private (ObjRuntimeIsPrivate), and nothing changes there.
-  decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit }
-function ObjRuntimeIsPrivate: Boolean; forward;
-function ObjProcIsBuiltinRtl(procIdx: Integer): Boolean;
-var u: AnsiString;
-begin
-  Result := False;
-  if not EmitObjMode or EmitSharedMode then Exit;
-  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then Exit;
-  if ObjRuntimeIsPrivate then Exit;
-  if (ProcUnitIdx[procIdx] < 0) or (ProcUnitIdx[procIdx] >= Length(Strs)) then Exit;
-  u := LowerCase(Strs[ProcUnitIdx[procIdx]].Text);
-  { the units every hosted object carries (measured on a C object: 1,540
-    builtinheap, 130 platform_backend, 124 platform, 122 pxxcio) }
-  Result := (u = 'builtinheap') or (u = 'platform') or (u = 'platform_backend') or
-            (u = 'pxxcio') or
-            { --threadsafe: the pthread trampoline is cdecl, so it was a STRONG
-              global in every object -- two objects collided at a gcc link, and
-              pxx --link kept one silently, which hung pthread_create from the
-              second object (Gibux s13). Weak like the rest: one copy wins. }
-            (u = 'palthread') or
-            { its block install and PxxHostCThreadStart, cdecl too, moved out of
-              palthread (bug-c-thread-local-storage-still-shares-one-copy-off-
-              x86-64-and-a-warning-is-all-that-stands-there): the same collision
-              (c_objth_g, two --threadsafe objects at a gcc link) }
-            (u = 'palhostthread');
-  { a unit's own initialisation/finalisation stays per object: each object's
-    thunk runs its own, and a shared one would run N times }
-  if Result and ((Copy(Procs[procIdx].Name, 1, 7) = '__fini_') or
-                 (Copy(Procs[procIdx].Name, 1, 7) = '__init_')) then Result := False;
-end;
-
-var
-  ObjImportNameCachedFor: Integer = -1;
-  ObjImportNames: array of AnsiString;
-
-function ObjProcShadowsAnImport(procIdx: Integer): Boolean;
-{ Does this object also IMPORT a library routine under this routine's name?
-  Then the definition must stay LOCAL. In an executable the import is a
-  dynamic relocation and a same-named body is internal, so the two never meet;
-  in an object both are the same NAME, and every linker (gcc's and pxx --link
-  alike) binds the UND to the object's own exported definition. That is how
-  crtl's pthread_create, calling PalThreadCreate, got itself back as palthread's
-  "libc" pthread_create and deadlocked on its own registry lock (Gibux s13).
-  The pthread pair is renamed at the source now (crtl's pthread.h), which keeps
-  the family's one shared registry -- making two of its members LOCAL would
-  split it. This is the guard for the rest: crtl's dlopen/dlsym/dlclose against
-  the -dPXX_DYNLIB_LIBC imports, and anything that later grows the same shape.
-  A local copy is strictly better than a call that finds itself.
-  bug-a-an-object-s-crtl-definition-captured-the-runtime-s-own-libc-import }
-var i, n: Integer;
-begin
-  Result := False;
-  if ObjImportNameCachedFor <> ProcCount then
-  begin
-    n := 0;
-    SetLength(ObjImportNames, 0);
-    for i := 0 to ProcCount - 1 do
-      { ProcExternal, not ProcLibrary alone: a C prototype is tagged libc when
-        it is declared, and keeps the tag after crtl supplies its body }
-      if (ProcLibrary[i] >= 0) and ProcExternal[i] then
-      begin
-        SetLength(ObjImportNames, n + 1);
-        if ProcExtName[i] >= 0 then ObjImportNames[n] := Strs[ProcExtName[i]].Text
-        else ObjImportNames[n] := Procs[i].Name;
-        Inc(n);
-      end;
-    ObjImportNameCachedFor := ProcCount;
-  end;
-  if ProcExternal[procIdx] then Exit;
-  for i := 0 to Length(ObjImportNames) - 1 do
-    if ObjImportNames[i] = Procs[procIdx].Name then begin Result := True; Exit; end;
-end;
-
 function ObjProcIsExported(procIdx: Integer): Boolean;
 { Does this routine belong in the object's link-visible surface? Only if its
   NAME and its CONVENTION both mean something outside this compilation, which
@@ -5298,10 +4477,7 @@ var i: Integer;
 begin
   Result := False;
   if ProcCStaticLink[procIdx] then Exit;
-  if CProcInlineOnly(procIdx) then Exit;   { C99 inline definition: no external one here }
-  if ObjProcShadowsAnImport(procIdx) then Exit;
   if ProcCdecl[procIdx] then begin Result := True; Exit; end;
-  if ObjProcIsBuiltinRtl(procIdx) then begin Result := True; Exit; end;
   if not ProcConventionIsC(procIdx) then Exit;
   for i := 0 to ExportCount - 1 do
     if FindProc(ExportName[i]) = procIdx then begin Result := True; Exit; end;
@@ -5804,8 +4980,7 @@ function ObjProcBind(procIdx: Integer): Byte;
   exported weak alongside the code; see ObjDataIsRuntime.
   bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
 begin
-  if ProcObjRuntimeCopy[procIdx] or ObjProcIsBuiltinRtl(procIdx) or ProcCWeakDef[procIdx] then ObjProcBind := $20
-  else ObjProcBind := $10;
+  if ProcObjRuntimeCopy[procIdx] then ObjProcBind := $20 else ObjProcBind := $10;
 end;
 
 function ObjRuntimeIsPrivate: Boolean;
@@ -5889,19 +5064,8 @@ function ObjDataIsImport(i: Integer): Boolean;
   The answer is a private slot, which is what it had before this ticket, not an
   UND that the linker will resolve into a different runtime. }
 begin
-  { --shared-runtime is the exception, and the reason it exists: the runtime
-    object linked beside this one DOES own the definition, so the private slot
-    would be a second, never-initialised stdout (measured: toybox's xprintf
-    passed NULL to ferror). }
-  { ...and so are the bounds the LINKER defines: no runtime owns them, a
-    private slot is two equal zeros-or-garbage, and crtl's xtensa
-    __pxx_run_initializers walked one into a nil call.
-    feature-xtensa-objects-run-their-initialisers }
   ObjDataIsImport := ObjDataIsCandidate(i) and SymObjDataExternOnly[i] and
-                     (not SymCStaticLink[i]) and
-                     ((not SymObjRuntimeCopy[i]) or SharedRuntime or
-                      (Syms[i].Name = '__init_array_start') or
-                      (Syms[i].Name = '__init_array_end'));
+                     (not SymCStaticLink[i]) and (not SymObjRuntimeCopy[i]);
 end;
 
 function ObjDataIsLocal(i: Integer): Boolean;
@@ -5914,8 +5078,7 @@ function ObjDataExportInfo(i: Integer): Byte;
   The runtime's state is weak for the same reason its code is -- see
   ObjProcBind, which carries the argument and the measurement. }
 begin
-  if SymObjRuntimeCopy[i] or SymObjDataWeak[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
-  if SymElfTls[i] then ObjDataExportInfo := (ObjDataExportInfo and $F0) or 6;  { STT_TLS }
+  if SymObjRuntimeCopy[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
 end;
 
 function ObjDataIsExport(i: Integer): Boolean;
@@ -5927,30 +5090,6 @@ begin
   ObjDataIsExport := ObjDataIsCandidate(i) and (not SymCStaticLink[i]) and
                      (not SymObjDataExternOnly[i]) and
                      not (SymObjRuntimeCopy[i] and ObjRuntimeIsPrivate);
-end;
-
-{ -fcommon: an exported C global that no declaration initialised, in no
-  named section, not thread-local and not weak, is SHN_COMMON -- value = its
-  alignment, size = its size -- and the linker merges every object's copy
-  with the one real definition. Its .bss slot stays and is unnamed; every
-  reference already names the symbol (ObjDataExportSymForOff).
-  feature-c-fcommon-tentative-definitions-are-common-symbols }
-function ObjDataIsCommon(i: Integer): Boolean;
-begin
-  ObjDataIsCommon := CObjCommon and ObjDataIsExport(i) and
-                     (i < Length(SymCHasInit)) and (not SymCHasInit[i]) and
-                     (not SymOffIsData(Syms[i].Offset)) and (not SymElfTls[i]) and
-                     (not SymObjDataWeak[i]) and (SymAllocSize[i] > 0) and
-                     ((i >= Length(SymSectionName)) or (SymSectionName[i] = ''));
-end;
-
-function ObjCommonAlign(i: Integer): Integer;
-var a: Integer;
-begin
-  a := 1;
-  while (a < 16) and (SymAllocSize[i] mod (a * 2) = 0) do a := a * 2;
-  if a > 8 then a := 8;
-  ObjCommonAlign := a;
 end;
 
 { A typed const that DCE left unreferenced goes to .rodata. Baking
@@ -5966,35 +5105,9 @@ end;
   DceRun compacted them, which is what makes "dead" mean unreachable rather
   than merely unwritten. Exported and imported names are never candidates:
   code outside this object can reach them. Called from ObjRoPrepare. }
-{ A C const object moved to .rodata takes the zero padding after it, up to
-  the next data symbol, when that is shorter than 16 bytes and no other
-  read-only range starts in it. Left behind, the padding would begin the RW
-  piece, which keeps the padding's residue and not the next variable's
-  (RwPieceModulus). }
-function ConstObjPaddedEnd(e: Integer): Integer;
-var k, d, nxt, x: Integer;
-begin
-  Result := e;
-  nxt := DataLen;
-  for k := 0 to SymCount - 1 do
-    if (Syms[k].Kind = skGlobal) and SymOffIsData(Syms[k].Offset) and (SymAllocSize[k] > 0) then
-    begin
-      d := SymOffDataPart(Syms[k].Offset);
-      if (d >= e) and (d < nxt) then nxt := d;
-    end;
-  if (nxt <= e) or (nxt - e >= RO_RESIDUE) then Exit;
-  for x := e to nxt - 1 do
-    if Data[x] <> 0 then Exit;
-  for k := 0 to RoRangeCount - 1 do
-    if (RoRangeStart[k] >= e) and (RoRangeStart[k] < nxt) then Exit;
-  for k := 0 to RoAddCount - 1 do
-    if (RoAddS[k] >= e) and (RoAddS[k] < nxt) then Exit;
-  Result := nxt;
-end;
-
 procedure ObjRoAdoptDeadTypedConsts;
 var k, i, j, d, e, t: Integer;
-    live, relTouch: Boolean;
+    live: Boolean;
 
   { Half-open. An address equal to `e` is the NEXT object's start far more
     often than this one's end -- a pointer stored right after TableB in the
@@ -6036,21 +5149,10 @@ begin
         Inc(i);
       end;
       i := 0;
-      relTouch := False;
-      while (not relTouch) and (i < DataRelFixCount) do
+      while (not live) and (i < DataRelFixCount) do
       begin
-        if DeadConstRefIn(DataRelFixPos[i]) or DeadConstRefIn(DataRelFixTarget[i]) then relTouch := True;
+        if DeadConstRefIn(DataRelFixPos[i]) or DeadConstRefIn(DataRelFixTarget[i]) then live := True;
         Inc(i);
-      end;
-      { A C object whose type is const goes to .rodata referenced or not, as
-        gcc puts it -- unless a self-relative word has an end in it (both ends
-        must share a section; ObjRoPrepare refuses the split otherwise).
-        bug-c-xtensa-object-data-puts-a-dead-runtime-string-and-const-arrays-ahead-of-user-data }
-      if relTouch then live := True
-      else if (k < Length(SymCConstObj)) and SymCConstObj[k] then
-      begin
-        live := False;
-        e := ConstObjPaddedEnd(e);
       end;
       if not live then RoAddPush(d, e);
     end;
@@ -6233,432 +5335,6 @@ begin
   if req > 16 then ObjSecAlign := req else ObjSecAlign := 16;
 end;
 
-{ ===== --function-sections for DATA: a section per C global (x86-64) =========
-  The .data/.bss half of what ObjPlanCuts does for code, and gcc's
-  -fdata-sections. Without it an object's .data and .bss are one section each,
-  addressed section-relative, so a linker's GC can drop none of it: every
-  object kept every crtl buffer it carried (pxx_env_buf 16 KiB, pxx_tz_buf
-  8 KiB, gr_line, ...), ~39 KiB of named statics per toybox object, whichever
-  object's weak crtl copy won.
-
-  THE CUTS. One per C global this object DEFINES (ObjDataIsLocal or
-  ObjDataIsExport) with a size, at its start; a cut runs to the next cut or the
-  section end, so the bytes between two globals -- string literals, GOT slots,
-  Pascal state, padding -- belong to the global BEFORE them, and the bytes
-  before the first global stay in the head section (.data/.bss, symbols 2/3).
-  Contiguous on purpose: a gap that is its own section could be dropped while
-  something that only computes its address from a neighbour still needs it;
-  attached to a neighbour, the worst case is a neighbour kept alive.
-
-  THE REFERENCES. Every relocation into .data/.bss is section-relative in this
-  writer, built from an offset (ObjDRef). The cut is chosen by that offset --
-  for a C initialiser `&g + k`, by g's base, the addend carried on top -- and
-  the addend becomes relative to the cut. The measured C shapes reference a
-  global at its base and add the index after the LEA (ObjDataIsReferenced), so
-  an offset decides the owner; a reference that lands EXACTLY on the next
-  global's start is taken as that global, the half-open rule
-  ObjRoAdoptDeadTypedConsts uses.
-
-  SAFE BY REFUSAL. A self-relative word in .data (AddDataRelFix, RTTI) must not
-  span two sections; if one would, no .data cut is made at all. Overlapping
-  globals keep the first. Only under --function-sections, which aarch64
-  refuses, so only x86-64 objects are ever cut, and an object without the flag
-  is byte-for-byte what it was. }
-var
-  ODCSec   : array of Integer;     { 0 = .data, 1 = .bss }
-  ODCOff   : array of Integer;     { start: .data offset, or REMAPPED .bss offset }
-  ODCEndT  : array of Integer;     { the global's own end (planning only) }
-  ODCName  : array of AnsiString;
-  ODCFull  : array of AnsiString;  { a C section("name") global: the section's whole name; '' = .data.<ODCName> }
-  { a const C object whose bytes are all baked: .rodata.<ODCName>, SHF_ALLOC
-    only. A candidate at planning; ObjNumberDataCuts keeps it only when the
-    cut has no relocation (gcc's .data.rel.ro case stays writable).
-    feature-c-const-objects-go-to-rodata-in-x86-64-objects }
-  ODCRo    : array of Boolean;
-  ODCShndx : array of Integer;
-  ODCSym   : array of Integer;     { its STT_SECTION symbol }
-  ODCRelAt : array of Integer;     { first index of its entries in ODR* }
-  ODCRelN  : array of Integer;
-  ODCNm    : array of Integer;     { .shstrtab: '.rela.data.<n>' (+5 '.data.<n>') or '.bss.<n>' }
-  ODCCount : Integer;
-  ODCFirstBss : Integer;           { first .bss cut; = ODCCount when there is none }
-  ODCDroppedData : Boolean;        { .data cuts refused (a self-relative word spans two) }
-  { every .rela.data entry, collected, then grouped by the cut its SITE is in }
-  ODRPos, ODRAddn : array of Int64;
-  ODRSym, ODRType : array of Integer;
-  ODRCount, ODRHeadN : Integer;
-
-function ObjDSecEnd(sec: Integer): Integer;
-begin
-  if sec = 0 then ObjDSecEnd := DataLen else ObjDSecEnd := BSSSize - ObjBssDropTotal;
-end;
-
-{ The data cut holding offset `off` of section `sec`, -1 for the head. }
-function ObjDCutOf(sec, off: Integer): Integer;
-var lo, hi, mid: Integer;
-begin
-  ObjDCutOf := -1;
-  if sec = 0 then begin lo := 0; hi := ODCFirstBss - 1; end
-  else begin lo := ODCFirstBss; hi := ODCCount - 1; end;
-  if hi < lo then Exit;
-  if off < ODCOff[lo] then Exit;
-  while lo < hi do
-  begin
-    mid := (lo + hi + 1) div 2;
-    if ODCOff[mid] <= off then lo := mid else hi := mid - 1;
-  end;
-  ObjDCutOf := lo;
-end;
-
-function ObjDCutEnd(c: Integer): Integer;
-begin
-  if (c + 1 < ODCCount) and (ODCSec[c + 1] = ODCSec[c]) then ObjDCutEnd := ODCOff[c + 1]
-  else ObjDCutEnd := ObjDSecEnd(ODCSec[c]);
-end;
-
-{ The head section's size: up to the first cut of that section. }
-function ObjDHeadEnd(sec: Integer): Integer;
-var c: Integer;
-begin
-  if sec = 0 then c := 0 else c := ODCFirstBss;
-  if (c < ODCCount) and (ODCSec[c] = sec) then ObjDHeadEnd := ODCOff[c]
-  else ObjDHeadEnd := ObjDSecEnd(sec);
-end;
-
-{ The alignment the cut's start had inside its section, up to the section's
-  own: a linker that places it on that boundary keeps every offset inside it
-  aligned as it was. }
-function ObjDCutAlign(c: Integer): Integer;
-var a, cap, sz, nat: Integer;
-begin
-  if ODCSec[c] = 0 then cap := ObjSecAlign(ReqDataAlign) else cap := ObjSecAlign(ReqBssAlign);
-  { A named section (a link set) is concatenated with the same section of
-    every other object, and ld pads each input to its alignment: an 8-byte
-    entry aligned 16 left an 8-byte hole that __stop_ - __start_ counted as a
-    null entry. Its natural alignment, as gcc gives it -- the largest power of
-    two dividing its size, at most 8. feature-c-section-attribute-on-x86-64-objects }
-  if ODCFull[c] <> '' then
-  begin
-    sz := ODCEndT[c] - ODCOff[c];
-    nat := 1;
-    while (nat < 8) and (sz mod (nat * 2) = 0) do nat := nat * 2;
-    if nat < cap then cap := nat;
-  end;
-  a := 1;
-  if ODCOff[c] = 0 then a := cap
-  else
-    while (a < cap) and ((ODCOff[c] mod (a * 2)) = 0) do a := a * 2;
-  ObjDCutAlign := a;
-end;
-
-{ A reference to offset `off` of section `sec` (0 .data, 1 .bss): the symbol
-  to relocate against, and the part of the addend that locates `off` in it. }
-procedure ObjDRef(sec, off: Integer; var sym: Integer; var rel: Int64);
-var c: Integer;
-begin
-  c := ObjDCutOf(sec, off);
-  if c < 0 then
-  begin
-    sym := 2 + sec;
-    rel := off;
-  end
-  else
-  begin
-    sym := ODCSym[c];
-    rel := Int64(off) - ODCOff[c];
-  end;
-end;
-
-function ObjDataSecOf(i: Integer): Integer;
-begin
-  if SymOffIsData(Syms[i].Offset) then ObjDataSecOf := 0 else ObjDataSecOf := 1;
-end;
-
-{ st_shndx / st_value of a data symbol this object defines }
-function ObjDataSymShndx(i: Integer): Integer;
-var c: Integer;
-begin
-  c := ObjDCutOf(ObjDataSecOf(i), ObjDataValue(i));
-  if c < 0 then ObjDataSymShndx := ObjDataShndx(i) else ObjDataSymShndx := ODCShndx[c];
-end;
-
-function ObjDataSymValue(i: Integer): Integer;
-var c: Integer;
-begin
-  c := ObjDCutOf(ObjDataSecOf(i), ObjDataValue(i));
-  if c < 0 then ObjDataSymValue := ObjDataValue(i)
-  else ObjDataSymValue := ObjDataValue(i) - ODCOff[c];
-end;
-
-procedure ObjDCutAdd(sec, off, en: Integer; const nm: AnsiString);
-var n: Integer;
-begin
-  if ODCCount >= Length(ODCOff) then
-  begin
-    n := Length(ODCOff) * 2;
-    if n < 64 then n := 64;
-    SetLength(ODCSec, n); SetLength(ODCOff, n); SetLength(ODCEndT, n);
-    SetLength(ODCName, n); SetLength(ODCFull, n); SetLength(ODCRo, n);
-  end;
-  ODCSec[ODCCount] := sec;
-  ODCOff[ODCCount] := off;
-  ODCEndT[ODCCount] := en;
-  ODCName[ODCCount] := nm;
-  ODCFull[ODCCount] := '';
-  ODCRo[ODCCount] := False;
-  Inc(ODCCount);
-end;
-
-{ (sec, off) order }
-function ObjDCutLess(a, b: Integer): Boolean;
-begin
-  if ODCSec[a] <> ODCSec[b] then ObjDCutLess := ODCSec[a] < ODCSec[b]
-  else ObjDCutLess := ODCOff[a] < ODCOff[b];
-end;
-
-procedure ObjDCutSwap(a, b: Integer);
-var t: Integer; s: AnsiString; bo: Boolean;
-begin
-  t := ODCSec[a]; ODCSec[a] := ODCSec[b]; ODCSec[b] := t;
-  t := ODCOff[a]; ODCOff[a] := ODCOff[b]; ODCOff[b] := t;
-  t := ODCEndT[a]; ODCEndT[a] := ODCEndT[b]; ODCEndT[b] := t;
-  s := ODCName[a]; ODCName[a] := ODCName[b]; ODCName[b] := s;
-  s := ODCFull[a]; ODCFull[a] := ODCFull[b]; ODCFull[b] := s;
-  bo := ODCRo[a]; ODCRo[a] := ODCRo[b]; ODCRo[b] := bo;
-end;
-
-{ The data cuts and their symbol indices; section indices come later
-  (ObjNumberDataCuts), once the relocations are counted. }
-procedure ObjPlanDataCuts(firstSecSym: Integer);
-var i, j, k, sec, off, en, prevSec, prevEnd, gap, nNamed, nAll: Integer;
-    ok: Boolean;
-
-  procedure SortCuts;
-  var si, sj, sg: Integer;
-  begin
-    sg := ODCCount div 2;
-    while sg > 0 do
-    begin
-      for si := sg to ODCCount - 1 do
-      begin
-        sj := si;
-        while (sj - sg >= 0) and ObjDCutLess(sj, sj - sg) do
-        begin
-          ObjDCutSwap(sj, sj - sg);
-          sj := sj - sg;
-        end;
-      end;
-      sg := sg div 2;
-    end;
-  end;
-
-begin
-  ODCCount := 0;
-  ODCFirstBss := 0;
-  ODCDroppedData := False;
-  ODRCount := 0;
-  ODRHeadN := 0;
-  if not (FunctionSections and (TargetArch = TARGET_X86_64)) then Exit;
-  for i := 0 to SymCount - 1 do
-    if (ObjDataIsLocal(i) or ObjDataIsExport(i)) and (SymAllocSize[i] > 0) then
-    begin
-      sec := ObjDataSecOf(i);
-      off := ObjDataValue(i);
-      en := off + SymAllocSize[i];
-      if (off >= 0) and (en <= ObjDSecEnd(sec)) then
-      begin
-        ObjDCutAdd(sec, off, en, Syms[i].Name);
-        { __attribute__((section("link_set_x"))): the cut IS that section,
-          under its own name (NetBSD's link sets, rump's evcnts and domains;
-          the linker makes __start_/__stop_ for a C-identifier name).
-          feature-c-section-attribute-on-x86-64-objects }
-        if (i < Length(SymSectionName)) and (SymSectionName[i] <> '') then
-          ODCFull[ODCCount - 1] := SymSectionName[i]
-        { A const C object whose initialiser was baked whole (no store ran as
-          code) is .rodata.<name>, as gcc places it -- a candidate here, kept
-          only if the cut turns out to carry no relocation. }
-        else if (sec = 0) and CStaticDataMode and
-                (i < Length(SymCConstObj)) and SymCConstObj[i] and
-                not ((i < Length(SymCInitByCode)) and SymCInitByCode[i]) and
-                (SymTlsOffset[i] < 0) then
-          ODCRo[ODCCount - 1] := True;
-      end;
-    end;
-  { Every interned string is an entry of its own, [EntryStart, EntryEnd), and
-    is referenced only inside it (the handle and the chars sit at fixed
-    offsets in the entry). Without a cut each, a crtl copy's whole literal
-    pool rode with whichever global preceded it and stayed alive in every
-    object (toybox: 182 x 17.6 KiB). Not when the section indices would reach
-    SHN_LORESERVE (0xff00): this writer has no extended numbering. }
-  if ObjCutCount * 2 + (ODCCount + StrCount) * 2 + 32 < $FF00 then
-    for i := 0 to StrCount - 1 do
-      if (Strs[i].EntryStart >= 0) and (Strs[i].EntryEnd > Strs[i].EntryStart) and
-         (Strs[i].EntryEnd <= DataLen) then
-        ObjDCutAdd(0, Strs[i].EntryStart, Strs[i].EntryEnd, 'pxx.str' + AIntToStr(i));
-  { shell sort by (sec, off) }
-  SortCuts;
-  { drop a global that starts inside the one before it (the first stands) }
-  k := 0; prevSec := -1; prevEnd := 0;
-  for i := 0 to ODCCount - 1 do
-  begin
-    if (ODCSec[i] = prevSec) and (ODCOff[i] < prevEnd) then Continue;
-    if k <> i then
-    begin
-      ODCSec[k] := ODCSec[i]; ODCOff[k] := ODCOff[i];
-      ODCEndT[k] := ODCEndT[i]; ODCName[k] := ODCName[i]; ODCFull[k] := ODCFull[i];
-      ODCRo[k] := ODCRo[i];
-    end;
-    prevSec := ODCSec[k];
-    prevEnd := ODCEndT[k];
-    Inc(k);
-  end;
-  ODCCount := k;
-  { A named section holds its global and nothing else: a link set is an array
-    the linker concatenates, and __stop_ - __start_ counts its entries, so
-    the alignment padding up to the next global must not ride in it. The gap
-    becomes a cut of its own (anything in it then has a section to relocate
-    against). feature-c-section-attribute-on-x86-64-objects }
-  nNamed := 0;
-  nAll := ODCCount;
-  for i := 0 to nAll - 1 do
-    if (ODCFull[i] <> '') or ODCRo[i] then
-    begin
-      { a read-only cut is split the same way, for a different reason: the
-        bytes after the object may be something writable with no symbol of
-        its own, and they must not become read-only with it }
-      Inc(nNamed);
-      if (i + 1 < nAll) and (ODCSec[i + 1] = ODCSec[i]) then en := ODCOff[i + 1]
-      else en := ObjDSecEnd(ODCSec[i]);
-      if en > ODCEndT[i] then
-        ObjDCutAdd(ODCSec[i], ODCEndT[i], en, 'pxx.pad' + AIntToStr(i));
-    end;
-  if ODCCount <> nAll then SortCuts;
-  ODCFirstBss := 0;
-  while (ODCFirstBss < ODCCount) and (ODCSec[ODCFirstBss] = 0) do Inc(ODCFirstBss);
-  { a self-relative word must stay inside one section with its target }
-  ok := True;
-  for i := 0 to DataRelFixCount - 1 do
-    if ObjDCutOf(0, DataRelFixPos[i]) <> ObjDCutOf(0, DataRelFixTarget[i]) then ok := False;
-  if not ok then
-  begin
-    for i := 0 to ODCFirstBss - 1 do
-      if ODCFull[i] <> '' then
-        ErrorNoPos('--emit-obj: C global in section "' + ODCFull[i] + '" cannot be given'
-                   + ' its own section: this object has a self-relative data word that'
-                   + ' spans two globals, so its .data stays one section');
-    ODCDroppedData := True;
-    for i := ODCFirstBss to ODCCount - 1 do
-    begin
-      j := i - ODCFirstBss;
-      ODCSec[j] := ODCSec[i]; ODCOff[j] := ODCOff[i];
-      ODCEndT[j] := ODCEndT[i]; ODCName[j] := ODCName[i]; ODCFull[j] := ODCFull[i];
-      ODCRo[j] := ODCRo[i];
-    end;
-    ODCCount := ODCCount - ODCFirstBss;
-    ODCFirstBss := 0;
-  end;
-  SetLength(ODCShndx, ODCCount + 1);
-  SetLength(ODCSym, ODCCount + 1);
-  SetLength(ODCRelAt, ODCCount + 1);
-  SetLength(ODCRelN, ODCCount + 1);
-  SetLength(ODCNm, ODCCount + 1);
-  for i := 0 to ODCCount - 1 do
-  begin
-    ODCShndx[i] := 0;
-    ODCSym[i] := firstSecSym + i;
-    ODCRelAt[i] := 0;
-    ODCRelN[i] := 0;
-    ODCNm[i] := 0;
-  end;
-end;
-
-procedure ObjDRelPush(pos: Int64; sym, rtype: Integer; addend: Int64);
-var n: Integer;
-begin
-  if ODRCount >= Length(ODRPos) then
-  begin
-    n := Length(ODRPos) * 2;
-    if n < 256 then n := 256;
-    SetLength(ODRPos, n); SetLength(ODRAddn, n);
-    SetLength(ODRSym, n); SetLength(ODRType, n);
-  end;
-  ODRPos[ODRCount] := pos;
-  ODRSym[ODRCount] := sym;
-  ODRType[ODRCount] := rtype;
-  ODRAddn[ODRCount] := addend;
-  Inc(ODRCount);
-end;
-
-{ Group the .rela.data entries: the head's first (in collection order, so an
-  uncut object writes the file it always did), then each cut's, sites made
-  cut-relative. Run ONCE. }
-procedure ObjGroupDataRelocs;
-var i, c, n: Integer;
-    cutOf, fill: array of Integer;
-    sPos, sAdd: array of Int64; sSym, sTyp: array of Integer;
-begin
-  ODRHeadN := ODRCount;
-  if ODCFirstBss = 0 then Exit;   { no .data cut }
-  SetLength(cutOf, ODRCount);
-  ODRHeadN := 0;
-  for c := 0 to ODCCount - 1 do ODCRelN[c] := 0;
-  for i := 0 to ODRCount - 1 do
-  begin
-    cutOf[i] := ObjDCutOf(0, Integer(ODRPos[i]));
-    if cutOf[i] < 0 then Inc(ODRHeadN) else Inc(ODCRelN[cutOf[i]]);
-  end;
-  n := ODRHeadN;
-  for c := 0 to ODCCount - 1 do begin ODCRelAt[c] := n; n := n + ODCRelN[c]; end;
-  SetLength(sPos, ODRCount); SetLength(sAdd, ODRCount);
-  SetLength(sSym, ODRCount); SetLength(sTyp, ODRCount);
-  SetLength(fill, ODCCount + 1);
-  for c := 0 to ODCCount - 1 do fill[c] := ODCRelAt[c];
-  n := 0;
-  for i := 0 to ODRCount - 1 do
-  begin
-    c := cutOf[i];
-    if c < 0 then
-    begin
-      sPos[n] := ODRPos[i]; sAdd[n] := ODRAddn[i];
-      sSym[n] := ODRSym[i]; sTyp[n] := ODRType[i];
-      Inc(n);
-    end
-    else
-    begin
-      sPos[fill[c]] := ODRPos[i] - ODCOff[c];
-      sAdd[fill[c]] := ODRAddn[i];
-      sSym[fill[c]] := ODRSym[i];
-      sTyp[fill[c]] := ODRType[i];
-      Inc(fill[c]);
-    end;
-  end;
-  for i := 0 to ODRCount - 1 do
-  begin
-    ODRPos[i] := sPos[i]; ODRAddn[i] := sAdd[i];
-    ODRSym[i] := sSym[i]; ODRType[i] := sTyp[i];
-  end;
-end;
-
-{ Number the data cuts after the code cuts: a .data cut is followed by its
-  .rela.data.<name> when it has entries; a .bss cut has none. }
-function ObjNumberDataCuts(firstShndx: Integer): Integer;
-var c, n: Integer;
-begin
-  n := firstShndx;
-  for c := 0 to ODCCount - 1 do
-  begin
-    { the read-only decision, now that the relocations are grouped: a const
-      object holding an address stays writable (gcc's .data.rel.ro; a
-      relocation in a read-only section is a text relocation under PIE) }
-    ODCRo[c] := ODCRo[c] and (ODCSec[c] = 0) and (ODCRelN[c] = 0) and
-                (ODCFull[c] = '') and not ODCDroppedData;
-    ODCShndx[c] := n;
-    Inc(n);
-    if (ODCSec[c] = 0) and (ODCRelN[c] > 0) then Inc(n);
-  end;
-  ObjNumberDataCuts := n;
-end;
-
 procedure CheckUndefinedExternData;
 { An EXECUTABLE that uses a C `extern` variable nothing defines is refused.
   ld refuses it too ("undefined reference to `ghost'"), and so does pxx's own
@@ -6675,17 +5351,9 @@ procedure CheckUndefinedExternData;
 var i, n: Integer; names, more: AnsiString;
 begin
   if EmitObjMode or EmitSharedMode then Exit;
-  { an undefined WEAK one is 0, not an error (CWeakDataIsNull); but one lowered
-    as 0 that a LATER declaration defined has code that ignores the definition }
-  for i := 0 to Length(SymWeakNulled) - 1 do
-    if (i < SymCount) and SymWeakNulled[i] and not ObjDataIsImport(i) then
-      ErrorNoPos('weak variable `' + Syms[i].Name + ''' is defined after a use that ' +
-                 'was compiled as an undefined weak reference (address 0). Move the ' +
-                 'definition above its first use (bug-c-weak-data-references-bind-locally-and-skip-the-got)');
   n := 0; names := '';
   for i := 0 to SymCount - 1 do
-    if ObjDataIsImport(i) and SymIRReached[i] and
-       not ((i < Length(SymObjDataWeak)) and SymObjDataWeak[i]) then
+    if ObjDataIsImport(i) and SymIRReached[i] then
     begin
       if n < 8 then
       begin
@@ -6807,19 +5475,16 @@ function ObjDataExportSymForOff(bssOff: Integer): Integer;
   where gcc says 2. Sharing a definition is a two-sided contract and only the
   import side was wired.
 
-  .data too: the export loop writes each symbol's own section (ObjDataShndx /
-  ObjDataSymShndx), so a global CPlaceGlobalInData moved there is named
-  correctly. It used to be refused here, from when that loop said .bss for
-  every symbol -- and with --c-static-data on by default for gc-ready objects,
-  a baked weak crtl global (`int optind = 1;`) then bound every reference in
-  its object to the private copy: toybox's getopt set one optind and
-  getopt_long read another. Both encodings compare raw: a .data offset carries
-  DATA_SYM_BIAS on both sides. }
+  .bss only, because the export loop declares section 5 for every data symbol
+  it writes. Accepting a .data-encoded offset here would name a symbol whose
+  own st_shndx says .bss -- a wrong address that still links. }
 var k: Integer;
 begin
   ObjDataExportSymForOff := -1;
+  if SymOffIsData(bssOff) then Exit;
   for k := 0 to SymCount-1 do
-    if ObjDataIsExport(k) and (Syms[k].Offset = bssOff) then
+    if ObjDataIsExport(k) and (not SymOffIsData(Syms[k].Offset)) and
+       (Syms[k].Offset = bssOff) then
     begin
       ObjDataExportSymForOff := k;
       Exit;
@@ -7180,20 +5845,16 @@ procedure ObjBuildTextRelocsX64(firstGlobal, extSym0, impSym0,
   the reason to do it this way: the objects this produces must be the files
   they were before the refactor, and four saved ones (the reloc probe and a
   function-sections case, x86-64 and i386) are compared to check it. }
-var i, dsym, csym: Integer; crel: Int64;
+var i, dsym: Integer;
 begin
-  { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss -- or a data
-    cut's own (ObjDRef), under --function-sections.
+  { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
     R_X86_64_64 = 1, R_X86_64_32S = 11. }
   for i := 0 to FixCount-1 do
-  begin
     { rtype 1 = R_X86_64_64 (absolute), 2 = R_X86_64_PC32 for the lea form }
-    ObjDRef(0, Fixups[i].DataOff, csym, crel);
     if FixupPCRel[i] then
-      ObjRelPush(Fixups[i].CodePos, csym, 2, crel - 4)
+      ObjRelPush(Fixups[i].CodePos, 2, 2, Fixups[i].DataOff - 4)
     else
-      ObjRelPush(Fixups[i].CodePos, csym, 1, crel);
-  end;
+      ObjRelPush(Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
   begin
     { A data-resident global (a typed const baked into .data) carries a BIASED
@@ -7244,38 +5905,6 @@ begin
       if dsym >= 0 then
         dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
     end;
-    { ELF TLS (EmitElfTlsAddr). Initial-exec names the variable's symbol with
-      the -4 PC addend, so it needs a symbol: an import or an export. Local-exec
-      is S + A - TP, so the cut's section symbol plus the offset serves a
-      `static` one. feature-c-thread-local-in-x86-64-objects }
-    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 2) then
-    begin
-      if dsym < 0 then
-        ErrorNoPos('--emit-obj: internal: an initial-exec __thread reference has no symbol');
-      ObjRelPush(GlobFix[i].CodePos, dsym, 22, -4);
-      Continue;
-    end;
-    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 1) then
-    begin
-      if dsym >= 0 then
-        ObjRelPush(GlobFix[i].CodePos, dsym, 23, 0)
-      else
-      begin
-        if not SymOffIsData(GlobFix[i].BSSoff) then
-          ErrorNoPos('--emit-obj: internal: a local-exec __thread variable is not in .tdata');
-        ObjDRef(0, SymOffDataPart(GlobFix[i].BSSoff), csym, crel);
-        ObjRelPush(GlobFix[i].CodePos, csym, 23, crel);
-      end;
-      Continue;
-    end;
-    { an undefined weak variable's GOT slot (EmitWeakDataGotAddr) }
-    if (i < Length(GlobFixTls)) and (GlobFixTls[i] = 3) then
-    begin
-      if dsym < 0 then
-        ErrorNoPos('--emit-obj: internal: a weak variable''s GOT reference has no symbol');
-      ObjRelPush(GlobFix[i].CodePos, dsym, 42, -4);   { R_X86_64_REX_GOTPCRELX }
-      Continue;
-    end;
     if dsym >= 0 then
     begin
       if GlobFixPCRel[i] then
@@ -7283,27 +5912,26 @@ begin
       else
         ObjRelPush(GlobFix[i].CodePos, dsym, 11, 0);
     end
-    else
+    else if GlobFixPCRel[i] then
     begin
       if SymOffIsData(GlobFix[i].BSSoff) then
-        ObjDRef(0, SymOffDataPart(GlobFix[i].BSSoff), csym, crel)
+        ObjRelPush(GlobFix[i].CodePos, 2, 2,
+                    SymOffDataPart(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i])
       else
-        ObjDRef(1, ObjBssRemap(GlobFix[i].BSSoff), csym, crel);
-      if GlobFixPCRel[i] then
-        ObjRelPush(GlobFix[i].CodePos, csym, 2, crel - 4 - GlobFixTrail[i])
-      else
-        ObjRelPush(GlobFix[i].CodePos, csym, 11, crel);
-    end;
+        ObjRelPush(GlobFix[i].CodePos, 3, 2,
+                    ObjBssRemap(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i]);
+    end
+    else if SymOffIsData(GlobFix[i].BSSoff) then
+      ObjRelPush(GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
+    else
+      ObjRelPush(GlobFix[i].CodePos, 3, 11, ObjBssRemap(GlobFix[i].BSSoff));
   end;
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
   for i := 0 to DynCallCount-1 do
-  begin
     { `call qword ptr [rip+disp32]` naming our own GOT slot in .data: PC32, so
       the addend carries the -4 to the end of the instruction. }
-    ObjDRef(0, ExternalGotOff[DynCallExtIdx[i]], csym, crel);
-    ObjRelPush(DynCallCodePos[i], csym, 2, crel - 4);
-  end;
+    ObjRelPush(DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
   { @proc: the `mov rax, imm64` operand, absolute against .text }
   { @proc: `lea rax,[rip+disp32]` against .text -- PC32 (rtype 2), addend
     carrying the -4 to the end of the instruction. It was R_X86_64_64 against
@@ -7486,14 +6114,14 @@ procedure ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0: Inte
   relocation here uses. A function or a variable defined in another object
   relocates against its own UND symbol; an exported definition against its
   own symbol, for the reason ObjDataExportSymForOff gives. }
-var p, k, e: Integer; rel: Int64;
+var p, k, e: Integer;
 begin
   addend := CDRAddend[i];
   case CDRKind[i] of
     CDR_DATA:
       begin
-        ObjDRef(0, CDRTarget[i], sym, rel);
-        addend := addend + rel;
+        sym := 2;
+        addend := addend + CDRTarget[i];
       end;
     CDR_PROC:
       begin
@@ -7520,20 +6148,20 @@ begin
       p := CDRTarget[i];
       if ObjDataIsImport(p) then
         sym := impSym0 + ObjDataImportOrdinal(p)
+      else if SymOffIsData(Syms[p].Offset) then
+      begin
+        sym := 2;
+        addend := addend + SymOffDataPart(Syms[p].Offset);
+      end
       else
       begin
         e := ObjDataExportSymForOff(Syms[p].Offset);
         if e >= 0 then
           sym := firstGlobal + numExportProcs + ObjDataExportOrdinal(e)
-        else if SymOffIsData(Syms[p].Offset) then
-        begin
-          ObjDRef(0, SymOffDataPart(Syms[p].Offset), sym, rel);
-          addend := addend + rel;
-        end
         else
         begin
-          ObjDRef(1, ObjBssRemap(Syms[p].Offset), sym, rel);
-          addend := addend + rel;
+          sym := 3;
+          addend := addend + ObjBssRemap(Syms[p].Offset);
         end;
       end;
     end;
@@ -7557,119 +6185,9 @@ begin
     end;
 end;
 
-{ File-scope asm aliases (CFsaAlias*, cparser.inc): each becomes a GLOBAL or
-  WEAK symbol at its target's section and offset, appended after every other
-  symbol (no relocation names it). The target must be defined in this
-  object; an alias name the object also imports would be two symbols of one
-  name, and is refused rather than guessed at. feature-c-file-scope-asm-symbol-aliases }
-var
-  OFsaProc, OFsaSym, OFsaBind, OFsaStrOff: array of Integer;
-  OFsaCount: Integer;
-  OFsaExtOf, OFsaImpOf: array of Integer;   { by external / Syms index: the alias defining it, or -1 }
-  OFsaSlot: array of Boolean;               { the alias took over an import's slot }
-
-function ObjFsaBindOf(const nm: AnsiString): Integer;
-var k: Integer;
-begin
-  ObjFsaBindOf := 0;
-  for k := 0 to CFsaBindCount - 1 do
-    if CFsaBindName[k] = nm then
-      if CFsaBindKind[k] > ObjFsaBindOf then ObjFsaBindOf := CFsaBindKind[k];
-end;
-
-procedure ObjPlanFsaAliases(var strSize: Integer);
-var k, j, b: Integer; a, t: AnsiString;
-begin
-  OFsaCount := 0;
-  SetLength(OFsaExtOf, ExternalCount + 1);
-  for j := 0 to ExternalCount - 1 do OFsaExtOf[j] := -1;
-  SetLength(OFsaImpOf, SymCount + 1);
-  for j := 0 to SymCount - 1 do OFsaImpOf[j] := -1;
-  if CFsaAliasCount = 0 then Exit;
-  SetLength(OFsaProc, CFsaAliasCount); SetLength(OFsaSym, CFsaAliasCount);
-  SetLength(OFsaBind, CFsaAliasCount); SetLength(OFsaStrOff, CFsaAliasCount);
-  SetLength(OFsaSlot, CFsaAliasCount);
-  for k := 0 to CFsaAliasCount - 1 do
-  begin
-    a := CFsaAliasName[k];
-    t := CFsaAliasTarget[k];
-    b := ObjFsaBindOf(a);
-    if b = 0 then
-      ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ' has no .globl or .weak:'
-                 + ' a local alias is not supported');
-    OFsaProc[k] := -1; OFsaSym[k] := -1;
-    for j := 0 to ProcCount - 1 do
-      if (Procs[j].Name = t) and ObjProcIsDefined(j) then begin OFsaProc[k] := j; Break; end;
-    if OFsaProc[k] < 0 then
-      for j := 0 to SymCount - 1 do
-        if (Syms[j].Name = t) and (ObjDataIsLocal(j) or ObjDataIsExport(j)) then
-        begin OFsaSym[k] := j; Break; end;
-    if (OFsaProc[k] < 0) and (OFsaSym[k] < 0) then
-      ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ': ' + t
-                 + ' is not defined in this translation unit');
-    for j := 0 to ProcCount - 1 do
-      if (Procs[j].Name = a) and ObjProcIsDefined(j) then
-        ErrorNoPos('C: file-scope asm alias ' + a + ' = ' + t + ': ' + a + ' is also defined here');
-    { The file also CALLS or READS the alias by name (locks.c calls
-      mutex_spin_exit, vm.c reads uvm_vnodeops): that import's symbol becomes
-      the definition, so its relocations bind to it and the name is in the
-      symbol table once. }
-    OFsaSlot[k] := False;
-    for j := 0 to ExternalCount - 1 do
-      if ExternalLinkName(j) = a then begin OFsaExtOf[j] := k; OFsaSlot[k] := True; end;
-    for j := 0 to SymCount - 1 do
-      if (Syms[j].Name = a) and ObjDataIsImport(j) and ObjDataIsReferenced(j) then
-      begin OFsaImpOf[j] := k; OFsaSlot[k] := True; end;
-    if b = 2 then OFsaBind[k] := 2 else OFsaBind[k] := 1;
-    if not OFsaSlot[k] then
-    begin
-      OFsaStrOff[k] := strSize;
-      strSize := strSize + Length(a) + 1;
-      Inc(OFsaCount);
-    end;
-  end;
-end;
-
-{$ifdef FPC}
-procedure ObjWriteFsaAliasSym(var f: File; strOff, k: Integer);
-{$else}
-procedure ObjWriteFsaAliasSym(f: Integer; strOff, k: Integer);
-{$endif}
-begin
-  if OFsaProc[k] >= 0 then
-    writeSym64(f, strOff, Byte((OFsaBind[k] shl 4) or 2),
-               ObjTextShndx(Procs[OFsaProc[k]].BodyAddr),
-               ObjTextRel(Procs[OFsaProc[k]].BodyAddr), ObjProcSize(OFsaProc[k]))
-  else
-    writeSym64(f, strOff, Byte((OFsaBind[k] shl 4) or 1),
-               ObjDataSymShndx(OFsaSym[k]), ObjDataSymValue(OFsaSym[k]), SymAllocSize[OFsaSym[k]]);
-end;
-
-{ asm labels: a DEFINED function or global takes its label as its symbol name
-  in this object (imports get it through ExternalLinkName). Renamed in place
-  once, here, after every lookup by C name is done.
-  feature-c-asm-labels-rename-the-symbol }
-procedure ObjApplyAsmLabels;
-var j: Integer; nm: AnsiString;
-begin
-  if CAsmLblCount = 0 then Exit;
-  for j := 0 to ProcCount - 1 do
-    if ObjProcIsDefined(j) then
-    begin
-      nm := CAsmLabelOf(Procs[j].Name);
-      if nm <> '' then Procs[j].Name := nm;
-    end;
-  for j := 0 to SymCount - 1 do
-    if (Syms[j].Kind = skGlobal) then
-    begin
-      nm := CAsmLabelOf(Syms[j].Name);
-      if nm <> '' then Syms[j].Name := nm;
-    end;
-end;
-
 procedure writeELFRelX64General(const outPath: AnsiString);
 var
-  i, wkI: Integer;
+  i: Integer;
   numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
   numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
@@ -7682,41 +6200,14 @@ var
     nThunkSym, initThunkSym, finiThunkSym: Integer;
     thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
   nSecSym, c, extraRelaOff, extraRelaCount: Integer;
-  dataRelaOff, dataRelaCount, dshstr: Integer;
   machine, rAbs64: Integer;
   cdrSym: Integer; cdrAdd: Int64;   { a CDataReloc entry's symbol and addend }
-  extLive: array of Boolean;         { an external a live site still uses }
 {$ifdef FPC}
   f: File;
 {$else}
   f: Integer;
 {$endif}
 begin
-  { A weak C DEFINITION only means something if the calls to it can be
-    re-bound: a strong definition in another object must win, and in one
-    .text section the call was already a resolved rel32 to this object's own
-    copy (gcc: wk() -> 20 with the strong object linked, pxx: 2). Function
-    sections relocate every call against the callee's symbol, so an object
-    holding one is written that way. Read only by the writers, so it can be
-    decided here, after the parse has seen the attribute.
-    bug-c-attribute-weak-was-ignored }
-  if not FunctionSections then
-    for wkI := 0 to ProcCount - 1 do
-      if ProcCWeakDef[wkI] and ObjProcIsDefined(wkI) then
-      begin
-        FunctionSections := True;
-        Break;
-      end;
-  { ...and a section("name") global: the data cuts that carry it come with
-    function sections. feature-c-section-attribute-on-x86-64-objects }
-  if not FunctionSections then
-    for wkI := 0 to Length(SymSectionName) - 1 do
-      if SymSectionName[wkI] <> '' then
-      begin
-        FunctionSections := True;
-        Break;
-      end;
-  ObjApplyAsmLabels;       { before any symbol name is measured }
   CRegisterCDataImports;   { before anything counts ExternalCount }
   ObjBssPlanImportDrops;   { before any .bss offset is written out }
   { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
@@ -7815,16 +6306,12 @@ begin
   { --function-sections: one STT_SECTION symbol per cut after the head (whose
     section symbol is the fixed symbol 1), LOCAL, after the thunk symbols. }
   ObjPlanCuts(4 + numLocalProcs + numLocalData + nThunkSym);
-  { and the data cuts' after them -- see ObjPlanDataCuts }
-  ObjPlanDataCuts(4 + numLocalProcs + numLocalData + nThunkSym + ObjCutCount - 1);
-  nSecSym := ObjCutCount - 1 + ODCCount;
+  nSecSym := ObjCutCount - 1;
 
   firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym + nSecSym;
   extSym0 := firstGlobal + numExportProcs + numExportData;
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
-  ObjPlanFsaAliases(strSize);
-  numSyms := numSyms + OFsaCount;
 
   ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym + nSecSym);
 
@@ -7848,61 +6335,7 @@ begin
   ObjGroupRelocs;
   relaTextCount := ObjCutRelN[0];
   extraRelaCount := ObjRelCount - relaTextCount;
-
-  { .rela.data: data->data pointers, data->code method slots, and one
-    R_X86_64_64 per external GOT slot against that extern's UND symbol, then
-    the C initialisers baked into .data (CStaticDataMode). Collected, then
-    grouped by data cut; an uncut object writes them in this order, as before. }
-  for i := 0 to DataPtrFixCount-1 do
-  begin
-    ObjDRef(0, DataPtrFix[i].TargetOff, dsym, cdrAdd);
-    ObjDRelPush(DataPtrFix[i].DataPos, dsym, rAbs64, cdrAdd);
-  end;
-  { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
-    method's own symbol under --function-sections, where it was `.text` plus the
-    body offset. }
-  for i := 0 to MethodFixCount-1 do
-    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
-      ObjDRelPush(MethodFixups[i].DataPos,
-                  ObjProcSymIdx[MethodFixups[i].ProcIdx], rAbs64, 0)
-    else
-      ObjDRelPush(MethodFixups[i].DataPos,
-                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
-                  ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
-  { ONLY A LIVE EXTERNAL'S SLOT IS RELOCATED. Every external the parse
-    reached got a slot, including ones only a header's static inline or a
-    since-removed body called; gcc emits neither, so those calls never exist
-    there. The slot's relocation made the object REQUIRE the symbol anyway:
-    rump's librump, linked whole, wanted 18 functions no rump library defines
-    (pmap_pv_remove, vm_map_lock, ...). Live = a call or load through the
-    slot that survived DCE (DynCall*), or a C initialiser naming it (CDR).
-    A dead slot stays zero, and its UND symbol is left unreferenced, which no
-    linker resolves. bug-c-objects-require-externals-only-dead-code-called }
-  SetLength(extLive, ExternalCount + 1);
-  for i := 0 to ExternalCount - 1 do extLive[i] := False;
-  for i := 0 to DynCallCount - 1 do
-    if (DynCallExtIdx[i] >= 0) and (DynCallExtIdx[i] < ExternalCount) then
-      extLive[DynCallExtIdx[i]] := True;
-  for i := 0 to CDRCount-1 do
-  begin
-    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
-    if (cdrSym >= extSym0) and (cdrSym < extSym0 + ExternalCount) then
-      extLive[cdrSym - extSym0] := True;
-  end;
-  for i := 0 to ExternalCount-1 do
-    if extLive[i] then
-      ObjDRelPush(ExternalGotOff[i], extSym0 + i, rAbs64, 0);
-  for i := 0 to CDRCount-1 do
-  begin
-    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
-    ObjDRelPush(CDRPos[i], cdrSym, rAbs64, cdrAdd);
-  end;
-  ObjGroupDataRelocs;
-  relaDataCount := ODRHeadN;
-  dataRelaCount := ODRCount - ODRHeadN;
-  if PxxDbgEnabled('obj.datasections') or (FunctionSections and (ODCCount > 0) and PxxDbgEnabled('a.datamap')) then
-    writeln(StdErr, 'data-sections: .data cuts ', ODCFirstBss, '  .bss cuts ',
-            ODCCount - ODCFirstBss, '  .data refused ', ODCDroppedData);
+  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount + CDRCount;
 
   textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
   dataOff := AlignTo(textOff + CodeLen, 16);
@@ -7923,7 +6356,6 @@ begin
   if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
   if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
   numSects := ObjNumberCuts(numSects);
-  numSects := ObjNumberDataCuts(numSects);
 
   { Names are appended to the 66-byte base blob only for sections that EXIST, so
     an object without initialisers is byte-for-byte the file it was before this
@@ -7950,21 +6382,6 @@ begin
     ObjCutRelaNm[c] := shstrSize;
     shstrSize := shstrSize + Length(ObjCutName[c]) + 12;
   end;
-  { '.rela.data.<name>' (+5 '.data.<name>') per .data cut, '.bss.<name>' per .bss }
-  for c := 0 to ODCCount - 1 do
-  begin
-    ODCNm[c] := shstrSize;
-    if ODCFull[c] <> '' then
-    begin
-      { '.rela<name>' then the section from +5, like the others; a .bss one is
-        just '<name>' }
-      if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCFull[c]) + 6
-      else shstrSize := shstrSize + Length(ODCFull[c]) + 1;
-    end
-    else if ODCRo[c] then shstrSize := shstrSize + Length(ODCName[c]) + 14
-    else if ODCSec[c] = 0 then shstrSize := shstrSize + Length(ODCName[c]) + 12
-    else shstrSize := shstrSize + Length(ODCName[c]) + 6;
-  end;
 
   { Every offset here is already 8-aligned: relaDataOff is, 24 and 8 preserve
     it, so the array sections need no padding of their own. }
@@ -7977,8 +6394,7 @@ begin
   if hasFiniArr then relaFiniArrOff := finiArrOff + 8;
   extraRelaOff := relaFiniArrOff;
   if hasFiniArr then extraRelaOff := relaFiniArrOff + 24;
-  dataRelaOff := extraRelaOff + extraRelaCount * 24;
-  shstrOff := dataRelaOff + dataRelaCount * 24;
+  shstrOff := extraRelaOff + extraRelaCount * 24;
   shOff := AlignTo(shstrOff + shstrSize, 8);
 
 {$ifdef FPC}
@@ -8024,12 +6440,7 @@ begin
     pass which simply exports everything. }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-    begin
-      if SymElfTls[i] then
-        writeSym64(f, ObjDataStrOff[i], $06, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i])
-      else
-        writeSym64(f, ObjDataStrOff[i], $01, ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
-    end;
+      writeSym64(f, ObjDataStrOff[i], $01, ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
   { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
     data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
     -- a thunk is code no proc owns and its extent is recorded nowhere, so
@@ -8043,40 +6454,24 @@ begin
   { the cut sections' own symbols ($03 = LOCAL SECTION), in cut order }
   for c := 1 to ObjCutCount - 1 do
     writeSym64(f, 0, $03, ObjCutShndx[c], 0, 0);
-  for c := 0 to ODCCount - 1 do
-    writeSym64(f, 0, $03, ODCShndx[c], 0, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-      writeSym64O(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ProcCVis[i], ObjTextShndx(Procs[i].BodyAddr),
+      writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ObjTextShndx(Procs[i].BodyAddr),
                  ObjTextRel(Procs[i].BodyAddr), ObjProcSize(i));
   { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
     (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
     SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-    begin
-      if ObjDataIsCommon(i) then
-        writeSym64(f, ObjDataStrOff[i], $11, $FFF2, ObjCommonAlign(i), SymAllocSize[i])
-      else
-        writeSym64O(f, ObjDataStrOff[i], ObjDataExportInfo(i), SymCVis[i], ObjDataSymShndx(i), ObjDataSymValue(i), SymAllocSize[i]);
-    end;
+      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), ObjDataShndx(i), ObjDataValue(i), SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
-    if OFsaExtOf[i] >= 0 then
-      ObjWriteFsaAliasSym(f, ObjExtStrOff[i], OFsaExtOf[i])
-    else
-      writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
+    writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
     size lives on the DEFINITION in another TU -- `extern char b[];` carries
     none -- so emitting anything but 0 here would be inventing it. }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-    begin
-      if OFsaImpOf[i] >= 0 then ObjWriteFsaAliasSym(f, ObjDataStrOff[i], OFsaImpOf[i])
-      else writeSym64(f, ObjDataStrOff[i], ObjDataImpBind(i), 0, 0, 0);
-    end;
-  { file-scope asm aliases, last (ObjPlanFsaAliases) }
-  for i := 0 to CFsaAliasCount - 1 do
-    if not OFsaSlot[i] then ObjWriteFsaAliasSym(f, OFsaStrOff[i], i);
+      writeSym64(f, ObjDataStrOff[i], $10, 0, 0, 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);
@@ -8093,17 +6488,35 @@ begin
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   if initThunkSym >= 0 then writeStrZ(f, OBJ_INIT_THUNK_NAME);
   if finiThunkSym >= 0 then writeStrZ(f, OBJ_FINI_THUNK_NAME);
-  for i := 0 to CFsaAliasCount - 1 do
-    if not OFsaSlot[i] then writeStrZ(f, CFsaAliasName[i]);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: the head's entries (all of them, unsplit) -- collected above }
   for i := 0 to ObjCutRelN[0] - 1 do
     writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
 
-  { .rela.data: the head's entries, collected and grouped above }
-  for i := 0 to ODRHeadN - 1 do
-    writeRela64(f, ODRPos[i], ODRSym[i], ODRType[i], ODRAddn[i]);
+  { .rela.data: data->data pointers, data->code method slots, and one
+    R_X86_64_64 per external GOT slot against that extern's UND symbol. }
+  for i := 0 to DataPtrFixCount-1 do
+    writeRela64(f, DataPtrFix[i].DataPos, 2, rAbs64, DataPtrFix[i].TargetOff);
+  { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
+    method's own symbol under --function-sections, where it was `.text` plus the
+    body offset. }
+  for i := 0 to MethodFixCount-1 do
+    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
+      writeRela64(f, MethodFixups[i].DataPos,
+                  ObjProcSymIdx[MethodFixups[i].ProcIdx], rAbs64, 0)
+    else
+      writeRela64(f, MethodFixups[i].DataPos,
+                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
+                  ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
+  for i := 0 to ExternalCount-1 do
+    writeRela64(f, ExternalGotOff[i], extSym0 + i, rAbs64, 0);
+  { C initialisers baked into .data (CStaticDataMode) }
+  for i := 0 to CDRCount-1 do
+  begin
+    ObjCDataRelaSym(i, firstGlobal, numExportProcs, extSym0, impSym0, cdrSym, cdrAdd);
+    writeRela64(f, CDRPos[i], cdrSym, rAbs64, cdrAdd);
+  end;
 
   { .init_array / .fini_array: ONE 8-byte slot each, whose VALUE is supplied by
     the relocation rather than by these bytes. The slot is written as zero
@@ -8128,9 +6541,6 @@ begin
   { the cut sections' relocations, grouped, after the head's and the arrays' }
   for i := ObjCutRelN[0] to ObjRelCount - 1 do
     writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
-  { and the data cuts' }
-  for i := ODRHeadN to ODRCount - 1 do
-    writeRela64(f, ODRPos[i], ODRSym[i], ODRType[i], ODRAddn[i]);
 
   { .shstrtab: 66-byte base blob, plus 29 bytes per array pair that exists. }
   writeU8(f, 0);
@@ -8153,15 +6563,6 @@ begin
     writeStrZ(f, '.rela.fini_array');
   end;
   for c := 1 to ObjCutCount - 1 do writeStrZ(f, '.rela.text.' + ObjCutName[c]);
-  for c := 0 to ODCCount - 1 do
-    if ODCFull[c] <> '' then
-    begin
-      if ODCSec[c] = 0 then writeStrZ(f, '.rela' + ODCFull[c])
-      else writeStrZ(f, ODCFull[c]);
-    end
-    else if ODCRo[c] then writeStrZ(f, '.rela.rodata.' + ODCName[c])
-    else if ODCSec[c] = 0 then writeStrZ(f, '.rela.data.' + ODCName[c])
-    else writeStrZ(f, '.bss.' + ODCName[c]);
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs. $40 = SHF_INFO_LINK on rela sections; 6 = ALLOC|EXEC, 3 = ALLOC|WRITE. }
@@ -8171,11 +6572,11 @@ begin
   writeShdrB64(f, 0, 0, 16, 0);
   writeShdrA64(f, 7, 4, $40, relaTextOff, relaTextCount*24);
   writeShdrB64(f, 6, 1, 8, 24);
-  writeShdrA64(f, 18, 1, 3, dataOff, ObjDHeadEnd(0));
+  writeShdrA64(f, 18, 1, 3, dataOff, DataLen);
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqDataAlign), 0);
   writeShdrA64(f, 24, 4, $40, relaDataOff, relaDataCount*24);
   writeShdrB64(f, 6, 3, 8, 24);
-  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, ObjDHeadEnd(1));
+  writeShdrA64(f, 35, 8, 3, dataOff + DataLen, BSSSize - ObjBssDropTotal);
   writeShdrB64(f, 0, 0, ObjSecAlign(ReqBssAlign), 0);
   writeShdrA64(f, 40, 2, 0, symOff, numSyms*24);
   writeShdrB64(f, 7, firstGlobal, 8, 24);
@@ -8214,31 +6615,6 @@ begin
       writeShdrB64(f, 6, ObjCutShndx[c], 8, 24);
     end;
   end;
-  { the data cuts, the same way: .data bytes in place inside the one data blob,
-    each followed by its .rela.data.<name> when it has one; .bss is NOBITS. }
-  for c := 0 to ODCCount - 1 do
-    if ODCSec[c] = 0 then
-    begin
-      { SHF_TLS on a C `__thread` variable's .tdata.<name> }
-      if Copy(ODCFull[c], 1, 6) = '.tdata' then
-        writeShdrA64(f, ODCNm[c] + 5, 1, $403, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c])
-      else if ODCRo[c] then
-        writeShdrA64(f, ODCNm[c] + 5, 1, 2, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c])
-      else
-      writeShdrA64(f, ODCNm[c] + 5, 1, 3, dataOff + ODCOff[c], ObjDCutEnd(c) - ODCOff[c]);
-      writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);
-      if ODCRelN[c] > 0 then
-      begin
-        writeShdrA64(f, ODCNm[c], 4, $40,
-                     dataRelaOff + (ODCRelAt[c] - ODRHeadN) * 24, ODCRelN[c] * 24);
-        writeShdrB64(f, 6, ODCShndx[c], 8, 24);
-      end;
-    end
-    else
-    begin
-      writeShdrA64(f, ODCNm[c], 8, 3, dataOff + DataLen, ObjDCutEnd(c) - ODCOff[c]);
-      writeShdrB64(f, 0, 0, ObjDCutAlign(c), 0);
-    end;
 
 {$ifdef FPC}
   Close(f);
@@ -8333,7 +6709,7 @@ procedure ObjBuildTextRelocs386(firstGlobal, impSym0, numExportProcs: Integer);
 
   The control for the lift is byte-identity: the i386 objects this produces
   must be the files they were before it. }
-var i, dsym, n, p: Integer; expIdx: array of Integer;
+var i, dsym: Integer;
 begin
   for i := 0 to FixCount-1 do
     ObjRelPush(Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]), 0);
@@ -8365,36 +6741,6 @@ begin
     ObjRelPush(DynCallCodePos[i], 2, Rel386Type(DynCallPCRel[i]), 0);
   for i := 0 to ProcAddrFixCount-1 do
     ObjRelPush(ProcAddrFix[i].CodePos, 1, Rel386Type(ProcAddrPCRel[i]), 0);
-  { A CALL TO A WEAK DEFINITION goes through the callee's symbol, so a strong
-    definition in another object replaces it at link time. This object has
-    one .text, so every other call is a resolved rel32 to its own copy, and so
-    was this one: c_weak_a.o + c_weak_b.o printed 2 where gcc and the x86-64
-    objects print 20. On x86-64 the same thing comes from --function-sections
-    (ObjCallFixIsRelocatable), which this writer does not have. R_386_PC32 is
-    REL, so the addend lives in the code word: -4, the rel32 bias. The symbol
-    is the callee's GLOBAL row, numbered as the table below emits them.
-    bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object }
-  SetLength(expIdx, ProcCount);
-  n := 0;
-  for i := 0 to ProcCount-1 do
-  begin
-    expIdx[i] := -1;
-    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-    begin
-      expIdx[i] := firstGlobal + n;
-      Inc(n);
-    end;
-  end;
-  for i := 0 to CallFixCount-1 do
-  begin
-    p := CallFix[i].ProcIdx;
-    if (p >= 0) and (p < ProcCount) and ProcCWeakDef[p] and (expIdx[p] >= 0) and
-       ((CallFixTarget[i] < 0) or (CallFixTarget[i] = Procs[p].BodyAddr)) then
-    begin
-      Patch32(CallFix[i].CodePos, -4);
-      ObjRelPush(CallFix[i].CodePos, expIdx[p], 2, 0);   { R_386_PC32 }
-    end;
-  end;
 end;
 
 procedure ObjBuildTextRelocsArm32(firstGlobal, gotSym0, impSym0,
@@ -8786,16 +7132,9 @@ begin
     one decision taken in ObjPlanHostedSymbols. If only one writer emitted them
     the counts that writer returns would no longer describe the table it wrote,
     which is exactly the truncated object this loop was added to fix. }
-  { a variable CPlaceGlobalInData moved to .data (a weak definition's baked
-    initialiser) carries a TAGGED offset: its value is the .data part and its
-    section is .data (3), not .bss (5) -- written raw it was a .bss symbol at
-    0x200006c8 and the program segfaulted. bug-c-a-strong-definition-does-not-replace-a-weak-one-in-an-i386-object }
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
-      if SymOffIsData(Syms[i].Offset) then
-        writeSym32(f, ObjDataStrOff[i], SymOffDataPart(Syms[i].Offset), SymAllocSize[i], $01, 3)
-      else
-        writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
   { The arm32 GOT-slot locals, LAST in the local half and therefore immediately
     before firstGlobal. $01 = STB_LOCAL | STT_OBJECT; shndx 3 is .data; the
     slot is 8 bytes wide because the .data layout is shared with the 64-bit
@@ -8825,15 +7164,12 @@ begin
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), Byte(ObjProcBind(i) or 2), 1);
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      if SymOffIsData(Syms[i].Offset) then
-        writeSym32(f, ObjDataStrOff[i], SymOffDataPart(Syms[i].Offset), SymAllocSize[i], ObjDataExportInfo(i), 3)
-      else
-        writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      writeSym32(f, ObjDataStrOff[i], 0, 0, ObjDataImpBind(i), 0);
+      writeSym32(f, ObjDataStrOff[i], 0, 0, $10, 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);
@@ -9312,12 +7648,8 @@ begin
   if FiniThunkOff >= 0 then Inc(dynamicSize, 16);
 
   phOff := ELF_HEADER_SIZE;
-  textOff := phOff + 4 * PROG_HEADER_SIZE;   { 2 x PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
-  { The data starts on a page of its own: the text is mapped R+X and the rest
-    RW, never one RWX segment. NetBSD (PaX MPROTECT) refuses to map a
-    writable executable segment ("mmap of data failed: Permission denied")
-    and OpenBSD enforces W^X; Linux took it, but should not have to. }
-  dataOff := AlignTo(textOff + CodeLen, 4096);
+  textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
+  dataOff := AlignTo(textOff + CodeLen, 8);
   dynstrOff := dataOff + DataLen;
   dynsymOff := AlignTo(dynstrOff + dynstrSize, 8);
   hashOff := dynsymOff + numDynSyms * 24;
@@ -9388,19 +7720,15 @@ begin
   writeU16(f,3);writeU16(f,62);writeU32(f,1);           { ET_DYN, EM_X86_64 }
   writeU64(f,0);writeU64(f,phOff);writeU64(f,shOff);    { entry=0, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
-  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,4);
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,3);
   writeU16(f,64);writeU16(f,10);writeU16(f,9);  { shentsize, shnum, shstrndx }
 
-  { PT_LOAD 1: the headers and the code, R+X. }
-  writeU32(f,1);writeU32(f,5);
+  { PT_LOAD: whole file, RWX (same single-segment simplification the ET_EXEC
+    writer already uses). }
+  writeU32(f,1);writeU32(f,7);
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
-  writeU64(f,textOff + CodeLen);writeU64(f,textOff + CodeLen);writeU64(f,$1000);
-  { PT_LOAD 2: data, the dynamic tables and .bss, RW; vaddr = file offset as
-    everywhere in this writer. memsz > filesz: the tail is .bss, zero-filled
-    by the kernel. }
-  writeU32(f,1);writeU32(f,6);
-  writeU64(f,dataOff);writeU64(f,dataOff);writeU64(f,dataOff);
-  writeU64(f,fileSize - dataOff);writeU64(f,memSize - dataOff);writeU64(f,$1000);
+  { memsz > filesz: the tail is .bss, zero-filled by the kernel. }
+  writeU64(f,fileSize);writeU64(f,memSize);writeU64(f,$200000);
 
   { PT_DYNAMIC }
   writeU32(f,2);writeU32(f,6);
@@ -9783,13 +8111,7 @@ begin
   lastSlash := 0;
   for i := 1 to Length(path) do
   begin
-{$ifdef PXX_OS_WINDOWS}
-    { a compiler built for Windows: argv[0] and typed paths use '\' too
-      (D:\pxx\compiler\pascal26.exe), and its ExeDir finds lib/ through it }
-    if (path[i] = '/') or (path[i] = '\') then
-{$else}
     if path[i] = '/' then
-{$endif}
       lastSlash := i;
   end;
   Result := '';
@@ -9809,11 +8131,7 @@ begin
   lastSlash := 0; lastDot := 0;
   for i := 1 to Length(path) do
   begin
-{$ifdef PXX_OS_WINDOWS}
-    if (path[i] = '/') or (path[i] = '\') then lastSlash := i;
-{$else}
     if path[i] = '/' then lastSlash := i;
-{$endif}
     if path[i] = '.' then lastDot := i;
   end;
   if lastDot <= lastSlash then lastDot := Length(path) + 1;
@@ -10171,74 +8489,6 @@ begin
   AppendChar(IncExpanded, #10);
 end;
 
-{ fpc's `{$I %NAME%}` compile-time info macro: the STRING it expands to, as
-  fpc 3.2.2 answers it (measured, see the ticket's table). `nm` is the name
-  without the percent signs, `selfPath` the file the directive sits in, `line`
-  its line there. %DATE% and %TIME% need a clock the compiler does not have yet
-  and are REFUSED, never left at 0: this used to compile `const d = ;` as the
-  Integer 0 with no word, because this pass left the directive "for the lexer"
-  and the lexer had no handler for it.
-  bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero }
-function PasInfoMacro(const nm, selfPath: AnsiString; line: Integer): AnsiString;
-var k, slash: Integer; v: AnsiString;
-begin
-  v := '';
-  if CaseEqual(nm, 'FILE') then
-  begin
-    slash := 0;
-    for k := 1 to Length(selfPath) do
-      if selfPath[k] = '/' then slash := k;
-    for k := slash + 1 to Length(selfPath) do AppendChar(v, selfPath[k]);
-  end
-  else if CaseEqual(nm, 'LINE') then
-    v := IncSmallIntStr(line)
-  else if CaseEqual(nm, 'FPCVERSION') then
-    v := '3.2.2'                     { the dialect pxx follows; same as VER3_2_2 under --mimic-fpc }
-  else if CaseEqual(nm, 'FPCTARGET') or CaseEqual(nm, 'FPCTARGETCPU') then
-  begin
-    case TargetArch of
-      TARGET_X86_64:  v := 'x86_64';
-      TARGET_I386:    v := 'i386';
-      TARGET_AARCH64: v := 'aarch64';
-      TARGET_ARM32:   v := 'arm';
-      TARGET_XTENSA:  v := 'xtensa';
-      TARGET_RISCV32: v := 'riscv32';
-      TARGET_WASM32:  v := 'wasm32';
-    else
-      v := TargetArchName(TargetArch);
-    end;
-  end
-  else if CaseEqual(nm, 'FPCTARGETOS') then
-  begin
-    if TargetPlatform = PLATFORM_ESP then v := 'FreeRTOS'
-    else if TargetPlatform = PLATFORM_WASI then v := 'WASI'
-    else
-      case TargetKernel of
-        KERNEL_FREEBSD:   v := 'FreeBSD';
-        KERNEL_OPENBSD:   v := 'OpenBSD';
-        KERNEL_NETBSD:    v := 'NetBSD';
-        KERNEL_DRAGONFLY: v := 'DragonFly';
-        KERNEL_MINIX:     v := 'Minix';
-        KERNEL_WINDOWS:   v := 'Win64';
-      else
-        v := 'Linux';
-      end;
-  end
-  else if CaseEqual(nm, 'DATE') or CaseEqual(nm, 'TIME') then
-  begin
-    ErrorAt(line, 'the include macro %' + nm + '% is not implemented in pxx (no compile-time clock yet); ' +
-               'fpc expands it to the build date/time. Use a const string instead');
-  end
-  else
-  begin
-    { fpc: any other name is that ENVIRONMENT variable, '' plus a warning when unset. }
-    v := PxxGetEnv(nm);
-    if v = '' then
-      WarnAt(line, 'Include environment "' + nm + '" not found in environment');
-  end;
-  PasInfoMacro := v;
-end;
-
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString);
 { Replace active dollar-include directives with file contents, RECURSIVELY: an
   include inside an include is ordinary Pascal and FPC expands it, so we must
@@ -10267,7 +8517,6 @@ var
   wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
   incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
-  macName, macVal: AnsiString; macLine: Integer;   { a {$I %MACRO%} expansion (PasInfoMacro) }
   cond, active, outermost, savedNestedComments, optOn: Boolean;
   savedCondQuiet: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
@@ -10518,35 +8767,12 @@ begin
 {$endif}
           Inc(j);
         end;
-        if (Length(fname) >= 2) and (fname[1] = '%') and
-           (fname[Length(fname)] = '%') and (j <= Length(src)) then
-        begin
-          { `{$I %MACRO%}`: fpc's compile-time info macro, expanded HERE to the
-            quoted string literal it stands for (PasInfoMacro). The lexer never
-            had a handler for it, so leaving it "for the lexer" compiled
-            `const d = ;` as 0. }
-          macName := '';
-          for k := 2 to Length(fname) - 1 do AppendChar(macName, fname[k]);
-          macLine := 1;
-          for k := 1 to i - 1 do
-            if src[k] = #10 then Inc(macLine);
-          macVal := PasInfoMacro(macName, selfPath, macLine);
-          AppendChar(IncExpanded, '''');
-          for k := 1 to Length(macVal) do
-          begin
-            if macVal[k] = '''' then AppendChar(IncExpanded, '''');
-            AppendChar(IncExpanded, macVal[k]);
-          end;
-          AppendChar(IncExpanded, '''');
-          i := j + 1;                   { past the closing brace }
-        end
-        else if (Length(fname) = 1) and ((fname[1] = '+') or (fname[1] = '-')) or
+        if (Length(fname) = 1) and ((fname[1] = '+') or (fname[1] = '-')) or
            ((Length(fname) > 0) and (fname[1] = '%')) then
         begin
-          { NOT an include: `{$I+}` / `{$I-}` IO-checking switches -- leave them
-            in the text for the lexer (the hard miss-error below must not fire
-            on them). A malformed macro with no closing percent sign stays
-            here too. }
+          { NOT an include: `{$I+}` / `{$I-}` IO-checking switches and
+            `{$I %MACRO%}` compile-time info macros — leave them in the text
+            for the lexer (the hard miss-error below must not fire on them). }
           AppendChar(IncExpanded, src[i]);
           Inc(i);
         end

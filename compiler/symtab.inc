@@ -116,7 +116,6 @@ procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadDataRefRISCV32(rd, dataOff: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
-procedure Rv32InlineMem(n: Integer; isCopy: Boolean); forward;
 procedure EmitFrameAddrRISCV32(rd: Integer; off: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 { The xtensa twin of EmitSlotAddrRISCV32 four lines up, and it is here for the
@@ -3230,39 +3229,8 @@ begin
     else if (Result = REC_NONE) or not UserRecordIsBuiltinShape(ci, Result) then
       Result := REC_UCLASS_BASE + ci;
   end
-  else
-    { NO declaration of the name is visible: the builtin id is not the user's
-      type. These fourteen ids exist so compiler.pas's OWN records keep known
-      ids across the self-host, and compiler.pas declares every one of them, so
-      that path is the arm above (a declared record of the builtin shape). A
-      user program that merely MENTIONS the name got a compiler-internal
-      record: `var t: TParam` with no TParam anywhere was a silent 40-byte
-      record (fpc: identifier not found), and `PToken = ^TToken` ahead of the
-      user's own `TToken = record kind: Byte end` bound the pointer to the
-      builtin, so `p^.kind` was "no such member". REC_NONE lets the ordinary
-      unknown-type and forward-pointer paths answer instead.
-      bug-a-fourteen-compiler-internal-record-names-are-reserved-in-every-user-program }
+  else if (Result <> REC_NONE) and (FindEnumType(lo2) >= 0) then
     Result := REC_NONE;
-end;
-
-function RecordCastTarget(const lo: AnsiString): Integer;
-{ The record a VALUE typecast `T(x)` reinterprets as: IsRecordType's answer,
-  or, when T is an ALIAS of a record (`bestrealrec = TDoubleRec`, FPC's own
-  x86_64/cpuinfo.pas), the record it names. Without the alias arm
-  `R2(v).field` fell through to the pointer-alias cast and was refused
-  ("expected ')' before '.'") while `TR(v).field` compiled.
-  feature-b-rtl-has-no-tdoublerec }
-var ai, ci: Integer;
-begin
-  Result := IsRecordType(lo);
-  if Result >= REC_UCLASS_BASE then Exit;
-  Result := REC_NONE;
-  ai := FindTypeAlias(lo);
-  if (ai < 0) or (AliasTk[ai] <> Ord(tyRecord)) or (AliasProcSig[ai] >= 0) or
-     (AliasPtrDepth[ai] <> 0) then Exit;
-  ci := AliasElemRec[ai] - REC_UCLASS_BASE;
-  if (ci < 0) or (ci >= UClsCount) or (not UClsIsRecord[ci]) then Exit;
-  Result := AliasElemRec[ai];
 end;
 
 { The CLASS of that name, skipping same-named RECORDS. FindUClass returns the
@@ -4644,7 +4612,6 @@ begin
     29: Result := 1;  { tyBool8 — C99 _Bool, one unsigned byte (same storage as tyUInt8) }
     30: Result := 4;  { tyUCS4Char — a Unicode code point (same storage as tyUInt32) }
     31: Result := 2;  { tyWideChar — a UTF-16 code unit (same storage as tyUInt16) }
-    32, 33: Result := 16;  { tyInt128/tyUInt128 — __int128, two 64-bit halves }
     27: Result := 8;  { tyPromoInt32 — two 32-bit NATIVE words: tag + inline payload }
     28: Result := 16; { tyPromoInt64 — two 64-bit NATIVE words: tag + inline payload }
   end;
@@ -4895,16 +4862,6 @@ begin
   else if Result <= 2 then Result := 2
   else if Result <= 4 then Result := 4
   else Result := 8;
-  { __int128 is 16-aligned on every 64-bit psABI (gcc: _Alignof 16). }
-  if (Ord(tk) = 32) or (Ord(tk) = 33) then Result := 16;
-end;
-
-{ GCC's 128-bit integers. Not ordinal and not TypeSigned on purpose (see the
-  enum): every site that handles one asks for it here.
-  feature-c-int128-and-attribute-mode }
-function TypeIsInt128(tk: TTypeKind): Boolean;
-begin
-  Result := (Ord(tk) = 32) or (Ord(tk) = 33);
 end;
 
 function TypeFieldAlign(tk: TTypeKind): Integer;
@@ -5544,8 +5501,7 @@ end;
 
 { ===== 32-bit call argument marshalling: the shared DECISION =====
 
-  Every 32-bit backend (i386, arm32, riscv32, and xtensa through
-  XtensaPushArgByClass) marshals by-value call arguments
+  Every 32-bit backend (i386, arm32, riscv32) marshals by-value call arguments
   with a ladder of special cases, and each writes that ladder out once per call
   KIND: direct, indirect (proc-var), and virtual. Three backends x three kinds,
   nine copies that were never meant to differ — and they drifted. IR_VIRTUAL_CALL
@@ -6442,26 +6398,6 @@ begin
   DbgCaseBindReport(hit, lo);
 end;
 
-{ NilPy: a bare name's binding is PER MODULE. When FindSym's first match is
-  ANOTHER .py module's global, the module being compiled may have its own
-  binding of that name further out in the chain, or may have from-imported it
-  from a different module than the newest one. PyRedirectForeignModuleGlobal
-  (pyparser.inc) answers which. Without it `from m import A` beside a later
-  `from n import A as NA` read n's A for a bare `A` (CPython: m's).
-  bug-n-a-from-import-alias-resolves-its-source-through-flat-scope }
-{$ifndef PXX_NO_NILPY}
-function PyRedirectForeignModuleGlobal(i: Integer; const lo: AnsiString): Integer; forward;
-{$endif}
-
-{ The candidate test FindSym's walk applies, factored so the NilPy redirect
-  continues the walk with the same one. }
-function FindSymMatches(i: Integer; const lo: AnsiString): Boolean;
-begin
-  FindSymMatches := (StrEqual(Syms[i].Name, lo) or
-        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo)))
-       and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i);
-end;
-
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
@@ -6520,13 +6456,10 @@ begin
   i := SymHashHead[SymNameFoldHash(lo)];
   while i >= 0 do
   begin
-    if FindSymMatches(i, lo) then
+    if (StrEqual(Syms[i].Name, lo) or
+        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo)))
+       and IsBlockVisible(SymBlockId[i], CurBlockId) and SymBindableHere(i) then
     begin
-{$ifndef PXX_NO_NILPY}
-      if PyProgramMode and (Syms[i].Kind = skGlobal) and (SymUnitIdx[i] >= 0) and
-         (SymUnitIdx[i] <> CurrentUnitIdx) and UnitIsPyModule(SymUnitIdx[i]) then
-        i := PyRedirectForeignModuleGlobal(i, lo);
-{$endif}
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
       { PXXDBG=a.casebind — see DbgCaseBindReport above. 1 is asked-and-off, so
         an unset PXXDBG costs one integer compare per resolution. }
@@ -6717,10 +6650,10 @@ begin
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
-  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n); SetLength(SymCConstObj, n); SetLength(SymCInitByCode, n); SetLength(SymCVis, n);
+  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymObjDataExternOnly, n);  SetLength(SymObjDataWeak, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(SymElfTls, n);  SetLength(SymCHasInit, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   SetLength(SymArrAi, n);
@@ -6911,16 +6844,14 @@ begin
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
   SymCLongRank[SymCount]  := 0;
-  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;   { a definition unless a declaration says otherwise }
+  SymObjDataExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False; SymCInitByCode[SymCount] := False; SymCVis[SymCount] := 0;
+  SymCStaticLink[SymCount] := False;
   SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
   SymAllocSize[SymCount] := 0;         { set by whichever reservation path takes global storage }
   SymTlsOffset[SymCount] := -1;        { not a threadvar; the `threadvar` section is the only writer }
-  SymElfTls[SymCount] := False;
-  SymCHasInit[SymCount] := False;
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -7081,14 +7012,6 @@ begin
     if (CurProc < 0) or AllocStaticLocal then
     begin
       if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
-      { THE SECTION MUST BE AT LEAST AS ALIGNED AS ITS MOST-ALIGNED SLOT. The
-        slot's offset honours a record's own alignment (a member's
-        aligned(4096) makes the struct 4096-aligned), but only an aligned(N)
-        written on the VARIABLE used to reach the writers, so .bss started 8-
-        or 16-aligned and a 4096-aligned struct sat at an offset that was a
-        multiple of 4096 from a base that was not. Gibux's NVMe queues.
-        bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment }
-      if align > ReqBssAlign then ReqBssAlign := align;
       { A C GLOBAL OF SIZE 0 STILL GETS ITS OWN ADDRESS. `extern const struct T
         x;` before T is complete sizes to 0, so a run of such declarations all
         sat at ONE offset. The object writer names an import by its offset
@@ -7110,10 +7033,6 @@ begin
     end
     else
     begin
-      { C aligned(N) on a LOCAL, up to the frame pointer's own alignment:
-        the slot offset is a multiple of N from a 16-aligned frame.
-        feature-c-an-over-aligned-local-is-not-aligned }
-      if AllocMinAlign > align then align := AllocMinAlign;
       FrameSize := AlignTo(FrameSize + sz, align);
       Syms[SymCount].Kind   := skLocal;
       Syms[SymCount].Offset := -FrameSize;
@@ -7273,8 +7192,6 @@ var sz, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
-  SymElfTls[SymCount] := False;
-  SymCHasInit[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
@@ -7371,7 +7288,7 @@ begin
   Syms[SymCount].Kind     := skParam;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -7487,8 +7404,7 @@ function TryBakeConstArrayIntoData(symIdx, firstPI, bssBefore, bssAfterAlloc: In
   a 114-entry errno byte table cost 7.7 KB of startup stores under
   --emit-obj. The x86-64/aarch64/i386/arm32 object writers carry an arm too
   but no test has run one, so they stay refused until one does. }
-var k, n, esz, base, b, si: Integer; v: Int64; elemTk: TTypeKind;
-    isStr: Boolean;
+var k, n, esz, base, b: Integer; v: Int64; elemTk: TTypeKind;
 begin
   Result := False;
   if EmitSharedMode then Exit;
@@ -7499,21 +7415,10 @@ begin
   if n <= 0 then Exit;
   if PendingInitCount - firstPI <> n then Exit;
   elemTk := Syms[symIdx].ElemType;
-  { An AnsiString element whose every initialiser is a LITERAL is bakeable
-    too: the startup store puts the interned literal's static handle in the
-    slot (InternStr lays it down complete with [meta][rc][len] and the static
-    refcount, so retain/release no-op on it), and a data pointer fixup puts
-    the same word there at link time. The startup path cost ~40 B of code per
-    element: 10.6 KB for a 256-entry table (measured on riscv32 ESP), and
-    pylib's PyChar1Tab is one, in every NilPy image. tyAnsiString only (what
-    `string` and `AnsiString` elements are); not ShortString/string[N], which
-    are inline buffers, not handles.
-    feature-a-a-table-filled-at-startup-is-sram-that-could-have-been-flash }
-  isStr := (elemTk = tyAnsiString) and (SymStrCap[symIdx] <= 0);
-  if (not isStr) and (not TypedConstBakeable(elemTk)) then Exit;
+  if not TypedConstBakeable(elemTk) then Exit;
   if SymElemDynDepth[symIdx] > 0 then Exit;
   if SymIsSub[symIdx] then Exit;    { a subrange element still stores its ordinal, but leave the narrow cases alone until one is measured }
-  if isStr then esz := TARGET_PTR_SIZE else esz := TypeSlotSize(elemTk);
+  esz := TypeSlotSize(elemTk);
 
   { Every recorded init must be a plain literal for THIS array, in element
     order, covering the whole extent. Kind 0 is an ordinal, kind 3 a float
@@ -7522,11 +7427,7 @@ begin
   begin
     if PendingInitSym[k] <> symIdx then Exit;
     if PendingInitFOff[k] <> -1 then Exit;
-    if isStr then
-    begin
-      if PendingInitKind[k] <> 1 then Exit;
-    end
-    else if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
+    if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
     if PendingInitElem[k] <> Syms[symIdx].ConstVal + (k - firstPI) then Exit;
   end;
 
@@ -7540,41 +7441,6 @@ begin
     false and the fallback is gone -- promotion no longer depends on how much
     .data the rest of the compile happened to use first.
     feature-dynamic-compiler-tables }
-  if isStr then
-  begin
-    { The literals first: InternStr appends to Data, so the slots are laid
-      down after every literal exists, then each slot gets its fixup. }
-    { '' stays a zero slot: an empty AnsiString is NIL, and code compares
-      against '' by testing for nil, so a pointer to an interned empty literal
-      would read as non-empty (the self-host caught exactly that). }
-    for k := firstPI to PendingInitCount - 1 do
-      if GetTokenStrFromRaw(PendingInitVal[k], PendingInitValAux[k]) = '' then
-        PendingInitValAux[k] := -1
-      else
-        PendingInitValAux[k] := InternStr(GetTokenStrFromRaw(PendingInitVal[k], PendingInitValAux[k]));
-    base := AlignTo(DataLen, TARGET_PTR_SIZE);
-    DataEnsure(base - DataLen + n * esz);
-    for k := DataLen to base + n * esz - 1 do Data[k] := 0;
-    DataLen := base + n * esz;
-    for k := firstPI to PendingInitCount - 1 do
-    begin
-      si := PendingInitValAux[k];
-      if si >= 0 then
-        AddDataPtrFix(base + (k - firstPI) * esz, Strs[si].Offset + 8);
-    end;
-    { The slots are about to be REWOUND (PendingInitCount := firstPI below) and
-      reused by the next declaration, and the numeric element path does not set
-      PendingInitKind -- it relies on 0. A Kind of 1 left here made the next
-      Byte array's elements startup-store as strings (the compiler's own STUB
-      table, caught by the self-host). }
-    for k := firstPI to PendingInitCount - 1 do
-    begin
-      PendingInitKind[k] := 0;
-      PendingInitValAux[k] := 0;
-    end;
-  end
-  else
-  begin
   DataEnsure(base - DataLen + n * esz);
   for k := firstPI to PendingInitCount - 1 do
   begin
@@ -7586,7 +7452,6 @@ begin
       Data[base + (k - firstPI) * esz + b] := Byte((v shr (8 * b)) and $FF);
   end;
   DataLen := base + n * esz;
-  end;
 
   Syms[symIdx].Offset := DATA_SYM_BIAS + base;
   PendingInitCount := firstPI;
@@ -7794,13 +7659,6 @@ begin
   else if size >= 2 then align := 2
   else align := 1;
   if minAlign > align then align := minAlign;
-  { the record's own alignment, as the .bss slot had it }
-  if (Syms[symIdx].TypeKind = tyRecord) and (Syms[symIdx].RecName >= REC_UCLASS_BASE)
-     and (UClsAlign[Syms[symIdx].RecName - REC_UCLASS_BASE] > align) then
-    align := UClsAlign[Syms[symIdx].RecName - REC_UCLASS_BASE];
-  if Syms[symIdx].IsArray and (Syms[symIdx].ElemRecName >= REC_UCLASS_BASE)
-     and (UClsAlign[Syms[symIdx].ElemRecName - REC_UCLASS_BASE] > align) then
-    align := UClsAlign[Syms[symIdx].ElemRecName - REC_UCLASS_BASE];
   { An executable's read-only split moves RW data by a multiple of 16 only
     (RO_RESIDUE), so a larger aligned(N) would not survive it there: such a
     global stays in .bss with its stores. An object has no split. }
@@ -7881,8 +7739,6 @@ var elemSize, totalSize, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
-  SymElfTls[SymCount] := False;
-  SymCHasInit[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   if LastTypeElemDynDepth > 0 then
   begin
@@ -8012,7 +7868,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -8041,7 +7897,6 @@ begin
   if (CurProc < 0) or AllocStaticLocal then
   begin
     if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) }
-    if align > ReqBssAlign then ReqBssAlign := align;    { see AllocVar }
     BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
@@ -8050,7 +7905,6 @@ begin
   end
   else
   begin
-    if AllocMinAlign > align then align := AllocMinAlign;   { C aligned(N) on a local array: see AllocVar }
     FrameSize := AlignTo(FrameSize + totalSize, align);
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
@@ -8070,8 +7924,6 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
-  SymElfTls[SymCount] := False;
-  SymCHasInit[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name        := name;
   Syms[SymCount].TypeKind    := elemType;
@@ -8157,7 +8009,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
-  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -8224,8 +8076,6 @@ end;
 function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
-  SymElfTls[SymCount] := False;
-  SymCHasInit[SymCount] := False;
   SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
@@ -8273,9 +8123,9 @@ begin
   SymPtrElemAlias[SymCount] := -1;
   SymSetElemTk[SymCount] := 0; SymSetElemLo[SymCount] := 0; SymSetElemHi[SymCount] := -1;
   SymCLongRank[SymCount] := 0;
-  SymObjDataExternOnly[SymCount] := False; SymObjDataWeak[SymCount] := False;
+  SymObjDataExternOnly[SymCount] := False;
   SymIRReached[SymCount] := False;
-  SymCStaticLink[SymCount] := False; SymCConstObj[SymCount] := False; SymCInitByCode[SymCount] := False; SymCVis[SymCount] := 0;
+  SymCStaticLink[SymCount] := False;
   SymObjDataScope[SymCount] := False;
   SymObjRuntimeCopy[SymCount] := False;
   SymAllocSize[SymCount] := 0;
@@ -11605,28 +11455,6 @@ begin
       Warn('lazycasing: ''' + name + ''' resolved to C import ''' +
            Procs[Result].Name + ''' (case mismatch)');
       Exit;
-    end;
-  end;
-  { A COMPILER-INTERNAL KERNEL (`__pxx_*`) is found in ANY loaded unit, not
-    only where `uses` makes it visible. The backends ask for these by name
-    (riscv32/xtensa soft-float, arm32's 64-bit converts) from inside whatever
-    unit is being compiled, and a float in a unit that did not itself name
-    softfloat failed with "add `uses softfloat` to the program", even after the
-    program did. That advice could not work, because the PROGRAM's uses are
-    not the unit's. Such a name is never a user's routine, so no scope can
-    legitimately hide it.
-    bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help }
-  if (Length(name) > 6) and (Copy(name, 1, 6) = '__pxx_') then
-  begin
-    i := ProcChainHead(name);
-    while i >= 0 do
-    begin
-      if Procs[i].Name = name then
-      begin
-        Result := i;
-        Exit;
-      end;
-      i := ProcHashNext[i];
     end;
   end;
   Result := -1;
@@ -14959,9 +14787,9 @@ begin
   SetLength(DceWhy, n);  SetLength(DceVia, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcCWeakDef, n); SetLength(ProcCVis, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);  SetLength(ProcCInlineDef, n);  SetLength(ProcCExtDecl, n);  SetLength(ProcCGnuExtInline, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
-  SetLength(ProcCdecl, n);  SetLength(ProcWinCb, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
+  SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcResultFresh, n);  SetLength(ProcResultArgIdx, n);  SetLength(ProcResultFreshOrArg, n);  SetLength(ProcParamStays, n);  SetLength(ProcAggregateDestSym, n);
@@ -14991,7 +14819,7 @@ begin
   SetLength(ProcParamSemId, n*MAX_PROC_PARAMS);
   SetLength(ProcParamPtrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamPtrElemRec, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
-  SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamPyListAnn, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
   SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
   SetLength(ProcParamElemDynDepth, n*MAX_PROC_PARAMS);
   SetLength(ProcParamStrElemTk, n*MAX_PROC_PARAMS);  SetLength(ProcParamStrCap, n*MAX_PROC_PARAMS);
@@ -15001,22 +14829,6 @@ begin
   SetLength(ProcParamDefaultSLen, n*MAX_PROC_PARAMS);
   SetLength(PyCapName, n*PY_MAX_CAPS);
   ProcCapacity := n;
-end;
-
-
-{ A C function whose only definition here is an INLINE DEFINITION (C99
-  6.7.4p7): no external definition in this translation unit, so its symbol is
-  LOCAL, as gcc emits nothing global for it. Two objects that include a header
-  defining `inline int twice(int)` both exported a strong `twice`, and --link
-  refused the pair. One `extern` (or non-inline) declaration anywhere makes the
-  definition external again; a gnu_inline `extern inline` never is.
-  bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object }
-function CProcInlineOnly(pi: Integer): Boolean;
-begin
-  Result := False;
-  if (pi < 0) or (pi >= Length(ProcCInlineDef)) then Exit;
-  if ProcCGnuExtInline[pi] then begin Result := True; Exit; end;
-  Result := ProcCInlineDef[pi] and (not ProcCExtDecl[pi]);
 end;
 
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
@@ -15047,15 +14859,12 @@ begin
   ProcNoSelf[ProcCount]       := False;
   ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCStaticLink[ProcCount] := False;      { set when the C definition said `static` }
-  ProcCInlineDef[ProcCount] := False;  ProcCExtDecl[ProcCount] := False;  ProcCGnuExtInline[ProcCount] := False;
-  ProcCWeakDef[ProcCount] := False; ProcCVis[ProcCount] := 0;
   ProcCaseSensitive[ProcCount] := DeclCaseSensitive;
   ProcOverloadDirective[ProcCount] := False;
   ProcFlexColumn[ProcCount]   := False;
   ProcLibrary[ProcCount]      := -1;
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;
-  ProcWinCb[ProcCount]        := False;
   ProcUnitIdx[ProcCount] := CurrentUnitIdx; ProcDeclImpl[ProcCount] := DeclInImplNow;
   ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
   ProcPyRebindTok[ProcCount]  := -2;  { -2 = not computed; see defs.inc }
@@ -15113,7 +14922,6 @@ begin
     ProcParamStrCap[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamCapRef[ProcCount * MAX_PROC_PARAMS + i] := False;
-    ProcParamPyListAnn[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamUntyped[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamHasDefault[ProcCount * MAX_PROC_PARAMS + i] := False;
@@ -15292,32 +15100,6 @@ begin
       arithmetic -- do not copy the constant. }
     EmitAsm386('sub esp, 12');
   end
-  else if TargetArch = TARGET_AARCH64 then
-  begin
-    { AAPCS64: x19..x28, fp/lr and the low halves of d8..d15 are the caller's.
-      A 160-byte frame keeps sp 16-aligned at every call in the body:
-        stp x29,x30,[sp,#-160]! ; mov x29,sp
-        stp x19..x28 at 16..95 ; stp d8..d15 at 96..159
-      (words from llvm-mc; only an --emit-obj .init_array carrier reaches here,
-      --shared is refused above) }
-    EmitI32($A9B67BFD); EmitI32($910003FD);
-    EmitI32($A90153F3); EmitI32($A9025BF5); EmitI32($A90363F7);
-    EmitI32($A9046BF9); EmitI32($A90573FB);
-    EmitI32($6D0627E8); EmitI32($6D072FEA); EmitI32($6D0837EC); EmitI32($6D093FEE);
-  end
-  else if TargetArch = TARGET_XTENSA then
-  begin
-    { windowed, called through an .init_array pointer by CALLX8 (the caller
-      4-aligned the thunk). A procedure's own frame shape: a15 = the entry sp,
-      128 bytes of scratch below it, a7 = the local-area bias -- the global
-      initialiser code is the code main's prologue normally hosts. }
-    { the whole frame in ENTRY: a MOVSP right after it traps on every call
-      (bug-xtensa-windowed-prologue-movsp-traps-on-every-call) }
-    xtensa_entry(reg_xtensa_sp, 32 + 128);
-    xtensa_addi(reg_xtensa_a15, reg_xtensa_sp, 64);
-    xtensa_addi(reg_xtensa_a15, reg_xtensa_a15, 64);
-    xtensa_addi(reg_xtensa_a7, reg_xtensa_a15, -64);
-  end
   else
     ErrorNoPos('internal: no init/fini thunk prologue for --target=' +
                TargetArchName(TargetArch));
@@ -15348,17 +15130,6 @@ begin
       'ret'
     ]);
   end
-  else if TargetArch = TARGET_AARCH64 then
-  begin
-    { the prologue's frame, unwound: ldp in the same slots, then
-      ldp x29,x30,[sp],#160 ; ret }
-    EmitI32($A94153F3); EmitI32($A9425BF5); EmitI32($A94363F7);
-    EmitI32($A9446BF9); EmitI32($A94573FB);
-    EmitI32($6D4627E8); EmitI32($6D472FEA); EmitI32($6D4837EC); EmitI32($6D493FEE);
-    EmitI32($A8CA7BFD); EmitI32($D65F03C0);
-  end
-  else if TargetArch = TARGET_XTENSA then
-    xtensa_retw
   else
     ErrorNoPos('internal: no init/fini thunk epilogue for --target=' +
                TargetArchName(TargetArch));
@@ -16578,33 +16349,6 @@ begin
     aligned := ((size + XtSpillMax + 15) div 16) * 16;
     if aligned = 0 then aligned := 16;
     Patch32(patchPos, aligned);
-    { THE WHOLE FRAME IN ENTRY'S IMMEDIATE when it fits (imm12 * 8, up to
-      32760), as gcc does: `entry a1, 32+F; ...; add a15, a1, a8; nop`
-      replaces `entry a1, 32; mov.n a15, a1; ...; sub a8, a1, a8; movsp a1, a8`.
-      Same final sp, same a15 (= entry sp + F = the old 32-byte frame's sp),
-      same layout. MOVSP right after ENTRY always finds the caller's window
-      live, so it raised an AllocaCause exception on EVERY call: ESP-IDF and
-      Linux spill and retry in a handler (a trap per call), Gibux had no
-      handler and stopped busybox at its first one. The literal stays (it is
-      a8 = F for the add). Only the shape this prologue emitted is rewritten,
-      checked byte for byte; anything else keeps MOVSP.
-      bug-xtensa-windowed-prologue-movsp-traps-on-every-call }
-    if 32 + aligned <= 32760 then
-    begin
-      p := -1;
-      for rvLo := patchPos - 5 downto patchPos - 16 do
-        if (rvLo >= 0) and (p < 0) and
-           (Code[rvLo] = $36) and (Code[rvLo + 1] = $41) and (Code[rvLo + 2] = $00) and
-           (Code[rvLo + 3] = $FD) and (Code[rvLo + 4] = $01) then p := rvLo;
-      if (p >= 0) and
-         (Code[patchPos + 7] = $80) and (Code[patchPos + 8] = $81) and (Code[patchPos + 9] = $C0) and
-         (Code[patchPos + 10] = $10) and (Code[patchPos + 11] = $18) and (Code[patchPos + 12] = $00) then
-      begin
-        Patch24(p, $000136 or (((32 + aligned) div 8) shl 12));   { entry a1, 32+F }
-        Patch24(patchPos + 7, $80F180);                            { add a15, a1, a8 }
-        Patch24(patchPos + 10, $0020F0);                           { nop }
-      end;
-    end;
     { ...and every alloca's block offset, which is the same final number:
       the block sits just above the region this frame reserves for spills. }
     for rvLo := 0 to XtAllocaLitCount - 1 do
@@ -17571,15 +17315,13 @@ begin
     Error('compiler error: EmitZeroFrameSlot: unhandled target');
 end;
 
-function ABIX64SysVRet(procIdx: Integer; var cls0, cls1: Integer): Integer; forward;
-
 { Stash the caller's hidden aggregate-result destination pointer (passed in the
   per-target indirect-result register) into the proc's dest-sym frame slot, right
   after the prologue and before the param-copy loop can clobber that register.
   Shared by the Pascal (pasparser_*.inc) and C (cparser.inc) routine emitters so an
   aggregate-returning C function uses the same convention as a Pascal one. }
 procedure EmitAggregateDestStash(procIdx: Integer);
-var idx, sc0, sc1: Integer;
+var idx: Integer;
 begin
   if (procIdx < 0) or (ProcAggregateDestSym[procIdx] < 0) then Exit;
   idx := ProcAggregateDestSym[procIdx];
@@ -17642,9 +17384,6 @@ begin
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a9, 0);
     end;
   end
-  else if ABIX64SysVRet(procIdx, sc0, sc1) = 0 then
-    { SysV MEMORY: the destination is the hidden first argument }
-    begin EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[idx].Offset); end { mov [rbp+off], rdi }
   else
     begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
 end;
@@ -17740,7 +17479,7 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz, i, procIdx, mek, sc0, sc1, sc, gp, xm: Integer;
+var sz, i, procIdx, mek: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -18193,14 +17932,6 @@ begin
         EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
         EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
-        if EspBareBoot then
-        begin
-          { no RTL: copy inline (XtensaInlineMem), then a2 = dest again }
-          XtensaInlineMem(sz, True);
-          EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);
-        end
-        else
-        begin
         EmitLoadConstXtensa(reg_xtensa_a4, sz);                       { a4 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
@@ -18217,7 +17948,6 @@ begin
         begin
           EmitCallProc(procIdx);
           EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);           { a2 = dest (return value) }
-        end;
         end;
       end
       else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
@@ -18351,14 +18081,10 @@ begin
         EmitSlotAddrRISCV32(reg_a1, retSymIdx);              { a1 = &Result (src) }
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
-        if EspBareBoot then Rv32InlineMem(sz, True)           { no RTL: inline }
-        else
-        begin
         EmitLoadImmRISCV32(reg_a2, sz);                       { a2 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
-        end;
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest (return value) }
       end
       else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
@@ -18453,31 +18179,7 @@ begin
 
   if retSymIdx >= 0 then
   begin
-    if (ABIX64SysVRet(CurProc, sc0, sc1) > 0) and (Syms[retSymIdx].Kind = skLocal) then
-    begin
-      { SysV register-class record: the eightbytes go back in registers,
-        INTEGER ones in rax then rdx and SSE ones in xmm0 then xmm1; the
-        caller has passed no destination. The second load may read past a
-        12-byte Result into the frame, which only fills bits the caller
-        ignores. }
-      gp := 0; xm := 0;
-      for i := 0 to ABIX64SysVRet(CurProc, sc0, sc1) - 1 do
-      begin
-        if i = 0 then sc := sc0 else sc := sc1;
-        if sc = SYSV_CLS_SSE then
-        begin
-          EmitAsmX64(['movsd %xmm, [rbp+%]', xm, Syms[retSymIdx].Offset + 8 * i]);
-          Inc(xm);
-        end
-        else
-        begin
-          if gp = 0 then EmitAsmX64(['mov rax, [rbp+%]', Syms[retSymIdx].Offset + 8 * i])
-          else EmitAsmX64(['mov rdx, [rbp+%]', Syms[retSymIdx].Offset + 8 * i]);
-          Inc(gp);
-        end;
-      end;
-    end
-    else if ABIRetViaHiddenDestProc(CurProc) and
+    if ABIRetViaHiddenDestProc(CurProc) and
        (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
     begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.
@@ -18541,15 +18243,6 @@ begin
         with no widen and no rax bridge (the cdecl caller reads xmm0, not rax). }
       EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { movss xmm0, [rbp+off] }
     end
-    else if TypeIsInt128(Syms[retSymIdx].TypeKind) and (Syms[retSymIdx].Kind = skLocal) and
-            not Syms[retSymIdx].IsArray then
-    begin
-      { __int128 returns in rdx:rax (SysV), which is also the value model
-        ir_codegen_i128.inc carries it in. feature-c-int128-and-attribute-mode }
-      EmitAsmX64([
-        'mov rax, [rbp+%]', Syms[retSymIdx].Offset,
-        'mov rdx, [rbp+%]', Syms[retSymIdx].Offset + 8]);
-    end
     else
     begin
       EmitLoadVar(retSymIdx);
@@ -18587,25 +18280,6 @@ begin
   begin
     EmitB($4C); EmitB($8B); EmitB($A5); EmitI32(CsSaveOff12);  { mov r12, [rbp+off] }
     EmitB($4C); EmitB($8B); EmitB($AD); EmitI32(CsSaveOff13);  { mov r13, [rbp+off] }
-  end;
-  { -fstack-protector-strong: the canary check, on every return of a protected
-    C function (each `return` and the fall-through reach here). Last before the
-    frame teardown, with r11 only: the result is already in rax/rdx/xmm0-1.
-    __stack_chk_fail does not return, so clobbering the result there is fine.
-    feature-c-stack-protector-strong-global-guard }
-  if CSspStrong and (CSspProc >= 0) and (CSspProc = CurProc) and (CSspSlot >= 0) then
-  begin
-    i := FindSym('__stack_chk_guard');
-    procIdx := FindProc('__stack_chk_fail');
-    if (i < 0) or (procIdx < 0) then
-      Error('-fstack-protector-strong: __stack_chk_guard/__stack_chk_fail are not declared');
-    EmitAsmX64(['mov r11, [rbp+%]', Syms[CSspSlot].Offset,
-                'cmp r11, [@glob]', Syms[i].Offset]);
-    EmitB($74); sz := CodeLen; EmitB(0);          { je ok (patched below) }
-    EmitCallProc(procIdx);
-    if CodeLen - sz - 1 > 127 then
-      Error('-fstack-protector-strong: the failure call does not fit a short jump');
-    Code[sz] := CodeLen - sz - 1;                 { ok: }
   end;
   EmitB($C9); EmitB($C3);
 end;
@@ -18917,35 +18591,6 @@ begin
     end;
   end;
 
-  { x86-64 has its own block in gs, and a thread pxx starts gets a fresh
-    one (PxxPthreadStart). A thread the LOADED LIBC starts does not: a C
-    program built with --system-libs calls the host's pthread_create
-    directly, and its threads inherit the creator's gs, so every __thread
-    read and write lands in the main thread's block. Measured 2026-11-19:
-    `__thread int tl = 7;` set to 9 in such a thread reads 9 in main, where
-    gcc keeps 7. It was silent. It warned from then, and since 2026-11-20 a
-    C executable's pthread_create is renamed to palhostthread's wrapper
-    (CHostPthreadRoute), which installs the block, so its calls no longer reach
-    an external of this name. What still lands here: thrd_create (glibc's own
-    internal pthread_create is not routed), and a pthread_create reached by a
-    name the rename does not cover.
-    bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
-  if (ExternalCount > 0) and (TargetArch = TARGET_X86_64) and (TlsUserUsed > 0)
-     and (not KernelLibc) and (not TlsSharedWarned) then
-    for i := 0 to ExternalCount - 1 do
-      if CaseEqual(Procs[ExternalProc[i]].Name, 'pthread_create') or
-         CaseEqual(Procs[ExternalProc[i]].Name, 'thrd_create') then
-      begin
-        TlsSharedWarned := True;
-        Inc(WarnCount);
-        writeln('pascal26: warning: this program starts threads with the loaded '
-          + 'libc''s ' + Procs[ExternalProc[i]].Name + ', and those threads do not '
-          + 'get pxx''s per-thread block: its thread-local variables (__thread, '
-          + '_Thread_local, threadvar) get ONE copy shared by them and the main '
-          + 'thread. Threads will read and write each other''s values.');
-        Break;
-      end;
-
   { No "pxx threads share glibc's thread pointer" warning any more: every
     target with threads takes palthread.pas's pthread route whenever a shared
     library is linked, which is exactly when the hazard existed.
@@ -19017,31 +18662,7 @@ begin
       objdump; the invariant is one check at the choke point, which is where
       the parent ticket's IREmitCodeCall(0) guard already showed this shape
       pays. }
-    { --shared-runtime is the one build where an unbodied `__pxx_*` is
-      intended: crtl's bodies (assert's __pxx_assert_fail,
-      __pxx_builtin_popcount32, ...) are left out of the object ON PURPOSE,
-      and the runtime object `--link` adds supplies them. dropbear's
-      common-channel.c and mlkem768.c hit this the day the flag became that
-      tool's default. }
-    { ...and on a build that EXCLUDES the runtime on purpose (a bare ESP
-      profile, --no-default-rtl), the missing body is that exclusion, not a
-      lost `uses`: say so, as FindHeapHelperOrRefuse does for PXXMemZero.
-      Since the bare xtensa/riscv32 backends copy and zero aggregates inline
-      (8e478eab32), C reaching crtl on bare is refused HERE, at its first
-      bridge call (__pxx_open in fcntl.c), instead of at PXXMemZero.
-      bug-a-the-bare-esp-crtl-refusal-moved-to-a-pxx-bridge-symbol-and-lost-its-profile }
-    if (Copy(enm, 1, 6) = '__pxx_') and not (SharedRuntime and EmitObjMode) and
-       (NoDefaultRtl or TargetIsEspClass) then
-      Error(enm + ' is part of pxx''s runtime bridge, and this build excludes '
-            + 'the default RTL, so nothing here can provide it. That exclusion is '
-            + 'deliberate: --esp-profile=bare (and --no-default-rtl) produce a '
-            + 'freestanding image. This translation unit is not freestanding -- it '
-            + 'calls into crtl, which needs the runtime. Either build it for the '
-            + 'ESP-IDF profile (drop --esp-profile=bare), where the RTL is pulled '
-            + 'and crtl is reachable, or keep the unit freestanding and do not call '
-            + 'into crtl (in C, that means no <stdio.h>/<stdlib.h>/<fcntl.h> calls '
-            + 'such as printf, malloc or open).');
-    if (Copy(enm, 1, 6) = '__pxx_') and not (SharedRuntime and EmitObjMode) then
+    if Copy(enm, 1, 6) = '__pxx_' then
       Error(enm + ' is a pxx-internal runtime symbol and cannot be imported '
             + 'dynamically: no library exports it, so this build would link '
             + 'clean and die at load with "undefined symbol: ' + enm + '". '
@@ -19082,184 +18703,10 @@ begin
   Result := extIdx;
 end;
 
-{ --os=windows: record where the SysV marshalling put each argument (one
-  slot per argument). A record by value reaches here as one integer slot
-  already (the C-call arm applies the Microsoft rule to it); any other
-  aggregate leaves the call undescribed, and the integer-only adapter keeps
-  its old behaviour. }
-procedure WinCallNote(n: Integer; const sse, stk, agg: array of Boolean; const reg: array of Integer);
-var i, j, d: Integer;
-begin
-  WinCallArgN := 0;
-  if (TargetKernel <> KERNEL_WINDOWS) or (TargetArch <> TARGET_X86_64) then Exit;
-  { WinCallDestFirst: a large record result's hidden pointer is argument 0,
-    in SysV's first integer register, ahead of every slot listed here. }
-  d := 0;
-  if WinCallDestFirst then
-  begin
-    WinCallArgSse[0] := False;
-    WinCallArgReg[0] := 0;
-    d := 1;
-  end;
-  WinCallDestFirst := False;
-  j := 0;
-  for i := 0 to n - 1 do
-  begin
-    if agg[i] then Exit;
-    WinCallArgSse[i + d] := sse[i];
-    if stk[i] then
-    begin
-      WinCallArgReg[i + d] := -1;
-      WinCallArgStk[i + d] := j;
-      Inc(j);
-    end
-    else
-      WinCallArgReg[i + d] := reg[i];
-  end;
-  WinCallArgN := n + d;
-end;
-
-{ SysV integer argument register k as a register number (rdi rsi rdx rcx r8 r9). }
-function WinSysVIntReg(k: Integer): Integer;
-begin
-  case k of
-    0: Result := 7;
-    1: Result := 6;
-    2: Result := 2;
-    3: Result := 1;
-    4: Result := 8;
-  else
-    Result := 9;
-  end;
-end;
-
-{ The Microsoft x64 frame for a described call with a floating-point
-  argument, built from the SysV registers and stack the marshalling left.
-  Microsoft gives argument i the i-th slot whatever its type: rcx/xmm0,
-  rdx/xmm1, r8/xmm2, r9/xmm3, then [rsp+32+8*(i-4)]; SysV counts the two
-  classes apart. Arguments 5+ are copied to their slots first (reading
-  registers and the old stack only); the first four go through their own
-  shadow slot ([rsp+8*i]) so no move overwrites a register another still
-  needs, and a floating one is loaded into BOTH its xmm and its integer
-  register, which is what a variadic Microsoft callee reads. Answers the
-  frame size to pop after the call. rax is the only scratch. }
-function EmitWinCallFrame: Integer;
-var i, n, src, dst: Integer;
-begin
-  n := WinCallArgN;
-  Result := 32;
-  if n > 4 then Result := Result + 8 * (n - 4);
-  Result := (Result + 15) and not 15;
-  EmitAsmX64(['sub rsp, %', Result]);
-  for i := 0 to n - 1 do
-  begin
-    if i < 4 then dst := 8 * i else dst := 32 + 8 * (i - 4);
-    if WinCallArgReg[i] < 0 then
-    begin
-      src := Result + 8 * WinCallArgStk[i];
-      EmitAsmX64(['mov rax, [rsp+%]', src]);
-      EmitAsmX64(['mov [rsp+%], rax', dst]);
-    end
-    else if WinCallArgSse[i] then
-      EmitAsmX64(['movq [rsp+%], %xmm', dst, WinCallArgReg[i]])
-    else
-      EmitAsmX64(['mov [rsp+%], %r64', dst, WinSysVIntReg(WinCallArgReg[i])]);
-  end;
-  for i := 0 to n - 1 do
-    if i < 4 then
-    begin
-      case i of
-        0: EmitAsmX64(['mov rcx, [rsp]']);
-        1: EmitAsmX64(['mov rdx, [rsp+8]']);
-        2: EmitAsmX64(['mov r8, [rsp+16]']);
-      else
-        EmitAsmX64(['mov r9, [rsp+24]']);
-      end;
-      if WinCallArgSse[i] then EmitAsmX64(['movq %xmm, [rsp+%]', i, 8 * i]);
-    end;
-end;
-
-{ --os=nt: a C-convention call through a POINTER, whose target is in r11
-  with the System V arguments already in place (IR_CALL_IND's cdecl arm,
-  which has called WinCallNote). The pointer says nothing about which
-  convention its target takes, so ask where it points:
-
-    cmp r11 with the start of this image's code and with the start of its
-    data, which follows the code directly. Inside: pxx code, the System V
-    call. Outside: a DLL's function, an export stub of a pxx DLL, or one of
-    winabi's callback adapters -- all Microsoft x64, so the call goes through
-    the same conversion an `external 'x.dll'` call makes (EmitWinCallFrame
-    for a call with a floating-point argument, the integer shuffle
-    otherwise), with the full signature the pointer's type gives.
-
-  One compare pair and a predicted branch per indirect call, on NT only.
-  rax is free here (only AL, the vector count, is live, and it is set again
-  on the internal path; a Microsoft callee ignores it). Not for winabi's own
-  calls: its thunk-page helpers are System V code outside the image
-  (WinIndirectChecked). A raw routine address handed out of another pxx
-  image (not its export stub) is misjudged: it is pxx code outside this
-  image. }
-function WinIndirectChecked: Boolean;
-var u: AnsiString;
-begin
-  Result := (TargetKernel = KERNEL_WINDOWS) and (TargetArch = TARGET_X86_64);
-  if not Result then Exit;
-  u := '';
-  if (CurProc >= 0) and (ProcUnitIdx[CurProc] >= 0) and (ProcUnitIdx[CurProc] < Length(Strs)) then
-    u := LowerCase(Strs[ProcUnitIdx[CurProc]].Text);
-  if u = 'winabi' then Result := False;
-end;
-
-procedure EmitWinCheckedIndirectCall(sseCount: Integer);
-var jb1, jae1, jdone, winFrame, i: Integer;
-    winSse: Boolean;
-begin
-  EmitB($48); EmitB($8D); EmitB($05);            { lea rax, [rip+code offset 0] }
-  RecordCodeRef(0);
-  EmitI32(0 - (CodeLen + 4));
-  EmitB($49); EmitB($39); EmitB($C3);            { cmp r11, rax }
-  EmitB($0F); EmitB($82); jb1 := CodeLen; EmitI32(0);    { jb .foreign }
-  EmitB($48); EmitB($B8); EmitDataRef(0);         { rax = the first data byte: the code's end }
-  EmitB($49); EmitB($39); EmitB($C3);            { cmp r11, rax }
-  EmitB($0F); EmitB($83); jae1 := CodeLen; EmitI32(0);   { jae .foreign }
-  EmitAsmX64(['mov eax, %', sseCount]);
-  FloatPoolSave;
-  EmitAsmX64(['call r11']);
-  FloatPoolRestore;
-  EmitB($E9); jdone := CodeLen; EmitI32(0);       { jmp .done }
-  Patch32(jb1, CodeLen - (jb1 + 4));
-  Patch32(jae1, CodeLen - (jae1 + 4));
-  { .foreign: }
-  FloatPoolSave;
-  winSse := False;
-  for i := 0 to WinCallArgN - 1 do
-    if WinCallArgSse[i] then winSse := True;
-  if winSse then winFrame := EmitWinCallFrame
-  else
-  begin
-    winFrame := 48;
-    EmitAsmX64([
-      'sub rsp, 48',
-      'mov [rsp+32], r8',
-      'mov [rsp+40], r9',
-      'mov r9, rcx',
-      'mov r8, rdx',
-      'mov rdx, rsi',
-      'mov rcx, rdi']);
-  end;
-  WinCallArgN := 0;
-  EmitAsmX64(['call r11']);
-  EmitAsmX64(['add rsp, %', winFrame]);
-  FloatPoolRestore;
-  Patch32(jdone, CodeLen - (jdone + 4));
-end;
-
 { Emit the indirect call through the external's GOT slot and register the
   fixup. Caller is responsible for argument marshalling, stack alignment, and
   the variadic AL count. }
 procedure EmitExternalIndirectCall(extIdx: Integer);
-var winFrame, i: Integer;
-    winSse: Boolean;
 begin
   if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
   { pxx internal ABI: the external callee runs under SysV, where all XMM are
@@ -19272,43 +18719,6 @@ begin
     disagree about. }
   DynCallPCRel[DynCallCount] := False;
   DynCallPicDelta[DynCallCount] := 0;
-  if (TargetArch = TARGET_X86_64) and (TargetKernel = KERNEL_WINDOWS) then
-  begin
-    { --os=windows: every import is a DLL export under the Microsoft x64
-      convention, and the arguments are already in SysV registers. Adapt at
-      the call site: 32 bytes of shadow space plus two slots for args 5 and 6,
-      then rdi/rsi/rdx/rcx -> rcx/rdx/r8/r9 (r9 and r8 move out first). Any
-      7th+ argument the caller pushed now sits at [rsp+48] -- exactly where
-      Microsoft's callee looks for it -- so this holds for every argument
-      count. rsp stays 16-aligned (48). A call with a floating-point argument
-      takes the general frame instead (EmitWinCallFrame): Microsoft assigns
-      xmm0-3 by position, SysV by count. feature-port-windows-pe }
-    winSse := False;
-    for i := 0 to WinCallArgN - 1 do
-      if WinCallArgSse[i] then winSse := True;
-    if winSse then winFrame := EmitWinCallFrame
-    else
-    begin
-      winFrame := 48;
-      EmitAsmX64([
-        'sub rsp, 48',
-        'mov [rsp+32], r8',
-        'mov [rsp+40], r9',
-        'mov r9, rcx',
-        'mov r8, rdx',
-        'mov rdx, rsi',
-        'mov rcx, rdi']);
-    end;
-    WinCallArgN := 0;
-    EmitB($FF); EmitB($15);
-    DynCallCodePos[DynCallCount] := CodeLen;
-    DynCallExtIdx[DynCallCount] := extIdx;
-    Inc(DynCallCount);
-    EmitI32(0);
-    EmitAsmX64(['add rsp, %', winFrame]);
-    FloatPoolRestore;
-    Exit;
-  end;
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($FF); EmitB($15);
@@ -20304,23 +19714,11 @@ begin
       DynCallExtIdx[DynCallCount] := extIdx;
       Inc(DynCallCount);
       EmitI32(0);
-      { ON CALL0 THE CALLEE GOES IN a9, NOT a8: a8 carries the hidden
-        aggregate-result destination there (the caller loads it just before
-        the call), and loading the callee over it made the callee store its
-        result through a code address. The indirect path made the same move
-        for the same reason. a9 is caller-saved and free here; windowed keeps
-        a8 (the destination is argument word 0 there).
-        bug-esp-a-struct-returning-extern-call-passes-no-result-pointer }
+      xtensa_l32r(reg_xtensa_a8, $FFFF);
       if XtensaABI = XTENSA_ABI_WINDOWED then
-      begin
-        xtensa_l32r(reg_xtensa_a8, $FFFF);
-        xtensa_callx8(reg_xtensa_a8);
-      end
+        xtensa_callx8(reg_xtensa_a8)
       else
-      begin
-        xtensa_l32r(reg_xtensa_a9, $FFFF);
-        xtensa_callx0(reg_xtensa_a9);
-      end;
+        xtensa_callx0(reg_xtensa_a8);
       Exit;
     end;
     if TargetArch = TARGET_RISCV32 then
@@ -20396,17 +19794,9 @@ begin
     either: compiler.pas has no `interrupt;` and no `iram;`.
     Measured on esp32s3: handler entered, its first direct store printed, and
     the first CALL faulted. }
-  { A FREESTANDING ESP OBJECT takes the bare runtime but is still an ET_REL
-    for an external linker that places .iram1.text away from flash, so it
-    takes this path like an IDF object (EspFreestandingObj, compiler.pas). }
   if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32))
-     and ((not EspBareBoot) or EspFreestandingObj) then
-    { ...and IRAM to IRAM too: the writer PACKS the iram bodies into
-      .iram1.text, so the distance between two of them there is not their
-      distance in Code[] whenever a flash routine sat between them -- a direct
-      call computed here would land inside the wrong body. }
-    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) or
-       ((CurProc >= 0) and ProcIram[CurProc] and ProcIram[procIdx] and (CurProc <> procIdx)) then
+     and (not EspBareBoot) then
+    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) then
     begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');
       if TargetArch = TARGET_RISCV32 then
@@ -20428,16 +19818,11 @@ begin
         IramCallFix[IramCallFixCount].ProcIdx := procIdx;
         Inc(IramCallFixCount);
         EmitI32(0);
-        if XtensaABI = XTENSA_ABI_WINDOWED then   { call0: a9, see the external path }
-        begin
-          xtensa_l32r(reg_xtensa_a8, $FFFF);
-          xtensa_callx8(reg_xtensa_a8);
-        end
+        xtensa_l32r(reg_xtensa_a8, $FFFF);
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+          xtensa_callx8(reg_xtensa_a8)
         else
-        begin
-          xtensa_l32r(reg_xtensa_a9, $FFFF);
-          xtensa_callx0(reg_xtensa_a9);
-        end;
+          xtensa_callx0(reg_xtensa_a8);
       end;
       Exit;
     end;
@@ -20632,19 +20017,6 @@ begin
   if pi >= 0 then EmitCallProc(pi);
 end;
 
-{ The window increment a file-scope asm `callN name` slot asked for, or -1
-  when the slot at pos is an ordinary compiler-emitted call. Kept as a list
-  of positions, not read back from the bytes: an ordinary slot holds a
-  provisional encoding that could look like any CALLn.
-  feature-c-file-scope-asm-that-defines-code }
-function CFsaCallSlotN(pos: Integer): Integer;
-var j: Integer;
-begin
-  Result := -1;
-  for j := 0 to CFsaSlotCount - 1 do
-    if CFsaSlotPos[j] = pos then begin Result := CFsaSlotN[j]; Exit; end;
-end;
-
 procedure ApplyCallFixups;
 var i, procIdx, rvHi, rvLo, tgt: Integer;
 begin
@@ -20689,13 +20061,7 @@ begin
               + '--xtensa-long-calls, which reserves the long form at every '
               + 'forward call site (bigger and slower, and the only thing that '
               + 'builds an image this large today)');
-      { A CALLn slot file-scope asm wrote (CFsaEmitCode: call0/4/8/12
-        name) keeps its own n; only the offset is ours to patch. Every other
-        slot takes the ABI's call. feature-c-file-scope-asm-that-defines-code }
-      if CFsaCallSlotN(CallFix[i].CodePos) >= 0 then
-        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt)
-                or (CFsaCallSlotN(CallFix[i].CodePos) shl 4))
-      else if XtensaABI = XTENSA_ABI_WINDOWED then
+      if XtensaABI = XTENSA_ABI_WINDOWED then
         Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else
         Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt));
@@ -21708,45 +21074,6 @@ begin
           Result := UFldPtrElemRec[fIdx]
         else
           Result := REC_NONE;
-      end
-      else if (ASTKind[innerNode] = AN_PTR_CAST) and (Integer(ASTIVal[innerNode]) >= 0) then
-      begin
-        { `((struct D **)p)[i]->w`: the index takes one level and the deref the
-          other, so a TWO-level cast lands on its ultimate base. No arm here
-          was REC_NONE and `->w` read offset 0, while `(*(struct D **)p)->w`
-          (the AN_PTR_CAST arm below) was right.
-          bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
-        if AliasPtrDepth[Integer(ASTIVal[innerNode])] = 2 then
-          Result := AliasPtrBaseRec[Integer(ASTIVal[innerNode])]
-        else
-          Result := AliasElemRec[Integer(ASTIVal[innerNode])];
-      end
-      else if (ASTKind[innerNode] = AN_INDEX) or (ASTKind[innerNode] = AN_DEREF) then
-      begin
-        { THREE OR MORE LEVELS: `z[0][0]->w`, `(*z)[0]->w` over `struct D ***z`.
-          Each subscript and each deref takes one level; when they add up to
-          the declared depth the value is the ULTIMATE base, the same counted
-          rule as the implicit-deref arm below. These fell to REC_NONE and the
-          member read offset 0, while `(**z)->w` was right.
-          bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
-        dwDepth := 2;
-        while (innerNode >= 0) and
-              ((ASTKind[innerNode] = AN_INDEX) or (ASTKind[innerNode] = AN_DEREF)) do
-        begin
-          Inc(dwDepth);
-          innerNode := ASTLeft[innerNode];
-        end;
-        Result := REC_NONE;
-        if innerNode >= 0 then
-        begin
-          if (ASTKind[innerNode] = AN_IDENT) and (Integer(ASTIVal[innerNode]) >= 0) and
-             (Integer(ASTIVal[innerNode]) < SymCount) and
-             (SymPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
-            Result := SymPtrBaseRec[Integer(ASTIVal[innerNode])]
-          else if (ASTKind[innerNode] = AN_PTR_CAST) and (Integer(ASTIVal[innerNode]) >= 0) and
-                  (AliasPtrDepth[Integer(ASTIVal[innerNode])] = dwDepth) then
-            Result := AliasPtrBaseRec[Integer(ASTIVal[innerNode])];
-        end;
       end
       else
         Result := REC_NONE;
