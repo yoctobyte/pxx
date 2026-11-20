@@ -19826,8 +19826,75 @@ begin
 end;
 
 var
-  CHdrLibMemoPath, CHdrLibMemoLib, CHdrLibMemoFile: AnsiString;
-  CHdrLibMemoOk: Boolean;
+  { ONE ENTRY PER HEADER PATH. This was a single last-header memo, and a C
+    unit's prototypes do not arrive grouped by header: NetBSD's sys/ headers
+    interleave dozens of them, so nearly every declaration missed and paid
+    three scans of /etc/ld.so.cache (LdCacheFindSoname, LdCacheNativePathFor,
+    LdCacheDirCandidate). Measured on Rainyday's rump build, amhphy.c
+    preprocessed: 3017 procedures, most of a 6.6 s compile in those scans.
+    The answer depends only on the path, so it is kept per path; a hashed
+    open-addressed table, doubled at half full. }
+  CHdrLibMemoPaths, CHdrLibMemoLibs, CHdrLibMemoFiles: array of AnsiString;
+  CHdrLibMemoOks: array of Boolean;
+  CHdrLibMemoCount: Integer;
+  CHdrLibMemoSlot: array of Integer;     { -1 empty, else an index above }
+
+function CHdrLibMemoFind(const hdr: AnsiString): Integer;
+{ The entry for `hdr`, or -1. }
+var h, m: Integer;
+begin
+  Result := -1;
+  m := Length(CHdrLibMemoSlot);
+  if m = 0 then Exit;
+  h := StrHashOf(hdr) and (m - 1);
+  while CHdrLibMemoSlot[h] >= 0 do
+  begin
+    if CHdrLibMemoPaths[CHdrLibMemoSlot[h]] = hdr then
+    begin
+      Result := CHdrLibMemoSlot[h];
+      Exit;
+    end;
+    h := (h + 1) and (m - 1);
+  end;
+end;
+
+procedure CHdrLibMemoPlace(idx: Integer);
+var h, m: Integer;
+begin
+  m := Length(CHdrLibMemoSlot);
+  h := StrHashOf(CHdrLibMemoPaths[idx]) and (m - 1);
+  while CHdrLibMemoSlot[h] >= 0 do h := (h + 1) and (m - 1);
+  CHdrLibMemoSlot[h] := idx;
+end;
+
+function CHdrLibMemoAdd(const hdr: AnsiString): Integer;
+var i, m: Integer;
+begin
+  if CHdrLibMemoCount >= Length(CHdrLibMemoPaths) then
+  begin
+    m := 2 * Length(CHdrLibMemoPaths);
+    if m < 64 then m := 64;
+    SetLength(CHdrLibMemoPaths, m);
+    SetLength(CHdrLibMemoLibs, m);
+    SetLength(CHdrLibMemoFiles, m);
+    SetLength(CHdrLibMemoOks, m);
+  end;
+  if 2 * (CHdrLibMemoCount + 1) > Length(CHdrLibMemoSlot) then
+  begin
+    m := 2 * Length(CHdrLibMemoSlot);
+    if m < 128 then m := 128;
+    SetLength(CHdrLibMemoSlot, m);
+    for i := 0 to m - 1 do CHdrLibMemoSlot[i] := -1;
+    for i := 0 to CHdrLibMemoCount - 1 do CHdrLibMemoPlace(i);
+  end;
+  Result := CHdrLibMemoCount;
+  CHdrLibMemoPaths[Result] := hdr;
+  CHdrLibMemoLibs[Result] := '';
+  CHdrLibMemoFiles[Result] := '';
+  CHdrLibMemoOks[Result] := False;
+  Inc(CHdrLibMemoCount);
+  CHdrLibMemoPlace(Result);
+end;
 
 function CHeaderLibraryFor(tok: Integer; const sym: AnsiString;
                            var soname: AnsiString): Boolean;
@@ -19849,7 +19916,7 @@ function CHeaderLibraryFor(tok: Integer; const sym: AnsiString;
   re-declares memcmp) keeps libc, and a libc header maps to stem `c` and is
   never asked. x86-64 only: the cache and the .dynsym check describe THIS
   machine, which is not a cross target's. }
-var hdr, base, stem, cand, path: AnsiString; i, dot, slash: Integer;
+var hdr, base, stem, cand, path: AnsiString; i, dot, slash, e: Integer; ok: Boolean;
 begin
   Result := False;
   if TargetArch <> TARGET_X86_64 then Exit;
@@ -19859,10 +19926,11 @@ begin
     <pthread.h> is crtl's shim over the thread PAL, and libpthread.so.0 does
     export pthread_create, so the export check alone would rebind it. }
   if Pos('crtl/include/', hdr) > 0 then Exit;
-  if hdr <> CHdrLibMemoPath then
+  e := CHdrLibMemoFind(hdr);
+  if e < 0 then
   begin
-    CHdrLibMemoPath := hdr;
-    CHdrLibMemoOk := False;
+    e := CHdrLibMemoAdd(hdr);
+    ok := False;
     slash := 0; dot := 0;
     for i := 1 to Length(hdr) do
       if hdr[i] = '/' then begin slash := i; dot := 0; end
@@ -19874,19 +19942,20 @@ begin
     begin
       CSonameForStem(stem, cand);
       if LdCacheNativePathFor(cand, path) then
-        CHdrLibMemoOk := True
+        ok := True
       else if LdCacheDirCandidate(CHeaderDirName(hdr), cand, path) then
-        CHdrLibMemoOk := True;
-      if CHdrLibMemoOk then
+        ok := True;
+      if ok then
       begin
-        CHdrLibMemoLib := cand;
-        CHdrLibMemoFile := path;
+        CHdrLibMemoLibs[e] := cand;
+        CHdrLibMemoFiles[e] := path;
       end;
     end;
+    CHdrLibMemoOks[e] := ok;
   end;
-  if not CHdrLibMemoOk then Exit;
-  if not ElfSoExportsSymbol(CHdrLibMemoFile, sym) then Exit;
-  soname := CHdrLibMemoLib;
+  if not CHdrLibMemoOks[e] then Exit;
+  if not ElfSoExportsSymbol(CHdrLibMemoFiles[e], sym) then Exit;
+  soname := CHdrLibMemoLibs[e];
   Result := True;
 end;
 

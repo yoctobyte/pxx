@@ -4670,22 +4670,119 @@ end;
 
 function LdCacheStringAt(off: Integer; var out_: AnsiString): Boolean;
 { The NUL-terminated string at 0-based FILE offset `off`. }
-var i, n: Integer;
+var i, j, n: Integer;
 begin
   LdCacheStringAt := False;
   out_ := '';
   n := Length(LdCacheBody);
   i := off + 1;                       { 0-based file offset -> 1-based string }
   if (i < 1) or (i > n) then Exit;
-  while (i <= n) and (LdCacheBody[i] <> Chr(0)) do
-  begin
-    out_ := out_ + LdCacheBody[i];
-    Inc(i);
-  end;
-  LdCacheStringAt := i <= n;          { unterminated => the file is truncated }
+  { Find the NUL, then ONE Copy. Appending a character at a time allocated per
+    character, and every lookup reads every key: that was most of a C unit's
+    compile once its headers asked per declaration (Rainyday 0050). }
+  j := i;
+  while (j <= n) and (LdCacheBody[j] <> Chr(0)) do Inc(j);
+  out_ := Copy(LdCacheBody, i, j - i);
+  LdCacheStringAt := j <= n;          { unterminated => the file is truncated }
 end;
 
-function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString): Boolean;
+{ THE CACHE DECODED ONCE. The lookups below used to re-read every entry's key
+  out of the file image on every call -- a string built per entry, plus a Copy
+  and a LowerCase of its prefix -- and a C unit asks once per distinct header.
+  NetBSD's rump units include hundreds of headers, and those scans were 40
+  percent of their compile (Rainyday 0050). Each entry's key and path are
+  decoded once; an exact-key chain and two prefix chains (through the first
+  `.so.`, as spelled and lowered) answer the common questions without a scan.
+  Chains run in CACHE ORDER, so "first in cache order" means what it meant.
+
+  The truncation rules are the scans' own: the key scan stops at the first
+  entry whose key cannot be read (LdIdxKeyStop), the path scan at the first
+  entry whose key or path offset cannot be read (LdIdxPathStop), and an entry
+  whose path string cannot be read is skipped (LdIdxValOk). }
+var
+  LdIdxBuilt: Boolean;
+  LdIdxN, LdIdxKeyStop, LdIdxPathStop: Integer;
+  LdIdxKey, LdIdxVal, LdIdxLo: array of AnsiString;
+  LdIdxValOk: array of Boolean;
+  LdIdxExactHead, LdIdxPreHead, LdIdxPreLoHead: array of Integer;
+  LdIdxExactNext, LdIdxPreNext, LdIdxPreLoNext: array of Integer;
+
+function LdIdxSoPrefix(const k: AnsiString): AnsiString;
+{ `k` through its first `.so.`, or '' when it has none. }
+var p: Integer;
+begin
+  p := Pos('.so.', k);
+  if p = 0 then Result := '' else Result := Copy(k, 1, p + 3);
+end;
+
+procedure LdIdxChain(const k: AnsiString; i: Integer; var head, next: array of Integer);
+var h: Integer;
+begin
+  h := StrHashOf(k) and (Length(head) - 1);
+  next[i] := head[h];
+  head[h] := i;
+end;
+
+procedure LdIdxBuild;
+var nlibs, i, entOff, m: Integer;
+    keyOff, valOff: Int64;
+    k, v, pre: AnsiString;
+    keyDone, pathDone: Boolean;
+begin
+  if LdIdxBuilt then Exit;
+  LdIdxBuilt := True;
+  LdIdxN := 0; LdIdxKeyStop := 0; LdIdxPathStop := 0;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  nlibs := Integer(LdCacheU32(21));
+  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+  SetLength(LdIdxKey, nlibs); SetLength(LdIdxVal, nlibs);
+  SetLength(LdIdxLo, nlibs); SetLength(LdIdxValOk, nlibs);
+  keyDone := False; pathDone := False;
+  for i := 0 to nlibs - 1 do
+  begin
+    entOff := 49 + i * 24;
+    keyOff := LdCacheU32(entOff + 4);
+    valOff := LdCacheU32(entOff + 8);
+    if (keyOff < 0) or (valOff < 0) then pathDone := True;
+    if (keyOff < 0) or not LdCacheStringAt(Integer(keyOff), k) then
+    begin
+      keyDone := True;
+      pathDone := True;
+    end;
+    if keyDone then Break;
+    LdIdxKey[i] := k;
+    LdIdxLo[i] := LowerCase(k);
+    LdIdxValOk[i] := (valOff >= 0) and LdCacheStringAt(Integer(valOff), v);
+    if LdIdxValOk[i] then LdIdxVal[i] := v else LdIdxVal[i] := '';
+    LdIdxKeyStop := i + 1;
+    if not pathDone then LdIdxPathStop := i + 1;
+  end;
+  LdIdxN := LdIdxKeyStop;
+  m := 64;
+  while m < 2 * LdIdxN do m := m * 2;
+  SetLength(LdIdxExactHead, m); SetLength(LdIdxPreHead, m); SetLength(LdIdxPreLoHead, m);
+  for i := 0 to m - 1 do
+  begin
+    LdIdxExactHead[i] := -1; LdIdxPreHead[i] := -1; LdIdxPreLoHead[i] := -1;
+  end;
+  SetLength(LdIdxExactNext, LdIdxN + 1); SetLength(LdIdxPreNext, LdIdxN + 1);
+  SetLength(LdIdxPreLoNext, LdIdxN + 1);
+  { pushed in REVERSE, so every chain reads in cache order }
+  for i := LdIdxN - 1 downto 0 do
+  begin
+    LdIdxPreNext[i] := -1; LdIdxPreLoNext[i] := -1; LdIdxExactNext[i] := -1;
+    if i < LdIdxPathStop then LdIdxChain(LdIdxKey[i], i, LdIdxExactHead, LdIdxExactNext);
+    pre := LdIdxSoPrefix(LdIdxKey[i]);
+    if pre <> '' then LdIdxChain(pre, i, LdIdxPreHead, LdIdxPreNext);
+    pre := LdIdxSoPrefix(LdIdxLo[i]);
+    if pre <> '' then LdIdxChain(pre, i, LdIdxPreLoHead, LdIdxPreLoNext);
+  end;
+end;
+
+function LdCacheFindSonameScan(const unversioned: AnsiString; var soname: AnsiString): Boolean;
 { `libz.so` -> `libz.so.1` when the host has one. Only a VERSIONED key counts:
   an exact `libz.so` hit is the -dev symlink, which is what we would have
   emitted anyway, so it is not an answer worth preferring over the table.
@@ -4712,50 +4809,74 @@ function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString
   hold two keys differing only in case and neither matches exactly, this takes
   the first in cache order. That is a guess, and it is strictly better than
   today's answer, which is a name that is not in the cache at all. }
-var nlibs, i, entOff: Integer;
-    keyOff: Int64;
+var i, h: Integer;
     key, want, wantLo, ciHit: AnsiString;
 begin
-  LdCacheFindSoname := False;
-  LdCacheLoad;
-  if Length(LdCacheBody) < 48 then Exit;
-  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
-  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
-  nlibs := Integer(LdCacheU32(21));
-  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+  LdCacheFindSonameScan := False;
+  LdIdxBuild;
+  if LdIdxN = 0 then Exit;
   want := unversioned + '.';          { the version suffix must be present }
   wantLo := LowerCase(want);
   ciHit := '';
-  for i := 0 to nlibs - 1 do
+  { THE INDEXED PATH, when `want` ends in its only `.so.`: a key starts with
+    `want` exactly when its own first `.so.` ends there, so the prefix chain
+    holds every candidate, in cache order. Anything else takes the scan. }
+  if (Length(want) >= 4) and (Pos('.so.', want) = Length(want) - 3) then
   begin
-    entOff := 49 + i * 24;            { 1-based start of entry i }
-    keyOff := LdCacheU32(entOff + 4);
-    if keyOff < 0 then Break;
-    if not LdCacheStringAt(Integer(keyOff), key) then Break;
+    h := StrHashOf(want) and (Length(LdIdxPreHead) - 1);
+    i := LdIdxPreHead[h];
+    while i >= 0 do
+    begin
+      key := LdIdxKey[i];
+      if (Length(key) > Length(want)) and (Copy(key, 1, Length(want)) = want) then
+      begin
+        soname := key;
+        LdCacheFindSonameScan := True;
+        Exit;                         { exact: nothing later can beat it }
+      end;
+      i := LdIdxPreNext[i];
+    end;
+    h := StrHashOf(wantLo) and (Length(LdIdxPreLoHead) - 1);
+    i := LdIdxPreLoHead[h];
+    while i >= 0 do
+    begin
+      if (Length(LdIdxKey[i]) > Length(want)) and (Copy(LdIdxLo[i], 1, Length(want)) = wantLo) then
+      begin
+        soname := LdIdxKey[i];
+        LdCacheFindSonameScan := True;
+        Exit;                         { the FIRST case-insensitive hit }
+      end;
+      i := LdIdxPreLoNext[i];
+    end;
+    Exit;
+  end;
+  for i := 0 to LdIdxKeyStop - 1 do
+  begin
+    key := LdIdxKey[i];
     if Length(key) > Length(want) then
     begin
       if Copy(key, 1, Length(want)) = want then
       begin
         soname := key;
-        LdCacheFindSoname := True;
+        LdCacheFindSonameScan := True;
         Exit;                         { exact: nothing later can beat it }
       end;
-      { Only the PREFIX is lowered, not the whole key -- this runs once per
-        cache entry per header import and the tail is never compared. }
-      if (Length(ciHit) = 0) and (LowerCase(Copy(key, 1, Length(want))) = wantLo) then
+      if (Length(ciHit) = 0) and (Copy(LdIdxLo[i], 1, Length(want)) = wantLo) then
         ciHit := key;
     end;
   end;
-  { A truncated cache Breaks out above rather than Exiting, so a case-insensitive
-    hit found before the truncation is still returned -- the alternative is
-    discarding a correct answer because of a defect further down a file we did
-    not write. }
+  { A truncated cache stops the decode rather than the answer, so a
+    case-insensitive hit found before the truncation is still returned -- the
+    alternative is discarding a correct answer because of a defect further
+    down a file we did not write. }
   if Length(ciHit) > 0 then
   begin
     soname := ciHit;
-    LdCacheFindSoname := True;
+    LdCacheFindSonameScan := True;
   end;
 end;
+
+function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString): Boolean; forward;
 
 function ResolveHostSoname(const unversioned: AnsiString): AnsiString;
 { The one funnel: hand it the unversioned spelling, get back what the loader on
@@ -4852,7 +4973,7 @@ end;
   answer correctly about the wrong machine. The class byte is the only thing
   that does. }
 
-function LdCacheNativePathFor(const key: AnsiString; var libpath: AnsiString): Boolean;
+function LdCacheNativePathForScan(const key: AnsiString; var libpath: AnsiString): Boolean;
 { The on-disk path for an EXACT cache key, of this machine's own architecture.
 
   A hardcoded /usr/lib/x86_64-linux-gnu/libc.so.6 would be a name standing in
@@ -4863,35 +4984,30 @@ function LdCacheNativePathFor(const key: AnsiString; var libpath: AnsiString): B
 
   The class check is the same one and for the same reason: libc.so.6 has an
   i386 twin under this key on any multiarch box. }
-var nlibs, i, entOff: Integer;
-    keyOff, valOff: Int64;
-    k, v: AnsiString;
+var i, h: Integer;
 begin
-  LdCacheNativePathFor := False;
-  LdCacheLoad;
-  if Length(LdCacheBody) < 48 then Exit;
-  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
-  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
-  nlibs := Integer(LdCacheU32(21));
-  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
-  for i := 0 to nlibs - 1 do
+  LdCacheNativePathForScan := False;
+  LdIdxBuild;
+  if LdIdxN = 0 then Exit;
+  h := StrHashOf(key) and (Length(LdIdxExactHead) - 1);
+  i := LdIdxExactHead[h];
+  while i >= 0 do
   begin
-    entOff := 49 + i * 24;
-    keyOff := LdCacheU32(entOff + 4);
-    valOff := LdCacheU32(entOff + 8);
-    if (keyOff < 0) or (valOff < 0) then Exit;
-    if not LdCacheStringAt(Integer(keyOff), k) then Exit;
-    if k <> key then Continue;
-    if not LdCacheStringAt(Integer(valOff), v) then Continue;
-    ElfLoadMemo(v);
-    if not ElfIsNative64(DynSymMemoBody) then Continue;
-    libpath := v;
-    LdCacheNativePathFor := True;
-    Exit;
+    if (LdIdxKey[i] = key) and LdIdxValOk[i] then
+    begin
+      ElfLoadMemo(LdIdxVal[i]);
+      if ElfIsNative64(DynSymMemoBody) then
+      begin
+        libpath := LdIdxVal[i];
+        LdCacheNativePathForScan := True;
+        Exit;
+      end;
+    end;
+    i := LdIdxExactNext[i];
   end;
 end;
 
-function LdCacheDirCandidate(const dirName: AnsiString;
+function LdCacheDirCandidateScan(const dirName: AnsiString;
                              var soname, libpath: AnsiString): Boolean;
 { The cache entry a header's DIRECTORY names, with the PATH beside it -- the
   field LdCacheFindSoname discards, because until now nothing opened the file.
@@ -4922,7 +5038,7 @@ var nlibs, i, entOff, pass: Integer;
     ok: Boolean;
     j: Integer;
 begin
-  LdCacheDirCandidate := False;
+  LdCacheDirCandidateScan := False;
   if Length(dirName) = 0 then Exit;
   LdCacheLoad;
   if Length(LdCacheBody) < 48 then Exit;
@@ -4973,18 +5089,121 @@ begin
       begin
         soname := key;
         libpath := val;
-        LdCacheDirCandidate := True;
+        LdCacheDirCandidateScan := True;
         Exit;
       end;
-      if not LdCacheDirCandidate then
+      if not LdCacheDirCandidateScan then
       begin
         soname := key;
         libpath := val;
-        LdCacheDirCandidate := True;
+        LdCacheDirCandidateScan := True;
       end;
     end;
-    if LdCacheDirCandidate then Exit;  { pass 0 answered: never widen }
+    if LdCacheDirCandidateScan then Exit;  { pass 0 answered: never widen }
   end;
+end;
+
+{ ONE ANSWER PER QUESTION FOR THE WHOLE COMPILE. Each of the three lookups
+  above walks every entry of /etc/ld.so.cache (about 1400 here, a string read
+  and a compare each), the cache does not change while we run, and the answer
+  depends only on the argument. A C unit asks per DECLARATION: NetBSD's rump
+  headers asked thousands of times per file, which was most of a 6.6 s compile
+  of if_wm-sized units (Rainyday 0050/0060). Keyed by a kind letter plus the
+  argument; a hashed open-addressed table, doubled at half full. }
+var
+  LdMemoKeys, LdMemoA, LdMemoB: array of AnsiString;
+  LdMemoOk: array of Boolean;
+  LdMemoCount: Integer;
+  LdMemoSlot: array of Integer;
+
+function LdMemoFind(const k: AnsiString): Integer;
+var h, m: Integer;
+begin
+  Result := -1;
+  m := Length(LdMemoSlot);
+  if m = 0 then Exit;
+  h := StrHashOf(k) and (m - 1);
+  while LdMemoSlot[h] >= 0 do
+  begin
+    if LdMemoKeys[LdMemoSlot[h]] = k then begin Result := LdMemoSlot[h]; Exit; end;
+    h := (h + 1) and (m - 1);
+  end;
+end;
+
+procedure LdMemoPlace(idx: Integer);
+var h, m: Integer;
+begin
+  m := Length(LdMemoSlot);
+  h := StrHashOf(LdMemoKeys[idx]) and (m - 1);
+  while LdMemoSlot[h] >= 0 do h := (h + 1) and (m - 1);
+  LdMemoSlot[h] := idx;
+end;
+
+procedure LdMemoAdd(const k: AnsiString; ok: Boolean; const a, b: AnsiString);
+var i, m, e: Integer;
+begin
+  if LdMemoCount >= Length(LdMemoKeys) then
+  begin
+    m := 2 * Length(LdMemoKeys);
+    if m < 32 then m := 32;
+    SetLength(LdMemoKeys, m); SetLength(LdMemoA, m);
+    SetLength(LdMemoB, m); SetLength(LdMemoOk, m);
+  end;
+  if 2 * (LdMemoCount + 1) > Length(LdMemoSlot) then
+  begin
+    m := 2 * Length(LdMemoSlot);
+    if m < 64 then m := 64;
+    SetLength(LdMemoSlot, m);
+    for i := 0 to m - 1 do LdMemoSlot[i] := -1;
+    for i := 0 to LdMemoCount - 1 do LdMemoPlace(i);
+  end;
+  e := LdMemoCount;
+  LdMemoKeys[e] := k; LdMemoOk[e] := ok; LdMemoA[e] := a; LdMemoB[e] := b;
+  Inc(LdMemoCount);
+  LdMemoPlace(e);
+end;
+
+function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString): Boolean;
+var e: Integer; r: AnsiString;
+begin
+  e := LdMemoFind('F' + unversioned);
+  if e < 0 then
+  begin
+    r := '';
+    LdMemoAdd('F' + unversioned, LdCacheFindSonameScan(unversioned, r), r, '');
+    e := LdMemoCount - 1;
+  end;
+  Result := LdMemoOk[e];
+  if Result then soname := LdMemoA[e];
+end;
+
+function LdCacheNativePathFor(const key: AnsiString; var libpath: AnsiString): Boolean;
+var e: Integer; r: AnsiString;
+begin
+  e := LdMemoFind('N' + key);
+  if e < 0 then
+  begin
+    r := '';
+    LdMemoAdd('N' + key, LdCacheNativePathForScan(key, r), r, '');
+    e := LdMemoCount - 1;
+  end;
+  Result := LdMemoOk[e];
+  if Result then libpath := LdMemoA[e];
+end;
+
+function LdCacheDirCandidate(const dirName: AnsiString;
+                             var soname, libpath: AnsiString): Boolean;
+var e: Integer; a, b: AnsiString;
+begin
+  e := LdMemoFind('D' + dirName);
+  if e < 0 then
+  begin
+    a := ''; b := '';
+    LdMemoAdd('D' + dirName, LdCacheDirCandidateScan(dirName, a, b), a, b);
+    e := LdMemoCount - 1;
+  end;
+  Result := LdMemoOk[e];
+  if Result then begin soname := LdMemoA[e]; libpath := LdMemoB[e]; end;
 end;
 
 function CHeaderDirName(const path: AnsiString): AnsiString;

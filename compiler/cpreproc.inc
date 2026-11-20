@@ -4732,6 +4732,74 @@ end;
   standard extern prototype goes on line 1 (no line number moves), so the call
   is an ordinary external call, as gcc emits it. A later <string.h> redeclares
   the same type, which C allows. }
+{ EVERY `__builtin_<ident>` THE UNIT MENTIONS, IN ONE PASS. The two
+  procedures below asked Pos() once per name they know -- 34 and 20 full scans
+  of the preprocessed unit, which for a NetBSD driver is over a megabyte, and
+  was a fifth of its compile (Rainyday 0050). Every question they ask is "does
+  `__builtin_` + some identifier characters, maybe followed by one more
+  character, occur", and an occurrence of that starts at an occurrence of
+  `__builtin_`; so the identifier after each one, and the character after the
+  identifier, answer all of them. Not left-anchored, exactly like Pos. }
+var
+  CBltIdents: array of AnsiString;
+  CBltNexts: array of Char;
+  CBltCount: Integer;
+
+procedure CBuiltinMentions(const src: AnsiString);
+var i, j, n, k: Integer; id: AnsiString; nx: Char; dup: Boolean;
+begin
+  CBltCount := 0;
+  n := Length(src);
+  i := 1;
+  while i + 9 <= n do
+  begin
+    if (src[i] = '_') and (src[i + 1] = '_') and (src[i + 2] = 'b') and
+       (src[i + 3] = 'u') and (src[i + 4] = 'i') and (src[i + 5] = 'l') and
+       (src[i + 6] = 't') and (src[i + 7] = 'i') and (src[i + 8] = 'n') and
+       (src[i + 9] = '_') then
+    begin
+      j := i + 10;
+      while (j <= n) and (src[j] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(j);
+      id := Copy(src, i + 10, j - i - 10);
+      if j <= n then nx := src[j] else nx := #0;
+      dup := False;
+      for k := 0 to CBltCount - 1 do
+        if (CBltNexts[k] = nx) and (CBltIdents[k] = id) then begin dup := True; Break; end;
+      if not dup then
+      begin
+        if CBltCount >= Length(CBltIdents) then
+        begin
+          SetLength(CBltIdents, 2 * CBltCount + 16);
+          SetLength(CBltNexts, 2 * CBltCount + 16);
+        end;
+        CBltIdents[CBltCount] := id;
+        CBltNexts[CBltCount] := nx;
+        Inc(CBltCount);
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+function CBuiltinSaw(const id: AnsiString; nx: Char): Boolean;
+{ `__builtin_` + id + nx occurs; nx = #0 means "anything after it, or nothing". }
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to CBltCount - 1 do
+    if (CBltIdents[k] = id) and ((nx = #0) or (CBltNexts[k] = nx)) then
+    begin Result := True; Exit; end;
+end;
+
+function CBuiltinSawPrefix(const pre: AnsiString): Boolean;
+{ `__builtin_` + pre occurs, pre being identifier characters only. }
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to CBltCount - 1 do
+    if Copy(CBltIdents[k], 1, Length(pre)) = pre then begin Result := True; Exit; end;
+end;
+
 procedure CAddLibBuiltinDecls(var src: AnsiString);
 const N = 17;
   nm: array[0..N - 1] of AnsiString = ('memcpy', 'memmove', 'memset', 'memcmp',
@@ -4758,9 +4826,10 @@ const N = 17;
 var k: Integer; protos: AnsiString;
 begin
   if Pos('__builtin_', src) = 0 then Exit;
+  CBuiltinMentions(src);
   protos := '';
   for k := 0 to N - 1 do
-    if Pos('__builtin_' + nm[k] + '(', src) + Pos('__builtin_' + nm[k] + ' ', src) > 0 then
+    if CBuiltinSaw(nm[k], '(') or CBuiltinSaw(nm[k], ' ') then
       protos := protos + pr[k] + ' ';
   if protos <> '' then src := protos + src;
 end;
@@ -4778,18 +4847,19 @@ begin
   fams[0] := 'clz'; fams[1] := 'ctz'; fams[2] := 'popcount'; fams[3] := 'ffs'; fams[4] := 'parity';
   fams[5] := 'bswap';
   lw := CLongWidthSuffix;
+  CBuiltinMentions(src);
   for f := 0 to 4 do
   begin
-    if Pos('__builtin_' + fams[f] + '(', src) > 0 then want[f * 2] := True;
-    if Pos('__builtin_' + fams[f] + 'll', src) > 0 then want[f * 2 + 1] := True;
-    if Pos('__builtin_' + fams[f] + 'l(', src) > 0 then
+    if CBuiltinSaw(fams[f], '(') then want[f * 2] := True;
+    if CBuiltinSawPrefix(fams[f] + 'll') then want[f * 2 + 1] := True;
+    if CBuiltinSaw(fams[f] + 'l', '(') then
     begin
       if lw = '64' then want[f * 2 + 1] := True else want[f * 2] := True;
     end;
   end;
-  if Pos('__builtin_bswap16', src) > 0 then want[10] := True;
-  if Pos('__builtin_bswap32', src) > 0 then want[11] := True;
-  if Pos('__builtin_bswap64', src) > 0 then begin want[11] := True; want[12] := True; end;
+  if CBuiltinSawPrefix('bswap16') then want[10] := True;
+  if CBuiltinSawPrefix('bswap32') then want[11] := True;
+  if CBuiltinSawPrefix('bswap64') then begin want[11] := True; want[12] := True; end;
   { hosted: crtl's declaration in the text means stdlib.h is in and its body
     is auto-pulled -- no copy (see the note above CAddFreestandingBuiltins) }
   if hosted then
