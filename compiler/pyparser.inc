@@ -7526,7 +7526,20 @@ begin
           ownPi := -1;
           if not ((i > startIdx) and (Tokens[i - 1].Kind = tkDot)) then
             ownPi := PyOwnDefProc(name);
-          if (ownPi < 0) and NilPyUserCode and
+          { A PARAMETER or LOCAL of the def being scanned, called: a callable
+            VALUE, whose result this scan cannot know. FindProc below folds
+            case and knows no scope, so `def p(lo, v): return lo(v)` was typed
+            from Pascal's Lo -- a Byte -- and the str the callee returned came
+            back as "expected a number, got str". Same for length, pos, ord,
+            swap, random, val. The variant is the honest answer, as for any
+            call this scan cannot type.
+            bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic }
+          if (not ((i > startIdx) and (Tokens[i - 1].Kind = tkDot))) and
+             (PyInferBodyLo >= 0) and (PyInferBodyHi > PyInferBodyLo) and
+             PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                              PyInferBodyLo, PyInferBodyHi, name) then
+            tk := tyVariant
+          else if (ownPi < 0) and NilPyUserCode and
              not ((i > startIdx) and (Tokens[i - 1].Kind = tkDot)) and
              PyTopDefByScan(name) then
             tk := tyVariant          { a later def of this file: not yet typed }
@@ -62175,6 +62188,33 @@ begin
     Result := Copy(Result, 7, Length(Result) - 6);
 end;
 
+{ Does a local, a parameter, or a global THIS module binds carry exactly this
+  spelling? Python scoping makes that binding the name's whole meaning, so no
+  name-keyed intrinsic may answer for it: `def p(pred, v): return pred(v)`
+  answered Pascal's Pred(v), and `trunc = f; trunc(7)` the Trunc intrinsic.
+  The sibling of PyUserShadowsProc, which asks the same question about a DEF.
+  bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic }
+function PyNameBoundAsVarHere(const name: AnsiString): Boolean;
+var s: Integer;
+begin
+  Result := False;
+  s := FindSym(name);
+  if s < 0 then Exit;
+  if Syms[s].Name <> name then Exit;
+  Result := (Syms[s].Kind in [skLocal, skParam]) or
+            ((Syms[s].Kind = skGlobal) and (SymUnitIdx[s] = CurrentUnitIdx));
+end;
+
+{ The question every name-keyed BUILTIN arm of the factor asks: does this
+  scope give the name another meaning -- a user def (PyUserShadowsProc) or a
+  variable (PyNameBoundAsVarHere)? `def p(int, v): return int(v)` reached the
+  int() conversion with the argument the parameter was meant to receive.
+  bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic }
+function PyShadowedHere(const name: AnsiString): Boolean;
+begin
+  Result := PyUserShadowsProc(name) or PyNameBoundAsVarHere(name);
+end;
+
 procedure PyParseFactorCore;
 var modName: AnsiString;   { __name__ of an imported module }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
@@ -62192,6 +62232,7 @@ var modName: AnsiString;   { __name__ of an imported module }
     pyPrintNode: Integer;      { print(...) in expression position: the write node, wrapped }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
+    pyNameBoundHere: Boolean;  { the name is a local/param/this-module global: no intrinsic arm }
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
     rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
@@ -63530,7 +63571,7 @@ begin
         bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
       if isNilPy and (TokPos + 1 < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) and
-         (FindSym(name) < 0) and (not PyUserShadowsProc(name)) and
+         (FindSym(name) < 0) and (not PyShadowedHere(name)) and
          PyIsZeroArgCtorName(name) then
       begin
         Next;                          { the name }
@@ -63614,7 +63655,7 @@ begin
         own path. bug-n-a-type-name-is-not-a-first-class-value }
       if (TokPos <= TokCount) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
-         (PyBuiltinTypeCode(name) > 0) and (not PyUserShadowsProc(name)) and
+         (PyBuiltinTypeCode(name) > 0) and (not PyShadowedHere(name)) and
          (FindSym(name) < 0) then
       begin
         Next;
@@ -64086,7 +64127,7 @@ begin
         builtin silently (bug-nilpy-user-def-does-not-shadow-a-pylib-builtin).
         Checked here rather than inside, so the dunder rewrite below does not
         run either. }
-      if CaseEqual(name, 'len') and (not PyUserShadowsProc(name)) and
+      if CaseEqual(name, 'len') and (not PyShadowedHere(name)) and
          (TokPos < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -64248,7 +64289,7 @@ begin
 
         A NON-promo argument REWINDS to the ordinary Int64 overload, so native
         values keep today's code path untouched. }
-      if (not PyUserShadowsProc(name)) and
+      if (not PyShadowedHere(name)) and
          (CaseEqual(name, 'hex') or CaseEqual(name, 'bin') or CaseEqual(name, 'oct')) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -64323,7 +64364,7 @@ begin
         FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
-      if (name = 'int') and (not PyUserShadowsProc(name)) then
+      if (name = 'int') and (not PyShadowedHere(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { `int(s, base)` — the two-argument radix form. A separate pylib
@@ -64938,7 +64979,7 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[atDflt]);
         Exit;
       end
-      else if (name = 'setattr') and (not PyUserShadowsProc('setattr')) then
+      else if (name = 'setattr') and (not PyShadowedHere('setattr')) then
       begin
         { The third member of the attribute trio. hasattr and getattr have been
           here since the protocol landed and setattr was simply absent —
@@ -65043,7 +65084,7 @@ begin
         Exit;
       end
       else if ((name = 'staticmethod') or (name = 'classmethod')) and
-              (FindSym(name) < 0) and (not PyUserShadowsProc(name)) and
+              (FindSym(name) < 0) and (not PyShadowedHere(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { `clear = staticmethod(_unimplemented)` in a class body — a class used
@@ -65151,7 +65192,7 @@ begin
         Exit;
       end
       else if CaseEqual(name, 'print') and
-              (not PyUserShadowsProc(name)) and
+              (not PyShadowedHere(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { `print(...)` in EXPRESSION position — `lambda first, last: print(...)`
@@ -65179,7 +65220,7 @@ begin
         Exit;
       end
       else if CaseEqual(name, 'format') and (FindSym(name) < 0) and
-              (not PyUserShadowsProc(name)) and
+              (not PyShadowedHere(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { format(v[, spec]) -> PyParseFormatCall (pyformat_v). Intercepted even
@@ -65206,7 +65247,7 @@ begin
         LastExprTk := tyAnsiString;
         Exit;
       end
-      else if (name = 'open') and (not PyUserShadowsProc(name)) then
+      else if (name = 'open') and (not PyShadowedHere(name)) then
       begin
         { open(path[, mode], ...) -> a TPyFile, whatever the mode. With no mode
           it goes through pyopen, which is pyfile_open(path, 'r') -- Python's
@@ -65337,7 +65378,7 @@ begin
         unconditionally and the user's def was NEVER called — silently, on
         both sides of the def.
         bug-nilpy-a-def-named-float-or-bool-is-never-called }
-      else if (name = 'float') and (not PyUserShadowsProc(name)) then
+      else if (name = 'float') and (not PyShadowedHere(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
         { …and a user class declaring `__float__` — the twin of int()'s
@@ -65551,7 +65592,7 @@ begin
         LastExprTk := tyClass;
         Exit;
       end
-      else if (name = 'next') and (TokPos < TokCount) and
+      else if (name = 'next') and (not PyShadowedHere(name)) and (TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and PyNextOverListAhead then
       begin
         { `next(<list>)` / `next(<list>, default)` — Python's builtin over a
@@ -65599,7 +65640,7 @@ begin
         unconditionally and the user's def was NEVER called — silently, on
         both sides of the def.
         bug-nilpy-a-def-named-float-or-bool-is-never-called }
-      else if (name = 'bool') and (not PyUserShadowsProc(name)) then
+      else if (name = 'bool') and (not PyShadowedHere(name)) then
       begin
         { `bool(x)` is Python's TRUTHINESS, the same rule `if x:` and `not x`
           use — so it goes through PyMakeTruthy rather than resolving to pylib's
@@ -65637,7 +65678,7 @@ begin
         LastExprTk := tyBoolean;
         Exit;
       end
-      else if (name = 'str') and (not PyUserShadowsProc(name)) then
+      else if (name = 'str') and (not PyShadowedHere(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { str() of an ARBITRARY-PRECISION int renders through the promo runtime.
@@ -65771,7 +65812,7 @@ begin
       end
       else if (CaseEqual(name, 'trunc') or CaseEqual(name, 'round') or
                CaseEqual(name, 'frac') or CaseEqual(name, 'int')) and
-              (not PyUserShadowsProc(name)) and
+              (not PyShadowedHere(name)) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { only a call `name(...)` is the float intrinsic; a bare identifier of the
@@ -66046,7 +66087,7 @@ begin
 
         Gated on PyExprMode so Pascal's own SizeOf stays an intrinsic, where it
         must: the self-host fixedpoint is the check for that. }
-      if CaseEqual(name, 'sizeof') and
+      if CaseEqual(name, 'sizeof') and (not PyNameBoundAsVarHere(name)) and
          not ((TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and
               PyAnyProcWithArity(name, CountCallArgsAhead)) then
@@ -67361,6 +67402,25 @@ begin
         meant ("code the NilPy user wrote", PyExprMode telling a .py module
         body from a Pascal unit). bug-a-the-import-escape-hatch-fails-on-classes-pas }
 
+      { A NAME THIS SCOPE BINDS IS ITS OWN MEANING, BEFORE ANY INTRINSIC.
+
+        Every arm below is keyed on the name alone (`Pred`, `Length`, `Pos`,
+        `max`, `id`, ...) and most fire on `procIdx < 0` -- which is exactly
+        what a local or parameter holding a callable looks like, since the
+        local arm above clears procIdx for it. So `def p(pred, v): return
+        pred(v)` answered Pascal's Pred(v), v-1, and `length = f; length(s)`
+        reached the Length intrinsic. Python scoping says a local, a parameter,
+        or a global this module binds under the EXACT spelling is the name's
+        meaning, so none of these arms is asked; the name parses as the
+        variable it is and the call goes through the callable-value door.
+        One guard rather than a clause per arm, because a clause per arm is how
+        Abs/Sqr got the rule and the other arms did not.
+        bug-n-a-param-or-local-named-like-a-pascal-intrinsic-is-answered-by-the-intrinsic }
+      pyNameBoundHere := (qUnit < 0) and (idx >= 0) and (Syms[idx].Name = name) and
+        ((Syms[idx].Kind in [skLocal, skParam]) or
+         ((Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx)));
+      if not pyNameBoundHere then
+      begin
       { `Eof` (standard input), no args -> Boolean. The textfile RTL declares
         `Eof(var f: Text)`, but a bare `Eof` / `Eof()` cannot bind that file arg,
         so the no-arg form routes to stdin Eof regardless of that proc; the
@@ -68330,6 +68390,7 @@ begin
         Error('Copy: dynamic-array Copy needs a dynamic-array first argument ' +
               '(string Copy needs the strutils/sysutils unit)');
       end;
+      end;  { not pyNameBoundHere }
 
       { Indirect call through a procedural-type variable: v(args) as an expression. }
       if (idx >= 0) and (SymProcSig[idx] >= 0) and (Tokens[TokPos].Kind = tkLParen) then

@@ -1267,6 +1267,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_clsstatic26 | diff -u test/test_nilpy_a_staticmethod_called_through_cls.expected -
 	./$(COMPILER) test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.py $(TESTTMP)/test_nilpy_shadowfold26
 	$(TESTTMP)/test_nilpy_shadowfold26 | diff -u test/test_nilpy_a_module_name_beats_a_case_folded_pascal_routine.expected -
+	./$(COMPILER) test/test_nilpy_a_param_or_local_named_like_a_pascal_intrinsic_is_that_binding.py $(TESTTMP)/test_nilpy_shadowlocal26
+	$(TESTTMP)/test_nilpy_shadowlocal26 | diff -u test/test_nilpy_a_param_or_local_named_like_a_pascal_intrinsic_is_that_binding.expected -
 	./$(COMPILER) test/test_nilpy_a_method_receiver_need_not_be_named_self.py $(TESTTMP)/test_nilpy_recvname26
 	$(TESTTMP)/test_nilpy_recvname26 | diff -u test/test_nilpy_a_method_receiver_need_not_be_named_self.expected -
 	./$(COMPILER) test/test_nilpy_a_def_inside_a_module_level_suite.py $(TESTTMP)/test_nilpy_conddef26
