@@ -4881,6 +4881,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_clsattr_callres26 | diff -u test/test_nilpy_class_attr_shared_slot_via_call_result.expected -
 	./$(COMPILER) test/test_nilpy_user_iterable_in_builtins.npy $(TESTTMP)/test_nilpy_useriter26
 	$(TESTTMP)/test_nilpy_useriter26 | diff -u test/test_nilpy_user_iterable_in_builtins.expected -
+	./$(COMPILER) test/test_nilpy_a_user_iterator_passed_to_a_list_annotated_parameter_is_drained.py $(TESTTMP)/test_nilpy_listann26
+	$(TESTTMP)/test_nilpy_listann26 | diff -u test/test_nilpy_a_user_iterator_passed_to_a_list_annotated_parameter_is_drained.expected -
 	./$(COMPILER) test/test_nilpy_pyeval_host_arity_and_returns.npy $(TESTTMP)/test_nilpy_pyeval_arity26
 	$(TESTTMP)/test_nilpy_pyeval_arity26 | diff -u test/test_nilpy_pyeval_host_arity_and_returns.expected -
 	./$(COMPILER) test/test_nilpy_math_surface_and_random.npy $(TESTTMP)/test_nilpy_math_random26

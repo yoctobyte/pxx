@@ -3,8 +3,8 @@ slug: bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled
 track: N
 prio: 45
 type: bug
-status: new
-owner: ""
+status: done
+owner: "claude-pxx"
 blocked-by: []
 summary: "MEASURED. `PyFixIterableArgs` (pyparser.inc:21694) can be disabled at its first line -- `Result := False; if True then Exit;` -- and `test/test_nilpy_user_iterable_in_builtins.npy`, the test that exists to cover it, emits a BYTE-IDENTICAL binary and identical 37-line output, still matching CPython. So does the rest of the NilPy corpus tried. Either the mechanism has been superseded by another path and is dead code, or it is entirely uncovered; both are defects and they need different fixes. Found while proving a DIFFERENT set of arms dead -- this one is a live call site whose removal nothing notices, which is the more dangerous shape."
 ---
@@ -82,3 +82,42 @@ same programs correctly. **Check the predicate before the function.**
 - [[bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag]] — the work that surfaced this
 - `bug-nilpy-builtins-over-a-user-iterable-answer-empty` — the bug the mechanism was written for
 - [[a-gate-that-measures-as-no-change-is-a-finding]]
+
+## Resolution (2026-11-20)
+
+**Neither: half superseded, half never reachable, and the unreachable half
+was a crash.** Traced on 0ab6ae5f65 by logging each arm.
+
+- **Builtins (`list`, `tuple`, `sorted`, `sum`, `min`, `max`, `any`, `all`,
+  `bytes`, `bytearray`): superseded.** Every call in
+  `test_nilpy_user_iterable_in_builtins.npy` reaches the function with a match
+  already made, and the matched parameter is a **Variant** (tk 22, rec 0). The
+  Variant overloads walk a user iterator at run time, so neither the TPyList nor
+  the TPyIter arm can fire there. That is why the control changed nothing.
+- **A NilPy def's `xs: list` parameter: the arm the mechanism was for, and
+  unreachable.** `PyApplyDefSignature` records a class rec id in
+  `ProcParamRecId` only for `*args`/`**kwargs`. An annotated `xs: list` is
+  tyClass with rec 0, so `pRec = TPyList` was never true. A Counter passed in
+  was read through TPyList's layout: **segfault** (`total(Counter(4))`).
+- Recording the rec id for every annotated class parameter fixes that, but it
+  also makes overload matching refuse a duck-typed argument CPython accepts:
+  `f(C())` into `def f(p: A)` became "no overload of f matches". It printed 3
+  before. Rejected.
+
+**Fix:** a NilPy-only parallel array `ProcParamPyListAnn` (defs.inc, allocated
+and cleared in symtab.inc), written in `PyApplyDefSignature`. The procIdx >= 0
+arm treats a flagged parameter as TPyList. Matching is unchanged.
+
+**Known divergence, now instead of a crash:** the argument is drained into a
+list, which agrees with CPython only when the callee iterates once. `len(xs)`,
+`xs[i]`, or a second pass over a one-shot iterator answer where CPython raises
+or yields nothing.
+
+**Test:** `test_nilpy_a_user_iterator_passed_to_a_list_annotated_parameter_is_drained.py`
+(test-nilpy row `listann26`). Old compiler: segfault. New: matches CPython,
+including the duck-typed `f(C())` row.
+
+**Not this ticket, filed:**
+[[bug-n-a-user-iterator-into-some-shims-and-builtins-crashes-or-answers-wrong]]
+(`itertools.islice`/`takewhile` segfault; `collections.Counter` empty;
+`bytes`/`bytearray` refuse).

@@ -31971,6 +31971,10 @@ begin
       else if i < MAX_PROC_PARAMS then
       begin
         pRec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i];
+        { a NilPy def's `xs: list` carries no rec id (ProcParamPyListAnn
+          says why) but wants the same drain a Pascal TPyList parameter gets }
+        if ProcParamPyListAnn[procIdx * MAX_PROC_PARAMS + i] then
+          pRec := REC_UCLASS_BASE + listCi;
         if pRec = REC_UCLASS_BASE + listCi then
         begin
           ASTLeft[currArg] :=
@@ -43117,6 +43121,14 @@ begin
   if (PyHdrKwIdx >= 0) and (PyHdrKwIdx < MAX_PROC_PARAMS) then
     ProcParamRecId[procIdx * MAX_PROC_PARAMS + PyHdrKwIdx] :=
       REC_UCLASS_BASE + PyHdrPCis[PyHdrKwIdx];
+  { A `list`-annotated parameter, flagged for PyFixIterableArgs (see
+    ProcParamPyListAnn). Written for every parameter, not only the flagged
+    ones: a pre-pass and the real parse both come through here. }
+  for i := 0 to PyHdrNParams - 1 do
+    if i < MAX_PROC_PARAMS then
+      ProcParamPyListAnn[procIdx * MAX_PROC_PARAMS + i] :=
+        (i <> PyHdrStarIdx) and (PyHdrPTypes[i] = tyClass) and (PyHdrPCis[i] >= 0) and
+        (PyHdrPCis[i] = FindUClass('TPyList'));
   for i := 0 to PyHdrNParams - 1 do
     if PyHdrDefHas[i] and (i < MAX_PROC_PARAMS) then
     begin
