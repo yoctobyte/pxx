@@ -189,6 +189,10 @@ cat > "$W/c.c" <<'EOF'
 #include <stdio.h>
 #include <string.h>
 int use(const char*s){ printf("%s", s); return strlen(s); }
+/* pad1 only moves .text off a multiple of 16: when plain --emit-obj
+   started baking initialisers (6cdc4bea7e) c.o shrank to 0x3dfb0 and
+   the per-input-alignment guard below fired. */
+int pad1(int x){ return x + 1; }
 EOF
 cat > "$W/d.c" <<'EOF'
 int use(const char*s);
