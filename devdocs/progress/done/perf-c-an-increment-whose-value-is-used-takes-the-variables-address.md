@@ -3,7 +3,7 @@ slug: perf-c-an-increment-whose-value-is-used-takes-the-variables-address
 track: A
 prio: 50
 type: perf
-status: working
+status: done
 owner: "claude-pxx"
 blocked-by: []
 summary: "MEASURED 2026-11-20. Rainyday's lib/string.c copy loops, built in userland on x86-64 against gcc -O2: word memcpy 3.5x, memset 4x, and the byte loop `while (n--) *d++ = *s++;` 8.6x. pixx measured the pxx-built kernel at 2.5-4x the gcc-built one on pipes, fork and syscalls (Rainyday 0060). The cause here: `p++` with its value used, and `n -= 32` / `q += 4`, lower through an address temp of the variable (AN_INCDEC / AN_COMPOUND_ASSIGN), so the variable never gets the register path a plain assignment has. At -O2 the same loop in Pascal keeps its pointers in r14/r15; in C it does not."
