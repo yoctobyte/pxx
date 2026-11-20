@@ -4,10 +4,10 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-02
 found-by: frankA
-owner: unassigned
+owner: rd
 summary: "EnsureCloneStub has four legs -- x86-64, i386, aarch64, arm32 -- and only the x86-64 one carves and registers a per-thread signal alt stack. All five backends DO register one for the installing thread (grepping for syscall 131 finds only x86-64 because the number is per-arch: 186 on i386/arm32, 132 on aarch64/riscv32), so on every non-x86-64 target a cloned thread still has sp=0 flags=SS_DISABLE and its stack overflow is unhandleable. NOT DONE WITH THE x86-64 FIX BECAUSE IT COULD NOT BE VERIFIED: SA_ONSTACK is already known not to take effect under qemu (bug-a-riscv32-sa-onstack-has-no-effect-under-qemu), which is the only way to run these targets here, so the code would have been written and not tested."
 ---
 
@@ -64,3 +64,39 @@ now carves 1152 + 32768 bytes off the top before the child's first instruction
 and a smaller request would have the stub writing past the mapping. The three
 non-x86-64 legs will need the same arithmetic, and the constant is already a
 second copy of the compiler's two — that is stated at its declaration.
+
+## Resolution (2026-11-20, rd)
+
+Done the way the section above says to, with the test first: the
+registration is read back with `sigaltstack(NULL, &old)` inside each worker,
+which does not depend on SA_ONSTACK delivery under qemu.
+
+test/test_a_a_cloned_thread_registers_its_own_alt_stack.pas, test-threads
+rows on x86-64, aarch64, arm32 and i386, before the change:
+
+    x86_64:  registered=2/2 size-ok=2/2 above-own-frame=2/2 distinct=TRUE
+    aarch64: registered=0/2 size-ok=0/2 above-own-frame=0/2 distinct=FALSE
+    arm32:   (same as aarch64)
+    i386:    (same as aarch64)
+
+After, all four print the x86-64 line, four runs each.
+
+`EnsureCloneStub` (compiler/thread_emit.inc), in each of the three legs:
+- carves SIG_ALTSTACK_SIZE between the hidden-destination scratch and the TLS
+  block (the x86-64 placement: the top of the mapping, away from the guard
+  page);
+- registers it in the child, after the TLS install and before the entry,
+  with a stack_t built on the child's own stack (i386 `int 0x80` 186, arm32
+  `svc 0` 186, aarch64 `svc #0` 132);
+- moves the scratch pointer up by SIG_ALTSTACK_SIZE.
+
+aarch64 carves on every kernel, so the offsets have one answer, and registers
+on Linux only. Its FreeBSD (thr_new) and NetBSD/OpenBSD (translator) child
+paths reach the same code, but sigaltstack through them is not measured
+here. The new aarch64, arm32 and i386 encodings were checked word for word
+against clang's assembler. PAL_MIN_STACK (128 KB) already covers the carve on
+every target: it was unconditional.
+
+The test keeps both workers alive until both have read their registration.
+PalThreadCreate reaps a dead thread's stack, so without that barrier worker 1
+could reuse worker 0's mapping, and `distinct` read FALSE once on aarch64.

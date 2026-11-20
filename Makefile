@@ -9381,6 +9381,19 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_threadvar_pt26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_threadvar_pt26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26_arm32
 	tools/expect_same.sh arm32/test_threadvar_pt26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_threadvar_pt26_arm32)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	# Every clone leg registers the child's own signal alt stack, read back
+	# from inside each worker (not delivery, which qemu does not honour).
+	# Before 2026-11-20 aarch64, arm32 and i386 printed registered=0/2
+	# size-ok=0/2 above-own-frame=0/2 distinct=FALSE.
+	# bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only
+	./$(COMPILER) --threadsafe test/test_a_a_cloned_thread_registers_its_own_alt_stack.pas $(TESTTMP)/test_cloned_altstk26
+	tools/expect_same.sh test_cloned_altstk26 "$$($(TESTTMP)/test_cloned_altstk26)" "registered=2/2 size-ok=2/2 above-own-frame=2/2 distinct=TRUE"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_a_a_cloned_thread_registers_its_own_alt_stack.pas $(TESTTMP)/test_cloned_altstk26_a64
+	tools/expect_same.sh aarch64/test_cloned_altstk26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cloned_altstk26_a64)" "registered=2/2 size-ok=2/2 above-own-frame=2/2 distinct=TRUE"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_a_a_cloned_thread_registers_its_own_alt_stack.pas $(TESTTMP)/test_cloned_altstk26_arm32
+	tools/expect_same.sh arm32/test_cloned_altstk26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cloned_altstk26_arm32)" "registered=2/2 size-ok=2/2 above-own-frame=2/2 distinct=TRUE"
+	./$(COMPILER) --threadsafe --target=i386 test/test_a_a_cloned_thread_registers_its_own_alt_stack.pas $(TESTTMP)/test_cloned_altstk26_i386
+	tools/expect_same.sh i386/test_cloned_altstk26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_cloned_altstk26_i386)" "registered=2/2 size-ok=2/2 above-own-frame=2/2 distinct=TRUE"
 	# C's `__thread`, and errno through it, on the same two targets. Same
 	# control, same day: the nop-install compiler prints zeroed-on-entry=0/4 and
 	# main-copy=103 for the C fixture too.

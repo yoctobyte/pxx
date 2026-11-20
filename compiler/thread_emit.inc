@@ -475,6 +475,9 @@ begin
     { carve the hidden-destination scratch off the top first — see
       CLONE_RETBUF_SIZE. i386 carries that pointer in ecx. }
     EmitB($81); EmitB($E9); EmitI32(CLONE_RETBUF_SIZE); { sub ecx, CLONE_RETBUF_SIZE }
+    { the child's signal alt stack, between the scratch and the TLS block, as
+      on x86-64 (see the placement argument there) }
+    EmitB($81); EmitB($E9); EmitI32(SIG_ALTSTACK_SIZE); { sub ecx, SIG_ALTSTACK_SIZE }
     { ---- carve the child's TLS block below the scratch, as the other legs
       do, zeroed for the same reasons (see the x86-64 leg). eax, edx and edi
       are free here: edx and edi are loaded below, edi was saved above. ---- }
@@ -568,11 +571,28 @@ begin
       PatchRel8(pCopy);                               { .nocopy: }
     end;
     PatchRel8(pNoInst);                               { .noinst: }
+    { ---- register the alt stack carved above, on THIS thread ----
+      sigaltstack(2) is per-thread and not inherited across clone; see the
+      x86-64 leg. i386 stack_t = {ss_sp, ss_flags, ss_size}, 4 bytes each,
+      built on the child's own stack. ebx and ecx are dead in the child (the
+      exit below reloads ebx; ecx is reloaded with the scratch). The stage
+      area is at esp, the block at esp+8, the alt stack above the block.
+      bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only }
+    EmitB($8D); EmitB($84); EmitB($24); EmitI32(8 + TlsBlockSize);  { lea eax, [esp+8+TlsBlockSize] }
+    EmitB($83); EmitB($EC); EmitB($10);               { sub esp, 16 }
+    EmitB($89); EmitB($04); EmitB($24);               { mov [esp], eax        (ss_sp) }
+    EmitB($31); EmitB($C9);                           { xor ecx, ecx }
+    EmitB($89); EmitB($4C); EmitB($24); EmitB($04);   { mov [esp+4], ecx      (ss_flags) }
+    EmitB($C7); EmitB($44); EmitB($24); EmitB($08); EmitI32(SIG_ALTSTACK_SIZE);  { mov dword [esp+8], size }
+    EmitB($89); EmitB($E3);                           { mov ebx, esp          (new; ecx = old = NULL) }
+    EmitB($B8); EmitI32(186);                         { mov eax, 186          (sigaltstack) }
+    EmitB($CD); EmitB($80);                           { int 0x80 }
+    EmitB($83); EmitB($C4); EmitB($10);               { add esp, 16 }
     EmitAsm386('pop eax');  { entry; arg stays at [esp] }
     { ecx = the hidden-destination scratch. esp now points at arg; the TLS
-      block sits between it and the scratch, so the scratch base is
-      esp+4+TlsBlockSize. }
-    EmitB($8D); EmitB($8C); EmitB($24); EmitI32(4 + TlsBlockSize);  { lea ecx, [esp+4+TlsBlockSize] }
+      block and the alt stack sit between it and the scratch, so the scratch
+      base is esp+4+TlsBlockSize+SIG_ALTSTACK_SIZE. }
+    EmitB($8D); EmitB($8C); EmitB($24); EmitI32(4 + TlsBlockSize + SIG_ALTSTACK_SIZE);  { lea ecx, [esp+4+TlsBlockSize+alt] }
     EmitB($FF); EmitB($D0);                           { call eax (entry(arg), caller-cleans convention) }
     EmitAsm386([
       'xor ebx, ebx',                    { exit code 0 }
@@ -617,6 +637,11 @@ begin
     end;
     CloneStubAddr := CodeLen;
     EmitI32($D1040021);                 { sub  x1, x1, #256       (hidden-dest scratch) }
+    { the child's signal alt stack below the scratch, above the TLS block, as
+      on x86-64. Carved on every kernel so the offsets below are one answer;
+      registered on Linux, the one syscall ABI this leg speaks directly. }
+    EmitLoadImmA64(9, SIG_ALTSTACK_SIZE);
+    EmitI32($CB090021);                 { sub  x1, x1, x9 }
     { ---- carve the child's TLS block below the scratch ----
       The same block the x86-64 leg carves, zeroed for the same reasons (see
       there): every threadvar starts at 0, and a reused stack must not hand
@@ -787,13 +812,32 @@ begin
     Patch32(pNoInst, $B4000009 or ((((CodeLen - pNoInst) div 4) and $7FFFF) shl 5));
     Patch32(pNoInst2, $54000001 or ((((CodeLen - pNoInst2) div 4) and $7FFFF) shl 5));
     end;
+    if TargetKernel = KERNEL_LINUX then
+    begin
+      { ---- register the alt stack on THIS thread; see the x86-64 leg.
+        aarch64 stack_t = {ss_sp @0, int ss_flags @8, size_t ss_size @16}.
+        bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only }
+      EmitI32($910043E0);               { add  x0, sp, #16        (the block) }
+      EmitLoadImmA64(9, TlsBlockSize);
+      EmitI32($8B090000);               { add  x0, x0, x9         (ss_sp) }
+      EmitI32($D10083FF);               { sub  sp, sp, #32 }
+      EmitI32($F90003E0);               { str  x0, [sp] }
+      EmitI32($F90007FF);               { str  xzr, [sp, #8]      (ss_flags) }
+      EmitLoadImmA64(9, SIG_ALTSTACK_SIZE);
+      EmitI32($F9000BE9);               { str  x9, [sp, #16]      (ss_size) }
+      EmitI32($910003E0);               { mov  x0, sp }
+      EmitI32($D2800001);               { mov  x1, #0             (old = NULL) }
+      EmitI32($D2801088);               { mov  x8, #132           (sigaltstack) }
+      EmitI32($D4000001);               { svc  #0 }
+      EmitI32($910083FF);               { add  sp, sp, #32 }
+    end;
     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
     EmitI32($F94007E0);                 { ldr  x0, [sp, #8]       (arg -> x0) }
     { x8 = the hidden-destination scratch (AAPCS XR, which is also what this
       compiler's own aggregate-return convention uses) — see CLONE_RETBUF_SIZE.
-      It sits above the stage area and the TLS block. }
+      It sits above the stage area, the TLS block and the alt stack. }
     EmitI32($910043E8);                 { add  x8, sp, #16 }
-    EmitLoadImmA64(9, TlsBlockSize);
+    EmitLoadImmA64(9, TlsBlockSize + SIG_ALTSTACK_SIZE);
     EmitI32($8B090108);                 { add  x8, x8, x9         (scratch) }
     EmitI32($D63F0020);                 { blr  x1                 (entry(arg)) }
     EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
@@ -822,6 +866,9 @@ begin
       the PARENT restores them; the child runs on a fresh stack. }
     EmitI32($E92D0600);                 { push {r9, r10} }
     EmitI32($E2411C01);                 { sub r1, r1, #256      (hidden-dest scratch) }
+    { the child's signal alt stack, above the TLS block, as on x86-64 }
+    EmitLoadImmArm32(9, SIG_ALTSTACK_SIZE);
+    EmitI32($E0411009);                 { sub r1, r1, r9 }
     { ---- carve the child's TLS block, as the aarch64 leg does ---- }
     EmitLoadImmArm32(9, TlsBlockSize);  { r9 = TlsBlockSize }
     EmitI32($E0411009);                 { sub r1, r1, r9 }
@@ -876,12 +923,28 @@ begin
     end;
     Patch32(pNoInst, $0A000000 or ((((CodeLen - pNoInst) div 4) - 2) and $00FFFFFF));
     Patch32(pNoInst2, $1A000000 or ((((CodeLen - pNoInst2) div 4) - 2) and $00FFFFFF));
+    { ---- register the alt stack on THIS thread; see the x86-64 leg.
+      arm32 stack_t = {ss_sp, ss_flags, ss_size}, 4 bytes each.
+      bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only }
+    EmitI32($E28D0010);                 { add r0, sp, #16       (the block) }
+    EmitLoadImmArm32(9, TlsBlockSize);
+    EmitI32($E0800009);                 { add r0, r0, r9        (ss_sp) }
+    EmitI32($E24DD010);                 { sub sp, sp, #16 }
+    EmitI32($E58D0000);                 { str r0, [sp] }
+    EmitI32($E3A01000);                 { mov r1, #0 }
+    EmitI32($E58D1004);                 { str r1, [sp, #4]      (ss_flags) }
+    EmitLoadImmArm32(9, SIG_ALTSTACK_SIZE);
+    EmitI32($E58D9008);                 { str r9, [sp, #8]      (ss_size) }
+    EmitI32($E1A0000D);                 { mov r0, sp            (new; r1 = old = NULL) }
+    EmitI32($E3A070BA);                 { mov r7, #186          (sigaltstack) }
+    EmitI32($EF000000);                 { svc 0 }
+    EmitI32($E28DD010);                 { add sp, sp, #16 }
     EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }
     EmitI32($E59D0004);                 { ldr r0, [sp, #4]      (arg -> r0) }
     { r12 (ip) = the hidden-destination scratch — see CLONE_RETBUF_SIZE. It
-      sits above the stage area and the TLS block. }
+      sits above the stage area, the TLS block and the alt stack. }
     EmitI32($E28DC010);                 { add r12, sp, #16 }
-    EmitLoadImmArm32(9, TlsBlockSize);
+    EmitLoadImmArm32(9, TlsBlockSize + SIG_ALTSTACK_SIZE);
     EmitI32($E08CC009);                 { add r12, r12, r9      (scratch) }
     EmitI32($E12FFF31);                 { blx r1                (entry(arg)) }
     EmitI32($E3A00000);                 { mov r0, #0            (exit code 0) }
