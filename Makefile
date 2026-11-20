@@ -21446,6 +21446,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_incdec_value "$$($(TESTTMP)/c_incval)" "$$(cat test/c_incdec_value_on_a_plain_variable.expected)"
 	./$(COMPILER) -O2 test/c_incdec_value_on_a_plain_variable.c $(TESTTMP)/c_incval2 >/dev/null
 	tools/expect_same.sh c_incdec_value_o2 "$$($(TESTTMP)/c_incval2)" "$$(cat test/c_incdec_value_on_a_plain_variable.expected)"
+	# a C loop test branches on its compare (inverted for `== 0`, never on a
+	# float) and literal arithmetic folds; against gcc at -O0 and -O2
+	./$(COMPILER) test/c_loop_test_fusion_and_literal_folds.c $(TESTTMP)/c_lpfuse >/dev/null
+	tools/expect_same.sh c_loop_fusion "$$($(TESTTMP)/c_lpfuse)" "$$(cat test/c_loop_test_fusion_and_literal_folds.expected)"
+	./$(COMPILER) -O2 test/c_loop_test_fusion_and_literal_folds.c $(TESTTMP)/c_lpfuse2 >/dev/null
+	tools/expect_same.sh c_loop_fusion_o2 "$$($(TESTTMP)/c_lpfuse2)" "$$(cat test/c_loop_test_fusion_and_literal_folds.expected)"
 	# crtl on xtensa issues the time64 syscalls (Nilix implements those)
 	python3 -I tools/check_xtensa_time64_syscalls.py $(COMPILER) $(TESTTMP)
 	# vfork on xtensa is a real vfork (CLONE_VM|CLONE_VFORK), call0 and windowed

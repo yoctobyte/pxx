@@ -584,6 +584,7 @@ AN_AWAIT Left -1          { bare `await
 AN_AWAIT Left CurASTNode
 AN_AWAIT Left ParseStatementAST()
 AN_BINOP Left ASTLeft[node]
+AN_BINOP Left ASTLeft[nx]
 AN_BINOP Left CloneAST(SetLenDimNode[0])
 AN_BINOP Left CloneAST(SetLenDimNode[k])
 AN_BINOP Left CurASTNode
@@ -658,6 +659,7 @@ AN_BINOP Left vlaExt
 AN_BINOP Left vtGuardCall
 AN_BINOP Right ASTLeft[argSeq]
 AN_BINOP Right ASTLeft[node]
+AN_BINOP Right ASTRight[nx]
 AN_BINOP Right AllocNode(AN_INT_LIT)
 AN_BINOP Right CurASTNode
 AN_BINOP Right ParseSetLiteralAST

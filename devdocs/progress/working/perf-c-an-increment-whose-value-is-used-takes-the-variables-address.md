@@ -47,6 +47,30 @@ allocation proper (the toybox ticket's item 3), not this ticket.
 - A scratch probe with unsequenced rows: identical to the old pxx at both
   levels.
 
+## Second commit: loop tests and literal folds
+
+A C `for` with a step is `if (cond == 0) break`, and conditions arrive as
+`(cmp) != 0`, so the loop test was setcc/movzx/cmp 0/jcc/jmp. IRLowerCondJump
+now peels `(cmp) != 0` and inverts `(cmp) == 0` (ordinal and pointer operands
+only, never a float: NaN). Literal + - * with a 32/64-bit result in 0..2^31-1
+folds, and pointer + constant scales the constant (`q += 4` was
+`mov eax,4; imul rax,rax,8` per iteration).
+Test: test/c_loop_test_fusion_and_literal_folds.c (gcc, -O0 and -O2).
+
+## Measured, both commits
+
+- callgrind, the copy loops (userland x86-64): 93.9M -> 69.4M instructions
+  (-26%). gcc -O2: 13.7M, so still 5x.
+- Rainyday kernel at e2fbfde (pc profile), built in a scratch copy: .text
+  1,665,842 -> 1,623,869 bytes (-2.5%). `make test` passes in QEMU, and so
+  does user/speedtest in a plain boot (tools/units.sh).
+- speedtest old against new, three rounds each, alternating, host at load 21:
+  within noise on every row (fork+wait looked 15-25% better in all three;
+  everything else crossed over). Not claimed as a kernel speedup.
+
+The rest of the gap is the stack-machine expression code and locals in frame
+slots: register allocation proper, the toybox ticket's item 3.
+
 ## Related
 
 - [[feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc]]

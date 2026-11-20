@@ -11838,6 +11838,18 @@ begin
     (IntToTypeKind(ASTTk[ASTRight[n]]) = tyBoolean);
 end;
 
+{ May a comparison on this operand be inverted (`!(a < b)` as `a >= b`)? Only
+  where the operand is an ordinal or a pointer: on a float NaN makes the two
+  differ, and strings, variants and 128-bit values compare through helpers. }
+function IRCmpOperandInvertible(node: Integer): Boolean;
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(ASTTk[node]);
+  Result := ((IsIntTypeKind(tk) and not TypeIsInt128(tk)) or
+             (tk = tyPointer) or (tk = tyChar) or (tk = tyBoolean)) and
+            not TypeIsFloat(tk);
+end;
+
 function IRLowerCondJump(n, falseLabel, trueLabel: Integer): Integer;
 { Lower a CONDITION as control flow: jump to falseLabel when it is false; when
   it is true, jump to trueLabel or (trueLabel = -1) fall through. Returns the
@@ -11853,6 +11865,51 @@ function IRLowerCondJump(n, falseLabel, trueLabel: Integer): Integer;
   skipped right operand are unchanged. }
 var tl, nx: Integer;
 begin
+  { `(a >= b) != 0` is `a >= b`. The C front end hands a condition over in its
+    truth wrapper, and the branch then tested the WRAPPER: the compare was
+    materialised (setcc/movzx), compared with 0, and jumped on -- six
+    instructions per loop test where the fused compare-and-branch is two, on
+    every `if`/`while`/`for` of a C program. A comparison already yields 0 or
+    1, whatever its operands, so the peel is exact. Rainyday 0060. }
+  while (n >= 0) and (ASTKind[n] = AN_BINOP) and (Integer(ASTIVal[n]) = Ord(tkNeq)) and
+        (ASTRight[n] >= 0) and (ASTKind[ASTRight[n]] = AN_INT_LIT) and
+        (ASTIVal[ASTRight[n]] = 0) and
+        (ASTLeft[n] >= 0) and (ASTKind[ASTLeft[n]] = AN_BINOP) and
+        (Integer(ASTIVal[ASTLeft[n]]) in [Ord(tkEq), Ord(tkNeq), Ord(tkLt),
+                                          Ord(tkLe), Ord(tkGt), Ord(tkGe)]) do
+    n := ASTLeft[n];
+  { ...and `(a >= b) == 0` is `a < b`: a C `for` with a step is built as
+    `if (cond == 0) break`, so its loop test was the wrapped compare TESTED FOR
+    ZERO, inverted twice and never fused. Only for integer, pointer, char and
+    boolean operands: on a float `!(a < b)` is not `a >= b` (NaN). A new node,
+    not an edit of the shared AST. }
+  if (n >= 0) and (ASTKind[n] = AN_BINOP) and (Integer(ASTIVal[n]) = Ord(tkEq)) and
+     (ASTRight[n] >= 0) and (ASTKind[ASTRight[n]] = AN_INT_LIT) and
+     (ASTIVal[ASTRight[n]] = 0) and
+     (ASTLeft[n] >= 0) and (ASTKind[ASTLeft[n]] = AN_BINOP) and
+     (Integer(ASTIVal[ASTLeft[n]]) in [Ord(tkEq), Ord(tkNeq), Ord(tkLt),
+                                       Ord(tkLe), Ord(tkGt), Ord(tkGe)]) and
+     (ASTLeft[ASTLeft[n]] >= 0) and (ASTRight[ASTLeft[n]] >= 0) and
+     (ASTSLen[ASTLeft[n]] = 0) and
+     IRCmpOperandInvertible(ASTLeft[ASTLeft[n]]) and
+     IRCmpOperandInvertible(ASTRight[ASTLeft[n]]) then
+  begin
+    nx := ASTLeft[n];
+    tl := AllocNode(AN_BINOP);
+    case Integer(ASTIVal[nx]) of
+      Ord(tkEq):  ASTIVal[tl] := Ord(tkNeq);
+      Ord(tkNeq): ASTIVal[tl] := Ord(tkEq);
+      Ord(tkLt):  ASTIVal[tl] := Ord(tkGe);
+      Ord(tkGe):  ASTIVal[tl] := Ord(tkLt);
+      Ord(tkLe):  ASTIVal[tl] := Ord(tkGt);
+      Ord(tkGt):  ASTIVal[tl] := Ord(tkLe);
+    end;
+    ASTLeft[tl] := ASTLeft[nx];
+    ASTRight[tl] := ASTRight[nx];
+    ASTTk[tl] := ASTTk[nx];
+    ASTSLen[tl] := ASTSLen[nx];
+    n := tl;
+  end;
   if IRIsShortCircuitBool(n) then
   begin
     if Integer(ASTIVal[n]) = Ord(tkAnd) then
@@ -14894,6 +14951,35 @@ begin
 
     AN_BINOP:
     begin
+      { Two integer LITERALS under + - *: the C front end's pointer step builds
+        `4 * 8` for `q += 4`, and it was multiplied at run time in every loop
+        iteration (`mov eax,4; imul rax,rax,8`). Folded only where the answer
+        is the same whatever the signedness: a 32- or 64-bit result type and
+        a result in 0..2^31-1. Rainyday 0060. }
+      if (Integer(ASTIVal[node]) in [Ord(tkPlus), Ord(tkMinus), Ord(tkStar)]) and
+         (ASTLeft[node] >= 0) and (ASTRight[node] >= 0) and
+         (ASTKind[ASTLeft[node]] = AN_INT_LIT) and (ASTKind[ASTRight[node]] = AN_INT_LIT) and
+         IsIntTypeKind(IntToTypeKind(ASTTk[node])) and
+         (TypeSlotSize(IntToTypeKind(ASTTk[node])) >= 4) and
+         not TypeIsInt128(IntToTypeKind(ASTTk[node])) and
+         not TypeIsPromoInt(IntToTypeKind(ASTTk[node])) and
+         IsIntTypeKind(IntToTypeKind(ASTTk[ASTLeft[node]])) and
+         IsIntTypeKind(IntToTypeKind(ASTTk[ASTRight[node]])) and
+         (ASTIVal[ASTLeft[node]] >= 0) and (ASTIVal[ASTLeft[node]] <= 2147483647) and
+         (ASTIVal[ASTRight[node]] >= 0) and (ASTIVal[ASTRight[node]] <= 2147483647) then
+      begin
+        case Integer(ASTIVal[node]) of
+          Ord(tkPlus):  foldK := ASTIVal[ASTLeft[node]] + ASTIVal[ASTRight[node]];
+          Ord(tkMinus): foldK := ASTIVal[ASTLeft[node]] - ASTIVal[ASTRight[node]];
+        else
+          foldK := ASTIVal[ASTLeft[node]] * ASTIVal[ASTRight[node]];
+        end;
+        if (foldK >= 0) and (foldK <= 2147483647) then
+        begin
+          Result := IRAppend(IR_CONST_INT, -1, -1, -1, foldK, ASTTk[node]);
+          Exit;
+        end;
+      end;
       { {$MODE DELPHI}: `fp = nil` and `fp = fp2` compare the CALL RESULTS, not
         the addresses — measured against FPC, which does the opposite in
         FPC/OBJFPC mode. To compare addresses in Delphi mode you write `@fp`.
@@ -16093,7 +16179,11 @@ begin
           left := IRLowerAST(ASTLeft[node]);
           right := IRLowerAST(ASTRight[node]);
           elemSize := IRPointerStride(ASTLeft[node]);
-          if elemSize > 1 then
+          { `p + 3` scales a CONSTANT: fold it rather than multiply per use }
+          if (elemSize > 1) and (IRKind[right] = IR_CONST_INT) and
+             (IRIVal[right] >= 0) and (IRIVal[right] <= 2147483647 div elemSize) then
+            right := IRAppend(IR_CONST_INT, -1, -1, -1, IRIVal[right] * elemSize, Ord(tyInteger))
+          else if elemSize > 1 then
           begin
             item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInteger));
             right := IRAppend(IR_BINOP, right, item, Ord(tkStar), 0, Ord(tyInteger));
