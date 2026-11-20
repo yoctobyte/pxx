@@ -11722,6 +11722,25 @@ begin
 end;
 {$endif}
 
+{ An operand the xtensa frontend cannot bind (an x86 "=m", a float, a
+  register variable it cannot honour, ...). In a `static` routine or an
+  imported header it POISONS the routine, as an unknown instruction does
+  below: gcc never expands an uncalled static inline, so it never checks that
+  asm's constraints either, and an x86 arch header's helpers stopped an xtensa
+  compile that never used them (Rainyday 0004, rump-pxx g20). Elsewhere the
+  compile stops with the message, as before.
+  bug-c-xtensa-an-unused-static-inline-with-x86-asm-operands-stops-the-compile }
+function CXtAsmRefuse(const msg: AnsiString): Integer;
+var blk: Integer;
+begin
+  Result := -1;
+  if not CAsmMayPoison then Error(msg);
+  if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+  ProcAsmPoison[CurProc] := 'its inline asm cannot be built for xtensa (' + msg + ')';
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := -1;
+  Result := blk;
+end;
+
 { GNU C inline asm on xtensa. The split is aarch64's (casm_a64.inc) with one
   difference: the template is not encoded here but kept as TEXT LINES in the
   InlineAsmLine pool, the same pool a Pascal asm block on this target fills,
@@ -11765,13 +11784,13 @@ begin
     if nm = '' then Continue;
     if CaseEqual(nm, 'sar') then Continue;     { no value lives in SAR across a statement }
     if not AsmXtensaRegNum(nm, reg) then
-      Error('C: xtensa inline asm clobbers "' + nm + '", which is not a general register');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm clobbers "' + nm + '", which is not a general register'); Exit; end;
     { a7 is the biased frame base and a15 the frame pointer on both ABIs
       (EmitProcPrologue: `mov a15, a1` / `addi a7, a15, -N`); a12..a14 are
       callee-saved under call0 and this prologue does not save them }
     if (reg <= 1) or (reg = 7) or (reg = 15) or ((reg >= 12) and (XtensaABI = XTENSA_ABI_CALL0)) then
-      Error('C: xtensa inline asm clobbers "' + nm + '", which this frontend does not'
-            + ' save around the block -- a2..a6 and a8..a11 may be clobbered');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm clobbers "' + nm + '", which this frontend does not'
+            + ' save around the block -- a2..a6 and a8..a11 may be clobbered'); Exit; end;
     used[reg] := True;
   end;
 
@@ -11785,18 +11804,18 @@ begin
     opReg[i] := -1;
     if (CAsmOps[i].TiedTo >= 0) or (CAsmOps[i].FixReg = '') then Continue;
     if not AsmXtensaRegNum(CAsmOps[i].FixReg, reg) then
-      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
-            + CAsmOps[i].FixReg + '", which is not a general register');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which is not a general register'); Exit; end;
     if (reg < 2) or (reg = 7) or (reg >= 12) then
-      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
-            + CAsmOps[i].FixReg + '"; a register variable may name a2..a6 and a8..a11');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '"; a register variable may name a2..a6 and a8..a11'); Exit; end;
     if CAsmOps[i].IsOut and ((reg = 8) or (reg = 9)) then
-      Error('C: xtensa inline asm output "' + CAsmOps[i].Raw + '" is bound to "'
+      begin Result := CXtAsmRefuse('C: xtensa inline asm output "' + CAsmOps[i].Raw + '" is bound to "'
             + CAsmOps[i].FixReg + '", which this frontend uses to store outputs back;'
-            + ' an output register variable may name a2..a6, a10 or a11');
+            + ' an output register variable may name a2..a6, a10 or a11'); Exit; end;
     if used[reg] then
-      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
-            + CAsmOps[i].FixReg + '", which another operand or a clobber already uses');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which another operand or a clobber already uses'); Exit; end;
     opReg[i] := reg;
     used[reg] := True;
   end;
@@ -11811,16 +11830,16 @@ begin
     if (cls = 'i') or (cls = 'n') then
     begin
       if not CAsmImmValue(CAsmOps[i].Expr, opImm[i]) then
-        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant');
+        begin Result := CXtAsmRefuse('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant'); Exit; end;
       Continue;
     end;
     if (cls <> 'a') and (cls <> 'r') and (cls <> 'g') and (cls <> 'rm') and (cls <> 'mr') then
-      Error('C: xtensa inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
-            + ' -- this target reads "a"/"r" (and "g"/"rm" as a register) and the immediates "i"/"n"');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
+            + ' -- this target reads "a"/"r" (and "g"/"rm" as a register) and the immediates "i"/"n"'); Exit; end;
     while (poolNext < XT_POOL_N) and used[pool[poolNext]] do Inc(poolNext);
     if poolNext >= XT_POOL_N then
-      Error('C: xtensa inline asm needs more registers than this frontend pins'
-            + ' (a3..a6, a10, a11, less any clobbered)');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm needs more registers than this frontend pins'
+            + ' (a3..a6, a10, a11, less any clobbered)'); Exit; end;
     opReg[i] := pool[poolNext];
     used[opReg[i]] := True;
   end;
@@ -11833,11 +11852,11 @@ begin
     tk := ASTTk[CAsmOps[i].Expr];
     sz := TypeSlotSize(IntToTypeKind(tk));
     if (IntToTypeKind(tk) = tyDouble) or (IntToTypeKind(tk) = tySingle) then
-      Error('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
-            + ' only address registers are supported');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
+            + ' only address registers are supported'); Exit; end;
     if (sz <> 1) and (sz <> 2) and (sz <> 4) then
-      Error('C: xtensa inline asm operand is ' + AIntToStr(sz) + ' bytes wide,'
-            + ' which does not fit one address register');
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand is ' + AIntToStr(sz) + ' bytes wide,'
+            + ' which does not fit one address register'); Exit; end;
     { a signed byte travels in a 32-bit temporary: the register then holds
       it sign-extended, which the old load produced and the input load
       (EmitLoadVarOwnXtensa) cannot do without a scratch register }
@@ -11866,7 +11885,7 @@ begin
       nm := Copy(tpl, i + 1, j - i - 1);
       for k := 0 to CAsmOpCount - 1 do
         if (CAsmOps[k].TiedTo < 0) and (CAsmOps[k].SymName = nm) then num := k;
-      if num < 0 then Error('C: xtensa inline asm names operand [' + nm + '], which does not exist');
+      if num < 0 then begin Result := CXtAsmRefuse('C: xtensa inline asm names operand [' + nm + '], which does not exist'); Exit; end;
       i := j + 1;
     end
     else if (i <= Length(tpl)) and (tpl[i] >= '0') and (tpl[i] <= '9') then
@@ -11878,9 +11897,9 @@ begin
         Inc(i);
       end;
       if num >= CAsmOpCount then
-        Error('C: xtensa inline asm uses %' + AIntToStr(num) + ', which is not an operand');
+        begin Result := CXtAsmRefuse('C: xtensa inline asm uses %' + AIntToStr(num) + ', which is not an operand'); Exit; end;
     end
-    else Error('C: xtensa inline asm: operand modifiers are not supported');
+    else begin Result := CXtAsmRefuse('C: xtensa inline asm: operand modifiers are not supported'); Exit; end;
     if opReg[num] < 0 then s := s + AIntToStr(opImm[num])
     else s := s + 'a' + AIntToStr(opReg[num]);
   end;
