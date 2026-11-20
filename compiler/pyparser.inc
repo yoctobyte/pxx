@@ -10211,13 +10211,117 @@ end;
   "does an expression follow the '='" instead would also claim
   `field(default_factory=list)`, whose `field` is not a callable that exists.
   feature-nilpy-dataclass-expression-field-default }
+{ A @dataclass's generated constructor takes the fields of its dataclass BASES
+  first, then its own, as CPython's does: `Kid(Base)` with `a` in Base and `b`
+  in Kid is `Kid(a, b)`. pxx keeps each class's own fields in its own window
+  (UClsFBase/UClsFCount), so every reader of "field number i of this
+  dataclass" goes through this FLAT index: the chain root first, counting
+  only the classes that are dataclasses (CPython skips a plain class's
+  attributes) plus ci itself. Before it, the ctor took Kid's own field only,
+  and Kid(1, 2.5) passed one argument too many and segfaulted.
+  bug-n-a-dataclass-that-inherits-a-dataclass-segfaults-on-construction }
+function PyDcFlatChain(ci: Integer; var chain: array of Integer): Integer;
+{ ci and its ancestors, ROOT FIRST, keeping ci and every dataclass ancestor. }
+var c, n, i, t: Integer;
+begin
+  n := 0;
+  c := ci;
+  while (c >= 0) and (n < 64) do
+  begin
+    if (c = ci) or ((c < PY_MAX_DC_FIELDS) and PyDcClassIsDc[c]) then
+    begin
+      chain[n] := c;
+      Inc(n);
+    end;
+    c := UClsParent[c];
+  end;
+  for i := 0 to (n div 2) - 1 do
+  begin
+    t := chain[i]; chain[i] := chain[n - 1 - i]; chain[n - 1 - i] := t;
+  end;
+  Result := n;
+end;
+
+function PyDcFlatCount(ci: Integer): Integer;
+var chain: array[0..63] of Integer; n, i: Integer;
+begin
+  n := PyDcFlatChain(ci, chain);
+  Result := 0;
+  for i := 0 to n - 1 do Result := Result + UClsFCount[chain[i]];
+end;
+
+{ flat field number -> (owning class, index in its window); False past the end }
+function PyDcFlatField(ci, flat: Integer; var oc, oi: Integer): Boolean;
+var chain: array[0..63] of Integer; n, i: Integer;
+begin
+  Result := False;
+  if flat < 0 then Exit;
+  n := PyDcFlatChain(ci, chain);
+  for i := 0 to n - 1 do
+  begin
+    if flat < UClsFCount[chain[i]] then
+    begin
+      oc := chain[i];
+      oi := flat;
+      Result := True;
+      Exit;
+    end;
+    flat := flat - UClsFCount[chain[i]];
+  end;
+end;
+
+{ field name -> flat field number, or -1 }
+function PyDcFlatIndexOf(ci: Integer; const nm: AnsiString): Integer;
+var chain: array[0..63] of Integer; n, i, f, base: Integer;
+begin
+  Result := -1;
+  n := PyDcFlatChain(ci, chain);
+  base := 0;
+  for i := 0 to n - 1 do
+  begin
+    for f := 0 to UClsFCount[chain[i]] - 1 do
+      if PyRawName(UFldNOff[UClsFBase[chain[i]] + f], UFldNLen[UClsFBase[chain[i]] + f]) = nm then
+      begin
+        Result := base + f;
+        Exit;
+      end;
+    base := base + UClsFCount[chain[i]];
+  end;
+end;
+
+{ the UFld index of flat field `flat` }
+function PyDcFlatUFld(ci, flat: Integer): Integer;
+var oc, oi: Integer;
+begin
+  if PyDcFlatField(ci, flat, oc, oi) then Result := UClsFBase[oc] + oi
+  else Result := -1;
+end;
+
+{ Does ci's OWN body define method nm? CPython's @dataclass skips generating
+  a dunder only when the class itself defines it -- an inherited __repr__ or
+  __eq__ (a dataclass base's generated one included) is replaced, which is
+  what makes Kid(Base) print as Kid(a=.., b=..).
+  bug-n-a-dataclass-that-inherits-a-dataclass-segfaults-on-construction }
+function PyDcOwnsMeth(ci: Integer; const nm: AnsiString): Boolean;
+var k, m: Integer;
+begin
+  Result := False;
+  for k := 0 to UClsMCount[ci] - 1 do
+  begin
+    m := UClsMBase[ci] + k;
+    if PyRawName(UMthNOff[m], UMthNLen[m]) = nm then begin Result := True; Exit; end;
+  end;
+end;
+
 function PyDcFieldKind(ci: Integer; const nm: AnsiString): Integer;
-var i, fidx, base: Integer;
+var i, fidx, base, oc, oi: Integer;
 begin
   Result := PYDC_NONE;
-  fidx := FindUField(ci, nm);
+  fidx := PyDcFlatIndexOf(ci, nm);
   if fidx < 0 then Exit;
-  fidx := fidx - UClsFBase[ci];
+  if not PyDcFlatField(ci, fidx, oc, oi) then Exit;
+  ci := oc;
+  fidx := oi;
   base := -1;
   for i := 0 to PyDcCount - 1 do
     if PyDcCi[i] = ci then begin base := i; Break; end;
@@ -10228,10 +10332,24 @@ begin
 end;
 
 function PyDcDefaultNode(ci, dcBase, fidx: Integer): Integer;
-var i, k, valNode, tkNode: Integer; tkF: TTypeKind;
+var i, k, valNode, tkNode, oc, oi: Integer; tkF: TTypeKind;
 begin
+  { fidx is a FLAT field number (PyDcFlatField): an inherited field's default
+    lives in its OWNING class's rows, so remap the class, the index and the
+    first row; dcBase stays the caller's answer only for an own field }
+  if PyDcFlatField(ci, fidx, oc, oi) then
+  begin
+    fidx := oi;           { an own field after inherited ones is offset too }
+    if oc <> ci then
+    begin
+      ci := oc;
+      dcBase := -1;
+      for i := 0 to PyDcCount - 1 do
+        if PyDcCi[i] = ci then begin dcBase := i; Break; end;
+    end;
+  end;
   i := dcBase + fidx;
-  if (i >= PyDcCount) or (PyDcCi[i] <> ci) or (PyDcKind[i] = PYDC_NONE) then
+  if (dcBase < 0) or (i >= PyDcCount) or (PyDcCi[i] <> ci) or (PyDcKind[i] = PYDC_NONE) then
     Error('Nil Python: missing argument for dataclass field without default');
 case PyDcKind[i] of
     PYDC_INT:
@@ -10684,10 +10802,15 @@ begin
       end;
       if kwFld < 0 then
       begin
-        kwFld := FindUField(ci, kwName);
-        if kwFld >= 0 then
-          kwFld := kwFld - UClsFBase[ci]   { absolute -> field INDEX }
+        if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] then
+          kwFld := PyDcFlatIndexOf(ci, kwName)   { a base's field is a ctor parameter too }
         else
+        begin
+          kwFld := FindUField(ci, kwName);
+          if kwFld >= 0 then
+            kwFld := kwFld - UClsFBase[ci];   { absolute -> field INDEX }
+        end;
+        if kwFld < 0 then
           Error('Nil Python: ' + name + ' has no field or constructor parameter named ''' +
                 kwName + '''');
       end;
@@ -10739,12 +10862,12 @@ begin
           a retain, so the field owns what it holds.
           [[bug-nilpy-slice-of-variant-local-returned-is-unusable]] }
         if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] and
-           (kwI < UClsFCount[ci]) and
+           (kwI < PyDcFlatCount(ci)) and
            (IntToTypeKind(ASTTk[ASTLeft[argNode]]) = tyVariant) and
-           (UFldTk[UClsFBase[ci] + kwI] = Ord(tyClass)) and
-           (UFldRec_[UClsFBase[ci] + kwI] >= REC_UCLASS_BASE) then
+           (UFldTk[PyDcFlatUFld(ci, kwI)] = Ord(tyClass)) and
+           (UFldRec_[PyDcFlatUFld(ci, kwI)] >= REC_UCLASS_BASE) then
           ASTLeft[argNode] := PyUnboxVariantToClassEx(ASTLeft[argNode],
-            UFldRec_[UClsFBase[ci] + kwI] - REC_UCLASS_BASE, True);
+            UFldRec_[PyDcFlatUFld(ci, kwI)] - REC_UCLASS_BASE, True);
       end
       else
       begin
@@ -11017,8 +11140,10 @@ begin
     dcBase := -1; k := 0;
     for i := 0 to PyDcCount - 1 do
       if PyDcCi[i] = ci then begin dcBase := i; break; end;
-    if dcBase >= 0 then
-      while nArgs < UClsFCount[ci] do
+    { FLAT count: a dataclass base's fields are the ctor's first parameters
+      (PyDcFlatField), and an inherited default comes from its own class's
+      rows -- PyDcDefaultNode remaps; an own field with no row refuses there }
+      while nArgs < PyDcFlatCount(ci) do
       begin
         valNode := PyDcDefaultNode(ci, dcBase, nArgs);
         argNode := AllocNode(AN_ARG);
@@ -51101,13 +51226,15 @@ begin
       a 17-field dataclass was refused by a limit the compiler no longer had.
       That is one class (tuxspaceprogram's `Scene`) walling FOUR of its files,
       three of them only because they import it. }
-    if UClsFCount[ci] > MAX_PROC_PARAMS - 1 then
+    { the dataclass BASES' fields first, then its own (PyDcFlatField) }
+    if PyDcFlatCount(ci) > MAX_PROC_PARAMS - 1 then
       Error('Nil Python: a dataclass ctor takes at most '
             + AIntToStr(MAX_PROC_PARAMS - 1) + ' fields');
     pnames[0] := 'self'; ptypes[0] := tyClass;
     nparams := 1;
-    for k := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
+    for j := 0 to PyDcFlatCount(ci) - 1 do
     begin
+      k := PyDcFlatUFld(ci, j);
       pnames[nparams] := PyRawName(UFldNOff[k], UFldNLen[k]);
       ptypes[nparams] := IntToTypeKind(UFldTk[k]);
       Inc(nparams);
@@ -51125,7 +51252,7 @@ begin
       Registered as an ordinary method so the `==` dispatch in ParseExpr picks
       it up like a hand-written one; a hand-written __eq__ WINS (it is already
       in the method table by now, and eq=False is not modelled). }
-    if FindUMeth(ci, '__eq__') < 0 then
+    if not PyDcOwnsMeth(ci, '__eq__') then
     begin
       pnames[0] := 'self'; ptypes[0] := tyClass;
       pnames[1] := 'other'; ptypes[1] := tyClass;
@@ -51145,7 +51272,7 @@ begin
       the number IS a value, so nothing raises.
       A hand-written __repr__ wins, same rule as __eq__ (repr=False is not
       modelled). bug-nilpy-dataclass-no-generated-repr }
-    if FindUMeth(ci, '__repr__') < 0 then
+    if not PyDcOwnsMeth(ci, '__repr__') then
     begin
       pnames[0] := 'self'; ptypes[0] := tyClass;
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
@@ -51169,7 +51296,7 @@ begin
       for dcCmp := 0 to 3 do
       begin
         name := PyDcCmpName(dcCmp);
-        if FindUMeth(ci, name) >= 0 then Continue;
+        if PyDcOwnsMeth(ci, name) then Continue;
         pnames[0] := 'self'; ptypes[0] := tyClass;
         pnames[1] := 'other'; ptypes[1] := tyClass;
         fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
@@ -51907,13 +52034,13 @@ begin
   for i := 0 to nparams - 1 do
   begin
     if i = 0 then name := 'self'
-    else name := PyRawName(UFldNOff[UClsFBase[ci] + i - 1],
-                           UFldNLen[UClsFBase[ci] + i - 1]);
+    else name := PyRawName(UFldNOff[PyDcFlatUFld(ci, i - 1)],
+                           UFldNLen[PyDcFlatUFld(ci, i - 1)]);
     idx := AllocParam(name, Procs[procIdx].Params[i].TypeKind, False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
     if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci
     else if Procs[procIdx].Params[i].TypeKind = tyClass then
-      Syms[idx].RecName := UFldRec_[UClsFBase[ci] + i - 1];
+      Syms[idx].RecName := UFldRec_[PyDcFlatUFld(ci, i - 1)];
     SymSyncTypeRef(idx);
   end;
   SetProcBodyAddrHere(procIdx);
@@ -51922,7 +52049,7 @@ begin
   seqHead := -1;
   for i := 1 to nparams - 1 do
   begin
-    k := UClsFBase[ci] + i - 1;
+    k := PyDcFlatUFld(ci, i - 1);   { an inherited field is stored through self too }
     selfNode := AllocNode(AN_IDENT);
     ASTIVal[selfNode] := Procs[procIdx].Params[0].SymIdx;
     ASTTk[selfNode] := Ord(tyClass);
@@ -52093,9 +52220,9 @@ begin
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 2);
   acc := -1;
-  for i := 0 to UClsFCount[ci] - 1 do
+  for i := 0 to PyDcFlatCount(ci) - 1 do
   begin
-    k := UClsFBase[ci] + i;
+    k := PyDcFlatUFld(ci, i);   { inherited dataclass fields first }
     fieldTk := IntToTypeKind(UFldTk[k]);
     selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
     otherNode := PyMakeIdent(Procs[procIdx].Params[1].SymIdx);
@@ -52196,9 +52323,9 @@ begin
   acc := AllocNode(AN_BOOL_LIT);
   if baseTrue then ASTIVal[acc] := 1 else ASTIVal[acc] := 0;
   ASTTk[acc] := Ord(tyBoolean);
-  for i := UClsFCount[ci] - 1 downto 0 do
+  for i := PyDcFlatCount(ci) - 1 downto 0 do
   begin
-    k := UClsFBase[ci] + i;
+    k := PyDcFlatUFld(ci, i);   { inherited dataclass fields first }
     selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
     otherNode := PyMakeIdent(Procs[procIdx].Params[1].SymIdx);
     lhs := AllocNode(AN_FIELD);
@@ -52291,9 +52418,9 @@ begin
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 1);
   acc := PyExcFoldLit(clsName + '(');
-  for i := 0 to UClsFCount[ci] - 1 do
+  for i := 0 to PyDcFlatCount(ci) - 1 do
   begin
-    k := UClsFBase[ci] + i;
+    k := PyDcFlatUFld(ci, i);   { inherited dataclass fields first }
     if i = 0 then sep := '' else sep := ', ';
     acc := PyExcFoldCat(acc,
              PyExcFoldLit(sep + PyRawName(UFldNOff[k], UFldNLen[k]) + '='));
@@ -52639,6 +52766,10 @@ begin
           end
           else
           begin
+            { the flag PyParseClass sets, set here too: a dataclass SUBCLASS
+              registered by this sweep reads it on its bases to build its
+              ctor's flat field list (PyDcFlatChain), and the bases come first }
+            if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
             PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
             if hoist then PyMembersHoisted[ci] := True;
           end;
