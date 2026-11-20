@@ -182,6 +182,68 @@ begin
   if mine >= 0 then Result := mine;
 end;
 
+{ GNU local labels: `__label__ a, b;` at the top of a block (in practice a
+  statement expression, so a macro can use one label per expansion) makes
+  those names the block's own. Each gets a fresh spelling in TokChars,
+  `name.L<n>` -- the dot keeps it from meeting any C identifier -- and goto,
+  a label and `&&name` inside the block resolve through this stack. A block
+  pops what it pushed at its closing brace (ParseCBlockAST,
+  ParseCStmtExprAST). Function scope is unchanged: labels stay per function
+  (GotoLabelCount), and only the spelling differs. }
+var
+  CLocalLabOrigOff, CLocalLabOrigLen, CLocalLabNewOff, CLocalLabNewLen: array of Integer;
+  CLocalLabCount: Integer;
+  CLocalLabSerial: Integer;
+
+procedure CLocalLabPush(tokIdx: Integer);
+var nm: AnsiString; k: Integer;
+begin
+  if CLocalLabCount >= Length(CLocalLabOrigOff) then
+  begin
+    k := Length(CLocalLabOrigOff) * 2 + 16;
+    SetLength(CLocalLabOrigOff, k); SetLength(CLocalLabOrigLen, k);
+    SetLength(CLocalLabNewOff, k); SetLength(CLocalLabNewLen, k);
+  end;
+  CLocalLabOrigOff[CLocalLabCount] := Tokens[tokIdx].SOffset;
+  CLocalLabOrigLen[CLocalLabCount] := Tokens[tokIdx].SLen;
+  nm := '';
+  for k := 0 to Tokens[tokIdx].SLen - 1 do nm := nm + TokChars[Tokens[tokIdx].SOffset + k];
+  Inc(CLocalLabSerial);
+  nm := nm + '.L' + AIntToStr(CLocalLabSerial);
+  CLocalLabNewOff[CLocalLabCount] := TokCharLen;
+  CLocalLabNewLen[CLocalLabCount] := Length(nm);
+  for k := 1 to Length(nm) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('C: token char buffer overflow (local label)');
+    TokChars[TokCharLen] := nm[k];
+    Inc(TokCharLen);
+  end;
+  Inc(CLocalLabCount);
+end;
+
+{ The (offset, length) a label NAME token stands for: its local-label
+  spelling when an enclosing block declared it with __label__, else itself.
+  Exact compare: C labels are case-sensitive. }
+procedure CLabelSpan(tokIdx: Integer; var off, len: Integer);
+var i, k: Integer; same: Boolean;
+begin
+  off := Tokens[tokIdx].SOffset;
+  len := Tokens[tokIdx].SLen;
+  for i := CLocalLabCount - 1 downto 0 do
+    if CLocalLabOrigLen[i] = len then
+    begin
+      same := True;
+      for k := 0 to len - 1 do
+        if TokChars[CLocalLabOrigOff[i] + k] <> TokChars[off + k] then begin same := False; Break; end;
+      if same then
+      begin
+        off := CLocalLabNewOff[i];
+        len := CLocalLabNewLen[i];
+        Exit;
+      end;
+    end;
+end;
+
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 { The braced-list loop condition, called from the first such loop ~3200 lines
@@ -192,6 +254,7 @@ function ParseCStatementAST: Integer; forward;
 function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
+function CReadAsmLabelString: AnsiString; forward;
 procedure ParseCSubroutine; forward;
 function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDecl asks it ~900 lines above its body }
 { Both called from ParseCGlobalVarDecl ~2500 lines above their bodies, for the
@@ -200,11 +263,21 @@ function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDe
   until the global-variable path started asking the same question, and pxx
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
+function CDeclSawWeak(typeIdx: Integer): Boolean; forward;
+function CDeclVisibility(typeIdx: Integer): Integer; forward;
+function CDeclSectionName(typeIdx: Integer): AnsiString; forward;
+function CDeclCtorKind(typeIdx: Integer): Integer; forward;
+procedure CRegisterCtor(procIdx, kind: Integer); forward;
+procedure CApplyProcSection(procIdx: Integer; const nm: AnsiString); forward;
+function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean; forward;
+procedure CSplitDeclarators(isTypedef: Boolean); forward;
 function CRecMissingFieldKind(recId: Integer): Integer; forward;
 procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forward;
 procedure CRefuseIncompleteSizeof(recId: Integer); forward;
 procedure CCheckIncompleteGlobals; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
+function CDeclTokFlag(typeIdx, mask: Integer): Boolean; forward;
+procedure CNoteInlineLinkage(pi: Integer; sawInline, sawExtern, gnuInline, isDef: Boolean); forward;
 function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer; forward;
 function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
@@ -214,6 +287,7 @@ function CEvalConstExpr: Int64; forward;
 function CTryParseStaticAssert: Boolean; forward;
 function CEvalConstFloatExpr: Double; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
+function CInitCountRecordArrayAt(openIdx, recId: Integer): Integer; forward;
 procedure CSkipCInitElement; forward;
 function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
                              nDims, dim0, elemsBelow: Integer;
@@ -243,6 +317,11 @@ function CNodeIsPointer(node: Integer): Boolean; forward;
 { CNodeDecaysToPointer forward moved to forwards.inc (must sit above ir.inc:901,
   which calls it; this spot is below that use — too late for the FPC seed). }
 function CNodePtrElemRec(node: Integer): Integer; forward;
+function CRecAlign(rec: Integer): Integer; forward;
+function CAtomicIntrinsic(const name: AnsiString; argHead, argN: Integer): Integer; forward;
+function CAtomicRewrite(var name: AnsiString; var argHead: Integer; argN: Integer;
+                        var retKind: Integer): Boolean; forward;
+function CAtomicRetype(node, p: Integer): Integer; forward;
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 
 { ===== C expression compiler (Slice B) =====
@@ -355,6 +434,11 @@ begin
     unsigned 64 > signed 64 > unsigned 32 > signed 32. Without this an inline
     `i - 1u` (unsigned) was tagged signed, so `(i - 1u) < asize` compiled to a
     SIGNED compare (lua `findindex` looped forever in `pairs`). }
+  { __int128 outranks every other integer (feature-c-int128-and-attribute-mode) }
+  else if (IntToTypeKind(ASTTk[l]) = tyUInt128) or (IntToTypeKind(ASTTk[r]) = tyUInt128) then
+    Result := Ord(tyUInt128)
+  else if (IntToTypeKind(ASTTk[l]) = tyInt128) or (IntToTypeKind(ASTTk[r]) = tyInt128) then
+    Result := Ord(tyInt128)
   else if (IntToTypeKind(ASTTk[l]) = tyUInt64) or (IntToTypeKind(ASTTk[r]) = tyUInt64) then
     Result := Ord(tyUInt64)
   else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
@@ -383,6 +467,12 @@ begin
     if (tTk = tyExtended) or (eTk = tyExtended) then Result := Ord(tyExtended)
     else if (tTk = tyDouble) or (eTk = tyDouble) then Result := Ord(tyDouble)
     else Result := Ord(tySingle);
+  end
+  else if (TypeIsInt128(tTk) or TypeIsOrdinal(tTk)) and (TypeIsInt128(eTk) or TypeIsOrdinal(eTk)) and
+          (TypeIsInt128(tTk) or TypeIsInt128(eTk)) then
+  begin
+    if (tTk = tyUInt128) or (eTk = tyUInt128) then Result := Ord(tyUInt128)
+    else Result := Ord(tyInt128);
   end
   else if TypeIsOrdinal(tTk) and TypeIsOrdinal(eTk) then
   begin
@@ -1153,7 +1243,7 @@ begin
       so it's free to repurpose as the "arithmetic shr" sentinel for the
       signed case; the unsigned case keeps the existing `tkIdent` logical
       path unchanged. }
-    if TypeSigned(IntToTypeKind(ASTTk[l])) then
+    if TypeSigned(IntToTypeKind(ASTTk[l])) or (IntToTypeKind(ASTTk[l]) = tyInt128) then
       ivalOp := Ord(tkShr)
     else
       ivalOp := Ord(tkShrLogical);
@@ -1347,8 +1437,59 @@ function CFieldOfTernary(tern, fldOff, fldLen, tk: Integer): Integer; forward;
   for prefix (yield NEW). The pointed-at record for `(p++)->field` is derived from
   the lvalue (Left) by CNodePtrElemRec, not carried on the node. }
 function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
-var node, bfPrec: Integer; bfSigned: Boolean;
+var node, bfPrec, bfW, one, sum, asn, back: Integer; bfSigned: Boolean;
+    resTk: TTypeKind;
 begin
+  { A BITFIELD operand: AN_INCDEC loads and stores the whole storage unit, so
+    `p->cnt++` on a field above bit 0 wrote the new value at bit 0 -- over
+    its neighbours -- and left the field as it was (LVGL's style_cnt:6 at bit
+    4: lv_obj_add_style looped 4 billion times). Rewrite it the way `x OP= y`
+    already is, `lv = lv +- 1`, through the bitfield-aware assignment: prefix
+    yields that assignment's (masked) value; postfix yields it minus the step,
+    masked back to the field's width, so `c++` at the top of the field gives
+    the old top value. The base is evaluated twice, as for `+=`.
+    bug-c-increment-of-a-bitfield-above-bit-0-writes-at-bit-0 }
+  if (ASTKind[lv] = AN_FIELD) and (ASTLeft[lv] >= 0) then
+  begin
+    bfW := RecFieldBitWidth(ResolveNodeRec(ASTLeft[lv]), GetASTIdentName(lv));
+    if bfW > 0 then
+    begin
+      one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+      if isInc then sum := CMakeBinop(Ord(tkPlus), lv, one)
+      else sum := CMakeBinop(Ord(tkMinus), lv, one);
+      asn := AllocNode(AN_ASSIGN);
+      ASTLeft[asn] := lv;
+      ASTRight[asn] := CConvertAsIfAssigned(IntToTypeKind(ASTTk[lv]), sum);
+      ASTTk[asn] := ASTTk[lv];
+      if isPre then begin Result := asn; Exit; end;
+      one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+      if isInc then back := CMakeBinop(Ord(tkMinus), asn, one)
+      else back := CMakeBinop(Ord(tkPlus), asn, one);
+      if bfW < 64 then
+      begin
+        { `back & (2^w-1)`, sign-extended for a signed field, in the type the
+          field reads as (int below 32 bits), so `printf("%d", p->c++)` passes
+          an int on i386 too }
+        if bfW < 32 then resTk := tyInteger else resTk := IntToTypeKind(ASTTk[lv]);
+        bfSigned := TypeSigned(RecFieldType(ResolveNodeRec(ASTLeft[lv]), GetASTIdentName(lv)));
+        one := AllocNode(AN_INT_LIT); ASTIVal[one] := (Int64(1) shl bfW) - 1; ASTTk[one] := Ord(tyInt64);
+        node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
+        ASTLeft[node] := back; ASTRight[node] := one; ASTTk[node] := Ord(resTk);
+        if bfSigned then
+        begin
+          one := AllocNode(AN_INT_LIT); ASTIVal[one] := Int64(1) shl (bfW - 1); ASTTk[one] := Ord(tyInt64);
+          sum := AllocNode(AN_BINOP); ASTIVal[sum] := Ord(tkXor);
+          ASTLeft[sum] := node; ASTRight[sum] := one; ASTTk[sum] := Ord(resTk);
+          one := AllocNode(AN_INT_LIT); ASTIVal[one] := Int64(1) shl (bfW - 1); ASTTk[one] := Ord(tyInt64);
+          node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkMinus);
+          ASTLeft[node] := sum; ASTRight[node] := one; ASTTk[node] := Ord(resTk);
+        end;
+        back := node;
+      end;
+      Result := back;
+      Exit;
+    end;
+  end;
   node := AllocNode(AN_INCDEC);
   ASTLeft[node] := lv;
   if isInc then ASTIVal[node] := 1 else ASTIVal[node] := -1;
@@ -1389,6 +1530,12 @@ end;
   already IS the control-block pointer — pass it as-is. }
 function CVaListAddr(apNode: Integer): Integer;
 begin
+  { a decayed parameter (x86-64 va_list is an array): the pointer itself }
+  if (apNode >= 0) and (IntToTypeKind(ASTTk[apNode]) = tyPointer) then
+  begin
+    Result := apNode;
+    Exit;
+  end;
   Result := AllocNode(AN_ADDR);
   ASTLeft[Result] := apNode;
   ASTIVal[Result] := ResolveNodeRec(apNode);
@@ -1831,8 +1978,10 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     name: AnsiString;
     argUndecl: array[0..MAX_PROC_PARAMS-1] of Boolean;
     argN: Integer;
+    atomRet, atomP: Integer;   { gcc atomic builtins: CAtomicRewrite / CAtomicRetype }
 begin
   Result := -1;
+  atomP := -1;
   case CurTok.Kind of
     tkInteger:
     begin
@@ -2446,10 +2595,16 @@ begin
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);       { &dest[0], ASTIVal = elem rec }
         a2 := CVaListAddr(valNode);            { &src[0] }
+        { the control block's record: an AN_ADDR carries it in ASTIVal; a
+          decayed parameter (CVaListAddr returned the pointer) is its pointee }
         a3 := AllocNode(AN_DEREF); ASTLeft[a3] := addrNode;
-        ASTTk[a3] := Ord(tyRecord); ASTIVal[a3] := ASTIVal[addrNode];
+        ASTTk[a3] := Ord(tyRecord);
+        if ASTKind[addrNode] = AN_ADDR then ASTIVal[a3] := ASTIVal[addrNode]
+        else ASTIVal[a3] := CNodePtrElemRec(addrNode);
         a4 := AllocNode(AN_DEREF); ASTLeft[a4] := a2;
-        ASTTk[a4] := Ord(tyRecord); ASTIVal[a4] := ASTIVal[a2];
+        ASTTk[a4] := Ord(tyRecord);
+        if ASTKind[a2] = AN_ADDR then ASTIVal[a4] := ASTIVal[a2]
+        else ASTIVal[a4] := CNodePtrElemRec(a2);
         node := AllocNode(AN_ASSIGN); ASTLeft[node] := a3; ASTRight[node] := a4;
         ASTTk[node] := Ord(tyRecord);
         Result := node; Exit;
@@ -2488,6 +2643,15 @@ begin
           end;
         end;
         Expect(tkRParen, ')');
+        { gcc's __sync_* / __atomic_* builtins, and the __pxx_atomic_*
+          intrinsics their helpers are written with. }
+        if Copy(name, 1, 13) = '__pxx_atomic_' then
+        begin
+          node := CAtomicIntrinsic(name, argHead, argN);
+          if node >= 0 then begin Result := node; Exit; end;
+        end;
+        if CAtomicRewrite(name, argHead, argN, atomRet) and (atomRet = 1) then
+          atomP := ASTLeft[argHead];
         { gcc builtin `__builtin_expect(x, c)` is a branch-prediction hint that
           evaluates to its first argument — lua uses it pervasively via
           l_likely/l_unlikely. Reduce it to that argument's value. }
@@ -2543,6 +2707,78 @@ begin
           Result := AllocNode(AN_INT_LIT);
           ASTIVal[Result] := 0;
           ASTTk[Result] := Ord(tyInteger);
+          Exit;
+        end;
+        { gcc's `__builtin_return_address(0)`: this function's return address.
+          It is FPC's get_pc_addr exactly -- AN_PCADDR, a load of [frame +
+          FrameRetAddrOffset] that every backend already has. Level 0 only, for
+          the reason __builtin_frame_address gives below: a caller's level
+          needs a frame-chain walk, and a plausible wrong address is the worst
+          answer. NetBSD's rump sources record it for lock debugging. }
+        if name = '__builtin_return_address' then
+        begin
+          fraArg := -1;
+          if argHead >= 0 then fraArg := ASTLeft[argHead];
+          if (fraArg < 0) or (ASTKind[fraArg] <> AN_INT_LIT) or
+             (ASTIVal[fraArg] <> 0) then
+            Error('__builtin_return_address: only the constant 0 (this ' +
+                  'function''s own return address) is supported');
+          Result := AllocNode(AN_PCADDR);
+          ASTTk[Result] := Ord(tyPointer);
+          Exit;
+        end;
+        { `__builtin_prefetch(addr[, rw[, locality]])` is a cache hint with no
+          effect on the program. The address is still evaluated, as gcc does,
+          so its side effects happen; the value is discarded. It is ASSIGNED to
+          a hidden local: as a bare expression statement, `&v[bump()]` was
+          dropped whole, and bump() with it. }
+        if name = '__builtin_prefetch' then
+        begin
+          if argHead >= 0 then
+          begin
+            fraSym := AllocVar('', tyPointer);
+            fraIdn := AllocNode(AN_IDENT);
+            ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyPointer);
+            Result := AllocNode(AN_ASSIGN);
+            ASTLeft[Result] := fraIdn; ASTRight[Result] := ASTLeft[argHead];
+            ASTTk[Result] := Ord(tyPointer);
+          end
+          else
+          begin
+            Result := AllocNode(AN_INT_LIT);
+            ASTIVal[Result] := 0; ASTTk[Result] := Ord(tyInteger);
+          end;
+          Exit;
+        end;
+        { `__builtin_unreachable()` tells gcc control never gets here; reaching
+          it is undefined behaviour. pxx does not optimise on it, so it is a
+          no-op: code after it still exists and runs if it is ever reached. }
+        if (name = '__builtin_unreachable') and (argHead < 0) then
+        begin
+          Result := AllocNode(AN_INT_LIT);
+          ASTIVal[Result] := 0; ASTTk[Result] := Ord(tyInteger);
+          Exit;
+        end;
+        { `__builtin_isnan(x)`: x != x, the one comparison a NaN fails. x goes
+          through a hidden double local first so it is evaluated ONCE (an
+          argument with side effects must not run twice), and an integer
+          argument converts, as gcc's does. }
+        if (name = '__builtin_isnan') and (argHead >= 0) then
+        begin
+          fraSym := AllocVar('', tyDouble);
+          fraIdn := AllocNode(AN_IDENT);
+          ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyDouble);
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := fraIdn; ASTRight[node] := ASTLeft[argHead];
+          ASTTk[node] := Ord(tyDouble);
+          fraArg := AllocNode(AN_IDENT);
+          ASTIVal[fraArg] := fraSym; ASTTk[fraArg] := Ord(tyDouble);
+          fraIdn := AllocNode(AN_IDENT);
+          ASTIVal[fraIdn] := fraSym; ASTTk[fraIdn] := Ord(tyDouble);
+          Result := AllocNode(AN_COMMA);
+          ASTLeft[Result] := node;
+          ASTRight[Result] := CMakeBinop(Ord(tkNeq), fraArg, fraIdn);
+          ASTTk[Result] := ASTTk[ASTRight[Result]];
           Exit;
         end;
         { gcc builtin `__builtin_inf()`: the double +infinity, as a CONSTANT and
@@ -2896,6 +3132,7 @@ begin
           else
             Error('call to undeclared function: ' + name);
         end;
+        if atomP >= 0 then node := CAtomicRetype(node, atomP);
         Result := node;
       end
       else
@@ -3015,7 +3252,18 @@ begin
   Result := node;
 end;
 
+{ The UFld index of a field node, or -1. }
+function CNodeFieldIdx(node: Integer): Integer;
+var rec: Integer;
+begin
+  Result := -1;
+  rec := ResolveNodeRec(ASTLeft[node]);
+  if rec >= REC_UCLASS_BASE then
+    Result := FindUField(rec - REC_UCLASS_BASE, GetASTIdentName(node));
+end;
+
 function CNodePtrDepth(node: Integer): Integer;
+var fi: Integer;
 begin
   node := CCommaValue(node);
   Result := 0;
@@ -3029,6 +3277,13 @@ begin
       Result := SymPtrDepth[ASTIVal[node]];
       if Result = 0 then Result := 1;
     end;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    { a pointer member: its recorded depth (the C struct builder stamps it) }
+    fi := CNodeFieldIdx(node);
+    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) then
+      Result := UFldPtrDepth[fi];
   end
   else if ASTKind[node] = AN_INDEX then
   begin
@@ -3080,13 +3335,20 @@ begin
 end;
 
 function CNodePtrBaseTk(node: Integer): Integer;
-var baseNode: Integer;
+var baseNode, fi: Integer;
 begin
   node := CCommaValue(node);
   Result := Ord(tyUnknown);
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
     Result := SymPtrBaseTk[ASTIVal[node]]
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    fi := CNodeFieldIdx(node);
+    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) and
+       (UFldPtrDepth[fi] > 0) then
+      Result := UFldPtrBaseTk[fi];
+  end
   else if ASTKind[node] = AN_INDEX then
   begin
     baseNode := ASTLeft[node];
@@ -3272,9 +3534,16 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
-    if CNodeIsPointer(ASTLeft[node]) then
+    { `arr + n` / `n + arr`: an ARRAY operand decays like a pointer, and its
+      element type is the pointee. Asking CNodeIsPointer alone missed every
+      array, so `*(buf + 4)` and `(buf + 120)[k]` on an `unsigned char buf[]`
+      defaulted to tyInteger: a 4-byte store per byte. libtomcrypt's portable
+      STORE64H `(y)[7] = ...` with y = md->sha512.buf + 120 then zeroed three
+      bytes past the hash state, into the caller's next local.
+      bug-c-array-plus-int-derefs-as-int-so-a-byte-store-writes-four }
+    if CNodeDecaysToPointer(ASTLeft[node]) then
       Result := CNodePointeeTk(ASTLeft[node])
-    else if CNodeIsPointer(ASTRight[node]) then
+    else if CNodeDecaysToPointer(ASTRight[node]) then
       Result := CNodePointeeTk(ASTRight[node]);
   end
   else if ASTKind[node] = AN_TERNARY then
@@ -3419,6 +3688,254 @@ begin
     Result := CNodePtrElemRec(ASTLeft[node]);
 end;
 
+{ ===== gcc __sync_* / __atomic_* builtins =====================================
+
+  feature-c-sync-and-atomic-builtins. Each builtin becomes a call to a small
+  per-width helper, __pxx_a_<op>_<N>, where N is the byte size of the first
+  argument's pointee (1, 2, 4, or 8). The helper bodies are C, and the
+  translation unit carries them itself (CAddAtomicBuiltins, cpreproc.inc), so
+  hosted and --freestanding builds behave alike. They sit on AN_ATOMIC through
+  the __pxx_atomic_{xchg,cas,add}{32,64} intrinsics below.
+
+  Every operation is sequentially consistent. The memory-order arguments are
+  evaluated and passed along, and the helpers ignore them. This is correct for
+  every order; only a weaker order could be faster.
+
+  The helpers return `unsigned long long`, and a value-returning builtin's
+  result is converted back to the pointee type here (CAtomicRetype). Without
+  that, `__atomic_fetch_sub(&i, 1) < 0` would compare an unsigned value. }
+
+function CAtomicArgAt(argHead, k: Integer): Integer;
+var i: Integer;
+begin
+  Result := argHead; i := 0;
+  while (Result >= 0) and (i < k) do begin Result := ASTRight[Result]; Inc(i); end;
+end;
+
+procedure CAtomicInsertLit(var argHead: Integer; k: Integer; v: Int64);
+var lit, a, prev: Integer;
+begin
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := v; ASTTk[lit] := Ord(tyInt32);
+  a := AllocNode(AN_ARG); ASTLeft[a] := lit; ASTRight[a] := -1;
+  if (k = 0) or (argHead < 0) then
+  begin
+    ASTRight[a] := argHead; argHead := a; Exit;
+  end;
+  prev := CAtomicArgAt(argHead, k - 1);
+  if prev < 0 then
+  begin
+    { fewer arguments than the builtin takes: append, and the count check
+      in CAtomicRewrite reports it }
+    prev := argHead;
+    while ASTRight[prev] >= 0 do prev := ASTRight[prev];
+  end;
+  ASTRight[a] := ASTRight[prev]; ASTRight[prev] := a;
+end;
+
+function CAtomicOpCode(const s: AnsiString): Integer;
+begin
+  if s = 'add' then Result := 0
+  else if s = 'sub' then Result := 1
+  else if s = 'or' then Result := 2
+  else if s = 'and' then Result := 3
+  else if s = 'xor' then Result := 4
+  else if s = 'nand' then Result := 5
+  else Result := -1;
+end;
+
+function CAtomicTargetHas: Boolean;
+begin
+  Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+         or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32);
+end;
+
+{ The internal intrinsics the helper bodies are written with:
+  __pxx_atomic_{xchg,cas,add}{32,64}(addr, ...) -> the OLD value, as
+  Pascal's __pxxatomic_*. Returns -1 when name is not one of them. }
+function CAtomicIntrinsic(const name: AnsiString; argHead, argN: Integer): Integer;
+var op, want: Integer;
+begin
+  Result := -1;
+  if Copy(name, 1, 13) <> '__pxx_atomic_' then Exit;
+  if name = '__pxx_atomic_xchg32' then op := ATOMIC_XCHG
+  else if name = '__pxx_atomic_cas32' then op := ATOMIC_CAS
+  else if name = '__pxx_atomic_add32' then op := ATOMIC_ADD
+  else if name = '__pxx_atomic_xchg64' then op := ATOMIC_XCHG64
+  else if name = '__pxx_atomic_cas64' then op := ATOMIC_CAS64
+  else if name = '__pxx_atomic_add64' then op := ATOMIC_ADD64
+  else Exit;
+  if (op >= ATOMIC_XCHG64) and (TARGET_PTR_SIZE < 8) then
+    Error(name + ': 64-bit atomics need a 64-bit target');
+  if (op = ATOMIC_CAS) or (op = ATOMIC_CAS64) then want := 3 else want := 2;
+  if argN <> want then
+    Error(name + ' takes ' + AIntToStr(want) + ' arguments');
+  Result := AllocNode(AN_ATOMIC);
+  ASTIVal[Result] := op;
+  ASTTk[Result] := Ord(tyInt64);
+  ASTLeft[Result] := argHead;
+end;
+
+{ Rename a gcc atomic builtin to its helper and reshape its arguments.
+  retKind: 0 = the helper's own type (int / void), 1 = the pointee's type.
+  False when `name` is not an atomic builtin (left alone). }
+function CAtomicRewrite(var name: AnsiString; var argHead: Integer; argN: Integer;
+                        var retKind: Integer): Boolean;
+var p, n, op, want: Integer; tk: TTypeKind; base, rest, orig: AnsiString;
+    sized: Boolean;
+begin
+  Result := False;
+  retKind := 0;
+  if (Copy(name, 1, 7) <> '__sync_') and (Copy(name, 1, 9) <> '__atomic_') then Exit;
+  orig := name;
+  base := ''; want := -1; op := -1; sized := True;
+  { [want] is the argument count gcc takes }
+  if Copy(name, 1, 17) = '__sync_fetch_and_' then
+  begin
+    op := CAtomicOpCode(Copy(name, 18, Length(name) - 17));
+    if op < 0 then Exit;
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 5); CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (Copy(name, 1, 7) = '__sync_') and (Length(name) > 17)
+          and (Copy(name, Length(name) - 9, 10) = '_and_fetch') then
+  begin
+    op := CAtomicOpCode(Copy(name, 8, Length(name) - 17));
+    if op < 0 then Exit;
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 5); CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 1);
+  end
+  else if name = '__sync_bool_compare_and_swap' then begin want := 3; base := 'bcas'; end
+  else if name = '__sync_val_compare_and_swap' then begin want := 3; base := 'cas'; retKind := 1; end
+  else if name = '__sync_lock_test_and_set' then
+  begin
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 2, 2); CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__sync_lock_release' then
+  begin
+    want := 1; base := 'rmw';
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 2, 3);
+    CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__sync_synchronize' then
+  begin
+    want := 0; base := 'fence'; sized := False;
+    CAtomicInsertLit(argHead, 0, 5);
+  end
+  else if name = '__atomic_load_n' then
+  begin
+    want := 2; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 3, 7); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (name = '__atomic_store_n') or (name = '__atomic_exchange_n') then
+  begin
+    want := 3; base := 'rmw';
+    if name = '__atomic_exchange_n' then retKind := 1;
+    CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if name = '__atomic_compare_exchange_n' then begin want := 6; base := 'cmpx'; end
+  else if name = '__atomic_compare_exchange' then begin want := 6; base := 'cmpxp'; end
+  else if name = '__atomic_load' then begin want := 3; base := 'loadp'; end
+  else if name = '__atomic_store' then begin want := 3; base := 'storep'; end
+  else if name = '__atomic_exchange' then begin want := 4; base := 'xchgp'; end
+  else if Copy(name, 1, 15) = '__atomic_fetch_' then
+  begin
+    op := CAtomicOpCode(Copy(name, 16, Length(name) - 15));
+    if op < 0 then Exit;
+    want := 3; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (Copy(name, 1, 9) = '__atomic_') and (Length(name) > 15)
+          and (Copy(name, Length(name) - 5, 6) = '_fetch') then
+  begin
+    rest := Copy(name, 10, Length(name) - 15);
+    op := CAtomicOpCode(rest);
+    if op < 0 then Exit;
+    want := 3; base := 'rmw'; retKind := 1;
+    CAtomicInsertLit(argHead, 3, op); CAtomicInsertLit(argHead, 4, 1);
+  end
+  else if name = '__atomic_test_and_set' then begin want := 2; base := 'tas'; sized := False; end
+  else if name = '__atomic_clear' then
+  begin
+    want := 2; base := 'rmw';
+    CAtomicInsertLit(argHead, 1, 0); CAtomicInsertLit(argHead, 3, 6); CAtomicInsertLit(argHead, 4, 0);
+  end
+  else if (name = '__atomic_thread_fence') or (name = '__atomic_signal_fence') then
+  begin
+    want := 1; base := 'fence'; sized := False;
+  end
+  else if (name = '__atomic_always_lock_free') or (name = '__atomic_is_lock_free') then
+  begin
+    want := 2; base := 'lockfree'; sized := False;
+  end
+  else Exit;   { not a builtin we know: left to the ordinary call path }
+  if argN <> want then
+    Error(orig + ' takes ' + AIntToStr(want) + ' argument(s), not ' + AIntToStr(argN));
+  if not CAtomicTargetHas then
+    Error(orig + ': atomics are not implemented for this target '
+          + '(bug-a-riscv32-and-xtensa-have-no-atomic-codegen)');
+  Result := True;
+  if not sized then
+  begin
+    name := '__pxx_a_' + base;
+    Exit;
+  end;
+  p := ASTLeft[argHead];
+  if not CNodeDecaysToPointer(p) then
+    Error(orig + ': the first argument must be a pointer');
+  tk := IntToTypeKind(CNodePointeeTk(p));
+  if tk = tyPointer then n := TARGET_PTR_SIZE
+  else if tk = tyRecord then n := RecSize(CNodePtrElemRec(p))
+  else if TypeIsFloat(tk) then
+  begin
+    n := 0;
+    Error(orig + ': an atomic on a floating type is not supported');
+  end
+  else n := TypeSlotSize(tk);
+  if (tk = tyRecord) and (retKind = 1) then
+    Error(orig + ': the _n forms take an integer or pointer object, not a struct');
+  if (n <> 1) and (n <> 2) and (n <> 4) and (n <> 8) then
+    Error(orig + ': an atomic on a ' + AIntToStr(n) + '-byte object is not supported (1, 2, 4 or 8)');
+  name := '__pxx_a_' + base + '_' + AIntToStr(n);
+end;
+
+{ The result of a value-returning atomic builtin, in the pointee's type: a
+  narrow integer is truncated and re-extended by its signedness, a 64-bit one
+  retagged, and a pointer carries its pointee so `->` and `*` keep working. }
+function CAtomicRetype(node, p: Integer): Integer;
+var tk: TTypeKind; q, d, c: Integer;
+begin
+  Result := node;
+  tk := IntToTypeKind(CNodePointeeTk(p));
+  if tk = tyPointer then
+  begin
+    { the pointer object itself: `head` for `&head`, else `*pp` }
+    q := CCommaValue(p);
+    if ASTKind[q] = AN_ADDR then d := ASTLeft[q]
+    else
+    begin
+      d := AllocNode(AN_DEREF);
+      ASTLeft[d] := p;
+      ASTTk[d] := Ord(tyPointer);
+      if CNodePtrElemRec(p) > 0 then ASTIVal[d] := CNodePtrElemRec(p);
+    end;
+    if CNodePtrDepth(d) <= 1 then
+      Result := CVaArgThreadPointee(node, 1, CNodePointeeTk(d), CNodePtrElemRec(d),
+                                    CNodePointeeTk(d), CNodePtrElemRec(d))
+    else
+      Result := CVaArgThreadPointee(node, CNodePtrDepth(d), Ord(tyPointer), 0,
+                                    CNodePtrBaseTk(d), CNodePtrElemRec(d));
+    Exit;
+  end;
+  if TypeSlotSize(tk) < 8 then node := CMakeNarrowIntCast(node, tk);
+  c := AllocNode(AN_PTR_CAST);
+  ASTLeft[c] := node;
+  ASTIVal[c] := -1;
+  ASTRight[c] := -1;
+  ASTTk[c] := Ord(tk);
+  Result := c;
+end;
+
 { Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }
 function CTypeSizeBytes(tk: TTypeKind): Integer;
 begin
@@ -3524,6 +4041,37 @@ end;
   double case does not reach its sibling (devdocs/dev/normalise-dont-special-case.md).
   Both spellings now walk here.
   bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+{ Refuse a member the record does not have: `x.zz` with no zz. One check for
+  every place that names a member -- the member-access parse and the sizeof
+  operand walkers, which size a member without building the access node and
+  so answered 4 for a member that does not exist (gcc refuses it).
+  `keyPos` is the member token's index in Tokens: a walker that rewinds and
+  re-reads the same operand reports it once.
+  bug-c-an-unknown-member-name-compiles-as-int }
+var CMemberErrLastPos: Integer;   { 0 = none: token 0 is never a member name }
+function CRecMemberCheck(recId: Integer; const fieldName: AnsiString; keyPos: Integer): Boolean;
+var missKind: Integer;
+begin
+  Result := True;
+  if recId = REC_NONE then Exit;
+  if RecHasField(recId, fieldName) then Exit;
+  Result := False;
+  if (keyPos > 0) and (keyPos = CMemberErrLastPos) then Exit;
+  CMemberErrLastPos := keyPos;
+  missKind := CRecMissingFieldKind(recId);
+  if missKind = 1 then
+    ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
+      + ' -- the struct/union has no definition in scope, so its layout'
+      + ' is unknown and the member would read at offset 0')
+  else if missKind = 2 then
+    ErrorRecover('C: ''' + fieldName + ''' is unreachable -- pxx kept this'
+      + ' struct/union OPAQUE and dropped its layout, so no member of it'
+      + ' can be addressed (every one would read at offset 0)')
+  else
+    ErrorRecover('C: no member named ''' + fieldName + ''' in this'
+      + ' struct/union');
+end;
+
 function CSizeofDescriptorWalkDeref(si, derefs: Integer; var sz: Integer): Boolean;
 { `derefs` leading `*`s, applied AFTER the postfix chain because C's unary `*`
   binds looser than `[]`/`.`/`->`: `*a.m` is `*(a.m)`. Dereferencing an ARRAY
@@ -3713,6 +4261,7 @@ begin
       if recId = REC_NONE then begin cOK := False; Break; end;
       Next;   { consume '.' / '->' }
       fieldName := CurTok.SVal;
+      if not CRecMemberCheck(recId, fieldName, TokPos - 1) then begin cOK := False; Next; Break; end;
       Next;   { consume the field name }
       cTk := RecFieldType(recId, fieldName);
       cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
@@ -3803,6 +4352,7 @@ var arrLen: Integer; elemTk: TTypeKind;
 begin
   Result := False;
   if recId = REC_NONE then Exit;
+  if not RecHasField(recId, fieldName) then Exit;   { reported by the access parse }
   if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
   begin
     arrLen := RecFieldArrLen(recId, fieldName);
@@ -3865,6 +4415,164 @@ begin
   Result := sz > 0;
 end;
 
+{ C11 `_Alignof(type-name)`, and gcc's `__alignof__` / `__alignof`, which also
+  take an expression. CurTok is the keyword. A record answers its own
+  alignment (the largest member alignment, aligned(N) members included), a
+  pointer the pointer size, an array its element's. Gibux asked
+  2026-11-14 (_Alignof(struct ctrl) was "expected C expression").
+  bug-c-a-global-of-an-over-aligned-struct-type-is-not-placed-on-its-alignment }
+function CParseAlignof: Integer;
+var tk: TTypeKind; node, rec: Integer; isType: Boolean;
+begin
+  Next;   { the keyword }
+  Expect(tkLParen, '(');
+  isType := IsCTypeTok;
+  if isType then
+  begin
+    tk := ParseCDeclType;
+    if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
+    else if tk = tyRecord then Result := CRecAlign(CTypeBaseRec)
+    else Result := TypeAlign(tk);
+    if (CTypePtrDepth = 0) and (CTypeTypedefAlign > Result) then Result := CTypeTypedefAlign;
+    while CurTok.Kind = tkStar do begin Next; Result := TARGET_PTR_SIZE; while CurTok.Kind = tkConst do Next; end;
+    while CurTok.Kind = tkLBrack do
+    begin
+      { an array has its element's alignment: skip the dimension }
+      while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+      Expect(tkRBrack, ']');
+    end;
+  end
+  else
+  begin
+    node := ParseCExpr;
+    tk := IntToTypeKind(ASTTk[node]);
+    if tk = tyRecord then
+    begin
+      rec := ResolveNodeRec(node);
+      if rec >= 0 then Result := CRecAlign(rec) else Result := TARGET_PTR_SIZE;
+    end
+    else if tk = tyPointer then Result := TARGET_PTR_SIZE
+    else Result := TypeAlign(tk);
+  end;
+  if Result < 1 then Result := 1;
+  Expect(tkRParen, ')');
+end;
+
+{ gcc's `__builtin_types_compatible_p(T1, T2)`: 1 when the two type NAMES
+  are the same type once typedefs are seen through and top-level qualifiers
+  dropped, else 0 -- a constant, so it also works in a constant expression.
+  CurTok is the keyword.
+
+  Compared: the base kind, the struct/union, the pointer depth and what a
+  pointer points at, and the array dimensions. A known gap: pxx gives some
+  distinct C types one kind (`long` and `long long` on LP64), and those
+  compare equal here where gcc says 0. NetBSD's rump sources use it inside
+  type-checking macros (__type_fit and friends). }
+function CParseOneTypeKey: AnsiString;
+var tk: TTypeKind; depth: Integer;
+begin
+  tk := ParseCDeclType;
+  depth := CTypePtrDepth;
+  Result := AIntToStr(Ord(tk)) + ':' + AIntToStr(CTypeBaseRec) + ':' +
+            AIntToStr(CTypePtrBaseTk) + ':' + AIntToStr(CTypePtrBaseRec) + ':';
+  if CTypeIsVoid then Result := Result + 'v';
+  while CurTok.Kind = tkStar do
+  begin
+    Next; Inc(depth);
+    while CurTok.Kind = tkConst do Next;
+  end;
+  Result := Result + ':*' + AIntToStr(depth);
+  while CurTok.Kind = tkLBrack do
+  begin
+    Next;
+    if CurTok.Kind = tkRBrack then Result := Result + '[]'
+    else Result := Result + '[' + AIntToStr(CEvalConstExpr) + ']';
+    Expect(tkRBrack, ']');
+  end;
+end;
+
+function CParseTypesCompatible: Integer;
+var k1, k2: AnsiString;
+begin
+  Next;   { the keyword }
+  Expect(tkLParen, '(');
+  if not IsCTypeTok then Error('__builtin_types_compatible_p: expected a type name');
+  k1 := CParseOneTypeKey;
+  Expect(tkComma, ',');
+  if not IsCTypeTok then Error('__builtin_types_compatible_p: expected a type name');
+  k2 := CParseOneTypeKey;
+  Expect(tkRParen, ')');
+  if k1 = k2 then Result := 1 else Result := 0;
+end;
+
+{ The size of an already-parsed operand node, by the rules the parenthesised
+  general-expression arm of ParseCSizeof uses: a member is the member object,
+  a decayed row is the row, otherwise the result type. }
+function CSizeofNodeBytes(node: Integer): Integer;
+var rec: Integer; tk: TTypeKind;
+begin
+  Result := 4;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    rec := CNodePtrElemRec(ASTLeft[node]);
+    if rec = REC_NONE then rec := ResolveNodeRec(ASTLeft[node]);
+    if (rec <> REC_NONE) and CSizeofRecFieldBytes(rec, GetASTIdentName(node), Result) then Exit;
+  end;
+  if CSizeofDecayedDeref(node, Result) then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if tk = tyRecord then Result := RecSize(ResolveNodeRec(node))
+  else if tk = tyPointer then Result := TARGET_PTR_SIZE
+  else if TypeIsFloat(tk) then Result := TypeSlotSize(tk)
+  else if tk = tyBoolean then Result := 4
+  else if TypeIsOrdinal(tk) then Result := TypeSlotSize(tk)
+  else Result := 4;
+end;
+
+{ Does the unparenthesised sizeof operand at CurTok continue past a group
+  with a postfix the dedicated arms do not read? `sizeof (*p)[1]` (a
+  parenthesised expression, then a subscript) and `sizeof f()[1]` /
+  `sizeof h()->a` (a call, then a subscript or a member). Those arms stopped
+  at the group and left `[1]` / `->a` behind: "expected ')'". Such an operand
+  is parsed whole as a unary expression instead.
+  bug-c-sizeof-of-a-parenthesised-deref-followed-by-a-subscript-is-refused
+  bug-c-sizeof-without-parentheses-refuses-a-call-followed-by-a-subscript-or-arrow }
+function CSizeofOperandHasTrailingPostfix: Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := TokPos - 1;                        { CurTok }
+  if CurTok.Kind = tkIdent then
+  begin
+    if FindProc(CurTok.SVal) < 0 then Exit;
+    if CFindSymFromModule(CurTok.SVal) >= 0 then Exit;
+    Inc(k);
+    if (k >= TokCount) or (Tokens[k].Kind <> tkLParen) then Exit;
+  end
+  else if CurTok.Kind = tkLParen then
+  begin
+    if CIsCastAhead then Exit;            { `sizeof (T)` / a cast operand }
+    { `sizeof (v)[i]` of a variable has its own arm (the descriptor walk) }
+    if (k + 2 < TokCount) and (Tokens[k + 1].Kind = tkIdent) and (Tokens[k + 2].Kind = tkRParen) then Exit;
+  end
+  else
+    Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end;
+    Inc(k);
+  end;
+  if k + 1 >= TokCount then Exit;
+  if Tokens[k + 1].Kind = tkLBrack then Result := True
+  else if (CurTok.Kind = tkIdent) and (Tokens[k + 1].Kind = tkDot) then Result := True;
+end;
+
 function ParseCSizeof: Integer;
 var szK, szN: Integer; szWide: Boolean;
     node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
@@ -3872,6 +4580,7 @@ var szK, szN: Integer; szWide: Boolean;
     szTdI: Integer;   { walks an array typedef's inherent dims for a type-name operand }
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
+    vlaExt, vlaExtPos, vlaMulN, vlaLitN: Integer;   { `sizeof(T [n])`: the run-time extents' product }
     saRec: Integer;   { the general path's field-access base record, REC_NONE if none }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
@@ -3879,6 +4588,13 @@ begin
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;
+  vlaExt := -1;
+  if CSizeofOperandHasTrailingPostfix then
+  begin
+    node := ParseCUnary;
+    sz := CSizeofNodeBytes(node);
+  end
+  else
   { `sizeof (t)->key` -- a PARENTHESISED IDENTIFIER followed by a postfix
     chain. The operand is the unary expression `(t)->key`, which is `t->key`;
     it was read as `sizeof(t)` and the `->key` left over was refused with
@@ -4007,9 +4723,35 @@ begin
           Expect(tkRBrack, ']')
         else
         begin
+          { A RUN-TIME extent, `sizeof(struct s [n - 1])` (NetBSD
+            rumpdev_bus_dma.c): a VLA type, sized at run time as C 6.5.3.4
+            says. It was folded with n as 0 and refused as a negative
+            dimension. Same rewind as the declaration's VLA arm.
+            bug-c-sizeof-of-a-vla-type-name-folds-the-extent rump-pxx g31 }
+          CConstExprSawNonConst := False;
+          vlaExtPos := TokPos;
+          CConstExprAllowCall := True;
           cArrLen := CEvalConstExpr;   { extent }
-          CCheckArrayExtent(cArrLen);
-          sz := sz * cArrLen;
+          CConstExprAllowCall := False;
+          if CConstExprSawNonConst then
+          begin
+            TokPos := vlaExtPos - 1; Next;
+            node := ParseCExpr;
+            if vlaExt < 0 then vlaExt := node
+            else
+            begin
+              vlaMulN := AllocNode(AN_BINOP); ASTIVal[vlaMulN] := Ord(tkStar);
+              ASTLeft[vlaMulN] := vlaExt; ASTRight[vlaMulN] := node;
+              ASTTk[vlaMulN] := Ord(tyNativeUInt);
+              vlaExt := vlaMulN;
+            end;
+            node := -1;
+          end
+          else
+          begin
+            CCheckArrayExtent(cArrLen);
+            sz := sz * cArrLen;
+          end;
           Expect(tkRBrack, ']');
         end;
       end;
@@ -4030,7 +4772,7 @@ begin
         was a command substitution running a command whose NAME was garbage,
         three layers away from sizeof. Measured: gcc 16, pxx 8. }
       starCount := 0;
-      while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+      while CurTok.Kind = tkStar do begin Inc(starCount); Next; while CurTok.Kind = tkConst do Next; end;
       if CSizeofTryArrayDeref(starCount, sz) then
         { an array dereferenced: sized, see CSizeofDescriptorWalkDeref }
       else if (starCount > 1) and (CurTok.Kind = tkIdent) then
@@ -4077,6 +4819,7 @@ begin
             if Syms[si].IsArray then recId := Syms[si].ElemRecName
             else recId := Syms[si].RecName;
           end;
+          if not CRecMemberCheck(recId, fieldName, TokPos + 1) then recId := REC_NONE;
           if (recId <> REC_NONE) and (RecFieldType(recId, fieldName) = tyPointer) then
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
@@ -4154,6 +4897,19 @@ begin
               * TypeSlotSize(tyInteger)
       else
         sz := Tokens[TokPos - 1].SLen + 1;
+      { CONSUME THE LITERAL. Left in place, CurTok was not the `)`, and the
+        re-parse below fires on `sz = TARGET_PTR_SIZE` -- which an 8-byte
+        array (a 7-character literal) is. That re-parse sized the literal as
+        an expression, 4, so `sizeof("charset")` was 4: fontconfig's gperf
+        name pool (`char str11[sizeof("charset")]`) came out 28 bytes short
+        and "charset"/"foundry"/... were not built-in objects.
+        Anything after the literal (`"abc"[0]`) is an expression: back to the
+        default so the re-parse sizes it.
+        bug-c-sizeof-of-a-parenthesised-7-character-literal-is-4 }
+      if (szK < TokCount) and (Tokens[szK].Kind = tkRParen) then
+        while CurTok.Kind = tkString do Next
+      else
+        sz := TARGET_PTR_SIZE;
     end
     else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
@@ -4291,7 +5047,8 @@ begin
       fieldName := CurTok.SVal;
       recId := CNodePtrElemRec(node);
       if recId = REC_NONE then recId := ResolveNodeRec(node);
-      if not CSizeofRecFieldBytes(recId, fieldName, sz) then ;   { False leaves the default }
+      if CRecMemberCheck(recId, fieldName, TokPos - 1) then
+        if not CSizeofRecFieldBytes(recId, fieldName, sz) then ;   { False leaves the default }
       Next;   { consume the field name }
     end;
   end
@@ -4361,7 +5118,7 @@ begin
       stars do not dereference an array, so a pointer keeps the path below. }
     savedPos := TokPos - 1;
     starCount := 0;
-    while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(starCount); Next; while CurTok.Kind = tkConst do Next; end;
     if (starCount > 0) and CSizeofTryArrayDeref(starCount, sz) then
       node := -1
     else
@@ -4382,6 +5139,19 @@ begin
     ASTIVal[node] := vlaSz;
     ASTTk[node] := Ord(tyInt64);
     Result := node;
+    Exit;
+  end;
+  if vlaExt >= 0 then
+  begin
+    { the constant part (element size times any constant extents) times the
+      run-time extents; size_t, as the literal below }
+    vlaLitN := AllocNode(AN_INT_LIT);
+    ASTIVal[vlaLitN] := sz;
+    ASTTk[vlaLitN] := Ord(tyNativeUInt);
+    vlaMulN := AllocNode(AN_BINOP); ASTIVal[vlaMulN] := Ord(tkStar);
+    ASTLeft[vlaMulN] := vlaExt; ASTRight[vlaMulN] := vlaLitN;
+    ASTTk[vlaMulN] := Ord(tyNativeUInt);
+    Result := vlaMulN;
     Exit;
   end;
   { C 6.5.3.4: sizeof yields size_t, which is UNSIGNED. This said tyInteger, and
@@ -4836,10 +5606,62 @@ begin
   end;
 end;
 
+{ GNU cast to a union, `(union u)expr` (gcc's extension, NetBSD and rump use
+  it): a temporary union whose member of expr's type holds expr. The record-
+  cast path treats `(T)x` as an identity, right for a struct-to-struct cast and
+  wrong here: the scalar 5 was then used as the union's ADDRESS and the
+  program faulted reading `x.i`. The member is the one whose type is the
+  operand's; else the first of the same kind (floating, pointer, integer);
+  else the first. Every union member is at offset 0.
+  bug-c-a-cast-to-a-union-used-the-value-as-the-unions-address }
+function CUnionCastLiteral(recId, operand: Integer): Integer;
+var tmpSym, savedRecId, zseq, ci, fi, pick, kindPick, idn, fld, asn, sq, t: Integer;
+    otk: TTypeKind;
+  function UnionMemberClass(tk: TTypeKind): Integer;
+  begin
+    if tk in [tySingle, tyDouble, tyExtended] then Result := 1
+    else if tk = tyPointer then Result := 2
+    else Result := 0;
+  end;
+begin
+  ci := recId - REC_UCLASS_BASE;
+  otk := IntToTypeKind(ASTTk[operand]);
+  pick := -1; kindPick := -1;
+  for fi := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
+  begin
+    if (pick < 0) and (UFldTk[fi] = Ord(otk)) then pick := fi;
+    if (kindPick < 0) and (UnionMemberClass(IntToTypeKind(UFldTk[fi])) = UnionMemberClass(otk)) then kindPick := fi;
+  end;
+  if pick < 0 then pick := kindPick;
+  if (pick < 0) and (UClsFCount[ci] > 0) then pick := UClsFBase[ci];
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := recId;
+  tmpSym := AllocVar('', tyRecord);
+  LastTypeRecId := savedRecId;
+  zseq := CMakeZeroLocal(tmpSym, tyRecord);
+  if pick >= 0 then
+  begin
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := tmpSym; ASTTk[idn] := Ord(tyRecord);
+    fld := AllocNode(AN_FIELD); ASTLeft[fld] := idn;
+    ASTSOffset[fld] := UFldNOff[pick]; ASTSLen[fld] := UFldNLen[pick];
+    ASTTk[fld] := UFldTk[pick];
+    asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := fld; ASTRight[asn] := operand;
+    ASTTk[asn] := UFldTk[pick];
+    sq := AllocNode(AN_SEQ); ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    t := zseq;
+    while ASTRight[t] <> -1 do t := ASTRight[t];
+    ASTRight[t] := sq;
+  end;
+  Result := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[Result] := tmpSym;
+  ASTLeft[Result] := zseq;
+  ASTTk[Result] := Ord(tyRecord);
+end;
+
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
-    frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP: Integer;
+    frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP, labOff, labLen: Integer;
     clDesig: Boolean;
     castPaLen, castPaNDims: Integer;
     castPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
@@ -4867,6 +5689,22 @@ begin
     Result := ParseCSizeof();
     Exit;
   end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
+  begin
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := CParseTypesCompatible;
+    ASTTk[Result] := Ord(tyInteger);
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and ((CurTok.SVal = '_Alignof') or (CurTok.SVal = '__alignof__')
+     or (CurTok.SVal = '__alignof')) then
+  begin
+    node := CParseAlignof;
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := node;
+    ASTTk[Result] := Ord(tyInt64);   { as sizeof's literal }
+    Exit;
+  end;
   { cast: (type) unary -> reinterpret/retag the operand to the target type }
   if (CurTok.Kind = tkLParen) and CIsCastAhead then
   begin
@@ -4879,6 +5717,27 @@ begin
     castBaseRec := CTypePtrBaseRec;
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     castPtrElemProcSig := CTypePtrElemProcSig;  { ptr-to-fn-ptr cast `(ft*)e`: pointee callee sig }
+    { A POINTER TYPEDEF (`typedef struct D *PD;`) comes back as tyPointer with
+      its pointee in CTypeElemTk/Rec but depth 0 -- the stars were in the
+      typedef, not here. Depth 0 skipped the alias registration below, so the
+      cast's value was a bare pointer with no record: `((PD)p)->w` read offset
+      0 (the FIRST field, whatever was asked for) and `((PD)p)->fn(a)` made no
+      call at all -- it yielded the first field. Xlib's XAllocID is exactly
+      `(*((_XPrivDisplay)(dpy))->resource_alloc)((dpy))`. Publish it as the
+      one-star spelling `(struct D *)` does. A fn-pointer typedef (castProcSig)
+      is a callable value, not a pointer to a pointee, and stays as it was.
+      bug-c-cast-through-a-pointer-typedef-loses-the-pointee }
+    { One level only: a typedef of `T **` has a POINTER element and its depth
+      is not recorded anywhere; that shape is
+      bug-c-pointer-to-pointer-struct-member-reads-offset-0. }
+    if (castDepth = 0) and (castTk = tyPointer) and (castProcSig < 0) and
+       (castElemTk <> Ord(tyPointer)) and
+       ((castElemRec <> REC_NONE) or (castElemTk <> Ord(tyUnknown))) then
+    begin
+      castDepth := 1;
+      castBaseTk := castElemTk;
+      castBaseRec := castElemRec;
+    end;
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
     { `(T (*)[N]..)e`: a pointer to ARRAY. The operand's recursive parse clobbers
@@ -4970,6 +5829,9 @@ begin
       (records are carried BY ADDRESS in this IR) yielded a value where an address
       was expected — a by-value/assign copy then read garbage and SEGV'd. Yield the
       operand unchanged (composes with the whole-record-value init path). }
+    if (castDepth = 0) and (castTk = tyRecord) and (ASTTk[operand] <> Ord(tyRecord)) and
+       (clRecId >= REC_UCLASS_BASE) then
+    begin Result := ParseCPostfixTail(CUnionCastLiteral(clRecId, operand)); Exit; end;
     if (castDepth = 0) and (castTk = tyRecord) then
     begin Result := operand; Exit; end;
     { `(void)expr` evaluates expr for its side effects and discards the value.
@@ -5212,9 +6074,11 @@ begin
         Error('expected a label name after && (GNU labels-as-values)');
       Result := AllocNode(AN_LABELADDR);
       { CurTok is Tokens[TokPos - 1] -- the same spelling AN_GOTO and AN_LABEL
-        use to capture a label name, so all three name it identically. }
-      ASTSOffset[Result] := Tokens[TokPos - 1].SOffset;
-      ASTSLen[Result] := Tokens[TokPos - 1].SLen;
+        use to capture a label name, so all three name it identically
+        (CLabelSpan: a __label__ name resolves to its block's spelling). }
+      CLabelSpan(TokPos - 1, labOff, labLen);
+      ASTSOffset[Result] := labOff;
+      ASTSLen[Result] := labLen;
       ASTTk[Result] := Ord(tyPointer);
       Next;
       Exit;
@@ -5411,6 +6275,38 @@ begin
       ASTTk[callee] := Ord(tyPointer);
     end;
   end
+  else if (ASTKind[inner] = AN_INCDEC) and (derefCount >= 1) and
+          (ASTKind[ASTLeft[inner]] = AN_IDENT) and
+          (SymElemProcSig[ASTIVal[ASTLeft[inner]]] >= 0) then
+  begin
+    { `(*p++)(args)` / `(*++p)(args)` -- walking a table of function pointers
+      (`ft *p`), the twin of the `(*pf)(args)` arm above with the step in the
+      operand. Without this arm the callee had no signature: `(*p++)(6, 7)`
+      called through the wrong value and returned garbage, and with the table
+      typedef'd (Xlib's XcmsFuncListPtr, xcms/CvCols.c) the call did not
+      parse. One deref of the INCDEC is the load of the current entry; the
+      INCDEC itself is evaluated once inside it.
+      bug-c-call-through-an-incremented-pointer-to-function-pointer }
+    Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]];
+    callee := AllocNode(AN_DEREF);
+    ASTLeft[callee] := inner;
+    ASTTk[callee] := Ord(tyPointer);
+  end
+  else if (ASTKind[inner] = AN_BINOP) and (derefCount >= 1) and
+          ((ASTIVal[inner] = Ord(tkPlus)) or (ASTIVal[inner] = Ord(tkMinus))) and
+          (ASTKind[ASTLeft[inner]] = AN_IDENT) and
+          (SymElemProcSig[ASTIVal[ASTLeft[inner]]] >= 0) and
+          (SymProcSig[ASTIVal[ASTLeft[inner]]] < 0) then
+  begin
+    { `(*(p + i))(args)` -- `p[i]` spelled as pointer arithmetic on a
+      pointer-to-function-pointer (or a function-pointer array). One deref of
+      the sum is the load of the entry, as in the INCDEC arm above.
+      bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+    Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]];
+    callee := AllocNode(AN_DEREF);
+    ASTLeft[callee] := inner;
+    ASTTk[callee] := Ord(tyPointer);
+  end
   else if ASTKind[inner] = AN_PROCADDR then
     { `(name)(args)` — a parenthesized bare function name decayed to its address
       (AN_PROCADDR). Its own proc is the call signature; the callee value is the
@@ -5507,7 +6403,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx, fldTokIdx: Integer;
     shTk: TTypeKind; shRec, shLen: Integer;       { pointer-to-array shape, copied from CPA* }
     shSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
@@ -5854,6 +6750,7 @@ begin
       if CurTok.Kind <> tkIdent then Error('field name expected after .');
       fldOff := Tokens[TokPos - 1].SOffset;
       fldLen := Tokens[TokPos - 1].SLen;
+      fldTokIdx := TokPos - 1;
       fieldName := CurTok.SVal;
       { On a pointer base this is C `->`: dereference, then take the field. }
       baseFld := node;
@@ -5903,21 +6800,7 @@ begin
         RECOVERING, not fatal: gcc reports every bad member in a file and so
         should we, and the node built below is well-formed either way.
         bug-c-an-undeclared-struct-type-compiles-and-reads-garbage }
-      if (recId <> REC_NONE) and (not RecHasField(recId, fieldName)) then
-      begin
-        missKind := CRecMissingFieldKind(recId);
-        if missKind = 1 then
-          ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
-            + ' -- the struct/union has no definition in scope, so its layout'
-            + ' is unknown and the member would read at offset 0')
-        else if missKind = 2 then
-          ErrorRecover('C: ''' + fieldName + ''' is unreachable -- pxx kept this'
-            + ' struct/union OPAQUE and dropped its layout, so no member of it'
-            + ' can be addressed (every one would read at offset 0)')
-        else
-          ErrorRecover('C: no member named ''' + fieldName + ''' in this'
-            + ' struct/union');
-      end;
+      if not CRecMemberCheck(recId, fieldName, fldTokIdx) then ;   { reports; the node stays well-formed }
       if recId <> REC_NONE then
       begin
         ASTTk[fnode] := Ord(RecFieldType(recId, fieldName));
@@ -6278,11 +7161,26 @@ end;
 { Resolve a struct/union tag to its record id, creating a forward (empty)
   record if the tag has not been seen — so `struct Node *next;` inside Node and
   forward declarations resolve. }
+function CDefineCTag(const name: AnsiString): Integer; forward;
+
 function FindOrForwardCTag(const name: AnsiString): Integer;
 var rec, ci: Integer;
 begin
   rec := FindCTag(name);
   if rec >= 0 then begin Result := rec; Exit; end;
+  { A tag first named INSIDE A BLOCK with no visible declaration declares an
+    incomplete type in THAT block (C 6.7.2.3p8), so a definition later in the
+    same block completes it. It was forwarded at file scope instead, and the
+    block's definition made a second type: `struct pend_head { struct
+    pend_entry *slh_first; }` then `struct pend_entry {..}` left slh_first
+    pointing at an incomplete type (NetBSD kern_module.c). rump-pxx g39.
+    bug-c-a-block-scope-forward-tag-is-not-completed-by-its-block }
+  if (CBlockDepth > 0) and (CTagUndoCount <= High(CTagUndoIdx)) and
+     (UClsCount < MAX_UCLASS - 1) then
+  begin
+    Result := CDefineCTag(name);
+    Exit;
+  end;
   { Out of record-table headroom (e.g. GTK's thousands of tags): resolve the tag
     as opaque (REC_NONE) instead of allocating a UClass, so a macro-soup header
     degrades gracefully rather than overflowing MAX_UCLASS. }
@@ -6435,10 +7333,15 @@ begin
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
     CTypedefProcSig[idx] := -1;
+    CTypedefPtrElemProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
     CTypedefNDims[idx] := 0;
+    CTypedefAlign[idx] := 0;
     CTypedefLongRank[idx] := newRank;
+    CTypedefIsUEnum[idx] := False;
+    CTypedefPtrDepth[idx] := 0;
+    CTypedefPtrBaseTk[idx] := Ord(tyUnknown);
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -6456,10 +7359,15 @@ begin
   CTypedefElemTk[CTypedefCount] := elemTk;
   CTypedefRec[CTypedefCount] := rec;
   CTypedefProcSig[CTypedefCount] := -1;
+  CTypedefPtrElemProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
   CTypedefNDims[CTypedefCount] := 0;
+  CTypedefAlign[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
+  CTypedefIsUEnum[CTypedefCount] := False;
+  CTypedefPtrDepth[CTypedefCount] := 0;
+  CTypedefPtrBaseTk[CTypedefCount] := Ord(tyUnknown);
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -6480,6 +7388,45 @@ begin
   if idx >= 0 then CTypedefProcSig[idx] := sigPi;
 end;
 
+{ Block-scope statics are skGlobal (BSS), so CTypedefShadowed's
+  skLocal/skParam rule did not see them: crtl's printf has
+  `static struct __crtl_dexp X;` and a USER `typedef struct {..} X;` turned
+  its `X.df[i] = 0;` into a declaration -- "expected C expression" inside
+  stdio.c for any program with a typedef named X. Each such symbol is noted
+  with the function that declared it, and shadows a typedef only there.
+  bug-c-a-block-scope-static-did-not-shadow-a-typedef }
+var CBlockStaticSym, CBlockStaticProc: array of Integer;
+    CBlockStaticCount: Integer;
+
+procedure CNoteBlockStatics(fromSym: Integer);
+var si: Integer;
+begin
+  for si := fromSym to SymCount - 1 do
+    if Syms[si].Kind = skGlobal then
+    begin
+      if CBlockStaticCount >= Length(CBlockStaticSym) then
+      begin
+        SetLength(CBlockStaticSym, CBlockStaticCount * 2 + 16);
+        SetLength(CBlockStaticProc, CBlockStaticCount * 2 + 16);
+      end;
+      CBlockStaticSym[CBlockStaticCount] := si;
+      CBlockStaticProc[CBlockStaticCount] := CurProc;
+      Inc(CBlockStaticCount);
+    end;
+end;
+
+function CIsBlockStaticHere(si: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := CBlockStaticCount - 1 downto 0 do
+    if CBlockStaticSym[k] = si then
+    begin
+      Result := (CurProc >= 0) and (CBlockStaticProc[k] = CurProc);
+      Exit;
+    end;
+end;
+
 function CTypedefShadowed(const name: AnsiString): Boolean;
 var si: Integer;
 begin
@@ -6498,7 +7445,28 @@ begin
     int x;` — c-testsuite 00022). Exact-case (C is case-sensitive; FindSym has a
     case-insensitive fallback). }
   Result := (si >= 0) and StrEqual(Syms[si].Name, name)
-            and (Syms[si].Kind in [skLocal, skParam]);
+            and ((Syms[si].Kind in [skLocal, skParam]) or
+                 ((Syms[si].Kind = skGlobal) and CIsBlockStaticHere(si)));
+end;
+
+function CIsTypeofWord(const w: AnsiString): Boolean;
+{ GNU `typeof` and its reserved spellings (C23 `typeof` too). }
+begin
+  Result := (w = 'typeof') or (w = '__typeof__') or (w = '__typeof') or
+            { C23 typeof_unqual, gcc 14's spellings (NetBSD sys/atomic.h):
+              this frontend does not carry qualifiers in the type, so it is
+              the same thing as typeof here }
+            (w = 'typeof_unqual') or (w = '__typeof_unqual__') or (w = '__typeof_unqual');
+end;
+
+{ GCC's 128-bit integer spellings: the keyword `__int128` (and `__int128__`)
+  and the predefined typedef names `__int128_t` / `__uint128_t`. Built in rather
+  than real typedefs so `unsigned __int128` composes like `unsigned long`.
+  feature-c-int128-and-attribute-mode }
+function CIsInt128Word(const s: AnsiString): Boolean;
+begin
+  Result := (s = '__int128') or (s = '__int128__') or
+            (s = '__int128_t') or (s = '__uint128_t');
 end;
 
 function IsCTypeTok: Boolean;
@@ -6508,6 +7476,7 @@ begin
     tkRecord { 'struct' }];
   if (not Result) and (CurTok.Kind = tkIdent) then
     Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
+              CIsTypeofWord(CurTok.SVal) or CIsInt128Word(CurTok.SVal) or
               { typedef name is a type only if not shadowed by a variable of the
                 same exact name — zlib inftrees.h `typedef ... code;` vs trees.c
                 `int code;` loop var. }
@@ -6519,7 +7488,8 @@ begin
   Result := tk;
   if tk = tyInt16 then Result := tyUInt16
   else if tk = tyInt32 then Result := tyUInt32
-  else if tk = tyInt64 then Result := tyUInt64;
+  else if tk = tyInt64 then Result := tyUInt64
+  else if tk = tyInt128 then Result := tyUInt128;
 end;
 
 { Consume a C declaration-specifier sequence (const, signed/unsigned,
@@ -6581,9 +7551,32 @@ begin
             fn-pointer signature cannot classify a by-value struct argument
             and the indirect call marshals a pointer. }
           CFnSigPRecIds[CFnSigNParams] := CTypeBaseRec;
+          { An ARRAY parameter is a pointer (C 6.7.6.3p7), the same decay a
+            named function's parameters get: an array typedef (`va_list`, which
+            is `__pxx_va_elem[1]` on x86-64), or `T a[]` after the name below.
+            Without it the indirect call passed the 24-byte block BY VALUE
+            where the callee reads a pointer: dropbear's `_dropbear_log(prio,
+            fmt, va_list)` hook handed vsnprintf garbage and the server
+            segfaulted on its first log line.
+            bug-c-an-array-parameter-of-a-function-pointer-does-not-decay }
+          if (CTypePtrDepth = 0) and (CTypeTypedefArrLen >= 0) then
+          begin
+            CFnSigPTypes[CFnSigNParams] := tyPointer;
+            CFnSigPRecIds[CFnSigNParams] := REC_NONE;
+          end;
           Inc(CFnSigNParams);
         end;
         if CurTok.Kind = tkIdent then Next;  { optional parameter name }
+        if (CurTok.Kind = tkLBrack) and (CFnSigNParams > 0) then
+        begin
+          while CurTok.Kind = tkLBrack do
+          begin
+            while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+            Eat(tkRBrack);
+          end;
+          CFnSigPTypes[CFnSigNParams - 1] := tyPointer;
+          CFnSigPRecIds[CFnSigNParams - 1] := REC_NONE;
+        end;
       end
       else
       begin
@@ -6657,17 +7650,67 @@ begin
   Result := fpSig;
 end;
 
+{ `T (*name[N]..)[M]..` -- an ARRAY of pointers to arrays -- with the '(' at
+  token index lp: the index of the ')' when the shape matches and a '[' follows
+  it, else -1. The declaration paths (a local, a global) read this declarator
+  themselves, as the typedef spelling `vecM *name[N]` of the same type: they
+  set CDeclLeaveParenPtrArr before ParseCDeclType so that it stops at the '('.
+  bug-c-the-spelled-out-array-of-pointers-to-arrays-declarator-is-refused }
+var CDeclLeaveParenPtrArr: Boolean;
+function CParenPtrArrEnd(lp: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := -1;
+  if (lp < 0) or (lp + 4 >= TokCount) then Exit;
+  if (Tokens[lp].Kind <> tkLParen) or (Tokens[lp + 1].Kind <> tkStar) or
+     (Tokens[lp + 2].Kind <> tkIdent) or (Tokens[lp + 3].Kind <> tkLBrack) then Exit;
+  k := lp + 3;
+  while (k < TokCount) and (Tokens[k].Kind = tkLBrack) do
+  begin
+    depth := 0;
+    repeat
+      if Tokens[k].Kind = tkLBrack then Inc(depth)
+      else if Tokens[k].Kind = tkRBrack then Dec(depth)
+      else if Tokens[k].Kind in [tkSemicolon, tkEOF] then Exit;
+      Inc(k);
+    until (depth = 0) or (k >= TokCount);
+  end;
+  if (k + 1 < TokCount) and (Tokens[k].Kind = tkRParen) and (Tokens[k + 1].Kind = tkLBrack) then
+    Result := k;
+end;
+
+{ Read the pointee dims `[M]..` after the ')' of a CParenPtrArrEnd declarator
+  into tdDims (outermost first); answers their product. }
+function CReadPtrArrPointeeDims(var nd: Integer; var dims: array of Integer): Integer;
+begin
+  nd := 0;
+  Result := 1;
+  while CurTok.Kind = tkLBrack do
+  begin
+    Next;
+    if nd >= MAX_ARR_DIMS then Error('too many C array dimensions');
+    dims[nd] := CEvalConstExpr;
+    Expect(tkRBrack, ']');
+    Result := Result * dims[nd];
+    Inc(nd);
+  end;
+end;
+
 function ParseCDeclType: TTypeKind;
 var
+  leavePtrArr: Boolean;            { see CDeclLeaveParenPtrArr: read once, cleared for nested calls }
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
+  tdPtrDepth, tdPtrBaseTk: Integer;   { a `T **` typedef's own depth and the kind under its stars (CTypedefPtrDepth) }
+  tyNode, tyCallee: Integer;   { typeof(expr): the expression's node (and CNodeProcSig's callee out-param) }
   tdLongRank: Integer;   { long rank carried by a typedef-name base; see the CTypeLong assignment }
   tdDimI: Integer;       { copies an array typedef's dims out of CTypedefDims into CTypeTypedefDims }
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
+  fpStars: Integer;                { stars in the `(*..name)` group: 2 = pointer to a function pointer }
   fpNDims, fpDi: Integer;          { every dimension of `(*name[N][M]..)`, same reason }
   fpDims: array[0..7] of Integer;
   fpNParams, fpSig, fnRetNParams, pi: Integer;
@@ -6688,6 +7731,8 @@ var
   fnRetPRecId, fnRetPProcSig: array[0..MAX_PROC_PARAMS-1] of Integer;
   fnRetIsFunc, fpVariadic: Boolean;
 begin
+  leavePtrArr := CDeclLeaveParenPtrArr;
+  CDeclLeaveParenPtrArr := False;
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
@@ -6695,11 +7740,14 @@ begin
   CTypeBaseIsEnum := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
+  tdPtrDepth := 0; tdPtrBaseTk := Ord(tyUnknown);
+  CTypeTdLvl := 0;
   tdIsFnType := False;
   CTypeProcSig := -1;
   CTypePtrElemProcSig := -1;
   CTypeTypedefArrLen := -1;
   CTypeTypedefNDims := 0;
+  CTypeTypedefAlign := 0;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
@@ -6764,6 +7812,93 @@ begin
             end;
             if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, True);
           end
+          else if (not sawBase) and CIsTypeofWord(CurTok.SVal) then
+          begin
+            { `typeof(expr)` / `typeof(type-name)` (GNU, C23). The type-name
+              form takes ParseCDeclType's answer; the expression form is parsed
+              for its TYPE only -- the nodes are never compiled -- and takes the
+              scalar kind the expression carries, signedness included. That is
+              what toybox's minof/maxof need (`typeof(a) aa = (a);` inside a
+              statement expression). A pointer or struct expression would also
+              need its pointee or record identity, which an expression node does
+              not carry in one place, so those are refused by name rather than
+              given a type that is right in size and wrong in what it points at.
+              feature-c-typeof }
+            Next;
+            Expect(tkLParen, '(');
+            if IsCTypeTok then
+            begin
+              { the parentheses are the recursion: a bare ParseCDeclType inside
+                its own body is the function's RESULT variable }
+              base := ParseCDeclType();
+              if CTypeIsVoid then isVoid := True;
+              { `typeof(T *) *p`: the pointee, as the expression arm records it }
+              if (base = tyPointer) and (CTypePtrDepth = 1) and (CTypeProcSig < 0) then
+              begin
+                tdElemTk := CTypeElemTk;
+                tdElemRec := CTypeElemRec;
+              end;
+            end
+            else
+            begin
+              tyNode := ParseCExpr;
+              { `*(&x)` is x: NetBSD's atomic_load_*(&fdp->fd_dt) spell
+                __typeof__(*(&fdp->fd_dt)), and the pointee/record readers
+                below know the field, not the round trip through its address.
+                bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee-two-levels-down }
+              while (tyNode >= 0) and (ASTKind[tyNode] = AN_DEREF) and (ASTLeft[tyNode] >= 0) and
+                    (ASTKind[ASTLeft[tyNode]] = AN_ADDR) and (ASTLeft[ASTLeft[tyNode]] >= 0) do
+                tyNode := ASTLeft[ASTLeft[tyNode]];
+              base := IntToTypeKind(ASTTk[tyNode]);
+              { A struct takes the record the node resolves to; a pointer its
+                pointee kind and record, the same pair a pointer typedef
+                carries (tdElemTk/tdElemRec, read at the pointer suffix
+                below). NetBSD's sys/cdefs_elf.h and sys/atomic.h spell
+                `__typeof__(ptr) x` and `const volatile __typeof__(t) *p`.
+                feature-c-typeof }
+              if base = tyRecord then
+              begin
+                baseRec := ResolveNodeRec(tyNode);
+                if baseRec < 0 then
+                  Error('C: typeof of a struct expression whose struct is not known here (feature-c-typeof)');
+              end
+              else if base = tyPointer then
+              begin
+                tdElemTk := CNodePointeeTk(tyNode);
+                tdElemRec := CNodePtrElemRec(tyNode);
+                { only a C record id, and only when the pointee is a record or
+                  CNodePointeeTk's unmodelled default: `&arr[0]` carries an
+                  unrelated id on its AN_ADDR beside a correct int64 pointee }
+                if (tdElemRec >= REC_UCLASS_BASE) and
+                   ((IntToTypeKind(tdElemTk) = tyRecord) or (IntToTypeKind(tdElemTk) = tyInteger)) then
+                  tdElemTk := Ord(tyRecord)
+                else
+                  tdElemRec := REC_NONE;
+                CTypeProcSig := CNodeProcSig(tyNode, tyCallee);
+              end
+              else if base = tyUnknown then
+                Error('C: typeof of an untyped expression is not supported (feature-c-typeof)');
+              if (base = tyBoolean) or (base = tyInteger) then base := tyInt32;   { a comparison has type int in C }
+            end;
+            Expect(tkRParen, ')');
+            if (base = tyInt64) or (base = tyUInt64) then tdLongRank := 1;
+            if base = tySingle then isFloatTy := True;
+            if base = tyDouble then isFloatTy := True;
+            sawBase := True; isTypedef := True;
+          end
+          else if CIsInt128Word(CurTok.SVal) then
+          begin
+            { `__int128`, `signed`/`unsigned __int128`, `__int128_t`,
+              `__uint128_t`. x86-64 only so far: the other back ends have no
+              register-pair lowering yet, and taking the type there would drop
+              its high half. feature-c-int128-and-attribute-mode }
+            if TargetArch <> TARGET_X86_64 then
+              Error('C: ' + CurTok.SVal + ' (a 128-bit integer) is supported on x86-64 only so far ' +
+                    '(feature-c-int128-and-attribute-mode); for libtommath, build with -DMP_32BIT');
+            if CurTok.SVal = '__uint128_t' then isUnsigned := True;
+            base := tyInt128; sawBase := True;
+            Next;
+          end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
             Next;
@@ -6786,13 +7921,18 @@ begin
               baseRec := CTypedefRec[tdIdx];
               tdElemTk := CTypedefElemTk[tdIdx];
               tdElemRec := CTypedefRec[tdIdx];
+              tdPtrDepth := CTypedefPtrDepth[tdIdx];
+              tdPtrBaseTk := CTypedefPtrBaseTk[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
+              CTypePtrElemProcSig := CTypedefPtrElemProcSig[tdIdx]; { ptr-to-fn-ptr typedef: the pointee's }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
               CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length of the first dim, else -1 }
               CTypeTypedefNDims := CTypedefNDims[tdIdx];  { and HOW MANY dims -- see the field's note in defs.inc }
+              CTypeTypedefAlign := CTypedefAlign[tdIdx];  { an aligned(N) typedef: members, globals and _Alignof honour it }
               for tdDimI := 0 to MAX_ARR_DIMS - 1 do
                 CTypeTypedefDims[tdDimI] := CTypedefDims[tdIdx * MAX_ARR_DIMS + tdDimI];
               tdLongRank := CTypedefLongRank[tdIdx];    { `long`/`long long` rank of the type this name denotes }
+              CTypeBaseIsEnum := CTypedefIsUEnum[tdIdx]; { an unsigned-enum typedef: its bitfields are unsigned }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -6836,6 +7976,10 @@ begin
     Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
     Result := base
+  else if base = tyInt128 then
+  begin
+    if isUnsigned then Result := tyUInt128 else Result := tyInt128;
+  end
   else if base = tyBool8 then
     Result := base               { _Bool: 1-byte storage, but 0/1 conversion — see tyBool8 }
   else if base = tyUInt8 then
@@ -6890,6 +8034,7 @@ begin
     record. Depth >= 2 reports the element as Pointer (a `T**` derefs to a
     `T*`). The base (Result) before the stars is the element kind. }
   CTypePtrDepth := 0;
+  CTypeTdPtrFolded := False;
   CTypeElemTk := Ord(tyUnknown);
   CTypeElemRec := REC_NONE;
   CTypePtrBaseTk := Ord(tyUnknown);
@@ -6899,6 +8044,23 @@ begin
   begin
     CTypeElemTk := tdElemTk;
     CTypeElemRec := tdElemRec;
+  end;
+  { A TYPEDEF OF `T **` (or deeper) carries its depth: `PPD q` is `struct D
+    **q`, and without the depth it was a pointer to an unknown pointer --
+    `q[0]->w` read a stray word and `(*q)->v` the wrong one. The stars below
+    add to it (`PPD *x` is three levels). One-level pointer typedefs keep
+    depth 0 and their own readers (the cast's and the declarator's).
+    bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+  CTypeTdLvl := 0;
+  if isTypedef and (Result = tyPointer) and (tdPtrDepth >= 2) and (not tdIsFnType) then
+  begin
+    CTypeTdLvl := tdPtrDepth;
+    CTypePtrDepth := tdPtrDepth;
+    CTypeElemTk := Ord(tyPointer);
+    CTypeElemRec := tdElemRec;
+    CTypePtrBaseTk := tdPtrBaseTk;
+    CTypePtrBaseRec := tdElemRec;
+    baseRec := tdElemRec;
   end;
   { Function-TYPE typedef `typedef R N(args)` used as `N *p`: the star is the
     C function-to-pointer DECAY, not an extra indirection — `N *p` is the
@@ -6916,7 +8078,8 @@ begin
     { A star past a fn-pointer typedef makes a POINTER-to-fn-ptr: not directly
       callable, but preserve the pointee sig so `(*pf)()` / `(**(ft*)x)()` can
       still resolve the callee (see CNodeProcSig). }
-    if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig;
+    if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig
+    else CTypePtrElemProcSig := -1;  { `ftl *x` (ftl a ptr-to-fn-ptr typedef) is one level further: no callee here }
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     { `void' arrives here as the tyInteger PLACEHOLDER set where isVoid is read
       (`Result := tyInteger { placeholder; pointer suffix overrides below }').
@@ -6948,8 +8111,17 @@ begin
       CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
       CTypePtrBaseTk := Ord(Result);
     end;
-    CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
-    CTypePtrBaseRec := baseRec;
+    if CTypeTdLvl = 0 then
+    begin
+      CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
+      CTypePtrBaseRec := baseRec;
+    end
+    else
+    begin
+      { stars over a `T **` typedef: the base stays the typedef's (above) }
+      CTypeElemTk := Ord(tyPointer);
+      CTypePtrBaseTk := tdPtrBaseTk;
+    end;
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);
@@ -6958,6 +8130,27 @@ begin
         `T * const * p` — without this the declarator name is never reached and
         the variable goes undeclared (read as 0). }
       while CurTok.Kind = tkConst do Next;
+    end;
+    { STARS OVER A POINTER TYPEDEF ADD TO ITS LEVEL. `typedef Glyph *Line;
+      Line *line` is `Glyph **line`, but the stars were counted as if Line were
+      a scalar: depth 1 with a POINTER element and no pointee, so
+      `line[y][x]` strode 8 and yielded a pointer -- sizeof 8, and a Glyph
+      passed by value was loaded through as an address. st's draw() crashed
+      on its first frame; `typedef int *IP; IP *p` gave `p[0][0]` 8 bytes.
+      The typedef's own pointee is known (tdElemTk/Rec), so it becomes the
+      base and the depth gains the typedef's level. A typedef of `T **`
+      (pointer element, depth not recorded) and a function typedef keep the
+      old reading. bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee }
+    if isTypedef and (Result = tyPointer) and (not tdIsFnType) and
+       (CTypePtrElemProcSig < 0) and (tdElemTk <> Ord(tyPointer)) and
+       ((tdElemRec <> REC_NONE) or (tdElemTk <> Ord(tyUnknown))) then
+    begin
+      Inc(CTypePtrDepth);
+      CTypeTdPtrFolded := True;
+      baseRec := tdElemRec;
+      CTypeBaseRec := tdElemRec;
+      CTypePtrBaseTk := tdElemTk;
+      CTypePtrBaseRec := tdElemRec;
     end;
     if CTypePtrDepth >= 2 then
     begin
@@ -6968,6 +8161,8 @@ begin
         `TString **p = G(L)->strcache[i]; getstr(p[j])`). }
       CTypeElemTk := Ord(tyPointer);
       CTypeElemRec := baseRec;
+      { typeof(ptr-expr) sets no baseRec; its pointee record is the base's }
+      if CTypeElemRec = REC_NONE then CTypeElemRec := CTypePtrBaseRec;
     end;
     { `mat4 *m` / `vec4 *v` -- ONE star over an ARRAY typedef is a pointer to
       array, the same type as `float (*m)[4][4]`, and must carry the same row
@@ -7045,7 +8240,8 @@ begin
     bytes. Detect `(` immediately followed by `*`, collapse to Pointer, and
     skip both the `(*name)` declarator group and the trailing `(params)`
     group so the caller's parameter loop resyncs on the next `,`/`)`. }
-  else if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
+  else if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+          not (leavePtrArr and (CParenPtrArrEnd(TokPos - 1) >= 0)) then
   begin
     fpRet := Result;                  { return type parsed above (before the '(') }
     { A function pointer whose POINTEE returns a function pointer:
@@ -7090,6 +8286,7 @@ begin
     fpName := '';
     fpArrLen := -2;
     fpNDims := 0;
+    fpStars := 0;
     fnRetIsFunc := False;
     fnRetNParams := 0;
     { first group `(*name)` — collapse to Pointer, capturing the declarator name }
@@ -7097,6 +8294,8 @@ begin
     repeat
       if CurTok.Kind = tkLParen then Inc(depth)
       else if CurTok.Kind = tkRParen then Dec(depth)
+      else if (CurTok.Kind = tkStar) and (depth = 1) and (fpName = '') then
+        Inc(fpStars)
       else if (CurTok.Kind = tkIdent) and (fpName = '') then
       begin
         fpName := CurTok.SVal;
@@ -7188,6 +8387,16 @@ begin
       callable function pointer; the dims were skipped, so `sizeof *f()` was 4
       and `(*f())[3]` read the wrong int.
       bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+    { `float (*q[2])[4]`: an ARRAY of pointers to arrays. A variable (local or
+      global) never gets here -- its declaration path reads the declarator
+      itself (CParenPtrArrEnd). A struct member or a parameter would, and
+      nothing on those paths carries the pointee shape of an array element,
+      so it is refused by name rather than laid out wrong.
+      bug-c-the-spelled-out-array-of-pointers-to-arrays-declarator-is-refused }
+    if (not fnRetIsFunc) and (fpNDims > 0) and (CurTok.Kind = tkLBrack) then
+      Error('C: ''' + fpName + ''': an array of pointers to arrays, T (*name[N])[M],'
+        + ' is supported for a variable but not as a struct member or parameter;'
+        + ' declare it through a typedef: typedef T rowM[M]; rowM *name[N];');
     fnRetArr := fnRetIsFunc and (CurTok.Kind = tkLBrack);
     if fnRetArr then
     begin
@@ -7287,8 +8496,33 @@ begin
       CTypePtrBaseRec := baseRec;
       CTypePtrElemArrLen := paArrLen;
       CTypeIsVoid := False;
+    end
+    else if (fpStars = 2) and (not pointeeRetFn) and (CTypeProcSig >= 0) then
+    begin
+      { `ret (**name)(params)`: a POINTER TO a function pointer, the inline
+        spelling of `ft *name`. The stars in the group were not counted, so it
+        became a plain function pointer: `(*pp)(a)` then called pp ITSELF, the
+        address of the slot, and faulted. Publish it the way the typedef
+        spelling does (the star arm above): the signature belongs to the
+        pointee, and the variable is not directly callable. }
+      CTypePtrElemProcSig := CTypeProcSig;
+      CTypeProcSig := -1;
+      CTypeElemTk := Ord(tyPointer);
+      CTypeElemRec := REC_NONE;
+      CTypePtrDepth := 1;
+      CTypePtrBaseTk := Ord(tyPointer);
+      CTypePtrBaseRec := REC_NONE;
     end;
   end;
+end;
+
+procedure CNoteLocalThreadSym(sym: Integer);
+begin
+  if sym < 0 then Exit;
+  if CLocalThreadSymCount >= Length(CLocalThreadSyms) then
+    SetLength(CLocalThreadSyms, CLocalThreadSymCount * 2 + 8);
+  CLocalThreadSyms[CLocalThreadSymCount] := sym;
+  Inc(CLocalThreadSymCount);
 end;
 
 function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer;
@@ -7298,6 +8532,7 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocVar(name, tk);
   CurProc := savedCurProc;
+  if CLocalStaticDecl and CLocalThreadDecl then CNoteLocalThreadSym(Result);
   { Record whether a pointer variable's pointee is const-qualified (`const T *p`),
     for C11 _Generic lvalue-converted matching. CTypeBaseConst reflects the base
     type of the ParseCDeclType that just produced `tk`. }
@@ -7321,6 +8556,7 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocArray(name, elemType, lo, hi);
   CurProc := savedCurProc;
+  if CLocalStaticDecl and CLocalThreadDecl then CNoteLocalThreadSym(Result);
 end;
 
 { `extern T name[];` in a header, then `T name[] = { ... };` in the .c. The
@@ -7358,6 +8594,9 @@ begin
   grown := AllocArray('', elemTk, 0, newLen - 1);
   Syms[idx].Offset := Syms[grown].Offset;
   Syms[idx].ArrLen := newLen;
+  { the row's size follows its slot, as CGrowGlobalRecord's does: an object
+    symbol's st_size and CPlaceGlobalInData both read it }
+  SymAllocSize[idx] := SymAllocSize[grown];
 end;
 
 { The record twin of CGrowGlobalArray. `extern const struct T x;` while T is
@@ -7389,6 +8628,36 @@ begin
   SymAllocSize[idx] := SymAllocSize[grown];
 end;
 
+{ Does record ci end in a flexible array member (`T v[]`, length 0)? }
+function CRecEndsInFam(ci: Integer): Boolean;
+var fi: Integer;
+begin
+  Result := False;
+  if (ci < 0) or (UClsFCount[ci] < 1) then Exit;
+  fi := UClsFBase[ci] + UClsFCount[ci] - 1;
+  Result := UFldIsArray[fi] and (UFldDynDepth[fi] = 0) and (UFldArrLen[fi] = 0);
+end;
+
+{ Grow a global record to `need` bytes: an initialised flexible array member's
+  elements live past sizeof (gcc does the same; the symbol's st_size covers
+  them). Repoints the row at a fresh slot, as CGrowGlobalRecord does. }
+procedure CGrowGlobalBytes(idx, need, align: Integer);
+var grown: Integer;
+    wasData: Boolean;
+begin
+  if (idx < 0) or (need <= SymAllocSize[idx]) then Exit;
+  if Syms[idx].Kind <> skGlobal then Exit;
+  wasData := SymOffIsData(Syms[idx].Offset);   { CStaticDataMode placed it in .data }
+  if align < 8 then align := 8;
+  AllocMinAlign := align;
+  if align > ReqBssAlign then ReqBssAlign := align;
+  grown := AllocArray('', tyUInt8, 0, need - 1);
+  AllocMinAlign := 0;
+  Syms[idx].Offset := Syms[grown].Offset;
+  SymAllocSize[idx] := SymAllocSize[grown];
+  if wasData then CPlaceGlobalInData(idx, align);
+end;
+
 { Wrap a static-local declaration's initializer chain (AN_SEQ head) in a
   one-time guard: `if guard == 0 { guard = 1; <inits> }`. C runs a block-scope
   static's initializer ONCE (load-time semantics), not on every function
@@ -7403,6 +8672,10 @@ begin
   CurProc := -1;                       { guard is a global (BSS) slot }
   gsym := AllocVar('$staticinit$' + MangleSuffix(SymCount), tyInteger);
   CurProc := savedCurProc;
+  { a thread-local's guard is thread-local too: each thread runs the
+    (constant) initialiser on its own first pass, so a new thread starts from
+    the initial value as gcc's .tdata gives it }
+  if CLocalThreadDecl then CNoteLocalThreadSym(gsym);
   { cond: guard == 0 }
   idn := AllocNode(AN_IDENT); ASTIVal[idn] := gsym; ASTTk[idn] := Ord(tyInteger);
   zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
@@ -7426,22 +8699,57 @@ end;
   AN_BLOCK whose AN_SEQ chain holds the initialiser assignments (an empty block
   when there are no initialisers). Increment-1 scope: scalar declarators; array
   and per-declarator pointer-depth handling come later. }
+{ The register a local register variable is bound to, when symbol idx is
+  one (see CRegVarName), else ''. }
+function CRegVarOf(idx: Integer): AnsiString;
+var k, j: Integer;
+begin
+  Result := '';
+  if (idx < 0) or (idx >= SymCount) then Exit;
+  for k := CRegVarCount - 1 downto 0 do
+    if (CRegVarBase[k] <= idx) and (Syms[idx].Name = CRegVarName[k]) then
+    begin
+      j := CRegVarBase[k];
+      while (j < idx) and (Syms[j].Name <> CRegVarName[k]) do Inc(j);
+      if j = idx then Result := CRegVarReg[k];
+      Exit;
+    end;
+end;
+
+procedure CRegVarAdd(const nm, reg: AnsiString);
+begin
+  if Length(CRegVarName) <= CRegVarCount then
+  begin
+    SetLength(CRegVarName, CRegVarCount + 16);
+    SetLength(CRegVarReg, CRegVarCount + 16);
+    SetLength(CRegVarBase, CRegVarCount + 16);
+  end;
+  CRegVarName[CRegVarCount] := nm;
+  CRegVarReg[CRegVarCount] := reg;
+  CRegVarBase[CRegVarCount] := SymCount;
+  Inc(CRegVarCount);
+end;
+
 function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
     lclNDims, lclSpan0, lclEB, mdi: Integer;
     ptrElemSig, declPtrElemSig: Integer;  { pointee fn-ptr sig for `ft *pf` (SymElemProcSig channel) }
+    sibFnSig: Integer;  { the base fn-pointer type's sig for a sibling declarator (`ft *a, *b, c`), else -1 }
     paLen, sibPaLen: Integer;
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
     hadStar: Boolean;
+    tdLvl: Integer;   { CTypeTdLvl of the base: levels a `T **` typedef put into ptrDepth }
+    lclTypeTok, lclEnd, lclDepth: Integer;   { the declaration's type token, and one declarator's extent, for aligned(N) }
+    sibTdLvl, sibTdBaseTk, sibTdBaseRec: Integer;   { siblings over a pointer typedef: its extra level and pointee }
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     fpLocNDims: Integer;
     fpLocDims: array[0..7] of Integer;
-    beFlat, beBelow: Integer;
+    beFlat, beBelow, beDim, beIdx, beChain: Integer;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     unsizedOuter: Boolean;   { `T a[][N] = {...}`: rows come from the braces }
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
@@ -7456,10 +8764,20 @@ var baseTk, declTk, scalarTk: TTypeKind;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
     lParenName: Boolean; lParenEnd: Integer;   { `T *(name[N])`, see CParenDeclNameEnd }
+    lParenPtrArr: Boolean;   { `T (*name[N])[M]`, see CParenPtrArrEnd }
+    CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry: Integer;
+    CTypeTypedefDimsAtEntry: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   cliOuterTop := CLIArrTop;
   cliBase := CLIArrTop;
+  CDeclLeaveParenPtrArr := True;
+  lclTypeTok := TokPos - 1;
+  AllocMinAlign := 0;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  lParenPtrArr := False;
+  CTypeTypedefArrLenAtEntry := CTypeTypedefArrLen;
+  CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
+  for di := 0 to MAX_ARR_DIMS - 1 do CTypeTypedefDimsAtEntry[di] := CTypeTypedefDims[di];
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
   tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
   for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDims[di];
@@ -7468,6 +8786,7 @@ begin
   elemTkOrd := CTypeElemTk;
   elemRec := CTypeElemRec;
   ptrDepth := CTypePtrDepth;
+  tdLvl := CTypeTdLvl;
   ptrBaseTk := CTypePtrBaseTk;
   ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
@@ -7605,9 +8924,19 @@ begin
     end
     else
     begin
-      SetSymPointerType(idx, tyUnknown, REC_NONE,
-                        1, Ord(tyUnknown), REC_NONE);
-      if procSig >= 0 then SymProcSig[idx] := procSig;
+      if (procSig < 0) and (CTypePtrElemProcSig >= 0) then
+      begin
+        { `ret (**name)(params)`: points at a function pointer; `(*name)(a)`
+          and `name[i](a)` call through the pointee's signature }
+        SetSymPointerType(idx, tyPointer, REC_NONE, 1, Ord(tyPointer), REC_NONE);
+        SymElemProcSig[idx] := CTypePtrElemProcSig;
+      end
+      else
+      begin
+        SetSymPointerType(idx, tyUnknown, REC_NONE,
+                          1, Ord(tyUnknown), REC_NONE);
+        if procSig >= 0 then SymProcSig[idx] := procSig;
+      end;
     end;
     head := -1; tail := -1;
     if CurTok.Kind = tkAssign then
@@ -7642,9 +8971,10 @@ begin
     scalarTk := Procs[procSig].RetType;
     scalarRec := CTypeBaseRec;
     hadStar := False;
+    sibFnSig := -1;   { siblings of an inline fn-ptr take its RETURN type, not a callable }
     Next;   { consume the ',' — the loop handles stars/name of each sibling }
     declPtr := 0;
-    while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
     if declPtr > 0 then
     begin
       declTk := tyPointer; declPtrDepth := declPtr;
@@ -7675,9 +9005,38 @@ begin
     recover the pre-star scalar base; each later declarator gets its own stars.
     A pointer from a *literal* star (elemTk known) is redistributable; a pointer
     from a typedef (no star) is the whole type and applies to every sibling. }
-  hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
+  hadStar := (baseTk = tyPointer) and (CTypePtrDepth > tdLvl);   { a `T **` typedef's own depth is no star }
   if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
+  { A POINTER TYPEDEF base (`IP pv = v, *ip;` / `Line *a, *b;`): every
+    sibling's stars sit over the typedef's own level, as the first
+    declarator's do (ParseCDeclType, CTypeTdPtrFolded). The scalar base above
+    is the typedef's POINTEE then, and a sibling without stars is the typedef.
+    bug-c-a-pointer-to-a-pointer-typedef-loses-the-pointee }
+  sibTdLvl := 0; sibTdBaseTk := Ord(tyUnknown); sibTdBaseRec := REC_NONE;
+  if tdLvl >= 2 then
+  begin
+    { `PPD a, *b, c;`: every sibling stands over the typedef's own levels }
+    sibTdLvl := tdLvl; sibTdBaseTk := ptrBaseTk; sibTdBaseRec := ptrBaseRec;
+  end
+  else if hadStar and CTypeTdPtrFolded then
+  begin
+    sibTdLvl := 1; sibTdBaseTk := ptrBaseTk; sibTdBaseRec := ptrBaseRec;
+  end
+  else if (not hadStar) and (baseTk = tyPointer) and (procSig < 0) and
+          (elemTkOrd <> Ord(tyPointer)) and
+          ((elemRec <> REC_NONE) or (elemTkOrd <> Ord(tyUnknown))) then
+  begin
+    sibTdLvl := 1; sibTdBaseTk := elemTkOrd; sibTdBaseRec := elemRec;
+  end;
+  { A sibling of a fn-pointer-typedef declarator (`XcmsDIConversionProc *a, *b;`)
+  is built from the SAME base type, so it needs the base's call signature:
+  the base's own when the first declarator had no star, else the one its star
+  moved to the pointee channel. Without it `(*b++)(args)` did not parse.
+  bug-c-call-through-an-incremented-pointer-to-function-pointer }
+  if procSig >= 0 then sibFnSig := procSig
+  else if hadStar then sibFnSig := ptrElemSig
+  else sibFnSig := -1;
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
   declPtrElemSig := ptrElemSig;   { primary declarator: `ft *pf` pointee sig }
   declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
@@ -7722,20 +9081,42 @@ begin
       begin
         Next;
         declPtr := 0;
-        while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
-        if declPtr > 0 then
+        while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
+        if (declPtr > 0) and (sibTdLvl > 0) then
+        begin
+          declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
+          declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+          declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if (declPtr = 0) and hadStar and (sibTdLvl >= 2) then
+        begin
+          declTk := tyPointer; declPtrDepth := sibTdLvl;
+          declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+          declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
+        begin
+          declTk := tyPointer; declPtrDepth := 0;
+          declElemTk := sibTdBaseTk; declElemRec := sibTdBaseRec;
+          declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+          declProcSig := -1; declPtrElemSig := -1;
+        end
+        else if declPtr > 0 then
         begin
           declTk := tyPointer; declPtrDepth := declPtr;
           declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
           if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
           else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
-          declProcSig := -1; declPtrElemSig := -1;
+          declProcSig := -1;
+          if declPtr = 1 then declPtrElemSig := sibFnSig else declPtrElemSig := -1;  { `ft *a, *b`: b is `ft *` too }
         end
         else if hadStar then
         begin
           declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
           declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-          declProcSig := -1; declPtrElemSig := -1;
+          declProcSig := sibFnSig; declPtrElemSig := -1;  { `ft *a, b`: b is a callable `ft` }
         end
         else
         begin
@@ -7751,7 +9132,30 @@ begin
       arm's sibling (see CParenDeclNameEnd). A '(' after the ')' would make it
       a block-scope prototype `int (f)(void);`, which stays with the arm below. }
     lParenName := False;
-    if CurTok.Kind = tkLParen then
+    if lParenPtrArr then
+    begin
+      { the previous declarator borrowed the typedef-dims slots; a sibling
+        (`T (*q[2])[4], x;`) gets the declaration's own back }
+      tdArrLen := CTypeTypedefArrLenAtEntry; tdNDimsL := CTypeTypedefNDimsAtEntry;
+      for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDimsAtEntry[di];
+    end;
+    lParenPtrArr := False;
+    if (CurTok.Kind = tkLParen) and (declPtrDepth = 0) and (CParenPtrArrEnd(TokPos - 1) >= 0) then
+    begin
+      { `T (*name[N])[M]`: an array of N pointers to T[M], the type
+        `typedef T vecM[M]; vecM *name[N];` declares. Read as that spelling:
+        the element is a depth-1 pointer to the scalar, and the pointee dims
+        after the ')' take the typedef dims' place (tdDimsL, stamped on the
+        array after allocation). See CParenPtrArrEnd. }
+      Next; Next;                    { '(' '*' }
+      lParenName := True;
+      lParenPtrArr := True;
+      declTk := tyPointer; declPtrDepth := 1;
+      declElemTk := Ord(scalarTk); declElemRec := scalarRec;
+      declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
+      declProcSig := -1; declPtrElemSig := -1;
+    end
+    else if CurTok.Kind = tkLParen then
     begin
       lParenEnd := CParenDeclNameEnd(TokPos - 1);
       if (lParenEnd >= 0) and (lParenEnd + 1 < TokCount) and
@@ -7763,6 +9167,29 @@ begin
     end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    { `register long a2 __asm__("a2")`: a local register variable, bound at
+      inline-asm operands (CRegVarOf). feature-c-asm-register-variables }
+    if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'asm') or
+       (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CRegVarAdd(name, CReadAsmLabelString);
+    { aligned(N) for THIS declarator: on the specifiers, an aligned typedef, or
+      after the declarator (`char b[5] __attribute__((aligned(64)))` -- the
+      lexer marks the token after the attribute, so the scan runs to the `,`
+      `;` or `=` that ends the declarator). AllocVar/AllocArray's local branch
+      honour it. feature-c-an-over-aligned-local-is-not-aligned }
+    lclEnd := TokPos - 1; lclDepth := 0;
+    while lclEnd < TokCount do
+    begin
+      case Tokens[lclEnd].Kind of
+        tkLParen, tkLBrack, tkBegin: Inc(lclDepth);
+        tkRParen, tkRBrack, tkEnd: Dec(lclDepth);
+      end;
+      if (lclDepth <= 0) and ((Tokens[lclEnd].Kind = tkComma) or
+         (Tokens[lclEnd].Kind = tkSemicolon) or (Tokens[lclEnd].Kind = tkAssign)) then Break;
+      if lclDepth < 0 then Break;
+      Inc(lclEnd);
+    end;
+    AllocMinAlign := CDeclAttrAlign(lclTypeTok, lclEnd);
     if lParenName and (CurTok.Kind = tkRParen) then begin Next; lParenName := False; end;
     if CurTok.Kind = tkLParen then
     begin
@@ -7867,6 +9294,10 @@ begin
         Inc(dimCount);
       end;
       if lParenName then begin Expect(tkRParen, ')'); lParenName := False; end;
+      if lParenPtrArr then
+      begin
+        tdArrLen := CReadPtrArrPointeeDims(tdNDimsL, tdDimsL);
+      end;
       { Array typedef inherent dims fold UNDER any declarator-applied dims:
         `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init).
         ALL of them, in order: this appended exactly one, so `typedef int T[2][3]'
@@ -7940,6 +9371,7 @@ begin
         Next; Next;   { consume the assign then the open brace }
         brDepth := 1;
         beFlat := 0;
+        beStack[0] := 0;   { the outermost aggregate starts at 0 (designators) }
         while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
         begin
           if CurTok.Kind = tkBegin then
@@ -7973,6 +9405,40 @@ begin
           end
           else if CurTok.Kind = tkComma then
             Next
+          else if CurTok.Kind = tkLBrack then
+          begin
+            { An index designator (C99 6.7.8p6), `int e[4][3] = {{1}, [3] =
+              {9}}` or `{[1][2] = 5}`: `[i]` at brace depth d names element i
+              of dimension d-1 of the sub-aggregate that brace opened, so the
+              flat cursor moves to that aggregate's start plus i times the
+              size of one element. A chain `[i][j]` continues into the next
+              dimension. It was "expected C expression".
+              bug-c-an-array-designator-inside-a-multi-dimensional-initializer-is-refused }
+            beDim := brDepth - 1;
+            if beDim < MAX_ARR_DIMS then beFlat := beStack[beDim];
+            beChain := 0;
+            while CurTok.Kind = tkLBrack do
+            begin
+              Next;
+              beIdx := CEvalConstExpr;
+              Expect(tkRBrack, ']');
+              if beDim >= dimCount then
+                Error('C: array designator nests deeper than the dimensions of ' + name);
+              if (beIdx < 0) or ((dimSpan[beDim] > 0) and (beIdx >= dimSpan[beDim]) and
+                 not (unsizedOuter and (beDim = 0))) then
+                Error('C: array index in initializer exceeds array bounds');
+              beBelow := 1;
+              for di := beDim + 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+              if beBelow < 1 then beBelow := 1;
+              beFlat := beFlat + beIdx * beBelow;
+              Inc(beDim);
+              Inc(beChain);
+            end;
+            Expect(tkAssign, '=');
+            if (CurTok.Kind = tkBegin) and (beChain > 1) then
+              Error('C: a braced value after a chained array designator ([i][j] = {...})'
+                + ' is not supported in a local initializer; write [i] = {[j] = {...}}');
+          end
           else if (CurTok.Kind = tkString) and (declTk <> tyPointer) and
                   TypeIsOrdinal(declTk) and (TypeSlotSize(declTk) = 1) then
           begin
@@ -8199,6 +9665,33 @@ begin
       else if (dimCount <= 1) and (not hadArrDesig) and (nArrElems > arrLen) then
         arrLen := nArrElems;
       if (dimCount <= 1) and (recArrInitCount > arrLen) then arrLen := recArrInitCount;
+      { `static const lv_color_t colors[][5] = { {..x5}, {..x5}, .. }` in a
+        block: the unsized outer dimension of a STRUCT array was left at the 1
+        it was clamped to above (the scalar walk re-sizes its own), so the
+        array had one row and every later row read zero -- LVGL's
+        lv_palette_lighten/darken returned black, and the default theme drew
+        a black screen. File scope was right.
+        bug-c-a-block-scope-struct-array-with-an-unsized-outer-dimension-has-one-row }
+      if unsizedOuter and (declTk = tyRecord) and (recArrInitCount > 0) then
+      begin
+        beBelow := 1;
+        for di := 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+        if beBelow < 1 then beBelow := 1;
+        { a top-level brace is a ROW whatever it holds (gcc: `e[][2] =
+          {{1,2,3},{4,5,6}}` is two rows of which [0] is set); a flat list
+          is records under elision, filling rows in turn }
+        if Tokens[TokPos + 1].Kind = tkBegin then
+          dk := recArrInitCount
+        else if scalarRec >= REC_UCLASS_BASE then
+          dk := (CInitCountRecordArrayAt(TokPos, scalarRec) + beBelow - 1) div beBelow
+        else
+          dk := 0;
+        if dk > dimSpan[0] then
+        begin
+          dimSpan[0] := dk;
+          arrLen := dk * beBelow;
+        end;
+      end;
       { VARIABLE-LENGTH ARRAY. The symbol becomes a POINTER local filled from
         alloca at the declaration point, because that is what the object is:
         runtime-sized storage in this frame, released by the epilogue. Indexing
@@ -8505,8 +9998,32 @@ begin
       Next;
       { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
       declPtr := 0;
-      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
-      if declPtr > 0 then
+      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
+      if (declPtr > 0) and (sibTdLvl > 0) then
+      begin
+        { over a pointer typedef: see sibTdLvl }
+        declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
+        declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+        declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if (declPtr = 0) and hadStar and (sibTdLvl >= 2) then
+      begin
+        { `PPD *a, b;`: b is the two-level typedef itself }
+        declTk := tyPointer; declPtrDepth := sibTdLvl;
+        declElemTk := Ord(tyPointer); declElemRec := sibTdBaseRec;
+        declBaseTk := sibTdBaseTk; declBaseRec := sibTdBaseRec;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if (declPtr = 0) and hadStar and (sibTdLvl > 0) then
+      begin
+        { `IP *a, b;`: b is the typedef itself }
+        declTk := tyPointer; declPtrDepth := 0;
+        declElemTk := sibTdBaseTk; declElemRec := sibTdBaseRec;
+        declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+        declProcSig := -1; declPtrElemSig := -1;
+      end
+      else if declPtr > 0 then
       begin
         declTk := tyPointer;
         declPtrDepth := declPtr;
@@ -8514,14 +10031,15 @@ begin
         declBaseRec := scalarRec;
         if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
         else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
-        declProcSig := -1; declPtrElemSig := -1;
+        declProcSig := -1;
+        if declPtr = 1 then declPtrElemSig := sibFnSig else declPtrElemSig := -1;  { `ft *a, *b`: b is `ft *` too }
       end
       else if hadStar then
       begin
         { sibling with no star, base had a redistributable star: plain scalar }
         declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
         declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-        declProcSig := -1; declPtrElemSig := -1;
+        declProcSig := sibFnSig; declPtrElemSig := -1;  { `ft *a, b`: b is a callable `ft` }
       end
       else
       begin
@@ -8658,7 +10176,10 @@ begin
   if CurTok.Kind = tkSemicolon then
     Next
   else if IsCTypeTok then
-    initNode := ParseCLocalDeclAST
+  begin
+    initNode := ParseCLocalDeclAST;
+    AllocMinAlign := 0;   { a local's aligned(N) ends with its declaration }
+  end
   else
   begin
     initNode := ParseCCommaStmt;
@@ -8885,6 +10406,7 @@ begin
   CAsmClobCC := False;
   CAsmClobRegs := '';
   CAsmIsGoto := False;
+  CAsmGotoCount := 0;
 end;
 
 { Split a constraint into its modifiers and its class letters. `=` and `+` mark
@@ -8981,6 +10503,7 @@ procedure CAsmParseOperandSection(isOutSection: Boolean);
 var raw, cls, sym: AnsiString;
     isOut, isInOut, early: Boolean;
     tied, immHi, addrN: Integer;
+    wasN: Boolean;
 begin
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
         (CurTok.Kind <> tkEOF) do
@@ -9011,11 +10534,28 @@ begin
     if (Length(cls) > 1) and (Pos('N', cls) > 0) then
       Delete(cls, Pos('N', cls), 1);
     if cls = 'n' then cls := 'i';
+    { "N" alone: an unsigned 8-bit constant, the port number of in/out
+      (`outb %%al,%0` with "N"(0x80), rump repro g14c). An "i" whose range
+      is checked like I and J's below. }
+    wasN := cls = 'N';
+    if wasN then cls := 'i';
+    { "A" on x86-64 for a value that fits one register is rax -- gcc reads it
+      that way (rdtsc's "=A" keeps only eax there; a known source bug that
+      gcc compiles, so pxx compiles it the same). On i386 it means the
+      edx:eax PAIR, which this frontend has no carrier for. }
+    if cls = 'A' then
+    begin
+      if TargetArch <> TARGET_X86_64 then
+        Error('C: inline asm constraint "' + raw + '" (the edx:eax pair) is'
+              + ' not supported on this target');
+      cls := 'a';
+    end;
     { "I" and "J" are x86's ranged immediates: a constant in 0..31 (a 32-bit
       shift or rotate count) and in 0..63 (a 64-bit one). libtomcrypt's ROLc
       and ROL64c spell their counts this way. They are an "i" whose value gcc
       range-checks, and so do we, below. }
     immHi := -1;
+    if wasN then immHi := 255;
     if cls = 'I' then begin cls := 'i'; immHi := 31; end
     else if cls = 'J' then begin cls := 'i'; immHi := 63; end;
     { "qm" / "Qm": a byte register OR memory, the usual spelling for a setcc
@@ -9023,6 +10563,11 @@ begin
       allowed choices, the same reading that honours "rm" as a register. }
     if (cls = 'qm') or (cls = 'mq') then cls := 'q';
     if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
+    { "qQ": either byte class. Q (a register with an addressable high byte:
+      a b c d) is also a q register, so Q satisfies both alternatives -- and
+      it is the one a template using %h needs. NetBSD's/rump's x86 atomic.h
+      spells xchgb's result this way (rump repro g14a). }
+    if (cls = 'qQ') or (cls = 'Qq') or (cls = 'qQm') or (cls = 'Qqm') then cls := 'Q';
     { A digit constraint names an earlier operand's location. It is only legal
       in the INPUT section -- an output tied to an output has no meaning -- and
       it must name an operand that already exists. }
@@ -9043,6 +10588,7 @@ begin
     CAsmOps[CAsmOpCount].Early := early;
     CAsmOps[CAsmOpCount].SymName := sym;
     CAsmOps[CAsmOpCount].TiedTo := tied;
+    CAsmOps[CAsmOpCount].FixReg := '';
     if cls = 'i' then
     begin
       { An immediate is a constant expression -- `FOUR * 10`, `KERNEL_CS`,
@@ -9074,6 +10620,19 @@ begin
         ASTLeft[addrN] := CAsmOps[CAsmOpCount].Expr;
         ASTTk[addrN] := Ord(tyPointer);
         CAsmOps[CAsmOpCount].Expr := addrN;
+      end;
+      { a local register variable as a register-class operand: that register,
+        which is what gcc guarantees for it. feature-c-asm-register-variables }
+      if ((cls = 'r') or (cls = 'g') or (cls = 'rm') or (cls = 'mr')) and
+         (ASTKind[CAsmOps[CAsmOpCount].Expr] = AN_IDENT) then
+      begin
+        CAsmOps[CAsmOpCount].FixReg := CRegVarOf(ASTIVal[CAsmOps[CAsmOpCount].Expr]);
+        if (CAsmOps[CAsmOpCount].FixReg <> '') and
+           (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) and
+           (TargetArch <> TARGET_XTENSA) then
+          Error('C: inline asm operand "' + CAsmOps[CAsmOpCount].Raw + '" is the'
+                + ' register variable bound to "' + CAsmOps[CAsmOpCount].FixReg
+                + '"; pxx pins register variables on x86-64, i386 and xtensa only');
       end;
     end;
     Inc(CAsmOpCount);
@@ -9107,12 +10666,104 @@ end;
 
 { The `asm goto` label section: bare identifiers. Captured only so the refusal
   below can be specific; nothing reads them. }
+{ %lN / %l[name] -> `<ASMGOTO_LBL+k>f`, and the exit stubs appended. Done on
+  the TEXT so the AT&T reader's own numeric-label machinery resolves every
+  jump; only jmp/jcc to a %l operand is meaningful (a `.quad %l1` jump table
+  would reach the reader as a label it cannot place, and refuse there). }
+const ASMGOTO_LBL = 99900; ASMGOTO_DONE = 99899;
+function CAsmGotoRewrite(const t: AnsiString; slot: Integer): AnsiString;
+var i, j, n, k, firstLbl: Integer; nm: AnsiString;
+begin
+  firstLbl := CAsmOpCount - 1;     { the hidden operand sits at the user's label base }
+  Result := '';
+  i := 1;
+  while i <= Length(t) do
+  begin
+    if (t[i] = '%') and (i < Length(t)) and (t[i + 1] = '%') then
+    begin
+      Result := Result + '%%';
+      Inc(i, 2);
+      Continue;
+    end;
+    if (t[i] = '%') and (i + 1 < Length(t)) and (t[i + 1] = 'l') and
+       ((t[i + 2] = '[') or ((t[i + 2] >= '0') and (t[i + 2] <= '9'))) then
+    begin
+      k := -1;
+      if t[i + 2] = '[' then
+      begin
+        j := i + 3; nm := '';
+        while (j <= Length(t)) and (t[j] <> ']') do begin nm := nm + t[j]; Inc(j); end;
+        for n := 0 to CAsmGotoCount - 1 do
+          if CAsmGotoName[n] = nm then k := n;
+        if k < 0 then Error('C: inline asm goto names no label [' + nm + ']');
+        i := j + 1;
+      end
+      else
+      begin
+        j := i + 2; n := 0;
+        while (j <= Length(t)) and (t[j] >= '0') and (t[j] <= '9') do
+        begin n := n * 10 + Ord(t[j]) - Ord('0'); Inc(j); end;
+        k := n - firstLbl;
+        if (k < 0) or (k >= CAsmGotoCount) then
+          Error('C: inline asm goto template names %l' + AIntToStr(n)
+                + ', which is not one of its labels');
+        i := j;
+      end;
+      Result := Result + AIntToStr(ASMGOTO_LBL + k) + 'f';
+      Continue;
+    end;
+    Result := Result + t[i];
+    Inc(i);
+  end;
+  Result := Result + #10'movl $0, %' + AIntToStr(slot) + #10'jmp '
+            + AIntToStr(ASMGOTO_DONE) + 'f';
+  for k := 0 to CAsmGotoCount - 1 do
+    Result := Result + #10 + AIntToStr(ASMGOTO_LBL + k) + ':'#10'movl $'
+              + AIntToStr(k + 1) + ', %' + AIntToStr(slot) + #10'jmp '
+              + AIntToStr(ASMGOTO_DONE) + 'f';
+  Result := Result + #10 + AIntToStr(ASMGOTO_DONE) + ':';
+end;
+
+{ The asm block, then `if (exit == k+1) goto label_k;` per label: ordinary
+  AST, so a C label anywhere in the function resolves the usual way. }
+function CAsmGotoDispatch(blk, sym: Integer): Integer;
+var k, idn, lit, cond, gt, pairN, ifn, sq, head, tail: Integer;
+begin
+  sq := AllocNode(AN_SEQ); ASTLeft[sq] := blk; ASTRight[sq] := -1;
+  head := sq; tail := sq;
+  for k := 0 to CAsmGotoCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := sym; ASTTk[idn] := Ord(tyInteger);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := k + 1; ASTTk[lit] := Ord(tyInteger);
+    cond := AllocNode(AN_BINOP); ASTIVal[cond] := Ord(tkEq);
+    ASTLeft[cond] := idn; ASTRight[cond] := lit; ASTTk[cond] := Ord(tyBoolean);
+    gt := AllocNode(AN_GOTO);
+    ASTSOffset[gt] := CAsmGotoOff[k];
+    ASTSLen[gt] := CAsmGotoLen[k];
+    pairN := AllocNode(AN_PAIR); ASTLeft[pairN] := gt; ASTRight[pairN] := -1;
+    ifn := AllocNode(AN_IF); ASTLeft[ifn] := cond; ASTRight[ifn] := pairN;
+    sq := AllocNode(AN_SEQ); ASTLeft[sq] := ifn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq; tail := sq;
+  end;
+  Result := AllocNode(AN_BLOCK);
+  ASTLeft[Result] := head;
+end;
+
 procedure CAsmParseLabelSection;
+var lo, ll: Integer;
 begin
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
   begin
     if CurTok.Kind <> tkIdent then
       Error('C: inline asm goto expects a label name');
+    if CAsmGotoCount > High(CAsmGotoOff) then
+      Error('C: inline asm goto names more than ' + AIntToStr(High(CAsmGotoOff) + 1)
+            + ' labels');
+    CLabelSpan(TokPos - 1, lo, ll);
+    CAsmGotoOff[CAsmGotoCount] := lo;
+    CAsmGotoLen[CAsmGotoCount] := ll;
+    CAsmGotoName[CAsmGotoCount] := CurTok.SVal;
+    Inc(CAsmGotoCount);
     Next;
     if CurTok.Kind = tkComma then Next else Break;
   end;
@@ -9286,7 +10937,8 @@ begin
     if (CAsmOps[i].Cons = 'i') and (i < CAsmOutCount) then
       Error('C: inline asm output constraint "' + CAsmOps[i].Raw
             + '" is an immediate, which cannot be written');
-    if CAsmOps[i].IsInOut then
+    if CAsmOps[i].IsInOut and
+       not ((CAsmOps[i].Cons = 'm') and (TargetArch = TARGET_X86_64)) then
       Error('C: inline asm read-write constraint "' + CAsmOps[i].Raw
             + '" is not supported — write it as an "=' + CAsmOps[i].Cons
             + '" output with an input tied to it');
@@ -9312,6 +10964,40 @@ end;
   admit it. Deliberately narrow -- it is about output operands, and every
   output a real block writes is a name, a subscript, a field, or a dereference
   of those. }
+{ `*q` for q a pointer-to-array: the decay node `q + 0` (stamped, see
+  CIsDecayedDerefOfPtrToArr), with q a plain pointer or a cast's `(t = e, t)`.
+  Its value IS the array's address, which an "m" operand must bind by address. }
+function CAsmMemIdxKey(node: Integer; var k: Int64): Boolean;
+{ `base[k]` with base a plain identifier, k an integer constant and the
+  element a scalar whose array stride is its slot size: the shape whose
+  address is the base's plus k strides, so two of them share one register.
+  bug-test-core-four-rows-still-red-2026-11-19 (casmmpress) }
+var tk: TTypeKind; sz: Integer;
+begin
+  Result := False;
+  if (node < 0) or (ASTKind[node] <> AN_INDEX) then Exit;
+  if (ASTLeft[node] < 0) or (ASTKind[ASTLeft[node]] <> AN_IDENT) then Exit;
+  if ASTIVal[ASTLeft[node]] < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if not TypeIsOrdinal(tk) then Exit;
+  sz := TypeSlotSize(tk);
+  if (sz <> 1) and (sz <> 2) and (sz <> 4) and (sz <> 8) then Exit;
+  Result := CAsmImmValue(ASTRight[node], k);
+end;
+
+function CAsmIsPtrToArrDeref(node: Integer): Boolean;
+var q: Integer;
+begin
+  Result := False;
+  if CIsDecayedDerefOfPtrToArr(node) then begin Result := True; Exit; end;
+  if (node < 0) or (ASTKind[node] <> AN_BINOP) or (ASTIVal[node] <> Ord(tkPlus)) then Exit;
+  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) or
+     (ASTIVal[ASTRight[node]] <> 0) then Exit;
+  q := CCommaValue(ASTLeft[node]);
+  Result := (q >= 0) and (ASTKind[q] = AN_IDENT) and (ASTIVal[q] >= 0) and
+            (SymPtrElemArrLen[ASTIVal[q]] > 0);
+end;
+
 function CAsmExprIsPure(node: Integer): Boolean;
 begin
   Result := False;
@@ -9323,6 +11009,18 @@ begin
       Result := CAsmExprIsPure(ASTLeft[node]);
     AN_INDEX, AN_BINOP:
       Result := CAsmExprIsPure(ASTLeft[node]) and CAsmExprIsPure(ASTRight[node]);
+    { `(t = e, t)` with t a HIDDEN temp: how a cast to a pointer-to-array
+      `(char (*)[512])p` is built. Storing the same pure e into a temp nobody
+      else names, twice, is unobservable, so the pair is as pure as e. NetBSD's
+      fxsave/xsave/fnsave write exactly `"=m" (*(char (*)[N])area)`.
+      feature-c-inline-asm-x87-and-system-instructions }
+    AN_COMMA:
+      Result := (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_ASSIGN) and
+                (ASTLeft[ASTLeft[node]] >= 0) and (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
+                (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_IDENT) and
+                (ASTIVal[ASTRight[node]] = ASTIVal[ASTLeft[ASTLeft[node]]]) and
+                (ASTIVal[ASTRight[node]] >= 0) and (Syms[ASTIVal[ASTRight[node]]].Name = '') and
+                CAsmExprIsPure(ASTRight[ASTLeft[node]]);
   end;
 end;
 
@@ -9380,6 +11078,34 @@ end;
   Pascal local takes -- which is possible only because AllocVar assigns a C
   local its frame offset at DECLARATION time, so the offset is already final
   while the block is still being encoded. }
+{ x86 inline asm in a routine gcc may never emit -- a `static` one (the arch
+  header's static inline: rump's invpcid in x86/cpufunc.h) or one from an
+  imported header -- does not stop the compile on an instruction the encoder
+  lacks. AttEncodeOne records it in AttUnknown instead, and the routine is
+  POISONED with it, as the xtensa path does: a call to it refuses with this
+  text, and an uncalled one costs nothing. Anywhere else the routine is
+  compiled for use and the compile stops at the instruction, as before. }
+function CAsmMayPoison: Boolean;
+begin
+  Result := (CurProc >= 0) and (CHeaderMode or
+            ((CurProc < Length(ProcCStaticLink)) and ProcCStaticLink[CurProc]));
+end;
+
+{ After the template: True when it held an unknown instruction. The span it
+  encoded is dropped (its bytes, or its i386 lines) and the routine poisoned. }
+function CAsmX86Poisoned(spanStart: Integer): Boolean;
+begin
+  Result := AttUnknown <> '';
+  AttPoisonable := False;
+  if not Result then Exit;
+  if AttSinkText then InlineAsmLineCount := spanStart
+  else AsmBytesCount := spanStart;
+  if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+  ProcAsmPoison[CurProc] := 'its inline asm uses "' + AttUnknown + '", which the '
+      + TargetArchName(TargetArch) + ' assembler in pxx does not encode';
+  AttUnknown := '';
+end;
+
 function CAsmBuildBlock(isExt: Boolean): Integer;
 var
   i, j, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
@@ -9389,7 +11115,12 @@ var
   saveReg: array[0..MAX_CASM_OPERANDS-1] of Integer;
   saveCount: Integer;
   tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
-  head, tail, nd, idn, asn, sq, blk, val: Integer;
+  memReg: array[0..MAX_CASM_OPERANDS-1] of Boolean;   { "m" reached through an address register }
+  { an "m" dereference that shares an earlier operand's address register:
+    the leader's index, and this operand's byte displacement from it }
+  memLead, memDisp: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  memKi, memKj: Int64;
+  head, tail, nd, idn, asn, sq, blk, val, adr: Integer;
   cls, nm, rest: AnsiString;
   dummySize: Integer;
   immV: Int64;
@@ -9406,9 +11137,21 @@ begin
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
-    if CAsmOps[i].Cons = 'm' then
+    { A MEMORY OUTPUT ("=m", "+m") on x86-64: the template writes the object
+      itself, through its address in a register (or straight into a plain
+      local's slot), so there is nothing to copy back and "+" costs nothing
+      more than "=". Rump/NetBSD's atomic and xchg helpers and Nilix's
+      xchg write exactly this.
+      feature-c-inline-asm-plus-m-read-write-memory-operand }
+    if (CAsmOps[i].Cons = 'm') and (TargetArch <> TARGET_X86_64) then
       Error('C: inline asm memory OUTPUT constraint "' + CAsmOps[i].Raw
-            + '" is not supported');
+            + '" is not supported on this target');
+    if CAsmOps[i].Cons = 'm' then
+      for j := 0 to CAsmOpCount - 1 do
+        if CAsmOps[j].TiedTo = i then
+          Error('C: inline asm ties operand ' + AIntToStr(j) + ' to the memory'
+                + ' output "' + CAsmOps[i].Raw + '" -- use "+m" for an'
+                + ' object the template both reads and writes');
     { An output expression is written twice -- once as the store target here,
       and once more if a matching input names it -- so what has to be excluded
       is a SIDE EFFECT, not a shape. The rule used to be "a plain variable",
@@ -9450,6 +11193,12 @@ begin
     opReg[i] := -1;
     if CAsmOps[i].TiedTo >= 0 then Continue;
     fixed := CAsmFixedReg(CAsmOps[i].Cons);
+    if CAsmOps[i].FixReg <> '' then
+    begin
+      if not AsmRegNum(CAsmOps[i].FixReg, fixed, dummySize) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+              + CAsmOps[i].FixReg + '", which is not a register this backend knows');
+    end;
     if fixed >= 0 then
     begin
       if used[fixed] then
@@ -9555,6 +11304,78 @@ begin
     used[reg] := True;
   end;
 
+  { ---- an `"m"` INPUT that is a dereference: the object itself ----
+    `"m"(*(volatile char *)p)`, `"m"(a[i])`, `"m"(s->f)`: the asm must address
+    THAT object, not a copy of its value in a frame slot. For a load the copy
+    reads the same bytes; for clflush, invlpg, lgdt or a lock-prefixed RMW the
+    ADDRESS is the operand, and the copy flushed a stack temporary while the
+    page-table line the IOMMU reads stayed dirty (Gibux vtd.c). So the address
+    is computed into a pool register and %N is `(reg)`. On i386 too: its text
+    sink writes that as `[reg]` (AttRender386's AOP_MEMR arm), and before it
+    did, `addl %1, %0` / `movb $7, %0` on "m"(*p) wrote a copy silently.
+    bug-c-an-m-operand-that-is-a-dereference-binds-a-copy,
+    bug-c-an-m-operand-dereference-on-i386-still-binds-a-copy }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    memReg[i] := False;
+    if ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) and
+       (i >= CAsmOutCount) and
+       (CAsmOps[i].TiedTo < 0) and (CAsmOps[i].Cons = 'm') and
+       ((ASTKind[CAsmOps[i].Expr] = AN_DEREF) or (ASTKind[CAsmOps[i].Expr] = AN_INDEX) or
+        (ASTKind[CAsmOps[i].Expr] = AN_FIELD) or
+        { `*(char (*)[512])p` is the decay node `x + 0`, not an AN_DEREF: its
+          VALUE is the address, so the carrier copy handed the template the
+          pointer. NetBSD's frstor/fxrstor/xrstor restored FPU state from the
+          bytes of a pointer. bug-c-an-m-input-of-a-pointer-to-array-deref-reads-the-pointer }
+        CAsmIsPtrToArrDeref(CAsmOps[i].Expr)) then
+      memReg[i] := True;
+    { an "=m" OUTPUT on i386 keeps its copy, which is stored back after the
+      block and so writes the right object; it would otherwise cost one of
+      the five pool registers. }
+    if (TargetArch = TARGET_X86_64) and
+       (i < CAsmOutCount) and (CAsmOps[i].Cons = 'm') then
+    begin
+      memReg[i] := True;
+      if ASTKind[CAsmOps[i].Expr] = AN_IDENT then
+      begin
+        j := ASTIVal[CAsmOps[i].Expr];
+        tk := TypeSlotSize(IntToTypeKind(ASTTk[CAsmOps[i].Expr]));
+        if (j >= 0) and ((Syms[j].Kind = skLocal) or (Syms[j].Kind = skParam)) and
+           ((tk = 1) or (tk = 2) or (tk = 4) or (tk = 8)) then
+          memReg[i] := False;    { bound to the local's own slot below }
+      end;
+    end;
+  end;
+
+  { ---- "m" dereferences of ONE base at constant indexes share a register ----
+    `"m"(v[0]) ... "m"(v[8])` is nine objects at fixed distances from one
+    address. gcc writes them as `(%rax)`, `8(%rax)`, ... off one register; a
+    register each overflowed the nine-entry pool (test/casm_m_operand_pressure.c,
+    red since b3c5f711ea made a dereference bind its object). The follower
+    takes the leader's register and renders as `disp(reg)`. Only a plain
+    identifier base and a scalar element whose stride is its slot size are
+    grouped; anything else keeps a register of its own, as before.
+    bug-test-core-four-rows-still-red-2026-11-19 (casmmpress) }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    memLead[i] := -1;
+    memDisp[i] := 0;
+    if not memReg[i] or (i < CAsmOutCount) then Continue;
+    if not CAsmMemIdxKey(CAsmOps[i].Expr, memKi) then Continue;
+    for j := CAsmOutCount to i - 1 do
+      if memReg[j] and (memLead[j] < 0) and
+         CAsmMemIdxKey(CAsmOps[j].Expr, memKj) and
+         (ASTTk[CAsmOps[j].Expr] = ASTTk[CAsmOps[i].Expr]) and
+         (ASTIVal[ASTLeft[CAsmOps[j].Expr]] = ASTIVal[ASTLeft[CAsmOps[i].Expr]]) and
+         (Abs(memKi - memKj) < 65536) then
+      begin
+        memLead[i] := j;
+        memDisp[i] := Integer(memKi - memKj) *
+                      TypeSlotSize(IntToTypeKind(ASTTk[CAsmOps[i].Expr]));
+        Break;
+      end;
+  end;
+
   { ---- and the rest, pinned from the caller-saved pool ---- }
   { An `"m"` operand is DELIBERATELY not in this loop: it is encoded as a frame
     slot, so it consumes no pool entry. It used to take one to hold its address,
@@ -9564,7 +11385,8 @@ begin
   for i := 0 to CAsmOpCount - 1 do
   begin
     if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
-    if not CAsmClassWantsReg(CAsmOps[i].Cons) then Continue;
+    if memLead[i] >= 0 then Continue;
+    if not (CAsmClassWantsReg(CAsmOps[i].Cons) or memReg[i]) then Continue;
     while (poolNext < CAsmPoolCount) and used[CAsmPoolReg(poolNext)] do Inc(poolNext);
     if poolNext >= CAsmPoolCount then
       Error('C: inline asm needs more registers than this frontend can pin'
@@ -9575,6 +11397,8 @@ begin
   end;
   for i := 0 to CAsmOpCount - 1 do
     if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+  for i := 0 to CAsmOpCount - 1 do
+    if memLead[i] >= 0 then opReg[i] := opReg[memLead[i]];
 
   { ---- widths, and a local to carry each value ----
 
@@ -9606,6 +11430,19 @@ begin
         tmpSym[i] := j;
     end;
     opOwn[i] := tmpSym[i] < 0;
+    if memLead[i] >= 0 then
+    begin
+      { no carrier: the leader's carrier loads the shared address }
+      tmpSym[i] := -1;
+      opOwn[i] := False;
+      Continue;
+    end;
+    if memReg[i] then
+    begin
+      { the carrier holds the ADDRESS, so any width of object is fine }
+      tmpSym[i] := AllocVar('', tyPointer);
+      Continue;
+    end;
     { The width rule is about the CARRIER, not about the constraint. A value
       that has to be copied into a temporary must fit a register, because the
       copy is an ordinary assignment; an `"m"` bound straight to a variable's
@@ -9633,6 +11470,8 @@ begin
               + '" must be an integer constant');
       AttBindImmOperand(i, immV);
     end
+    else if memReg[i] then
+      AttBindOperand(i, ATTBIND_MEMREG, opReg[i], opSz[i], memDisp[i])
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i], 0)
     else
@@ -9642,13 +11481,22 @@ begin
   end;
 
   { ---- encode: loads, the template, stores ---- }
+  AttPoisonable := CAsmMayPoison;
+  AttUnknown := '';
   AttBeginBlock(startOff);
   { Saves first and restores last, so a callee-saved register is live as an
     operand for the whole block including the moves that fill and drain it. }
   for i := 0 to saveCount - 1 do
     AttEmitPushPop(saveReg[i], True);
+  for i := 0 to CAsmOutCount - 1 do
+    if memReg[i] then
+      AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
-    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+    if memLead[i] >= 0 then
+      { shares the leader's register, filled by the leader's move }
+    else if memReg[i] then
+      AttEmitFrameMove(opReg[i], TARGET_PTR_SIZE, Syms[tmpSym[i]].Offset, True)
+    else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
   AttEncodeTemplateInner(CAsmTemplate, isExt);
   for i := 0 to CAsmOutCount - 1 do
@@ -9657,11 +11505,17 @@ begin
   for i := saveCount - 1 downto 0 do
     AttEmitPushPop(saveReg[i], False);
   AttEndBlock(startOff, blkLen);
+  if CAsmX86Poisoned(startOff) then
+  begin
+    Result := AllocNode(AN_BLOCK); ASTLeft[Result] := -1;
+    Exit;
+  end;
 
   { ---- and the ordinary statements around it ---- }
   head := -1; tail := -1;
-  for i := CAsmOutCount to CAsmOpCount - 1 do
+  for i := 0 to CAsmOpCount - 1 do
   begin
+    if (i < CAsmOutCount) and not memReg[i] then Continue;
     { An `"m"` bound straight to the caller's own local has nothing to carry --
       the asm reads that variable's slot. Synthesising `x = x` here would be
       harmless and would also be a lie about what the block does. }
@@ -9670,6 +11524,13 @@ begin
     ASTIVal[idn] := tmpSym[i];
     ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
     val := CAsmOps[i].Expr;
+    if memReg[i] then
+    begin
+      adr := AllocNode(AN_ADDR);
+      ASTLeft[adr] := val;
+      ASTTk[adr] := Ord(tyPointer);
+      val := adr;
+    end;
     asn := AllocNode(AN_ASSIGN);
     ASTLeft[asn] := idn; ASTRight[asn] := val;
     ASTTk[asn] := ASTTk[idn];
@@ -9689,6 +11550,7 @@ begin
 
   for i := 0 to CAsmOutCount - 1 do
   begin
+    if CAsmOps[i].Cons = 'm' then Continue;   { the template wrote the object itself }
     idn := AllocNode(AN_IDENT);
     ASTIVal[idn] := tmpSym[i];
     ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
@@ -9706,8 +11568,459 @@ begin
   Result := blk;
 end;
 
+{$ifndef PXX_NO_AARCH64}
+{ GNU C inline asm on aarch64 (casm_a64.inc has the design). Operands are
+  pinned to x10..x15 -- caller-saved, and untouched by the codegen helpers
+  that fill and drain them (EmitLoadVarA64Dest/EmitStoreVarA64 use x0, x1,
+  x9, d0) -- the template is encoded now, and codegen moves the values. Every
+  operand gets a register of its own (a tied input shares its output's), so
+  "&" holds by construction, as on x86. }
+function CAsmBuildBlockA64: Integer;
+var
+  i, j, reg, tk, sz, poolNext, startOff, blkLen, b, first, nIn, nOut: Integer;
+  used: array[0..31] of Boolean;
+  opReg, tmpSym: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  rest, nm, cls: AnsiString;
+  is64: Boolean;
+  immV: Int64;
+  head, tail, nd, idn, asn, sq, blk: Integer;
+begin
+  for i := 0 to 31 do used[i] := False;
+  { clobbers: x0..x17 may be named (nothing lives in them across a
+    statement); a callee-saved register would need saving and is refused }
+  rest := CAsmClobRegs;
+  while rest <> '' do
+  begin
+    i := Pos(' ', rest);
+    if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
+    else begin nm := rest; rest := ''; end;
+    if nm = '' then Continue;
+    if not CA64RegOf(nm, reg, is64) then
+      Error('C: aarch64 inline asm clobbers "' + nm + '", which is not a general register');
+    if reg > 17 then
+      Error('C: aarch64 inline asm clobbers "' + nm + '", a callee-saved register, which'
+            + ' this frontend does not save around the block -- x0..x17 may be clobbered');
+    used[reg] := True;
+  end;
+
+  poolNext := 10;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    opReg[i] := -1;
+    tmpSym[i] := -1;
+    if CAsmOps[i].TiedTo >= 0 then Continue;
+    cls := CAsmOps[i].Cons;
+    if cls = 'i' then Continue;
+    if (cls <> 'r') and (cls <> 'g') and (cls <> 'rm') and (cls <> 'mr') then
+      Error('C: aarch64 inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
+            + ' -- this target reads "r" (and "g"/"rm" as a register) and the immediate "i"');
+    while (poolNext <= 15) and used[poolNext] do Inc(poolNext);
+    if poolNext > 15 then
+      Error('C: aarch64 inline asm needs more registers than this frontend pins'
+            + ' (x10..x15, less any clobbered)');
+    opReg[i] := poolNext;
+    used[poolNext] := True;
+  end;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+
+  { a temporary per register operand, the width of its C type }
+  CA64OpCount := CAsmOpCount;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    tk := ASTTk[CAsmOps[i].Expr];
+    sz := TypeSlotSize(IntToTypeKind(tk));
+    CA64OpName[i] := CAsmOps[i].SymName;
+    CA64OpSz[i] := sz;
+    CA64OpReg[i] := opReg[i];
+    CA64OpImm[i] := 0;
+    if opReg[i] < 0 then
+    begin
+      if not CAsmImmValue(CAsmOps[i].Expr, immV) then
+        Error('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant');
+      CA64OpImm[i] := immV;
+      Continue;
+    end;
+    if (IntToTypeKind(tk) = tyDouble) or (IntToTypeKind(tk) = tySingle) then
+      Error('C: aarch64 inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
+            + ' only general registers are supported');
+    if (sz <> 1) and (sz <> 2) and (sz <> 4) and (sz <> 8) then
+      Error('C: inline asm operand is ' + AIntToStr(sz) + ' bytes wide, which does not fit a register');
+    tmpSym[i] := AllocVar('', IntToTypeKind(tk));
+  end;
+
+  startOff := AsmBytesCount;
+  CA64EncodeTemplate(CAsmTemplate);
+  blkLen := AsmBytesCount - startOff;
+
+  { the bindings codegen replays: inputs (tied ones included: a "+r" input
+    loads the output's register), then outputs }
+  b := CAsmA64BlkCount;
+  Inc(CAsmA64BlkCount);
+  SetLength(CAsmA64BlkFirst, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkIn, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkOut, CAsmA64BlkCount);
+  first := CAsmA64BindCount;
+  nIn := 0; nOut := 0;
+  for j := 0 to 1 do
+    for i := 0 to CAsmOpCount - 1 do
+    begin
+      if opReg[i] < 0 then Continue;
+      if (j = 0) and (i < CAsmOutCount) then Continue;
+      if (j = 1) and (i >= CAsmOutCount) then Continue;
+      Inc(CAsmA64BindCount);
+      SetLength(CAsmA64BindSym, CAsmA64BindCount);
+      SetLength(CAsmA64BindReg, CAsmA64BindCount);
+      CAsmA64BindSym[CAsmA64BindCount - 1] := tmpSym[i];
+      CAsmA64BindReg[CAsmA64BindCount - 1] := opReg[i];
+      if j = 0 then Inc(nIn) else Inc(nOut);
+    end;
+  CAsmA64BlkFirst[b] := first;
+  CAsmA64BlkIn[b] := nIn;
+  CAsmA64BlkOut[b] := nOut;
+
+  { tmp = expr for each input, the block, expr = tmp for each output }
+  head := -1; tail := -1;
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+  begin
+    if tmpSym[i] < 0 then Continue;
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := CAsmOps[i].Expr;
+    ASTTk[asn] := ASTTk[idn];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    if head < 0 then head := sq else ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  nd := AllocNode(AN_ASM);
+  ASTLeft[nd] := startOff;
+  ASTRight[nd] := blkLen;
+  ASTIVal[nd] := b + 1;
+  sq := AllocNode(AN_SEQ);
+  ASTLeft[sq] := nd; ASTRight[sq] := -1;
+  if head < 0 then head := sq else ASTRight[tail] := sq;
+  tail := sq;
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := CAsmOps[i].Expr; ASTRight[asn] := idn;
+    ASTTk[asn] := ASTTk[CAsmOps[i].Expr];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;
+  Result := blk;
+end;
+{$endif}
+
+{ An operand the xtensa frontend cannot bind (an x86 "=m", a float, a
+  register variable it cannot honour, ...). In a `static` routine or an
+  imported header it POISONS the routine, as an unknown instruction does
+  below: gcc never expands an uncalled static inline, so it never checks that
+  asm's constraints either, and an x86 arch header's helpers stopped an xtensa
+  compile that never used them (Rainyday 0004, rump-pxx g20). Elsewhere the
+  compile stops with the message, as before.
+  bug-c-xtensa-an-unused-static-inline-with-x86-asm-operands-stops-the-compile }
+function CXtAsmRefuse(const msg: AnsiString): Integer;
+var blk: Integer;
+begin
+  Result := -1;
+  if not CAsmMayPoison then Error(msg);
+  if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+  ProcAsmPoison[CurProc] := 'its inline asm cannot be built for xtensa (' + msg + ')';
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := -1;
+  Result := blk;
+end;
+
+{ GNU C inline asm on xtensa. The split is aarch64's (casm_a64.inc) with one
+  difference: the template is not encoded here but kept as TEXT LINES in the
+  InlineAsmLine pool, the same pool a Pascal asm block on this target fills,
+  and the IR_ASM arm of ir_codegen_xtensa.inc replays them through
+  AsmXtensaProcessLine at final code positions. So an instruction the text
+  engine knows is available to both languages, and nothing is encoded twice.
+
+  Operands are pinned to a3..a6, a10, a11: caller-saved under both ABIs, and
+  untouched by EmitLoadVarXtensa/EmitStoreVarXtensa (a2, a8, a9) and by the
+  frame pointer (a7 windowed, a15 call0). Codegen loads each input through a2
+  into its register, replays the lines, and stores each output back through
+  a2. Every operand has a register of its own (a tied input shares its
+  output's), so "&" holds by construction.
+
+  What a kernel's arch headers need (Gibux, ESP32-S3): rsr/wsr/xsr by name or
+  dotted (rsr.ps), rsil, waiti, memw/isync/rsync/esync/dsync/extw/excw,
+  rur/wur threadptr, s32c1i with scompare1, l32ai/s32ri.
+  feature-c-xtensa-inline-asm-templates }
+function CAsmBuildBlockXtensa: Integer;
+const XT_POOL_N = 6;
+var
+  i, j, k, reg, tk, sz, poolNext, startOff, blkLen, b, first, nIn, nOut, num: Integer;
+  used: array[0..15] of Boolean;
+  pool: array[0..XT_POOL_N-1] of Integer;
+  opReg, tmpSym: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  opImm: array[0..MAX_CASM_OPERANDS-1] of Int64;
+  rest, nm, cls, s, line, tpl, bad: AnsiString;
+  head, tail, nd, idn, asn, sq, blk: Integer;
+begin
+  bad := '';
+  pool[0] := 3; pool[1] := 4; pool[2] := 5; pool[3] := 6; pool[4] := 10; pool[5] := 11;
+  for i := 0 to 15 do used[i] := False;
+  { clobbers: the scratch registers may be named; a0 (return address), a1
+    (sp) and the frame pointer may not, nor a call0 callee-saved one }
+  rest := CAsmClobRegs;
+  while rest <> '' do
+  begin
+    i := Pos(' ', rest);
+    if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
+    else begin nm := rest; rest := ''; end;
+    if nm = '' then Continue;
+    if CaseEqual(nm, 'sar') then Continue;     { no value lives in SAR across a statement }
+    if not AsmXtensaRegNum(nm, reg) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm clobbers "' + nm + '", which is not a general register'); Exit; end;
+    { a7 is the biased frame base and a15 the frame pointer on both ABIs
+      (EmitProcPrologue: `mov a15, a1` / `addi a7, a15, -N`); a12..a14 are
+      callee-saved under call0 and this prologue does not save them }
+    if (reg <= 1) or (reg = 7) or (reg = 15) or ((reg >= 12) and (XtensaABI = XTENSA_ABI_CALL0)) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm clobbers "' + nm + '", which this frontend does not'
+            + ' save around the block -- a2..a6 and a8..a11 may be clobbered'); Exit; end;
+    used[reg] := True;
+  end;
+
+  { register variables first, so the pool below works around them. Inputs
+    are loaded straight into their register by a load that touches nothing
+    else (EmitLoadVarOwnXtensa); outputs are stored back through a2, the one
+    bound to a2 first, by a store that uses a8 and a9 -- so an output may not
+    be bound to those two. feature-c-asm-register-variables }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    opReg[i] := -1;
+    if (CAsmOps[i].TiedTo >= 0) or (CAsmOps[i].FixReg = '') then Continue;
+    if not AsmXtensaRegNum(CAsmOps[i].FixReg, reg) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which is not a general register'); Exit; end;
+    if (reg < 2) or (reg = 7) or (reg >= 12) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '"; a register variable may name a2..a6 and a8..a11'); Exit; end;
+    if CAsmOps[i].IsOut and ((reg = 8) or (reg = 9)) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm output "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which this frontend uses to store outputs back;'
+            + ' an output register variable may name a2..a6, a10 or a11'); Exit; end;
+    if used[reg] then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is bound to "'
+            + CAsmOps[i].FixReg + '", which another operand or a clobber already uses'); Exit; end;
+    opReg[i] := reg;
+    used[reg] := True;
+  end;
+  poolNext := 0;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    tmpSym[i] := -1;
+    opImm[i] := 0;
+    if CAsmOps[i].TiedTo >= 0 then Continue;
+    if opReg[i] >= 0 then Continue;
+    cls := CAsmOps[i].Cons;
+    if (cls = 'i') or (cls = 'n') then
+    begin
+      if not CAsmImmValue(CAsmOps[i].Expr, opImm[i]) then
+        begin Result := CXtAsmRefuse('C: inline asm operand "' + CAsmOps[i].Raw + '" must be an integer constant'); Exit; end;
+      Continue;
+    end;
+    if (cls <> 'a') and (cls <> 'r') and (cls <> 'g') and (cls <> 'rm') and (cls <> 'mr') then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm constraint "' + CAsmOps[i].Raw + '" is not supported'
+            + ' -- this target reads "a"/"r" (and "g"/"rm" as a register) and the immediates "i"/"n"'); Exit; end;
+    while (poolNext < XT_POOL_N) and used[pool[poolNext]] do Inc(poolNext);
+    if poolNext >= XT_POOL_N then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm needs more registers than this frontend pins'
+            + ' (a3..a6, a10, a11, less any clobbered)'); Exit; end;
+    opReg[i] := pool[poolNext];
+    used[opReg[i]] := True;
+  end;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if opReg[i] < 0 then Continue;
+    tk := ASTTk[CAsmOps[i].Expr];
+    sz := TypeSlotSize(IntToTypeKind(tk));
+    if (IntToTypeKind(tk) = tyDouble) or (IntToTypeKind(tk) = tySingle) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand "' + CAsmOps[i].Raw + '" is floating point;'
+            + ' only address registers are supported'); Exit; end;
+    if (sz <> 1) and (sz <> 2) and (sz <> 4) then
+      begin Result := CXtAsmRefuse('C: xtensa inline asm operand is ' + AIntToStr(sz) + ' bytes wide,'
+            + ' which does not fit one address register'); Exit; end;
+    { a signed byte travels in a 32-bit temporary: the register then holds
+      it sign-extended, which the old load produced and the input load
+      (EmitLoadVarOwnXtensa) cannot do without a scratch register }
+    if CAsmOps[i].TiedTo >= 0 then
+      tmpSym[i] := tmpSym[CAsmOps[i].TiedTo]
+    else if (sz = 1) and TypeSigned(IntToTypeKind(tk)) then
+      tmpSym[i] := AllocVar('', tyInteger)
+    else
+      tmpSym[i] := AllocVar('', IntToTypeKind(tk));
+  end;
+
+  { the template: every %N / %[name] becomes its register or its value }
+  tpl := CAsmTemplate;
+  s := '';
+  i := 1;
+  while i <= Length(tpl) do
+  begin
+    if tpl[i] <> '%' then begin AppendChar(s, tpl[i]); Inc(i); Continue; end;
+    Inc(i);
+    if (i <= Length(tpl)) and (tpl[i] = '%') then begin AppendChar(s, '%'); Inc(i); Continue; end;
+    num := -1;
+    if (i <= Length(tpl)) and (tpl[i] = '[') then
+    begin
+      j := i + 1;
+      while (j <= Length(tpl)) and (tpl[j] <> ']') do Inc(j);
+      nm := Copy(tpl, i + 1, j - i - 1);
+      for k := 0 to CAsmOpCount - 1 do
+        if (CAsmOps[k].TiedTo < 0) and (CAsmOps[k].SymName = nm) then num := k;
+      if num < 0 then begin Result := CXtAsmRefuse('C: xtensa inline asm names operand [' + nm + '], which does not exist'); Exit; end;
+      i := j + 1;
+    end
+    else if (i <= Length(tpl)) and (tpl[i] >= '0') and (tpl[i] <= '9') then
+    begin
+      num := 0;
+      while (i <= Length(tpl)) and (tpl[i] >= '0') and (tpl[i] <= '9') do
+      begin
+        num := num * 10 + Ord(tpl[i]) - Ord('0');
+        Inc(i);
+      end;
+      if num >= CAsmOpCount then
+        begin Result := CXtAsmRefuse('C: xtensa inline asm uses %' + AIntToStr(num) + ', which is not an operand'); Exit; end;
+    end
+    else begin Result := CXtAsmRefuse('C: xtensa inline asm: operand modifiers are not supported'); Exit; end;
+    if opReg[num] < 0 then s := s + AIntToStr(opImm[num])
+    else s := s + 'a' + AIntToStr(opReg[num]);
+  end;
+  startOff := InlineAsmLineCount;
+  line := '';
+  i := 1;
+  while i <= Length(s) + 1 do
+  begin
+    if (i > Length(s)) or (s[i] = #10) or (s[i] = ';') then
+    begin
+      j := Pos('#', line);
+      if j > 0 then line := Copy(line, 1, j - 1);
+      line := AsmTextTrim(line);
+      if (line <> '') and (bad = '') and not AsmXtensaLineKnown(line) then bad := line;
+      if line <> '' then AsmAddInlineLine(line, 0, 0);
+      line := '';
+    end
+    else if (s[i] = #9) or (s[i] = #13) then AppendChar(line, ' ')
+    else AppendChar(line, s[i]);
+    Inc(i);
+  end;
+  blkLen := InlineAsmLineCount - startOff;
+  { An instruction the text engine lacks. In a `static` routine (the arch
+    header's static inline) or an imported header it POISONS the routine
+    instead: a call to it refuses with this text, and an uncalled one --
+    which gcc never emits, so never assembles -- costs nothing. Anywhere else
+    the routine is compiled for use and the compile stops now, naming the
+    line, rather than at codegen. }
+  if bad <> '' then
+  begin
+    InlineAsmLineCount := startOff;
+    if (CurProc >= 0) and (CHeaderMode or
+       ((CurProc < Length(ProcCStaticLink)) and ProcCStaticLink[CurProc])) then
+    begin
+      if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+      ProcAsmPoison[CurProc] := 'its inline asm uses "' + bad
+          + '", which the xtensa assembler in pxx does not encode';
+      blk := AllocNode(AN_BLOCK); ASTLeft[blk] := -1;
+      Result := blk;
+      Exit;
+    end;
+    Error('C: xtensa inline asm: "' + bad + '" is not an instruction the xtensa'
+          + ' assembler in pxx encodes');
+  end;
+
+  { the bindings codegen replays: inputs (tied ones included), then outputs }
+  b := CAsmA64BlkCount;
+  Inc(CAsmA64BlkCount);
+  SetLength(CAsmA64BlkFirst, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkIn, CAsmA64BlkCount);
+  SetLength(CAsmA64BlkOut, CAsmA64BlkCount);
+  first := CAsmA64BindCount;
+  nIn := 0; nOut := 0;
+  for j := 0 to 1 do
+    for i := 0 to CAsmOpCount - 1 do
+    begin
+      if opReg[i] < 0 then Continue;
+      if (j = 0) and (i < CAsmOutCount) then Continue;
+      if (j = 1) and (i >= CAsmOutCount) then Continue;
+      Inc(CAsmA64BindCount);
+      SetLength(CAsmA64BindSym, CAsmA64BindCount);
+      SetLength(CAsmA64BindReg, CAsmA64BindCount);
+      CAsmA64BindSym[CAsmA64BindCount - 1] := tmpSym[i];
+      CAsmA64BindReg[CAsmA64BindCount - 1] := opReg[i];
+      if j = 0 then Inc(nIn) else Inc(nOut);
+    end;
+  CAsmA64BlkFirst[b] := first;
+  CAsmA64BlkIn[b] := nIn;
+  CAsmA64BlkOut[b] := nOut;
+
+  { tmp = expr for each untied input, the block, expr = tmp for each output.
+    A tied input shares its output's temporary, which is loaded with the
+    output's current value -- what "+a" means. }
+  head := -1; tail := -1;
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+  begin
+    if opReg[i] < 0 then Continue;
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := CAsmOps[i].Expr;
+    ASTTk[asn] := ASTTk[idn];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    if head < 0 then head := sq else ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  nd := AllocNode(AN_ASM);
+  ASTLeft[nd] := startOff;
+  ASTRight[nd] := blkLen;
+  ASTIVal[nd] := b + 1;
+  sq := AllocNode(AN_SEQ);
+  ASTLeft[sq] := nd; ASTRight[sq] := -1;
+  if head < 0 then head := sq else ASTRight[tail] := sq;
+  tail := sq;
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := CAsmOps[i].Expr; ASTRight[asn] := idn;
+    ASTTk[asn] := ASTTk[CAsmOps[i].Expr];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq;
+    tail := sq;
+  end;
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;
+  Result := blk;
+end;
+
 procedure CWarnFuncScopeThreadLocal(sawStatic: Boolean);
-{ The sixth reason, and the only one that is not an answer from the allocator.
+{ SUPERSEDED IN PART 2026-11-14: a `static __thread` now gets real per-thread
+  storage (CAssignLocalThreadStorage), and the area-sizing objection below is
+  answered there by an all-or-nothing rollback to the old shared copy. What is
+  left here is the no-`static` Error. The history is kept as written.
+
+  The sixth reason, and the only one that is not an answer from the allocator.
 
   A `static __thread int t;` inside a function body gets ONE shared object,
   exactly like the other five degraded shapes -- but unlike them it said NOTHING
@@ -9781,24 +12094,58 @@ begin
        + 'Add `static`, or move the declaration to file scope');
     Exit;
   end;
-  if CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] then Exit;
-  CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] := True;
-  Warn('__thread at function scope: a thread-local declared inside a function '
-     + 'body never reaches the thread-local allocator at all -- the storage '
-     + 'class is consumed with the other block-scope specifiers -- so it is '
-     + 'not refused for a reason, it is simply never asked for. '
-     + 'File-scope scalars are the shape that gets real per-thread storage. '
-     + '— this declaration therefore gets ONE copy shared by every thread, not '
-     + 'one per thread, exactly as it did before thread-local storage existed. '
-     + 'Single-threaded code is unaffected; threaded code will read and write '
-     + 'another thread''s value with no further warning');
+  { `static __thread` is given real storage by CAssignLocalThreadStorage,
+    which warns itself, per reason, when it cannot. Until 2026-11-14 this
+    warned unconditionally (TLSREFUSE_FUNCSCOPE) and changed no storage. }
+end;
+
+procedure CAssignLocalThreadStorage;
+{ Real per-thread storage for a function-scope `static __thread`: every symbol
+  the declaration made (the variables and the once-guard of its initialiser)
+  gets a slot, or NONE does. The area-sizing worry recorded at
+  CWarnFuncScopeThreadLocal is answered by the rollback: when any of them
+  cannot be placed -- the area is full, the build installs no block, the
+  target has none -- every slot taken here is handed back and the declaration
+  keeps the ONE shared copy it always had, with the warning it always had. So
+  no program that compiled before stops compiling, and an all-or-nothing rule
+  means a variable never ends up per-thread behind a shared guard.
+  feature-c-a-function-scope-thread-local-gets-real-per-thread-storage }
+var i, savedUsed, reason: Integer; why: AnsiString; ok: Boolean;
+begin
+  savedUsed := TlsUserUsed;
+  ok := True;
+  why := '';
+  reason := TLSREFUSE_NONE;
+  for i := 0 to CLocalThreadSymCount - 1 do
+    if SymTlsOffset[CLocalThreadSyms[i]] < 0 then
+      if not TryAssignThreadVarStorage(CLocalThreadSyms[i], '__thread', why, reason) then
+      begin
+        ok := False;
+        Break;
+      end;
+  if not ok then
+  begin
+    for i := 0 to CLocalThreadSymCount - 1 do SymTlsOffset[CLocalThreadSyms[i]] := -1;
+    TlsUserUsed := savedUsed;
+    if (reason >= 0) and (reason <= TLSREFUSE_MAX) and (not CTlsWarnedReason[reason]) then
+    begin
+      CTlsWarnedReason[reason] := True;
+      Warn(why + ' (at function scope) — this declaration therefore gets ONE copy '
+         + 'shared by every thread, not one per thread. Single-threaded code is '
+         + 'unaffected; threaded code will read and write another thread''s value '
+         + 'with no further warning');
+    end;
+  end;
+  CLocalThreadSymCount := 0;
 end;
 
 function ParseCStatementAST: Integer;
-var node, exprNode, seq, seq2, blk: Integer;
+var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    asmGotoSym, asmGotoIdx, asmGotoIdn: Integer;   { asm goto: its hidden exit index (CAsmGotoRewrite) }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
+    bsMark: Integer;   { SymCount before a block-scope static declaration: CNoteBlockStatics }
     localSawExtern: Boolean;   { a block-scope `extern`, likewise -- the declaration is parsed and DISCARDED; see the arm below }
     externDepth: Integer;      { nesting while discarding that declaration }
 begin
@@ -9981,8 +12328,15 @@ begin
     if IsCTypeTok then
     begin
       CLocalStaticDecl := True;
+      CLocalThreadDecl := localSawThread;
+      CLocalThreadSymCount := 0;
+      bsMark := SymCount;
       Result := ParseCLocalDeclAST;
+      AllocMinAlign := 0;
       CLocalStaticDecl := False;
+      CNoteBlockStatics(bsMark);
+      CLocalThreadDecl := False;
+      if localSawThread then CAssignLocalThreadStorage;
       Exit;
     end;
   end;
@@ -9992,6 +12346,7 @@ begin
   begin
     CLocalStaticDecl := False;
     Result := ParseCLocalDeclAST;
+    AllocMinAlign := 0;
     Exit;
   end;
 
@@ -10032,6 +12387,16 @@ begin
     ASTSLen[node] := 1;   { C switch-case MARKER flag (distinct from a Pascal AN_CASE
                             statement, whose ASTRight is a branch chain) — the switch
                             lowering turns it into an IR_LABEL dispatch target. }
+    { gcc's case RANGE, `case LO ... HI:` (NetBSD: `case 'a' ... 'z':`). The
+      lexer gives `...` as three dots. HI rides as an AN_INT_LIT in ASTLeft,
+      which a plain marker leaves at -1; the dispatch scan tests both ends.
+      An empty range (LO > HI) matches nothing, as in gcc. }
+    if CurTok.Kind = tkDot then
+    begin
+      Next; Expect(tkDot, '...'); Expect(tkDot, '...');
+      ASTLeft[node] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTLeft[node]] := CEvalConstExpr;
+    end;
     Expect(tkColon, ':');
     Result := node;
     Exit;
@@ -10140,6 +12505,7 @@ begin
         CAsmOps[CAsmOpCount].Early := False;
         CAsmOps[CAsmOpCount].SymName := '';
         CAsmOps[CAsmOpCount].TiedTo := asmI;
+        CAsmOps[CAsmOpCount].FixReg := '';
         CAsmOps[CAsmOpCount].Expr := CloneAST(CAsmOps[asmI].Expr);
         Inc(CAsmOpCount);
         CAsmOps[asmI].IsInOut := False;
@@ -10152,8 +12518,37 @@ begin
       behind them: every path out of here either encodes the template or says
       which construct it could not. }
     if CAsmIsGoto then
-      Error('C: inline asm goto is not supported'
-            + ' — the jump out of the template would have no target');
+    begin
+      if TargetArch <> TARGET_X86_64 then
+        Error('C: inline asm goto is not supported on this target');
+      if CAsmOutCount > 0 then
+        Error('C: inline asm goto with outputs is not supported'
+              + ' — every jump out of the template would have to store them');
+      if CAsmGotoCount = 0 then
+        Error('C: inline asm goto names no labels');
+      if CAsmOpCount >= MAX_CASM_OPERANDS then
+        Error('C: inline asm goto has no operand left for its exit index');
+      { the hidden exit index: an int local, bound as an "m" input to its own
+        slot (no copy in or out). %l numbering is gcc's: labels follow every
+        operand the source wrote, so the hidden one goes after them in the
+        operand table and the template never names it by number. }
+      asmGotoSym := AllocVar('', tyInteger);
+      asmGotoIdx := CAsmOpCount;
+      asmGotoIdn := AllocNode(AN_IDENT);
+      ASTIVal[asmGotoIdn] := asmGotoSym;
+      ASTTk[asmGotoIdn] := Ord(tyInteger);
+      CAsmOps[CAsmOpCount].Cons := 'm';
+      CAsmOps[CAsmOpCount].Raw := 'm';
+      CAsmOps[CAsmOpCount].IsOut := False;
+      CAsmOps[CAsmOpCount].IsInOut := False;
+      CAsmOps[CAsmOpCount].Early := False;
+      CAsmOps[CAsmOpCount].SymName := '';
+      CAsmOps[CAsmOpCount].TiedTo := -1;
+      CAsmOps[CAsmOpCount].FixReg := '';
+      CAsmOps[CAsmOpCount].Expr := asmGotoIdn;
+      Inc(CAsmOpCount);
+      CAsmTemplate := CAsmGotoRewrite(CAsmTemplate, asmGotoIdx);
+    end;
     if not asmEmpty then
     begin
       CAsmRefuseUnsupported;
@@ -10164,6 +12559,18 @@ begin
       { x86-64 encodes bytes here; i386 renders the same parse as text lines for
         asmtext_386.inc (AttSinkText). Every other target has no reader for
         this syntax at all and says so. }
+      {$ifndef PXX_NO_AARCH64}
+      if TargetArch = TARGET_AARCH64 then
+      begin
+        Result := CAsmBuildBlockA64;
+        Exit;
+      end;
+      {$endif}
+      if TargetArch = TARGET_XTENSA then
+      begin
+        Result := CAsmBuildBlockXtensa;
+        Exit;
+      end;
       if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
       begin
         { inside a routine of an IMPORTED HEADER: accept and poison (see
@@ -10173,22 +12580,31 @@ begin
         begin
           if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
           ProcAsmPoison[CurProc] := 'its body holds C inline asm, which is only supported on'
-              + ' x86-64 and i386, not ' + TargetArchName(TargetArch);
+              + ' x86-64, i386, aarch64 and xtensa, not ' + TargetArchName(TargetArch);
           node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
           Result := node;
           Exit;
         end;
         Error('C: inline asm with a non-empty template is only supported on'
-              + ' x86-64 and i386, not ' + TargetArchName(TargetArch));
+              + ' x86-64, i386, aarch64 and xtensa, not ' + TargetArchName(TargetArch));
       end;
       if CAsmOpCount > 0 then
       begin
         Result := CAsmBuildBlock(asmSections > 0);
+        if CAsmIsGoto then Result := CAsmGotoDispatch(Result, asmGotoSym);
         Exit;
       end;
       AttSinkText := TargetArch = TARGET_I386;
       AttResetBindings;
+      AttPoisonable := CAsmMayPoison;
+      AttUnknown := '';
       AttEncodeTemplate(CAsmTemplate, asmSections > 0, asmStart, asmLen);
+      if CAsmX86Poisoned(asmStart) then
+      begin
+        node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+        Result := node;
+        Exit;
+      end;
       node := AllocNode(AN_ASM);
       ASTLeft[node] := asmStart;
       ASTRight[node] := asmLen;
@@ -10228,11 +12644,28 @@ begin
     end;
     if CurTok.Kind <> tkIdent then Error('expected label name after goto');
     node := AllocNode(AN_GOTO);
-    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
-    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    CLabelSpan(TokPos - 1, labOff, labLen);
+    ASTSOffset[node] := labOff;
+    ASTSLen[node] := labLen;
     Next;
     Eat(tkSemicolon);
     Result := node;
+    Exit;
+  end;
+
+  { `__label__ a, b;` -- GNU local labels (CLocalLabPush). Declares, emits
+    nothing. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__label__') then
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      CLocalLabPush(TokPos - 1);
+      Next;
+      if CurTok.Kind = tkComma then Next else Break;
+    end;
+    Expect(tkSemicolon, ';');
+    Result := -1;
     Exit;
   end;
 
@@ -10242,13 +12675,14 @@ begin
     { Register the label name so AN_LABEL/AN_GOTO resolve it (C labels are not
       pre-declared; the table is reset per function in ParseCSubroutine). }
     if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
-    GotoLabelNOff[GotoLabelCount] := Tokens[TokPos - 1].SOffset;
-    GotoLabelNLen[GotoLabelCount] := Tokens[TokPos - 1].SLen;
+    CLabelSpan(TokPos - 1, labOff, labLen);
+    GotoLabelNOff[GotoLabelCount] := labOff;
+    GotoLabelNLen[GotoLabelCount] := labLen;
     GotoLabelCodePos[GotoLabelCount] := -1;
     Inc(GotoLabelCount);
     node := AllocNode(AN_LABEL);
-    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
-    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    ASTSOffset[node] := labOff;
+    ASTSLen[node] := labLen;
     Next; Next;    { consume ident and colon }
     { C 6.8.1: a label PREFIXES a statement — they are ONE statement. Returning
       the label alone detached the following statement from an enclosing
@@ -10298,9 +12732,10 @@ begin
 end;
 
 function ParseCBlockAST: Integer;
-var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark, labMark: Integer;
 begin
   Expect(tkBegin, '{');
+  labMark := CLocalLabCount;
   { C block scope: an inner `int v` SHADOWS an outer v (FindSym's hash chain
     is newest-first, so the inner decl wins while in scope) and DIES at the
     closing brace — implemented by blanking the names of locals declared
@@ -10327,6 +12762,7 @@ begin
   end;
   Expect(tkEnd, '}');
   CTagLeaveBlock(tagMark);
+  CLocalLabCount := labMark;
   { End of scope: unhook this block's locals from their hash chains so name
     lookup can't bind them anymore. AST nodes already hold sym INDICES, which
     stay valid (codegen, DWARF); block-scope statics are skGlobal (BSS) and
@@ -10371,9 +12807,10 @@ end;
 
 function ParseCStmtExprAST: Integer;
 var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
-    prevStmt, valNode, comma: Integer;
+    prevStmt, valNode, comma, labMark, lq, lq2: Integer;
 begin
   Expect(tkBegin, '{');
+  labMark := CLocalLabCount;
   tagMark := CTagEnterBlock;
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
@@ -10399,6 +12836,29 @@ begin
   end;
   Expect(tkEnd, '}');
   CTagLeaveBlock(tagMark);
+  CLocalLabCount := labMark;
+  { A LABELLED last statement (`out: 1;`, the local-label idiom) arrives as
+    AN_BLOCK(SEQ(AN_LABEL, SEQ(expr))). Its value is the expression's, so the
+    label goes into the side-effect block and the expression stays the value. }
+  if (prevStmt >= 0) and (ASTKind[prevStmt] = AN_BLOCK) then
+  begin
+    lq := ASTLeft[prevStmt];
+    if (lq >= 0) and (ASTKind[lq] = AN_SEQ) and (ASTLeft[lq] >= 0) and
+       (ASTKind[ASTLeft[lq]] = AN_LABEL) then
+    begin
+      lq2 := ASTRight[lq];
+      if (lq2 >= 0) and (ASTKind[lq2] = AN_SEQ) and (ASTRight[lq2] = -1) and
+         not CNodeIsStatementKind(ASTLeft[lq2]) then
+      begin
+        seqNode := AllocNode(AN_SEQ);
+        ASTLeft[seqNode] := ASTLeft[lq];
+        if lastSeq = -1 then ASTLeft[blockNode] := seqNode
+        else ASTRight[lastSeq] := seqNode;
+        lastSeq := seqNode;
+        prevStmt := ASTLeft[lq2];
+      end;
+    end;
+  end;
   { last statement decides the value: an expression yields it; a structural
     statement makes the whole thing void — push it into the block too. }
   if CNodeIsStatementKind(prevStmt) then
@@ -10547,7 +13007,7 @@ begin
 end;
 
 function CBraceFlatIntInitCountAt(openIdx: Integer; allowFloat: Boolean): Integer;
-var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen, dIdx, subDepth: Integer; sawValue: Boolean;
 begin
   { Returns the element COUNT of a flat integer brace init = max index + 1,
     honouring `[k] =` array designators (C 6.7.8) so `{5, [2]=2, 3}` counts as
@@ -10557,12 +13017,26 @@ begin
   depth := 1;
   sawValue := False;
   ei := 0; maxSeen := -1;
+  subDepth := 0;
   j := openIdx + 1;
   while (depth > 0) and (j < TokCount) do
   begin
     case Tokens[j].Kind of
       tkBegin: begin Result := -1; Exit; end;   { nested aggregate -> not flat }
+      tkRBrack:
+        { closes a SUBSCRIPT opened mid-element (below); a designator's `]` is
+          stepped over by its own arm and never reaches here }
+        if subDepth > 0 then Dec(subDepth)
+        else begin Result := -1; Exit; end;
       tkLBrack:
+        if sawValue then
+          { MID-ELEMENT `[` is a subscript, not a designator: `offsetof(T,
+            n.y[1])` expands to `...->n.y[1]))`. Read as `[1] =` it moved the
+            running index, and `{ offsetof(T, n.y[1]), 7 }` counted 3
+            elements where gcc has 2. A designator only ever STARTS an
+            element. }
+          Inc(subDepth)
+        else
         begin
           { `[<int>] =` element designator repositions the running index. Only a
             literal index is understood here (the scanner can't fold consts). A
@@ -10738,11 +13212,20 @@ begin
 end;
 
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer;
-var j, depth: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
 begin
   Result := 0;
   depth := 1;
   sawValue := False;
+  { `[k] =` ARRAY DESIGNATORS move the running index (C 6.7.8p17), so the
+    count is the highest index written + 1, not the number of elements: st's
+    `colorname[] = { "black", ..., [255] = 0, "#cccccc", ... }` is 260 long
+    and was sized 20, so its default foreground/background/cursor colours
+    were past the end and st drew no text. CBraceFlatIntInitCountAt has the
+    same rule for flat int lists; this is the general counter's copy, folding
+    the index with the same helper. An index that does not fold leaves the
+    old element count. bug-c-a-designator-in-a-pointer-array-initialiser-is-not-counted }
+  ei := 0; maxSeen := -1;
   j := openIdx + 1;
   { Stop at end of the C SOURCE, not end of the token array. By the time a
     global initializer is counted the RTL may already be APPENDED to Tokens[],
@@ -10764,7 +13247,12 @@ begin
         begin
           if depth = 1 then
           begin
-            if sawValue then Inc(Result);
+            if sawValue then
+            begin
+              Inc(Result);
+              if ei > maxSeen then maxSeen := ei;
+              Inc(ei);
+            end;
             Dec(depth);
           end
           else
@@ -10773,14 +13261,33 @@ begin
       tkComma:
         if depth = 1 then
         begin
-          if sawValue then Inc(Result);
+          if sawValue then
+          begin
+            Inc(Result);
+            if ei > maxSeen then maxSeen := ei;
+            Inc(ei);
+          end;
           sawValue := False;
+        end;
+      tkLBrack:
+        if (depth = 1) and (not sawValue) then
+        begin
+          dIdx := CBraceDesignatorExprIdx(j + 1);
+          if (dIdx >= 0) and (CBraceDesignatorEnd + 1 < TokCount) and
+             (Tokens[CBraceDesignatorEnd + 1].Kind = tkAssign) then
+          begin
+            ei := dIdx;
+            j := CBraceDesignatorEnd + 1;   { land on '='; the loop's Inc(j) steps past it }
+          end
+          else
+            sawValue := True;
         end;
     else
       if depth = 1 then sawValue := True;
     end;
     Inc(j);
   end;
+  if (depth = 0) and (maxSeen + 1 > Result) then Result := maxSeen + 1;
   { An unterminated run is a REFUSAL, not a return value.
 
     This was `if depth <> 0 then Result := -1`, and it had detected the
@@ -11104,7 +13611,18 @@ begin
   end
   else
   begin
-    if not CTryBakeGlobalInit(asn) then CompileAST(asn);   { CStaticDataMode }
+    if not CTryBakeGlobalInit(asn) then
+    begin
+      CompileAST(asn);   { CStaticDataMode }
+      { a `__thread` array's element: store it into the init image too, so
+        new threads start with it (feature-c-thread-local-arrays) }
+      if CTlsArrayInitTarget(asn) then
+      begin
+        TlsArrToImage := True;
+        CompileAST(asn);
+        TlsArrToImage := False;
+      end;
+    end;
     ASTNodeCount := ASTArenaFloor;
   end;
 end;
@@ -11220,7 +13738,8 @@ end;
 { One record member: descend aggregates (braced = bounded, unbraced = elided
   flat fill), else a scalar leaf. }
 procedure CInitWalkMember(fi: Integer; emit: Boolean);
-var ndims, span0, eb, cons, ci2: Integer;
+var ndims, span0, eb, cons, ci2, es: Integer;
+    isFam: Boolean;
 begin
   if UFldIsArray[fi] and (UFldDynDepth[fi] = 0) then
   begin
@@ -11256,6 +13775,13 @@ begin
         if eb < 1 then eb := 1;
       end;
       cons := 0;
+      { a flexible array member `T v[]` has length 0: every element was
+        skipped as excess, and the object had no room for them (NetBSD
+        ioconf.c's cfiattrdata locator tables read back NULL). Only a static
+        object may initialise one (C99 6.7.2.1, gcc), so it is unbounded only
+        on the global paths, which also make the room (CGrowGlobalBytes). }
+      isFam := CInitFamOpen and (ndims = 1) and (UFldArrLen[fi] = 0);
+      if isFam then span0 := -1;
       if CurTok.Kind = tkBegin then
       begin
         Next;
@@ -11266,6 +13792,14 @@ begin
       else
         CInitWalkArray(UFldTk[fi], UFldRec_[fi], -1, fi, 0, ndims, span0, 0, eb,
                        False, emit, cons);
+      if isFam then
+      begin
+        if UFldTk[fi] = Ord(tyRecord) then es := RecSize(UFldRec_[fi])
+        else if UFldTk[fi] = Ord(tyPointer) then es := TARGET_PTR_SIZE
+        else es := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
+        if UFldOff_[fi] + cons * es > CInitFamMax then
+          CInitFamMax := UFldOff_[fi] + cons * es;
+      end;
     end;
     Dec(CInitPathDepth);
   end
@@ -11615,11 +14149,15 @@ begin
     TokPos := CScalInitTok[i]; Next;   { CurTok = first expression token }
     sTarget := AllocNode(AN_IDENT);
     ASTIVal[sTarget] := CScalInitSym[i];
-    ASTTk[sTarget] := Ord(tyPointer);
+    { a pointer, or (feature-c-int128-and-attribute-mode) an __int128 }
+    if TypeIsInt128(Syms[CScalInitSym[i]].TypeKind) then
+      ASTTk[sTarget] := Ord(Syms[CScalInitSym[i]].TypeKind)
+    else
+      ASTTk[sTarget] := Ord(tyPointer);
     sExpr := ParseCExpr;
     sAsn := AllocNode(AN_ASSIGN);
     ASTLeft[sAsn] := sTarget; ASTRight[sAsn] := sExpr;
-    ASTTk[sAsn] := Ord(tyPointer);
+    ASTTk[sAsn] := ASTTk[sTarget];
     if not CTryBakeGlobalInit(sAsn) then CompileAST(sAsn);   { CStaticDataMode }
     ASTNodeCount := ASTArenaFloor;
   end;
@@ -11655,7 +14193,11 @@ begin
                      True, True, cons);
     end
     else
+    begin
+      CInitFamOpen := True;
       CInitWalkRecord(CAggInitRec[i] - REC_UCLASS_BASE, True, True);
+      CInitFamOpen := False;
+    end;
   end;
   TokPos := savedIdx; Next;
 end;
@@ -11797,7 +14339,7 @@ begin
 end;
 
 
-procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
+procedure CApplyThreadLocalStorage(idx: Integer; sawThread, hasInit: Boolean);
 { Give one `__thread` / `_Thread_local` global its per-thread slot, or leave it
   on the shared storage it has today and say why.
 
@@ -11865,6 +14407,29 @@ var why: AnsiString; reason: Integer;
 begin
   if not sawThread then Exit;
   if idx < 0 then Exit;
+  { AN x86-64 OBJECT GETS REAL ELF TLS. There is no pxx entry point to install
+    pxx's gs block (TLSREFUSE_NOINSTALL), but the program that links the object
+    has an ELF libc or kernel that sets fs, and gcc's own objects reach their
+    `__thread` through it. The variable becomes its own .tdata.<name> section,
+    so whatever links it gives each thread a copy of its bytes. AN INITIALISER
+    MUST THEN BE IN THOSE BYTES: under CStaticDataMode it is baked; otherwise
+    it would be a store in the init thunk that only the main thread's copy
+    sees, so such a declaration keeps the shared-copy degradation below.
+    rump's curlwp is `__thread`: shared, a second thread's
+    KASSERT(curlwp == NULL) panicked at boot.
+    feature-c-thread-local-in-x86-64-objects }
+  { ONLY UNDER --system-libs: the object is then for a host libc's link,
+    whose loader sets fs. pxx's own --link has no PT_TLS and no TPOFF/GOTTPOFF
+    resolution, and crtl's --threadsafe runtime object has a `static
+    __thread` -- that link failed on ".tdata.pxx_key_val" until this
+    condition. Without --system-libs a __thread keeps the degraded shared copy. }
+  if EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_X86_64) and
+     CUseSystemLibs and CProgramMode and (CStaticDataMode or not hasInit) then
+  begin
+    SymElfTls[idx] := True;
+    ElfTlsUsed := True;
+    Exit;
+  end;
   if TryAssignThreadVarStorage(idx, '__thread', why, reason) then Exit;
 
   { THE ONE REASON THE PROGRAMMER CAN FIX IS THE ONE THAT STOPS. `why` already
@@ -11889,6 +14454,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     gFpNDims, gFpDi: Integer;
+    gFpPtrElemSig: Integer;   { `ret (**name)(..)`: the POINTEE's call signature }
     gFpDims: array[0..7] of Integer;
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok, paDeferTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
@@ -11904,16 +14470,24 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
     gNameTok: Integer;    { token index of THIS declarator's name }
-    gHadStar: Boolean;    { the first declarator's pointer came from a LITERAL star }
+    gHadStar: Boolean;
+    gBaseConst: Boolean;  { the declaration's base type is const (CTypeBaseConst) -- SymCConstObj }    { the first declarator's pointer came from a LITERAL star }
     gScalarTk, gFirstTk: TTypeKind;
     gScalarRec, gFirstRec, gFirstPtrDepth, gFirstElemTk, gFirstElemRec,
     gFirstPtrBaseTk, gFirstPtrBaseRec, gFirstPtrElemSig: Integer;
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
     gParenName: Boolean;  { THIS declarator's name is in redundant parens }
+    gParenPtrArr: Boolean;  { THIS declarator is `(*name[N])[M]`, see CParenPtrArrEnd }
+    gTdArrLen0, gTdNDims0: Integer; gTdDims0: array[0..MAX_ARR_DIMS - 1] of Integer;
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
     declTypeTok, gAlign: Integer;   { the type's first token; this declarator's aligned(N) }
+    famTok: Integer;
     gPreScanInit: Boolean;  { the flat pointer-array pre-scan consumed `= {..}` before allocation }
+    gSecPlace: Boolean;     { __attribute__((section)) placed this global (CApplyGlobalSection) }
+    gCastK, gCastD: Integer; { the end of a `(T)` cast in front of a function name }
+    gHadInit: Boolean;       { the function-pointer declarator has `= ...` }
 begin
+  gHadInit := False;
   { PXXDBG=c.staticdata turns CStaticDataMode on for a whole test run, which
     is how the C corpus exercises the baker without a flag on every row. }
   if (not CStaticDataMode) and PxxDbgEnabled('c.staticdata') then CStaticDataMode := True;
@@ -11925,6 +14499,7 @@ begin
   declSawExtern := CDeclSawExtern(TokPos - 1);
   declSawStatic := CDeclSawStatic(TokPos - 1);
   declSawThread := CDeclSawThreadLocal(TokPos - 1);
+  CDeclLeaveParenPtrArr := True;
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
@@ -11932,6 +14507,9 @@ begin
     ParseCDeclType, for the pointee stamp of `mat4 *g` / `mat4 *g[2]` }
   gTdNDims := CTypeTypedefNDims;
   for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims[gTdDi] := CTypeTypedefDims[gTdDi];
+  gParenPtrArr := False;
+  gTdArrLen0 := tdArrLen; gTdNDims0 := gTdNDims;
+  for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims0[gTdDi] := gTdDims[gTdDi];
   { POINTER-TO-ARRAY `elem (*name)[N]` at FILE SCOPE. Captured HERE, beside the
     other CType* reads, for the reason ParseCLocalDeclAST states at its own
     copy: an initializer can contain a cast, a cast re-runs ParseCDeclType, and
@@ -11993,6 +14571,7 @@ begin
       end;
     end;
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
+    gFpPtrElemSig := CTypePtrElemProcSig;
     wasArr := (CTypeFnPtrArrLen >= -1);
     { `(*h[R][C])(..)`: every dimension, taken now -- an initialiser's casts
       re-enter ParseCDeclType and reset the globals (Gibux irq.c) }
@@ -12001,6 +14580,7 @@ begin
       if gFpDi <= 7 then gFpDims[gFpDi] := CTypeFnPtrDims[gFpDi];
     nArrElems := 0;
     paDeferTok := -1;
+    gHadInit := CurTok.Kind = tkAssign;
     if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
     begin
       Next; Next;                        { consume assign and opening brace }
@@ -12106,6 +14686,34 @@ begin
         the pointer stayed 0 and calling it SIGSEGV'd). }
       Next;
       initStartTok := TokPos - 1;         { the expression, for paDeferTok below }
+      { `= (void *)nullop;` / `= (fn_t)f;` -- a CAST in front of the function
+        name is the same address. It fell to the skip below and the pointer
+        stayed 0: rump's `rump_proc_vfs_init = (void *)nullop` was nil and the
+        first lwproc_newproc called through it. Taken only when a function
+        name (optionally `&`) and the end of the declarator follow the `)`, so
+        `(f)(x)` or `(void *)f + 1` still reach the skip.
+        bug-c-a-cast-function-name-initialiser-of-a-function-pointer-global-is-dropped }
+      if CurTok.Kind = tkLParen then
+      begin
+        gCastK := TokPos; gCastD := 1;
+        while (gCastK < TokCount) and (gCastD > 0) and (Tokens[gCastK].Kind <> tkSemicolon) do
+        begin
+          if Tokens[gCastK].Kind = tkLParen then Inc(gCastD)
+          else if Tokens[gCastK].Kind = tkRParen then Dec(gCastD);
+          Inc(gCastK);
+        end;
+        if (gCastD = 0) and (gCastK + 2 < TokCount) then
+        begin
+          if Tokens[gCastK].Kind = tkAmp then Inc(gCastK);
+          if (Tokens[gCastK].Kind = tkIdent) and
+             ((Tokens[gCastK + 1].Kind = tkSemicolon) or (Tokens[gCastK + 1].Kind = tkComma)) then
+          begin
+            gCastD := TokPos - 1;              { the '(' -- rewind point }
+            while TokPos - 1 < gCastK do Next;
+            if FindProc(CurTok.SVal) < 0 then begin TokPos := gCastD; Next; end;
+          end;
+        end;
+      end;
       if CurTok.Kind = tkAmp then Next;   { optional `&` before the function name }
       if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
       begin
@@ -12137,6 +14745,10 @@ begin
           pointer keeps the old skip: out of this ticket's scope.
           bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
         if (not wasArr) and (gPaLen > 0) then paDeferTok := initStartTok;
+        { A pointer TO a function pointer (`int (**ops)(void *) = vec + 1;`,
+          `= &vec[1]`) is a plain data pointer and replays the same way; it
+          stayed nil. bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+        if (not wasArr) and (procIdx < 0) and (gFpPtrElemSig >= 0) then paDeferTok := initStartTok;
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
       end;
     end;
@@ -12211,7 +14823,14 @@ begin
       function-pointer global needs to be linkable is decided here; nothing
       about it made it invisible except which branch registered it. }
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
-    CApplyThreadLocalStorage(idx, declSawThread);
+    { `extern T x __attribute__((weak));` -- at file scope or hoisted from a
+      block -- is an OPTIONAL reference: WEAK undefined, 0 when nothing defines
+      it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
+      bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
+    if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
+    if (idx >= 0) and (CDeclVisibility(declTypeTok) <> 0) then SymCVis[idx] := CDeclVisibility(declTypeTok);
+    CApplyThreadLocalStorage(idx, declSawThread, gHadInit);
+    if (idx >= 0) and gHadInit then SymCHasInit[idx] := True;
     if (idx >= 0) and wasArr and (gFpNDims >= 2) then
     begin
       SymArrNDims[idx] := gFpNDims;
@@ -12224,9 +14843,17 @@ begin
     end;
     { its initialiser (already consumed above) is baked into .data -- see the
       same call in the main declarator path below }
-    if CStaticDataMode and ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
-       (not declSawThread) and (TargetArch = TARGET_X86_64) and
-       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+    if (idx >= 0) then CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), False);
+    if (idx >= 0) and SymElfTls[idx] and not declSawExtern then
+      CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
+    { a weak definition too: see the main declarator path below }
+    if (CStaticDataMode or ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and
+                            ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)))) and
+       ((nArrElems > 0) or (paDeferTok >= 0)) and (idx >= 0) and
+       ((not declSawThread) or SymElfTls[idx]) and
+       ((TargetArch = TARGET_X86_64) or EspFreestandingObj or
+        ((TargetArch = TARGET_I386) and SymObjDataWeak[idx] and EmitObjMode)) and
+       (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     if idx >= 0 then
     begin
@@ -12238,6 +14865,16 @@ begin
       if wasArr then
       begin
         if procIdx >= 0 then SymElemProcSig[idx] := procIdx;
+      end
+      else if (procIdx < 0) and (gFpPtrElemSig >= 0) then
+      begin
+        { `extern int (**ops)(void *);` (NetBSD's vnode op vector): a pointer TO a
+          function pointer. The local declarator path already published the
+          pointee's signature; the global one dropped it, so `(*ops[i])(v)` and
+          `(*ops)(v)` had no callee -- "expected ')'" inside any parentheses.
+          bug-c-a-global-pointer-to-function-pointer-has-no-callee }
+        SetSymPointerType(idx, tyPointer, REC_NONE, 1, Ord(tyPointer), REC_NONE);
+        SymElemProcSig[idx] := gFpPtrElemSig;
       end
       else
       begin
@@ -12316,6 +14953,7 @@ begin
     loop top from its own stars. A pointer from a TYPEDEF (no literal star) is
     the whole type and applies to every sibling. }
   gHadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
+  gBaseConst := CTypeBaseConst;
   gFirstTk := baseTk; gFirstRec := recId;
   gFirstPtrDepth := CTypePtrDepth; gFirstElemTk := CTypeElemTk;
   gFirstElemRec := CTypeElemRec; gFirstPtrBaseTk := CTypePtrBaseTk;
@@ -12334,8 +14972,14 @@ begin
       IRLowerAddress(int-literal) -> "Unsupported linear node" (tcc tccgen.c).
       The stars keep the base pointer depth (uniform declarators, the common case
       and all of tcc's `Sym *a, *b`). }
+    { ...and the `const` after each star, as ParseCDeclType skips it for the
+      first declarator. Left in, `extern T * const a, * const b;` stopped here
+      at `const` and `b` came out DEFINED, not extern (4 bytes of .bss, and a
+      rump link's `multiple definition`); a local or a member of that shape
+      lost its value. Every star loop in this file skips it now.
+      bug-c-a-later-declarators-const-after-the-star-was-not-skipped }
     gStars := 0;
-    while CurTok.Kind = tkStar do begin Next; Inc(gStars); end;
+    while CurTok.Kind = tkStar do begin Next; Inc(gStars); while CurTok.Kind = tkConst do Next; end;
     if not gFirstDecl then
     begin
       if gStars > 0 then
@@ -12362,9 +15006,34 @@ begin
         CTypePtrBaseRec := gFirstPtrBaseRec; CTypePtrElemProcSig := gFirstPtrElemSig;
       end;
     end;
+    if gParenPtrArr then
+    begin
+      { the previous declarator borrowed the typedef-dims slots }
+      tdArrLen := gTdArrLen0; gTdNDims := gTdNDims0;
+      for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims[gTdDi] := gTdDims0[gTdDi];
+      gParenPtrArr := False;
+    end;
+    if (CurTok.Kind = tkLParen) and (gStars = 0) and
+       not (gFirstDecl and (baseTk = tyPointer)) and (CParenPtrArrEnd(TokPos - 1) >= 0) then
+    begin
+      { `T (*name[N])[M]`: an array of pointers to T[M], read as the typedef
+        spelling `vecM *name[N]` -- the local path's twin, see CParenPtrArrEnd }
+      Next; Next;                    { '(' '*' }
+      gParenName := True;
+      gParenPtrArr := True;
+      gStars := 1;
+      baseTk := tyPointer; recId := gScalarRec;
+      CTypePtrDepth := 1;
+      CTypePtrBaseTk := Ord(gScalarTk); CTypePtrBaseRec := gScalarRec;
+      CTypeElemTk := Ord(gScalarTk); CTypeElemRec := gScalarRec;
+      CTypePtrElemProcSig := -1;
+    end
+    else
+    begin
     { `T *(name[N])`: the parens are redundant -- see CParenDeclNameEnd. }
     gParenName := (CurTok.Kind = tkLParen) and (CParenDeclNameEnd(TokPos - 1) >= 0);
     if gParenName then Next;
+    end;
     if CurTok.Kind <> tkIdent then Break;
     gNameTok := TokPos - 1;
     name := CurTok.SVal; Next;
@@ -12392,6 +15061,7 @@ begin
       if dimCount = 1 then arrLen := dimVal;
     end;
     if gParenName then Expect(tkRParen, ')');
+    if gParenPtrArr then tdArrLen := CReadPtrArrPointeeDims(gTdNDims, gTdDims);
     { Array typedef inherent dim folds UNDER any declarator dims: `v4 g` -> [4],
       `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init).
 
@@ -12579,12 +15249,13 @@ begin
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
         end
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
-                (baseTk = tyRecord) then
+                ((baseTk = tyRecord) or TypeIsInt128(baseTk)) then
         begin
           { unsized `T x[] = {...}`: size by elements consumed under brace
             elision (a flat 63-scalar list of 7-leaf structs = 9 elements),
-            not by top-level commas. }
-          if recId >= REC_UCLASS_BASE then
+            not by top-level commas. An __int128 element is one leaf, so its
+            top-level count is the answer (feature-c-int128-and-attribute-mode). }
+          if (baseTk = tyRecord) and (recId >= REC_UCLASS_BASE) then
             flatInitCount := CInitCountRecordArrayAt(TokPos, recId)
           else
             flatInitCount := CBraceTopLevelInitCountAt(TokPos);
@@ -12672,13 +15343,50 @@ begin
     else if (baseTk = tyRecord) and (gStars = 0) then
       CGrowGlobalRecord(idx, recId, gAlign);
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
-    CApplyThreadLocalStorage(idx, declSawThread);
+    { `extern T x __attribute__((weak));` -- at file scope or hoisted from a
+      block -- is an OPTIONAL reference: WEAK undefined, 0 when nothing defines
+      it (NetBSD: `__stop_link_set_*`). It was a strong one, and the link failed.
+      bug-c-a-weak-extern-object-is-a-strong-undefined-symbol }
+    if (idx >= 0) and CDeclSawWeak(declTypeTok) then SymObjDataWeak[idx] := True;
+    if (idx >= 0) and (CDeclVisibility(declTypeTok) <> 0) then SymCVis[idx] := CDeclVisibility(declTypeTok);
+    CApplyThreadLocalStorage(idx, declSawThread,
+                             (CurTok.Kind = tkAssign) or gPreScanInit);
+    if (idx >= 0) and ((CurTok.Kind = tkAssign) or gPreScanInit) then SymCHasInit[idx] := True;
+    { the object itself is const: a const base, no star of its own, and not a
+      pointer from the first declarator or a typedef (`const char *a, b[]`
+      leaves b unmarked: conservative) -- SymCConstObj }
+    if (idx >= 0) and gBaseConst and (gStars = 0) and (gFirstTk <> tyPointer) then
+      SymCConstObj[idx] := True;
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
-    if CStaticDataMode and ((CurTok.Kind = tkAssign) or gPreScanInit) and (idx >= 0) and
-       (not declSawThread) and (TargetArch = TARGET_X86_64) and
-       (not EmitSharedMode) and (declSymIsNew or not wasArr) then
+    gSecPlace := CApplyGlobalSection(idx, CDeclSectionName(declTypeTok), declSawExtern);
+    { an ELF TLS definition is its own .tdata.<name> section, PROGBITS so a
+      baked initialiser is the image every thread's copy starts from }
+    if (idx >= 0) and SymElfTls[idx] and not declSawExtern then
+      gSecPlace := CApplyGlobalSection(idx, '.tdata.' + Syms[idx].Name, False);
+    { A section("name") global on an x86-64 object is .data even without
+      static data: in .bss its section would be NOBITS, and ld puts a NOBITS
+      input in an output section of its own, apart from gcc's PROGBITS one of
+      the same name -- a link set mixing the two lost entries. Its initialiser
+      may still be a store in the init thunk; the bytes are the section's.
+      feature-c-section-attribute-on-x86-64-objects }
+{ A WEAK DATA DEFINITION is baked into .data in an x86-64 object even
+      without CStaticDataMode. Its initialiser used to be a store in the
+      object's start-up code, and that store goes through the SYMBOL: when
+      another object's strong definition wins the link, the weak object's
+      start-up code still wrote its own value into the winner (gcc prints
+      `1 1 40`, pxx printed `1 1 4`). As bytes in the weak copy, the value
+      is simply discarded with that copy.
+      bug-c-weak-data-references-bind-locally-and-skip-the-got }
+    if (CStaticDataMode or (gSecPlace and EmitObjMode and (TargetArch = TARGET_X86_64)) or
+        ((idx >= 0) and SymObjDataWeak[idx] and EmitObjMode and
+         ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)))) and
+       ((CurTok.Kind = tkAssign) or gPreScanInit or gSecPlace) and (idx >= 0) and
+       ((not declSawThread) or SymElfTls[idx]) and
+       ((TargetArch = TARGET_X86_64) or EspFreestandingObj or
+        ((TargetArch = TARGET_I386) and SymObjDataWeak[idx] and EmitObjMode)) and
+       (not EmitSharedMode) then
       CPlaceGlobalInData(idx, gAlign);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
@@ -12810,6 +15518,30 @@ begin
       recBase := -1;
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
+      { A scalar __int128 global: replay `g = <expr>` at program start through
+        the ordinary expression path, so the value is computed in 128 bits.
+        Folding it here (CEvalConstExpr) is 64-bit, which would sign-extend
+        `= 0xFFFFFFFFFFFFFFFFull` and lose `= (unsigned __int128)1 << 70`.
+        Not baked into .data (CTryBakeGlobalInit refuses a slot wider than 8).
+        feature-c-int128-and-attribute-mode }
+      if (not wasArr) and (idx >= 0) and TypeIsInt128(baseTk) then
+        CDeferScalarPtrInitSkip(idx, initStartTok)
+      else if (CurTok.Kind = tkBegin) and wasArr and (idx >= 0) and TypeIsInt128(baseTk) then
+      begin
+        { ...and an ARRAY of them goes to the recursive initializer walker, as
+          an array of structs does: each element replays as `a[i] = <expr>`.
+          The ordinal array paths below fold every element to 64 bits, and
+          without this the initializer was skipped and the array left zero. }
+        EnsureCAggInitCapacity(CAggInitCount);
+        CAggInitSym[CAggInitCount] := idx;
+        CAggInitTok[CAggInitCount] := TokPos - 1;
+        CAggInitRec[CAggInitCount] := REC_NONE;
+        CAggInitLen[CAggInitCount] := arrLen;
+        CAggInitIsArr[CAggInitCount] := True;
+        Inc(CAggInitCount);
+        SkipBraceBlock;
+      end
+      else
       if (CurTok.Kind = tkBegin) and wasArr and (dimCount >= 2) and
          (baseTk <> tyRecord) and
          (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk) or (baseTk = tyPointer)) and
@@ -12982,6 +15714,21 @@ begin
           CAggInitLen[CAggInitCount] := 1;
           CAggInitIsArr[CAggInitCount] := False;
           Inc(CAggInitCount);
+        end;
+        if CRecEndsInFam(recId - REC_UCLASS_BASE) then
+        begin
+          { measure the initialised flexible array member with a dry walk, and
+            give the object its full extent now, while nothing has read its
+            offset (bug-c-an-initialised-flexible-array-member-is-dropped) }
+          famTok := TokPos - 1;
+          Next;
+          CInitPathDepth := 0;
+          CInitFamMax := 0;
+          CInitFamOpen := True;
+          CInitWalkRecord(recId - REC_UCLASS_BASE, True, False);
+          CInitFamOpen := False;
+          TokPos := famTok; Next;
+          CGrowGlobalBytes(idx, CInitFamMax, gAlign);
         end;
         SkipBraceBlock;
         while clWrap > 0 do begin Eat(tkRParen); Dec(clWrap); end;   { close a stripped compound-literal wrapper }
@@ -13336,9 +16083,12 @@ function CTopLevelIsFunc: Boolean;
 var savedPos, pe: Integer; hadName: Boolean;
 begin
   savedPos := TokPos - 1;          { index of the current token }
+  CDeclLeaveParenPtrArr := True;   { `T (*name[N])[M]` is a variable: see CParenPtrArrEnd }
   ParseCDeclType;
   if CTypeFnRetIsFunc then
     Result := True
+  else if CParenPtrArrEnd(TokPos - 1) >= 0 then
+    Result := False
   else
   begin
     hadName := CurTok.Kind = tkIdent;
@@ -13468,6 +16218,81 @@ begin
   else
     Error('EmitCReturnZeroStub: unsupported target');
   end;
+end;
+
+{ vfork(2) ON XTENSA, AS A FRAMELESS BODY -- crtl's C vfork() is fork() there
+  and anywhere else. A vfork child shares the parent's memory and stack and
+  RETURNS INTO THE CALLER; the parent resumes, later, inside this body. So the
+  body may own no stack frame: a C wrapper's frame (windowed `entry`) sits
+  below the caller's sp, the child's next calls overwrite it, and the parent's
+  return through it -- retw, a window underflow from that very area -- reads
+  what the child left. This is uClibc's xtensa vfork.S, hand-encoded:
+    WINDOWED: no `entry`. The body runs in the CALLER's window, where call8 left
+      the return address in a8 (call-size in its top two bits) and expects the
+      result in a10. a2..a7 are the caller's and must survive, so a2..a6 park in
+      a11..a15 (a call8 callee may clobber a8..a15) around the syscall; the
+      return is retw's arithmetic done by hand: a8's low 30 bits under the
+      current PC's top 2 (taken from a call0 to the next word), then jx.
+    CALL0: every register the syscall touches is caller-saved; `ret` reads only
+      a0, which no stack holds.
+  clone(CLONE_VM|CLONE_VFORK|SIGCHLD = 0x4111, stack 0 = the same sp, ptid,
+  tls, ctid 0) -- xtensa's argument order, syscall 116; arguments in a6 a3 a4
+  a5 a8. Gibux (no MMU) has vfork and no fork; Linux and qemu have both.
+  feature-crtl-a-real-vfork-on-xtensa }
+procedure EmitCVforkStub;
+var vIdx, pad: Integer;
+    pn: array[0..0] of AnsiString; pt: array[0..0] of TTypeKind;
+begin
+  vIdx := RegisterProc('vfork', True, tyInteger, 0, pn, pt);
+  while (CodeLen and 3) <> 0 do EmitB(0);
+  SetProcBodyAddrHere(vIdx);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a9, reg_xtensa_a8);       { return address (+ call size) }
+    xtensa_mov(reg_xtensa_a11, reg_xtensa_a2);
+    xtensa_mov(reg_xtensa_a12, reg_xtensa_a3);
+    xtensa_mov(reg_xtensa_a13, reg_xtensa_a4);
+    xtensa_mov(reg_xtensa_a14, reg_xtensa_a5);
+    xtensa_mov(reg_xtensa_a15, reg_xtensa_a6);
+  end;
+  xtensa_movi(reg_xtensa_a6, $111);
+  xtensa_addmi(reg_xtensa_a6, reg_xtensa_a6, $4000); { flags 0x4111 }
+  xtensa_movi(reg_xtensa_a3, 0);                     { stack: the same sp }
+  xtensa_movi(reg_xtensa_a4, 0);
+  xtensa_movi(reg_xtensa_a5, 0);
+  xtensa_movi(reg_xtensa_a8, 0);
+  xtensa_movi(reg_xtensa_a2, 116);                   { clone }
+  xtensa_syscall;
+  if XtensaABI <> XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_ret;                                      { result already in a2 }
+    Exit;
+  end;
+  xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);         { the caller's result register }
+  xtensa_mov(reg_xtensa_a2, reg_xtensa_a11);
+  xtensa_mov(reg_xtensa_a3, reg_xtensa_a12);
+  xtensa_mov(reg_xtensa_a4, reg_xtensa_a13);
+  xtensa_mov(reg_xtensa_a5, reg_xtensa_a14);
+  xtensa_mov(reg_xtensa_a6, reg_xtensa_a15);
+  xtensa_mov(reg_xtensa_a11, reg_xtensa_a0);         { the caller's a0 }
+  { call0 to the next WORD: a0 := this PC + 3, whose top two bits are the
+    region retw would keep. The pad bytes between are never executed. }
+  pad := (4 - ((CodeLen + 3) and 3)) and 3;
+  xtensa_call0(3 + pad);
+  while pad > 0 do begin EmitB(0); Dec(pad); end;
+  xtensa_movi(reg_xtensa_a12, 30);
+  xtensa_ssr(reg_xtensa_a12);
+  xtensa_srl(reg_xtensa_a13, reg_xtensa_a0);         { PC >> 30 }
+  xtensa_ssl(reg_xtensa_a12);
+  xtensa_sll(reg_xtensa_a13, reg_xtensa_a13);        { ... << 30: the top bits }
+  xtensa_movi(reg_xtensa_a12, 2);
+  xtensa_ssl(reg_xtensa_a12);
+  xtensa_sll(reg_xtensa_a14, reg_xtensa_a9);         { drop the call size... }
+  xtensa_ssr(reg_xtensa_a12);
+  xtensa_srl(reg_xtensa_a14, reg_xtensa_a14);        { ...bits 31:30 }
+  xtensa_or(reg_xtensa_a14, reg_xtensa_a14, reg_xtensa_a13);
+  xtensa_mov(reg_xtensa_a0, reg_xtensa_a11);
+  xtensa_jx(reg_xtensa_a14);
 end;
 
 procedure EmitCFenvStubs;
@@ -13604,12 +16429,41 @@ begin
     EmitCReturnZeroStub;
 end;
 
+{ XTENSA C setjmp/longjmp: the Pascal exception helpers' design
+  (exception_emit.inc, ExcSetJmp/ExcLongJmp -- read its comment for WHY) with
+  C's contract: longjmp delivers val, 0 becoming 1.
+  WINDOWED: both are entered by CALL8 with &env in a2 (the setjmp macro calls
+  __pxx_setjmp from the user's own frame). Spill every window with a
+  self-recursive CALL8 chain, copy the caller's two save areas into env (11
+  words of the 32), and on longjmp write them back, forge a0/a1 and RETW: the
+  window underflow reloads the setjmp frame. Each body carries its OWN spill
+  chain (CALL8 into its own entry), so no call crosses from one proc to
+  another and DCE can move either alone.
+  CALL0: a0, sp and the callee-saved a12..a15.
+  feature-xtensa-c-setjmp-longjmp }
+procedure XtensaEmitSpillChain(var spillAt: Integer);
+begin
+  while (CodeLen and 3) <> 0 do xtensa_nop;
+  spillAt := CodeLen;
+  xtensa_entry(reg_xtensa_sp, 32);
+  xtensa_movi(reg_xtensa_a3, 0);
+  XtensaWideBegin;
+  xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { count = 0: -> retw }
+  xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
+  xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+  xtensa_call8(spillAt - CodeLen);
+  XtensaWideEnd;
+  xtensa_retw;
+end;
+
 procedure EmitCSetjmpStubs;
-var sjIdx, ljIdx: Integer;
+var sjIdx, ljIdx, spill, jOver, k: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
 begin
   pn[0] := 'env'; pt[0] := tyPointer;
   sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen and 3) <> 0 do EmitB(0);          { CALLn targets are 4-aligned }
   SetProcBodyAddrHere(sjIdx);
   case TargetArch of
   TARGET_X86_64:
@@ -13706,12 +16560,70 @@ begin
     EmitI32($00000513);   { li a0, 0 }
     EmitI32($00008067);   { ret }
   end;
+  TARGET_XTENSA:
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_entry(reg_xtensa_sp, 32);
+    jOver := CodeLen; xtensa_j(0);                    { over the spill chain }
+    XtensaEmitSpillChain(spill);
+    Patch24(jOver, EncodeXtensaJ(CodeLen - jOver));
+    xtensa_movi(reg_xtensa_a10, 16);
+    xtensa_call8(spill - CodeLen);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);  { the caller's a0-a3 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+    end;
+    { ...and the 16 bytes BELOW the caller's sp: its caller's a0-a3, whose
+      a1 word is what the caller's own underflow reads (sp-12) to find its
+      a4-a7. A VLA or alloca the caller makes after setjmp lowers sp (MOVSP
+      copies that area down) and its contents then cover the old copy, which
+      longjmp's restored sp points at again -- busybox's run_nofork_applet
+      (`char *tmp[argc+1]` after setjmp) came back with a7 = 0. glibc and
+      newlib keep the same four words in the jmp_buf.
+      bug-xtensa-windowed-longjmp-after-a-vla-loses-the-callers-registers }
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 4);    { the caller's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 44 + k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { the caller's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);    { ITS caller's sp }
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);  { the caller's a4-a7 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+    end;
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 32);   { return address + call bits }
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 36);   { this body's own sp }
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_retw;
+  end
+  else
+  begin
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    xtensa_s32i(reg_xtensa_a12, reg_xtensa_a2, 8);
+    xtensa_s32i(reg_xtensa_a13, reg_xtensa_a2, 12);
+    xtensa_s32i(reg_xtensa_a14, reg_xtensa_a2, 16);
+    xtensa_s32i(reg_xtensa_a15, reg_xtensa_a2, 20);
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_ret;
+  end;
   else
     Error('EmitCSetjmpStubs: unsupported target');
   end;
 
   pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
   ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen and 3) <> 0 do EmitB(0);
   SetProcBodyAddrHere(ljIdx);
   case TargetArch of
   TARGET_X86_64:
@@ -13819,6 +16731,62 @@ begin
     EmitI32($00051463);   { bnez a0, +8 }
     EmitI32($00100513);   { li a0, 1   (val==0 -> 1) }
     EmitI32($00008067);   { ret }
+  end;
+  TARGET_XTENSA:
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_entry(reg_xtensa_sp, 32);
+    jOver := CodeLen; xtensa_j(0);
+    XtensaEmitSpillChain(spill);
+    Patch24(jOver, EncodeXtensaJ(CodeLen - jOver));
+    xtensa_movi(reg_xtensa_a10, 16);
+    xtensa_call8(spill - CodeLen);
+    xtensa_l32i(reg_xtensa_a7, reg_xtensa_a2, 36);   { setjmp's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a7, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 4);    { the caller's setjmp-time sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 44 + k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 32);   { forge the return }
+    XtensaWideBegin;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);        { val... }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);
+    xtensa_movi(reg_xtensa_a2, 1);                   { ...0 becomes 1 }
+    XtensaWideEnd;
+    xtensa_mov(reg_xtensa_sp, reg_xtensa_a7);        { a1 LAST }
+    xtensa_retw;
+  end
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 0);
+    xtensa_l32i(reg_xtensa_a12, reg_xtensa_a2, 8);
+    xtensa_l32i(reg_xtensa_a13, reg_xtensa_a2, 12);
+    xtensa_l32i(reg_xtensa_a14, reg_xtensa_a2, 16);
+    xtensa_l32i(reg_xtensa_a15, reg_xtensa_a2, 20);
+    xtensa_l32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    XtensaWideBegin;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);
+    xtensa_movi(reg_xtensa_a2, 1);
+    XtensaWideEnd;
+    xtensa_ret;
   end;
   else
     Error('EmitCSetjmpStubs: unsupported target');
@@ -13966,6 +16934,22 @@ end;
   Called from two places (the stub, and the crtl pull that supplies the shell's
   body) and they must agree, so it is one function rather than two spellings of
   one condition. feature-c-entry-stub-must-run-initializers-for-environ }
+{ Does the token stream contain `main (`? Conservative on purpose: a call
+  to main, or a prototype, also counts, and keeps the full process entry. }
+function CTokensMentionMain: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to TokCount - 2 do
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 4) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'main') then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function CNeedsEnvironInit: Boolean;
 var i: Integer;
 begin
@@ -13985,11 +16969,32 @@ begin
     reached by the .init_array thunk below.
     bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
   if CUseSystemLibs or NoDefaultRtl then Exit;
+  { A hosted windowed xtensa OBJECT always has pre-main work: environ, and the
+    other objects' .init_array slots, both in __pxx_run_initializers.
+    feature-xtensa-objects-run-their-initialisers }
+  if (TargetArch = TARGET_XTENSA) and EmitObjMode and (not EmitSharedMode) and
+     (TargetPlatform = PLATFORM_POSIX) and (XtensaABI = XTENSA_ABI_WINDOWED) and
+     (not EspFreestandingObj) and (not FreestandingMode) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if TargetArch = TARGET_XTENSA then Exit;
   if (TargetArch = TARGET_RISCV32) and EspBareBoot then Exit;
+  { --shared-runtime: environ lives in the runtime object, whose own init
+    thunk fills it once; this unit only references it. }
+  if SharedRuntime and EmitObjMode then Exit;
+  { `environ`, and GNU's program_invocation_name/_short_name (argv[0], set in
+    the same pre-main shell; crtl's <err.h> prints the short one).
+    feature-crtl-runtime-gaps-from-e2fsprogs-util-linux-dosfstools }
   for i := 0 to TokCount - 1 do
-    if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 7) and
-       (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ') then
+    if (Tokens[i].Kind = tkIdent) and
+       (((Tokens[i].SLen = 7) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ')) or
+        ((Tokens[i].SLen = 23) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'program_invocation_name')) or
+        ((Tokens[i].SLen = 29) and
+         (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'program_invocation_short_name'))) then
     begin
       Result := True;
       Exit;
@@ -14003,6 +17008,14 @@ var
 begin
   Result := -1;
   if CUseSystemLibs then Exit;
+  { -nostdinc and --freestanding say the program brings its own headers, as
+    with gcc. The synthetic `#include <netinet/in.h>` for a hand-written
+    `htonl` prototype then either failed (-nostdinc: "include file not
+    found", nothing on the <> path) or, with kernel -I roots, pulled in the
+    KERNEL's netinet/in.h, a header the file never asked for. A prototype
+    with no definition stays an undefined symbol, which is what gcc leaves
+    for the link. NetBSD's rump tree hit this in 141 files (Gibux item 13). }
+  if NoStdInc or FreestandingMode then Exit;
   wantList := '';
   for i := 0 to ProcCount - 1 do
     if ProcExternal[i] then
@@ -14241,11 +17254,932 @@ begin
     (s = '__asm__') or (s = '__asm');
 end;
 
+{ `d_open_t yopen;` -- a declaration through a FUNCTION-TYPE typedef
+  (`typedef int d_open_t(int, int);`) declares a function, C 6.7.6.3. Every
+  path here read it as an object: yopen became 4 bytes of .bss and a call to
+  it jumped into data (rump's sys/conf.h, `dev_type_open(bdev_open)`). Rather
+  than teach the prototype path a second spelling, the declaration is
+  rewritten in the token stream, once, in pass 1, into the spelling that path
+  already handles:
+
+    [specifiers] T a, b;   ->   [specifiers] R a (args); [specifiers] R b (args);
+
+  R and (args) are the typedef's own tokens (CTypedefFnRetTok..RParTok), so
+  the parameter types, attributes and qualifiers come through unchanged, and
+  pass 2 sees an ordinary prototype. Only the plain shape: a name directly
+  followed by `,` or `;`. `T *p;` (a pointer, already right) and `T x = ...`
+  (not C) are left alone.
+  bug-c-a-function-declared-through-a-function-typedef-became-an-object }
+procedure CExpandFnTypedefDecl;
+var s0, k, e, ti, n, i, j, nameTok: Integer;
+    nm: AnsiString;
+    out: array of TRawToken;
+  procedure Put(const t: TRawToken);
+  begin
+    if n >= Length(out) then SetLength(out, n * 2 + 16);
+    out[n] := t; Inc(n);
+  end;
+begin
+  s0 := TokPos - 1;
+  k := s0;
+  while (k < TokCount) and
+        (((Tokens[k].Kind = tkIdent) and
+          CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen)) and
+          (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) <> '__attribute__') and
+          (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) <> '__attribute')) or
+         (Tokens[k].Kind = tkConst)) do Inc(k);
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIdent) then Exit;
+  nm := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+  ti := FindCTypedef(nm);
+  if (ti < 0) or (not CTypedefIsFnType[ti]) or CTypedefShadowed(nm) then Exit;
+  if (CTypedefFnRetTok[ti] < 0) or (CTypedefFnRParTok[ti] <= CTypedefFnLParTok[ti]) then Exit;
+  { the declarator list: ident (, ident)* ; -- anything else is not ours }
+  e := k + 1;
+  while True do
+  begin
+    if (e >= TokCount) or (Tokens[e].Kind <> tkIdent) then Exit;
+    Inc(e);
+    if e >= TokCount then Exit;
+    if Tokens[e].Kind = tkSemicolon then Break;
+    if Tokens[e].Kind <> tkComma then Exit;
+    Inc(e);
+  end;
+  n := 0;
+  SetLength(out, 64);
+  nameTok := k + 1;
+  while nameTok < e do
+  begin
+    for i := s0 to k - 1 do Put(Tokens[i]);
+    for j := CTypedefFnRetTok[ti] to CTypedefFnNameTok[ti] - 1 do Put(Tokens[j]);
+    Put(Tokens[nameTok]);
+    for j := CTypedefFnLParTok[ti] to CTypedefFnRParTok[ti] do Put(Tokens[j]);
+    Put(Tokens[e]);                    { the closing `;` }
+    nameTok := nameTok + 2;            { past `, ` to the next name }
+  end;
+  RemoveTokens(s0, e - s0 + 1);
+  InsertTokens(s0, out, n);
+  TokPos := s0; Next;
+end;
+
+{ K&R (OLD-STYLE) FUNCTION DEFINITIONS, C89 6.7.1 / C99 6.9.1:
+
+    static int f(a, b, c) char *a; register int b; BODY
+
+  were refused ("stray token at top level"), and old X server code (TinyX's
+  mi/, dix/, Xext/: ~40 files) is written that way. The definition is
+  rewritten in the token stream, once, before pass 1, into the prototype form
+  every later pass already handles:
+
+    static int f(char *a, register int b, int c) BODY
+
+  Each declaration's specifiers are copied in front of each of its
+  declarators; a parameter with no declaration is `int` (C89's implicit int).
+  Only this exact shape fires: at file scope, a name, `(`, a non-empty list of
+  plain identifiers, `)`, then declarations up to the body's opening brace, each
+  declarator naming one listed parameter once. Anything else (a prototype, an
+  attribute, a struct body among the declarations) is left alone.
+
+  KNOWN DIFFERENCE: a K&R `float` parameter is passed as a double by the
+  default argument promotions; after the rewrite it is a prototyped float. It
+  matches whenever a prototype is in scope (X's headers have them), which is
+  also the only case gcc accepts without complaint.
+  feature-c-k-and-r-function-definitions }
+function CKnRName(i: Integer): AnsiString;
+begin
+  Result := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+end;
+
+function CKnRIsQual(const s: AnsiString): Boolean;
+begin
+  Result := (s = 'const') or (s = 'volatile') or (s = 'restrict') or
+            (s = '__restrict') or (s = '__restrict__') or (s = '__const') or
+            (s = '__volatile__');
+end;
+
+function CKnROpens(k: TTokenKind): Integer;
+begin
+  Result := 0;
+  if (k = tkLParen) or (k = tkLBrack) then Result := 1
+  else if (k = tkRParen) or (k = tkRBrack) then Result := -1;
+end;
+
+function CRewriteKnRDefs(fromIdx, toIdx: Integer): Integer;
+var i, j, k, m, depth, pdepth, np, brIdx, a, b, c, e, ds, pd, q, pi, n, cnt,
+    specA, specB: Integer;
+    ok, haveInt: Boolean;
+    names: array of AnsiString;
+    pStart, pEnd, pSpecA, pSpecB: array of Integer;
+    out: array of TRawToken;
+    intRaw: TRawToken;
+    nm: AnsiString;
+  procedure Put(const t: TRawToken);
+  begin
+    if n >= Length(out) then SetLength(out, n * 2 + 16);
+    out[n] := t; Inc(n);
+  end;
+begin
+  Result := 0;
+  haveInt := False;
+  for i := fromIdx to toIdx do
+    if (not haveInt) and (Tokens[i].Kind = tkInteger_T) then   { C's `int` }
+    begin
+      intRaw := Tokens[i]; haveInt := True;
+    end;
+  depth := 0; pdepth := 0;
+  i := fromIdx;
+  while i + 4 <= toIdx do
+  begin
+    ok := (depth = 0) and (pdepth = 0) and (Tokens[i].Kind = tkIdent) and
+          (Tokens[i + 1].Kind = tkLParen) and (Tokens[i + 2].Kind = tkIdent);
+    j := i + 2; np := 0;
+    if ok then
+    begin
+      { the identifier list }
+      while (j + 1 <= toIdx) and (Tokens[j].Kind = tkIdent) and
+            (Tokens[j + 1].Kind = tkComma) do j := j + 2;
+      ok := (j + 1 <= toIdx) and (Tokens[j].Kind = tkIdent) and
+            (Tokens[j + 1].Kind = tkRParen);
+      if ok then
+      begin
+        Inc(j);                                   { j = the `)` }
+        np := (j - i - 1) div 2;
+        { a declaration starts here: `int`, `struct`, `register`, a typedef
+          name... (C base types are their own token kinds, not tkIdent) }
+        nm := CKnRName(j + 1);
+        ok := not ((Tokens[j + 1].Kind = tkSemicolon) or (Tokens[j + 1].Kind = tkComma) or
+                   (Tokens[j + 1].Kind = tkBegin) or (Tokens[j + 1].Kind = tkLParen) or
+                   (Tokens[j + 1].Kind = tkRParen) or (Tokens[j + 1].Kind = tkAssign) or
+                   (Tokens[j + 1].Kind = tkLBrack) or (Tokens[j + 1].Kind = tkEOF)) and
+              (nm <> '__attribute__') and (nm <> '__attribute') and (nm <> 'asm') and
+              (nm <> '__asm__') and (nm <> '__asm');
+      end;
+    end;
+    brIdx := -1;
+    if ok then
+    begin
+      { declarations up to the body's opening brace: no braces, no `=` }
+      k := j + 1; pd := 0;
+      while ok and (brIdx < 0) and (k <= toIdx) do
+      begin
+        if (Tokens[k].Kind = tkBegin) and (pd = 0) then brIdx := k
+        else if (Tokens[k].Kind = tkBegin) or (Tokens[k].Kind = tkEnd) or
+                (Tokens[k].Kind = tkAssign) then ok := False
+        else pd := pd + CKnROpens(Tokens[k].Kind);
+        Inc(k);
+      end;
+      ok := ok and (brIdx > j + 1) and (Tokens[brIdx - 1].Kind = tkSemicolon);
+    end;
+    if ok then
+    begin
+      SetLength(names, np); SetLength(pStart, np); SetLength(pEnd, np);
+      SetLength(pSpecA, np); SetLength(pSpecB, np);
+      for m := 0 to np - 1 do
+      begin
+        names[m] := CKnRName(i + 2 + 2 * m);
+        pStart[m] := -1; pEnd[m] := -1; pSpecA[m] := -1; pSpecB[m] := -1;
+      end;
+      a := j + 1;
+      while ok and (a < brIdx) do
+      begin
+        b := a; pd := 0;                          { the statement [a, b), b = `;` }
+        while (b < brIdx) and not ((Tokens[b].Kind = tkSemicolon) and (pd = 0)) do
+        begin
+          pd := pd + CKnROpens(Tokens[b].Kind); Inc(b);
+        end;
+        specB := -1; specA := a;
+        c := a;
+        while ok and (c < b) do
+        begin
+          e := c; pd := 0;                        { the declarator [c, e) }
+          while (e < b) and not ((Tokens[e].Kind = tkComma) and (pd = 0)) do
+          begin
+            pd := pd + CKnROpens(Tokens[e].Kind); Inc(e);
+          end;
+          q := -1; pi := -1;
+          for k := c to e - 1 do
+            if (q < 0) and (Tokens[k].Kind = tkIdent) then
+            begin
+              nm := CKnRName(k);
+              for m := 0 to np - 1 do
+                if (q < 0) and (names[m] = nm) then begin q := k; pi := m; end;
+            end;
+          if (q < 0) or (pStart[pi] >= 0) then ok := False
+          else
+          begin
+            if specB < 0 then
+            begin
+              ds := q;
+              while (ds > c) and ((Tokens[ds - 1].Kind = tkStar) or
+                    (Tokens[ds - 1].Kind = tkLParen) or
+                    (Tokens[ds - 1].Kind = tkConst) or
+                    ((Tokens[ds - 1].Kind = tkIdent) and CKnRIsQual(CKnRName(ds - 1)))) do
+                Dec(ds);
+              if ds = c then ok := False;         { no specifiers at all }
+              specB := ds; c := ds;
+            end;
+            pSpecA[pi] := specA; pSpecB[pi] := specB;
+            pStart[pi] := c; pEnd[pi] := e;
+          end;
+          c := e + 1;
+        end;
+        a := b + 1;
+      end;
+      for m := 0 to np - 1 do
+        if (pStart[m] < 0) and (not haveInt) then ok := False;
+    end;
+    if ok then
+    begin
+      n := 0;
+      Put(Tokens[i + 1]);                         { ( }
+      for m := 0 to np - 1 do
+      begin
+        if m > 0 then Put(Tokens[i + 3]);         { , (the list's own) }
+        if pStart[m] >= 0 then
+        begin
+          for k := pSpecA[m] to pSpecB[m] - 1 do Put(Tokens[k]);
+          for k := pStart[m] to pEnd[m] - 1 do Put(Tokens[k]);
+        end
+        else
+        begin
+          Put(intRaw); Put(Tokens[i + 2 + 2 * m]);
+        end;
+      end;
+      Put(Tokens[j]);                             { ) }
+      cnt := brIdx - i - 1;
+      RemoveTokens(i + 1, cnt);
+      InsertTokens(i + 1, out, n);
+      Result := Result + n - cnt;
+      toIdx := toIdx + n - cnt;
+      i := i + 1 + n;                             { the body's opening brace }
+    end
+    else
+    begin
+      case Tokens[i].Kind of
+        tkBegin: Inc(depth);
+        tkEnd: if depth > 0 then Dec(depth);
+        tkLParen: Inc(pdepth);
+        tkRParen: if pdepth > 0 then Dec(pdepth);
+      end;
+      Inc(i);
+    end;
+  end;
+end;
+
+{ A BRACED STRING INITIALISER for a char array, C11 6.7.9p14 (the literal
+  may be "optionally enclosed in braces"):
+
+    static const char Names[] = LBRACE "alice blue\0" "AliceBlue\0" ... RBRACE;
+
+  came out 1 byte long and empty (a sized `char C[8] = LBRACE "xyz" RBRACE`
+  was empty too), so TinyX's colour table, OsLookupColor, matched no name, and
+  st died on "could not allocate color 'black'". The braces are dropped in the
+  token stream, once, before pass 1, which leaves the unbraced spelling every
+  initialiser path already handles. It fires only when the declarator is
+  NAME[...] (one bracket group, no `*`) and the specifiers back to the
+  declaration start are char / signed / unsigned, qualifiers and storage
+  classes. So an array of pointers (`char *p[]`), a 2-D array (`char a[][4]`)
+  and a struct keep their braces.
+  bug-c-a-braced-string-initialiser-for-a-char-array-is-empty }
+function CBracedStrSpecOk(i: Integer): Boolean;
+var nm: AnsiString;
+begin
+  Result := Tokens[i].Kind in [tkChar_T, tkConst, tkCSigned, tkCUnsigned];
+  if (not Result) and (Tokens[i].Kind = tkIdent) then
+  begin
+    nm := CKnRName(i);
+    Result := (nm = 'static') or (nm = 'unsigned') or (nm = 'signed') or
+              (nm = 'volatile') or (nm = 'extern') or (nm = 'register') or
+              (nm = '__const');
+  end;
+end;
+
+function CRewriteBracedCharStrInit(fromIdx, toIdx: Integer): Integer;
+var i, j, k, e, nm, lb: Integer;
+    sawChar, ok: Boolean;
+begin
+  Result := 0;
+  i := fromIdx + 1;
+  while i + 3 <= toIdx do
+  begin
+    ok := (Tokens[i].Kind = tkAssign) and (Tokens[i + 1].Kind = tkBegin) and
+          (Tokens[i + 2].Kind = tkString) and (Tokens[i - 1].Kind = tkRBrack);
+    e := -1;
+    if ok then
+    begin
+      { the literals, an optional comma, then the closing brace }
+      j := i + 2;
+      while (j <= toIdx) and (Tokens[j].Kind = tkString) do Inc(j);
+      if (j <= toIdx) and (Tokens[j].Kind = tkComma) then e := j + 1 else e := j;
+      ok := (e <= toIdx) and (Tokens[e].Kind = tkEnd);
+    end;
+    if ok then
+    begin
+      { NAME [ ... ] : exactly one bracket group }
+      lb := i - 2;
+      while (lb > fromIdx) and (Tokens[lb].Kind <> tkLBrack) and
+            (Tokens[lb].Kind <> tkRBrack) and (Tokens[lb].Kind <> tkSemicolon) do Dec(lb);
+      ok := (Tokens[lb].Kind = tkLBrack) and (lb - 1 > fromIdx) and
+            (Tokens[lb - 1].Kind = tkIdent);
+      if ok then
+      begin
+        nm := lb - 1;
+        k := nm - 1; sawChar := False;
+        while (k >= fromIdx) and CBracedStrSpecOk(k) do
+        begin
+          if Tokens[k].Kind = tkChar_T then sawChar := True;
+          Dec(k);
+        end;
+        ok := sawChar and ((k < fromIdx) or (Tokens[k].Kind = tkSemicolon) or
+              (Tokens[k].Kind = tkBegin) or (Tokens[k].Kind = tkEnd));
+      end;
+    end;
+    if ok then
+    begin
+      { drop the closing brace (and a trailing comma), then the opening one }
+      RemoveTokens(j, e - j + 1);
+      RemoveTokens(i + 1, 1);
+      Result := Result - (e - j + 1) - 1;
+      toIdx := toIdx - (e - j + 1) - 1;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ FILE-SCOPE asm(...). It was skipped token by token like an attribute, so
+  NetBSD's __strong_alias / __weak_alias (`.weak a` + `a = b`, ~1000 in rump)
+  produced no symbol and the link failed or bound elsewhere -- and anything
+  else written there vanished without a word. What is handled: .globl/.global
+  and .weak binds, `a = b` / `.set a, b` / `.equ a, b` aliases (the writer
+  emits them, writeELFRelX64General), .hidden/.type/.size (ignored, as
+  visibility is), and .pushsection blocks of .ident / .comment / .gnu.warning
+  / .copyright / .note strings (dropped: __KERNEL_RCSID, __warn_references).
+  Anything else is refused by name: an instruction or a data directive here
+  would have to be assembled, and dropping it is a silent miscompilation.
+  feature-c-file-scope-asm-symbol-aliases }
+procedure CFsaBind(const nm: AnsiString; kind: Integer);
+begin
+  if Length(CFsaBindName) <= CFsaBindCount then
+  begin
+    SetLength(CFsaBindName, CFsaBindCount + 32);
+    SetLength(CFsaBindKind, CFsaBindCount + 32);
+  end;
+  CFsaBindName[CFsaBindCount] := nm;
+  CFsaBindKind[CFsaBindCount] := kind;
+  Inc(CFsaBindCount);
+end;
+
+procedure CFsaAlias(const a, b: AnsiString);
+begin
+  if Length(CFsaAliasName) <= CFsaAliasCount then
+  begin
+    SetLength(CFsaAliasName, CFsaAliasCount + 32);
+    SetLength(CFsaAliasTarget, CFsaAliasCount + 32);
+  end;
+  CFsaAliasName[CFsaAliasCount] := a;
+  CFsaAliasTarget[CFsaAliasCount] := b;
+  Inc(CFsaAliasCount);
+end;
+
+function CFsaTrim(const s: AnsiString): AnsiString;
+var a, b: Integer;
+begin
+  a := 1; b := Length(s);
+  while (a <= b) and (s[a] in [' ', #9, #13]) do Inc(a);
+  while (b >= a) and (s[b] in [' ', #9, #13]) do Dec(b);
+  CFsaTrim := Copy(s, a, b - a + 1);
+end;
+
+function CFsaIsName(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  CFsaIsName := False;
+  if s = '' then Exit;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '$']) then Exit;
+  if s[1] in ['0'..'9'] then Exit;
+  CFsaIsName := True;
+end;
+
+procedure CAsmLabel(const cname, lname: AnsiString);
+begin
+  if Length(CAsmLblFrom) <= CAsmLblCount then
+  begin
+    SetLength(CAsmLblFrom, CAsmLblCount + 16);
+    SetLength(CAsmLblTo, CAsmLblCount + 16);
+  end;
+  CAsmLblFrom[CAsmLblCount] := cname;
+  CAsmLblTo[CAsmLblCount] := lname;
+  Inc(CAsmLblCount);
+end;
+
+{ the first `#` outside quotes: gas's x86 line comment }
+function CFsaCommentPos(const s: AnsiString): Integer;
+var i: Integer; q: Boolean;
+begin
+  CFsaCommentPos := 0;
+  q := False;
+  for i := 1 to Length(s) do
+  begin
+    if (s[i] = '"') and ((i = 1) or (s[i - 1] <> '\')) then q := not q
+    else if (s[i] = '#') and not q then begin CFsaCommentPos := i; Exit; end;
+  end;
+end;
+
+{ `asm("name")` at the cursor (on the asm keyword): returns the name }
+function CReadAsmLabelString: AnsiString;
+begin
+  Result := '';
+  Next;
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('C: an asm label expects a string');
+  while CurTok.Kind = tkString do
+  begin
+    Result := Result + CurTok.SVal;
+    Next;
+  end;
+  Expect(tkRParen, ')');
+end;
+
+{ ---- file-scope asm that DEFINES CODE (xtensa) ----------------------------
+  `__asm__(".text\n.align 4\n.global _start\n_start:\nentry a1, 32\n...")`:
+  Rainyday's tests/xtensa entry stubs and signal restorer. Each GLOBAL label
+  opens a frameless procedure of that name (found by name, so a C
+  `extern void my_restorer(void);` binds to it, or registered new), and the
+  lines up to the next global label are its body, assembled by the xtensa
+  text engine right here, where a C body would be emitted. Local labels are
+  scoped to the whole asm statement. On top of the inline-asm engine:
+  `entry`, `retw`, and `call0/4/8/12 name`, which is recorded
+  (CFsaCallPos) and becomes an internal call once the unit is parsed.
+  Directives: .text, a .section/.pushsection that is .text or .text.*, and
+  .previous/.popsection stay in this one code stream; .align N pads with zero
+  bytes; .space/.skip/.zero N emit N zero bytes. Anything else refuses.
+  feature-c-file-scope-asm-that-defines-code }
+function CFsaIsCodeText(const text: AnsiString): Boolean;
+{ Does this file-scope asm define code: a `.text` or a label line? }
+var i, p, k: Integer; line: AnsiString;
+begin
+  Result := False;
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if (line = '.text') or ((Length(line) >= 2) and (line[Length(line)] = ':')) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+end;
+
+procedure CFsaEmitCode(const text: AnsiString);
+{ xtensa, and x86-64 (rump repro s03: `.globl myfunc; myfunc: movl $42,%eax;
+  ret`). On x86-64 the instruction lines and numeric local labels of a body
+  collect into one AT&T template, encoded by the inline-asm reader
+  (AttEncodeTemplate, so `jne 1f` reaches `1:`) at each global label,
+  `call/jmp name`, .align/.space, and the end; `call name` and `jmp name`
+  are E8/E9 rel32 sites resolved like xtensa's callN. }
+var i, p, k, curProc, n, reg, nGlob, pi, st, ln, j: Integer;
+    line, w, rest, nm, a, pend: AnsiString;
+    x86, gf: Boolean;
+    globs: array of AnsiString;
+    noNames: array[0..0] of AnsiString;
+    noTypes: array[0..0] of TTypeKind;
+    dummyHoles: array[0..0] of Int64;
+
+  procedure Refuse(const why: AnsiString);
+  begin
+    Error('C: file-scope asm (code): ' + why + ' -- pxx assembles .text code here (global'
+          + ' labels, the xtensa instructions inline asm knows, entry/retw/callN name,'
+          + ' .align/.space); anything else would be dropped silently');
+  end;
+
+  function IsGlob(const s: AnsiString): Boolean;
+  var j: Integer;
+  begin
+    Result := False;
+    for j := 0 to nGlob - 1 do
+      if globs[j] = s then begin Result := True; Exit; end;
+  end;
+
+  { x86-64: encode the collected template and copy it into the code, with
+    the global-ref fixups IR_ASM's blit applies }
+  procedure FlushX86;
+  var q: Integer;
+  begin
+    if (not x86) or (pend = '') then Exit;
+    AttResetBindings;
+    AttEncodeTemplate(pend, False, st, ln);
+    j := 0;
+    while j < ln do
+    begin
+      gf := False;
+      for q := 0 to AsmGlobFixCount - 1 do
+        if AsmGlobFix[q].AsmOff = st + j then
+        begin
+          EmitGlobRef(AsmGlobFix[q].BSSoff);
+          gf := True;
+        end;
+      if gf then Inc(j, 4)
+      else begin EmitB(AsmBytes[st + j]); Inc(j); end;
+    end;
+    pend := '';
+  end;
+
+  procedure CloseProc;
+  begin
+    FlushX86;
+    if curProc >= 0 then SetProcBodyEndHere(curProc);
+    curProc := -1;
+  end;
+
+  procedure NeedProc;
+  begin
+    if curProc < 0 then Refuse('"' + line + '" before any global label');
+  end;
+
+  function NumOr(const t: AnsiString): Integer;
+  var v, code: Integer;
+  begin
+    Val(t, v, code);
+    if (code <> 0) or (t = '') then Result := -1 else Result := v;
+  end;
+
+  procedure FsaZeroFill(cnt: Integer);
+  var j: Integer;
+  begin
+    for j := 1 to cnt do EmitB(0);
+  end;
+
+begin
+  { the global names first: a label is a procedure only if it is exported }
+  nGlob := 0;
+  SetLength(globs, 0);
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := CFsaTrim(Copy(text, p, i - p));
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := CFsaTrim(Copy(line, 1, k - 1));
+      w := line; rest := '';
+      k := Pos(' ', line);
+      if k = 0 then k := Pos(#9, line);
+      if k > 0 then begin w := Copy(line, 1, k - 1); rest := CFsaTrim(Copy(line, k + 1, Length(line))); end;
+      if (w = '.global') or (w = '.globl') or (w = '.weak') then
+      begin
+        if not CFsaIsName(rest) then Refuse('"' + line + '" (one name per line)');
+        SetLength(globs, nGlob + 1);
+        globs[nGlob] := rest;
+        Inc(nGlob);
+        if w = '.weak' then CFsaBind(rest, 2);
+      end;
+    end;
+
+  curProc := -1;
+  x86 := TargetArch = TARGET_X86_64;
+  pend := '';
+  if not x86 then AsmXtensaBlockBegin;
+  p := 1;
+  for i := 1 to Length(text) + 1 do
+    if (i > Length(text)) or (text[i] = #10) or (text[i] = ';') then
+    begin
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if line = '' then Continue;
+      w := line; rest := '';
+      k := 1;
+      while (k <= Length(line)) and not (line[k] in [' ', #9]) do Inc(k);
+      w := Copy(line, 1, k - 1);
+      rest := CFsaTrim(Copy(line, k, Length(line)));
+      if (w = '.global') or (w = '.globl') or (w = '.weak') or (w = '.text') or
+         (w = '.previous') or (w = '.popsection') or (w = '.type') or (w = '.size') or
+         (w = '.literal_position') then
+        Continue;
+      if (w = '.section') or (w = '.pushsection') then
+      begin
+        a := rest;
+        k := Pos(',', a); if k > 0 then a := Copy(a, 1, k - 1);
+        a := CFsaTrim(a);
+        if (a <> '.text') and (Copy(a, 1, 6) <> '.text.') then
+          Refuse('section "' + a + '" (only .text and .text.* are code here)');
+        Continue;
+      end;
+      if (w = '.align') or (w = '.balign') or (w = '.p2align') then
+      begin
+        n := NumOr(rest);
+        if w = '.p2align' then
+        begin
+          if (n < 0) or (n > 12) then Refuse('"' + line + '"');
+          n := 1 shl n;
+        end;
+        if (n < 1) or (n > 4096) then Refuse('"' + line + '"');
+        FlushX86;
+        if curProc >= 0 then
+          while (CodeLen mod n) <> 0 do
+            if x86 then EmitB($90) else EmitB(0);   { gas pads x86 .text with nops }
+        Continue;     { a procedure start is aligned to 4 anyway }
+      end;
+      if (w = '.space') or (w = '.skip') or (w = '.zero') then
+      begin
+        NeedProc;
+        FlushX86;
+        n := NumOr(rest);
+        if (n < 0) or (n > 16 * 1024 * 1024) then Refuse('"' + line + '" (a plain byte count)');
+        FsaZeroFill(n);
+        Continue;
+      end;
+      { a label (before the directive check: `.Lpos:` starts with a dot) }
+      if (Length(line) >= 2) and (line[Length(line)] = ':') then
+      begin
+        nm := Copy(line, 1, Length(line) - 1);
+        if IsGlob(nm) then
+        begin
+          CloseProc;
+          pi := CFindProcFromModule(nm);
+          if (pi >= 0) and (Procs[pi].BodyAddr >= 0) then
+            Refuse('"' + nm + '" is already defined');
+          if pi < 0 then
+          begin
+            pi := RegisterProc(nm, False, tyUnknown, 0, noNames, noTypes);
+            ProcCdecl[pi] := True;
+          end;
+          { what a C definition sets (ParseCSubroutine): a prototype seen
+            first left the row external, and the object would import it }
+          ProcWeakExternal[pi] := False;
+          ProcExternal[pi] := False;
+          CProcHasLocalDef[pi] := True;
+          ProcCModule[pi] := CModuleOfTok(TokPos - 1);
+          SetProcBodyAddrHere(pi);
+          curProc := pi;
+        end
+        else if x86 then
+        begin
+          NeedProc;
+          if (nm = '') or not (nm[1] in ['0'..'9']) then
+            Refuse('"' + line + '" (on x86-64 a local label is numeric: `1:` with `jne 1f`)');
+          pend := pend + line + #10;
+        end
+        else
+        begin
+          NeedProc;
+          AsmXtensaProcessLine(line, dummyHoles, 0);
+        end;
+        Continue;
+      end;
+      if (w <> '') and (w[1] = '.') then Refuse('"' + line + '"');
+      NeedProc;
+      if x86 then
+      begin
+        if ((w = 'call') or (w = 'callq') or (w = 'jmp') or (w = 'jmpq')) and CFsaIsName(rest) then
+        begin
+          FlushX86;
+          if (w = 'call') or (w = 'callq') then EmitB($E8) else EmitB($E9);
+          if Length(CFsaCallPos) <= CFsaCallCount then
+          begin
+            SetLength(CFsaCallPos, CFsaCallCount + 16);
+            SetLength(CFsaCallName, CFsaCallCount + 16);
+          end;
+          CFsaCallPos[CFsaCallCount] := CodeLen;     { the rel32, as ApplyCallFixups patches it }
+          CFsaCallName[CFsaCallCount] := rest;
+          Inc(CFsaCallCount);
+          EmitB(0); EmitB(0); EmitB(0); EmitB(0);
+        end
+        else
+          pend := pend + line + #10;
+        Continue;
+      end;
+      if w = 'entry' then
+      begin
+        k := Pos(',', rest);
+        if (k = 0) or not AsmXtensaRegNum(CFsaTrim(Copy(rest, 1, k - 1)), reg) then
+          Refuse('"' + line + '"');
+        n := NumOr(CFsaTrim(Copy(rest, k + 1, Length(rest))));
+        if (n < 0) or (n > 32760) or ((n mod 8) <> 0) then Refuse('"' + line + '" (frame 0..32760, a multiple of 8)');
+        xtensa_entry(reg, n);
+        Continue;
+      end;
+      if (w = 'retw') or (w = 'retw.n') then
+      begin
+        if rest <> '' then Refuse('"' + line + '"');
+        xtensa_retw;
+        Continue;
+      end;
+      if (w = 'call0') or (w = 'call4') or (w = 'call8') or (w = 'call12') then
+      begin
+        if not CFsaIsName(rest) then Refuse('"' + line + '" (a call to a name)');
+        if w = 'call0' then n := 0 else if w = 'call4' then n := 1
+        else if w = 'call8' then n := 2 else n := 3;
+        if Length(CFsaCallPos) <= CFsaCallCount then
+        begin
+          SetLength(CFsaCallPos, CFsaCallCount + 16);
+          SetLength(CFsaCallName, CFsaCallCount + 16);
+        end;
+        CFsaCallPos[CFsaCallCount] := CodeLen;
+        CFsaCallName[CFsaCallCount] := rest;
+        Inc(CFsaCallCount);
+        EmitB((n shl 4) or 5); EmitB(0); EmitB(0);   { CALLn, offset patched by ApplyCallFixups }
+        Continue;
+      end;
+      if not AsmXtensaLineKnown(line) then
+        Refuse('"' + line + '" is not an instruction the xtensa assembler in pxx encodes');
+      AsmXtensaProcessLine(line, dummyHoles, 0);
+    end;
+  if not x86 then AsmXtensaBlockResolve;
+  CloseProc;
+end;
+
+{ The calls file-scope asm made, by name, now that every body is in place. }
+procedure CFsaResolveCalls;
+var i, pi: Integer;
+begin
+  for i := 0 to CFsaCallCount - 1 do
+  begin
+    pi := CFindProcFromModule(CFsaCallName[i]);
+    if (pi < 0) or (Procs[pi].BodyAddr < 0) then
+      ErrorNoPos('C: file-scope asm calls "' + CFsaCallName[i] + '", which this unit does'
+                 + ' not define -- a call into another object is not supported there');
+    RecordInternalCallAt(pi, CFsaCallPos[i], -1);
+    if TargetArch <> TARGET_XTENSA then Continue;   { x86-64: a plain rel32 }
+    if Length(CFsaSlotPos) <= CFsaSlotCount then
+    begin
+      SetLength(CFsaSlotPos, CFsaSlotCount + 16);
+      SetLength(CFsaSlotN, CFsaSlotCount + 16);
+    end;
+    CFsaSlotPos[CFsaSlotCount] := CFsaCallPos[i];
+    CFsaSlotN[CFsaSlotCount] := (Code[CFsaCallPos[i]] shr 4) and 3;
+    Inc(CFsaSlotCount);
+  end;
+  CFsaCallCount := 0;
+end;
+
+procedure CParseFileScopeAsm;
+var text, line, w, rest, a, b, sec: AnsiString;
+    i, p, k: Integer;
+    skipping, inQ: Boolean;
+
+  procedure Refuse(const why: AnsiString);
+  begin
+    Error('C: file-scope asm: ' + why + ' -- pxx handles symbol aliases (.globl/.weak, a = b,'
+          + ' .set) and .ident/.gnu.warning strings there; anything else would have to be'
+          + ' assembled into the object, and dropping it would be silent');
+  end;
+
+  procedure SplitWord(const s: AnsiString; var first, tail: AnsiString);
+  var j: Integer;
+  begin
+    j := 1;
+    while (j <= Length(s)) and not (s[j] in [' ', #9]) do Inc(j);
+    first := Copy(s, 1, j - 1);
+    tail := CFsaTrim(Copy(s, j, Length(s)));
+  end;
+
+  procedure BindList(const tail: AnsiString; kind: Integer);
+  var j, st: Integer; nm: AnsiString;
+  begin
+    st := 1;
+    for j := 1 to Length(tail) + 1 do
+      if (j > Length(tail)) or (tail[j] = ',') then
+      begin
+        nm := CFsaTrim(Copy(tail, st, j - st));
+        if not CFsaIsName(nm) then Refuse('"' + line + '"');
+        CFsaBind(nm, kind);
+        st := j + 1;
+      end;
+  end;
+
+begin
+  { `time_t time_second_legacy asm("time_second");` (kern_tc.c): the variable
+    parser stops at `asm`, right after the declarator's name -- an asm LABEL,
+    not a file-scope statement. The variable is the global just declared.
+    feature-c-asm-labels-rename-the-symbol }
+  if (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkIdent) then
+  begin
+    a := GetTokenStrFromRaw(Tokens[TokPos - 2].SOffset, Tokens[TokPos - 2].SLen);
+    b := CReadAsmLabelString;
+    if CurTok.Kind <> tkSemicolon then
+      Error('C: an asm label on variable ' + a + ' must end its declaration (`T ' + a
+            + ' asm("' + b + '");`); an initialiser or a second declarator after it is not supported');
+    Next;
+    CAsmLabel(a, b);
+    Exit;
+  end;
+  Next;   { asm / __asm / __asm__ }
+  while (CurTok.Kind = tkIdent) and
+        ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
+         (CurTok.SVal = '__volatile')) do Next;
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('C: file-scope asm expects a string');
+  text := '';
+  while CurTok.Kind = tkString do
+  begin
+    text := text + CurTok.SVal;
+    Next;
+  end;
+  Expect(tkRParen, ')');
+  if CurTok.Kind = tkSemicolon then Next;
+  if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_X86_64)) and CFsaIsCodeText(text) then
+  begin
+    CFsaEmitCode(text);
+    Exit;
+  end;
+
+  skipping := False;
+  text := text + #10;
+  p := 1;
+  inQ := False;
+  for i := 1 to Length(text) do
+  begin
+    { a `;` or `#` inside a quoted .ascii string is text, not a separator or
+      a comment (libprop's __warn_references messages) }
+    if inQ then
+    begin
+      if (text[i] = '\') and (i < Length(text)) then Continue;
+      if (text[i] = '"') and ((i = 1) or (text[i - 1] <> '\')) then inQ := False;
+      if text[i] <> #10 then Continue;
+    end
+    else if text[i] = '"' then begin inQ := True; Continue; end;
+    if (text[i] = #10) or (text[i] = ';') then
+    begin
+      inQ := False;
+      line := Copy(text, p, i - p);
+      p := i + 1;
+      k := CFsaCommentPos(line);
+      if k > 0 then line := Copy(line, 1, k - 1);
+      line := CFsaTrim(line);
+      if line = '' then Continue;
+      SplitWord(line, w, rest);
+      if skipping then
+      begin
+        if w = '.popsection' then skipping := False
+        else if (w <> '.ascii') and (w <> '.asciz') and (w <> '.string') then
+          Refuse('"' + line + '" in a dropped string section');
+        Continue;
+      end;
+      if (w = '.globl') or (w = '.global') then BindList(rest, 1)
+      else if w = '.weak' then BindList(rest, 2)
+      else if (w = '.hidden') or (w = '.protected') or (w = '.internal') or
+              (w = '.size') or (w = '.ident') then
+        { visibility is not honoured elsewhere either; .size/.ident carry nothing }
+      else if w = '.type' then
+      begin
+        if Pos('indirect_function', rest) > 0 then Refuse('an ifunc ("' + line + '")');
+      end
+      else if (w = '.set') or (w = '.equ') then
+      begin
+        k := Pos(',', rest);
+        if k = 0 then Refuse('"' + line + '"');
+        a := CFsaTrim(Copy(rest, 1, k - 1));
+        b := CFsaTrim(Copy(rest, k + 1, Length(rest)));
+        if not (CFsaIsName(a) and CFsaIsName(b)) then Refuse('"' + line + '" (only name = name)');
+        CFsaAlias(a, b);
+      end
+      else if (w = '.pushsection') or (w = '.section') then
+      begin
+        SplitWord(rest, sec, a);
+        k := Pos(',', sec);
+        if k > 0 then sec := Copy(sec, 1, k - 1);
+        if (Copy(sec, 1, 6) = '.ident') or (Copy(sec, 1, 8) = '.comment') or
+           (Copy(sec, 1, 12) = '.gnu.warning') or (Copy(sec, 1, 10) = '.copyright') or
+           (Copy(sec, 1, 5) = '.note') then
+        begin
+          if w = '.section' then Refuse('".section ' + sec + '" (use .pushsection/.popsection)');
+          skipping := True;
+        end
+        else
+          Refuse('section "' + sec + '"');
+      end
+      else if Pos('=', line) > 0 then
+      begin
+        k := Pos('=', line);
+        a := CFsaTrim(Copy(line, 1, k - 1));
+        b := CFsaTrim(Copy(line, k + 1, Length(line)));
+        if not (CFsaIsName(a) and CFsaIsName(b)) then Refuse('"' + line + '" (only name = name)');
+        CFsaAlias(a, b);
+      end
+      else
+        Refuse('"' + line + '"');
+    end;
+  end;
+  if skipping then Refuse('a .pushsection with no .popsection');
+end;
+
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
     callAnchor, initAnchor: Integer;   { xtensa only -- see PatchEntryStubCall }
     xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
+    xtInitIdx, xtInitLit, xtInitAnchor: Integer;
+    xtInitNames: array[0..0] of AnsiString;
+    xtInitTypes: array[0..0] of TTypeKind;
     needInit: Boolean;
     cPullsBuiltinHeap: Boolean;   { the default-RTL pull below, decided ONCE -- see its use }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
@@ -14257,7 +18191,13 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cSfI: Integer;
     envPi: Integer;   { __pxx_set_environ, for the init thunk }
     thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
+    xtInitThunk: Boolean;           { hosted xtensa object: .init_array thunk }
+    ci, finiDtors: Integer;         { C constructors/destructors in the thunks }
+    knrDelta: Integer;              { token-count change of the K&R rewrite }
+    finiRunner: Boolean;
 begin
+  CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
+  CFsaAliasCount := 0; CFsaBindCount := 0; CAsmLblCount := 0; CFsaCallCount := 0;
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
     around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive
@@ -14278,6 +18218,16 @@ begin
     restore the mode for. Set once, at the top, before any registration. }
   CaseSensitiveMode := True;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+  { The --threadsafe heap lock's word: the TTAS fast path in
+    EmitAcquireHeapLock and its contended stub spin on it. The Pascal driver
+    allocates it in its BSS block and EmitProgramPrologue with the arena; the C
+    driver never did, so it stayed 0 and the lock word was whatever lives at
+    BSS offset 0. In a --system-libs program with an initialised `__thread`
+    that is the TLS init image: `__thread int tl = 7` made the lock read as
+    held, and the first Pascal GetMem died with Runtime error 212 ("the heap
+    lock was never released"), threads or not.
+    bug-c-the-c-driver-never-allocates-the-heap-lock-word }
+  BSS_HEAP_LOCK := BSSSize; Inc(BSSSize, 8);
 
   { Token count of the USER program, captured before any unit pull. The pulls
     below (pxxcio/crtl via CLexAppend) merge their tokens into one stream after
@@ -14418,6 +18368,122 @@ begin
       RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
       xtensa_retw;
       while (CodeLen and 3) <> 0 do EmitB(0);          { ENTRY targets are 4-aligned }
+      cEspNoMainBody := CodeLen;
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_retw;
+      cEspObjEntry := True;
+        end
+    { AND A POSIX OBJECT ON WINDOWED XTENSA IS A PROCESS: the entry of a Linux
+      (or Gibux, ESP32-S3) program linked by GNU ld, e.g. as a PIE with
+      `ld -pie --no-dynamic-linker -e app_main`. The kernel starts it as if by
+      a CALL4 that never returns (PS.WOE=1, CALLINC=1, a0=0) with the Linux
+      initial stack at sp: argc, argv[], 0, envp[], 0, auxv. So `entry sp, 32`
+      is legal, the initial stack is sp+32 after it, and this is the call0
+      stub's sequence one window over: the initial sp to BSS_INITIAL_RSP, the
+      initializer shell (which sets environ), main(argc, argv) in a10/a11, the
+      finalizers, exit_group with main's result. A source with no main gets
+      the empty body, as the IDF arm does. Before this, offset 0 was the `ill`
+      trap below and a C program built this way had no entry at all.
+      feature-xtensa-posix-objects-get-a-process-entry }
+    else if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_POSIX) and (TargetArch = TARGET_XTENSA) and
+       (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspFreestandingObj) and
+       (not CTokensMentionMain) then
+    begin
+      { A translation unit that never says `main(` cannot define main: its
+        app_main is the WEAK one that only fills offset 0 (ObjAppMainIsWeak),
+        and nothing ever enters it. The full stub below would still CALL the
+        initializer shell, main's slot and the finalizer runner, and those
+        edges kept ~3.5 KB (__pxx_atexit_run, PXXNilRef, PXXWriteNL,
+        PXXSysWrite, __fini_pxxcio) alive in every busybox object.
+        feature-xtensa-no-main-objects-carry-no-process-exit-path }
+      if CodeLen <> 0 then
+        Error('internal: the xtensa process entry stub must be at code offset 0');
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_retw;
+      while (CodeLen and 3) <> 0 do EmitB(0);
+    end
+    else if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_POSIX) and (TargetArch = TARGET_XTENSA) and
+       (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspFreestandingObj) then
+    begin
+      if CodeLen <> 0 then
+        Error('internal: the xtensa process entry stub must be at code offset 0, ' +
+              'where the object writer exports app_main, but code starts at ' +
+              AIntToStr(CodeLen));
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, 32);   { the initial stack }
+      { SEED THE ROOT FRAME'S SAVE AREA, as the Pascal process entry does
+        (EmitProgramEntryForTarget, which says why at length): no CALL8 reached
+        this frame, so [sp-12] -- the caller's sp, from which a window
+        overflow finds where to spill this frame's a4..a7 -- is whatever lay
+        on the stack. Measured: main's result kept in a7 across the finalizer
+        call came back 0, and every program exited 0. }
+      xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);
+      xtensa_s32i(reg_xtensa_a0, reg_xtensa_a8, 0);
+      xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 4);
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 8);
+      xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 12);
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+      xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 0);
+      if needInit then
+      begin
+        xtensa_mov(reg_xtensa_a10, reg_xtensa_a6);     { arg1 = the initial stack }
+        if SharedRuntime then
+        begin
+          { the body is in the runtime object: an EXTERNAL call (an UND
+            symbol and an R_XTENSA_32 literal), registered here because no
+            header declares it }
+          xtInitIdx := FindProc('__pxx_run_initializers');
+          if xtInitIdx < 0 then
+          begin
+            xtInitNames[0] := 'sp'; xtInitTypes[0] := tyPointer;
+            xtInitIdx := RegisterProc('__pxx_run_initializers', False, tyInteger, 1,
+                                      xtInitNames, xtInitTypes);
+          end;
+          ProcExternal[xtInitIdx] := True;
+          EmitCallProc(xtInitIdx);
+        end
+        else
+          EmitXtensaLongCallSlot(initPatch, initAnchor);
+      end;
+      xtensa_l32i(reg_xtensa_a10, reg_xtensa_a6, 0);   { argc }
+      xtensa_addi(reg_xtensa_a11, reg_xtensa_a6, 4);   { argv }
+      EmitXtensaLongCallSlot(callPatch, callAnchor);
+      if SharedRuntime then
+      begin
+        { RETURNING FROM main IS exit(main's result) (C11 5.1.2.2.3), and
+          under --shared-runtime that has to be the RUNTIME OBJECT's exit:
+          atexit() resolves to rt.o, so the handlers sit in rt.o's table,
+          and this object's own finalizer runner drained a private, empty
+          copy of it -- "atexit ran" never printed (pxx, on Gibux). rt.o's
+          exit runs its __pxx_atexit_run, then exits with the code. The
+          object's local runner is not called at all, so its finalizer
+          bodies are dead here and DCE drops them.
+          bug-xtensa-shared-runtime-objects-skip-atexit-handlers }
+        { a10 already holds main's result: exit's argument }
+        xtInitIdx := FindProc('exit');
+        if xtInitIdx < 0 then
+        begin
+          xtInitNames[0] := 'code'; xtInitTypes[0] := tyInteger;
+          xtInitIdx := RegisterProc('exit', False, tyInteger, 1,
+                                    xtInitNames, xtInitTypes);
+        end;
+        ProcExternal[xtInitIdx] := True;
+        EmitCallProc(xtInitIdx);
+        xtensa_movi(reg_xtensa_a2, 127);                 { exit does not return }
+        EmitExitReg;
+      end
+      else
+      begin
+      xtensa_mov(reg_xtensa_a7, reg_xtensa_a10);       { main's result, kept across the next call }
+      xtFiniIdx := GetFiniRunnerProc;
+      EmitXtensaLongCallSlot(xtFiniLit, xtFiniAnchor);
+      RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
+      xtensa_mov(reg_xtensa_a2, reg_xtensa_a7);
+      EmitExitReg;
+      end;
+      while (CodeLen and 3) <> 0 do EmitB(0);
       cEspNoMainBody := CodeLen;
       xtensa_entry(reg_xtensa_sp, 32);
       xtensa_retw;
@@ -15058,6 +19124,8 @@ begin
       "PXXMemMove not found". Idempotent if already loaded. }
     ParseUsesUnitAmbient('builtinheap');
     ParseUsesUnitAmbient('pxxcio');
+    { the body behind the pthread_create rename (CHostPthreadRoute) }
+    if CHostPthreadRoute then ParseUsesUnitAmbient('palhostthread');
     PullKernelAbiUnit;
     { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
       palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/
@@ -15111,9 +19179,16 @@ begin
       BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
       .c-unit pull carry the same condition, and changing one would make a C
       program and a C unit disagree about which stubs exist. }
-    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
-      EmitCSetjmpStubs;
-    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    if TargetArch <> TARGET_WASM32 then
+      EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
+    { NOT in a --freestanding object: the x86-64 stubs are SSE (stmxcsr /
+      ldmxcsr) through the red zone below rsp, the two things kernel code
+      built -mgeneral-regs-only -mno-red-zone must not contain, and nothing
+      freestanding has the float formatter that calls them. A reference left
+      anyway is an undefined symbol that names itself. feature-c-accept-rainydays-gcc-kernel-cflags }
+    if (TargetArch <> TARGET_WASM32) and not FreestandingMode then EmitCFenvStubs;
+    if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
+      EmitCVforkStub;
   end;
 
   firstIdx := TokPos - 1;
@@ -15121,6 +19196,15 @@ begin
   CAggInitCount := 0;
   CScalInitCount := 0;
   CHasWideBitfield := False;
+
+  { K&R definitions become prototype definitions first (feature-c-k-and-r-function-definitions) }
+  knrDelta := CRewriteKnRDefs(firstIdx, userTokEnd);
+  knrDelta := knrDelta + CRewriteBracedCharStrInit(firstIdx, userTokEnd + knrDelta);
+  if knrDelta <> 0 then
+  begin
+    userTokEnd := userTokEnd + knrDelta;
+    TokPos := firstIdx; Next;
+  end;
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
@@ -15137,11 +19221,16 @@ begin
     end
     else if IsCTypeTok then
     begin
+      CSplitDeclarators(False);
+      CExpandFnTypedefDecl;
       if CTopLevelIsFunc then ParseCSubroutine
       else ParseCGlobalVarDecl;
     end
     else if (CurTok.Kind = tkSemicolon) or ((TokPos - 1) >= userTokEnd) then
       Next  { stray top-level `;` (empty decl, legal C), or an appended pulled-unit token }
+    else if (CurTok.Kind = tkIdent) and
+            ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CParseFileScopeAsm   { feature-c-file-scope-asm-symbol-aliases }
     else if (CurTok.Kind = tkIdent) and
             ((CurTok.SVal = '_Static_assert') or (CurTok.SVal = 'static_assert')) then
       { EVALUATED, not skipped. It is still in CIsTopLevelSkipIdent so the
@@ -15226,6 +19315,8 @@ begin
       end
       else if IsCTypeTok then
       begin
+        CSplitDeclarators(False);
+        CExpandFnTypedefDecl;
         if CTopLevelIsFunc then ParseCSubroutine
         else ParseCGlobalVarDecl;
       end
@@ -15307,15 +19398,24 @@ begin
 
     Emitted BEFORE ApplyCallFixups because the call below is a forward like any
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
-  if (EmitSharedMode or EmitObjMode) and
+  { Hosted windowed xtensa objects too (busybox per TU on Gibux): the thunk
+    carries only the initialisers -- environ is the process entry's, set by
+    __pxx_run_initializers, which then runs every object's .init_array slot.
+    feature-xtensa-objects-run-their-initialisers }
+  xtInitThunk := EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_XTENSA) and
+     (TargetPlatform = PLATFORM_POSIX) and (XtensaABI = XTENSA_ABI_WINDOWED) and
+     (not EspFreestandingObj) and (not FreestandingMode);
+  if xtInitThunk then
+    while (CodeLen and 3) <> 0 do EmitB(0);
+  if xtInitThunk or ((EmitSharedMode or EmitObjMode) and
      ((TargetArch = TARGET_X86_64) or
-      (EmitObjMode and (TargetArch = TARGET_I386))) then
+      (EmitObjMode and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64))))) then
   begin
     thunkStart := CodeLen;
     InitThunkOff := CodeLen;
     EmitSharedThunkPrologue;
     thunkBody := CodeLen;
-    if needInit then
+    if needInit and not xtInitThunk then
     begin
       envPi := FindProc('__pxx_set_environ');
       if envPi < 0 then
@@ -15329,6 +19429,12 @@ begin
       if TargetArch = TARGET_X86_64 then
       begin
         EmitAsmX64(['mov rdi, rdx']); { (envp, from ld.so) }
+        EmitCallProc(envPi);
+      end
+      else if TargetArch = TARGET_AARCH64 then
+      begin
+        { AAPCS64 hands envp in x2, and the prologue left x0..x7 alone }
+        EmitI32($AA0203E0);   { mov x0, x2 }
         EmitCallProc(envPi);
       end
       else
@@ -15369,6 +19475,14 @@ begin
                  + ' initialisation (a file-scope initialiser that is not a'
                  + ' constant, or environ), and a freestanding object has'
                  + ' nothing to run a .init_array');
+    { __attribute__((constructor)) functions, after the initialisers and in
+      declaration order, as gcc's .init_array entries for one translation unit
+      run. A freestanding object may have them: gcc gives it an .init_array too,
+      and rump (-DRUMP_USE_CTOR) registers every component this way. Their
+      priorities are not honoured across objects (all run at the object's own
+      slot). bug-c-constructor-and-destructor-attributes-were-dropped }
+    for ci := 0 to CCtorCount - 1 do
+      if Procs[CCtorProcs[ci]].BodyAddr >= 0 then EmitCallProc(CCtorProcs[ci]);
     if EmitObjMode and (not EmitSharedMode) and (CodeLen = thunkBody) then
     begin
       CodeLen := thunkStart;
@@ -15380,20 +19494,67 @@ begin
 
     { Same for finalization: the Pascal thunk already guards this and the C one
       did not, because under --shared the runner always exists. }
-    if ((not EmitObjMode) or EmitSharedMode or
+    finiRunner := ((not EmitObjMode) or EmitSharedMode or
         (FiniProcCount > 0) or (FiniRunnerProc >= 0)) and
-       not (FreestandingMode and EmitObjMode) then
+       not (FreestandingMode and EmitObjMode) and not xtInitThunk;
+    { __attribute__((destructor)) functions: last declared runs first, as
+      glibc walks a translation unit's .fini_array entries backwards.
+      bug-c-constructor-and-destructor-attributes-were-dropped }
+    finiDtors := 0;
+    if not xtInitThunk then
+      for ci := 0 to CDtorCount - 1 do
+        if Procs[CDtorProcs[ci]].BodyAddr >= 0 then Inc(finiDtors);
+    if finiRunner or (finiDtors > 0) then
     begin
       FiniThunkOff := CodeLen;
       EmitSharedThunkPrologue;
-      EmitCallProc(GetFiniRunnerProc);
+      if finiDtors > 0 then
+        for ci := CDtorCount - 1 downto 0 do
+          if Procs[CDtorProcs[ci]].BodyAddr >= 0 then EmitCallProc(CDtorProcs[ci]);
+      if finiRunner then EmitCallProc(GetFiniRunnerProc);
       EmitSharedThunkEpilogue;
     end;
   end;
 
+  { A FREESTANDING ESP OBJECT with no main: the initialisers have no thunk to
+    run in (the block above is x86-64 / i386 / aarch64) and no main to run at
+    the start of, so before this they were dropped SILENTLY -- `int gv = 5;`
+    read 0 in the kernel that linked it. They are walked here with
+    CStaticDataMode on, so each constant one is baked into .data and emits
+    nothing; one that would need code at run time is refused by name, either
+    by CTryBakeGlobalInit or by the length check below.
+    feature-xtensa-freestanding-objects-carry-the-idf-application-runtime }
+  if EspFreestandingObj and (FindProc('main') < 0) then
+  begin
+    thunkStart := CodeLen;
+    CompilePendingGlobalInits;
+    CEmitDeferredCAggInits;
+    if CodeLen <> thunkStart then
+      ErrorNoPos('--freestanding: this translation unit needs run-time'
+                 + ' initialisation (a file-scope initialiser that is not a'
+                 + ' constant), and a freestanding object has nothing to run it');
+  end;
   CProgramMode := False;
+  { An executable: constructors were called from main's init proc, which knew
+    only the ones declared before main; destructors join the finalizers, which
+    run last-registered first at exit. bug-c-constructor-and-destructor-attributes-were-dropped }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+  begin
+    if CCtorCount > CCtorInMain then
+      ErrorNoPos('C: __attribute__((constructor)) function ' + Procs[CCtorProcs[CCtorInMain]].Name
+                 + ' is declared after main; in a program pxx links, declare constructors before main');
+    for ci := 0 to CDtorCount - 1 do
+      if FiniProcCount < 256 then
+      begin
+        FiniProcs[FiniProcCount] := CDtorProcs[ci];
+        Inc(FiniProcCount);
+      end
+      else
+        ErrorNoPos('C: more than 256 finalizers and destructors');
+  end;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   FillRootVMTSlotDefaults;   { the reserved root slots, as ParseProgram and the NilPy epilogue fill them }
+  CFsaResolveCalls;          { file-scope asm's callN name -- feature-c-file-scope-asm-that-defines-code }
   ApplyCallFixups;
 
   { Object mode emitted no entry stub, so there is nothing to patch and no
@@ -15526,7 +19687,7 @@ function CDeclAttrAlign(typeIdx, endIdx: Integer): Integer;
   endIdx. The lexer records an attribute on the token AFTER it (CAttrFlags bit
   2, value in CAttrAlignValues). A bare `aligned` already carries the
   target's biggest alignment. 0 when there is none. }
-var k, startIdx: Integer; s: AnsiString;
+var k, startIdx, ti: Integer; s: AnsiString; sawStar: Boolean;
 begin
   Result := 0;
   startIdx := typeIdx;
@@ -15540,8 +19701,22 @@ begin
   end;
   if startIdx < 0 then startIdx := 0;
   for k := startIdx to endIdx do
-    if ((CAttrFlags[k] and 2) <> 0) and (CAttrAlignValues[k] > Result) then
-      Result := CAttrAlignValues[k];
+    if ((CAttrFlags[k] and 2) <> 0) and ((CAttrAlignValues[k] and $FFFF) > Result) then
+      Result := (CAttrAlignValues[k] and $FFFF);
+  { ...and an aligned TYPEDEF the declaration is spelled with (`al_t g;`), as
+    long as no `*` follows it: `al_t *p` is a plain pointer.
+    bug-c-an-aligned-typedef-member-does-not-align-the-member }
+  sawStar := False;
+  for k := typeIdx to endIdx do
+    if Tokens[k].Kind = tkStar then sawStar := True;
+  if not sawStar then
+    for k := typeIdx to endIdx do
+      if Tokens[k].Kind = tkIdent then
+      begin
+        ti := FindCTypedef(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen));
+        if (ti >= 0) and (CTypedefAlign[ti] > Result) and (CTypedefTk[ti] <> Ord(tyPointer)) then
+          Result := CTypedefAlign[ti];
+      end;
 end;
 
 function CDeclSawStatic(typeIdx: Integer): Boolean;
@@ -15654,6 +19829,57 @@ begin
   Result := True;
 end;
 
+function CHoistBlockProto(k: Integer): Boolean;
+{ Token k starts a block-scope statement. When it is a function prototype
+  `[extern] T name(params);` for a name that is not yet a routine, register it
+  as a file-scope prototype would be and leave TokPos after its `;`; otherwise
+  rewind to k and answer False. See CHoistBlockScopeExterns. }
+var e, depth, nameTok, pd: Integer;
+begin
+  Result := False;
+  { the statement's extent: one top-level `(...)`, then `;` }
+  e := k; nameTok := -1; pd := 0;
+  while e < TokCount do
+  begin
+    if (pd = 0) and (Tokens[e].Kind in [tkSemicolon, tkBegin, tkEnd, tkAssign, tkComma]) then Break;
+    if Tokens[e].Kind = tkLParen then
+    begin
+      if (pd = 0) and (nameTok < 0) then
+      begin
+        if (e > k) and (Tokens[e - 1].Kind = tkIdent) then nameTok := e - 1
+        else Exit;   { `(*fp)(...)`, a cast, a call through a parenthesis }
+      end;
+      Inc(pd);
+    end
+    else if Tokens[e].Kind = tkRParen then
+    begin
+      Dec(pd);
+      if (pd = 0) and (nameTok >= 0) then
+      begin
+        { `;` ends the prototype; `,` begins another declarator of the same
+          statement (`int f(void), x;`), which pass 2 declares as usual }
+        if (e + 1 < TokCount) and (Tokens[e + 1].Kind in [tkSemicolon, tkComma]) then Break;
+        Exit;   { `f(x) + 1;`, a definition }
+      end;
+    end;
+    Inc(e);
+  end;
+  if (nameTok <= k) or (e >= TokCount) or (Tokens[e].Kind <> tkRParen) then Exit;
+  if FindProc(GetTokenStrFromRaw(Tokens[nameTok].SOffset, Tokens[nameTok].SLen)) >= 0 then Exit;
+  TokPos := k; Next;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'extern') then Next;
+  if IsCTypeTok and CTopLevelIsFunc then
+  begin
+    ParseCSubroutine;
+    { resume the caller's scan after the `;` / `,` (its k := TokPos - 2,
+      then Inc), wherever ParseCSubroutine stopped }
+    TokPos := e + 3;
+    Result := True;
+    Exit;
+  end;
+  TokPos := k; Next;
+end;
+
 procedure CHoistBlockScopeExterns;
 { Pass 1, at a function body's opening brace: register every block-scope
   `extern T name...;` OBJECT declaration whose name no file-scope declaration
@@ -15671,9 +19897,20 @@ procedure CHoistBlockScopeExterns;
   only for a name nothing else in the file declares; an extern object refers
   to the one definition with that name either way. A declarator with a
   parenthesis (a function, or a pointer to one) is left to the old path.
-  bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared }
+  bug-c-a-block-scope-extern-with-no-file-scope-declaration-is-undeclared
+
+  FUNCTION PROTOTYPES TOO, with or without `extern`: `extern int f(int);` or
+  `int g(void);` at block scope declares f for the calls after it (C99
+  6.2.1). Pass 2 skips the declaration, so a function defined in another
+  translation unit -- nothing in this file declares it at file scope -- was
+  "call to undeclared function". A statement that starts with a type and
+  whose single declarator is `name(params)` followed by `;` is registered by
+  ParseCSubroutine, exactly as the same line at file scope. A name already
+  known as a routine is left alone. The mixed form `int f(void), x;` is not
+  hoisted.
+  bug-c-a-block-scope-function-prototype-is-not-a-declaration }
 var k, e, depth, savedPos, nameTok: Integer;
-    hasParen: Boolean;
+    hasParen, anyNew: Boolean;
 begin
   savedPos := TokPos - 1;     { CurTok = the body's opening brace }
   depth := 0;
@@ -15695,36 +19932,204 @@ begin
       e := k + 1;
       hasParen := False;
       nameTok := -1;
+      { ANY declarator the file has not declared: `extern struct domain
+        arpdomain, inetdomain;` with only inetdomain at file scope tested the
+        LAST name, found it, and left arpdomain undeclared (rump's
+        netinet_component.c). Re-declaring a known extern is harmless.
+        bug-c-a-block-scope-extern-list-hoists-only-when-its-last-name-is-new }
+      anyNew := False;
       while (e < TokCount) and (Tokens[e].Kind <> tkSemicolon) and
             (Tokens[e].Kind <> tkBegin) and (Tokens[e].Kind <> tkEnd) do
       begin
+        { `( name )` is a grouping, not a function declarator: NetBSD's
+          __link_set_decl expands to `extern T * const (__start_link_set_x)[]`
+          inside the function. Not hoisted, the name was undeclared -- or,
+          inside rump's prop_kern_init, the loop over the set read both bounds
+          as 0 and initialised no pool.
+          bug-c-a-parenthesised-block-scope-extern-name-is-not-declared }
+        if (Tokens[e].Kind = tkLParen) and (e + 3 < TokCount) and
+           (Tokens[e + 1].Kind = tkIdent) and (Tokens[e + 2].Kind = tkRParen) and
+           (Tokens[e + 3].Kind in [tkSemicolon, tkLBrack, tkComma]) then
+        begin
+          nameTok := e + 1;
+          if FindSym(GetTokenStrFromRaw(Tokens[e + 1].SOffset, Tokens[e + 1].SLen)) < 0 then anyNew := True;
+          e := e + 3;
+          Continue;
+        end;
         if Tokens[e].Kind = tkLParen then hasParen := True;
         if (Tokens[e].Kind = tkIdent) and (Tokens[e + 1].Kind in [tkSemicolon, tkLBrack, tkComma]) then
+        begin
           nameTok := e;
+          if FindSym(GetTokenStrFromRaw(Tokens[e].SOffset, Tokens[e].SLen)) < 0 then anyNew := True;
+        end;
         Inc(e);
       end;
       if (e < TokCount) and (Tokens[e].Kind = tkSemicolon) and (not hasParen) and
-         (nameTok > k + 1) and
-         (FindSym(GetTokenStrFromRaw(Tokens[nameTok].SOffset, Tokens[nameTok].SLen)) < 0) then
+         (nameTok > k + 1) and anyNew then
       begin
         TokPos := k + 1; Next;     { CurTok = the type, `extern` just behind it }
         ParseCGlobalVarDecl;
         k := e;
-      end;
+      end
+      else if CHoistBlockProto(k) then k := TokPos - 2;
+    end
+    else if (k > savedPos) and
+            ((Tokens[k - 1].Kind = tkBegin) or (Tokens[k - 1].Kind = tkSemicolon) or
+             (Tokens[k - 1].Kind = tkEnd)) then
+    begin
+      if CHoistBlockProto(k) then k := TokPos - 2;
     end;
     Inc(k);
   end;
   TokPos := savedPos; Next;
 end;
 
+{ `main`'s file-scope initialisers, compiled as a procedure of their own and
+  CALLED from main's head instead of being compiled INTO it.
+
+  Inline, every temporary the initialisers need became one of main's locals:
+  a trivial program's main had a 5,520-byte frame, and toybox's -- whose
+  243-entry toy_list and friends are initialised here -- ran past 24 KB. That
+  is not only waste. toybox measures recursion depth as the distance between
+  main's &argc and a local in the command it is about to run, gives up above
+  24,000 bytes, and so ran NO command at all: every invocation answered
+  "Unknown command". gcc's main frame is the handful of bytes its own locals
+  need, and code that measures stack distance from main is entitled to that.
+
+  The unit-init proc in ParseCUnit is the same shape for a C unit; this is the
+  program's. Emitted BEFORE main's body address is taken, so the two bodies do
+  not interleave. Returns the proc index. }
+function CEmitMainInitProc: Integer;
+var initIdx, patchPos, savedSC, savedFS, savedCur, i: Integer;
+    dummyNames: array[0..0] of AnsiString;
+    dummyTypes: array[0..0] of TTypeKind;
+begin
+  initIdx := RegisterProc('__pxx_c_main_init', False, tyInteger, 0, dummyNames, dummyTypes);
+  ProcCStaticLink[initIdx] := True;
+  SetProcBodyAddrHere(initIdx);
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  savedCur := CurProc;
+  FrameSize := 0;
+  CurProc := initIdx;
+  Procs[initIdx].ScopeBase := SymCount;
+  patchPos := EmitProcPrologue;
+  Procs[initIdx].FramePatch := patchPos;
+  CompilePendingGlobalInits;
+  CEmitDeferredCAggInits;
+  { ...then the `initialization` sections of the Pascal units this program
+    pulled in (`#include "u.pas"`, and pxxcio's own), in dependency order, as
+    ParseProgram runs them after its initialisers. They never ran under a C
+    main: textfile's never installed its stdin hook, so a byte Eof(Input)
+    peeked was invisible to getchar, and a unit's `initialization WriteLn`
+    printed nothing. Executable only, as the constructors below.
+    bug-c-a-pascal-units-initialization-never-runs-under-a-c-main }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+    for i := 0 to InitProcCount - 1 do EmitCallProc(InitProcs[i]);
+  { An executable's constructors run here, after the initialisers, before
+    main's body. An object or a shared library runs them from its init thunk
+    instead (ParseCProgram), so they are not called twice when it holds main.
+    One declared after main is refused at the end (ParseCProgram).
+    bug-c-constructor-and-destructor-attributes-were-dropped }
+  if (not EmitObjMode) and (not EmitSharedMode) then
+  begin
+    for i := 0 to CCtorCount - 1 do EmitCallProc(CCtorProcs[i]);
+    CCtorInMain := CCtorCount;
+  end;
+  EmitProcEpilog(-1);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC);
+  FrameSize := savedFS;
+  CurProc := savedCur;
+  Result := initIdx;
+end;
+
+function CCallStmtBlock(procIdx: Integer): Integer;
+{ `proc();` as a one-statement block, the shape the parser builds for an
+  expression statement. A bare AN_CALL compiled on its own is lowered as a
+  discarded VALUE, which wasm32 drops entirely, so the call never happens. }
+var call, seq: Integer;
+begin
+  call := AllocNode(AN_CALL);
+  ASTIVal[call] := procIdx;
+  ASTLeft[call] := -1; ASTRight[call] := -1;
+  ASTTk[call] := Ord(Procs[procIdx].RetType);
+  seq := AllocNode(AN_SEQ);
+  ASTLeft[seq] := call; ASTRight[seq] := -1;
+  Result := AllocNode(AN_BLOCK);
+  ASTLeft[Result] := seq; ASTRight[Result] := -1;
+end;
+
+function CSspRecHasArray(recId, depth: Integer): Boolean;
+{ A struct/union holding an array, directly or through a nested record field:
+  gcc's strong rule protects a local of such a type like an array. }
+var ci, base, i: Integer;
+begin
+  Result := False;
+  if (depth > 64) or (recId < REC_UCLASS_BASE) then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    if UFldIsArray[base + i] then begin Result := True; Exit; end;
+    if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
+       CSspRecHasArray(UFldRec_[base + i], depth + 1) then
+      begin Result := True; Exit; end;
+  end;
+end;
+
+function CSspNeedsProtection(procIdx, firstNode: Integer): Boolean;
+{ gcc's -fstack-protector-strong rule, read after the body is parsed and before
+  any of its code is generated: protect a function that has a local array, a
+  local struct/union holding one, a local or parameter whose address is taken,
+  or an alloca/VLA. Locals of inner blocks are still in Syms (a block's end
+  only unlinks their names), and the body's AST is exactly the nodes allocated
+  since firstNode.
+  feature-c-stack-protector-strong-global-guard }
+var i, n, b: Integer;
+begin
+  Result := True;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and (i <> CSspSlot) then
+    begin
+      if Syms[i].IsArray then Exit;
+      if (Syms[i].TypeKind = tyRecord) and CSspRecHasArray(SymTR[i].RecId, 0) then Exit;
+    end;
+  for n := firstNode to ASTNodeCount - 1 do
+  begin
+    if ASTKind[n] = AN_ALLOCA then Exit;
+    if ASTKind[n] = AN_ADDR then
+    begin
+      { descend through member selection to the object whose address it is;
+        a dereference or an index stops it (that is the pointee's address, and
+        an indexed ARRAY is protected by the rule above already) }
+      b := ASTLeft[n];
+      while (b >= 0) and (ASTKind[b] = AN_FIELD) do b := ASTLeft[b];
+      if (b >= 0) and (ASTKind[b] = AN_IDENT) and (ASTIVal[b] >= Procs[procIdx].ScopeBase) and
+         (ASTIVal[b] < SymCount) and
+         ((Syms[ASTIVal[b]].Kind = skLocal) or (Syms[ASTIVal[b]].Kind = skParam)) then
+        Exit;
+    end;
+  end;
+  Result := False;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
+  sspFirstNode, sspGuard: Integer;   { -fstack-protector-strong, see the body }
   name, extLib, hdrLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
+  mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
+  procSawWeak: Boolean;
+  procVis: Integer;      { CDeclVisibility: ELF st_other for the symbol }
+  procCtorKind: Integer;
+  procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
+  procSawInline, procSawExtern, procGnuInline: Boolean;   { C99 inline linkage (CNoteInlineLinkage) }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
@@ -15793,6 +20198,13 @@ begin
     ordinary case, a static defined in a .c the user named.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   procSawStatic := CDeclSawStatic(TokPos - 1);
+  procSawInline := CDeclTokFlag(TokPos - 1, $400);
+  procGnuInline := CDeclTokFlag(TokPos - 1, $800);
+  procSawExtern := CDeclSawExtern(TokPos - 1);
+  procSawWeak := CDeclSawWeak(TokPos - 1);
+  procVis := CDeclVisibility(TokPos - 1);
+  procCtorKind := CDeclCtorKind(TokPos - 1);
+  procSecName := CDeclSectionName(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -16407,6 +20819,8 @@ begin
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  { a visibility on the prototype or the definition holds for the symbol }
+  if procVis <> 0 then ProcCVis[procIdx] := procVis;
   { A `static` PROTOTYPE already gives the name internal linkage (C 6.2.2p3).
     It was recorded only at the definition, so RUNG X (a) took the forward
     `static int sp_parse(...);` for an external row and split the definition
@@ -16494,10 +20908,21 @@ begin
     ProcRetPtrElemDims[procIdx * MAX_ARR_DIMS + retPaK] := retPaDims[retPaK];
   if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
+  { A SysV MEMORY-class result takes rdi before any named argument, so a
+    variadic function's va_start must count it as a used GP register. }
+  if wasNewProc and isVariadic and (ABIX64SysVRet(procIdx, retPaK, gli) = 0) then
+    Inc(ProcNamedGP[procIdx]);
 
-  { If it is just a declaration (ends with ';'), we are done! }
+  { If it is just a declaration (ends with ';'), we are done! An asm label in
+    the tail (`int foo(int) __asm("bar");`, NetBSD's __RENAME) renames the
+    link symbol; it was skipped with the rest. feature-c-asm-labels-rename-the-symbol }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
-        (CurTok.Kind <> tkEOF) do Next;
+        (CurTok.Kind <> tkEOF) do
+    if (CurTok.Kind = tkIdent) and
+       ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm') or (CurTok.SVal = '__asm__')) then
+      CAsmLabel(Procs[procIdx].Name, CReadAsmLabelString)
+    else
+      Next;
   if CurTok.Kind = tkSemicolon then
   begin
     { Pure declaration (prototype). Mark external EXCEPT in a C-program pass 2,
@@ -16515,6 +20940,15 @@ begin
       if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
       else ProcLibrary[procIdx] := InternStr(extLib);   { libm for math, else libc }
     end;
+    { `extern int maybe(void) __attribute__((weak));` -- an OPTIONAL import,
+      the same thing as Pascal's `weakexternal`: an undefined weak symbol
+      that resolves to 0 when nothing defines it, so `maybe ? maybe() : 0`
+      works. It was a required import. bug-c-attribute-weak-was-ignored }
+    if procSawWeak and (Procs[procIdx].BodyAddr < 0) then ProcWeakExternal[procIdx] := True;
+    if not procSawStatic then
+      CNoteInlineLinkage(procIdx, procSawInline, procSawExtern, procGnuInline, False);
+    CApplyProcSection(procIdx, procSecName);
+    CRegisterCtor(procIdx, procCtorKind);
     Next;
     Exit;
   end;
@@ -16605,7 +21039,24 @@ begin
     inherits the internal linkage of an earlier `static` one, so a plain
     redeclaration must not turn the symbol global again.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
-  if procSawStatic then ProcCStaticLink[procIdx] := True;
+  if procSawStatic then ProcCStaticLink[procIdx] := True
+  else CNoteInlineLinkage(procIdx, procSawInline, procSawExtern, procGnuInline, True);
+  { ...and a weak DEFINITION, which another object's strong one may replace
+    (ObjProcBind). bug-c-attribute-weak-was-ignored }
+  if procSawWeak or ProcWeakExternal[procIdx] then ProcCWeakDef[procIdx] := True;
+  CApplyProcSection(procIdx, procSecName);
+  CRegisterCtor(procIdx, procCtorKind);
+  ProcWeakExternal[procIdx] := False;
+  mainInitIdx := -1;
+  { Not on wasm32: there a body is a wasm function built by the backend, and
+    this hand-emitted procedure and its call never became one, so EVERY
+    initialised file-scope variable read 0 (`static int si = 7` printed 0, and
+    math.h's NAN, a static const union, read 0.0). wasm32 keeps the inline
+    form below, and its stack is not main's frame, so the frame-size reason
+    this proc exists for does not apply.
+    bug-c-wasm32-file-scope-initialisers-read-zero }
+  if (name = 'main') and (TargetArch <> TARGET_WASM32) then
+    mainInitIdx := CEmitMainInitProc;
   SetProcBodyAddrHere(procIdx);
   
   { Save scope }
@@ -16619,6 +21070,15 @@ begin
   GotoFixupCount := 0;
   for gli := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[gli] := -1;
   Procs[procIdx].ScopeBase := SymCount;
+  { -fstack-protector-strong: the canary slot is the FIRST local, so it sits at
+    rbp-8 directly under the saved rbp, with every parameter spill, local and
+    later reservation below it -- an overflow running up from a local array
+    reaches it before the return address. Reserved for every C function under
+    the flag (the strong decision needs the parsed body); only a protected one
+    ever writes or checks it. feature-c-stack-protector-strong-global-guard }
+  CSspProc := -1;
+  CSspSlot := -1;
+  if CSspStrong then CSspSlot := AllocVar('__pxx_ssp_canary', tyInt64);
   
   { PXXDBG=a.sysvplace -- the placement oracle's answer for this whole
     signature, printed so it can be diffed against `gcc -S` for the same
@@ -17331,16 +21791,50 @@ begin
        (TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
       EmitZeroLocalSlotForTarget(Procs[procIdx].RetSymIdx,
                                  TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
-    CompilePendingGlobalInits;
-    CEmitDeferredCAggInits;
+    { the initialisers, out of line (CEmitMainInitProc says why) -- or, on
+      wasm32, inline as they were before b3c5f711ea (see mainInitIdx above) }
+    if mainInitIdx >= 0 then EmitCallProc(mainInitIdx)
+    else if TargetArch = TARGET_WASM32 then
+    begin
+      CompilePendingGlobalInits;
+      CEmitDeferredCAggInits;
+      { AN_CALL statements, not EmitCallProc: a raw call never reaches the
+        wasm backend, which builds the body from IR. Constructors had never
+        run on wasm32 for exactly that reason. }
+      if (not EmitObjMode) and (not EmitSharedMode) then
+      begin
+        for i := 0 to CCtorCount - 1 do
+        begin
+          CompileAST(CCallStmtBlock(CCtorProcs[i]));
+        end;
+        CCtorInMain := CCtorCount;
+      end;
+    end;
   end;
 
   { Parse & Compile Body }
+  sspFirstNode := ASTNodeCount;
   node := ParseCBlockAST;
+  { -fstack-protector-strong: the body is parsed and none of its code is
+    generated yet, so this store is the first thing the body runs (the
+    parameter spills above it only write their own slots). r11: the argument
+    registers were spilled already, and r11 is nobody's. }
+  if (CSspSlot >= 0) and CSspNeedsProtection(procIdx, sspFirstNode) then
+  begin
+    sspGuard := FindSym('__stack_chk_guard');
+    if (sspGuard < 0) or (Syms[sspGuard].Kind <> skGlobal) then
+      Error('-fstack-protector-strong: __stack_chk_guard is not a global here');
+    if Syms[CSspSlot].Offset <> -8 then
+      Error('-fstack-protector-strong: the canary slot is not at rbp-8');
+    EmitAsmX64(['mov r11, [@glob]', Syms[sspGuard].Offset,
+                'mov [rbp+%], r11', Syms[CSspSlot].Offset]);
+    CSspProc := procIdx;
+  end;
   CompileAST(node);
 
   { Epilogue }
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  CSspProc := -1;   { no other body's epilogue checks this one's slot }
   PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }
@@ -17384,7 +21878,8 @@ end;
   (CEvalConstExpr is forward-declared at the top of the C parser.) }
 
 function CEvalConstOffsetofAddress: Int64;
-var parenDepth, recId: Integer;
+var parenDepth, recId, fldTotal, fldNDims, subK, subDiv, subSpan, nextRec: Integer;
+    subIdx: Int64;
     fieldName, savedFnPtrName: AnsiString;
     savedIsVoid, savedFnRetIsFunc: Boolean;
     savedPtrDepth, savedElemTk, savedElemRec, savedPtrBaseTk, savedPtrBaseRec: Integer;
@@ -17461,15 +21956,43 @@ begin
         construct with one loop, not a case and a special case.
 
         RecFieldRecId returns REC_NONE for a field that is not itself a record,
-        which ends the walk naturally at the last link. }
+        which ends the walk naturally at the last link.
+
+        A link may carry SUBSCRIPTS: `offsetof(T, b[2])`, `offsetof(T, n.y[3])`
+        (gcc's __builtin_offsetof takes them; NetBSD's rump sources use them).
+        Each `[i]` adds i times the stride of that dimension: the field's whole
+        size divided by the product of the spans so far. This walk used to stop
+        at the `[`, leave it unconsumed, and the initialiser parse never came
+        back (a hang, not an error). }
       while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
       begin
         Next;
         if CurTok.Kind <> tkIdent then Break;
         fieldName := CurTok.SVal;
         Result := Result + RecFieldOffset(recId, fieldName);
-        recId := RecFieldRecId(recId, fieldName);
+        nextRec := RecFieldRecId(recId, fieldName);
         Next;
+        if CurTok.Kind = tkLBrack then
+        begin
+          fldTotal := RecFieldByteSize(recId, fieldName);
+          fldNDims := RecFieldArrNDims(recId, fieldName);
+          subK := 0;
+          subDiv := 1;
+          while CurTok.Kind = tkLBrack do
+          begin
+            Next;
+            subIdx := CEvalConstExpr;
+            Expect(tkRBrack, ']');
+            if fldNDims >= 2 then subSpan := RecFieldArrDimSpanAt(recId, fieldName, subK)
+            else subSpan := RecFieldArrLen(recId, fieldName);
+            if subSpan <= 0 then
+              Error('C: offsetof subscript on a member whose array extent is not known here: ' + fieldName);
+            subDiv := subDiv * subSpan;
+            Result := Result + subIdx * (fldTotal div subDiv);
+            Inc(subK);
+          end;
+        end;
+        recId := nextRec;
       end;
       while (parenDepth > 0) and (CurTok.Kind = tkRParen) do
       begin
@@ -17648,7 +22171,8 @@ begin
 end;
 
 function CEvalConstPrimary: Int64;
-var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW: Boolean;
+var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst: Boolean;
+    strLitText: AnsiString; strLitIdx: Int64;
 begin
   wasCall := False;
   Result := 0;
@@ -17745,6 +22269,41 @@ begin
     end;
     Next;
   end
+  else if CurTok.Kind = tkString then
+  begin
+    { A string literal is an ADDRESS constant, never null, so in the truth
+      contexts a constant expression can use one -- `0 || "abc"`, `!"x"`,
+      `"x" && n` -- it is 1. toybox computes `static const int NEED_OPTIONS =
+      "opts" || 0 || ...;` from its command table; this folded it to 0 (the
+      primary had no string arm, read nothing and answered 0), and every
+      command then skipped option parsing entirely. Adjacent literals are one
+      literal. Anywhere else (an array bound, a case label) a string is not a
+      constant expression and the context's own checks still say so. }
+    strLitText := '';
+    while CurTok.Kind = tkString do begin strLitText := strLitText + CurTok.SVal; Next; end;
+    Result := 1;
+    { ...EXCEPT SUBSCRIPTED: "abc"[i] is the character, an integer constant
+      expression gcc folds. busybox's BUILD_BUG_ON(CONFIG_BUSYBOX_EXEC_PATH[0]
+      != '/') became `char[-1]` -- the subscript was never read, so the
+      comparison saw 1 != '/'. Index = length is the terminating NUL; past it
+      is out of bounds and refused. Plain char's signedness decides a high
+      byte (CPlainCharSigned). bug-c-a-subscripted-string-literal-folds-to-1 }
+    if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      strLitIdx := CEvalConstExpr;
+      if CurTok.Kind <> tkRBrack then Error('C: expected ] after a string literal subscript');
+      Next;
+      if (strLitIdx < 0) or (strLitIdx > Length(strLitText)) then
+        Error('C: string literal subscript ' + AIntToStr(strLitIdx) + ' is out of bounds');
+      if strLitIdx = Length(strLitText) then Result := 0
+      else
+      begin
+        Result := Ord(strLitText[strLitIdx + 1]);
+        if CPlainCharSigned and (Result > 127) then Result := Result - 256;
+      end;
+    end;
+  end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
     { `sizeof(type|expr)` in a constant expression (e.g. array dimension
@@ -17759,6 +22318,32 @@ begin
             + ' — its value is only known at run time');
     Result := ASTIVal[Result];
     CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
+  end
+  else if (CurTok.Kind = tkIdent) and ((CurTok.SVal = '_Alignof') or (CurTok.SVal = '__alignof__')
+          or (CurTok.SVal = '__alignof')) then
+  begin
+    Result := CParseAlignof;
+    CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;   { size_t }
+  end
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
+    Result := CParseTypesCompatible
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_constant_p') and
+          (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { In a CONSTANT expression (an array size: NetBSD's sys/bitops.h ilog2
+      in `bmempools[NMEMPOOLS]`) the answer is whether the operand folds
+      here: 1 for `4`, 0 for a name that is not a constant. The expression
+      parser's answer stays 0 (see ParseCUnary's call arm), which is the
+      sound direction there; here the operand is folded anyway, so the
+      constant arm is the one gcc takes too. }
+    Next; Next;   { name, ( }
+    savedNonConst := CConstExprSawNonConst;
+    CConstExprSawNonConst := False;
+    CEvalConstExpr;
+    if CConstExprSawNonConst then Result := 0 else Result := 1;
+    CConstExprSawNonConst := savedNonConst;
+    Expect(tkRParen, ')');
+    CConstUns := False; CConstWide := False;
   end
   else if CurTok.Kind = tkIdent then
   begin
@@ -17996,6 +22581,23 @@ begin
   end;
 end;
 
+{ The arm a constant condition did NOT select: read for its tokens and its
+  type, never as a constraint on the whole. NetBSD's ilog2(x) is
+  `__builtin_constant_p(x) ? <constant arithmetic> : fls64(x) - 1`, used as an
+  array size; gcc never evaluates the call, and refusing it ("a constant
+  expression cannot call one") or letting it mark the dimension run-time was
+  wrong. rump-pxx g32. bug-c-a-dead-ternary-arm-is-held-to-constant-rules }
+function CEvalConstDeadArm: Int64;
+var savedAllow, savedNonConst: Boolean;
+begin
+  savedAllow := CConstExprAllowCall;
+  savedNonConst := CConstExprSawNonConst;
+  CConstExprAllowCall := True;
+  Result := CEvalConstExpr;
+  CConstExprAllowCall := savedAllow;
+  CConstExprSawNonConst := savedNonConst;
+end;
+
 function CEvalConstTernary: Int64;
 var t, e: Int64; tu, tw: Boolean;
 begin
@@ -18003,10 +22605,14 @@ begin
   if CurTok.Kind = tkQuestion then
   begin
     Next;
-    t := CEvalConstExpr;            { then-branch is a full expression }
+    if CConstExprSawNonConst then t := CEvalConstExpr   { a run-time condition: both arms count }
+    else if Result <> 0 then t := CEvalConstExpr
+    else t := CEvalConstDeadArm;    { then-branch is a full expression }
     tu := CConstUns; tw := CConstWide;
     if CurTok.Kind = tkColon then Next;
-    e := CEvalConstExpr;            { else-branch }
+    if CConstExprSawNonConst then e := CEvalConstExpr
+    else if Result = 0 then e := CEvalConstExpr
+    else e := CEvalConstDeadArm;    { else-branch }
     CConstConv(tu, tw, CConstUns, CConstWide);
     if Result <> 0 then Result := t else Result := e;
     Result := CConstWrap(Result, CConstUns, CConstWide);
@@ -18028,6 +22634,7 @@ var nextVal, val: Int64; nm: AnsiString;
 begin
   Next; { consume the opening brace }
   nextVal := 0;
+  CEnumBodyHasNeg := False;
   while CBlockContinues do
   begin
     if CurTok.Kind = tkIdent then
@@ -18041,6 +22648,7 @@ begin
       else
         val := nextVal;
       AddConst(nm, tyInt32, val);
+      if val < 0 then CEnumBodyHasNeg := True;
       nextVal := val + 1;
       if CurTok.Kind = tkComma then Next;
     end
@@ -18267,7 +22875,7 @@ begin
     packed/aligned(N) attributes are applied by ParseCStructInto. }
   for i := declStart to startIdx - 1 do
   begin
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
     begin
       Result := False;
       Exit;
@@ -18278,7 +22886,7 @@ begin
   i := startIdx;
   while i < TokCount do
   begin
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
     begin
       Result := False;
       Exit;
@@ -18295,7 +22903,7 @@ begin
         Inc(i);
         while (i < TokCount) and (Tokens[i].Kind <> tkEOF) do
         begin
-          if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
+          if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) < 1) then
           begin
             Result := False;
             Exit;
@@ -18347,8 +22955,8 @@ begin
   if lo < 0 then lo := 0;
   if hi >= TokCount then hi := TokCount - 1;
   for i := lo to hi do
-    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] > Result) then
-      Result := CAttrAlignValues[i];
+    if ((CAttrFlags[i] and 2) <> 0) and ((CAttrAlignValues[i] and $FFFF) > Result) then
+      Result := (CAttrAlignValues[i] and $FFFF);
 end;
 
 function CStructDeclStart(startIdx: Integer): Integer;
@@ -18489,6 +23097,7 @@ var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
   fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, bfCap, k: Integer;
+  fpMemArrLen, fpMemSlots: Integer;   { `RET (*name[N])(..)` member: N, and its 8-byte slots }
   fTk: TTypeKind;
   isArr, firstDecl, subIsUnion, fldBaseIsEnum: Boolean;
   anonBitW, anonBitBytes: Integer;
@@ -18506,12 +23115,16 @@ var
   bfNDims: array of Integer;
   bfPtrElemArrLen: array of Integer;   { flattened extent of an ARRAY pointee, `int (*fp)[4]` -> 4; 0 otherwise }
   bfPtrElemNDims: array of Integer;    { ...its dim count when it has more than one (`mat4 *p`) }
+  bfPtrDepth: array of Integer;        { pointer depth of a pointer member (`char **m` -> 2); 0 = not recorded }
+  bfPtrBaseTk: array of Integer;       { ...and the ultimate pointee kind (`char`) / record }
+  bfPtrBaseRec: array of Integer;
   bfPtrElemDim: array of Integer;      { ...and those dims, MAX_ARR_DIMS per field }
   bfDimSpan: array of Integer;
   { An ARRAY TYPEDEF's dims, captured when the member's type is parsed: an
     array bound or bit width read later can re-enter ParseCDeclType
     (`sizeof(T)`), which resets the globals. }
   fldTdArrLen, fldTdNDims, fldTdK: Integer;
+  fldTdAlign: Integer;   { the member type's typedef aligned(N), 0 = none }
   fldTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
@@ -18568,7 +23181,8 @@ begin
   SetLength(bfBitShift, bfCap);  SetLength(bfBitBytes, bfCap);  SetLength(bfAnonRec, bfCap);
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   SetLength(bfPtrElemArrLen, bfCap);
-  SetLength(bfPtrElemNDims, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
+  SetLength(bfPtrElemNDims, bfCap);
+  SetLength(bfPtrDepth, bfCap); SetLength(bfPtrBaseTk, bfCap); SetLength(bfPtrBaseRec, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   bitPos := 0;
@@ -18626,7 +23240,7 @@ begin
       bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
       repeat
         declStars := 0;
-        while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+        while CurTok.Kind = tkStar do begin Inc(declStars); Next; while CurTok.Kind = tkConst do Next; end;
         if CurTok.Kind <> tkIdent then
         begin
           { ANONYMOUS aggregate member (no declarator, e.g. `union { int b1; };`):
@@ -18669,6 +23283,9 @@ begin
                     UFldPtrElemDimSpan[(UClsFBase[subci] + k) * MAX_ARR_DIMS + ndi];
                 end;
                 bfAnonRec[bfCount] := REC_UCLASS_BASE + subci;   { flattened from this anon member }
+                bfPtrDepth[bfCount] := UFldPtrDepth[UClsFBase[subci] + k];
+                bfPtrBaseTk[bfCount] := UFldPtrBaseTk[UClsFBase[subci] + k];
+                bfPtrBaseRec[bfCount] := UFldPtrBaseRec[UClsFBase[subci] + k];
                 Inc(bfCount);
               end;
             if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
@@ -18740,6 +23357,7 @@ begin
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1; bfElemProcSig[bfCount] := -1;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
         totalSz := sz;
@@ -18756,6 +23374,8 @@ begin
       fTk := ParseCDeclType;
       fldTdArrLen := CTypeTypedefArrLen;
       fldTdNDims := CTypeTypedefNDims;
+      fldTdAlign := 0;
+      if CTypePtrDepth = 0 then fldTdAlign := CTypeTypedefAlign;
       for fldTdK := 0 to MAX_ARR_DIMS - 1 do fldTdDims[fldTdK] := CTypeTypedefDims[fldTdK];
       if (fldTdNDims < 1) and (fldTdArrLen >= 1) then
       begin
@@ -18777,6 +23397,12 @@ begin
           Register it as an 8-byte pointer field; the normal name-reading loop
           below would Break (the name token is already consumed). }
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, TARGET_PTR_SIZE);
+        { `(*name[N])`: N slots (a pointer-to-array member keeps one) }
+        fpMemArrLen := 0;
+        if (CTypeFnPtrArrLen >= 1) and (CTypePtrElemArrLen <= 0) and (CTypeFnPtrNDims <= 1) then
+          fpMemArrLen := CTypeFnPtrArrLen;
+        fpMemSlots := 1;
+        if fpMemArrLen > 1 then fpMemSlots := fpMemArrLen;
         if bfCount < bfCap then
         begin
           bfNOff[bfCount] := CTypeFnPtrNameOff; bfNLen[bfCount] := CTypeFnPtrNameLen;
@@ -18812,12 +23438,32 @@ begin
             bfPtrElemArrLen[bfCount] := 0;
           end;
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
+          { `RET (*name[N])(params);` -- an ARRAY of N function pointers, laid
+            out and indexed in place like the typedef'd `fn_t name[N];` (whose
+            element signature also rides on bfProcSig). It was one 8-byte
+            pointer: the members after it overlapped the array, and `p->fn[i]`
+            loaded fn as a pointer and indexed what it pointed at (Gibux's ACPI
+            INTx table, a page fault on q35).
+            bug-c-an-array-of-function-pointers-member-is-one-pointer }
+          if (fpMemArrLen > 1) or ((fpMemArrLen = 1) and (CTypePtrElemArrLen <= 0)) then
+          begin
+            bfIsArr[bfCount] := True; bfArrLen[bfCount] := fpMemArrLen;
+            bfTk[bfCount] := Ord(tyPointer);
+          end;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           bfProcSig[bfCount] := fldProcSig; bfElemProcSig[bfCount] := -1;
+          { `ret (**name)(..)` member: no own signature, the pointee's instead }
+          if (CTypeProcSig < 0) and (CTypePtrElemProcSig >= 0) then
+          begin
+            bfProcSig[bfCount] := -1;
+            bfElemProcSig[bfCount] := CTypePtrElemProcSig;
+            bfElemTk[bfCount] := Ord(tyPointer);
+          end;
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
-        if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
-        else curOff := thisOff + TARGET_PTR_SIZE;
+        if isUnion then begin if TARGET_PTR_SIZE * fpMemSlots > curOff then curOff := TARGET_PTR_SIZE * fpMemSlots; end
+        else curOff := thisOff + TARGET_PTR_SIZE * fpMemSlots;
         if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
         CEndCMember;
       end
@@ -18860,7 +23506,7 @@ begin
         else
         begin
           declStars := 0;
-          while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+          while CurTok.Kind = tkStar do begin Inc(declStars); Next; while CurTok.Kind = tkConst do Next; end;
         end;
         { ANONYMOUS bit-field `T : width;` -- no name, so the declarator has a `:` where
           the identifier would be. It reserves BITS but declares no member:
@@ -19045,6 +23691,13 @@ begin
           sz := TypeSlotSize(IntToTypeKind(baseScalarTk));
           al := TypeFieldAlign(IntToTypeKind(baseScalarTk));
         end;
+        { A member whose type is an aligned typedef (`typedef int T
+          __attribute__((aligned(16)))`) takes that alignment as its TYPE's: so
+          packed and #pragma pack below still cap it, as gcc does (p1 offset 1,
+          pack(4) offset 4). It was the plain int's 4, so `struct { char c; T x; }`
+          put x at 4 where gcc-built code reads 16.
+          bug-c-an-aligned-typedef-member-does-not-align-the-member }
+        if (declStars = 0) and (fldTdAlign > al) then al := fldTdAlign;
         if al < 1 then al := 1;
         attrEndIdx := TokPos - 1;
         fieldPacked := structPacked or CAttrPackedInRange(declStartIdx, attrEndIdx);
@@ -19184,6 +23837,36 @@ begin
           { `ft *pf` (exactly one star): field is a pointer-to-fn-ptr, callable via
             `(*s.pf)()` — record the pointee sig on the parallel elem channel. }
           if declStars = 1 then bfElemProcSig[bfCount] := fldElemProcSig else bfElemProcSig[bfCount] := -1;
+          { `ftl f` with ftl a pointer-to-fn-ptr TYPEDEF (Xlib's XcmsFuncListPtr
+            to_CIEXYZ): no star here, but the same shape as `ft *f`. fldProcSig
+            < 0 tells it apart from a plain fn-pointer typedef, whose sig the
+            fallback above also copied into fldElemProcSig.
+            bug-c-call-through-an-incremented-pointer-to-function-pointer }
+          if (declStars = 0) and (fldProcSig < 0) and (fldElemProcSig >= 0) then
+            bfElemProcSig[bfCount] := fldElemProcSig;
+          { The member's full pointer shape, the way a local's is kept
+            (SetSymPointerType): depth and ultimate base. Without it a
+            `char **m` member was "a pointer to a pointer to something", so
+            `*s.m[i]` and `**s.m` loaded 8 bytes and `s.m[i][j]` indexed
+            pointers: toybox's `*toys.optargs[1]` came back as four characters
+            and devmem refused every width. The first declarator's shape is
+            ParseCDeclType's; a later one's is its own stars over the base
+            scalar (unrecorded when that base is itself a pointer typedef).
+            bug-c-indexing-a-pointer-to-pointer-struct-member-loses-a-level }
+          bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
+          if (declStars > 0) and firstDecl and (CTypePtrDepth = declStars) then
+          begin
+            bfPtrDepth[bfCount] := CTypePtrDepth;
+            bfPtrBaseTk[bfCount] := CTypePtrBaseTk;
+            bfPtrBaseRec[bfCount] := CTypePtrBaseRec;
+          end
+          else if (declStars > 0) and (not firstDecl) and
+                  (IntToTypeKind(baseScalarTk) <> tyPointer) then
+          begin
+            bfPtrDepth[bfCount] := declStars;
+            bfPtrBaseTk[bfCount] := baseScalarTk;
+            bfPtrBaseRec[bfCount] := baseRecId;
+          end;
           Inc(bfCount);
         end;
 
@@ -19273,6 +23956,9 @@ begin
     UFldAnonRec[UFldCount-1] := bfAnonRec[k];
     UFldPtrElemArrLen[UFldCount-1] := bfPtrElemArrLen[k];
     UFldPtrElemNDims[UFldCount-1] := bfPtrElemNDims[k];
+    UFldPtrDepth[UFldCount-1] := bfPtrDepth[k];
+    UFldPtrBaseTk[UFldCount-1] := bfPtrBaseTk[k];
+    UFldPtrBaseRec[UFldCount-1] := bfPtrBaseRec[k];
     for ndi := 0 to MAX_ARR_DIMS - 1 do
       UFldPtrElemDimSpan[(UFldCount-1) * MAX_ARR_DIMS + ndi] := bfPtrElemDim[k * MAX_ARR_DIMS + ndi];
     UFldIsArray[UFldCount-1] := bfIsArr[k];
@@ -19333,6 +24019,16 @@ begin
     Inc(j);
   Result := (j + 1 < TokCount) and (Tokens[j].Kind = tkLParen) and
             (Tokens[j + 1].Kind = tkStar);
+  { A function TYPE returning the aggregate (or a pointer to it):
+    `typedef struct e *lk_t(struct t *, ...);`, and `(lk_t)` once
+    CUnparenTypedefName has stripped the parentheses (NetBSD if_llatbl.h).
+    The aggregate arm read NAME as a plain pointer typedef and dropped the
+    parameter list, so `lk_t *lk; t->lk(..)` had no call signature: "expected
+    ')'" inside any parentheses. The scalar arm registers function types.
+    bug-c-a-function-typedef-returning-a-struct-pointer-has-no-signature }
+  if not Result then
+    Result := (j + 1 < TokCount) and (Tokens[j].Kind = tkIdent) and
+              (Tokens[j + 1].Kind = tkLParen);
 end;
 
 { The `[N][M]..` after a typedef name, into that typedef's dims, the way the
@@ -19365,10 +24061,549 @@ begin
   end;
 end;
 
+{ The mode(..) width on any token from `first` to the declaration's `;`
+  (the lexer puts it on the token AFTER the attribute, which may be the `;`
+  itself), or 0. }
+{ Did this declaration say __attribute__((weak))? From the storage-class
+  words before the type at typeIdx to the `;` or the open brace that ends the
+  declarator (parens nest: a parameter list may hold neither). The flag
+  lands on the token AFTER the attribute, so `int f(void) __attribute__((weak));`
+  carries it on the `;`. bug-c-attribute-weak-was-ignored }
+{ constructor (1) / destructor (2) attributes anywhere in the declaration
+  that starts at typeIdx, OR-ed: `static void f(void) __attribute__((constructor));`
+  puts it after the declarator, on the `;`. }
+function CDeclCtorKind(typeIdx: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := 0;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    Result := Result or ((CAttrFlags[k] shr 8) and 3);
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ File a function as a constructor and/or destructor, once each, in the order
+  first seen -- gcc's .init_array order within one translation unit. }
+procedure CRegisterCtor(procIdx, kind: Integer);
+var i: Integer; seen: Boolean;
+begin
+  if procIdx < 0 then Exit;
+  if (kind and 1) <> 0 then
+  begin
+    seen := False;
+    for i := 0 to CCtorCount - 1 do if CCtorProcs[i] = procIdx then seen := True;
+    if not seen then
+    begin
+      if Length(CCtorProcs) <= CCtorCount then SetLength(CCtorProcs, CCtorCount + 16);
+      CCtorProcs[CCtorCount] := procIdx;
+      Inc(CCtorCount);
+    end;
+  end;
+  if (kind and 2) <> 0 then
+  begin
+    seen := False;
+    for i := 0 to CDtorCount - 1 do if CDtorProcs[i] = procIdx then seen := True;
+    if not seen then
+    begin
+      if Length(CDtorProcs) <= CDtorCount then SetLength(CDtorProcs, CDtorCount + 16);
+      CDtorProcs[CDtorCount] := procIdx;
+      Inc(CDtorCount);
+    end;
+  end;
+end;
+
+{ A CAttrFlags bit on any token of the declaration: the storage-class run
+  before the type (the same backward walk as CDeclSawWeak) through the `;` or
+  open brace that ends it, so a trailing `__attribute__((gnu_inline))` counts. The
+  lexer drops `inline` and marks the token after it ($400), and marks the
+  token after a gnu_inline attribute ($800). }
+{ The visibility attribute on a declaration, as ELF st_other (0 default),
+  scanned as CDeclTokFlag scans. bug-c-visibility-attribute-was-ignored }
+function CDeclVisibility(typeIdx: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := 0;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if ((CAttrFlags[k] shr 12) and 3) <> 0 then begin Result := (CAttrFlags[k] shr 12) and 3; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+function CDeclTokFlag(typeIdx, mask: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrFlags[k] and mask) <> 0 then begin Result := True; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ C99 6.7.4p7 for one file-scope declaration of a function. An INLINE
+  DEFINITION (`inline`, no `extern`) provides no external definition; any
+  declaration with `extern`, or without `inline`, asks for one. gnu_inline
+  reverses the two: its `extern inline` definition is never external and its
+  plain `inline` one is. The flags are only ever set, so the answer does not
+  depend on declaration order or on which pass is running; CProcInlineOnly
+  reads them. bug-c-a-c99-inline-function-in-a-header-is-a-strong-symbol-in-every-object }
+procedure CNoteInlineLinkage(pi: Integer; sawInline, sawExtern, gnuInline, isDef: Boolean);
+begin
+  if pi < 0 then Exit;
+  if gnuInline then
+  begin
+    if isDef and sawInline and sawExtern then ProcCGnuExtInline[pi] := True
+    else if isDef then ProcCExtDecl[pi] := True;
+  end
+  else if sawInline and (not sawExtern) then
+  begin
+    if isDef then ProcCInlineDef[pi] := True;
+  end
+  else
+    ProcCExtDecl[pi] := True;
+end;
+
+function CDeclSawWeak(typeIdx: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrAlignValues[k] and $10000) <> 0 then begin Result := True; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ The __attribute__((section("x"))) name on a declaration, scanned exactly as
+  CDeclSawWeak scans (the lexer puts the index on the token AFTER the
+  attribute, bits 17..23 of CAttrAlignValues), or ''. feature-c-section-attribute-on-esp }
+function CDeclSectionName(typeIdx: Integer): AnsiString;
+var k, depth, id: Integer;
+begin
+  Result := '';
+  k := typeIdx;
+  while (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+        CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k - 1].SOffset, Tokens[k - 1].SLen)) do Dec(k);
+  depth := 0;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    id := (CAttrAlignValues[k] shr 17) and $7F;
+    if (id > 0) and (id <= CAttrSecCount) then begin Result := CAttrSecNames[id - 1]; Exit; end;
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: Dec(depth);
+      tkSemicolon, tkBegin: if depth <= 0 then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ A function's section: in a freestanding ESP object (EspFreestandingObj) a
+  name beginning ".iram" makes it an IRAM routine -- its bytes, inline L32R
+  literals included, go to .iram1.text, and calls across the flash/IRAM split
+  go through a relocated literal. Any other name there is not honoured and
+  says so once. Elsewhere unchanged (the IDF profile keeps ignoring it). }
+procedure CApplyProcSection(procIdx: Integer; const nm: AnsiString);
+begin
+  if (nm = '') or (procIdx < 0) or not EspFreestandingObj then Exit;
+  if Copy(nm, 1, 5) = '.iram' then
+  begin
+    if Length(ProcIram) <= procIdx then Exit;
+    ProcIram[procIdx] := True;
+  end
+  else
+    Warn('section("' + nm + '") on function ' + Procs[procIdx].Name + ' is not honoured;'
+         + ' only .iram* is -- the function stays in .text');
+end;
+
+{ A global's section: in a freestanding ESP object any name is honoured -- the
+  variable gets an ELF section of that name of its own (writeELF32RelIram),
+  initialised or not, so it is placed in .data now. True = place it. }
+function CApplyGlobalSection(idx: Integer; const nm: AnsiString; isExtern: Boolean): Boolean;
+begin
+  Result := False;
+  if (nm = '') or (idx < 0) or isExtern then Exit;
+  { an x86-64 object gives it a section of that name too (writeELFRelX64General's
+    data cuts). feature-c-section-attribute-on-x86-64-objects }
+  if not (EspFreestandingObj or (EmitObjMode and (TargetArch = TARGET_X86_64))) then Exit;
+  if Length(SymSectionName) <= idx then SetLength(SymSectionName, idx + 256);
+  SymSectionName[idx] := nm;
+  Result := True;
+end;
+
+function CModeBytesInDecl(first: Integer): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  k := first;
+  while (k >= 0) and (k < TokCount) do
+  begin
+    if (CAttrFlags[k] and 128) <> 0 then begin Result := (CAttrAlignValues[k] shr 24) and $FF; Exit; end;
+    if Tokens[k].Kind = tkSemicolon then Exit;
+    Inc(k);
+  end;
+end;
+
+{ The largest aligned(N) from `first` to the declaration's `;` (which may
+  carry it: the lexer puts an attribute on the token after it), or 0. }
+function CAttrAlignInDecl(first: Integer): Integer;
+var k: Integer;
+begin
+  k := first;
+  while (k >= 0) and (k < TokCount) and (Tokens[k].Kind <> tkSemicolon) do Inc(k);
+  Result := CAttrAlignInRange(first, k);
+end;
+
+function CApplyAttrMode(tk: TTypeKind; bytes: Integer): TTypeKind;
+var uns: Boolean;
+begin
+  Result := tk;
+  if bytes <= 0 then Exit;
+  if not (tk in [tyInteger, tyChar, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32, tyUInt32,
+                 tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) then Exit;
+  uns := tk in [tyChar, tyUInt8, tyUInt16, tyUInt32, tyUInt64, tyNativeUInt];
+  case bytes of
+    1: if uns then Result := tyUInt8 else Result := tyInt8;
+    2: if uns then Result := tyUInt16 else Result := tyInt16;
+    4: if uns then Result := tyUInt32 else Result := tyInt32;
+    8: if uns then Result := tyUInt64 else Result := tyInt64;
+    16: if uns then Result := tyUInt128 else Result := tyInt128;   { mode(TI) }
+  end;
+end;
+
+{ `typedef SPEC A, *B, C[3];` -- a typedef with several declarators
+  registered only A; B and C were never types (NetBSD's sys/types.h
+  `typedef int32_t __devmajor_t, __devminor_t;`, then `(__devminor_t)x`
+  failed). Rewritten here, once, from the `typedef` token, into one typedef per
+  declarator:
+
+    typedef SPEC A; typedef SPEC' *B; typedef SPEC' C[3];
+
+  The comma BECOMES the `;` and `typedef SPEC'` is inserted after it, so every
+  original token -- and the attribute flags the lexer put on it -- stays where
+  it was. SPEC' is SPEC without an aggregate body: `typedef struct {..} X, *PX`
+  must name ONE struct, so an anonymous body is given a synthetic tag first
+  and the copies say `struct <tag>`. The first declarator is found from its
+  end: trailing ()/[] groups, then the name, or a `(*name)` group; stars and
+  qualifiers directly before it belong to it, not to SPEC.
+  bug-c-a-multi-name-typedef-declares-only-its-first-name }
+var CTdAnonSeq: Integer;
+
+function CTdMatchBack(k: Integer): Integer;
+{ k is a `)` or `]`: the index of its opening partner, or -1 }
+var depth: Integer;
+begin
+  Result := -1;
+  depth := 0;
+  while k >= 0 do
+  begin
+    if Tokens[k].Kind in [tkRParen, tkRBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkLParen, tkLBrack] then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Result := k; Exit; end;
+    end;
+    Dec(k);
+  end;
+end;
+
+function CTdIsQual(k: Integer): Boolean;
+var w: AnsiString;
+begin
+  Result := Tokens[k].Kind = tkConst;
+  if Result or (Tokens[k].Kind <> tkIdent) then Exit;
+  w := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+  Result := (w = 'volatile') or (w = 'restrict') or (w = '__restrict') or
+            (w = '__restrict__') or (w = '__volatile__') or (w = '_Atomic');
+end;
+
+procedure CSplitDeclarators(isTypedef: Boolean);
+var s0, sb, sp, k, c, semi, depth, ds, g, firstGroup, b, e, n, i, j, kw: Integer;
+    w, tag: AnsiString;
+    out: array of TRawToken;
+    src: array of Integer;
+    t, semiTok: TRawToken;
+    fp: Boolean;
+  procedure Put(idx: Integer);
+  begin
+    if n >= Length(out) then
+    begin
+      SetLength(out, n * 2 + 16);
+      SetLength(src, n * 2 + 16);
+    end;
+    out[n] := Tokens[idx]; src[n] := idx; Inc(n);
+  end;
+begin
+  s0 := TokPos - 1;
+  if isTypedef then sp := s0 + 1 else sp := s0;   { the first SPEC token }
+  { the first top-level comma, before the closing `;` }
+  c := -1; semi := -1; depth := 0;
+  k := sp;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack: Inc(depth);
+      tkBegin:
+        begin
+          { a declaration's own open brace at depth 0 is a function body or a braced
+            initialiser: not ours. A typedef's is the aggregate body. }
+          if (depth = 0) and not isTypedef then Exit;
+          Inc(depth);
+        end;
+      tkRParen, tkRBrack, tkEnd: Dec(depth);
+      tkComma: if (depth = 0) and (c < 0) then c := k;
+      tkSemicolon: if depth = 0 then begin semi := k; Break; end;
+      tkEOF: Exit;
+    end;
+    Inc(k);
+  end;
+  if (c < 0) or (semi < 0) then Exit;
+  { where the first declarator starts: from its end, which is the comma or
+    the top-level `=` of an initialiser }
+  k := c - 1;
+  depth := 0;
+  for g := sp to c - 1 do
+  begin
+    if Tokens[g].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[g].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (Tokens[g].Kind = tkAssign) and (depth = 0) then begin k := g - 1; Break; end;
+  end;
+  firstGroup := -1;
+  while (k >= sp) and (Tokens[k].Kind in [tkRParen, tkRBrack]) do
+  begin
+    g := CTdMatchBack(k);
+    if g < sp then Exit;
+    if (g > sp) and (Tokens[g - 1].Kind = tkLParen) and (g - 2 >= sp) and
+       (Tokens[g - 2].Kind = tkIdent) then
+    begin
+      w := GetTokenStrFromRaw(Tokens[g - 2].SOffset, Tokens[g - 2].SLen);
+      if (w = '__attribute__') or (w = '__attribute') then
+      begin
+        k := g - 3;                       { an attribute: not the declarator }
+        Continue;
+      end;
+    end;
+    firstGroup := g;
+    k := g - 1;
+  end;
+  if (firstGroup >= 0) and (Tokens[firstGroup].Kind = tkLParen) and
+     (Tokens[firstGroup + 1].Kind in [tkStar, tkLParen]) then
+    ds := firstGroup                     { `(*name)(...)` }
+  else if Tokens[k].Kind = tkIdent then
+    ds := k
+  else
+    Exit;
+  while (ds - 1 >= sp) and ((Tokens[ds - 1].Kind = tkStar) or
+        (CTdIsQual(ds - 1) and (ds - 2 >= sp) and (Tokens[ds - 2].Kind = tkStar))) do
+    Dec(ds);
+  if ds <= sp then Exit;                 { no specifier left }
+  { a plain declaration is split only for the shapes its own parser cannot
+    take: a `(*name)` declarator, or a function-pointer typedef as SPEC
+    (`extern pf_t a, b;`, `extern void (*c)(int), (*d)(int);` -- NetBSD
+    sys/dtrace_bsd.h). Every other multi-declarator already works there.
+    bug-c-several-function-pointer-declarators-in-one-declaration }
+  if not isTypedef then
+  begin
+    fp := False;
+    for k := sp to semi - 1 do
+    begin
+      if (Tokens[k].Kind = tkLParen) and (k + 1 < semi) and (Tokens[k + 1].Kind = tkStar) then fp := True;
+      if (k < ds) and (Tokens[k].Kind = tkIdent) then
+      begin
+        g := FindCTypedef(GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen));
+        if (g >= 0) and (CTypedefProcSig[g] >= 0) then fp := True;
+      end;
+    end;
+    if not fp then Exit;
+  end;
+  { an aggregate body in SPEC: tag it if anonymous, and leave it out of copies }
+  b := -1; e := -1;
+  for k := sp to ds - 1 do
+    if Tokens[k].Kind = tkBegin then begin b := k; Break; end;
+  if b >= 0 then
+  begin
+    depth := 0;
+    for k := b to ds - 1 do
+    begin
+      if Tokens[k].Kind = tkBegin then Inc(depth)
+      else if Tokens[k].Kind = tkEnd then
+      begin
+        Dec(depth);
+        if depth = 0 then begin e := k; Break; end;
+      end;
+    end;
+    if e < 0 then Exit;
+    kw := b - 1;
+    if (Tokens[kw].Kind = tkIdent) and (kw - 1 >= sp) and
+       ((Tokens[kw - 1].Kind = tkRecord) or
+        ((Tokens[kw - 1].Kind = tkIdent) and
+         ((GetTokenStrFromRaw(Tokens[kw - 1].SOffset, Tokens[kw - 1].SLen) = 'union') or
+          (GetTokenStrFromRaw(Tokens[kw - 1].SOffset, Tokens[kw - 1].SLen) = 'enum')))) then
+      { tagged already }
+    else
+    begin
+      { anonymous: give it a tag the copies can name }
+      Inc(CTdAnonSeq);
+      tag := '__pxx_td_anon_' + AIntToStr(CTdAnonSeq);
+      if TokCharLen + Length(tag) > STRING_CAP then Exit;
+      t := Tokens[b];
+      t.Kind := tkIdent;
+      t.IVal := 0;
+      t.SOffset := TokCharLen;
+      t.SLen := Length(tag);
+      for i := 1 to Length(tag) do
+      begin
+        TokChars[TokCharLen] := tag[i];
+        Inc(TokCharLen);
+      end;
+      SetLength(out, 1);
+      out[0] := t;
+      InsertTokens(b, out, 1);
+      Inc(b); Inc(e); Inc(c); Inc(semi); Inc(ds);
+    end;
+  end;
+  sb := sp;
+  if not isTypedef then
+    while (sb > 0) and (Tokens[sb - 1].Kind = tkIdent) and
+          CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen)) and
+          (GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen) <> '__attribute__') and
+          (GetTokenStrFromRaw(Tokens[sb - 1].SOffset, Tokens[sb - 1].SLen) <> '__attribute') do
+      Dec(sb);
+  { split at every top-level comma, last to first so indices stay valid; the
+    `;` is copied now, because each insertion moves it }
+  semiTok := Tokens[semi];
+  k := semi - 1;
+  depth := 0;
+  while k >= c do
+  begin
+    case Tokens[k].Kind of
+      tkRParen, tkRBrack, tkEnd: Inc(depth);
+      tkLParen, tkLBrack, tkBegin: Dec(depth);
+      tkComma:
+        if depth = 0 then
+        begin
+          n := 0;
+          SetLength(out, 16); SetLength(src, 16);
+          if isTypedef then Put(s0)        { typedef }
+          else
+            { the storage-class words the caller consumed before SPEC
+              (`static HANDLER h0, h1;`): each copy repeats them, or every
+              name after the first lost `static` -- expat's xmlrole.c had 41
+              handlers become undefined externals.
+              bug-c-split-declarators-drop-static-after-the-first-name }
+            for j := sb to sp - 1 do Put(j);
+          for j := sp to ds - 1 do
+            if (b < 0) or (j < b) or (j > e) then Put(j);
+          t := semiTok;
+          t.Line := Tokens[k].Line;
+          Tokens[k] := t;                  { the comma becomes `;` (its attribute slot stays) }
+          InsertTokens(k + 1, out, n);
+          for j := 0 to n - 1 do
+          begin
+            CAttrFlags[k + 1 + j] := CAttrFlags[src[j]];
+            CAttrAlignValues[k + 1 + j] := CAttrAlignValues[src[j]];
+          end;
+        end;
+    end;
+    Dec(k);
+  end;
+end;
+
+{ `typedef int (imp_t)(int, int);` -- the typedef NAME in parentheses, which
+  C allows and NetBSD's sys/vmem.h uses (vmem_import_t). Every path below
+  wants `NAME (` or `NAME ;`, so the redundant pair is removed here, from the
+  `typedef` token to its `;`: `( IDENT )` followed by `(`, `[` or `;`, where
+  IDENT is not already a type name (that would be a cast-like parameter
+  group, not a declarator).
+  bug-c-a-parenthesised-function-typedef-name-was-not-a-type }
+procedure CUnparenTypedefName;
+var k, depth: Integer;
+begin
+  k := TokPos;            { the token after `typedef` }
+  depth := 0;
+  while (k + 3 < TokCount) and not ((depth = 0) and (Tokens[k].Kind = tkSemicolon)) do
+  begin
+    if (depth = 0) and (Tokens[k].Kind = tkLParen) and (Tokens[k + 1].Kind = tkIdent) and
+       (Tokens[k + 2].Kind = tkRParen) and
+       (Tokens[k + 3].Kind in [tkLParen, tkLBrack, tkSemicolon]) and
+       (FindCTypedef(GetTokenStrFromRaw(Tokens[k + 1].SOffset, Tokens[k + 1].SLen)) < 0) and
+       not CIsTopLevelSkipIdent(GetTokenStrFromRaw(Tokens[k + 1].SOffset, Tokens[k + 1].SLen)) then
+    begin
+      RemoveTokens(k + 2, 1);
+      RemoveTokens(k, 1);
+      Exit;
+    end;
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(depth);
+      tkRParen, tkRBrack, tkEnd: Dec(depth);
+    end;
+    Inc(k);
+  end;
+end;
+
+
+{ `typedef struct D **PPD;` -- TWO OR MORE stars over a struct. These arms
+  counted the stars and registered `struct D *` whatever the count, so PPD was
+  one level short: `q[0]` was the struct itself and `q[0]->w` dereferenced its
+  first field. Recorded as the general path records a `T **` typedef: a pointer
+  element over the record, with the depth and the kind under the stars
+  (ParseCDeclType reads them). bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+procedure CAddStructPtrPtrTypedef(const nm: AnsiString; nmOff, nmLen, stars, rec: Integer);
+var ti: Integer;
+begin
+  AddCTypedefEx(nm, tyPointer, Ord(tyPointer), rec);
+  ti := FindCTypedef(nm);
+  if ti >= 0 then
+  begin
+    CTypedefPtrDepth[ti] := stars;
+    CTypedefPtrBaseTk[ti] := Ord(tyRecord);
+  end;
+  RegisterPtrAlias(nmOff, nmLen, Ord(tyPointer), rec, 0, 0);
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
+    tdAlign: Integer;   { aligned(N) this typedef name carries }
     tdDimV: Integer;   { array typedef: the dim being read (CTypedefReadDims reads the rest) }
     tdElemNDims: Integer;      { dims the ELEMENT typedef carries (`typedef vec4 mat4[4]`) }
     tdElemDims: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -19377,8 +24612,15 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     ftPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;
     ftRi: Integer;
+    ftRetElemTk, ftRetElemRec, ftRetRec: Integer;   { the result's record shape, before the params' parses overwrite it }
+    tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
+    isEnumFn, tdEnumUnsigned: Boolean;
+    k: Integer;
 begin
+  CSplitDeclarators(True);
+  CUnparenTypedefName;
   Next; { consume 'typedef' }
+  tdFirstTok := TokPos - 1;   { the type's first token: CTypedefFnRetTok }
 
   isAggregate := ((CurTok.Kind = tkRecord) or
                   ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
@@ -19407,7 +24649,7 @@ begin
         silently — the exact failure this fallback is otherwise careful to avoid.
         bug-a-dynamic-tables-left-their-fixed-size-shadows-behind }
       SkipBraceBlock;
-      while CurTok.Kind = tkStar do Next;
+      while (CurTok.Kind = tkStar) or (CurTok.Kind = tkConst) do Next;
       if CurTok.Kind = tkIdent then
       begin
         nm := CurTok.SVal; Next;
@@ -19430,14 +24672,20 @@ begin
       UClsIsRecord[ci] := True;
       UClsCaseSensFields[ci] := True; { C: `b` != `B` }
       ParseCStructInto(ci, isUnion);
+      { `typedef struct mi {..} const mi_t;` -- a qualifier after the body
+        (NetBSD sys/module.h modinfo_t). It stopped the name being read.
+        bug-c-a-qualifier-after-a-struct-typedef-body-hid-the-name }
+      while (CurTok.Kind = tkConst) or ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__'))) do Next;
       ptrStars := 0;
-      while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
+      while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
       if CurTok.Kind = tkIdent then
       begin
         nmOff := Tokens[TokPos-1].SOffset;
         nmLen := Tokens[TokPos-1].SLen;
         nm := CurTok.SVal; Next;
-        if ptrStars > 0 then
+        if ptrStars >= 2 then
+          CAddStructPtrPtrTypedef(nm, nmOff, nmLen, ptrStars, REC_UCLASS_BASE + ci)
+        else if ptrStars > 0 then
         begin
           { typedef struct {..} *Name; — the record stays anonymous, Name is a
             pointer to it (both for the C parser and as a Pascal pointer type). }
@@ -19464,8 +24712,9 @@ begin
       `struct Zio { ... }` body fills the same record and `z->field` resolves.
       `typedef struct T *Ref;` is a pointer to it. A tagless no-body typedef
       stays an opaque pointer handle. }
+    while (CurTok.Kind = tkConst) or ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__'))) do Next;   { `typedef struct T const CT;` }
     ptrStars := 0;
-    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
+    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; while CurTok.Kind = tkConst do Next; end;
     if CurTok.Kind = tkIdent then
     begin
       nmOff := Tokens[TokPos-1].SOffset;
@@ -19474,7 +24723,9 @@ begin
       if hasTag then
       begin
         ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE;
-        if ptrStars > 0 then
+        if ptrStars >= 2 then
+          CAddStructPtrPtrTypedef(nm, nmOff, nmLen, ptrStars, REC_UCLASS_BASE + ci)
+        else if ptrStars > 0 then
         begin
           AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
           RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
@@ -19493,15 +24744,54 @@ begin
     Exit;
   end;
 
-  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
+  { `typedef enum E Processor(XML_Parser, ...);` and `typedef enum E
+    (*fp)(int);` -- an enum RESULT, not an enum typedef. The arm below
+    registered `Processor` as an int and skipped its parameter list, so
+    `static Processor prologInitProcessor;` declared a 4-byte object and
+    every `parser->m_processor = prologInitProcessor` stored 0: expat parsed
+    a document without calling one handler. With no body, the general path
+    handles `enum E` as a type and the declarator as a function.
+    bug-c-a-function-typedef-returning-an-enum-declares-objects }
+  isEnumFn := False;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') and
+     (Tokens[TokPos].Kind = tkIdent) then
+  begin
+    k := TokPos + 1;
+    while (k < TokCount) and ((Tokens[k].Kind = tkStar) or (Tokens[k].Kind = tkConst)) do Inc(k);
+    if k + 1 < TokCount then
+      isEnumFn := ((Tokens[k].Kind = tkIdent) and (Tokens[k + 1].Kind = tkLParen)) or
+                  ((Tokens[k].Kind = tkLParen) and (Tokens[k + 1].Kind = tkStar));
+  end;
+  if (not isEnumFn) and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
   begin
     Next; { 'enum' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
-    if CurTok.Kind = tkBegin then ParseCEnumBody; { enumerators -> constants }
+    tdEnumUnsigned := False;
+    if CurTok.Kind = tkBegin then
+    begin
+      ParseCEnumBody; { enumerators -> constants }
+      tdEnumUnsigned := not CEnumBodyHasNeg;
+    end;
+    { `typedef enum E *PE;` -- CSplitDeclarators writes exactly this for
+      `typedef enum {..} E, *PE;`, and it registered nothing: the star was
+      not a name. bug-c-a-multi-name-typedef-declares-only-its-first-name }
+    ptrStars := 0;
+    while (CurTok.Kind = tkStar) or (CurTok.Kind = tkConst) do
+    begin
+      if CurTok.Kind = tkStar then Inc(ptrStars);
+      Next;
+    end;
     if CurTok.Kind = tkIdent then
     begin
       nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyInt32);
+      if ptrStars > 0 then AddCTypedefEx(nm, tyPointer, Ord(tyInt32), REC_NONE)
+      else
+      begin
+        AddCTypedef(nm, tyInt32);
+        { a bitfield of this type is unsigned when no enumerator is negative,
+          as in gcc. bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+        CTypedefIsUEnum[FindCTypedef(nm)] := tdEnumUnsigned;
+      end;
     end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
@@ -19532,9 +24822,14 @@ begin
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     nm := CurTok.SVal;
+    ftNameTok := TokPos - 1;
     Next;                              { consume NAME -> CurTok is '(' }
+    ftLParTok := TokPos - 1;
     ftRet := tk;
     if CTypeIsVoid then ftRet := tyInteger;
+    ftRetElemTk := CTypeElemTk;
+    ftRetElemRec := CTypeElemRec;
+    ftRetRec := CTypeBaseRec;
     ftNParams := 0;
     Next;                              { consume the parameter-list '(' }
     while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
@@ -19557,6 +24852,7 @@ begin
         Next;                          { `...` varargs marker }
       Eat(tkComma);
     end;
+    ftRParTok := TokPos - 1;
     Eat(tkRParen);
     ftSig := RegisterProc('$cfntype', True, ftRet, ftNParams, ftPNames, ftPTypes);
     Procs[ftSig].BodyAddr := -1;
@@ -19583,10 +24879,29 @@ begin
           Procs[ftSig].Params[ftRi].IsRef :=
             not ABICRecordParamByValue(ftPRecIds[ftRi]);
       end;
+    { The result's record, as the $cfnptr registration records it: without it
+      `f(i)->b` and `f(i).b` through a function-type typedef read offset 0.
+      bug-c-a-function-typedef-returning-a-struct-pointer-has-no-signature }
+    if (ftRet = tyPointer) and (ftRetElemRec >= REC_UCLASS_BASE) then
+    begin
+      ProcRetPtrElemTk[ftSig] := ftRetElemTk;
+      ProcRetPtrElemRec[ftSig] := ftRetElemRec;
+    end
+    else if ftRet = tyPointer then
+      ProcRetPtrElemTk[ftSig] := ftRetElemTk;
+    if (ftRet = tyRecord) and (ftRetRec >= 0) then
+      ProcRetRecId[ftSig] := ftRetRec;
     CTypeIsVoid := False;
     AddCTypedefFnPtr(nm, ftSig);
     ci := FindCTypedef(nm);
-    if ci >= 0 then CTypedefIsFnType[ci] := True;   { `*` decays, not indirects }
+    if ci >= 0 then
+    begin
+      CTypedefIsFnType[ci] := True;   { `*` decays, not indirects }
+      CTypedefFnRetTok[ci] := tdFirstTok;
+      CTypedefFnNameTok[ci] := ftNameTok;
+      CTypedefFnLParTok[ci] := ftLParTok;
+      CTypedefFnRParTok[ci] := ftRParTok;
+    end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;
@@ -19619,6 +24934,17 @@ begin
       that produced `tk` a few lines above -- no other ParseCDeclType runs on
       the path to here, the two arms that do their own both Exit first.
       bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently }
+    { __attribute__((mode(..))) anywhere in this declaration -- before the
+      name, after it, or after the type -- makes an INTEGER type that wide,
+      keeping its signedness. bug-c-attribute-mode-qi-hi-si-di-was-ignored }
+    tk := CApplyAttrMode(tk, CModeBytesInDecl(tdFirstTok));
+    { aligned(N) anywhere in the declaration, or inherited from the typedef
+      this one aliases (`typedef al_t al2_t;`). Read before the dims below,
+      whose constant expressions may run another type parse.
+      bug-c-an-aligned-typedef-member-does-not-align-the-member }
+    tdAlign := 0;
+    if CTypePtrDepth = 0 then tdAlign := CTypeTypedefAlign;
+    if CAttrAlignInDecl(tdFirstTok) > tdAlign then tdAlign := CAttrAlignInDecl(tdFirstTok);
     CTypedefRedefArmed := True;
     if CTypeLongLong then CTypedefPendingRank := 2
     else if CTypeLong then CTypedefPendingRank := 1
@@ -19629,11 +24955,36 @@ begin
     begin
       AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
       if CTypeProcSig >= 0 then CTypedefProcSig[FindCTypedef(nm)] := CTypeProcSig;
+      { `typedef struct D **PPD;` -- two or more levels: keep the depth and the
+        kind under the stars, so `PPD q` is `struct D **q` (ParseCDeclType).
+        One level needs neither: its pointee is CTypedefElemTk/Rec already.
+        bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
+      if (CTypeProcSig < 0) and (CTypePtrElemProcSig < 0) and (CTypePtrDepth >= 2) then
+      begin
+        CTypedefPtrDepth[FindCTypedef(nm)] := CTypePtrDepth;
+        CTypedefPtrBaseTk[FindCTypedef(nm)] := CTypePtrBaseTk;
+      end;
+      { `typedef ft *ftl;` -- a table of function pointers (Xlib's
+        XcmsFuncListPtr). Keep the pointee signature for the typedef's users.
+        bug-c-call-through-an-incremented-pointer-to-function-pointer }
+      if (CTypeProcSig < 0) and (CTypePtrDepth = 1) and (CTypePtrElemProcSig >= 0) then
+        CTypedefPtrElemProcSig[FindCTypedef(nm)] := CTypePtrElemProcSig;
       if (CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown)) then
         RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
     end
     else
+    begin
       AddCTypedef(nm, tk);
+      { `typedef side_t alias_t;` keeps the unsigned-enum mark.
+        bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+      if (CTypePtrDepth = 0) and CTypeBaseIsEnum then
+        CTypedefIsUEnum[FindCTypedef(nm)] := True;
+    end;
+    if tdAlign > 0 then
+    begin
+      ci := FindCTypedef(nm);
+      if ci >= 0 then CTypedefAlign[ci] := tdAlign;
+    end;
     { AN ARRAY TYPEDEF WHOSE ELEMENT IS ITSELF AN ARRAY TYPEDEF keeps both sets
       of dims: its own brackets outermost, then the element typedef's. cglm's
       `typedef vec4 mat4[4]` over `typedef float vec4[4]` recorded [4] only, so
@@ -19954,9 +25305,16 @@ begin
       BOTH COPIES MOVE TOGETHER. The comment above says why: this site and the
       .c-unit pull carry the same condition, and changing one would make a C
       program and a C unit disagree about which stubs exist. }
-    if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_WASM32) then
-      EmitCSetjmpStubs;
-    if TargetArch <> TARGET_WASM32 then EmitCFenvStubs;
+    if TargetArch <> TARGET_WASM32 then
+      EmitCSetjmpStubs;   { xtensa too since feature-xtensa-c-setjmp-longjmp }
+    { NOT in a --freestanding object: the x86-64 stubs are SSE (stmxcsr /
+      ldmxcsr) through the red zone below rsp, the two things kernel code
+      built -mgeneral-regs-only -mno-red-zone must not contain, and nothing
+      freestanding has the float formatter that calls them. A reference left
+      anyway is an undefined symbol that names itself. feature-c-accept-rainydays-gcc-kernel-cflags }
+    if (TargetArch <> TARGET_WASM32) and not FreestandingMode then EmitCFenvStubs;
+    if (TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_POSIX) then
+      EmitCVforkStub;
   end;
 
   firstIdx := TokPos - 1;
