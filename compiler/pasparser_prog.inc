@@ -1301,6 +1301,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     doneDecls, hasExceptions, needsBuiltin, needsSysGenerics,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
+    needsFloatRec: Boolean;   { names TDoubleRec/TSingleRec/TFloatSpecial }
     needsSoftFloat, needsWasiFile: Boolean;
     needsEspAssert: Boolean;
     needsStrFmt: Boolean;
@@ -1400,6 +1401,7 @@ begin
   needsTextfile := False;
   usesMath := False;
   needsMath := False;
+  needsFloatRec := False;
   needsSoftFloat := False;
   needsWasiFile := False;
   needsEspAssert := False;
@@ -1498,6 +1500,20 @@ begin
       end;
     if usesMath then needsMath := True;
   end;
+  { FPC's System float views (TDoubleRec & co., mathh.inc) live in floatrec:
+    pulled when the program NAMES one, the same way `math` is pulled for sqrt.
+    Not size-gated by target: it is a few small methods, and only a program
+    that names the type pays for it. feature-b-rtl-has-no-tdoublerec }
+  if not NoDefaultRtl then
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 10) and (Tokens[i].SLen <= 13) then
+      begin
+        tnm := GetTokenStr(i);
+        if CaseEqual(tnm, 'TDoubleRec') or CaseEqual(tnm, 'TSingleRec') or
+           CaseEqual(tnm, 'TFloatSpecial') then
+        begin needsFloatRec := True; Break; end;
+      end;
   { The UTF-16 runtime is its own unit for the reason `math` is: builtinheap has
     no dead-code elimination, so four unreachable transcoders were 13 KB of
     every bare ESP image. Pull builtinwide only when the program can actually
@@ -2681,6 +2697,7 @@ begin
     managed-field zero-init. }
   if needsTextfile then ParseUsesUnitAmbient('textfile');
   if needsMath then ParseUsesUnitAmbient('math');
+  if needsFloatRec then ParseUsesUnitAmbient('floatrec');
   if needsThreads then ParseUsesUnitAmbient('palthreadobj');
   FixupTVarRecLayout;
   DbgGlobalScopeBase := SymCount;  { -g: program globals are declared past here }

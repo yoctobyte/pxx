@@ -7507,9 +7507,9 @@ begin
         already went to AN_CLASS_CAST above; a record name is not a type alias so
         it would otherwise fall through to "unexpected token". }
       if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) and
-         (IsRecordType(name) >= REC_UCLASS_BASE) then
+         (RecordCastTarget(name) >= REC_UCLASS_BASE) then
       begin
-        baseRec := IsRecordType(name);
+        baseRec := RecordCastTarget(name);   { a record, or an alias of one }
         Next;                  { consume record type name }
         Expect(tkLParen, '(');
         ParseExpr;
@@ -7534,9 +7534,19 @@ begin
           trailing accessor is the one that was wrong.
           bug-a-a-whole-record-hard-cast-is-lowered-as-a-pointer-cast
           `^` still means the pointer path — `TRec(p)^` derefs the VALUE. }
+        { ...and a bare cast of a SCALAR VALUE is the same reinterpret:
+          `r := TDoubleRec(d)` with d a Double read a record FROM THE ADDRESS
+          d's bits spell, and segfaulted (fpc: the 8 bytes of d). Integers,
+          floats, Boolean/Char and sets are values, never addresses; pointer-
+          sized kinds (Pointer, NativeInt, class, string) keep the pointer
+          reading, which `TRec(p)` code relies on.
+          feature-b-rtl-has-no-tdoublerec }
         if (CurTok.Kind = tkDot) or
            ((CurTok.Kind <> tkCaret) and
-            (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord)) then
+            (IntToTypeKind(ASTTk[ASTLeft[node]]) in
+               [tyRecord, tyInteger, tyBoolean, tyChar, tyInt8, tyUInt8,
+                tyInt16, tyUInt16, tyInt32, tyUInt32, tyInt64, tyUInt64,
+                tySingle, tyDouble, tySet])) then
         begin
           { VALUE typecast used directly with `.field` — `TRec(q).high` — is
             FPC's in-place reinterpret: the field lives at @q + offset. Build a

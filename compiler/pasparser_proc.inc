@@ -7213,6 +7213,7 @@ var
   unitNeedsText: Boolean;
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
+  unitNeedsFloatRec: Boolean;   { …and TDoubleRec/TSingleRec/TFloatSpecial }
   unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
   unitIsBuiltin: Boolean;       { resolved from compiler/builtin/ -- no guessed pulls }
   unitTnm: AnsiString;
@@ -8262,6 +8263,7 @@ begin
     unitNeedsText := False;
     unitNeedsRootMeth := False;
     unitNeedsMath := False;
+    unitNeedsFloatRec := False;
     unitNeedsThreads := False;
     while i < TokCount do
     begin
@@ -8329,6 +8331,17 @@ begin
            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
           unitNeedsMath := True;
         if CaseEqual(unitTnm, 'pi') then unitNeedsMath := True;
+      end;
+      { FPC's System float views, NAMED (a type, so no '(' rule): x86_64/
+        cpuinfo.pas writes `bestrealrec = TDoubleRec` with only globtype in
+        its uses. feature-b-rtl-has-no-tdoublerec }
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 10) and (Tokens[i].SLen <= 13) then
+      begin
+        unitTnm := GetTokenStr(i);
+        if CaseEqual(unitTnm, 'TDoubleRec') or CaseEqual(unitTnm, 'TSingleRec') or
+           CaseEqual(unitTnm, 'TFloatSpecial') then
+          unitNeedsFloatRec := True;
       end;
       { NO CLAUSE HERE FOR THE SYSTEM NAMES THAT LIVE IN `builtin`, AND THAT IS
         A MEASUREMENT RATHER THAN AN OVERSIGHT. One was written on 2026-09-09
@@ -8399,6 +8412,8 @@ begin
     if unitNeedsThreads and (not unitIsBuiltin) and (not NoDefaultRtl) and
        (not TargetIsEspClass) then
       ParseUsesUnitAmbient('palthreadobj');
+    if unitNeedsFloatRec and (not unitIsBuiltin) and (not NoDefaultRtl) then
+      ParseUsesUnitAmbient('floatrec');
 
     { Point parser to first token of the unit }
     TokPos := startPos;

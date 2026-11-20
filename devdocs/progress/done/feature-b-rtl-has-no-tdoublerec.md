@@ -4,8 +4,8 @@ title: "`TDoubleRec` is declared nowhere pxx can see, and fpc has it in System"
 track: P
 prio: 25
 type: feature
-status: open
-owner: ""
+status: done
+owner: claude-dupwt
 found-by: frankH
 created: 2026-09-11
 tags: [rtl, floats, fpc-corpus, type-visibility]
@@ -73,3 +73,38 @@ siblings `TSingleRec` and `TExtended80Rec` sit beside it and are equally
 absent — `cpuinfo.pas:34` takes the `TExtended80Rec` arm under
 `FPC_HAS_TYPE_EXTENDED`, so check which arm our define profile selects before
 building only one.
+
+
+## Done 2026-11-20 (claude-dupwt)
+
+The blocker (bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses)
+is in done/.
+
+- **lib/rtl/floatrec.pas**: `TFloatSpecial`, `TSingleRec` and `TDoubleRec`
+  with FPC's interface (variant Bytes/Words/Data/Value; Sign/Exp/Frac
+  properties; Mantissa, Fraction, Exponent, SpecialType, BuildUp). Written
+  from the interface, not copied from the FPC RTL.
+- **Ambient, like `math`**: ParseProgram's token scan and the unit loader's
+  scan load `floatrec` when a source NAMES one of the three types. A
+  program's own `TDoubleRec` still wins.
+- **Two cast bugs on the same path, both fixed:**
+  1. `R2(v).field` / `.method` through a record ALIAS (`bestrealrec =
+     TDoubleRec`) was refused ("expected ')' before '.'") while `TR(v).field`
+     compiled. A new helper, RecordCastTarget (symtab.inc), resolves the alias.
+  2. A bare whole-value cast of a SCALAR to a record (`pr := TPair(d)`, d a
+     Double/Int64/LongWord) read a record from the ADDRESS d's bits spelled,
+     and segfaulted. This was so on the published compiler too, whatever the
+     type was named. It now reinterprets the bytes, as fpc does.
+- Output = fpc 3.2.2 for both new tests, on x86-64, i386 and aarch64. The
+  one difference: `TDoubleRec.BuildUp(True, 0, 3)`. fpc 3.2.2 prints 8.0
+  (its Double BuildUp loses the sign; its Single one keeps it); pxx prints
+  -8.0, which is what the IEEE bits say.
+
+Rows (test-core): test_tdoublerec_is_ambient, test_tdoublerec_alias_cast
+(+ tdoublerec_alias_unit, the cpuinfo.pas/nadd.pas shape).
+
+Not done: FPC's real x86_64/cpuinfo.pas now stops EARLIER, in globtype.pas
+(`unknown type: PInt`), before its TDoubleRec line, so it is behind other
+gaps. A record cast of a non-lvalue (`TR(d*2)`) is refused with
+IR_UNSUPPORTED, with `.field` (as before) and now bare (it used to
+segfault): bug-p-a-record-value-cast-of-a-computed-value-is-refused.

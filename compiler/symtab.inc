@@ -3245,6 +3245,26 @@ begin
     Result := REC_NONE;
 end;
 
+function RecordCastTarget(const lo: AnsiString): Integer;
+{ The record a VALUE typecast `T(x)` reinterprets as: IsRecordType's answer,
+  or, when T is an ALIAS of a record (`bestrealrec = TDoubleRec`, FPC's own
+  x86_64/cpuinfo.pas), the record it names. Without the alias arm
+  `R2(v).field` fell through to the pointer-alias cast and was refused
+  ("expected ')' before '.'") while `TR(v).field` compiled.
+  feature-b-rtl-has-no-tdoublerec }
+var ai, ci: Integer;
+begin
+  Result := IsRecordType(lo);
+  if Result >= REC_UCLASS_BASE then Exit;
+  Result := REC_NONE;
+  ai := FindTypeAlias(lo);
+  if (ai < 0) or (AliasTk[ai] <> Ord(tyRecord)) or (AliasProcSig[ai] >= 0) or
+     (AliasPtrDepth[ai] <> 0) then Exit;
+  ci := AliasElemRec[ai] - REC_UCLASS_BASE;
+  if (ci < 0) or (ci >= UClsCount) or (not UClsIsRecord[ci]) then Exit;
+  Result := AliasElemRec[ai];
+end;
+
 { The CLASS of that name, skipping same-named RECORDS. FindUClass returns the
   first row whatever it is, and the RTL has a `Text` record (the file type), so
   a façade class called Text — the name a tkinter application writes — was

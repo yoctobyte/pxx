@@ -24366,6 +24366,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_mgmt_op_clsa26 | diff -u test/test_mgmt_operators_class_field_array.expected -
 	./$(COMPILER) test/test_mgmt_operators_class_field_nested.pas $(TESTTMP)/test_mgmt_op_clsn26
 	$(TESTTMP)/test_mgmt_op_clsn26 | diff -u test/test_mgmt_operators_class_field_nested.expected -
+	# FPC's System float views, NAMED with no `uses` (program and unit), and a
+	# value typecast through a record ALIAS with .field/.method -- FPC's own
+	# cpuinfo.pas/nadd.pas shape. feature-b-rtl-has-no-tdoublerec
+	./$(COMPILER) test/test_tdoublerec_is_ambient.pas $(TESTTMP)/test_tdoublerec_amb26 > /dev/null
+	$(TESTTMP)/test_tdoublerec_amb26 | diff -u test/test_tdoublerec_is_ambient.expected -
+	./$(COMPILER) test/test_tdoublerec_alias_cast.pas $(TESTTMP)/test_tdoublerec_ac26 > /dev/null
+	$(TESTTMP)/test_tdoublerec_ac26 | diff -u test/test_tdoublerec_alias_cast.expected -
 	# ...and MULTI-DIMENSIONAL, symbol and field, because storage is flat
 	# row-major and the recorded extent is the FLAT count, so one loop walks any
 	# dimensionality. What changes with the dimension count is the INDEX SPACE:
