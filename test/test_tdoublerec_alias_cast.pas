@@ -11,7 +11,9 @@ type
 function TR.F: LongInt; begin Result := a * 2; end;
 type TPair = record lo, hi: LongWord; end;
   TB4 = packed record b0, b1, b2, b3: Byte; end;
-var v: LongInt; z: Double; q: Int64; w: LongWord; pr: TPair; b4: TB4;
+function Twice(x: Double): Double; begin Result := x * 2; end;
+
+var v: LongInt; z: Double; k: Integer; q: Int64; w: LongWord; pr: TPair; b4: TB4;
 begin
   v := 21;
   writeln(TR(v).F, ' ', R2(v).a, ' ', R2(v).F);
@@ -23,4 +25,12 @@ begin
   z := 1.5; pr := TPair(z); writeln(pr.hi);
   q := -1; pr := TPair(q); writeln(pr.lo, ' ', pr.hi);
   w := $04030201; b4 := TB4(w); writeln(b4.b0, ' ', b4.b3);
+  { ...and of a COMPUTED value, which has no address of its own: it was
+    refused (IR_UNSUPPORTED). bug-p-a-record-value-cast-of-a-computed-value-is-refused }
+  writeln(TPair(z * 2).hi, ' ', TPair(Twice(z)).hi, ' ', TPair(q + 1).lo);
+  pr := TPair(Twice(z) + 1.0); writeln(pr.hi);
+  b4 := TB4(LongWord(w + 1)); writeln(b4.b0);
+  for k := 1 to 3 do write(TB4(LongWord(k * 256 + k)).b1, ' ');
+  writeln;
+  writeln(Ord(TDoubleRec(z * 0.5).SpecialType), ' ', TDoubleRec(-z).Sign);
 end.

@@ -2833,6 +2833,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     recName, aliasIdx: Integer;
     strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
                               tyAnsiString index arm below }
+    spillSym: Integer;      { a computed scalar's hidden home -- see the tail }
 begin
   { Address of an address-of: `&(&x)`. In valid C this only arises from array
     decay (`&arr` where arr is an array yields arr's address), so the address of
@@ -3767,6 +3768,23 @@ begin
        ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_ARM32)) then
       Result := IRAppend(IR_FIELD, Result, -1, 1, 0, Ord(tyPointer));
   end
+  else if (ASTKind[node] = AN_PTR_CAST) and (not CProgramMode) and
+          (IntToTypeKind(ASTTk[node]) in
+             [tyInteger, tyBoolean, tyChar, tyInt8, tyUInt8, tyInt16, tyUInt16,
+              tyInt32, tyUInt32, tyInt64, tyUInt64, tySingle, tyDouble]) then
+  begin
+    { A cast to a SCALAR VALUE type of a non-lvalue -- `LongWord(k*256+k)` under
+      a record cast, `TB4(LongWord(...)).b1`. Its VALUE is a number, not an
+      address, so the arm below (the value IS the address, right for
+      `PFoo(x)`) dereferenced k*256+k and segfaulted, on the published
+      compiler too. A lvalue operand was peeled above; this one gets a hidden
+      home like the computed scalar at the tail.
+      bug-p-a-record-value-cast-of-a-computed-value-is-refused }
+    spillSym := AllocVar('', IntToTypeKind(ASTTk[node]));
+    SymIsHiddenArgTemp[spillSym] := True;
+    IRMarkStatementNode(IRAppend(IR_STORE_SYM, spillSym, IRLowerAST(node), -1, 0, ASTTk[node]));
+    Result := IRAppend(IR_LEA, spillSym, -1, -1, 0, Ord(tyPointer));
+  end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
     { The cast result is the pointer value itself; use it as the address.
@@ -3850,6 +3868,24 @@ begin
       which is what made it look like a property bug rather than a call-shape
       one. bug-p-index-getter-backed-string-property }
     Result := IRLowerAST(node)
+  else if (not CProgramMode) and
+          (IntToTypeKind(ASTTk[node]) in
+             [tyInteger, tyBoolean, tyChar, tyInt8, tyUInt8, tyInt16, tyUInt16,
+              tyInt32, tyUInt32, tyInt64, tyUInt64, tySingle, tyDouble]) then
+  begin
+    { A COMPUTED SCALAR in an address position -- Pascal's record value cast
+      of a non-lvalue, `TR(d*2).hi` / `pr := TR(f(x))`, which the parser builds
+      as a deref of the operand's address. The value has no home, so give it
+      one: a hidden temp of its own kind, stored once, and its address. Only
+      shapes that fell to IR_UNSUPPORTED below reach this arm, so nothing that
+      already lowered changes. C is excluded: `&(a+b)` is not C, and its
+      frontend owns that diagnosis.
+      bug-p-a-record-value-cast-of-a-computed-value-is-refused }
+    spillSym := AllocVar('', IntToTypeKind(ASTTk[node]));
+    SymIsHiddenArgTemp[spillSym] := True;
+    IRMarkStatementNode(IRAppend(IR_STORE_SYM, spillSym, IRLowerAST(node), -1, 0, ASTTk[node]));
+    Result := IRAppend(IR_LEA, spillSym, -1, -1, 0, Ord(tyPointer));
+  end
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
