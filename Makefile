@@ -1341,6 +1341,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_aliasmain26 | diff -u test/test_nilpy_a_module_binds_its_own_global_beside_main_s.expected -
 	./$(COMPILER) -Futest/nilpy_qdeffirst test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py $(TESTTMP)/test_nilpy_qdeffirst26
 	$(TESTTMP)/test_nilpy_qdeffirst26 | diff -u test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.expected -
+	./$(COMPILER) -Futest/nilpy_ctorov test/test_nilpy_an_overloaded_constructor_picks_by_argument_class.py $(TESTTMP)/test_nilpy_ctorov26
+	$(TESTTMP)/test_nilpy_ctorov26 | diff -u test/test_nilpy_an_overloaded_constructor_picks_by_argument_class.expected -
 	./$(COMPILER) test/test_nilpy_the_2026_08_06_syntax_sweep_rows.py $(TESTTMP)/test_nilpy_sweep0806
 	$(TESTTMP)/test_nilpy_sweep0806 | diff -u test/test_nilpy_the_2026_08_06_syntax_sweep_rows.expected -
 	./$(COMPILER) test/test_nilpy_object_is_a_value_and_a_sentinel.py $(TESTTMP)/test_nilpy_objsent26
@@ -13144,6 +13146,12 @@ test-core: $(COMPILER)
 	# param must still accept anything (bug-a-overload-resolution-ignores-class-identity)
 	./$(COMPILER) test/test_overload_class_identity.pas $(TESTTMP)/test_overload_class_identity26
 	tools/expect_same.sh test_overload_class_identity26 "$$($(TESTTMP)/test_overload_class_identity26)" "$$(printf '1\n2\n1\n9\n9')"
+	# ...and CONSTRUCTOR overloads by class identity: two same-arity Creates that
+	# differ only in a class parameter ran the first-declared body. A descendant
+	# argument still widens to its ancestor; the exact class beats the up-cast.
+	# bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type
+	./$(COMPILER) test/test_a_a_same_arity_ctor_overload_picks_by_class.pas $(TESTTMP)/test_ctorovcls26
+	tools/expect_same.sh test_ctorovcls26 "$$($(TESTTMP)/test_ctorovcls26)" "$$(printf '1 2 2\n1 2')"
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas $(TESTTMP)/test_interface_constref_cdecl_b24926
 	tools/expect_same.sh test_interface_constref_cdecl_b24926 "$$($(TESTTMP)/test_interface_constref_cdecl_b24926)" "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"

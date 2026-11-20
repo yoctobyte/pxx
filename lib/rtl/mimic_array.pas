@@ -75,18 +75,16 @@ type
       initialiser is element VALUES. The same argument position means opposite
       things depending on its type; that asymmetry is CPython's, not ours.
 
-      ONE constructor that dispatches on the runtime type, NOT two overloads,
-      and that is a WORKAROUND rather than a design: NilPy resolves overloaded
-      CONSTRUCTORS by first name match and ignores argument class identity, so
-      the two-overload spelling silently ran the bytes body for a list argument
-      and raised "bytes length not a multiple of item size" from a call that
-      passed no bytes. Measured against the function spelling, which is
-      correct — see the ticket. Same shape as pylib's own `bytes(b: TPyBytes)`
-      runtime `is` check, which exists for the function-side version of this
-      and is documented there.
-      REVERT TO TWO OVERLOADS once that is fixed; the declaration below is the
-      only thing holding the workaround.
-      bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type }
+      ONE constructor that dispatches on the runtime type, NOT two overloads.
+      This began as a workaround for overloaded constructors being picked by
+      name (bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-
+      type, now fixed: a STATICALLY typed list or bytes argument picks the
+      right overload). It stays because an UNTYPED argument cannot be picked
+      at compile time: `def mk(x): return array.array("h", x)` reaches the
+      constructor as a variant, and with two overloads `mk([4, 5])` ran the
+      bytes body (measured 2026-11-20: "array index out of range: 1"). Only
+      the runtime check sees what CPython sees. Same shape as pylib's own
+      `bytes(b: TPyBytes)` runtime `is` check. }
     constructor Create(const tc: AnsiString; init: TPyBytes); overload;
     destructor Destroy; override;
 

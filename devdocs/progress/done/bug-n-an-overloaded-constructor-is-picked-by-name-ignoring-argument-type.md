@@ -3,8 +3,8 @@ slug: bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type
 track: N
 prio: 55
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: rd
 created: 2026-09-09
 found-by: frankB
 tags: [nilpy, overload, constructor, silent-wrong-value]
@@ -88,3 +88,40 @@ same shape pylib's own `bytes(b: TPyBytes)` carries for the function-side
 version of this bug, and it is marked REVERT TO TWO OVERLOADS in place.
 Track B's revert-when-fixed pattern (devdocs/dev/track-b-workarounds.md), not a
 compiler-appeasement reshape of compiler code.
+
+## Resolution (2026-11-20, rd)
+
+**The mechanism above was half right.** PyClassCreate's `FindUMeth(ci,
+'create')` is a by-name pick, but the call is not lowered with it: IR lowering
+re-picks through `FindUCtorOverloadArgs` (pasparser_call.inc), which already
+scores the ALREADY-PARSED argument nodes, as this ticket proposed. The bug was
+inside that selector: it ranked by type KIND only, so two `tyClass` parameters
+tied at rank 0 and the first-declared won. It lacked the class-identity
+refinement its twin `FindUMethOverloadAhead` carries (exact class rank 0,
+ancestor up-cast rank 2, unrelated class rank 3).
+
+**Fix:** the same refinement in `FindUCtorOverloadArgs`, reading the argument's
+class through `ResolveNodeRec`.
+
+**Pascal had the same bug.** That selector is shared:
+
+```
+K.Create(b: TB) / K.Create(a: TA), called with b, a, TA2(a descendant):
+  fpc 3.2.2   1 2 2      pxx before   1 1 1      pxx after   1 2 2
+KR.Create(a: TA) / KR.Create(a2: TA2), called with a, a2:
+  fpc 3.2.2   1 2        pxx before   1 1        pxx after   1 2
+```
+
+**Tests:**
+- test-nilpy: `test_nilpy_an_overloaded_constructor_picks_by_argument_class.py`
+  (fixture `test/nilpy_ctorov/mimic_ovprobe.pas`, the repro above).
+- test-core: `test_a_a_same_arity_ctor_overload_picks_by_class.pas`.
+
+Both fail on the compiler before the fix.
+
+**mimic_array is NOT reverted to two overloads, on purpose.** Measured: with
+two overloads, `def mk(x): return array.array("h", x)` passes a variant, the
+bytes overload wins, and `mk([4, 5])` raises "array index out of range: 1".
+An untyped argument can only be dispatched at run time, so the single
+constructor with its `is TPyList` check is the right design, not a workaround.
+Its comment now says so.

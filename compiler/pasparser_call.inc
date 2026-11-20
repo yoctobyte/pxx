@@ -5009,6 +5009,7 @@ var
   nCand, nArgs, i, j, c, pi, want, curr, mbase, cnt, best: Integer;
   score, bestScore, rank, argSeq: Integer;
   signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
+  pRec, aRec, upCurr: Integer;   { the class-identity refinement }
   ok: Boolean;
   lo, nm: AnsiString;
 begin
@@ -5079,6 +5080,27 @@ begin
     begin
       { STORED kind on purpose -- see the twin in FindUMethOverloadAhead. }
       rank := OverloadArgRank(ParamStoredKind(pi, 1 + j), argTk[j]);
+      { CLASS IDENTITY, the twin of the refinement in FindUMethOverloadAhead:
+        two tyClass parameters tie at rank 0 on the kind, so `K(b: TPyBytes)`
+        and `K(l: TPyList)` ran whichever Create was declared first whatever
+        the argument was -- silently, the wrong body on the wrong object. The
+        exact class wins, an ancestor up-cast is merely compatible, and an
+        unrelated class cannot bind. Both ids must be known; REC_NONE keeps
+        the kind-level rank.
+        bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type }
+      if (rank < 3) and (ParamStoredKind(pi, 1 + j) = tyClass) and
+         (argTk[j] = tyClass) and (1 + j < MAX_PROC_PARAMS) then
+      begin
+        pRec := ProcParamRecId[pi * MAX_PROC_PARAMS + 1 + j];
+        aRec := ResolveNodeRec(argNodeC[j]);
+        if (pRec >= REC_UCLASS_BASE) and (aRec >= REC_UCLASS_BASE) and (pRec <> aRec) then
+        begin
+          upCurr := aRec - REC_UCLASS_BASE;
+          while (upCurr >= 0) and (upCurr <> pRec - REC_UCLASS_BASE) do
+            upCurr := UClsParent[upCurr];
+          if upCurr < 0 then rank := 3 else rank := 2;
+        end;
+      end;
       { see the twin site in FindUMethOverloadAhead: two tyPointer (or two
         tyAnsiString) parameters tie at rank 0, and the part that separates them
         is not on the kind. }
