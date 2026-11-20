@@ -21,6 +21,7 @@ AN_ADDR Left valNode
 AN_ADDR Left wIdentNode
 AN_ALLOCA Left ASTLeft[argHead]
 AN_ALLOCA Left idn
+AN_ARG Left -1
 AN_ARG Left ASTLeft[ASTLeft[callNode]]
 AN_ARG Left ASTLeft[clsSrcArg]
 AN_ARG Left ASTLeft[currArg]
@@ -113,6 +114,7 @@ AN_ARG Left PyMakeObjPtr(atRecv)
 AN_ARG Left PyMakeObjPtr(baseNode)
 AN_ARG Left PyMakeObjPtr(node)
 AN_ARG Left PyMakeObjPtr(recvNode)
+AN_ARG Left PyOverrideAwareDefault(baseNode, mpi, k)
 AN_ARG Left PyStarIterableNode(PyZipStarOperand(CurASTNode))
 AN_ARG Left RParseCallArg(procIdx, argSlot)
 AN_ARG Left Result
@@ -896,6 +898,7 @@ AN_COMMA Left hStmts[k]
 AN_COMMA Left k
 AN_COMMA Left left
 AN_COMMA Left mcallNode
+AN_COMMA Left n
 AN_COMMA Left node
 AN_COMMA Left post
 AN_COMMA Left pyPrintNode
@@ -1089,6 +1092,7 @@ AN_INTF_CALL Left firstArg
 AN_INTF_CALL Right node
 AN_INTF_CALL Right recvNode
 AN_INT_LIT Right -1
+AN_IS_TEST Left CloneAST(recv)
 AN_IS_TEST Left baseNode
 AN_IS_TEST Left callN
 AN_IS_TEST Left exprNode
@@ -1149,6 +1153,7 @@ AN_PAIR Left WriteLit('true')
 AN_PAIR Left ZFieldNode(RMakeIdent(symIdx), '__val', elemTk)
 AN_PAIR Left arm
 AN_PAIR Left armN
+AN_PAIR Left armNode
 AN_PAIR Left arms[0]
 AN_PAIR Left arms[i].BodyNode
 AN_PAIR Left asgN
