@@ -17,6 +17,10 @@ for arg in sys.argv[1:]:
         by_base.setdefault(o, o)
     for m in sorted(set(members)):
         stem = m[:-2]
+        # libtool prefixes a member when the library has per-target flags
+        # (libXaw7.a holds libXaw7_la-Actions.o, from Actions.c)
+        if stem.startswith(lib + "_la-"):
+            stem = stem[len(lib) + 4:]
         hits = [o for o in objs if o == stem + ".c.o" or o.endswith("_" + stem + ".c.o")]
         if not hits:
             sys.stderr.write(f"{lib}: no replay object for {m}\n")

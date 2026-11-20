@@ -1,10 +1,11 @@
 #!/bin/sh
-# startx for pixx's pxx-built desktop (Path B): TinyX Xfbdev on /dev/fb0,
-# the dwm window manager, one st terminal. Run as root from a text console
+# startx for pixx's pxx-built desktop (Path B): TinyX Xfbdev on /dev/fb0
+# and the JWM window manager, whose configuration (/etc/jwm/system.jwmrc)
+# opens one st terminal with a welcome. Run as root from a text console
 # (Xfbdev takes over the VT and reads the keyboard from it; TinyX has no
 # other keyboard driver).
-#   Alt+Shift+Return  new terminal      Alt+Shift+c  close window
-#   Alt+j / Alt+k     focus next/prev   Alt+Shift+q  quit (back to the console)
+#   mouse: click the desktop (or Menu in the tray) for programs and Log out
+#   PIXX_WM=dwm  the earlier dwm + st session instead (Alt+Shift+q quits)
 #
 # Mouse: PIXX_MOUSE=/dev/... picks the device; otherwise the first of
 # /dev/input/mice and /dev/psaux that exists. With neither, the server gets a
@@ -15,6 +16,11 @@
 export DISPLAY=:0
 export HOME=${HOME:-/root}
 export FONTCONFIG_FILE=/etc/fonts/fonts.conf
+# Xlib's locale data. libX11 has the build host's prefix compiled in, which
+# does not exist here; without it XSupportsLocale() fails, and a window
+# manager that converts titles through the locale (dwm) shows "broken".
+export XLOCALEDIR=/usr/share/X11/locale
+export LANG=${LANG:-C}
 [ -c /dev/fb0 ] || { echo "startx-pixx: no /dev/fb0 (no framebuffer)"; exit 1; }
 if ! grep -q ' /dev/pts ' /proc/mounts; then
   mkdir -p /dev/pts && mount -t devpts -o ptmxmode=0666 devpts /dev/pts
@@ -35,7 +41,11 @@ XPID=$!
 i=0
 while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); done
 [ -S /tmp/.X11-unix/X0 ] || { echo "startx-pixx: the X server did not start"; kill $XPID 2>/dev/null; exit 1; }
-st &
-dwm
+if [ "$PIXX_WM" = dwm ]; then
+  st &
+  dwm
+else
+  jwm -f /etc/jwm/system.jwmrc
+fi
 kill $XPID 2>/dev/null
 wait $XPID 2>/dev/null

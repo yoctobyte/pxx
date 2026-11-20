@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<!-- pixix desktop (Path B): JWM's configuration. startx-pixx runs
+     `jwm -f /etc/jwm/system.jwmrc`. Everything is reachable with the mouse
+     alone: a left or right click on the background opens the menu, and so
+     does the Menu button in the tray. Remote viewers (RustDesk) swallow most
+     Alt chords, so no key binding is needed for anything here. -->
+<JWM>
+    <RootMenu onroot="13">
+        <Program label="Terminal">st</Program>
+        <Separator/>
+        <Program label="Editor (xedit)">xedit</Program>
+        <Program label="Calculator (xcalc)">xcalc</Program>
+        <Program label="Clock (xclock)">xclock</Program>
+        <Program label="System load (xload)">xload</Program>
+        <Program label="Eyes (xeyes)">xeyes</Program>
+        <Separator/>
+        <Restart label="Restart JWM"/>
+        <Exit label="Log out (back to the console)" confirm="true"/>
+    </RootMenu>
+
+    <!-- The first terminal, with a short welcome -->
+    <StartupCommand>st -t "pixix terminal" -e sh -c 'cat /usr/share/pixix/welcome.txt; exec sh'</StartupCommand>
+
+    <Group>
+        <Class>xclock</Class>
+        <Option>noborder</Option>
+        <Option>notitle</Option>
+        <Option>nolist</Option>
+    </Group>
+    <Group>
+        <Class>XEyes</Class>
+        <Option>notitle</Option>
+    </Group>
+
+    <Tray x="0" y="-1" autohide="off" height="30">
+        <TrayButton label="Menu">root:1</TrayButton>
+        <Spacer width="4"/>
+        <TrayButton label="Desktop">showdesktop</TrayButton>
+        <Spacer width="4"/>
+        <TaskList maxwidth="220"/>
+        <Dock/>
+        <Clock format="%H:%M"><Button mask="123">exec:xclock</Button></Clock>
+        <Spacer width="6"/>
+    </Tray>
+
+    <!-- Fonts are core X fonts: JWM 2.4 without Pango opens them with
+         XLoadQueryFont, so Xft names ("DejaVu Sans-10") never load. The
+         bundle ships misc 6x13, aliased "fixed". -->
+    <WindowStyle>
+        <Font>fixed</Font>
+        <Width>4</Width>
+        <Height>22</Height>
+        <Corner>3</Corner>
+        <Foreground>#D8DEE9</Foreground>
+        <Background>#4C566A</Background>
+        <Outline>#2E3440</Outline>
+        <Active>
+            <Foreground>#FFFFFF</Foreground>
+            <Background>#3B6EA5:#2A4F7A</Background>
+            <Outline>#1C3550</Outline>
+        </Active>
+    </WindowStyle>
+    <TrayStyle group="true" list="all">
+        <Font>fixed</Font>
+        <Background>#2E3440</Background>
+        <Foreground>#ECEFF4</Foreground>
+        <Outline>#1C2028</Outline>
+    </TrayStyle>
+    <TaskListStyle list="all" group="false">
+        <Font>fixed</Font>
+        <Foreground>#ECEFF4</Foreground>
+        <Background>#3B4252</Background>
+        <Active>
+            <Foreground>#FFFFFF</Foreground>
+            <Background>#3B6EA5</Background>
+        </Active>
+        <Minimized>
+            <Foreground>#A0A8B8</Foreground>
+            <Background>#262A33</Background>
+        </Minimized>
+    </TaskListStyle>
+    <MenuStyle>
+        <Font>fixed</Font>
+        <Foreground>#ECEFF4</Foreground>
+        <Background>#2E3440</Background>
+        <Outline>#1C2028</Outline>
+        <Active>
+            <Foreground>#FFFFFF</Foreground>
+            <Background>#3B6EA5</Background>
+        </Active>
+    </MenuStyle>
+    <PopupStyle>
+        <Font>fixed</Font>
+        <Foreground>#000000</Foreground>
+        <Background>#E5E9F0</Background>
+    </PopupStyle>
+
+    <Desktops width="1" height="1">
+        <Background type="gradient">#3A6186:#0F2027</Background>
+    </Desktops>
+
+    <DoubleClickSpeed>400</DoubleClickSpeed>
+    <DoubleClickDelta>3</DoubleClickDelta>
+    <FocusModel>click</FocusModel>
+    <SnapMode distance="10">border</SnapMode>
+    <MoveMode>opaque</MoveMode>
+    <ResizeMode>opaque</ResizeMode>
+
+    <!-- The usual JWM keys, for a local keyboard -->
+    <Key mask="A" key="Tab">nextstacked</Key>
+    <Key mask="A" key="F4">close</Key>
+    <Key mask="A" key="F2">window</Key>
+    <Key mask="A" key="F1">root:1</Key>
+    <Key mask="4" key="Return">exec:st</Key>
+</JWM>

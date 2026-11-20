@@ -16,7 +16,8 @@ export PXXFLAGS=${PXXFLAGS:---shared-runtime --threadsafe}
 sh $T/fetch.sh
 bash $T/gccbuild.sh
 python3 $T/replay-cc.py xorgproto libXau xtrans libxcb libX11 libXext libXrender expat \
-  freetype fontconfig libXft zlib libfontenc libXfont tinyx
+  freetype fontconfig libXft zlib libfontenc libXfont tinyx \
+  libICE libSM libXt libXmu libXpm libXaw xclock xcalc xeyes xload xedit jwm
 sh $T/link.sh
 bash $T/lvgl.sh
 sh $T/make_bundle.sh

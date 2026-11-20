@@ -10,6 +10,19 @@ R=$O/root
 mkdir -p $R/usr/bin $R/etc/fonts $R/usr/share/fonts/X11/misc \
          $R/usr/share/fonts/truetype/dejavu $R/usr/share/licenses/pathb
 cp $B/bin/Xfbdev $B/bin/dwm $B/bin/st $R/usr/bin/
+# JWM and the programs in its menu
+for p in jwm xclock xcalc xeyes xload xedit; do cp $B/bin/$p $R/usr/bin/; done
+mkdir -p $R/etc/jwm $R/usr/share/pixix $R/usr/share/X11/app-defaults $R/usr/share/X11/locale
+cp $T/files/system.jwmrc $R/etc/jwm/system.jwmrc
+cp $T/files/welcome.txt $R/usr/share/pixix/welcome.txt
+# the Athena apps' resources (libXt searches /usr/share/X11/app-defaults)
+cp $B/prefix/share/X11/app-defaults/* $R/usr/share/X11/app-defaults/
+# Xlib's locale data, for XSupportsLocale and the Xmb/Xutf8 conversions:
+# the C and en_US.UTF-8 locales and the tables that map names to them.
+# startx-pixx points XLOCALEDIR here.
+XL=$B/prefix/share/X11/locale
+cp $XL/locale.alias $XL/locale.dir $XL/compose.dir $R/usr/share/X11/locale/
+for l in C en_US.UTF-8 iso8859-1; do cp -r $XL/$l $R/usr/share/X11/locale/; done
 # LVGL's widgets demo, no X: straight on /dev/fb0 (lvgl.sh)
 [ -x $B/bin/lvgl-demo ] && cp $B/bin/lvgl-demo $R/usr/bin/lvgl-demo
 install -m 755 $T/files/startx-pixx $R/usr/bin/startx-pixx
@@ -39,6 +52,10 @@ done
 cp $B/src/freetype/docs/FTL.TXT $L/freetype.FTL.TXT
 cp $B/src/st-0.9.2/LICENSE $L/st.LICENSE
 cp $B/src/dwm-6.5/LICENSE $L/dwm.LICENSE
+cp $B/src/jwm/LICENSE $L/jwm.LICENSE
+for p in libICE libSM libXt libXmu libXpm libXaw xclock xcalc xeyes xload xedit; do
+  cp $B/src/$p/COPYING $L/$p.COPYING
+done
 [ -f $B/src/lvgl/LICENCE.txt ] && cp $B/src/lvgl/LICENCE.txt $L/lvgl.LICENCE.txt
 cp $T/files/README.bundle $L/README
 cp $T/patches/*.patch $L/

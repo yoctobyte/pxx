@@ -44,4 +44,17 @@ OBJS=$(python3 $T/xfb_objs.py)
 LIBS=$(python3 $T/libobjs.py libXfont:libXfont freetype:libfreetype libfontenc:libfontenc zlib:libz 2>/dev/null)
 LIBS=$(python3 $T/drop_dups.py $B/obj/loc "$OBJS" "$LIBS" 2>/dev/null)
 $PXX --link -o $B/bin/Xfbdev $OBJS $LIBS >/dev/null
-ls -la $B/bin/st $B/bin/dwm $B/bin/Xfbdev
+# JWM and the Athena-widget apps in its menu: each program's objects come off
+# its own gcc link line (prog_objs.py); the libraries are the pxx-compiled
+# members of gcc's archives, pulled by ld's archive rule (drop_dups.py), in
+# ld's order. The rule matters here: libXaw's Vendor.o replaces libXt's
+# (both define vendorShellWidgetClass), and ld never pulls Xt's.
+TLIBS=$(python3 $T/libobjs.py libXaw:libXaw7 libXpm:libXpm libXmu:libXmu libXt:libXt \
+        libSM:libSM libICE:libICE libXext:libXext 2>/dev/null)
+for p in jwm xclock xcalc xeyes xload xedit; do
+  P=$(python3 $T/prog_objs.py $p $p)
+  L=$(python3 $T/drop_dups.py $B/obj/loc-$p "$P" "$TLIBS $XOBJS" first 2>/dev/null)
+  $PXX --link -o $B/bin/$p $P $L >/dev/null
+done
+ls -la $B/bin/st $B/bin/dwm $B/bin/Xfbdev $B/bin/jwm $B/bin/xclock $B/bin/xcalc \
+       $B/bin/xeyes $B/bin/xload $B/bin/xedit
