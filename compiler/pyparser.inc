@@ -20276,8 +20276,16 @@ begin
     wrapRetOk := PyScalarWrappableRetType(Procs[pi].RetType) or
                  (Procs[pi].RetType = tyVariant) or
                  (Procs[pi].RetType = tyClass);
+    { A PROCEDURE is wrappable too, and must be: the raw address of
+      `procedure sleep(seconds: Double)` was boxed and called through the
+      Variant ABI, so the callee read its Double from wherever the dispatcher
+      left a Variant ADDRESS. `from time import sleep as sf; sf(1.5)` returned
+      at once on x86-64 (xmm0 happened to hold something <= 0) and slept for
+      ~10^9 seconds on arm32 (r0:r1 = the pointer). The wrapper's body calls
+      it as a statement and answers None (PyCompileLambdaBody).
+      bug-a-arm32-a-from-import-alias-of-time-sleep-hangs }
     if paramsAllVariant and (Procs[pi].ParamCount <= MAX_PROC_PARAMS) and
-       Procs[pi].IsFunc and wrapRetOk then
+       ((Procs[pi].IsFunc and wrapRetOk) or (not Procs[pi].IsFunc)) then
       pi := PyGetOrMakeCallableWrapper(pi);
   end;
   { A callee that COLLECTS needs the star-aware pair: its compiled signature
@@ -43987,6 +43995,14 @@ begin
     a result has nowhere to go). Wrapping it in AN_EXIT would store through a
     result symbol this proc does not have. }
   if bStart = -2 then
+    node := CurASTNode
+  else if (bStart = -1) and (realProcIdx >= 0) and
+          (not Procs[realProcIdx].IsFunc) then
+    { A CALLABLE-VALUE WRAPPER AROUND A PROCEDURE (`sf = time.sleep`): the
+      call is the statement, and the wrapper's Variant result stays the None it
+      starts as -- what CPython's sleep() returns. An AN_EXIT around a call
+      with no value has nothing to store.
+      bug-a-arm32-a-from-import-alias-of-time-sleep-hangs }
     node := CurASTNode
   else if (bStart = -1) and (not Procs[procIdx].IsFunc) and
           (Procs[procIdx].RetType <> tyVariant) then

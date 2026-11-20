@@ -2078,6 +2078,11 @@ test-nilpy: $(COMPILER)
 	# not resolve imports in its dead arms -- dht.py's `from esp import`.
 	./$(COMPILER) test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.py $(TESTTMP)/test_nilpy_deadif26
 	$(TESTTMP)/test_nilpy_deadif26 | diff -u test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.expected -
+	# A Pascal PROCEDURE taken as a value gets the argument-converting wrapper a
+	# function gets (aliased time.sleep: no sleep on x86-64, ~forever on arm32).
+	# bug-a-arm32-a-from-import-alias-of-time-sleep-hangs
+	./$(COMPILER) test/test_nilpy_a_pascal_procedure_taken_as_a_value_converts_its_arguments.npy $(TESTTMP)/test_nilpy_procval26
+	$(TESTTMP)/test_nilpy_procval26 | diff -u test/test_nilpy_a_pascal_procedure_taken_as_a_value_converts_its_arguments.expected -
 	# hasattr(<module>, "x") answers what <module>.x resolves to: the unit's
 	# declarations case-insensitively, the dotted-call table, sys's members.
 	./$(COMPILER) test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.npy $(TESTTMP)/test_nilpy_hasattrmod26

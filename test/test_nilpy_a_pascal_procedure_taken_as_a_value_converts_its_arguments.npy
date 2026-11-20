@@ -1,0 +1,29 @@
+# A Pascal PROCEDURE reached as a value -- here through `from ... import ... as`
+# -- is called through the callable-value dispatcher, whose convention is
+# Variant arguments. A function got a synthesized wrapper that converts them; a
+# procedure was boxed as its RAW address, so `procedure sleep(seconds: Double)`
+# read its Double from wherever a Variant ADDRESS had been put: on x86-64 it
+# returned at once (xmm0 happened to hold something <= 0), on arm32 it slept for
+# about 10^9 seconds (r0:r1 = the pointer). Both are silent: the plain
+# `from time import sleep` spelling was always right, the alias was the boundary.
+# bug-a-arm32-a-from-import-alias-of-time-sleep-hangs
+#
+# The bound is one-sided on purpose (a loaded box sleeps longer, never shorter),
+# and the result is None, as CPython's sleep() returns.
+from time import sleep as sf
+from time import monotonic
+import time
+
+t = monotonic()
+r = sf(0.2)
+dt = monotonic() - t
+print(r, dt >= 0.15)
+
+nap = time.sleep
+t = monotonic()
+nap(0.2)
+print(monotonic() - t >= 0.15)
+
+sf(0)      # returns at once
+sf(0.0)
+print("done")
