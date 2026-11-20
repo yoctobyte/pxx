@@ -1345,6 +1345,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_ovdflt26 | diff -u test/test_nilpy_an_override_s_own_default_applies_through_the_base.expected -
 	./$(COMPILER) -Futest/nilpy_procnone test/test_nilpy_a_pascal_procedure_used_as_a_value_is_none.py $(TESTTMP)/test_nilpy_procnone26
 	$(TESTTMP)/test_nilpy_procnone26 | diff -u test/test_nilpy_a_pascal_procedure_used_as_a_value_is_none.expected -
+	./$(COMPILER) -Futest/nilpy_typeinfo test/test_nilpy_typeinfo_reports_the_type_it_was_named.py $(TESTTMP)/test_nilpy_tiname26
+	$(TESTTMP)/test_nilpy_tiname26 | diff -u test/test_nilpy_typeinfo_reports_the_type_it_was_named.expected -
 	./$(COMPILER) -Futest/nilpy_qdeffirst test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.py $(TESTTMP)/test_nilpy_qdeffirst26
 	$(TESTTMP)/test_nilpy_qdeffirst26 | diff -u test/test_nilpy_a_qualified_def_value_read_when_the_defs_module_is_imported_first.expected -
 	./$(COMPILER) -Futest/nilpy_ctorov test/test_nilpy_an_overloaded_constructor_picks_by_argument_class.py $(TESTTMP)/test_nilpy_ctorov26

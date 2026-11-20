@@ -66725,26 +66725,14 @@ begin
             end;
           end;
         end
-        else if CurTok.Kind in [tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
-                                 tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T] then
-        begin
-          { Type-keyword tokens (Integer/Boolean/Char/String/Real/LongWord/Single/
-            Double/Extended lex as their OWN token kind, not tkIdent -- SVal is
-            empty for these, read the spelling via GetTokenStr like the class-body
-            method-named-after-a-type-keyword path does, b332. }
-          tiName := GetTokenStr(TokPos);
-          case CurTok.Kind of
-            tkInteger_T:  tiTk := tyInteger;
-            tkBoolean_T:  tiTk := tyBoolean;
-            tkChar_T:     tiTk := tyChar;
-            tkString_T:   tiTk := tyAnsiString;
-            tkReal_T:     tiTk := RealTypeKind;
-            tkLongWord_T: tiTk := tyUInt32;
-            tkSingle_T:   tiTk := tySingle;
-            tkDouble_T:   tiTk := tyDouble;
-            tkExtended_T: tiTk := tyExtended;
-          end;
-        end
+        { No type-KEYWORD arm. The Pascal parser has one because paslexer lexes
+          Integer/Byte/Boolean/... as their own token kinds. pylexer never does:
+          every type name reaches NilPy as tkIdent (PyKeyword returns no type
+          kind), so the arm above already resolves it by SPELLING, which is what
+          keeps TypeInfo(byte) from answering Integer. The copied arm read the
+          wrong token and switched on the kind; it could not run, and was
+          deleted rather than fixed.
+          bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind }
         else
           Error('TypeInfo expects a type name');
         Next;

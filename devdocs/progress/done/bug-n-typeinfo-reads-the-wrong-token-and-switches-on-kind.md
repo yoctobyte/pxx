@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T)."
-status: backlog
-owner: unassigned
+status: done
+owner: rd
 ---
 
 # N TypeInfo reads the wrong token and switches on token kind
@@ -61,3 +61,25 @@ existence.
 A `.npy` assertion in the same shape as
 `test/test_typeinfo_scalar_names.pas` (assert the byte-vs-integer pair, since
 that is the case the kind switch cannot express) is the test that bites.
+
+## Resolution (2026-11-20, rd): the arm was unreachable, deleted
+
+NilPy never had the wrong answer. pylexer emits no type-keyword token kinds:
+- `PyKeyword` returns only control and statement kinds;
+- every emitted kind was listed from the source, and none is a `tk*_T`.
+
+So `byte`, `integer` and the rest reach the TypeInfo parse as `tkIdent`. The
+`tkIdent` arm already resolves by spelling (`OrdinalNameToTk` first). The
+copied type-keyword arm, which carried both defects, could not run. It was
+deleted with a comment in place, the same outcome as
+bug-n-inline-cast-deref-loses-a-pointer-fields-pointee.
+
+Measured: `TypeInfo(byte)` answers `1 Byte`, and `TypeInfo(integer)` answers
+`1 Integer`, before and after.
+
+Pinned with test-nilpy row tiname26,
+`test_nilpy_typeinfo_reports_the_type_it_was_named.py` (fixture
+`test/nilpy_typeinfo/`, a shim that reads the RTTI name). It covers the
+byte/integer pair the ticket asks for, plus word, boolean, longword, double
+and string. It is a pin, not a red-to-green: there was no NilPy failure to
+turn green.
