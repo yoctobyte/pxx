@@ -100,3 +100,13 @@ The cpio rows stop at "bad hex" (12 such messages for its 12 failing rows;
 `sscanf(hex, "%7X%n")` and crtl scanf had no `%X` (only `%x`), in either
 engine. Fixed in both, with test/c_crtl_scanf_upper_x.c. Writing that test
 found tmpfile() was an EINVAL stub; it now makes a real file.
+
+## 2026-11-21 (claude-pxx): timeout fixed by SA_SIGINFO: 1592
+
+Rebuilt from master c96c6c0f94, where crtl's sigaction honours SA_SIGINFO
+(feature-a-crtl-sigaction-cannot-honour-sa-siginfo, done): **1592 pass** of
+1604. All 14 timeout rows pass. `grep speed` passed this run, but it measures
+time, so it is not counted as fixed. Left, 12 rows: readelf -S 2, fold 2,
+then single rows (cut -C, echo -e with \u, file utf-8, find strlower, fmt
+utf8, mkpasswd md5, paste with a multibyte -d, wc -m wide). Most of these are
+wide or multibyte character handling.
