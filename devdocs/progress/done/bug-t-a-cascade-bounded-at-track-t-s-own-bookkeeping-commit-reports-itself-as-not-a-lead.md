@@ -2,12 +2,12 @@
 prio: 70
 track: T
 type: bug
-status: new
+status: done
 found: 2026-09-22
 found-by: frankh-c0
-owner: ""
+owner: "claude-pxx"
 blocked-by: []
-summary: "TRACK T DETECTED THE x86-64 C BUILD REGRESSION AT THE FIRST FULL TIER THAT CONTAINED IT, AND ITS OWN REPORT TOLD THE READER THERE WAS NOTHING TO FOLLOW. Verified: `test-emit-obj#src:test/c_obj_data_import.c` transitions to `new_red` at f64af0fd3a0c, the full tier whose tree contains 523833fde (the bisected cause, frankb-8e), after being `fixed` since 2026-09-12. So breadth worked -- the detection is not the defect. What `twatch.py --status` then prints is `open CASCADE: 17 of 17 swept job(s) still red, bad=f64af0fd3a0c (3 in range) -- bad touches NO buildable file: it is the tested upper bound, not a lead`. AND f64af0fd3a0c IS A COMMIT TRACK T ITSELF AUTHORED: its subject is `tstate(borg): c6208f6d47c6 RED (native)`, one of the archive-bookkeeping commits the watcher writes. So T's bisect range is bounded by T's own writes, the bound correctly touches no buildable file, and the honest observation `not a lead` is the last thing a reader sees about a 17-job cascade that had a real and findable cause nine commits earlier. This is CLAUDE.md's `any instrument that scans a namespace THE OBSERVER IS ALSO IN counts the observer` -- written there about pgrep/pkill -- arriving in the COMMIT RANGE a bisect walks. NOT VERIFIED and the reason the prio is 70 rather than higher: I did not establish how often a cascade bound lands on a tstate commit rather than a real one, nor whether the bisect deliberately excludes them and this was an exception. One number would decide whether this is a papercut or the normal case, and a T seat can get it from the archive in one query. The remedy is probably not to suppress the message: `bad touches no buildable file` is TRUE and worth printing. It is that a bound which is one of T's OWN commits should say so by name and widen, rather than reporting the same sentence it would print for an ordinary docs commit."
+summary: "FIXED 2026-11-21: `--status` names a tstate(...) bound as the watcher's own bookkeeping commit and points at the range (bad_qualifier, is_tstate_commit). Originally: TRACK T DETECTED THE x86-64 C BUILD REGRESSION AT THE FIRST FULL TIER THAT CONTAINED IT, AND ITS OWN REPORT TOLD THE READER THERE WAS NOTHING TO FOLLOW. Verified: `test-emit-obj#src:test/c_obj_data_import.c` transitions to `new_red` at f64af0fd3a0c, the full tier whose tree contains 523833fde (the bisected cause, frankb-8e), after being `fixed` since 2026-09-12. So breadth worked -- the detection is not the defect. What `twatch.py --status` then prints is `open CASCADE: 17 of 17 swept job(s) still red, bad=f64af0fd3a0c (3 in range) -- bad touches NO buildable file: it is the tested upper bound, not a lead`. AND f64af0fd3a0c IS A COMMIT TRACK T ITSELF AUTHORED: its subject is `tstate(borg): c6208f6d47c6 RED (native)`, one of the archive-bookkeeping commits the watcher writes. So T's bisect range is bounded by T's own writes, the bound correctly touches no buildable file, and the honest observation `not a lead` is the last thing a reader sees about a 17-job cascade that had a real and findable cause nine commits earlier. This is CLAUDE.md's `any instrument that scans a namespace THE OBSERVER IS ALSO IN counts the observer` -- written there about pgrep/pkill -- arriving in the COMMIT RANGE a bisect walks. NOT VERIFIED and the reason the prio is 70 rather than higher: I did not establish how often a cascade bound lands on a tstate commit rather than a real one, nor whether the bisect deliberately excludes them and this was an exception. One number would decide whether this is a papercut or the normal case, and a T seat can get it from the archive in one query. The remedy is probably not to suppress the message: `bad touches no buildable file` is TRUE and worth printing. It is that a bound which is one of T's OWN commits should say so by name and widen, rather than reporting the same sentence it would print for an ordinary docs commit."
 ---
 
 # A cascade bounded at Track T's own bookkeeping commit reports itself as "not a lead"
@@ -97,3 +97,30 @@ one branch.
 Found while answering a question frankb-8e raised about which guard should have
 caught the C regression. It should not be read as a criticism of breadth: the
 measured fact is that breadth worked and the report did not carry it.
+
+## Fixed 2026-11-21 (claude-pxx)
+
+The suggested shape, taken as offered. `bad_qualifier` (the `--status`
+suffix, which CASCADE lines carry too) still prints
+`bad touches NO buildable file: it is the tested upper bound, not a lead`
+for an ordinary docs commit. When the bound is one of the watcher's OWN
+commits -- subject `tstate(<host>): ...`, which every publish writes -- it now
+says instead:
+
+    — bad is a tstate bookkeeping commit this watcher wrote, not a lead:
+      the cause is EARLIER in the range; read the range, not bad
+
+Not suppressed and not widened: the range itself is already the right
+instruction, and the stub ticket's range note says "the upper bound of an
+untested range" already. What was missing was the one line a reader acts on
+naming whose commit the bound is. `is_tstate_commit` reads the subject and
+answers False for a sha it cannot read.
+
+**Not established, and still the open question in this ticket:** how often a
+cascade bound lands on a tstate commit. The fix costs one `git log` per
+non-buildable bound either way, so it does not wait on that number.
+
+Test: tools/twatch_cascade_qualifier_devtest.py. Its docs-only commit was a
+tstate publish, so the old checks are now made against an ordinary devdocs
+commit, and four new ones cover the tstate case (named; points at the range;
+still "not a lead"; an ordinary docs commit does not get the wording).

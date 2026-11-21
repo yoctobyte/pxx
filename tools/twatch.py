@@ -4319,6 +4319,17 @@ def pin_observable(clone, shas):
     return out
 
 
+def is_tstate_commit(repo, sha):
+    """Is `sha` one of the watcher's own bookkeeping commits? By subject: every
+    one is published as `tstate(<host>): ...` (TStateClone.publish callers).
+    False when the sha cannot be read -- never a claim made blind."""
+    try:
+        subj = sh(["git", "log", "-1", "--format=%s", sha], cwd=repo, check=False)
+    except Exception:           # noqa: BLE001 - an unreadable sha is no claim
+        return False
+    return (subj or "").startswith("tstate(")
+
+
 def bad_qualifier(reg, repo):
     """The terse `--status` suffix saying what `bad=` MEANS, or "".
 
@@ -4344,6 +4355,16 @@ def bad_qualifier(reg, repo):
     except Exception:           # noqa: BLE001 - a sha we cannot read
         pass                    #   just falls back to the stamp
     if bad_untestable:
+        # WHOSE commit the bound is. One of this watcher's own bookkeeping
+        # commits (`tstate(<host>): ...`, written after every run) touches no
+        # buildable file by construction, so the generic sentence reads as a
+        # dead end for a range that may hold a real cause just below it.
+        # Naming it turns that into an instruction.
+        # bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead
+        if is_tstate_commit(repo, reg["bad"]):
+            return (" — bad is a tstate bookkeeping commit this watcher wrote, "
+                    "not a lead: the cause is EARLIER in the range; read "
+                    "the range, not bad")
         return (" — bad touches NO buildable file: it is the tested upper "
                 "bound, not a lead")
     if reg.get("pin_axis"):

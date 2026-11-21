@@ -58,18 +58,36 @@ def make_repo(tmp):
          ).write("{}\n")
     git(git_dir, "add", "-A")
     git(git_dir, "commit", "-qm", "tstate(seven): publish")
+    tstate_sha = git(git_dir, "rev-parse", "HEAD")
+    # an ordinary docs-only commit, someone else's
+    open(os.path.join(git_dir, "devdocs", "note.md"), "w").write("a note\n")
+    git(git_dir, "add", "-A")
+    git(git_dir, "commit", "-qm", "docs: a note")
     docs_sha = git(git_dir, "rev-parse", "HEAD")
     # a real code commit
     open(os.path.join(git_dir, "compiler", "ir.inc"), "w").write("x\n")
     git(git_dir, "add", "-A")
     git(git_dir, "commit", "-qm", "fix(A): real change")
     code_sha = git(git_dir, "rev-parse", "HEAD")
-    return git_dir, docs_sha, code_sha
+    return git_dir, docs_sha, code_sha, tstate_sha
 
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        repo, docs_sha, code_sha = make_repo(tmp)
+        repo, docs_sha, code_sha, tstate_sha = make_repo(tmp)
+
+        print("a bound that is the WATCHER'S OWN bookkeeping commit says so by name")
+        # bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead
+        own = {"bad": tstate_sha, "cascade": True, "range": [tstate_sha]}
+        w = twatch.bad_qualifier(own, repo)
+        check("a tstate(...) bad is named as the watcher's bookkeeping commit",
+              "tstate bookkeeping commit" in w, repr(w))
+        check("...and points at the range, not at bad",
+              "EARLIER" in w and "read the range" in w, repr(w))
+        check("...and still says it is not a lead", "not a lead" in w, repr(w))
+        check("an ordinary docs commit does NOT get the tstate wording",
+              "tstate" not in twatch.bad_qualifier(
+                  {"bad": docs_sha, "range": [docs_sha]}, repo))
 
         print("the case it MUST annotate — and a CASCADE entry is one of them")
         casc = {"bad": docs_sha, "cascade": True, "range": [docs_sha]}
