@@ -1,0 +1,7 @@
+thread 1: key=NULL v=101 counter=1000 shared=0
+joined 1 -> 1
+thread 2: key=NULL v=102 counter=1000 shared=0
+joined 2 -> 2
+thread 3: key=NULL v=103 counter=1000 shared=0
+joined 3 -> 3
+main: v=11 counter=42 key=7

@@ -14429,13 +14429,17 @@ begin
     rump's curlwp is `__thread`: shared, a second thread's
     KASSERT(curlwp == NULL) panicked at boot.
     feature-c-thread-local-in-x86-64-objects }
-  { ONLY UNDER --system-libs: the object is then for a host libc's link,
-    whose loader sets fs. pxx's own --link has no PT_TLS and no TPOFF/GOTTPOFF
-    resolution, and crtl's --threadsafe runtime object has a `static
-    __thread` -- that link failed on ".tdata.pxx_key_val" until this
-    condition. Without --system-libs a __thread keeps the degraded shared copy. }
+  { WITH OR WITHOUT --system-libs. It used to be --system-libs only, because
+    pxx's own --link had no PT_TLS and no TPOFF/GOTTPOFF resolution, so an
+    object for it kept the degraded shared copy -- including crtl's own
+    `static __thread void *pxx_key_val[]`, which made pthread_getspecific
+    PROCESS-wide: a new thread read main's value and rumpuser's
+    `pthread_getspecific(curlwpkey) == NULL` assertion fired at boot. pxx
+    --link has had both since feature-a-pxx-link-has-no-elf-tls (PT_TLS, the
+    main thread's block from the entry stub, each pthread's from crtl), so
+    the condition went with it. bug-c-thread-local-is-shared-in-emit-obj-without-system-libs }
   if EmitObjMode and (not EmitSharedMode) and (TargetArch = TARGET_X86_64) and
-     CUseSystemLibs and CProgramMode and (CStaticDataMode or not hasInit) then
+     CProgramMode and (CStaticDataMode or not hasInit) then
   begin
     SymElfTls[idx] := True;
     ElfTlsUsed := True;

@@ -21420,6 +21420,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_ltls_pt "$$(readelf -lW $(TESTTMP)/c_ltls | grep -c '^ *TLS ')" "1"
 	gcc -o $(TESTTMP)/c_ltls_g $(TESTTMP)/c_ltls_a.o $(TESTTMP)/c_ltls_b.o $(TESTTMP)/c_ltls_c.o -lpthread
 	tools/expect_same.sh c_ltls_g "$$(timeout 20 $(TESTTMP)/c_ltls_g)" "$$(cat test/c_link_elf_tls.expected)"
+	# ...and WITHOUT --system-libs: __thread and crtl's pthread keys per thread in a plain
+	# --emit-obj --threadsafe object, through pxx --link and through gcc (rumpuser's curlwpkey).
+	# bug-c-thread-local-is-shared-in-emit-obj-without-system-libs
+	$(COMPILER) --emit-obj --threadsafe test/c_link_thread_local_objects.c $(TESTTMP)/c_ltlo.o > /dev/null
+	$(COMPILER) --link --threadsafe -o $(TESTTMP)/c_ltlo $(TESTTMP)/c_ltlo.o > /dev/null
+	tools/expect_same.sh c_ltlo "$$(timeout 20 $(TESTTMP)/c_ltlo)" "$$(cat test/c_link_thread_local_objects.expected)"
+	gcc -o $(TESTTMP)/c_ltlo_g $(TESTTMP)/c_ltlo.o -lpthread
+	tools/expect_same.sh c_ltlo_g "$$(timeout 20 $(TESTTMP)/c_ltlo_g)" "$$(cat test/c_link_thread_local_objects.expected)"
 	# a reference from a section the GC drops needs no definition, as with ld --gc-sections;
 	# with --no-gc-sections the section is kept and the link refuses
 	$(COMPILER) --emit-obj --function-sections test/c_link_gc_dead_undefined_ref.c $(TESTTMP)/c_lgcu.o > /dev/null
