@@ -150,5 +150,13 @@ It links past TLS, and past two more walls that are not TLS:
    hosted like librumpuser, it links. That is how the all-pxx build must
    classify it, a build-harness fact, not a pxx gap.
 
-What is left is `backtrace()`, which rumpnic's crash handler calls and crtl
-does not have (glibc and NetBSD's libexecinfo do). Then the boot.
+What was left was `backtrace()`, which rumpnic's crash handler calls and crtl
+did not have (glibc and NetBSD's libexecinfo do): crtl now has <execinfo.h>.
+
+With those, the all-pxx rumpnic LINKS (scratch, 2026-11-21): 473 objects, an
+11 MB static image with an 8-byte PT_TLS, curlwp's. One more emulation
+detail of the scratch link: librumpuser is an ordinary archive in the gcc
+link, so ld never pulls rumpuser_mem.o (rumpnic.o defines all four of its
+functions); pxx --link reads no archives, so the scratch link leaves that
+member out by hand. Not run here: rumpnic takes the first network card under
+/dev/vfio, so its boot belongs in Rainyday under QEMU, Rainyday's harness.

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  799 functions across 76 headers. }
+  802 functions across 77 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -25,6 +25,7 @@ begin
       ' atan2f:math.h atanf:math.h atanh:math.h atexit:stdlib.h atof:stdlib.h atoi:stdlib.h ' +
       ' atol:stdlib.h atoll:stdlib.h ';
     'b': Result :=
+      ' backtrace:execinfo.h backtrace_symbols:execinfo.h backtrace_symbols_fd:execinfo.h ' +
       ' basename:libgen.h bind:sys/socket.h bind_textdomain_codeset:libintl.h ' +
       ' bindtextdomain:libintl.h brk:unistd.h bsearch:stdlib.h btowc:wchar.h ';
     'c': Result :=
@@ -242,7 +243,7 @@ begin
   case c of
     '_': Result := 32;
     'a': Result := 288760;
-    'b': Result := 8405432;
+    'b': Result := 9585592;
     'c': Result := 176120;
     'd': Result := 4088;
     'e': Result := 30712;

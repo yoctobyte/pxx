@@ -21081,6 +21081,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_crtl_getgrgid_survives_getgrouplist.c $(TESTTMP)/c_grsurv26 > /dev/null
 	gcc -w -o $(TESTTMP)/c_grsurv26_gcc test/c_crtl_getgrgid_survives_getgrouplist.c
 	tools/expect_same.sh c_grsurv26 "$$($(TESTTMP)/c_grsurv26)" "$$($(TESTTMP)/c_grsurv26_gcc)"
+	# <execinfo.h>: backtrace walks the frame-pointer chain from its caller outwards,
+	# direct, --threadsafe, as an object pxx --link links (rumpnic's crash handler), and on
+	# aarch64; expected output gcc+glibc's
+	./$(COMPILER) test/c_crtl_backtrace.c $(TESTTMP)/c_bt26 > /dev/null
+	tools/expect_same.sh c_bt26 "$$($(TESTTMP)/c_bt26)" "$$(cat test/c_crtl_backtrace.expected)"
+	./$(COMPILER) --threadsafe test/c_crtl_backtrace.c $(TESTTMP)/c_bt26_ts > /dev/null
+	tools/expect_same.sh c_bt26_ts "$$($(TESTTMP)/c_bt26_ts)" "$$(cat test/c_crtl_backtrace.expected)"
+	./$(COMPILER) --emit-obj --threadsafe test/c_crtl_backtrace.c $(TESTTMP)/c_bt26.o > /dev/null
+	./$(COMPILER) --link --threadsafe -o $(TESTTMP)/c_bt26_l $(TESTTMP)/c_bt26.o > /dev/null
+	tools/expect_same.sh c_bt26_l "$$($(TESTTMP)/c_bt26_l)" "$$(cat test/c_crtl_backtrace.expected)"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/c_crtl_backtrace.c $(TESTTMP)/c_bt26_a64 >/dev/null || exit 1; \
+	  tools/run_target.sh aarch64 $(TESTTMP)/c_bt26_a64 | diff -u test/c_crtl_backtrace.expected - || exit 1; \
+	else echo "=== c_bt26: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o
