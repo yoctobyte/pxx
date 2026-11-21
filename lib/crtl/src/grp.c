@@ -38,6 +38,22 @@ static char  gr_line[GR_LINE_MAX];
 static char *gr_mem[GR_MEM_MAX + 1];
 static struct group gr_ent;
 
+/* getgrnam/getgrgid's OWN result, and getgrouplist's own scratch. All three
+   used to walk the file through getgrent, i.e. through gr_ent and gr_fp, and
+   that had two visible effects (bug-c-toybox-test-suite-failures):
+     - getgrouplist overwrote the struct a getgrgid had just returned. toybox
+       `id root' keeps getgrgid(0) and calls getgrouplist before printing, so it
+       printed the LAST line of /etc/group (gid=117(direwolf) on plexus).
+     - each lookup rewound and closed gr_fp, so a caller in the middle of its
+       own getgrent loop lost its place.
+   glibc keeps them apart; so does this. */
+static char  gq_line[GR_LINE_MAX];
+static char *gq_mem[GR_MEM_MAX + 1];
+static struct group gq_ent;
+static char  gl_line[GR_LINE_MAX];
+static char *gl_mem[GR_MEM_MAX + 1];
+static struct group gl_ent;
+
 /* Split at the next ':', NUL-terminating it; *next is the field after it, or
    NULL at end of line. Empty fields are legal (gr_passwd usually is). */
 static char *gr_field(char *s, char **next) {
@@ -97,22 +113,30 @@ void endgrent(void) {
   if (gr_fp) { fclose(gr_fp); gr_fp = 0; }
 }
 
+/* The next parseable entry of `fp', into the given buffers, or NULL at the
+   end. A line that did not fit has no newline: drain and skip it, rather than
+   parsing its tail as a fresh entry. (A final line with no newline at all is
+   kept, as before: fgets stops at EOF, so the check is for a line that
+   filled the buffer.) */
+static struct group *gr_next(FILE *fp, char *line, int linemax,
+                             struct group *ent, char **mem) {
+  while (fgets(line, linemax, fp)) {
+    if (!strchr(line, '\n') && (int)strlen(line) == linemax - 1) {
+      int c;
+      while ((c = fgetc(fp)) != '\n' && c != EOF) { }
+      continue;
+    }
+    if (gr_parse(line, ent, mem, GR_MEM_MAX)) return ent;
+  }
+  return 0;
+}
+
 struct group *getgrent(void) {
   if (!gr_fp) {
     gr_fp = fopen("/etc/group", "r");
     if (!gr_fp) return 0;
   }
-  while (fgets(gr_line, (int)sizeof gr_line, gr_fp)) {
-    /* A line that did not fit has no newline: drain and skip, rather than
-       parsing its tail as a fresh entry. */
-    if (!strchr(gr_line, '\n')) {
-      int c;
-      while ((c = fgetc(gr_fp)) != '\n' && c != EOF) { }
-      continue;
-    }
-    if (gr_parse(gr_line, &gr_ent, gr_mem, GR_MEM_MAX)) return &gr_ent;
-  }
-  return 0;
+  return gr_next(gr_fp, gr_line, (int)sizeof gr_line, &gr_ent, gr_mem);
 }
 
 /* NOT a wrapper pair -- see pwd.c's block comment for the contract difference
@@ -185,23 +209,24 @@ int getgrgid_r(gid_t gid, struct group *grp, char *buf, size_t buflen,
   return gr_lookup_r(0, gid, 0, grp, buf, buflen, result);
 }
 
-struct group *getgrnam(const char *name) {
+/* One lookup on its own stream into gq_*: by name when `name', else by gid. */
+static struct group *gr_find(const char *name, gid_t gid) {
   struct group *g;
+  FILE *fp = fopen("/etc/group", "r");
+  if (!fp) return 0;
+  while ((g = gr_next(fp, gq_line, (int)sizeof gq_line, &gq_ent, gq_mem)) != 0)
+    if (name ? strcmp(g->gr_name, name) == 0 : g->gr_gid == gid) break;
+  fclose(fp);
+  return g;
+}
+
+struct group *getgrnam(const char *name) {
   if (!name) return 0;
-  setgrent();
-  while ((g = getgrent()) != 0)
-    if (strcmp(g->gr_name, name) == 0) { endgrent(); return g; }
-  endgrent();
-  return 0;
+  return gr_find(name, (gid_t)0);
 }
 
 struct group *getgrgid(gid_t gid) {
-  struct group *g;
-  setgrent();
-  while ((g = getgrent()) != 0)
-    if (g->gr_gid == gid) { endgrent(); return g; }
-  endgrent();
-  return 0;
+  return gr_find(0, gid);
 }
 
 /* getgrouplist(3): every group `user' belongs to, with `group' first whether
@@ -216,6 +241,7 @@ struct group *getgrgid(gid_t gid) {
  */
 int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups) {
   struct group *g;
+  FILE *fp;
   int have = 0, cap;
   int i;
 
@@ -225,8 +251,8 @@ int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups) {
   if (cap > 0 && groups) groups[0] = group;
   have = 1;
 
-  setgrent();
-  while ((g = getgrent()) != 0) {
+  fp = fopen("/etc/group", "r");
+  while (fp && (g = gr_next(fp, gl_line, (int)sizeof gl_line, &gl_ent, gl_mem)) != 0) {
     char **m;
     if (g->gr_gid == group) continue;        /* already carried as primary */
     if (!user || !g->gr_mem) continue;
@@ -242,7 +268,7 @@ int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups) {
       break;
     }
   }
-  endgrent();
+  if (fp) fclose(fp);
 
   if (have > cap) { *ngroups = have; return -1; }
   *ngroups = have;

@@ -21076,6 +21076,11 @@ test-core: $(COMPILER)
 	# printf 0-flag pads after a float's sign; strtod reads inf/nan (toybox seq -w, sort -g)
 	./$(COMPILER) test/c_crtl_printf_signed_zero_pad_and_strtod_inf_nan.c $(TESTTMP)/c_pzinf26 > /dev/null
 	tools/expect_same.sh c_pzinf26 "$$($(TESTTMP)/c_pzinf26)" "$$(cat test/c_crtl_printf_signed_zero_pad_and_strtod_inf_nan.expected)"
+	# getgrgid's result survives getgrouplist, and lookups leave a getgrent walk alone
+	# (toybox id root). gcc is the oracle, run here: the answers are this box's /etc/group.
+	./$(COMPILER) test/c_crtl_getgrgid_survives_getgrouplist.c $(TESTTMP)/c_grsurv26 > /dev/null
+	gcc -w -o $(TESTTMP)/c_grsurv26_gcc test/c_crtl_getgrgid_survives_getgrouplist.c
+	tools/expect_same.sh c_grsurv26 "$$($(TESTTMP)/c_grsurv26)" "$$($(TESTTMP)/c_grsurv26_gcc)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o
