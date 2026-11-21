@@ -9,7 +9,7 @@ created: 2026-11-21
 found-by: claude-pxx (toybox suite, timeout rows)
 tags: [crtl, signals, tls, toybox]
 blocked-by: []
-summary: "crtl's sigaction refuses SA_SIGINFO with EINVAL, by design: the hook into pxx's signal runtime is one-argument. toybox `timeout` installs its SIGCHLD handler with SA_SIGINFO and reads si_status/si_code, so all 14 of its suite rows fail (`xsignal 17: Invalid argument`, exit 125); toybox sh uses it too. The emitted dispatch stub already HAS the kernel's siginfo pointer (it reads si_code and si_addr out of it into the parked slots) -- what is missing is one more parked slot to carry the pointer to the C hook. The per-thread block has none free: slots 0-15 are packed and the heap lists start at 16, and the signal four must stay contiguous. So the fix is a thread-block layout change, not a crtl change."
+summary: "OWNER 2026-11-21: go ahead (renumber the thread block, option 1, after the literal-offset census); targets with no signal runtime (ESP, Windows) should not pay for the slot if that can be done smartly -- not a hard requirement for 16 bytes. crtl's sigaction refuses SA_SIGINFO with EINVAL, by design: the hook into pxx's signal runtime is one-argument. toybox `timeout` installs its SIGCHLD handler with SA_SIGINFO and reads si_status/si_code, so all 14 of its suite rows fail (`xsignal 17: Invalid argument`, exit 125); toybox sh uses it too. The emitted dispatch stub already HAS the kernel's siginfo pointer (it reads si_code and si_addr out of it into the parked slots) -- what is missing is one more parked slot to carry the pointer to the C hook. The per-thread block has none free: slots 0-15 are packed and the heap lists start at 16, and the signal four must stay contiguous. So the fix is a thread-block layout change, not a crtl change."
 ---
 
 # crtl's sigaction cannot honour SA_SIGINFO
@@ -84,3 +84,16 @@ toybox's own `tests/timeout.test`, plus a crtl row: a SIGCHLD handler
 installed with SA_SIGINFO reads `si_status` and `si_code` of a child that
 exits 3, and of one killed by SIGKILL. The expected output comes from gcc.
 Run it under `--threadsafe` too, where the slot is per thread.
+
+## Owner, 2026-11-21
+
+> for the signals, that's not such big issue, at least not on pc platforms.
+> however, platforms without signals (esp, windows) should avoid wasting
+> space. although i'm not worried about the last 16 bytes, but it's something
+> to keep in mind if we can do that smart.
+
+So: option 1 (renumber), census of literal slot offsets first. Where the
+target has no signal runtime (TargetHasSignalRuntime false), the signal group
+should cost nothing if the layout can allow it -- for instance by putting the
+signal group LAST among the fixed slots, so a target without signals can end
+the fixed area before it. Not a blocker if it cannot.
