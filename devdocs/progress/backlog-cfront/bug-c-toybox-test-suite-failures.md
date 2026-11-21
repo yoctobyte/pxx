@@ -30,3 +30,23 @@ constants and strings), test `test/c_gnu_escape_e.c` against gcc's output.
 Not re-measured: a toybox rebuilt with the fixed compiler (the replay was not
 rerun). The rows above are expected to move; whether all six do is for the
 next suite run to say.
+
+## 2026-11-21 (claude-pxx): toybox rebuilt with the `\e` fix, and the sed cause
+
+Rebuilt in scratch with pxx at 3b330fe9f9 (205 units, linked by `pxx --link`):
+the suite went from **1502 to 1509** passes. The five `\e` rows (`echo -e \e`,
+`printf \e`, `printf %b \e`, `printf escapes`, `printf %b escapes`) pass.
+`ls -ou` and `ls -otu` pass too, but those read access times, so they are not
+counted as fixed. `echo -e 'a\x123כּbc'` still fails (\u wants a UTF-8
+locale).
+
+Failures left, grouped by command: sed 22, touch 15, timeout 14, cpio 12,
+stat 8, id 4, tar, readelf and fold 2 each, then single rows.
+
+**sed (most of its 22): crtl regexec ignored pmatch[0] under REG_STARTEND when
+nmatch was 0**, and answered NOMATCH. toybox's `regexec0` calls it exactly that
+way for every address match (`/two/p`, `1,/two/p`, ...), while `s///` passes
+nmatch 10 and worked. glibc reads pmatch[0] whatever nmatch is (nmatch counts
+slots to WRITE). Fixed in lib/crtl/src/regex.c; test/c_crtl_regex.c gained
+three nmatch-0 checks (matches in span, misses out of span, does not write
+pmatch).

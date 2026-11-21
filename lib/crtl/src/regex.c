@@ -727,7 +727,10 @@ int regexec(const regex_t *preg, const char *string, size_t nmatch,
   first = 0;
   last  = (int)strlen(string);
   if (eflags & REG_STARTEND) {
-    if (nmatch < 1 || !pmatch) return REG_NOMATCH;
+    /* pmatch[0] is READ whatever nmatch says: nmatch counts the slots to
+       WRITE. glibc and the BSDs agree, and toybox sed's addresses call it with
+       nmatch 0 (bug-c-toybox-test-suite-failures). */
+    if (!pmatch) return REG_NOMATCH;
     first = (int)pmatch[0].rm_so;
     last  = (int)pmatch[0].rm_eo;
     if (first < 0 || last < first) return REG_NOMATCH;

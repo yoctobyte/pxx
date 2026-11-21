@@ -223,6 +223,20 @@ int main(void)
         printf("FAIL startend span %d,%d\n", (int)m[0].rm_so, (int)m[0].rm_eo);
         fails++;
       }
+      /* nmatch 0 still READS pmatch[0]: nmatch counts slots to write.
+         toybox sed's addresses (regexec0) call it this way; crtl answered
+         NOMATCH for every line, as glibc does not. */
+      m[0].rm_so = 0; m[0].rm_eo = 9;
+      if (regexec(&re, hay, 0, m, REG_STARTEND) != 0) {
+        printf("FAIL startend nmatch0 full span\n"); fails++;
+      }
+      m[0].rm_so = 0; m[0].rm_eo = 3;
+      if (regexec(&re, hay, 0, m, REG_STARTEND) != REG_NOMATCH) {
+        printf("FAIL startend nmatch0 not-in-span\n"); fails++;
+      }
+      if (m[0].rm_so != 0 || m[0].rm_eo != 3) {
+        printf("FAIL startend nmatch0 wrote pmatch\n"); fails++;
+      }
       regfree(&re);
     }
   }
