@@ -1019,6 +1019,20 @@ else
   RC=1
 fi
 
+# EVERY test-* TARGET IS IN A TIER OR SAYS WHY NOT. A target in no tier makes
+# no row anywhere, so nothing that reads the archive can notice it: test-nilpy,
+# test-uforth and six real-program targets were each found by a person asking.
+# The guard asks instead; its --self-check is the positive control (an unlisted
+# target, a stale entry and a broken alias must each fail). Under a second.
+# bug-t-six-real-program-jobs-are-in-no-tier-so-they-never-run
+if [ -f tools/check_tier_coverage.py ]; then
+  step "every test target is tiered or opted out" "$LOGDIR/tier-coverage.log" \
+       python3 tools/check_tier_coverage.py --self-check                       || RC=1
+else
+  say "  FAIL  tier coverage — tools/check_tier_coverage.py is MISSING"
+  RC=1
+fi
+
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
 # session in the fleet and had no test at all until 2026-09-03, which is how it
 # reached four open tickets: each fix was checked by hand against the case that

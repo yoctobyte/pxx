@@ -127,3 +127,37 @@ the tier's cost and concludes the measurement was wrong.
 Not a defect in the retry policy: the class is right about corpus jobs in
 general, and a compile failure that is deterministic is not something the class
 can know in advance. Noted so the number is explicable, not as a thing to fix.
+
+## 2026-11-21 (claude-pxx): the class guard is in; placement is still open
+
+`tools/check_tier_coverage.py`, a gate step ("every test target is tiered or
+opted out", 0.3 s). It subtracts every tier's targets from the Makefile's
+`^test-[a-z0-9-]+:` and fails on anything left that is not in its OPT_OUT.
+OPT_OUT entries come in three kinds, and the kind is checked:
+
+- `alias`: every test-* prerequisite must itself be tiered.
+- `outside`: carries its reason.
+- `hole`: no decision. Printed on every run.
+
+A stale entry fails, and so does one a tier now runs. `--self-check` is the
+positive control the ticket asked for: a fixture with an unlisted target, a
+stale entry and a broken alias must each fail, and a placed fixture must be
+clean.
+
+The measured count was 34, not 6. 72 test targets, 46 tiered.
+- **3 are aliases** of tiered targets: test-c, test-c-conformance-cross,
+  test-sqlite-threads.
+- **22 are deliberately outside**, each with the reason its own Makefile
+  comment gives: FPC (3), OS VM images (11), frozen/managed reruns (4),
+  no-NilPy opt-in, ESP-IDF (2), dropbear.
+- **9 are holes**, and they are this ticket's remaining work:
+  - test-chess-perft, test-duktape, test-sqlite-parity and test-wasm32,
+    from the original six. test-quickjs has since been tiered, and test-fpc
+    is outside: it needs FPC, and the release workflow runs it.
+  - five the guard found, with no placement recorded anywhere:
+    test-c-abi-cross, test-c-abi-glibc-oracle, test-c-float-const-cross,
+    test-packenum-gcc-oracle and test-packrecords-c-gcc-oracle.
+
+**Still open:** a tier for each hole, chosen on cost measured on seven, as
+this ticket says (not bulk-added; wasm32 is 51 jobs). Placing one means moving
+it from OPT_OUT to a tier, and the guard then refuses a stale entry.
