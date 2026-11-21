@@ -1,0 +1,26 @@
+[-02] [-0042] [+0042] [ 0042] [-2   ]
+[-02] [-003.14] [+003.14] [0003.14] [-3.14e+00]
+[-02] [-007]
+[000ff] [0x00ff] [   ab] [  z]
+[    -005] [-02] [-0003]
+[-0001.5] [-01E-10] [-01.23e+04] [-1.50   |]
+[-0.000000] [   inf] [  -inf] [  +inf]
+strtod NaN            -> nan used=3 errno=0
+strtod -nan           -> -nan used=4 errno=0
+strtod nan(123)       -> nan used=8 errno=0
+strtod nan(           -> nan used=3 errno=0
+strtod NAN(abc_9)x    -> nan used=10 errno=0
+strtod inf            -> inf used=3 errno=0
+strtod -INF           -> -inf used=4 errno=0
+strtod +infinity      -> inf used=9 errno=0
+strtod inFINity!      -> inf used=8 errno=0
+strtod infinit        -> inf used=3 errno=0
+strtod   -inf         -> -inf used=6 errno=0
+strtod in             -> 0.000000 used=0 errno=0
+strtod bork           -> 0.000000 used=0 errno=0
+strtod 1.222          -> 1.222000 used=5 errno=0
+strtod 1e400          -> inf used=5 errno=1
+strtof inf            -> inf used=3 errno=0
+strtof -infinity      -> -inf used=9 errno=0
+strtof 1e39           -> inf used=4 errno=1
+strtof nan            -> nan used=3 errno=0

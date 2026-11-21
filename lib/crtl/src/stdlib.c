@@ -656,6 +656,34 @@ double strtod(const char *s, char **end) {
   while (*p == ' ' || *p == '\t' || *p == '\n') p++;
   if (*p == '-') { sign = -1.0; p++; } else if (*p == '+') p++;
 
+  /* INF, INFINITY and NAN, any case, NAN optionally followed by (n-char-seq)
+     (C11 7.22.1.3). Missing, so strtod("inf") was 0 consuming nothing, and
+     toybox `sort -g' ordered NaN/-inf/+infinity as zeros. The NaN is built
+     from its bits: 0.0/0.0 on x86 is the default NaN, sign bit SET, and
+     glibc's strtod("nan") is positive (strtod("-nan") negative). */
+  {
+    static const char inf_s[] = "infinity";
+    int i = 0;
+    while (i < 8 && (p[i] | 0x20) == inf_s[i]) i++;
+    if (i >= 3) {              /* "infinit" is "inf" and 4 left over */
+      if (end) *end = (char *)(p + (i == 8 ? 8 : 3));
+      return sign * (1.0 / 0.0);
+    }
+    if ((p[0] | 0x20) == 'n' && (p[1] | 0x20) == 'a' && (p[2] | 0x20) == 'n') {
+      union { unsigned long long u; double d; } nb;
+      const char *q = p + 3;
+      if (*q == '(') {
+        const char *r = q + 1;
+        while ((*r >= '0' && *r <= '9') || ((*r | 0x20) >= 'a' && (*r | 0x20) <= 'z') || *r == '_') r++;
+        if (*r == ')') q = r + 1;
+      }
+      nb.u = 0x7FF8000000000000ULL;
+      if (sign < 0) nb.u |= 0x8000000000000000ULL;
+      if (end) *end = (char *)q;
+      return nb.d;
+    }
+  }
+
   /* C99 hex float: 0x h* [. h*] [pP [+-] d+]. Missing entirely until
      2026-08-05, so strtod("0x1.8p+1") returned 0 leaving "x1.8p+1" — and with
      it atof, scanf's %f and %a. printf gained %a in the same batch, so without
@@ -740,6 +768,9 @@ double strtod(const char *s, char **end) {
     while (dexp < -22) { v = v / 1e22; dexp += 22; }
     if (dexp > 0) v = v * __crtl_pow10e(dexp);
     else if (dexp < 0) v = v / __crtl_pow10e(-dexp);
+    /* a finite input that overflowed: C11 7.22.1.3 wants ERANGE with the
+       HUGE_VAL it already is. (Underflow's ERANGE is not set here.) */
+    if (v - v != 0) errno = ERANGE;
   }
   if (end) *end = (char *)(any ? p : s);
   return sign * v;
@@ -1552,7 +1583,9 @@ float strtof(const char *s, char **end)
 {
   double d = strtod(s, end);
   float f = (float)d;
-  if ((d > 3.4028234663852886e38 || d < -3.4028234663852886e38) && d == d) errno = ERANGE;
+  /* a FINITE double too big for float; an infinity strtod parsed from "inf"
+     is not an overflow, and one from "1e400" already has its ERANGE */
+  if ((d > 3.4028234663852886e38 || d < -3.4028234663852886e38) && d - d == 0) errno = ERANGE;
   return f;
 }
 

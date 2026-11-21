@@ -21073,6 +21073,9 @@ test-core: $(COMPILER)
 	# scanf %X is %x (toybox cpio newc headers), sscanf and fscanf; fscanf reads tmpfile()
 	./$(COMPILER) test/c_crtl_scanf_upper_x.c $(TESTTMP)/c_scanfX26 > /dev/null
 	tools/expect_same.sh c_scanfX26 "$$($(TESTTMP)/c_scanfX26)" "$$(cat test/c_crtl_scanf_upper_x.expected)"
+	# printf 0-flag pads after a float's sign; strtod reads inf/nan (toybox seq -w, sort -g)
+	./$(COMPILER) test/c_crtl_printf_signed_zero_pad_and_strtod_inf_nan.c $(TESTTMP)/c_pzinf26 > /dev/null
+	tools/expect_same.sh c_pzinf26 "$$($(TESTTMP)/c_pzinf26)" "$$(cat test/c_crtl_printf_signed_zero_pad_and_strtod_inf_nan.expected)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

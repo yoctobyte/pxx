@@ -747,6 +747,20 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       if (plus) { prefix = "+"; preflen = 1; }
       else if (space) { prefix = " "; preflen = 1; }
     }
+    /* ...and that '-' is part of the BODY, so the zero padding below went in
+       front of it: `%07.2f` of -3.14 printed "00-3.14" where glibc prints
+       "-003.14" (toybox `seq -w -2 19 120' printed "0-2"). Lift it into the
+       prefix, which is written before the zeros. */
+    if ((k=='f'||k=='F'||k=='e'||k=='E'||k=='g'||k=='G'||k=='a'||k=='A')
+        && nl > 0 && s[0] == '-' && preflen == 0) {
+      prefix = "-"; preflen = 1; s++; nl--;
+    }
+    /* glibc pads inf and nan with SPACES whatever the '0' flag says, and
+       ignores '0' for %s and %c. */
+    if ((k=='f'||k=='F'||k=='e'||k=='E'||k=='g'||k=='G'||k=='a'||k=='A')
+        && nl > 0 && (s[0]=='i'||s[0]=='I'||s[0]=='n'||s[0]=='N'))
+      zero = 0;
+    if (k == 's' || k == 'c') zero = 0;
 
     /* integer precision: minimum digit count (zero-pad the number, not the field) */
     int zpad = 0;
