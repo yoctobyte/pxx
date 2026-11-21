@@ -21151,6 +21151,18 @@ test-core: $(COMPILER)
 	gcc -c test/c_attribute_section_link_set.c -o $(TESTTMP)/c_lset26_ga.o
 	gcc test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_ga.o $(TESTTMP)/c_lset26_b.o -o $(TESTTMP)/c_lset26_m
 	tools/expect_same.sh c_lset26_m "$$($(TESTTMP)/c_lset26_m)" "$$(cat test/c_attribute_section_link_set.expected)"
+	# ...and linked by pxx --link itself: __start_/__stop_ of each set, kept by GC when
+	# referenced (feature-a-pxx-link-gives-link-sets-their-bounds-and-places-common-symbols)
+	./$(COMPILER) --emit-obj test/c_attribute_section_link_set_main.c $(TESTTMP)/c_lset26_mo.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_lset26_pl $(TESTTMP)/c_lset26_mo.o $(TESTTMP)/c_lset26_a.o $(TESTTMP)/c_lset26_b.o > /dev/null
+	tools/expect_same.sh c_lset26_pl "$$($(TESTTMP)/c_lset26_pl)" "$$(cat test/c_attribute_section_link_set.expected)"
+	# -fcommon tentative definitions through pxx --link: merged by name, largest size wins, a real
+	# definition displaces them, an unshared one is zero; the expected output is gcc+ld's
+	./$(COMPILER) --emit-obj -fcommon -DCM_A test/c_link_common_symbols.c $(TESTTMP)/c_lcom26_a.o > /dev/null
+	./$(COMPILER) --emit-obj -fcommon -DCM_B test/c_link_common_symbols.c $(TESTTMP)/c_lcom26_b.o > /dev/null
+	./$(COMPILER) --emit-obj test/c_link_common_symbols.c $(TESTTMP)/c_lcom26_m.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_lcom26 $(TESTTMP)/c_lcom26_m.o $(TESTTMP)/c_lcom26_a.o $(TESTTMP)/c_lcom26_b.o > /dev/null
+	tools/expect_same.sh c_lcom26 "$$($(TESTTMP)/c_lcom26)" "$$(cat test/c_link_common_symbols.expected)"
 	# file-scope asm aliases (__strong_alias/__weak_alias) in x86-64 objects, hosted and --freestanding (feature-c-file-scope-asm-symbol-aliases)
 	./$(COMPILER) --emit-obj test/c_file_scope_asm_alias.c $(TESTTMP)/c_fsalias26.o > /dev/null
 	gcc test/c_file_scope_asm_alias_main.c $(TESTTMP)/c_fsalias26.o -o $(TESTTMP)/c_fsalias26 2>/dev/null

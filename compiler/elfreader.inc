@@ -354,6 +354,25 @@ var
   ElfLnkSecAddr  : array of Int64;
   ElfLnkSecLive  : array of Boolean;   { laid out and written; see ElfLnkGcMark }
   ElfLnkSecCount : Integer;
+  { LINK SETS. A section whose name is a C identifier (`link_set_domains`,
+    from __attribute__((section(..))) is laid out with every other input of
+    that name, after the rest of .data, and gets __start_<name> and
+    __stop_<name>, which is what ld does for such a name and what NetBSD's
+    __link_set_foreach walks. -1 for every other section. }
+  ElfLnkSecSet   : array of Integer;
+  ElfLnkSetName  : array of AnsiString;
+  ElfLnkSetStart : array of Int64;
+  ElfLnkSetStop  : array of Int64;
+  ElfLnkSetCount : Integer;
+  { COMMON SYMBOLS (-fcommon tentative definitions, SHN_COMMON): per global,
+    the largest size and alignment any object asked for. A real definition
+    anywhere wins and the common is dropped; otherwise ElfLnkPlaceCommons
+    gives it a .bss slot of its own, after every object's sections. That is
+    ld's rule, and the one -fcommon programs (NetBSD's rump kernel) assume. }
+  ElfLnkComSize  : array of Int64;
+  ElfLnkComAlign : array of Int64;
+  ElfLnkCommonsPlaced: Boolean;
+  ElfLnkComSlot0 : Integer;           { first synthetic slot; ElfLnkSecCount at placement }
   { THE REFERENCE GRAPH, one edge per relocation: FROM the slot it patches TO a
     slot (>= 0, a local or section symbol) or to a global NAME, -(g+1) --
     resolved only at marking time, because which object's copy a global means
@@ -426,6 +445,10 @@ begin
   SetLength(ElfLnkDefIsWeak, 0);
   SetLength(ElfLnkDefInfo, 0);
   SetLength(ElfLnkDefSize, 0);
+  SetLength(ElfLnkComSize, 0);
+  SetLength(ElfLnkComAlign, 0);
+  ElfLnkCommonsPlaced := False;
+  ElfLnkComSlot0 := 0;
   ElfLnkRwFile := 0;
   ElfLnkRxEnd := 0;
   ElfLnkEntryStub := False;
@@ -436,6 +459,10 @@ begin
   SetLength(ElfLnkObjSec0, 0);
   SetLength(ElfLnkObjNsec, 0);
   ElfLnkSecCount := 0;
+  ElfLnkSetCount := 0;
+  SetLength(ElfLnkSetName, 0);
+  SetLength(ElfLnkSetStart, 0);
+  SetLength(ElfLnkSetStop, 0);
   ElfLnkEdgeCount := 0;
   ElfLnkGcOn := False;
   for i := 0 to ELFLNK_NKIND - 1 do
@@ -471,6 +498,10 @@ begin
   SetLength(ElfLnkDefIsWeak, n + 1);
   SetLength(ElfLnkDefInfo, n + 1);
   SetLength(ElfLnkDefSize, n + 1);
+  SetLength(ElfLnkComSize, n + 1);
+  SetLength(ElfLnkComAlign, n + 1);
+  ElfLnkComSize[n] := 0;
+  ElfLnkComAlign[n] := 0;
   ElfLnkDefInfo[n] := 0;
   ElfLnkDefSize[n] := 0;
   ElfLnkDefObj[n] := -1;
@@ -493,6 +524,32 @@ end;
   input would report a smaller unresolved set than the truth. }
 function ElfRdShFlags(i: Integer): Int64;     begin ElfRdShFlags     := ElfRdU64(ElfRdShdr(i) + 8); end;
 function ElfRdShAddrAlign(i: Integer): Int64; begin ElfRdShAddrAlign := ElfRdU64(ElfRdShdr(i) + 48); end;
+
+{ Is `nm` a C identifier -- the names ld gives __start_/__stop_ symbols? }
+function ElfLnkIsCIdent(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if (Length(nm) = 0) or not (nm[1] in ['A'..'Z', 'a'..'z', '_']) then Exit;
+  for i := 2 to Length(nm) do
+    if not (nm[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit;
+  Result := True;
+end;
+
+function ElfLnkSetOf(const nm: AnsiString): Integer;
+var i: Integer;
+begin
+  for i := 0 to ElfLnkSetCount - 1 do
+    if ElfLnkSetName[i] = nm then begin Result := i; Exit; end;
+  Result := ElfLnkSetCount;
+  Inc(ElfLnkSetCount);
+  SetLength(ElfLnkSetName, ElfLnkSetCount);
+  SetLength(ElfLnkSetStart, ElfLnkSetCount);
+  SetLength(ElfLnkSetStop, ElfLnkSetCount);
+  ElfLnkSetName[Result] := nm;
+  ElfLnkSetStart[Result] := 0;
+  ElfLnkSetStop[Result] := 0;
+end;
 
 { The output kind of input section i, ELFLNK_NKIND when it carries nothing into
   the image (not SHF_ALLOC), or -1 with ElfRdErr set when it is allocated and
@@ -532,11 +589,18 @@ begin
     is still a foreign toolchain's and still refused (the elf_reader_vs_readelf
     control). bug-a-pxx-own-linker-refused-its-rodata-cuts }
   else if Copy(nm, 1, 8) = '.rodata.' then
-    begin k := ELFLNK_K_DATA; wantTy := 1; wantFl := 2; end;
+    begin k := ELFLNK_K_DATA; wantTy := 1; wantFl := 2; end
+  { a LINK SET: pxx writes __attribute__((section("link_set_x"))) data as a
+    writable PROGBITS section of that name (a const one as read-only) }
+  else if ElfLnkIsCIdent(nm) then
+  begin
+    k := ELFLNK_K_DATA; wantTy := 1;
+    if (fl and 1) <> 0 then wantFl := 3 else wantFl := 2;
+  end;
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
-              + 'links pxx''s own objects (.text .text.* .data .data.* .rodata.* .bss .bss.* .init_array .fini_array), '
+              + 'links pxx''s own objects (.text .text.* .data .data.* .rodata.* .bss .bss.* .init_array .fini_array, and data sections named like a C identifier), '
               + 'not a third-party toolchain''s';
     Exit;
   end;
@@ -563,7 +627,9 @@ begin
   SetLength(ElfLnkSecAlign, cap);
   SetLength(ElfLnkSecAddr, cap);
   SetLength(ElfLnkSecLive, cap);
+  SetLength(ElfLnkSecSet, cap);
 end;
+
 
 { One edge; a repeat of the previous one is dropped, which is most of them --
   a function calls the same few neighbours, and consecutive relocations in one
@@ -633,10 +699,13 @@ begin
     ElfLnkSecAlign[slot] := 1;
     ElfLnkSecAddr[slot] := 0;
     ElfLnkSecLive[slot] := False;
+    ElfLnkSecSet[slot] := -1;
     if i = 0 then Continue;
     kind := ElfLnkSecKind(i);
     if kind < 0 then Exit;
     ElfLnkSecKindOf[slot] := kind;
+    if (kind = ELFLNK_K_DATA) and ElfLnkIsCIdent(ElfRdSecName(i)) then
+      ElfLnkSecSet[slot] := ElfLnkSetOf(ElfRdSecName(i));
     if kind = ELFLNK_NKIND then Continue;
     { ONE PER NAME PER OBJECT is what the emitter writes for everything but
       code and data. Two .init_array sections would need a rule for their
@@ -686,6 +755,16 @@ begin
           if bind <> ELFLNK_STB_WEAK then ElfLnkStrongRef[k] := True;
           Continue;
         end;
+        { SHN_COMMON: a tentative definition under -fcommon. Not a definition
+          yet -- it counts as neither a strong nor a weak one, so a real
+          definition elsewhere is no duplicate; its size and alignment (in
+          st_value) are merged by the largest, as ld does. }
+        if shndx = $FFF2 then
+        begin
+          if ElfRdU64(e + 16) > ElfLnkComSize[k] then ElfLnkComSize[k] := ElfRdU64(e + 16);
+          if ElfRdU64(e + 8) > ElfLnkComAlign[k] then ElfLnkComAlign[k] := ElfRdU64(e + 8);
+          Continue;
+        end;
         if bind = ELFLNK_STB_WEAK then
           ElfLnkWeak[k] := ElfLnkWeak[k] + 1
         else
@@ -694,9 +773,7 @@ begin
           if ElfLnkFirst[k] = '' then ElfLnkFirst[k] := path;
         end;
         { WHERE the definition lives. SHN_ABS carries its address in st_value.
-          SHN_COMMON is what -fcommon would emit and our writer does not (a
-          tentative definition is a real .bss OBJECT here), so it is refused
-          by name rather than laid out by a rule nobody decided. }
+          SHN_COMMON is taken above. }
         if shndx = $FFF1 then slot := -1
         else if (shndx >= $FF00) or (shndx >= nsec) then
         begin
@@ -791,10 +868,46 @@ end;
 
   With GC off every allocated section is live, which is what the stage 3/4
   oracles (ld without --gc-sections) compare against. }
-procedure ElfLnkGcMark(entryG: Integer);
-var i, s, t, sp, g: Integer;
-    first, adj, fill, stack: array of Integer;
+{ Give every common symbol that no object DEFINES a .bss slot of its own
+  (once, before the first marking: the slots must exist for GC to reach). }
+procedure ElfLnkPlaceCommons;
+var g, n, slot: Integer;
 begin
+  if ElfLnkCommonsPlaced then Exit;
+  ElfLnkCommonsPlaced := True;
+  ElfLnkComSlot0 := ElfLnkSecCount;
+  n := 0;
+  for g := 0 to ElfLnkCount - 1 do
+    if (ElfLnkComSize[g] > 0) and (ElfLnkDefObj[g] < 0) then Inc(n);
+  if n = 0 then Exit;
+  ElfLnkGrowSecs(ElfLnkSecCount + n);
+  for g := 0 to ElfLnkCount - 1 do
+    if (ElfLnkComSize[g] > 0) and (ElfLnkDefObj[g] < 0) then
+    begin
+      slot := ElfLnkSecCount;
+      Inc(ElfLnkSecCount);
+      ElfLnkSecKindOf[slot] := ELFLNK_K_BSS;
+      ElfLnkSecSize[slot] := ElfLnkComSize[g];
+      if ElfLnkComAlign[g] >= 1 then ElfLnkSecAlign[slot] := ElfLnkComAlign[g]
+      else ElfLnkSecAlign[slot] := 1;
+      ElfLnkSecAddr[slot] := 0;
+      ElfLnkSecLive[slot] := False;
+      ElfLnkSecSet[slot] := -1;
+      ElfLnkDefObj[g] := 0;
+      ElfLnkDefSec[g] := slot;
+      ElfLnkDefVal[g] := 0;
+      ElfLnkDefIsWeak[g] := False;
+      ElfLnkDefInfo[g] := $11;       { GLOBAL OBJECT }
+      ElfLnkDefSize[g] := ElfLnkComSize[g];
+    end;
+end;
+
+procedure ElfLnkGcMark(entryG: Integer);
+var i, s, t, sp, g, st: Integer;
+    first, adj, fill, stack, setOfG: array of Integer;
+    nm: AnsiString;
+begin
+  ElfLnkPlaceCommons;
   for s := 0 to ElfLnkSecCount - 1 do
     ElfLnkSecLive[s] := (not ElfLnkGcOn) and (ElfLnkSecKindOf[s] <> ELFLNK_NKIND);
   if not ElfLnkGcOn then Exit;
@@ -813,6 +926,21 @@ begin
   end;
   SetLength(stack, ElfLnkSecCount);
   sp := 0;
+  { which globals are a set's __start_/__stop_: a reference to either keeps
+    EVERY section of the set, as ld does -- nothing names the entries, the
+    walk between the two symbols is the only use they have }
+  SetLength(setOfG, ElfLnkCount);
+  for g := 0 to ElfLnkCount - 1 do
+  begin
+    setOfG[g] := -1;
+    if ElfLnkSetCount = 0 then Continue;
+    nm := ElfLnkName[g];
+    if Copy(nm, 1, 8) = '__start_' then nm := Copy(nm, 9, Length(nm))
+    else if Copy(nm, 1, 7) = '__stop_' then nm := Copy(nm, 8, Length(nm))
+    else Continue;
+    for st := 0 to ElfLnkSetCount - 1 do
+      if ElfLnkSetName[st] = nm then setOfG[g] := st;
+  end;
   for s := 0 to ElfLnkSecCount - 1 do
     if (ElfLnkSecKindOf[s] = ELFLNK_K_INIT) or (ElfLnkSecKindOf[s] = ELFLNK_K_FINI)
        or (ElfLnkSecKindOf[s] = ELFLNK_K_HEAD) or (ElfLnkSecKindOf[s] = ELFLNK_K_NOTE) then
@@ -839,6 +967,17 @@ begin
       if t < 0 then
       begin
         g := -t - 1;
+        if (ElfLnkDefObj[g] < 0) and (g < Length(setOfG)) and (setOfG[g] >= 0) then
+        begin
+          st := setOfG[g];
+          for t := 0 to ElfLnkSecCount - 1 do
+            if (ElfLnkSecSet[t] = st) and not ElfLnkSecLive[t] then
+            begin
+              ElfLnkSecLive[t] := True;
+              stack[sp] := t; Inc(sp);
+            end;
+          Continue;
+        end;
         if (ElfLnkDefObj[g] < 0) or (ElfLnkDefSec[g] < 0) then Continue;
         t := ElfLnkDefSec[g];
       end;
@@ -880,8 +1019,8 @@ end;
   An output section with no inputs has size 0 and an address that nothing
   refers to; the writer omits it. }
 procedure ElfLnkLayout;
-var k, o, i, s0: Integer;
-    addr, start, maxAl, rwFile: Int64;
+var k, o, i, s0, st: Integer;
+    addr, start, maxAl, rwFile, setAl: Int64;
 begin
   addr := ImageBase + ELFLNK_PAGE;
   for k := 0 to ELFLNK_NKIND - 1 do
@@ -910,11 +1049,47 @@ begin
       for i := s0 to s0 + ElfLnkObjNsec[o] - 1 do
       begin
         if (not ElfLnkSecLive[i]) or (ElfLnkSecKindOf[i] <> k) then Continue;
+        if ElfLnkSecSet[i] >= 0 then Continue;     { a link set: below }
         addr := ElfLnkAlignUp(addr, ElfLnkSecAlign[i]);
         ElfLnkSecAddr[i] := addr;
         addr := addr + ElfLnkSecSize[i];
       end;
     end;
+    { each LINK SET contiguous, in link order, after the rest of .data: its
+      entries are walked from __start_ to __stop_, so nothing else may sit
+      between them. A set starts at its largest member alignment, so the
+      first entry is where __start_ says. }
+    if k = ELFLNK_K_DATA then
+      for st := 0 to ElfLnkSetCount - 1 do
+      begin
+        setAl := 1;
+        for i := 0 to ElfLnkSecCount - 1 do
+          if ElfLnkSecLive[i] and (ElfLnkSecSet[i] = st) and (ElfLnkSecAlign[i] > setAl) then
+            setAl := ElfLnkSecAlign[i];
+        addr := ElfLnkAlignUp(addr, setAl);
+        ElfLnkSetStart[st] := addr;
+        for o := 0 to ElfLnkObjCount - 1 do
+        begin
+          s0 := ElfLnkObjSec0[o];
+          for i := s0 to s0 + ElfLnkObjNsec[o] - 1 do
+          begin
+            if (not ElfLnkSecLive[i]) or (ElfLnkSecSet[i] <> st) then Continue;
+            addr := ElfLnkAlignUp(addr, ElfLnkSecAlign[i]);
+            ElfLnkSecAddr[i] := addr;
+            addr := addr + ElfLnkSecSize[i];
+          end;
+        end;
+        ElfLnkSetStop[st] := addr;
+      end;
+    { the placed COMMONS, after every object's .bss }
+    if (k = ELFLNK_K_BSS) and ElfLnkCommonsPlaced then
+      for i := ElfLnkComSlot0 to ElfLnkSecCount - 1 do
+      begin
+        if (not ElfLnkSecLive[i]) or (ElfLnkSecKindOf[i] <> k) then Continue;
+        addr := ElfLnkAlignUp(addr, ElfLnkSecAlign[i]);
+        ElfLnkSecAddr[i] := addr;
+        addr := addr + ElfLnkSecSize[i];
+      end;
     { the synthesised _start goes AFTER every input's .text, so each input
       keeps the address it has without it -- which keeps the stage 3/4 oracle
       (ld, which has no stub) valid for everything but these bytes }
@@ -1712,6 +1887,26 @@ begin
     ElfLnkDefVal[g] := v;
     ElfLnkDefIsWeak[g] := False;
     ElfLnkDefInfo[g] := $10;         { GLOBAL NOTYPE }
+    ElfLnkDefSize[g] := 0;
+  end;
+  { a link set's bounds, when something asks for them }
+  for k := 0 to 2 * ElfLnkSetCount - 1 do
+  begin
+    if (k and 1) = 0 then
+    begin
+      nm := '__start_' + ElfLnkSetName[k shr 1]; v := ElfLnkSetStart[k shr 1];
+    end
+    else
+    begin
+      nm := '__stop_' + ElfLnkSetName[k shr 1]; v := ElfLnkSetStop[k shr 1];
+    end;
+    g := ElfLnkFind(nm);
+    if (g < 0) or (ElfLnkDefObj[g] >= 0) then Continue;
+    ElfLnkDefObj[g] := 0;
+    ElfLnkDefSec[g] := -1;
+    ElfLnkDefVal[g] := v;
+    ElfLnkDefIsWeak[g] := False;
+    ElfLnkDefInfo[g] := $10;
     ElfLnkDefSize[g] := 0;
   end;
 end;
