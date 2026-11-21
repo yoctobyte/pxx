@@ -19,12 +19,15 @@ fail() { echo "FAIL $1 (see $B/logs/$1.*.log)"; return 1; }
 src()  {  # name tarball
   d=$B/src/$1; [ -d $d ] || { mkdir -p $d && tar -xf $B/dl/$2 -C $d --strip-components=1; }
 }
+# MK="VAR=value" before pkg: a make variable for the COMPILE step only. A
+# path compiled into the code can then be the target's (/usr/...) while
+# `make install` still installs under $P, which make_bundle.sh copies from.
 pkg() {   # name tarball [configure args...]
   n=$1; t=$2; shift 2
   done_or $n && return 0
   src $n $t
   ( cd $B/src/$n && ./configure $CFG "$@" > $B/logs/$n.configure.log 2>&1 \
-      && make -w V=1 -j1 > $B/logs/$n.make.log 2>&1 \
+      && make -w V=1 -j1 ${MK:+"$MK"} > $B/logs/$n.make.log 2>&1 \
       && make install > $B/logs/$n.install.log 2>&1 ) && ok $n || fail $n
 }
 pkg xorgproto  xorgproto-2024.1.tar.xz        || exit 1
@@ -75,6 +78,9 @@ pkg libSM      libSM-1.2.4.tar.xz --disable-docs --without-libuuid --without-xml
 # app-defaults on the target.
 pkg libXt      libXt-1.3.1.tar.xz --disable-specs --without-xmlto --without-fop \
   --with-xfile-search-path='/usr/share/X11/%L/%T/%N%C%S:/usr/share/X11/%T/%N%C%S:/usr/share/X11/%L/%T/%N%S:/usr/share/X11/%T/%N%S' || exit 1
+# Xmu finds bitmaps (the apps' icons) in BITMAPDIR: the target's, where the
+# bundle puts xbitmaps, not $P/include.
+MK='BITMAP_DEFINES=-DBITMAPDIR=\"/usr/include/X11/bitmaps\"' \
 pkg libXmu     libXmu-1.2.1.tar.xz --disable-docs --without-xmlto --without-fop || exit 1
 pkg libXpm     libXpm-3.5.17.tar.xz --disable-open-zfile --disable-stat-zfile || exit 1
 pkg libXaw     libXaw-1.0.16.tar.xz --disable-xaw6 --disable-specs --without-xmlto --without-fop || exit 1
@@ -84,6 +90,10 @@ pkg xclock     xclock-1.1.1.tar.xz --without-xkb || exit 1
 pkg xcalc      xcalc-1.1.2.tar.xz              || exit 1
 pkg xeyes      xeyes-1.1.2.tar.bz2             || exit 1
 pkg xload      xload-1.2.0.tar.xz --disable-nls || exit 1
+# xedit's Lisp loads its .lsp files from LISPDIR at start-up. With the build
+# prefix compiled in, it found none on the target, and its error path then
+# longjmps through a buffer not yet set (a SIGSEGV in the gcc build too).
+MK='LISPDIR=/usr/lib/X11/xedit/lisp' \
 pkg xedit      xedit-1.2.4.tar.xz              || exit 1
 # JWM looks for its libraries with AC_CHECK_LIB, not pkg-config, so a static
 # link test needs the whole chain in LIBS. Its Makefile then links with

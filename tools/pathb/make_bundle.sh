@@ -17,6 +17,9 @@ cp $T/files/system.jwmrc $R/etc/jwm/system.jwmrc
 cp $T/files/welcome.txt $R/usr/share/pixix/welcome.txt
 # the Athena apps' resources (libXt searches /usr/share/X11/app-defaults)
 cp $B/prefix/share/X11/app-defaults/* $R/usr/share/X11/app-defaults/
+# xedit's Lisp files, where its LISPDIR points (gccbuild.sh)
+mkdir -p $R/usr/lib/X11/xedit
+cp -r $B/prefix/lib/X11/xedit/lisp $R/usr/lib/X11/xedit/
 # Xlib's locale data, for XSupportsLocale and the Xmb/Xutf8 conversions:
 # the C and en_US.UTF-8 locales and the tables that map names to them.
 # startx-pixx points XLOCALEDIR here.
@@ -36,6 +39,13 @@ X=$(mktemp -d)
 # font-misc-misc's own build makes them, with ucs2any and font-util's map.
 tar -xJf $B/dl/font-misc-misc-1.1.3.tar.xz -C $X
 tar -xJf $B/dl/font-cursor-misc-1.0.4.tar.xz -C $X
+# the standard X bitmaps (xcalc's and xedit's icons), where libXmu's BITMAPDIR
+# points (gccbuild.sh)
+tar -xJf $B/dl/xbitmaps-1.1.3.tar.xz -C $X
+mkdir -p $R/usr/include/X11/bitmaps
+for f in $X/xbitmaps-1.1.3/*; do
+  case ${f##*/} in COPYING|ChangeLog|README*|INSTALL|Makefile*|configure*|aclocal.m4|*.pc*|missing|install-sh|compile|depcomp|config.*|m4|autom4te.cache) ;; *) [ -f $f ] && cp $f $R/usr/include/X11/bitmaps/ ;; esac
+done
 MD=$R/usr/share/fonts/X11/misc
 MAP=${PATHB_ISO8859_1_MAP:-/usr/share/fonts/X11/util/map-ISO8859-1}
 [ -f $MAP ] || { echo "make_bundle: no $MAP (font-util / xfonts-utils; or set PATHB_ISO8859_1_MAP)"; exit 1; }
@@ -65,6 +75,7 @@ L=$R/usr/share/licenses/pathb
 cp $X/dejavu-fonts-ttf-2.37/LICENSE $L/dejavu-fonts.LICENSE
 cp $X/font-misc-misc-1.1.3/COPYING $L/font-misc-misc.COPYING
 cp $X/font-cursor-misc-1.0.4/COPYING $L/font-cursor-misc.COPYING
+cp $X/xbitmaps-1.1.3/COPYING $L/xbitmaps.COPYING
 cp $B/src/tinyx/COPYING $L/tinyx.COPYING
 for p in libXau xtrans libxcb libX11 libXext libXrender expat fontconfig libXft zlib libfontenc libXfont; do
   for f in COPYING LICENSE; do [ -f $B/src/$p/$f ] && cp $B/src/$p/$f $L/$p.$f; done
