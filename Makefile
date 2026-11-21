@@ -21392,6 +21392,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_ltls_pt "$$(readelf -lW $(TESTTMP)/c_ltls | grep -c '^ *TLS ')" "1"
 	gcc -o $(TESTTMP)/c_ltls_g $(TESTTMP)/c_ltls_a.o $(TESTTMP)/c_ltls_b.o $(TESTTMP)/c_ltls_c.o -lpthread
 	tools/expect_same.sh c_ltls_g "$$(timeout 20 $(TESTTMP)/c_ltls_g)" "$$(cat test/c_link_elf_tls.expected)"
+	# a reference from a section the GC drops needs no definition, as with ld --gc-sections;
+	# with --no-gc-sections the section is kept and the link refuses
+	$(COMPILER) --emit-obj --function-sections test/c_link_gc_dead_undefined_ref.c $(TESTTMP)/c_lgcu.o > /dev/null
+	$(COMPILER) --link -o $(TESTTMP)/c_lgcu $(TESTTMP)/c_lgcu.o > /dev/null
+	tools/expect_same.sh c_lgcu "$$($(TESTTMP)/c_lgcu)" "$$(cat test/c_link_gc_dead_undefined_ref.expected)"
+	tools/expect_same.sh c_lgcu_keep "$$($(COMPILER) --link --no-gc-sections -o $(TESTTMP)/c_lgcu_k $(TESTTMP)/c_lgcu.o 2>&1 | grep -c "undefined reference to 'nowhere'")" "1"
 	# a refused relocation leaves no output (bug-a-link-leaves-a-truncated-executable-after-a-refused-relocation)
 	gcc -c -O2 -fno-pie -fcf-protection=none -fno-asynchronous-unwind-tables test/c_link_refused_reloc_gcc.c -o $(TESTTMP)/c_lnkref26_g.o
 	$(COMPILER) --emit-obj test/c_link_refused_reloc_main.c $(TESTTMP)/c_lnkref26_m.o > /dev/null

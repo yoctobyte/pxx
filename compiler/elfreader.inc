@@ -2071,14 +2071,29 @@ var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff
     g, phCount, nOut, shstrLen: Integer;
     outIdx: array[0..ELFLNK_NKIND - 1] of Integer;
     ldsoVA, pa: Int64;
+    refLive: array of Boolean;
 const
   SHSTR = 68;   { see the blob below }
 begin
   ElfLnkWriteExe := False;
-  { every STRONG reference must have a definition somewhere in the set }
+  { every STRONG reference must have a definition somewhere in the set --
+    every reference FROM A SECTION THE LINK KEEPS. A section the GC dropped
+    is not written and its relocations are never applied, so what it names
+    does not need to exist: ld --gc-sections links a dead function that calls
+    an undefined one, and refuses it only without --gc-sections, when the
+    function is kept. That is what an object of header `static inline`s
+    needs (pxx emits each, used or not, in its own --function-sections
+    section): rump's members name ~50 kernel functions only from such dead
+    copies. With --no-gc-sections every allocated section is live, so the
+    rule is the old one. }
+  SetLength(refLive, ElfLnkCount);
+  for i := 0 to ElfLnkCount - 1 do refLive[i] := False;
+  for i := 0 to ElfLnkEdgeCount - 1 do
+    if (ElfLnkEdgeTo[i] < 0) and ElfLnkSecLive[ElfLnkEdgeFrom[i]] then
+      refLive[-ElfLnkEdgeTo[i] - 1] := True;
   nUnres := 0;
   for i := 0 to ElfLnkCount - 1 do
-    if ElfLnkStrongRef[i] and (ElfLnkDefObj[i] < 0) then
+    if ElfLnkStrongRef[i] and refLive[i] and (ElfLnkDefObj[i] < 0) then
     begin
       Inc(nUnres);
       if nUnres <= 50 then WriteLn(tag, ': undefined reference to ''', ElfLnkName[i], '''');
