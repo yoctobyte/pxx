@@ -92,3 +92,11 @@ only. `TZ=UTC0` happens to work, but `UTC-05:00:00`, `EST5EDT` and
 `touch -d ...+05:00` builds exactly the first of those. No suite row failing
 today depends on it. A fixed-offset parse would be easy; the DST rules (`M`
 dates) are the real work, and half of it would be a plausible wrong answer.
+
+## 2026-11-21 (claude-pxx): cpio
+
+The cpio rows stop at "bad hex" (12 such messages for its 12 failing rows;
+7 pair with a row unambiguously in the log, which interleaves stderr). cpio reads its newc header with
+`sscanf(hex, "%7X%n")` and crtl scanf had no `%X` (only `%x`), in either
+engine. Fixed in both, with test/c_crtl_scanf_upper_x.c. Writing that test
+found tmpfile() was an EINVAL stub; it now makes a real file.

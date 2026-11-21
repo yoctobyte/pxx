@@ -1275,7 +1275,20 @@ void rewind(FILE *stream) {
   }
 }
 
-FILE *tmpfile(void) { errno = EINVAL; return 0; }
+/* tmpfile(3): an anonymous read/write stream, gone when it is closed. Was a
+   stub that refused (EINVAL), so a caller that did not check dereferenced
+   NULL. Made in /tmp as glibc does (it does not consult TMPDIR here), and
+   unlinked at once, so nothing is left behind even if the program dies. */
+FILE *tmpfile(void) {
+  char name[] = "/tmp/tmpfXXXXXX";
+  FILE *f;
+  int fd = mkstemp(name);
+  if (fd < 0) return 0;
+  unlink(name);
+  f = fdopen(fd, "w+");
+  if (!f) { int e = errno; close(fd); errno = e; }
+  return f;
+}
 char *tmpnam(char *s) { (void)s; errno = EINVAL; return 0; }
 int remove(const char *path) { int rc = __pxx_remove(path); if (rc < 0) { errno = -rc; return -1; } return 0; }
 int rename(const char *oldp, const char *newp) { int rc = __pxx_rename(oldp, newp); if (rc < 0) { errno = -rc; return -1; } return 0; }
@@ -1405,6 +1418,7 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
         p++;
       }
       conv = *p;
+      if (conv == 'X') conv = 'x';   /* the same conversion (C11 7.21.6.2) */
       if (conv == '\0') break;
       p++;
       /* Leading whitespace is skipped before every conversion EXCEPT %c, %[ and
@@ -1645,6 +1659,7 @@ int vfscanf(FILE *fp, const char *fmt, va_list ap) {
         p++;
       }
       conv = *p;
+      if (conv == 'X') conv = 'x';   /* the same conversion (C11 7.21.6.2) */
       if (conv == '\0') break;
       p++;
       /* Leading whitespace is skipped before every conversion EXCEPT %c, %[

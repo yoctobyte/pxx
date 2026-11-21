@@ -21070,6 +21070,9 @@ test-core: $(COMPILER)
 	  done; \
 	  echo 'cmktl: identical to gcc (6 zones)'; \
 	else echo 'cmktl: SKIP (no gcc or no zoneinfo)'; $(TESTTMP)/cmktl >/dev/null; fi
+	# scanf %X is %x (toybox cpio newc headers), sscanf and fscanf; fscanf reads tmpfile()
+	./$(COMPILER) test/c_crtl_scanf_upper_x.c $(TESTTMP)/c_scanfX26 > /dev/null
+	tools/expect_same.sh c_scanfX26 "$$($(TESTTMP)/c_scanfX26)" "$$(cat test/c_crtl_scanf_upper_x.expected)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o
