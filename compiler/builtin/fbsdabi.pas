@@ -2005,10 +2005,10 @@ begin
           if t[0] <> FbMainTid then
           begin
             { CLONE_CHILD_CLEARTID, as the clone stub's own exit does: the tid
-              word's address is in this thread's TLS slot 14 (put there by the
+              word's address is in this thread's TLS_SLOT_FS_ENTRY (put there by the
               stub's thr_new entry); clear it once the parent has stored the
               tid, and wake the joiner. }
-            r := PInt64(Int64(__pxxTlsBase) + 8 * 14)^;
+            r := PInt64(Int64(__pxxTlsBase) + __pxxTlsFsEntrySlotOff)^;
             if r <> 0 then
             begin
               while PInteger(r)^ = 0 do FbSys(FB_SCHED_YIELD, 0, 0, 0, 0, 0, 0);

@@ -133,7 +133,7 @@ const
   { The TLS slot the clone stub leaves free for the child's ctid pointer on
     x86-64: defs.inc's TLS_SLOT_FS_ENTRY (14), i386's fs entry slot, never
     written on x86-64. fbsdabi uses the same slot for the same purpose. }
-  DF_TLS_SLOT_CTID = 14;
+  DF_TLS_SLOT_CTID = __pxxTlsFsEntrySlotOff div 8;   { TLS_SLOT_FS_ENTRY, derived: the layout moves }
 
 { The ONE kernel entry. args -> [nr, a0..a5, rdx-out, cf-out]. DragonFly
   reports an error with CF set and the

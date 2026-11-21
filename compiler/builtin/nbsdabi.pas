@@ -83,7 +83,9 @@ const
   NB_EPOLL_PWAIT2 = 504; NB_DUP3 = 505;
   NB_GETCONTEXT = 307; NB_LWP_CREATE = 309; NB_LWP_EXIT = 310;
   NB_LWP_DETACHED = $40; NB_UC_TLSBASE = $80000;
-  NB_TLS_SLOT_CTID = 14;           { TLS_SLOT_FS_ENTRY: free on x86-64, as fbsdabi uses it }
+  { TLS_SLOT_FS_ENTRY: free on x86-64, as fbsdabi uses it. Derived, not 14:
+    the slot numbers move when the block's layout does. }
+  NB_TLS_SLOT_CTID = __pxxTlsFsEntrySlotOff div 8;
 
   NB_AT_FDCWD = -100;
   NB_AT_EACCESS = $100; NB_AT_SYMLINK_NOFOLLOW = $200; NB_AT_SYMLINK_FOLLOW = $400;

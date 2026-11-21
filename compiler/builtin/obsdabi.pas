@@ -126,9 +126,9 @@ var
 const
   OB_EXIT_STACK_SIZE = 16384;
   { The TLS slot the clone stub leaves free for the child's ctid pointer on
-    x86-64: defs.inc's TLS_SLOT_FS_ENTRY (14), i386's fs entry slot, never
+    x86-64: defs.inc's TLS_SLOT_FS_ENTRY, i386's fs entry slot, never
     written on x86-64. fbsdabi uses the same slot for the same purpose. }
-  OB_TLS_SLOT_CTID = 14;
+  OB_TLS_SLOT_CTID = __pxxTlsFsEntrySlotOff div 8;   { derived, not 14: the layout moves }
 
 {$ifdef PXX_OBSD_LIBC}
 { --os=openbsd --rtl-libc: no kernel entry in this program at all. Each
@@ -1877,7 +1877,7 @@ begin
   ObTibUnlock;
   if p[0] = 0 then begin Result := -LX_ENOMEM; Exit; end;
   p[0] := ObTcbOfTib(p[0]);
-  PInt64(ObBlockOf(p[0]) + 8 * 13)^ := PInt64(ObMyBlock + 8 * 13)^;   { TLS_SLOT_INIT_IMAGE }
+  PInt64(ObBlockOf(p[0]) + __pxxTlsInitImageSlotOff)^ := PInt64(ObMyBlock + __pxxTlsInitImageSlotOff)^;
 {$else}
   p[0] := stack + 16;                                     { tf_tcb = the TLS block }
 {$endif}
