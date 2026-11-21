@@ -69,3 +69,18 @@ s* repros' CHECK lines against gcc's objects:
 What is left is the real link of the rump libraries, which needs the
 Rainyday side to try it again.
 
+
+## 2026-11-21: the all-pxx rumpnic boots
+
+Two pxx fixes were needed for the real link and the boot:
+- feature-a-pxx-link-has-no-elf-tls (ELF TLS in `pxx --link`);
+- bug-c-thread-local-is-shared-in-emit-obj-without-system-libs (a `__thread`
+  in a plain object was shared, and so were crtl's pthread keys).
+
+Confirmed by Rainyday at 37dc0dfe2d: with ALLPXX=1 (458 rump objects plus
+librumpuser, virtif_user, rumpnic, vfiodev and confine, linked by pxx, with
+no glibc or gcc strings in the binary), tools/rumpnictest.sh passes for
+e1000, rtl8139 (behind the IOMMU, as uid 150 under seccomp) and pcnet. That
+covers DHCP, ping, and an HTTP fetch with the right md5. It is in Rainyday's
+regression suite. Nothing is open on the pxx side for this; the ticket stays
+as the umbrella until Rainyday reports the next gap.

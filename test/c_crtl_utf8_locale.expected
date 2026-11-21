@@ -1,0 +1,138 @@
+== C
+query C
+MB_CUR_MAX 1 CODESET ANSI_X3.4-1968
+wcwidth U+0041 1
+wcwidth U+00E9 -1
+wcwidth U+0301 -1
+wcwidth U+79C1 -1
+wcwidth U+3002 -1
+wcwidth U+1F600 -1
+wcwidth U+00AD -1
+wcwidth U+200B -1
+wcwidth U+007F -1
+U+0061 alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=0061 tu=0041
+U+00E9 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00E9 tu=00E9
+U+00C9 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00C9 tu=00C9
+U+03B1 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=03B1 tu=03B1
+U+0391 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=0391 tu=0391
+U+4E00 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=4E00 tu=4E00
+U+2028 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=2028 tu=2028
+U+3000 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=3000 tu=3000
+U+00A0 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00A0 tu=00A0
+U+1E9E alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=1E9E tu=1E9E
+U+00DF alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00DF tu=00DF
+btowc(0x41)=65 btowc(0xC3)=-1 wctob(0xE9)=-1
+tables 0987369c
+mbrtowc e-acute    -> -1 U+0000
+== names
+empty -> C
+bogus -> (null)
+POSIX -> C
+LANG=C.UTF-8 empty -> C.UTF-8
+all query -> LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C
+numeric query -> C
+C -> C
+C.utf8 -> C.utf8
+C.UTF-8 -> C.UTF-8
+all query -> C.UTF-8
+== C.UTF-8
+MB_CUR_MAX 6 CODESET UTF-8
+wcwidth U+0041 1
+wcwidth U+00E9 1
+wcwidth U+0301 0
+wcwidth U+79C1 2
+wcwidth U+3002 2
+wcwidth U+1F600 2
+wcwidth U+00AD 1
+wcwidth U+200B 0
+wcwidth U+007F -1
+U+0061 alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=0061 tu=0041
+U+00E9 alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=00E9 tu=00C9
+U+00C9 alpha=1 lower=0 upper=1 space=0 print=1 punct=0 tl=00E9 tu=00C9
+U+03B1 alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=03B1 tu=0391
+U+0391 alpha=1 lower=0 upper=1 space=0 print=1 punct=0 tl=03B1 tu=0391
+U+4E00 alpha=1 lower=0 upper=0 space=0 print=1 punct=0 tl=4E00 tu=4E00
+U+2028 alpha=0 lower=0 upper=0 space=1 print=0 punct=0 tl=2028 tu=2028
+U+3000 alpha=0 lower=0 upper=0 space=1 print=1 punct=0 tl=3000 tu=3000
+U+00A0 alpha=0 lower=0 upper=0 space=0 print=1 punct=1 tl=00A0 tu=00A0
+U+1E9E alpha=1 lower=0 upper=1 space=0 print=1 punct=0 tl=00DF tu=1E9E
+U+00DF alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=00DF tu=00DF
+btowc(0x41)=65 btowc(0xC3)=-1 wctob(0xE9)=-1
+tables e2020581
+mbrtowc ascii      -> 1 U+0041
+mbrtowc e-acute    -> 2 U+00E9
+mbrtowc cjk        -> 3 U+79C1
+mbrtowc emoji      -> 4 U+1F600
+mbrtowc max        -> 4 U+10FFFF
+mbrtowc past-max   -> 4 U+110000
+mbrtowc overlong   -> -1 U+0000
+mbrtowc overlong3  -> -1 U+0000
+mbrtowc surrogate  -> -1 U+0000
+mbrtowc lone-cont  -> -1 U+0000
+mbrtowc bad-cont   -> -1 U+0000
+mbrtowc f5         -> 4 U+140000
+mbrtowc short      -> -2 U+0000
+mbrtowc 5byte      -> 5 U+200000
+mbrtowc 6byte      -> 6 U+7FFFFFFF
+mbrtowc 6overlong  -> -1 U+0000
+mbrtowc fe         -> -1 U+0000
+mbrtowc c0-alone   -> -1 U+0000
+mbrtowc e0-80      -> -2 U+0000
+mbrtowc ed-a0      -> -2 U+0000
+mbrtowc f0-80      -> -2 U+0000
+mbrtowc f8-80      -> -2 U+0000
+mbrtowc nul        -> 0 U+0000
+split1 -2 mbsinit=0
+split2 -2
+split3 1 U+1F600 mbsinit=1
+wcrtomb U+0041 -> 1 41
+wcrtomb U+00E9 -> 2 C3 A9
+wcrtomb U+79C1 -> 3 E7 A7 81
+wcrtomb U+1F600 -> 4 F0 9F 98 80
+wcrtomb U+10FFFF -> 4 F4 8F BF BF
+wcrtomb U+D800 -> -1
+wcrtomb U+110000 -> 4 F4 90 80 80
+wcrtomb U+200000 -> 5 F8 88 80 80 80
+wcrtomb U+7FFFFFFF -> 6 FD BF BF BF BF BF
+beyond: w=-1 alpha=0 print=0 tu=110000 w(-1)=-1 alpha(WEOF)=0 tu(WEOF)=-1
+mbtowc 3 U+79C1
+mbtowc short -1
+mblen 4 -1
+wctomb 3 E7 A7 81
+mbstowcs 3 0061 00E9 79C1
+mbstowcs bad -1
+mbstowcs count 2
+wcstombs 6 ok
+wcswidth 5
+== back to C
+C -> C
+MB_CUR_MAX 1 CODESET ANSI_X3.4-1968
+wcwidth U+0041 1
+wcwidth U+00E9 -1
+wcwidth U+0301 -1
+wcwidth U+79C1 -1
+wcwidth U+3002 -1
+wcwidth U+1F600 -1
+wcwidth U+00AD -1
+wcwidth U+200B -1
+wcwidth U+007F -1
+U+0061 alpha=1 lower=1 upper=0 space=0 print=1 punct=0 tl=0061 tu=0041
+U+00E9 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00E9 tu=00E9
+U+00C9 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00C9 tu=00C9
+U+03B1 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=03B1 tu=03B1
+U+0391 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=0391 tu=0391
+U+4E00 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=4E00 tu=4E00
+U+2028 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=2028 tu=2028
+U+3000 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=3000 tu=3000
+U+00A0 alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00A0 tu=00A0
+U+1E9E alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=1E9E tu=1E9E
+U+00DF alpha=0 lower=0 upper=0 space=0 print=0 punct=0 tl=00DF tu=00DF
+btowc(0x41)=65 btowc(0xC3)=-1 wctob(0xE9)=-1
+tables 0987369c
+== uselocale
+newlocale bogus -> (null)
+newlocale C.UTF-8 -> ok
+prev is global 1, query is u8 1
+global still C; CODESET UTF-8 MB_CUR_MAX 6 wcwidth 2
+other thread: ANSI_X3.4-1968
+restored: CODESET ANSI_X3.4-1968 wcwidth -1

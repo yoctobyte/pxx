@@ -110,3 +110,10 @@ time, so it is not counted as fixed. Left, 12 rows: readelf -S 2, fold 2,
 then single rows (cut -C, echo -e with \u, file utf-8, find strlower, fmt
 utf8, mkpasswd md5, paste with a multibyte -d, wc -m wide). Most of these are
 wide or multibyte character handling.
+
+## 2026-11-21 (claude-pxx): the C.UTF-8 locale: 1601
+
+With feature-crtl-c-utf8-locale done: **1601 pass** of 1604. All the UTF-8
+rows pass now (cut -C, echo \u, file utf-8, find strlower, fmt utf8, fold
+wide twice, paste with a multibyte -d, wc -m wide). Left: mkpasswd md5 and
+readelf -S (2).

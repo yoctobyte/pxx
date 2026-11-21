@@ -21109,6 +21109,18 @@ test-core: $(COMPILER)
 	done; echo "c_sasi26 cross: OK"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=call0 test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_xt > /dev/null
 	tools/expect_same.sh c_sasi26_xt "$$(timeout 60 tools/run_target.sh xtensa $(TESTTMP)/c_sasi26_xt)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
+	# The C.UTF-8 locale: setlocale names as glibc returns them, UTF-8 mbrtowc/wcrtomb (split
+	# sequences, glibc's invalid forms), MB_CUR_MAX, CODESET, and the class/width/case tables
+	# hashed over every code point; the C locale before and after; newlocale/uselocale per
+	# thread (toybox's way in). Expected output glibc's.
+	# feature-crtl-c-utf8-locale
+	# --threadsafe throughout: uselocale is per thread and a second thread checks that.
+	./$(COMPILER) --threadsafe test/c_crtl_utf8_locale.c $(TESTTMP)/c_u8loc26_ts > /dev/null
+	tools/expect_same.sh c_u8loc26_ts "$$(timeout 60 $(TESTTMP)/c_u8loc26_ts)" "$$(cat test/c_crtl_utf8_locale.expected)"
+	@for t in i386 aarch64; do \
+	  ./$(COMPILER) --threadsafe --target=$$t test/c_crtl_utf8_locale.c $(TESTTMP)/c_u8loc26_$$t >/dev/null || exit 1; \
+	  timeout 120 tools/run_target.sh $$t $(TESTTMP)/c_u8loc26_$$t | diff -u test/c_crtl_utf8_locale.expected - || { echo "c_u8loc26 $$t FAIL"; exit 1; }; \
+	done; echo "c_u8loc26 cross: OK"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

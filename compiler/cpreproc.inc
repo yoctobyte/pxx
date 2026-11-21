@@ -4479,6 +4479,11 @@ begin
   if (TargetPlatform = PLATFORM_ESP) and
      ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
     CPAddEspGccTypePredefs;
+  { crtl asks this to leave out what a microcontroller should not carry: the
+    C.UTF-8 tables (lib/crtl/src/wchar.c, about 27 KB), so setlocale refuses
+    C.UTF-8 there. feature-crtl-c-utf8-locale }
+  if TargetPlatform = PLATFORM_ESP then
+    CPAddLiteral('__PXX_PLATFORM_ESP__', '1');
   { The compiler writes vfork's body itself (EmitCVforkStub) on exactly this
     condition -- the same one its two emission sites in cparser.inc test --
     so crtl asks this macro rather than re-deriving it. It used to test

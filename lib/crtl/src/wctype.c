@@ -13,43 +13,56 @@
  */
 
 #include <wctype.h>
+#include <stdlib.h>   /* __crtl_utf8 */
 
 /* one place where "is this even a byte?" is decided, so WEOF and every wide
    value take the same path out */
 static int wc_ascii(wint_t c) { return c >= 0 && c < 128; }
 
+/* Under C.UTF-8 every predicate is one bit of glibc's table (wchar.c,
+   tools/gen_crtl_unicode.py); the bit numbers are the generator's order. */
+#ifndef __PXX_PLATFORM_ESP__
+unsigned int __crtl_u8props(wint_t c);
+#define U8CLASS(c, bit) if (__crtl_utf8()) return (int)((__crtl_u8props(c) >> (bit)) & 1)
+#else
+#define U8CLASS(c, bit)
+#endif
+
 int iswalpha(wint_t c)
 {
+    U8CLASS(c, 0);
     if (!wc_ascii(c)) return 0;
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
-int iswdigit(wint_t c) { return wc_ascii(c) && c >= '0' && c <= '9'; }
+int iswdigit(wint_t c) { U8CLASS(c, 1); return wc_ascii(c) && c >= '0' && c <= '9'; }
 
-int iswalnum(wint_t c) { return iswalpha(c) || iswdigit(c); }
+int iswalnum(wint_t c) { U8CLASS(c, 11); return iswalpha(c) || iswdigit(c); }
 
-int iswblank(wint_t c) { return wc_ascii(c) && (c == ' ' || c == '\t'); }
+int iswblank(wint_t c) { U8CLASS(c, 2); return wc_ascii(c) && (c == ' ' || c == '\t'); }
 
-int iswcntrl(wint_t c) { return wc_ascii(c) && (c < 32 || c == 127); }
+int iswcntrl(wint_t c) { U8CLASS(c, 3); return wc_ascii(c) && (c < 32 || c == 127); }
 
-int iswgraph(wint_t c) { return wc_ascii(c) && c > 32 && c < 127; }
+int iswgraph(wint_t c) { U8CLASS(c, 4); return wc_ascii(c) && c > 32 && c < 127; }
 
-int iswprint(wint_t c) { return wc_ascii(c) && c >= 32 && c < 127; }
+int iswprint(wint_t c) { U8CLASS(c, 5); return wc_ascii(c) && c >= 32 && c < 127; }
 
-int iswlower(wint_t c) { return wc_ascii(c) && c >= 'a' && c <= 'z'; }
+int iswlower(wint_t c) { U8CLASS(c, 6); return wc_ascii(c) && c >= 'a' && c <= 'z'; }
 
-int iswupper(wint_t c) { return wc_ascii(c) && c >= 'A' && c <= 'Z'; }
+int iswupper(wint_t c) { U8CLASS(c, 7); return wc_ascii(c) && c >= 'A' && c <= 'Z'; }
 
-int iswpunct(wint_t c) { return iswgraph(c) && !iswalnum(c); }
+int iswpunct(wint_t c) { U8CLASS(c, 8); return iswgraph(c) && !iswalnum(c); }
 
 int iswspace(wint_t c)
 {
+    U8CLASS(c, 9);
     if (!wc_ascii(c)) return 0;
     return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 }
 
 int iswxdigit(wint_t c)
 {
+    U8CLASS(c, 10);
     if (!wc_ascii(c)) return 0;
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }

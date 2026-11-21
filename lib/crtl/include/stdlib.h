@@ -141,7 +141,14 @@ static int __pxx_sys_atexit(void (*func)(void)) {
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
-#define MB_CUR_MAX 1
+/* 6 under C.UTF-8 (glibc's value: it allows the 5- and 6-byte forms), 1 in
+   the C locale. Not a constant expression, as in glibc. */
+extern int __crtl_ctype_utf8;
+int __crtl_utf8(void);
+int __crtl_thread_locale(int k);
+int __crtl_u8dec(wchar_t *pwc, const char *s, size_t n);
+int __crtl_u8enc(char *s, wchar_t wc);
+#define MB_CUR_MAX ((size_t)(__crtl_utf8() ? 6 : 1))
 
 /* Multibyte <-> wide in the C locale, which is ASCII (the same rule as
    <wchar.h>'s mbrtowc): bytes 0..127 are their own wide characters, anything

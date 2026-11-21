@@ -1520,14 +1520,100 @@ char *ptsname(int fd)
 	return buf;
 }
 
-/* ---- multibyte, C locale --------------------------------------------------- */
+/* ---- multibyte: the C locale and C.UTF-8 ---------------------------------- */
 
-/* ASCII only, as <wchar.h>'s mbrtowc: see the note in <stdlib.h>. */
+/* Nonzero while LC_CTYPE is C.UTF-8 (setlocale, locale.c). Lives HERE because
+   this file is pulled into nearly every C program, and every reader of the flag
+   (locale.c, wchar.c, wctype.c, langinfo.c) includes <stdlib.h>, which pulls
+   it. feature-crtl-c-utf8-locale */
+int __crtl_ctype_utf8;
+
+/* uselocale(3) is per thread and outranks setlocale: 0 = none (the global
+   locale applies), 1 = C, 2 = C.UTF-8. toybox selects C.UTF-8 this way
+   (uselocale(newlocale(LC_CTYPE_MASK, "C.UTF-8", 0))), not with setlocale. */
+/* Guarded like errno (stdio.c): a __thread only where the compiler gives
+   thread-locals real storage. Unguarded, every object pulling this file got
+   ELF TLS and a PT_TLS, threads or not. */
+#ifdef __pxx_thread_local__
+static __thread int __crtl_thread_ctype;
+#else
+static int __crtl_thread_ctype;
+#endif
+
+/* THE question every multibyte and wide-character function asks: is this
+   thread's LC_CTYPE C.UTF-8? */
+int __crtl_utf8(void)
+{
+  return __crtl_thread_ctype ? __crtl_thread_ctype == 2 : __crtl_ctype_utf8;
+}
+
+/* uselocale's half that lives here: the thread's override, old value back;
+   k < 0 only reads it */
+int __crtl_thread_locale(int k)
+{
+  int old = __crtl_thread_ctype;
+  if (k >= 0) __crtl_thread_ctype = k;
+  return old;
+}
+
+/* One UTF-8 sequence, glibc's rules (measured, test/c_crtl_utf8_locale.c):
+   1..6 bytes, so up to U+7FFFFFFF and NOT capped at U+10FFFF; an overlong form
+   and a surrogate are invalid; C0, C1, FE, FF and a stray continuation byte
+   are invalid at once. An overlong or surrogate PREFIX is reported as
+   incomplete (-2), not invalid, until the sequence is whole -- that is what
+   glibc does with "\xE0\x80" and "\xED\xA0".
+   Returns the length, 0 for NUL, -1 invalid, -2 incomplete (n too short). */
+int __crtl_u8dec(wchar_t *pwc, const char *s, size_t n)
+{
+  static const unsigned int min[7] = {0, 0, 0x80, 0x800, 0x10000, 0x200000, 0x4000000};
+  const unsigned char *u = (const unsigned char *)s;
+  unsigned int c = u[0], v;
+  int len, i;
+  if (n == 0) return -2;
+  if (c < 0x80) { if (pwc) *pwc = (wchar_t)c; return c ? 1 : 0; }
+  if (c < 0xC2) return -1;
+  else if (c < 0xE0) { len = 2; v = c & 0x1F; }
+  else if (c < 0xF0) { len = 3; v = c & 0x0F; }
+  else if (c < 0xF8) { len = 4; v = c & 0x07; }
+  else if (c < 0xFC) { len = 5; v = c & 0x03; }
+  else if (c < 0xFE) { len = 6; v = c & 0x01; }
+  else return -1;
+  for (i = 1; i < len; i++) {
+    if ((size_t)i >= n) return -2;
+    if ((u[i] & 0xC0) != 0x80) return -1;
+    v = (v << 6) | (u[i] & 0x3F);
+  }
+  if (v < min[len] || (v >= 0xD800 && v <= 0xDFFF)) return -1;
+  if (pwc) *pwc = (wchar_t)v;
+  return len;
+}
+
+/* The encoder: -1 for a negative value (wchar_t is int) and for a surrogate,
+   which glibc refuses; everything else up to U+7FFFFFFF encodes. */
+int __crtl_u8enc(char *s, wchar_t wc)
+{
+  unsigned int v = (unsigned int)wc;
+  int len, i;
+  if (wc < 0 || (v >= 0xD800 && v <= 0xDFFF)) return -1;
+  if (v < 0x80) { s[0] = (char)v; return 1; }
+  len = v < 0x800 ? 2 : v < 0x10000 ? 3 : v < 0x200000 ? 4 : v < 0x4000000 ? 5 : 6;
+  for (i = len - 1; i > 0; i--) { s[i] = (char)(0x80 | (v & 0x3F)); v >>= 6; }
+  s[0] = (char)((0xFF00 >> len) | v);
+  return len;
+}
+
+/* In the C locale every byte above 127 is EILSEQ: glibc's C locale is ASCII,
+   see the note in <stdlib.h>. */
 int mbtowc(wchar_t *pwc, const char *s, size_t n)
 {
   unsigned char c;
-  if (!s) return 0;                       /* stateless encoding */
+  if (!s) return 0;                       /* stateless encoding, either way */
   if (n == 0) return -1;
+  if (__crtl_utf8()) {
+    int r = __crtl_u8dec(pwc, s, n);
+    if (r < 0) { errno = EILSEQ; return -1; }   /* glibc: a short one is -1 too */
+    return r;
+  }
   c = (unsigned char)*s;
   if (c > 127) { errno = EILSEQ; return -1; }
   if (pwc) *pwc = (wchar_t)c;
@@ -1539,6 +1625,11 @@ int mblen(const char *s, size_t n) { return mbtowc(0, s, n); }
 int wctomb(char *s, wchar_t wc)
 {
   if (!s) return 0;
+  if (__crtl_utf8()) {
+    int r = __crtl_u8enc(s, wc);
+    if (r < 0) errno = EILSEQ;
+    return r;
+  }
   if (wc < 0 || wc > 127) { errno = EILSEQ; return -1; }
   *s = (char)wc;
   return 1;
@@ -1548,6 +1639,19 @@ int wctomb(char *s, wchar_t wc)
 size_t mbstowcs(wchar_t *dst, const char *src, size_t n)
 {
   size_t i = 0;
+  if (__crtl_utf8()) {
+    for (;;) {
+      wchar_t wc;
+      int r;
+      if (dst && i >= n) return i;
+      r = __crtl_u8dec(&wc, src, 6);
+      if (r < 0) { errno = EILSEQ; return (size_t)-1; }
+      if (dst) dst[i] = wc;
+      if (r == 0) return i;
+      src += r;
+      i++;
+    }
+  }
   for (;;) {
     unsigned char c = (unsigned char)src[i];
     if (c > 127) { errno = EILSEQ; return (size_t)-1; }
@@ -1560,9 +1664,27 @@ size_t mbstowcs(wchar_t *dst, const char *src, size_t n)
   }
 }
 
+/* dst NULL: the byte count. A character that does not fit whole in what is
+   left of dst stops the conversion there, as in glibc. */
 size_t wcstombs(char *dst, const wchar_t *src, size_t n)
 {
   size_t i = 0;
+  if (__crtl_utf8()) {
+    for (;; src++) {
+      char b[8];
+      int r = __crtl_u8enc(b, *src), k;
+      if (r < 0) { errno = EILSEQ; return (size_t)-1; }
+      if (*src == 0) {
+        if (dst && i < n) dst[i] = 0;
+        return i;
+      }
+      if (dst) {
+        if (i + (size_t)r > n) return i;
+        for (k = 0; k < r; k++) dst[i + k] = b[k];
+      }
+      i += (size_t)r;
+    }
+  }
   for (;;) {
     wchar_t wc = src[i];
     if (wc < 0 || wc > 127) { errno = EILSEQ; return (size_t)-1; }

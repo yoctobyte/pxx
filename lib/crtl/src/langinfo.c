@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Zlib */
 /* C runtime: nl_langinfo -- glibc's C-locale answers (see <langinfo.h>). */
 #include <langinfo.h>
+#include <stdlib.h>   /* __crtl_utf8 (C.UTF-8 selected) */
 
 static const char *const crtl_days[7] = {
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -15,7 +16,7 @@ char *nl_langinfo(nl_item item)
   static char abbr[4];
   const char *s = "";
   switch (item) {
-  case CODESET:    s = "ANSI_X3.4-1968"; break;
+  case CODESET:    s = __crtl_utf8() ? "UTF-8" : "ANSI_X3.4-1968"; break;
   case RADIXCHAR:  s = "."; break;
   case THOUSEP:    s = ""; break;
   case D_T_FMT:    s = "%a %b %e %H:%M:%S %Y"; break;
