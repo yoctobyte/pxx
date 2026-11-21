@@ -465,6 +465,13 @@ int clock_gettime(int clk_id, struct timespec *tp) {
   return 0;
 }
 
+/* C11 7.27.2.5, as glibc: TIME_UTC reads CLOCK_REALTIME; any other base, or
+   a failed read, returns 0. */
+int timespec_get(struct timespec *ts, int base) {
+  if (base != TIME_UTC || clock_gettime(CLOCK_REALTIME, ts) != 0) return 0;
+  return base;
+}
+
 /* clock_nanosleep(2) over nanosleep: an absolute deadline (TIMER_ABSTIME)
    becomes the time left on that clock, and a deadline already past returns at
    once. The result is the error number, 0 on success. */

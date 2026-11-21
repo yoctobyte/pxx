@@ -27,6 +27,14 @@ function PxxThreadBlockInstall(var tlsBytes, altBytes: Int64): Int64;
   installed in the new thread before its start routine runs. }
 function __pxx_host_pthread_create(th, attr, start, arg: Pointer): Integer; cdecl;
 
+{ C11 thrd_create under --system-libs, predefined to this the same way: glibc's
+  own thrd_create calls its internal pthread_create, which no rename reaches,
+  so it is replaced whole. The thread starts through the same block install;
+  its int result rides in the pthread result, which is how glibc's thrd_join
+  reads it. Returns thrd_success 0, thrd_busy 1, thrd_error 2, thrd_nomem 3
+  (glibc's values). }
+function __pxx_host_thrd_create(thr, func, arg: Pointer): Integer; cdecl;
+
 { The host libc's two, WEAK: nil unless the program links libc for another
   reason, so neither puts libc in a libc-free program's DT_NEEDED. palthread's
   pthread route uses them too; they are declared once, here.
@@ -226,10 +234,51 @@ begin
   Result := c_pthread_create(th, attr, @PxxHostCThreadStart, rec);
   if Result <> 0 then FreeMem(rec);
 end;
+
+type
+  TPxxCThrdStart = function(arg: Pointer): Integer; cdecl;
+
+function PxxHostCThrdStart(a: Pointer): Pointer; cdecl;
+var
+  blk, ignore, tlsBytes, altBytes: Int64;
+  rec: PPxxCStartRec;
+  fn: TPxxCThrdStart;
+  arg: Pointer;
+begin
+  blk := PxxThreadBlockInstall(tlsBytes, altBytes);
+  rec := PPxxCStartRec(a);
+  fn := TPxxCThrdStart(rec^.Fn);
+  arg := rec^.Arg;
+  FreeMem(rec);
+  Result := Pointer(PtrInt(fn(arg)));
+  if blk > 0 then
+    ignore := __pxxrawsyscall(SYS_munmap, blk, tlsBytes + altBytes, 0, 0, 0, 0);
+end;
+
+function __pxx_host_thrd_create(thr, func, arg: Pointer): Integer; cdecl;
+var rec: PPxxCStartRec; e: Integer;
+begin
+  if @c_pthread_create = nil then begin Result := 2; Exit; end;   { thrd_error: no libc }
+  rec := PPxxCStartRec(GetMem(SizeOf(TPxxCStartRec)));
+  if rec = nil then begin Result := 3; Exit; end;
+  rec^.Fn := TPxxCStart(func);
+  rec^.Arg := arg;
+  e := c_pthread_create(thr, nil, @PxxHostCThrdStart, rec);
+  if e <> 0 then FreeMem(rec);
+  if e = 0 then Result := 0
+  else if e = 12 then Result := 3      { ENOMEM: thrd_nomem }
+  else if e = 16 then Result := 1      { EBUSY: thrd_busy }
+  else Result := 2;                    { thrd_error }
+end;
 {$else}
 function __pxx_host_pthread_create(th, attr, start, arg: Pointer): Integer; cdecl;
 begin
   Result := 38;   { ENOSYS: never predefined for a target without the route }
+end;
+
+function __pxx_host_thrd_create(thr, func, arg: Pointer): Integer; cdecl;
+begin
+  Result := 2;    { thrd_error: never predefined for a target without the route }
 end;
 {$endif}
 

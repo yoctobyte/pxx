@@ -20082,6 +20082,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_tls_threads_libc_ts "$$($(TESTTMP)/c_tlsthr_dyn)" "$$(cat test/c_tls_threads_libc_warns.expected)"
 	./$(COMPILER) --system-libs test/c_tls_threads_libc_warns.c $(TESTTMP)/c_tlsthr_dyn2 > /dev/null
 	tools/expect_same.sh c_tls_threads_libc "$$($(TESTTMP)/c_tlsthr_dyn2)" "$$(cat test/c_tls_threads_libc_warns.expected)"
+	# C11 <threads.h>: crtl's over its pthreads (--threadsafe), and glibc's with thrd_create
+	# routed through palhostthread (--system-libs); every thread its own thread_local.
+	./$(COMPILER) --threadsafe test/c_c11_threads.c $(TESTTMP)/c_c11thr > /dev/null
+	tools/expect_same.sh c_c11thr "$$($(TESTTMP)/c_c11thr)" "$$(cat test/c_c11_threads.expected)"
+	./$(COMPILER) --system-libs test/c_c11_threads.c $(TESTTMP)/c_c11thr_dyn > /dev/null 2>&1
+	tools/expect_same.sh c_c11thr_dyn "$$($(TESTTMP)/c_c11thr_dyn)" "$$(cat test/c_c11_threads.expected)"
+	./$(COMPILER) --target=i386 --system-libs test/c_c11_threads.c $(TESTTMP)/c_c11thr_386 > /dev/null 2>&1
+	tools/run_target.sh i386 $(TESTTMP)/c_c11thr_386 | diff -u test/c_c11_threads.expected -
+	./$(COMPILER) --target=aarch64 --threadsafe test/c_c11_threads.c $(TESTTMP)/c_c11thr_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_c11thr_a64 | diff -u test/c_c11_threads.expected -
 	# i386 takes the same route (its block is on fs, glibc's on gs); latest-
 	# f784b38446 printed `main 9 30 50 14` there without a warning. Needs the
 	# host's i386 libc to run.

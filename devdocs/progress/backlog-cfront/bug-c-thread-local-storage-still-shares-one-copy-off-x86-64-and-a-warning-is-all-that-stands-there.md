@@ -1,5 +1,5 @@
 ---
-summary: "FIXED 2026-11-20 (claude-dupwt) for item (1), the --system-libs executable on x86-64 and i386: pthread_create is routed through palhostthread (see the bottom section); (2) and (3) below stay open. RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history."
+summary: "UPDATE 2026-11-22 (claude-pxx): thrd_create is routed too (crtl has its own C11 <threads.h> over its pthreads; --system-libs renames glibc's thrd_create to palhostthread's wrapper; test c_c11thr). Item (2) for an x86-64 --emit-obj PROGRAM object is fixed since 2026-11-21 (real ELF TLS without --system-libs, c_ltlo); --shared still shares. FIXED 2026-11-20 (claude-dupwt) for item (1), the --system-libs executable on x86-64 and i386: pthread_create is routed through palhostthread (see the bottom section); (2) and (3) below stay open. RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history."
 type: bug
 track: C
 prio: 40
@@ -230,3 +230,38 @@ Still open:
   properties.
 
 Verified: gate quick GREEN; test-threads and test-c-conformance 0 failures; test-core: its only reds were two --threadsafe objects linking duplicate palhostthread symbols (c_objth/c_objth_g), fixed by making the unit a weak runtime unit like palthread (ObjProcIsBuiltinRtl); both rows then pass.
+
+
+## 2026-11-22 (claude-pxx): thrd_create, and item (2) re-measured
+
+**thrd_create.** Measured before the change, with a `thread_local int` and a
+`_Thread_local int[3]` bumped in three threads: every build disagreed with
+gcc (`main 5 2 sum 600021`). With `--threadsafe` it printed e.g. `main
+390717 216112`; the threads shared the main thread's copy and raced on it.
+Two causes:
+- crtl had no `<threads.h>`, so even a `--threadsafe` program included the
+  host's and called glibc's `thrd_create`. glibc implements that over its
+  internal pthread_create, so no thread got a pxx block.
+- under `--system-libs`, the pthread_create rename did not reach it, for
+  the same reason.
+
+Fixed:
+- lib/crtl/include/threads.h and src/threads.c: C11 threads over crtl's
+  pthreads, as musl builds them, with glibc's constant values. Like
+  `<pthread.h>` it needs `--threadsafe`, which a threaded crtl program needs
+  anyway for its heap. `mtx_timedlock` polls trylock in 1 ms steps.
+- crtl's `<time.h>` gains C11 `timespec_get`/`TIME_UTC`.
+- `--system-libs` on x86-64 and i386: `thrd_create` is predefined to
+  palhostthread's `__pxx_host_thrd_create`, which starts the thread through
+  the same block install and returns the int through the pthread result,
+  as glibc's thrd_join reads it.
+
+test/c_c11_threads.c (c_c11thr; --system-libs; i386 --system-libs; aarch64
+--threadsafe) covers thread_local scalars and arrays, call_once, tss with a
+destructor, recursive and timed mutexes, cnd_wait, thrd_exit and
+thrd_sleep, against gcc. 16 of 16 repeated runs matched.
+
+**Item (2), re-measured.** An x86-64 `--emit-obj` C PROGRAM object without
+`--system-libs` emits real ELF TLS since 2026-11-21
+(done/bug-c-thread-local-is-shared-in-emit-obj-without-system-libs, test
+c_ltlo). `--shared` still shares and warns; so do non-x86-64 objects.

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  802 functions across 77 headers. }
+  803 functions across 77 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -208,9 +208,9 @@ begin
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +
       ' tcsetattr:termios.h tcsetpgrp:termios.h textdomain:libintl.h timegm:time.h ' +
-      ' times:sys/times.h tmpfile:stdio.h tmpnam:stdio.h toascii:ctype.h tolower:ctype.h ' +
-      ' toupper:ctype.h towlower:wchar.h towupper:wchar.h trunc:math.h truncate:unistd.h ' +
-      ' truncf:math.h ttyname:unistd.h ttyname_r:unistd.h tzset:time.h ';
+      ' times:sys/times.h timespec_get:time.h tmpfile:stdio.h tmpnam:stdio.h toascii:ctype.h ' +
+      ' tolower:ctype.h toupper:ctype.h towlower:wchar.h towupper:wchar.h trunc:math.h ' +
+      ' truncate:unistd.h truncf:math.h ttyname:unistd.h ttyname_r:unistd.h tzset:time.h ';
     'u': Result :=
       ' umask:sys/stat.h umount:sys/mount.h umount2:sys/mount.h uname:sys/utsname.h ' +
       ' ungetc:stdio.h unlink:unistd.h unlinkat:unistd.h unlockpt:stdlib.h unsetenv:stdlib.h ' +
@@ -261,7 +261,7 @@ begin
     'q': Result := 160;
     'r': Result := 8176;
     's': Result := 4620280;
-    't': Result := 4088;
+    't': Result := 8184;
     'u': Result := 992;
     'v': Result := 1008;
     'w': Result := 496;

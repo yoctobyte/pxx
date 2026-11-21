@@ -25,6 +25,7 @@ EXCLUSIONS are deliberate, not omissions:
   - `pthread.h` — pulling it without --threadsafe is a hard error by design
     (RegisterExternal refuses `__pxx_p*`). Auto-pulling it from a hand
     prototype would turn a working program into a compile error.
+    `threads.h` (C11) is built on pthread.h and is excluded for the same reason.
   - `__`-prefixed names — internal kernels, never a user's libc call.
   - names crtl declares but does not define — PAL entry points and genuinely
     system-provided symbols; pulling their header would not supply them.
@@ -39,7 +40,7 @@ INC = os.path.join(ROOT, "lib", "crtl", "include")
 SRC = os.path.join(ROOT, "lib", "crtl", "src")
 OUT = os.path.join(ROOT, "compiler", "crtl_names.inc")
 
-EXCLUDED_HEADERS = {"pthread.h"}
+EXCLUDED_HEADERS = {"pthread.h", "threads.h"}   # threads.h includes pthread.h: same reason
 
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 from crtl_reachability import scan, strip_noise  # one scanner, no drift

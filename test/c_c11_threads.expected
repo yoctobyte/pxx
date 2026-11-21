@@ -1,0 +1,10 @@
+worker 1 -> 200007
+worker 2 -> 300007
+worker 3 -> 401007
+main tv=5 arr=1,2,3
+counter=3000 once=1 dtors=3
+sleep 0
+waiter -> 77
+trylock held: busy
+timedlock free: success
+equal 1 0

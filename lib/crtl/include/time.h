@@ -111,6 +111,9 @@ typedef int clockid_t;
 /* clock_nanosleep(2): returns the error number, not -1 */
 int clock_nanosleep(clockid_t clk, int flags, const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);
+/* C11 timespec_get: TIME_UTC is the realtime clock; returns base, or 0 */
+#define TIME_UTC 1
+int timespec_get(struct timespec *ts, int base);
 /* Privileged: expect EPERM unless the caller is root. */
 int clock_settime(int clk_id, const struct timespec *tp);
 

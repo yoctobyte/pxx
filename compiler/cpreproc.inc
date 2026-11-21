@@ -4418,7 +4418,12 @@ begin
     wrapper, which gives the thread its own (CHostPthreadRoute).
     bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
   if CHostPthreadRoute then
+  begin
     CPAddLiteral('pthread_create', '__pxx_host_pthread_create');
+    { glibc's thrd_create calls its internal pthread_create, which the rename
+      above cannot reach: the whole function is replaced (palhostthread) }
+    CPAddLiteral('thrd_create', '__pxx_host_thrd_create');
+  end;
   { The shared-runtime marker (decide-a-is-a-pxx-object-a-self-contained-
     runtime-or-a-translation-unit): one symbol per runtime VARIANT -- target,
     and --threadsafe, which changes errno to a thread-local and adds pthread.
