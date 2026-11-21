@@ -10,8 +10,8 @@
  * TWO DELIBERATE DIFFERENCES FROM libxcrypt ARE NOT ROWS, because there the
  * oracle disagrees with the spec rather than with us: rounds below 1000
  * (libxcrypt answers the failure token "*0", while the spec, glibc and musl
- * clamp to 1000, and crtl clamps), and "$1$" MD5-crypt (libxcrypt has it,
- * crtl answers NULL/EINVAL, see crypt.c).
+ * clamp to 1000, and crtl clamps). "$1$" MD5-crypt has its own test,
+ * test/c_crypt_md5.c.
  *
  * pxx: lib/crtl/src/crypt.c. gcc: link with -lcrypt.
  * Found building dropbear (svr-authpasswd.c).

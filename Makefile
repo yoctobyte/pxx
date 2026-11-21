@@ -21853,6 +21853,9 @@ test-core: $(COMPILER)
 	# first row is the spec's own published vector.
 	./$(COMPILER) test/c_crypt_sha.c $(TESTTMP)/c_cryptsha26
 	$(TESTTMP)/c_cryptsha26 | diff -u test/c_crypt_sha.expected -
+	# "$$1$$" MD5-crypt against libxcrypt (toybox mkpasswd -m md5)
+	./$(COMPILER) test/c_crypt_md5.c $(TESTTMP)/c_cryptmd526 > /dev/null
+	$(TESTTMP)/c_cryptmd526 | diff -u test/c_crypt_md5.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,
 	# explicit_bzero, <shadow.h>, <pty.h>, <utmp.h> sizes, timer macros,
 	# getusershell, the set*id calls that were ENOSYS stubs, sockaddr_storage).
