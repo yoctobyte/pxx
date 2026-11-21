@@ -40,6 +40,9 @@ static void sp(const char *s, const char *f)
   memset(&tm, 0, sizeof tm);
   tm.tm_year = 126;
   p = strptime(s, f, &tm);
+  /* After a FAILED parse the fields are unspecified (glibc leaves them, crtl
+     keeps what it parsed), so a failure prints only that it failed. */
+  if (!p) { printf("strptime %-16s %-14s -> NULL\n", s, f); return; }
   printf("strptime %-16s %-14s -> %s rest=[%s] year=%d mon=%d mday=%d %02d:%02d:%02d\n",
          s, f, p ? "ok" : "NULL", p ? p : "", tm.tm_year + 1900,
          tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
@@ -74,6 +77,12 @@ int main(void)
   sp("70", "%y");
   sp("68", "%y");
   sp("12 20", "%y %C");
+  sp("2009-02-13T23:31:30Z", "%Y-%m-%dT%T");
+  sp("2009-02-13 23:31:30.5", "%Y-%m-%d %T");
+  sp("23:31", "%R");
+  sp("02/13/09", "%D");
+  sp("2009-02-13", "%F");
+  sp("23:31x", "%T");
   /* NOT tested: %C/%y together with a later %Y. POSIX leaves conflicting
      conversions unspecified, and glibc's answer (1900) is its bookkeeping. */
   return 0;

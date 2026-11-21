@@ -72,3 +72,23 @@ pinning only gcc to UTC.
 SA_SIGINFO, which crtl refuses on purpose. Filed as
 feature-a-crtl-sigaction-cannot-honour-sa-siginfo-because-the-thread-block-has-no-slot-for-it:
 the fix is a thread-block layout decision.
+
+## 2026-11-21 (claude-pxx): measured after the regex and time fixes: 1555
+
+Rebuilt from master 42bc80ca4b: **1555 pass** (1509 before, gcc 1604), 45
+rows fixed and none newly failing. sed and stat have no failures left; touch
+is down from 15 to 4. Left, grouped by command: timeout 14 (SA_SIGINFO, filed),
+cpio 12, touch 4, id 4, readelf 2, fold 2, then single rows (wc, sort, seq,
+paste, mkpasswd, grep speed).
+
+**touch -d (3 of the 4): strptime had no %T** (`%Y-%m-%dT%T` is how touch
+parses `2009-02-13T23:31:30Z`). Added %T, %R, %D and %F, the composites glibc
+accepts, with rows in the zone test. The fourth, `touch -r`, copies the stamp
+of the file the failed `-d nanoseconds` row should have set.
+
+**Found and NOT fixed: POSIX TZ strings.** crtl's zone code reads TZif files
+only. `TZ=UTC0` happens to work, but `UTC-05:00:00`, `EST5EDT` and
+`CET-1CEST,M3.5.0,M10.5.0/3` all read as UTC (probe against glibc). toybox
+`touch -d ...+05:00` builds exactly the first of those. No suite row failing
+today depends on it. A fixed-offset parse would be easy; the DST rules (`M`
+dates) are the real work, and half of it would be a plausible wrong answer.

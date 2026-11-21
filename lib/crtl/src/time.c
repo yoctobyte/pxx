@@ -787,6 +787,12 @@ static const char *sp_parse(const char *s, const char *fmt, struct tm *tm,
         case 'c':   /* locale date+time: "Www Mmm dd hh:mm:ss yyyy" */
           s = sp_parse(s, "%a %b %e %H:%M:%S %Y", tm, yr);
           if (!s) return 0; break;
+        /* The composites glibc accepts. %T was missing, and it is what
+           toybox's `touch -d 2009-02-13T23:31:30Z' parses with. */
+        case 'T': s = sp_parse(s, "%H:%M:%S", tm, yr); if (!s) return 0; break;
+        case 'R': s = sp_parse(s, "%H:%M", tm, yr); if (!s) return 0; break;
+        case 'D': s = sp_parse(s, "%m/%d/%y", tm, yr); if (!s) return 0; break;
+        case 'F': s = sp_parse(s, "%Y-%m-%d", tm, yr); if (!s) return 0; break;
         case 'n': case 't':
           while (*s == ' ' || *s == '\t' || *s == '\n') s++; break;
         case '%':
