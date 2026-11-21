@@ -21130,6 +21130,10 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=$$t test/c_wide_literal_escapes.c $(TESTTMP)/c_wlit26_$$t >/dev/null || exit 1; \
 	  tools/run_target.sh $$t $(TESTTMP)/c_wlit26_$$t | diff -u test/c_wide_literal_escapes.expected - || { echo "c_wlit26 $$t FAIL"; exit 1; }; \
 	done; echo "c_wlit26 cross: OK"
+	# an EMPTY brace pair zero-fills a local array (toybox readelf -S's flags buffer)
+	# bug-c-an-empty-brace-initializer-leaves-a-local-array-uninitialised
+	./$(COMPILER) test/c_empty_brace_local_array.c $(TESTTMP)/c_ebla26 > /dev/null
+	tools/expect_same.sh c_ebla26 "$$($(TESTTMP)/c_ebla26)" "$$(cat test/c_empty_brace_local_array.expected)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

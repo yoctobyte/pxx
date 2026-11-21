@@ -8756,6 +8756,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     sibTdLvl, sibTdBaseTk, sibTdBaseRec: Integer;   { siblings over a pointer typedef: its extra level and pointee }
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
+    hadBraceInit: Boolean;   { an `=` and an open brace follow: zero-fill even an EMPTY list }
     fpLocNDims: Integer;
     fpLocDims: array[0..7] of Integer;
     beFlat, beBelow, beDim, beIdx, beChain: Integer;
@@ -9367,6 +9368,7 @@ begin
         garbage). Record-element arrays (each element a nested brace group) and
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
+      hadBraceInit := (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin);
       cliBase := CLIArrTop;
       CStrInitCount := 0;
       recArrInitCount := 0;
@@ -9820,8 +9822,12 @@ begin
         SymSyncTypeRef(idx);
       end;
       { C99 6.7.8p21: any brace initializer zero-fills the tail the list does
-        not reach — zero the whole array before the element stores. }
-      if (nArrElems > 0) or (CStrInitCount > 0) or (recArrInitCount > 0) then
+        not reach — zero the whole array before the element stores. An EMPTY
+        brace pair (GNU, and C23) counts: it has no elements, so the element
+        counts below were all 0 and the array kept its stack garbage --
+        toybox readelf's empty-braced `char sh_flags[16]` printed a stray byte.
+        bug-c-an-empty-brace-initializer-leaves-a-local-array-uninitialised }
+      if (nArrElems > 0) or (CStrInitCount > 0) or (recArrInitCount > 0) or hadBraceInit then
       begin
         seq := CMakeZeroLocal(idx, declTk);
         if head = -1 then head := seq else ASTRight[tail] := seq;
