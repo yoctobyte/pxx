@@ -193,14 +193,31 @@ int use(const char*s){ printf("%s", s); return strlen(s); }
    started baking initialisers (6cdc4bea7e) c.o shrank to 0x3dfb0 and
    the per-input-alignment guard below fired. */
 int pad1(int x){ return x + 1; }
+/* ...and it fired AGAIN when a crtl change moved c.o's size (crtl is in
+   every C object), so the padding is no longer a hand-picked constant: the
+   build below tries PAD=0..3 and keeps the first .text that is NOT a
+   multiple of 16. Each level adds a function of a different shape. */
+#if PAD >= 1
+int pad2(int x){ return x * 3 + 7; }
+#endif
+#if PAD >= 2
+int pad3(int x, int y){ return x ? y : x - y; }
+#endif
+#if PAD >= 3
+long pad4(long x){ return x ^ (x >> 3); }
+#endif
 EOF
 cat > "$W/d.c" <<'EOF'
 int use(const char*s);
 int main(void){ return use("hi"); }
 EOF
-for o in c d; do
-  "$COMPILER" --emit-obj "$W/$o.c" "$W/$o.o" > "$W/$o.build.log" 2>&1 \
-    || { cat "$W/$o.build.log"; fail "--emit-obj did not produce $o.o"; }
+"$COMPILER" --emit-obj "$W/d.c" "$W/d.o" > "$W/d.build.log" 2>&1 \
+  || { cat "$W/d.build.log"; fail "--emit-obj did not produce d.o"; }
+for pad in 0 1 2 3; do
+  "$COMPILER" --emit-obj -DPAD=$pad "$W/c.c" "$W/c.o" > "$W/c.build.log" 2>&1 \
+    || { cat "$W/c.build.log"; fail "--emit-obj did not produce c.o"; }
+  ctext0=$(readelf -SW "$W/c.o" | sed -n 's/^ *\[ *[0-9]*\] *//p' | awk '$1==".text" {print $5}')
+  [ -n "$ctext0" ] && [ $((0x$ctext0 % 16)) -ne 0 ] && break
 done
 printf '%s\n%s\n' "$W/c.o" "$W/d.o" > "$W/cd.lst"
 merge cd.lst
