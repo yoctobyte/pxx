@@ -21054,6 +21054,9 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_crtlsurf26 "$$($(TESTTMP)/c_crtlsurf26 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
 	./$(COMPILER) --target=i386 test/c_crtl_toybox_surface.c $(TESTTMP)/c_crtlsurf_i386 > /dev/null
 	tools/expect_same.sh i386/c_crtlsurf_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_crtlsurf_i386 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
+	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
+	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
+	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

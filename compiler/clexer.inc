@@ -896,6 +896,7 @@ begin
     'b': Result := 8;
     'f': Result := 12;
     'v': Result := 11;
+    'e', 'E': Result := 27;   { GNU: ESC, as gcc and clang read it }
     '\': Result := Ord('\');
     '''': Result := Ord('''');
     '"': Result := Ord('"');
@@ -1084,6 +1085,7 @@ begin
             'b': AppendChar(s, #8);
             'f': AppendChar(s, #12);
             'v': AppendChar(s, #11);
+            'e', 'E': AppendChar(s, #27);   { GNU: ESC, as gcc and clang read it }
             '\': AppendChar(s, '\');
             '"': AppendChar(s, '"');
             '''': AppendChar(s, '''');
