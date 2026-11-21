@@ -50,3 +50,25 @@ nmatch 10 and worked. glibc reads pmatch[0] whatever nmatch is (nmatch counts
 slots to WRITE). Fixed in lib/crtl/src/regex.c; test/c_crtl_regex.c gained
 three nmatch-0 checks (matches in span, misses out of span, does not write
 pmatch).
+
+## 2026-11-21 (claude-pxx): touch -t, and what stops timeout
+
+**touch (15 rows), two crtl causes:**
+- **mktime read the fields as UTC.** It was written before localtime read the
+  zone and was never revisited, so on a CET box `touch -t 01231234` stamped
+  13:34. It now inverts localtime in the TZ zone and honours tm_isdst as glibc
+  does. timegm keeps the UTC arithmetic, and strftime `%s` is mktime (it was
+  timegm, on the same stale premise).
+- **strptime had no `%C`,** so every `touch -t CCYYMMDDhhmm` was "bad date".
+  It now uses glibc's rules (`%C` alone is C*100; `%C` with `%y` in either order
+  is C*100+y; `%y` alone pivots at 69).
+
+Test: test/c_crtl_mktime_local_and_strptime_century.c, in test-core, run per
+zone against gcc in six zones (identical in all six and with TZ unset). The
+strftime row `cstrfz` now runs gcc and pxx in the same environment instead of
+pinning only gcc to UTC.
+
+**timeout (14 rows) is not fixed here.** Its SIGCHLD handler is installed with
+SA_SIGINFO, which crtl refuses on purpose. Filed as
+feature-a-crtl-sigaction-cannot-honour-sa-siginfo-because-the-thread-block-has-no-slot-for-it:
+the fix is a thread-block layout decision.

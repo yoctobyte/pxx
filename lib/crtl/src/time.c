@@ -388,17 +388,57 @@ struct tm *localtime_r(const time_t *timer, struct tm *result) {
   return result;
 }
 
-time_t mktime(struct tm *tm) {
+/* The broken-down fields read as UTC: seconds since the epoch, the struct
+   left alone. timegm and mktime both start here. */
+static long long pxx_tm_as_utc(const struct tm *tm) {
   long long y = (long long)tm->tm_year + 1900;
   long long days = days_from_civil(y, (unsigned)(tm->tm_mon + 1),
                                    (unsigned)tm->tm_mday);
-  long long secs = days * 86400 + tm->tm_hour * 3600
-                 + tm->tm_min * 60 + tm->tm_sec;
-  /* normalize the struct back (best-effort, UTC). */
-  time_t t = (time_t)secs;
-  struct tm *n = gmtime(&t);
-  *tm = *n;
-  return t;
+  return days * 86400 + (long long)tm->tm_hour * 3600
+       + (long long)tm->tm_min * 60 + tm->tm_sec;
+}
+
+/* mktime(3): the fields are LOCAL time, the inverse of localtime. It was UTC
+   (written before localtime read the zone, and never revisited), so on a CET
+   box `touch -t 01231234' stamped 13:34: the value went in as UTC and came
+   back out through localtime's +1h (bug-c-toybox-test-suite-failures).
+
+   Local = UTC + off(t), and off depends on the t being solved for. Guess with
+   the offset at the fields-as-UTC instant, then once more at the result: that
+   settles every instant except the hour a DST change skips or repeats, where
+   the second lookup picks a side. tm_isdst >= 0 that disagrees with what the
+   zone says for that instant shifts by the zone's own DST step, as glibc
+   does (`isdst=0' in July reads the fields as standard time). */
+time_t mktime(struct tm *tm) {
+  long long u = pxx_tm_as_utc(tm);
+  long off1, off2;
+  int dst1, dst2;
+  long long t;
+  tzset();                       /* POSIX: as if tzset() were called */
+  pxx_tz_lookup(u, &off1, &dst1, 0);
+  t = u - off1;
+  pxx_tz_lookup(t, &off2, &dst2, 0);
+  if (off2 != off1) {
+    t = u - off2;
+    pxx_tz_lookup(t, &off1, &dst1, 0);
+  } else {
+    dst1 = dst2;
+  }
+  /* NOT guarded on `daylight': glibc shifts a zone with no DST too (TZ=UTC
+     with tm_isdst=1 comes back an hour earlier), and gcc is the reference. */
+  if (tm->tm_isdst >= 0 && (tm->tm_isdst > 0) != (dst1 != 0)) {
+    /* Read the fields at the offset of the kind ASKED for. Standard is
+       -timezone (POSIX keeps it as seconds WEST); DST is taken as one hour
+       ahead of it. That is true of nearly every zone; Lord Howe's 30-minute
+       step is the known exception, and it is the only answer this has. */
+    long std = (long)(-timezone);
+    t = u - (tm->tm_isdst > 0 ? std + 3600 : std);
+  }
+  {
+    time_t tt = (time_t)t;
+    *tm = *localtime(&tt);
+    return tt;
+  }
 }
 
 /* ---- strftime: the subset lua os.date emits ----------------------------- */
@@ -446,13 +486,13 @@ int clock_nanosleep(clockid_t clk, int flags, const struct timespec *req, struct
 /* ---- asctime / ctime / timegm ------------------------------------------- */
 
 /* timegm(3): the inverse of gmtime — a struct tm interpreted as UTC, with the
-   struct normalised in place. crtl's mktime is already UTC (there is no
-   local-time offset in the PAL), so this is the same computation under the name
-   that actually PROMISES UTC; code that means UTC should not have to rely on
-   mktime happening to be. Was missing entirely — a program calling it hit
+   struct normalised in place. mktime is the LOCAL-time inverse; this one is the
+   same arithmetic without the zone. Was missing entirely — a program calling it hit
    "call to undeclared function". */
 time_t timegm(struct tm *tm) {
-  return mktime(tm);
+  time_t t = (time_t)pxx_tm_as_utc(tm);
+  *tm = *gmtime(&t);
+  return t;
 }
 
 /* asctime(3) / ctime(3), C99 7.23.3.1. The format is FIXED by the standard —
@@ -610,10 +650,10 @@ size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm) {
                   p = put_num(p, end, hh, 2, &trunc);
                   if (!trunc) p = put_num(p, end, mm, 2, &trunc); } break;
       /* glibc: mktime() of the fields, in the local zone, NOT adjusted by
-         tm_gmtoff. crtl's local zone is UTC (no zone database), so this is
-         timegm; the gcc oracle agrees under TZ=UTC. */
+         tm_gmtoff. This was timegm while crtl's mktime was UTC; both read the
+         zone now, so it is mktime, as glibc's is. */
       case 's': { struct tm c = *tm;
-                  long long t = (long long)timegm(&c);
+                  long long t = (long long)mktime(&c);
                   char tmp[24]; int n = 0, neg = t < 0;
                   unsigned long long u = neg ? (unsigned long long)(-t) : (unsigned long long)t;
                   do { tmp[n++] = (char)('0' + u % 10); u /= 10; } while (u);
@@ -686,14 +726,34 @@ static int sp_num(const char **sp, int maxw, int *out) {
   *sp = s; *out = v; return 1;
 }
 
-static const char *sp_parse(const char *s, const char *fmt, struct tm *tm);
+/* %C and %y each say half of the year, in either order, so neither can write
+   tm_year by itself: the pair is collected here and resolved once the whole
+   format has matched. %Y says all of it and clears both. */
+struct sp_year { int cent, yy; };
 
+static const char *sp_parse(const char *s, const char *fmt, struct tm *tm,
+                            struct sp_year *yr);
+
+/* %C was missing, so every %C%y form failed -- toybox's `touch -t
+   CCYYMMDDhhmm' and `date' parse with exactly that (bug-c-toybox-test-suite-
+   failures). glibc's rules: %C alone is year C*100; %C with %y is C*100+y;
+   %y alone pivots, 69..99 -> 19xx and 00..68 -> 20xx. */
 char *strptime(const char *s, const char *fmt, struct tm *tm) {
-  const char *r = sp_parse(s, fmt, tm);
+  struct sp_year yr;
+  const char *r;
+  yr.cent = -1; yr.yy = -1;
+  r = sp_parse(s, fmt, tm, &yr);
+  if (r) {
+    if (yr.cent >= 0)
+      tm->tm_year = yr.cent * 100 + (yr.yy >= 0 ? yr.yy : 0) - 1900;
+    else if (yr.yy >= 0)
+      tm->tm_year = yr.yy < 69 ? yr.yy + 100 : yr.yy;
+  }
   return (char *)r;   /* NULL on mismatch */
 }
 
-static const char *sp_parse(const char *s, const char *fmt, struct tm *tm) {
+static const char *sp_parse(const char *s, const char *fmt, struct tm *tm,
+                            struct sp_year *yr) {
   int v, idx;
   while (*fmt) {
     if (*fmt == '%') {
@@ -715,16 +775,17 @@ static const char *sp_parse(const char *s, const char *fmt, struct tm *tm) {
         case 'm': if (!sp_num(&s, 2, &v)) return 0; tm->tm_mon = v - 1; break;
         case 'M': if (!sp_num(&s, 2, &v)) return 0; tm->tm_min = v; break;
         case 'S': if (!sp_num(&s, 2, &v)) return 0; tm->tm_sec = v; break;
-        case 'y': if (!sp_num(&s, 2, &v)) return 0;
-                  tm->tm_year = v < 69 ? v + 100 : v; break;
-        case 'Y': if (!sp_num(&s, 4, &v)) return 0; tm->tm_year = v - 1900; break;
+        case 'y': if (!sp_num(&s, 2, &v)) return 0; yr->yy = v; break;
+        case 'C': if (!sp_num(&s, 2, &v)) return 0; yr->cent = v; break;
+        case 'Y': if (!sp_num(&s, 4, &v)) return 0; tm->tm_year = v - 1900;
+                  yr->cent = -1; yr->yy = -1; break;
         case 'p':
           if (sp_ci_eq(s[0], 'p') && sp_ci_eq(s[1], 'm')) { if (tm->tm_hour < 12) tm->tm_hour += 12; s += 2; }
           else if (sp_ci_eq(s[0], 'a') && sp_ci_eq(s[1], 'm')) { if (tm->tm_hour == 12) tm->tm_hour = 0; s += 2; }
           else return 0;
           break;
         case 'c':   /* locale date+time: "Www Mmm dd hh:mm:ss yyyy" */
-          s = sp_parse(s, "%a %b %e %H:%M:%S %Y", tm);
+          s = sp_parse(s, "%a %b %e %H:%M:%S %Y", tm, yr);
           if (!s) return 0; break;
         case 'n': case 't':
           while (*s == ' ' || *s == '\t' || *s == '\n') s++; break;

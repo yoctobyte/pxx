@@ -19796,11 +19796,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_crtl_chroot_reaches_the_kernel.c $(TESTTMP)/cchroot > /dev/null
 	gcc -o $(TESTTMP)/cchroot_gcc test/c_crtl_chroot_reaches_the_kernel.c
 	tools/expect_same.sh cchroot "$$($(TESTTMP)/cchroot)" "$$($(TESTTMP)/cchroot_gcc)"
-	# strftime's %Z/%z/%T/%F.. and pthread_kill; gcc is the oracle, run under
-	# TZ=UTC because glibc's %s is mktime in the local zone and crtl's is UTC.
+	# strftime's %Z/%z/%T/%F.. and pthread_kill; gcc is the oracle. %s is
+	# mktime in the LOCAL zone for both, so both run in the same environment.
 	./$(COMPILER) --threadsafe test/c_crtl_strftime_zone_and_pthread_kill.c $(TESTTMP)/cstrfz > /dev/null
 	gcc -pthread -o $(TESTTMP)/cstrfz_gcc test/c_crtl_strftime_zone_and_pthread_kill.c
-	tools/expect_same.sh cstrfz "$$($(TESTTMP)/cstrfz)" "$$(TZ=UTC $(TESTTMP)/cstrfz_gcc)"
+	tools/expect_same.sh cstrfz "$$($(TESTTMP)/cstrfz)" "$$($(TESTTMP)/cstrfz_gcc)"
 	# A 2-D array of function pointers (Nilix irq.c), both spellings, both scopes.
 	./$(COMPILER) test/c_two_dimensional_function_pointer_array.c $(TESTTMP)/c2dfp > /dev/null
 	tools/expect_same.sh c2dfp "$$($(TESTTMP)/c2dfp)" "$$(cat test/c_two_dimensional_function_pointer_array.expected)"
@@ -21057,6 +21057,19 @@ test-core: $(COMPILER)
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
+	# mktime is localtime's inverse and strptime knows %C (toybox touch -t),
+	# per zone against gcc, TZ in the environment as lib-test's ctime_localtime row does.
+	./$(COMPILER) test/c_crtl_mktime_local_and_strptime_century.c $(TESTTMP)/cmktl > /dev/null
+	@if command -v gcc >/dev/null 2>&1 && [ -d /usr/share/zoneinfo ]; then \
+	  gcc -w -o $(TESTTMP)/cmktl_gcc test/c_crtl_mktime_local_and_strptime_century.c || exit 1; \
+	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney :America/New_York; do \
+	    TZ=$$z $(TESTTMP)/cmktl_gcc > $(TESTTMP)/cmktl_gcc.txt; \
+	    TZ=$$z $(TESTTMP)/cmktl > $(TESTTMP)/cmktl_pxx.txt; \
+	    diff $(TESTTMP)/cmktl_gcc.txt $(TESTTMP)/cmktl_pxx.txt || \
+	      { echo "FAIL: cmktl differs from gcc for $$z"; exit 1; }; \
+	  done; \
+	  echo 'cmktl: identical to gcc (6 zones)'; \
+	else echo 'cmktl: SKIP (no gcc or no zoneinfo)'; $(TESTTMP)/cmktl >/dev/null; fi
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o
