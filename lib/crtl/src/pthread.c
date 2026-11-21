@@ -17,6 +17,7 @@
 #include <sched.h>
 #include <errno.h>    /* ENOMEM from pthread_atfork */
 #include <unistd.h>   /* fork() and __crtl_atfork_hook live in unistd.c */
+#include <sys/syscall.h>  /* SYS_arch_prctl, for a thread's ELF TLS block */
 
 /* Pascal bridge (lib/rtl/palpthread.pas), bound case-insensitively by name. */
 extern void      __pxx_pmutex_init(void *m);
@@ -253,6 +254,7 @@ struct pxx_thr_slot {
   void          *arg;                /* run by pxx_thr_trampoline, which    */
   void          *ret;                /* keeps the return value for join     */
   jmp_buf        exit_jb;            /* pthread_exit's way back to it       */
+  void          *elftls;             /* this thread's ELF TLS block, or 0   */
 };
 static struct pxx_thr_slot pxx_thr_reg[PXX_PTHREAD_MAX];
 static pthread_mutex_t pxx_thr_reg_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -371,12 +373,71 @@ int pthread_getname_np(pthread_t t, char *name, unsigned long len) {
  * on threads crtl did not start. */
 static __thread struct pxx_thr_slot *pxx_thr_cur;
 
+/* ---- ELF thread-local storage (x86-64) ----
+ * A `__thread` in an object compiled with --system-libs is real ELF TLS,
+ * reached through fs. When pxx --link links such an object, it lays the
+ * `.tdata` inputs out as a TLS template, gives the MAIN thread a block in the
+ * entry stub, and defines these four symbols. Every other thread is started
+ * here, so its block is made here: allocated by the creator (a failure is
+ * pthread_create's EAGAIN, not a crash in the new thread), filled and
+ * installed by the thread itself, as the first thing it does, before any
+ * code that could touch a thread-local. Variant II, as ld and glibc lay it
+ * out: the image at the start, the thread pointer `memsz` (already rounded up
+ * to `align`) above it, and the pointer's first word pointing at itself.
+ * The references are WEAK: with no template, or in a gcc link where libc owns
+ * fs, all four are 0 and nothing here runs. pxx's own thread block is in gs,
+ * so it is not touched. feature-a-pxx-link-has-no-elf-tls */
+#if defined(__x86_64__) && defined(SYS_arch_prctl)
+extern char __pxx_tls_image[] __attribute__((weak));
+extern char __pxx_tls_filesz[] __attribute__((weak));
+extern char __pxx_tls_memsz[] __attribute__((weak));
+extern char __pxx_tls_align[] __attribute__((weak));
+#define PXX_TLS_TCB 64   /* bytes at the thread pointer, as pxx --link's entry stub keeps */
+
+static unsigned long pxx_elftls_align(void) {
+  unsigned long al = (unsigned long)__pxx_tls_align;
+  return al < 16 ? 16 : al;
+}
+
+/* The block a new thread needs, or 0 when the program has no template. */
+static void *pxx_elftls_alloc(int *failed) {
+  char *img = __pxx_tls_image;
+  void *blk;
+  *failed = 0;
+  if (!img) return 0;
+  blk = malloc((unsigned long)__pxx_tls_memsz + PXX_TLS_TCB + pxx_elftls_align());
+  if (!blk) *failed = 1;
+  return blk;
+}
+
+static void pxx_elftls_install(void *blk) {
+  unsigned long al = pxx_elftls_align();
+  unsigned long msz = (unsigned long)__pxx_tls_memsz;
+  char *base, *tp;
+  if (!blk) return;
+  base = (char *)(((unsigned long)blk + al - 1) & ~(al - 1));
+  memset(base, 0, msz + PXX_TLS_TCB);
+  memcpy(base, __pxx_tls_image, (unsigned long)__pxx_tls_filesz);
+  tp = base + msz;
+  *(char **)tp = tp;
+  syscall(SYS_arch_prctl, 0x1002 /* ARCH_SET_FS */, tp);
+}
+#else
+static void *pxx_elftls_alloc(int *failed) { *failed = 0; return 0; }
+static void pxx_elftls_install(void *blk) { (void)blk; }
+#endif
+
 static void *pxx_thr_trampoline(void *p) {
   struct pxx_thr_slot *s = (struct pxx_thr_slot *)p;
+  pxx_elftls_install(s->elftls);
   pxx_thr_cur = s;
   if (setjmp(s->exit_jb) == 0)
     s->ret = s->start(s->arg);
   pxx_key_run_dtors();
+  /* nothing reads a thread-local after this, and the block is the thread's
+     own: the slot outlives it (join reads ret), the block need not */
+  free(s->elftls);
+  s->elftls = 0;
   return s->ret;
 }
 
@@ -416,15 +477,18 @@ static void pxx_thr_reap_detached(void) {
 
 int pthread_create(pthread_t *t, const pthread_attr_t *attr,
                    void *(*start)(void *), void *arg) {
-  int i, slot = -1;
+  int i, slot = -1, tlsfail;
   long long tid;
+  void *elftls = pxx_elftls_alloc(&tlsfail);
+
+  if (tlsfail) return 11;                                               /* EAGAIN */
 
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
   pxx_thr_reap_detached();
   for (i = 0; i < PXX_PTHREAD_MAX; i++) {
     if (!pxx_thr_reg[i].used) { slot = i; pxx_thr_reg[i].used = 1; break; }
   }
-  if (slot < 0) { __pxx_pmutex_unlock(&pxx_thr_reg_lock); return 11; }  /* EAGAIN */
+  if (slot < 0) { __pxx_pmutex_unlock(&pxx_thr_reg_lock); free(elftls); return 11; }  /* EAGAIN */
 
   /* Spawn under the registry lock: PalThreadCreate fills the handle bytes and
      returns the child tid. Serialising spawns is fine for test-scale fan-out. */
@@ -432,9 +496,12 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
   pxx_thr_reg[slot].start = start;
   pxx_thr_reg[slot].arg   = arg;
   pxx_thr_reg[slot].ret   = 0;
+  pxx_thr_reg[slot].elftls = elftls;
   tid = __pxx_pthread_create(pxx_thr_reg[slot].h, pxx_thr_trampoline, &pxx_thr_reg[slot]);
   if (tid <= 0) {
     pxx_thr_reg[slot].used = 0;
+    pxx_thr_reg[slot].elftls = 0;
+    free(elftls);
     __pxx_pmutex_unlock(&pxx_thr_reg_lock);
     return 11;                                                          /* EAGAIN */
   }

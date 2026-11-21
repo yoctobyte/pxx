@@ -3,13 +3,13 @@ slug: feature-a-pxx-link-has-no-elf-tls
 track: A
 prio: 40
 type: feature
-status: backlog
+status: done
 created: 2026-11-21
 found-by: an all-pxx rumpnic (Rainyday 0050 item 2), tried in scratch
 tags: [link, elf, tls, threads, rump, rainyday]
 owner: "claude-pxx"
 blocked-by: []
-summary: "DECIDED 2026-11-21 by the owner: option 1, gcc-compatible ELF TLS in pxx --link (\"stay gcc compatible, it's a solved problem, just fix the linker\"). An x86-64 object under --system-libs gives a C `__thread` real ELF TLS (.tdata.<name>, GOTTPOFF/TPOFF32), for a libc's loader to set fs. pxx's own --link has no PT_TLS and resolves neither relocation, and pxx's runtime keeps thread-locals in its own block, not in fs. So an object with ELF TLS links only with gcc. That is the last wall for an all-pxx rumpnic: rump's curlwp is `__thread` (one variable, four GOTTPOFF uses), and without ELF TLS it degrades to a shared copy that panicked at boot. Deciding how pxx --link should carry ELF TLS is a runtime design question, hence decide."
+summary: "DONE 2026-11-21: pxx --link lays .tdata.* out as a PT_TLS template, resolves R_X86_64_TPOFF32 and relaxes R_X86_64_GOTTPOFF to an immediate as ld does, gives the main thread its fs block in the entry stub, and crtl's pthread_create gives every new thread one from the __pxx_tls_* symbols the link defines; output matches gcc+ld (test/c_link_elf_tls.c). DECIDED 2026-11-21 by the owner: option 1, gcc-compatible ELF TLS in pxx --link (\"stay gcc compatible, it's a solved problem, just fix the linker\"). An x86-64 object under --system-libs gives a C `__thread` real ELF TLS (.tdata.<name>, GOTTPOFF/TPOFF32), for a libc's loader to set fs. pxx's own --link has no PT_TLS and resolves neither relocation, and pxx's runtime keeps thread-locals in its own block, not in fs. So an object with ELF TLS links only with gcc. That is the last wall for an all-pxx rumpnic: rump's curlwp is `__thread` (one variable, four GOTTPOFF uses), and without ELF TLS it degrades to a shared copy that panicked at boot. Deciding how pxx --link should carry ELF TLS is a runtime design question, hence decide."
 ---
 
 # pxx --link has no ELF TLS
@@ -103,3 +103,52 @@ and written from the main thread and two pthreads, under --threadsafe
 --system-libs --emit-obj, linked by `pxx --link`. Expected output is the gcc+ld
 link of the same objects. Then the real one: rumpnic linked all-pxx in
 scratch, booted in QEMU.
+
+## Done (claude-pxx, 2026-11-21)
+
+As planned above, with one change of place: the per-thread block is made in
+crtl's `pthread_create` (lib/crtl/src/pthread.c), not in thread_emit.inc's
+clone stub. Every thread a C program starts comes through it (rumpnic's come
+from librumpuser's pthread_create), it is C, and C already has weak data
+references; the clone stub has no symbol to refer to one from.
+
+- compiler/elfreader.inc: a new section kind, ELFLNK_K_TDATA, between .data
+  and .bss. `.tdata.*` must carry SHF_TLS and anything with SHF_TLS must be
+  `.tdata.*`; a NOBITS `.tbss` is still refused (pxx writes none). PT_TLS
+  header, a `.tdata` section header, STT_TLS symbols valued as their offset
+  in the template (as ld writes them: tx 0, tz 8, ty 0x14 in the test, the
+  same as gcc+ld's).
+- TPOFF32 = S + A - tp; GOTTPOFF's `mov r64, [rip+disp]` becomes
+  `mov r64, imm32` (ld's IE->LE relaxation), anything else under it refused.
+  tp = template start + its size rounded up to its alignment (variant II).
+- The entry stub grows a 70-byte prologue when there is a template: a block
+  carved from the initial stack, zeroed, the image copied in, the
+  self-pointer stored, arch_prctl(ARCH_SET_FS).
+- `__pxx_tls_image/_filesz/_memsz/_align`, linker-defined only when there is
+  a template. crtl refers to them weakly; elfwriter.inc's ObjDataIsImport lets
+  them stay undefined in a runtime copy, as for __init_array_start, because a
+  private slot is a nonzero "template" of garbage size (measured: a memcpy
+  far past the image).
+- pthread_create allocates the block (failure is EAGAIN), the new thread
+  fills and installs it before anything else, and frees it when it ends.
+
+Test: test/c_link_elf_tls.c, rows c_ltls (pxx --link), c_ltls_pt (one PT_TLS)
+and c_ltls_g (gcc+glibc over the same objects), expected output from gcc.
+Before the crtl half, the two threads read and wrote the main thread's block.
+
+### The all-pxx rumpnic, after this
+
+It links past TLS, and past two more walls that are not TLS:
+
+1. `pxx --link` counted undefined references from sections its GC drops. ld
+   --gc-sections does not: rump's members name ~50 kernel functions only from
+   header `static inline` copies nothing calls. Fixed beside this
+   (test/c_link_gc_dead_undefined_ref.c).
+2. virtif_user.c is a RUMPCOMP_USER file (the host side of virtif, like
+   librumpuser) and needs the host libc: under --system-libs it asks for
+   glibc's `pthread_create`, `__errno_location` and `__assert_fail`. Compiled
+   hosted like librumpuser, it links. That is how the all-pxx build must
+   classify it, a build-harness fact, not a pxx gap.
+
+What is left is `backtrace()`, which rumpnic's crash handler calls and crtl
+does not have (glibc and NetBSD's libexecinfo do). Then the boot.

@@ -5897,11 +5897,16 @@ begin
     private slot is two equal zeros-or-garbage, and crtl's xtensa
     __pxx_run_initializers walked one into a nil call.
     feature-xtensa-objects-run-their-initialisers }
+  { ...and the TLS template pxx --link describes with __pxx_tls_image,
+    _filesz, _memsz and _align: crtl's pthread_create reads them WEAKLY to
+    give each new thread its ELF TLS block, and a private slot would be a
+    nonzero "template" of garbage size. feature-a-pxx-link-has-no-elf-tls }
   ObjDataIsImport := ObjDataIsCandidate(i) and SymObjDataExternOnly[i] and
                      (not SymCStaticLink[i]) and
                      ((not SymObjRuntimeCopy[i]) or SharedRuntime or
                       (Syms[i].Name = '__init_array_start') or
-                      (Syms[i].Name = '__init_array_end'));
+                      (Syms[i].Name = '__init_array_end') or
+                      (Copy(Syms[i].Name, 1, 10) = '__pxx_tls_'));
 end;
 
 function ObjDataIsLocal(i: Integer): Boolean;

@@ -21381,6 +21381,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_objth "$$(timeout 20 $(TESTTMP)/c_objth)" "$$(cat test/c_obj_thread.expected)"
 	gcc -o $(TESTTMP)/c_objth_g $(TESTTMP)/c_objth_a.o $(TESTTMP)/c_objth_b.o -lpthread
 	tools/expect_same.sh c_objth_g "$$(timeout 20 $(TESTTMP)/c_objth_g)" "$$(cat test/c_obj_thread.expected)"
+	# ELF TLS through pxx --link: --system-libs objects' __thread (GOTTPOFF and TPOFF32), a
+	# PT_TLS template, the main thread's block from the entry stub and each pthread's from
+	# crtl; then gcc+glibc over the same objects. feature-a-pxx-link-has-no-elf-tls
+	$(COMPILER) --emit-obj --system-libs --threadsafe -DTLS_A test/c_link_elf_tls.c $(TESTTMP)/c_ltls_a.o > /dev/null
+	$(COMPILER) --emit-obj --system-libs --threadsafe -DTLS_B test/c_link_elf_tls.c $(TESTTMP)/c_ltls_b.o > /dev/null
+	$(COMPILER) --emit-obj --threadsafe test/c_link_elf_tls.c $(TESTTMP)/c_ltls_c.o > /dev/null
+	$(COMPILER) --link --threadsafe -o $(TESTTMP)/c_ltls $(TESTTMP)/c_ltls_a.o $(TESTTMP)/c_ltls_b.o $(TESTTMP)/c_ltls_c.o > /dev/null
+	tools/expect_same.sh c_ltls "$$(timeout 20 $(TESTTMP)/c_ltls)" "$$(cat test/c_link_elf_tls.expected)"
+	tools/expect_same.sh c_ltls_pt "$$(readelf -lW $(TESTTMP)/c_ltls | grep -c '^ *TLS ')" "1"
+	gcc -o $(TESTTMP)/c_ltls_g $(TESTTMP)/c_ltls_a.o $(TESTTMP)/c_ltls_b.o $(TESTTMP)/c_ltls_c.o -lpthread
+	tools/expect_same.sh c_ltls_g "$$(timeout 20 $(TESTTMP)/c_ltls_g)" "$$(cat test/c_link_elf_tls.expected)"
 	# a refused relocation leaves no output (bug-a-link-leaves-a-truncated-executable-after-a-refused-relocation)
 	gcc -c -O2 -fno-pie -fcf-protection=none -fno-asynchronous-unwind-tables test/c_link_refused_reloc_gcc.c -o $(TESTTMP)/c_lnkref26_g.o
 	$(COMPILER) --emit-obj test/c_link_refused_reloc_main.c $(TESTTMP)/c_lnkref26_m.o > /dev/null

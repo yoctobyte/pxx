@@ -321,7 +321,7 @@ var
   its own .S frontend. }
 
 const
-  ELFLNK_NKIND  = 8;
+  ELFLNK_NKIND  = 9;
   ELFLNK_K_HEAD = 0;
   ELFLNK_K_TEXT = 1;
   ELFLNK_K_RODATA = 2;
@@ -329,12 +329,20 @@ const
   ELFLNK_K_INIT = 4;
   ELFLNK_K_FINI = 5;
   ELFLNK_K_DATA = 6;
-  ELFLNK_K_BSS  = 7;
+  { ELF THREAD-LOCAL STORAGE: the `.tdata.<name>` inputs (SHF_TLS) that
+    `--emit-obj --system-libs` writes for a C `__thread`. Laid out together,
+    after .data and before .bss, as the TLS TEMPLATE a PT_TLS header
+    describes: each thread's block starts as a copy of these bytes. x86-64
+    only. feature-a-pxx-link-has-no-elf-tls }
+  ELFLNK_K_TDATA = 7;
+  ELFLNK_K_BSS  = 8;
   ELFLNK_K_ABS  = -1;           { a definition against SHN_ABS: its value is the address }
   { The image base is ImageBase: LOAD_ADDR ($400000, the static non-PIE base ld
     uses on x86-64) unless --image-base / --gibix moved it. }
   ELFLNK_PAGE   = $1000;
   ELFLNK_STUB_SIZE_X64 = 93;    { the synthesised _start; see ElfLnkPutStub }
+  ELFLNK_TLS_PRO_SIZE = 70;     { its main-thread TLS prologue, when there is a template }
+  ELFLNK_TLS_TCB = 64;          { bytes reserved at the thread pointer: word 0 is the self-pointer }
   ELFLNK_STUB_SIZE_A64 = 128;   { 26 instructions + 3 literal quads; ElfLnkPutStubA64 }
   ELFLNK_EM_X86_64 = 62;
   ELFLNK_EM_AARCH64 = 183;
@@ -382,8 +390,15 @@ var
   ElfLnkEdgeCount: Integer;
   ElfLnkGcOn     : Boolean;
   { the output sections, indexed by kind }
-  ElfLnkOutAddr  : array[0..7] of Int64;
-  ElfLnkOutSize  : array[0..7] of Int64;
+  ElfLnkOutAddr  : array[0..ELFLNK_NKIND - 1] of Int64;
+  ElfLnkOutSize  : array[0..ELFLNK_NKIND - 1] of Int64;
+  { THE TLS TEMPLATE (ELFLNK_K_TDATA): whether the link has one, its largest
+    input alignment, and its size rounded up to that alignment -- which is
+    where the thread pointer sits above the block's start (variant II), so
+    tpoff(x) = addr(x) - (template start + ElfLnkTlsMemR). }
+  ElfLnkHasTls   : Boolean;
+  ElfLnkTlsAlign : Int64;
+  ElfLnkTlsMemR  : Int64;
   ElfLnkNoteAlign: Int64;             { the largest .note* input alignment: PT_NOTE's p_align }
   { the CHOSEN definition per global: object, kind, st_value, and whether it is
     weak (a later STRONG definition displaces a weak one; a later weak one does
@@ -410,6 +425,7 @@ begin
     ELFLNK_K_INIT: ElfLnkKindName := '.init_array';
     ELFLNK_K_FINI: ElfLnkKindName := '.fini_array';
     ELFLNK_K_DATA: ElfLnkKindName := '.data';
+    ELFLNK_K_TDATA: ElfLnkKindName := '.tdata';
     ELFLNK_K_BSS:  ElfLnkKindName := '.bss';
   else
     ElfLnkKindName := '?';
@@ -453,6 +469,9 @@ begin
   ElfLnkRxEnd := 0;
   ElfLnkEntryStub := False;
   ElfLnkStubAddr := 0;
+  ElfLnkHasTls := False;
+  ElfLnkTlsAlign := 1;
+  ElfLnkTlsMemR := 0;
   ElfLnkMachine := ELFLNK_EM_X86_64;
   ElfLnkObjCount := 0;
   SetLength(ElfLnkObjPath, 0);
@@ -574,6 +593,14 @@ begin
     begin k := ELFLNK_K_DATA; wantTy := 1;  wantFl := 3; end
   else if (nm = '.bss') or (Copy(nm, 1, 5) = '.bss.') then
     begin k := ELFLNK_K_BSS;  wantTy := ELFRD_SHT_NOBITS; wantFl := 3; end
+  { `.tdata.<name>`: a C `__thread` under --emit-obj --system-libs, ALLOC|WRITE
+    plus SHF_TLS (checked below, since the flags test looks at the low three
+    bits only). pxx writes no .tbss: an uninitialised `__thread` is zero bytes
+    in .tdata, so a NOBITS TLS input is a foreign toolchain's and is refused
+    with the rest. }
+  else if (ElfLnkMachine = ELFLNK_EM_X86_64) and
+          ((nm = '.tdata') or (Copy(nm, 1, 7) = '.tdata.')) then
+    begin k := ELFLNK_K_TDATA; wantTy := 1; wantFl := 3; end
   else if nm = '.init_array' then begin k := ELFLNK_K_INIT; wantTy := 14; wantFl := 3; end
   else if nm = '.fini_array' then begin k := ELFLNK_K_FINI; wantTy := 15; wantFl := 3; end
   else if FreestandingMode and (nm = '.multiboot') then
@@ -600,7 +627,7 @@ begin
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
-              + 'links pxx''s own objects (.text .text.* .data .data.* .rodata.* .bss .bss.* .init_array .fini_array, and data sections named like a C identifier), '
+              + 'links pxx''s own objects (.text .text.* .data .data.* .rodata.* .tdata.* .bss .bss.* .init_array .fini_array, and data sections named like a C identifier), '
               + 'not a third-party toolchain''s';
     Exit;
   end;
@@ -610,6 +637,17 @@ begin
     ElfRdErr := 'section ''' + nm + ''' has type ' + AIntToStr(ty) + ' flags '
               + AIntToStr(fl and 7) + ', and pxx writes that name as type '
               + AIntToStr(wantTy) + ' flags ' + AIntToStr(wantFl);
+    Exit;
+  end;
+  { SHF_TLS ($400) is what makes a section part of the template, so the two
+    must agree both ways: a `.tdata.x` without it, or a `.data.x` with it,
+    would put a thread's variable in shared memory or the reverse }
+  if ((fl and $400) <> 0) <> (k = ELFLNK_K_TDATA) then
+  begin
+    if k = ELFLNK_K_TDATA then
+      ElfRdErr := 'section ''' + nm + ''' is named as thread-local data but has no SHF_TLS flag'
+    else
+      ElfRdErr := 'section ''' + nm + ''' has SHF_TLS, and pxx writes thread-local data only as .tdata.<name>';
     Exit;
   end;
   ElfLnkSecKind := k;
@@ -654,6 +692,7 @@ end;
 function ElfLnkStubSize: Integer;
 begin
   if ElfLnkMachine = ELFLNK_EM_AARCH64 then ElfLnkStubSize := ELFLNK_STUB_SIZE_A64
+  else if ElfLnkHasTls then ElfLnkStubSize := ELFLNK_STUB_SIZE_X64 + ELFLNK_TLS_PRO_SIZE
   else ElfLnkStubSize := ELFLNK_STUB_SIZE_X64;
 end;
 
@@ -714,7 +753,8 @@ begin
       one per function and one per C global, and their order is simply header
       order. }
     if (kind <> ELFLNK_K_TEXT) and (kind <> ELFLNK_K_RODATA) and
-       (kind <> ELFLNK_K_DATA) and (kind <> ELFLNK_K_BSS) and seen[kind] then
+       (kind <> ELFLNK_K_DATA) and (kind <> ELFLNK_K_TDATA) and
+       (kind <> ELFLNK_K_BSS) and seen[kind] then
     begin
       ElfRdErr := 'two ' + ElfLnkKindName(kind) + ' sections in one object; pxx writes one';
       Exit;
@@ -1022,6 +1062,11 @@ procedure ElfLnkLayout;
 var k, o, i, s0, st: Integer;
     addr, start, maxAl, rwFile, setAl: Int64;
 begin
+  { decided before .text is placed, because the entry stub that ends .text
+    grows a TLS prologue when there is a template }
+  ElfLnkHasTls := False;
+  for i := 0 to ElfLnkSecCount - 1 do
+    if ElfLnkSecLive[i] and (ElfLnkSecKindOf[i] = ELFLNK_K_TDATA) then ElfLnkHasTls := True;
   addr := ImageBase + ELFLNK_PAGE;
   for k := 0 to ELFLNK_NKIND - 1 do
   begin
@@ -1040,6 +1085,7 @@ begin
     start := ElfLnkAlignUp(addr, maxAl);
     addr := start;
     if k = ELFLNK_K_NOTE then ElfLnkNoteAlign := maxAl;
+    if k = ELFLNK_K_TDATA then ElfLnkTlsAlign := maxAl;
     { object order, then header order within an object -- which for a split
       object is code order, so a link that keeps every section reproduces the
       unsplit object's layout }
@@ -1101,6 +1147,8 @@ begin
     end;
     ElfLnkOutAddr[k] := start;
     ElfLnkOutSize[k] := addr - start;
+    if k = ELFLNK_K_TDATA then
+      ElfLnkTlsMemR := ElfLnkAlignUp(ElfLnkOutSize[k], ElfLnkTlsAlign);
   end;
 end;
 
@@ -1392,6 +1440,8 @@ begin
     9:  ElfLnkRelTypeName := 'R_X86_64_GOTPCREL';
     10: ElfLnkRelTypeName := 'R_X86_64_32';
     11: ElfLnkRelTypeName := 'R_X86_64_32S';
+    22: ElfLnkRelTypeName := 'R_X86_64_GOTTPOFF';
+    23: ElfLnkRelTypeName := 'R_X86_64_TPOFF32';
     41: ElfLnkRelTypeName := 'R_X86_64_GOTPCRELX';
     42: ElfLnkRelTypeName := 'R_X86_64_REX_GOTPCRELX';
     257: ElfLnkRelTypeName := 'R_AARCH64_ABS64';
@@ -1602,11 +1652,12 @@ begin
     else if (rtype = 2) or (rtype = 4) or (rtype = 11) then width := 4
     else if FreestandingMode and (rtype = 10) then width := 4
     else if (rtype = 9) or (rtype = 41) or (rtype = 42) then width := 4   { GOTPCREL, relaxed below }
+    else if (rtype = 22) or (rtype = 23) then width := 4   { GOTTPOFF, TPOFF32: thread-local, below }
     else
     begin
       ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfRdSecName(target)
                 + ' -- pxx emits R_X86_64_64, R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_32S'
-                + ' and R_X86_64_REX_GOTPCRELX only'
+                + ', R_X86_64_REX_GOTPCRELX, R_X86_64_GOTTPOFF and R_X86_64_TPOFF32 only'
                 + ' (R_X86_64_32 too under --link --freestanding)';
       Exit;
     end;
@@ -1623,6 +1674,43 @@ begin
       target L is the symbol itself, so it is PC32 -- as GNU ld resolves it.
       pxx's own .asm frontend writes it for every extern reference. }
     if (rtype = 2) or (rtype = 4) then v := S + add - P else v := S + add;
+    { THREAD-LOCAL, as GNU ld resolves them for an executable (x86-64 variant
+      II: the thread pointer is the END of the block, rounded up to the
+      template's alignment, and the template is copied to just below it):
+        R_X86_64_TPOFF32 (23), local-exec `lea rax, [rax + x@tpoff]`:
+          the value is tpoff(x), negative.
+        R_X86_64_GOTTPOFF (22), initial-exec `mov reg, [rip + x@gottpoff]`:
+          an executable needs no GOT for it -- the load is RELAXED to
+          `mov reg, imm32` holding tpoff(x), in the same seven bytes, exactly
+          ld's IE->LE rewrite (REX.R moves to REX.B with the register, and
+          the -4 addend that made it PC-relative is dropped).
+      feature-a-pxx-link-has-no-elf-tls }
+    if (rtype = 22) or (rtype = 23) then
+    begin
+      if not ElfLnkHasTls then
+      begin
+        ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target) + '+'
+                  + AIntToStr(off) + ' names a thread-local variable, and the link has no .tdata';
+        Exit;
+      end;
+      if rtype = 23 then
+        v := S + add - (ElfLnkOutAddr[ELFLNK_K_TDATA] + ElfLnkTlsMemR)
+      else
+      begin
+        if (off < 3) or (buf[bufOff + off - 2] <> $8B) or
+           ((buf[bufOff + off - 1] and $C7) <> $05) or
+           ((buf[bufOff + off - 3] and $FB) <> $48) then
+        begin
+          ElfRdErr := 'R_X86_64_GOTTPOFF at ' + ElfRdSecName(target) + '+' + AIntToStr(off)
+                    + ' is not on a `mov r64, [rip+disp32]`, and pxx --link builds no GOT';
+          Exit;
+        end;
+        buf[bufOff + off - 3] := $48 or ((buf[bufOff + off - 3] shr 2) and 1);   { REX.R -> REX.B }
+        buf[bufOff + off - 1] := $C0 or ((buf[bufOff + off - 1] shr 3) and 7);
+        buf[bufOff + off - 2] := $C7;               { mov r/m64, imm32 }
+        v := S - (ElfLnkOutAddr[ELFLNK_K_TDATA] + ElfLnkTlsMemR);
+      end;
+    end;
     { R_X86_64_GOTPCREL / GOTPCRELX / REX_GOTPCRELX on `mov reg, [rip+X]`
       (what pxx emits for an undefined weak variable, and gcc for any extern
       under -fPIE). This image has no GOT, so the load is RELAXED the way
@@ -1732,12 +1820,65 @@ const
     $B8,$3C,$00,$00,$00,                   { 85 mov eax,60             }
     $0F,$05,                               { 90 syscall                }
     $F4);                                  { 92 hlt                    }
-var i: Integer;
+  { THE MAIN THREAD'S TLS BLOCK, when the link has a template: inserted after
+    envp is computed (offset 16) and before the alignment, so the rest of the
+    stub is unchanged and moves down as a whole. The block is carved from the
+    initial stack, below argv and auxv, and lives as long as the process.
+    Variant II: the image is copied to the block's start, the thread pointer
+    is ElfLnkTlsMemR above it, and its first word points at itself (what
+    `mov rax, fs:[0]` reads). arch_prctl(ARCH_SET_FS) installs it; pxx's own
+    thread block is in gs, so the two do not meet. A new thread gets its block
+    from crtl's pthread_create, which reads the template through the
+    __pxx_tls_* symbols ElfLnkDefineLinkerSyms gives it.
+      sub   rsp, memR + TCB + al          48 81 EC imm32     (0)
+      and   rsp, -al                      48 81 E4 imm32     (7)
+      mov   rdi, rsp                      48 89 E7          (14)
+      mov   ecx, memR + TCB               B9 imm32          (17)
+      xor   eax, eax ; cld ; rep stosb    31 C0 FC F3 AA    (22)
+      mov   rdi, rsp                      48 89 E7          (27)
+      movabs rsi, <template>              48 BE imm64       (30)
+      mov   ecx, <template size>          B9 imm32          (40)
+      rep   movsb                         F3 A4             (45)
+      lea   rsi, [rsp + memR]             48 8D B4 24 imm32 (47)
+      mov   [rsi], rsi                    48 89 36          (55)
+      mov   edi, 0x1002 ; mov eax, 158 ; syscall            (58)  }
+  TLSPRO: array[0..ELFLNK_TLS_PRO_SIZE - 1] of Byte = (
+    $48,$81,$EC,0,0,0,0,
+    $48,$81,$E4,0,0,0,0,
+    $48,$89,$E7,
+    $B9,0,0,0,0,
+    $31,$C0,$FC,$F3,$AA,
+    $48,$89,$E7,
+    $48,$BE,0,0,0,0,0,0,0,0,
+    $B9,0,0,0,0,
+    $F3,$A4,
+    $48,$8D,$B4,$24,0,0,0,0,
+    $48,$89,$36,
+    $BF,$02,$10,$00,$00,
+    $B8,$9E,$00,$00,$00,
+    $0F,$05);
+var i, pro: Integer;
+    al: Int64;
 begin
-  for i := 0 to ELFLNK_STUB_SIZE_X64 - 1 do buf[i] := STUB[i];
-  ElfLnkPutLE(buf, 22, initStart, 8);
-  ElfLnkPutLE(buf, 32, initEnd, 8);
-  ElfLnkPutLE(buf, 73, mainAddr, 8);
+  pro := 0;
+  if ElfLnkHasTls then pro := ELFLNK_TLS_PRO_SIZE;
+  for i := 0 to 15 do buf[i] := STUB[i];
+  for i := 16 to ELFLNK_STUB_SIZE_X64 - 1 do buf[i + pro] := STUB[i];
+  if ElfLnkHasTls then
+  begin
+    al := ElfLnkTlsAlign;
+    if al < 16 then al := 16;
+    for i := 0 to ELFLNK_TLS_PRO_SIZE - 1 do buf[16 + i] := TLSPRO[i];
+    ElfLnkPutLE(buf, 16 + 3, ElfLnkTlsMemR + ELFLNK_TLS_TCB + al, 4);
+    ElfLnkPutLE(buf, 16 + 10, -al, 4);
+    ElfLnkPutLE(buf, 16 + 18, ElfLnkTlsMemR + ELFLNK_TLS_TCB, 4);
+    ElfLnkPutLE(buf, 16 + 32, ElfLnkOutAddr[ELFLNK_K_TDATA], 8);
+    ElfLnkPutLE(buf, 16 + 41, ElfLnkOutSize[ELFLNK_K_TDATA], 4);
+    ElfLnkPutLE(buf, 16 + 51, ElfLnkTlsMemR, 4);
+  end;
+  ElfLnkPutLE(buf, 22 + pro, initStart, 8);
+  ElfLnkPutLE(buf, 32 + pro, initEnd, 8);
+  ElfLnkPutLE(buf, 73 + pro, mainAddr, 8);
 end;
 
 { The same contract on aarch64. The kernel enters with sp -> argc, argv[],
@@ -1862,14 +2003,20 @@ var k, i, g: Integer;
     nm: AnsiString;
 begin
   dataEnd := ImageBase + ElfLnkRwFile;
-  for k := ELFLNK_K_INIT to ELFLNK_K_DATA do
+  for k := ELFLNK_K_INIT to ELFLNK_K_TDATA do
     if ElfLnkOutAddr[k] + ElfLnkOutSize[k] > dataEnd then
       dataEnd := ElfLnkOutAddr[k] + ElfLnkOutSize[k];
   bssEnd := dataEnd;
   if ElfLnkOutAddr[ELFLNK_K_BSS] + ElfLnkOutSize[ELFLNK_K_BSS] > bssEnd then
     bssEnd := ElfLnkOutAddr[ELFLNK_K_BSS] + ElfLnkOutSize[ELFLNK_K_BSS];
-  for i := 0 to 6 do
+  { 7..10: THE TLS TEMPLATE for crtl's pthread_create, which gives each new
+    thread its block from them. pxx's names, not ld's (ld has none: glibc
+    reads PT_TLS through AT_PHDR), and only when there is a template -- crtl
+    refers to them WEAKLY, so without one they stay 0 and it sets up nothing.
+    Absolute values: an address and three sizes, read as `(long)&sym`. }
+  for i := 0 to 10 do
   begin
+    if (i >= 7) and not ElfLnkHasTls then Break;
     case i of
       0: begin nm := '__executable_start'; v := ImageBase; end;
       1: begin nm := 'etext'; v := ImageBase + ElfLnkRxEnd; end;
@@ -1877,8 +2024,12 @@ begin
       3: begin nm := 'edata'; v := dataEnd; end;
       4: begin nm := '__bss_start'; v := ElfLnkOutAddr[ELFLNK_K_BSS]; end;
       5: begin nm := '_end'; v := bssEnd; end;
+      6: begin nm := 'end'; v := bssEnd; end;
+      7: begin nm := '__pxx_tls_image'; v := ElfLnkOutAddr[ELFLNK_K_TDATA]; end;
+      8: begin nm := '__pxx_tls_filesz'; v := ElfLnkOutSize[ELFLNK_K_TDATA]; end;
+      9: begin nm := '__pxx_tls_memsz'; v := ElfLnkTlsMemR; end;
     else
-      begin nm := 'end'; v := bssEnd; end;
+      begin nm := '__pxx_tls_align'; v := ElfLnkTlsAlign; end;
     end;
     g := ElfLnkFind(nm);
     if (g < 0) or (ElfLnkDefObj[g] >= 0) then Continue;
@@ -1918,7 +2069,7 @@ var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
     relaOf: array of Integer;
     g, phCount, nOut, shstrLen: Integer;
-    outIdx: array[0..7] of Integer;
+    outIdx: array[0..ELFLNK_NKIND - 1] of Integer;
     ldsoVA, pa: Int64;
 const
   SHSTR = 68;   { see the blob below }
@@ -1984,7 +2135,7 @@ begin
   { the RW segment's extent }
   rwStart := ImageBase + ElfLnkRwFile;
   endAddr := rwStart;
-  for k := ELFLNK_K_INIT to ELFLNK_K_DATA do
+  for k := ELFLNK_K_INIT to ELFLNK_K_TDATA do
     if ElfLnkOutAddr[k] + ElfLnkOutSize[k] > endAddr then
       endAddr := ElfLnkOutAddr[k] + ElfLnkOutSize[k];
   rwLen := endAddr - rwStart;
@@ -2001,6 +2152,7 @@ begin
   phCount := 3;
   if LdsoRunnable then Inc(phCount);
   if ElfLnkOutSize[ELFLNK_K_NOTE] > 0 then Inc(phCount);
+  if ElfLnkHasTls then Inc(phCount);
   { p_paddr = p_vaddr - LoadOffset (--load-offset, a kernel's physical load
     address: what a PVH loader places a segment at); 0 means p_paddr = p_vaddr }
   pa := -LoadOffset;
@@ -2031,6 +2183,17 @@ begin
     ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_NOTE] + pa, 8);
     ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_NOTE], 8); ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_NOTE], 8);
     ElfLnkBPut(ElfLnkNoteAlign, 8);
+  end;
+  { PT_TLS R: the template, which also lies inside the RW PT_LOAD. memsz =
+    filesz, since pxx writes no .tbss. }
+  if ElfLnkHasTls then
+  begin
+    ElfLnkBPut(7, 4); ElfLnkBPut(4, 4);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_TDATA] - ImageBase, 8);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_TDATA], 8);
+    ElfLnkBPut(ElfLnkOutAddr[ELFLNK_K_TDATA] + pa, 8);
+    ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_TDATA], 8); ElfLnkBPut(ElfLnkOutSize[ELFLNK_K_TDATA], 8);
+    ElfLnkBPut(ElfLnkTlsAlign, 8);
   end;
   { PT_GNU_STACK RW: without it the kernel may map the stack executable }
   ElfLnkBPut($6474E551, 4); ElfLnkBPut(6, 4);
@@ -2077,7 +2240,8 @@ begin
     ordinary link's headers are what they were. }
   nOut := 0;
   for k := 0 to ELFLNK_NKIND - 1 do
-    if ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA) and (k <> ELFLNK_K_NOTE))
+    if ((k <> ELFLNK_K_HEAD) and (k <> ELFLNK_K_RODATA) and (k <> ELFLNK_K_NOTE)
+        and (k <> ELFLNK_K_TDATA))
        or (ElfLnkOutSize[k] > 0) then
     begin
       Inc(nOut);
@@ -2088,6 +2252,7 @@ begin
   if outIdx[ELFLNK_K_HEAD] > 0 then shstrLen := shstrLen + 11;
   if outIdx[ELFLNK_K_RODATA] > 0 then shstrLen := shstrLen + 8;
   if outIdx[ELFLNK_K_NOTE] > 0 then shstrLen := shstrLen + 6;
+  if outIdx[ELFLNK_K_TDATA] > 0 then shstrLen := shstrLen + 7;
   shOff := Integer(ElfLnkAlignUp(shstrOff + shstrLen, 8));
   ElfLnkPutLE(ElfLnkB, 40, shOff, 8);
   ElfLnkPutLE(ElfLnkB, 60, nOut + 4, 2);   { e_shnum: null + kinds + 3 }
@@ -2217,7 +2382,12 @@ begin
       ElfLnkBPut(0, 1);
       if ElfLnkDefSec[i] < 0 then ElfLnkBPut($FFF1, 2)
       else ElfLnkBPut(outIdx[ElfLnkSecKindOf[ElfLnkDefSec[i]]], 2);
-      ElfLnkBPut(ElfLnkGlobalAddr(i), 8);
+      { a thread-local symbol's value is its offset in the template, as ld
+        writes it (STT_TLS): an address would mean nothing to gdb or nm }
+      if (ElfLnkDefSec[i] >= 0) and (ElfLnkSecKindOf[ElfLnkDefSec[i]] = ELFLNK_K_TDATA) then
+        ElfLnkBPut(ElfLnkGlobalAddr(i) - ElfLnkOutAddr[ELFLNK_K_TDATA], 8)
+      else
+        ElfLnkBPut(ElfLnkGlobalAddr(i), 8);
       ElfLnkBPut(ElfLnkDefSize[i], 8);
       strPos := strPos + Length(ElfLnkName[i]) + 1;
     end;
@@ -2241,6 +2411,7 @@ begin
   if outIdx[ELFLNK_K_HEAD] > 0 then ElfLnkBStrZ('.multiboot');      { at SHSTR }
   if outIdx[ELFLNK_K_RODATA] > 0 then ElfLnkBStrZ('.rodata');       { at SHSTR or SHSTR+11 }
   if outIdx[ELFLNK_K_NOTE] > 0 then ElfLnkBStrZ('.note');           { after those two }
+  if outIdx[ELFLNK_K_TDATA] > 0 then ElfLnkBStrZ('.tdata');         { after those three }
   ElfLnkBPadTo(shOff - symOff);
   { null }
   for i := 1 to 64 do ElfLnkBPut(0, 1);
@@ -2266,6 +2437,14 @@ begin
       ELFLNK_K_INIT: begin ElfLnkBPut(7, 4);  ElfLnkBPut(14, 4); ElfLnkBPut(3, 8); end;
       ELFLNK_K_FINI: begin ElfLnkBPut(19, 4); ElfLnkBPut(15, 4); ElfLnkBPut(3, 8); end;
       ELFLNK_K_DATA: begin ElfLnkBPut(31, 4); ElfLnkBPut(1, 4);  ElfLnkBPut(3, 8); end;
+      ELFLNK_K_TDATA:
+        begin
+          t := SHSTR;
+          if outIdx[ELFLNK_K_HEAD] > 0 then t := t + 11;
+          if outIdx[ELFLNK_K_RODATA] > 0 then t := t + 8;
+          if outIdx[ELFLNK_K_NOTE] > 0 then t := t + 6;
+          ElfLnkBPut(t, 4); ElfLnkBPut(1, 4); ElfLnkBPut($403, 8);   { WRITE|ALLOC|TLS }
+        end;
       ELFLNK_K_BSS:  begin ElfLnkBPut(37, 4); ElfLnkBPut(8, 4);  ElfLnkBPut(3, 8); end;
     end;
     ElfLnkBPut(ElfLnkOutAddr[k], 8);
@@ -2278,6 +2457,7 @@ begin
     else if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8)
     else if (k = ELFLNK_K_HEAD) or (k = ELFLNK_K_RODATA) then ElfLnkBPut(1, 8)
     else if k = ELFLNK_K_NOTE then ElfLnkBPut(ElfLnkNoteAlign, 8)
+    else if k = ELFLNK_K_TDATA then ElfLnkBPut(ElfLnkTlsAlign, 8)
     else ElfLnkBPut(16, 8);
     if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8) else ElfLnkBPut(0, 8);
   end;
