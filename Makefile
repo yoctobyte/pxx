@@ -21134,6 +21134,16 @@ test-core: $(COMPILER)
 	# bug-c-an-empty-brace-initializer-leaves-a-local-array-uninitialised
 	./$(COMPILER) test/c_empty_brace_local_array.c $(TESTTMP)/c_ebla26 > /dev/null
 	tools/expect_same.sh c_ebla26 "$$($(TESTTMP)/c_ebla26)" "$$(cat test/c_empty_brace_local_array.expected)"
+	# a pointer to an array typedef of POINTERS (`typedef P T[16]; T *pt`) is a pointer to the
+	# whole array, as `P (*pt)[16]`: locals, globals, parameters, siblings, 2-D, `T **`.
+	# x86-64, aarch64, and i386 (4-byte pointers, its own expected file).
+	# bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape
+	./$(COMPILER) test/c_ptr_to_array_typedef_of_ptrs.c $(TESTTMP)/c_tdpap26 > /dev/null
+	tools/expect_same.sh c_tdpap26 "$$($(TESTTMP)/c_tdpap26)" "$$(cat test/c_ptr_to_array_typedef_of_ptrs.expected)"
+	./$(COMPILER) --target=aarch64 test/c_ptr_to_array_typedef_of_ptrs.c $(TESTTMP)/c_tdpap26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_tdpap26_a64 | diff -u test/c_ptr_to_array_typedef_of_ptrs.expected -
+	./$(COMPILER) --target=i386 test/c_ptr_to_array_typedef_of_ptrs.c $(TESTTMP)/c_tdpap26_386 > /dev/null
+	tools/run_target.sh i386 $(TESTTMP)/c_tdpap26_386 | diff -u test/c_ptr_to_array_typedef_of_ptrs.i386.expected -
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

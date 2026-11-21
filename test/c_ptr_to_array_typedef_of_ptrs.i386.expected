@@ -1,0 +1,9 @@
+local     11 64 64
+global    11 64 7
+param     64
+direct    42 64 64
+sibling   7 22
+2-d       7 48 16
+ptr-ptr   22 64 42
+store     22 7
+decay     11 55

@@ -8776,6 +8776,8 @@ var baseTk, declTk, scalarTk: TTypeKind;
     lParenName: Boolean; lParenEnd: Integer;   { `T *(name[N])`, see CParenDeclNameEnd }
     lParenPtrArr: Boolean;   { `T (*name[N])[M]`, see CParenPtrArrEnd }
     lclNoStar: Boolean;      { this declarator wrote no `*`: an array typedef stays an array }
+    lclStars: Integer;       { the `*`s this declarator wrote, apart from a typedef's own }
+    lclShapeD: Integer;      { the depth an array typedef's shape is stamped at }
     CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry: Integer;
     CTypeTypedefDimsAtEntry: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
@@ -8790,6 +8792,7 @@ begin
   CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
   for di := 0 to MAX_ARR_DIMS - 1 do CTypeTypedefDimsAtEntry[di] := CTypeTypedefDims[di];
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
+  lclStars := CTypeSpelledStars;
   lclNoStar := CTypeSpelledStars = 0;   { the first declarator wrote no `*` (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
   tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
   for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDims[di];
@@ -9095,6 +9098,7 @@ begin
         declPtr := 0;
         while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
         lclNoStar := declPtr = 0;
+        lclStars := declPtr;
         if (declPtr > 0) and (sibTdLvl > 0) then
         begin
           declTk := tyPointer; declPtrDepth := declPtr + sibTdLvl;
@@ -9939,7 +9943,23 @@ begin
           belongs HERE, on the pointee — the same slot, in the same order, that
           the parenthesised `elem (*name)[N]` arm writes, so the two spellings
           converge on one stamping instead of this one growing a private rule. }
-        if (tdArrLen >= 1) and (declPtrDepth >= 1) and (declPtrDepth <= 2) then
+        { `T *p` over `typedef E *T[N]` (an array OF POINTERS): the depth is 2,
+          one level the typedef's elements carry and one the written star, and
+          read as depth 2 it is `E **` with an array at the base -- `(*p)[i]`
+          loaded through garbage. It is a pointer to the N-pointer array, the
+          same symbol `E *(*p)[N]` gets: depth 1, pointee and base a pointer.
+          `T **pp` is the same one level up: depth 2 with the array stamped as
+          the base pointee's shape, as `TL **pp` over an array of longs has it.
+          bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape }
+        if (tdArrLen >= 1) and (lclStars >= 1) and (lclStars <= 2) and
+           (declPtrDepth = lclStars + 1) and (declElemTk = Ord(tyPointer)) then
+        begin
+          SetSymPointerType(idx, tyPointer, declElemRec, lclStars, Ord(tyPointer), declBaseRec);
+          lclShapeD := lclStars;
+        end
+        else
+          lclShapeD := declPtrDepth;
+        if (tdArrLen >= 1) and (lclShapeD >= 1) and (lclShapeD <= 2) then
           SymPtrElemArrLen[idx] := tdArrLen;
         { a MULTI-dim array typedef (`mat4 *m`, [4][4]) is a pointer to that
           whole array: stamp every dim, as `float (*m)[4][4]` does. At depth 2
@@ -9947,7 +9967,7 @@ begin
           CPtrToArrShapeSym reads it; it had only the flat length there, and
           every reader took it as pp's own pointee, so `pp + 1` stepped 64
           bytes. bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
-        if (tdArrLen >= 1) and (declPtrDepth >= 1) and (declPtrDepth <= 2) and
+        if (tdArrLen >= 1) and (lclShapeD >= 1) and (lclShapeD <= 2) and
            (tdNDimsL > 1) then
         begin
           SymPtrElemArrLen[idx] := 1;
@@ -10022,6 +10042,8 @@ begin
       { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
       declPtr := 0;
       while CurTok.Kind = tkStar do begin Inc(declPtr); Next; while CurTok.Kind = tkConst do Next; end;
+      lclNoStar := declPtr = 0;
+      lclStars := declPtr;
       if (declPtr > 0) and (sibTdLvl > 0) then
       begin
         { over a pointer typedef: see sibTdLvl }
@@ -15490,6 +15512,15 @@ begin
         a multi-dim array the spans follow its own (CPtrElemSpanOff).
         bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
       if gFirstDecl then gPtrD := CTypePtrDepth else gPtrD := gStars;
+      { `T *g` over `typedef E *T[N]`, an array OF POINTERS: a pointer to the
+        N-pointer array, depth 1, as the local path and `E *(*g)[N]` have it.
+        bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape }
+      if (tdArrLen >= 1) and gFirstDecl and (gSpelled = 1) and (gPtrD = 2) and
+         (not wasArr) and (CTypeElemTk = Ord(tyPointer)) then
+      begin
+        SetSymPointerType(idx, tyPointer, CTypeElemRec, 1, Ord(tyPointer), CTypePtrBaseRec);
+        gPtrD := 1;
+      end;
       if (tdArrLen >= 1) and ((gFirstDecl and (gSpelled > 0)) or (gStars > 0)) and
          (gPtrD >= 1) and (gPtrD <= 2) and
          ((not wasArr) or (gPtrD = 1)) and
@@ -20519,6 +20550,17 @@ begin
           if CTypePtrElemNDims > 1 then
             for pmi := 0 to CTypePtrElemNDims - 1 do
               pptrdims[nparams * MAX_ARR_DIMS + pmi] := CTypePtrElemDim[pmi];
+          { `T *t` over `typedef E *T[N]`, an array OF POINTERS: a pointer to the
+            N-pointer array, depth 1, as `E *(*t)[N]` has it; the branch below
+            then stamps the array as the pointee.
+            bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape }
+          if (CTypePtrDepth = 2) and (CTypeTypedefArrLen > 0) and
+             (CTypeSpelledStars = 1) and (CTypeElemTk = Ord(tyPointer)) and
+             (pptrarrlen[nparams] = 0) then
+          begin
+            pdepths[nparams] := 1;
+            pbasetk[nparams] := Ord(tyPointer);
+          end;
           { `mat4 **pp`: the BASE pointee's shape, as a depth-2 stamp means
             (CPtrToArrShapeSym) -- the local `mat4 **pp` records the same }
           if (CTypePtrDepth = 2) and (CTypeTypedefArrLen > 0) and
