@@ -21121,6 +21121,15 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --threadsafe --target=$$t test/c_crtl_utf8_locale.c $(TESTTMP)/c_u8loc26_$$t >/dev/null || exit 1; \
 	  timeout 120 tools/run_target.sh $$t $(TESTTMP)/c_u8loc26_$$t | diff -u test/c_crtl_utf8_locale.expected - || { echo "c_u8loc26 $$t FAIL"; exit 1; }; \
 	done; echo "c_u8loc26 cross: OK"
+	# wide literals keep an escape's full value (\x79C1 is one element, not 0xC1), \u/\U name a
+	# code point in narrow literals too, L'...' takes raw UTF-8; i386 and aarch64 with it.
+	# bug-c-a-wide-string-literal-truncates-hex-escapes-above-ff
+	./$(COMPILER) test/c_wide_literal_escapes.c $(TESTTMP)/c_wlit26 > /dev/null
+	tools/expect_same.sh c_wlit26 "$$($(TESTTMP)/c_wlit26)" "$$(cat test/c_wide_literal_escapes.expected)"
+	@for t in i386 aarch64; do \
+	  ./$(COMPILER) --target=$$t test/c_wide_literal_escapes.c $(TESTTMP)/c_wlit26_$$t >/dev/null || exit 1; \
+	  tools/run_target.sh $$t $(TESTTMP)/c_wlit26_$$t | diff -u test/c_wide_literal_escapes.expected - || { echo "c_wlit26 $$t FAIL"; exit 1; }; \
+	done; echo "c_wlit26 cross: OK"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

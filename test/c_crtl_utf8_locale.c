@@ -172,12 +172,7 @@ int main(void) {
   printf("mbstowcs count %ld\n", (long)mbstowcs(0, "\xE7\xA7\x81\xE7\xA7\x81", 0));
   r = wcstombs(buf, wbuf, sizeof buf);
   printf("wcstombs %ld %s\n", (long)r, r == 6 && !strcmp(buf, "a\xC3\xA9\xE7\xA7\x81") ? "ok" : "BAD");
-  {
-    /* an array, not L"\x79C1...": a wide literal's \x escape above 0xFF is
-       its own bug (bug-c-a-wide-string-literal-truncates-hex-escapes-above-ff) */
-    static const wchar_t w3[] = {0x79C1, 0x306F, 'a', 0};
-    printf("wcswidth %d\n", wcswidth(w3, 3));
-  }
+  printf("wcswidth %d\n", wcswidth(L"\x79C1\x306F" "a", 3));
 
   printf("== back to C\n");
   printf("C -> %s\n", setlocale(LC_ALL, "C"));

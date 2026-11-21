@@ -1867,11 +1867,17 @@ end;
 function CWideDecodeNext(soff, slen, ei: Integer; var advBy: Integer): Integer;
 var wb0, wb1, wb2, wcp, wnb: Integer;
 begin
+  { 5- and 6-byte forms and the 7-byte $FE one too: the lexer writes an
+    escape's full wchar_t value this way (CLexAppendUtf8, clexer.inc) }
   wb0 := Ord(TokChars[soff + ei]) and 255;
   if wb0 < $80 then begin wcp := wb0; wnb := 1; end
   else if (wb0 and $E0) = $C0 then begin wcp := wb0 and $1F; wnb := 2; end
   else if (wb0 and $F0) = $E0 then begin wcp := wb0 and $0F; wnb := 3; end
-  else begin wcp := wb0 and $07; wnb := 4; end;
+  else if (wb0 and $F8) = $F0 then begin wcp := wb0 and $07; wnb := 4; end
+  else if (wb0 and $FC) = $F8 then begin wcp := wb0 and $03; wnb := 5; end
+  else if (wb0 and $FE) = $FC then begin wcp := wb0 and $01; wnb := 6; end
+  else if wb0 = $FE then begin wcp := 0; wnb := 7; end
+  else begin wcp := wb0; wnb := 1; end;
   wb1 := 1;
   while (wb1 < wnb) and (ei + wb1 < slen) do
   begin

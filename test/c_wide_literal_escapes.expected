@@ -1,0 +1,17 @@
+hex        79c1 306f 0
+hex-cat    79c1 306f 61 0
+hex-long   79c1 306fa 0
+hex-low    e9 41 0
+hex-max    10ffff 7fffffff 0
+octal      e9 41 0 7a
+ucn        e9 1f600 79c1 0
+raw        e9 79c1 1f600 0
+mixed      61 100 62 301 0
+array      79c1 306f 0
+local      79c1 e9 7a ffffffff 0
+local-sz  20
+sizeof    12 8 12
+chars     79c1 79c1 79c1 e9 e9
+narrow-u   c3 a9 e7 a7 81 00
+narrow-U   f0 9f 98 80 00
+narrow-x   e9 41 41 00

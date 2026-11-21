@@ -875,15 +875,77 @@ end;
   `#if ... (' ' == 32) && ...` charset guard hit its #error (busybox kconfig's
   zconf.hash.c) and `#if 'A'` was false. Values are the byte, 0..255, as the
   lexer has always produced them. }
-function CDecodeCharBody(const s: AnsiString; var pos: Integer; last: Integer): Int64;
-var n: Int64; ch: Char;
+{ A wide literal's text is kept as UTF-8 and decoded to wchar_t elements at
+  parse time (CWideDecodeNext, cparser.inc), so an ESCAPE in one is appended as
+  the UTF-8 form of its VALUE -- which a wchar_t limits, not a char. Values
+  past 0x7FFFFFFF take a 7-byte $FE form the decoder also reads, so a full
+  32-bit \xFFFFFFFF survives. A \u/\U universal character name goes through
+  the same encoder in narrow literals too, where gcc writes it as UTF-8.
+  bug-c-a-wide-string-literal-truncates-hex-escapes-above-ff }
+procedure CLexAppendUtf8(var s: AnsiString; v: Int64);
+var len, i: Integer; b: array[0..6] of Integer;
+begin
+  v := v and $FFFFFFFF;
+  if v < $80 then begin AppendChar(s, Chr(v)); Exit; end;
+  if v < $800 then len := 2
+  else if v < $10000 then len := 3
+  else if v < $200000 then len := 4
+  else if v < $4000000 then len := 5
+  else if v < $80000000 then len := 6
+  else len := 7;
+  for i := len - 1 downto 1 do
+  begin
+    b[i] := $80 or (v and $3F);
+    v := v shr 6;
+  end;
+  if len = 7 then b[0] := $FE
+  else b[0] := (($FF00 shr len) and $FF) or v;
+  for i := 0 to len - 1 do AppendChar(s, Chr(b[i]));
+end;
+
+{ the value of exactly `count` hex digits at s[pos+1..], pos left on the last
+  one; fewer digits than that is gcc's "incomplete universal character name",
+  an error }
+function CLexUcnValue(const s: AnsiString; var pos: Integer; last, count: Integer): Int64;
+var k: Integer; ch: Char;
+begin
+  Result := 0;
+  for k := 1 to count do
+  begin
+    if (pos + 1 > last) or not (s[pos+1] in ['0'..'9','a'..'f','A'..'F']) then
+      Error('incomplete universal character name');
+    Inc(pos);
+    ch := s[pos];
+    if ch in ['0'..'9'] then Result := Result * 16 + (Ord(ch) - 48)
+    else if ch in ['a'..'f'] then Result := Result * 16 + (Ord(ch) - 87)
+    else Result := Result * 16 + (Ord(ch) - 55);
+  end;
+end;
+
+{ `wide`: the body of an L'...' constant, whose value is a wchar_t: raw UTF-8
+  text is one character, and \x / octal escapes keep their full value. }
+function CDecodeCharBodyW(const s: AnsiString; var pos: Integer; last: Integer; wide: Boolean): Int64;
+var n: Int64; ch: Char; b0, nb, k: Integer;
 begin
   Result := 0;
   if pos > last then Exit;
   if s[pos] <> '\' then
   begin
-    Result := Ord(s[pos]);
+    b0 := Ord(s[pos]) and 255;
     Inc(pos);
+    Result := b0;
+    if wide and (b0 >= $C0) then
+    begin
+      if b0 < $E0 then begin nb := 1; Result := b0 and $1F; end
+      else if b0 < $F0 then begin nb := 2; Result := b0 and $0F; end
+      else begin nb := 3; Result := b0 and $07; end;
+      for k := 1 to nb do
+        if (pos <= last) and ((Ord(s[pos]) and $C0) = $80) then
+        begin
+          Result := (Result shl 6) or (Ord(s[pos]) and $3F);
+          Inc(pos);
+        end;
+    end;
     Exit;
   end;
   Inc(pos);
@@ -908,7 +970,7 @@ begin
         if (pos + 1 <= last) and (s[pos+1] in ['0'..'7']) then
         begin Inc(pos); n := n * 8 + (Ord(s[pos]) - 48); end;
       end;
-      Result := n and 255;
+      if wide then Result := n else Result := n and 255;
     end;
     'x': begin
       n := 0;
@@ -919,12 +981,20 @@ begin
         if ch in ['0'..'9'] then n := n*16 + (Ord(ch)-48)
         else if ch in ['a'..'f'] then n := n*16 + (Ord(ch)-87)
         else n := n*16 + (Ord(ch)-55);
+        n := n and $FFFFFFFF;
       end;
-      Result := n and 255;
+      if wide then Result := n else Result := n and 255;
     end;
+    'u': Result := CLexUcnValue(s, pos, last, 4);
+    'U': Result := CLexUcnValue(s, pos, last, 8);
     else Result := Ord(s[pos]);
   end;
   Inc(pos);
+end;
+
+function CDecodeCharBody(const s: AnsiString; var pos: Integer; last: Integer): Int64;
+begin
+  Result := CDecodeCharBodyW(s, pos, last, False);
 end;
 
 procedure CLexOne;
@@ -1099,7 +1169,7 @@ begin
                 if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
                 begin Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48); end;
               end;
-              AppendChar(s, Chr(n and 255));
+              if wide then CLexAppendUtf8(s, n) else AppendChar(s, Chr(n and 255));
             end;
             'x': begin
               { Hex escape \xNN... — SrcPos on 'x', consume hex digits; last
@@ -1113,9 +1183,12 @@ begin
                 if c in ['0'..'9'] then n := n*16 + (Ord(c)-48)
                 else if c in ['a'..'f'] then n := n*16 + (Ord(c)-87)
                 else n := n*16 + (Ord(c)-55);
+                n := n and $FFFFFFFF;
               end;
-              AppendChar(s, Chr(n and 255));
+              if wide then CLexAppendUtf8(s, n) else AppendChar(s, Chr(n and 255));
             end;
+            'u': CLexAppendUtf8(s, CLexUcnValue(Source, SrcPos, Length(Source), 4));
+            'U': CLexAppendUtf8(s, CLexUcnValue(Source, SrcPos, Length(Source), 8));
             else  AppendChar(s, Source[SrcPos]);
           end;
           Inc(SrcPos);
@@ -1136,7 +1209,7 @@ begin
   if c = '''' then
   begin
     Inc(SrcPos);
-    CurTok.IVal := CDecodeCharBody(Source, SrcPos, Length(Source));
+    CurTok.IVal := CDecodeCharBodyW(Source, SrcPos, Length(Source), wide);
     if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then Inc(SrcPos);
     CurTok.Kind := tkInteger; Exit;
   end;
