@@ -73,10 +73,10 @@ type
   PInt64 = ^Int64;
   { 8 slots. Slot 0 is the block's own address (the convention __pxxTlsBase
     reads through); slot 1 is this test's per-thread tag. }
-  { Sixteen slots, i.e. the whole TLS_BLOCK_SIZE, not just the part this test
-    writes: phase B installs one of these AS the thread's block, so a short one
-    would leave the runtime's own slots pointing past its end. }
-  TTlsBlock = array[0..15] of Int64;
+  { Seventeen slots, i.e. every fixed slot of the map, not just the part this
+    test writes: phase B installs one of these AS the thread's block, so a
+    short one would leave the runtime's own slots pointing past its end. }
+  TTlsBlock = array[0..16] of Int64;
 
 var
   Blocks: array[0..NTHREADS] of TTlsBlock;   { [NTHREADS] is the main thread's }
@@ -104,16 +104,19 @@ begin
   end;
 end;
 
-{ SLOT 15, THE LAST ONE, chosen so this test stops moving. The map in defs.inc
-  grows from the BOTTOM -- slot 0 self-pointer, 1 the --threadsafe I/O lock's
-  cached tid, 2/3 its stack bounds, 4..7 the signal dispatch stub's parked
-  fields, 8..11 the exception state -- and this test's tag has been evicted
+{ SLOT 16, THE LAST FIXED ONE, chosen so this test stops moving. It is the
+  signal stub's siginfo pointer (TLS_SLOT_SIG_INFO), written only while a
+  signal is delivered, and this test raises none. The map in defs.inc --
+  slot 0 self-pointer, 1 the --threadsafe I/O lock's cached tid, 2/3 its stack
+  bounds, 4..7 the runtime's bookkeeping, 8..11 the exception state, 12..16
+  the signal fields -- has grown under this tag before, and it was evicted
   FOUR TIMES IN ONE DAY by that growth, each time silently: a tag in slot 1
   makes every Writeln here see a bogus owner id, and one in slot 8 makes the
   unwinder walk a chain head this test invented.
   Taking the top slot instead of TLS_SLOT_FIRST_FREE means the next runtime
-  consumer does not move this file; if the map ever reaches 15, TLS_BLOCK_SIZE
-  has to grow anyway and that is the moment to look here. The zero-check below
+  consumer does not move this file. It moved once more, from 15 to 16, when
+  the 2026-11-21 renumbering put the signal group last; the next fixed slot
+  is the next moment to look here. The zero-check below
   still reads TLS_SLOT_FIRST_FREE's neighbourhood, which is the assertion that
   caught all four evictions -- it is about slots this test does NOT own. }
 function TlsSlot(n: Integer): PInt64;
@@ -160,12 +163,12 @@ begin
   if PInt64(AutoBase[idx])^ <> Int64(PtrUInt(AutoBase[idx])) then Inc(Errs[idx]);
   { the stub zeroes the block; a reused stack must not show the previous
     thread's slots. }
-  if TlsSlot(15)^ <> 0 then Inc(Errs[idx]);
+  if TlsSlot(16)^ <> 0 then Inc(Errs[idx]);
   tag := 2000 + idx;
-  TlsSlot(15)^ := tag;
+  TlsSlot(16)^ := tag;
   for k := 1 to CHURN do
-    if TlsSlot(15)^ <> tag then Inc(Errs[idx]);
-  if TlsSlot(15)^ <> tag then Inc(Errs[idx]);
+    if TlsSlot(16)^ <> tag then Inc(Errs[idx]);
+  if TlsSlot(16)^ <> tag then Inc(Errs[idx]);
 end;
 
 { Phase B: install our own block over the stub's. }
@@ -175,9 +178,9 @@ begin
   idx := Integer(PtrUInt(arg));
   InstallTls(@Blocks[idx][0]);
   tag := 1000 + idx;
-  TlsSlot(15)^ := tag;
+  TlsSlot(16)^ := tag;
   for k := 1 to CHURN do
-    if TlsSlot(15)^ <> tag then Inc(Errs[idx]);
+    if TlsSlot(16)^ <> tag then Inc(Errs[idx]);
   { the self-pointer convention itself }
   if __pxxTlsBase <> Pointer(@Blocks[idx][0]) then Inc(Errs[idx]);
 end;
@@ -193,23 +196,26 @@ begin
   mb := __pxxTlsBase;
   if mb = nil then Inc(errors);
   if PInt64(mb)^ <> Int64(PtrUInt(mb)) then Inc(errors);   { slot 0 = self }
-  { slots 12..15 zero. Slots 1..3 are the I/O lock's business, 4..7 the signal
-    stub's and 8..11 the exception runtime's, and the ENTRY CODE fills 1..3
+  { slots 4..7 zero, the runtime's bookkeeping (they were 12..15 until the
+    2026-11-21 renumbering). Slots 1..3 are the I/O lock's business, 8..11 the
+    exception runtime's, 12..16 the signal stub's, and the ENTRY CODE fills 1..3
     (tid, stack low, stack high), so asserting they are zero here is asserting
     the opposite of the contract -- which is how this loop failed the day the
     bounds landed, and it has earned its keep three more times since. }
-  { ...EXCEPT 13, which since 2026-09-24 is the init image's address
-    (TLS_SLOT_INIT_IMAGE), written by the same entry code whenever the program
-    has a thread-local user area. It is the compiler's, like 1..3. }
-  for i := 12 to 15 do
-    if (i <> 13) and (PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0) then Inc(errors);
+  { ...EXCEPT 5, which since 2026-09-24 is the init image's address
+    (TLS_SLOT_INIT_IMAGE, slot 13 before the renumbering), written by the same
+    entry code whenever the program has a thread-local user area. It is the
+    compiler's, like 1..3. }
+  for i := 4 to 7 do
+    if (i <> 5) and (PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0) then Inc(errors);
+  if PInt64(PtrUInt(mb) + PtrUInt(16 * 8))^ <> 0 then Inc(errors);   { the tag's slot }
 
   { and the manual path still works, over the top of that block }
   { Installing our own block over the entry one leaves slots 1..3 zero, so every
     Writeln below falls back to gettid instead of trusting a block whose bounds
     nobody filled. That is the fail-safe direction, and this line exercises it. }
   InstallTls(@Blocks[NTHREADS][0]);
-  TlsSlot(15)^ := 999;
+  TlsSlot(16)^ := 999;
 
   { ---- phase A: the clone stub's automatic install ---- }
   GoA := 0;
@@ -245,7 +251,7 @@ begin
     for j := 0 to NTHREADS - 1 do
       if (i <> j) and (AutoBase[i] = AutoBase[j]) then Inc(errors);
   end;
-  if TlsSlot(15)^ <> 999 then Inc(errors);   { four children later, ours is ours }
+  if TlsSlot(16)^ <> 999 then Inc(errors);   { four children later, ours is ours }
 
   { ---- phase A2: the block a RECYCLED stack hands back ---- }
   { The stub carves its block off the top of the child's stack, and that stack
@@ -292,7 +298,7 @@ begin
   for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
   for i := 0 to NTHREADS - 1 do
     if AutoBase[i] = nil then Inc(errors);
-  if TlsSlot(15)^ <> 999 then Inc(errors);   { and ours is still ours }
+  if TlsSlot(16)^ <> 999 then Inc(errors);   { and ours is still ours }
 
   { ---- phase B: a thread installing its own block over the stub's ---- }
   for i := 0 to NTHREADS - 1 do Errs[i] := 0;
@@ -306,9 +312,9 @@ begin
 
   for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
   for i := 0 to NTHREADS - 1 do
-    if Blocks[i][15] <> 1000 + i then Inc(errors);
+    if Blocks[i][16] <> 1000 + i then Inc(errors);
   { the parent's own base survived four children installing theirs }
-  if TlsSlot(15)^ <> 999 then Inc(errors);
+  if TlsSlot(16)^ <> 999 then Inc(errors);
   if __pxxTlsBase <> Pointer(@Blocks[NTHREADS][0]) then Inc(errors);
 
   Writeln('errors=', errors);

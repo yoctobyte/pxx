@@ -1115,8 +1115,8 @@ const
     owns, and a growable one would have to be negotiated through the __pxxclone
     signature.
 
-    16 SLOTS OF MAP + 64 MAGAZINE HEADS + 64 MAGAZINE COUNTS = 144 slots,
-    1152 bytes. The
+    17 SLOTS OF MAP + 64 MAGAZINE HEADS + 64 MAGAZINE COUNTS = 145 slots,
+    1160 bytes (1152 before the 2026-11-21 renumbering). The
     magazine tail is deliberately part of THIS block rather than a pointer to a
     separately allocated one, and that is what makes the allocator fast path a
     straight-line sequence: there is no null slot to test on every GetMem, no
@@ -1152,7 +1152,19 @@ const
   CLONE_RETBUF_SIZE = 256;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
-    silent wrong VALUE, not a crash. Slots 13..15 are unclaimed. }
+    silent wrong VALUE, not a crash. Every slot 0..16 is claimed.
+
+    THE LAYOUT (2026-11-21, feature-a-crtl-sigaction-cannot-honour-sa-siginfo):
+    0..3 self/tid/stack bounds, 4..7 the runtime's bookkeeping (magazine
+    guard, init image, i386 fs entry, owner fs), 8..11 the exception state,
+    12..16 the FIVE signal fields, LAST among the fixed slots, then the heap
+    magazine from 17. The signal group gained its fifth field (the siginfo
+    pointer) then, and a group that is addressed as base + offset can only
+    grow at its end, so it moved to the end of the map; the four bookkeeping
+    slots took its old place. Nothing outside this file may spell a slot
+    number -- the BSD translators' literal 14 and 13 were replaced by
+    __pxxTlsFsEntrySlotOff / __pxxTlsInitImageSlotOff before the move, for
+    exactly this reason. }
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   { The I/O lock's cached owner tid, plus the STACK BOUNDS that say whether this
     block is REALLY the reading thread's. Both halves are needed and neither is
@@ -1200,10 +1212,15 @@ const
     every single delivery, agree with itself, and quietly restore the
     process-wide behaviour it was added to fix. The writer and the reader here
     are the same thread with the same base, so they always agree without one. }
-  TLS_SLOT_SIG_CODE = 4;
-  TLS_SLOT_SIG_ADDR = 5;
-  TLS_SLOT_SIG_CTX  = 6;
-  TLS_SLOT_SIG_NUM  = 7;
+  { ...and the FIFTH, the kernel's siginfo_t pointer itself, so a C handler
+    installed with SA_SIGINFO gets (sig, info, ctx) -- it reads si_status and
+    si_pid, which no parked field carries. Valid only while the handler runs:
+    it points into the kernel's signal frame. }
+  TLS_SLOT_SIG_CODE = 12;
+  TLS_SLOT_SIG_ADDR = 13;
+  TLS_SLOT_SIG_CTX  = 14;
+  TLS_SLOT_SIG_NUM  = 15;
+  TLS_SLOT_SIG_INFO = 16;
   { The EXCEPTION state of the current execution context. TLS_SLOT_EXC_TOP is
     the head of the setjmp shadow chain the unwinder walks; the other three are
     the object, its class index and the raise site.
@@ -1273,7 +1290,7 @@ const
     A handler that never RETURNS from inside the fast path (an exception raised
     in a handler, unwinding past it) strands this set, which costs that thread
     its fast path for the rest of its life and costs correctness nothing. }
-  TLS_SLOT_HEAP_MAGBUSY = 12;
+  TLS_SLOT_HEAP_MAGBUSY = 4;
   { The address of the thread-local INIT IMAGE, or 0 when no thread-local has an
     initialiser. A C `__thread int x = 5;` is initialised by a store in main's
     prologue, which reaches only the MAIN thread's block. So each such store also
@@ -1282,7 +1299,7 @@ const
     palthread's PxxPthreadStart. The image of a variable with no initialiser is
     0, so the copy also gives the zero start that the language requires.
     bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
-  TLS_SLOT_INIT_IMAGE = 13;
+  TLS_SLOT_INIT_IMAGE = 5;
   { i386 ONLY: the GDT TLS entry number set_thread_area gave the main thread's
     block, which `fs` selects ((entry shl 3) or 3). Every thread shares the
     entry NUMBER and gets its own descriptor for it (the kernel keeps the TLS
@@ -1290,7 +1307,7 @@ const
     own block. The clone leg reads the number from `fs` itself; palthread's
     PxxPthreadStart cannot read a segment register and reads it here
     (__pxxTlsFsEntrySlotOff). 0 on every other target. }
-  TLS_SLOT_FS_ENTRY = 14;
+  TLS_SLOT_FS_ENTRY = 6;
   { x86-64 ONLY: the libc thread pointer (fs base, which glibc and musl also
     keep at fs:[0]) of the thread this block belongs to, or 0 when the program
     has no libc thread pointer (a static binary: fs base 0) or the block was
@@ -1302,8 +1319,8 @@ const
     `try` entry compares the two and adopts a fresh block on a mismatch
     (ExcAdoptAddr). Written by EmitTlsMainInstall and palthread's
     PxxPthreadStart, through __pxxTlsOwnerFsSlotOff. }
-  TLS_SLOT_OWNER_FS = 15;
-  TLS_SLOT_FIRST_FREE = 16;   { = TLS_SLOT_HEAP_MAG: the map has no free slot left }
+  TLS_SLOT_OWNER_FS = 7;
+  TLS_SLOT_FIRST_FREE = 17;   { = TLS_SLOT_HEAP_MAG: the map has no free slot left }
   { ---- the per-thread heap magazine -------------------------------------
     A short free LIST per size class, held thread-locally so that a GetMem or
     FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds
@@ -1344,7 +1361,7 @@ const
   HEAP_MAG_MAX      = 512;                { largest cached size, = HEAP_BIN_MAX }
   HEAP_MAG_BINS     = HEAP_MAG_MAX div 8; { 64 classes: 8, 16, ..., 512 }
   HEAP_MAG_DEPTH    = 8;                  { blocks per class; see the retention bound above }
-  TLS_SLOT_HEAP_MAG  = 16;                          { 64 list heads }
+  TLS_SLOT_HEAP_MAG  = TLS_SLOT_FIRST_FREE;        { 64 list heads }
   TLS_SLOT_HEAP_MAGN = TLS_SLOT_HEAP_MAG + HEAP_MAG_BINS;   { 64 counts }
   HEAP_MAG_BUSYOFF  = TLS_SLOT_HEAP_MAGBUSY * 8;    { from the TLS BASE, not size-relative }
   HEAP_MAG_HDISP    = TLS_SLOT_HEAP_MAG * 8 - 8;    { head  offset = rounded size + this }
@@ -1352,7 +1369,7 @@ const
 
   { ---- the source-declared `threadvar` area, and the block size it makes ----
 
-    Everything above this offset is the compiler's own map: the 16 named slots,
+    Everything above this offset is the compiler's own map: the 17 named slots,
     then 64 magazine heads and 64 counts. A `threadvar` gets storage PAST all of
     it, so no existing offset moves and the map stays exactly the ABI it was.
     Its address is `__pxxTlsBase + TLS_USER_FIRST_OFF + <its own offset>`, which
@@ -1393,7 +1410,7 @@ const
     lib/rtl/palthread.pas states the carve in prose and reads the real number
     through __pxxTlsBlockSize, so it follows the knob without being edited.
     feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
-  TLS_USER_FIRST_OFF = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8;   { 1152 today }
+  TLS_USER_FIRST_OFF = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8;   { 1160 since the 2026-11-21 renumbering }
   TLS_USER_BYTES_DEFAULT = 3072;
   { who holds an inline-asm register in CAsmBuildBlock's used[] table. A plain
     Boolean could not tell a legal output/input tie from two inputs colliding. }
@@ -7886,6 +7903,7 @@ var
   ThreadVarRewriteHigh: Integer; { how far into the PERMANENT AST region (below ASTArenaFloor) ThreadVarRewriteRange has swept. Never a high-water mark of ASTNodeCount: the arena is rolled back per statement and node indices are REUSED -- see the routine, which records the one-statement bug that came of assuming otherwise }
   ParsingThreadVar: Boolean;     { ParseVarSection is running for a `threadvar` section, not a `var` one }
   BSS_SIG_NUM     : Integer;
+  BSS_SIG_INFO    : Integer;   { the kernel's siginfo_t pointer, parked by the dispatch stub; read by __pxxSigInfo (SA_SIGINFO C handlers) }
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;

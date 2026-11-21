@@ -11,9 +11,12 @@
  * first signal it had written a handler for, far from the call that reported
  * success (bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing).
  *
- * WHAT IS STILL NOT HONOURED IS REFUSED, NOT IGNORED: SA_SIGINFO (the pxx hook
- * ABI is one-argument, so a three-argument handler would be called with the
- * wrong arguments) and sa_mask (no per-handler mask is installed). sigaltstack
+ * SA_SIGINFO IS HONOURED: the dispatch stub parks the kernel's siginfo_t and
+ * ucontext_t pointers, and the runtime's C trampoline calls such a handler as
+ * h(sig, info, ctx) (feature-a-crtl-sigaction-cannot-honour-sa-siginfo; it
+ * was refused with EINVAL until the thread block had a slot for the
+ * pointer). WHAT IS STILL NOT HONOURED IS REFUSED, NOT IGNORED: sa_mask (no
+ * per-handler mask is installed). sigaltstack
  * is still a stub. Each says so at its own definition.
  */
 
@@ -28,6 +31,7 @@ extern int __pxx_kill(int pid, int sig);
 extern int __pxx_sigprocmask(int how, void *set, void *oldset, int setSize);
 extern int __pxx_sigtimedwait(void *set, int setSize, int sec, int nsec);
 extern int __pxx_c_signal(int sig, void *handler);
+extern int __pxx_c_sigaction(int sig, void *handler, int siginfo);
 extern int __pxx_getpid(void);
 
 /* 65, not 64: the array is indexed BY SIGNAL NUMBER, so slot 64 must exist and
@@ -72,6 +76,7 @@ int sigismember(const sigset_t *set, int sig) {
    here rather than widening the bridge keeps the Pascal side to "install this"
    and leaves the C contract in the C file. */
 static __sighandler_t __pxx_prev[__PXX_NSIG];
+static unsigned char __pxx_prev_info[__PXX_NSIG];   /* installed with SA_SIGINFO */
 
 __sighandler_t signal(int sig, __sighandler_t func) {
   __sighandler_t prev;
@@ -81,6 +86,7 @@ __sighandler_t signal(int sig, __sighandler_t func) {
   rc = __pxx_c_signal(sig, (void *)func);
   if (rc < 0) { errno = -rc; return SIG_ERR; }
   __pxx_prev[sig] = func;
+  __pxx_prev_info[sig] = 0;
   return prev;
 }
 
@@ -158,20 +164,19 @@ int sigwait(const sigset_t *set, int *sig) {
   return 0;
 }
 
-/* sigaction(2). REFUSES what it cannot honour instead of accepting it:
+/* sigaction(2).
 
-   SA_SIGINFO asks for a three-argument handler and the pxx hook ABI passes one
-   argument, so accepting it would call the caller's function with two garbage
-   arguments -- a plausible wrong value in signal context, which is the worst
-   place to put one. EINVAL is the honest answer and the caller can fall back to
-   sa_handler, which is what portable code already does.
+   SA_SIGINFO: the handler is called as h(sig, info, ctx) with the kernel's own
+   siginfo_t and ucontext_t, which the dispatch stub parks. It was refused with
+   EINVAL until the thread block had a slot for the siginfo pointer: calling a
+   three-argument handler with one argument hands it two garbage pointers.
 
    sa_mask is NOT installed: no signals are blocked for the duration of the
    handler. That is a real divergence from POSIX and it is recorded rather than
    hidden -- a non-empty sa_mask does not refuse, because refusing would reject
    the majority of real callers (busybox fills sa_mask routinely) over a
    property most of them do not depend on. sa_flags bits other than SA_SIGINFO
-   (SA_RESTART, SA_NOCLDSTOP, ...) are likewise accepted and not acted on; the
+   (SA_RESTART, SA_NOCLDSTOP, ...) are accepted and not acted on; the
    underlying install is SA_RESTART-shaped already. */
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
   __sighandler_t prev;
@@ -179,17 +184,16 @@ int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
   if (sig < 1 || sig >= __PXX_NSIG) { errno = EINVAL; return -1; }
   prev = __pxx_prev[sig];
   if (oact) {
-    oact->sa_handler = prev;
-    oact->sa_sigaction = 0;
+    oact->sa_handler = prev;          /* sa_sigaction is the same storage */
     sigemptyset(&oact->sa_mask);
-    oact->sa_flags = 0;
+    oact->sa_flags = __pxx_prev_info[sig] ? SA_SIGINFO : 0;
     oact->sa_restorer = 0;
   }
   if (!act) return 0;                 /* query-only, and oact is already filled */
-  if (act->sa_flags & SA_SIGINFO) { errno = EINVAL; return -1; }
-  rc = __pxx_c_signal(sig, (void *)act->sa_handler);
+  rc = __pxx_c_sigaction(sig, (void *)act->sa_handler, (act->sa_flags & SA_SIGINFO) != 0);
   if (rc < 0) { errno = -rc; return -1; }
   __pxx_prev[sig] = act->sa_handler;
+  __pxx_prev_info[sig] = (act->sa_flags & SA_SIGINFO) != 0;
   return 0;
 }
 

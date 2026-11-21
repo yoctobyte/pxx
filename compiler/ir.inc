@@ -8690,6 +8690,7 @@ begin
   else if IRC[n] = 3 then Result := BSS_SIG_ADDR
   else if IRC[n] = 4 then Result := BSS_SIG_CTX
   else if IRC[n] = 5 then Result := BSS_SIG_NUM
+  else if IRC[n] = 7 then Result := BSS_SIG_INFO     { __pxxSigInfo }
   else Result := BSS_EXC_OBJ;
 end;
 
@@ -14001,6 +14002,8 @@ begin
         IRAppend(IR_EXC_STORE, eaSym, -1, 4, 0, 0)      { the ucontext pointer }
       else if ASTIVal[node] = 4 then
         IRAppend(IR_EXC_STORE, eaSym, -1, 5, 0, 0)      { __pxxSigNum }
+      else if ASTIVal[node] = 6 then
+        IRAppend(IR_EXC_STORE, eaSym, -1, 7, 0, 0)      { __pxxSigInfo (IRC 6 is BSS_EXC_CLS) }
       else
         IRAppend(IR_EXC_STORE, eaSym, -1, ASTIVal[node] + 2, 0, 0);
       Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, ASTTk[node]);

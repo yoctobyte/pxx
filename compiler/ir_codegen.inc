@@ -127,16 +127,16 @@ procedure EmitAcquireHeapLock;
   recording, since the first reading sends you looking for an accessor that is
   already here.
 
-  Slot budget, RE-READ from defs.inc rather than carried forward: 0..14 are
-  taken (the magazine's own busy flag is 12, the init image 13, i386's fs
-  entry 14) and TLS_SLOT_FIRST_FREE = 15, so ONE map slot is free. The magazine did not
-  need them -- it took
-  a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and the block grew to
-  1152 to hold it, which is stack the thread already owns. Both numbers in
+  Slot budget: read it from defs.inc (the TLS_SLOT_* map), not from here. At
+  the 2026-11-21 renumbering every slot 0..16 was taken and the magazine's
+  64-slot TAIL starts at TLS_SLOT_HEAP_MAG = TLS_SLOT_FIRST_FREE = 17, which
+  made the map 1160 bytes (it was 1152 with 16 named slots) -- stack the
+  thread already owns. Both numbers in
   this paragraph were one lower when it was written; a slot count in prose is a
   census with an owner elsewhere, and it goes stale the next time someone takes
-  a slot -- as 1152 did: TlsBlockSize is now that map PLUS TlsUserBytes of
-  `threadvar` storage, and the map's own extent is what the 1152 above names.
+  a slot -- as 1152 did, and then 1160: TlsBlockSize is that map PLUS
+  TlsUserBytes of `threadvar` storage, and the map's own extent is
+  TLS_USER_FIRST_OFF.
 
   THE REAL CONSTRAINT IS THE TARGET SET. Since 2026-09-24 aarch64 and arm32
   install a block too (TargetHasTlsBlock), but ONLY IN A STATIC BINARY: their
@@ -1167,6 +1167,7 @@ begin
     'mov eax, edi',                                   { the signal number... }
     'mov [r8+%], rax', BSS_SIG_NUM - BSS_SIG_CODE,    { ...zero-extended; valid for every }
     'mov [r8+%], rdx', BSS_SIG_CTX - BSS_SIG_CODE,    { signal, unlike si_code/si_addr }
+    'mov [r8+%], rsi', BSS_SIG_INFO - BSS_SIG_CODE,   { siginfo_t* itself, for SA_SIGINFO C handlers }
     'test rsi, rsi',
     'jz .nosi',
     'mov eax, [rsi+8]',                               { si_code (32-bit, zero-extended) }
@@ -1441,16 +1442,27 @@ begin
     "x86-64 is still its only target" is a fact with an expiry date, and the
     comment saying so was true when written and wrong by the time it mattered. }
   BSS_SIG_NUM     := BSSSize; Inc(BSSSize, 8);
-  { THE FOUR MUST STAY CONTIGUOUS, IN THIS ORDER. Every writer and reader
-    addresses them as a group base plus (BSS_SIG_x - BSS_SIG_CODE), so that one
-    offset expression is correct whether the base is this group or the matching
-    TLS slots (TLS_SLOT_SIG_CODE..._NUM). Insert an allocation between them and
-    the offsets silently address the wrong field -- no error, a wrong VALUE, in
-    a handler. Cheap to assert, so asserted. }
+  { The kernel's siginfo_t pointer, for a C handler installed with SA_SIGINFO
+    (crtl's sigaction): it reads si_status and si_pid, which no field above
+    carries. feature-a-crtl-sigaction-cannot-honour-sa-siginfo }
+  BSS_SIG_INFO    := BSSSize; Inc(BSSSize, 8);
+  { THE FIVE MUST STAY CONTIGUOUS, IN THIS ORDER, AND THE TLS FIVE WITH THEM.
+    Every writer and reader addresses them as a group base plus (BSS_SIG_x -
+    BSS_SIG_CODE), so that one offset expression is correct whether the base
+    is this group or the matching TLS slots (TLS_SLOT_SIG_CODE..._INFO).
+    Insert an allocation between them, or move one TLS slot and not the
+    others, and the offsets silently address the wrong field -- no error, a
+    wrong VALUE, in a handler. Cheap to assert, so asserted -- both halves:
+    the TLS half went unchecked until the 2026-11-21 renumbering. }
   if (BSS_SIG_ADDR - BSS_SIG_CODE <> 8) or (BSS_SIG_CTX - BSS_SIG_CODE <> 16) or
-     (BSS_SIG_NUM - BSS_SIG_CODE <> 24) then
-    Error('compiler error: the four parked signal fields must be allocated ' +
-          'contiguously as CODE, ADDR, CTX, NUM -- see TLS_SLOT_SIG_CODE');
+     (BSS_SIG_NUM - BSS_SIG_CODE <> 24) or (BSS_SIG_INFO - BSS_SIG_CODE <> 32) or
+     (8 * (TLS_SLOT_SIG_ADDR - TLS_SLOT_SIG_CODE) <> BSS_SIG_ADDR - BSS_SIG_CODE) or
+     (8 * (TLS_SLOT_SIG_CTX - TLS_SLOT_SIG_CODE) <> BSS_SIG_CTX - BSS_SIG_CODE) or
+     (8 * (TLS_SLOT_SIG_NUM - TLS_SLOT_SIG_CODE) <> BSS_SIG_NUM - BSS_SIG_CODE) or
+     (8 * (TLS_SLOT_SIG_INFO - TLS_SLOT_SIG_CODE) <> BSS_SIG_INFO - BSS_SIG_CODE) then
+    Error('compiler error: the five parked signal fields must be allocated ' +
+          'contiguously as CODE, ADDR, CTX, NUM, INFO, in BSS and in the TLS ' +
+          'slot map alike -- see TLS_SLOT_SIG_CODE');
   { The signal ALT STACK and its stack_t descriptor. Allocated HERE, for every
     target, rather than inside x86-64's EmitSignalRuntime where they used to
     live — which is the exact bug the rest of this function exists to prevent:

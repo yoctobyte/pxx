@@ -165,13 +165,22 @@ typedef struct {
 #define SS_ONSTACK 1
 #define SS_DISABLE 2
 
+/* sa_handler and sa_sigaction SHARE STORAGE, as in glibc and the kernel's
+   own struct: a program may set either name and pass SA_SIGINFO (toybox's
+   xsignal_flags sets sa_handler), and the flag alone says which shape the
+   function has. */
 struct sigaction {
-  void (*sa_handler)(int);
-  void (*sa_sigaction)(int, siginfo_t *, void *);
+  union {
+    void (*__sa_handler)(int);
+    void (*__sa_sigaction)(int, siginfo_t *, void *);
+  } __sigaction_handler;
   sigset_t sa_mask;
   int sa_flags;
   void (*sa_restorer)(void);
 };
+
+#define sa_handler   __sigaction_handler.__sa_handler
+#define sa_sigaction __sigaction_handler.__sa_sigaction
 
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);

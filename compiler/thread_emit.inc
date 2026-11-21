@@ -107,7 +107,7 @@ begin
     begin
       fbChild := CodeLen;
       { ctidptr, parked at stage-8 by the parent, moves into the child's own
-        TLS block before anything is pushed over it: slot 14 is i386's
+        TLS block before anything is pushed over it: TLS_SLOT_FS_ENTRY is i386's
         TLS_SLOT_FS_ENTRY and never written on x86-64 (the block is zeroed). }
       EmitAsmX64([
         'mov rsp, rdi',
@@ -203,7 +203,7 @@ begin
         [stack_base, stack_base+size) with a fake return slot at the top, so
         the top is put 16 below the stage area: the slot lands below stage-16
         and stage-8 carries ctidptr to the child's entry, which moves it into
-        TLS slot 14 for the exit path. The new tid is
+        TLS_SLOT_FS_ENTRY for the exit path. The new tid is
         written to a scratch long on THIS stack (thr_new stores longs; the
         caller's word is an int), then stored as CLONE_PARENT_SETTID would --
         after the child may already be running, which the exit path allows
@@ -403,7 +403,7 @@ begin
     if TargetKernel = KERNEL_FREEBSD then
       { CLONE_CHILD_CLEARTID by hand: zero the tid word and wake its waiters
         (both umtx queues -- a joiner may wait shared or private), then
-        thr_exit. ctidptr is in this thread's TLS slot 14 (put there by the
+        thr_exit. ctidptr is in this thread's TLS_SLOT_FS_ENTRY (put there by the
         thr_new entry). The word is cleared only once the PARENT has stored
         the tid (it does so after thr_new returns, and this child may get
         here first), or the store would resurrect a dead thread for its
@@ -622,7 +622,7 @@ begin
     { --os=freebsd: thr_new's entry, as on x86-64. The kernel starts the
       thread at a function with x0 = its arg (the stage area) and its own sp;
       this makes it the clone child: sp = the stage, ctidptr (parked at
-      stage-8 by the parent) into the new block's slot 14 for the exit path,
+      stage-8 by the parent) into the new block's TLS_SLOT_FS_ENTRY for the exit path,
       then the shared child code. thr_new copies the parent's tpidr_el0, so
       that code's "running on a pxx block" test reads the same as after
       clone. feature-port-freebsd-native }
@@ -843,7 +843,7 @@ begin
     EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
     EmitI32($D2800BA8);                 { mov  x8, #93            (SYS_exit) }
     { thread exits here; under --os=freebsd through the translator, whose exit
-      clears and wakes the tid word from slot 14 }
+      clears and wakes the tid word from TLS_SLOT_FS_ENTRY }
     EmitSvcA64;
     { ---- .parent: x0 = child tid ---- }
     if pParent >= 0 then

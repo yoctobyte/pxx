@@ -30,6 +30,7 @@ begin
     if bssSlot = BSS_SIG_ADDR then begin StatusSlotTlsIndex := TLS_SLOT_SIG_ADDR; Exit; end;
     if bssSlot = BSS_SIG_CTX  then begin StatusSlotTlsIndex := TLS_SLOT_SIG_CTX;  Exit; end;
     if bssSlot = BSS_SIG_NUM  then begin StatusSlotTlsIndex := TLS_SLOT_SIG_NUM;  Exit; end;
+    if bssSlot = BSS_SIG_INFO then begin StatusSlotTlsIndex := TLS_SLOT_SIG_INFO; Exit; end;
   end;
   if ExceptionUsed then
   begin

@@ -425,6 +425,8 @@ begin
   EmitMovGlobAcc($A3, BSS_SIG_NUM);           { mov [num], eax }
   EmitAsm386('mov eax, [ebp+16]');  { ucontext* }
   EmitMovGlobAcc($A3, BSS_SIG_CTX);           { mov [ctx], eax }
+  EmitAsm386('mov eax, [ebp+12]');  { siginfo*, for SA_SIGINFO C handlers }
+  EmitMovGlobAcc($A3, BSS_SIG_INFO);          { mov [info], eax }
   EmitAsm386([
     'mov eax, [ebp+12]',               { siginfo* }
     'test eax, eax'

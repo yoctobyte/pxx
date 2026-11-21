@@ -2,7 +2,7 @@ program test_a_unit_free_program_pays_no_threadvar_area;
 { A Pascal program that names neither the per-thread storage keyword nor an
   import clause cannot reach the per-thread allocator, so it is given none of
   that area — with no flag. __pxxTlsBlockSize is then the compiler-owned slot
-  map alone: 1152 = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8, which is
+  map alone: 1160 = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8, which is
   TLS_USER_FIRST_OFF.
 
   READ THE PROSE ABOVE BEFORE EDITING IT. This comment deliberately does not

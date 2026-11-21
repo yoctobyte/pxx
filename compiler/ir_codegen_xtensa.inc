@@ -6447,6 +6447,8 @@ begin
 
   EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_CTX);
   xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 0);     { ucontext* for __pxxSigContext }
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_INFO);
+  xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 0);      { siginfo*, for SA_SIGINFO C handlers }
 
   { siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }. The union is
     pointer-aligned, so on ILP32 the preamble is NOT padded and si_addr sits at

@@ -3,13 +3,13 @@ slug: feature-a-crtl-sigaction-cannot-honour-sa-siginfo-because-the-thread-block
 track: A
 prio: 45
 type: feature
-status: backlog
+status: done
 owner: ""
 created: 2026-11-21
 found-by: claude-pxx (toybox suite, timeout rows)
 tags: [crtl, signals, tls, toybox]
 blocked-by: []
-summary: "OWNER 2026-11-21: go ahead (renumber the thread block, option 1, after the literal-offset census); targets with no signal runtime (ESP, Windows) should not pay for the slot if that can be done smartly -- not a hard requirement for 16 bytes. crtl's sigaction refuses SA_SIGINFO with EINVAL, by design: the hook into pxx's signal runtime is one-argument. toybox `timeout` installs its SIGCHLD handler with SA_SIGINFO and reads si_status/si_code, so all 14 of its suite rows fail (`xsignal 17: Invalid argument`, exit 125); toybox sh uses it too. The emitted dispatch stub already HAS the kernel's siginfo pointer (it reads si_code and si_addr out of it into the parked slots) -- what is missing is one more parked slot to carry the pointer to the C hook. The per-thread block has none free: slots 0-15 are packed and the heap lists start at 16, and the signal four must stay contiguous. So the fix is a thread-block layout change, not a crtl change."
+summary: "DONE 2026-11-21: signal group moved last in the TLS map (12..16, SIG_INFO added), every hosted stub parks the siginfo pointer, crtl sigaction honours SA_SIGINFO; test c_sasi26*. Smaller fixed area for signal-less targets left as a follow-up. OWNER 2026-11-21: go ahead (renumber the thread block, option 1, after the literal-offset census); targets with no signal runtime (ESP, Windows) should not pay for the slot if that can be done smartly -- not a hard requirement for 16 bytes. crtl's sigaction refuses SA_SIGINFO with EINVAL, by design: the hook into pxx's signal runtime is one-argument. toybox `timeout` installs its SIGCHLD handler with SA_SIGINFO and reads si_status/si_code, so all 14 of its suite rows fail (`xsignal 17: Invalid argument`, exit 125); toybox sh uses it too. The emitted dispatch stub already HAS the kernel's siginfo pointer (it reads si_code and si_addr out of it into the parked slots) -- what is missing is one more parked slot to carry the pointer to the C hook. The per-thread block has none free: slots 0-15 are packed and the heap lists start at 16, and the signal four must stay contiguous. So the fix is a thread-block layout change, not a crtl change."
 ---
 
 # crtl's sigaction cannot honour SA_SIGINFO
@@ -97,3 +97,46 @@ target has no signal runtime (TargetHasSignalRuntime false), the signal group
 should cost nothing if the layout can allow it -- for instance by putting the
 signal group LAST among the fixed slots, so a target without signals can end
 the fixed area before it. Not a blocker if it cannot.
+
+## Done, 2026-11-21
+
+Option 1, as decided. In two steps:
+
+1. **Census, then the BSD translators.** The only code outside `defs.inc`
+   that spelled slot numbers was the BSD ABI translators (`nbsdabi`, `dfbsdabi`,
+   `obsdabi`, `fbsdabi`: literal 14 for the fs-entry / ctid slot, 13 for the
+   init image). They now use `__pxxTlsFsEntrySlotOff` and
+   `__pxxTlsInitImageSlotOff`, which fold to constants. The freestanding start
+   file touches slots 0..3 only, which did not move.
+2. **The renumbering.** 0..3 unchanged; 4..7 `HEAP_MAGBUSY`, `INIT_IMAGE`,
+   `FS_ENTRY`, `OWNER_FS`; 8..11 the exception state; **12..16 the signal
+   group, now five fields with `SIG_INFO` last**; the heap magazine from
+   `TLS_SLOT_FIRST_FREE` = 17, derived instead of written twice. The map is
+   1160 bytes (was 1152), so every threadvar block grows by 8.
+   `EnsureSignalBss` allocates `BSS_SIG_INFO` after `BSS_SIG_NUM`, and its
+   assertion now also checks the TLS half of the group. Before, nothing
+   checked that the TLS slots stay in step with the BSS deltas.
+
+Every hosted dispatch stub (x86-64, i386, arm32, aarch64, riscv32, xtensa)
+parks the siginfo pointer. `__pxxSigInfo` reads it. `CSigTrampoline` calls a
+handler installed with SA_SIGINFO as `h(sig, info, ctx)`. crtl's `sigaction`
+accepts the flag and records it per signal. The query form reports it back.
+`sa_handler` and `sa_sigaction` are now a union, as in glibc, because toybox
+sets `sa_handler` together with SA_SIGINFO.
+
+Test: `test/c_crtl_sigaction_siginfo.c` (rows `c_sasi26*` in test-core). It
+checks a SIGCHLD SA_SIGINFO handler against gcc+glibc for a child that exits 3
+(CLD_EXITED/3) and one killed by SIGKILL (CLD_KILLED/9), plus si_pid, a
+non-null ctx, the query form, and a plain one-argument handler beside it. It
+was run directly, under `--threadsafe`, and on i386, arm32, aarch64, riscv32
+and xtensa call0. Windowed xtensa does not compile crtl headers at all; that
+was already true with the pin, so it is a separate issue.
+
+**Not done, the owner's "if we can do that smart":** with the signal group
+last, a target without a signal runtime could end its fixed area at slot 12
+and save 40 bytes per thread. It needs `TLS_SLOT_HEAP_MAG` to become a
+per-target value instead of a constant. ESP already pays nothing: xtensa and
+riscv32 install no thread block at all (TargetHasTlsBlock). The saving would
+only come on an x86-64, i386, arm32 or aarch64 platform without a signal
+runtime, such as Windows. This is a follow-up for whenever such a platform
+counts those bytes.

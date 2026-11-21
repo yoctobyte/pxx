@@ -315,6 +315,8 @@ begin
   EmitI32($F900012A);   { str  x10, [x9] }
   EmitLoadGlobAddrA64(9, BSS_SIG_CTX);
   EmitI32($F9000122);   { str  x2, [x9]        ucontext* }
+  EmitLoadGlobAddrA64(9, BSS_SIG_INFO);
+  EmitI32($F9000121);   { str  x1, [x9]        siginfo*, for SA_SIGINFO C handlers }
   cbzAt := CodeLen;
   EmitI32($B4000001);   { cbz  x1, .nosi       (patched) }
   EmitI32($B980082A);   { ldrsw x10, [x1, #8]  si_code, sign-extended }

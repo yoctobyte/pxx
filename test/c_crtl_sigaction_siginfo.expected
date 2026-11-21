@@ -1,0 +1,5 @@
+install: 0
+query: siginfo=1 same=1
+exit: got=1 sig=17 code=1 status=3 pid_ok=1 ctx=1
+kill: got=1 sig=17 code=2 status=9 pid_ok=1 ctx=1
+plain: 10

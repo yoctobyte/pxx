@@ -138,6 +138,8 @@ begin
   rv32_sw(reg_a0, reg_t1, 0);
   EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_CTX);
   rv32_sw(reg_a2, reg_t1, 0);
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_INFO);
+  rv32_sw(reg_a1, reg_t1, 0);                     { siginfo*, for SA_SIGINFO C handlers }
   bNoSi := CodeLen; rv32_beq(reg_a1, reg_zero, 0);  { -> .nosi (patched) }
   rv32_lw(reg_t0, reg_a1, 8);                     { si_code }
   rv32_lw(reg_t2, reg_a1, 12);                    { si_addr (ILP32 offset) }

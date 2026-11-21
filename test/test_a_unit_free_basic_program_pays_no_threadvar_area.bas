@@ -1,6 +1,6 @@
 10 REM feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar
 20 REM A .bas that pulls no unit gets a ZERO-byte per-thread variable area with
-30 REM no flag, so __pxxTlsBlockSize is TLS_USER_FIRST_OFF (1152) and not 4224.
+30 REM no flag, so __pxxTlsBlockSize is TLS_USER_FIRST_OFF (1160) and not 4224.
 40 REM Unit-free BASIC: bss 37,632 -> 34,560, a flat -3,072. Added 2026-09-22.
 50 REM
 60 REM THIS FILE MUST NEVER CONTAIN THE WORD THAT TURNS THE ARM OFF, not even

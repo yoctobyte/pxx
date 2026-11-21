@@ -9528,7 +9528,7 @@ test-threads: $(COMPILER)
 	# source with no compiler rebuild, and the LAST-declared name (the one past
 	# the default cap) reads back, so a knob that moved the diagnostic without
 	# moving the storage fails here.
-	# `block=` pins the derivation: TLS_USER_FIRST_OFF + the rung, 1152 + 4096.
+	# `block=` pins the derivation: TLS_USER_FIRST_OFF + the rung, 1160 + 4096.
 	# Measured 2026-09-18: the fold is sound because the size is a compile-time
 	# CONSTANT, not because it is 3072 -- at 0 bytes test_atomic_counter still
 	# prints 800000/800000 over four threads. What is forbidden is a size that
@@ -9538,18 +9538,18 @@ test-threads: $(COMPILER)
 	  | grep -q 'the per-thread variable area is full (3072 bytes)' \
 	  || { echo 'test_the_threadvar_area_is_a_command_line_knob: FAIL - the default cap did not refuse 3080 bytes of threadvar'; exit 1; }
 	./$(COMPILER) --threadsafe -dPXX_TLS_USER_4K test/test_the_threadvar_area_is_a_command_line_knob.pas $(TESTTMP)/test_tlsknob26
-	tools/expect_same.sh test_tlsknob26 "$$($(TESTTMP)/test_tlsknob26)" "$$(printf 'first=11\nlast=31\nblock=5248')"
+	tools/expect_same.sh test_tlsknob26 "$$($(TESTTMP)/test_tlsknob26)" "$$(printf 'first=11\nlast=31\nblock=5256')"
 	# ...and ROUTE A, the half that needs no flag: a program naming neither the
 	# per-thread keyword nor an import clause cannot reach the allocator, so it
-	# is given none of the area. 1152 is TLS_USER_FIRST_OFF, the slot map alone.
-	# PINNED CONTROL: the pinned compiler prints 4224 for this same file.
+	# is given none of the area. 1160 is TLS_USER_FIRST_OFF, the slot map alone.
+	# PINNED CONTROL: the pinned compiler prints 4232 for this same file.
 	# THIS IS ALSO THE GUARD ON WHAT THE PRESCAN RESTS ON. An import-free program
 	# still pulls builtinheap/softfloat/builtin ambiently, so the scan is correct
 	# only while no unit under lib/ or compiler/builtin/ declares per-thread
 	# storage — counted 2026-09-19, none does. Add one and this row goes RED with
 	# the cap's diagnostic rather than a wrong size shipping quietly.
 	./$(COMPILER) test/test_a_unit_free_program_pays_no_threadvar_area.pas $(TESTTMP)/test_tlsnone26
-	tools/expect_same.sh test_tlsnone26 "$$($(TESTTMP)/test_tlsnone26)" "block=1152"
+	tools/expect_same.sh test_tlsnone26 "$$($(TESTTMP)/test_tlsnone26)" "block=1160"
 	# ...and BOTH directions of the scan, which is the half that protects
 	# acceptance. An import clause keeps the full area even though the main
 	# source declares nothing — a used unit's declaration is not in these tokens,
@@ -9559,10 +9559,10 @@ test-threads: $(COMPILER)
 	# and a fixture explaining itself in prose would trip it (see that file).
 	@printf 'program tlsusesarea;\nuses sysutils;\nbegin writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsusesarea.pas
 	./$(COMPILER) $(TESTTMP)/tlsusesarea.pas $(TESTTMP)/tlsusesarea
-	tools/expect_same.sh tlsusesarea "$$($(TESTTMP)/tlsusesarea)" "4224"
+	tools/expect_same.sh tlsusesarea "$$($(TESTTMP)/tlsusesarea)" "4232"
 	@printf 'program tlsdeclarea;\nthreadvar t: LongInt;\nbegin t := 1; writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsdeclarea.pas
 	./$(COMPILER) $(TESTTMP)/tlsdeclarea.pas $(TESTTMP)/tlsdeclarea
-	tools/expect_same.sh tlsdeclarea "$$($(TESTTMP)/tlsdeclarea)" "4224"
+	tools/expect_same.sh tlsdeclarea "$$($(TESTTMP)/tlsdeclarea)" "4232"
 	# THE BASIC ARM, added 2026-09-22, and it is the PASCAL argument rather than
 	# the NilPy one. BASIC has exactly ONE door to a unit of any language --
 	# `USES` during the parse, which bparser.inc's BSourceUsesAUnit says in its
@@ -9571,10 +9571,10 @@ test-threads: $(COMPILER)
 	# keyword because BASIC cannot spell one, and scanning for it would be a
 	# guard that cannot fail.
 	# A PAIR, AND NEITHER ROW CATCHES WHAT THE OTHER DOES. The first reds at
-	# 4224 if the arm is removed; the second reds at 1152 if the arm stops
+	# 4232 if the arm is removed; the second reds at 1160 if the arm stops
 	# looking at the source, which is the cheapest wrong widening.
-	# PINNED CONTROL, AND IT COVERS ONLY THE FIRST ROW: the pin answers 4224
-	# for BOTH files. On the unit-free row that discriminates (HEAD says 1152);
+	# PINNED CONTROL, AND IT COVERS ONLY THE FIRST ROW: the pin answers 4232
+	# for BOTH files. On the unit-free row that discriminates (HEAD says 1160);
 	# on the control row it is two compilers doing the same correct thing, so
 	# it is not cited as a control there.
 	# WHY THE CONTROL ROW NAMES A C UNIT ON PURPOSE: a NilPy arm of this exact
@@ -9582,11 +9582,11 @@ test-threads: $(COMPILER)
 	# reaches C units AMBIENTLY through -Fu and every C unit declares a
 	# __thread errno. BASIC is safe from that only while its door is explicit,
 	# so this row builds and runs a real C unit -- the day a unit arrives
-	# without the source saying so, it goes to 1152 and names which half broke.
+	# without the source saying so, it goes to 1160 and names which half broke.
 	./$(COMPILER) test/test_a_unit_free_basic_program_pays_no_threadvar_area.bas $(TESTTMP)/test_tlsnonebas26
-	tools/expect_same.sh test_tlsnonebas26 "$$($(TESTTMP)/test_tlsnonebas26)" "1152"
+	tools/expect_same.sh test_tlsnonebas26 "$$($(TESTTMP)/test_tlsnonebas26)" "1160"
 	./$(COMPILER) test/test_a_basic_program_with_a_unit_pays_the_full_threadvar_area.bas $(TESTTMP)/test_tlsusesbas26
-	tools/expect_same.sh test_tlsusesbas26 "$$($(TESTTMP)/test_tlsusesbas26)" "4224"
+	tools/expect_same.sh test_tlsusesbas26 "$$($(TESTTMP)/test_tlsusesbas26)" "4232"
 	@# A unit-free BASIC program on i386 pulls no runtime unit. 8bd233d512
 	@# pulled builtinheap on i386 for EVERY skeleton driver (for the Fortran and
 	@# Algol float writer) and `10 PRINT "hello"` went from 4,224 to 265,824
@@ -21095,6 +21095,20 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=aarch64 test/c_crtl_backtrace.c $(TESTTMP)/c_bt26_a64 >/dev/null || exit 1; \
 	  tools/run_target.sh aarch64 $(TESTTMP)/c_bt26_a64 | diff -u test/c_crtl_backtrace.expected - || exit 1; \
 	else echo "=== c_bt26: qemu-aarch64 absent, aarch64 arm NOT verified ==="; fi
+	# sigaction(SA_SIGINFO): h(sig, info, ctx) with the kernel's siginfo_t -- a SIGCHLD handler
+	# reads si_code/si_status/si_pid for an exit(3) and a SIGKILL (toybox timeout). Direct,
+	# --threadsafe (the pointer lives in the thread block there), and on every hosted cross
+	# target the dispatch stub parks it on. feature-a-crtl-sigaction-cannot-honour-sa-siginfo
+	./$(COMPILER) test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26 > /dev/null
+	tools/expect_same.sh c_sasi26 "$$(timeout 20 $(TESTTMP)/c_sasi26)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
+	./$(COMPILER) --threadsafe test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_ts > /dev/null
+	tools/expect_same.sh c_sasi26_ts "$$(timeout 20 $(TESTTMP)/c_sasi26_ts)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  ./$(COMPILER) --target=$$t test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_$$t >/dev/null || exit 1; \
+	  timeout 60 tools/run_target.sh $$t $(TESTTMP)/c_sasi26_$$t | diff -u test/c_crtl_sigaction_siginfo.expected - || { echo "c_sasi26 $$t FAIL"; exit 1; }; \
+	done; echo "c_sasi26 cross: OK"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=call0 test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_xt > /dev/null
+	tools/expect_same.sh c_sasi26_xt "$$(timeout 60 tools/run_target.sh xtensa $(TESTTMP)/c_sasi26_xt)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
 	# i386 objects link with the host ld and tools/pxxcrt_i386.S (feature-c-i386-link-for-c-objects)
 	./$(COMPILER) --target=i386 --emit-obj test/c_i386_link_entry.c $(TESTTMP)/c_i386lnk.o > /dev/null
 	tools/pxx_link_i386.sh -o $(TESTTMP)/c_i386lnk $(TESTTMP)/c_i386lnk.o

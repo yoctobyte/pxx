@@ -4779,7 +4779,7 @@ begin
         abandoned. The raise stub only ever needs room to reach ExcRaise. }
       if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
           CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr') or
-          CaseEqual(name, '__pxxSigSPPtr') or
+          CaseEqual(name, '__pxxSigSPPtr') or CaseEqual(name, '__pxxSigInfo') or
           CaseEqual(name, '__pxxSigNum')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
@@ -4847,6 +4847,12 @@ begin
         else if CaseEqual(name, '__pxxSigSPPtr') then
         begin
           ASTIVal[node] := 5; ASTTk[node] := Ord(tyPointer);
+        end
+        else if CaseEqual(name, '__pxxSigInfo') then
+        begin
+          { the kernel's siginfo_t pointer, valid while the handler runs: what
+            a C handler installed with SA_SIGINFO receives as its 2nd argument }
+          ASTIVal[node] := 6; ASTTk[node] := Ord(tyPointer);
         end
         else
         begin

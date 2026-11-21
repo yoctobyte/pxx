@@ -381,6 +381,8 @@ begin
   EmitI32($E58C0000);   { str r0, [ip]      sig }
   EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_CTX);   { ip = &ctx slot }
   EmitI32($E58C2000);   { str r2, [ip]      ucontext* }
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_INFO);  { ip = &info slot }
+  EmitI32($E58C1000);   { str r1, [ip]      siginfo*, for SA_SIGINFO C handlers }
   EmitI32($E3510000);   { cmp r1, #0 }
   bNoSi := CodeLen; EmitI32($0A000000);        { beq .nosi (patched) }
   EmitI32($E5912008);   { ldr r2, [r1, #8]   si_code }

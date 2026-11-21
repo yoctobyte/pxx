@@ -1010,6 +1010,13 @@ begin
     reason, same retirement. bug-c-crtl-stdin-and-pascal-input-do-not-share-a-peeked-byte }
   name := 'PXX_BUILTIN_STDIN_UNGET';
   PasDefine(name);
+  { The __pxxSigInfo intrinsic (the parked siginfo_t pointer), which pxxcio's
+    C signal trampoline passes to SA_SIGINFO handlers. Same reason as the two
+    above: the pin builds live lib/rtl and does not know the intrinsic. Retire
+    it, and the guard, once a pin carries it.
+    feature-a-crtl-sigaction-cannot-honour-sa-siginfo }
+  name := 'PXX_HAS_SIGINFO';
+  PasDefine(name);
   name := 'CPU64';
   PasDefine(name);
   name := 'CPUX86_64';

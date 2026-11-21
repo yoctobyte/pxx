@@ -963,9 +963,14 @@ const
 
 type
   TCSignalHandler = procedure(sig: Longint); cdecl;
+  { SA_SIGINFO's handler: (sig, siginfo_t *, ucontext_t *) }
+  TCSigInfoHandler = procedure(sig: Longint; info, ctx: Pointer); cdecl;
 
 var
   CSigHandlers: array[1..PXX_CSIG_MAX] of Pointer;
+  { per signal: the handler was installed with SA_SIGINFO and takes three
+    arguments. Read with the handler, so it is written BEFORE the handler. }
+  CSigInfoWanted: array[1..PXX_CSIG_MAX] of Boolean;
 
 { One parameterless hook serves every signal; __pxxSigNum says which. The bounds
   check is not defensive noise -- an unwritten slot reads as a number the table
@@ -974,20 +979,38 @@ var
   Same shape as signals.pas's trampoline, deliberately: that one is the FPC
   surface over this hook and this is the C surface. Two SURFACES over one
   mechanism, not two mechanisms. }
+{ A handler installed with SA_SIGINFO gets the kernel's own siginfo_t and
+  ucontext_t, parked by the dispatch stub (__pxxSigInfo, __pxxSigContext), so
+  it reads si_status, si_pid and si_code exactly as under glibc.
+  feature-a-crtl-sigaction-cannot-honour-sa-siginfo }
 procedure CSigTrampoline;
-var n: Longint; h: TCSignalHandler;
+var n: Longint; h: TCSignalHandler; hi: TCSigInfoHandler;
 begin
   n := __pxxSigNum;
   if (n >= 1) and (n <= PXX_CSIG_MAX) then
     if (CSigHandlers[n] <> Pointer(PXX_CSIG_DFL)) and
        (CSigHandlers[n] <> Pointer(PXX_CSIG_IGN)) then
     begin
-      h := TCSignalHandler(CSigHandlers[n]);
-      h(n);
+      if CSigInfoWanted[n] then
+      begin
+        hi := TCSigInfoHandler(CSigHandlers[n]);
+        { PXX_HAS_SIGINFO: the pinned compiler builds this file too and has
+          no __pxxSigInfo; under it the handler gets nil pointers. }
+        {$ifdef PXX_HAS_SIGINFO}
+        hi(n, __pxxSigInfo, __pxxSigContext);
+        {$else}
+        hi(n, nil, nil);
+        {$endif}
+      end
+      else
+      begin
+        h := TCSignalHandler(CSigHandlers[n]);
+        h(n);
+      end;
     end;
 end;
 
-function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
+function __pxx_c_sigaction(sig: Integer; handler: Pointer; siginfo: Integer): Integer;
 begin
   { SIGKILL (9) and SIGSTOP (19) cannot be caught or ignored. The kernel refuses
     too; refusing here means the answer does not depend on which of the two
@@ -1015,13 +1038,30 @@ begin
   end
   else
   begin
-    { Store BEFORE installing: the signal can arrive between the two. }
+    { Store BEFORE installing: the signal can arrive between the two. The
+      arity flag goes first of all, and a changed one is safe only because
+      the handler slot is rewritten after it: a delivery between the two
+      calls the OLD handler with the NEW arity, so a 1-argument handler is
+      replaced by first parking DFL. }
+    if CSigInfoWanted[sig] <> (siginfo <> 0) then
+      CSigHandlers[sig] := Pointer(PXX_CSIG_DFL);
+    CSigInfoWanted[sig] := siginfo <> 0;
     CSigHandlers[sig] := handler;
     SetSignalHandler(sig, @CSigTrampoline);
     Result := 0;
   end;
 end;
+
+function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
+begin
+  Result := __pxx_c_sigaction(sig, handler, 0);
+end;
 {$else}
+function __pxx_c_sigaction(sig: Integer; handler: Pointer; siginfo: Integer): Integer;
+begin
+  Result := -38;   { -ENOSYS, as __pxx_c_signal below }
+end;
+
 function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
 begin
   { -ENOSYS, never 0. The C side turns this into -1/ENOSYS, so a caller that
