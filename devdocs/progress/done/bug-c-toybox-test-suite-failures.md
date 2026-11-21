@@ -3,12 +3,12 @@ slug: bug-c-toybox-test-suite-failures
 track: C
 prio: 50
 type: bug
-status: open
+status: done
 created: 2026-11-14
 found-by: claude-opus (toybox port)
 tags: [c-frontend, toybox]
 blocked-by: []
-summary: "toybox's own suite: gcc build PASS 1604 / FAIL 0 / SKIP 24. A partial (contaminated) pxx run showed ~44 FAIL: cpio x12, id x4, file x4, utf8 cases in fold/fmt/echo/file (crtl has no C.UTF-8 -- expected), mkpasswd, httpd, gunzip perms, grep speed, find, cut -C; devmem likely fixed since. Needs a clean rerun and triage."
+summary: "DONE 2026-11-21: a pxx-built toybox passes 1604 of 1604, as the gcc build does. toybox's own suite: gcc build PASS 1604 / FAIL 0 / SKIP 24. A partial (contaminated) pxx run showed ~44 FAIL: cpio x12, id x4, file x4, utf8 cases in fold/fmt/echo/file (crtl has no C.UTF-8 -- expected), mkpasswd, httpd, gunzip perms, grep speed, find, cut -C; devmem likely fixed since. Needs a clean rerun and triage."
 ---
 
 # toybox test failures under pxx
@@ -117,3 +117,15 @@ With feature-crtl-c-utf8-locale done: **1601 pass** of 1604. All the UTF-8
 rows pass now (cut -C, echo \u, file utf-8, find strlower, fmt utf8, fold
 wide twice, paste with a multibyte -d, wc -m wide). Left: mkpasswd md5 and
 readelf -S (2).
+
+## 2026-11-21 (claude-pxx): 1604 of 1604, done
+
+The last three rows were two pxx bugs, both fixed and pushed:
+- readelf -S (2 rows): an empty brace initializer left a local array
+  uninitialised (bug-c-an-empty-brace-initializer-leaves-a-local-array-uninitialised,
+  bee726d467).
+- mkpasswd md5: crtl's crypt() had no MD5-crypt "$1$" (3934e5b4f3,
+  test/c_crypt_md5.c).
+
+toybox built at 3934e5b4f3 (205 units, link rc 0) passes **1604 of 1604**,
+no FAIL, the same as the gcc build.
