@@ -13928,6 +13928,8 @@ end;
   the current subobject whose path frames are already pushed, then initialise the
   designated leaf/subobject. Handles the record.record.scalar shape used by C99
   sub-level designators (c-testsuite 00216 test_zero_init `.a.j = 5`). }
+procedure CInitDesignatedArrayMember(fi: Integer; emit: Boolean); forward;
+
 procedure CInitDesignatedDescend(tkOrd, recId: Integer; emit: Boolean);
 var sfi, ix: Integer;
 begin
@@ -13948,6 +13950,9 @@ begin
       Next;                                 { '=' }
       CInitWalkMember(sfi, emit);
     end
+    else if (sfi >= 0) and UFldIsArray[sfi] and (UFldDynDepth[sfi] = 0) and
+            (CurTok.Kind = tkLBrack) then
+      CInitDesignatedArrayMember(sfi, emit)
     else if sfi >= 0 then
     begin
       CInitPathPush(1, sfi, UFldTk[sfi]);
@@ -13978,6 +13983,107 @@ begin
   end;
 end;
 
+{ A designator that indexes into array member fi: `.m[i]`, `.m[i][j]`, and
+  the same at the end of a chain (`.d.m[i] = ...`). Every index is scaled by
+  the elements below its level, so `.m2[1][2]` is flat 1*3+2, not 2. A chain
+  that stops above the element level designates a SUB-ARRAY and walks it as
+  CInitWalkArray walks a row (`.m2[1] = {8, 9}`). Then, C11 6.7.9p17: the
+  values that follow initialise the subobjects after the designated one, in
+  order, while the array has room (`.m2[0][1] = 3, 4, 5` fills [0][1],
+  [0][2], [1][0]); the comma before a value that does not fit is left for
+  the record walk, which carries on with the next member.
+  Before: the last index alone, a row from a list stored as one scalar, and
+  the following values went to the next member.
+  bug-c-a-designator-ending-in-an-index-into-a-2d-member-stores-a-list-as-one-scalar }
+procedure CInitDesignatedArrayMember(fi: Integer; emit: Boolean);
+var nd, lvl, ix, flat, eb, total, p, span, ebN, cons, tk, rec: Integer;
+    isRec: Boolean;
+
+  function SpanAt(level: Integer): Integer;
+  begin
+    if nd < 2 then Result := total
+    else Result := CInitDimSpanAt(-1, fi, level);
+    if Result < 1 then Result := 1;
+  end;
+
+begin
+  nd := UFldArrNDims[fi];
+  if nd < 1 then nd := 1;
+  total := UFldArrLen[fi];
+  tk := UFldTk[fi];
+  rec := UFldRec_[fi];
+  isRec := (tk = Ord(tyRecord)) and (rec >= REC_UCLASS_BASE);
+  CInitPathPush(1, fi, tk);
+  flat := 0; lvl := 0; eb := total;
+  if eb < 1 then eb := 1;
+  while (CurTok.Kind = tkLBrack) and (lvl < nd) do
+  begin
+    Next;
+    ix := CEvalConstExpr;
+    Expect(tkRBrack, ']');
+    span := SpanAt(lvl);
+    eb := eb div span;
+    if eb < 1 then eb := 1;
+    flat := flat + ix * eb;
+    Inc(lvl);
+  end;
+  if lvl < nd then
+  begin
+    { a sub-array: the elements below level lvl, eb of them from flat }
+    if CurTok.Kind = tkAssign then Next;
+    span := SpanAt(lvl);
+    ebN := eb div span;
+    if ebN < 1 then ebN := 1;
+    if (CurTok.Kind = tkString) and CInitElemIsChar(tk) and (lvl = nd - 1) then
+      CInitFillCharFlat(tk, flat, span, emit)      { `.names[1] = "ab"`: one row }
+    else if CurTok.Kind = tkBegin then
+    begin
+      Next;
+      CInitWalkArray(tk, rec, -1, fi, lvl, nd, span, flat, ebN, True, emit, cons);
+      Eat(tkEnd);
+    end
+    else
+      CInitWalkArray(tk, rec, -1, fi, lvl, nd, span, flat, ebN, False, emit, cons);
+    p := flat + eb;
+  end
+  else
+  begin
+    { one element }
+    CInitPathPush(0, flat, tk);
+    if isRec and ((CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack)) then
+    begin
+      CInitDesignatedDescend(tk, rec, emit);
+      Dec(CInitPathDepth);
+      Dec(CInitPathDepth);
+      Exit;
+    end;
+    if CurTok.Kind = tkAssign then Next;
+    if isRec and (CurTok.Kind = tkBegin) then
+    begin
+      Next;
+      CInitWalkRecord(rec - REC_UCLASS_BASE, True, emit);
+      Eat(tkEnd);
+    end
+    else
+      CInitLeaf(tk, emit);
+    Dec(CInitPathDepth);
+    p := flat + 1;
+  end;
+  { the positional values that follow, while the array has room (scalar
+    elements; a record element's continuation stays with the record walk) }
+  if not isRec then
+    while (CurTok.Kind = tkComma) and (p < total) and
+          not (Tokens[TokPos].Kind in [tkEnd, tkDot, tkLBrack, tkEOF]) do
+    begin
+      Next;
+      CInitPathPush(0, p, tk);
+      CInitLeaf(tk, emit);
+      Dec(CInitPathDepth);
+      Inc(p);
+    end;
+  Dec(CInitPathDepth);
+end;
+
 procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean);
 var base, n, fldI, fi, fEnd, di: Integer;
 begin
@@ -13999,9 +14105,14 @@ begin
       if ((CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack)) and (fldI < n) then
       begin
         fi := base + fldI;
-        CInitPathPush(1, fi, UFldTk[fi]);
-        CInitDesignatedDescend(UFldTk[fi], UFldRec_[fi], emit);
-        Dec(CInitPathDepth);
+        if UFldIsArray[fi] and (UFldDynDepth[fi] = 0) and (CurTok.Kind = tkLBrack) then
+          CInitDesignatedArrayMember(fi, emit)
+        else
+        begin
+          CInitPathPush(1, fi, UFldTk[fi]);
+          CInitDesignatedDescend(UFldTk[fi], UFldRec_[fi], emit);
+          Dec(CInitPathDepth);
+        end;
         { positional advance past the designated field, then continue the list }
         if UFldBitWidth[fi] > 0 then Inc(fldI)
         else
