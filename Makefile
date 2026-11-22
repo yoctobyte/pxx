@@ -21925,6 +21925,10 @@ test-core: $(COMPILER)
 	timeout 60 tools/run_target.sh i386 $(TESTTMP)/c_saflg26_386 | diff -u test/c_sigaction_flags.expected -
 	./$(COMPILER) --target=riscv32 test/c_sigaction_flags.c $(TESTTMP)/c_saflg26_rv32 > /dev/null
 	timeout 60 tools/run_target.sh riscv32 $(TESTTMP)/c_saflg26_rv32 | diff -u test/c_sigaction_flags.expected -
+	./$(COMPILER) --threadsafe test/c_pthread_cancel.c $(TESTTMP)/c_pcancel26 > /dev/null
+	timeout 30 $(TESTTMP)/c_pcancel26 | diff -u test/c_pthread_cancel.expected -
+	./$(COMPILER) --threadsafe --target=aarch64 test/c_pthread_cancel.c $(TESTTMP)/c_pcancel26_a64 > /dev/null
+	timeout 60 tools/run_target.sh aarch64 $(TESTTMP)/c_pcancel26_a64 | diff -u test/c_pthread_cancel.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

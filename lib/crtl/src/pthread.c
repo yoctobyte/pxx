@@ -18,6 +18,7 @@
 #include <errno.h>    /* ENOMEM from pthread_atfork */
 #include <unistd.h>   /* fork() and __crtl_atfork_hook live in unistd.c */
 #include <sys/syscall.h>  /* SYS_arch_prctl, for a thread's ELF TLS block */
+#include <signal.h>   /* sigaction, pthread_kill: asynchronous cancellation */
 
 /* Pascal bridge (lib/rtl/palpthread.pas), bound case-insensitively by name. */
 extern void      __pxx_pmutex_init(void *m);
@@ -209,9 +210,11 @@ int pthread_cond_broadcast(pthread_cond_t *c) { __pxx_pcond_broadcast(c); return
  * cleared for the duration (another thread will lock it) and restored after. */
 int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   long owner = m->__owner; int count = m->__count;
+  pthread_testcancel();                    /* a cancellation point */
   m->__owner = 0;
   __pxx_pcond_wait(c, m);
   m->__owner = owner; m->__count = count;
+  pthread_testcancel();                    /* acted on with the mutex held, as glibc */
   return 0;
 }
 
@@ -236,6 +239,7 @@ int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
     m->__owner = 0;
     r = __pxx_pcond_timedwait(c, m, ns);
     m->__owner = owner; m->__count = count;
+    pthread_testcancel();                  /* a cancellation point */
     return r;
   }
 }
@@ -261,6 +265,9 @@ struct pxx_thr_slot {
   void          *ret;                /* keeps the return value for join     */
   jmp_buf        exit_jb;            /* pthread_exit's way back to it       */
   void          *elftls;             /* this thread's ELF TLS block, or 0   */
+  volatile int   cancel_pending;     /* pthread_cancel was called           */
+  volatile int   cancel_state;       /* PTHREAD_CANCEL_ENABLE / DISABLE     */
+  volatile int   cancel_type;        /* PTHREAD_CANCEL_DEFERRED / ASYNC     */
 };
 static struct pxx_thr_slot pxx_thr_reg[PXX_PTHREAD_MAX];
 static pthread_mutex_t pxx_thr_reg_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -503,6 +510,9 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
   pxx_thr_reg[slot].arg   = arg;
   pxx_thr_reg[slot].ret   = 0;
   pxx_thr_reg[slot].elftls = elftls;
+  pxx_thr_reg[slot].cancel_pending = 0;
+  pxx_thr_reg[slot].cancel_state = PTHREAD_CANCEL_ENABLE;
+  pxx_thr_reg[slot].cancel_type = PTHREAD_CANCEL_DEFERRED;
   tid = __pxx_pthread_create(pxx_thr_reg[slot].h, pxx_thr_trampoline, &pxx_thr_reg[slot]);
   if (tid <= 0) {
     pxx_thr_reg[slot].used = 0;
@@ -520,6 +530,7 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
 
 int pthread_join(pthread_t t, void **retval) {
   int i, slot = -1;
+  pthread_testcancel();                    /* a cancellation point */
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
   for (i = 0; i < PXX_PTHREAD_MAX; i++) {
     if (pxx_thr_reg[i].used && pxx_thr_reg[i].tid == (long long)t) { slot = i; break; }
@@ -535,6 +546,102 @@ int pthread_join(pthread_t t, void **retval) {
   pxx_thr_reg[slot].used = 0;
   pxx_thr_reg[slot].tid  = 0;
   __pxx_pmutex_unlock(&pxx_thr_reg_lock);
+  return 0;
+}
+
+/* ---- cancellation ----
+ * The pending flag, state and type live in the thread's slot, so pthread_cancel
+ * on another thread can read the type and set the flag. Acting on a cancel is
+ * pthread_exit(PTHREAD_CANCELED): the trampoline runs the key destructors and
+ * join sees PTHREAD_CANCELED. Asynchronous cancellation sends PXX_SIGCANCEL,
+ * whose handler exits the thread from wherever it was -- as glibc's SIGCANCEL
+ * does, and with the same rule that only async-cancel-safe code may run in
+ * that mode. The handler is installed with SA_RESTART on the thread's own
+ * stack (crtl sigaction honours both), so a deferred thread the signal can
+ * never reach is not disturbed. feature-crtl-pthread-cancellation */
+#define PXX_SIGCANCEL 32
+
+static void pxx_cancel_now(struct pxx_thr_slot *s) {
+  s->cancel_pending = 0;
+  pthread_exit(PTHREAD_CANCELED);
+}
+
+static void pxx_cancel_handler(int sig) {
+  struct pxx_thr_slot *s = pxx_thr_cur;
+  (void)sig;
+  if (s && s->cancel_pending && s->cancel_state == PTHREAD_CANCEL_ENABLE &&
+      s->cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS)
+    pxx_cancel_now(s);
+}
+
+static volatile int pxx_cancel_installed;
+static void pxx_cancel_install(void) {
+  struct sigaction sa;
+  if (pxx_cancel_installed) return;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = pxx_cancel_handler;
+  sa.sa_flags = SA_RESTART;
+  sigemptyset(&sa.sa_mask);
+  sigaction(PXX_SIGCANCEL, &sa, 0);
+  pxx_cancel_installed = 1;
+}
+
+void pthread_testcancel(void) {
+  struct pxx_thr_slot *s = pxx_thr_cur;
+  if (s && s->cancel_pending && s->cancel_state == PTHREAD_CANCEL_ENABLE)
+    pxx_cancel_now(s);
+}
+
+int pthread_cancel(pthread_t t) {
+  int i, slot = -1, async;
+  __pxx_pmutex_lock(&pxx_thr_reg_lock);
+  for (i = 0; i < PXX_PTHREAD_MAX; i++)
+    if (pxx_thr_reg[i].used && pxx_thr_reg[i].tid == (long long)t) { slot = i; break; }
+  if (slot >= 0) pxx_thr_reg[slot].cancel_pending = 1;
+  async = slot >= 0 && pxx_thr_reg[slot].cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS &&
+          pxx_thr_reg[slot].cancel_state == PTHREAD_CANCEL_ENABLE &&
+          !__pxx_pthread_exited(pxx_thr_reg[slot].h);
+  __pxx_pmutex_unlock(&pxx_thr_reg_lock);
+  if (slot < 0) return 3;                  /* ESRCH */
+  if (async) {
+    if ((long long)t == (long long)pthread_self()) pxx_cancel_now(&pxx_thr_reg[slot]);
+    pthread_kill(t, PXX_SIGCANCEL);
+  }
+  return 0;
+}
+
+int pthread_setcancelstate(int state, int *oldstate) {
+  struct pxx_thr_slot *s = pxx_thr_cur;
+  static __thread int main_state;          /* threads crtl did not start */
+  if (state != PTHREAD_CANCEL_ENABLE && state != PTHREAD_CANCEL_DISABLE) return 22;
+  if (!s) {
+    if (oldstate) *oldstate = main_state;
+    main_state = state;
+    return 0;
+  }
+  if (oldstate) *oldstate = s->cancel_state;
+  s->cancel_state = state;
+  if (state == PTHREAD_CANCEL_ENABLE && s->cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS &&
+      s->cancel_pending)
+    pxx_cancel_now(s);
+  return 0;
+}
+
+int pthread_setcanceltype(int type, int *oldtype) {
+  struct pxx_thr_slot *s = pxx_thr_cur;
+  static __thread int main_type;
+  if (type != PTHREAD_CANCEL_DEFERRED && type != PTHREAD_CANCEL_ASYNCHRONOUS) return 22;
+  if (type == PTHREAD_CANCEL_ASYNCHRONOUS) pxx_cancel_install();
+  if (!s) {
+    if (oldtype) *oldtype = main_type;
+    main_type = type;
+    return 0;
+  }
+  if (oldtype) *oldtype = s->cancel_type;
+  s->cancel_type = type;
+  if (type == PTHREAD_CANCEL_ASYNCHRONOUS && s->cancel_state == PTHREAD_CANCEL_ENABLE &&
+      s->cancel_pending)
+    pxx_cancel_now(s);
   return 0;
 }
 

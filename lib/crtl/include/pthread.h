@@ -189,6 +189,22 @@ int  pthread_join(pthread_t t, void **retval);
 int  pthread_detach(pthread_t t);
 void pthread_exit(void *retval) __attribute__((__noreturn__));
 int  pthread_setname_np(pthread_t t, const char *name);
+
+/* Cancellation (glibc's values). Deferred: acted on at pthread_testcancel,
+ * pthread_join, pthread_cond_wait/timedwait and sem_wait/timedwait. A thread
+ * BLOCKED in one of those is not woken by the cancel, only checked when it
+ * returns. Asynchronous: a signal (32, glibc's SIGCANCEL) makes the thread
+ * exit wherever it is. Threads crtl did not start (main included) cannot be
+ * cancelled: ESRCH. feature-crtl-pthread-cancellation */
+#define PTHREAD_CANCEL_ENABLE        0
+#define PTHREAD_CANCEL_DISABLE       1
+#define PTHREAD_CANCEL_DEFERRED      0
+#define PTHREAD_CANCEL_ASYNCHRONOUS  1
+#define PTHREAD_CANCELED ((void *)-1)
+int  pthread_cancel(pthread_t t);
+int  pthread_setcancelstate(int state, int *oldstate);
+int  pthread_setcanceltype(int type, int *oldtype);
+void pthread_testcancel(void);
 int  pthread_getname_np(pthread_t t, char *name, unsigned long len);
 
 #ifdef __PXX_SYSTEM_PTHREAD__

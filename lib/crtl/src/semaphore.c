@@ -35,12 +35,19 @@ int sem_destroy(sem_t *sem)
   return 0;
 }
 
+/* sem_wait and sem_timedwait are cancellation points: tested on entry. The
+   wait itself runs with cancellation disabled, because a cancel acted on
+   inside pthread_cond_wait would exit holding the semaphore's lock. */
 int sem_wait(sem_t *sem)
 {
+  int cs;
+  pthread_testcancel();
+  pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
   pthread_mutex_lock(&S(sem)->lock);
   while (S(sem)->value == 0) pthread_cond_wait(&S(sem)->nonzero, &S(sem)->lock);
   S(sem)->value--;
   pthread_mutex_unlock(&S(sem)->lock);
+  pthread_setcancelstate(cs, 0);
   return 0;
 }
 
@@ -58,12 +65,15 @@ int sem_trywait(sem_t *sem)
 /* abstime is an absolute CLOCK_REALTIME deadline, as for pthread_cond_timedwait */
 int sem_timedwait(sem_t *sem, const struct timespec *abstime)
 {
-  int e = 0;
+  int e = 0, cs;
   if (abstime->tv_nsec < 0 || abstime->tv_nsec >= 1000000000L) { errno = EINVAL; return -1; }
+  pthread_testcancel();
+  pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
   pthread_mutex_lock(&S(sem)->lock);
   while (S(sem)->value == 0 && e == 0) e = pthread_cond_timedwait(&S(sem)->nonzero, &S(sem)->lock, abstime);
   if (S(sem)->value > 0) { S(sem)->value--; e = 0; }
   pthread_mutex_unlock(&S(sem)->lock);
+  pthread_setcancelstate(cs, 0);
   if (e) { errno = e; return -1; }
   return 0;
 }

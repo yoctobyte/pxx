@@ -1,0 +1,6 @@
+deferred canceled 1, key destructor 1
+disabled canceled 1, progress 1
+async canceled 1
+sem_wait canceled 1
+main setcancelstate 0 old 0
+bad state 22, bad type 22
