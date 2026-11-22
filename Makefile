@@ -21904,6 +21904,15 @@ test-core: $(COMPILER)
 	timeout 60 $(TESTTMP)/c_sem26 | diff -u test/c_semaphore.expected -
 	./$(COMPILER) test/c_semaphore_single_thread.c $(TESTTMP)/c_sem1t26 > /dev/null
 	$(TESTTMP)/c_sem1t26 | diff -u test/c_semaphore_single_thread.expected -
+	./$(COMPILER) test/c_naked_function.c $(TESTTMP)/c_naked26 > /dev/null
+	$(TESTTMP)/c_naked26 | diff -u test/c_naked_function.expected -
+	./$(COMPILER) --emit-obj test/c_naked_branch_to_other_object.c $(TESTTMP)/c_nakedx26_a.o > /dev/null
+	./$(COMPILER) --emit-obj test/c_naked_branch_to_other_object_tail.c $(TESTTMP)/c_nakedx26_b.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_nakedx26 $(TESTTMP)/c_nakedx26_a.o $(TESTTMP)/c_nakedx26_b.o > /dev/null
+	$(TESTTMP)/c_nakedx26 | diff -u test/c_naked_branch_to_other_object.expected -
+	tools/expect_same.sh c_naked26_a64 "$$(./$(COMPILER) --target=aarch64 test/c_naked_function.c $(TESTTMP)/c_naked26_a64 2>&1 | grep -c 'naked.*x86-64 only')" "1"
+	./$(COMPILER) -U__GNUC__ -D__GNUC__=8 -DFOO=3 -UFOO -UBAR -DBAR=4 test/c_cmdline_undef_order.c $(TESTTMP)/c_undord26 > /dev/null
+	$(TESTTMP)/c_undord26 | diff -u test/c_cmdline_undef_order.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

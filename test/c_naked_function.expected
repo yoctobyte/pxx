@@ -1,0 +1,4 @@
+save returned 40
+rip saved 1, inside probe's caller code 1
+rsp slot 8-aligned at entry 1
+twice_plus 11 15 1

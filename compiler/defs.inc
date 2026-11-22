@@ -4715,8 +4715,6 @@ var
   CCmdIncludeCount : Integer;
   CCmdDefRaw       : array[0..MAX_C_CMD_DEFINES-1] of AnsiString;
   CCmdDefCount     : Integer;
-  CCmdUndefRaw     : array[0..MAX_C_CMD_DEFINES-1] of AnsiString;
-  CCmdUndefCount   : Integer;
   PasCondParent    : array[0..MAX_PAS_CONDS-1] of Boolean;
   PasCondActive    : array[0..MAX_PAS_CONDS-1] of Boolean;
   PasCondTaken     : array[0..MAX_PAS_CONDS-1] of Boolean;
@@ -7344,6 +7342,7 @@ var
     feature-c-file-scope-asm-that-defines-code }
   CFsaCallPos : array of Integer;
   CFsaCallName : array of AnsiString;
+  CFsaCallSlot : array of Integer;   { 0 = five-byte call/jmp rel32; 6 = six-byte slot, filled by CFsaResolveCalls (nop+rel32 or [rip+GOT]) }
   CFsaCallCount : Integer;
   { ...and, once resolved, each slot's window increment (0..3), which the
     ApplyCallFixups patch keeps. Not reset per unit: positions stay valid
@@ -7961,6 +7960,7 @@ var
   CAttrAlignValue : Integer;
   CLexSawInline   : Boolean;   { `inline`/`__inline`/`__inline__` was dropped before the next token: rides it as CAttrFlags bit $400 }
   CAttrGnuInline  : Boolean;   { __attribute__((gnu_inline)): rides the next token as CAttrFlags bit $800 }
+  CAttrNaked      : Boolean;   { __attribute__((naked)): rides the next token as CAttrFlags bit $4000 }
   CAttrVis        : Integer;   { __attribute__((visibility("..."))): the ELF st_other value (1 internal, 2 hidden, 3 protected); rides the next token as CAttrFlags bits 12..13. bug-c-visibility-attribute-was-ignored }
   CAttrWeak       : Boolean;   { __attribute__((weak)): rides the next token as CAttrAlignValues bit 16 }
   { __attribute__((constructor)) = 1, ((destructor)) = 2: rides the next token
@@ -8187,7 +8187,7 @@ var
     bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
   TokSrcOff : array of Integer;
   TokSrcLen : array of Integer;
-  CAttrFlags : array of Word;   { bits 0..7 below; 256 = constructor, 512 = destructor (CAttrCtor) }
+  CAttrFlags : array of Word;   { bits 0..7 below; 256 = constructor, 512 = destructor (CAttrCtor); $4000 = naked }
   CAttrAlignValues : array of Integer;
   TokCount   : Integer;
   TokCapacity : Integer;   { current allocated length of the token parallel arrays (grown by EnsureTokCapacity) }

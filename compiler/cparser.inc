@@ -18124,11 +18124,29 @@ begin
         if ((w = 'call') or (w = 'callq') or (w = 'jmp') or (w = 'jmpq')) and CFsaIsName(rest) then
         begin
           FlushX86;
-          if (w = 'call') or (w = 'callq') then EmitB($E8) else EmitB($E9);
           if Length(CFsaCallPos) <= CFsaCallCount then
           begin
             SetLength(CFsaCallPos, CFsaCallCount + 16);
             SetLength(CFsaCallName, CFsaCallCount + 16);
+            SetLength(CFsaCallSlot, CFsaCallCount + 16);
+          end;
+          { A name not defined YET may turn out to live in another object (a naked
+            nlr_push's `jmp nlr_push_tail`), and that is only known at the end of
+            the unit. So it gets a six-byte slot, filled by CFsaResolveCalls:
+            `nop; call/jmp rel32` for a body here, `call/jmp *[rip+GOT]` for an
+            import -- both keep their 32 bits at the same place. A name already
+            defined keeps the plain five-byte form. }
+          pi := CFindProcFromModule(rest);
+          if (pi >= 0) and (Procs[pi].BodyAddr >= 0) and not ProcExternal[pi] then
+          begin
+            if (w = 'call') or (w = 'callq') then EmitB($E8) else EmitB($E9);
+            CFsaCallSlot[CFsaCallCount] := 0;
+          end
+          else
+          begin
+            EmitB($90);
+            if (w = 'call') or (w = 'callq') then EmitB($E8) else EmitB($E9);
+            CFsaCallSlot[CFsaCallCount] := 6;
           end;
           CFsaCallPos[CFsaCallCount] := CodeLen;     { the rel32, as ApplyCallFixups patches it }
           CFsaCallName[CFsaCallCount] := rest;
@@ -18186,6 +18204,29 @@ begin
   for i := 0 to CFsaCallCount - 1 do
   begin
     pi := CFindProcFromModule(CFsaCallName[i]);
+    if (TargetArch = TARGET_X86_64) and (i < Length(CFsaCallSlot)) and (CFsaCallSlot[i] = 6) and
+       ((pi < 0) or (Procs[pi].BodyAddr < 0)) then
+    begin
+      { an import: the six-byte slot becomes `call/jmp qword [rip+disp32]`
+        through the GOT slot every external call uses (EmitExternalIndirectCall),
+        so the object writer and the static linker see an ordinary call site }
+      if pi < 0 then
+        ErrorNoPos('C: asm branches to "' + CFsaCallName[i] + '", which is not declared'
+                   + ' in this unit -- declare it (a prototype is enough)');
+      if TargetKernel = KERNEL_WINDOWS then
+        ErrorNoPos('C: asm branching to the import "' + CFsaCallName[i] + '" is not supported'
+                   + ' for --os=windows');
+      if DynCallCount >= MAX_CALLFIX then ErrorNoPos('external call fixup overflow');
+      if Code[CFsaCallPos[i] - 1] = $E8 then Code[CFsaCallPos[i] - 1] := $15
+      else Code[CFsaCallPos[i] - 1] := $25;
+      Code[CFsaCallPos[i] - 2] := $FF;
+      DynCallPCRel[DynCallCount] := False;
+      DynCallPicDelta[DynCallCount] := 0;
+      DynCallCodePos[DynCallCount] := CFsaCallPos[i];
+      DynCallExtIdx[DynCallCount] := RegisterExternal(pi);
+      Inc(DynCallCount);
+      Continue;
+    end;
     if (pi < 0) or (Procs[pi].BodyAddr < 0) then
       ErrorNoPos('C: file-scope asm calls "' + CFsaCallName[i] + '", which this unit does'
                  + ' not define -- a call into another object is not supported there');
@@ -20378,6 +20419,8 @@ var
   procSawWeak: Boolean;
   procVis: Integer;      { CDeclVisibility: ELF st_other for the symbol }
   procCtorKind: Integer;
+  procNaked: Boolean;
+  nakedText: AnsiString;
   procSecName: AnsiString;
   procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   procSawInline, procSawExtern, procGnuInline: Boolean;   { C99 inline linkage (CNoteInlineLinkage) }
@@ -20455,6 +20498,7 @@ begin
   procSawWeak := CDeclSawWeak(TokPos - 1);
   procVis := CDeclVisibility(TokPos - 1);
   procCtorKind := CDeclCtorKind(TokPos - 1);
+  procNaked := CDeclTokFlag(TokPos - 1, $4000);
   procSecName := CDeclSectionName(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -21319,6 +21363,49 @@ begin
     bug-c-wasm32-file-scope-initialisers-read-zero }
   if (name = 'main') and (TargetArch <> TARGET_WASM32) then
     mainInitIdx := CEmitMainInitProc;
+  { __attribute__((naked)): no prologue, no epilogue, no frame -- gcc allows
+    only basic asm in the body, and the asm is the whole function. So it is
+    lowered as file-scope asm defining the label (CFsaEmitCode), which already
+    assembles a body from AT&T text, resolves numeric labels, and branches to
+    other functions by name. It was accepted and ignored: micropython's
+    py/nlrx64.c nlr_push then ran under a pushed rbp and saved the wrong return
+    address. feature-c-attribute-naked-and-inline-asm-branches-to-symbols }
+  if procNaked then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      Error('C: __attribute__((naked)) on ' + name + ' is supported on x86-64 only so far'
+            + ' -- compiling it as an ordinary function would run its asm under a prologue');
+    if name = 'main' then Error('C: main cannot be __attribute__((naked))');
+    Expect(tkBegin, '{');
+    nakedText := '.globl ' + name + #10 + name + ':' + #10;
+    while CurTok.Kind <> tkEnd do
+    begin
+      if not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm')
+              or (CurTok.SVal = '__asm__'))) then
+        Error('C: the body of naked function ' + name + ' may hold only basic asm statements'
+              + ' (gcc''s rule: no locals, no C statements, no operands)');
+      Next;
+      while (CurTok.Kind = tkIdent) and
+            ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
+             (CurTok.SVal = '__volatile')) do Next;
+      Expect(tkLParen, '(');
+      if CurTok.Kind <> tkString then
+        Error('C: naked function ' + name + ': asm expects a string template');
+      while CurTok.Kind = tkString do
+      begin
+        nakedText := nakedText + CurTok.SVal;
+        Next;
+      end;
+      if CurTok.Kind <> tkRParen then
+        Error('C: naked function ' + name + ': only basic asm is allowed (no operands)');
+      Next;
+      nakedText := nakedText + #10;
+      while CurTok.Kind = tkSemicolon do Next;
+    end;
+    Next;   { the closing brace }
+    CFsaEmitCode(nakedText);
+    Exit;
+  end;
   SetProcBodyAddrHere(procIdx);
   
   { Save scope }

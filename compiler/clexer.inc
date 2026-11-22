@@ -448,6 +448,10 @@ begin
             else if CStrContains(attrText, '"internal"') then CAttrVis := 1;
           end;
           if CAttrHasWord(attrText, 'gnu_inline') then CAttrGnuInline := True;
+          { naked: no prologue or epilogue -- the body is basic asm alone (gcc's
+            rule). Rides the next token as $4000; ParseCSubroutine lowers such a
+            definition as file-scope asm. feature-c-attribute-naked-and-inline-asm-branches-to-symbols }
+          if CAttrHasWord(attrText, 'naked') or CAttrHasWord(attrText, '__naked__') then CAttrNaked := True;
           if CAttrHasWord(attrText, 'constructor') then CAttrCtor := CAttrCtor or 1;
           if CAttrHasWord(attrText, 'destructor') then CAttrCtor := CAttrCtor or 2;
           if CAttrHasWord(attrText, 'section') then CAttrSection := CAttrSectionOf(attrText);
@@ -1335,6 +1339,7 @@ begin
   CAttrWeak := False; CAttrVis := 0;
   CLexSawInline := False;
   CAttrGnuInline := False;
+  CAttrNaked := False;
   CAttrCtor := 0;
   CAttrSection := '';
   TokCount := 0; TokCharLen := 0;
@@ -1381,6 +1386,11 @@ begin
     begin
       CAttrFlags[TokCount] := CAttrFlags[TokCount] or $800;
       CAttrGnuInline := False;
+    end;
+    if CAttrNaked then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $4000;
+      CAttrNaked := False;
     end;
     if CAttrCtor <> 0 then
     begin
@@ -1446,6 +1456,7 @@ begin
   CAttrWeak := False; CAttrVis := 0;
   CLexSawInline := False;
   CAttrGnuInline := False;
+  CAttrNaked := False;
   CAttrCtor := 0;
   CAttrSection := '';
   SavedLexSource := Source;
@@ -1515,6 +1526,11 @@ begin
     begin
       CAttrFlags[TokCount] := CAttrFlags[TokCount] or $800;
       CAttrGnuInline := False;
+    end;
+    if CAttrNaked then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $4000;
+      CAttrNaked := False;
     end;
     if CAttrCtor <> 0 then
     begin

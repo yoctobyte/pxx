@@ -1,7 +1,7 @@
 ---
 slug: bug-c-a-setjmp-called-through-a-pointer-cannot-be-returned-to-on-x86-64
 track: C
-prio: 30
+prio: 20
 type: bug
 status: backlog
 created: 2026-11-22
@@ -57,7 +57,12 @@ slot inside the caller's frame, which a later call cannot reach.
 
 ## Who needs it
 
-micropython's native emitter keeps `setjmp` in its function table
-(py/nativeglue.c), and JIT-generated code calls it through that table. In C,
-this shape is rare. test/c_setjmp_as_value.c names this ticket and leaves the
-shape out.
+No known user on x86-64. micropython's function table does hold `setjmp`
+(py/nativeglue.c), but only the xtensawin emitter calls it (N_NLR_SETJMP).
+The x86-64 JIT calls the table's nlr_push entry and needs py/nlrx64.c, see
+feature-c-attribute-naked-and-inline-asm-branches-to-symbols. An earlier
+version of this ticket blamed micropython's seven native/viper test
+failures on this bug. That was wrong: they came from building with
+-DMICROPY_NLR_SETJMP=1, where the x86-64 JIT calls nlr_push_tail and never
+saves its registers. In C, this shape is rare. test/c_setjmp_as_value.c
+names this ticket and leaves the shape out.

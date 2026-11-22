@@ -4244,8 +4244,10 @@ begin
 end;
 
 { Seed the C `-D`/`-U` command-line predefines (captured raw at arg-parse time).
-  A define splits on the first `=`: `name=value`, or `name` → value `1`. Undefs
-  reuse CPUndef via a synthetic single-name line. }
+  A define splits on the first `=`: `name=value`, or `name` → value `1`. An
+  undef (stored marked #1, in the same list) reuses CPUndef. One list, applied
+  in command-line order, as gcc does: `-U__GNUC__ -D__GNUC__=8` is 8.
+  bug-c-command-line-undef-is-applied-after-every-define }
 procedure CPApplyCmdlineDefines;
 var i, eq: Integer; raw, nm, vl: AnsiString;
 begin
@@ -4253,6 +4255,12 @@ begin
   begin
     raw := CCmdDefRaw[i];
     if raw = '' then Continue;
+    if raw[1] = #1 then
+    begin
+      raw := Copy(raw, 2, Length(raw) - 1);
+      if raw <> '' then CPUndef(raw, 1, Length(raw));
+      Continue;
+    end;
     eq := Pos('=', raw);
     if eq > 0 then
     begin
@@ -4275,11 +4283,6 @@ begin
       CPDefine(raw, 1, Length(raw));
     end
     else if nm <> '' then CPAddLiteral(nm, vl);
-  end;
-  for i := 0 to CCmdUndefCount - 1 do
-  begin
-    raw := CCmdUndefRaw[i];
-    if raw <> '' then CPUndef(raw, 1, Length(raw));
   end;
 end;
 

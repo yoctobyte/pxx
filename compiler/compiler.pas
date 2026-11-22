@@ -3097,10 +3097,12 @@ begin
             ((option[2] = 'u') or (option[2] = 'U')) then
     begin
       PasUndefineCommandOption(3);
-      if CCmdUndefCount < MAX_C_CMD_DEFINES then
+      { into the SAME list as -D, marked #1: gcc applies -D and -U in the order
+        given, so `-U__GNUC__ -D__GNUC__=8` is 8 (pxx read it as undefined) }
+      if CCmdDefCount < MAX_C_CMD_DEFINES then
       begin
-        CCmdUndefRaw[CCmdUndefCount] := PasOptionTail(option, 3);
-        Inc(CCmdUndefCount);
+        CCmdDefRaw[CCmdDefCount] := #1 + PasOptionTail(option, 3);
+        Inc(CCmdDefCount);
       end;
       Inc(i);
     end
