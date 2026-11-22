@@ -21937,6 +21937,10 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_pp2arr26 | diff -u test/c_pointer_to_pointer_to_array_of_pointers.expected -
 	./$(COMPILER) --target=aarch64 test/c_pointer_to_pointer_to_array_of_pointers.c $(TESTTMP)/c_pp2arr26_a64 > /dev/null
 	timeout 60 tools/run_target.sh aarch64 $(TESTTMP)/c_pp2arr26_a64 | diff -u test/c_pointer_to_pointer_to_array_of_pointers.expected -
+	./$(COMPILER) test/c_setjmp_through_pointer.c $(TESTTMP)/c_sjptr26 > /dev/null
+	$(TESTTMP)/c_sjptr26 | diff -u test/c_setjmp_through_pointer.expected -
+	./$(COMPILER) --target=i386 test/c_setjmp_through_pointer.c $(TESTTMP)/c_sjptr26_386 > /dev/null
+	tools/run_target.sh i386 $(TESTTMP)/c_sjptr26_386 | diff -u test/c_setjmp_through_pointer.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

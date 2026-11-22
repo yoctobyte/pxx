@@ -9085,6 +9085,8 @@ begin
             plus mStack 8-byte args needs 8 more pad when mStack is even for the
             call-site 16-alignment. }
           EmitSaveCallerRspX64;                     { r11 = P ; and rsp, -16 ; push r11 }
+          if IRCallRspSlot[node] >= 0 then
+            EmitAsmX64(['mov [rbp+%], r11', Syms[IRCallRspSlot[node]].Offset]);
           if (mStack and 1) = 0 then
           begin
             padBytes := 8;
@@ -9209,7 +9211,16 @@ begin
           EmitAsmX64(['call r11']);
           FloatPoolRestore;
           end;
-          EmitRestoreCallerRspX64(mStack * 8 + padBytes);
+          if IRCallRspSlot[node] >= 0 then
+          begin
+            { from the frame: a second return (setjmp) finds it intact }
+            EmitAsmX64(['mov r11, [rbp+%]', Syms[IRCallRspSlot[node]].Offset]);
+            if X64AllocaBaseOff <> 0 then
+              EmitAsmX64(['add r11, [rbp+%]', X64AllocaBaseOff]);
+            EmitAsmX64(['mov rsp, r11']);
+          end
+          else
+            EmitRestoreCallerRspX64(mStack * 8 + padBytes);
           EmitAsmX64(['add rsp, 8']); { (pop callee) }
           if (sysvRet > 0) and (IRCallDest[node] >= 0) then
             IREmitSysVRetStore(IRCallDest[node], sysvRet, retC0, retC1,

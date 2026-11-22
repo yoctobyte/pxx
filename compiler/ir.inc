@@ -520,6 +520,7 @@ begin
   SetLength(IRKind, n);         SetLength(IRA, n);         SetLength(IRB, n);
   SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
   SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
+  SetLength(IRCallRspSlot, n);
   SetLength(IRSetLenBaseCap, n);
   SetLength(IRArgRecId, n);
   SetLength(IRStmtRoot, n);     SetLength(IRLine, n);      SetLength(IRFile, n);
@@ -641,6 +642,7 @@ begin
   IRLine[IRCount] := CurLowerLine;
   IRFile[IRCount] := CurLowerFile;
   IRCallDest[IRCount] := -1;
+  IRCallRspSlot[IRCount] := -1;
   IRArgRecId[IRCount] := REC_NONE;
   IRCtorProc[IRCount] := -1;
   IRSetLenBaseCap[IRCount] := 0;
@@ -4014,6 +4016,17 @@ begin
                -1, 0, Ord(tyUnknown))] := 1;
   end;
   Result := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
+end;
+
+{ See IRCallRspSlot (defs.inc). C only, so every Pascal body's code is
+  unchanged. }
+procedure IRCallKeepRsp(callNode: Integer);
+var tmpSym: Integer;
+begin
+  if (TargetArch <> TARGET_X86_64) or (not CProgramMode) or (CurProc < 0) then Exit;
+  tmpSym := AllocVar('', tyInt64);
+  if Syms[tmpSym].Kind <> skLocal then Exit;
+  IRCallRspSlot[callNode] := tmpSym;
 end;
 
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
@@ -13956,6 +13969,7 @@ begin
       if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
       if hidDest >= 0 then IRCallDest[Result] := hidDest;
+      IRCallKeepRsp(Result);
     end;
 
     AN_GUIDCONST:
@@ -19761,6 +19775,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
       if hidDest >= 0 then IRCallDest[Result] := hidDest;
+      IRCallKeepRsp(Result);
       { copy-OUT the var/out open-array writebacks this call's args registered —
         the direct AN_CALL path already flushes these; the indirect path never
         did, so a static array / record field passed to a `var` open-array param
@@ -19890,6 +19905,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
       if hidDest >= 0 then IRCallDest[Result] := hidDest;
+      IRCallKeepRsp(Result);
     end;
 
     AN_IF:

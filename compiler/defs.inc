@@ -8566,6 +8566,12 @@ var
     and IR_CALL_IND have no free operand, so their dest node lives here (-1 = none).
     bug-frozen-string-result-global-not-reentrant. }
   IRCallDest : array of Integer;
+  { x86-64 IR_CALL_IND in a C program: a frame slot that keeps the caller's rsp
+    across the call, else -1. The call sequence parks it below the argument
+    area too, but a callee that returns twice (setjmp through a pointer)
+    comes back after later calls have reused that stack.
+    bug-c-a-setjmp-called-through-a-pointer-cannot-be-returned-to-on-x86-64 }
+  IRCallRspSlot : array of Integer;
   { The RECORD IDENTITY of a by-value struct argument, carried on the VALUE node
     IRLowerCallArg returns (an IR_LEA over the private temp). REC_NONE = not a
     record argument.

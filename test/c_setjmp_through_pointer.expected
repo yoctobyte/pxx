@@ -1,0 +1,8 @@
+r=0 count=0
+r=1 count=1
+r=2 count=2
+r=3 count=3
+viaptr 4
+nested 25
+loop 12650
+alloca 24

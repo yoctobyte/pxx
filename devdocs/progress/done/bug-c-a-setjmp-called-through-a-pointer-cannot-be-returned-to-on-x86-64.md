@@ -3,7 +3,8 @@ slug: bug-c-a-setjmp-called-through-a-pointer-cannot-be-returned-to-on-x86-64
 track: C
 prio: 20
 type: bug
-status: backlog
+status: done
+closed: 2026-11-22
 created: 2026-11-22
 found-by: claude-pxx (building micropython v1.24.1's unix port with pxx)
 tags: [cfront, setjmp, x86-64]
@@ -66,3 +67,23 @@ failures on this bug. That was wrong: they came from building with
 -DMICROPY_NLR_SETJMP=1, where the x86-64 JIT calls nlr_push_tail and never
 saves its registers. In C, this shape is rare. test/c_setjmp_as_value.c
 names this ticket and leaves the shape out.
+
+## Done (2026-11-22)
+
+The second fix the ticket suggested. A C program's x86-64 IR_CALL_IND now
+gets a frame slot (IRCallRspSlot, allocated with the call node by
+IRCallKeepRsp). The call sequence stores the caller's rsp there as well as
+below the argument area, and restores rsp from the frame slot after the
+call. A second return through longjmp finds the slot intact, because it is
+in the caller's frame. In a body with alloca the slot holds `rsp - base`,
+as the parked copy did. Pascal bodies are unchanged; the switch is
+CProgramMode. The cost is one store and one 8-byte slot per indirect call
+site.
+
+Direct calls keep the old sequence. A direct setjmp is the intrinsic. A
+returns-twice function called directly by name (vfork, getcontext) has not
+been measured.
+
+Test c_setjmp_through_pointer (gcc-checked: x86-64, i386, aarch64) covers
+four returns through one pointer-called setjmp, plus alloca in the same
+body, indirect calls nested in arguments, and a loop of them.
