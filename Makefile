@@ -21917,6 +21917,14 @@ test-core: $(COMPILER)
 	tools/run_target.sh xtensa $(TESTTMP)/test_gpcaddr_xtw | diff -u test/test_get_pc_addr_xtensa_windowed.expected -
 	tools/expect_same.sh gpcaddr_xtensa_call0_refused "$$(./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_get_pc_addr_xtensa_windowed.pas $(TESTTMP)/test_gpcaddr_xtc0 2>&1 | grep -c 'windowed ABI only')" "1"
 	./$(COMPILER) --target=esp32s3 --emit-obj --freestanding test/c_return_address_esp32s3_object.c $(TESTTMP)/c_retaddr_s3.o > /dev/null
+	./$(COMPILER) test/c_sigaction_flags.c $(TESTTMP)/c_saflg26 > /dev/null
+	timeout 30 $(TESTTMP)/c_saflg26 | diff -u test/c_sigaction_flags.expected -
+	./$(COMPILER) --target=aarch64 test/c_sigaction_flags.c $(TESTTMP)/c_saflg26_a64 > /dev/null
+	timeout 60 tools/run_target.sh aarch64 $(TESTTMP)/c_saflg26_a64 | diff -u test/c_sigaction_flags.expected -
+	./$(COMPILER) --target=i386 test/c_sigaction_flags.c $(TESTTMP)/c_saflg26_386 > /dev/null
+	timeout 60 tools/run_target.sh i386 $(TESTTMP)/c_saflg26_386 | diff -u test/c_sigaction_flags.expected -
+	./$(COMPILER) --target=riscv32 test/c_sigaction_flags.c $(TESTTMP)/c_saflg26_rv32 > /dev/null
+	timeout 60 tools/run_target.sh riscv32 $(TESTTMP)/c_saflg26_rv32 | diff -u test/c_sigaction_flags.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

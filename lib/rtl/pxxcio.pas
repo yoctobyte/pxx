@@ -196,6 +196,8 @@ function __pxx_kill(pid, sig: Integer): Integer;
   compiler's signal runtime. A second copy in C would be the second mechanism
   for one concept that root-cause-over-microfix.md is about. }
 function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
+{ sa_flags bits on/off on an installed handler (crtl sigaction) }
+function __pxx_c_sigflags(sig, flagsOn, flagsOff: Integer): Integer;
 function __pxx_fork: Integer;
 function __pxx_wait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function __pxx_geteuid: Integer;
@@ -1056,10 +1058,24 @@ function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
 begin
   Result := __pxx_c_sigaction(sig, handler, 0);
 end;
+
+{ The caller's SA_ONSTACK / SA_RESTART / SA_NODEFER, applied to the
+  disposition __pxx_c_sigaction just installed (the runtime installs every
+  handler ONSTACK|RESTART). A negative result is -errno. }
+function __pxx_c_sigflags(sig, flagsOn, flagsOff: Integer): Integer;
+begin
+  Result := PalSetSignalFlags(sig, flagsOn, flagsOff);
+  if Result > 0 then Result := -Result;
+end;
 {$else}
 function __pxx_c_sigaction(sig: Integer; handler: Pointer; siginfo: Integer): Integer;
 begin
   Result := -38;   { -ENOSYS, as __pxx_c_signal below }
+end;
+
+function __pxx_c_sigflags(sig, flagsOn, flagsOff: Integer): Integer;
+begin
+  Result := -38;
 end;
 
 function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;

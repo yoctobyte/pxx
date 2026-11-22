@@ -32,6 +32,7 @@ extern int __pxx_sigprocmask(int how, void *set, void *oldset, int setSize);
 extern int __pxx_sigtimedwait(void *set, int setSize, int sec, int nsec);
 extern int __pxx_c_signal(int sig, void *handler);
 extern int __pxx_c_sigaction(int sig, void *handler, int siginfo);
+extern int __pxx_c_sigflags(int sig, int flags_on, int flags_off);
 extern int __pxx_getpid(void);
 
 /* 65, not 64: the array is indexed BY SIGNAL NUMBER, so slot 64 must exist and
@@ -77,6 +78,26 @@ int sigismember(const sigset_t *set, int sig) {
    and leaves the C contract in the C file. */
 static __sighandler_t __pxx_prev[__PXX_NSIG];
 static unsigned char __pxx_prev_info[__PXX_NSIG];   /* installed with SA_SIGINFO */
+static int __pxx_prev_flags[__PXX_NSIG];            /* the caller's sa_flags, for oact */
+
+/* The signal runtime installs every handler SA_ONSTACK|SA_RESTART (Pascal's
+   stack-overflow SIGSEGV needs the alt stack). A C handler gets the flags its
+   caller asked for instead, as with glibc: SA_ONSTACK and SA_RESTART only if
+   requested, SA_NODEFER if requested. A handler that runs on the alt stack
+   when it did not ask to sees an sp outside its thread's stack -- micropython's
+   thread GC scans [sp, stack top) from its SIGUSR1 handler and crashed -- and
+   one installed without SA_RESTART must see EINTR.
+   bug-crtl-sigaction-ignores-sa-flags-so-every-handler-runs-on-the-alt-stack-with-sa-restart
+   -ENOSYS (no signal runtime, or a kernel where the PAL keeps the runtime's
+   flags) is not an error: the handler is installed. */
+static int __pxx_apply_flags(int sig, __sighandler_t h, int flags) {
+  int rc;
+  if (h == SIG_DFL || h == SIG_IGN) return 0;
+  rc = __pxx_c_sigflags(sig, flags & SA_NODEFER,
+                        (SA_ONSTACK | SA_RESTART | SA_NODEFER) & ~flags);
+  if (rc == -38) return 0;
+  return rc;
+}
 
 __sighandler_t signal(int sig, __sighandler_t func) {
   __sighandler_t prev;
@@ -85,8 +106,12 @@ __sighandler_t signal(int sig, __sighandler_t func) {
   prev = __pxx_prev[sig];
   rc = __pxx_c_signal(sig, (void *)func);
   if (rc < 0) { errno = -rc; return SIG_ERR; }
+  /* glibc's signal() is BSD's: SA_RESTART, on the thread's own stack */
+  rc = __pxx_apply_flags(sig, func, SA_RESTART);
+  if (rc < 0) { errno = -rc; return SIG_ERR; }
   __pxx_prev[sig] = func;
   __pxx_prev_info[sig] = 0;
+  __pxx_prev_flags[sig] = SA_RESTART;
   return prev;
 }
 
@@ -175,9 +200,9 @@ int sigwait(const sigset_t *set, int *sig) {
    handler. That is a real divergence from POSIX and it is recorded rather than
    hidden -- a non-empty sa_mask does not refuse, because refusing would reject
    the majority of real callers (busybox fills sa_mask routinely) over a
-   property most of them do not depend on. sa_flags bits other than SA_SIGINFO
-   (SA_RESTART, SA_NOCLDSTOP, ...) are accepted and not acted on; the
-   underlying install is SA_RESTART-shaped already. */
+   property most of them do not depend on. SA_ONSTACK, SA_RESTART and
+   SA_NODEFER are applied as asked (__pxx_apply_flags). SA_RESETHAND and
+   SA_NOCLDSTOP are accepted and not acted on. */
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
   __sighandler_t prev;
   int rc;
@@ -186,14 +211,17 @@ int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
   if (oact) {
     oact->sa_handler = prev;          /* sa_sigaction is the same storage */
     sigemptyset(&oact->sa_mask);
-    oact->sa_flags = __pxx_prev_info[sig] ? SA_SIGINFO : 0;
+    oact->sa_flags = __pxx_prev_flags[sig] | (__pxx_prev_info[sig] ? SA_SIGINFO : 0);
     oact->sa_restorer = 0;
   }
   if (!act) return 0;                 /* query-only, and oact is already filled */
   rc = __pxx_c_sigaction(sig, (void *)act->sa_handler, (act->sa_flags & SA_SIGINFO) != 0);
   if (rc < 0) { errno = -rc; return -1; }
+  rc = __pxx_apply_flags(sig, act->sa_handler, act->sa_flags);
+  if (rc < 0) { errno = -rc; return -1; }
   __pxx_prev[sig] = act->sa_handler;
   __pxx_prev_info[sig] = (act->sa_flags & SA_SIGINFO) != 0;
+  __pxx_prev_flags[sig] = act->sa_flags & (SA_ONSTACK | SA_RESTART | SA_NODEFER | SA_NOCLDSTOP);
   return 0;
 }
 

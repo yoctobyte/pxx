@@ -1,0 +1,7 @@
+handler on the thread's stack 1
+no SA_RESTART: read -1 EINTR
+SA_RESTART: read 1 'x'
+signal(): read 1 'x'
+deferred: max depth 1
+SA_NODEFER: max depth 2
+oact restart 1 nodefer 1 onstack 0 siginfo 0

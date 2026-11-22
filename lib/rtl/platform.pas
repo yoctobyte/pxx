@@ -140,6 +140,7 @@ const
   the signal-disposition mechanism as fact; it was never implemented, and every
   send died: bug-b-fpsend-to-a-closed-peer-kills-the-process-msg-nosignal-is-never-passed. }
 function PalIgnoreSignal(sig: Integer): Integer;
+function PalSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;
 { Change the process working directory. Process-GLOBAL: it affects every
@@ -485,6 +486,11 @@ end;
 function PalIgnoreSignal(sig: Integer): Integer;
 begin
   Result := PalBackendIgnoreSignal(sig);
+end;
+
+function PalSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
+begin
+  Result := PalBackendSetSignalFlags(sig, flagsOn, flagsOff);
 end;
 
 function PalDelete(path: PChar): Integer;

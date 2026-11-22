@@ -94,6 +94,7 @@ function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 function PalBackendMmapFile(fd: Integer; len: Int64; prot: Integer): Pointer;
 function PalBackendIgnoreSignal(sig: Integer): Integer;
+function PalBackendSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -684,6 +685,31 @@ begin
     64-bit. sigsetsize = 8 (kernel 64-bit sigset). }
   act[0] := 1; act[1] := 0; act[2] := 0; act[3] := 0;
   Result := Integer(__pxxrawsyscall(SYS_rt_sigaction, sig, Int64(@act[0]), 0, 8, 0, 0));
+end;
+
+{ Turn sa_flags bits on and off in a signal's INSTALLED disposition: read it
+  back, change the flags word, write it back. The handler, restorer and mask
+  stay as the signal runtime set them. The flags word is the second field of
+  the kernel's struct sigaction on every Linux arch, one native word after the
+  handler, which is why the buffer is PtrUInt-sized. crtl's sigaction uses this
+  to honour SA_ONSTACK / SA_RESTART / SA_NODEFER as the caller asked, which
+  the runtime's install (always ONSTACK|RESTART) cannot know.
+  bug-crtl-sigaction-ignores-sa-flags-so-every-handler-runs-on-the-alt-stack-with-sa-restart
+  Linux only: the other kernels keep the runtime's flags (0 = nothing done). }
+function PalBackendSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
+var act: array[0..15] of PtrUInt;
+    i: Integer;
+    r: Int64;
+begin
+{$if defined(PXX_OS_FREEBSD) or defined(PXX_OS_NETBSD) or defined(PXX_OS_OPENBSD) or defined(PXX_OS_DRAGONFLY) or defined(PXX_OS_MINIX) or defined(PXX_OS_WINDOWS)}
+  Result := 0;
+{$else}
+  for i := 0 to 15 do act[i] := 0;
+  r := __pxxrawsyscall(SYS_rt_sigaction, sig, 0, Int64(@act[0]), 8, 0, 0);
+  if r < 0 then begin Result := Integer(r); Exit; end;
+  act[1] := (act[1] or PtrUInt(Cardinal(flagsOn))) and not PtrUInt(Cardinal(flagsOff));
+  Result := Integer(__pxxrawsyscall(SYS_rt_sigaction, sig, Int64(@act[0]), 0, 8, 0, 0));
+{$endif}
 end;
 
 function PalBackendDelete(path: PChar): Integer;

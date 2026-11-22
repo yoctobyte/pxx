@@ -23,6 +23,7 @@ function PalBackendSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
 function PalBackendFlush(handle: Integer): Integer;
 function PalBackendClose(handle: Integer): Integer;
 function PalBackendIgnoreSignal(sig: Integer): Integer;
+function PalBackendSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
 function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
@@ -526,6 +527,11 @@ end;
 function PalBackendIgnoreSignal(sig: Integer): Integer;
 begin
   Result := 0;   { FreeRTOS has no POSIX signals — nothing to ignore }
+end;
+
+function PalBackendSetSignalFlags(sig, flagsOn, flagsOff: Integer): Integer;
+begin
+  Result := 0;   { no POSIX signals, no flags }
 end;
 
 function PalBackendDelete(path: PChar): Integer;
