@@ -10012,7 +10012,11 @@ begin
         offset := Integer(IRIVal[node]);
         
         IREmitNode(baseAddr);
-        EmitAsmX64(['add rax, %', offset]);
+        { a field at offset 0 is its record's address: no `add rax, 0`
+          (3058 of them in the Rainyday pc kernel, 4 bytes each).
+          feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+        if offset <> 0 then
+          EmitAsmX64(['add rax, %', offset]);
       end;
 
     IR_LOAD_MEM:
@@ -10568,12 +10572,15 @@ begin
           if (OptLevel >= 3) and (op = tkStar) and (IRKind[left] = IR_LOAD_SYM) then
             w1LeftReg := ResidentRegOf(IRA[left]);
           if w1LeftReg = 0 then IREmitNode(left);   { rax = left }
+          { `x + 0` (a no-op decay, an index 0), `x - 0`, `x | 0`, `x ^ 0`:
+            the value is x, so no instruction. Nothing reads the flags of
+            these: a branch tests its own compare. }
           case op of
-            tkPlus:  begin EmitAsmX64(['add rax, %', IRIVal[right]]); end;
-            tkMinus: begin EmitAsmX64(['sub rax, %', IRIVal[right]]); end;
+            tkPlus:  begin if IRIVal[right] <> 0 then EmitAsmX64(['add rax, %', IRIVal[right]]); end;
+            tkMinus: begin if IRIVal[right] <> 0 then EmitAsmX64(['sub rax, %', IRIVal[right]]); end;
             tkAnd:   begin EmitAsmX64(['and rax, %', IRIVal[right]]); end;
-            tkOr:    begin EmitAsmX64(['or rax, %', IRIVal[right]]); end;
-            tkXor:   begin EmitAsmX64(['xor rax, %', IRIVal[right]]); end;
+            tkOr:    begin if IRIVal[right] <> 0 then EmitAsmX64(['or rax, %', IRIVal[right]]); end;
+            tkXor:   begin if IRIVal[right] <> 0 then EmitAsmX64(['xor rax, %', IRIVal[right]]); end;
             tkStar:  EmitImulRaxLeftImm32(w1LeftReg, IRIVal[right]);                       { imul rax, rax|rN, imm32 }
           end;
           Exit;

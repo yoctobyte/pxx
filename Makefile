@@ -21954,6 +21954,11 @@ test-core: $(COMPILER)
 	tools/run_target.sh i386 $(TESTTMP)/c_litraw26_386 | diff -u test/c_string_literal_plain_bytes.expected -
 	./$(COMPILER) --emit-obj --function-sections test/c_string_literal_plain_bytes.c $(TESTTMP)/c_litraw26.o > /dev/null 2>&1
 	tools/expect_same.sh c_litraw26_sec "$$(readelf -SW $(TESTTMP)/c_litraw26.o | sed 's/^ *\[ *[0-9]*\]//' | awk '$$1 ~ /^\.rodata\.pxx\.cstr/ {n++; if ($$NF != 1 || $$7 != "A") bad++} END {print (n > 10), bad + 0}')" "1 0"
+	# no `add rax, 0` for a field at offset 0 or an `x + 0` (3132 of them, 12.8 KB, in
+	# the Rainyday pc kernel). feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_field_offset_zero.c $(TESTTMP)/c_fz026 > /dev/null
+	$(TESTTMP)/c_fz026 | diff -u test/c_field_offset_zero.expected -
+	tools/expect_same.sh c_noaddzero26 "$$(objdump -d $(TESTTMP)/c_fz026 | grep -cE '\s(add|sub)\s+\$$0x0,%rax')" "0"
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

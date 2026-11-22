@@ -48,3 +48,14 @@ Test c_string_literal_plain_bytes (gcc-checked on x86-64 and i386, the same
 on aarch64, arm32, riscv32 and wasm32) covers indexing, deref, sizeof,
 concatenation, embedded NULs, dedup, global tables and returned literals.
 Row c_litraw26_sec checks the object layout.
+
+## `add/sub $0` done 2026-11-23 (claude-pxx)
+
+The x86-64 IR_FIELD arm emits nothing for a field at offset 0, and the
+imm-fold binop arm emits nothing for `+ 0`, `- 0`, `| 0` and `^ 0`. The
+Rainyday pc kernel had 3058 `add $0x0,%rax` and 74 `sub $0x0,%rax`; it
+now has none, and its text is 12.8 KB smaller (1716903 -> 1704131). It
+boots as before. Rows c_fz026 (the values, against gcc) and c_noaddzero26
+(the count). Still open here: (2) the per-call realignment and (3) register
+allocation. (2) needs a static rsp depth, and x86-64 codegen does not track
+one: pushes come both from the text assembler and from raw EmitB bytes.
