@@ -21945,6 +21945,15 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_pa2el26 | diff -u test/c_pointer_to_array_of_pointers_element.expected -
 	./$(COMPILER) --target=i386 test/c_pointer_to_array_of_pointers_element.c $(TESTTMP)/c_pa2el26_386 > /dev/null
 	tools/run_target.sh i386 $(TESTTMP)/c_pa2el26_386 | diff -u test/c_pointer_to_array_of_pointers_element.expected -
+	# C string literals are plain bytes and a NUL; in a --function-sections object each
+	# is its own read-only section with alignment 1, as gcc's .rodata.str1.1.
+	# feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_string_literal_plain_bytes.c $(TESTTMP)/c_litraw26 > /dev/null
+	$(TESTTMP)/c_litraw26 | diff -u test/c_string_literal_plain_bytes.expected -
+	./$(COMPILER) --target=i386 test/c_string_literal_plain_bytes.c $(TESTTMP)/c_litraw26_386 > /dev/null
+	tools/run_target.sh i386 $(TESTTMP)/c_litraw26_386 | diff -u test/c_string_literal_plain_bytes.expected -
+	./$(COMPILER) --emit-obj --function-sections test/c_string_literal_plain_bytes.c $(TESTTMP)/c_litraw26.o > /dev/null 2>&1
+	tools/expect_same.sh c_litraw26_sec "$$(readelf -SW $(TESTTMP)/c_litraw26.o | sed 's/^ *\[ *[0-9]*\]//' | awk '$$1 ~ /^\.rodata\.pxx\.cstr/ {n++; if ($$NF != 1 || $$7 != "A") bad++} END {print (n > 10), bad + 0}')" "1 0"
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

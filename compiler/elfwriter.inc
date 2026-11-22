@@ -6350,6 +6350,10 @@ begin
     if nat < cap then cap := nat;
   end;
   a := 1;
+  { a C string literal (InternCStr) needs none, as gcc's .rodata.str1.1;
+    reading one from its offset claimed whatever that offset happened to
+    divide by, and a linker then padded every literal to it }
+  if Copy(ODCName[c], 1, 8) = 'pxx.cstr' then cap := 1;
   if ODCOff[c] = 0 then a := cap
   else
     while (a < cap) and ((ODCOff[c] mod (a * 2)) = 0) do a := a * 2;
@@ -6495,11 +6499,23 @@ begin
     pool rode with whichever global preceded it and stayed alive in every
     object (toybox: 182 x 17.6 KiB). Not when the section indices would reach
     SHN_LORESERVE (0xff00): this writer has no extended numbering. }
-  if ObjCutCount * 2 + (ODCCount + StrCount) * 2 + 32 < $FF00 then
+  if ObjCutCount * 2 + (ODCCount + StrCount + CStrCount) * 2 + 32 < $FF00 then
+  begin
     for i := 0 to StrCount - 1 do
       if (Strs[i].EntryStart >= 0) and (Strs[i].EntryEnd > Strs[i].EntryStart) and
          (Strs[i].EntryEnd <= DataLen) then
         ObjDCutAdd(0, Strs[i].EntryStart, Strs[i].EntryEnd, 'pxx.str' + AIntToStr(i));
+    { ...and so is every C literal (InternCStr), read-only as gcc has it.
+      Without a cut each, one rode in whichever cut preceded it, and kept it
+      alive. feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+    for i := 0 to CStrCount - 1 do
+      if CStrOff[i] + Length(CStrText[i]) + 1 <= DataLen then
+      begin
+        ObjDCutAdd(0, CStrOff[i], CStrOff[i] + Length(CStrText[i]) + 1,
+                   'pxx.cstr' + AIntToStr(i));
+        ODCRo[ODCCount - 1] := True;
+      end;
+  end;
   { shell sort by (sec, off) }
   SortCuts;
   { drop a global that starts inside the one before it (the first stands) }

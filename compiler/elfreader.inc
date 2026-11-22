@@ -616,7 +616,7 @@ begin
     is still a foreign toolchain's and still refused (the elf_reader_vs_readelf
     control). bug-a-pxx-own-linker-refused-its-rodata-cuts }
   else if Copy(nm, 1, 8) = '.rodata.' then
-    begin k := ELFLNK_K_DATA; wantTy := 1; wantFl := 2; end
+    begin k := ELFLNK_K_RODATA; wantTy := 1; wantFl := 2; end
   { a LINK SET: pxx writes __attribute__((section("link_set_x"))) data as a
     writable PROGBITS section of that name (a const one as read-only) }
   else if ElfLnkIsCIdent(nm) then

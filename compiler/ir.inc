@@ -12262,7 +12262,8 @@ begin
 
     AN_STR_LIT:
     begin
-      Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
+      if not CProgramMode then
+        Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
       { IN C, A STRING LITERAL *IS* A `char *`, so decay it HERE, once, rather
         than at each consumer. IR_CONST_STR's value is the frozen string's
         HANDLE — an 8-byte length prefix then the data — and C wants the data.
@@ -12283,10 +12284,15 @@ begin
         (`IRTk[aval] = tyString`), not on the node kind — and its whole column
         was green while the node-kind columns were not.
         refactor-c-string-literal-decay-belongs-at-the-producer }
+      { ...and not from the managed-string pool at all: a C literal is plain
+        bytes and a NUL (InternCStr), about 40 bytes smaller each.
+        feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
       if CProgramMode then
-        Result := IRAppend(IR_BINOP, Result,
-                           IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                           Ord(tkPlus), 0, Ord(tyPointer));
+      begin
+        Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                           InternCStr(GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node])),
+                           Ord(tyPointer));
+      end;
     end;
 
     AN_DEFAULT:

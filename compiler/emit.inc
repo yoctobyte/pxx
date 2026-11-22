@@ -2147,6 +2147,50 @@ begin
   end;
 end;
 
+procedure CStrClear;
+var i: Integer;
+begin
+  if Length(CStrHead) = 0 then SetLength(CStrHead, 16384);
+  for i := 0 to 16383 do CStrHead[i] := -1;
+  CStrCount := 0;
+end;
+
+{ The data offset of C string literal s: its bytes and a NUL, emitted once per
+  distinct text. See CStrText (defs.inc). }
+function InternCStr(const s: AnsiString): Integer;
+var i, j, h: Integer;
+begin
+  if Length(CStrHead) = 0 then CStrClear;
+  h := StrHashOf(s) and 16383;
+  i := CStrHead[h];
+  while i >= 0 do
+  begin
+    if CStrText[i] = s then begin Result := CStrOff[i]; Exit; end;
+    i := CStrNext[i];
+  end;
+  if CStrCount >= Length(CStrText) then
+  begin
+    if Length(CStrText) = 0 then j := 1024 else j := Length(CStrText) * 2;
+    SetLength(CStrText, j); SetLength(CStrOff, j); SetLength(CStrNext, j);
+  end;
+  CStrText[CStrCount] := s;
+  CStrOff[CStrCount] := DataLen;
+  CStrNext[CStrCount] := CStrHead[h];
+  CStrHead[h] := CStrCount;
+  Inc(CStrCount);
+  DataEnsure(Length(s) + 1);
+  for j := 1 to Length(s) do
+  begin
+    Data[DataLen] := Ord(s[j]);
+    Inc(DataLen);
+  end;
+  Data[DataLen] := 0;
+  Inc(DataLen);
+  { read-only, as gcc's .rodata: a store through a literal is undefined }
+  RoRangeAdd(CStrOff[CStrCount - 1], DataLen);
+  Result := CStrOff[CStrCount - 1];
+end;
+
 function InternStr(const s: AnsiString): Integer;
 var i, j, h, entryStart: Integer; len, orAll, meta: Int64; match: Boolean;
 begin

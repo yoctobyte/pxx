@@ -536,7 +536,10 @@ ngc=$(wc -l < "$W/gc.ours" | tr -d ' ')
 PXXDBG="a.objgclink:$W/efs.lst" "$COMPILER" > "$W/efs.link" 2>&1 || fail "the GC link dump exited nonzero"
 grep -q 'ELFLINK-OK' "$W/efs.link" || { cat "$W/efs.link"; fail "the GC link dump did not reach its completion line"; }
 gstarts=""
-for s in text init_array fini_array data bss; do
+# .rodata too: C string literals live there (one section each, kept when
+# used), and ld would otherwise give it a page of its own on top of the
+# pinned .init_array. pxx places it straight after .text.
+for s in text rodata init_array fini_array data bss; do
   a=$(awk -v n=".$s" '$2=="out" && $3==n {print $4}' "$W/efs.link")
   [ -n "$a" ] || fail "the GC layout printed no address for .$s"
   gstarts="$gstarts --section-start=.$s=$a"

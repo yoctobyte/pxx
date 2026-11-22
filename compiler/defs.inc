@@ -4903,6 +4903,15 @@ var
   StrHashHead : array of Integer;
   StrHashNext : array of Integer;
   StrHashMask : Integer;
+  { C string literals as C has them: the bytes and a NUL, unaligned, one copy
+    per distinct text (InternCStr). A Strs entry is a static managed-string
+    handle, with 32 bytes of header and 8-byte alignment in front of the text,
+    and C reads only the text. feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+  CStrText : array of AnsiString;
+  CStrOff  : array of Integer;
+  CStrNext : array of Integer;
+  CStrHead : array of Integer;
+  CStrCount : Integer;
 
   { `uses` edge table (bug-pascal-uses-is-transitive measurement step): one
     entry per `uses X` clause actually parsed, recorded even when X was
