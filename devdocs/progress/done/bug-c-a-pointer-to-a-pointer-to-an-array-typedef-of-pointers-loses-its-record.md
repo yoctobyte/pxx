@@ -3,7 +3,8 @@ slug: bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-rec
 track: C
 prio: 25
 type: bug
-status: backlog
+status: done
+closed: 2026-11-22
 created: 2026-11-21
 found-by: claude-pxx (fixing bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape)
 tags: [cfront, typedef]
@@ -45,3 +46,35 @@ from somewhere else on this path.
   and the parameter path for `CTypeSpelledStars = 1` only.
 - The explicit `long *(**pq)[16]` is a parse error in pxx
   ("expected C expression" at `pq`). `long *(*q)[16]` parses.
+
+## Done (2026-11-22)
+
+Measured against gcc. Before the fix, over `typedef struct R *Table[16]`:
+- `(**ppt)[5]->b` read offset 0, and so did `(*ppt)[0][5]->b`,
+  `ppt[0][0][5]->b` and `(*(*ppt))[5]->b`.
+- The global `Table **g` and the parameter `Table **pp` crashed.
+- `(*(*pt)[5]).b` crashed at depth 1 as well.
+- `elem (**name)[N]` did not parse.
+
+The fixes:
+- CNodePtrElemRec's AN_INDEX arm answers an index whose base is a
+  pointer-to-array value (here `ppt[0]`) from CPtrToArrShape's CPAElemRec.
+  Before, only identifier and field bases had an arm.
+- CNodePointeeTk's AN_INDEX arm types such an element's pointee as the
+  record when the array's elements are struct pointers. It answered
+  `pointer`, and `.f` added an implicit second deref.
+- The global and parameter declarations stamp `T **` as depth 2, with the
+  array as the base pointee's shape, as the local path did.
+- The declarator arm accepts `elem (**name)[N]` as depth 2, and the local
+  and global allocations pass the depth on. They had 1 hardcoded.
+
+Test c_pointer_to_pointer_to_array_of_pointers (gcc-checked on x86-64 and
+aarch64; i386 agrees apart from the pointer sizes). It covers the local,
+global and parameter typedef forms, `->` and `(*x).f`, the explicit
+two-star spelling as local, global and parameter, and sizeof.
+
+Not fixed, filed as
+bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type:
+- A SCALAR element's pointee type is not recorded. `*(*q)[5]` over
+  `short *(*q)[16]` loads 8 bytes; `long *` only looks right.
+- `&(*pt)[5] - gtab` is 0 (gcc: 5), at depth 1 as well.

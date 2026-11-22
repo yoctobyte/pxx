@@ -514,8 +514,8 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record | C | 25 | bug | Over `typedef RecPtr Table[16]` (an array of struct pointers): a local `Table **pp` indexes right, but `(**pp)[5]->a[1]` reads 0 (gcc: 22); through a typed temporary it works. `T **` in a GLOBAL or a PARAMETER is not handled at all (the depth-1 fix covers those, the local path alone covers depth 2). The explicit spelling `long *(**pq)[16]` does not parse ('expected C expression'). Rare shapes; none seen in real code yet. | — |
 | bug-c-a-setjmp-called-through-a-pointer-cannot-be-returned-to-on-x86-64 | C | 20 | bug | `int (*f)(jmp_buf) = setjmp; if (f(jb) == 0) longjmp(jb, 5);` segfaults on x86-64 after the longjmp (gcc: returns 5). i386, aarch64, arm32 and riscv32 are right. The indirect call realigns the stack and keeps the old rsp in a slot below the caller's frame; the longjmp comes back to the instruction that reloads rsp from that slot, which later calls have overwritten. | — |
+| bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type | C | 30 | bug | Over `short *(*q)[16]` (or `typedef short *T[16]; T *q`), `*(*q)[5]` loads 8 bytes where gcc loads a short (pxx 6488141, gcc 77). A pointer and a long are both 8 bytes, so `long *` elements only look right. Separately, `&(*pt)[5] - gtab` is 0 (gcc 5): the difference divides by sizeof the whole array. Through a `T *e` temporary both are right. Struct-pointer elements were fixed in the parent ticket. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
 | bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there | C | 40 | bug | UPDATE 2026-11-22 (claude-pxx): thrd_create is routed too (crtl has its own C11 <threads.h> over its pthreads; --system-libs renames glibc's thrd_create to palhostthread's wrapper; test c_c11thr). Item (2) for an x86-64 --emit-obj PROGRAM object is fixed since 2026-11-21 (real ELF TLS without --system-libs, c_ltlo); --shared still shares. FIXED 2026-11-20 (claude-dupwt) for item (1), the --system-libs executable on x86-64 and i386: pthread_create is routed through palhostthread (see the bottom section); (2) and (3) below stay open. RE-MEASURED 2026-11-19 (rd): the silent half below is FIXED. Statically linked, an initialised scalar, an array, a struct and a function-scope static `__thread` are per-thread and initialised from the image on x86-64, i386, aarch64 and arm32 (gcc's output; test/c_tls_threads_libc_warns.c). What still shares one copy: (1) a DYNAMIC binary (--system-libs) whose threads the loaded libc starts. A C program there calls the host pthread_create directly and its threads inherit the creator's block. On x86-64 this was SILENT until 2026-11-19 and now warns; aarch64/arm32 warned already. Fix: route those threads through PxxPthreadStart, or emit real ELF TLS (PT_TLS + fs-relative local-exec) in pxx's own dynamic link. (2) --emit-obj/--shared without --system-libs (warns; with --system-libs objects carry real ELF TLS since 877d42f8b5). (3) targets with no block install (riscv32, xtensa: no threads). The old text below is the history. | — |
 | feature-c-an-over-aligned-local-is-not-aligned | C | 40 | feature | A local declared `int l __attribute__((aligned(32)))`, or with an aligned typedef (`al_t l;`, aligned 16), is placed at its plain type's alignment: `&l % 32` is nonzero under pxx, 0 under gcc. Globals and struct members honour both. Up to 16 needs only slot alignment within the 16-aligned frame; above 16 needs gcc-style frame realignment (and rbp addressing that survives it). Matters for SIMD/FXSAVE buffers and DMA descriptors on the stack. | — |
@@ -942,9 +942,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4693)
+## done (4694)
 
-4693 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4694 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (90)
 
@@ -1337,6 +1337,7 @@ _none_
 - [p 30] [A] bug-a-an-explicit-pal-dir-that-contradicts-the-target-platform-fails-deep-in-the-rtl-with-no-diagnostic
 - [p 30] [A] bug-a-shared-reports-an-internal-error-on-four-targets-where-i386-gets-a-clean-refusal
 - [p 30] [A] bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc
+- [p 30] [C] bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type
 - [p 30] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - [p 30] [N] bug-n-a-variant-argument-picks-the-class-overload-without-a-tag-test
 - [p 30] [N] bug-n-an-ambiguous-property-store-on-a-dynamic-receiver-has-no-setter-path
@@ -1390,7 +1391,6 @@ _none_
 - [p 25] [A] bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings
 - [p 25] [A] bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend
 - [p 25] [A] bug-a-two-dozen-comments-describe-an-interface-value-as-a-16-byte-fat-pointer-and-it-is-one-pointer
-- [p 25] [C] bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record
 - [p 25] [N] bug-n-a-chained-assignment-through-a-call-result-target-still-stores-right-to-left
 - [p 25] [N] bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver
 - [p 25] [N] bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues

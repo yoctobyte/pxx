@@ -3551,7 +3551,15 @@ begin
   end
   else if ASTKind[node] = AN_INDEX then
   begin
-    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    if (IntToTypeKind(ASTTk[node]) = tyPointer) and CPtrToArrShape(ASTLeft[node]) and
+       (CPAElemTk = tyPointer) and (CPAElemRec >= REC_UCLASS_BASE) then
+      { an element of an array of struct pointers reached through a pointer to
+        the array, `(*pt)[i]` / `(**ppt)[i]`: the element points at the shape's
+        record. The depth rule below answered `pointer`, and `(*(*pt)[i]).f`
+        then took an implicit second deref.
+        bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record }
+      Result := Ord(tyRecord)
+    else if IntToTypeKind(ASTTk[node]) = tyPointer then
     begin
       depth := CNodePtrDepth(node);
       baseTk := CNodePtrBaseTk(node);
@@ -3711,7 +3719,15 @@ begin
       recId := ResolveNodeRec(ASTLeft[baseNode]);
       fieldName := GetASTIdentName(baseNode);
       Result := RecFieldPtrElemRec(recId, fieldName);
-    end;
+    end
+    else if CPtrToArrShape(baseNode) and (CPAElemTk = tyPointer) then
+      { An element of an array of struct pointers reached through a pointer
+        VALUE: `(**pp)[i]->f` over `typedef struct R *T[N]; T **pp` is lowered
+        to an index over `pp[0]`, and that base is neither an identifier nor
+        a field. The element's record is the pointee shape's (CPAElemRec).
+        No arm here was REC_NONE and `->f` read offset 0.
+        bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record }
+      Result := CPAElemRec;
   end
   else if ASTKind[node] = AN_BINOP then
     Result := ASTSOffset[node]      { pointer-arith binop carries the elem rec }
@@ -7770,6 +7786,7 @@ var
   fnRetArr: Boolean;               { `ret (*name(params))[N]..` -- a function returning a pointer to an array }
   fnRetArrK: Integer;
   paArrLen: Integer;               { pointer-to-array declarator `elem (*name)[N]` row length }
+  paTwo: Boolean;                  { ...spelled `elem (**name)[N]` }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpRetRec: Integer;                    { fn-ptr return's OWN record, for a by-value struct result }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -8247,14 +8264,23 @@ begin
     parameter -- is the same type with no name. It fell to the fn-pointer arm
     below, which recorded no row, so `((float (*)[4])p)[i][j]` stepped one
     element per row. }
-  if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+  { `elem (**name)[N]` is the same one level up: a pointer to such a pointer,
+    depth 2 with the array as the BASE pointee's shape, as `T **pp` over an
+    array typedef records it (CPtrToArrShapeSym). It was "expected C
+    expression". bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record }
+  paTwo := (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+           (Tokens[TokPos+1].Kind = tkStar) and (Tokens[TokPos+2].Kind = tkIdent) and
+           (Tokens[TokPos+3].Kind = tkRParen) and (Tokens[TokPos+4].Kind = tkLBrack);
+  if paTwo or
+     ((CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
      (((Tokens[TokPos+1].Kind = tkIdent) and (Tokens[TokPos+2].Kind = tkRParen) and
        (Tokens[TokPos+3].Kind = tkLBrack)) or
-      ((Tokens[TokPos+1].Kind = tkRParen) and (Tokens[TokPos+2].Kind = tkLBrack))) then
+      ((Tokens[TokPos+1].Kind = tkRParen) and (Tokens[TokPos+2].Kind = tkLBrack)))) then
   begin
     fpRet := Result;                 { element scalar type (before the pointer) }
     Next;                            { consume '(' }
     Next;                            { consume '*' }
+    if paTwo then Next;              { the second '*' }
     if CurTok.Kind = tkIdent then
     begin
       CTypeFnPtrName := CurTok.SVal;    { the declarator name (current token) }
@@ -8281,8 +8307,9 @@ begin
     end;
     Result := tyPointer;
     CTypeElemTk := Ord(fpRet);       { pointee element scalar kind (elem stride) }
+    if paTwo then CTypeElemTk := Ord(tyPointer);
     CTypeElemRec := baseRec;
-    CTypePtrDepth := 1;
+    if paTwo then CTypePtrDepth := 2 else CTypePtrDepth := 1;
     CTypePtrBaseTk := Ord(fpRet);
     CTypePtrBaseRec := baseRec;
     CTypePtrElemArrLen := paArrLen;  { flattened product for the p+1 stride }
@@ -8792,6 +8819,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     ptrElemSig, declPtrElemSig: Integer;  { pointee fn-ptr sig for `ft *pf` (SymElemProcSig channel) }
     sibFnSig: Integer;  { the base fn-pointer type's sig for a sibling declarator (`ft *a, *b, c`), else -1 }
     paLen, sibPaLen: Integer;
+    paDepth: Integer;        { 1 for `elem (*name)[N]`, 2 for `elem (**name)[N]` }
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
@@ -8852,6 +8880,7 @@ begin
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
   ptrElemSig := CTypePtrElemProcSig;  { pointee sig if this is `ft *` (mutually exclusive with procSig) }
   paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
+  paDepth := CTypePtrDepth;
   arrLen := CTypeFnPtrArrLen;  { array-of-fn-ptr `(*name[N])(..)` dim, else -2 }
   { Guard on baseTk = tyPointer for the same reason ParseCGlobalVarDecl does: a
     LOCAL whose type is a struct/union with a function-pointer member
@@ -8979,8 +9008,12 @@ begin
       if CTypePtrElemNDims > 1 then
         for mdi := 0 to CTypePtrElemNDims - 1 do
           SymArrDimSpan[idx * MAX_ARR_DIMS + mdi] := CTypePtrElemDim[mdi];
-      SetSymPointerType(idx, IntToTypeKind(elemTkOrd), elemRec,
-                        1, ptrBaseTk, ptrBaseRec);
+      if paDepth = 2 then
+        SetSymPointerType(idx, IntToTypeKind(elemTkOrd), elemRec,
+                          2, ptrBaseTk, ptrBaseRec)
+      else
+        SetSymPointerType(idx, IntToTypeKind(elemTkOrd), elemRec,
+                          1, ptrBaseTk, ptrBaseRec);
     end
     else
     begin
@@ -14692,6 +14725,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     declSawExtern, declSawStatic, declSymIsNew: Boolean;
     declSawThread: Boolean;
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
+    gPaDepth: Integer;   { 1 for `elem (*g)[N]`, 2 for `elem (**g)[N]` }
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
     gNameTok: Integer;    { token index of THIS declarator's name }
     gHadStar: Boolean;
@@ -14748,6 +14782,7 @@ begin
     where the identical local returns 23.
     bug-c-a-file-scope-pointer-to-array-crashes-on-indexing }
   gPaLen      := CTypePtrElemArrLen;
+  gPaDepth    := CTypePtrDepth;
   gPaNDims    := CTypePtrElemNDims;
   gElemTkOrd  := CTypeElemTk;
   gElemRec    := CTypeElemRec;
@@ -15170,8 +15205,12 @@ begin
       if gPaNDims > 1 then
         for gmdi := 0 to gPaNDims - 1 do
           SymArrDimSpan[idx * MAX_ARR_DIMS + gmdi] := gPaDim[gmdi];
-      SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
-                        1, gPtrBaseTk, gPtrBaseRec);
+      if gPaDepth = 2 then
+        SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
+                          2, gPtrBaseTk, gPtrBaseRec)
+      else
+        SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
+                          1, gPtrBaseTk, gPtrBaseRec);
     end;
     { the replay recorded above, now that the symbol exists }
     if (paDeferTok >= 0) and (idx >= 0) then
@@ -15687,11 +15726,15 @@ begin
       { `T *g` over `typedef E *T[N]`, an array OF POINTERS: a pointer to the
         N-pointer array, depth 1, as the local path and `E *(*g)[N]` have it.
         bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape }
-      if (tdArrLen >= 1) and gFirstDecl and (gSpelled = 1) and (gPtrD = 2) and
+      { `T **g` is the same one level up, depth 2 with the array as the base
+        pointee's shape, as the local path has it.
+        bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record }
+      if (tdArrLen >= 1) and gFirstDecl and (gSpelled >= 1) and (gSpelled <= 2) and
+         (gPtrD = gSpelled + 1) and
          (not wasArr) and (CTypeElemTk = Ord(tyPointer)) then
       begin
-        SetSymPointerType(idx, tyPointer, CTypeElemRec, 1, Ord(tyPointer), CTypePtrBaseRec);
-        gPtrD := 1;
+        SetSymPointerType(idx, tyPointer, CTypeElemRec, gSpelled, Ord(tyPointer), CTypePtrBaseRec);
+        gPtrD := gSpelled;
       end;
       if (tdArrLen >= 1) and ((gFirstDecl and (gSpelled > 0)) or (gStars > 0)) and
          (gPtrD >= 1) and (gPtrD <= 2) and
@@ -20560,6 +20603,7 @@ var
   pptrndims:  array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array param: pointee array dim count (>1 -> multi-dim, spans in pptrdims) }
   pptrdims:   array[0..MAX_PROC_PARAMS * MAX_ARR_DIMS - 1] of Integer; { pointee per-dim spans for a `(*q)[A][B]..` param }
   savedSC, savedFS, node, savedCurProc, pmi: Integer;
+  pArrOfPtr2: Boolean;   { a `T **t` param over an array typedef of pointers }
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
   xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
@@ -20783,16 +20827,20 @@ begin
             N-pointer array, depth 1, as `E *(*t)[N]` has it; the branch below
             then stamps the array as the pointee.
             bug-c-a-pointer-to-an-array-typedef-of-pointers-has-no-shape }
-          if (CTypePtrDepth = 2) and (CTypeTypedefArrLen > 0) and
-             (CTypeSpelledStars = 1) and (CTypeElemTk = Ord(tyPointer)) and
-             (pptrarrlen[nparams] = 0) then
+          { `T **t` is the same one level up: depth 2, the array the base
+            pointee's shape (bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record) }
+          pArrOfPtr2 := False;
+          if (CTypeTypedefArrLen > 0) and (CTypeSpelledStars >= 1) and
+             (CTypeSpelledStars <= 2) and (CTypePtrDepth = CTypeSpelledStars + 1) and
+             (CTypeElemTk = Ord(tyPointer)) and (pptrarrlen[nparams] = 0) then
           begin
-            pdepths[nparams] := 1;
+            pdepths[nparams] := CTypeSpelledStars;
             pbasetk[nparams] := Ord(tyPointer);
+            pArrOfPtr2 := CTypeSpelledStars = 2;
           end;
           { `mat4 **pp`: the BASE pointee's shape, as a depth-2 stamp means
             (CPtrToArrShapeSym) -- the local `mat4 **pp` records the same }
-          if (CTypePtrDepth = 2) and (CTypeTypedefArrLen > 0) and
+          if ((CTypePtrDepth = 2) or pArrOfPtr2) and (CTypeTypedefArrLen > 0) and
              (pptrarrlen[nparams] = 0) then
           begin
             if CTypeTypedefNDims > 1 then

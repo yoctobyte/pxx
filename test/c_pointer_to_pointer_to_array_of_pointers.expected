@@ -1,0 +1,10 @@
+temp 22
+depth1 22 33 33
+local 22 33 33 22
+deref 33 22
+next 1
+global 22 33
+param 22 22 33
+explicit 77 77 77 77
+explicitrec 22 33 33 33
+sizeof 128 8 128
