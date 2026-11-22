@@ -2916,6 +2916,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-tests-two-rows-asserted-behaviour-that-was-later-changed-on-purpose | N | 40 | bug | Two Nil Python rows asserted behaviour that was later changed on purpose | — |
 | bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance | A | 70 | bug | The queue makes filing a duplicate the path of least resistance | — |
+| bug-the-quick-gate-misses-c-file-scope-initialisers | T | 40 | bug | `tools/gate.sh quick` stayed GREEN while every C program's `main` skipped its file-scope initialisers (`char t[] = \"abc\";` read as an empty string). C conformance caught it with 16 failures. The quick tier should build and run a C program that has an initialised global. | — |
 | bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
 | bug-tobject-param-truncated-32bit | A | 60 | bug | TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines | — |

@@ -25,6 +25,17 @@ struct Point { int x; int y; };
 
 union U { int i; unsigned char b[4]; };
 
+/* FILE-SCOPE INITIALISERS, nonzero on purpose (a zero reads the same whether
+   main ran the initialisers or not). An edit to ParseCSubroutine once dropped
+   main's call of them: every C program's globals read 0 or "", and this tier
+   stayed green while conformance went 16 red.
+   bug-the-quick-gate-misses-c-file-scope-initialisers */
+#define CANARY_B "b"
+char g_concat[] = "a" CANARY_B "c";
+int g_int = 7;
+static struct Point g_pt = { 3, -4 };
+static const char *g_names[] = { "zero", "one", "two" };
+
 static int add(int a, int b) { return a + b; }
 static int sub(int a, int b) { return a - b; }
 
@@ -113,6 +124,12 @@ int main(void)
     sprintf(fbuf, "%d|%s|%c|%ld", 42, "str", 'x', 123456789L);
     chk(22, strcmp(fbuf, "42|str|x|123456789") == 0);
 
-    printf("total ok %d / 22\n", ok);
+    /* --- file-scope initialisers ------------------------------------------- */
+    chk(23, strcmp(g_concat, "abc") == 0 && sizeof g_concat == 4);
+    chk(24, g_int == 7);
+    chk(25, g_pt.x == 3 && g_pt.y == -4);
+    chk(26, strcmp(g_names[2], "two") == 0);
+
+    printf("total ok %d / 26\n", ok);
     return 0;
 }

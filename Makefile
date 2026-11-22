@@ -44194,7 +44194,7 @@ test-quick: $(COMPILER)
 	! ./$(COMPILER) -Futest/usesdepth test/quick_canary_uses_fail.pas $(TESTTMP)/qc_usesf26 > $(TESTTMP)/qc_usesf.log 2>&1
 	grep -q "undefined variable (DeepInt)" $(TESTTMP)/qc_usesf.log
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/quick_canary_c.c $(TESTTMP)/qc_c26
-	tools/expect_same.sh qc_c26 "$$($(TESTTMP)/qc_c26 | tail -1)" "total ok 22 / 22"
+	tools/expect_same.sh qc_c26 "$$($(TESTTMP)/qc_c26 | tail -1)" "total ok 26 / 26"
 	# THE EMITTED BINARY MUST NOT DEPEND ON HOW THE COMPILER WAS INVOKED. Unit
 	# resolution builds paths out of ExeDir (the directory of ParamStr(0)), and
 	# those resolved paths were interned into the EMITTED string pool, so one
