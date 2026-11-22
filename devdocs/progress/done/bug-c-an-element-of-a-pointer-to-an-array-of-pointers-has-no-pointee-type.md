@@ -3,7 +3,8 @@ slug: bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type
 track: C
 prio: 30
 type: bug
-status: backlog
+status: done
+closed: 2026-11-22
 created: 2026-11-22
 found-by: claude-pxx (fixing bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record)
 tags: [cfront, pointer-to-array]
@@ -49,3 +50,21 @@ the element (8). Not measured further.
 ## Who needs it
 
 No known user. Seen only while testing the parent ticket's shapes.
+
+## Done (2026-11-22)
+
+- **The element's pointee type.** A new per-symbol slot,
+  SymPtrArrElemPteTk, holds it. It is filled for the explicit spelling,
+  through CTypePtrArrElemPteTk which the `elem (*name)[N]` arm takes before
+  it overwrites the type, and for the typedef rules from the base type they
+  replace. That covers the local, global and parameter paths, depth 1 and
+  depth 2. CPtrShapeFromSym carries the slot into CPAElemPteTk, and
+  CNodePointeeTk's AN_INDEX arm answers from it.
+- **The difference.** IRPointerStride's `&x[i]` arm took IRArrayElemStride
+  of the base, which for a pointer-to-array base is the whole array. Over
+  such a base (CPtrToArrShape) the element is the shape's element.
+
+Test c_pointer_to_array_of_pointers_element (gcc-checked: x86-64, i386,
+aarch64, riscv32). It covers short and char elements, the explicit and
+typedef spellings at depth 1 and 2 as local, global and parameter, and
+differences over int, short-pointer, struct and 3-D pointees.

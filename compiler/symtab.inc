@@ -6714,7 +6714,7 @@ begin
   SetLength(SymFileRecSize, n);   SetLength(SymFileElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrArrElemPteTk, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n); SetLength(SymCConstObj, n); SetLength(SymCInitByCode, n); SetLength(SymCVis, n);
@@ -6957,7 +6957,7 @@ begin
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
-  SymPtrElemStrCap[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrArrElemPteTk[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -7325,7 +7325,7 @@ begin
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
-  SymPtrElemStrCap[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrArrElemPteTk[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -7983,7 +7983,7 @@ begin
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
-  SymPtrElemStrCap[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrArrElemPteTk[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
@@ -8116,7 +8116,7 @@ begin
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
-  SymPtrElemStrCap[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrArrElemPteTk[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   { `array of T` where T is a named FIXED array: the parser leaves the row
     shape in LastTypeDynElemRowLen/Lo; stamp it (depth-1 only) and reset. }
@@ -8288,7 +8288,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0; SymPtrElemNDims[SymCount] := 0;
-  SymPtrElemStrCap[SymCount] := 0; SymPtrElemStrTk[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrArrElemPteTk[SymCount] := 0; SymPtrElemStrTk[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0; SymDynElemRowLo[SymCount] := 0;
   DbgReportSymPtr(SymCount, name);

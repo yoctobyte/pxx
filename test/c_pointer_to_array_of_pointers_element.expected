@@ -1,0 +1,7 @@
+load 77 99 77 77
+typedef 99 99 11 99
+param 77 11 99 99
+char t h one
+diff 5 5 5 7
+diff3 23 3
+eq 1 1

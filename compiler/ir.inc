@@ -4323,6 +4323,7 @@ var k: Integer;
 begin
   CPAElemTk := CPtrToArrElemTk(si);
   CPAElemRec := CPtrToArrElemRec(si);
+  CPAElemPteTk := SymPtrArrElemPteTk[si];
   CPAArrLen := SymPtrElemArrLen[si];
   CPANDims := SymPtrElemNDims[si];
   for k := 0 to MAX_ARR_DIMS - 1 do CPASpan[k] := 0;
@@ -4464,6 +4465,7 @@ function CPtrToArrShape(node: Integer): Boolean;
 var si, f, rec: Integer; fname: AnsiString; wantArr: Boolean;
 begin
   Result := False;
+  CPAElemPteTk := 0;
   if node < 0 then Exit;
   si := CPtrToArrShapeSym(node);
   if si >= 0 then
@@ -4750,6 +4752,17 @@ begin
         elements, and asking the plain stride would answer the ROW stride the
         multi-dim decay arm above returns — 8 — making that difference 1.
         A full index has already spent every dimension. }
+      { Over a pointer to an array (`&(*q)[5]`, which the subscript arm flattens
+        to an index over q), the element is the pointee array's, and the
+        base's own stride is the whole array: `&(*q)[5] - arr` came out 0.
+        bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type }
+      if CProgramMode and CPtrToArrShape(ASTLeft[ASTLeft[node]]) then
+      begin
+        if CPAElemTk = tyRecord then Result := RecSize(CPAElemRec)
+        else if CPAElemTk = tyUnknown then Result := 1
+        else Result := TypeSlotSize(CPAElemTk);
+        Exit;
+      end;
       Result := IRArrayElemStride(ASTLeft[ASTLeft[node]]);
       Exit;
     end;

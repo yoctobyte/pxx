@@ -3559,6 +3559,11 @@ begin
         then took an implicit second deref.
         bug-c-a-pointer-to-a-pointer-to-an-array-typedef-of-pointers-loses-its-record }
       Result := Ord(tyRecord)
+    else if (IntToTypeKind(ASTTk[node]) = tyPointer) and CPtrToArrShape(ASTLeft[node]) and
+            (CPAElemTk = tyPointer) and (CPAElemPteTk > 0) then
+      { ...and a scalar element's pointee: `*(*q)[5]` over `short *(*q)[16]`
+        loads a short, not the 8 bytes `pointer` says. bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type }
+      Result := CPAElemPteTk
     else if IntToTypeKind(ASTTk[node]) = tyPointer then
     begin
       depth := CNodePtrDepth(node);
@@ -7822,6 +7827,7 @@ begin
   CTypeFnPtrArrLen := -2;
   CTypeFnPtrNDims := 0;
   CTypePtrElemArrLen := 0;
+  CTypePtrArrElemPteTk := 0;
   CTypePtrElemNDims := 0;
   CTypeFnRetIsFunc := False;
   CTypeFnRetParamCount := 0;
@@ -8278,6 +8284,10 @@ begin
       ((Tokens[TokPos+1].Kind = tkRParen) and (Tokens[TokPos+2].Kind = tkLBrack)))) then
   begin
     fpRet := Result;                 { element scalar type (before the pointer) }
+    { `short *(*q)[16]`: the elements are `short *`, and the star loop left
+      their pointee in CTypeElemTk; nothing below keeps it }
+    if (fpRet = tyPointer) and (CTypePtrDepth = 1) then
+      CTypePtrArrElemPteTk := CTypeElemTk;
     Next;                            { consume '(' }
     Next;                            { consume '*' }
     if paTwo then Next;              { the second '*' }
@@ -8820,6 +8830,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     sibFnSig: Integer;  { the base fn-pointer type's sig for a sibling declarator (`ft *a, *b, c`), else -1 }
     paLen, sibPaLen: Integer;
     paDepth: Integer;        { 1 for `elem (*name)[N]`, 2 for `elem (**name)[N]` }
+    paPteTk: Integer;        { the elements' pointee when they are pointers, else 0 }
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
@@ -8881,6 +8892,7 @@ begin
   ptrElemSig := CTypePtrElemProcSig;  { pointee sig if this is `ft *` (mutually exclusive with procSig) }
   paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
   paDepth := CTypePtrDepth;
+  paPteTk := CTypePtrArrElemPteTk;
   arrLen := CTypeFnPtrArrLen;  { array-of-fn-ptr `(*name[N])(..)` dim, else -2 }
   { Guard on baseTk = tyPointer for the same reason ParseCGlobalVarDecl does: a
     LOCAL whose type is a struct/union with a function-pointer member
@@ -9014,6 +9026,7 @@ begin
       else
         SetSymPointerType(idx, IntToTypeKind(elemTkOrd), elemRec,
                           1, ptrBaseTk, ptrBaseRec);
+      SymPtrArrElemPteTk[idx] := paPteTk;
     end
     else
     begin
@@ -10033,6 +10046,7 @@ begin
         if (tdArrLen >= 1) and (lclStars >= 1) and (lclStars <= 2) and
            (declPtrDepth = lclStars + 1) and (declElemTk = Ord(tyPointer)) then
         begin
+          SymPtrArrElemPteTk[idx] := declBaseTk;   { the elements' pointee, before it is overwritten }
           SetSymPointerType(idx, tyPointer, declElemRec, lclStars, Ord(tyPointer), declBaseRec);
           lclShapeD := lclStars;
         end
@@ -14726,6 +14740,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     declSawThread: Boolean;
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
     gPaDepth: Integer;   { 1 for `elem (*g)[N]`, 2 for `elem (**g)[N]` }
+    gPaPteTk: Integer;   { the elements' pointee when they are pointers, else 0 }
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
     gNameTok: Integer;    { token index of THIS declarator's name }
     gHadStar: Boolean;
@@ -14783,6 +14798,7 @@ begin
     bug-c-a-file-scope-pointer-to-array-crashes-on-indexing }
   gPaLen      := CTypePtrElemArrLen;
   gPaDepth    := CTypePtrDepth;
+  gPaPteTk    := CTypePtrArrElemPteTk;
   gPaNDims    := CTypePtrElemNDims;
   gElemTkOrd  := CTypeElemTk;
   gElemRec    := CTypeElemRec;
@@ -15211,6 +15227,7 @@ begin
       else
         SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
                           1, gPtrBaseTk, gPtrBaseRec);
+      SymPtrArrElemPteTk[idx] := gPaPteTk;
     end;
     { the replay recorded above, now that the symbol exists }
     if (paDeferTok >= 0) and (idx >= 0) then
@@ -15733,6 +15750,7 @@ begin
          (gPtrD = gSpelled + 1) and
          (not wasArr) and (CTypeElemTk = Ord(tyPointer)) then
       begin
+        SymPtrArrElemPteTk[idx] := CTypePtrBaseTk;   { the elements' pointee }
         SetSymPointerType(idx, tyPointer, CTypeElemRec, gSpelled, Ord(tyPointer), CTypePtrBaseRec);
         gPtrD := gSpelled;
       end;
@@ -20599,6 +20617,7 @@ var
   precid: array[0..MAX_PROC_PARAMS-1] of Integer;    { record id per tyRecord param (for isRef field access) }
   pprocsig: array[0..MAX_PROC_PARAMS-1] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   pptrelemsig: array[0..MAX_PROC_PARAMS-1] of Integer;  { pointee fn-ptr sig for a `ft *pf` param (`(*pf)()`), else -1 }
+  pptrpte:    array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array-of-pointers param: the elements' pointee, else 0 }
   pptrarrlen: array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array param `elem (*q)[N]`: flattened pointee row length, else 0 }
   pptrndims:  array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array param: pointee array dim count (>1 -> multi-dim, spans in pptrdims) }
   pptrdims:   array[0..MAX_PROC_PARAMS * MAX_ARR_DIMS - 1] of Integer; { pointee per-dim spans for a `(*q)[A][B]..` param }
@@ -20819,6 +20838,7 @@ begin
             array shape so `q[i][j]` strides by the row size (bug-c-ptr-to-array-
             parameter). Mirrors the local-declarator store. }
           pptrarrlen[nparams] := CTypePtrElemArrLen;
+          pptrpte[nparams] := CTypePtrArrElemPteTk;
           pptrndims[nparams]  := CTypePtrElemNDims;
           if CTypePtrElemNDims > 1 then
             for pmi := 0 to CTypePtrElemNDims - 1 do
@@ -20835,6 +20855,7 @@ begin
              (CTypeElemTk = Ord(tyPointer)) and (pptrarrlen[nparams] = 0) then
           begin
             pdepths[nparams] := CTypeSpelledStars;
+            pptrpte[nparams] := CTypePtrBaseTk;   { the elements' pointee }
             pbasetk[nparams] := Ord(tyPointer);
             pArrOfPtr2 := CTypeSpelledStars = 2;
           end;
@@ -21710,6 +21731,7 @@ begin
       if pptrarrlen[i] > 0 then
       begin
         SymPtrElemArrLen[idx] := pptrarrlen[i];
+        SymPtrArrElemPteTk[idx] := pptrpte[i];
         SymPtrElemNDims[idx] := pptrndims[i];
         if pptrndims[i] > 1 then
           for pmi := 0 to pptrndims[i] - 1 do

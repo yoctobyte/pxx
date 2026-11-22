@@ -5284,6 +5284,7 @@ var
   SymPtrElemAlias  : array of Integer; { ...and the POINTEE's own pointer alias, when the pointee is one (`pp: TPP` where `TPP = ^TP`): that alias index, else -1. The symbol-side mirror of AliasPtrElemAlias, and what lets NodePtrAlias answer for `pp^` -- an AN_DEREF has no symbol of its own, so the chain has to be walked one link at a time. }
   SymPtrElemArrAi  : array of Integer; { the pointee's ArrType ROW, when the pointee is a named array type (fixed or dynamic) -- else -1. The row the five SymPtrElem* copies above were derived FROM, kept beside them because a copy cannot answer a question nobody thought to copy: the per-dimension shape of an ARRAY-OF-POINTER's element pointee has nowhere to live, since SetPtrElemArrayInfo parks the pointee's dims in SymArrDimLo/Span and on an ARRAY symbol those slots already describe the array's OWN dimensions. One integer, no collision, and it is what DerefPtrElemArrAi answers with for a plain identifier and for `ap[0]^` alike. bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
   SymPtrElemNDims  : array of Integer; { C pointer-to-multidim-array `elem (*p)[A][B]..`: number of pointee array dims (0 or 1 = single-dim / scalar-pointee, uses SymPtrElemArrLen only). >1 -> the dim spans live in SymArrDimSpan[idx*MAX_ARR_DIMS + d] (a pointer symbol has SymArrNDims=0, so those slots are otherwise unused). Drives the >2-subscript `p[i][j][k]` flatten. }
+  SymPtrArrElemPteTk : array of Integer; { a pointer to an array OF POINTERS (`short *(*q)[16]`, `T *q` over `typedef short *T[16]`, and the depth-2 `**` forms): the ELEMENT's own pointee type (short), else 0. Nothing else carries it: the pointee and the base are both `pointer` there, so `*(*q)[5]` loaded 8 bytes. bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type }
   SymPtrElemStrCap : array of Integer; { THE FROZEN CAPACITY N BEHIND A POINTER, in either of the two shapes that have one: the ELEMENT's N for a pointer-to-array (`PA = ^array[0..3] of string[7]`), and the POINTEE's own N for a direct `PStr = ^string[8]`. 0 = unset. The two are disjoint -- a pointer is to an array or to a string, never both -- so they share one slot deliberately rather than growing a third convention for "the N behind a pointer" (two is a smell, three is a design flaw). Both are filled by SetPtrElemArrayInfo, which is the one procedure all four allocators call. SymStrCap is the capacity of the string the symbol IS and stays 0 on a pointer, so nothing else carried it -- and the index path needs it for the per-element SLOT STRIDE, which is the whole of why `p^[1]` on such an array read a byte at the wrong offset and printed empty. Filled from ArrTypeElemStrCap by SetPtrElemArrayInfo. bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
@@ -5686,6 +5687,7 @@ var
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
   CTypeFnPtrNDims  : Integer; { how many `[..]` that declarator had: `(*h[16][4])(void)` is 2 (Gibux irq.c) }
   CTypeFnPtrDims   : array[0..7] of Integer;  { their spans, outermost first; [0] = CTypeFnPtrArrLen }
+  CTypePtrArrElemPteTk : Integer; { `elem (*Name)[N]` whose elem is a pointer (`short *(*q)[16]`): that pointer's pointee (short), else 0. bug-c-an-element-of-a-pointer-to-an-array-of-pointers-has-no-pointee-type }
   CTypePtrElemArrLen : Integer; { pointer-to-array declarator `elem (*Name)[N]`: the pointee is a fixed array of N (row length). For a multi-dim pointee `(*Name)[A][B]` it holds the FLATTENED product A*B. 0 = not a pointer-to-array. }
   CTypePtrElemNDims  : Integer; { pointer-to-array declarator: number of pointee array dims (1 for `[N]`, >1 for `[A][B]..`); the spans are in CTypePtrElemDim[0..NDims-1]. }
   CTypePtrElemDim    : array[0..MAX_ARR_DIMS-1] of Integer; { pointee per-dim spans for a `(*Name)[A][B]..` declarator }
@@ -9428,6 +9430,7 @@ var
     they need before parsing further, as with NDInfo* below.
     bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
   CPAElemTk  : TTypeKind;
+  CPAElemPteTk : Integer;   { the element's pointee type when the element is a pointer (SymPtrArrElemPteTk), else 0 }
   CPAElemRec : Integer;
   CPAArrLen  : Integer;
   CPANDims   : Integer;
