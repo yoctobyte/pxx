@@ -21913,6 +21913,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_naked26_a64 "$$(./$(COMPILER) --target=aarch64 test/c_naked_function.c $(TESTTMP)/c_naked26_a64 2>&1 | grep -c 'naked.*x86-64 only')" "1"
 	./$(COMPILER) -U__GNUC__ -D__GNUC__=8 -DFOO=3 -UFOO -UBAR -DBAR=4 test/c_cmdline_undef_order.c $(TESTTMP)/c_undord26 > /dev/null
 	$(TESTTMP)/c_undord26 | diff -u test/c_cmdline_undef_order.expected -
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_get_pc_addr_xtensa_windowed.pas $(TESTTMP)/test_gpcaddr_xtw > /dev/null
+	tools/run_target.sh xtensa $(TESTTMP)/test_gpcaddr_xtw | diff -u test/test_get_pc_addr_xtensa_windowed.expected -
+	tools/expect_same.sh gpcaddr_xtensa_call0_refused "$$(./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_get_pc_addr_xtensa_windowed.pas $(TESTTMP)/test_gpcaddr_xtc0 2>&1 | grep -c 'windowed ABI only')" "1"
+	./$(COMPILER) --target=esp32s3 --emit-obj --freestanding test/c_return_address_esp32s3_object.c $(TESTTMP)/c_retaddr_s3.o > /dev/null
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

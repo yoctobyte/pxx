@@ -2641,6 +2641,7 @@ procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
+  retAnchor: Integer;   { IR_RETADDR: the call0 anchor's 4-aligned target }
   asmBlk, asmK, asmPass: Integer;   { IR_ASM: the C inline-asm binding block, and a cursor }
   isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
   r4: Integer;      { the string-marshalling quad's FOURTH register -- a7 on
@@ -2705,6 +2706,25 @@ begin
         EmitLoadConst64Xtensa(IRIVal[node])
       else
         EmitLoadConstXtensa(reg_xtensa_a2, Low32(IRIVal[node]));
+
+    IR_RETADDR:
+      begin
+        { a0's low 30 bits, the PC's top two (the window increment rides in
+          a0's), the way gcc lowers __builtin_return_address(0). The PC comes
+          from a call0 to the next 4-aligned offset, a0 saved in a9 around it,
+          the same anchor EmitXtensaLongCallSlot uses. }
+        xtensa_mov(reg_xtensa_a9, reg_xtensa_a0);
+        retAnchor := ((CodeLen + 3 + 3) div 4) * 4;
+        xtensa_call0(retAnchor - CodeLen);
+        while CodeLen < retAnchor do EmitB(0);
+        xtensa_mov(reg_xtensa_a8, reg_xtensa_a0);     { a8 = PC }
+        xtensa_mov(reg_xtensa_a0, reg_xtensa_a9);     { a0 restored }
+        EmitLoadConstXtensa(reg_xtensa_a2, $3FFFFFFF);
+        xtensa_and(reg_xtensa_a9, reg_xtensa_a9, reg_xtensa_a2);
+        EmitLoadConstXtensa(reg_xtensa_a2, Int32($C0000000));
+        xtensa_and(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a2);
+        xtensa_or(reg_xtensa_a2, reg_xtensa_a8, reg_xtensa_a9);
+      end;
 
     IR_CONST_STR:
       begin

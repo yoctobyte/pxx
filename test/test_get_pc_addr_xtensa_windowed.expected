@@ -1,0 +1,3 @@
+distinct TRUE increasing TRUE
+stable TRUE near TRUE
+top bits kept TRUE

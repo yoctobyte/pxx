@@ -1725,6 +1725,7 @@ const
                            so the store for a function-local table sits in the same body as
                            the labels it names. Measured 2026-09-02; see
                            bug-c-labels-as-values-is-the-whole-of-the-lua-regression. }
+  IR_RETADDR       = 77; { __builtin_return_address(0) / get_pc_addr on xtensa's WINDOWED ABI, into the accumulator (a2). No operands. Other targets read the return address off IR_FRAME; xtensa has no frame chain, but under the windowed ABI a0 holds the return address all through the body (pxx's own call0 anchors save and restore it), its top two bits being the window increment. So, as gcc does: a0's low 30 bits with the current PC's top two. feature-xtensa-builtin-return-address }
   IR_JUMP_INDIRECT = 76; { GNU `goto *expr': jump to the address in IRA's value.
                            AN UNCONDITIONAL TRANSFER, and IRIsUncondTransfer must say so, or
                            the block after it is read as fallen-into. It names NO label, which

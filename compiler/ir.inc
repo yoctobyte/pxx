@@ -732,6 +732,7 @@ begin
     IR_BLOCK_MEM: Result := 'block_mem';
     IR_MULHI: Result := 'mulhi';
     IR_FRAME: Result := 'frame';
+    IR_RETADDR: Result := 'retaddr';
     IR_TLSBASE: Result := 'tlsbase';
     IR_ALLOCA: Result := 'alloca';
     IR_FPU_MASK: Result := 'fpu_mask';
@@ -984,7 +985,7 @@ begin
   begin
     case IRKind[i] of
       IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT, IR_RESOURCES,
-      IR_FRAME, IR_TLSBASE:
+      IR_FRAME, IR_TLSBASE, IR_RETADDR:
         begin end;
 
       IR_LOAD_SYM:
@@ -14098,6 +14099,15 @@ begin
       { get_pc_addr = the return address of the CURRENT function, which the
         prologue parked one word above the saved frame pointer: [fp + PtrSize].
         So it is a plain load off IR_FRAME -- no backend op of its own. }
+      if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+      begin
+        { no frame chain, but a0 is the return address (IR_RETADDR) }
+        Result := IRAppend(IR_RETADDR, -1, -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
+      if TargetArch = TARGET_XTENSA then
+        Error('get_pc_addr / __builtin_return_address(0): supported on xtensa''s windowed ABI'
+              + ' only -- under call0, a0 is not kept as the return address through the body');
       IRRejectNoFramePointer('get_pc_addr');
       frameNode := IRAppend(IR_FRAME, -1, -1, -1, 0, Ord(tyPointer));
       slotNode := IRAppend(IR_BINOP, frameNode,
