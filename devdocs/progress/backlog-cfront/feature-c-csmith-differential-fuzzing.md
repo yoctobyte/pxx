@@ -1214,3 +1214,18 @@ This was the first sitting on either target. Neither repeats the riscv32 find,
 which fits: that bug was in riscv32's own narrowing. The harness's `--target`
 choices do not include xtensa, so the Xtensa guard is covered only by the
 c_xtu64cmp row.
+
+## Sitting 2026-11-22 (claude-pxx): 350 seeds, three targets, DRY
+
+At master dd18d9f380, pxx -O0 and -O2 against gcc, `tools/csmith_fuzz.py`
+defaults otherwise:
+
+| target | seeds | agreed | skipped (validity filter) | findings |
+| --- | --- | --- | --- | --- |
+| x86-64 | --seed-start 2026112200, 150 | 130 | 20 | none |
+| arm32 (gcc -m32 oracle) | --seed-start 2026113000, 100 | 89 | 11 | none |
+| riscv32 (gcc -m32 oracle) | --seed-start 2026113000, 100 | 89 | 11 | none |
+
+First sitting since 2026-08-30. Next sitting: seeds from 2026120000 on.
+Real-world builds (toybox, libXt, rump) found every C bug fixed this week;
+csmith has not, so it is a regression net now more than a bug source.
