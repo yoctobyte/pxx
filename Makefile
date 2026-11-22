@@ -21876,6 +21876,36 @@ test-core: $(COMPILER)
 	# "$$1$$" MD5-crypt against libxcrypt (toybox mkpasswd -m md5)
 	./$(COMPILER) test/c_crypt_md5.c $(TESTTMP)/c_cryptmd526 > /dev/null
 	$(TESTTMP)/c_cryptmd526 | diff -u test/c_crypt_md5.expected -
+	./$(COMPILER) test/c_address_compare_in_dimension.c $(TESTTMP)/c_addrdim26 > /dev/null
+	$(TESTTMP)/c_addrdim26 | diff -u test/c_address_compare_in_dimension.expected -
+	./$(COMPILER) test/c_designator_chain_onto_array_member.c $(TESTTMP)/c_dsgarr26 > /dev/null
+	$(TESTTMP)/c_dsgarr26 | diff -u test/c_designator_chain_onto_array_member.expected -
+	./$(COMPILER) --target=riscv32 test/c_designator_chain_onto_array_member.c $(TESTTMP)/c_dsgarr26_rv > /dev/null
+	tools/run_target.sh riscv32 $(TESTTMP)/c_dsgarr26_rv | diff -u test/c_designator_chain_onto_array_member.expected -
+	./$(COMPILER) test/c_stdbool_is_bool.c $(TESTTMP)/c_stdbool26 > /dev/null
+	$(TESTTMP)/c_stdbool26 | diff -u test/c_stdbool_is_bool.expected -
+	./$(COMPILER) --target=arm32 test/c_stdbool_is_bool.c $(TESTTMP)/c_stdbool26_arm > /dev/null
+	tools/run_target.sh arm32 $(TESTTMP)/c_stdbool26_arm | diff -u test/c_stdbool_is_bool.expected -
+	./$(COMPILER) test/c_bitfield_after_fnptr_member.c $(TESTTMP)/c_bfafp26 > /dev/null
+	$(TESTTMP)/c_bfafp26 | diff -u test/c_bitfield_after_fnptr_member.expected -
+	./$(COMPILER) --target=i386 test/c_bitfield_after_fnptr_member.c $(TESTTMP)/c_bfafp26_386 > /dev/null
+	tools/run_target.sh i386 $(TESTTMP)/c_bfafp26_386 | diff -u test/c_bitfield_after_fnptr_member.i386.expected -
+	./$(COMPILER) --target=aarch64 test/c_bitfield_after_fnptr_member.c $(TESTTMP)/c_bfafp26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_bfafp26_a64 | diff -u test/c_bitfield_after_fnptr_member.expected -
+	./$(COMPILER) '-DSQ(x)=((x)*(x))' '-DADD(a,b)=((a)+(b))' -DPLAIN=5 '-DSTR(s)=#s' '-DNOARGS()=3' test/c_cmdline_function_macro.c $(TESTTMP)/c_cmdfnm26 > /dev/null
+	$(TESTTMP)/c_cmdfnm26 | diff -u test/c_cmdline_function_macro.expected -
+	./$(COMPILER) test/c_setjmp_as_value.c $(TESTTMP)/c_sjval26 > /dev/null
+	$(TESTTMP)/c_sjval26 | diff -u test/c_setjmp_as_value.expected -
+	./$(COMPILER) --target=aarch64 test/c_setjmp_as_value.c $(TESTTMP)/c_sjval26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_sjval26_a64 | diff -u test/c_setjmp_as_value.expected -
+	./$(COMPILER) --target=i386 test/c_setjmp_as_value.c $(TESTTMP)/c_sjval26_386 > /dev/null
+	tools/run_target.sh i386 $(TESTTMP)/c_sjval26_386 | diff -u test/c_setjmp_as_value.expected -
+	./$(COMPILER) --threadsafe test/c_semaphore.c $(TESTTMP)/c_sem26 > /dev/null
+	timeout 60 $(TESTTMP)/c_sem26 | diff -u test/c_semaphore.expected -
+	./$(COMPILER) test/c_semaphore_single_thread.c $(TESTTMP)/c_sem1t26 > /dev/null
+	$(TESTTMP)/c_sem1t26 | diff -u test/c_semaphore_single_thread.expected -
+	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
+	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,
 	# explicit_bzero, <shadow.h>, <pty.h>, <utmp.h> sizes, timer macros,
 	# getusershell, the set*id calls that were ENOSYS stubs, sockaddr_storage).

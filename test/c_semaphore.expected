@@ -1,0 +1,6 @@
+total 3000 sum 3000
+left 1
+trywait empty -1 EAGAIN
+timedwait -1 ETIMEDOUT
+after two posts 2, timedwait 0
+cond realtime 1 monotonic 1 default 1

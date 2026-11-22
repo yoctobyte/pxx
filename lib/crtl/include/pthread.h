@@ -31,12 +31,12 @@
  * bug-c-crtl-pthread-types-are-smaller-than-glibc-s */
 #if defined(__x86_64__)
 #define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
-#define __PXX_PT_COND_PAD    int __pxx_pad[9]; long long __pxx_align;
+#define __PXX_PT_COND_PAD    int __pxx_pad[8]; long long __pxx_align;
 #define __PXX_PT_ATTR_PAD    long __pxx_pad[5];
 #define __PXX_PT_RWLOCK_PAD  int __pxx_pad[7]; long long __pxx_align;
 #elif defined(__i386__)
 #define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
-#define __PXX_PT_COND_PAD    int __pxx_pad[11];
+#define __PXX_PT_COND_PAD    int __pxx_pad[10];
 #define __PXX_PT_ATTR_PAD    int __pxx_pad[6];
 #define __PXX_PT_RWLOCK_PAD  int __pxx_pad[3];
 #else
@@ -118,13 +118,16 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(vo
  * attribute is accepted and ignored: timedwait measures a RELATIVE budget on
  * the monotonic clock, which is what CLOCK_MONOTONIC callers (QuickJS) want;
  * CLOCK_REALTIME absolute deadlines are approximated the same way. */
-typedef struct { int __seq; __PXX_PT_COND_PAD } pthread_cond_t;
+/* __clock: the clock pthread_cond_timedwait's deadline is on, from the attr;
+   0 is CLOCK_REALTIME, POSIX's default, so the static initializer is right */
+typedef struct { int __seq; int __clock; __PXX_PT_COND_PAD } pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER { 0 }
 typedef struct { int __clock; } pthread_condattr_t;
 
 int pthread_condattr_init(pthread_condattr_t *a);
 int pthread_condattr_destroy(pthread_condattr_t *a);
 int pthread_condattr_setclock(pthread_condattr_t *a, int clock_id);
+int pthread_condattr_getclock(const pthread_condattr_t *a, int *clock_id);
 
 int pthread_cond_init(pthread_cond_t *c, const pthread_condattr_t *attr);
 int pthread_cond_destroy(pthread_cond_t *c);

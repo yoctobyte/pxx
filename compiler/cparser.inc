@@ -1102,6 +1102,14 @@ begin
   Result := cmp;
 end;
 
+{ The same rule for a folded constant that a file-scope initializer stores
+  directly (PendingInit): `static bool g = 300` stored the low byte, 44.
+  bug-crtl-stdbool-defines-bool-as-int }
+function CBoolConstV(tk: TTypeKind; v: Int64): Int64;
+begin
+  if (tk = tyBool8) and (v <> 0) then Result := 1 else Result := v;
+end;
+
 { C11 6.3.1.4 / 6.5.16.1: a FLOAT converted to an integer type "as if by
   assignment" truncates toward zero -- the same conversion an explicit cast
   makes, so it is built as the same node (-203 Trunc; see the cast lowering).
@@ -1449,6 +1457,43 @@ begin
     masked back to the field's width, so `c++` at the top of the field gives
     the old top value. The base is evaluated twice, as for `+=`.
     bug-c-increment-of-a-bitfield-above-bit-0-writes-at-bit-0 }
+  { A _Bool operand (C99 6.5.2.4 / 6.5.3.1: `b++` is `b += 1`, converted to
+    _Bool): ++ always leaves 1, -- flips the value. AN_INCDEC added 1 to the
+    byte, so `b = 1; b++` read back 2 and `b--` from 0 gave 255.
+      ++b  ->  b = 1                   b++  ->  b ? 1 : (b = 1, 0)
+      --b  ->  b = (b - 1) != 0        b--  ->  (b = (b - 1) != 0) == 0
+    The operand is evaluated twice, as for `+=` and the bitfield arm below.
+    bug-c-increment-of-a-bool-is-not-converted-to-0-or-1 }
+  if IntToTypeKind(ASTTk[lv]) = tyBool8 then
+  begin
+    one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := lv;
+    if isInc then ASTRight[asn] := one
+    else ASTRight[asn] := CNormalizeToBool(tyBool8, CMakeBinop(Ord(tkMinus), lv, one));
+    ASTTk[asn] := ASTTk[lv];
+    if isPre then begin Result := asn; Exit; end;
+    if not isInc then
+    begin
+      one := AllocNode(AN_INT_LIT); ASTIVal[one] := 0; ASTTk[one] := Ord(tyInteger);
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := asn; ASTRight[node] := one; ASTTk[node] := Ord(tyBoolean);
+      Result := node;
+      Exit;
+    end;
+    one := AllocNode(AN_INT_LIT); ASTIVal[one] := 0; ASTTk[one] := Ord(tyInteger);
+    back := AllocNode(AN_COMMA);
+    ASTLeft[back] := asn; ASTRight[back] := one; ASTTk[back] := Ord(tyInteger);
+    one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+    sum := AllocNode(AN_PAIR);
+    ASTLeft[sum] := one; ASTRight[sum] := back;
+    node := AllocNode(AN_TERNARY);
+    ASTLeft[node] := CCondOf(lv);
+    ASTRight[node] := sum;
+    ASTTk[node] := Ord(tyInteger);
+    Result := node;
+    Exit;
+  end;
   if (ASTKind[lv] = AN_FIELD) and (ASTLeft[lv] >= 0) then
   begin
     bfW := RecFieldBitWidth(ResolveNodeRec(ASTLeft[lv]), GetASTIdentName(lv));
@@ -9851,7 +9896,8 @@ begin
         ASTTk[idxLit] := Ord(tyInteger);
         inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
         ASTTk[inode] := Ord(declTk);
-        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := CLIArrElem[cliBase + ei];
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode;
+        ASTRight[asn] := CNormalizeToBool(declTk, CLIArrElem[cliBase + ei]);   { _Bool: 0/1 }
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
@@ -13693,6 +13739,9 @@ begin
   begin
     target := CInitBuildTarget;
     e := ParseCExpr;
+    { a _Bool leaf is 0/1 (6.3.1.2): `bool b[] = {2, 0x100}` stored the low
+      byte, 2 and 0. bug-crtl-stdbool-defines-bool-as-int }
+    e := CNormalizeToBool(IntToTypeKind(tkOrd), e);
     asn := AllocNode(AN_ASSIGN);
     ASTLeft[asn] := target; ASTRight[asn] := e;
     ASTTk[asn] := tkOrd;
@@ -13887,7 +13936,19 @@ begin
     Next;                                   { '.' }
     sfi := FindUField(recId - REC_UCLASS_BASE, CurTok.SVal);
     Next;                                   { sub-field name }
-    if sfi >= 0 then
+    if (sfi >= 0) and (CurTok.Kind = tkAssign) then
+    begin
+      { The chain ends here: initialise the member as a positional walk would
+        (CInitWalkMember pushes its own frame). The arm below treated the last
+        member as a scalar, so a char array from a string (`.d.magic =
+        {"littlefs"}`) stored the literal's address and an array from a list
+        (`.d.root = {a, b}`) kept only a -- littlefs v1's superblock, and
+        micropython's VfsLfs1 could not mount what it had just formatted.
+        bug-c-a-chained-designator-onto-an-array-member-stores-one-scalar }
+      Next;                                 { '=' }
+      CInitWalkMember(sfi, emit);
+    end
+    else if sfi >= 0 then
     begin
       CInitPathPush(1, sfi, UFldTk[sfi]);
       CInitDesignatedDescend(UFldTk[sfi], UFldRec_[sfi], emit);
@@ -15696,7 +15757,7 @@ begin
             Expect(tkRBrack, ']');
             if CurTok.Kind = tkAssign then Next;      { '=' }
           end;
-          initV := CEvalConstExpr;
+          initV := CBoolConstV(baseTk, CEvalConstExpr);
           if rangeHiG >= ei then
           begin
             for gk := ei to rangeHiG do
@@ -15879,7 +15940,7 @@ begin
         PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -1;
         PendingInitFLen[PendingInitCount] := 0;
-        PendingInitVal[PendingInitCount]  := CurTok.IVal;
+        PendingInitVal[PendingInitCount]  := CBoolConstV(baseTk, CurTok.IVal);
         PendingInitTk[PendingInitCount]   := Ord(baseTk);
         Inc(PendingInitCount);
         Next;
@@ -15948,7 +16009,7 @@ begin
           Move(dvv, initV, 8);         { IEEE-754 bits of the folded value }
         end
         else
-          initV := CEvalConstExpr;
+          initV := CBoolConstV(baseTk, CEvalConstExpr);
         PendingInitSym[PendingInitCount]  := idx;
         PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -1;
@@ -16565,11 +16626,23 @@ begin
 end;
 
 procedure EmitCSetjmpStubs;
-var sjIdx, ljIdx, spill, jOver, k: Integer;
+var sjIdx, ljIdx, spill, jOver, k, sjPass: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
 begin
+  { TWO bodies, one per name: `__pxx_setjmp`, which the <setjmp.h> macro calls,
+    and a real `setjmp` for code that takes its ADDRESS. glibc's setjmp is a
+    function, and micropython's native emitter calls it through a table of
+    function pointers (py/nativeglue.c); a bare `setjmp` was an undeclared
+    identifier. A wrapper cannot do it -- setjmp must save its CALLER's frame
+    -- so the same body is emitted twice; DCE drops the copy nobody names.
+    bug-c-setjmp-cannot-be-used-as-a-function-value }
+  for sjPass := 0 to 1 do
+  begin
   pn[0] := 'env'; pt[0] := tyPointer;
-  sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
+  if sjPass = 0 then
+    sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt)
+  else
+    sjIdx := RegisterProc('setjmp', True, tyInteger, 1, pn, pt);
   if TargetArch = TARGET_XTENSA then
     while (CodeLen and 3) <> 0 do EmitB(0);          { CALLn targets are 4-aligned }
   SetProcBodyAddrHere(sjIdx);
@@ -16727,6 +16800,7 @@ begin
   else
     Error('EmitCSetjmpStubs: unsupported target');
   end;
+  end;   { sjPass }
 
   pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
   ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
@@ -22359,7 +22433,7 @@ begin
 end;
 
 function CEvalConstPrimary: Int64;
-var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst: Boolean;
+var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst, addrObj: Boolean;
     strLitText: AnsiString; strLitIdx: Int64;
 begin
   wasCall := False;
@@ -22433,7 +22507,26 @@ begin
   end
   else if CurTok.Kind = tkAmp then
   begin
-    Next; Result := CEvalConstOffsetofAddress();
+    Next;
+    { `&object` or `&function` is an ADDRESS constant, not an integer constant
+      expression, the same population a plain declared variable is (it sets
+      the flag below). It used to go through the offsetof walk, which reads
+      `&((T *)0)->f` and answers 0 for anything else, so `&a != &b` folded to
+      `0 != 0`. micropython's mp_obj_is_type asserts `(t) != &mp_type_int`
+      with `sizeof(char[1 - 2 * !(cond)])`: gcc makes that a VLA inside a
+      function, pxx reported a failing static assert in 24 files. Flag it, so
+      a dimension becomes a run-time VLA as gcc's does; the value is 1, since
+      an object's address is never null (`&x && n` in a truth context).
+      bug-c-an-address-comparison-in-an-array-dimension-folds-to-a-failing-static-assert }
+    addrObj := (CurTok.Kind = tkIdent) and
+               (((FindSym(CurTok.SVal) >= 0) and (Syms[FindSym(CurTok.SVal)].Kind <> skConst)) or
+                ((FindSym(CurTok.SVal) < 0) and (FindProc(CurTok.SVal) >= 0)));
+    Result := CEvalConstOffsetofAddress();
+    if addrObj then
+    begin
+      CConstExprSawNonConst := True;
+      Result := 1;
+    end;
     CConstUns := True; CConstWide := TARGET_PTR_SIZE = 8;
   end
   else if CurTok.Kind = tkInteger then
@@ -23477,7 +23570,7 @@ begin
                 Inc(bfCount);
               end;
             if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
-            else curOff := thisOff + subRecSz;
+            else begin curOff := thisOff + subRecSz; bitPos := curOff * 8; end;
             if subAl > maxAlign then maxAlign := subAl;
           end;
           Break;
@@ -23551,7 +23644,7 @@ begin
         totalSz := sz;
         if isArr then totalSz := sz * arrLen;
         if isUnion then begin if totalSz > curOff then curOff := totalSz; end
-        else curOff := thisOff + totalSz;
+        else begin curOff := thisOff + totalSz; bitPos := curOff * 8; end;
         if al > maxAlign then maxAlign := al;
       until not Eat(tkComma);
       CEndCMember;
@@ -23650,8 +23743,12 @@ begin
           bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
           Inc(bfCount);
         end;
+        { re-seat the bit cursor past this member, as the plain-member path does:
+  without it a following bit-field went back to bit 0 and overlaid the member
+  (micropython's mp_stream_p_t: `is_text : 1` after three function pointers
+  turned `read` into read+1). bug-c-a-bit-field-after-a-function-pointer-or-inline-struct-member-overlays-it }
         if isUnion then begin if TARGET_PTR_SIZE * fpMemSlots > curOff then curOff := TARGET_PTR_SIZE * fpMemSlots; end
-        else curOff := thisOff + TARGET_PTR_SIZE * fpMemSlots;
+        else begin curOff := thisOff + TARGET_PTR_SIZE * fpMemSlots; bitPos := curOff * 8; end;
         if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
         CEndCMember;
       end

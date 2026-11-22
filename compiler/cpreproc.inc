@@ -4264,7 +4264,17 @@ begin
       nm := raw;
       vl := '1';
     end;
-    if nm <> '' then CPAddLiteral(nm, vl);
+    { `-D'SQ(x)=((x)*(x))'`: a FUNCTION-LIKE macro, as gcc reads it -- the same
+      as `#define SQ(x) ((x)*(x))`, so the #define parser installs it. As a
+      literal it was an object macro named `SQ(x)` that nothing could expand,
+      and `SQ(7)` was a call to an undeclared function.
+      bug-c-a-function-like-macro-on-the-command-line-is-not-defined }
+    if (nm <> '') and (Pos('(', nm) > 0) then
+    begin
+      raw := nm + ' ' + vl;
+      CPDefine(raw, 1, Length(raw));
+    end
+    else if nm <> '' then CPAddLiteral(nm, vl);
   end;
   for i := 0 to CCmdUndefCount - 1 do
   begin
@@ -4424,6 +4434,13 @@ begin
       above cannot reach: the whole function is replaced (palhostthread) }
     CPAddLiteral('thrd_create', '__pxx_host_thrd_create');
   end;
+  { --threadsafe as a macro, in every mode (__PXXRT_THREADSAFE below is the
+    --emit-obj runtime marker only). crtl's semaphore.c reads it: <semaphore.h>
+    is included by programs that never start a thread (tcc's tcc.h), and
+    lowering it onto <pthread.h> without the flag is refused by design.
+    feature-crtl-posix-semaphores-and-the-cond-clock }
+  if ThreadSafeMode then
+    CPAddLiteral('__PXX_THREADSAFE__', '1');
   { The shared-runtime marker (decide-a-is-a-pxx-object-a-self-contained-
     runtime-or-a-translation-unit): one symbol per runtime VARIANT -- target,
     and --threadsafe, which changes errno to a thread-local and adds pthread.

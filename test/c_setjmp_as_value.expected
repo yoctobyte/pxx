@@ -1,0 +1,5 @@
+table 1 1 1
+pointer call first return 0
+chain r=1 hits=4
+struct field r=3 11 22
+sigsetjmp r=5

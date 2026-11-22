@@ -187,13 +187,18 @@ int pthread_once(pthread_once_t *guard, void (*init_routine)(void)) {
   return 0;
 }
 
-int pthread_condattr_init(pthread_condattr_t *a)                { (void)a; return 0; }
+int pthread_condattr_init(pthread_condattr_t *a)                { a->__clock = CLOCK_REALTIME; return 0; }
 int pthread_condattr_destroy(pthread_condattr_t *a)             { (void)a; return 0; }
-int pthread_condattr_setclock(pthread_condattr_t *a, int clk)   { (void)a; (void)clk; return 0; }
+int pthread_condattr_setclock(pthread_condattr_t *a, int clk) {
+  if (clk != CLOCK_REALTIME && clk != CLOCK_MONOTONIC) return EINVAL;
+  a->__clock = clk;
+  return 0;
+}
+int pthread_condattr_getclock(const pthread_condattr_t *a, int *clk) { *clk = a->__clock; return 0; }
 
 int pthread_cond_init(pthread_cond_t *c, const pthread_condattr_t *attr) {
-  (void)attr;
   __pxx_pcond_init(c);
+  c->__clock = attr ? attr->__clock : CLOCK_REALTIME;
   return 0;
 }
 int pthread_cond_destroy(pthread_cond_t *c)   { (void)c; return 0; }  /* futex: no teardown */
@@ -211,19 +216,20 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
 }
 
 /* POSIX timedwait takes an ABSOLUTE deadline; palsync takes a relative
- * nanosecond budget. Convert against the wall clock the caller measured on —
- * QuickJS arms it with CLOCK_MONOTONIC "now + timeout", so subtracting the
- * matching clock's now gives the intended relative budget. A deadline already
- * in the past degrades to a zero-budget wait (immediate ETIMEDOUT unless
- * signalled). */
+ * nanosecond budget. The deadline is on the cond's own clock: CLOCK_REALTIME
+ * unless pthread_condattr_setclock chose another. It was always read as
+ * MONOTONIC, which suits QuickJS (it sets CLOCK_MONOTONIC) and made every
+ * default cond wait about 56 years for a realtime deadline -- sem_timedwait
+ * and C11 cnd_timedwait never timed out. A deadline already in the past
+ * degrades to a zero-budget wait (immediate ETIMEDOUT unless signalled). */
 int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
                            const struct timespec *abstime) {
-  /* now from the Pascal PAL (monotonic; ms granularity) — crtl has no
-   * clock_gettime body, and calling one would mark it external-against-libc
-   * and give the binary a DT_NEEDED (breaking the libc-free contract). */
-  long long now_ns = __pxx_pmonotonic_ns();
-  long long ns = (long long)abstime->tv_sec * 1000000000LL
-               + (long long)abstime->tv_nsec - now_ns;
+  struct timespec now;
+  long long now_ns, ns;
+  if (clock_gettime(c->__clock, &now) != 0) return EINVAL;
+  now_ns = (long long)now.tv_sec * 1000000000LL + now.tv_nsec;
+  ns = (long long)abstime->tv_sec * 1000000000LL
+     + (long long)abstime->tv_nsec - now_ns;
   if (ns < 0) ns = 0;
   {
     long owner = m->__owner; int count = m->__count, r;

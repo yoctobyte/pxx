@@ -1,0 +1,8 @@
+sizes 1 8 4 6
+cast 1 1 1 1
+init 1 1 1 0 1 1
+struct 1 0 300 1
+call 1 1 0
+assign 1 1 1 1 1 0
+incdec 1 1 1 1 0 0 1 0 0 1 1
+static 1 1 0 1 1 1 1

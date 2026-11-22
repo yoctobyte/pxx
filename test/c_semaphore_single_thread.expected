@@ -1,0 +1,1 @@
+init 0 value 2 wait 0 0 empty -1 EAGAIN timedwait -1 ETIMEDOUT posted 3 timedwait 0 destroy 0

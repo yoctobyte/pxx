@@ -454,7 +454,8 @@ AN_ASSIGN Right CAsmOps[i].Expr
 AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[left]), ASTRight[node])
 AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[lv]), sum)
 AN_ASSIGN Right CConvertAsIfAssigned(declTk, ASTRight[asn])
-AN_ASSIGN Right CLIArrElem[cliBase + ei]
+AN_ASSIGN Right CNormalizeToBool(declTk, CLIArrElem[cliBase + ei])
+AN_ASSIGN Right CNormalizeToBool(tyBool8, CMakeBinop(Ord(tkMinus), lv, one))
 AN_ASSIGN Right CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs)
 AN_ASSIGN Right CPromoteCharTo(declTk, initExpr)
 AN_ASSIGN Right CStrInitElem[ei]
@@ -605,6 +606,7 @@ AN_BINOP Left PyMakeVariantGetItem(node, indexNode)
 AN_BINOP Left Result
 AN_BINOP Left a
 AN_BINOP Left acc
+AN_BINOP Left asn
 AN_BINOP Left augRead
 AN_BINOP Left back
 AN_BINOP Left baseFld
@@ -891,6 +893,7 @@ AN_COMMA Left Result
 AN_COMMA Left arm
 AN_COMMA Left asg
 AN_COMMA Left asgn
+AN_COMMA Left asn
 AN_COMMA Left blockNode
 AN_COMMA Left callNode
 AN_COMMA Left chAssign
@@ -934,6 +937,7 @@ AN_COMMA Right idx
 AN_COMMA Right innerComma
 AN_COMMA Right k
 AN_COMMA Right node
+AN_COMMA Right one
 AN_COMMA Right res
 AN_COMMA Right setInnerComma
 AN_COMMA Right sub
@@ -1186,6 +1190,7 @@ AN_PAIR Left itemNode
 AN_PAIR Left labelsHead
 AN_PAIR Left left
 AN_PAIR Left node
+AN_PAIR Left one
 AN_PAIR Left p1
 AN_PAIR Left pair1
 AN_PAIR Left rbVal
@@ -1218,6 +1223,7 @@ AN_PAIR Right addrNode
 AN_PAIR Right argNode
 AN_PAIR Right arms[1]
 AN_PAIR Right atDflt
+AN_PAIR Right back
 AN_PAIR Right bodyN
 AN_PAIR Right bodyNode
 AN_PAIR Right boxCall
@@ -1317,6 +1323,7 @@ AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
 AN_TERNARY Left ASTLeft[tern]
 AN_TERNARY Left CCondOf(left)
+AN_TERNARY Left CCondOf(lv)
 AN_TERNARY Left bfIsCall
 AN_TERNARY Left clsCondCall
 AN_TERNARY Left cmp
@@ -1346,6 +1353,7 @@ AN_TERNARY Right pairN
 AN_TERNARY Right pairNode
 AN_TERNARY Right rbPair
 AN_TERNARY Right rngPair
+AN_TERNARY Right sum
 AN_TERNARY Right thenElse
 AN_TERNARY Right valNode
 AN_TRY_EXCEPT Left bodyNode

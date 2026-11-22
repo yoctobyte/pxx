@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:51 blocked:8 backlog:5 backlog_new:1 backlog-umbrella:14 backlog-core:164 backlog-nilpy:99 backlog-tools:73 backlog-pascal:14 backlog-decide:46 backlog-libs:28 backlog-cfront:26 backlog-web:9 backlog-windows:2 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:154 done:4479 rejected:90`
+`working:3 unfinished:51 blocked:8 backlog_new:1 backlog-umbrella:14 backlog-core:121 backlog-nilpy:92 backlog-tools:72 backlog-pascal:5 backlog-decide:47 backlog-libs:27 backlog-cfront:16 backlog-web:9 backlog-windows:2 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:51 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:154 done:4686 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A]
-- `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — blocked-by: refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-a-dynamic-array-of-frozen-strings` [A] — blocked-by: decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A]
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A]
@@ -78,14 +78,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 502, ranked
+## Ready — top 30 of 426, ranked
 
 - `[p 95] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones (unblocks 1)
 - `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
 - `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
-- `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
-- `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -98,7 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray (unblocks 1)
 - `[p 75] [P]` feature-pascal-management-operators-copy-and-addref (unblocks 1)
 - `[p 75] [P]` feature-pascal-management-operators-nested-and-array (unblocks 1)
-- `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -109,6 +106,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [N]` bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
-- `[p 70] [T]` bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead
+- `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
+- `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 65] [U]` decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 5)
+- `[p 65] [A]` bug-a-a-hand-built-com-interface-cannot-be-called (unblocks 1)
 
-_472 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_396 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

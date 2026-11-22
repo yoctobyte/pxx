@@ -26,6 +26,8 @@ EXCLUSIONS are deliberate, not omissions:
     (RegisterExternal refuses `__pxx_p*`). Auto-pulling it from a hand
     prototype would turn a working program into a compile error.
     `threads.h` (C11) is built on pthread.h and is excluded for the same reason.
+    (`semaphore.h` is not: it does not include pthread.h, and its source
+    builds without --threadsafe.)
   - `__`-prefixed names — internal kernels, never a user's libc call.
   - names crtl declares but does not define — PAL entry points and genuinely
     system-provided symbols; pulling their header would not supply them.

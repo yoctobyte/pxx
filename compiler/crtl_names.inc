@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  803 functions across 77 headers. }
+  813 functions across 78 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -174,7 +174,10 @@ begin
       ' sched_get_priority_max:sched.h sched_get_priority_min:sched.h sched_getaffinity:sched.h ' +
       ' sched_getparam:sched.h sched_getscheduler:sched.h sched_setaffinity:sched.h ' +
       ' sched_setscheduler:sched.h sched_yield:sched.h secure_getenv:stdlib.h seed48:stdlib.h ' +
-      ' select:sys/select.h semctl:sys/sem.h semget:sys/sem.h semop:sys/sem.h ' +
+      ' select:sys/select.h sem_close:semaphore.h sem_destroy:semaphore.h ' +
+      ' sem_getvalue:semaphore.h sem_init:semaphore.h sem_open:semaphore.h sem_post:semaphore.h ' +
+      ' sem_timedwait:semaphore.h sem_trywait:semaphore.h sem_unlink:semaphore.h ' +
+      ' sem_wait:semaphore.h semctl:sys/sem.h semget:sys/sem.h semop:sys/sem.h ' +
       ' semtimedop:sys/sem.h send:sys/socket.h sendmsg:sys/socket.h sendto:sys/socket.h ' +
       ' setbuf:stdio.h setegid:unistd.h setenv:stdlib.h seteuid:unistd.h setgid:unistd.h ' +
       ' setgrent:grp.h setgroups:unistd.h sethostname:unistd.h setitimer:sys/time.h ' +

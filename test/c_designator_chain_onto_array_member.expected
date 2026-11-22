@@ -1,0 +1,10 @@
+nested-desig-braced littlefs
+  1 2 3
+nested-desig-bare littlefs
+nested-brace littlefs
+flat-desig-braced abcdefgh
+positional-braced abcdefgh
+positional-bare abc
+static-nested-braced littlefs
+array-members 7 9 5 | 7 0 0 0 8 9 | 11 12 1 2 3 0
+h.m2 1 2 3 4

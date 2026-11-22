@@ -211,9 +211,12 @@ struct sockaddr_storage {
    MSG_TRUNC IS DECLARED AND NOT CARRIED, and a call passing it now answers
    -1/EINVAL rather than succeeding with the flag dropped. That is the louder
    of the two wrong answers on purpose: a silent drop is what made the peek bug
-   invisible for as long as it existed. Nothing in this tree passes it. */
+   invisible for as long as it existed. Nothing in this tree passes it.
+   MSG_DONTROUTE is the same: declared (micropython publishes it as
+   socket.MSG_DONTROUTE), not carried, and a call passing it is EINVAL. */
 #define MSG_OOB 1
 #define MSG_PEEK 2
+#define MSG_DONTROUTE 4
 #define MSG_TRUNC 0x20
 #define MSG_DONTWAIT 0x40
 #define MSG_WAITALL 0x100
