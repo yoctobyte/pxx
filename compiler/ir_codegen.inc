@@ -6659,6 +6659,10 @@ begin
   PatchRel8(pSkip);
 end;
 
+procedure I128ToDouble(xmm: Integer; signed: Boolean); forward;   { ir_codegen_i128.inc }
+function I128MixedFloat(node: Integer): Boolean; forward;
+procedure I128OperandAsDouble(n: Integer); forward;
+
 procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
 { cvtsi2sd xmm<xmm>, r<reg> (reg: 0=rax, 1=rcx) — with the unsigned fixup when
   the SOURCE type is unsigned 64-bit: cvtsi2sd is a SIGNED conversion, so a
@@ -6671,8 +6675,14 @@ begin
   { converting from one register would use the low half: refused until a
     correctly rounded 128-bit conversion exists (gcc's __floattidf).
     feature-c-int128-and-attribute-mode }
+  { an __int128 is in rdx:rax; from rcx alone its high half is gone }
   if TypeIsInt128(srcTk) then
-    Error('__int128: conversion to a floating type is not supported yet (feature-c-int128-and-attribute-mode)');
+  begin
+    if reg <> 0 then
+      Error('__int128: this conversion to a floating type is not supported yet (feature-c-int128-other-targets-float-and-narrow-modes)');
+    I128ToDouble(xmm, srcTk = tyInt128);
+    Exit;
+  end;
   AsmScopeBegin;
   if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
   begin
@@ -10292,6 +10302,13 @@ begin
             this value expression redundant precisely because nothing is
             emitted before it. }
           IREmitNode(valueNode);
+          { an __int128 into a float slot converts now, while rdx:rax hold it
+            (feature-c-int128-other-targets-float-and-narrow-modes) }
+          if TypeIsFloat(IntToTypeKind(IRTk[node])) and TypeIsInt128(IntToTypeKind(IRTk[valueNode])) then
+          begin
+            I128ToDouble(0, IntToTypeKind(IRTk[valueNode]) = tyInt128);
+            EmitAsmX64(['movq rax, xmm0']);
+          end;
           EmitAsmX64(['push rax']); { -- value }
 
           { An IR_FIELD destination folds into the store's displacement, as in
@@ -10313,7 +10330,8 @@ begin
             rather than bit-copy. A float-typed value is already double-bits and
             falls through unchanged. Mirrors the IR_STORE_SYM path. See
             feature-int-to-float-assign. }
-          if TypeIsFloat(tk) and not TypeIsFloat(IntToTypeKind(IRTk[valueNode])) then
+          if TypeIsFloat(tk) and not TypeIsFloat(IntToTypeKind(IRTk[valueNode])) and
+             not TypeIsInt128(IntToTypeKind(IRTk[valueNode])) then
           begin
             EmitCvtSi2SdOrU64(1, 1, IntToTypeKind(IRTk[valueNode])); { cvtsi2sd xmm1, rcx (u64-aware) }
             EmitAsmX64(['movq rcx, xmm1']);
@@ -10616,6 +10634,18 @@ begin
           Exit;
         end;
 
+        { An __int128 meeting a float: each side becomes double bits here
+          (I128OperandAsDouble), and the float arm below takes an __int128
+          side as already converted. The leaf shortcuts would load one half.
+          feature-c-int128-other-targets-float-and-narrow-modes }
+        if I128MixedFloat(node) then
+        begin
+          I128OperandAsDouble(left);
+          EmitAsmX64(['push rax']);
+          I128OperandAsDouble(right);
+          EmitAsmX64(['mov rcx, rax', 'pop rax']);
+        end
+        else
         if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) then
         begin
           { -O1 leaf-operand direct load: a constant right operand goes
@@ -11067,12 +11097,12 @@ begin
              (rhsTk = tySingle) or (rhsTk = tyDouble) or (rhsTk = tyExtended) or
              (op = tkSlash) then
           begin
-            if not TypeIsFloat(lhsTk) then
+            if not TypeIsFloat(lhsTk) and not TypeIsInt128(lhsTk) then
               EmitCvtSi2SdOrU64(1, 0, lhsTk)  { cvtsi2sd xmm1, rax (u64-aware) }
             else
               begin EmitAsmX64(['movq xmm1, rax']); end;
 
-            if not TypeIsFloat(rhsTk) then
+            if not TypeIsFloat(rhsTk) and not TypeIsInt128(rhsTk) then
               EmitCvtSi2SdOrU64(0, 1, rhsTk)  { cvtsi2sd xmm0, rcx (u64-aware) }
             else
               begin EmitAsmX64(['movq xmm0, rcx']); end;

@@ -8586,7 +8586,7 @@ begin
       if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
          TypeIsFloat(Procs[cpi].Params[pathIdx].TypeKind) and
          (not Procs[cpi].Params[pathIdx].IsArray) and
-         (not TypeIsFloat(argTk)) and TypeIsOrdinal(argTk) then
+         (not TypeIsFloat(argTk)) and (TypeIsOrdinal(argTk) or TypeIsInt128(argTk)) then
       begin
         { NOT for an OPEN ARRAY parameter: `const a: array of Double` records
           the ELEMENT kind in Params[].TypeKind, and the argument is a dyn-array

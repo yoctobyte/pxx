@@ -21392,9 +21392,6 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_i128ptrwalk26 "$$($(TESTTMP)/c_i128ptrwalk26)" "$$(cat test/c_int128_ptrwalk.expected)"
 	./$(COMPILER) -O2 test/c_int128_ptrwalk.c $(TESTTMP)/c_i128ptrwalk26_o2 > /dev/null
 	tools/expect_same.sh c_i128ptrwalk26_o2 "$$($(TESTTMP)/c_i128ptrwalk26_o2)" "$$(cat test/c_int128_ptrwalk.expected)"
-	@./$(COMPILER) test/c_int128_float_refused.c $(TESTTMP)/c_i128flt26 2>&1 \
-	  | grep -q '__int128: conversion to a floating type is not supported yet' \
-	  || { echo 'c_int128_float_refused: FAIL - an __int128 -> double conversion was accepted, or refused as something else'; exit 1; }
 	@./$(COMPILER) --target=aarch64 test/c_int128_float_refused.c $(TESTTMP)/c_i128a64 2>&1 \
 	  | grep -q 'is supported on x86-64 only so far' \
 	  || { echo 'c_int128_float_refused: FAIL - aarch64 accepted __int128, or refused it as something else'; exit 1; }
@@ -22008,6 +22005,16 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_i128stk26 | diff -u test/c_int128_stack_arg_alignment.expected -
 	./$(COMPILER) test/c_int128_cast_spellings.c $(TESTTMP)/c_i128cast26 > /dev/null
 	$(TESTTMP)/c_i128cast26 | diff -u test/c_int128_cast_spellings.expected -
+	# __int128 <-> double/float, correctly rounded and truncated as gcc; mixed arithmetic.
+	# feature-c-int128-other-targets-float-and-narrow-modes
+	./$(COMPILER) test/c_int128_float_conversion.c $(TESTTMP)/c_i128fcv26 > /dev/null
+	$(TESTTMP)/c_i128fcv26 | diff -u test/c_int128_float_conversion.expected -
+	./$(COMPILER) -O0 test/c_int128_float_conversion.c $(TESTTMP)/c_i128fcv26_0 > /dev/null
+	$(TESTTMP)/c_i128fcv26_0 | diff -u test/c_int128_float_conversion.expected -
+	./$(COMPILER) test/c_int128_float_mixed.c $(TESTTMP)/c_i128mix26 > /dev/null
+	$(TESTTMP)/c_i128mix26 | diff -u test/c_int128_float_mixed.expected -
+	./$(COMPILER) -O3 test/c_int128_float_mixed.c $(TESTTMP)/c_i128mix26_3 > /dev/null
+	$(TESTTMP)/c_i128mix26_3 | diff -u test/c_int128_float_mixed.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

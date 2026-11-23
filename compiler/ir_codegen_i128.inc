@@ -40,9 +40,162 @@ begin
     IR_LOAD_SYM, IR_STORE_SYM:
       Result := I128Sym(IRA[node]);
     IR_BINOP:
-      Result := I128Node(node) or I128Node(IRA[node]) or I128Node(IRB[node]);
+      { an __int128 meeting a float is float arithmetic (or a float compare):
+        the float arm converts the integer side (EmitCvtSi2SdOrU64) }
+      Result := (I128Node(node) or I128Node(IRA[node]) or I128Node(IRB[node])) and
+                not TypeIsFloat(IntToTypeKind(IRTk[node])) and
+                not TypeIsFloat(IntToTypeKind(IRTk[IRA[node]])) and
+                not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]]));
     IR_NEG, IR_NOT:
       Result := I128Node(node) or I128Node(IRA[node]);
+  end;
+end;
+
+{ A floating value (its double bits in rax, a Single's included) truncated toward zero
+  into rdx:rax, as gcc's __fixdfti / __fixunsdfti. Below 2^63 in magnitude
+  cvttsd2si is exact and cqo extends it. Above, the value is its 53-bit
+  mantissa shifted left by (exponent - 1075) >= 11, then negated if the sign
+  bit was set. Out of range is undefined in C, as in gcc.
+  feature-c-int128-other-targets-float-and-narrow-modes }
+procedure I128FromFloat(tk: TTypeKind);
+begin
+  { a Single travels as double bits too (it is narrowed only when stored),
+    so tk does not change the sequence }
+  AsmScopeBegin;
+  EmitAsmX64([
+    'mov rcx, rax',
+    'shr rcx, 52',
+    'and ecx, 2047',                 { biased exponent }
+    'cmp ecx, 1086',                 { 1023 + 63: |x| >= 2^63 }
+    'jae big',
+    'movq xmm0, rax',
+    'cvttsd2si rax, xmm0',
+    'cqo',
+    'jmp done',
+  'big:',
+    'mov r11, rax',                  { the sign, in bit 63 }
+    'mov rdx, -1',
+    'shr rdx, 12',
+    'and rax, rdx',                  { the 52 stored mantissa bits }
+    'mov edx, 1',
+    'shl rdx, 52',
+    'or rax, rdx',                   { m, with the implicit bit }
+    'sub ecx, 1075',                 { m << ecx is the value }
+    'xor edx, edx',
+    'cmp ecx, 64',
+    'jae wide',
+    'shld rdx, rax, cl',
+    'shl rax, cl',
+    'jmp sign',
+  'wide:',
+    'sub ecx, 64',
+    'mov rdx, rax',
+    'shl rdx, cl',
+    'xor eax, eax',
+  'sign:',
+    'test r11, r11',
+    'jns done',
+    'neg rax',
+    'adc rdx, 0',
+    'neg rdx',
+  'done:']);
+  AsmScopeEnd;
+end;
+
+{ The value in rdx:rax converted to the double in xmm<xmm>, correctly
+  rounded, as gcc's __floattidf / __floatuntidf. A value that fits in 63 bits
+  is one cvtsi2sd. Otherwise it is shifted right by s (1..65) to 63 bits with
+  every bit shifted out OR-ed into bit 0 -- 63 bits hold the 53 kept, a round
+  bit and a sticky bit, so cvtsi2sd rounds exactly as the full value would --
+  and 2^s is put back by adding s to the exponent field, which is exact. A
+  signed value converts its magnitude (2^127 for the most negative is fine
+  unsigned) and flips the sign bit. Clobbers rax, rcx, rdx, r11.
+  feature-c-int128-other-targets-float-and-narrow-modes }
+procedure I128ToDouble(xmm: Integer; signed: Boolean);
+begin
+  AsmScopeBegin;
+  if signed then
+    EmitAsmX64([
+      'mov r11, rdx',
+      'sar r11, 63',
+      'xor rax, r11',
+      'xor rdx, r11',
+      'sub rax, r11',
+      'sbb rdx, r11'])               { |v|; r11 = 0 or -1 }
+  else
+    EmitAsmX64(['xor r11d, r11d']);
+  EmitAsmX64([
+    'test rdx, rdx',
+    'jnz big',
+    'test rax, rax',
+    'js big',
+    'cvtsi2sd %xmm, rax', xmm,
+    'jmp sign',
+  'big:',
+    'push r11',
+    'mov ecx, 1',                    { hi = 0, lo >= 2^63: s = 1 }
+    'test rdx, rdx',
+    'jz haves',
+    'bsr rcx, rdx',
+    'add ecx, 2',                    { bit length 65 + idx: s = idx + 2 }
+  'haves:',
+    'push rcx',
+    'cmp ecx, 64',
+    'jae wide',
+    'mov r11, rax',
+    'neg ecx',
+    'shl r11, cl',                   { the s low bits, at the top: shift 64 - s }
+    'neg ecx',
+    'shrd rax, rdx, cl',
+    'jmp sticky',
+  'wide:',
+    'sub ecx, 64',                   { 0 or 1 }
+    'mov r11, rdx',
+    'and r11, rcx',                  { the bit of hi shifted out, if any }
+    'or r11, rax',                   { and all of lo }
+    'shr rdx, cl',
+    'mov rax, rdx',
+  'sticky:',
+    'test r11, r11',
+    'jz exact',
+    'or rax, 1',
+  'exact:',
+    'cvtsi2sd %xmm, rax', xmm,
+    'movq rax, %xmm', xmm,
+    'pop rcx',
+    'shl rcx, 52',
+    'add rax, rcx',                  { times 2^s }
+    'movq %xmm, rax', xmm,
+    'pop r11',
+  'sign:',
+    'test r11, r11',
+    'jz done',
+    'movq rax, %xmm', xmm,
+    'btc rax, 63',
+    'movq %xmm, rax', xmm,
+  'done:']);
+  AsmScopeEnd;
+end;
+
+{ A binop with an __int128 operand and a floating one (arithmetic or a
+  compare): C converts the integer to the floating type. }
+function I128MixedFloat(node: Integer): Boolean;
+var lt, rt: TTypeKind;
+begin
+  lt := IntToTypeKind(IRTk[IRA[node]]);
+  rt := IntToTypeKind(IRTk[IRB[node]]);
+  Result := (TypeIsInt128(lt) and TypeIsFloat(rt)) or (TypeIsFloat(lt) and TypeIsInt128(rt));
+end;
+
+{ n's value as double bits in rax: an __int128 converted, a float as it is.
+  The other operand of a mixed binop is always the float one. }
+procedure I128OperandAsDouble(n: Integer);
+begin
+  IREmitNode(n);
+  if TypeIsInt128(IntToTypeKind(IRTk[n])) then
+  begin
+    I128ToDouble(0, IntToTypeKind(IRTk[n]) = tyInt128);
+    EmitAsmX64(['movq rax, xmm0']);
   end;
 end;
 
@@ -54,7 +207,10 @@ begin
   if I128Node(n) then Exit;
   tk := IntToTypeKind(IRTk[n]);
   if TypeIsFloat(tk) then
-    Error('__int128: conversion from a floating type is not supported yet (feature-c-int128-and-attribute-mode)');
+  begin
+    I128FromFloat(tk);
+    Exit;
+  end;
   { tyUnknown is a synthesized integer, which x86-64 treats as signed }
   if TypeSigned(tk) or (tk = tyUnknown) then
     begin EmitAsmX64(['cqo']); end

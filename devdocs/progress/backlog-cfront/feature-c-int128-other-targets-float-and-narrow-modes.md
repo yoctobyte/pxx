@@ -4,7 +4,7 @@ tags: [c, int128, attributes]
 prio: 40
 type: feature
 blocked-by: []
-summary: "__int128 works on x86-64 only. Still missing: other targets, int128<->float conversion. Fixed 2026-11-23: stack-passed __int128 alignment, and casts written `(__int128)x`. The narrow modes (QI/HI/SI/DI) work on typedefs, variables and members (2026-11-23)."
+summary: "__int128 works on x86-64 only. Still missing: other targets. Fixed 2026-11-23: stack-passed __int128 alignment, casts written `(__int128)x`, and int128<->float conversion. The narrow modes (QI/HI/SI/DI) work on typedefs, variables and members (2026-11-23)."
 status: open
 owner: unassigned
 ---
@@ -55,3 +55,20 @@ gcc calling pxx. Not covered: a by-value STRUCT whose alignment is 16.
 
 CUndeclaredTypeCastAhead took the built-in spellings for undeclared type
 names. Test c_int128_cast_spellings, against gcc.
+
+## int128 <-> float done 2026-11-23 (claude-pxx)
+
+x86-64, both directions, both signednesses, double and float:
+- To floating (I128ToDouble): one cvtsi2sd below 2^63; above, shift to 63
+  bits with a sticky bit and add the shift to the exponent. Correctly
+  rounded, as gcc's __floattidf; a float goes through the double, which is
+  safe (53 >= 2*24+2).
+- From floating (I128FromFloat): cvttsd2si below 2^63; above, the mantissa
+  shifted by exponent - 1075, then negated. Truncates as __fixdfti.
+- Mixed binops (arithmetic and compares) evaluate each side as double bits
+  (I128MixedFloat / I128OperandAsDouble); a store into a float field or
+  element converts while rdx:rax hold the value; an __int128 argument to a
+  double parameter goes through the converting temp like any integer.
+
+Tests c_int128_float_conversion (edges, ties, 2^127, and 4000-value
+sweeps) and c_int128_float_mixed, both against gcc at -O0, -O2 and -O3.
