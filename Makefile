@@ -21979,6 +21979,9 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_vacnt26 | diff -u test/c_vararg_vector_count_zero.expected -
 	./$(COMPILER) --emit-obj test/c_vararg_vector_count_zero.c $(TESTTMP)/c_vacnt26.o > /dev/null 2>&1
 	tools/expect_same.sh c_vacnt26 "$$(objdump -d $(TESTTMP)/c_vacnt26.o | grep -cE 'mov\s+\$$0x0,%eax')" "0"
+	# --freestanding builds at -O3: the xmm8..13 pool wrap around an indirect call
+	# tripped the no-SSE refusal. bug-freestanding-o3-trips-the-no-sse-refusal
+	./$(COMPILER) -O3 --emit-obj --freestanding test/c_freestanding_o3_builds.c $(TESTTMP)/c_fso326.o > /dev/null
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

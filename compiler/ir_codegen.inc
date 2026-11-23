@@ -16053,6 +16053,13 @@ begin
   if OptLevel < 3 then Exit;
   if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
+  { --freestanding code has no floats (asmtext refuses an xmm instruction in
+    it), so nothing sits in the pool for a wrap to protect -- and the wrap's
+    own movq to xmm8..13 is what that refusal then caught: an -O3 kernel
+    did not build at all ("float/double arithmetic is not supported" on
+    platform.pas's PalDrainPending, an indirect call). Same predicate as the
+    refusal, so the appended builtin units keep their wraps. }
+  if AsmFreestandingRefusesSSE then Exit;
   for k := 0 to IRCount - 1 do
     if IRKind[k] = IR_ASM then Exit;
   FrameSize := AlignTo(FrameSize + 8 * FR_RESIDENT_MAX, 8);
