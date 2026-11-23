@@ -96,3 +96,17 @@ Correction: row c_noaddzero26 (72d13651f7) counted in an executable, which
 objdump cannot disassemble (no section headers), so it printed 0 whatever
 the code. It and c_vacnt26 now count in an `--emit-obj` object; both fail
 with the compiler from before their fix (545 and 585) and pass now.
+
+## Store->reload for C locals at -O2 done 2026-11-23 (claude-pxx)
+
+IRMarkRedundantReloads (the -O3 pass: a load is dropped only when nothing at
+all is emitted between the store and it) now also runs for C at -O2, the
+default. In C it never takes a global: pxx drops `volatile`, so a volatile
+global (a flag an interrupt handler writes) would look like any other.
+Globals were 244 bytes of the gain anyway. pc text 1589910 -> 1581379
+(-8.5 KB); boots. Far less than the ~6800 same-slot pairs suggest: most of
+them are inside one statement or across a construct the pass does not
+see through, which is the register-allocation item again.
+
+Also found and fixed while measuring -O3 (which is larger than -O2 for the
+kernel, 1626396): bug-freestanding-o3-trips-the-no-sse-refusal.

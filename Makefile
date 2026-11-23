@@ -21982,6 +21982,12 @@ test-core: $(COMPILER)
 	# --freestanding builds at -O3: the xmm8..13 pool wrap around an indirect call
 	# tripped the no-SSE refusal. bug-freestanding-o3-trips-the-no-sse-refusal
 	./$(COMPILER) -O3 --emit-obj --freestanding test/c_freestanding_o3_builds.c $(TESTTMP)/c_fso326.o > /dev/null
+	# C at -O2 skips reloading a local the previous statement stored; each narrow type
+	# must still come out narrowed. The marks are counted so a pass that never ran
+	# cannot pass. feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_store_then_reload_local.c $(TESTTMP)/c_strl26 > /dev/null
+	$(TESTTMP)/c_strl26 | diff -u test/c_store_then_reload_local.expected -
+	tools/expect_same.sh c_strl26_marks "$$(PXXDBG='a.reload:*' ./$(COMPILER) test/c_store_then_reload_local.c $(TESTTMP)/c_strl26m 2>&1 | awk '/a.reload marked/ && ($$NF == "sc" || $$NF == "us") {n++} /DECLINED/ {d++} END {print (n >= 2), d + 0}')" "1 0"
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

@@ -9341,7 +9341,7 @@ begin
         { -O3 store->reload elimination: the statement immediately before this
           one stored this very symbol and nothing at all was emitted in
           between, so rax still holds the value — only the width fixup is left.
-          Set by IRMarkRedundantReloads; always False below -O3.
+          Set by IRMarkRedundantReloads; False below -O3, except C at -O2.
 
           The CodeLen test is not belt-and-braces, it is the SECOND HALF of the
           premise. The mark is made by IRFirstEvaluated, a hand-maintained mirror
@@ -14862,6 +14862,13 @@ begin
   if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam) or
           (Syms[idx].Kind = skGlobal)) then Exit;
   if ResidentRegOf(idx) <> 0 then Exit;
+  { C: never a global. pxx reads `volatile` and drops it, so a volatile
+    global -- a flag an interrupt handler or another CPU also writes --
+    looks like any other, and C requires it re-read. A local cannot change
+    between two adjacent instructions except through an escaped address,
+    which is the same volatile question in a far narrower form; setjmp has
+    a call in between, which ends the run. }
+  if CProgramMode and (Syms[idx].Kind = skGlobal) then Exit;
   ReloadElimSym := True;
 end;
 
@@ -14984,7 +14991,10 @@ end;
 procedure IRMarkRedundantReloads;
 var i, j, f, sym: Integer;
 begin
-  if OptLevel < 3 then Exit;
+  { C at -O2 too: a C store to a local followed by a statement that reads
+    it first is the commonest pair in C bodies (`x = f(); if (x) ...`).
+    feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+  if (OptLevel < 3) and not ((OptLevel >= 2) and CProgramMode) then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   { PXXDBG=a.reload:* — what this pass actually marked, per body. A
     differential that passes because the pass never RAN asserts nothing, so
