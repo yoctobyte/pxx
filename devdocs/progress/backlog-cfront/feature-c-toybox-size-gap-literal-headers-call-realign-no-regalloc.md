@@ -59,3 +59,18 @@ boots as before. Rows c_fz026 (the values, against gcc) and c_noaddzero26
 (the count). Still open here: (2) the per-call realignment and (3) register
 allocation. (2) needs a static rsp depth, and x86-64 codegen does not track
 one: pushes come both from the text assembler and from raw EmitB bytes.
+
+## `&&`/`||` on 0/1 operands done 2026-11-23 (claude-pxx)
+
+CMakeTruthy no longer wraps an operand that is already 0/1 (a comparison,
+`!`, or an and/or of two such) in `!= 0`. The Rainyday pc kernel had 2242
+`setcc; movzx; cmp 0; setne; movzx` doubles. Text, same source:
+
+| kernel | before | after |
+|---|---|---|
+| pc | 1704131 | 1628910 (-75 KB) |
+| esp32s3 | 1108956 | 1044536 (-64 KB, 5.8%) |
+
+Both boot as before. Test c_logical_operand_already_boolean, gcc-checked on
+x86-64, i386, aarch64, arm32, riscv32 and wasm32 and at -O2; rows on x86-64
+and aarch64.

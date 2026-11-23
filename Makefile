@@ -21959,6 +21959,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_field_offset_zero.c $(TESTTMP)/c_fz026 > /dev/null
 	$(TESTTMP)/c_fz026 | diff -u test/c_field_offset_zero.expected -
 	tools/expect_same.sh c_noaddzero26 "$$(objdump -d $(TESTTMP)/c_fz026 | grep -cE '\s(add|sub)\s+\$$0x0,%rax')" "0"
+	# `&&`/`||` do not compare an operand that is already 0/1 with 0 again (2242 double
+	# setcc sequences in the Rainyday pc kernel); the ones that are not 0/1 still are.
+	# feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_logical_operand_already_boolean.c $(TESTTMP)/c_lgbool26 > /dev/null
+	$(TESTTMP)/c_lgbool26 | diff -u test/c_logical_operand_already_boolean.expected -
+	./$(COMPILER) --target=aarch64 test/c_logical_operand_already_boolean.c $(TESTTMP)/c_lgbool26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_lgbool26_a64 | diff -u test/c_logical_operand_already_boolean.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

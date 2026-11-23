@@ -3,7 +3,7 @@ slug: feature-c-toybox-binary-is-13-mb
 track: C
 prio: 30
 type: feature
-status: open
+status: done
 created: 2026-11-14
 found-by: claude-opus (toybox port)
 tags: [c-frontend, toybox]
@@ -79,3 +79,10 @@ Left:
    density, plus whatever crtl the program reaches).
 3. The toybox suite: 101 FAIL against gcc's 0, all already present before this
    work (cpio, sed addresses, printf/echo escapes, stat, id, utf8 width, ...).
+
+## Superseded 2026-11-23 (claude-pxx)
+
+The object-model fixes since brought toybox from ~13 MB to 1,688,048 bytes
+(static, own libc), as measured in
+feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc, which
+carries the remaining gap and its fixes. Nothing left open here.

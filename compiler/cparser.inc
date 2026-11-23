@@ -611,9 +611,42 @@ begin
   ASTTk[Result] := Ord(tyBoolean);
 end;
 
+{ Is e already a 0/1 value? A comparison (`!` is one too: `x == 0`), or an
+  and/or whose operands both are -- which is what `&&`/`||` build. Only
+  boolean-typed nodes count, so the `&&` lowering still sees what it saw.
+  A bitwise `&` of two comparisons is 0/1 as well, so the and/or rule holds
+  whichever of the two operators the node came from. }
+function CIsZeroOne(e: Integer): Boolean;
+var op: Integer;
+begin
+  Result := False;
+  if (e < 0) or (e >= ASTNodeCount) then Exit;
+  if IntToTypeKind(ASTTk[e]) <> tyBoolean then Exit;
+  if ASTKind[e] = AN_INT_LIT then
+  begin
+    Result := (ASTIVal[e] = 0) or (ASTIVal[e] = 1);
+    Exit;
+  end;
+  if ASTKind[e] <> AN_BINOP then Exit;
+  op := Integer(ASTIVal[e]);
+  if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+     (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+    Result := True
+  else if (op = Ord(tkAnd)) or (op = Ord(tkOr)) then
+    Result := CIsZeroOne(ASTLeft[e]) and CIsZeroOne(ASTRight[e]);
+end;
+
 function CMakeTruthy(e: Integer): Integer;
 var node, zero: Integer; v: Int64;
 begin
+  { Already 0/1: `a < b && ...` used to compare the comparison with 0 again,
+    a `setcc; movzx; cmp 0; setne; movzx` on x86-64 (2242 of them in the
+    Rainyday pc kernel). feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+  if CIsZeroOne(e) then
+  begin
+    Result := e;
+    Exit;
+  end;
   { A literal operand answers its own truthiness. Folding HERE and not only at
     the `&&`/`||` site is what makes a CHAIN collapse: `0 || 0 || !BB_MMU` is
     left-associative, so the first `||` hands its folded result to the second as
