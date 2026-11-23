@@ -472,6 +472,12 @@ begin
       begin
         SrcPos := p;
         if (s = 'inline') or (s = '__inline') or (s = '__inline__') then CLexSawInline := True;
+        { volatile is dropped here, so mark the token it stood before
+          (CAttrFlags $8000, which moves with the token): the C store->reload
+          pass skips a function definition holding one (cparser
+          CVolatileInRange). }
+        if (s = 'volatile') or (s = '__volatile') or (s = '__volatile__') then
+          CLexVolatilePending := True;
         idDone := True;
       end
       else if s = '_Atomic' then
@@ -1343,6 +1349,7 @@ begin
   CAttrCtor := 0;
   CAttrSection := '';
   TokCount := 0; TokCharLen := 0;
+  CLexVolatilePending := False;
   repeat
     CLexOne;
     k := CurTok.Kind;
@@ -1371,6 +1378,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CLexVolatilePending then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $8000;
+      CLexVolatilePending := False;
     end;
     if CAttrVis <> 0 then
     begin
@@ -1511,6 +1523,11 @@ begin
     begin
       CAttrAlignValues[TokCount] := CAttrAlignValues[TokCount] or $10000;
       CAttrWeak := False;
+    end;
+    if CLexVolatilePending then
+    begin
+      CAttrFlags[TokCount] := CAttrFlags[TokCount] or $8000;
+      CLexVolatilePending := False;
     end;
     if CAttrVis <> 0 then
     begin

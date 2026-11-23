@@ -14869,6 +14869,9 @@ begin
     which is the same volatile question in a far narrower form; setjmp has
     a call in between, which ends the run. }
   if CProgramMode and (Syms[idx].Kind = skGlobal) then Exit;
+  { ...and nothing in a C body that mentions `volatile` at all (cparser
+    ParseCSubroutine sets the flag): a volatile local is re-read too. }
+  if CProgramMode and CBodyMentionsVolatile then Exit;
   ReloadElimSym := True;
 end;
 

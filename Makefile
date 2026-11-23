@@ -21988,6 +21988,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_store_then_reload_local.c $(TESTTMP)/c_strl26 > /dev/null
 	$(TESTTMP)/c_strl26 | diff -u test/c_store_then_reload_local.expected -
 	tools/expect_same.sh c_strl26_marks "$$(PXXDBG='a.reload:*' ./$(COMPILER) test/c_store_then_reload_local.c $(TESTTMP)/c_strl26m 2>&1 | awk '/a.reload marked/ && ($$NF == "sc" || $$NF == "us") {n++} /DECLINED/ {d++} END {print (n >= 2), d + 0}')" "1 0"
+	# ...but not in a function that mentions `volatile`: pxx drops the qualifier, so the
+	# whole body keeps its reloads. vx (volatile) is never marked, px (plain) is.
+	./$(COMPILER) test/c_volatile_local_reloaded.c $(TESTTMP)/c_volrl26 > /dev/null
+	$(TESTTMP)/c_volrl26 | diff -u test/c_volatile_local_reloaded.expected -
+	tools/expect_same.sh c_volrl26_marks "$$(PXXDBG='a.reload:*' ./$(COMPILER) test/c_volatile_local_reloaded.c $(TESTTMP)/c_volrl26m 2>&1 | awk '/a.reload marked/ && $$NF == "vx" {v++} /a.reload marked/ && $$NF == "px" {p++} END {print v + 0, (p > 0)}')" "0 1"
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

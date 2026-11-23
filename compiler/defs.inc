@@ -8199,7 +8199,7 @@ var
     bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings }
   TokSrcOff : array of Integer;
   TokSrcLen : array of Integer;
-  CAttrFlags : array of Word;   { bits 0..7 below; 256 = constructor, 512 = destructor (CAttrCtor); $4000 = naked }
+  CAttrFlags : array of Word;   { bits 0..7 below; 256 = constructor, 512 = destructor (CAttrCtor); $4000 = naked; $8000 = a `volatile` was dropped before this token }
   CAttrAlignValues : array of Integer;
   TokCount   : Integer;
   TokCapacity : Integer;   { current allocated length of the token parallel arrays (grown by EnsureTokCapacity) }
@@ -8583,6 +8583,8 @@ var
     comes back after later calls have reused that stack.
     bug-c-a-setjmp-called-through-a-pointer-cannot-be-returned-to-on-x86-64 }
   IRCallRspSlot : array of Integer;
+  CLexVolatilePending : Boolean;  { the C lexer dropped a `volatile`; the next token gets CAttrFlags $8000 }
+  CBodyMentionsVolatile : Boolean;  { the C body being compiled says `volatile` (cparser ParseCSubroutine); the C reload pass skips it }
   { The RECORD IDENTITY of a by-value struct argument, carried on the VALUE node
     IRLowerCallArg returns (an IR_LEA over the private temp). REC_NONE = not a
     record argument.

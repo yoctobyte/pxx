@@ -110,3 +110,12 @@ see through, which is the register-allocation item again.
 
 Also found and fixed while measuring -O3 (which is larger than -O2 for the
 kernel, 1626396): bug-freestanding-o3-trips-the-no-sse-refusal.
+
+Correction, same day: fc7bbfef34 still skipped the reload of a VOLATILE
+LOCAL (`volatile int x = 3; x = 4; return x + x;` read x from rax once),
+which gcc never does. The C lexer drops `volatile` before it is a token,
+so it now marks the token after the word (CAttrFlags $8000), and
+ParseCSubroutine keeps every reload in a definition holding one
+(CBodyMentionsVolatile). Cost: 289 bytes of pc text. Test
+c_volatile_local_reloaded, row c_volrl26_marks. A typedef'd volatile scalar
+local is still not seen; recording volatile on symbols would close that.

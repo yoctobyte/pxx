@@ -20612,6 +20612,21 @@ begin
   Result := False;
 end;
 
+{ Did the C lexer drop a `volatile` before any token in [lo, hi]? It marks
+  the token after the word (CAttrFlags $8000), so the mark moves with it. }
+function CVolatileInRange(lo, hi: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if lo < 0 then lo := 0;
+  if hi > TokCount - 1 then hi := TokCount - 1;
+  for k := lo to hi do
+    if (CAttrFlags[k] and $8000) <> 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
@@ -20664,7 +20679,9 @@ var
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
   apTdN: Integer; apTdDims: array[0..MAX_ARR_DIMS-1] of Integer;   { an array-TYPEDEF param's own dims, appended after the bracket ones }
   apN, apK, apProd: Integer;
+  volFromTok: Integer;   { the definition's first token, for CVolatileInRange }
 begin
+  volFromTok := TokPos;
   { A `static`/`static inline` function DEFINED in a header reached by `uses`.
     The header path assumed a header "declares and defines nothing", so it
     dropped such a body, marked the proc external, and synthesised a soname
@@ -22393,7 +22410,16 @@ begin
                 'mov [rbp+%], r11', Syms[CSspSlot].Offset]);
     CSspProc := procIdx;
   end;
+  { pxx reads `volatile` and drops it, so the C store->reload pass cannot
+    tell a volatile local from a plain one; a definition that says
+    `volatile` anywhere (parameters, locals, casts, asm) keeps every reload.
+    The lexer drops the word and marks the token after it. A typedef'd
+    volatile scalar local is not seen. ir_codegen's ReloadElimSym. }
+  CBodyMentionsVolatile := CVolatileInRange(volFromTok - 1, TokPos);
+  if PxxDbgWants('a.reload', '*') then
+    WriteLn('PXXDBG a.reload body ', Procs[procIdx].Name, ' volatile ', CBodyMentionsVolatile);
   CompileAST(node);
+  CBodyMentionsVolatile := False;
 
   { Epilogue }
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
