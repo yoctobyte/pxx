@@ -3377,6 +3377,14 @@ begin
         frame slot is rounded up to a multiple of 8 (ParamValueSize), so storing
         8 bytes for a 3-byte struct writes into that struct's own padding. }
       if plAgg then sz := 8;
+      { SysV: an __int128 in memory sits at a 16-byte aligned slot. rbp+16 is
+        the caller's 16-aligned rsp, so an odd eightbyte position skips one,
+        the mirror of the caller's pad slot in IREmitNode's C call arms.
+        feature-c-int128-other-targets-float-and-narrow-modes }
+      if plMem and plAgg and TypeIsInt128(Syms[idx].TypeKind) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+         Odd((stackOff - 16) div 8) then
+        Inc(stackOff, 8);
       for sIdx := 0 to nSlotsForParam - 1 do
       begin
         if sIdx = 0 then begin slotSse := plS0; slotReg := plR0; end
@@ -9041,6 +9049,24 @@ begin
               (libcrux's MlKemPrivateKey, dropbear's mlkem768.c) needs 300 and
               was refused. One slot, mStack advanced by the full eightbyte count:
               the same pushes in the same order, so the bytes do not change. }
+            { SysV: an __int128 in memory sits at a 16-byte aligned slot. The
+              stack area starts 16-aligned, so an odd eightbyte position gets
+              a pad slot first (slotArg -1: `sub rsp, 8` in the push loop).
+              gcc and pxx disagreed on every stack-passed __int128 before.
+              feature-c-int128-other-targets-float-and-narrow-modes }
+            if apMem and apAgg and TypeIsInt128(aggTk) and (not aggIsRef) and (not aggIsArr) and
+               Odd(mStack) then
+            begin
+              if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
+              slotArg[nSlots] := -1;
+              slotIsAgg[nSlots] := False;
+              slotI128[nSlots] := False;
+              slotSrcOff[nSlots] := 0;
+              slotIsSse[nSlots] := False;
+              slotIsStack[nSlots] := True;
+              Inc(mStack);
+              Inc(nSlots);
+            end;
             if apMem and apAgg and (sysvSlots > 1) then
             begin
               if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
@@ -9100,6 +9126,7 @@ begin
             if slotIsStack[slotIdx] then
             begin
               i := slotArg[slotIdx];
+              if i < 0 then begin EmitAsmX64(['sub rsp, 8']); Continue; end;   { the __int128 pad slot }
               if slotIsAgg[slotIdx] then
               begin
                 { Evaluated ONCE, at the argument's highest slot, eightbytes
@@ -12071,6 +12098,23 @@ begin
                 (libcrux's MlKemPrivateKey, dropbear's mlkem768.c) needs 300 and
                 was refused. One slot, mStack advanced by the full eightbyte count:
                 the same pushes in the same order, so the bytes do not change. }
+              { SysV: an __int128 in memory sits at a 16-byte aligned slot; an
+                odd eightbyte position gets a pad slot first (slotArg -1). As
+                in the indirect arm. feature-c-int128-other-targets-float-and-narrow-modes }
+              if apMem and apAgg and TypeIsInt128(tk) and (not aggIsRef) and (not aggIsArr) and
+                 Odd(mStack) then
+              begin
+                if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
+                slotArg[nSlots] := -1;
+                slotIsAgg[nSlots] := False;
+                slotI128[nSlots] := False;
+                winRecLoad[nSlots] := 0;
+                slotSrcOff[nSlots] := 0;
+                slotIsSse[nSlots] := False;
+                slotIsStack[nSlots] := True;
+                Inc(mStack);
+                Inc(nSlots);
+              end;
               if apMem and apAgg and (sysvSlots > 1) then
               begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
@@ -12136,6 +12180,7 @@ begin
               if slotIsStack[slotIdx] then
               begin
                 i := slotArg[slotIdx];
+                if i < 0 then begin EmitAsmX64(['sub rsp, 8']); Continue; end;   { the __int128 pad slot }
                 { A MEMORY aggregate, or a register-classified one the banks were
                   too full to take: its eightbytes ARE the stack argument, pushed
                   high->low so eightbyte 0 ends at the lowest address. Evaluated

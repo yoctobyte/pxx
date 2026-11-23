@@ -22000,6 +22000,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/c_attribute_mode_on_variables.c $(TESTTMP)/c_amode26_a64 > /dev/null
 	tools/run_target.sh aarch64 $(TESTTMP)/c_amode26_a64 | diff -u test/c_attribute_mode_on_variables.expected -
 	./$(COMPILER) test/c_attribute_mode_one_of_several_refused.c $(TESTTMP)/c_amode26r 2>&1 | grep -q 'after one declarator of several is not supported'
+	# An __int128 passed in memory sits at a 16-byte aligned slot (SysV), both ways
+	# between pxx and gcc, direct and indirect. feature-c-int128-other-targets-float-and-narrow-modes
+	gcc -O1 -c test/c_int128_stack_arg_alignment_gcc.c -o $(TESTTMP)/c_i128stk26_g.o
+	./$(COMPILER) --emit-obj test/c_int128_stack_arg_alignment.c $(TESTTMP)/c_i128stk26_p.o > /dev/null 2>&1
+	gcc $(TESTTMP)/c_i128stk26_p.o $(TESTTMP)/c_i128stk26_g.o -o $(TESTTMP)/c_i128stk26
+	$(TESTTMP)/c_i128stk26 | diff -u test/c_int128_stack_arg_alignment.expected -
+	./$(COMPILER) test/c_int128_cast_spellings.c $(TESTTMP)/c_i128cast26 > /dev/null
+	$(TESTTMP)/c_i128cast26 | diff -u test/c_int128_cast_spellings.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

@@ -5345,14 +5345,18 @@ end;
   `(X)&y`, `(X)-1` and `(X)(y)` are left alone precisely because `*`/`&`/`-`/`(`
   are also binary/call continuations, and the value-position leniency the
   corpora rely on must keep working there. Rewinds. }
+function CIsInt128Word(const s: AnsiString): Boolean; forward;
 function CUndeclaredTypeCastAhead(var tname: AnsiString): Boolean;
 var savedPos: Integer; nm: AnsiString;
 begin
   Result := False; tname := '';
   savedPos := TokPos - 1;          { index of the '(' }
   Next;                            { CurTok = first token inside the parens }
+  { CIsInt128Word: `(__int128)5` was "unknown type name '__int128' in cast";
+    the spellings are built in, not typedefs. feature-c-int128-other-targets-float-and-narrow-modes }
   if (CurTok.Kind = tkIdent) and (FindCTypedef(CurTok.SVal) < 0)
-     and (FindSym(CurTok.SVal) < 0) and (FindProc(CurTok.SVal) < 0) then
+     and (FindSym(CurTok.SVal) < 0) and (FindProc(CurTok.SVal) < 0)
+     and not CIsInt128Word(CurTok.SVal) then
   begin
     nm := CurTok.SVal;
     Next;

@@ -4,7 +4,7 @@ tags: [c, int128, attributes]
 prio: 40
 type: feature
 blocked-by: []
-summary: "__int128 works on x86-64 only. Still missing: other targets, int128<->float conversion, and 16-byte alignment of a stack-passed __int128. The narrow modes (QI/HI/SI/DI) work on typedefs, variables and members (2026-11-23)."
+summary: "__int128 works on x86-64 only. Still missing: other targets, int128<->float conversion. Fixed 2026-11-23: stack-passed __int128 alignment, and casts written `(__int128)x`. The narrow modes (QI/HI/SI/DI) work on typedefs, variables and members (2026-11-23)."
 status: open
 owner: unassigned
 ---
@@ -38,3 +38,20 @@ pxx gives sibling declarators one base type, so the second case in a
 declaration with several declarators is refused by name. Test
 c_attribute_mode_on_variables (same as gcc on six targets),
 c_attribute_mode_one_of_several_refused.
+
+## Stack-passed __int128 alignment done 2026-11-23 (claude-pxx)
+
+SysV puts an __int128 in memory at a 16-byte aligned slot. pxx put it in
+the next eightbyte, so pxx calling gcc and gcc calling pxx both read the
+wrong words (measured: 35863 and 1973175 for 5100). Caller: both C call
+arms (direct and indirect) insert a pad slot (slotArg -1, `sub rsp, 8`)
+before one at an odd eightbyte position. Callee: EmitParamSpillsForTarget
+skips 8 bytes in the same case. Test c_int128_stack_arg_alignment, linked
+with a gcc -c half: odd and even positions, two of them, one split by a
+full register bank (the next long still takes r9), indirect calls, and
+gcc calling pxx. Not covered: a by-value STRUCT whose alignment is 16.
+
+## `(__int128)x` casts done 2026-11-23 (claude-pxx)
+
+CUndeclaredTypeCastAhead took the built-in spellings for undeclared type
+names. Test c_int128_cast_spellings, against gcc.
