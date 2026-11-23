@@ -1,4 +1,4 @@
-{ ir_codegen_i128.inc -- GCC's 128-bit integers on x86-64.
+{ ir_codegen_i128.inc -- GCC's 128-bit integers on x86-64 (aarch64: ir_codegen_a64_i128.inc).
 
   `__int128` / `unsigned __int128` (tyInt128 / tyUInt128) are carried in
   rdx:rax, low half in rax, the way the i386 back end carries an Int64 in
@@ -14,10 +14,12 @@
   Only rax, rcx and rdx are clobbered, plus the stack for the left operand,
   which is the contract every other binop arm keeps.
 
-  Not here yet, and refused by name rather than computed on one half:
-  division and modulo (an RTL helper, no libgcc), conversion to or from a
-  floating type, and every target but x86-64.
-  feature-c-int128-and-attribute-mode }
+  Division and modulo are inline (no libgcc), and so are the conversions to
+  and from the floating types (I128ToDouble, I128FromFloat). aarch64 carries
+  the same model in x0:x1 (ir_codegen_a64_i128.inc); the 32-bit targets
+  refuse the type, as gcc does.
+  feature-c-int128-and-attribute-mode,
+  feature-c-int128-other-targets-float-and-narrow-modes }
 
 function I128Node(n: Integer): Boolean;
 begin

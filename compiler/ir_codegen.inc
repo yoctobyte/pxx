@@ -2392,6 +2392,20 @@ begin
   end;
 end;
 
+{ SysV: an argument passed in memory whose alignment is 16 -- an __int128, or
+  a struct with one inside -- sits at a 16-byte aligned slot. The caller pads
+  (a slotArg -1 pad slot) and the callee skips the same 8 bytes.
+  feature-c-int128-other-targets-float-and-narrow-modes }
+function SysVMemArgAlign16(tk: TTypeKind; rec: Integer; isRef, isArr: Boolean): Boolean;
+begin
+  Result := False;
+  if isRef or isArr then Exit;
+  if TypeIsInt128(tk) then
+    Result := True
+  else if (tk = tyRecord) and (rec >= REC_UCLASS_BASE) then
+    Result := UClsAlign[rec - REC_UCLASS_BASE] >= 16;
+end;
+
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
 { abi-oracle-reviewed: this routine asks the SLOT WIDTH / register-class
   question ("is this param one 4-byte stack slot, an 8-byte one, an SSE
@@ -3381,8 +3395,8 @@ begin
         the caller's 16-aligned rsp, so an odd eightbyte position skips one,
         the mirror of the caller's pad slot in IREmitNode's C call arms.
         feature-c-int128-other-targets-float-and-narrow-modes }
-      if plMem and plAgg and TypeIsInt128(Syms[idx].TypeKind) and
-         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+      if plMem and plAgg and
+         SysVMemArgAlign16(Syms[idx].TypeKind, Syms[idx].RecName, Syms[idx].IsRef, Syms[idx].IsArray) and
          Odd((stackOff - 16) div 8) then
         Inc(stackOff, 8);
       for sIdx := 0 to nSlotsForParam - 1 do
@@ -9064,7 +9078,7 @@ begin
               a pad slot first (slotArg -1: `sub rsp, 8` in the push loop).
               gcc and pxx disagreed on every stack-passed __int128 before.
               feature-c-int128-other-targets-float-and-narrow-modes }
-            if apMem and apAgg and TypeIsInt128(aggTk) and (not aggIsRef) and (not aggIsArr) and
+            if apMem and apAgg and SysVMemArgAlign16(aggTk, aggRec, aggIsRef, aggIsArr) and
                Odd(mStack) then
             begin
               if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
@@ -12131,7 +12145,7 @@ begin
               { SysV: an __int128 in memory sits at a 16-byte aligned slot; an
                 odd eightbyte position gets a pad slot first (slotArg -1). As
                 in the indirect arm. feature-c-int128-other-targets-float-and-narrow-modes }
-              if apMem and apAgg and TypeIsInt128(tk) and (not aggIsRef) and (not aggIsArr) and
+              if apMem and apAgg and SysVMemArgAlign16(tk, aggRec, aggIsRef, aggIsArr) and
                  Odd(mStack) then
               begin
                 if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');

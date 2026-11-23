@@ -4493,10 +4493,10 @@ begin
   CPAddLiteral('__SIZEOF_INT__', '4');
   CPAddLiteral('__SIZEOF_SHORT__', '2');
   CPAddLiteral('__SIZEOF_LONG_LONG__', '8');
-  { gcc defines it exactly where __int128 exists; pxx has it on x86-64 only so
-    far, and code tests this macro before using the type.
-    feature-c-int128-and-attribute-mode }
-  if TargetArch = TARGET_X86_64 then
+  { gcc defines it exactly where __int128 exists -- x86-64 and aarch64 among
+    pxx's targets -- and code tests this macro before using the type.
+    feature-c-int128-other-targets-float-and-narrow-modes }
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) then
     CPAddLiteral('__SIZEOF_INT128__', '16');
   CPAddLiteral('__SIZEOF_FLOAT__', '4');
   CPAddLiteral('__SIZEOF_DOUBLE__', '8');

@@ -659,11 +659,23 @@ begin
   Patch32(pSkip, $B5000001 or ((((CodeLen - pSkip) div 4) and $7FFFF) shl 5));
 end;
 
+procedure A64I128ToDouble(signed: Boolean); forward;   { ir_codegen_a64_i128.inc }
+procedure A64I128OperandAsDouble(n: Integer); forward;
+
 procedure EmitCvtIntToF64A64(dReg, xReg: Integer; srcTk: TTypeKind);
 { int -> double: scvtf for signed sources, ucvtf for unsigned 64-bit ones —
   scvtf converted a qword >= 2^63 to a negative double
   (bug-pascal-qword-to-double-signed). }
 begin
+  { an __int128 is in x0:x1; from any other register its high half is gone }
+  if TypeIsInt128(srcTk) then
+  begin
+    if (xReg <> 0) or (dReg <> 0) then
+      Error('__int128: this conversion to a floating type is not supported yet on aarch64 (feature-c-int128-other-targets-float-and-narrow-modes)');
+    A64I128ToDouble(srcTk = tyInt128);          { double bits in x0 }
+    EmitI32($9E670000);                         { fmov d0, x0 }
+    Exit;
+  end;
   if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
     EmitI32($9E630000 or (xReg shl 5) or dReg)   { ucvtf d<d>, x<n> }
   else
@@ -1992,6 +2004,10 @@ begin
       argFp[i] := dFp; argRegs[i] := dRegs; argSize[i] := dSize;
       argInd[i] := dInd; argAgg[i] := dAgg;
     end;
+    A64ArgAlign16[i] := ABIA64ParamAlign16(procIdx, pi);
+    if (not A64ArgAlign16[i]) and (an <> -1) and TypeIsInt128(IntToTypeKind(IRTk[IRA[an]])) and
+       ((pi < 0) or (pi >= Procs[procIdx].ParamCount)) then
+      Error('__int128: as a variadic argument on aarch64 is not supported yet (feature-c-int128-other-targets-float-and-narrow-modes)');
     if PxxDbgEnabled('a.a64argvec') then
       WriteLn('A64ARGVEC ', Procs[procIdx].Name, ' i=', i, ' pi=', pi,
               ' tk=', Ord(Procs[procIdx].Params[pi].TypeKind),
@@ -2070,6 +2086,8 @@ begin
   EmitI32($AA0203E0);                   { mov x0, x2 }
 end;
 
+{$include ir_codegen_a64_i128.inc}
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -2119,6 +2137,21 @@ begin
     Exit;
   end;
   if node = -1 then Exit;
+  { 128-bit integers live in x0:x1 and have their own arms (ir_codegen_a64_i128.inc);
+    a 128-bit node no arm claims is refused, never emitted as one register.
+    feature-c-int128-other-targets-float-and-narrow-modes }
+  if A64I128Claims(node) then
+  begin
+    A64I128EmitNode(node);
+    Exit;
+  end;
+  if A64I128Node(node) and (IRKind[node] <> IR_NOP) and (IRKind[node] <> IR_BLOCK) and
+     (IRKind[node] <> IR_INDEX) and (IRKind[node] <> IR_FIELD) and (IRKind[node] <> IR_LEA) and
+     { a call's 128-bit result arrives in x0:x1 (AAPCS64), already the model }
+     (IRKind[node] <> IR_CALL) and (IRKind[node] <> IR_CALL_IND) and
+     (IRKind[node] <> IR_DEFAULT_MEM) then
+    Error('__int128: ' + IROpName(IRKind[node]) +
+          ' of a 128-bit value is not supported yet on aarch64 (feature-c-int128-other-targets-float-and-narrow-modes)');
   case IRKind[node] of
     IR_NOP, IR_BLOCK: ;
 
@@ -2842,18 +2875,20 @@ begin
         rhsTk := IRValueKind(right);
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
         begin
-          IREmitNodeAarch64(left);
+          { an __int128 side becomes double bits as it is evaluated, while
+            x0:x1 still hold it (feature-c-int128-other-targets-float-and-narrow-modes) }
+          A64I128OperandAsDouble(left);
           EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
-          IREmitNodeAarch64(right);
+          A64I128OperandAsDouble(right);
           EmitI32($AA0003E1); { mov x1, x0 }
           EmitI32($F84107E0); { ldr x0, [sp], #16 }
 
-          if not TypeIsFloat(lhsTk) then
+          if not TypeIsFloat(lhsTk) and not TypeIsInt128(lhsTk) then
             EmitCvtIntToF64A64(0, 0, lhsTk)  { s/ucvtf d0, x0 }
           else
             EmitI32($9E670000); { fmov d0, x0 }
 
-          if not TypeIsFloat(rhsTk) then
+          if not TypeIsFloat(rhsTk) and not TypeIsInt128(rhsTk) then
             EmitCvtIntToF64A64(1, 1, rhsTk)  { s/ucvtf d1, x1 }
           else
             EmitI32($9E670021); { fmov d1, x1 }
@@ -3660,7 +3695,9 @@ begin
                   (bug-c-int64-to-double-cast-truncates-on-32bit). aarch64 has
                   the unsigned form outright. A 32-bit unsigned source is already
                   zero-extended in x0, so scvtf is right for it. }
-                if IntToTypeKind(IRTk[valNode]) = tyUInt64 then
+                if TypeIsInt128(IntToTypeKind(IRTk[valNode])) then
+                  EmitCvtIntToF64A64(0, 0, IntToTypeKind(IRTk[valNode]))
+                else if IntToTypeKind(IRTk[valNode]) = tyUInt64 then
                   EmitI32($9E630000)  { ucvtf d0, x0 }
                 else
                   EmitI32($9E620000); { scvtf d0, x0 }
@@ -3823,8 +3860,16 @@ begin
           cdeclDropA64 := 0;
           while argNode <> -1 do
           begin
-            IREmitNodeAarch64(IRA[argNode]);
-            EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (arg0 deepest) }
+            if ABIA64ParamIsInt128(procIdx, nArgs) then
+            begin
+              A64I128EmitValue(IRA[argNode]);    { x0:x1, widened to the parameter }
+              A64I128Push;                       { the whole 16-byte temp }
+            end
+            else
+            begin
+              IREmitNodeAarch64(IRA[argNode]);
+              EmitI32($F81F0FE0);                { str x0, [sp, #-16]! (arg0 deepest) }
+            end;
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
@@ -3884,7 +3929,7 @@ begin
             if hi >= 0 then
             begin
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-              EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
+              A64ArgTempToX9(ABIA64ParamIsInt128(procIdx, i), sz);   { x9 = the argument (its temp's address for an __int128) }
               if argAggA64[i] then
                 A64EmitAggToStack(argSizeA64[i], hi)
               else
@@ -3897,7 +3942,7 @@ begin
             ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then Continue;
             sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-            EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            A64ArgTempToX9(ABIA64ParamIsInt128(procIdx, i), sz);   { x9 = the argument (its temp's address for an __int128) }
             if argAggA64[i] then
             begin
               A64EmitAggLoadRegs(argRegsA64[i], lo, argSizeA64[i], a64Fp);
@@ -4102,8 +4147,16 @@ begin
           nArgs := 0;
           while argNode <> -1 do
           begin
-            IREmitNodeAarch64(IRA[argNode]);
-            EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
+            if ABIA64ParamIsInt128(procIdx, nArgs - Integer(IRC[node])) then
+            begin
+              A64I128EmitValue(IRA[argNode]);        { x0:x1, widened to the parameter }
+              A64I128Push;
+            end
+            else
+            begin
+              IREmitNodeAarch64(IRA[argNode]);
+              EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! }
+            end;
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
@@ -4150,7 +4203,7 @@ begin
             if hi >= 0 then
             begin
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-              EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
+              A64ArgTempToX9(ABIA64ParamIsInt128(procIdx, i - Integer(IRC[node])), sz);   { x9 = the argument (its temp's address for an __int128) }
               if argAggA64[i] then
                 A64EmitAggToStack(argSizeA64[i], hi)
               else
@@ -4163,7 +4216,7 @@ begin
             ABIA64VecWalkN(argRegsA64, argSizeA64, argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then Continue;
             sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-            EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            A64ArgTempToX9(ABIA64ParamIsInt128(procIdx, i - Integer(IRC[node])), sz);   { x9 = the argument (its temp's address for an __int128) }
             if argAggA64[i] then
             begin
               A64EmitAggLoadRegs(argRegsA64[i], lo, argSizeA64[i], a64Fp);
@@ -4611,7 +4664,7 @@ begin
         end;
         if tk = tySingle then
         begin
-          IREmitNodeAarch64(IRB[node]); { value -> x0 }
+          A64I128OperandAsDouble(IRB[node]); { value -> x0 (an __int128 as double bits) }
           EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
@@ -4622,7 +4675,7 @@ begin
             (scvtf) first; a float value is already double bits (fmov). Then
             narrow to single. Without the int case, `s.a := 10` reinterpreted the
             int as double bits -> ~0 (bug-single-field-element-in-aggregate). }
-          if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) or TypeIsInt128(IntToTypeKind(IRTk[IRB[node]])) then
             EmitI32($9E670020)          { fmov d0, x1 }
           else
             EmitCvtIntToF64A64(0, 1, IntToTypeKind(IRTk[IRB[node]])); { s/ucvtf d0, x1 }
@@ -4633,7 +4686,7 @@ begin
         end;
         if (tk = tyDouble) or (tk = tyExtended) then
         begin
-          IREmitNodeAarch64(IRB[node]); { value -> x0 }
+          A64I128OperandAsDouble(IRB[node]); { value -> x0 (an __int128 as double bits) }
           EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
@@ -4643,7 +4696,8 @@ begin
           { An integer value into a Double slot must be int->double converted
             (scvtf); a float value is already double bits. `d.a := 10` otherwise
             stored the raw integer (bug-single-field-element-in-aggregate). }
-          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) and
+             not TypeIsInt128(IntToTypeKind(IRTk[IRB[node]])) then
           begin
             EmitCvtIntToF64A64(0, 1, IntToTypeKind(IRTk[IRB[node]])); { s/ucvtf d0, x1 }
             EmitI32($9E660001);         { fmov x1, d0 }
@@ -5492,6 +5546,9 @@ begin
         begin
           lblId := IRA[i];
           IREmitNodeAarch64(IRB[i]); { condition -> x0 }
+          { a 128-bit condition is true when EITHER half is non-zero }
+          if A64I128Node(IRB[i]) then
+            EmitI32($AA010000);      { orr x0, x0, x1 }
           if LabelPositions[lblId] <> -1 then
             EmitAsmA64(['cbz x0, %', LabelPositions[lblId] - CodeLen])
           else

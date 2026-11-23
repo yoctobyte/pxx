@@ -21392,9 +21392,9 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_i128ptrwalk26 "$$($(TESTTMP)/c_i128ptrwalk26)" "$$(cat test/c_int128_ptrwalk.expected)"
 	./$(COMPILER) -O2 test/c_int128_ptrwalk.c $(TESTTMP)/c_i128ptrwalk26_o2 > /dev/null
 	tools/expect_same.sh c_i128ptrwalk26_o2 "$$($(TESTTMP)/c_i128ptrwalk26_o2)" "$$(cat test/c_int128_ptrwalk.expected)"
-	@./$(COMPILER) --target=aarch64 test/c_int128_float_refused.c $(TESTTMP)/c_i128a64 2>&1 \
-	  | grep -q 'is supported on x86-64 only so far' \
-	  || { echo 'c_int128_float_refused: FAIL - aarch64 accepted __int128, or refused it as something else'; exit 1; }
+	@./$(COMPILER) --target=i386 test/c_int128_float_refused.c $(TESTTMP)/c_i128i386 2>&1 \
+	  | grep -q "'__int128' is not supported on this target" \
+	  || { echo 'c_int128_float_refused: FAIL - i386 accepted __int128 (gcc refuses it), or refused it as something else'; exit 1; }
 	./$(COMPILER) test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz26 > /dev/null
 	tools/expect_same.sh c_alignsz26 "$$($(TESTTMP)/c_alignsz26)" "$$(cat test/c_aligned_attribute_sizeof_argument.expected)"
 	./$(COMPILER) --target=i386 test/c_aligned_attribute_sizeof_argument.c $(TESTTMP)/c_alignsz_i386 > /dev/null
@@ -22015,6 +22015,39 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_i128mix26 | diff -u test/c_int128_float_mixed.expected -
 	./$(COMPILER) -O3 test/c_int128_float_mixed.c $(TESTTMP)/c_i128mix26_3 > /dev/null
 	$(TESTTMP)/c_i128mix26_3 | diff -u test/c_int128_float_mixed.expected -
+	# __int128 on aarch64 (x0:x1, ir_codegen_a64_i128.inc): every x86-64 int128 test, same
+	# output, and AAPCS64 placement (even pairs, 16-aligned stack). feature-c-int128-other-targets-float-and-narrow-modes
+	./$(COMPILER) --target=aarch64 test/c_int128_basic.c $(TESTTMP)/c_i128a64_basic > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_basic | diff -u test/c_int128_basic.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_calls.c $(TESTTMP)/c_i128a64_calls > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_calls | diff -u test/c_int128_calls.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_divide.c $(TESTTMP)/c_i128a64_divide > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_divide | diff -u test/c_int128_divide.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_init.c $(TESTTMP)/c_i128a64_init > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_init | diff -u test/c_int128_init.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_ptrwalk.c $(TESTTMP)/c_i128a64_ptrwalk > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_ptrwalk | diff -u test/c_int128_ptrwalk.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_cast_spellings.c $(TESTTMP)/c_i128a64_cast_spellings > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_cast_spellings | diff -u test/c_int128_cast_spellings.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_float_conversion.c $(TESTTMP)/c_i128a64_float_conversion > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_float_conversion | diff -u test/c_int128_float_conversion.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_float_mixed.c $(TESTTMP)/c_i128a64_float_mixed > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_float_mixed | diff -u test/c_int128_float_mixed.expected -
+	./$(COMPILER) --target=aarch64 test/c_int128_aapcs64_calls.c $(TESTTMP)/c_i128a64_aapcs64_calls > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_aapcs64_calls | diff -u test/c_int128_aapcs64_calls.expected -
+	./$(COMPILER) -O0 --target=aarch64 test/c_int128_aapcs64_calls.c $(TESTTMP)/c_i128a64_abi0 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_i128a64_abi0 | diff -u test/c_int128_aapcs64_calls.expected -
+	./$(COMPILER) test/c_int128_aapcs64_calls.c $(TESTTMP)/c_i128abi26 > /dev/null
+	$(TESTTMP)/c_i128abi26 | diff -u test/c_int128_aapcs64_calls.expected -
+	# A struct whose alignment is 16 (holding an __int128, or aligned(16)) sits at a 16-byte
+	# aligned stack slot, as gcc puts it; aarch64 builds both halves as one file.
+	# feature-c-int128-other-targets-float-and-narrow-modes
+	gcc -O1 -c test/c_aligned16_struct_stack_arg_gcc.c -o $(TESTTMP)/c_a16stk26_g.o
+	./$(COMPILER) --emit-obj test/c_aligned16_struct_stack_arg.c $(TESTTMP)/c_a16stk26_p.o > /dev/null 2>&1
+	gcc $(TESTTMP)/c_a16stk26_p.o $(TESTTMP)/c_a16stk26_g.o -o $(TESTTMP)/c_a16stk26
+	$(TESTTMP)/c_a16stk26 | diff -u test/c_aligned16_struct_stack_arg.expected -
+	./$(COMPILER) --target=aarch64 -dA16_ONE_FILE test/c_aligned16_struct_stack_arg.c $(TESTTMP)/c_a16stk26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_a16stk26_a64 | diff -u test/c_aligned16_struct_stack_arg.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

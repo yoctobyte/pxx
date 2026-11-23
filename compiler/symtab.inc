@@ -18082,6 +18082,15 @@ begin
           bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target }
         EmitLoadVarA64(retSymIdx);   { the ArrLen = -1 arm loads full ptr width }
       end
+      else if TypeIsInt128(Syms[retSymIdx].TypeKind) and (Syms[retSymIdx].Kind = skLocal) and
+              not Syms[retSymIdx].IsArray then
+      begin
+        { __int128 returns in x0:x1 (AAPCS64), the value model of
+          ir_codegen_a64_i128.inc. feature-c-int128-other-targets-float-and-narrow-modes }
+        EmitLoadImmA64(9, Syms[retSymIdx].Offset);
+        EmitI32($8B0903A9);                                    { add x9, x29, x9 }
+        EmitI32($A9400520);                                    { ldp x0, x1, [x9] }
+      end
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or

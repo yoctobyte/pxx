@@ -572,14 +572,23 @@ end;
   HFA lands in w0 and not w2. A walk that advanced NGRN for an FP argument would
   be wrong in a way no single-argument probe can see.
   bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+{ The arguments whose natural alignment is 16 -- an __int128 -- by index into
+  the class vector the walks below read. AAPCS64 C.8/C.9 round NGRN up to an
+  even register and NSAA up to 16 for them. Filled by whoever builds the
+  vector (A64BuildArgVecN, ABIA64CdeclArgSlotN) right before the walk; a
+  parallel array rather than another parameter on every walk.
+  feature-c-int128-other-targets-float-and-narrow-modes }
+var A64ArgAlign16: array[0..MAX_PROC_PARAMS + 7] of Boolean;
+
 procedure ABIA64ArgPlace(nRegs, size: Integer; isFp: Boolean;
                          var ngrn, nsrn, nsaa: Integer;
-                         var regIdx, stackOff: Integer);
+                         var regIdx, stackOff: Integer; align16: Boolean);
 var fits: Boolean;
 begin
   regIdx := -1; stackOff := -1;
   if nRegs < 1 then nRegs := 1;
   if size < 1 then size := 8;
+  if align16 and (not isFp) and Odd(ngrn) and (ngrn < 8) then Inc(ngrn);
   if isFp then fits := nsrn + nRegs <= 8 else fits := ngrn + nRegs <= 8;
   if fits then
   begin
@@ -592,6 +601,7 @@ begin
     ABIA64RecordClass REFUSES an aggregate with alignment > 8 rather than
     letting one reach this walk. }
   if isFp then nsrn := 8 else ngrn := 8;
+  if align16 then nsaa := ((nsaa + 15) div 16) * 16;
   stackOff := nsaa;
   Inc(nsaa, ((size + 7) div 8) * 8);
 end;
@@ -615,7 +625,7 @@ begin
   for i := 0 to argIdx do
   begin
     isFp := argFp[i];
-    ABIA64ArgPlace(argRegs[i], argSize[i], isFp, ngrn, nsrn, nsaa, regIdx, stackOff);
+    ABIA64ArgPlace(argRegs[i], argSize[i], isFp, ngrn, nsrn, nsaa, regIdx, stackOff, A64ArgAlign16[i]);
   end;
 end;
 
@@ -639,7 +649,7 @@ begin
   for i := 0 to argIdx do
   begin
     isFp := argFp[i];
-    ABIA64ArgPlace(1, 8, isFp, ngrn, nsrn, nsaa, regIdx, stackOff);
+    ABIA64ArgPlace(1, 8, isFp, ngrn, nsrn, nsaa, regIdx, stackOff, False);
   end;
 end;
 
@@ -732,8 +742,12 @@ begin
   if TargetArch <> TARGET_AARCH64 then Exit;
   sz := RecSize(recId);
   if sz <= 0 then Exit;
+  { alignment 16 (a struct holding an __int128, or declared aligned(16)) is
+    classified like any other; the placement walk rounds it to an even
+    register pair and a 16-byte stack slot (A64ArgAlign16).
+    feature-c-int128-other-targets-float-and-narrow-modes }
   if recId >= REC_UCLASS_BASE then
-    if UClsAlign[recId - REC_UCLASS_BASE] > 8 then Exit;
+    if UClsAlign[recId - REC_UCLASS_BASE] > 16 then Exit;
 
   { HFA first: it is not a size question. `struct { double x, y; }` is 16 bytes
     and goes in d0,d1, while `struct { long a, b; }` is 16 bytes and goes in
@@ -868,6 +882,14 @@ begin
     nRegs := cnt; isFp := hfa; size := RecSize(recId); isAgg := True;
     Exit;
   end;
+  { __int128: two X registers (an even pair, A64ArgAlign16) or 16 stack bytes,
+    filled from a 16-byte temp the way an aggregate's are.
+    feature-c-int128-other-targets-float-and-narrow-modes }
+  if TypeIsInt128(tk) then
+  begin
+    nRegs := 2; size := 16; isAgg := True;
+    Exit;
+  end;
   isFp := TypeIsFloat(tk) and not ABIParamSlotIsPointer(tk, isRef, isArray);
 end;
 
@@ -947,6 +969,29 @@ end;
   the parameter range is an injected Self (a pointer) and above it is a variadic
   tail (already promoted, and never an aggregate), so both are one GP slot and
   neither carries a record id. }
+function ABIA64ParamIsInt128(procIdx, pi: Integer): Boolean;
+begin
+  Result := (pi >= 0) and (pi < Procs[procIdx].ParamCount) and
+            TypeIsInt128(Procs[procIdx].Params[pi].TypeKind) and
+            (not Procs[procIdx].Params[pi].IsRef) and (not Procs[procIdx].Params[pi].IsArray);
+end;
+
+{ Is parameter pi's natural alignment 16 (AAPCS64 C.8/C.9: an even NGRN, a
+  16-aligned NSAA)? An __int128, or a by-value record aligned to 16 that is
+  passed in registers or on the stack as itself (over 16 bytes it is a
+  pointer to a copy, and a pointer is 8-aligned). }
+function ABIA64ParamAlign16(procIdx, pi: Integer): Boolean;
+var rec: Integer;
+begin
+  Result := ABIA64ParamIsInt128(procIdx, pi);
+  if Result or (pi < 0) or (pi >= Procs[procIdx].ParamCount) then Exit;
+  if (Procs[procIdx].Params[pi].TypeKind <> tyRecord) or Procs[procIdx].Params[pi].IsRef or
+     Procs[procIdx].Params[pi].IsArray then Exit;
+  rec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + pi];
+  Result := (rec >= REC_UCLASS_BASE) and (UClsAlign[rec - REC_UCLASS_BASE] >= 16) and
+            (RecSize(rec) <= 16);
+end;
+
 procedure ABIA64ArgDescOf(procIdx, pi: Integer; var nRegs, size: Integer;
                           var isFp, isIndirect, isAgg: Boolean);
 var ok: Boolean;
@@ -995,6 +1040,7 @@ begin
       Error('target aarch64: argument index past the AAPCS64 class vector');
     ABIA64ArgDescOf(procIdx, i - selfCount, dRegs, dSize, dFp, dInd, dAgg);
     argFp[i] := dFp; argRegs[i] := dRegs; argSize[i] := dSize;
+    A64ArgAlign16[i] := ABIA64ParamAlign16(procIdx, i - selfCount);
     if i = argIdx then
     begin
       nRegs := dRegs; size := dSize; isIndirect := dInd; isAgg := dAgg;

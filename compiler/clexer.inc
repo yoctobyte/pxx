@@ -418,13 +418,13 @@ begin
             bug-c-attribute-mode-ti-was-ignored-and-made-a-64-bit-type }
           { mode(TI) IS a 128-bit integer since feature-c-int128-and-attribute-mode,
             on x86-64; the width rides CAttrModeBytes like the narrower modes. }
-          if (CAttrModeName(attrText) = 'ti') and (TargetArch = TARGET_X86_64) then
+          if (CAttrModeName(attrText) = 'ti') and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)) then
             CAttrModeBytes := 16
           else if (CAttrModeName(attrText) = 'ti') or (CAttrModeName(attrText) = 'oi') or
              (CAttrModeName(attrText) = 'tf') or (CAttrModeName(attrText) = 'xf') or
              (CAttrModeName(attrText) = 'kf') then
             Error('C: __attribute__((mode(' + UpCase(CAttrModeName(attrText)) +
-                  '))) asks for a type pxx has no lowering for on this target (128-bit integers are x86-64 only so far). ' +
+                  '))) asks for a type pxx has no lowering for on this target (128-bit integers exist on x86-64 and aarch64, as in gcc). ' +
                   'Ignoring it would make the type 64 bits wide. For libtommath, ' +
                   'build with -DMP_32BIT');
           { ...and the narrower ones are no longer skipped: `typedef int di_t

@@ -4,8 +4,8 @@ tags: [c, int128, attributes]
 prio: 40
 type: feature
 blocked-by: []
-summary: "__int128 works on x86-64 only. Still missing: other targets. Fixed 2026-11-23: stack-passed __int128 alignment, casts written `(__int128)x`, and int128<->float conversion. The narrow modes (QI/HI/SI/DI) work on typedefs, variables and members (2026-11-23)."
-status: open
+summary: "Done 2026-11-23. __int128 on x86-64 and aarch64 (gcc has it on no other pxx target; the 32-bit ones refuse it in gcc's words). int128<->float both ways, correctly rounded. SysV/AAPCS64 16-byte alignment for __int128 and for structs aligned to 16, checked against gcc (x86-64, linked) and clang (aarch64, call sites). (__int128)x casts. mode(QI/HI/SI/DI) on variables and members. Follow-up: bug-c-aarch64-returns-a-small-struct-through-x8-where-aapcs64-uses-x0-x1."
+status: done
 owner: unassigned
 ---
 
@@ -72,3 +72,43 @@ x86-64, both directions, both signednesses, double and float:
 
 Tests c_int128_float_conversion (edges, ties, 2^127, and 4000-value
 sweeps) and c_int128_float_mixed, both against gcc at -O0, -O2 and -O3.
+
+## aarch64 done 2026-11-23 (claude-pxx)
+
+gcc and clang have `__int128` on x86-64 and aarch64 only among pxx's
+targets; on i386, arm32, riscv32 and xtensa both refuse it, and pxx now
+refuses it there in gcc's words. wasm32 has it in clang only (gcc has no
+wasm target), so with gcc as the reference it stays refused there.
+
+aarch64 carries the x86-64 model in x0:x1 (ir_codegen_a64_i128.inc):
+- Every operator, shifts, inline shift-subtract division, compares (a
+  cmp/sbcs pair), and conversions to and from floating (ucvtf with a sticky
+  bit; fcvtzs below 2^63). Mixed float binops and float stores convert
+  while x0:x1 still hold the value. Conditions test both halves.
+- The fixed sequences come from tools/a64_i128/snippets.s through gen.py
+  (clang encodes them), and the comment on each word is its source line.
+- AAPCS64: an even register pair and a 16-aligned stack slot (A64ArgAlign16,
+  ABIA64ArgPlace). Arguments go through the aggregate loaders, and the
+  return is in x0:x1. The calls in c_int128_aapcs64_calls were checked
+  word by word against clang --target=aarch64-linux-gnu, as were the
+  aligned-struct ones. There is no aarch64 linker here, so pxx<->clang
+  objects were not linked.
+- `__SIZEOF_INT128__` is defined on aarch64 too.
+
+Every int128 test runs on aarch64 with gcc's x86-64 output (rows), at -O0,
+-O2 and -O3 by hand.
+
+## Structs aligned to 16 done 2026-11-23 (claude-pxx)
+
+The gap the stack-alignment note left open was real. A struct holding an
+__int128 after seven longs read 33166 where gcc reads 447, because pxx padded
+only a bare __int128. SysVMemArgAlign16 now pads any argument whose
+alignment is 16. On aarch64, ABIA64RecordClass refused alignment above 8, so
+such a struct went by pointer where clang uses an even pair. It now
+classifies alignment 16 and places it with A64ArgAlign16. Test
+c_aligned16_struct_stack_arg: linked with gcc on x86-64, both directions;
+one file on aarch64.
+
+Found on the way, not fixed (a different ticket): on aarch64 pxx returns
+every small struct (even `struct { long a, b; }`) through x8, where AAPCS64
+and clang use x0:x1.

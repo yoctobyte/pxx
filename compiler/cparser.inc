@@ -8004,12 +8004,15 @@ begin
           else if CIsInt128Word(CurTok.SVal) then
           begin
             { `__int128`, `signed`/`unsigned __int128`, `__int128_t`,
-              `__uint128_t`. x86-64 only so far: the other back ends have no
-              register-pair lowering yet, and taking the type there would drop
-              its high half. feature-c-int128-and-attribute-mode }
-            if TargetArch <> TARGET_X86_64 then
-              Error('C: ' + CurTok.SVal + ' (a 128-bit integer) is supported on x86-64 only so far ' +
-                    '(feature-c-int128-and-attribute-mode); for libtommath, build with -DMP_32BIT');
+              `__uint128_t`. The 64-bit targets carry it in a register pair
+              (ir_codegen_i128.inc, ir_codegen_a64_i128.inc). gcc and clang
+              refuse the type on i386, arm32, riscv32 and xtensa, and so does
+              pxx, with gcc's words. wasm32 has it in clang only (gcc has no
+              wasm target) and is not lowered here.
+              feature-c-int128-other-targets-float-and-narrow-modes }
+            if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then
+              Error('C: ''' + CurTok.SVal + ''' is not supported on this target ' +
+                    '(128-bit integers exist on x86-64 and aarch64, as in gcc); for libtommath, build with -DMP_32BIT');
             if CurTok.SVal = '__uint128_t' then isUnsigned := True;
             base := tyInt128; sawBase := True;
             Next;
