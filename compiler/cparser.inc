@@ -310,6 +310,9 @@ function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
 function CSuggestTypeName(const name: AnsiString): AnsiString; forward;
 function ParseCDeclType: TTypeKind; forward;
+function CModeBytesInDecl(first: Integer): Integer; forward;
+function CModeForDeclarators(first, nameTok: Integer): Integer; forward;
+function CApplyAttrMode(tk: TTypeKind; bytes: Integer): TTypeKind; forward;
 function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec, fpRetRec: Integer): Integer; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
@@ -8904,6 +8907,10 @@ begin
   lclTypeTok := TokPos - 1;
   AllocMinAlign := 0;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  { __attribute__((mode(..))) makes an integer type that wide, as on a
+    typedef: `int x __attribute__((mode(QI)))` stayed 4 bytes. Scoped as gcc
+    scopes it (CModeForDeclarators). feature-c-int128-other-targets-float-and-narrow-modes }
+  baseTk := CApplyAttrMode(baseTk, CModeForDeclarators(lclTypeTok, TokPos - 1));
   lParenPtrArr := False;
   CTypeTypedefArrLenAtEntry := CTypeTypedefArrLen;
   CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
@@ -14807,6 +14814,7 @@ begin
   declSawThread := CDeclSawThreadLocal(TokPos - 1);
   CDeclLeaveParenPtrArr := True;
   baseTk := ParseCDeclType;
+  baseTk := CApplyAttrMode(baseTk, CModeForDeclarators(declTypeTok, TokPos - 1));   { mode(..) on a global }
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
   gSpelled := CTypeSpelledStars;   { stars the first declarator wrote (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
@@ -23980,6 +23988,7 @@ begin
     begin
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
+      fTk := CApplyAttrMode(fTk, CModeForDeclarators(fieldStartIdx, TokPos - 1));   { mode(..) on a member }
       fldTdArrLen := CTypeTypedefArrLen;
       fldTdNDims := CTypeTypedefNDims;
       fldTdAlign := 0;
@@ -24891,6 +24900,49 @@ begin
     if (CAttrFlags[k] and 128) <> 0 then begin Result := (CAttrAlignValues[k] shr 24) and $FF; Exit; end;
     if Tokens[k].Kind = tkSemicolon then Exit;
     Inc(k);
+  end;
+end;
+
+{ mode(..) for a variable or member declaration with possibly several
+  declarators, from its first token `first`; `nameTok` is the first
+  declarator's name. gcc scopes it: among the specifiers (the lexer marks the
+  token AFTER the attribute, so a mark at or before the name) it applies to
+  every declarator; after a declarator, to that one only. pxx gives siblings
+  one base type, so a declarator-only mode in a declaration with more than
+  one declarator is refused rather than widened to its siblings. }
+function CModeForDeclarators(first, nameTok: Integer): Integer;
+var k, depth, commas, after: Integer;
+begin
+  Result := 0;
+  after := 0;
+  commas := 0;
+  depth := 0;
+  k := first;
+  if k < 0 then k := 0;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(depth);
+      tkRParen, tkRBrack, tkEnd: Dec(depth);
+    end;
+    if depth < 0 then Break;
+    { the mark sits on the token AFTER the attribute, so `x
+      __attribute__((mode(QI)));` marks the `;`: read it before stopping }
+    if (CAttrFlags[k] and 128) <> 0 then
+    begin
+      if k <= nameTok then Result := (CAttrAlignValues[k] shr 24) and $FF
+      else if after = 0 then after := (CAttrAlignValues[k] shr 24) and $FF;
+    end;
+    if (depth = 0) and (Tokens[k].Kind = tkSemicolon) then Break;
+    if (depth = 0) and (Tokens[k].Kind = tkComma) then Inc(commas);
+    Inc(k);
+  end;
+  if after <> 0 then
+  begin
+    if commas > 0 then
+      Error('C: __attribute__((mode(..))) after one declarator of several is not supported ' +
+            '(gcc applies it to that declarator only); put it on a declaration of its own');
+    Result := after;
   end;
 end;
 

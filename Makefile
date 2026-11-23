@@ -21993,6 +21993,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_volatile_local_reloaded.c $(TESTTMP)/c_volrl26 > /dev/null
 	$(TESTTMP)/c_volrl26 | diff -u test/c_volatile_local_reloaded.expected -
 	tools/expect_same.sh c_volrl26_marks "$$(PXXDBG='a.reload:*' ./$(COMPILER) test/c_volatile_local_reloaded.c $(TESTTMP)/c_volrl26m 2>&1 | awk '/a.reload marked/ && $$NF == "vx" {v++} /a.reload marked/ && $$NF == "px" {p++} END {print v + 0, (p > 0)}')" "0 1"
+	# __attribute__((mode(..))) on variables and members, scoped as gcc scopes it; after
+	# one declarator of several it is refused by name. feature-c-int128-other-targets-float-and-narrow-modes
+	./$(COMPILER) test/c_attribute_mode_on_variables.c $(TESTTMP)/c_amode26 > /dev/null
+	$(TESTTMP)/c_amode26 | diff -u test/c_attribute_mode_on_variables.expected -
+	./$(COMPILER) --target=aarch64 test/c_attribute_mode_on_variables.c $(TESTTMP)/c_amode26_a64 > /dev/null
+	tools/run_target.sh aarch64 $(TESTTMP)/c_amode26_a64 | diff -u test/c_attribute_mode_on_variables.expected -
+	./$(COMPILER) test/c_attribute_mode_one_of_several_refused.c $(TESTTMP)/c_amode26r 2>&1 | grep -q 'after one declarator of several is not supported'
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,
