@@ -89,10 +89,11 @@ _none_
 
 _none_
 
-## backlog_new (1)
+## backlog_new (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-nilpy-esp-code-size-blocks-dual-slot-ota | N+S | 60 | feature | A 263-line Nil Python program (JSON lines over USB, a config dict in NVS, one class, RC522 and OTA externals) is ~1.06 MB of flash on ESP32-C3 at -O2 (.text 949 KB, .rodata 115 KB). The whole IDF image is 1.62 MB without Wi-Fi and 1.96 MB with Wi-Fi + HTTP in C, against a ~1.94 MB two-slot OTA limit on 4 MB flash, so the Python runtime decides whether the product can do safe OTA. Target: under ~0.6 MB of app code for a program like this. Leads: a dict literal costs ~360 B per key and a 1-function if/elif dispatcher 32 KB; the generic call-binding bodies (PyHostCall 36K, PyBoundFnCallvnMaskBody 26K, PyDynMethL 20K, PyStrMethodByName 17K, PyBoundPairCallKwBody 14K, PyBoundCallStarSig 9K) are linked when the program never uses star or keyword calls; a size-oriented codegen mode for --platform=esp. | — |
 | feature-port-mips-linux-for-openwrt-routers | A | 40 | feature | MIPS Linux backend, for the OpenWrt routers people actually own (ath79 MIPS 24Kc big-endian, ramips MT7621 MIPS 1004Kc little-endian, lantiq). Everything else OpenWrt runs already works: pxx x86-64 and aarch64 binaries run unchanged on OpenWrt 25.12.6 (measured 2026-11-12 in QEMU), ARMv7 expected. MIPS is a new backend in the xtensa class of work: codegen, assembler, ELF writer, and the MIPS o32 syscall ABI (own numbers, errno in a3, own errno values). | — |
 
 ## backlog-umbrella (14)
@@ -940,9 +941,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4699)
+## done (4700)
 
-4699 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4700 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (90)
 
@@ -1093,6 +1094,7 @@ _none_
 - [p 60] [U] decide-u-do-the-measurement-rules-want-a-home-that-every-seat-reads
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-n-a-non-allocating-restricted-thunk-for-an-isr [parked — re-claim, do not duplicate]
+- [p 60] [N+S] feature-nilpy-esp-code-size-blocks-dual-slot-ota
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]

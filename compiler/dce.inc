@@ -1503,6 +1503,18 @@ begin
        ((src < 0) or (DceOwnerOf(CallFix[i].CodePos) = src)) then
     begin
       CallFix[i].ProcIdx := nop;
+      { AND FORGET THE BODY IT WAS AIMED AT. A call to a body already emitted
+        (a BACKWARD call) records that body's address in CallFixTarget, and
+        ApplyCallFixups prefers it to the proc row -- so re-aiming ProcIdx
+        alone left the site on the dropped callee's old address, which after
+        the compaction is whatever body follows it. PXXClassFinalize's cut
+        call to PXXClassMgmtRun (defined just above it) became a call to
+        PXXClassFinalize ITSELF: every Free of a class with a managed field
+        recursed until the stack ran out, on ESP32-C3 hardware and under QEMU
+        (json.loads, from the rfid project). The older cuts all pointed
+        forward and never had a target recorded.
+        bug-a-a-dce-cut-backward-call-keeps-its-old-target-and-recurses-on-esp }
+      CallFixTarget[i] := -1;
       Inc(n);
     end;
   if n > 0 then

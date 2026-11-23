@@ -11756,6 +11756,13 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# A DCE-cut BACKWARD call kept its recorded target, which after compaction was the
+	# caller itself: PXXClassFinalize called PXXClassFinalize on every Free of a class
+	# with a managed field on ESP (json.loads on an ESP32-C3, rfid project). Checked
+	# in the object, no toolchain needed; the QEMU half is in test-esp-idf.
+	# bug-a-a-dce-cut-backward-call-keeps-its-old-target-and-recurses-on-esp
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/esp_free_a_class_with_a_string_field.pas $(TESTTMP)/esp_free_class_c3.o > /dev/null
+	python3 tools/check_rv32_no_self_call.py $(TESTTMP)/esp_free_class_c3.o PXXClassFinalize PXXClassFinalizeManaged
 	# --rtl-libc is output-identical to the raw build and leaves at most the one
 	# raw rt_sigreturn. It had no test at all, and DCE broke it silently: the
 	# libc syscall sites were patched at pre-compaction offsets (2026-11-12).
@@ -43631,6 +43638,14 @@ test-esp-idf: $(COMPILER)
 	    tools/esp_run.sh --chip $$c test/esp_a_string_grows_past_its_doubled_size.pas > $(TESTTMP)/test_esp_idf_strgrow_$$c.out 2>/dev/null || true; \
 	  if grep -qF "$$want" $(TESTTMP)/test_esp_idf_strgrow_$$c.out; then echo "$$c strgrow ok"; \
 	  else echo "$$c strgrow MISMATCH -- wanted: $$want"; grep -E 'PXX-|out of memory' $(TESTTMP)/test_esp_idf_strgrow_$$c.out | head -3; exit 1; fi; \
+	done
+	@# Freeing a class with a string field recursed to a stack fault (a $$cE-cut backward
+	@# call kept its old target). bug-a-a-dce-cut-backward-call-keeps-its-old-target-and-recurses-on-esp
+	@for c in esp32c3 esp32s3; do \
+	  ESP_RUN_TIMEOUT=40 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$c test/esp_free_a_class_with_a_string_field.pas > $(TESTTMP)/test_esp_idf_freeclass_$$c.out 2>/dev/null || true; \
+	  if grep -qF 'PXX-free freed' $(TESTTMP)/test_esp_idf_freeclass_$$c.out; then echo "$$c free-class ok"; \
+	  else echo "$$c free-class FAIL -- Free of a class with a string field never returned"; grep -E 'PXX-|Guru|Panic' $(TESTTMP)/test_esp_idf_freeclass_$$c.out | head -3; exit 1; fi; \
 	done
 	@# fs-c3 CANNOT go through esp_run.sh and that is not a defect in either.
 	@# esp_run.sh builds every program inside the hello-c3/hello-s3 project;
