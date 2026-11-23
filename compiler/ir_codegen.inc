@@ -9192,7 +9192,10 @@ begin
             EmitAsmX64(['mov r10, rax']);
             if sysvRet = 0 then EmitAsmX64(['mov rdi, rax']);   { SysV MEMORY }
           end;
-          EmitAsmX64(['mov eax, %', sseIdx]); { mov eax, #vector-regs (vararg ABI) }
+          { mov eax, #vector-regs (vararg ABI); `xor eax, eax` (2 bytes, not 5)
+            for 0. Nothing between here and the call reads the flags. }
+          if sseIdx = 0 then EmitAsmX64(['xor eax, eax'])
+          else EmitAsmX64(['mov eax, %', sseIdx]);
           { Callee: the saved-P slot sits above the pad + stack args. }
           EmitLoadSavedRspX64(mStack * 8 + padBytes);   { r11 = P }
           EmitAsmX64(['mov r11, [r11]']); { = callee }
@@ -12302,8 +12305,11 @@ begin
             end;
             { Variadic ABI: AL = number of vector registers used. Set
               unconditionally (0 for all-integer calls) so variadic callees
-              such as printf read the correct count. }
-            EmitAsmX64(['mov eax, %', sseIdx]);
+              such as printf read the correct count. `xor eax, eax` for 0: 2
+              bytes, not 5, before 10935 calls in the Rainyday pc kernel, and
+              nothing between here and the call reads the flags. }
+            if sseIdx = 0 then EmitAsmX64(['xor eax, eax'])
+            else EmitAsmX64(['mov eax, %', sseIdx]);
             if ProcExternal[procIdx] then
             begin
               extIdx := RegisterExternal(procIdx);

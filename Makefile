@@ -21958,7 +21958,8 @@ test-core: $(COMPILER)
 	# the Rainyday pc kernel). feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
 	./$(COMPILER) test/c_field_offset_zero.c $(TESTTMP)/c_fz026 > /dev/null
 	$(TESTTMP)/c_fz026 | diff -u test/c_field_offset_zero.expected -
-	tools/expect_same.sh c_noaddzero26 "$$(objdump -d $(TESTTMP)/c_fz026 | grep -cE '\s(add|sub)\s+\$$0x0,%rax')" "0"
+	./$(COMPILER) --emit-obj test/c_field_offset_zero.c $(TESTTMP)/c_fz026.o > /dev/null 2>&1
+	tools/expect_same.sh c_noaddzero26 "$$(objdump -d $(TESTTMP)/c_fz026.o | grep -cE '\s(add|sub)\s+\$$0x0,%rax')" "0"
 	# `&&`/`||` do not compare an operand that is already 0/1 with 0 again (2242 double
 	# setcc sequences in the Rainyday pc kernel); the ones that are not 0/1 still are.
 	# feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
@@ -21972,6 +21973,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_nsc26 | diff -u test/c_negated_short_circuit_branch.expected -
 	./$(COMPILER) --target=riscv32 test/c_negated_short_circuit_branch.c $(TESTTMP)/c_nsc26_rv > /dev/null
 	tools/run_target.sh riscv32 $(TESTTMP)/c_nsc26_rv | diff -u test/c_negated_short_circuit_branch.expected -
+	# al = 0 before a C call is `xor eax, eax`, not `mov eax, 0` (10935 calls, 32.9 KB, in
+	# the Rainyday pc kernel). feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_vararg_vector_count_zero.c $(TESTTMP)/c_vacnt26 > /dev/null
+	$(TESTTMP)/c_vacnt26 | diff -u test/c_vararg_vector_count_zero.expected -
+	./$(COMPILER) --emit-obj test/c_vararg_vector_count_zero.c $(TESTTMP)/c_vacnt26.o > /dev/null 2>&1
+	tools/expect_same.sh c_vacnt26 "$$(objdump -d $(TESTTMP)/c_vacnt26.o | grep -cE 'mov\s+\$$0x0,%eax')" "0"
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

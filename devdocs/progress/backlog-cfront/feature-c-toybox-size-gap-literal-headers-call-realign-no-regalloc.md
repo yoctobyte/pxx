@@ -83,3 +83,16 @@ instead of storing the `&&` in a temp. pc text 1628910 -> 1622846
 (-6.1 KB), esp32s3 1044536 -> 1041804 (-2.7 KB); both boot. The ~1400
 bool store/reload pairs left are value uses (`return a && b;`, `x = a < b`)
 and need the register-allocation item. Test c_negated_short_circuit_branch.
+
+## `xor eax, eax` for al = 0 done 2026-11-23 (claude-pxx)
+
+Before a C call x86-64 set al (vector registers used, for variadic
+callees) with `mov eax, 0`, 5 bytes, before 10935 calls in the Rainyday pc
+kernel. `xor eax, eax` is 2; the flags it clobbers are dead before a call.
+pc text 1622846 -> 1589910 (-32.9 KB); boots. Test
+c_vararg_vector_count_zero, row c_vacnt26.
+
+Correction: row c_noaddzero26 (72d13651f7) counted in an executable, which
+objdump cannot disassemble (no section headers), so it printed 0 whatever
+the code. It and c_vacnt26 now count in an `--emit-obj` object; both fail
+with the compiler from before their fix (545 and 585) and pass now.
