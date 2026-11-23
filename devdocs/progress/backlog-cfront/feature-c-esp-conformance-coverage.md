@@ -121,3 +121,16 @@ POSIX. Every C program on the S3 under IDF failed to link. Fixed in
 40c7fe24e0 (done/bug-c-s3-idf-c-programs-fail-to-link-vfork); the s3 row
 above is that compiler. Nothing on the gate builds a C program for the S3
 under IDF, which is why two days passed unseen.
+
+## 2026-11-23 (claude-pxx): rerun after the size work
+
+Same population, sequential, one QEMU, nice 15. Compiler f4f7812599be at
+tree be321968e9 (plain-byte C literals, `&&`/`||` on 0/1 operands, negated
+short-circuit branches, the C -O2 store->reload).
+
+| chip | result |
+|---|---|
+| esp32c3 | 219 pass / 0 fail / 1 skip (00187) |
+| esp32s3 | 219 pass / 0 fail / 1 skip (00187) |
+
+Unchanged from 2026-11-19.
