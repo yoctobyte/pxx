@@ -21966,6 +21966,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_lgbool26 | diff -u test/c_logical_operand_already_boolean.expected -
 	./$(COMPILER) --target=aarch64 test/c_logical_operand_already_boolean.c $(TESTTMP)/c_lgbool26_a64 > /dev/null
 	tools/run_target.sh aarch64 $(TESTTMP)/c_lgbool26_a64 | diff -u test/c_logical_operand_already_boolean.expected -
+	# `!(x && y)` and a `for` test of `x && y` branch on x and y directly.
+	# feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_negated_short_circuit_branch.c $(TESTTMP)/c_nsc26 > /dev/null
+	$(TESTTMP)/c_nsc26 | diff -u test/c_negated_short_circuit_branch.expected -
+	./$(COMPILER) --target=riscv32 test/c_negated_short_circuit_branch.c $(TESTTMP)/c_nsc26_rv > /dev/null
+	tools/run_target.sh riscv32 $(TESTTMP)/c_nsc26_rv | diff -u test/c_negated_short_circuit_branch.expected -
 	./$(COMPILER) --threadsafe --target=aarch64 test/c_semaphore.c $(TESTTMP)/c_sem26_a64 > /dev/null
 	timeout 120 tools/run_target.sh aarch64 $(TESTTMP)/c_sem26_a64 | diff -u test/c_semaphore.expected -
 	# The rest of the crtl surface dropbear needed (strlcpy/strlcat,

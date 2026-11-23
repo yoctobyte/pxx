@@ -11938,6 +11938,21 @@ begin
     ASTSLen[tl] := ASTSLen[nx];
     n := tl;
   end;
+  { `(x && y) == 0` -- a C `!(x && y)`, or a `for` test of `x && y`, which
+    is built as `if (cond == 0) break` -- branches on x and y with the
+    targets swapped: true jumps to falseLabel, false falls through. Lowered
+    as a value, the `&&` stored its result in a temp, reloaded it and tested
+    it before the one branch. feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+  if (n >= 0) and (ASTKind[n] = AN_BINOP) and (Integer(ASTIVal[n]) = Ord(tkEq)) and
+     (ASTRight[n] >= 0) and (ASTKind[ASTRight[n]] = AN_INT_LIT) and
+     (ASTIVal[ASTRight[n]] = 0) and IRIsShortCircuitBool(ASTLeft[n]) then
+  begin
+    nx := IRNewLabel;
+    Result := IRLowerCondJump(ASTLeft[n], nx, -1);
+    IRAppend(IR_JUMP, falseLabel, -1, -1, 0, 0);
+    IRAppend(IR_LABEL, -1, -1, -1, nx, 0);
+    Exit;
+  end;
   if IRIsShortCircuitBool(n) then
   begin
     if Integer(ASTIVal[n]) = Ord(tkAnd) then

@@ -74,3 +74,12 @@ CMakeTruthy no longer wraps an operand that is already 0/1 (a comparison,
 Both boot as before. Test c_logical_operand_already_boolean, gcc-checked on
 x86-64, i386, aarch64, arm32, riscv32 and wasm32 and at -O2; rows on x86-64
 and aarch64.
+
+## Negated short-circuit conditions done 2026-11-23 (claude-pxx)
+
+IRLowerCondJump branches on x and y for `(x && y) == 0` (a C `!(x && y)`,
+and every `for` test of an `&&`/`||`, built as `if (cond == 0) break`),
+instead of storing the `&&` in a temp. pc text 1628910 -> 1622846
+(-6.1 KB), esp32s3 1044536 -> 1041804 (-2.7 KB); both boot. The ~1400
+bool store/reload pairs left are value uses (`return a && b;`, `x = a < b`)
+and need the register-allocation item. Test c_negated_short_circuit_branch.
