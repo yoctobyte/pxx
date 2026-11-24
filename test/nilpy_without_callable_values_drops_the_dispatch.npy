@@ -12,3 +12,9 @@ xs = [3, 1, 2]
 xs.sort()
 print(xs, min(3, 4), max(2.5, 1))
 print("%s=%d" % ("n", 4), "{}-{}".format(1, "x"))
+# sorted() with no key: it used to call PyCallKey1 by name, which kept the whole
+# dispatch in any program that sorts. (A def handed over as key= is a bound
+# pair, a callable value: that keeps it, rightly.)
+ys = [5, 9, 1, 7]
+print(sorted(ys), sorted(ys, reverse=True), sorted({"b": 1, "a": 2}), sorted("cab"))
+print(min(ys), max(ys), min([2.5, 1]))

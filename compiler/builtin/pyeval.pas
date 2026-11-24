@@ -7790,16 +7790,22 @@ begin
   Result := f1(a0);
 end;
 
+{ The key calls below go through PyIterCallHook, not PyCallKey1 by name:
+  initialization installs it unconditionally, and DCE (DceCondRoots) re-aims
+  that install at PyCallKey1Lite when no routine that makes a callable value
+  is live. A direct call here rooted the whole dispatch (~314 KB riscv32) in
+  any program that sorts or takes a min/max, key or no key.
+  feature-nilpy-esp-code-size-blocks-dual-slot-ota }
 function min(l: TPyList; key: Pointer): Variant; overload;
 var i: Integer; bestK, k: Variant;
 begin
   if (l = nil) or (l.count = 0) then
     raise ValueError.Create('min() iterable argument is empty');
   Result := l.at(0);
-  if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
+  if key = nil then bestK := Result else bestK := PyIterCallHook(key, Result);
   for i := 1 to l.count - 1 do
   begin
-    if key = nil then k := l.at(i) else k := PyCallKey1(key, l.at(i));
+    if key = nil then k := l.at(i) else k := PyIterCallHook(key, l.at(i));
     if pyvar_lt(k, bestK) then
     begin
       bestK := k;
@@ -7814,10 +7820,10 @@ begin
   if (l = nil) or (l.count = 0) then
     raise ValueError.Create('max() iterable argument is empty');
   Result := l.at(0);
-  if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
+  if key = nil then bestK := Result else bestK := PyIterCallHook(key, Result);
   for i := 1 to l.count - 1 do
   begin
-    if key = nil then k := l.at(i) else k := PyCallKey1(key, l.at(i));
+    if key = nil then k := l.at(i) else k := PyIterCallHook(key, l.at(i));
     if pyvar_gt(k, bestK) then
     begin
       bestK := k;
@@ -7999,7 +8005,7 @@ begin
       for i := 0 to l.count - 1 do
       begin
         ev := l.at(i);
-        if key <> nil then keys.append(PyCallKey1(key, ev))
+        if key <> nil then keys.append(PyIterCallHook(key, ev))
         else keys.append(ev);
       end;
       { a stable merge order over the keys (PySortOrder), each key computed once }
@@ -8033,7 +8039,7 @@ begin
   Result := TPyList.Create;
   if (l = nil) or (key = nil) then Exit;
   for i := 0 to l.count - 1 do
-    Result.append(PyCallKey1(key, l.at(i)));
+    Result.append(PyIterCallHook(key, l.at(i)));
 end;
 
 { `filter(f, xs)` -- keep the elements where f(x) is truthy. `filter(None,
@@ -8050,19 +8056,17 @@ begin
     begin
       if pyvar_to_bool(ev) then Result.append(ev);
     end
-    else if pyvar_to_bool(PyCallKey1(key, ev)) then Result.append(ev);
+    else if pyvar_to_bool(PyIterCallHook(key, ev)) then Result.append(ev);
   end;
 end;
 
 function pymap_iter(key: Pointer; const v: Variant): TPyIter;
 begin
-  PyIterCallHook := @PyCallKey1;
   Result := pyiter_map(key, v);
 end;
 
 function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
 begin
-  PyIterCallHook := @PyCallKey1;
   Result := pyiter_filter(key, v);
 end;
 
@@ -8098,13 +8102,11 @@ end;
 
 function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
 begin
-  PyIterCallHook := @PyCallKey1;
   Result := pyiter_map_i(key, up);
 end;
 
 function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
 begin
-  PyIterCallHook := @PyCallKey1;
   Result := pyiter_filter_i(key, up);
 end;
 

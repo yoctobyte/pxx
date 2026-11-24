@@ -138,5 +138,17 @@ formatting: same output as CPython, and both installs re-aimed on x86-64 and on
 the riscv32 ESP object).
 
 Still open here: leads 1 and 3 (~360 B per dict-literal key, the 32 KB
-dispatcher function, a size mode). `sorted()` always rooting PyCallKey1 is
-the next cheap one.
+dispatcher function, a size mode).
+
+## 2026-11-24 done (claude-pxx): sorted() no longer keeps the dispatch
+
+sorted(), min/max(l, key) and map/filter called PyCallKey1 by name, and the
+map/filter iterators re-installed @PyCallKey1 in owned code, so any program
+that sorted kept the whole dispatch. They now call through PyIterCallHook
+(re-aimed by DCE like the init install); the re-installs are gone. A def given
+as key= is a bound pair, a callable value, so a keyed sort still keeps it.
+
+| no-callable test + keyless sorted/min/max, riscv32 ESP | .text |
+|---|---|
+| before | 993,872 |
+| after | 695,100 (-298,772, -30.1%) |
