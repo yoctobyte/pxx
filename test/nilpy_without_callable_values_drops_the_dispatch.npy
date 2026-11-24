@@ -1,0 +1,14 @@
+# No callable VALUE anywhere: DCE re-aims pyeval's two call-hook installs at
+# PyCallKey1Lite / pyvar_callv0Lite and drops the generic dispatch (-314 KB of
+# riscv32 code in the rfid firmware). The program must not notice.
+# feature-nilpy-esp-code-size-blocks-dual-slot-ota
+import json
+
+cfg = {"name": "unit", "level": 3, "tags": ["a", "b"]}
+text = json.dumps(cfg)
+back = json.loads(text)
+print(back["name"], back["level"] + 1, len(back["tags"]))
+xs = [3, 1, 2]
+xs.sort()
+print(xs, min(3, 4), max(2.5, 1))
+print("%s=%d" % ("n", 4), "{}-{}".format(1, "x"))

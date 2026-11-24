@@ -1,0 +1,11 @@
+def name [3, 2, 1]
+def in a variable [3, 2, 1] 3 1
+lambda [3, 2, 1]
+closure [3, 2, 1] 3
+bound method [3, 2, 1] 1
+str method ['A', 'b', 'c']
+builtin ['a', 'bb', 'ccc']
+class [3, 2, 1]
+def in a dict 3
+map [-1, -2] [2, 3]
+defaultdict [1, 2] 3 6 7 9

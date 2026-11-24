@@ -1213,6 +1213,102 @@ begin
   Result := False;
 end;
 
+{ CONDITIONAL ROOTS: an address taken in unowned code that keeps a body only
+  if a WITNESS body is live, and is re-aimed at a small stand-in if not.
+
+  The one use: NilPy's callable dispatch. pyeval's initialization installs
+  @PyCallKey1 / @pyvar_callv0 into pylib's call hooks, and through them the
+  whole generic call machinery (PyHostCall, PyDynMethL, the keyword and star
+  binders) was live in every NilPy program: 314 KB of the rfid firmware's
+  951 KB of riscv32 code, in a program that makes no callable value at all.
+  The hooks only matter once one exists, and every routine that makes one takes
+  @PyEvalDispatchMark (pylib.pas, beside its comment). So:
+    - the witness live, or the target live anyway: the site keeps the target;
+    - otherwise the site is re-aimed at PyCallKey1Lite / pyvar_callv0Lite.
+  The decision is taken only when the rest of the walk has stopped, and undone
+  if marking a Lite body makes the witness live after all, so it is final only
+  at the fixpoint. Any of the five names missing (a Pascal program, a profile
+  without pyeval): no conditional roots, the old rule.
+  feature-nilpy-esp-code-size-blocks-dual-slot-ota }
+function DceProcByName(const nm: AnsiString): Integer;
+var i, hit: Integer;
+begin
+  hit := -1;
+  i := 0;
+  while i < ProcCount do
+  begin
+    if (Procs[i].BodyAddr >= 0) and (Procs[i].Name = nm) then
+    begin
+      if hit >= 0 then begin DceProcByName := -1; Exit; end;   { ambiguous: no rule }
+      hit := i;
+    end;
+    Inc(i);
+  end;
+  DceProcByName := hit;
+end;
+
+procedure DceCondSetup;
+begin
+  DceCondN := 0;
+  DceCondMark := DceProcByName('PyEvalDispatchMark');
+  DceCondFull[0] := DceProcByName('PyCallKey1');
+  DceCondLite[0] := DceProcByName('PyCallKey1Lite');
+  DceCondFull[1] := DceProcByName('pyvar_callv0');
+  DceCondLite[1] := DceProcByName('pyvar_callv0Lite');
+  if (DceCondMark >= 0) and (DceCondFull[0] >= 0) and (DceCondLite[0] >= 0) and
+     (DceCondFull[1] >= 0) and (DceCondLite[1] >= 0) then
+    DceCondN := 2;
+end;
+
+function DceCondIndex(p: Integer): Integer;
+var k: Integer;
+begin
+  DceCondIndex := -1;
+  k := 0;
+  while k < DceCondN do
+  begin
+    if DceCondFull[k] = p then begin DceCondIndex := k; Exit; end;
+    Inc(k);
+  end;
+end;
+
+{ One pass over the conditional sites, run when the walk has stopped. True if
+  it marked anything (the walk must then continue). }
+function DceCondRoots: Boolean;
+var i, k, full: Integer;
+begin
+  DceCondRoots := False;
+  DceWhyNow := DCE_WHY_PROCADDR;
+  DceViaNow := -1;
+  i := 0;
+  while i < ProcAddrFixCount do
+  begin
+    if DceProcAddrLite[i] <> -1 then
+    begin
+      full := ProcAddrFix[i].ProcIdx;
+      k := DceCondIndex(full);
+      if DceLive[full] then
+        DceProcAddrLite[i] := -1
+      else if DceLive[DceCondMark] then
+      begin
+        DceProcAddrLite[i] := -1;
+        DceMark(full);
+        DceCondRoots := True;
+      end
+      else if DceProcAddrLite[i] = -2 then
+      begin
+        DceProcAddrLite[i] := DceCondLite[k];
+        if not DceLive[DceCondLite[k]] then
+        begin
+          DceMark(DceCondLite[k]);
+          DceCondRoots := True;
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure DceMarkAll(suppressVmt: Boolean);
 { Install the roots and run the reachability fixpoint. Leaves the answer in
   DceLive/DceWhy/DceVia and touches NOTHING that is emitted.
@@ -1292,13 +1388,22 @@ begin
     still root their targets. Without that loop this would leave a retained
     body holding the address of a removed one. }
   SetLength(DceProcAddrOwner, ProcAddrFixCount + 1);
+  SetLength(DceProcAddrLite, ProcAddrFixCount + 1);
+  DceCondSetup;
   DceWhyNow := DCE_WHY_PROCADDR;
   i := 0;
   while i < ProcAddrFixCount do
   begin
     owner := DceOwnerOf(ProcAddrFix[i].CodePos);
     DceProcAddrOwner[i] := owner;
-    if owner < 0 then DceMark(ProcAddrFix[i].ProcIdx);
+    DceProcAddrLite[i] := -1;
+    if owner < 0 then
+    begin
+      if DceCondIndex(ProcAddrFix[i].ProcIdx) >= 0 then
+        DceProcAddrLite[i] := -2   { decided by DceCondRoots at the fixpoint }
+      else
+        DceMark(ProcAddrFix[i].ProcIdx);
+    end;
     Inc(i);
   end;
   { A function a C initialiser baked into .data points at (CStaticDataMode):
@@ -1480,6 +1585,7 @@ begin
       end;
       Inc(i);
     end;
+    if (not progressed) and (DceCondN > 0) then progressed := DceCondRoots;
   until not progressed;
 end;
 
@@ -1714,6 +1820,19 @@ begin
     bytes and re-patches, and a reader that runs after DceRun wants to know
     that liveness was computed, not that the removal phase finished. }
   DceLiveValid := True;
+
+  { Conditional roots decided Lite: aim those sites at it (see DceCondRoots). }
+  i := 0;
+  while i < ProcAddrFixCount do
+  begin
+    if DceProcAddrLite[i] >= 0 then
+    begin
+      DceReportLine('re-aimed @' + Procs[ProcAddrFix[i].ProcIdx].Name + ' at '
+                    + Procs[DceProcAddrLite[i]].Name + ' (no callable value is made)');
+      ProcAddrFix[i].ProcIdx := DceProcAddrLite[i];
+    end;
+    Inc(i);
+  end;
 
   { --- removable ranges --------------------------------------------------- }
   DceRemCount := 0;

@@ -1,0 +1,92 @@
+# Every kind of callable VALUE, through each reader of pylib's call hooks
+# (list.sort key, min/max key, map/filter, a defaultdict factory). DCE keeps
+# the full dispatch only when a routine that makes such a value is live
+# (PyEvalDispatchMark), so each of these must still answer what CPython does.
+# feature-nilpy-esp-code-size-blocks-dual-slot-ota
+from collections import defaultdict
+
+
+def neg(x):
+    return -x
+
+
+def five():
+    return 5
+
+
+def mk(k):
+    def f(x):
+        return x * k
+    return f
+
+
+class C:
+    def __init__(self):
+        self.s = 10
+
+    def k(self, x):
+        return self.s - x
+
+
+class K:
+    def __init__(self, v):
+        self.v = v
+
+    def __lt__(self, o):
+        return self.v > o.v
+
+
+class F:
+    def __call__(self):
+        return 9
+
+
+xs = [3, 1, 2]
+xs.sort(key=neg)
+print("def name", xs)
+
+f = neg
+ys = [3, 1, 2]
+ys.sort(key=f)
+print("def in a variable", ys, min([3, 1, 2], key=f), max([3, 1, 2], key=f))
+
+zs = [3, 1, 2]
+zs.sort(key=lambda v: -v)
+print("lambda", zs)
+
+g = mk(-1)
+ws = [3, 1, 2]
+ws.sort(key=g)
+print("closure", ws, min(ws, key=g))
+
+c = C()
+vs = [1, 3, 2]
+vs.sort(key=c.k)
+print("bound method", vs, max(vs, key=c.k))
+
+ss = ["b", "A", "c"]
+ss.sort(key=str.lower)
+print("str method", ss)
+
+ls = ["bb", "a", "ccc"]
+ls.sort(key=len)
+print("builtin", ls)
+
+ks = [1, 3, 2]
+ks.sort(key=K)
+print("class", ks)
+
+d = {"a": neg}
+print("def in a dict", min([3, 1, 2], key=d["a"]))
+
+print("map", list(map(neg, [1, 2])), list(filter(lambda v: v > 1, [1, 2, 3])))
+
+dl = defaultdict(list)
+dl["a"].append(1)
+dl["a"].append(2)
+di = defaultdict(int)
+di["x"] += 3
+dd = defaultdict(five)
+dm = defaultdict(lambda: 7)
+do = defaultdict(F())
+print("defaultdict", dl["a"], di["x"], dd["q"] + 1, dm["q"], do[1])

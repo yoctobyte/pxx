@@ -11763,6 +11763,19 @@ test-core: $(COMPILER)
 	# bug-a-a-dce-cut-backward-call-keeps-its-old-target-and-recurses-on-esp
 	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/esp_free_a_class_with_a_string_field.pas $(TESTTMP)/esp_free_class_c3.o > /dev/null
 	python3 tools/check_rv32_no_self_call.py $(TESTTMP)/esp_free_class_c3.o PXXClassFinalize PXXClassFinalizeManaged
+	# NilPy's full callable dispatch (PyCallKey1 / pyvar_callv0, ~314 KB of riscv32)
+	# is kept only when a routine that makes a callable value is live; otherwise
+	# pyeval's two hook installs are re-aimed at the Lite stand-ins (dce.inc,
+	# DceCondRoots). Every maker must take @PyEvalDispatchMark; every kind of
+	# callable value still answers what CPython does; a program with none re-aims
+	# both installs on x86-64 and riscv32 and runs the same.
+	# feature-nilpy-esp-code-size-blocks-dual-slot-ota
+	python3 tools/check_pyeval_dispatch_witness.py
+	./$(COMPILER) test/nilpy_callable_values_keep_the_full_dispatch.npy $(TESTTMP)/nilpy_cvdisp26 > /dev/null
+	$(TESTTMP)/nilpy_cvdisp26 | diff -u test/nilpy_callable_values_keep_the_full_dispatch.expected -
+	tools/expect_same.sh nilpy_nocv26_reaim_x64 "$$(./$(COMPILER) --dce-report test/nilpy_without_callable_values_drops_the_dispatch.npy $(TESTTMP)/nilpy_nocv26 2>&1 >/dev/null | grep -c 're-aimed @')" "2"
+	$(TESTTMP)/nilpy_nocv26 | diff -u test/nilpy_without_callable_values_drops_the_dispatch.expected -
+	tools/expect_same.sh nilpy_nocv26_reaim_rv32 "$$(./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj --dce-report test/nilpy_without_callable_values_drops_the_dispatch.npy $(TESTTMP)/nilpy_nocv26_c3.o 2>&1 | grep -c 're-aimed @')" "2"
 	# --rtl-libc is output-identical to the raw build and leaves at most the one
 	# raw rt_sigreturn. It had no test at all, and DCE broke it silently: the
 	# libc syscall sites were patched at pre-compaction offsets (2026-11-12).

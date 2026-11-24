@@ -763,6 +763,7 @@ end;
 function PyBoxClassRef(p: Pointer): Variant;
 var r: PPyRec;
 begin
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   r := PPyRec(@Result);
   r^.VType := 11; r^.Payload := Int64(p);
 end;
@@ -3373,6 +3374,7 @@ begin
     and needs no evaluator, and installing it there would root the tree for
     every program that takes a nested def as a value. }
   PyClosureInvokeHook := @PyClosureInvoke;
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   o := PClosureObj(PXXObjAllocRaw2(SizeOf(TClosureObj)));
   o^.Magic := @PyClosureMagicMarker;
   o^.Cidx  := cidx;
@@ -3570,6 +3572,7 @@ begin
   PXXObjFinalizeHook := @PyObjFinalize;
   PyClosureFinalizeHook := @PyEvalClosureFree;
   PyBoundFnSigHook := @PyBoundFnSigOf;   { f.__name__ on a lifted bound-fn }
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   o := PBoundFnObj(PXXObjAllocRaw2(SizeOf(TBoundFnObj)));
   o^.Magic := @PyBoundFnMagicMarker;
   o^.Code := code;

@@ -5217,6 +5217,13 @@ var
   { The body owning each ProcAddrFix SITE, computed once: an @proc inside a
     live body is an edge, and only an @proc no body owns is a root. }
   DceProcAddrOwner : array of Integer;
+  { CONDITIONAL ROOTS (DceCondRoots in dce.inc). An @Full taken in unowned
+    code roots Full only once the witness body is live; otherwise the site is
+    re-aimed at Lite. Per ProcAddrFix: -1 = an ordinary site, -2 = a
+    conditional site not yet decided, >= 0 = re-aimed at that proc. }
+  DceProcAddrLite  : array of Integer;
+  DceCondFull, DceCondLite : array[0..1] of Integer;
+  DceCondMark, DceCondN    : Integer;
 
   { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
     absolute runtime address of an internal proc (entry + BodyAddr). }

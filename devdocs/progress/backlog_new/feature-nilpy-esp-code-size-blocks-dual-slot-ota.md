@@ -94,3 +94,49 @@ PyIterCallHook KIND"):
   compiler-emitted install at program start when any surviving body boxes a
   callable; to measure whether builtin units box callables themselves, which
   would void the gain.
+
+## 2026-11-24 done (claude-pxx): lead 2, the dispatch is kept only for callable values
+
+The direction above ended differently: pylib makes several of the values
+(bound pairs, builtin methods, classes and builtin types as values), and pylib
+cannot call into pyeval, so "install where the value is made" cannot reach them.
+What does work is a DCE rule.
+
+- Every routine that makes a callable value takes the address of an empty
+  pylib body, `PyEvalDispatchWitness := @PyEvalDispatchMark`. These are
+  pybound_new_sig, PyBuiltinMethodNew, pybtype, the three class-value stampers,
+  pydefaultdict_new(f), PyBoxClassRef, PyMakeClosureObj and pyboundfn_new. It
+  is an address, not a call, because a call to an empty body is inlined away
+  and takes its edge with it.
+- dce.inc (DceCondRoots): an @PyCallKey1 / @pyvar_callv0 taken in unowned
+  code (pyeval's initialization) roots its target only when the mark is live.
+  Otherwise the site is re-aimed at PyCallKey1Lite (calls a bare code address,
+  the only key that exists with no callable value) or pyvar_callv0Lite
+  (unreachable: a defaultdict factory is a witness). It is decided only when
+  the rest of the walk has stopped, and undone if it later makes the mark live.
+  `--dce-report` prints `re-aimed @X at XLite`.
+- tools/check_pyeval_dispatch_witness.py: every routine in compiler/builtin that
+  stamps a callable tag, allocates a closure or bound-fn, builds a builtin method
+  or sets a factory must take the mark. Four are exempt with reasons (they
+  re-tag or copy a value a witness made). A control copy with pybtype's witness
+  removed fails it.
+
+| rfid firmware, riscv32 ESP, -O2 | .text |
+|---|---|
+| before | 951,532 |
+| after | 638,736 (-312,796, -32.9%) |
+
+That is about 0.64 MB of app code, close to the ~0.6 MB target. A program that
+makes any callable value, or calls `sorted()` (which calls PyCallKey1
+directly), keeps the full dispatch as before.
+
+Tests (test-core): the lint; test/nilpy_callable_values_keep_the_full_dispatch
+(every kind of callable value through sort/min/max keys, map/filter and five
+defaultdict factories, diffed against CPython);
+test/nilpy_without_callable_values_drops_the_dispatch (json, sort, min/max,
+formatting: same output as CPython, and both installs re-aimed on x86-64 and on
+the riscv32 ESP object).
+
+Still open here: leads 1 and 3 (~360 B per dict-literal key, the 32 KB
+dispatcher function, a size mode). `sorted()` always rooting PyCallKey1 is
+the next cheap one.

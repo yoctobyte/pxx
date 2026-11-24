@@ -2002,6 +2002,9 @@ var
   PyIterCallHook: TPyIterCall;
   PyIterStarHook: TPyIterStarCall;
   PyCall0Hook: TPyCall0;
+  { Written by every routine that makes a callable VALUE (see
+    PyEvalDispatchMark). Nothing reads it: the address taken is the point. }
+  PyEvalDispatchWitness: Pointer;
   { installed by pyboundfn_new: the Sig of a tag-10 lifted bound-fn, which this
     unit cannot read because the object's layout is pyeval's.
     bug-n-a-function-value-has-no-name }
@@ -2282,6 +2285,22 @@ function pycallback_call0(const cb: Variant): Int64;
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
 { True for a value that pycallback_call* can invoke. }
 function pycallback_is(const cb: Variant): Boolean;
+{ THE WITNESS FOR THE FULL CALLABLE DISPATCH. pyeval's initialization installs
+  PyCallKey1 and pyvar_callv0 into PyIterCallHook / PyCall0Hook, and those two
+  reach the whole generic call machinery (~314 KB of riscv32 code). They are
+  only needed once a callable VALUE exists: a bound pair, a closure, a lifted
+  bound-fn, a builtin method, a class or builtin type as a value, or a
+  defaultdict factory. Every routine that makes one takes this body's address
+  (`PyEvalDispatchWitness := @PyEvalDispatchMark`), and DCE keeps those two
+  targets only when this body is live (dce.inc, DceCondRoots). Otherwise the
+  installs are re-aimed at the two Lite routines below: with no callable value
+  in the program, a key can only be a bare compiled def's address.
+  An ADDRESS and not a call, because a call to an empty body is inlined away
+  and takes its edge with it.
+  feature-nilpy-esp-code-size-blocks-dual-slot-ota }
+procedure PyEvalDispatchMark;
+function PyCallKey1Lite(key: Pointer; const a0: Variant): Variant;
+function pyvar_callv0Lite(const cb: Variant): Variant;
 { The same call with the RESULT kept — `f = obj.method` / `f = some_def` and then
   `f(a, b)` as an expression. Arities 0..3 cover every dynamic call NilPy emits a
   guard for; beyond that a receiver-less pair still runs through the plain
@@ -5131,6 +5150,8 @@ var
   PyClassCallCount: Integer;
 
 function pyclasscall_of(rtti: Pointer): Pointer;
+{ Not a witness (see PyEvalDispatchMark): it converts a class value that
+  already exists, and PyBoxClassRef, which made it, is one. }
 var i: Integer; p: PPointer;
 begin
   { cached per class and never freed: a program has a fixed set of classes, so
@@ -6059,6 +6080,7 @@ begin
       bug-n-self-class-cannot-be-called-as-a-constructor }
     if name = '__class__' then
     begin
+      PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
       PPyVarRec(@Result)^.VType := 11;
       PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
       Exit;
@@ -6096,6 +6118,7 @@ end;
 procedure PyBuiltinMethodNew(const recv: Variant; const name: AnsiString; var res: Variant);
 var bm: TPyBuiltinMethod; tmp: Variant;
 begin
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   bm := TPyBuiltinMethod.Create;
   if PyBuiltinMethodVMT = nil then PyBuiltinMethodVMT := PPointer(bm)^;
   bm.FRecv := recv;
@@ -6210,6 +6233,7 @@ begin
       bug-n-self-class-cannot-be-called-as-a-constructor }
     if (name = '__class__') and (obj <> nil) then
     begin
+      PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
       PPyVarRec(@Result)^.VType := 11;
       PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
       Exit;
@@ -11448,6 +11472,7 @@ end;
 
 function pydefaultdict_new(const f: Variant): TPyDict;
 begin
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   Result := TPyDict.Create;
   if pyvartag(f) <> 0 then
   begin
@@ -20293,6 +20318,31 @@ begin
   pybound_new_star := pybound_new_sig(code, recv, isFunc, starIdx, nil);
 end;
 
+procedure PyEvalDispatchMark;
+begin
+end;
+
+type TPyKeyCbLite = function(const a0: Variant): Variant;
+
+function PyCallKey1Lite(key: Pointer; const a0: Variant): Variant;
+{ PyCallKey1's last arm alone: no routine that makes a callable value is in the
+  image, so key is a compiled def's code address. }
+var f1: TPyKeyCbLite;
+begin
+  Result := pynone;
+  if key = nil then Exit;
+  f1 := TPyKeyCbLite(key);
+  Result := f1(a0);
+end;
+
+function pyvar_callv0Lite(const cb: Variant): Variant;
+{ Unreachable: its only reader is a defaultdict factory, and
+  pydefaultdict_new(f) is a witness. }
+begin
+  raise TypeError.Create('internal: a callable value with no dispatch linked (PyEvalDispatchMark)');
+  Result := pynone;
+end;
+
 function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
                          starIdx: Int64; sig: Pointer): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
@@ -20301,6 +20351,7 @@ begin
     The pair OWNS +1 on its receiver; PyObjFinalize's raw arm drops it when
     the pair dies (feature-nilpy-object-reclamation slice 3). }
   PXXObjFinalizeHook := @PyObjFinalize;
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   b := PPyBoundRec(PXXObjAllocRaw(SizeOf(TPyBoundRec)));
   b^.Code := code;
   b^.Recv := recv;
@@ -25283,6 +25334,7 @@ end;
 function pybtype(code: Int64): Variant;
 var r: PPyVarRec;
 begin
+  PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
   r := PPyVarRec(@Result);
   r^.VType := 13;                     { VT_BTYPE_TAG }
   r^.Payload := code;
@@ -25521,6 +25573,7 @@ begin
   if (pyvartag(x) = 7) and (PPyVarRec(@x)^.Payload <> 0) then
   begin
     o := Pointer(NativeInt(PPyVarRec(@x)^.Payload));
+    PyEvalDispatchWitness := @PyEvalDispatchMark;   { a callable value exists (see PyEvalDispatchMark) }
     PPyVarRec(@Result)^.VType := 11;
     PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(o)));
     Exit;
