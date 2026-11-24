@@ -50,3 +50,47 @@ pypercent_format 7.5K, PyBuiltinMethodCallL 7.2K, user `default_config` 6.1K
 
 The rfid project has a fallback in the meantime: a C factory updater plus one
 big app slot.
+
+## 2026-11-24 measured (claude-pxx): two init hooks root ~314 KB
+
+Reproduced at cfbc7b2726: main.o .text 951,532. `--dce-why=<name>` on the
+large bodies gives one root for nearly all of them:
+
+    PyHostCall <- PyCallDunder <- pyvar_callv0 <- [@proc taken in unowned code]
+    PyBoundFnCallvnMaskBody <- pyboundfn_callvn_mask <- pyboundfn_callvn <- pyvar_callv0 <- ...
+    PyDynMethL / PyStrMethodByName / PyEvalMethodOn / PyBuiltinMethodCallL <- PyCallDunder <- pyvar_callv0 <- ...
+    PyBoundPairCallKwBody / PyBoundCallStarSig <- ... <- PyCallDunder <- pyvar_callv0 <- ...
+
+The address is taken in pyeval.pas's `initialization`:
+`PyIterCallHook := @PyCallKey1; PyCall0Hook := @pyvar_callv0;`.
+
+| pyeval init (scratch copy) | .text |
+|---|---|
+| as shipped | 951,532 |
+| only PyIterCallHook installed | 951,508 |
+| only PyCall0Hook installed | 944,640 |
+| neither | 637,656 (-314 KB, -33%) |
+
+So both must go. Neither is used by this program: it has no defaultdict
+factory, no sort key, no min/max key.
+
+Why the obvious fixes don't work:
+- Deleting the install is wrong. It is unconditional because a lazy install
+  (map/filter only) gave bug-nilpy-min-max-with-a-key-held-in-a-variable;
+  with no hook, PyCallKeyVar falls back to pybound_callv1, which answers
+  None for tags 9/10/12.
+- A DCE rule "root the hook's target only if a reader of the hook is live"
+  saves nothing here. The readers are TPyDict.fetch (every dict lookup) and
+  TPyList.sort (kept by its VMT slot), both live.
+
+Direction: install the hooks where a value that needs them is made, as
+PyClosureInvokeHook already is (pyeval.pas, "NOT A LAZY HOOK OF THE
+PyIterCallHook KIND"):
+- tag 9/10 (closure, bound fn) are made in pyeval: install there;
+- a defaultdict factory: route collections.defaultdict through a pyeval
+  wrapper that installs PyCall0Hook;
+- tag 12 (a compiled def boxed into a Variant) is stamped inline by every
+  backend (IRSrcIsCallable), so there is no runtime site. It needs a
+  compiler-emitted install at program start when any surviving body boxes a
+  callable; to measure whether builtin units box callables themselves, which
+  would void the gain.
