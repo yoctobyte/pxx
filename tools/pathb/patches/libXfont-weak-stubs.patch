@@ -1,0 +1,12 @@
+--- a/src/stubs/stubs.h	2017-11-28 15:34:21.000000000 +0100
++++ b/src/stubs/stubs.h	2026-11-24 21:05:04.571058926 +0100
+@@ -10,7 +10,8 @@
+ #endif
+ 
+ /* this probably works for Mach-O too, but probably not for PE */
+-#if defined(__ELF__) && defined(__GNUC__) && (__GNUC__ >= 3)
++/* pxx reports __GNUC__ 2 and has weak symbols (pathb patch) */
++#if defined(__ELF__) && defined(__GNUC__)
+ #define weak __attribute__((weak))
+ #else
+ #define weak

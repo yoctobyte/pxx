@@ -8,7 +8,7 @@ B = os.path.realpath(os.environ["PATHB_WORK"])  # make logs hold resolved paths
 out = []
 for arg in sys.argv[1:]:
     pkg, lib = arg.split(":")
-    members = subprocess.run(["ar", "t", f"{B}/prefix/lib/{lib}.a"], capture_output=True,
+    members = subprocess.run(["ar", "t", f"{B}/stage/usr/lib/{lib}.a"], capture_output=True,
                              text=True, check=True).stdout.split()
     objs = [f for f in os.listdir(f"{B}/replay/{pkg}") if f.endswith(".c.o")]
     by_base = {}

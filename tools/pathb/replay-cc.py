@@ -53,16 +53,17 @@ def run(pkg, i, u):
     err = next((l for l in (r.stdout + r.stderr).splitlines() if "error" in l), "")
     return name, r.returncode == 0, re.sub(r"^pascal26:\d+: ", "", err)
 
-for pkg in sys.argv[1:]:
-    us = units(f"{B}/logs/{pkg}.make.log")
-    os.makedirs(f"{B}/replay/{pkg}", exist_ok=True)
-    with ThreadPoolExecutor(JOBS) as ex:
-        res = list(ex.map(lambda iu: run(pkg, *iu), enumerate(us)))
-    ok = sum(1 for _, g, _ in res if g)
-    with open(f"{B}/replay/{pkg}/fails.txt", "w") as f:
-        for n, g, e in res:
-            if not g: f.write(f"{n}\t{e}\n")
-    print(f"{pkg}: {ok}/{len(res)} compile")
-    for e, c in collections.Counter(e for _, g, e in res if not g).most_common(6):
-        print(f"   {c:4d}  {e[:150]}")
-    sys.stdout.flush()
+if __name__ == "__main__":
+    for pkg in sys.argv[1:]:
+        us = units(f"{B}/logs/{pkg}.make.log")
+        os.makedirs(f"{B}/replay/{pkg}", exist_ok=True)
+        with ThreadPoolExecutor(JOBS) as ex:
+            res = list(ex.map(lambda iu: run(pkg, *iu), enumerate(us)))
+        ok = sum(1 for _, g, _ in res if g)
+        with open(f"{B}/replay/{pkg}/fails.txt", "w") as f:
+            for n, g, e in res:
+                if not g: f.write(f"{n}\t{e}\n")
+        print(f"{pkg}: {ok}/{len(res)} compile")
+        for e, c in collections.Counter(e for _, g, e in res if not g).most_common(6):
+            print(f"   {c:4d}  {e[:150]}")
+        sys.stdout.flush()
