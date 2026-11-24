@@ -11775,6 +11775,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/nilpy_cvdisp26 | diff -u test/nilpy_callable_values_keep_the_full_dispatch.expected -
 	tools/expect_same.sh nilpy_nocv26_reaim_x64 "$$(./$(COMPILER) --dce-report test/nilpy_without_callable_values_drops_the_dispatch.npy $(TESTTMP)/nilpy_nocv26 2>&1 >/dev/null | grep -c 're-aimed @')" "2"
 	$(TESTTMP)/nilpy_nocv26 | diff -u test/nilpy_without_callable_values_drops_the_dispatch.expected -
+	# A literal handed to a const Variant parameter is one shared read-only
+	# constant (ir.inc, IRStaticVariantLit); mutating what a program got from it
+	# must not reach the next site. feature-nilpy-esp-code-size-blocks-dual-slot-ota
+	./$(COMPILER) test/nilpy_literal_arguments_share_one_constant.npy $(TESTTMP)/nilpy_litconst26 > /dev/null
+	$(TESTTMP)/nilpy_litconst26 | diff -u test/nilpy_literal_arguments_share_one_constant.expected -
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/nilpy_literal_arguments_share_one_constant.npy $(TESTTMP)/nilpy_litconst26_c3.o > /dev/null
 	tools/expect_same.sh nilpy_nocv26_reaim_rv32 "$$(./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj --dce-report test/nilpy_without_callable_values_drops_the_dispatch.npy $(TESTTMP)/nilpy_nocv26_c3.o 2>&1 | grep -c 're-aimed @')" "2"
 	# --rtl-libc is output-identical to the raw build and leaves at most the one
 	# raw rt_sigreturn. It had no test at all, and DCE broke it silently: the

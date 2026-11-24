@@ -1,0 +1,35 @@
+# A literal handed to a `const v: Variant` parameter (dict keys and values,
+# .get defaults, list.append, ...) points at one shared read-only constant
+# (ir.inc, IRStaticVariantLit) instead of a fresh temp. Nothing a program does
+# with the value it gets may change the constant the next site sees.
+# feature-nilpy-esp-code-size-blocks-dual-slot-ota
+def mk(cmd: str) -> dict:
+    return {"ok": True, "cmd": cmd, "err": "unknown", "code": 3, "neg": -7, "big": 5000000000}
+
+a = mk("a")
+b = mk("b")
+a["ok"] = False
+a["err"] = a["err"] + "!"
+a["code"] += 1
+print(a)
+print(b)
+print(mk("c"))
+xs = []
+for i in range(3):
+    xs.append("v")
+    xs.append(i)
+    xs.append(True)
+xs[0] = "w"
+print(xs)
+d = {}
+print(d.get("missing", "dflt"), d.get("missing", 0), d.get("missing", False))
+s = d.get("missing", "dflt")
+s = s + "x"
+print(s, d.get("missing", "dflt"), "dflt".upper(), "v" in xs, "q" in xs)
+e = {"k": "v"}
+e["k"] += "z"
+print(e, {"k": "v"})
+def keep(v):
+    v = v + 1
+    return v
+print(keep(1), keep(1), [1, 1, -1, 0, ""].count(1))

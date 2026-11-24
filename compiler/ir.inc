@@ -6842,6 +6842,94 @@ begin
   Result := IRAppendCall(wpi, a0, -1, Ord(tyPointer));
 end;
 
+{ A LITERAL handed to a `const v: Variant` parameter, as one shared read-only
+  16-byte variant in Data instead of a fresh stack temp per call site.
+
+  The temp path costs, per literal, on riscv32: two prologue zeroings of the
+  slot, a PXXVarClear before the fill (with a0-a3 saved around it), the
+  tag/payload stores, and a PXXVarClear on the normal and on the exception exit
+  -- about 110 bytes, and a NilPy dict literal pays it for every key and every
+  constant value: `{"ok": True, "cmd": cmd}` is three of them.
+  The constant holds exactly what that temp held: VT_STRING and the literal's
+  static handle (Strs[].Offset + 8, saturated header, never retained or
+  released -- the same handle EmitAnsiStringFromNode* hands over at -O2),
+  VT_BOOL 0/1, VT_INT / VT_INT64 sign-extended. A `const` parameter cannot be
+  stored to, and the slot is in the read-only split (RoRangeAdd), so a callee
+  that wrote through it anyway faults instead of changing the next caller's
+  constant. A by-value Variant parameter keeps the temp: the callee owns that
+  copy. One slot per distinct value (IRSvl*).
+  feature-nilpy-esp-code-size-blocks-dual-slot-ota }
+var
+  IRSvlTag  : array of Integer;
+  IRSvlVal  : array of Int64;
+  IRSvlStr  : array of Integer;
+  IRSvlOff  : array of Integer;
+  IRSvlCount: Integer;
+
+function IRStaticVariantLit(argAST: Integer): Integer;
+var tag, si, k, pos: Integer; v: Int64; tk: TTypeKind;
+begin
+  Result := -1;
+  if (not isNilPy) or CProgramMode or (OptLevel < 2) or (argAST < 0) then Exit;
+  tk := IntToTypeKind(ASTTk[argAST]);
+  si := -1;
+  v := 0;
+  case ASTKind[argAST] of
+    AN_STR_LIT:
+      begin
+        if (tk <> tyString) and (tk <> tyAnsiString) then Exit;
+        si := InternStr(GetTokenStrFromRaw(ASTSOffset[argAST], ASTSLen[argAST]));
+        tag := VT_STRING;
+      end;
+    AN_BOOL_LIT:
+      begin
+        if tk <> tyBoolean then Exit;
+        tag := VT_BOOL;
+        if ASTIVal[argAST] <> 0 then v := 1;
+      end;
+    AN_INT_LIT:
+      begin
+        if (tk = tyInteger) or (tk = tyInt32) then tag := VT_INT
+        else if tk = tyInt64 then tag := VT_INT64
+        else Exit;
+        v := ASTIVal[argAST];
+        if tag = VT_INT then v := Int64(Integer(v));
+      end;
+  else
+    Exit;
+  end;
+  for k := 0 to IRSvlCount - 1 do
+    if (IRSvlTag[k] = tag) and (IRSvlVal[k] = v) and (IRSvlStr[k] = si) then
+    begin
+      Result := IRSvlOff[k];
+      Exit;
+    end;
+  pos := AlignTo(DataLen, 16);
+  DataEnsure(pos - DataLen + 16);
+  while DataLen < pos + 16 do
+  begin
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  for k := 0 to 3 do Data[pos + k] := Byte((tag shr (8 * k)) and $FF);
+  for k := 0 to 7 do Data[pos + 8 + k] := Byte((v shr (8 * k)) and $FF);
+  if si >= 0 then AddDataPtrFix(pos + 8, Strs[si].Offset + 8);
+  RoRangeAdd(pos, pos + 16);
+  if IRSvlCount >= Length(IRSvlTag) then
+  begin
+    SetLength(IRSvlTag, 2 * IRSvlCount + 64);
+    SetLength(IRSvlVal, 2 * IRSvlCount + 64);
+    SetLength(IRSvlStr, 2 * IRSvlCount + 64);
+    SetLength(IRSvlOff, 2 * IRSvlCount + 64);
+  end;
+  IRSvlTag[IRSvlCount] := tag;
+  IRSvlVal[IRSvlCount] := v;
+  IRSvlStr[IRSvlCount] := si;
+  IRSvlOff[IRSvlCount] := pos;
+  Inc(IRSvlCount);
+  Result := pos;
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -7629,6 +7717,16 @@ begin
       by-value form copies (bug-pascal-byvalue-variant-param). The synthesized
       `tmp := arg` lowers to the ARC-correct 16-byte IR_VAR_STORE, and tmp is
       an ordinary variant local, so the epilogue's PXXVarClear releases it. }
+    if Procs[cpi].Params[pathIdx].IsRef and
+       ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx] then
+    begin
+      caSlCall := IRStaticVariantLit(argAST);
+      if caSlCall >= 0 then
+      begin
+        Result := IRAppend(IR_CONST_DATA, -1, -1, -1, caSlCall, Ord(tyVariant));
+        Exit;
+      end;
+    end;
     tmpSym := AllocVar('', tyVariant);
     caIdent := AllocNode(AN_IDENT);
     ASTIVal[caIdent] := tmpSym;

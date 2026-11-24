@@ -152,3 +152,25 @@ as key= is a bound pair, a callable value, so a keyed sort still keeps it.
 |---|---|
 | before | 993,872 |
 | after | 695,100 (-298,772, -30.1%) |
+
+## 2026-11-24 done (claude-pxx): lead 1, literal arguments are static constants
+
+Each literal handed to a `const v: Variant` parameter (dict-literal keys and
+constant values, .get defaults, appends) was boxed into a stack temp: two
+prologue zeroings, a clear before the fill, the fill, and a clear on each exit,
+about 110 bytes of riscv32 per literal. IRStaticVariantLit (ir.inc) now makes
+one deduplicated read-only 16-byte variant in Data per distinct string, bool or
+int literal (NilPy, -O2, const by-reference parameters only), and
+ObjRoDropDeadStrings drops the ones only DCE-dead code referenced.
+
+| rfid firmware, riscv32 ESP -O2 | .text | .rodata |
+|---|---|---|
+| before | 638,736 | 103,648 |
+| after | 601,356 | 105,944 |
+
+-35,084 bytes of flash; `handle` 32,596 -> 18,684.
+Test: test/nilpy_literal_arguments_share_one_constant (CPython diff on x86-64,
+C3 object build; matched under QEMU esp32c3).
+
+Next here: batch the scope-exit variant clears (handle still has runs of 39 and
+23 PXXVarClear calls at each exit path), then lead 3 and the large formatters.

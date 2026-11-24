@@ -1,0 +1,8 @@
+{'ok': False, 'cmd': 'a', 'err': 'unknown!', 'code': 4, 'neg': -7, 'big': 5000000000}
+{'ok': True, 'cmd': 'b', 'err': 'unknown', 'code': 3, 'neg': -7, 'big': 5000000000}
+{'ok': True, 'cmd': 'c', 'err': 'unknown', 'code': 3, 'neg': -7, 'big': 5000000000}
+['w', 0, True, 'v', 1, True, 'v', 2, True]
+dflt 0 False
+dfltx dflt DFLT True False
+{'k': 'vz'} {'k': 'v'}
+2 2 2

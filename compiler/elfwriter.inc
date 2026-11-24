@@ -3753,8 +3753,10 @@ procedure ObjRoAdoptDeadTypedConsts; forward;   { body after ObjDataIsExport }
   --emit-obj --platform=esp, the same gate as the DCE's class-slot and
   kind-arm cuts. PXXDBG=a.datamap prints the total. }
 procedure ObjRoDropDeadStrings;
-var hit: array of Boolean;
-    i, r, a, e, x, n, bytes: Integer;
+var hit, svlDeadAt: array of Boolean;
+    svlDead: array of Boolean;
+    mS, mE: array of Integer;
+    i, r, a, e, x, n, bytes, k, m, j, nSvl, bSvl: Integer;
     live: Boolean;
 
   procedure MarkRef(o: Integer);
@@ -3771,6 +3773,30 @@ begin
   for i := 0 to FixCount - 1 do MarkRef(Fixups[i].DataOff);
   for i := 0 to GlobFixCount - 1 do
     if SymOffIsData(GlobFix[i].BSSoff) then MarkRef(SymOffDataPart(GlobFix[i].BSSoff));
+  { A static variant literal (IRStaticVariantLit, ir.inc) is live only through
+    the code that takes its address, so it is decided HERE, from the code
+    references alone, before the data words are marked: a dead slot's own
+    DataPtrFix (its string payload) must not keep that string alive, and it
+    must leave the table, or the writer would relocate into a dropped piece. }
+  SetLength(svlDead, IRSvlCount + 1);
+  SetLength(svlDeadAt, DataLen + 1);
+  for i := 0 to DataLen do svlDeadAt[i] := False;
+  for k := 0 to IRSvlCount - 1 do
+  begin
+    svlDead[k] := True;
+    for x := IRSvlOff[k] to IRSvlOff[k] + 15 do
+      if hit[x] then svlDead[k] := False;
+    if svlDead[k] then
+      for x := IRSvlOff[k] to IRSvlOff[k] + 15 do svlDeadAt[x] := True;
+  end;
+  m := 0;
+  for i := 0 to DataPtrFixCount - 1 do
+    if not svlDeadAt[DataPtrFix[i].DataPos] then
+    begin
+      DataPtrFix[m] := DataPtrFix[i];
+      Inc(m);
+    end;
+  DataPtrFixCount := m;
   for i := 0 to DataPtrFixCount - 1 do
   begin
     MarkRef(DataPtrFix[i].TargetOff);
@@ -3818,8 +3844,51 @@ begin
     Inc(n);
     bytes := bytes + (e - a);
   end;
+  { the dead static variant literals, merged in: the piece builder walks
+    RoDropS in ascending order, and both lists already are }
+  SetLength(mS, RoDropCount + IRSvlCount + 1);
+  SetLength(mE, RoDropCount + IRSvlCount + 1);
+  m := 0; j := 0; nSvl := 0; bSvl := 0;
+  r := 0;
+  k := 0;
+  while (j < RoDropCount) or (k < IRSvlCount) do
+  begin
+    if (k < IRSvlCount) and
+       ((j >= RoDropCount) or (IRSvlOff[k] < RoDropS[j])) then
+    begin
+      a := IRSvlOff[k];
+      e := a + 16;
+      while (r < RoRangeCount) and (RoRangeEnd[r] <= a) do Inc(r);
+      if svlDead[k] and (r < RoRangeCount) and
+         (RoRangeStart[r] <= a) and (RoRangeEnd[r] >= e) then
+      begin
+        mS[m] := a; mE[m] := e; Inc(m);
+        Inc(nSvl); bSvl := bSvl + 16;
+      end;
+      Inc(k);
+    end
+    else
+    begin
+      mS[m] := RoDropS[j]; mE[m] := RoDropE[j]; Inc(m);
+      Inc(j);
+    end;
+  end;
+  if m > Length(RoDropS) then
+  begin
+    SetLength(RoDropS, m);
+    SetLength(RoDropE, m);
+  end;
+  for i := 0 to m - 1 do
+  begin
+    RoDropS[i] := mS[i];
+    RoDropE[i] := mE[i];
+  end;
+  RoDropCount := m;
   if PxxDbgEnabled('a.datamap') then
+  begin
     WriteLn('PXXDBG a.datamap   unreferenced string literals dropped: ', n, ' (', bytes, 'B)');
+    WriteLn('PXXDBG a.datamap   unreferenced variant literals dropped: ', nSvl, ' (', bSvl, 'B)');
+  end;
   { The fixed low block (INTBUF, '-', #10): a freestanding C object that
     never writes a number references none of it, and it sat ahead of the
     first user variable -- gcc's .data starts with that variable (Rainyday
