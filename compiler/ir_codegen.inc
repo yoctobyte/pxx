@@ -8078,6 +8078,39 @@ end;
   cannot see this change and is not evidence about it. The C repros are.
   bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer }
 
+{ A call in a body whose depth is known (X64DepthOn, asmtext.inc): the pad
+  that makes rsp 16-aligned at the call once `argBytes` of stack arguments
+  are pushed, 0 or 8, emitted as one `push rax`. }
+function X64CallPadKnown(argBytes: Integer): Integer;
+begin
+  Result := (16 - ((X64KnownDepth + argBytes) and 15)) and 15;
+  if Result = 8 then EmitAsmX64(['push rax']);
+end;
+
+{ Just before the call instruction: the count must say aligned. A count that
+  got lost inside the arguments cannot be repaired here (the arguments are
+  already pushed), so it is a compiler error with the way around it named.
+  PXXDBG=x.rspcheck also checks at run time. }
+procedure X64CallCheckKnown;
+begin
+  if (X64KnownDepth < 0) or ((X64KnownDepth and 15) <> 0) then
+    Error('x86-64 code generator: lost the stack depth inside a call''s arguments (depth '
+          + AIntToStr(X64KnownDepth) + '); PXXDBG=x.realign compiles without the count');
+  if X64RspCheck then
+  begin
+    EmitB($40); EmitB($F6); EmitB($C4); EmitB($0F);    { test spl, 15 }
+    EmitB($74); EmitB($02);                            { jz +2 }
+    EmitB($0F); EmitB($0B);                            { ud2 }
+  end;
+end;
+
+{ After the call: drop the pad and the stack arguments. }
+procedure X64CallDropKnown(bytes: Integer);
+begin
+  if bytes = 8 then EmitAsmX64(['pop r11'])
+  else if bytes > 0 then EmitAsmX64(['add rsp, %', bytes]);
+end;
+
 procedure EmitSaveCallerRspX64;
 { Park the caller's rsp below the outgoing argument area, then align. }
 begin
@@ -8550,6 +8583,8 @@ var left, right, valNode, symIdx, si, pNil, rx, sx, foldDisp: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
     intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff, vaPopN: Integer;
+    depthKnown: Boolean;   { this call pads by the counted depth (X64DepthOn) }
+    depthBefore: Integer;  { the count before an old-style realignment, which puts rsp back exactly }
     argIsSse: array[0..127] of Boolean;
     argNodeArr: array[0..127] of Integer;
     { ARGUMENT vs ABI SLOT. `argIsSse`/`argNodeArr` above are indexed by
@@ -9134,6 +9169,17 @@ begin
             the arg area: after `push r11` rsp = aligned-8, so the saved-P slot
             plus mStack 8-byte args needs 8 more pad when mStack is even for the
             call-site 16-alignment. }
+          { A counted depth (X64DepthOn): pad by it, and find the callee at
+            [rsp + args + pad] at the call. A callee that returns twice
+            (setjmp through this pointer, the reason for IRCallRspSlot) is
+            fine here too: nothing is read back from the stack after the
+            call, `add rsp, N` from the rsp longjmp restores is exact. }
+          depthKnown := X64DepthOn and (X64KnownDepth >= 0);
+          depthBefore := X64KnownDepth;
+          if depthKnown then
+            padBytes := X64CallPadKnown(mStack * 8)
+          else
+          begin
           EmitSaveCallerRspX64;                     { r11 = P ; and rsp, -16 ; push r11 }
           if IRCallRspSlot[node] >= 0 then
             EmitAsmX64(['mov [rbp+%], r11', Syms[IRCallRspSlot[node]].Offset]);
@@ -9144,6 +9190,7 @@ begin
           end
           else
             padBytes := 0;
+          end;
           { Stack args, right-to-left (leftmost ends at the lowest address, at
             rsp when the call happens — SysV). }
           for slotIdx := nSlots - 1 downto 0 do
@@ -9248,8 +9295,13 @@ begin
           if sseIdx = 0 then EmitAsmX64(['xor eax, eax'])
           else EmitAsmX64(['mov eax, %', sseIdx]);
           { Callee: the saved-P slot sits above the pad + stack args. }
+          if depthKnown then
+            EmitAsmX64(['mov r11, [rsp+%]', mStack * 8 + padBytes])   { = callee }
+          else
+          begin
           EmitLoadSavedRspX64(mStack * 8 + padBytes);   { r11 = P }
           EmitAsmX64(['mov r11, [r11]']); { = callee }
+          end;
           { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
             save the callee-saved xmm8..13 pool around the call. --os=nt asks
             where the pointer points first (EmitWinCheckedIndirectCall). }
@@ -9262,9 +9314,14 @@ begin
           else
           begin
           FloatPoolSave;
+          if depthKnown then X64CallCheckKnown;
           EmitAsmX64(['call r11']);
           FloatPoolRestore;
           end;
+          if depthKnown then
+            X64CallDropKnown(mStack * 8 + padBytes + 8)   { pad, arguments and the callee slot }
+          else
+          begin
           if IRCallRspSlot[node] >= 0 then
           begin
             { from the frame: a second return (setjmp) finds it intact }
@@ -9275,7 +9332,11 @@ begin
           end
           else
             EmitRestoreCallerRspX64(mStack * 8 + padBytes);
+          { rsp is back where the save found it: so is the count (a
+            returns-twice body still counts its other calls) }
+          X64KnownDepth := depthBefore;
           EmitAsmX64(['add rsp, 8']); { (pop callee) }
+          end;
           if (sysvRet > 0) and (IRCallDest[node] >= 0) then
             IREmitSysVRetStore(IRCallDest[node], sysvRet, retC0, retC1,
                                RecSize(ProcRetRecId[cpi]));
@@ -12208,6 +12269,14 @@ begin
               leaves rsp = aligned-8. At the call rsp must be 16-aligned, so
               with the saved-rsp slot plus mStack 8-byte args we pad by 8 when
               mStack is even. }
+            { A body that knows its depth pads by what it knows instead
+              (X64DepthOn, asmtext.inc). }
+            depthKnown := X64DepthOn and (X64KnownDepth >= 0);
+            depthBefore := X64KnownDepth;
+            if depthKnown then
+              padBytes := X64CallPadKnown(mStack * 8)
+            else
+            begin
             EmitSaveCallerRspX64;
             if (mStack and 1) = 0 then
             begin
@@ -12216,6 +12285,7 @@ begin
             end
             else
               padBytes := 0;
+            end;
             { Stack args, right-to-left (leftmost ends at the lowest address).
               Iterates SLOTS; `i` is the argument the slot carries. While slotArg
               is the identity this walks arguments in the same order and emits
@@ -12399,6 +12469,7 @@ begin
               nothing between here and the call reads the flags. }
             if sseIdx = 0 then EmitAsmX64(['xor eax, eax'])
             else EmitAsmX64(['mov eax, %', sseIdx]);
+            if depthKnown then X64CallCheckKnown;
             if ProcExternal[procIdx] then
             begin
               extIdx := RegisterExternal(procIdx);
@@ -12411,7 +12482,12 @@ begin
             { Restore the caller's rsp from the saved slot, which sits
               padBytes + mStack*8 above the current (post-call) rsp. }
             restoreOff := padBytes + mStack * 8;
-            EmitRestoreCallerRspX64(restoreOff);
+            if depthKnown then X64CallDropKnown(restoreOff)
+            else
+            begin
+              EmitRestoreCallerRspX64(restoreOff);
+              X64KnownDepth := depthBefore;   { rsp is back where the save found it }
+            end;
             { --os=nt: a 1/2/4/8-byte result came back as the bytes in rax.
               Store them at the destination (an IR_LEA, so evaluating it again
               is free of effects) and answer its address, as pxx's own
@@ -12824,12 +12900,14 @@ begin
               begin
                 EmitB($48); EmitB($81); EmitB($C4);   { add rsp, (nArgs-6)*8 }
                 EmitI32((nArgs - 6) * 8);
+                X64DepthAdd(-(nArgs - 6) * 8);
               end;
             end
             else if Procs[procIdx].ParamCount > 6 then
             begin
               EmitB($48); EmitB($81); EmitB($C4);     { add rsp, n*8 }
               EmitI32(Procs[procIdx].ParamCount * 8);
+              X64DepthAdd(-Procs[procIdx].ParamCount * 8);
             end;
           end;
         end
@@ -12933,6 +13011,7 @@ begin
                 EmitI32((Procs[cpi].ParamCount - 1) * 8);
                 EmitB($48); EmitB($81); EmitB($C4);             { add rsp, n*8 }
                 EmitI32(Procs[cpi].ParamCount * 8);
+                X64DepthAdd(-Procs[cpi].ParamCount * 8);
               end
               else
               begin
@@ -14845,6 +14924,7 @@ begin
         begin
           EmitB($48); EmitB($81); EmitB($C4);             { add rsp, n*8 }
           EmitI32(Procs[procIdx].ParamCount * 8);
+          X64DepthAdd(-Procs[procIdx].ParamCount * 8);
         end;
       end;
 
@@ -15213,6 +15293,30 @@ begin
       EmitB($48); EmitB($89); EmitB($A5); EmitI32(X64AllocaBaseOff);  { mov [rbp+base], rsp }
     end;
 
+  { ONE ALIGNMENT FOR THE WHOLE C BODY instead of one per call: from here
+    rsp is a 16-aligned base and the assembler counts what is pushed below
+    it (X64DepthAdd, asmtext.inc). `leave` restores rsp from rbp, so the
+    epilogue does not care. Only where the call arms read it: a C body
+    (CBodyCompiling), with no alloca (that moves the base), that makes a call
+    (a leaf needs no alignment), and not for Windows (its adapters keep their
+    own realignment). }
+  X64DepthOn := False;
+  X64KnownDepth := -1;
+  if CBodyCompiling and (TargetKernel <> KERNEL_WINDOWS) and (X64AllocaBaseOff = 0) and
+     not PxxDbgEnabled('x.realign') then
+  begin
+    for i := 0 to IRCount - 1 do
+      if (IRKind[i] = IR_CALL) or (IRKind[i] = IR_CALL_IND) or (IRKind[i] = IR_VIRTUAL_CALL) then
+        X64DepthOn := True;
+    if X64DepthOn then
+    begin
+      EmitAsmX64(['and rsp, -16']);
+      X64KnownDepth := 0;
+      X64RspCheck := PxxDbgEnabled('x.rspcheck');
+      X64DepthDbg := PxxDbgEnabled('x.depth');
+    end;
+  end;
+
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
     parser's prologue zero-init pass, so they would otherwise hold stale stack
@@ -15332,6 +15436,7 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     DbgRecordRow(i);   { DWARF -g line table }
+    if X64DepthOn then X64KnownDepth := 0;   { a statement row starts at the base }
     { CodeLen as this statement begins — the redundant-load arm compares against
       it to confirm the load really is the first thing emitted here. }
     ReloadRaxCodeLen := CodeLen;
@@ -15485,8 +15590,9 @@ begin
             end
             else
             begin
-              IREmitNode(cLeft); EmitB($50);                       { push rax }
+              IREmitNode(cLeft); EmitB($50); X64DepthAdd(8);       { push rax }
               IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
+              X64DepthAdd(-8);
             end;
             if cmpImmOk then
               EmitCmpLeftImm32(w1JccLeftReg, Integer(IRIVal[cRight]))  { cmp rax|rN, imm32 }
@@ -18272,6 +18378,7 @@ begin
     EmitB($48); EmitB($83);
     if opening then EmitB($EC) else EmitB($C4);
     EmitB($08);                                          { sub/add rsp, 8 }
+    if opening then X64DepthAdd(8) else X64DepthAdd(-8);
   end
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then

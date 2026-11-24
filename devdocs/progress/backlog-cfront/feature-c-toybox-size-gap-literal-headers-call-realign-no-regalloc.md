@@ -8,7 +8,7 @@ created: 2026-11-15
 found-by: size root-cause measurement of toybox 0.8.15 (default build, 3ae36d29f5, --function-sections)
 tags: [cfront, codegen, size]
 blocked-by: []
-summary: "pxx's toybox is 1,688,048 bytes, static with its own libc. gcc's is 475,648 (-Os, dynamic glibc), and 2,037,248 stripped if linked static. On toybox's own code pxx emits ~3.6x gcc: 838 shared functions are 838 KB vs 286 KB, a ratio of about 3.3 at every function size; pxx executes 5.0x the instructions. Gap breakdown: codegen density ~743 KB (61%); runtime in the file ~300 KB (25%, only because glibc is a .so for gcc; weak merging works, no duplicates); C string literals ~190 KB (16%), each carrying a 32-byte AnsiString header plus 16-byte alignment (154 KB of headers over 4,805 literals, 35 KB padding; only 5.5 KB is duplicate text). -O2 changes nothing for C (byte-identical sections). Fixes by cost: (1) emit C literals as plain bytes in .rodata, about -190 KB; (2) drop the per-call stack realignment where the frame depth is already known, 18 B x 8,669 calls, up to -156 KB; (3) register allocation for locals (rbp slot traffic 307 KB + movslq reloads 56 KB), the big one, with cheap peepholes meanwhile (branch on the compare instead of setcc/movzb/cmp, -40..55 KB; add/sub $0, -19 KB). Scripts and data: the session scratchpad tbsize/ (gone after the next wipe)."
+summary: "(1) and (2) done (2026-11-22/23); open: (3) register allocation. pxx's toybox is 1,688,048 bytes, static with its own libc. gcc's is 475,648 (-Os, dynamic glibc), and 2,037,248 stripped if linked static. On toybox's own code pxx emits ~3.6x gcc: 838 shared functions are 838 KB vs 286 KB, a ratio of about 3.3 at every function size; pxx executes 5.0x the instructions. Gap breakdown: codegen density ~743 KB (61%); runtime in the file ~300 KB (25%, only because glibc is a .so for gcc; weak merging works, no duplicates); C string literals ~190 KB (16%), each carrying a 32-byte AnsiString header plus 16-byte alignment (154 KB of headers over 4,805 literals, 35 KB padding; only 5.5 KB is duplicate text). -O2 changes nothing for C (byte-identical sections). Fixes by cost: (1) emit C literals as plain bytes in .rodata, about -190 KB; (2) drop the per-call stack realignment where the frame depth is already known, 18 B x 8,669 calls, up to -156 KB; (3) register allocation for locals (rbp slot traffic 307 KB + movslq reloads 56 KB), the big one, with cheap peepholes meanwhile (branch on the compare instead of setcc/movzb/cmp, -40..55 KB; add/sub $0, -19 KB). Scripts and data: the session scratchpad tbsize/ (gone after the next wipe)."
 ---
 
 ## Item (1) done 2026-11-22 (claude-pxx): C literals are plain bytes
@@ -119,3 +119,59 @@ ParseCSubroutine keeps every reload in a definition holding one
 (CBodyMentionsVolatile). Cost: 289 bytes of pc text. Test
 c_volatile_local_reloaded, row c_volrl26_marks. A typedef'd volatile scalar
 local is still not seen; recording volatile on symbols would close that.
+
+## (2) The per-call realignment done 2026-11-23 (claude-pxx)
+
+Every C call was wrapped in `mov r11, rsp; and rsp, -16; push r11` and
+`sub rsp, 8` (when the stack arguments were even), with `mov rsp, [rsp+8]`
+after it: 18 bytes. The Rainyday pc kernel had 14,941 of these, ~269 KB.
+
+The x86-64 code generator now knows rsp in a C body:
+- The body aligns rsp once, right after the prologue: `and rsp, -16` (only
+  a C body that makes a call and has no alloca, and not for Windows).
+  `leave` restores rsp from rbp, so the epilogue is unaffected.
+- Every IR statement row starts at that base, depth 0.
+- EmitAsmX64 counts each push, pop and `sub/add rsp, N` it assembles
+  (X64DepthScan, asmtext.inc). The x86-64 raw-byte ones call X64DepthAdd.
+  Any other write to rsp makes the depth unknown, and that call realigns
+  the old way. After the old sequence the count is restored, because the
+  sequence puts rsp back exactly.
+- A call pads with one `push rax` when the depth plus its stack arguments is
+  8 mod 16, and afterwards drops pad and arguments with `add rsp, N` (or
+  `pop r11` for 8). The drop is computed from the call alone, so a miscount
+  could misalign a call but never lose rsp. The compiler also refuses to
+  emit a call whose count is not 0 mod 16 at the call instruction.
+- An indirect call reads its callee from `[rsp + args + pad]`. Nothing is
+  read back from the stack after any call, so a returns-twice callee
+  (setjmp through a pointer, why IRCallRspSlot exists) is fine on this path.
+
+Proof of the count: PXXDBG=x.rspcheck puts `test spl, 15; jz; ud2` before
+every call that skipped its realignment. The Rainyday pc kernel built that
+way (10,957 checks) boots and passes `test` and `test-sh`, and the C
+conformance suite passes 220/220 with it. PXXDBG=x.realign turns the whole
+thing off; PXXDBG=x.depth prints each place the count gives up.
+
+| pc kernel text | bytes |
+|---|---|
+| before (PXXDBG=x.realign) | 1,584,884 |
+| after | 1,396,804 (-188 KB, -11.9%) |
+
+Test c_call_alignment_without_per_call_realign: each callee checks a local
+declared aligned(16), reached from nested calls in arguments, stack
+arguments, an __int128 pad slot, varargs with doubles, indirect calls, ?:
+and &&/|| in arguments, a struct by value and a setjmp body. Same output as
+gcc at -O0, -O1 and -O3 and under x.rspcheck. Control: a compiler padding
+the wrong way (its compile-time refusal disabled) reports 25 misaligned
+calls, and under x.rspcheck traps. Row c_callal26_one_realign: main keeps
+one `and rsp, -16` (42 before).
+
+Left: the stack-protector failure call in each protected epilogue still
+realigns (cold, never returns). Pascal bodies are unchanged. A Pascal body's
+statement rows are not known to be balanced (exception frames), so it has
+no count.
+
+Found on the way, not changed: `__builtin_frame_address(0)` is the address
+of a hidden local, not rbp (by design, cparser.inc), so it cannot probe
+alignment.
+
+Still open here: (3) register allocation for locals.

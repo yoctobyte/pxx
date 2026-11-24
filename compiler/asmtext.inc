@@ -1658,6 +1658,119 @@ begin
   AsmCMMisses := AsmCMMisses + 1;
 end;
 
+{ THE STACK DEPTH OF A C BODY, FOR CALLS WITHOUT A REALIGNMENT.
+
+  A C call used to realign rsp around itself, `mov r11, rsp; and rsp, -16;
+  push r11; sub rsp, 8` before it and `mov rsp, [rsp+8]` after it: 18 bytes,
+  on 14,941 calls in the Rainyday pc kernel, ~269 KB, because the code
+  generator never knew rsp. A C body that makes calls (and has no alloca)
+  now aligns rsp ONCE, right after its prologue (ir_codegen.inc, the body
+  setup), and from there the depth is counted:
+  - every IR statement row starts at the base, depth 0 (an expression's
+    pushes are balanced inside the row that evaluates it);
+  - every push, pop and `sub/add rsp, N` that EmitAsmX64 assembles is
+    counted here, and the few raw-byte ones call X64DepthAdd;
+  - any other write to rsp (`mov rsp`, `lea rsp`, `and rsp`, `leave`) makes
+    the depth unknown (-1), and then a call realigns the old way.
+  A call pads with one `push rax` when the depth plus its stack arguments is
+  8 mod 16, and afterwards drops pad and arguments with `add rsp, N` (or
+  `pop r11` for 8), which does not depend on the depth at all: a miscount
+  can misalign a call, never lose the stack pointer. PXXDBG=x.rspcheck puts
+  `test spl, 15; jz; ud2` before every such call to prove the count, and
+  PXXDBG=x.realign turns the whole thing off.
+  feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc }
+var
+  { Declared here and not in defs.inc so the standalone .inc harnesses, which
+    include this file without defs.inc, need no stub. Set by the body setup in
+    ir_codegen.inc. }
+  X64DepthOn : Boolean = False;     { this body aligned rsp once; calls use the count }
+  X64KnownDepth : Integer = -1;     { bytes below that base; -1 = unknown }
+  X64DepthDbg : Boolean = False;    { PXXDBG=x.depth: print where the count gives up }
+
+procedure X64DepthAdd(delta: Integer);
+begin
+  if X64DepthOn and (X64KnownDepth >= 0) then
+  begin
+    X64KnownDepth := X64KnownDepth + delta;
+    if (X64KnownDepth < 0) or ((X64KnownDepth and 7) <> 0) then X64KnownDepth := -1;
+  end;
+end;
+
+function X64DepthHoleVal(const items: array of const; k: Integer; var v: Int64): Boolean;
+begin
+  Result := False;
+  if (k < 0) or (k > High(items)) then Exit;
+  case items[k].VType of
+    vtInteger: begin v := items[k].VInteger; Result := True; end;
+    vtInt64:   begin v := PHoleI64(items[k].VInt64)^; Result := True; end;
+  end;
+end;
+
+{ Count one assembled line. `firstHole` is the item index of the line's first
+  `%` value. }
+procedure X64DepthLine(const line: AnsiString; const items: array of const; firstHole: Integer);
+var t, mnem, op1, op2: AnsiString;
+    j, c: Integer;
+    v: Int64;
+begin
+  t := AsmTextTrim(line);
+  j := Pos(';', t);
+  if j > 0 then t := AsmTextTrim(Copy(t, 1, j - 1));
+  if t = '' then Exit;
+  if t[Length(t)] = ':' then Exit;                      { a label }
+  j := 1;
+  while (j <= Length(t)) and (t[j] <> ' ') and (t[j] <> #9) do Inc(j);
+  mnem := LowerCase(Copy(t, 1, j - 1));
+  op1 := LowerCase(AsmTextTrim(Copy(t, j, Length(t))));
+  op2 := '';
+  c := Pos(',', op1);
+  if c > 0 then
+  begin
+    op2 := AsmTextTrim(Copy(op1, c + 1, Length(op1)));
+    op1 := AsmTextTrim(Copy(op1, 1, c - 1));
+  end;
+  if (mnem = 'push') or (mnem = 'pushfq') or (mnem = 'pushf') then begin X64DepthAdd(8); Exit; end;
+  if (mnem = 'pop') or (mnem = 'popfq') or (mnem = 'popf') then begin X64DepthAdd(-8); Exit; end;
+  if (mnem = 'leave') or (mnem = 'enter') then begin X64KnownDepth := -1; Exit; end;
+  if op1 <> 'rsp' then
+  begin
+    if (mnem = 'xchg') and (op2 = 'rsp') then X64KnownDepth := -1;
+    Exit;
+  end;
+  if (mnem = 'sub') or (mnem = 'add') then
+  begin
+    if op2 = '%' then
+    begin
+      if not X64DepthHoleVal(items, firstHole, v) then begin X64KnownDepth := -1; Exit; end;
+    end
+    else
+    begin
+      Val(op2, v, c);
+      if c <> 0 then begin X64KnownDepth := -1; Exit; end;
+    end;
+    if mnem = 'sub' then X64DepthAdd(v) else X64DepthAdd(-v);
+    Exit;
+  end;
+  X64KnownDepth := -1;                                  { mov/lea/and/... rsp }
+  if X64DepthDbg then WriteLn('PXXDBG x.depth unknown after: ', t);
+end;
+
+procedure X64DepthScan(const items: array of const);
+var i, k, holes: Integer;
+    line: AnsiString;
+begin
+  i := 0;
+  while (i <= High(items)) and (X64KnownDepth >= 0) do
+  begin
+    if items[i].VType <> vtAnsiString then begin Inc(i); Continue; end;
+    line := AsmTextCStr(items[i].VAnsiString);
+    holes := 0;
+    for k := 1 to Length(line) do if line[k] = '%' then Inc(holes);
+    X64DepthLine(line, items, i + 1);
+    i := i + 1 + holes;
+  end;
+end;
+
 procedure EmitAsmX64(const items: array of const); overload;
 var
   i, n, h, nHoles, j: Integer;
@@ -1688,6 +1801,7 @@ begin
          (Pos('xmm', AsmTextCStr(items[i].VAnsiString)) > 0) then
         Error('--freestanding: float/double arithmetic is not supported -- it needs the '
             + 'SSE registers, which kernel code must leave alone (gcc: -mgeneral-regs-only)');
+  if X64DepthOn and (X64KnownDepth >= 0) and (not EncToAsmBuffer) then X64DepthScan(items);
   cmSlot := -1;
   if (not EncToAsmBuffer) and (n >= 1) and (items[0].VType = vtAnsiString) then
     if AsmCallMemoProbe(items, cmSlot) then Exit;

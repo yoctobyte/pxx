@@ -21983,6 +21983,19 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_vacnt26 | diff -u test/c_vararg_vector_count_zero.expected -
 	./$(COMPILER) --emit-obj test/c_vararg_vector_count_zero.c $(TESTTMP)/c_vacnt26.o > /dev/null 2>&1
 	tools/expect_same.sh c_vacnt26 "$$(objdump -d $(TESTTMP)/c_vacnt26.o | grep -cE 'mov\s+\$$0x0,%eax')" "0"
+	# A C body aligns rsp once and counts its depth, instead of realigning around
+	# every call (18 bytes a call, -186 KB of the Rainyday pc kernel). The probe is
+	# an aligned(16) local in each callee; x.rspcheck adds test spl,15 / ud2 before
+	# every call that skipped its realignment; main keeps one `and rsp, -16`.
+	# feature-c-toybox-size-gap-literal-headers-call-realign-no-regalloc
+	./$(COMPILER) test/c_call_alignment_without_per_call_realign.c $(TESTTMP)/c_callal26 > /dev/null
+	$(TESTTMP)/c_callal26 | diff -u test/c_call_alignment_without_per_call_realign.expected -
+	PXXDBG=x.rspcheck ./$(COMPILER) test/c_call_alignment_without_per_call_realign.c $(TESTTMP)/c_callal26_chk > /dev/null
+	$(TESTTMP)/c_callal26_chk | diff -u test/c_call_alignment_without_per_call_realign.expected -
+	./$(COMPILER) -O3 test/c_call_alignment_without_per_call_realign.c $(TESTTMP)/c_callal26_o3 > /dev/null
+	$(TESTTMP)/c_callal26_o3 | diff -u test/c_call_alignment_without_per_call_realign.expected -
+	./$(COMPILER) --emit-obj test/c_call_alignment_without_per_call_realign.c $(TESTTMP)/c_callal26.o > /dev/null 2>&1
+	tools/expect_same.sh c_callal26_one_realign "$$(objdump -d $(TESTTMP)/c_callal26.o | sed -n '/<main>:/,/^$$/p' | grep -cE 'and\s+\$$0xfffffffffffffff0,%rsp')" "1"
 	# --freestanding builds at -O3: the xmm8..13 pool wrap around an indirect call
 	# tripped the no-SSE refusal. bug-freestanding-o3-trips-the-no-sse-refusal
 	./$(COMPILER) -O3 --emit-obj --freestanding test/c_freestanding_o3_builds.c $(TESTTMP)/c_fso326.o > /dev/null

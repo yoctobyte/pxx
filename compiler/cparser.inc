@@ -22433,7 +22433,10 @@ begin
   CBodyMentionsVolatile := CVolatileInRange(volFromTok - 1, TokPos);
   if PxxDbgWants('a.reload', '*') then
     WriteLn('PXXDBG a.reload body ', Procs[procIdx].Name, ' volatile ', CBodyMentionsVolatile);
+  CBodyCompiling := True;
   CompileAST(node);
+  CBodyCompiling := False;
+  X64DepthOn := False;   { the epilogue and whatever follows are not this body's rows }
   CBodyMentionsVolatile := False;
 
   { Epilogue }
