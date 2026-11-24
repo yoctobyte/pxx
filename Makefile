@@ -29711,6 +29711,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=i386 test/c_fnptr_table_braced_rows.c $(TESTTMP)/c_fptab26_i386
 	@gcc -m32 -w -o $(TESTTMP)/c_fptab26_gcc32 test/c_fnptr_table_braced_rows.c
 	tools/expect_same.sh c_fptab26_i386 "$$(timeout 20 $(TESTTMP)/c_fptab26_i386)" "$$(timeout 20 $(TESTTMP)/c_fptab26_gcc32)"
+	# -ffile-prefix-map / -fmacro-prefix-map rewrite __FILE__ (main file and -I header), last match wins, against gcc.
+	./$(COMPILER) -ffile-prefix-map=$(CURDIR)/test=/usr/src/t -fmacro-prefix-map=$(CURDIR)=/nope -ffile-prefix-map=$(CURDIR)/test/c_file_prefix_map_inc=/usr/include/fpm -I$(CURDIR)/test/c_file_prefix_map_inc $(CURDIR)/test/c_file_prefix_map.c $(TESTTMP)/c_fpmap26
+	@gcc -w -ffile-prefix-map=$(CURDIR)/test=/usr/src/t -fmacro-prefix-map=$(CURDIR)=/nope -ffile-prefix-map=$(CURDIR)/test/c_file_prefix_map_inc=/usr/include/fpm -I$(CURDIR)/test/c_file_prefix_map_inc $(CURDIR)/test/c_file_prefix_map.c -o $(TESTTMP)/c_fpmap26_gcc
+	tools/expect_same.sh c_fpmap26 "$$(timeout 20 $(TESTTMP)/c_fpmap26)" "$$(timeout 20 $(TESTTMP)/c_fpmap26_gcc)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).

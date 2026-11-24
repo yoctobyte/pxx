@@ -2336,6 +2336,25 @@ begin
   end;
 end;
 
+{ __FILE__ through the -ffile-prefix-map / -fmacro-prefix-map list: an OLD
+  that starts the path is replaced by its NEW. gcc's order: the -ffile- maps
+  first, then the -fmacro- ones, each kind last-given first.
+  feature-c-ffile-prefix-map }
+function CPMapPrefix(const path: AnsiString): AnsiString;
+var k, pass: Integer;
+begin
+  Result := path;
+  for pass := 0 to 1 do
+    for k := CPrefixMapCount - 1 downto 0 do
+      if (CPrefixMapIsFile[k] = (pass = 0)) and
+         (Length(CPrefixMapOld[k]) <= Length(path)) and
+         (Copy(path, 1, Length(CPrefixMapOld[k])) = CPrefixMapOld[k]) then
+      begin
+        Result := CPrefixMapNew[k] + Copy(path, Length(CPrefixMapOld[k]) + 1, Length(path));
+        Exit;
+      end;
+end;
+
 function CPRangeIsLit(const src: AnsiString; a, b: Integer; const lit: AnsiString): Boolean;
 { Does src[a..b] spell exactly `lit`? For the small, fixed set of dynamic
   predefines (__LINE__/__FILE__) that must be re-evaluated at every use
@@ -2420,7 +2439,7 @@ begin
       if (mi < 0) and CPRangeIsLit(src, a, b, '__LINE__') then
         dst := dst + AIntToStr(CPCurLine)
       else if (mi < 0) and CPRangeIsLit(src, a, b, '__FILE__') then
-        dst := dst + '"' + CPCurPath + '"'
+        dst := dst + '"' + CPMapPrefix(CPCurPath) + '"'
       else
         dynMacroHit := False;
       if not dynMacroHit then

@@ -1626,6 +1626,7 @@ end;
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
+    pmArg: AnsiString; pmEq: Integer;                          { -ffile-prefix-map=OLD=NEW being read }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
     dmI, dmK, dmBest, dmRank: Integer; dmNamed, dmBestSz: Int64;   { PXXDBG a.datamap's walk of the global-symbol BSS rows }
     tlsR: Integer;                                            { loop index for the per-reason C __thread warn flags. A LOOP and not six assignments on purpose: TLSREFUSE_MAX is the one place the count is written, and an unrolled reset is a second spelling that goes stale the first time a sixth refusal reason is added. It is reset here rather than in cparser.inc because that file is behind {$ifndef PXX_NO_CFRONT} while the flags are declared in defs.inc, which is not. }
@@ -2836,6 +2837,31 @@ begin
     else if option = '--permissive-overload' then
     begin
       StrictOverload := False;
+      Inc(i);
+    end
+    else if (Copy(option, 1, 18) = '-ffile-prefix-map=') or
+            (Copy(option, 1, 19) = '-fmacro-prefix-map=') then
+    begin
+      { gcc's prefix maps, for __FILE__ (pxx writes no debug info that names
+        a directory): `__FILE__` that starts with OLD has it replaced by NEW,
+        so a build reproduces byte for byte from any directory. Several may be
+        given. As in gcc (checked against 15.2): a matching -ffile-prefix-map
+        beats every -fmacro-prefix-map, and within one kind the LAST match
+        wins.
+        feature-c-ffile-prefix-map }
+      if Copy(option, 1, 18) = '-ffile-prefix-map=' then
+        pmArg := Copy(option, 19, Length(option))
+      else
+        pmArg := Copy(option, 20, Length(option));
+      pmEq := Pos('=', pmArg);
+      if (pmEq < 2) then
+        Error(option + ': expected OLD=NEW');
+      if CPrefixMapCount > 15 then
+        Error('too many -f*-prefix-map options (16 at most)');
+      CPrefixMapOld[CPrefixMapCount] := Copy(pmArg, 1, pmEq - 1);
+      CPrefixMapNew[CPrefixMapCount] := Copy(pmArg, pmEq + 1, Length(pmArg));
+      CPrefixMapIsFile[CPrefixMapCount] := Copy(option, 1, 18) = '-ffile-prefix-map=';
+      Inc(CPrefixMapCount);
       Inc(i);
     end
     else if (option = '-fcommon') or (option = '-fno-common') then

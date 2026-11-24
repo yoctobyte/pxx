@@ -7878,6 +7878,12 @@ var
   BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
   CObjCommon      : Boolean;     { -fcommon: tentative C definitions are COMMON symbols }
+  { -ffile-prefix-map=OLD=NEW / -fmacro-prefix-map=OLD=NEW: __FILE__ starting
+    with OLD reads NEW instead, so a build's bytes do not depend on its
+    directory (reproducible builds). feature-c-ffile-prefix-map }
+  CPrefixMapOld, CPrefixMapNew : array[0..15] of AnsiString;
+  CPrefixMapIsFile : array[0..15] of Boolean;   { -ffile- (else -fmacro-) }
+  CPrefixMapCount : Integer;
   { -fstack-protector-strong with -mstack-protector-guard=global (x86-64 C).
     CSspStrong is the flag; CSspGuardGlobal records that the guard is the global
     __stack_chk_guard, the only guard implemented. CSspProc is the C function
