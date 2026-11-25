@@ -63,3 +63,27 @@ handlers (the synthesised `_start` never calls `exit`), and `--link -o <dir>`
 reported success. Both are being fixed next; then the recipes move to
 `--shared-runtime`, which the decision names for pxx's own builds and which
 removes ~90% of each unit's compile time on site.
+
+Follow-ups landed: 33c94c0d93 (`_start` calls `exit`; `-o <dir>` is an
+error), c161a3f8ec (`--link` loads the shared runtime object first, so
+`--shared-runtime` objects share `atexit` and crtl state), 616701bbf1 (the
+recipes compile `--function-sections --shared-runtime`: toybox on site 251 s
+-> 123 s, same size). The private-state bug is
+bug-a-default-emit-obj-objects-each-keep-private-crtl-state.
+
+## Item 2: mkfs.fat done; sfdisk, blkid, mke2fs next
+
+dosfstools 4.2 (`tools/nodisx/dosfstools/`), 2026-11-25: mkfs.fat, fsck.fat,
+fatlabel. dosfstools' own `make check` on the pxx binaries: 39 PASS, 1 XFAIL
+(upstream's), 0 FAIL. Eight `mkfs.fat --invariant` images (FAT12/16/32,
+Atari, labels, reserved sectors, one FAT) byte-identical to gcc's, and the
+programs' stdout and stderr the same. Text 187/185/127 KB.
+
+pxx fixes it needed (9f07ed8a66): crtl `iconv` had no CP437/CP850 (mkfs.fat
+opens CP850 by default and complained before falling back to its own table);
+and the shared runtime's cache key had lost its crtl hash, so after a crtl
+change `--link` kept linking the old runtime.
+
+Not fixed, and why the test compares stdout and stderr apart: crtl's stdout
+is unbuffered, so the two interleave differently from glibc's when they share
+a pipe (feature-c-crtl-stdio-buffering-and-setvbuf).

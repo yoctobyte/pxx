@@ -63,3 +63,14 @@ once on the host with gcc; its `-D` flags and its four generated files
 the pxx build and on the gcc build and compares the failures: in a
 non-interactive environment about 30 tests fail on both (no tty, history).
 PASS is no failure the gcc build does not have.
+
+## dosfstools 4.2 (GPL-3.0): mkfs.fat, fsck.fat, fatlabel
+
+The EFI system partition. `configure` runs once on the host with gcc; its
+`-D` list (`flags`), the per-program unit lists (`units`, from automake's
+link lines) and the one file it generates, `src/version.h` (`gen.tar`), are
+the recipe. `test.sh` runs dosfstools' own `make check` (reference FAT12/16/32
+and Atari images, fsck repairs, labels) with the pxx binaries in place of the
+gcc ones, and formats eight images with both builds under `--invariant`:
+PASS is no suite failure and every image, and both programs' output,
+identical to gcc's. Note the licence: GPL-3.0, unlike the rest so far.
