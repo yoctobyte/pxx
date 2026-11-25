@@ -21458,6 +21458,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_srt_dgr "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dgr -a -b x)" "$$(cat test/c_shared_runtime.expected)"
 	$(COMPILER) --link -o $(TESTTMP)/c_srt_dr $(TESTTMP)/c_srt_dp.o $(TESTTMP)/c_srt_dm.o > /dev/null
 	tools/expect_same.sh c_srt_dr "$$(PXX_SR_TEST=yes $(TESTTMP)/c_srt_dr -a -b x)" "$$(cat test/c_shared_runtime.expected)"
+	# pascal26 --link: returning from main is exit(main's value), so atexit
+	# handlers registered in ANOTHER object run and stdio is flushed, on the
+	# return path and the exit() path alike. The synthesised _start used to make
+	# the exit syscall straight after main. Expected = gcc's output and status.
+	# (Default objects without --function-sections still keep private crtl
+	# state per object -- feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes.)
+	./$(COMPILER) --emit-obj --function-sections test/c_link_return_from_main_runs_atexit_main.c $(TESTTMP)/c_lratx_m.o > /dev/null
+	./$(COMPILER) --emit-obj --function-sections test/c_link_return_from_main_runs_atexit_part.c $(TESTTMP)/c_lratx_p.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_lratx $(TESTTMP)/c_lratx_m.o $(TESTTMP)/c_lratx_p.o > /dev/null
+	tools/expect_same.sh c_lratx "$$({ $(TESTTMP)/c_lratx; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
+	tools/expect_same.sh c_lratx_exit "$$({ $(TESTTMP)/c_lratx x; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
+	# --link -o naming a directory is an error (it was rc 0 with nothing written)
+	mkdir -p $(TESTTMP)/c_lratx_dir
+	tools/expect_same.sh c_lratx_dir "$$(./$(COMPILER) --link -o $(TESTTMP)/c_lratx_dir $(TESTTMP)/c_lratx_m.o $(TESTTMP)/c_lratx_p.o > $(TESTTMP)/c_lratx_dir.log 2>&1; echo rc=$$?; grep -c 'the output path is a directory or not writable' $(TESTTMP)/c_lratx_dir.log)" "$$(printf 'rc=1\n1')"
 	$(COMPILER) --c-static-data test/c_redeclared_array_bakes.c $(TESTTMP)/c_rab > /dev/null
 	tools/expect_same.sh c_rab "$$($(TESTTMP)/c_rab)" "$$(cat test/c_redeclared_array_bakes.expected)"
 	$(COMPILER) --emit-obj --function-sections test/c_redeclared_array_bakes.c $(TESTTMP)/c_rab.o > /dev/null

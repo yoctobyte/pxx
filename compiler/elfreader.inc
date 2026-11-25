@@ -340,10 +340,10 @@ const
   { The image base is ImageBase: LOAD_ADDR ($400000, the static non-PIE base ld
     uses on x86-64) unless --image-base / --gibix moved it. }
   ELFLNK_PAGE   = $1000;
-  ELFLNK_STUB_SIZE_X64 = 93;    { the synthesised _start; see ElfLnkPutStub }
+  ELFLNK_STUB_SIZE_X64 = 110;   { the synthesised _start; see ElfLnkPutStub }
   ELFLNK_TLS_PRO_SIZE = 70;     { its main-thread TLS prologue, when there is a template }
   ELFLNK_TLS_TCB = 64;          { bytes reserved at the thread pointer: word 0 is the self-pointer }
-  ELFLNK_STUB_SIZE_A64 = 128;   { 26 instructions + 3 literal quads; ElfLnkPutStubA64 }
+  ELFLNK_STUB_SIZE_A64 = 144;   { 28 instructions + 4 literal quads; ElfLnkPutStubA64 }
   ELFLNK_EM_X86_64 = 62;
   ELFLNK_EM_AARCH64 = 183;
 
@@ -942,6 +942,33 @@ begin
     end;
 end;
 
+{ Index of `nm` in the global table, or -1. Never inserts. }
+function ElfLnkFind(const nm: AnsiString): Integer;
+var i: Integer;
+begin
+  ElfLnkFind := -1;
+  i := ElfLnkHead[ElfLnkHash(nm) and ElfLnkMask];
+  while i >= 0 do
+  begin
+    if ElfLnkName[i] = nm then begin ElfLnkFind := i; Exit; end;
+    i := ElfLnkNext[i];
+  end;
+end;
+
+{ The `exit` the synthesised _start calls when main returns (ElfLnkPutStub):
+  a defined global in a TEXT section -- crtl's, or the program's own -- or
+  -1 when the link has none (a Pascal program; a freestanding entry). }
+function ElfLnkStubExitSym: Integer;
+var g: Integer;
+begin
+  ElfLnkStubExitSym := -1;
+  if not ElfLnkEntryStub then Exit;
+  g := ElfLnkFind('exit');
+  if (g < 0) or (ElfLnkDefObj[g] < 0) or (ElfLnkDefSec[g] < 0) then Exit;
+  if ElfLnkSecKindOf[ElfLnkDefSec[g]] <> ELFLNK_K_TEXT then Exit;
+  ElfLnkStubExitSym := g;
+end;
+
 procedure ElfLnkGcMark(entryG: Integer);
 var i, s, t, sp, g, st: Integer;
     first, adj, fill, stack, setOfG: array of Integer;
@@ -991,6 +1018,17 @@ begin
   if (entryG >= 0) and (ElfLnkDefObj[entryG] >= 0) and (ElfLnkDefSec[entryG] >= 0) then
   begin
     s := ElfLnkDefSec[entryG];
+    if not ElfLnkSecLive[s] then
+    begin
+      ElfLnkSecLive[s] := True;
+      stack[sp] := s; Inc(sp);
+    end;
+  end;
+  { the synthesised _start also calls exit: a root like main }
+  g := ElfLnkStubExitSym;
+  if g >= 0 then
+  begin
+    s := ElfLnkDefSec[g];
     if not ElfLnkSecLive[s] then
     begin
       ElfLnkSecLive[s] := True;
@@ -1418,19 +1456,6 @@ begin
   while ElfLnkBLen < n do ElfLnkBPut(0, 1);
 end;
 
-{ Index of `nm` in the global table, or -1. Never inserts. }
-function ElfLnkFind(const nm: AnsiString): Integer;
-var i: Integer;
-begin
-  ElfLnkFind := -1;
-  i := ElfLnkHead[ElfLnkHash(nm) and ElfLnkMask];
-  while i >= 0 do
-  begin
-    if ElfLnkName[i] = nm then begin ElfLnkFind := i; Exit; end;
-    i := ElfLnkNext[i];
-  end;
-end;
-
 function ElfLnkRelTypeName(t: Int64): AnsiString;
 begin
   case t of
@@ -1792,9 +1817,16 @@ end;
   exit(2) (60), not exit(): the .S does not run the atexit chain or
   .fini_array either, and matching the proven contract exactly is the point --
   a difference here would be a claim nothing has measured. }
-procedure ElfLnkPutStub(var buf: array of Byte; initStart, initEnd, mainAddr: Int64);
+procedure ElfLnkPutStub(var buf: array of Byte; initStart, initEnd, mainAddr, exitAddr: Int64);
 const
-  { 93 bytes; the three movabs immediates are zero here and filled below }
+  { 110 bytes; the four movabs immediates are zero here and filled below.
+    RETURNING FROM main IS exit(main's value) (C11 5.1.2.2.3): when the link
+    defines exit, the stub calls it, so atexit handlers run and stdio is
+    flushed on the plain-return path too. Before this the stub went straight to
+    the exit syscall, and a handler registered with atexit ran only when the
+    program called exit() itself (found building mksh/toybox for Nodisx).
+    exitAddr 0 -- no exit in the link, e.g. Pascal objects -- keeps the
+    syscall. exit does not return; the syscall after it is the fallback. }
   STUB: array[0..ELFLNK_STUB_SIZE_X64 - 1] of Byte = (
     $31,$ED,                               {  0 xor ebp,ebp            }
     $4C,$8B,$24,$24,                       {  2 mov r12,[rsp]          }
@@ -1817,9 +1849,13 @@ const
     $48,$B8,0,0,0,0,0,0,0,0,               { 71 movabs rax,imm64 (73)  }
     $FF,$D0,                               { 81 call rax               }
     $89,$C7,                               { 83 mov edi,eax            }
-    $B8,$3C,$00,$00,$00,                   { 85 mov eax,60             }
-    $0F,$05,                               { 90 syscall                }
-    $F4);                                  { 92 hlt                    }
+    $48,$B8,0,0,0,0,0,0,0,0,               { 85 movabs rax,imm64 (87)  }
+    $48,$85,$C0,                           { 95 test rax,rax           }
+    $74,$02,                               { 98 je +2 -> 102           }
+    $FF,$D0,                               {100 call rax (exit)        }
+    $B8,$3C,$00,$00,$00,                   {102 mov eax,60             }
+    $0F,$05,                               {107 syscall                }
+    $F4);                                  {109 hlt                    }
   { THE MAIN THREAD'S TLS BLOCK, when the link has a template: inserted after
     envp is computed (offset 16) and before the alignment, so the rest of the
     stub is unchanged and moves down as a whole. The block is carved from the
@@ -1879,13 +1915,15 @@ begin
   ElfLnkPutLE(buf, 22 + pro, initStart, 8);
   ElfLnkPutLE(buf, 32 + pro, initEnd, 8);
   ElfLnkPutLE(buf, 73 + pro, mainAddr, 8);
+  ElfLnkPutLE(buf, 87 + pro, exitAddr, 8);
 end;
 
 { The same contract on aarch64. The kernel enters with sp -> argc, argv[],
   NULL, envp[], and sp is already 16-aligned (AAPCS64 needs nothing more).
   argc/argv/envp live in callee-saved x19..x21 across the calls, the
   .init_array walk is x22..x23, and every call is (x0, x1, x2) = (argc,
-  argv, envp). exit(2) is syscall 93 with main's w0. The three addresses are
+  argv, envp). Then exit(main's w0): crtl's exit when the link defines one
+  (lit4; see ElfLnkPutStub), else syscall 93. The four addresses are
   literal quads that the ldr-literal instructions reach PC-relatively.
   Encoded with llvm-mc:
 
@@ -1898,22 +1936,24 @@ end;
       ldr x9, [x22] ; blr x9 ; add x22, x22, #8 ; b 1b
    2: mov x0, x19 ; mov x1, x20 ; mov x2, x21
       ldr x9, lit3 ; blr x9                    main
-      mov x8, #93 ; svc #0 ; brk #0 ; nop
-   lit1/lit2/lit3 at +104/+112/+120 }
-procedure ElfLnkPutStubA64(var buf: array of Byte; initStart, initEnd, mainAddr: Int64);
+      ldr x9, lit4 ; cbz x9, 3f ; blr x9       exit, when the link has one
+   3: mov x8, #93 ; svc #0 ; brk #0
+   lit1/lit2/lit3/lit4 at +112/+120/+128/+136 }
+procedure ElfLnkPutStubA64(var buf: array of Byte; initStart, initEnd, mainAddr, exitAddr: Int64);
 const
-  W: array[0..25] of LongWord = (
+  W: array[0..27] of LongWord = (
     $D280001D, $D280001E, $F94003F3, $910023F4, $8B130E95, $910022B5,
-    $58000296, $580002B7, $EB1702DF, $54000102, $AA1303E0, $AA1403E1,
+    $580002D6, $580002F7, $EB1702DF, $54000102, $AA1303E0, $AA1403E1,
     $AA1503E2, $F94002C9, $D63F0120, $910022D6, $17FFFFF8, $AA1303E0,
-    $AA1403E1, $AA1503E2, $58000149, $D63F0120, $D2800BA8, $D4000001,
-    $D4200000, $D503201F);
+    $AA1403E1, $AA1503E2, $58000189, $D63F0120, $58000189, $B4000049,
+    $D63F0120, $D2800BA8, $D4000001, $D4200000);
 var i: Integer;
 begin
-  for i := 0 to 25 do ElfLnkPutLE(buf, 4 * i, W[i], 4);
-  ElfLnkPutLE(buf, 104, initStart, 8);
-  ElfLnkPutLE(buf, 112, initEnd, 8);
-  ElfLnkPutLE(buf, 120, mainAddr, 8);
+  for i := 0 to 27 do ElfLnkPutLE(buf, 4 * i, W[i], 4);
+  ElfLnkPutLE(buf, 112, initStart, 8);
+  ElfLnkPutLE(buf, 120, initEnd, 8);
+  ElfLnkPutLE(buf, 128, mainAddr, 8);
+  ElfLnkPutLE(buf, 136, exitAddr, 8);
 end;
 
 { Write the linked executable. ElfLnkLoadList and ElfLnkLayout must have run.
@@ -2064,7 +2104,7 @@ end;
 
 function ElfLnkWriteExe(const outPath, entryName, tag: AnsiString): Boolean;
 var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff, shOff, t: Integer;
-    mainAddr: Int64;
+    mainAddr, exitAddr: Int64;
     stub: array of Byte;
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
     relaOf: array of Integer;
@@ -2353,12 +2393,15 @@ begin
   if entryName = '' then
   begin
     SetLength(stub, ElfLnkStubSize);
+    exitAddr := 0;
+    g := ElfLnkStubExitSym;
+    if g >= 0 then exitAddr := ElfLnkGlobalAddr(g);
     if ElfLnkMachine = ELFLNK_EM_AARCH64 then
       ElfLnkPutStubA64(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
-                       ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr)
+                       ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr, exitAddr)
     else
       ElfLnkPutStub(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
-                    ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr);
+                    ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr, exitAddr);
     ElfLnkWriteZeros(ElfLnkStubAddr - cur);
     ElfLnkWrite(stub, ElfLnkStubSize);
     cur := ElfLnkStubAddr + ElfLnkStubSize;

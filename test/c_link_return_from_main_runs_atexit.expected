@@ -1,0 +1,4 @@
+main returns 3
+handler registered second runs first
+handler registered first runs last
+rc=3

@@ -1469,6 +1469,14 @@ begin
   if fd >= 0 then sysclose(fd);
 end;
 
+function OutputPathIsWritable(const path: AnsiString): Boolean;
+var fd: Integer;
+begin
+  fd := sysopen(path, 1);            { O_WRONLY: EISDIR on a directory, EACCES }
+  OutputPathIsWritable := fd >= 0;
+  if fd >= 0 then sysclose(fd);
+end;
+
 { Refuse in the writer's own voice: name the path, and say the one thing the
   caller cannot see -- that the compile itself was fine. Halt(1) so a harness
   reading rc gets the same answer as a harness reading the text. }
@@ -1598,6 +1606,17 @@ begin
       short-write check for, which test_trunc26.1 pins verbatim. So the parent
       is not tested instead of this branch; it is tested INSIDE it, and only to
       redirect the message. }
+    { AN OUTPUT PATH THAT EXISTS BUT IS NOT A WRITABLE FILE -- a directory
+      (`-o build` where build/ is the tree), or a file without write
+      permission -- opens read-only, so it passes the check below and was
+      reported as a short write, sending the reader to df. O_WRONLY without
+      O_TRUNC/O_CREAT changes nothing and fails on exactly those two. }
+    if OutputPathWasCreated(path) and not OutputPathIsWritable(path) then
+    begin
+      writeln(StdErr, 'pascal26: error: the output path is a directory or not writable: ', path);
+      writeln(StdErr, '  the compile itself succeeded; nothing was written.');
+      Halt(1);
+    end;
     if not OutputPathWasCreated(path) then
     begin
       writeln(StdErr, 'pascal26: error: could not create the output file: ', path);
@@ -3581,13 +3600,24 @@ begin
     begin
       if ParamCount < i then
         ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
-      if ElfLnkLinkArgs(i, ParamCount, LinkOutPath, LinkGcSections) then Halt(0);
+      if ElfLnkLinkArgs(i, ParamCount, LinkOutPath, LinkGcSections) then
+      begin
+        { the linker writes through OutWrite too: an output it could not
+          create was reported as success, rc 0 and no file (a -o naming a
+          directory, Nodisx's mksh recipe) }
+        RequireOutputArtefact(LinkOutPath);
+        Halt(0);
+      end;
     end
     else
     begin
       if ParamCount - i < 1 then
         ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
-      if ElfLnkLinkArgs(i, ParamCount - 1, ParamStr(ParamCount), LinkGcSections) then Halt(0);
+      if ElfLnkLinkArgs(i, ParamCount - 1, ParamStr(ParamCount), LinkGcSections) then
+      begin
+        RequireOutputArtefact(ParamStr(ParamCount));
+        Halt(0);
+      end;
     end;
     Halt(1);
   end;
