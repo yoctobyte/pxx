@@ -45,6 +45,17 @@ static const char *const output_names[] = { "None", "VGA", "DVI-I", "DVI-D", "DV
     "Composite", "SVIDEO", "LVDS", "Component", "DIN", "DP", "HDMI", "HDMI-B", "TV", "eDP",
     "Virtual", "DSI", "DPI", };
 static int arr12[3];
+/* sizeof((expr)) inside a static initialiser: the first fix removed the
+   redundant pair from the token stream, which moved the initialiser's
+   recorded token positions (xload's `sizeof(XtRString)`) */
+static const char res_strs[] = "BooleanString";
+#define RES_STR ((const char *)&res_strs[7])
+typedef struct { const char *n; unsigned sz; int v; } ResRec;
+static ResRec res_tab[] = {
+    { "a", sizeof(int), 1 },
+    { "b", sizeof(RES_STR), 2 },
+    { "c", sizeof((res_strs)), 3 },
+};
 
 static int clz_of(unsigned x) { return __builtin_clz (x); }
 
@@ -72,6 +83,8 @@ int main(void)
         printf("sizeof %d %d %d %d %d", (int)ARRAY_SIZE(output_names), (int)sizeof(((arr12))),
                (int)sizeof((loc)), (int)ARRAY_SIZE(loc), (int)sizeof((loc)[0]));
         printf(" %s\n", type >= ARRAY_SIZE(output_names) ? "Unknown" : output_names[type]);
+        printf("res %s %u %d %s %u %d %s %u %d\n", res_tab[0].n, res_tab[0].sz, res_tab[0].v,
+               res_tab[1].n, res_tab[1].sz, res_tab[1].v, res_tab[2].n, res_tab[2].sz, res_tab[2].v);
     }
     {
         CtxFlags cf = CTX_PRESERVED;

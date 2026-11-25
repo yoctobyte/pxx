@@ -4686,7 +4686,51 @@ begin
   else if (CurTok.Kind = tkIdent) and (Tokens[k + 1].Kind = tkDot) then Result := True;
 end;
 
+{ `sizeof((name))` -- a REDUNDANT PAIR around the whole operand. It is
+  still the array, not a use of it, but the general-expression arm sized the
+  decayed pointer: 8 for any array. ARRAY_SIZE(a) written as
+  `sizeof((a)) / sizeof((a)[0])` (Xorg's modesetting) then answered 1, and
+  every DRM output past connector type 0 was named "Unknown<type>". Each pair
+  whose `)` is followed at once by the enclosing `)` is stepped over here and
+  closed after the operand; `((a)[0])` and `((T)x)` are not such pairs. The
+  token stream is left as it is: positions recorded earlier (initialisers
+  kept by index) must not move.
+  bug-c-sizeof-of-a-parenthesised-array-name-gives-the-pointer-size }
+function ParseCSizeofOperand: Integer; forward;
+
 function ParseCSizeof: Integer;
+var n, i, q, m, depth: Integer;
+begin
+  Next; { sizeof }
+  n := 0;
+  if CurTok.Kind = tkLParen then
+  begin
+    q := TokPos;                       { the token after CurTok's `(` }
+    while (q < TokCount) and (Tokens[q].Kind = tkLParen) do
+    begin
+      depth := 0;
+      m := q;
+      while m < TokCount do
+      begin
+        if Tokens[m].Kind = tkLParen then Inc(depth)
+        else if Tokens[m].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+        Inc(m);
+      end;
+      if (m + 1 + n >= TokCount) or (Tokens[m + 1].Kind <> tkRParen) then Break;
+      Inc(n);
+      Inc(q);
+    end;
+  end;
+  for i := 1 to n do Next;
+  Result := ParseCSizeofOperand;
+  for i := 1 to n do Expect(tkRParen, ')');
+end;
+
+function ParseCSizeofOperand: Integer;
 var szK, szN: Integer; szWide: Boolean;
     node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym, cRest, cD: Integer;
@@ -4697,33 +4741,6 @@ var szK, szN: Integer; szWide: Boolean;
     saRec: Integer;   { the general path's field-access base record, REC_NONE if none }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
-  Next; { sizeof }
-  { `sizeof((name))` -- a REDUNDANT PAIR around the operand name. It is still
-    the array, not a use of it, but the general-expression arm sized the
-    decayed pointer: 8 for any array. ARRAY_SIZE(a) written as
-    `sizeof((a)) / sizeof((a)[0])` (Xorg's modesetting) then answered 1, and
-    every connector past index 0 was named "Unknown<type>". A pair that
-    wraps the whole operand, `sizeof( (...) )`, is removed, as many times as
-    it is nested; `((a)[0])` and `((T)x)` are not whole-operand pairs.
-    bug-c-sizeof-of-a-parenthesised-array-name-gives-the-pointer-size }
-  while (CurTok.Kind = tkLParen) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) do
-  begin
-    depth := 0;
-    si := TokPos;
-    while si < TokCount do
-    begin
-      if Tokens[si].Kind = tkLParen then Inc(depth)
-      else if Tokens[si].Kind = tkRParen then
-      begin
-        Dec(depth);
-        if depth = 0 then Break;
-      end;
-      Inc(si);
-    end;
-    if (si + 1 >= TokCount) or (Tokens[si + 1].Kind <> tkRParen) then Break;
-    RemoveTokens(si, 1);
-    RemoveTokens(TokPos, 1);
-  end;
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;

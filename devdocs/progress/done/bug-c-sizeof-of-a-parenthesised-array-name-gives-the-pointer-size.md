@@ -30,3 +30,11 @@ there.
 A pair counts as wrapping the whole operand only when its closing `)` is
 immediately followed by sizeof's own `)`. `((a)[0])`, `((T)x)` and
 `((T){...})` are left alone.
+
+The first fix (21efc589d2) removed the redundant pair from the token stream.
+That moved every later token position, and a static initialiser records
+its positions before this point, so `sizeof(XtRString)` in xload's resource
+table (a macro that expands to `((char*)&XtStrings[n])`) broke the parse:
+"expected C expression", in 19 Path B units. The quick gate passed. The fix
+now steps over the wrapping pairs and expects their `)`s after the operand,
+leaving the tokens alone.
