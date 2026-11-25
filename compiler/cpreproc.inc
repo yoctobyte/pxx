@@ -3959,6 +3959,33 @@ begin
   end;
 end;
 
+{ Does the line end, outside a string or character literal, with the name
+  of a function-like macro (its arguments may start on the next line)? }
+function CPLineEndsWithFnMacro(const line: AnsiString): Boolean;
+var i, a, e, mi: Integer; inStr, inCh: Boolean; c: Char;
+begin
+  Result := False;
+  inStr := False; inCh := False; i := 1;
+  while i <= Length(line) do
+  begin
+    c := line[i];
+    if inStr then begin if c = '\' then Inc(i) else if c = '"' then inStr := False; end
+    else if inCh then begin if c = '\' then Inc(i) else if c = '''' then inCh := False; end
+    else if c = '"' then inStr := True
+    else if c = '''' then inCh := True;
+    Inc(i);
+  end;
+  if inStr or inCh then Exit;
+  e := Length(line);
+  while (e >= 1) and (line[e] in [' ', #9, #13]) do Dec(e);
+  if (e < 1) or not CPIsIdentChar(line[e]) then Exit;
+  a := e;
+  while (a > 1) and CPIsIdentChar(line[a - 1]) do Dec(a);
+  if not CPIsIdentStart(line[a]) then Exit;
+  mi := CPFindMacro(line, a, e);
+  Result := (mi >= 0) and CPMFunction[mi];
+end;
+
 { Is the directive at line[p] (p at the '#') an #include? The same keyword
   scan CPDirective does, without acting on it. }
 function CPDirectiveIsInclude(const line: AnsiString; p: Integer): Boolean;
@@ -4107,6 +4134,7 @@ end;
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
     vaLine: AnsiString;
+    joinedCall, peekComment: Boolean; peekPos: Integer;
     savedFileId, savedLine, savedDepth: Integer;
     savedPath, savedBaseDir: AnsiString;
 begin
@@ -4174,6 +4202,8 @@ begin
       The join only runs while the region is ACTIVE. Inside a false conditional
       each line is skipped on its own below, and joining there could splice text
       from a dead region onto a live line once an `#endif` reopened it. }
+    repeat
+    joinedCall := False;
     if CPActive and ((p > Length(CPrepLine)) or (CPrepLine[p] <> '#')) then
       while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
       begin
@@ -4230,6 +4260,35 @@ begin
         else if CPActive then
           CPrepLine := CPrepLine + ' ' + cont;
       end;
+    { A FUNCTION-LIKE MACRO'S NAME ENDING THE LINE, ITS `(` ON THE NEXT. The
+      arguments of an invocation may start on a later line (C 6.10.3p10: the
+      `(` is the next preprocessing token, and a newline is white space
+      there). Xorg's dix/dixfonts.c writes
+
+          DebugF
+              ("[dix] Could not init font path element %s, ...\n", fpe->name);
+
+      and with DebugF(...) defined empty, a preprocessor that stops at the
+      newline leaves `DebugF` to the parser as a call to an undeclared
+      function. Peek at the next line; when it starts with `(`, join it and
+      let the parenthesis join above collect the rest. Otherwise the line is
+      left for the next round untouched. }
+    if CPActive and (pos <= Length(src)) and ((p > Length(CPrepLine)) or (CPrepLine[p] <> '#'))
+       and CPLineEndsWithFnMacro(CPrepLine) then
+    begin
+      peekPos := pos; peekComment := inComment;
+      CPReadLine(src, peekPos, peekComment, cont);
+      q := 1;
+      while (q <= Length(cont)) and (cont[q] in [' ', #9]) do Inc(q);
+      if (q <= Length(cont)) and (cont[q] = '(') then
+      begin
+        pos := peekPos; inComment := peekComment;
+        Inc(CPCurLine);        { -g: the join swallowed a physical line }
+        CPrepLine := CPrepLine + ' ' + cont;
+        joinedCall := True;
+      end;
+    end;
+    until not joinedCall;
     if p <= Length(CPrepLine) then
     begin
       if CPrepLine[p] = '#' then
@@ -4897,11 +4956,13 @@ begin
   fams[5] := 'bswap';
   lw := CLongWidthSuffix;
   CBuiltinMentions(src);
+  { `__builtin_clz (x)` -- a space before the parenthesis is still a call
+    (pixman-matrix.c writes it so) }
   for f := 0 to 4 do
   begin
-    if CBuiltinSaw(fams[f], '(') then want[f * 2] := True;
+    if CBuiltinSaw(fams[f], '(') or CBuiltinSaw(fams[f], ' ') then want[f * 2] := True;
     if CBuiltinSawPrefix(fams[f] + 'll') then want[f * 2 + 1] := True;
-    if CBuiltinSaw(fams[f] + 'l', '(') then
+    if CBuiltinSaw(fams[f] + 'l', '(') or CBuiltinSaw(fams[f] + 'l', ' ') then
     begin
       if lw = '64' then want[f * 2 + 1] := True else want[f * 2] := True;
     end;

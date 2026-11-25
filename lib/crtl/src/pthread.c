@@ -364,6 +364,12 @@ int pthread_attr_setdetachstate(pthread_attr_t *a, int st) {
   return 0;
 }
 int pthread_attr_getdetachstate(const pthread_attr_t *a, int *st) { *st = a->__detach; return 0; }
+int pthread_attr_setscope(pthread_attr_t *a, int scope) {
+  (void)a;
+  if (scope == PTHREAD_SCOPE_SYSTEM) return 0;
+  return scope == PTHREAD_SCOPE_PROCESS ? 95 /* ENOTSUP */ : 22;
+}
+int pthread_attr_getscope(const pthread_attr_t *a, int *scope) { (void)a; *scope = PTHREAD_SCOPE_SYSTEM; return 0; }
 int pthread_attr_setstacksize(pthread_attr_t *a, unsigned long size) {
   if (size < PTHREAD_STACK_MIN) return 22;
   a->__stacksize = size;

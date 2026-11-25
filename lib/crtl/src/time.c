@@ -861,3 +861,30 @@ int utimensat(int dirfd, const char *path, const struct timespec times[2], int f
 int futimens(int fd, const struct timespec times[2]) {
   return utimensat(fd, 0, times, 0);
 }
+
+/* clock_getres(2). The kernel fills ITS timespec: two `long's from
+   clock_getres where the target has it (x86-64, i386, aarch64, arm32 --
+   the same layout as crtl's struct timespec there), two 64-bit fields from
+   clock_getres_time64 where it is the only one (riscv32). Copied field by
+   field either way, so neither layout is assumed to be crtl's. */
+#include <sys/syscall.h>
+#include <unistd.h>
+int clock_getres(int clk_id, struct timespec *res)
+{
+  long r;
+#if defined(SYS_clock_getres)
+  struct { long s, ns; } k;
+  r = syscall(SYS_clock_getres, (long)clk_id, (long)&k);
+#elif defined(SYS_clock_getres_time64)
+  struct { long long s, ns; } k;
+  r = syscall(SYS_clock_getres_time64, (long)clk_id, (long)&k);
+#else
+  struct { long s, ns; } k;
+  k.s = 0; k.ns = 0;
+  errno = ENOSYS;
+  r = -1;
+#endif
+  if (r != 0) return -1;
+  if (res) { res->tv_sec = (long)k.s; res->tv_nsec = (long)k.ns; }
+  return 0;
+}

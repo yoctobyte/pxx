@@ -169,3 +169,15 @@ int munlockall(void)
   return -1;
 #endif
 }
+
+/* memfd_create(2). -1 with errno ENOSYS where the target has no such call. */
+int memfd_create(const char *name, unsigned int flags)
+{
+#ifdef SYS_memfd_create
+  return (int)syscall(SYS_memfd_create, (long)name, (long)flags);
+#else
+  (void)name; (void)flags;
+  errno = ENOSYS;
+  return -1;
+#endif
+}

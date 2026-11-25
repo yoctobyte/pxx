@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  814 functions across 78 headers. }
+  818 functions across 78 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -34,8 +34,8 @@ begin
       ' cfgetospeed:termios.h cfmakeraw:termios.h cfsetispeed:termios.h cfsetospeed:termios.h ' +
       ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chown:unistd.h chroot:unistd.h ' +
       ' clearenv:stdlib.h clearerr:stdio.h clearerr_unlocked:stdio.h clock:time.h ' +
-      ' clock_gettime:time.h clock_nanosleep:time.h clock_settime:time.h close:unistd.h ' +
-      ' closedir:dirent.h closelog:syslog.h confstr:unistd.h connect:sys/socket.h ' +
+      ' clock_getres:time.h clock_gettime:time.h clock_nanosleep:time.h clock_settime:time.h ' +
+      ' close:unistd.h closedir:dirent.h closelog:syslog.h confstr:unistd.h connect:sys/socket.h ' +
       ' copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h crypt:crypt.h ' +
       ' crypt_r:crypt.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
@@ -125,14 +125,14 @@ begin
       ' madvise:sys/mman.h malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h ' +
       ' mblen:stdlib.h mbrlen:wchar.h mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h ' +
       ' mbtowc:stdlib.h memalign:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
-      ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
-      ' memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
-      ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
-      ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
-      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
-      ' mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h ' +
-      ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
-      ' munmap:sys/mman.h ';
+      ' memcpy:string.h memfd_create:sys/mman.h memmem:string.h memmove:string.h ' +
+      ' mempcpy:string.h memrchr:string.h memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h ' +
+      ' mkdtemp:stdlib.h mkfifo:sys/stat.h mkfifoat:sys/stat.h mknod:sys/stat.h ' +
+      ' mknodat:sys/stat.h mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h ' +
+      ' mlock:sys/mman.h mlockall:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h ' +
+      ' mount:sys/mount.h mprotect:sys/mman.h mrand48:stdlib.h mremap:sys/mman.h ' +
+      ' msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h ' +
+      ' munlock:sys/mman.h munlockall:sys/mman.h munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
       ' ngettext:libintl.h nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h ' +
@@ -144,15 +144,16 @@ begin
       ' ns_put32:arpa/nameser.h ns_skiprr:arpa/nameser.h ntohl:netinet/in.h ntohs:netinet/in.h ' +
       ' ntp_adjtime:sys/timex.h ntp_gettime:sys/timex.h ';
     'o': Result :=
-      ' open:fcntl.h openat:fcntl.h opendir:dirent.h openlog:syslog.h openpty:pty.h ';
+      ' open:fcntl.h open_memstream:stdio.h openat:fcntl.h opendir:dirent.h openlog:syslog.h ' +
+      ' openpty:pty.h ';
     'p': Result :=
       ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
       ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
       ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
       ' posix_openpt:stdlib.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
       ' pread:unistd.h pread64:unistd.h preadv:sys/uio.h printf:stdio.h prlimit:sys/resource.h ' +
-      ' pselect:sys/select.h pthread_kill:signal.h ptrace:sys/ptrace.h ptsname:stdlib.h ' +
-      ' ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
+      ' pselect:sys/select.h pthread_kill:signal.h pthread_sigmask:signal.h ptrace:sys/ptrace.h ' +
+      ' ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
       ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pututxline:utmpx.h pwrite:unistd.h ' +
       ' pwrite64:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
@@ -247,7 +248,7 @@ begin
     '_': Result := 32;
     'a': Result := 288760;
     'b': Result := 9585592;
-    'c': Result := 176120;
+    'c': Result := 180216;
     'd': Result := 4088;
     'e': Result := 30712;
     'f': Result := 65520;
@@ -257,9 +258,9 @@ begin
     'j': Result := 128;
     'k': Result := 208;
     'l': Result := 7928;
-    'm': Result := 263664;
+    'm': Result := 267760;
     'n': Result := 360376;
-    'o': Result := 208;
+    'o': Result := 16592;
     'p': Result := 131064;
     'q': Result := 160;
     'r': Result := 8176;

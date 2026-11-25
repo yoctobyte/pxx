@@ -3245,8 +3245,13 @@ begin
             ASTIVal[node] := procIdx;
             ASTTk[node] := Ord(tyPointer);
           end
-          else if (name = '__func__') and (CurProc >= 0) then
+          else if ((name = '__func__') or (name = '__FUNCTION__') or (name = '__PRETTY_FUNCTION__'))
+                  and (CurProc >= 0) then
           begin
+            { gcc's __FUNCTION__ and __PRETTY_FUNCTION__ are, in C, the same
+              string as __func__ (only C++ decorates the pretty one). pixman's
+              FUNC is `((const char*) (__PRETTY_FUNCTION__))` under __GNUC__,
+              in every return_if_fail. bug-c-pretty-function-is-undeclared }
             { C99 6.4.2.2: __func__ is not a macro — it behaves as if
               `static const char __func__[] = "<enclosing-function-name>";`
               were declared at the start of the function body, so it needs the
@@ -22729,9 +22734,47 @@ begin
   else Result := a < b;
 end;
 
+{ A typedef name in a constant-expression cast: the scalar it stands for.
+  `(off_t)1 << 31` is the case that showed it -- off_t is `long` -- folded as
+  an int shift, so the value went negative and libdrm's LARGE_OFF_T
+  STATIC_ASSERT (autoconf's AC_SYS_LARGEFILE test, copied into
+  libdrm_macros.h) reported a failing static assertion that gcc passes.
+  A name that is not a scalar typedef (a struct, a float, an array, plain
+  char, whose signedness is per target) stays unknown, as before.
+  bug-c-a-cast-to-a-typedef-in-a-constant-expression-keeps-the-operand-type }
+procedure CConstCastTypedef(const nm: AnsiString; var sawU, sawS, sawBool, sawPtr, sawOther: Boolean;
+  var bits: Integer);
+var idx: Integer; tk: TTypeKind;
+begin
+  idx := FindCTypedef(nm);
+  if (idx < 0) or (CTypedefNDims[idx] > 0) or CTypedefIsFnType[idx] then
+  begin
+    sawOther := True; Exit;
+  end;
+  if CTypedefPtrDepth[idx] > 0 then begin sawPtr := True; Exit; end;
+  tk := IntToTypeKind(CTypedefTk[idx]);
+  case tk of
+    tyBoolean: sawBool := True;
+    tyInt8: begin sawS := True; bits := 8; end;
+    tyUInt8: begin sawU := True; bits := 8; end;
+    tyInt16: begin sawS := True; bits := 16; end;
+    tyUInt16: begin sawU := True; bits := 16; end;
+    tyInteger, tyInt32: begin sawS := True; bits := 32; end;
+    tyUInt32: begin sawU := True; bits := 32; end;
+    tyInt64: begin sawS := True; bits := 64; end;
+    tyUInt64: begin sawU := True; bits := 64; end;
+    tyNativeInt: begin sawS := True; bits := TARGET_PTR_SIZE * 8; end;
+    tyNativeUInt: begin sawU := True; bits := TARGET_PTR_SIZE * 8; end;
+    tyPointer: sawPtr := True;
+  else
+    sawOther := True;
+  end;
+end;
+
 { `(type)expr` in a constant expression: read the cast's type words and
   convert the value. Only the scalar spellings are recognised -- the
-  keywords, a pointer, and the <stdint.h>/<stddef.h> names; anything else
+  keywords, a pointer, typedef names for scalars, and the <stdint.h>/
+  <stddef.h> names; anything else
   (a struct, float, an unknown typedef, plain char whose signedness is per
   target) leaves the value and type as the operand had them, which is what
   the folder did for every cast before. Leaves CurTok after the `)`. }
@@ -22767,7 +22810,7 @@ begin
         else if (nm = 'int64_t') or (nm = 'intmax_t') then begin sawS := True; bits := 64; end
         else if (nm = 'size_t') or (nm = 'uintptr_t') then begin sawU := True; bits := TARGET_PTR_SIZE * 8; end
         else if (nm = 'ssize_t') or (nm = 'intptr_t') or (nm = 'ptrdiff_t') then begin sawS := True; bits := TARGET_PTR_SIZE * 8; end
-        else sawOther := True;
+        else CConstCastTypedef(nm, sawU, sawS, sawBool, sawPtr, sawOther, bits);
       end;
     else
       sawOther := True;
@@ -25088,13 +25131,17 @@ begin
   end;
   if (c < 0) or (semi < 0) then Exit;
   { where the first declarator starts: from its end, which is the comma or
-    the top-level `=` of an initialiser }
+    the top-level `=` of an initialiser. Braces count as depth too: an enum
+    body's `A = 1` is not an initialiser, and taking it for one started the
+    declarator at `A`, so `typedef enum { A = 1 } F, *FP;` declared only F
+    (libdrm's drm_context_tFlagsPtr).
+    bug-c-a-typedef-enum-with-values-declares-only-its-first-name }
   k := c - 1;
   depth := 0;
   for g := sp to c - 1 do
   begin
-    if Tokens[g].Kind in [tkLParen, tkLBrack] then Inc(depth)
-    else if Tokens[g].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    if Tokens[g].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[g].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
     else if (Tokens[g].Kind = tkAssign) and (depth = 0) then begin k := g - 1; Break; end;
   end;
   firstGroup := -1;

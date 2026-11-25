@@ -34,6 +34,9 @@ extern FILE *stderr;
 
 int printf(const char *fmt, ...);
 int fprintf(FILE *stream, const char *fmt, ...);
+/* open_memstream: a write-only stream into a growing heap buffer; *bufp and
+   *sizep follow every write, and the caller frees *bufp after fclose. */
+FILE *open_memstream(char **bufp, size_t *sizep);
 int sprintf(char *s, const char *fmt, ...);
 int snprintf(char *s, size_t n, const char *fmt, ...);
 int vprintf(const char *fmt, va_list ap);

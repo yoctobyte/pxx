@@ -80,6 +80,16 @@
 #define F_SETLKW  7
 #define F_SETOWN  8   /* SIGIO delivery: kdrive's input drivers set the owner, then O_ASYNC */
 #define F_GETOWN  9
+/* Linux-specific commands (F_LINUX_SPECIFIC_BASE 1024), passed through like
+   the rest. File seals: Xorg seals its memfd_create segments (Xext/shm.c). */
+#define F_LINUX_SPECIFIC_BASE 1024
+#define F_ADD_SEALS (F_LINUX_SPECIFIC_BASE + 9)
+#define F_GET_SEALS (F_LINUX_SPECIFIC_BASE + 10)
+#define F_SEAL_SEAL         0x0001
+#define F_SEAL_SHRINK       0x0002
+#define F_SEAL_GROW         0x0004
+#define F_SEAL_WRITE        0x0008
+#define F_SEAL_FUTURE_WRITE 0x0010
 
 #define FD_CLOEXEC 1
 

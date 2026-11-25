@@ -111,6 +111,9 @@ typedef int clockid_t;
 /* clock_nanosleep(2): returns the error number, not -1 */
 int clock_nanosleep(clockid_t clk, int flags, const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);
+/* clock_getres(2): the clock's resolution. Xorg reads it to decide whether
+   CLOCK_MONOTONIC_COARSE is fine-grained enough (os/utils.c). */
+int clock_getres(int clk_id, struct timespec *res);
 /* C11 timespec_get: TIME_UTC is the realtime clock; returns base, or 0 */
 #define TIME_UTC 1
 int timespec_get(struct timespec *ts, int base);

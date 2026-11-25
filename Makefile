@@ -29766,6 +29766,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_drm_uapi.c $(TESTTMP)/c_drmuapi26
 	@gcc -w test/c_drm_uapi.c -o $(TESTTMP)/c_drmuapi26_gcc
 	tools/expect_same.sh c_drmuapi26 "$$(timeout 20 $(TESTTMP)/c_drmuapi26)" "$$(timeout 20 $(TESTTMP)/c_drmuapi26_gcc)"
+	# Xorg/libdrm/pixman gaps: a typedef cast in a constant expression, __PRETTY_FUNCTION__, a macro call whose ( is on the next line, __builtin_clz (x) without stdlib.h, memfd_create/F_ADD_SEALS, clock_getres, pthread_sigmask; against gcc.
+	./$(COMPILER) --threadsafe test/c_xorg_gaps.c $(TESTTMP)/c_xgaps26
+	@gcc -w -pthread test/c_xorg_gaps.c -o $(TESTTMP)/c_xgaps26_gcc
+	tools/expect_same.sh c_xgaps26 "$$(timeout 20 $(TESTTMP)/c_xgaps26)" "$$(timeout 20 $(TESTTMP)/c_xgaps26_gcc)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).

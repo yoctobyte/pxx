@@ -150,6 +150,12 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
   return 0;
 }
 
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+  int e = errno, r = sigprocmask(how, set, oldset) == 0 ? 0 : errno;
+  errno = e;
+  return r;
+}
+
 /* sigtimedwait(2): wait for one of `set' to become pending, up to `timeout'.
 
    `info' IS IGNORED AND THAT IS DECLARED, not hidden: this passes NULL to the

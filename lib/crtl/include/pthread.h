@@ -72,6 +72,12 @@ int pthread_attr_init(pthread_attr_t *a);
 int pthread_attr_destroy(pthread_attr_t *a);
 int pthread_attr_setdetachstate(pthread_attr_t *a, int state);
 int pthread_attr_getdetachstate(const pthread_attr_t *a, int *state);
+/* Contention scope: Linux threads are all system scope; PROCESS is refused
+   with ENOTSUP, as glibc does. Xorg's input thread asks for SYSTEM. */
+#define PTHREAD_SCOPE_SYSTEM  0
+#define PTHREAD_SCOPE_PROCESS 1
+int pthread_attr_setscope(pthread_attr_t *a, int scope);
+int pthread_attr_getscope(const pthread_attr_t *a, int *scope);
 int pthread_attr_setstacksize(pthread_attr_t *a, unsigned long size);
 int pthread_attr_getstacksize(const pthread_attr_t *a, unsigned long *size);
 

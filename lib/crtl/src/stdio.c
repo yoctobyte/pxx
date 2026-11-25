@@ -118,6 +118,14 @@ struct PxxCrtlFile {
   int rbuffered;
   unsigned char *rbuf;  /* PXX_RBUF_SIZE bytes, allocated on first read */
   int rpos, rlen;       /* next unread byte; bytes valid in rbuf */
+  /* MEMORY STREAM (open_memstream): no fd; output appends to a heap buffer
+     whose address and length the caller reads through *mbufp and *msizep, kept
+     current after every write (POSIX asks for fflush/fclose; earlier is
+     allowed). mcap is the allocation, always > the length for the NUL. */
+  int mem;
+  char **mbufp;
+  size_t *msizep;
+  size_t mcap;
 };
 typedef struct PxxCrtlFile FILE;
 
@@ -167,6 +175,24 @@ static FILE *__crtl_alloc_file(void) {
     }
   }
   return 0;
+}
+
+/* open_memstream (POSIX 2008): a write-only stream into a growing buffer.
+   *bufp and *sizep hold the text written so far (NUL-terminated, the NUL
+   not counted); after fclose the caller frees *bufp. libdrm builds its
+   format-modifier names with it (xf86drm.c). */
+FILE *open_memstream(char **bufp, size_t *sizep) {
+  FILE *f;
+  if (!bufp || !sizep) { errno = EINVAL; return 0; }
+  f = __crtl_alloc_file();
+  if (!f) { errno = EMFILE; return 0; }
+  f->fd = -1; f->err = 0; f->eof = 0; f->ungetn = 0;
+  f->rbuffered = 0; f->rpos = 0; f->rlen = 0;
+  f->mem = 1; f->mbufp = bufp; f->msizep = sizep; f->mcap = 0;
+  *bufp = 0; *sizep = 0;
+  /* an empty stream still reads back as "" */
+  if (__crtl_swrite(f, "", 0) < 0) { f->mem = 0; f->heap = 0; return 0; }
+  return f;
 }
 
 /* ---- format engine -------------------------------------------------------- */
@@ -864,6 +890,33 @@ int asprintf(char **strp, const char *fmt, ...) {
 
 /* ---- stream output (rides __pxx_write) ------------------------------------ */
 
+/* Every FILE write goes here: a memory stream appends to its buffer, any
+   other stream writes its fd. Returns the bytes taken, or -1. */
+static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
+  if (f->mem) {
+    size_t len = *f->msizep;
+    if (len + n + 1 > f->mcap) {
+      size_t cap = f->mcap ? f->mcap : 64;
+      char *nb;
+      while (len + n + 1 > cap) cap *= 2;
+      nb = (char *)__pxx_malloc((long)cap);
+      if (!nb) { f->err = 1; errno = ENOMEM; return -1; }
+      if (*f->mbufp) {
+        memcpy(nb, *f->mbufp, len);
+        __pxx_free(*f->mbufp);
+      }
+      *f->mbufp = nb;
+      f->mcap = cap;
+    }
+    memcpy(*f->mbufp + len, p, n);
+    len += n;
+    (*f->mbufp)[len] = 0;
+    *f->msizep = len;
+    return (long)n;
+  }
+  return __pxx_write(f->fd, p, n);
+}
+
 /* Render into a fixed stack buffer then push to the fd in one write; a line
    that does not fit re-renders into a heap buffer sized from the returned
    need (tcc dumps multi-KB preprocessed buffers through one printf). */
@@ -886,7 +939,28 @@ static int __crtl_vfdprintf(int fd, const char *fmt, va_list ap) {
   return n;
 }
 
+/* a memory stream renders, then appends; any other stream as before */
+static int __crtl_vmemprintf(FILE *stream, const char *fmt, va_list ap) {
+  char buf[1024];
+  va_list ap2;
+  int n;
+  va_copy(ap2, ap);
+  n = __crtl_vformat(buf, sizeof(buf), fmt, ap2);
+  va_end(ap2);
+  if (n <= (int)sizeof(buf) - 1) {
+    if (__crtl_swrite(stream, buf, (unsigned long)n) < 0) return -1;
+  } else {
+    char *p = (char *)__pxx_malloc((long)n + 1);
+    if (!p) { stream->err = 1; return -1; }
+    __crtl_vformat(p, (size_t)n + 1, fmt, ap);
+    if (__crtl_swrite(stream, p, (unsigned long)n) < 0) n = -1;
+    __pxx_free(p);
+  }
+  return n;
+}
+
 int vfprintf(FILE *stream, const char *fmt, va_list ap) {
+  if (stream->mem) return __crtl_vmemprintf(stream, fmt, ap);
   if (stream->rlen) __crtl_rdrop(stream);
   return __crtl_vfdprintf(stream->fd, fmt, ap);
 }
@@ -898,8 +972,7 @@ int vprintf(const char *fmt, va_list ap) {
 int fprintf(FILE *stream, const char *fmt, ...) {
   va_list ap; int r;
   va_start(ap, fmt);
-  if (stream->rlen) __crtl_rdrop(stream);
-  r = __crtl_vfdprintf(stream->fd, fmt, ap);
+  r = vfprintf(stream, fmt, ap);
   va_end(ap);
   return r;
 }
@@ -919,7 +992,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   long w;
   if (total == 0) return 0;
   if (stream->rlen) __crtl_rdrop(stream);
-  w = __pxx_write(stream->fd, ptr, total);
+  w = __crtl_swrite(stream, ptr, total);
   if (w <= 0) { stream->err = 1; return 0; }
   if (size == 0) return 0;
   return (size_t)((unsigned long)w / (unsigned long)size);
@@ -929,7 +1002,7 @@ int fputs(const char *s, FILE *stream) {
   unsigned long n = 0;
   while (s[n]) n++;
   if (stream->rlen) __crtl_rdrop(stream);
-  if (__pxx_write(stream->fd, s, n) < 0) { stream->err = 1; return -1; }
+  if (__crtl_swrite(stream, s, n) < 0) { stream->err = 1; return -1; }
   return (int)n;
 }
 
@@ -944,7 +1017,7 @@ int puts(const char *s) {
 int fputc(int c, FILE *stream) {
   char ch = (char)c;
   if (stream->rlen) __crtl_rdrop(stream);
-  if (__pxx_write(stream->fd, &ch, 1) < 0) { stream->err = 1; return -1; }
+  if (__crtl_swrite(stream, &ch, 1) < 0) { stream->err = 1; return -1; }
   return c & 0xFF;
 }
 
@@ -1165,6 +1238,14 @@ FILE *freopen(const char *path, const char *mode, FILE *stream) {
 int fclose(FILE *stream) {
   int rc;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->mem) {
+    /* the buffer is the caller's now; the FILE goes back to the pool */
+    stream->mem = 0; stream->mbufp = 0; stream->msizep = 0; stream->mcap = 0;
+    stream->err = 0; stream->eof = 0; stream->ungetn = 0;
+    stream->fd = -1;
+    stream->heap = 0;
+    return 0;
+  }
   rc = __pxx_close(stream->fd);
   if (stream->rbuf) { __pxx_free(stream->rbuf); stream->rbuf = 0; }
   stream->rbuffered = 0;

@@ -201,6 +201,10 @@ int sigismember(const sigset_t *set, int sig);
    where sigaction cannot yet"; sigaction became real on 2026-09-04 and the
    clause went with it.) */
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+/* pthread_sigmask: the calling thread's mask (rt_sigprocmask is per thread,
+   so it is sigprocmask), but POSIX has it RETURN the error number rather
+   than set errno. Xorg's input thread blocks every signal with it. */
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 /* Collect a pending signal from `set'. `info' is IGNORED (NULL is passed to
    the kernel), so a caller that needs siginfo gets its struct untouched rather
    than filled with something unverified. Returns the signal number, or -1 with
