@@ -8,7 +8,8 @@
    - `__builtin_clz (x)` with a space, in a file without <stdlib.h>
    - `typedef enum { A = 1 } F, *FP;` declared only F (libdrm)
    - crtl: memfd_create + F_ADD_SEALS, clock_getres, pthread_sigmask,
-     open_memstream (libdrm), pthread_attr_setscope (Xorg's input thread) */
+     open_memstream (libdrm), pthread_attr_setscope (Xorg's input thread),
+     epoll (os/ospoll.c), iopl/ioperm (<sys/io.h>), backtrace */
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/types.h>
@@ -20,6 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <stddef.h>
+#include <errno.h>
+#include <sys/epoll.h>
+#include <sys/io.h>
+#include <execinfo.h>
 
 typedef long L;
 typedef unsigned short U16;
@@ -103,6 +109,32 @@ int main(void)
         pthread_attr_getscope(&a, &sc);
         printf(" get %d\n", sc);
         pthread_attr_destroy(&a);
+    }
+    {
+        struct epoll_event ev, out[4];
+        int ep = epoll_create1(EPOLL_CLOEXEC), p[2], n;
+        printf("epoll size %d off %d", (int)sizeof(struct epoll_event),
+               (int)offsetof(struct epoll_event, data));
+        if (ep >= 0 && pipe(p) == 0) {
+            ev.events = EPOLLIN;
+            ev.data.u64 = 0x1122334455667788ULL;
+            printf(" ctl %d", epoll_ctl(ep, EPOLL_CTL_ADD, p[0], &ev));
+            printf(" idle %d", epoll_wait(ep, out, 4, 0));
+            n = (int)write(p[1], "x", 1);
+            n = epoll_wait(ep, out, 4, 1000);
+            printf(" ready %d %d %d", n, out[0].events == EPOLLIN,
+                   out[0].data.u64 == 0x1122334455667788ULL);
+            close(p[0]); close(p[1]); close(ep);
+        }
+        printf(" bad %d", epoll_create(0));
+        printf("\n");
+    }
+    {
+        void *bt[8];
+        errno = 0;
+        printf("iopl %d", geteuid() == 0 ? -1 : iopl(3));
+        printf(" ioperm %d", geteuid() == 0 ? -1 : ioperm(0x3c0, 32, 1));
+        printf(" backtrace %d\n", backtrace(bt, 8) > 0);
     }
     return 0;
 }

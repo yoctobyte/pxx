@@ -152,10 +152,38 @@ def render(chosen, buckets):
     return "\n".join(L) + "\n"
 
 
+RUNTIME_ALL = os.path.join(INC, "pxx", "runtime_all.h")
+
+
+def runtime_all_missing():
+    """The crtl headers with an implementation (src/<name>.c) that
+    <pxx/runtime_all.h> does not include. --shared-runtime objects get crtl
+    from that one unit, so a header missing there links as undefined
+    references (execinfo, semaphore, threads and sys/ptrace were, until Xorg's
+    backtrace tripped over it)."""
+    have = read(RUNTIME_ALL)
+    miss = []
+    for dirpath, _dirs, files in os.walk(SRC):
+        for nm in files:
+            if not nm.endswith(".c"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, nm), SRC).replace(os.sep, "/")[:-2]
+            if os.path.exists(os.path.join(INC, rel + ".h")) and \
+               ("#include <%s.h>" % rel) not in have:
+                miss.append(rel + ".h")
+    return sorted(miss)
+
+
 def main():
     chosen, buckets = build()
     text = render(chosen, buckets)
     if "--check" in sys.argv:
+        miss = runtime_all_missing()
+        if miss:
+            print("crtl-map: lib/crtl/include/pxx/runtime_all.h lacks %s -- "
+                  "--shared-runtime programs calling them fail to link"
+                  % ", ".join(miss), file=sys.stderr)
+            return 1
         old = read(OUT) if os.path.exists(OUT) else ""
         if old != text:
             print("crtl-map: compiler/crtl_names.inc is STALE — "

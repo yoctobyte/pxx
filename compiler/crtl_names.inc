@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  818 functions across 78 headers. }
+  825 functions across 80 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -46,13 +46,15 @@ begin
       ' dprintf:stdio.h drand48:stdlib.h dup:unistd.h dup2:unistd.h duplocale:locale.h ';
     'e': Result :=
       ' endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h endspent:shadow.h ' +
-      ' endusershell:unistd.h endutxent:utmpx.h erand48:stdlib.h err:err.h errx:err.h ' +
-      ' ether_aton:netinet/ether.h ether_aton_r:netinet/ether.h ether_hostton:netinet/ether.h ' +
-      ' ether_line:netinet/ether.h ether_ntoa:netinet/ether.h ether_ntoa_r:netinet/ether.h ' +
-      ' ether_ntohost:netinet/ether.h eventfd:sys/eventfd.h eventfd_read:sys/eventfd.h ' +
-      ' eventfd_write:sys/eventfd.h execl:unistd.h execle:unistd.h execlp:unistd.h ' +
-      ' execv:unistd.h execve:unistd.h execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h ' +
-      ' expf:math.h explicit_bzero:string.h expm1:math.h ';
+      ' endusershell:unistd.h endutxent:utmpx.h epoll_create:sys/epoll.h ' +
+      ' epoll_create1:sys/epoll.h epoll_ctl:sys/epoll.h epoll_pwait:sys/epoll.h ' +
+      ' epoll_wait:sys/epoll.h erand48:stdlib.h err:err.h errx:err.h ether_aton:netinet/ether.h ' +
+      ' ether_aton_r:netinet/ether.h ether_hostton:netinet/ether.h ether_line:netinet/ether.h ' +
+      ' ether_ntoa:netinet/ether.h ether_ntoa_r:netinet/ether.h ether_ntohost:netinet/ether.h ' +
+      ' eventfd:sys/eventfd.h eventfd_read:sys/eventfd.h eventfd_write:sys/eventfd.h ' +
+      ' execl:unistd.h execle:unistd.h execlp:unistd.h execv:unistd.h execve:unistd.h ' +
+      ' execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h expf:math.h explicit_bzero:string.h ' +
+      ' expm1:math.h ';
     'f': Result :=
       ' fabs:math.h fabsf:math.h faccessat:unistd.h fallocate:fcntl.h fchdir:unistd.h ' +
       ' fchmod:sys/stat.h fchmodat:sys/stat.h fchown:unistd.h fchownat:unistd.h fclose:stdio.h ' +
@@ -101,14 +103,14 @@ begin
       ' imaxdiv:inttypes.h inet_addr:arpa/inet.h inet_aton:arpa/inet.h inet_ntoa:arpa/inet.h ' +
       ' inet_ntop:arpa/inet.h inet_pton:arpa/inet.h initgroups:unistd.h initstate_r:stdlib.h ' +
       ' inotify_add_watch:sys/inotify.h inotify_init:sys/inotify.h inotify_init1:sys/inotify.h ' +
-      ' inotify_rm_watch:sys/inotify.h ioctl:sys/ioctl.h isalnum:ctype.h isalpha:ctype.h ' +
-      ' isascii:ctype.h isatty:unistd.h isblank:ctype.h iscntrl:ctype.h isdigit:ctype.h ' +
-      ' isfinite:math.h isgraph:ctype.h isinf:math.h islower:ctype.h isnan:math.h ' +
-      ' isprint:ctype.h ispunct:ctype.h isspace:ctype.h isupper:ctype.h iswalnum:wctype.h ' +
-      ' iswalpha:wctype.h iswblank:wctype.h iswcntrl:wctype.h iswctype:wctype.h ' +
-      ' iswdigit:wctype.h iswgraph:wctype.h iswlower:wctype.h iswprint:wctype.h ' +
-      ' iswpunct:wctype.h iswspace:wctype.h iswupper:wctype.h iswxdigit:wctype.h ' +
-      ' isxdigit:ctype.h ';
+      ' inotify_rm_watch:sys/inotify.h ioctl:sys/ioctl.h ioperm:sys/io.h iopl:sys/io.h ' +
+      ' isalnum:ctype.h isalpha:ctype.h isascii:ctype.h isatty:unistd.h isblank:ctype.h ' +
+      ' iscntrl:ctype.h isdigit:ctype.h isfinite:math.h isgraph:ctype.h isinf:math.h ' +
+      ' islower:ctype.h isnan:math.h isprint:ctype.h ispunct:ctype.h isspace:ctype.h ' +
+      ' isupper:ctype.h iswalnum:wctype.h iswalpha:wctype.h iswblank:wctype.h iswcntrl:wctype.h ' +
+      ' iswctype:wctype.h iswdigit:wctype.h iswgraph:wctype.h iswlower:wctype.h ' +
+      ' iswprint:wctype.h iswpunct:wctype.h iswspace:wctype.h iswupper:wctype.h ' +
+      ' iswxdigit:wctype.h isxdigit:ctype.h ';
     'j': Result :=
       ' jrand48:stdlib.h ';
     'k': Result :=
@@ -250,11 +252,11 @@ begin
     'b': Result := 9585592;
     'c': Result := 180216;
     'd': Result := 4088;
-    'e': Result := 30712;
+    'e': Result := 32760;
     'f': Result := 65520;
     'g': Result := 131024;
     'h': Result := 608;
-    'i': Result := 229344;
+    'i': Result := 229360;
     'j': Result := 128;
     'k': Result := 208;
     'l': Result := 7928;

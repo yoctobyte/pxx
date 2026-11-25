@@ -7,7 +7,8 @@
  *
  * KEEP IN STEP WITH lib/crtl/src: a new src/<name>.c needs its header here,
  * or a --shared-runtime program that calls it fails to link (the self-
- * contained default is unaffected). tools/check_runtime_all.py checks it.
+ * contained default is unaffected). `tools/gen_crtl_map.py --check` (a gate
+ * step) checks it.
  */
 #ifndef PXX_CRTL_PXX_RUNTIME_ALL_H
 #define PXX_CRTL_PXX_RUNTIME_ALL_H 1
@@ -19,6 +20,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <err.h>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <fenv.h>
 #include <fnmatch.h>
@@ -42,6 +44,8 @@
 #include <poll.h>
 #ifdef __PXXRT_THREADSAFE
 #include <pthread.h>   /* needs --threadsafe */
+#include <semaphore.h>
+#include <threads.h>
 #endif
 #include <pty.h>
 #include <pwd.h>
@@ -55,9 +59,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/file.h>
 #include <sys/inotify.h>
+#include <sys/io.h>
 #include <sys/ioctl.h>
 #include <sys/ipc.h>
 #include <sys/klog.h>
@@ -66,6 +72,7 @@
 #include <sys/msg.h>
 #include <sys/personality.h>
 #include <sys/prctl.h>
+#include <sys/ptrace.h>
 #include <sys/random.h>
 #include <sys/reboot.h>
 #include <sys/resource.h>

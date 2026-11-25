@@ -29770,6 +29770,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --threadsafe test/c_xorg_gaps.c $(TESTTMP)/c_xgaps26
 	@gcc -w -pthread test/c_xorg_gaps.c -o $(TESTTMP)/c_xgaps26_gcc
 	tools/expect_same.sh c_xgaps26 "$$(timeout 20 $(TESTTMP)/c_xgaps26)" "$$(timeout 20 $(TESTTMP)/c_xgaps26_gcc)"
+	# the same through --shared-runtime, whose runtime is crtl's <pxx/runtime_all.h>: execinfo, epoll and io were missing there
+	./$(COMPILER) --threadsafe --emit-obj --shared-runtime test/c_xorg_gaps.c $(TESTTMP)/c_xgaps26_sr.o > /dev/null
+	XDG_CACHE_HOME=$(TESTTMP)/c_xgaps26_cache ./$(COMPILER) --link -o $(TESTTMP)/c_xgaps26_sr $(TESTTMP)/c_xgaps26_sr.o > /dev/null
+	tools/expect_same.sh c_xgaps26_sr "$$(timeout 20 $(TESTTMP)/c_xgaps26_sr)" "$$(timeout 20 $(TESTTMP)/c_xgaps26_gcc)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).
