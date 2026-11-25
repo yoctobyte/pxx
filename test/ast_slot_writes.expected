@@ -1281,7 +1281,6 @@ AN_SEQ Left call
 AN_SEQ Left callNode
 AN_SEQ Left cp
 AN_SEQ Left declNode
-AN_SEQ Left exprNode
 AN_SEQ Left fnAssign
 AN_SEQ Left fnLoop
 AN_SEQ Left forcAssign
@@ -1289,13 +1288,14 @@ AN_SEQ Left forcLoop
 AN_SEQ Left frAsn
 AN_SEQ Left ifn
 AN_SEQ Left initAssignNode
+AN_SEQ Left lab
 AN_SEQ Left lblNode
 AN_SEQ Left nd
-AN_SEQ Left node
 AN_SEQ Left outerCall
 AN_SEQ Left prevStmt
 AN_SEQ Left scAssign
 AN_SEQ Left scLoop
+AN_SEQ Left st
 AN_SEQ Left stmt
 AN_SEQ Left stmtNode
 AN_SEQ Left strAssign

@@ -230,18 +230,24 @@ int sigaltstack(const stack_t *ss, stack_t *oss) {
   return 0;
 }
 
-/* sigsuspend: with no rt_sigaction bridge no handler can ever fire, so a
-   faithful sigsuspend would block FOREVER. It fails with ENOSYS instead —
-   the one answer that is neither a lie nor a hang.
-
-   Note the difference from its neighbours above: sigaction and sigprocmask
-   return 0 because "registered, and it never fires" is harmless to a caller
-   that only wanted to install a handler. Waiting on a signal that cannot
-   arrive is not harmless, so this one reports the failure. */
+/* sigsuspend(2): swap in `mask' and sleep until a signal's handler has run,
+   then restore the old mask -- rt_sigsuspend does all three atomically, which
+   is the point (a sigprocmask + pause pair loses a signal that lands between
+   them). Like glibc's it always returns -1, with EINTR after a handler.
+   It answered ENOSYS while sigaction installed nothing; sigaction is real now,
+   and mksh waits for every child here (jobs.c j_waitj), so the ENOSYS made it
+   spin forever on the first external command. Kernel sigset size: see
+   PXX_KERNEL_SIGSETSIZE above. */
 int sigsuspend(const sigset_t *mask) {
+#ifdef SYS_rt_sigsuspend
+  if (!mask) { errno = EFAULT; return -1; }
+  return (int)syscall(SYS_rt_sigsuspend, (long)&((sigset_t *)mask)->__val[0],
+                      (long)PXX_KERNEL_SIGSETSIZE, 0L, 0L, 0L, 0L);
+#else
   (void)mask;
   errno = ENOSYS;
   return -1;
+#endif
 }
 
 /* kill: send a signal. Returns 0 or -1 with errno, like the C contract. */
@@ -249,6 +255,14 @@ int kill(int pid, int sig) {
   int r = __pxx_kill(pid, sig);
   if (r < 0) { errno = -r; return -1; }
   return 0;
+}
+
+/* killpg(3): a signal to every process in group pgrp, which is kill(-pgrp)
+   -- glibc's own definition, EINVAL for a negative group included (kill
+   would read that as a single pid). mksh's job control. */
+int killpg(int pgrp, int sig) {
+  if (pgrp < 0) { errno = EINVAL; return -1; }
+  return kill(-pgrp, sig);
 }
 
 /* pthread_kill(3): a pxx pthread_t IS the kernel tid (PalThreadSelf is

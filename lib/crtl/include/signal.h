@@ -84,8 +84,12 @@ __sighandler_t signal(int sig, __sighandler_t func);
    that publishes only the __-prefixed name gets neither, and shell/hush.c
    fails on a type it was told existed. */
 typedef __sighandler_t sighandler_t;
+/* 4.4 BSD's name for it, which glibc publishes under __USE_MISC (on by
+   default): mksh's sh.h declares its signal table with it. */
+typedef __sighandler_t sig_t;
 int raise(int sig);
 int kill(int pid, int sig);
+int killpg(int pgrp, int sig);
 /* POSIX puts pthread_kill here; a pxx pthread_t is a long (the kernel tid). */
 int pthread_kill(long thread, int sig);
 

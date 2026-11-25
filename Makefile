@@ -21142,6 +21142,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_sasi26 "$$(timeout 20 $(TESTTMP)/c_sasi26)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
 	./$(COMPILER) --threadsafe test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_ts > /dev/null
 	tools/expect_same.sh c_sasi26_ts "$$(timeout 20 $(TESTTMP)/c_sasi26_ts)" "$$(cat test/c_crtl_sigaction_siginfo.expected)"
+	# sigsuspend waking on SIGCHLD, killpg, sig_t and a .section/.previous ident asm:
+	# what mksh needs to run an external command. feature-nodisx-toybox-and-a-posix-shell-built-by-pxx
+	./$(COMPILER) test/c_crtl_sigsuspend_waits_for_a_child.c $(TESTTMP)/c_sigsusp26 > /dev/null
+	tools/expect_same.sh c_sigsusp26 "$$(timeout 20 $(TESTTMP)/c_sigsusp26)" "$$(cat test/c_crtl_sigsuspend_waits_for_a_child.expected)"
+	./$(COMPILER) --threadsafe test/c_crtl_sigsuspend_waits_for_a_child.c $(TESTTMP)/c_sigsusp26_ts > /dev/null
+	tools/expect_same.sh c_sigsusp26_ts "$$(timeout 20 $(TESTTMP)/c_sigsusp26_ts)" "$$(cat test/c_crtl_sigsuspend_waits_for_a_child.expected)"
+	# a case label inside an unbraced if: the if still guards the labeled statement (C 6.8.1)
+	./$(COMPILER) test/c_case_label_inside_an_unbraced_if.c $(TESTTMP)/c_caseif26 > /dev/null
+	tools/expect_same.sh c_caseif26 "$$($(TESTTMP)/c_caseif26)" "$$(cat test/c_case_label_inside_an_unbraced_if.expected)"
 	@for t in i386 arm32 aarch64 riscv32; do \
 	  ./$(COMPILER) --target=$$t test/c_crtl_sigaction_siginfo.c $(TESTTMP)/c_sasi26_$$t >/dev/null || exit 1; \
 	  timeout 60 tools/run_target.sh $$t $(TESTTMP)/c_sasi26_$$t | diff -u test/c_crtl_sigaction_siginfo.expected - || { echo "c_sasi26 $$t FAIL"; exit 1; }; \

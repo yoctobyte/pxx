@@ -12324,6 +12324,31 @@ begin
   CLocalThreadSymCount := 0;
 end;
 
+{ C 6.8.1: a label PREFIXES a statement -- `name:`, `case K:` and `default:`
+  each make ONE labeled statement with what follows. Returning the label alone
+  detached that statement from an enclosing unbraced if: tcc's
+  `if (t0 == TOK_PPJOIN) bad_twosharp: tcc_error(...)` ran the error
+  unconditionally, and mksh's tree.c
+      default: if (quotelevel == 0) case '"': case '$': shf_putc('\\', shf);
+  escaped every character inside quotes, which broke `"$(echo 'a b')"`
+  (feature-nodisx-toybox-and-a-posix-shell-built-by-pxx). The case markers
+  stay findable: the switch's dispatch scan walks every nested statement.
+  A label directly before a closing brace stays bare (GCC extension). }
+function CLabelPrefixesStatement(lab: Integer): Integer;
+var st, seq, seq2, blk: Integer;
+begin
+  Result := lab;
+  if (CurTok.Kind = tkEnd) or (CurTok.Kind = tkEOF) then Exit;
+  { Parse the statement BEFORE allocating the seq nodes: the recursive parse
+    grows the AST arrays, so an `ASTLeft[new] := ParseC...` store can land in
+    a stale (reallocated-away) array. }
+  st := ParseCStatementAST();
+  seq2 := AllocNode(AN_SEQ); ASTLeft[seq2] := st; ASTRight[seq2] := -1;
+  seq := AllocNode(AN_SEQ); ASTLeft[seq] := lab; ASTRight[seq] := seq2;
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := seq;
+  Result := blk;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
@@ -12583,7 +12608,7 @@ begin
       ASTIVal[ASTLeft[node]] := CEvalConstExpr;
     end;
     Expect(tkColon, ':');
-    Result := node;
+    Result := CLabelPrefixesStatement(node);
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'default') then
@@ -12593,7 +12618,7 @@ begin
     node := AllocNode(AN_DEFAULT);
     ASTSLen[node] := 1;   { C switch-default MARKER flag (distinct from the Default(T)
                             intrinsic node, ASTSLen=0). }
-    Result := node;
+    Result := CLabelPrefixesStatement(node);
     Exit;
   end;
 
@@ -12869,24 +12894,7 @@ begin
     ASTSOffset[node] := labOff;
     ASTSLen[node] := labLen;
     Next; Next;    { consume ident and colon }
-    { C 6.8.1: a label PREFIXES a statement — they are ONE statement. Returning
-      the label alone detached the following statement from an enclosing
-      unbraced if: tcc's `if (t0 == TOK_PPJOIN) bad_twosharp: tcc_error(...)`
-      ran the error unconditionally. (A label directly before a closing brace
-      stays bare — GCC-extension form.) }
-    if (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) then
-    begin
-      { Parse the statement BEFORE allocating the seq nodes: the recursive
-        parse grows the AST arrays, so an `ASTLeft[new] := ParseC...` store
-        can land in a stale (reallocated-away) array. }
-      exprNode := ParseCStatementAST();   { () — bare name would read Result }
-      seq2 := AllocNode(AN_SEQ); ASTLeft[seq2] := exprNode; ASTRight[seq2] := -1;
-      seq := AllocNode(AN_SEQ); ASTLeft[seq] := node; ASTRight[seq] := seq2;
-      blk := AllocNode(AN_BLOCK); ASTLeft[blk] := seq;
-      Result := blk;
-      Exit;
-    end;
-    Result := node;
+    Result := CLabelPrefixesStatement(node);
     Exit;
   end;
 
@@ -18467,7 +18475,7 @@ end;
 procedure CParseFileScopeAsm;
 var text, line, w, rest, a, b, sec: AnsiString;
     i, p, k: Integer;
-    skipping, inQ: Boolean;
+    skipping, inQ, skipBySection: Boolean;
 
   procedure Refuse(const why: AnsiString);
   begin
@@ -18536,6 +18544,7 @@ begin
   end;
 
   skipping := False;
+  skipBySection := False;
   text := text + #10;
   p := 1;
   inQ := False;
@@ -18562,7 +18571,10 @@ begin
       SplitWord(line, w, rest);
       if skipping then
       begin
-        if w = '.popsection' then skipping := False
+        { a .pushsection ends at .popsection, a .section at .previous (GNU as:
+          back to the section before it) -- each only at its own }
+        if (w = '.popsection') and not skipBySection then skipping := False
+        else if (w = '.previous') and skipBySection then skipping := False
         else if (w <> '.ascii') and (w <> '.asciz') and (w <> '.string') then
           Refuse('"' + line + '" in a dropped string section');
         Continue;
@@ -18594,7 +18606,11 @@ begin
            (Copy(sec, 1, 12) = '.gnu.warning') or (Copy(sec, 1, 10) = '.copyright') or
            (Copy(sec, 1, 5) = '.note') then
         begin
-          if w = '.section' then Refuse('".section ' + sec + '" (use .pushsection/.popsection)');
+          { `.section .comment` ... `.previous`: mksh's __RCSID, an ident
+            string spelled by hand. Same strings-only body as the pushsection
+            form, so it is dropped like .ident; a .section with no .previous
+            is refused at the end, as an unpopped .pushsection is. }
+          skipBySection := w = '.section';
           skipping := True;
         end
         else
@@ -18612,6 +18628,7 @@ begin
         Refuse('"' + line + '"');
     end;
   end;
+  if skipping and skipBySection then Refuse('a .section ' + sec + ' with no .previous');
   if skipping then Refuse('a .pushsection with no .popsection');
 end;
 

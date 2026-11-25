@@ -1,0 +1,5 @@
+child reaped by the handler: 1, exit 7
+SIGCHLD blocked after: 0
+previous SIGUSR1 handler was SIG_DFL: 1
+killpg(child group) = 0, child killed by SIGTERM: 1
+killpg(-1) = -1, EINVAL: 1
