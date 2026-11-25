@@ -1,0 +1,4 @@
+# Nodisx bootstrap sources: file  sha256  url
+# fetch.sh downloads each into $NODISX_WORK/dl and refuses a checksum mismatch.
+toybox-0.8.15.tar.gz  44e2bab43dfe2c171743297631ce558c6d9ed38b87a66fd751cef617574b375e  https://landley.net/toybox/downloads/toybox-0.8.15.tar.gz
+mksh-R59c.tgz         77ae1665a337f1c48c61d6b961db3e52119b38e58884d1c89684af31f87bc506  http://www.mirbsd.org/MirOS/dist/mir/mksh/mksh-R59c.tgz
