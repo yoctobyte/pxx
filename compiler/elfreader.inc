@@ -2646,6 +2646,15 @@ var root, hex: AnsiString; h: Int64; i: Integer;
   end;
 begin
   Result := '';
+  { --link runs before the compile path sets ExeDir and loads pxx.cfg, so the
+    probes below looked for ../lib/crtl relative to the CURRENT directory,
+    found nothing, and the key carried no crtl hash at all: editing crtl left
+    the cached runtime in place and every later link used the old one (an
+    iconv fix built and tested, and --link still linked the old iconv). The
+    child that builds the runtime resolves crtl from ParamStr(0) and the
+    config; the key is taken from the same tree. }
+  if ExeDir = '' then ExeDir := GetFilePath(ParamStr(0));
+  PxxCfgLoad;
   root := PxxGetEnv('PXX_HOME');
   if root = '' then root := PxxCfgHome;
   if root <> '' then

@@ -21093,6 +21093,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_crtlsurf26 "$$($(TESTTMP)/c_crtlsurf26 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
 	./$(COMPILER) --target=i386 test/c_crtl_toybox_surface.c $(TESTTMP)/c_crtlsurf_i386 > /dev/null
 	tools/expect_same.sh i386/c_crtlsurf_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_crtlsurf_i386 $$(mktemp -d)/d)" "$$(cat test/c_crtl_toybox_surface.expected)"
+	# iconv knows the DOS code pages FAT names use, CP437 and CP850 (dosfstools'
+	# mkfs.fat/fsck.fat open CP850 by default; Nodisx). Every byte both ways,
+	# expected = glibc's converters.
+	./$(COMPILER) test/c_iconv_dos_codepages.c $(TESTTMP)/c_icdos26 > /dev/null
+	tools/expect_same.sh c_icdos26 "$$($(TESTTMP)/c_icdos26)" "$$(cat test/c_iconv_dos_codepages.expected)"
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
@@ -21478,6 +21483,13 @@ test-core: $(COMPILER)
 	XDG_CACHE_HOME=$(TESTTMP)/c_srt_cache ./$(COMPILER) --link -o $(TESTTMP)/c_lratx_sr $(TESTTMP)/c_lratx_srm.o $(TESTTMP)/c_lratx_srp.o > /dev/null
 	tools/expect_same.sh c_lratx_sr "$$({ $(TESTTMP)/c_lratx_sr; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
 	tools/expect_same.sh c_lratx_sr_exit "$$({ $(TESTTMP)/c_lratx_sr x; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
+	# the cached runtime's name carries the crtl SOURCE hash (rt-<self>-<size>-
+	# <crtl>-<marker>.o): --link used to probe for crtl before ExeDir was set,
+	# left the field empty, and kept linking a stale runtime after crtl changed
+	# (its own cache per compiler build: TESTTMP outlives runs)
+	k=$(TESTTMP)/c_rtkey_$$(sha1sum < $(COMPILER) | cut -c1-12); \
+	XDG_CACHE_HOME=$$k ./$(COMPILER) --link -o $(TESTTMP)/c_rtkey $(TESTTMP)/c_lratx_srm.o $(TESTTMP)/c_lratx_srp.o > /dev/null 2>&1; \
+	tools/expect_same.sh c_rt_cache_key "$$(ls $$k/pxx | grep -c '^rt-[0-9a-f]*-[0-9]*-[0-9a-f]\{8\}-__pxxrt_needed_x86_64\.o$$')" "1"
 	# --link -o naming a directory is an error (it was rc 0 with nothing written)
 	mkdir -p $(TESTTMP)/c_lratx_dir
 	tools/expect_same.sh c_lratx_dir "$$(./$(COMPILER) --link -o $(TESTTMP)/c_lratx_dir $(TESTTMP)/c_lratx_m.o $(TESTTMP)/c_lratx_p.o > $(TESTTMP)/c_lratx_dir.log 2>&1; echo rc=$$?; grep -c 'the output path is a directory or not writable' $(TESTTMP)/c_lratx_dir.log)" "$$(printf 'rc=1\n1')"

@@ -1,0 +1,27 @@
+CP437:
+  c387 c3bc c3a9 c3a2 c3a4 c3a0 c3a5 c3a7 c3aa c3ab c3a8 c3af c3ae c3ac c384 c385
+  c389 c3a6 c386 c3b4 c3b6 c3b2 c3bb c3b9 c3bf c396 c39c c2a2 c2a3 c2a5 e282a7 c692
+  c3a1 c3ad c3b3 c3ba c3b1 c391 c2aa c2ba c2bf e28c90 c2ac c2bd c2bc c2a1 c2ab c2bb
+  e29691 e29692 e29693 e29482 e294a4 e295a1 e295a2 e29596 e29595 e295a3 e29591 e29597 e2959d e2959c e2959b e29490
+  e29494 e294b4 e294ac e2949c e29480 e294bc e2959e e2959f e2959a e29594 e295a9 e295a6 e295a0 e29590 e295ac e295a7
+  e295a8 e295a4 e295a5 e29599 e29598 e29592 e29593 e295ab e295aa e29498 e2948c e29688 e29684 e2968c e29690 e29680
+  ceb1 c39f ce93 cf80 cea3 cf83 c2b5 cf84 cea6 ce98 cea9 ceb4 e2889e cf86 ceb5 e288a9
+  e289a1 c2b1 e289a5 e289a4 e28ca0 e28ca1 c3b7 e28988 c2b0 e28899 c2b7 e2889a e281bf c2b2 e296a0 c2a0
+CP437: 0 bad
+CP437 euro: EILSEQ
+CP850:
+  c387 c3bc c3a9 c3a2 c3a4 c3a0 c3a5 c3a7 c3aa c3ab c3a8 c3af c3ae c3ac c384 c385
+  c389 c3a6 c386 c3b4 c3b6 c3b2 c3bb c3b9 c3bf c396 c39c c3b8 c2a3 c398 c397 c692
+  c3a1 c3ad c3b3 c3ba c3b1 c391 c2aa c2ba c2bf c2ae c2ac c2bd c2bc c2a1 c2ab c2bb
+  e29691 e29692 e29693 e29482 e294a4 c381 c382 c380 c2a9 e295a3 e29591 e29597 e2959d c2a2 c2a5 e29490
+  e29494 e294b4 e294ac e2949c e29480 e294bc c3a3 c383 e2959a e29594 e295a9 e295a6 e295a0 e29590 e295ac c2a4
+  c3b0 c390 c38a c38b c388 c4b1 c38d c38e c38f e29498 e2948c e29688 e29684 c2a6 c38c e29680
+  c393 c39f c394 c392 c3b5 c395 c2b5 c3be c39e c39a c39b c399 c3bd c39d c2af c2b4
+  c2ad c2b1 e28097 c2be c2b6 c2a7 c3b7 c2b8 c2b0 c2a8 c2b7 c2b9 c2b3 c2b2 e296a0 c2a0
+CP850: 0 bad
+CP850 euro: EILSEQ
+IBM437: ok
+437: ok
+IBM850: ok
+850: ok
+cp850: ok
