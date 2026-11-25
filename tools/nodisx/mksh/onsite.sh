@@ -29,7 +29,7 @@ cd "$WORK/build"
 while read -r u; do
   o=${u%.c}.o
   # shellcheck disable=SC2086 -- flags are words by design
-  "$PXX" --emit-obj --function-sections -ffile-prefix-map="$WORK=/usr/src" -I. -I../mksh $flags "../mksh/$u" "$o" \
+  "$PXX" --emit-obj --function-sections --shared-runtime -ffile-prefix-map="$WORK=/usr/src" -I. -I../mksh $flags "../mksh/$u" "$o" \
     > "$o.log" 2>&1 || { echo "onsite: FAILED $u: $(grep -m1 error "$o.log")" >&2; exit 1; }
   objs="$objs $o"
 done < "$R/units"

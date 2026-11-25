@@ -32,6 +32,20 @@ DL=/iso/dl PXX=pxx sh /iso/recipe/toybox/onsite.sh /tmp/tb /mnt/target
 DL=/iso/dl PXX=pxx sh /iso/recipe/mksh/onsite.sh /tmp/mksh /mnt/target
 ```
 
+## How the units are compiled
+
+`pxx --emit-obj --function-sections --shared-runtime`. With
+`--shared-runtime` an object leaves pxx's runtime out, and `--link` builds it
+once (cached under `$XDG_CACHE_HOME`, else `~/.cache`; that directory must be
+writable on the target) and links it first. That halves toybox's on-site
+build (123 s against 251 s at `JOBS=3` on the build host), because most of a
+unit's compile time was its own copy of the runtime. `--function-sections`
+keeps the binary at its size (1.07 MB of text for toybox; 4.8 MB without
+it). Without `--shared-runtime`, use `--function-sections` at least: default
+objects each keep a private copy of the C library's state (locale, strtok,
+rand), which broke toybox's UTF-8 tests
+(`bug-a-default-emit-obj-objects-each-keep-private-crtl-state`).
+
 ## toybox 0.8.15 (0BSD)
 
 `make defconfig` plus `CONFIG_GZIP` (which brings GUNZIP and ZCAT). 205

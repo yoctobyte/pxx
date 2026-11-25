@@ -31,7 +31,7 @@ while read -r obj src flags; do
   (
     cd "$WORK/src"
     # shellcheck disable=SC2086 -- flags are words by design
-    "$PXX" --emit-obj --function-sections -ffile-prefix-map="$WORK/src=/usr/src/toybox" $flags "$src" "$WORK/obj/$obj" \
+    "$PXX" --emit-obj --function-sections --shared-runtime -ffile-prefix-map="$WORK/src=/usr/src/toybox" $flags "$src" "$WORK/obj/$obj" \
       > "$WORK/obj/$obj.log" 2>&1 || : > "$WORK/obj/$obj.fail"
   ) &
   i=$((i + 1))
