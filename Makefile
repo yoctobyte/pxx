@@ -11781,6 +11781,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/nilpy_literal_arguments_share_one_constant.npy $(TESTTMP)/nilpy_litconst26 > /dev/null
 	$(TESTTMP)/nilpy_litconst26 | diff -u test/nilpy_literal_arguments_share_one_constant.expected -
 	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/nilpy_literal_arguments_share_one_constant.npy $(TESTTMP)/nilpy_litconst26_c3.o > /dev/null
+	./$(COMPILER) test/nilpy_many_boxed_temps_cleared_on_every_exit.npy $(TESTTMP)/nilpy_boxtemps26 > /dev/null
+	$(TESTTMP)/nilpy_boxtemps26 | diff -u test/nilpy_many_boxed_temps_cleared_on_every_exit.expected -
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj test/nilpy_many_boxed_temps_cleared_on_every_exit.npy $(TESTTMP)/nilpy_boxtemps26_c3.o > /dev/null
 	tools/expect_same.sh nilpy_nocv26_reaim_rv32 "$$(./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj --dce-report test/nilpy_without_callable_values_drops_the_dispatch.npy $(TESTTMP)/nilpy_nocv26_c3.o 2>&1 | grep -c 're-aimed @')" "2"
 	# --rtl-libc is output-identical to the raw build and leaves at most the one
 	# raw rt_sigreturn. It had no test at all, and DCE broke it silently: the

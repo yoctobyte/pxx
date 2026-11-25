@@ -1,0 +1,41 @@
+# A function that boxes many non-literal values (each one a variant temp the
+# epilogue must clear), left both normally and by an exception, many times.
+# On riscv32 ESP those clears are batched into PXXVarClearMask windows.
+
+def build(n, name, fail):
+    a = name + "a"
+    b = name + "b"
+    c = str(n)
+    d = {}
+    d[a] = n
+    d[b] = n + 1
+    d[c] = a + b
+    d[a + c] = [a, b, c, n, n * 2, n * 3]
+    d[b + c] = {a: b, b: c, c: a}
+    e = d.get(a + "x", b)
+    f = d.get(b, c)
+    lst = []
+    lst.append(a)
+    lst.append(b)
+    lst.append(c)
+    lst.append(e)
+    lst.append(f)
+    lst.append(n)
+    if fail:
+        raise ValueError(a + b + c)
+    d[name] = lst
+    return d
+
+total = 0
+errs = 0
+last = None
+for i in range(300):
+    try:
+        last = build(i, "k" + str(i % 7), i % 3 == 0)
+        total += len(last)
+    except ValueError as ex:
+        errs += 1
+        msg = str(ex)
+print(total, errs, msg)
+print(sorted(last.keys()))
+print(last["k5"])

@@ -186,6 +186,7 @@ procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 procedure PXXStrAssign(p: Pointer; slot: Pointer);
 procedure PXXStrDecRefMask(top: Pointer; mask: LongWord);
+procedure PXXVarClearMask(top: Pointer; mask: LongWord);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
   The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
@@ -7380,6 +7381,23 @@ begin
   end
   else
     PXXMemZero(v, 16);
+end;
+
+{ Clear the variants at up to 32 eight-byte steps below top at once: bit i of
+  mask names the variant at top - i * 8. riscv32 on ESP clears a proc's variant
+  locals at scope exit with one call to this per window instead of an address
+  and a PXXVarClear call per local -- PXXStrDecRefMask's reason, for the
+  16-byte slots NilPy fills with every boxed argument. }
+procedure PXXVarClearMask(top: Pointer; mask: LongWord);
+var a: NativeInt;
+begin
+  a := NativeInt(top);
+  while mask <> 0 do
+  begin
+    if (mask and 1) <> 0 then PXXVarClear(Pointer(a));
+    mask := mask shr 1;
+    a := a - 8;
+  end;
 end;
 
 procedure PXXVarReleasePayload(v: Pointer);

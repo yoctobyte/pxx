@@ -17676,6 +17676,7 @@ begin
       Result handle is skipped (ownership transfers to the caller). On ESP the
       plain frame-slot strings go first, a window at a time. }
     Rv32ReleaseStringLocalsMasked(retSymIdx);
+    Rv32ClearVariantLocalsMasked(retSymIdx);
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
@@ -17761,7 +17762,7 @@ begin
                     EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - jzPatch));
         end
         else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
-                (act = SXR_VAR) then
+                (act = SXR_VAR) and not Rv32MaskReleased[i] then
         begin
           { Variant local: clear (releases any managed payload). a0 = address. }
           EmitSlotAddrRISCV32(reg_a0, i);

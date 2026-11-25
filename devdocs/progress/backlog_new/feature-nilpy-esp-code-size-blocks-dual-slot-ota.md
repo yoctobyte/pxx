@@ -174,3 +174,20 @@ C3 object build; matched under QEMU esp32c3).
 
 Next here: batch the scope-exit variant clears (handle still has runs of 39 and
 23 PXXVarClear calls at each exit path), then lead 3 and the large formatters.
+
+## 2026-11-25 done (claude-pxx): variant locals cleared by mask at scope exit
+
+Rv32ClearVariantLocalsMasked: one PXXVarClearMask(top, mask) call per window
+of 32 eight-byte steps instead of an address and a PXXVarClear call per
+variant local, on the normal and every exception exit (riscv32 ESP).
+
+| rfid firmware, riscv32 ESP -O2 | .text |
+|---|---|
+| before | 601,356 |
+| after | 589,224 (-12,132) |
+
+`handle` 18,684 -> 16,684. Test: test/nilpy_many_boxed_temps_cleared_on_every_exit.
+
+Next here: the variant fill out of line (PXXVarFill32: ~54 bytes inline per
+boxing store, ~18 as a call; about 500 sites in the firmware), then lead 3
+and the large formatters.
