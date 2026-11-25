@@ -29774,7 +29774,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_drm_uapi.c $(TESTTMP)/c_drmuapi26
 	@gcc -w test/c_drm_uapi.c -o $(TESTTMP)/c_drmuapi26_gcc
 	tools/expect_same.sh c_drmuapi26 "$$(timeout 20 $(TESTTMP)/c_drmuapi26)" "$$(timeout 20 $(TESTTMP)/c_drmuapi26_gcc)"
-	# Xorg/libdrm/pixman gaps: a typedef cast in a constant expression, __PRETTY_FUNCTION__, a macro call whose ( is on the next line, __builtin_clz (x) without stdlib.h, memfd_create/F_ADD_SEALS, clock_getres, pthread_sigmask; against gcc.
+	# Xorg/libdrm/pixman gaps: a typedef cast in a constant expression, __PRETTY_FUNCTION__, a macro call whose ( is on the next line, __builtin_clz (x) without stdlib.h, memfd_create/F_ADD_SEALS, clock_getres, pthread_sigmask, pointer arithmetic on an element of an array of pointers, sscanf %i; against gcc.
 	./$(COMPILER) --threadsafe test/c_xorg_gaps.c $(TESTTMP)/c_xgaps26
 	@gcc -w -pthread test/c_xorg_gaps.c -o $(TESTTMP)/c_xgaps26_gcc
 	tools/expect_same.sh c_xgaps26 "$$(timeout 20 $(TESTTMP)/c_xgaps26)" "$$(timeout 20 $(TESTTMP)/c_xgaps26_gcc)"

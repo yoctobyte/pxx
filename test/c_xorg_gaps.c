@@ -59,6 +59,13 @@ static ResRec res_tab[] = {
 
 static int clz_of(unsigned x) { return __builtin_clz (x); }
 
+/* an element of an array of pointers is a pointer to the element type, and its
+   arithmetic steps by that type (xkmread.c: `type[g] - &map->types[0]`) */
+typedef struct { long a[5]; } KType;
+static KType ktypes[8];
+static KType *gkt[4];
+struct KMap { KType *f[4]; int *g[2]; };
+
 static void who(const char *f, const char *what) { printf("%s %s\n", f, what); }
 
 int main(void)
@@ -163,6 +170,29 @@ int main(void)
         printf("iopl %d", geteuid() == 0 ? -1 : iopl(3));
         printf(" ioperm %d", geteuid() == 0 ? -1 : ioperm(0x3c0, 32, 1));
         printf(" backtrace %d\n", backtrace(bt, 8) > 0);
+    }
+    {
+        KType *type[4]; int iv[10], *ia[2]; char *cs[3], **ca[2];
+        struct KMap km, *pkm = &km; unsigned char kt[2];
+        type[0] = &ktypes[2]; type[1] = &ktypes[5]; gkt[1] = &ktypes[6];
+        km.f[1] = &ktypes[4]; km.g[1] = &iv[7]; ia[1] = &iv[6]; ca[1] = &cs[2];
+        kt[0] = type[0] - (&ktypes[0]);
+        kt[1] = type[1] - &ktypes[0];
+        printf("ptr-array %u %u %ld %ld %ld %ld", kt[0], kt[1], (long)(gkt[1] - ktypes),
+               (long)(km.f[1] - ktypes), (long)(pkm->f[1] - ktypes), (long)(km.g[1] - iv));
+        printf(" %ld %ld %ld %ld %ld", (long)((ia[1] + 1) - iv), (long)(ca[1] - cs),
+               (long)(*(type + 1) - ktypes), (long)(*type - ktypes), (long)(++type[1] - ktypes));
+        printf(" %d\n", (type[1] + 1)->a == ktypes[7].a);
+    }
+    {
+        /* %i takes the base from the prefix, as strtol(…, 0) does (xkbcomp's
+           Private(type=0x86) became NoAction) */
+        int a = -1, b = -1, c = -1, d = -1, n;
+        unsigned x = 0;
+        n = sscanf("0x86 017 -0X1f 42", "%i %i %i %i", &a, &b, &c, &d);
+        printf("scanf-i %d %d %d %d %d", n, a, b, c, d);
+        n = sscanf("0x1fz", "%x", &x);
+        printf(" %d %u\n", n, x);
     }
     return 0;
 }

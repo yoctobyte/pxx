@@ -1399,6 +1399,7 @@ function IRNodeIsFrozenStrAddr(node: Integer): Boolean; forward;
 function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
 function IRLowerCompoundAssign(node: Integer): Integer; forward;
 function CNodeIsDecayedRow(node: Integer): Boolean; forward;
+function CCommaValue(node: Integer): Integer; forward;
 procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer;
                                      var defaultLabel: Integer); forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
@@ -4517,6 +4518,48 @@ end;
 
 function CObjectBytes(node: Integer): Integer; forward;
 
+{ True when `base` is a one-dimensional ARRAY OF POINTERS, spelled as a
+  variable or as a struct field (`T *a[4]`, `s.f` on `T *f[4]`), and then the
+  pointee of one element: an element `a[i]`, `*a` or `*(a + i)` is a `T *` and
+  steps by T. IRPointerStride had arms for a `T **` and for a pointer FIELD
+  indexed, and none for a real array of pointers, so its elements took the
+  1-byte default: `a[i] + 1` stepped one byte and `a[i] - base` returned the
+  BYTE distance. Xorg's xkmread.c stores `type[g] - &xkb->map->types[0]` as a
+  key's type index, which came out 40 times too big, and the first key press in
+  any client then read a type far outside the table and crashed.
+  bug-c-pointer-arithmetic-on-an-element-of-an-array-of-pointers-steps-bytes }
+function CArrOfPtrElem(base: Integer; var elemTk: TTypeKind; var recId: Integer): Boolean;
+var rec: Integer; fname: AnsiString;
+begin
+  Result := False;
+  base := CCommaValue(base);
+  if (not CProgramMode) or (base < 0) then Exit;
+  if ASTKind[base] = AN_IDENT then
+  begin
+    if (not Syms[ASTIVal[base]].IsArray) or (Syms[ASTIVal[base]].ArrLen = -1) or
+       (Syms[ASTIVal[base]].ElemType <> tyPointer) or
+       (SymArrNDims[ASTIVal[base]] > 1) then Exit;
+    elemTk := Syms[ASTIVal[base]].PtrElemTk;
+    recId := Syms[ASTIVal[base]].PtrElemRec;
+  end
+  else if ASTKind[base] = AN_FIELD then
+  begin
+    rec := ResolveNodeRec(ASTLeft[base]);
+    if rec = REC_NONE then Exit;
+    fname := GetASTIdentName(base);
+    if (not RecFieldIsArray(rec, fname)) or (RecFieldDynDepth(rec, fname) <> 0) or
+       (RecFieldType(rec, fname) <> tyPointer) or
+       (RecFieldArrNDims(rec, fname) > 1) then Exit;
+    elemTk := RecFieldPtrElemTk(rec, fname);
+    recId := RecFieldPtrElemRec(rec, fname);
+  end
+  else
+    Exit;
+  if elemTk = tyUnknown then Exit;
+  if (elemTk = tyRecord) and (recId = REC_NONE) then Exit;
+  Result := True;
+end;
+
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
@@ -4541,6 +4584,22 @@ begin
     Result := Result * CPAArrLen;
     Exit;
   end;
+  { an element of an array of pointers: `a[i]`, `*a`, `*(a + i)`
+    (bug-c-pointer-arithmetic-on-an-element-of-an-array-of-pointers-steps-bytes) }
+  if CProgramMode and (node >= 0) and
+     (((ASTKind[node] = AN_INDEX) and CArrOfPtrElem(ASTLeft[node], elemTk, recId)) or
+      ((ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+       (CArrOfPtrElem(ASTLeft[node], elemTk, recId) or
+        ((ASTKind[CCommaValue(ASTLeft[node])] = AN_BINOP) and
+         (not CNodeIsDecayedRow(CCommaValue(ASTLeft[node]))) and
+         CArrOfPtrElem(ASTLeft[CCommaValue(ASTLeft[node])], elemTk, recId))))) then
+  begin
+    if elemTk = tyRecord then Result := RecSize(recId)
+    else Result := TypeSlotSize(elemTk);
+    Exit;
+  end;
+  elemTk := tyUnknown;
+  recId := REC_NONE;
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) then

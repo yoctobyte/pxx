@@ -1526,7 +1526,13 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
         const char *nsrc = s;
         char *end;
         long long v;
-        int base = (conv == 'x') ? 16 : (conv == 'o') ? 8 : 10;
+        /* %i takes its base from the number, as strtol's base 0 does: 0x86 is
+           134, 010 is 8. It was read as decimal, so `0x86` gave 0 and the
+           rest of the field was left unread; xkbcomp scans every number of a
+           keymap with "%i" and turned Xorg's Private(type=0x86) actions into
+           NoAction. vfscanf below already had the prefixes.
+           bug-crtl-sscanf-percent-i-reads-hex-and-octal-as-decimal */
+        int base = (conv == 'x') ? 16 : (conv == 'o') ? 8 : (conv == 'i') ? 0 : 10;
         /* A width limits how many characters the conversion may look at, so
            the number is parsed out of a bounded copy rather than the tail. */
         if (width >= 0) {
