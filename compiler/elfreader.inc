@@ -2886,14 +2886,16 @@ begin
   Result := path;
 end;
 
-{ After the inputs are loaded: add the runtime when an object asks for it.
-  False (with a message) when it is needed and cannot be had. }
-function ElfLnkAddSharedRuntime: Boolean;
+{ After the inputs are loaded: the runtime object's path when an object asks
+  for it, in rtPath ('' when none does). False (with a message) when it is
+  needed and cannot be had. }
+function ElfLnkSharedRuntimePath(var rtPath: AnsiString): Boolean;
 var arch, m, mts, path: AnsiString;
     g, gts: Integer;
     needPlain, needTs: Boolean;
 begin
   Result := True;
+  rtPath := '';
   if TargetArch = TARGET_AARCH64 then arch := 'aarch64' else arch := 'x86_64';
   m := '__pxxrt_needed_' + arch;
   mts := m + '_ts';
@@ -2912,28 +2914,46 @@ begin
   end;
   if needTs then path := ElfRtProvide(mts, True) else path := ElfRtProvide(m, False);
   if path = '' then begin Result := False; Exit; end;
-  if not ElfLnkAddObject(path) then
-  begin
-    WriteLn(StdErr, 'pascal26 --link: ', path, ': ', ElfRdErr);
-    Result := False;
-  end;
+  rtPath := path;
 end;
 
 function ElfLnkLinkArgs(first, last: Integer; const outPath: AnsiString; gc: Boolean): Boolean;
-var j, g: Integer;
-    entryName: AnsiString;
+var j, g, pass: Integer;
+    entryName, rtPath: AnsiString;
 begin
+  { THE RUNTIME OBJECT IS LOADED FIRST, so its definitions are the ones every
+    weak runtime name binds to. A --shared-runtime object still carries the
+    builtin Pascal units it reaches (pxxcio, builtinheap, ...) as WEAK copies,
+    and with the runtime object added last those copies won: crtl's exit (in
+    rt.o) drained the OBJECT's __pxx_atexit_run, whose table was a private,
+    empty one, while atexit had recorded into rt.o's -- no handler ever ran,
+    on the return path or the exit() one. rt.o holds the whole runtime, so
+    binding every weak runtime name to it gives one copy of the code and one
+    of the state. Whether it is needed is known only once the objects are
+    read (the marker), hence the second pass.
+    decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit }
+  rtPath := '';
+  for pass := 0 to 1 do
+  begin
+  if (pass = 1) and (rtPath = '') then Break;
   ElfLnkLinkArgs := False;
   ElfLnkReset;
   if TargetArch = TARGET_AARCH64 then ElfLnkMachine := ELFLNK_EM_AARCH64;
   ElfLnkGcOn := gc;
+  if pass = 1 then
+    if not ElfLnkAddObject(rtPath) then
+    begin
+      WriteLn(StdErr, 'pascal26 --link: ', rtPath, ': ', ElfRdErr);
+      Exit;
+    end;
   for j := first to last do
     if not ElfLnkAddObject(ParamStr(j)) then
     begin
       WriteLn(StdErr, 'pascal26 --link: ', ParamStr(j), ': ', ElfRdErr);
       Exit;
     end;
-  if not ElfLnkAddSharedRuntime then Exit;
+  if (pass = 0) and not ElfLnkSharedRuntimePath(rtPath) then Exit;
+  end;
   g := ElfLnkFind('_start');
   if LinkEntryName <> '' then
   begin

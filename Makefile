@@ -21469,6 +21469,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) --link -o $(TESTTMP)/c_lratx $(TESTTMP)/c_lratx_m.o $(TESTTMP)/c_lratx_p.o > /dev/null
 	tools/expect_same.sh c_lratx "$$({ $(TESTTMP)/c_lratx; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
 	tools/expect_same.sh c_lratx_exit "$$({ $(TESTTMP)/c_lratx x; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
+	# the same under --shared-runtime: the runtime object is loaded FIRST, so the
+	# objects' weak builtin-RTL copies (pxxcio's __pxx_atexit_run, ...) bind to
+	# rt.o's and atexit and exit share one table. Default objects (no
+	# --function-sections): with the runtime object they share crtl state too.
+	./$(COMPILER) --emit-obj --shared-runtime test/c_link_return_from_main_runs_atexit_main.c $(TESTTMP)/c_lratx_srm.o > /dev/null
+	./$(COMPILER) --emit-obj --shared-runtime test/c_link_return_from_main_runs_atexit_part.c $(TESTTMP)/c_lratx_srp.o > /dev/null
+	XDG_CACHE_HOME=$(TESTTMP)/c_srt_cache ./$(COMPILER) --link -o $(TESTTMP)/c_lratx_sr $(TESTTMP)/c_lratx_srm.o $(TESTTMP)/c_lratx_srp.o > /dev/null
+	tools/expect_same.sh c_lratx_sr "$$({ $(TESTTMP)/c_lratx_sr; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
+	tools/expect_same.sh c_lratx_sr_exit "$$({ $(TESTTMP)/c_lratx_sr x; echo rc=$$?; } | cat)" "$$(cat test/c_link_return_from_main_runs_atexit.expected)"
 	# --link -o naming a directory is an error (it was rc 0 with nothing written)
 	mkdir -p $(TESTTMP)/c_lratx_dir
 	tools/expect_same.sh c_lratx_dir "$$(./$(COMPILER) --link -o $(TESTTMP)/c_lratx_dir $(TESTTMP)/c_lratx_m.o $(TESTTMP)/c_lratx_p.o > $(TESTTMP)/c_lratx_dir.log 2>&1; echo rc=$$?; grep -c 'the output path is a directory or not writable' $(TESTTMP)/c_lratx_dir.log)" "$$(printf 'rc=1\n1')"
