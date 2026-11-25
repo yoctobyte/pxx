@@ -4698,6 +4698,32 @@ var szK, szN: Integer; szWide: Boolean;
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
   Next; { sizeof }
+  { `sizeof((name))` -- a REDUNDANT PAIR around the operand name. It is still
+    the array, not a use of it, but the general-expression arm sized the
+    decayed pointer: 8 for any array. ARRAY_SIZE(a) written as
+    `sizeof((a)) / sizeof((a)[0])` (Xorg's modesetting) then answered 1, and
+    every connector past index 0 was named "Unknown<type>". A pair that
+    wraps the whole operand, `sizeof( (...) )`, is removed, as many times as
+    it is nested; `((a)[0])` and `((T)x)` are not whole-operand pairs.
+    bug-c-sizeof-of-a-parenthesised-array-name-gives-the-pointer-size }
+  while (CurTok.Kind = tkLParen) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) do
+  begin
+    depth := 0;
+    si := TokPos;
+    while si < TokCount do
+    begin
+      if Tokens[si].Kind = tkLParen then Inc(depth)
+      else if Tokens[si].Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Inc(si);
+    end;
+    if (si + 1 >= TokCount) or (Tokens[si + 1].Kind <> tkRParen) then Break;
+    RemoveTokens(si, 1);
+    RemoveTokens(TokPos, 1);
+  end;
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;

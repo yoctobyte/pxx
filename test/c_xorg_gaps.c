@@ -7,6 +7,8 @@
      (Xorg's `DebugF\n    ("...")`)
    - `__builtin_clz (x)` with a space, in a file without <stdlib.h>
    - `typedef enum { A = 1 } F, *FP;` declared only F (libdrm)
+   - `sizeof((arr))` sized the decayed pointer, so ARRAY_SIZE written as
+     `sizeof((a)) / sizeof((a)[0])` was 1 (Xorg's modesetting)
    - crtl: memfd_create + F_ADD_SEALS, clock_getres, pthread_sigmask,
      open_memstream (libdrm), pthread_attr_setscope (Xorg's input thread),
      epoll (os/ospoll.c), iopl/ioperm (<sys/io.h>), backtrace */
@@ -38,6 +40,12 @@ enum { E1 = ((L)1 << 40) > 0, E2 = (U16)70000, E3 = (int)((L)3000000000 / 2 > 0)
 #define NOTHING(...)            /* */
 #define TWICE(x) ((x) * 2)
 
+#define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
+static const char *const output_names[] = { "None", "VGA", "DVI-I", "DVI-D", "DVI-A",
+    "Composite", "SVIDEO", "LVDS", "Component", "DIN", "DP", "HDMI", "HDMI-B", "TV", "eDP",
+    "Virtual", "DSI", "DPI", };
+static int arr12[3];
+
 static int clz_of(unsigned x) { return __builtin_clz (x); }
 
 static void who(const char *f, const char *what) { printf("%s %s\n", f, what); }
@@ -58,6 +66,13 @@ int main(void)
     printf("twice %d\n", TWICE
            (21));
     printf("clz %d %d\n", clz_of(1), clz_of(0x80000000u));
+    {
+        int loc[7];
+        unsigned type = 15;
+        printf("sizeof %d %d %d %d %d", (int)ARRAY_SIZE(output_names), (int)sizeof(((arr12))),
+               (int)sizeof((loc)), (int)ARRAY_SIZE(loc), (int)sizeof((loc)[0]));
+        printf(" %s\n", type >= ARRAY_SIZE(output_names) ? "Unknown" : output_names[type]);
+    }
     {
         CtxFlags cf = CTX_PRESERVED;
         get_flags(&cf);
