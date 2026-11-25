@@ -29762,6 +29762,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) -ffile-prefix-map=$(CURDIR)/test=/usr/src/t -fmacro-prefix-map=$(CURDIR)=/nope -ffile-prefix-map=$(CURDIR)/test/c_file_prefix_map_inc=/usr/include/fpm -I$(CURDIR)/test/c_file_prefix_map_inc $(CURDIR)/test/c_file_prefix_map.c $(TESTTMP)/c_fpmap26
 	@gcc -w -ffile-prefix-map=$(CURDIR)/test=/usr/src/t -fmacro-prefix-map=$(CURDIR)=/nope -ffile-prefix-map=$(CURDIR)/test/c_file_prefix_map_inc=/usr/include/fpm -I$(CURDIR)/test/c_file_prefix_map_inc $(CURDIR)/test/c_file_prefix_map.c -o $(TESTTMP)/c_fpmap26_gcc
 	tools/expect_same.sh c_fpmap26 "$$(timeout 20 $(TESTTMP)/c_fpmap26)" "$$(timeout 20 $(TESTTMP)/c_fpmap26_gcc)"
+	# <drm/drm.h> and <drm/drm_mode.h> (host UAPI): crtl's <linux/types.h> brings the __kernel_* types and <asm/ioctl.h> the _IOC encoding; sizes, offsets, ioctl numbers against gcc.
+	./$(COMPILER) test/c_drm_uapi.c $(TESTTMP)/c_drmuapi26
+	@gcc -w test/c_drm_uapi.c -o $(TESTTMP)/c_drmuapi26_gcc
+	tools/expect_same.sh c_drmuapi26 "$$(timeout 20 $(TESTTMP)/c_drmuapi26)" "$$(timeout 20 $(TESTTMP)/c_drmuapi26_gcc)"
 	# aligned(N) on a local up to 16: x86-64 only (the i386 frame pointer is not
 	# 16-aligned, and above 16 needs frame realignment -- both still open on
 	# feature-c-an-over-aligned-local-is-not-aligned).

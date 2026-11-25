@@ -38,15 +38,9 @@ typedef uint64_t __be64;
 typedef uint16_t __sum16;
 typedef uint32_t __wsum;
 
-typedef int          __kernel_pid_t;
-typedef unsigned int __kernel_uid32_t;
-typedef unsigned int __kernel_gid32_t;
-typedef long         __kernel_off_t;
-typedef long long    __kernel_loff_t;
-typedef long         __kernel_time_t;
-typedef long         __kernel_suseconds_t;
-typedef long         __kernel_clock_t;
-typedef unsigned int __kernel_mode_t;
+/* the __kernel_* POSIX types, as the kernel's own <linux/types.h> does */
+#include <linux/posix_types.h>
+
 /* the kernel's home for this one is <linux/socket.h>; rtnetlink.h's struct
    rtvia uses it, and its member was silently dropped until an unknown type
    name became an error */
