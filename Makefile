@@ -3044,6 +3044,14 @@ test-nilpy: $(COMPILER)
 	# with CPython's U+FFFD rules. python3's output.
 	./$(COMPILER) test/test_nilpy_file_readline_size_and_errors_replace.npy $(TESTTMP)/test_nilpy_rlrep26
 	$(TESTTMP)/test_nilpy_rlrep26 | diff -u test/test_nilpy_file_readline_size_and_errors_replace.expected -
+	# errors="replace" reads whole UTF-8 characters across small reads
+	# bug-n-errors-replace-splits-a-utf-8-character-across-two-reads
+	./$(COMPILER) test/test_nilpy_errors_replace_keeps_a_utf8_character_whole_across_reads.npy $(TESTTMP)/test_nilpy_u8split26
+	$(TESTTMP)/test_nilpy_u8split26 | diff -u test/test_nilpy_errors_replace_keeps_a_utf8_character_whole_across_reads.expected -
+	# sys.stdout = None with fd 1 already closed: print() stays out of the next file
+	# bug-n-sys-stdout-none-with-the-fd-closed-sends-print-into-the-next-file
+	./$(COMPILER) test/test_nilpy_stdout_none_with_fd_1_closed_keeps_print_out_of_files.npy $(TESTTMP)/test_nilpy_stdnone26
+	$(TESTTMP)/test_nilpy_stdnone26 $(TESTTMP)/test_nilpy_stdnone26.txt 2>$(TESTTMP)/test_nilpy_stdnone26.err >&-; diff -u test/test_nilpy_stdout_none_with_fd_1_closed_keeps_print_out_of_files.expected $(TESTTMP)/test_nilpy_stdnone26.err
 	# nested unpack targets with attribute leaves (`(self.a, self.b), x = ...`)
 	./$(COMPILER) test/test_nilpy_nested_unpack_into_attributes.npy $(TESTTMP)/test_nilpy_nunpk26
 	$(TESTTMP)/test_nilpy_nunpk26 | diff -u test/test_nilpy_nested_unpack_into_attributes.expected -

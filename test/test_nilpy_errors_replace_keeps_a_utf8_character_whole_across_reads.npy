@@ -1,0 +1,32 @@
+# A text file opened with errors="replace", read in small pieces: a piece that
+# stops partway through a valid UTF-8 character reads the rest of it, so each
+# piece holds WHOLE characters, as CPython's incremental decoder gives. Each
+# read used to be decoded alone, so read(1) over "é" gave U+FFFD twice. A
+# truly broken sequence (C3 then "(", and a final lone C3) is still replaced.
+# Compared as strings, so the output is CPython's.
+# bug-n-errors-replace-splits-a-utf-8-character-across-two-reads
+import os
+
+p = "/tmp/pxx_test_u8split_" + str(os.getpid())
+f = open(p, "wb")
+f.write(b"a\xc3\xa9b\xe2\x82\xacc\xf0\x9f\x98\x80d\xc3(e\xc3")
+f.close()
+
+f = open(p, errors="replace")
+parts = []
+while True:
+    c = f.read(1)
+    if c == "":
+        break
+    parts.append(c)
+f.close()
+print("read(1) whole", "".join(parts) == "aéb€c\U0001f600d�(e�")
+
+f = open(p, errors="replace")
+print("read(2)", f.read(2) == "aé", f.read(2) == "b€", f.read(2) == "c\U0001f600")
+f.close()
+
+f = open(p, errors="replace")
+print("readline(2)", f.readline(2) == "aé")
+f.close()
+os.remove(p)

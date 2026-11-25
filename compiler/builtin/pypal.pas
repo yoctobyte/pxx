@@ -964,8 +964,14 @@ begin
   end;
   r := EspStat(@p[1], @buf[0]);
   if r < 0 then begin PyPalStatFull := EspFail; Exit; end;
+  { newlib's struct stat, measured with the IDF 15.2 riscv32 AND esp32s3 gcc
+    (offsetof): st_mode 4, st_size 16 (off_t is 4 bytes), st_mtim 40 -- an
+    8-byte time_t, then a 4-byte tv_nsec at +8 -- and 88 bytes in all. mtime was
+    never read, so os.stat().st_mtime and os.path.getmtime() were 0 on the
+    board. bug-n-os-stat-mtime-is-zero-on-esp-idf }
   st.mode := PLongWord(@buf[4])^;
   st.size := PLongWord(@buf[16])^;
+  st.mtimeNs := PInt64(@buf[40])^ * 1000000000 + PLongInt(@buf[48])^;
   PyPalStatFull := 0;
 {$else}
 {$ifdef CPUX86_64}

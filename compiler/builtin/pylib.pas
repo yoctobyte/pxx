@@ -5602,7 +5602,56 @@ function PyAttrLkIndex(cls: Pointer; const name: AnsiString; kind: NativeInt): N
   per call (`'__prop_get_' + name`), and an address hash would fill a fresh
   slot on every such call. O(1): the length and the first and last eight
   bytes, case-folded with `or $20` so the case-insensitive field walk keys
-  "Foo" and "foo" alike (folding punctuation too only costs a collision). }
+  "Foo" and "foo" alike (folding punctuation too only costs a collision).
+
+  TWO BODIES, one per word size. The 64-bit one below was the only one, and
+  on a 32-bit target its last step `h xor (h shr 32)` ZEROED the hash: on
+  riscv32 (the C3) and i386 all 512 (class, name, kind) keys of a probe went
+  to slot 0, so the 1024-slot cache was a 4-slot one and nearly every lookup
+  walked the RTTI. arm32 kept 110 slots but dropped the kind (`shl 56`).
+  The 32-bit body reads the same bytes as four words, assembled byte by byte
+  (no misaligned load on Xtensa), and mixes in 32 bits.
+  bug-n-the-attribute-lookup-cache-hashes-everything-to-slot-0-on-32-bit }
+{$ifdef CPU32}
+var h, a, b, c, d: LongWord; n, i: Integer; p: PByte;
+  function W(q: PByte): LongWord;
+  begin
+    W := LongWord(q[0]) or (LongWord(q[1]) shl 8) or (LongWord(q[2]) shl 16) or
+         (LongWord(q[3]) shl 24);
+  end;
+begin
+  n := Length(name);
+  p := PByte(Pointer(name));
+  a := 0; b := 0; c := 0; d := 0;
+  if n >= 8 then
+  begin
+    a := W(p);
+    b := W(@p[4]);
+    c := W(@p[n - 8]);
+    d := W(@p[n - 4]);
+  end
+  else
+    for i := 0 to n - 1 do
+      if i < 4 then a := (a shl 8) or p[i]
+      else b := (b shl 8) or p[i];
+  a := a or $20202020; b := b or $20202020;
+  c := c or $20202020; d := d or $20202020;
+  h := (LongWord(PtrUInt(cls)) shr 3) * $9E3779B1;
+  h := h xor (a * $85EBCA77);
+  h := (h xor (h shr 15)) * $2C1B3C6D;
+  h := h xor (b * $C2B2AE3D);
+  h := (h xor (h shr 13)) * $27D4EB2F;
+  h := h xor (c * $165667B1);
+  h := (h xor (h shr 16)) * $85EBCA6B;
+  h := h xor (d * $C2B2AE35) xor LongWord(n) xor (LongWord(kind) shl 28);
+  h := h xor (h shr 16);
+  h := h * $85EBCA6B;
+  h := h xor (h shr 13);
+  h := h * $C2B2AE35;
+  h := h xor (h shr 16);
+  Result := NativeInt(h and (PY_ATTRLK_SLOTS - 1));
+end;
+{$else}
 var h, q1, q2: NativeUInt; n, i: Integer; p: PByte;
 begin
   n := Length(name);
@@ -5627,6 +5676,7 @@ begin
   h := h xor (h shr 32);
   Result := NativeInt(h and (PY_ATTRLK_SLOTS - 1));
 end;
+{$endif}
 
 { The name's own handle when it is an IMMORTAL pooled literal, else nil.
   A literal's block is static -- it never moves and is never freed -- so the
@@ -18094,6 +18144,11 @@ begin
   path := '/dev/null' + #0;
   nul := PyPalOpen(@path[1], 1, 0);      { O_WRONLY }
   if nul < 0 then Exit;
+  { With fd already CLOSED (`prog >&-`), open() hands back fd itself: it now
+    IS /dev/null, so keep it. dup3(fd, fd) is EINVAL, and the close after it
+    closed fd again -- the next open() then took fd 1 and print() wrote into
+    that file. bug-n-sys-stdout-none-with-the-fd-closed-sends-print-into-the-next-file }
+  if nul = fd then Exit;
   PyPalDup3(nul, fd);
   PyPalClose(nul);
 end;
@@ -24950,6 +25005,39 @@ begin
     if mode[i] = 'b' then Result.FBinary := True;
 end;
 
+{ A text read under errors="replace" that stops partway through a valid UTF-8
+  sequence reads the rest of it first, so each read decodes WHOLE characters:
+  `read(1)` over 'é' (C3 A9) gave U+FFFD twice, where CPython's incremental
+  decoder gives 'é'. A byte that turns out not to be a continuation is kept --
+  it starts the next character, and decode replaces the cut sequence as
+  CPython does. Only the replace path: without it the bytes pass through
+  undecoded and two halves concatenate back to the character.
+  bug-n-errors-replace-splits-a-utf-8-character-across-two-reads }
+function PyFileFinishUtf8(fd: Int64; const s: AnsiString): AnsiString;
+var n, i, lead, need, have: Integer; ch: Byte; r: AnsiString;
+begin
+  r := s;
+  Result := r;
+  n := Length(r);
+  if n = 0 then Exit;
+  i := n;
+  while (i > 1) and (n - i < 3) and ((Ord(r[i]) and $C0) = $80) do Dec(i);
+  lead := Ord(r[i]);
+  if (lead >= $C2) and (lead <= $DF) then need := 2
+  else if (lead >= $E0) and (lead <= $EF) then need := 3
+  else if (lead >= $F0) and (lead <= $F4) then need := 4
+  else Exit;
+  have := n - i + 1;
+  while have < need do
+  begin
+    if PyPalRead(fd, @ch, 1) <= 0 then Break;
+    r := r + Chr(ch);
+    Inc(have);
+    if (ch and $C0) <> $80 then Break;
+  end;
+  Result := r;
+end;
+
 function TPyFile.read(u: Int64): Variant;
 { `f.read(n)`. TEXT mode yields a str, binary yields bytes — see FBinary. This
   arity used to yield bytes unconditionally, so `print(f.read(3))` on a text
@@ -24972,6 +25060,7 @@ begin
   end;
   s := '';
   for i := 0 to Integer(got) - 1 do s := s + Chr(PByte(NativeInt(r.FData) + i)^);
+  if FReplace then s := PyFileFinishUtf8(FFd, s);
   Result := TextOf(s);
 end;
 
@@ -25089,6 +25178,8 @@ begin
     Inc(n);
     if ch = 10 then Break;
   end;
+  if (not FBinary) and FReplace and (size >= 0) and (n >= size) then
+    s := PyFileFinishUtf8(FFd, s);
   if FBinary then Result := r else Result := TextOf(s);
 end;
 

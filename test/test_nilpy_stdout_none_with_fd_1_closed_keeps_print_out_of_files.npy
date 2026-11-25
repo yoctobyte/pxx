@@ -1,0 +1,17 @@
+# Run with fd 1 CLOSED (the Makefile row starts it with `>&-`). Setting
+# sys.stdout = None points fd 1 at /dev/null: here open("/dev/null") hands back
+# fd 1 itself, and the redirect used to close it again, so the next open()
+# took fd 1 and print() wrote into that file. CPython never writes print()
+# output anywhere once sys.stdout is None. Reported on stderr.
+# bug-n-sys-stdout-none-with-the-fd-closed-sends-print-into-the-next-file
+import sys
+
+path = sys.argv[1]
+sys.stdout = None
+f = open(path, "w")
+print("this must not land in the file")
+f.write("only this\n")
+f.close()
+g = open(path)
+sys.stderr.write("file holds: " + repr(g.read()) + "\n")
+g.close()

@@ -111,6 +111,10 @@ if ROOT == "/":
     attempt("fill the partition", fill)
     clean("big.bin")
     print("after cleanup, write works", open(ROOT + "hello.txt", "a").write("more\n") == 5)
+# FAT stores a modification time and IDF's stat hands it back; pxx read only
+# mode and size, so this was 0 (bug-n-os-stat-mtime-is-zero-on-esp-idf). An
+# unset board clock still stamps FAT's 1980 floor, never 0.
+print("mtime set", os.stat(ROOT + "hello.txt").st_mtime > 0, os.path.getmtime(ROOT + "hello.txt") > 0)
 os.remove(ROOT + "hello.txt")
 os.rmdir(ROOT + "d")
 print("listdir after", os.listdir(ROOT))

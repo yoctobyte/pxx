@@ -9,5 +9,6 @@ mkdir an existing directory -> FileExistsError [Errno 17] File exists: '/d'
 stat a missing path -> FileNotFoundError [Errno 2] No such file or directory: '/nope.txt'
 fill the partition -> OSError [Errno 28] No space left on device
 after cleanup, write works True
+mtime set True True
 listdir after []
 ESP FILES OK
