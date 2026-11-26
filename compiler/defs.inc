@@ -8003,6 +8003,13 @@ var
     object writer. feature-c-file-scope-asm-symbol-aliases }
   CFsaAliasName, CFsaAliasTarget : array of AnsiString;
   CFsaAliasCount : Integer;
+  { __attribute__((alias("target"))) on a declaration, as the LEXER finds it
+    (name = the declarator just before the attribute). ParseCProgram files
+    them as file-scope asm aliases after it resets those, since lexing runs
+    first. bug-c-the-alias-attribute-was-ignored }
+  CLexAliasName, CLexAliasTarget : array of AnsiString;
+  CLexAliasWeak : array of Boolean;
+  CLexAliasCount : Integer;
   CFsaBindName : array of AnsiString;
   CFsaBindKind : array of Integer;   { 1 = .globl, 2 = .weak }
   CFsaBindCount : Integer;

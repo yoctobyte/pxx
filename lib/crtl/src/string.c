@@ -228,6 +228,17 @@ void explicit_bzero(void *s, size_t n)
     }
 }
 
+/* memset_explicit (C23): the same volatile walk, any byte value */
+void *memset_explicit(void *s, int c, size_t n)
+{
+    volatile unsigned char *p = (volatile unsigned char *)s;
+    while (n > 0) {
+        *p++ = (unsigned char)c;
+        n--;
+    }
+    return s;
+}
+
 size_t strspn(const char *s, const char *accept)
 {
     size_t n = 0;

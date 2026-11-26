@@ -18740,7 +18740,7 @@ begin
 end;
 
 procedure ParseCProgram;
-var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
+var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd, lai: Integer;
     initPatch, initIdx: Integer;
     callAnchor, initAnchor: Integer;   { xtensa only -- see PatchEntryStubCall }
     xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
@@ -18765,6 +18765,12 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
 begin
   CCtorCount := 0; CDtorCount := 0; CCtorInMain := 0;
   CFsaAliasCount := 0; CFsaBindCount := 0; CAsmLblCount := 0; CFsaCallCount := 0;
+  { the alias attributes the lexer found (CLexAll ran before this) }
+  for lai := 0 to CLexAliasCount - 1 do
+  begin
+    CFsaAlias(CLexAliasName[lai], CLexAliasTarget[lai]);
+    if CLexAliasWeak[lai] then CFsaBind(CLexAliasName[lai], 2) else CFsaBind(CLexAliasName[lai], 1);
+  end;
   { C IS CASE-SENSITIVE, and this is the ONLY place that said so for a `.c`
     given on the command line. ParseUsesUnitBody already forces the same mode
     around ParseCUnit for a C source pulled through `uses`, and DeclCaseSensitive

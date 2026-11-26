@@ -31,6 +31,10 @@ extern char **environ;
 void __pxx_set_environ(char **envp);
 
 int close(int fd);
+/* closefrom: close every descriptor >= lowfd (glibc 2.34, the BSDs).
+   close_range(2) when the kernel has it (5.9+), else one close per slot up to
+   the descriptor limit. dhcpcd calls it before it daemonises. */
+void closefrom(int lowfd);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 off_t lseek(int fd, off_t offset, int whence);

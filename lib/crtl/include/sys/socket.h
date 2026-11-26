@@ -40,6 +40,9 @@ struct sockaddr_storage {
 
 #define AF_NETLINK 16
 #define AF_PACKET 17
+/* one past the highest family the kernel knows (glibc's PF_MAX, Linux 6.x):
+   dhcpcd sizes per-family tables with it */
+#define AF_MAX 46
 
 #define PF_UNSPEC AF_UNSPEC
 #define PF_UNIX AF_UNIX
@@ -48,6 +51,7 @@ struct sockaddr_storage {
 #define PF_INET6 AF_INET6
 #define PF_NETLINK AF_NETLINK
 #define PF_PACKET AF_PACKET
+#define PF_MAX AF_MAX
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM 2

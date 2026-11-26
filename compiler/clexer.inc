@@ -354,9 +354,67 @@ end;
 var CLexParenDepth, CLexAtomicTop: Integer;
     CLexAtomicStack: array[0..63] of Integer;
 
+{ alias("target") / __alias__("target") in an attribute: the target, in the
+  source's own case (lower is the lower-cased copy the other tests read, raw
+  the same characters as written). '' when there is none. }
+function CAttrAliasOf(const lower, raw: AnsiString): AnsiString;
+var i, j: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i + 4 <= Length(lower) do
+  begin
+    if (Copy(lower, i, 5) = 'alias') and
+       ((i = 1) or not (lower[i-1] in ['a'..'z', '0'..'9'])) then
+    begin
+      j := i + 5;
+      while (j <= Length(lower)) and (lower[j] in ['_', ' ', #9, #10, #13]) do Inc(j);
+      if (j <= Length(lower)) and (lower[j] = '(') then
+      begin
+        Inc(j);
+        while (j <= Length(lower)) and (lower[j] in [' ', #9, #10, #13]) do Inc(j);
+        if (j <= Length(lower)) and (lower[j] = '"') then
+        begin
+          Inc(j);
+          while (j <= Length(raw)) and (raw[j] <> '"') do
+          begin
+            AppendChar(Result, raw[j]);
+            Inc(j);
+          end;
+          Exit;
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ The declarator an attribute follows, from the tokens already lexed: `name`
+  directly before it, or the name before a parameter list or array bounds
+  (`void f(int) __attribute__((alias("g")))`). '' when it is anything else. }
+function CAttrPrevDeclName: AnsiString;
+var k, depth: Integer;
+begin
+  Result := '';
+  k := TokCount - 1;
+  if k < 0 then Exit;
+  while (k >= 0) and ((Tokens[k].Kind = tkRParen) or (Tokens[k].Kind = tkRBrack)) do
+  begin
+    depth := 0;
+    repeat
+      if (Tokens[k].Kind = tkRParen) or (Tokens[k].Kind = tkRBrack) then Inc(depth)
+      else if (Tokens[k].Kind = tkLParen) or (Tokens[k].Kind = tkLBrack) then Dec(depth);
+      Dec(k);
+    until (k < 0) or (depth = 0);
+  end;
+  if (k >= 0) and (Tokens[k].Kind = tkIdent) then
+    Result := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+end;
+
 procedure CSkipSpace;
 var done, idDone: Boolean;
-    p, depth, nameLen: Integer;
+    p, depth, nameLen, j, alignV, attrStart: Integer;
+    aliasName, aliasTarget: AnsiString;
     s: AnsiString;
     attrText: AnsiString;
     c_char: Char;
@@ -390,6 +448,7 @@ begin
         if (SrcPos <= Length(Source)) and (Source[SrcPos] = '(') then
         begin
           Inc(SrcPos);
+          attrStart := SrcPos;
           depth := 1;
           attrText := '';
           while (SrcPos <= Length(Source)) and (depth > 0) do
@@ -455,6 +514,32 @@ begin
           if CAttrHasWord(attrText, 'constructor') then CAttrCtor := CAttrCtor or 1;
           if CAttrHasWord(attrText, 'destructor') then CAttrCtor := CAttrCtor or 2;
           if CAttrHasWord(attrText, 'section') then CAttrSection := CAttrSectionOf(attrText);
+          { alias("target"): this declaration is another name for target,
+            defined in this file. It was dropped, and the name stayed an
+            undefined import: dhcpcd's compat/setproctitle.c,
+            `extern __typeof(setproctitle_impl) setproctitle
+            __attribute__((__alias__("setproctitle_impl")))`, linked with
+            setproctitle undefined. Filed as a file-scope asm alias (the
+            object writer already emits those), .weak with `weak`, else
+            .globl. bug-c-the-alias-attribute-was-ignored }
+          aliasTarget := CAttrAliasOf(attrText, Copy(Source, attrStart, Length(attrText)));
+          if aliasTarget <> '' then
+          begin
+            aliasName := CAttrPrevDeclName;
+            if aliasName = '' then
+              Error('C: __attribute__((alias("' + aliasTarget + '"))) must follow the declarator it names'
+                    + ' (`T name(...) __attribute__((alias(...)))`)');
+            if Length(CLexAliasName) <= CLexAliasCount then
+            begin
+              SetLength(CLexAliasName, CLexAliasCount + 16);
+              SetLength(CLexAliasTarget, CLexAliasCount + 16);
+              SetLength(CLexAliasWeak, CLexAliasCount + 16);
+            end;
+            CLexAliasName[CLexAliasCount] := aliasName;
+            CLexAliasTarget[CLexAliasCount] := aliasTarget;
+            CLexAliasWeak[CLexAliasCount] := CAttrHasWord(attrText, 'weak') or CAttrHasWord(attrText, '__weak__');
+            Inc(CLexAliasCount);
+          end;
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
           if CStrContains(attrText, 'aligned') then
@@ -462,6 +547,64 @@ begin
             CAttrAligned := True;
             CAttrAlignValue := CAttrAlignedValueOf(attrText);
           end;
+        end;
+        idDone := True;
+      end
+      { C11 `_Alignas(N)` / `_Alignas(type)` (what <stdalign.h>'s alignas
+        spells): the same alignment `__attribute__((aligned(N)))` gives, on
+        the same token, so every declaration path that honours one honours
+        the other. It was read as a call to an undeclared function -- dhcpcd's
+        `alignas(sizeof(struct ip *)) uint8_t buf[...]` in dhcp_readbpf. A
+        type argument means that type's alignment (_Alignof). An argument
+        this cannot evaluate is refused: on a struct member a guessed
+        alignment would move every later member.
+        bug-c-alignas-is-read-as-a-call }
+      else if s = '_Alignas' then
+      begin
+        SrcPos := p;
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9, #10, #13]) do
+        begin
+          if Source[SrcPos] = #10 then Inc(SrcLine);
+          Inc(SrcPos);
+        end;
+        if (SrcPos > Length(Source)) or (Source[SrcPos] <> '(') then
+          Error('C: _Alignas needs a parenthesised argument');
+        Inc(SrcPos);
+        depth := 1;
+        attrText := '';
+        while (SrcPos <= Length(Source)) and (depth > 0) do
+        begin
+          if Source[SrcPos] = '(' then Inc(depth)
+          else if Source[SrcPos] = ')' then Dec(depth)
+          else if Source[SrcPos] = #10 then Inc(SrcLine);
+          if depth > 0 then
+          begin
+            c_char := Source[SrcPos];
+            if c_char in ['A'..'Z'] then c_char := Chr(Ord(c_char) + 32);
+            AppendChar(attrText, c_char);
+          end;
+          Inc(SrcPos);
+        end;
+        while (attrText <> '') and (attrText[1] in [' ', #9, #10, #13]) do Delete(attrText, 1, 1);
+        while (attrText <> '') and (attrText[Length(attrText)] in [' ', #9, #10, #13]) do
+          Delete(attrText, Length(attrText), 1);
+        j := 1;
+        if (attrText <> '') and ((attrText[1] in ['0'..'9', '(']) or
+           (Copy(attrText, 1, 6) = 'sizeof') or (Copy(attrText, 1, 8) = '_alignof') or
+           (Copy(attrText, 1, 9) = '__alignof')) then
+          alignV := CAttrAlignExprAt(attrText, j)
+        else
+        begin
+          attrText := '_alignof(' + attrText + ')';
+          alignV := CAttrAlignExprAt(attrText, j);
+        end;
+        if alignV < 0 then alignV := 0;
+        if (alignV = 0) and (attrText <> '0') then
+          Error('C: cannot evaluate the argument of _Alignas(' + attrText + ')');
+        if alignV > 0 then
+        begin
+          CAttrAligned := True;
+          if alignV > CAttrAlignValue then CAttrAlignValue := alignV;
         end;
         idDone := True;
       end
@@ -1338,6 +1481,7 @@ procedure CLexAll;
 var off, len, i: Integer; k: TTokenKind;
 begin
   CLexParenDepth := 0; CLexAtomicTop := 0;
+  CLexAliasCount := 0;
   CAttrPacked := False;
   CAttrAligned := False;
   CAttrAlignValue := 0;

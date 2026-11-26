@@ -65,6 +65,11 @@ void srand(unsigned int seed);
    rand). busybox kconfig's conf.c calls random() for randconfig. */
 long random(void);
 void srandom(unsigned int seed);
+/* initstate/setstate: switch random() to a state table of the caller's (n of
+   8, 32, 64, 128 or 256+ bytes picks glibc's generator type); each returns the
+   table in use before. dhcpcd's IPv4LL. */
+char *initstate(unsigned int seed, char *state, size_t n);
+char *setstate(char *state);
 
 /* The POSIX rand48 family: one 48-bit LCG, X' = (a*X + c) mod 2^48, with
    a = 0x5DEECE66D and c = 0xB until lcong48 changes them. Deterministic and

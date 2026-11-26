@@ -952,9 +952,14 @@ int rand(void) {
   return (int)((__crtl_rand_state >> 33) & 0x7fffffffULL);
 }
 
-/* random/srandom share rand's generator and state, as glibc's do. */
-long random(void) { return (long)rand(); }
-void srandom(unsigned int seed) { srand(seed); }
+/* random/srandom share rand's generator and state, as glibc's do -- UNTIL a
+   program calls initstate or setstate, which hand random() a state table of
+   the caller's (the end of this file). */
+static int __crtl_rnd_tables(void);
+static long __crtl_rnd_next(void);
+static void __crtl_rnd_seed(unsigned int seed);
+long random(void) { return __crtl_rnd_tables() ? __crtl_rnd_next() : (long)rand(); }
+void srandom(unsigned int seed) { if (__crtl_rnd_tables()) __crtl_rnd_seed(seed); else srand(seed); }
 
 /* rand_r: the caller owns the state, so there is nothing process-wide to race
    on. IT CANNOT SHARE rand()'s GENERATOR, AND THAT IS FORCED BY THE SIGNATURE
@@ -1851,4 +1856,55 @@ int setstate_r(char *statebuf, struct random_data *buf)
   }
   buf->end_ptr = &state[buf->rand_deg];
   return 0;
+}
+
+/* ---- initstate / setstate: random() on a caller's state table --------------
+
+   POSIX lets a program keep several random() streams and switch between them:
+   initstate(seed, buf, n) starts one in buf, setstate(buf) makes it current,
+   both return the PREVIOUS table. dhcpcd keeps one per interface for IPv4LL
+   address picks. They run on random_r above, with one process-wide
+   random_data. The first call moves random() off rand()'s generator onto
+   these tables for good; a program that never calls either keeps the old
+   sequence. The table it was on before the first call is a TYPE_3 table
+   seeded with 1 -- glibc's own starting state -- so a setstate back to the
+   returned pointer works as it does there. */
+static struct random_data __crtl_rnd;
+static int __crtl_rnd_on;
+static int __crtl_rnd_default[32 + 1];
+
+static int __crtl_rnd_tables(void) { return __crtl_rnd_on; }
+
+static void __crtl_rnd_start(void)
+{
+  if (__crtl_rnd_on) return;
+  __crtl_rnd_on = 1;
+  initstate_r(1, (char *)__crtl_rnd_default, sizeof __crtl_rnd_default, &__crtl_rnd);
+}
+
+static long __crtl_rnd_next(void)
+{
+  int r;
+  random_r(&__crtl_rnd, &r);
+  return (long)r;
+}
+
+static void __crtl_rnd_seed(unsigned int seed) { srandom_r(seed, &__crtl_rnd); }
+
+char *initstate(unsigned int seed, char *state, size_t n)
+{
+  char *old;
+  __crtl_rnd_start();
+  old = (char *)(__crtl_rnd.state - 1);
+  if (initstate_r(seed, state, n, &__crtl_rnd) < 0) return NULL;
+  return old;
+}
+
+char *setstate(char *state)
+{
+  char *old;
+  __crtl_rnd_start();
+  old = (char *)(__crtl_rnd.state - 1);
+  if (setstate_r(state, &__crtl_rnd) < 0) return NULL;
+  return old;
 }

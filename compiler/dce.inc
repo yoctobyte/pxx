@@ -1333,7 +1333,7 @@ procedure DceMarkAll(suppressVmt: Boolean);
   O(stubs x coderefs) per body and DceOwnerOf is a binary search per fixup, and
   both are recomputed. That is why the second run happens only under
   --dce-cost and never by default. }
-var i, p, owner, a, b, slot: Integer; progressed: Boolean;
+var i, j, p, owner, a, b, slot: Integer; progressed: Boolean;
 begin
   { --- roots ------------------------------------------------------------- }
   i := 0;
@@ -1470,6 +1470,20 @@ begin
       if ObjProcIsDefined(i) and ObjProcIsExported(i) and
          not ObjProcIsBuiltinRtl(i) then DceMark(i);
       Inc(i);
+    end;
+    { ...and the target of a C alias (`__attribute__((alias("t")))`, or
+      file-scope asm `a = t`): the alias is exported, its body is t's, and t
+      may be `static` with no caller of its own -- dhcpcd's setproctitle_impl,
+      which this pass dropped and the writer then refused as undefined.
+      bug-c-the-alias-attribute-was-ignored }
+    for j := 0 to CFsaAliasCount - 1 do
+    begin
+      i := 0;
+      while i < ProcCount do
+      begin
+        if (Procs[i].Name = CFsaAliasTarget[j]) and ObjProcIsDefined(i) then DceMark(i);
+        Inc(i);
+      end;
     end;
   end;
   { A BODY THAT HOLDS A STUB TARGET IS A ROOT, NOT MERELY A BODY THAT SURVIVES.

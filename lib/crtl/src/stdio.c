@@ -2138,3 +2138,17 @@ int pclose(FILE *stream) {
   }
   return status;                               /* the raw wait status, as glibc */
 }
+
+/* fgetpos / fsetpos: ftello / fseeko through fpos_t */
+int fgetpos(FILE *stream, fpos_t *pos)
+{
+  off_t o = ftello(stream);
+  if (o < 0) return -1;
+  pos->__pos = o;
+  return 0;
+}
+
+int fsetpos(FILE *stream, const fpos_t *pos)
+{
+  return fseeko(stream, pos->__pos, SEEK_SET);
+}

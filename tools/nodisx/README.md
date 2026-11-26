@@ -113,3 +113,41 @@ byte-identical to gcc's and each read back by the other build. Also `-t`
 on a good and a corrupt file, two concatenated streams, `bzip2recover` on
 a truncated file, and every `.tar.bz2` download at hand, all compared with
 gcc's builds.
+
+## dhcpcd 10.5.2 (BSD-2-Clause): dhcpcd, its hook runner and three hooks
+
+The DHCPv4/DHCPv6/IPv4LL/IPv6-RA client the installer brings the network
+up with. dhcpcd has its own hand-written configure; `record.sh` runs it
+once with the choices given explicitly, not probed from the build host:
+`--without-udev` (no udev on Nodisx), `--without-openssl` (dhcpcd's own
+md5/sha256/hmac), `--with-hooks= --with-eghooks=` (only 01-test,
+20-resolv.conf and 30-hostname; configure would otherwise add an NTP or NIS
+hook if the BUILD host has chronyd or ypbind), and `--disable-privsep`.
+
+**`--disable-privsep` is a security trade-off, for the owner to revisit.**
+Privilege separation needs a dedicated user, a chroot directory and seccomp
+filters, none of which the install environment has. Without it dhcpcd runs
+entirely as root. Fine for an installer; the installed system may want it
+back.
+
+gen.tar holds config.h, the option definitions configure generates
+(`src/dhcpcd-embedded.{c,h}`) and the two hook scripts made from `.in`
+files. 34 units, one link. `.tar.xz`, so the xz recipe comes first.
+`onsite.sh WORK [DESTDIR]` installs `sbin/dhcpcd`, `libexec/dhcpcd-run-hooks`,
+`libexec/dhcpcd-hooks/` and `etc/dhcpcd.conf` (kept if present).
+
+`test.sh` compares with gcc's build what runs without root: `--version`, the
+usage text and an unknown-option error; `-V`, the whole option-definition
+table, with an empty config, the shipped dhcpcd.conf and a config of
+`define`/`define6`/`vendopt`/`encap`/`embed` blocks; and dhcpcd's own crypto
+self-test (the RFC 2202 HMAC-MD5 and SHA-256 vectors) built by pxx. A live
+lease needs a network namespace (refused unprivileged on the build host) or
+a VM: the Path B QEMU image's user-mode network answers DHCP.
+
+What dhcpcd needed from pxx and crtl (found by compiling every unit with
+`-nostdinc -I lib/crtl/include`, so nothing came from the host's headers):
+`_Alignas` and `<stdalign.h>`, the `alias` attribute (and DCE keeping an
+alias's static target), posix_spawn, the IPv6 neighbour-discovery and
+generic-netlink headers, initstate/setstate, fgetpos/fsetpos, closefrom,
+memset_explicit. Tickets: bug-c-alignas-is-read-as-a-call,
+bug-c-the-alias-attribute-was-ignored, feature-crtl-the-libc-gaps-dhcpcd-found.

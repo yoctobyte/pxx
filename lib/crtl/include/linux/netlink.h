@@ -113,6 +113,19 @@ struct nlmsgerr {
   struct nlmsghdr msg;      /* the header of the message that failed */
 };
 
+/* A netlink ATTRIBUTE: a 4-byte header, then the payload, padded to 4.
+   dhcpcd walks nl80211 replies with these (if-linux.c, nla_next). */
+struct nlattr {
+  __u16 nla_len;      /* header + payload, unpadded */
+  __u16 nla_type;
+};
+#define NLA_F_NESTED        (1 << 15)
+#define NLA_F_NET_BYTEORDER (1 << 14)
+#define NLA_TYPE_MASK       ~(NLA_F_NESTED | NLA_F_NET_BYTEORDER)
+#define NLA_ALIGNTO         4
+#define NLA_ALIGN(len)      (((len) + NLA_ALIGNTO - 1) & ~(NLA_ALIGNTO - 1))
+#define NLA_HDRLEN          ((int) NLA_ALIGN(sizeof(struct nlattr)))
+
 /* Socket options at SOL_NETLINK. */
 #define NETLINK_ADD_MEMBERSHIP   1
 #define NETLINK_DROP_MEMBERSHIP  2

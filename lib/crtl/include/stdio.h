@@ -96,6 +96,11 @@ long ftell(FILE *stream);
    target, where `long' is 32 bits and off_t is not. */
 int fseeko(FILE *stream, off_t off, int whence);
 off_t ftello(FILE *stream);
+/* fgetpos/fsetpos: ftello/fseeko's answer in an opaque type (no multibyte
+   shift state to keep: crtl's streams are bytes). dhcpcd's print_option. */
+typedef struct { off_t __pos; } fpos_t;
+int fgetpos(FILE *stream, fpos_t *pos);
+int fsetpos(FILE *stream, const fpos_t *pos);
 
 /* POSIX.1-2008. The delimiter is KEPT and the result NUL-terminated; the
    return is the byte count before that NUL, so an embedded NUL survives, and

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  825 functions across 80 headers. }
+  852 functions across 81 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -35,9 +35,9 @@ begin
       ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chown:unistd.h chroot:unistd.h ' +
       ' clearenv:stdlib.h clearerr:stdio.h clearerr_unlocked:stdio.h clock:time.h ' +
       ' clock_getres:time.h clock_gettime:time.h clock_nanosleep:time.h clock_settime:time.h ' +
-      ' close:unistd.h closedir:dirent.h closelog:syslog.h confstr:unistd.h connect:sys/socket.h ' +
-      ' copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h crypt:crypt.h ' +
-      ' crypt_r:crypt.h ctime:time.h ctime_r:time.h ';
+      ' close:unistd.h closedir:dirent.h closefrom:unistd.h closelog:syslog.h confstr:unistd.h ' +
+      ' connect:sys/socket.h copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h ' +
+      ' crypt:crypt.h crypt_r:crypt.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
       ' daemon:unistd.h dcgettext:libintl.h dcngettext:libintl.h dgettext:libintl.h ' +
       ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dladdr:dlfcn.h ' +
@@ -61,19 +61,19 @@ begin
       ' fcntl:fcntl.h fdatasync:unistd.h fdopen:stdio.h fdopendir:dirent.h feof:stdio.h ' +
       ' feof_unlocked:stdio.h ferror:stdio.h ferror_unlocked:stdio.h fexecve:unistd.h ' +
       ' fflush:stdio.h fflush_unlocked:stdio.h fgetc:stdio.h fgetc_unlocked:stdio.h ' +
-      ' fgets:stdio.h fgets_unlocked:stdio.h fgetxattr:sys/xattr.h fileno:stdio.h ' +
-      ' fileno_unlocked:stdio.h finite:math.h finitef:math.h flistxattr:sys/xattr.h ' +
-      ' flock:sys/file.h flockfile:stdio.h floor:math.h floorf:math.h fmax:math.h fmaxf:math.h ' +
-      ' fmin:math.h fminf:math.h fmod:math.h fmodf:math.h fnmatch:fnmatch.h fopen:stdio.h ' +
-      ' fork:unistd.h forkpty:pty.h fpathconf:unistd.h fprintf:stdio.h fputc:stdio.h ' +
-      ' fputc_unlocked:stdio.h fputs:stdio.h fputs_unlocked:stdio.h fread:stdio.h ' +
-      ' fread_unlocked:stdio.h free:stdlib.h freeaddrinfo:netdb.h freeifaddrs:ifaddrs.h ' +
-      ' freelocale:locale.h fremovexattr:sys/xattr.h freopen:stdio.h frexp:math.h fscanf:stdio.h ' +
-      ' fseek:stdio.h fseeko:stdio.h fsetxattr:sys/xattr.h fstat:sys/stat.h fstat64:sys/stat.h ' +
-      ' fstatat:sys/stat.h fstatat64:sys/stat.h fstatfs:sys/statfs.h fstatvfs:sys/statvfs.h ' +
-      ' fsync:unistd.h ftell:stdio.h ftello:stdio.h ftok:sys/ipc.h ftruncate:unistd.h ' +
-      ' ftrylockfile:stdio.h funlockfile:stdio.h futimens:time.h fwrite:stdio.h ' +
-      ' fwrite_unlocked:stdio.h ';
+      ' fgetpos:stdio.h fgets:stdio.h fgets_unlocked:stdio.h fgetxattr:sys/xattr.h ' +
+      ' fileno:stdio.h fileno_unlocked:stdio.h finite:math.h finitef:math.h ' +
+      ' flistxattr:sys/xattr.h flock:sys/file.h flockfile:stdio.h floor:math.h floorf:math.h ' +
+      ' fmax:math.h fmaxf:math.h fmin:math.h fminf:math.h fmod:math.h fmodf:math.h ' +
+      ' fnmatch:fnmatch.h fopen:stdio.h fork:unistd.h forkpty:pty.h fpathconf:unistd.h ' +
+      ' fprintf:stdio.h fputc:stdio.h fputc_unlocked:stdio.h fputs:stdio.h ' +
+      ' fputs_unlocked:stdio.h fread:stdio.h fread_unlocked:stdio.h free:stdlib.h ' +
+      ' freeaddrinfo:netdb.h freeifaddrs:ifaddrs.h freelocale:locale.h fremovexattr:sys/xattr.h ' +
+      ' freopen:stdio.h frexp:math.h fscanf:stdio.h fseek:stdio.h fseeko:stdio.h fsetpos:stdio.h ' +
+      ' fsetxattr:sys/xattr.h fstat:sys/stat.h fstat64:sys/stat.h fstatat:sys/stat.h ' +
+      ' fstatat64:sys/stat.h fstatfs:sys/statfs.h fstatvfs:sys/statvfs.h fsync:unistd.h ' +
+      ' ftell:stdio.h ftello:stdio.h ftok:sys/ipc.h ftruncate:unistd.h ftrylockfile:stdio.h ' +
+      ' funlockfile:stdio.h futimens:time.h fwrite:stdio.h fwrite_unlocked:stdio.h ';
     'g': Result :=
       ' gai_strerror:netdb.h getaddrinfo:netdb.h getc:stdio.h getc_unlocked:stdio.h ' +
       ' getchar:stdio.h getchar_unlocked:stdio.h getcwd:unistd.h getdelim:stdio.h ' +
@@ -101,16 +101,16 @@ begin
       ' iconv:iconv.h iconv_close:iconv.h iconv_open:iconv.h if_freenameindex:net/if.h ' +
       ' if_indextoname:net/if.h if_nameindex:net/if.h if_nametoindex:net/if.h imaxabs:inttypes.h ' +
       ' imaxdiv:inttypes.h inet_addr:arpa/inet.h inet_aton:arpa/inet.h inet_ntoa:arpa/inet.h ' +
-      ' inet_ntop:arpa/inet.h inet_pton:arpa/inet.h initgroups:unistd.h initstate_r:stdlib.h ' +
-      ' inotify_add_watch:sys/inotify.h inotify_init:sys/inotify.h inotify_init1:sys/inotify.h ' +
-      ' inotify_rm_watch:sys/inotify.h ioctl:sys/ioctl.h ioperm:sys/io.h iopl:sys/io.h ' +
-      ' isalnum:ctype.h isalpha:ctype.h isascii:ctype.h isatty:unistd.h isblank:ctype.h ' +
-      ' iscntrl:ctype.h isdigit:ctype.h isfinite:math.h isgraph:ctype.h isinf:math.h ' +
-      ' islower:ctype.h isnan:math.h isprint:ctype.h ispunct:ctype.h isspace:ctype.h ' +
-      ' isupper:ctype.h iswalnum:wctype.h iswalpha:wctype.h iswblank:wctype.h iswcntrl:wctype.h ' +
-      ' iswctype:wctype.h iswdigit:wctype.h iswgraph:wctype.h iswlower:wctype.h ' +
-      ' iswprint:wctype.h iswpunct:wctype.h iswspace:wctype.h iswupper:wctype.h ' +
-      ' iswxdigit:wctype.h isxdigit:ctype.h ';
+      ' inet_ntop:arpa/inet.h inet_pton:arpa/inet.h initgroups:unistd.h initstate:stdlib.h ' +
+      ' initstate_r:stdlib.h inotify_add_watch:sys/inotify.h inotify_init:sys/inotify.h ' +
+      ' inotify_init1:sys/inotify.h inotify_rm_watch:sys/inotify.h ioctl:sys/ioctl.h ' +
+      ' ioperm:sys/io.h iopl:sys/io.h isalnum:ctype.h isalpha:ctype.h isascii:ctype.h ' +
+      ' isatty:unistd.h isblank:ctype.h iscntrl:ctype.h isdigit:ctype.h isfinite:math.h ' +
+      ' isgraph:ctype.h isinf:math.h islower:ctype.h isnan:math.h isprint:ctype.h ' +
+      ' ispunct:ctype.h isspace:ctype.h isupper:ctype.h iswalnum:wctype.h iswalpha:wctype.h ' +
+      ' iswblank:wctype.h iswcntrl:wctype.h iswctype:wctype.h iswdigit:wctype.h ' +
+      ' iswgraph:wctype.h iswlower:wctype.h iswprint:wctype.h iswpunct:wctype.h ' +
+      ' iswspace:wctype.h iswupper:wctype.h iswxdigit:wctype.h isxdigit:ctype.h ';
     'j': Result :=
       ' jrand48:stdlib.h ';
     'k': Result :=
@@ -128,13 +128,14 @@ begin
       ' mblen:stdlib.h mbrlen:wchar.h mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h ' +
       ' mbtowc:stdlib.h memalign:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
       ' memcpy:string.h memfd_create:sys/mman.h memmem:string.h memmove:string.h ' +
-      ' mempcpy:string.h memrchr:string.h memset:string.h mkdir:sys/stat.h mkdirat:sys/stat.h ' +
-      ' mkdtemp:stdlib.h mkfifo:sys/stat.h mkfifoat:sys/stat.h mknod:sys/stat.h ' +
-      ' mknodat:sys/stat.h mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h ' +
-      ' mlock:sys/mman.h mlockall:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h ' +
-      ' mount:sys/mount.h mprotect:sys/mman.h mrand48:stdlib.h mremap:sys/mman.h ' +
-      ' msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h ' +
-      ' munlock:sys/mman.h munlockall:sys/mman.h munmap:sys/mman.h ';
+      ' mempcpy:string.h memrchr:string.h memset:string.h memset_explicit:string.h ' +
+      ' mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
+      ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
+      ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
+      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
+      ' mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h ' +
+      ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
+      ' munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
       ' ngettext:libintl.h nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h ' +
@@ -152,7 +153,17 @@ begin
       ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
       ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
       ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
-      ' posix_openpt:stdlib.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
+      ' posix_openpt:stdlib.h posix_spawn:spawn.h posix_spawn_file_actions_addchdir_np:spawn.h ' +
+      ' posix_spawn_file_actions_addclose:spawn.h posix_spawn_file_actions_adddup2:spawn.h ' +
+      ' posix_spawn_file_actions_addfchdir_np:spawn.h posix_spawn_file_actions_addopen:spawn.h ' +
+      ' posix_spawn_file_actions_destroy:spawn.h posix_spawn_file_actions_init:spawn.h ' +
+      ' posix_spawnattr_destroy:spawn.h posix_spawnattr_getflags:spawn.h ' +
+      ' posix_spawnattr_getpgroup:spawn.h posix_spawnattr_getschedpolicy:spawn.h ' +
+      ' posix_spawnattr_getsigdefault:spawn.h posix_spawnattr_getsigmask:spawn.h ' +
+      ' posix_spawnattr_init:spawn.h posix_spawnattr_setflags:spawn.h ' +
+      ' posix_spawnattr_setpgroup:spawn.h posix_spawnattr_setschedpolicy:spawn.h ' +
+      ' posix_spawnattr_setsigdefault:spawn.h posix_spawnattr_setsigmask:spawn.h ' +
+      ' posix_spawnp:spawn.h pow:math.h powf:math.h ppoll:poll.h prctl:sys/prctl.h ' +
       ' pread:unistd.h pread64:unistd.h preadv:sys/uio.h printf:stdio.h prlimit:sys/resource.h ' +
       ' pselect:sys/select.h pthread_kill:signal.h pthread_sigmask:signal.h ptrace:sys/ptrace.h ' +
       ' ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
@@ -188,28 +199,28 @@ begin
       ' setns:sched.h setpgid:unistd.h setpgrp:unistd.h setpriority:sys/resource.h ' +
       ' setpwent:pwd.h setregid:unistd.h setresgid:unistd.h setresuid:unistd.h setreuid:unistd.h ' +
       ' setrlimit:sys/resource.h setservent:netdb.h setsid:unistd.h setsockopt:sys/socket.h ' +
-      ' setspent:shadow.h setstate_r:stdlib.h settimeofday:sys/time.h setuid:unistd.h ' +
-      ' setusershell:unistd.h setutxent:utmpx.h setvbuf:stdio.h setxattr:sys/xattr.h ' +
-      ' sgetspent:shadow.h shmat:sys/shm.h shmctl:sys/shm.h shmdt:sys/shm.h shmget:sys/shm.h ' +
-      ' shutdown:sys/socket.h sigaction:signal.h sigaddset:signal.h sigaltstack:signal.h ' +
-      ' sigdelset:signal.h sigemptyset:signal.h sigfillset:signal.h sigisemptyset:signal.h ' +
-      ' sigismember:signal.h signal:signal.h signbit:math.h sigprocmask:signal.h ' +
-      ' sigsuspend:signal.h sigtimedwait:signal.h sigwait:signal.h sin:math.h sincos:math.h ' +
-      ' sincosf:math.h sinf:math.h sinh:math.h sleep:unistd.h snprintf:stdio.h ' +
-      ' socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h ' +
-      ' srand:stdlib.h srand48:stdlib.h srandom:stdlib.h srandom_r:stdlib.h sscanf:stdio.h ' +
-      ' stat:sys/stat.h stat64:sys/stat.h statfs:sys/statfs.h statvfs:sys/statvfs.h ' +
-      ' stpcpy:string.h stpncpy:string.h strcasestr:string.h strcat:string.h strchr:string.h ' +
-      ' strchrnul:string.h strcmp:string.h strcoll:string.h strcpy:string.h strcspn:string.h ' +
-      ' strdup:stdlib.h strerror:string.h strerror_r:string.h strftime:time.h strlcat:string.h ' +
-      ' strlcpy:string.h strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h ' +
-      ' strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h ' +
-      ' strsep:string.h strsignal:string.h strspn:string.h strstr:string.h strtod:stdlib.h ' +
-      ' strtof:stdlib.h strtoimax:inttypes.h strtok:string.h strtok_r:string.h strtol:stdlib.h ' +
-      ' strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h ' +
-      ' strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h swapoff:sys/swap.h ' +
-      ' swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h syscall:unistd.h ' +
-      ' sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
+      ' setspent:shadow.h setstate:stdlib.h setstate_r:stdlib.h settimeofday:sys/time.h ' +
+      ' setuid:unistd.h setusershell:unistd.h setutxent:utmpx.h setvbuf:stdio.h ' +
+      ' setxattr:sys/xattr.h sgetspent:shadow.h shmat:sys/shm.h shmctl:sys/shm.h shmdt:sys/shm.h ' +
+      ' shmget:sys/shm.h shutdown:sys/socket.h sigaction:signal.h sigaddset:signal.h ' +
+      ' sigaltstack:signal.h sigdelset:signal.h sigemptyset:signal.h sigfillset:signal.h ' +
+      ' sigisemptyset:signal.h sigismember:signal.h signal:signal.h signbit:math.h ' +
+      ' sigprocmask:signal.h sigsuspend:signal.h sigtimedwait:signal.h sigwait:signal.h ' +
+      ' sin:math.h sincos:math.h sincosf:math.h sinf:math.h sinh:math.h sleep:unistd.h ' +
+      ' snprintf:stdio.h socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h ' +
+      ' sqrtf:math.h srand:stdlib.h srand48:stdlib.h srandom:stdlib.h srandom_r:stdlib.h ' +
+      ' sscanf:stdio.h stat:sys/stat.h stat64:sys/stat.h statfs:sys/statfs.h ' +
+      ' statvfs:sys/statvfs.h stpcpy:string.h stpncpy:string.h strcasestr:string.h ' +
+      ' strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h strcoll:string.h ' +
+      ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +
+      ' strftime:time.h strlcat:string.h strlcpy:string.h strlen:string.h strncat:string.h ' +
+      ' strncmp:string.h strncpy:string.h strndup:stdlib.h strnlen:string.h strpbrk:string.h ' +
+      ' strptime:time.h strrchr:string.h strsep:string.h strsignal:string.h strspn:string.h ' +
+      ' strstr:string.h strtod:stdlib.h strtof:stdlib.h strtoimax:inttypes.h strtok:string.h ' +
+      ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
+      ' strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h ' +
+      ' swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h ' +
+      ' syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +
@@ -260,10 +271,10 @@ begin
     'j': Result := 128;
     'k': Result := 208;
     'l': Result := 7928;
-    'm': Result := 267760;
+    'm': Result := 300528;
     'n': Result := 360376;
     'o': Result := 16592;
-    'p': Result := 131064;
+    'p': Result := 1737621496;
     'q': Result := 160;
     'r': Result := 8176;
     's': Result := 4620280;

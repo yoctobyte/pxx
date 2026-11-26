@@ -55,6 +55,7 @@
 #include <setjmp.h>
 #include <shadow.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

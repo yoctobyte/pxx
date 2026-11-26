@@ -26,6 +26,9 @@ size_t strlcat(char *dst, const char *src, size_t size);
 /* memset that the compiler may not delete as a dead store: for wiping keys
    and passwords (dropbear's m_burn). */
 void explicit_bzero(void *s, size_t n);
+/* C23's spelling of the same guarantee, any byte value, returns s (dhcpcd's
+   auth.c wipes its keys with it; glibc 2.43 has it, so configure assumes it). */
+void *memset_explicit(void *s, int c, size_t n);
 char *strchr(const char *s, int c);
 
 /* The assumed-libc batch (feature-crtl-libc-gap-batch-2026-08). stpcpy returns

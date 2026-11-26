@@ -2035,3 +2035,19 @@ size_t confstr(int name, char *buf, size_t len)
   }
   return n;
 }
+
+/* closefrom: one close_range(lowfd, ~0, 0) on a kernel that has it; on one that
+   does not (ENOSYS, before 5.9) close each slot up to the descriptor limit,
+   ignoring EBADF -- the slots that were never open. */
+void closefrom(int lowfd)
+{
+  long max, fd;
+  struct rlimit rl;
+  if (lowfd < 0) lowfd = 0;
+  if (syscall(SYS_close_range, (long)lowfd, (long)~0U, 0L, 0L, 0L, 0L) == 0) return;
+  max = 1024;                      /* sysconf(_SC_OPEN_MAX)'s fixed answer */
+  if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+    max = (long)rl.rlim_cur;
+  if (max > 1048576) max = 1048576;
+  for (fd = lowfd; fd < max; fd++) close((int)fd);
+}

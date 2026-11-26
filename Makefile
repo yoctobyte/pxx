@@ -19799,6 +19799,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_struct_param_before_body.c $(TESTTMP)/c_spbb26
 	@gcc -w test/c_struct_param_before_body.c -o $(TESTTMP)/c_spbb26_gcc
 	tools/expect_same.sh c_spbb26 "$$(timeout 20 $(TESTTMP)/c_spbb26)" "$$(timeout 20 $(TESTTMP)/c_spbb26_gcc)"
+	# C11 _Alignas / <stdalign.h> alignas on a local, a global and struct members (dhcpcd's dhcp.c); against gcc
+	./$(COMPILER) test/c_alignas.c $(TESTTMP)/c_alignas26
+	@gcc -w test/c_alignas.c -o $(TESTTMP)/c_alignas26_gcc
+	tools/expect_same.sh c_alignas26 "$$(timeout 20 $(TESTTMP)/c_alignas26)" "$$(timeout 20 $(TESTTMP)/c_alignas26_gcc)"
+	# posix_spawn, initstate/setstate, fgetpos, closefrom, memset_explicit (crtl gaps dhcpcd found); against gcc
+	./$(COMPILER) test/c_posix_spawn.c $(TESTTMP)/c_pspawn26
+	@gcc -w -D_GNU_SOURCE test/c_posix_spawn.c -o $(TESTTMP)/c_pspawn26_gcc
+	tools/expect_same.sh c_pspawn26 "$$(timeout 20 $(TESTTMP)/c_pspawn26)" "$$(timeout 20 $(TESTTMP)/c_pspawn26_gcc)"
+	# __attribute__((alias)) through --emit-obj, two objects linked by pxx (dhcpcd's setproctitle); against gcc
+	./$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_alias_attribute.c $(TESTTMP)/c_aliasattr26.o > /dev/null
+	./$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_alias_attribute_main.c $(TESTTMP)/c_aliasattr26_m.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_aliasattr26 $(TESTTMP)/c_aliasattr26.o $(TESTTMP)/c_aliasattr26_m.o > /dev/null
+	@gcc -w test/c_alias_attribute.c test/c_alias_attribute_main.c -o $(TESTTMP)/c_aliasattr26_gcc
+	tools/expect_same.sh c_aliasattr26 "$$(timeout 20 $(TESTTMP)/c_aliasattr26)" "$$(timeout 20 $(TESTTMP)/c_aliasattr26_gcc)"
 	# Kernel inline asm (Nilix): the user-mode-runnable half executed and checked
 	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
 	# segment register moves, named operands, "i"/"n" immediates through a
