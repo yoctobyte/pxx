@@ -112,3 +112,20 @@ pxx fixes it needed:
 - crtl: `pthread_sigmask`, `program_invocation_name`, and printf's `'` flag.
 
 Next: mke2fs (e2fsprogs), then sfdisk/blkid (util-linux).
+
+## Item 2: mke2fs done (e2fsprogs); sfdisk/blkid (util-linux) next
+
+e2fsprogs 1.47.1 (`tools/nodisx/e2fsprogs/`), 2026-11-26: mke2fs, e2fsck and
+tune2fs, plus the mkfs.ext2/3/4, fsck.ext2/3/4 and e2label links. Upstream
+.tar.xz, unpacked with the xz recipe's xzcat. e2fsprogs' own `make check`
+passes 385 of 385 with the pxx programs in place of gcc's, the same as gcc's
+build. Ten mke2fs images (ext2/3/4, metadata_csum, 64bit, inline_data, 1 KiB
+blocks, journal size) are byte-identical to gcc's, with the same output.
+Text 818/1142/774 KB.
+
+pxx needed only crtl gaps here, no compiler fixes:
+- `open64` existed but `<fcntl.h>` did not declare it;
+- `mallinfo2`/`mallinfo` (used by `e2fsck -t`) were missing. They now report
+  the allocator's exact counts in glibc's layout (test c_mallinfo_open64).
+units-from-make.sh learned continued commands, archives linked from another
+path, and archives named twice on one link line.

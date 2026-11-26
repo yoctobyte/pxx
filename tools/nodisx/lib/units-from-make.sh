@@ -37,6 +37,16 @@ function rel(d, p,   parts, n, i, out, k, stack) {
   if (out == top) return "."
   return out
 }
+function byname(a,   b, k, hit, n) {
+  # an archive linked by a path it was not BUILT at: e2fsprogs builds
+  # lib/ext2fs/libext2fs.a and links ../lib/libext2fs.a, a link make makes
+  # after `ar`. Take the one built archive with that file name; an
+  # ambiguous name stays missing.
+  if (a in members) return a
+  b = a; sub(/.*\//, "", b); n = 0
+  for (k in members) { hit2 = k; sub(/.*\//, "", hit2); if (hit2 == b) { hit = k; n++ } }
+  return n == 1 ? hit : a
+}
 BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir = top; nu = 0; sp = 0 }
 # a stack: after `Leaving directory` the commands belong to the parent make again
 # (dropbear links its programs at the top after the libtomcrypt and
@@ -47,6 +57,10 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
 /Leaving directory/ { if (sp > 0) dir = stk[sp--]; else dir = top; next }
 {
   line = $0
+  # a command make echoes over several lines (a trailing backslash, as
+  # the e2fsprogs misc/Makefile writes the debugfs sources) is ONE command.
+  # (no apostrophes in these comments: the program is single-quoted)
+  while (line ~ /\\$/ && (getline more) > 0) { sub(/\\$/, " ", line); line = line more }
   if (line ~ /^libtool: compile: +/) sub(/^libtool: compile: +/, "", line)
   else if (line ~ /^libtool: link: +/) sub(/^libtool: link: +/, "", line)
   else if (line !~ /^(gcc|cc|ar) /) next
@@ -95,8 +109,13 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
     objs = ""
     for (i = 2; i <= n; i++) {
       if (w[i] ~ /\.o$/) objs = objs " " rel(dir, w[i])
-      else if (w[i] ~ /\.a$/) { a = rel(dir, w[i]); if (a in members) objs = objs members[a]; else objs = objs " MISSING-ARCHIVE:" a }
+      else if (w[i] ~ /\.a$/) { a = byname(rel(dir, w[i])); if (a in members) objs = objs members[a]; else objs = objs " MISSING-ARCHIVE:" a }
     }
+    # an archive named twice (ld resolves a cycle between libraries that
+    # way; e2fsprogs links libext2fs.a again after libblkid.a) is ONE set
+    # of objects: keep each object at its first place
+    m = split(objs, ow, " "); objs = ""; delete once
+    for (i = 1; i <= m; i++) if (!(ow[i] in once)) { once[ow[i]] = 1; objs = objs " " ow[i] }
     link[p] = objs
   }
 }

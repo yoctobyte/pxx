@@ -352,3 +352,26 @@ PATH, then runs busybox's own testsuite on the pxx build and on the gcc
 build: 763 PASS and the same 6 FAIL on both. It then boots Rainyday with
 this busybox as its userland and the on-site rumpnic as its NIC driver:
 DHCP, ping and a fetch. PASS is no pxx-only failure, and the boot.
+
+## e2fsprogs 1.47.1 (GPL-2.0; the libraries LGPL/BSD/MIT): mke2fs, e2fsck, tune2fs
+
+Upstream `.tar.xz`, unpacked with the xz recipe's `xzcat`. Installs
+`sbin/{mke2fs,e2fsck,tune2fs}` with the `mkfs.ext2/3/4`, `fsck.ext2/3/4` and
+`e2label` links. e2fsprogs' private libuuid and libblkid are linked in, so
+nothing comes from the host.
+
+`configure` and one `make V=1` run on the host. `gen.tar` holds every source
+the build generated: the built tree's `.c`/`.h` files that the tarball lacks
+(config.h, ext2fs.h, compile_et's `*_err.c/.h`, crc32c_table.h,
+default_profile.c, ...). `lib/units-from-make.sh` reads units and link lines
+from the make log. That needs three things the xz log did not: commands
+continued with a backslash, archives built in a subdirectory and linked from
+`lib/`, and an archive named twice on one link line. The host gcc is given
+`-std=gnu17`, because it defaults to C23, where e2fsprogs' `typedef int bool`
+is an error. Units compile `--threadsafe`, as gcc's build uses `-pthread`.
+
+`test.sh` runs e2fsprogs' own `make check` with the pxx mke2fs, e2fsck and
+tune2fs in place of gcc's (385 of 385, as gcc's build). It also builds ten
+mke2fs images (ext2/3/4, metadata_csum, 64bit, inline_data, 1 KiB blocks,
+explicit journal size) with the UUID, hash seed and clock fixed, and checks
+them byte-identical to gcc's, with the same stdout, stderr and exit status.
