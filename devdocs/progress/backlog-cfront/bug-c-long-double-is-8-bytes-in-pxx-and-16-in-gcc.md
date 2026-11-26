@@ -60,3 +60,15 @@ discover it from a message and cannot work around what they cannot see. Marked
 an unenumerated silent-wrong is the class it must not ship.
 
 Re-measured 2026-09-06: `sizeof(long double)` and `sizeof(struct { long double x; })` are both 16 under gcc and both 8 under pxx, from the same source, both compiling and running silently. An aggregate carrying one disagrees about its own SIZE across any real C boundary before any calling-convention question is reached.
+
+## Seen in sqlite 3.46.0 (Nodisx sqlite recipe, 2026-11-26, pxx2)
+
+sqlite probes at start-up whether long double has more precision than
+double (`hasHighPrecisionDouble`, sqlite3.c:179931). Under pxx it has not, so
+`sqlite3Config.bUseLongDouble` is 0 and reals are formatted and parsed with
+the double-double path. Against a stock gcc build the only difference the
+recipe's 6 SQL scripts found is past 17 significant digits:
+`printf('%!.20g', 0.1)` is `0.1000000000000000055` under pxx (the exact
+digits) and `0.100000000000000005` under gcc's x87 path. With
+`-DLONGDOUBLE_TYPE=double` on the gcc side the two builds are identical.
+`tools/nodisx/sqlite/test.sh` builds its reference that way.

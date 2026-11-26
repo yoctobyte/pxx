@@ -240,6 +240,39 @@ Fixed in pxx for this recipe:
   numbers. Without TCP_FASTOPEN_CONNECT, curl's Fast Open was silently
   compiled out; the strict `-nostdinc` header check found it.
 
+## sqlite 3.46.0 (public domain): sqlite3
+
+pixix's build, unchanged:
+- the version is the one `tools/install_lib_candidates.sh` pins;
+- the flags are pixix's `lib/stage-userland.sh` ones:
+  `-DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION -DHAVE_READLINE=0`;
+- two units, the amalgamation and `shell.c`, compiled from inside the
+  source directory so `__FILE__` holds no path.
+pixix fetches the amalgamation .zip, which toybox cannot unpack, so the
+recipe takes the release's autoconf .tar.gz. Its four sources are
+byte-identical to the zip's; `test.sh` checks that again whenever the pinned
+zip is in the download directory. Nothing is configured or generated.
+
+`test.sh` runs the six scripts in `sql/` through the pxx build and a gcc
+build with the same flags:
+- SQL: all join kinds, triggers, upsert, RETURNING, STRICT, query plans;
+- the built-in functions, casts, integer and real edge cases, printf, dates,
+  JSON/JSONB;
+- recursive CTEs, floating point summed 100,000 times, every window function;
+- the shell's output modes, `.import`, `.dump` and `.sha3sum`;
+- errors, savepoints and WAL;
+- 200,000 rows with overflow pages, indexes and VACUUM on a small cache.
+Output and exit status are identical, and so is every database file, the
+12 MB bulk one included. Each build reads the other's database.
+
+pxx's `long double` is double (bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc).
+sqlite notices at start-up and formats reals with its double-double code, as
+it does wherever long double is double. The gcc reference is built with
+`-DLONGDOUBLE_TYPE=double` so that it takes the same path. Against a stock
+80-bit gcc build, the only difference the scripts found is past 17
+significant digits: `printf('%!.20g', 0.1)` gives the exact digits under pxx
+and one fewer under x87. pxx needed no changes for sqlite.
+
 ## Limine 12.11.1 (BSD-2-Clause): the `limine` tool; the boot loaders ship as binaries
 
 pxx builds the host tool, `limine` (one C file: `bios-install`,
