@@ -2853,7 +2853,13 @@ begin
         { `__builtin_unreachable()` tells gcc control never gets here; reaching
           it is undefined behaviour. pxx does not optimise on it, so it is a
           no-op: code after it still exists and runs if it is ever reached. }
-        if (name = '__builtin_unreachable') and (argHead < 0) then
+        { `__builtin_ia32_pause()`, x86's PAUSE: a spin-wait hint, with no
+          effect on memory or on any value, so a no-op keeps its meaning.
+          Every gcc for x86 has it and pxx defines __GNUC__ and __x86_64__,
+          so code tests for exactly that and calls it (curl's easy_lock.h
+          spinlock). feature-c-builtin-ia32-pause }
+        if ((name = '__builtin_unreachable') or (name = '__builtin_ia32_pause'))
+           and (argHead < 0) then
         begin
           Result := AllocNode(AN_INT_LIT);
           ASTIVal[Result] := 0; ASTTk[Result] := Ord(tyInteger);
@@ -11446,6 +11452,19 @@ begin
     if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
     else begin nm := rest; rest := ''; end;
     if (nm <> '') and (nm[1] = '%') then nm := Copy(nm, 2, Length(nm));
+    { a clobber given as gcc's own hard-register NUMBER: on x86 0..7 are ax,
+      dx, cx, bx, si, di, bp, sp (gcc's i386.h order, not the encoding's).
+      mbedTLS's aesni.c clobbers "0", "1" (it uses %eax/%edx in the asm).
+      Higher numbers (x87, flags, SSE, r8..) are refused below, by name.
+      bug-c-a-numbered-asm-clobber-is-refused }
+    if (Length(nm) = 1) and (nm[1] in ['0'..'7']) then
+    begin
+      case nm[1] of
+        '0': nm := 'ax'; '1': nm := 'dx'; '2': nm := 'cx'; '3': nm := 'bx';
+        '4': nm := 'si'; '5': nm := 'di'; '6': nm := 'bp'; '7': nm := 'sp';
+      end;
+      if TargetArch = TARGET_I386 then nm := 'e' + nm else nm := 'r' + nm;
+    end;
     if nm <> '' then
     begin
       if not AsmRegNum(nm, reg, dummySize) then
@@ -12456,6 +12475,16 @@ begin
   Result := blk;
 end;
 
+{ an output operand that an input is tied to (`+r`, or `=r` with a "0"
+  input): an empty template leaves it holding the input's value. }
+function CAsmOutIsTied(o: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := CAsmOutCount to CAsmOpCount - 1 do
+    if CAsmOps[k].TiedTo = o then begin Result := True; Exit; end;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk, labOff, labLen: Integer;
     asmSections, asmStart, asmLen, asmI: Integer; asmEmpty: Boolean;   { GCC inline asm }
@@ -12674,7 +12703,10 @@ begin
     node := AllocNode(AN_EXIT);
     if CurTok.Kind <> tkSemicolon then
     begin
-      ASTLeft[node] := ParseCExpr;
+      { a full expression: `return a, b;` is the comma operator (mbedTLS,
+        curl's tests); ParseCExpr stopped at the comma and the statement was
+        "expected C expression". bug-c-return-of-a-comma-expression-is-refused }
+      ASTLeft[node] := ParseCCommaExpr;
       { `return e;` from a _Bool function converts to 0/1 like any other
         assignment to _Bool (C99 6.8.6.4p3 -> 6.3.1.2). }
       if CurProc >= 0 then
@@ -12934,10 +12966,21 @@ begin
       when the output section was the LAST one written -- `asm("" : "=r"(x) : :
       "memory")` has three sections and slipped through. Now that the operands
       are captured the question can be asked directly. Inputs and clobbers on an
-      empty template stay accepted: that is the barrier form. }
+      empty template stay accepted: that is the barrier form.
+      So are outputs that are ALL read-write (`+r`): the template writes
+      nothing, so each keeps the value it had, which is what gcc produces too.
+      That is the optimisation barrier mbedTLS's constant-time code is built
+      on (`asm volatile ("" : [x] "+r" (x) :)` in mbedtls_ct_compiler_opaque),
+      and with it refused every mbedTLS unit that includes
+      constant_time_impl.h failed. pxx does no value-range reasoning across
+      it to undo the barrier's purpose. bug-c-an-empty-asm-with-in-out-operands-is-refused }
+    { by here a `+` output has become `=` plus an input tied to it (the
+      split above), so "read-write" is: some input's TiedTo names it. }
     if CAsmOutCount > 0 then
-      Error('C: inline asm with an output operand list is not supported'
-            + ' — an empty template cannot have written to it');
+      for asmI := 0 to CAsmOutCount - 1 do
+        if not CAsmOutIsTied(asmI) then
+          Error('C: inline asm with an output operand list is not supported'
+                + ' — an empty template cannot have written to it');
     node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
     Result := node;
     Exit;

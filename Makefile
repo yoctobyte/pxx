@@ -19813,6 +19813,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) --link -o $(TESTTMP)/c_aliasattr26 $(TESTTMP)/c_aliasattr26.o $(TESTTMP)/c_aliasattr26_m.o > /dev/null
 	@gcc -w test/c_alias_attribute.c test/c_alias_attribute_main.c -o $(TESTTMP)/c_aliasattr26_gcc
 	tools/expect_same.sh c_aliasattr26 "$$(timeout 20 $(TESTTMP)/c_aliasattr26)" "$$(timeout 20 $(TESTTMP)/c_aliasattr26_gcc)"
+	# an empty asm with +r operands (mbedTLS's constant-time barrier), a numbered clobber "0"/"1" (aesni.c), __builtin_ia32_pause (curl); against gcc
+	./$(COMPILER) test/c_asm_inout_barrier.c $(TESTTMP)/c_asmbar26
+	@gcc -w test/c_asm_inout_barrier.c -o $(TESTTMP)/c_asmbar26_gcc
+	tools/expect_same.sh c_asmbar26 "$$(timeout 20 $(TESTTMP)/c_asmbar26)" "$$(timeout 20 $(TESTTMP)/c_asmbar26_gcc)"
+	# accept4 with SOCK_CLOEXEC/SOCK_NONBLOCK on loopback, and EINVAL (curl's cf-socket.c); against gcc
+	./$(COMPILER) test/c_accept4.c $(TESTTMP)/c_accept426
+	@gcc -w test/c_accept4.c -o $(TESTTMP)/c_accept426_gcc
+	tools/expect_same.sh c_accept426 "$$(timeout 20 $(TESTTMP)/c_accept426)" "$$(timeout 20 $(TESTTMP)/c_accept426_gcc)"
+	# `return a, b;` -- the comma operator in a return; against gcc
+	./$(COMPILER) test/c_return_comma.c $(TESTTMP)/c_retcomma26
+	@gcc -w test/c_return_comma.c -o $(TESTTMP)/c_retcomma26_gcc
+	tools/expect_same.sh c_retcomma26 "$$(timeout 20 $(TESTTMP)/c_retcomma26)" "$$(timeout 20 $(TESTTMP)/c_retcomma26_gcc)"
 	# Kernel inline asm (Nilix): the user-mode-runnable half executed and checked
 	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
 	# segment register moves, named operands, "i"/"n" immediates through a

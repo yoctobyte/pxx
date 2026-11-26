@@ -114,6 +114,19 @@ on a good and a corrupt file, two concatenated streams, `bzip2recover` on
 a truncated file, and every `.tar.bz2` download at hand, all compared with
 gcc's builds.
 
+## zstd 1.5.6 (BSD-3-Clause; dual GPL-2.0, used under BSD): zstd, unzstd, zstdcat
+
+No configure: the Makefile's probes for zlib, lzma and lz4 are answered as
+the target's (none of them: zstd reads and writes .zst only), the
+hand-written `huf_decompress_amd64.S` is off (`ZSTD_NO_ASM`, it is gas), and
+pthreads are on, so units compile with `--threadsafe` and `-T` works. 43
+units, nothing generated, no gen.tar. `test.sh` runs zstd's own CLI suite
+(`tests/playTests.sh`, datagen built by gcc) on the pxx build and the gcc
+build, both must pass; then 27 compression cases (levels 1..19, `--ultra
+-22`, `-T4`, `--long`, a trained dictionary) on a tarball, random data and
+datagen output: every .zst byte-identical to gcc's and read back by both
+builds. playTests' FIFO case needed crtl's `_POSIX_VERSION`.
+
 ## dhcpcd 10.5.2 (BSD-2-Clause): dhcpcd, its hook runner and three hooks
 
 The DHCPv4/DHCPv6/IPv4LL/IPv6-RA client the installer brings the network
@@ -175,6 +188,86 @@ pxx dbclient against a stock sshd.
 after its libtomcrypt/libtommath sub-makes, and the commands after `Leaving
 directory` used to resolve inside the last sub-directory (xz, dhcpcd and zstd
 output is byte-identical).
+## curl 8.23.0 (curl licence, MIT-style) with mbedTLS 3.6.8 (Apache-2.0) and the Mozilla CA bundle
+
+One recipe holds two trees, `mbedtls/` and `curl/`. mbedTLS's Makefile is
+`.SILENT`, so its units come from a dry run (`make -n -B`); curl's come from
+the libtool log. curl's configure runs once, against a staged mbedTLS:
+- static; HTTP(S), FTP(S), FILE and WS(S) only;
+- none of zlib, brotli, zstd, nghttp2/3, libidn2, libpsl, libssh;
+- the threaded resolver, so every unit is `--threadsafe`;
+- CA bundle `/etc/ssl/certs/ca-certificates.crt` and no CA directory.
+gen.tar holds `curl_config.h`, `tool_ca_embed.c` and mbedTLS's edited
+`mbedtls_config.h`. 590 units are recorded. curl links 246 objects: its
+own, plus the libcurl and mbedTLS archive members a gcc `-Wl,-Map` link
+pulled. The bundle is `cacert-2026-11-05.pem` from curl.se (checked
+against its .sha256), installed at that path. `units-from-make.sh` now
+keeps `-isystem` directories, written as `-I`: curl names mbedTLS's headers
+that way, and without them the unit was compiled against the host's.
+
+**Owner decision: no AES-NI.** mbedTLS's `aesni.c` is SSE/AES-NI inline asm,
+which pxx's encoder does not have (feature-c-inline-asm-sse-and-aes-ni), so
+the recipe comments out `MBEDTLS_AESNI_C`, for the gcc reference as well.
+mbedTLS then uses its software AES. It is correct (the self-test passes) but
+table-based, so it is exposed to cache-timing side channels that AES-NI is
+not, which matters when another user on the machine can measure the cache.
+TLS 1.3 servers often pick ChaCha20-Poly1305, which does not depend on it.
+
+`test.sh` runs a local server (`testserver.py`, stdlib: HTTP, and HTTPS with
+an EC and an RSA certificate from a throwaway CA). It compares the pxx curl
+with the gcc curl on 43 rows, and all must match:
+- `-V`;
+- file://;
+- HTTP: GET, HEAD, ranges, chunked, redirects, POST, PUT and multipart
+  uploads of a 3 MB random file, headers, cookies, auth, status codes,
+  connection reuse, parallel transfers;
+- HTTPS over TLS 1.2 and 1.3 with each certificate, and the refusals
+  (exit 60);
+- every one of the 118 certificates in the bundle, loaded by mbedTLS;
+- mbedTLS's own self-test, built by pxx from the same units: AES, GCM, CCM,
+  SHA-2/3, the DRBGs, RSA, ECP, x509; 295 passed lines, identical to gcc's.
+`NODISX_NET=1` also fetches https://curl.se/ with the bundle.
+
+Fixed in pxx for this recipe:
+- an empty asm with `+r` operands (mbedTLS's constant-time barrier);
+- numbered clobbers (`"0"`, `"1"`);
+- `__builtin_ia32_pause`;
+- `return a, b;`;
+- crtl: `accept4`, `<linux/tcp.h>`, and the rest of Linux's TCP option
+  numbers. Without TCP_FASTOPEN_CONNECT, curl's Fast Open was silently
+  compiled out; the strict `-nostdinc` header check found it.
+
+## Limine 12.11.1 (BSD-2-Clause): the `limine` tool; the boot loaders ship as binaries
+
+pxx builds the host tool, `limine` (one C file: `bios-install`,
+`enroll-config`). The boot loaders themselves are the release's own
+binaries from the signed `limine-binary` tarball: limine-bios.sys, the
+CD/PXE/UEFI-CD images, and BOOTX64/IA32/AA64/RISCV64/LOONGARCH64.EFI. The
+signature was checked against Mintsuki's key 05D29860...ECA23821. Building
+the loaders would take what neither the target nor pxx has:
+- nasm: 35 files in nasm syntax (stage 1, the real/protected-mode entry,
+  the EFI and menu thunks, SMP spin-up);
+- a freestanding cross toolchain per port, with ld.lld or GNU ld and six
+  linker scripts;
+- objcopy (`-O binary` stages, ELF to PE for every .EFI);
+- real-mode i386 code generation.
+`record.sh` lists them. The third-party code inside those binaries is 0BSD,
+MIT, BSD-2, Apache-2.0, CC0 and CC-BY-3.0 (no GPL: libfdt is used under
+BSD-2). `3RDPARTY.md` and LICENSE are installed with them under
+`share/doc/limine/`, as the licences require.
+
+The binary tarball's `limine.c` is the source tarball's `host/limine.c` with
+the version strings filled in. Its `limine-bios-hdd.h` holds the HDD stage-1
+sectors. `test.sh` builds the tool with gcc from the same file and compares:
+- the command line;
+- `bios-install` on an MBR image and on a GPT image with a BIOS boot
+  partition: the images are byte-identical, and changed;
+- the refusals, which leave the image as it was: no partition table, and GPT
+  without a BIOS boot partition;
+- `enroll-config` on BOOTX64.EFI and BOOTAA64.EFI: identical files, and
+  `--reset` restores the shipped file.
+Booting an installed image is left to the Path B QEMU image.
+
 ## GNU make 4.4.1 (GPL-3.0)
 
 What the Rainyday kernel's build needs (GNU-only features), so it comes

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  854 functions across 81 headers. }
+  855 functions across 81 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -17,13 +17,13 @@ begin
     '_': Result :=
       ' _Exit:stdlib.h _exit:unistd.h ';
     'a': Result :=
-      ' abort:stdlib.h abs:stdlib.h accept:sys/socket.h access:unistd.h acct:unistd.h ' +
-      ' acos:math.h acosf:math.h acosh:math.h addmntent:mntent.h adjtimex:sys/timex.h ' +
-      ' alarm:unistd.h aligned_alloc:stdlib.h alphasort:dirent.h arc4random:stdlib.h ' +
-      ' arc4random_buf:stdlib.h arc4random_uniform:stdlib.h asctime:time.h asctime_r:time.h ' +
-      ' asin:math.h asinf:math.h asinh:math.h asprintf:stdio.h atan:math.h atan2:math.h ' +
-      ' atan2f:math.h atanf:math.h atanh:math.h atexit:stdlib.h atof:stdlib.h atoi:stdlib.h ' +
-      ' atol:stdlib.h atoll:stdlib.h ';
+      ' abort:stdlib.h abs:stdlib.h accept:sys/socket.h accept4:sys/socket.h access:unistd.h ' +
+      ' acct:unistd.h acos:math.h acosf:math.h acosh:math.h addmntent:mntent.h ' +
+      ' adjtimex:sys/timex.h alarm:unistd.h aligned_alloc:stdlib.h alphasort:dirent.h ' +
+      ' arc4random:stdlib.h arc4random_buf:stdlib.h arc4random_uniform:stdlib.h asctime:time.h ' +
+      ' asctime_r:time.h asin:math.h asinf:math.h asinh:math.h asprintf:stdio.h atan:math.h ' +
+      ' atan2:math.h atan2f:math.h atanf:math.h atanh:math.h atexit:stdlib.h atof:stdlib.h ' +
+      ' atoi:stdlib.h atol:stdlib.h atoll:stdlib.h ';
     'b': Result :=
       ' backtrace:execinfo.h backtrace_symbols:execinfo.h backtrace_symbols_fd:execinfo.h ' +
       ' basename:libgen.h bind:sys/socket.h bind_textdomain_codeset:libintl.h ' +

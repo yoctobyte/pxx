@@ -984,7 +984,7 @@ AN_EXC_HANDLER Left actionSeq
 AN_EXIT Left -1
 AN_EXIT Left CConvertAsIfAssigned(Procs[CurProc].RetType, ASTLeft[node])
 AN_EXIT Left CurASTNode
-AN_EXIT Left ParseCExpr
+AN_EXIT Left ParseCCommaExpr
 AN_EXIT Left PyMakeNone
 AN_EXIT Left RMakeIdent(tmpSym)
 AN_EXIT Left ZParseExpr

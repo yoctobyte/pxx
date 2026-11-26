@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <unistd.h>  /* syscall */
+#include <fcntl.h>   /* accept4 without the raw syscall */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -177,6 +178,35 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   if (fd < 0) return __crtl_sock_fail(fd);
   __crtl_fill_sockaddr_in(addr, addrlen, host, port);
   return fd;
+}
+
+/* accept4: accept, with SOCK_CLOEXEC / SOCK_NONBLOCK set on the new socket.
+   Where the raw socket syscalls are used (64-bit Linux) it IS the syscall, so
+   the flags are set atomically and every family's address comes back; curl's
+   cf-socket.c calls it. Elsewhere: accept, then the two fcntl()s -- not
+   atomic against a concurrent fork+exec, the one thing the call exists for,
+   but the flags end up set. Unknown flags are EINVAL, as the kernel says. */
+int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
+  if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK)) { errno = EINVAL; return -1; }
+  if (flags == 0) return accept(sockfd, addr, addrlen);
+#ifdef __CRTL_RAW_SOCKADDR
+  {
+    long r = syscall(SYS_accept4, (long)sockfd, (long)addr, (long)addrlen, (long)flags);
+    return (int)r;
+  }
+#else
+  int fd = accept(sockfd, addr, addrlen);
+  if (fd < 0) return fd;
+  if ((flags & SOCK_CLOEXEC) && fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) goto bad;
+  if (flags & SOCK_NONBLOCK) {
+    int fl = fcntl(fd, F_GETFL);
+    if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) goto bad;
+  }
+  return fd;
+bad:
+  { int e = errno; close(fd); errno = e; }
+  return -1;
+#endif
 }
 
 /* THE `(void)flags' THAT USED TO STAND HERE WAS THE BUG, AND IT LOOKED LIKE

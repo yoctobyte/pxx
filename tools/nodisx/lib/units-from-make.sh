@@ -5,7 +5,7 @@
 #
 #   unit lines:  <obj> <dir> <src> <flag>...
 #       obj and dir relative to TOP; src relative to dir; flags are the -D,
-#       -U, -I and -include words of the compiler command, as written (they
+#       -U, -I, -isystem (as -I) and -include words of the compiler command, as written (they
 #       are relative to dir too, and keep configure's shell quoting; a
 #       double-quoted word with spaces stays one word, quotes included)
 #   link lines:  <prog> <obj>...
@@ -74,6 +74,13 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
     else if (w[i] == "-o") { out = w[++i] }
     else if (w[i] ~ /^-[DUI]./ || w[i] ~ /^"-[DUI]./) flags = flags " " w[i]
     else if (w[i] == "-include") { flags = flags " -include " w[i + 1]; i++ }
+    # -isystem DIR: curl names its dependencies (mbedTLS) so; dropped, the
+    # unit compiled against whatever headers pxx found instead. Written as
+    # -IDIR: pxx has no -isystem, and the only difference (gcc searches it
+    # after the -I directories) matters only if a -I directory holds a
+    # header of the same name
+    else if (w[i] == "-isystem") { flags = flags " -I" w[i + 1]; i++ }
+    else if (w[i] ~ /^-isystem./) { t = w[i]; sub(/^-isystem/, "-I", t); flags = flags " " t }
     else if (w[i] ~ /\.c$/) { src = w[i]; sub(/.*`/, "", src) }   # automake: `test -f x.c || echo ./`x.c
   }
   if (isc && src != "" && out != "") {

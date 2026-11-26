@@ -11,3 +11,7 @@ zstd-1.5.6.tar.gz  8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd40
 dhcpcd-10.5.2.tar.xz  3e476657fdb6eeb38b277da3a48d0ac0113ecce5858ebdcddff2b629faed52b4  https://github.com/NetworkConfiguration/dhcpcd/releases/download/v10.5.2/dhcpcd-10.5.2.tar.xz
 dropbear-2026.94.tar.bz2  e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81  https://matt.ucc.asn.au/dropbear/releases/dropbear-2026.94.tar.bz2
 make-4.4.1.tar.gz  dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3  https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz
+mbedtls-3.6.8.tar.bz2  bc54b818e87f49c0b3281dd85d24adaede0e63b4e822e3fbd49c005a38b9595b  https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.8/mbedtls-3.6.8.tar.bz2
+curl-8.23.0.tar.xz  8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5  https://curl.se/download/curl-8.23.0.tar.xz
+cacert-2026-11-05.pem  427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285  https://curl.se/ca/cacert-2026-11-05.pem
+limine-binary-12.11.1.tar.xz  493312624a0a7a3afadcf8e9993f5418a87258d6b54f9d7ebb914037fe089220  https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.xz
