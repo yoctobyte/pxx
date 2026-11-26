@@ -9,7 +9,7 @@ created: 2026-11-26
 found-by: owner (yoctobyte), asked of claude-dupwt
 owner: ""
 blocked-by: []
-summary: "GOAL, not a unit of work. 2026-11-26: GNU make and rumpnic DONE (claude-dupwt); e2fsprogs/util-linux rd; zstd/bzip2 pxx2. The Nodisx installer ISO ships only the kernel, pxx, a boot loader and a small permissive bootstrap set (~/nodisx/docs/bootstrap.md); everything else, GPL included, is pinned source plus a recipe that pxx compiles ON THE TARGET with only pxx, a POSIX shell and toybox (tools/nodisx/README.md). DONE: the kernel builds with pxx; toybox (1604/1604), mksh, dosfstools (GPL-3, images byte-identical to gcc's), xz-utils, the Path B X desktop; 471 rump objects and the USB stack compile, all-pxx rumpnic boots. OPEN, in order: GNU make (gates the kernel on site), mke2fs + sfdisk/blkid, rumpnic/usbhid as on-site recipes, the rest of the bootstrap set (curl+mbedTLS, dhcpcd, dropbear, zstd, bzip2, Limine), pixix userland (busybox, sqlite), and LAST the Linux GPU drivers (owner 2026-11-21: gcc for now)."
+summary: "GOAL, not a unit of work. 2026-11-26: GNU make, rumpnic, busybox DONE (claude-dupwt); bootstrap set DONE (pxx2); OPEN: disk tools (rd), sqlite (pxx2), GPU drivers last. The Nodisx installer ISO ships only the kernel, pxx, a boot loader and a small permissive bootstrap set (~/nodisx/docs/bootstrap.md); everything else, GPL included, is pinned source plus a recipe that pxx compiles ON THE TARGET with only pxx, a POSIX shell and toybox (tools/nodisx/README.md). DONE: the kernel builds with pxx; toybox (1604/1604), mksh, dosfstools (GPL-3, images byte-identical to gcc's), xz-utils, the Path B X desktop; 471 rump objects and the USB stack compile, all-pxx rumpnic boots. OPEN, in order: GNU make (gates the kernel on site), mke2fs + sfdisk/blkid, rumpnic/usbhid as on-site recipes, the rest of the bootstrap set (curl+mbedTLS, dhcpcd, dropbear, zstd, bzip2, Limine), pixix userland (busybox, sqlite), and LAST the Linux GPU drivers (owner 2026-11-21: gcc for now)."
 ---
 
 # Nodisx compiles the whole system on site with pxx
@@ -45,6 +45,7 @@ in Nodisx's `docs/needs.md`.
 | GNU make 4.4.1 | GPL-3.0 | tools/nodisx/make; own suite 1422/1422; Rainyday kernel built with it byte-identical |
 | rumpnic on site | BSD + MIT | tools/nodisx/rumpnic; 473 objects by pxx with no binutils (--rename-globals); boots, e1000 + rtl8139 PASS |
 | usbhid | MIT | Rainyday's own C; `make -C drivers PXX=pxx` with the on-site GNU make |
+| busybox 1.36.1 (pixix's config) | GPL-2.0 | tools/nodisx/busybox; testsuite 763/6, the same as gcc's; Rainyday boots with it |
 
 ## Open, in the order to take them
 
@@ -53,13 +54,14 @@ in Nodisx's `docs/needs.md`.
    2.40.2). Without them the installer cannot partition or format.
 3. ~~rumpnic and usbhid as on-site recipes~~ DONE 2026-11-26 (claude-dupwt),
    see the table.
-4. **The rest of the bootstrap set.** zstd and bzip2: pxx2 session
-   (2026-11-26), dhcpcd possibly next. Untried with pxx: curl + mbedTLS,
-   dhcpcd, dropbear, zstd, bzip2, Limine (its binary may ship if pxx cannot
-   build it: BSD-2).
-5. **pixix userland:** busybox (GPL, on site), sqlite, and whatever else
-   `install_lib_candidates.sh` carries; check each for build steps that run
-   host-compiled helpers.
+4. ~~The rest of the bootstrap set~~ DONE 2026-11-26 (pxx2): bzip2, zstd,
+   dhcpcd (--disable-privsep, flagged), dropbear, curl + mbedTLS + the
+   Mozilla bundle (AES-NI off: software AES, flagged), Limine (the limine
+   tool by pxx; the loaders ship as the signed release binaries, reasons in
+   its recipe). See tools/nodisx/README.md.
+5. **pixix userland:** busybox DONE 2026-11-26 (claude-dupwt, see the
+   table; three crtl bugs its testsuite found are fixed); dropbear is in
+   item 4; sqlite: pxx2, in progress.
 6. **Linux GPU drivers** (radeon, amdgpu, i915, nouveau; GPL). Owner
    2026-11-21: built with gcc for now, pxx "a question for another time".
    They also need `objcopy --redefine-syms`, ar, bash and awk. First step

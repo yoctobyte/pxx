@@ -15,3 +15,4 @@ mbedtls-3.6.8.tar.bz2  bc54b818e87f49c0b3281dd85d24adaede0e63b4e822e3fbd49c005a3
 curl-8.23.0.tar.xz  8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5  https://curl.se/download/curl-8.23.0.tar.xz
 cacert-2026-11-05.pem  427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285  https://curl.se/ca/cacert-2026-11-05.pem
 limine-binary-12.11.1.tar.xz  493312624a0a7a3afadcf8e9993f5418a87258d6b54f9d7ebb914037fe089220  https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.xz
+busybox-1.36.1.tar.bz2  b8cc24c9574d809e7279c3be349795c5d5ceb6fdf19ca709f80cde50e47de314  https://busybox.net/downloads/busybox-1.36.1.tar.bz2

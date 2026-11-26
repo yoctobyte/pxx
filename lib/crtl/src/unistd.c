@@ -1114,6 +1114,7 @@ static int pxx_getopt_impl(int argc, char *const argv[], const char *optstring,
 short_option:
     c = av[optind][pxx_optpos];
     optopt = (int)(unsigned char)c;
+    optarg = 0;     /* glibc: a flag leaves optarg NULL, not the last option's */
 
     spec = optstring;
     while (*spec && *spec != c) spec++;
@@ -1126,6 +1127,17 @@ short_option:
         return '?';
     }
 
+    if (spec[1] == ':' && spec[2] == ':') {
+        /* "o::", an OPTIONAL argument (glibc): only an attached one counts,
+           -ovalue; a bare -o has optarg NULL and the next word stays an
+           operand. Treating it as required made `sed -i SCRIPT FILE` take
+           SCRIPT as -i's backup suffix and FILE as the script.
+           bug-c-crtl-getopt-takes-the-next-word-as-an-optional-argument */
+        optarg = av[optind][pxx_optpos + 1] != 0 ? &av[optind][pxx_optpos + 1] : 0;
+        optind++;
+        pxx_optpos = 1;
+        return (int)(unsigned char)c;
+    }
     if (spec[1] == ':') {           /* the option takes an argument */
         if (av[optind][pxx_optpos + 1] != 0) {
             optarg = &av[optind][pxx_optpos + 1];         /* -ovalue */

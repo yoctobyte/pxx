@@ -301,3 +301,18 @@ on an e1000, and on an rtl8139 behind an IOMMU as uid 150. PASS is both.
 usbhid (Rainyday's own USB stack, MIT) needs no recipe of its own: it is
 plain C in the Rainyday tree, and `make -C drivers PXX=pxx` with the
 on-site GNU make builds it (22 s).
+
+## busybox 1.36.1 (GPL-2.0)
+
+pixix's busybox, its exact configuration: `pixix.config` is the `.config`
+embedded in Rainyday's busybox-pxx2829 (396 applets, FANCY_PING on).
+kconfig and busybox's host-compiled generators (applet tables, usage text,
+config options) run once on the host. The ten headers they write are the
+recipe's `gen.tar`. `units` comes from the `make V=1` log, and `link` is
+applets.o plus exactly the archive members gcc's link pulled (its map), so
+no ar is needed on site. 523 objects, ~8 minutes at JOBS=8 on plexus.
+`test.sh` replays the recipe with no gcc, make, binutils or python on
+PATH, then runs busybox's own testsuite on the pxx build and on the gcc
+build: 763 PASS and the same 6 FAIL on both. It then boots Rainyday with
+this busybox as its userland and the on-site rumpnic as its NIC driver:
+DHCP, ping and a fetch. PASS is no pxx-only failure, and the boot.

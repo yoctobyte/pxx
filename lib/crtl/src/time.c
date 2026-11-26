@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <stdlib.h>   /* getenv, for $TZ */
+#include <string.h>   /* memset, for the TZ rule state */
 
 extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
@@ -149,13 +150,162 @@ static long long pxx_be64(const unsigned char *p) {
   return v;
 }
 
+/* ---- POSIX TZ rule strings: std offset [dst [offset] [,start[/time],end[/time]]]
+ *
+ * When $TZ names no readable zone file it is a POSIX rule, e.g.
+ * `EET-2EEST,M3.5.0/3,M10.5.0/4' or `UTC-3' -- the form a system without a
+ * zoneinfo database (Rainyday, an installer) is configured with, and what
+ * busybox's date tests use. The WHOLE rule is evaluated, DST included, so the
+ * half-the-year failure the note above refuses cannot happen: an offset with
+ * a DST name and no rule takes glibc's default (M3.2.0,M11.1.0), and a string
+ * that does not parse is UTC, as before.
+ * bug-c-crtl-localtime-ignores-a-posix-tz-rule-string */
+struct pxx_tzdate { int kind; int m, w, d, n; long secs; };  /* kind: 'M', 'J', 'D' */
+static struct {
+  int valid, hasdst;
+  long stdoff, dstoff;               /* seconds EAST of UTC (TZif's sign) */
+  char stdname[16], dstname[16];
+  struct pxx_tzdate start, end;
+} pxx_tzr;
+
+static const char *pxx_tzr_name(const char *p, char *out) {
+  int n = 0;
+  if (*p == '<') {                   /* quoted: <+03>, <UTC-3> */
+    p++;
+    while (*p && *p != '>') { if (n < 15) out[n++] = *p; p++; }
+    if (*p != '>') return 0;
+    p++;
+  } else {
+    while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')) { if (n < 15) out[n++] = *p; p++; }
+  }
+  out[n] = 0;
+  return n >= 3 ? p : 0;
+}
+
+/* [+-]hh[:mm[:ss]] -> seconds; POSIX's sign is WEST-positive, returned as is */
+static const char *pxx_tzr_time(const char *p, long *out) {
+  long sign = 1, h = 0, m = 0, sec = 0;
+  if (*p == '+') p++; else if (*p == '-') { sign = -1; p++; }
+  if (*p < '0' || *p > '9') return 0;
+  while (*p >= '0' && *p <= '9') h = h * 10 + (*p++ - '0');
+  if (*p == ':') { p++; while (*p >= '0' && *p <= '9') m = m * 10 + (*p++ - '0'); }
+  if (*p == ':') { p++; while (*p >= '0' && *p <= '9') sec = sec * 10 + (*p++ - '0'); }
+  *out = sign * (h * 3600 + m * 60 + sec);
+  return p;
+}
+
+static const char *pxx_tzr_num(const char *p, int *out) {
+  int v = 0;
+  if (*p < '0' || *p > '9') return 0;
+  while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+  *out = v;
+  return p;
+}
+
+static const char *pxx_tzr_date(const char *p, struct pxx_tzdate *d) {
+  d->secs = 7200;                    /* default transition time 02:00 */
+  if (*p == 'M') {
+    d->kind = 'M';
+    if (!(p = pxx_tzr_num(p + 1, &d->m)) || *p != '.') return 0;
+    if (!(p = pxx_tzr_num(p + 1, &d->w)) || *p != '.') return 0;
+    if (!(p = pxx_tzr_num(p + 1, &d->d))) return 0;
+    if (d->m < 1 || d->m > 12 || d->w < 1 || d->w > 5 || d->d > 6) return 0;
+  } else if (*p == 'J') {
+    d->kind = 'J';
+    if (!(p = pxx_tzr_num(p + 1, &d->n)) || d->n < 1 || d->n > 365) return 0;
+  } else {
+    d->kind = 'D';
+    if (!(p = pxx_tzr_num(p, &d->n)) || d->n > 365) return 0;
+  }
+  if (*p == '/' && !(p = pxx_tzr_time(p + 1, &d->secs))) return 0;
+  return p;
+}
+
+static int pxx_tzr_parse(const char *p) {
+  long v;
+  memset(&pxx_tzr, 0, sizeof(pxx_tzr));
+  if (!(p = pxx_tzr_name(p, pxx_tzr.stdname))) return 0;
+  if (!(p = pxx_tzr_time(p, &v))) return 0;
+  pxx_tzr.stdoff = -v;
+  if (*p) {
+    if (!(p = pxx_tzr_name(p, pxx_tzr.dstname))) return 0;
+    pxx_tzr.hasdst = 1;
+    pxx_tzr.dstoff = pxx_tzr.stdoff + 3600;
+    if (*p && *p != ',') {
+      if (!(p = pxx_tzr_time(p, &v))) return 0;
+      pxx_tzr.dstoff = -v;
+    }
+    if (*p == ',') {
+      if (!(p = pxx_tzr_date(p + 1, &pxx_tzr.start)) || *p != ',') return 0;
+      if (!(p = pxx_tzr_date(p + 1, &pxx_tzr.end))) return 0;
+    } else {                         /* glibc's default rule: US since 2007 */
+      pxx_tzr.start.kind = 'M'; pxx_tzr.start.m = 3; pxx_tzr.start.w = 2; pxx_tzr.start.d = 0; pxx_tzr.start.secs = 7200;
+      pxx_tzr.end.kind = 'M'; pxx_tzr.end.m = 11; pxx_tzr.end.w = 1; pxx_tzr.end.d = 0; pxx_tzr.end.secs = 7200;
+    }
+  }
+  if (*p) return 0;
+  pxx_tzr.valid = 1;
+  return 1;
+}
+
+static int pxx_tzr_leap(long long y) { return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0; }
+
+/* days from 1970-01-01 to January 1st of year y */
+static long long pxx_tzr_jan1(long long y) {
+  long long d = 0, i;
+  if (y >= 1970) { for (i = 1970; i < y; i++) d += 365 + pxx_tzr_leap(i); }
+  else { for (i = y; i < 1970; i++) d -= 365 + pxx_tzr_leap(i); }
+  return d;
+}
+
+/* the transition instant in year y as LOCAL seconds since the epoch */
+static long long pxx_tzr_when(long long y, const struct pxx_tzdate *d) {
+  static const int mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  long long day = pxx_tzr_jan1(y);
+  int i, first_wday, mday, dim;
+  if (d->kind == 'J') {
+    day += d->n - 1;
+    if (pxx_tzr_leap(y) && d->n >= 60) day++;      /* Jn never counts Feb 29 */
+  } else if (d->kind == 'D') {
+    day += d->n;
+  } else {
+    for (i = 0; i < d->m - 1; i++) day += mdays[i] + (i == 1 && pxx_tzr_leap(y));
+    first_wday = (int)(((day % 7) + 7 + 4) % 7);  /* 1970-01-01 was a Thursday */
+    mday = 1 + (d->d - first_wday + 7) % 7 + (d->w - 1) * 7;
+    dim = mdays[d->m - 1] + (d->m == 2 && pxx_tzr_leap(y));
+    while (mday > dim) mday -= 7;                  /* w=5: the last one */
+    day += mday - 1;
+  }
+  return day * 86400 + d->secs;
+}
+
+static void pxx_tzr_lookup(long long t, long *poff, int *pisdst, const char **pabbr) {
+  long long y, days, a, b;
+  int dst = 0;
+  if (pxx_tzr.hasdst) {
+    days = (t + pxx_tzr.stdoff) / 86400;
+    if ((t + pxx_tzr.stdoff) % 86400 < 0) days--;
+    y = 1970 + days / 366;                         /* then walk to the year */
+    while (pxx_tzr_jan1(y + 1) <= days) y++;
+    while (pxx_tzr_jan1(y) > days) y--;
+    a = pxx_tzr_when(y, &pxx_tzr.start) - pxx_tzr.stdoff;   /* start: in std time */
+    b = pxx_tzr_when(y, &pxx_tzr.end) - pxx_tzr.dstoff;     /* end: in DST */
+    dst = a < b ? (t >= a && t < b) : !(t >= b && t < a);   /* southern zones wrap */
+  }
+  if (poff) *poff = dst ? pxx_tzr.dstoff : pxx_tzr.stdoff;
+  if (pisdst) *pisdst = dst;
+  if (pabbr) *pabbr = dst ? pxx_tzr.dstname : pxx_tzr.stdname;
+}
+
 /* Read $TZ's zoneinfo file, else /etc/localtime. A TZ of "UTC" needs no file
-   and is the common case in test harnesses, so it short-circuits. */
+   and is the common case in test harnesses, so it short-circuits. A TZ that
+   names no readable file is tried as a POSIX rule string (above). */
 static void pxx_tz_load(void) {
   int fd; long got; const char *tz;
   char path[256]; int i, j;
   if (pxx_tz_loaded) return;
   pxx_tz_loaded = 1;
+  pxx_tzr.valid = 0;
   tz = getenv("TZ");
   /* POSIX's `:name` form is how systemd and many scripts spell it; glibc reads
      the name after the colon exactly as the bare form, and an absolute name is
@@ -170,6 +320,7 @@ static void pxx_tz_load(void) {
     for (j = 0; tz[j] && i + j + 1 < (int)sizeof(path); j++) path[i + j] = tz[j];
     path[i + j] = 0;
     fd = __pxx_open(path, 0, 0);
+    if (fd < 0) { pxx_tzr_parse(tz); return; }
   } else {
     fd = __pxx_open("/etc/localtime", 0, 0);
   }
@@ -195,6 +346,7 @@ static void pxx_tz_lookup(long long t, long *poff, int *pisdst,
   if (pisdst) *pisdst = 0;
   if (pabbr) *pabbr = 0;
   pxx_tz_load();
+  if (pxx_tzr.valid) { pxx_tzr_lookup(t, poff, pisdst, pabbr); return; }
   len = pxx_tz_len;
   if (len < 44) return;
   if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return;
@@ -290,6 +442,13 @@ void tzset(void) {
   timezone = 0;
   daylight = 0;
   pxx_tz_load();
+  if (pxx_tzr.valid) {
+    tzname[0] = pxx_tzr.stdname;
+    tzname[1] = pxx_tzr.hasdst ? pxx_tzr.dstname : pxx_tzr.stdname;
+    timezone = -pxx_tzr.stdoff;
+    daylight = pxx_tzr.hasdst;
+    return;
+  }
 
   b = (const unsigned char *)pxx_tz_buf;
   len = pxx_tz_len;

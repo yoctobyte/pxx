@@ -238,3 +238,68 @@ struct servent *getservbyport(int port, const char *proto) {
   if (!keep) endservent();
   return hit;
 }
+
+/* ---- names to IPv4 addresses: /etc/hosts, then DNS ------------------------
+ *
+ * __pxx_resolve4 is what getaddrinfo and gethostbyname (src/netinet/in.c) use
+ * for a node that is not a dotted quad. /etc/hosts first, as glibc's default
+ * `hosts: files dns' does, then an A query through the stub resolver
+ * (src/resolv.c, /etc/resolv.conf's servers, its search list). Up to `max'
+ * addresses, network order, into `out'; `canon' (256 bytes, may be NULL) gets
+ * the name the answer is for. Returns the count, or 0 with h_errno set.
+ *
+ * Until 2026-11-26 every name was EAI_NONAME, so on a pxx-built userland
+ * `wget http://host/', `ping host' and `hostname -i' failed while the stub
+ * resolver to answer them sat in the same runtime.
+ * bug-c-crtl-getaddrinfo-resolves-no-names */
+#include <resolv.h>
+#include <arpa/nameser.h>
+#include <arpa/inet.h>
+
+static int pxx_hosts_lookup(const char *name, unsigned int *out, int max, char *canon) {
+  FILE *f = fopen("/etc/hosts", "r");
+  char line[512];
+  int n = 0;
+  if (!f) return 0;
+  while (n < max && fgets(line, sizeof line, f)) {
+    char *p = line, *addr, *w, *first;
+    struct in_addr a;
+    int hit = 0;
+    char *hash = strchr(p, '#');
+    if (hash) *hash = 0;
+    addr = strtok(p, " \t\r\n");
+    if (!addr || inet_pton(AF_INET, addr, &a) != 1) continue;   /* IPv6 lines too */
+    first = 0;
+    while ((w = strtok(0, " \t\r\n")) != 0) {
+      if (!first) first = w;
+      if (strcasecmp(w, name) == 0) hit = 1;
+    }
+    if (hit) {
+      if (n == 0 && canon && first) { strncpy(canon, first, 255); canon[255] = 0; }
+      out[n++] = a.s_addr;
+    }
+  }
+  fclose(f);
+  return n;
+}
+
+int __pxx_resolve4(const char *name, unsigned int *out, int max, char *canon) {
+  unsigned char ans[1500];
+  ns_msg m;
+  ns_rr rr;
+  int len, i, n;
+  if (canon) canon[0] = 0;
+  n = pxx_hosts_lookup(name, out, max, canon);
+  if (n > 0) return n;
+  len = res_search(name, ns_c_in, ns_t_a, ans, sizeof ans);
+  if (len <= 0 || ns_initparse(ans, len, &m) < 0) { h_errno = HOST_NOT_FOUND; return 0; }
+  for (i = 0; i < ns_msg_count(m, ns_s_an) && n < max; i++) {
+    if (ns_parserr(&m, ns_s_an, i, &rr) < 0) break;
+    if (ns_rr_type(rr) != ns_t_a || ns_rr_rdlen(rr) != 4) continue;   /* CNAMEs are steps */
+    memcpy(&out[n], ns_rr_rdata(rr), 4);
+    if (n == 0 && canon) { strncpy(canon, ns_rr_name(rr), 255); canon[255] = 0; }
+    n++;
+  }
+  if (n == 0) h_errno = NO_DATA;
+  return n;
+}

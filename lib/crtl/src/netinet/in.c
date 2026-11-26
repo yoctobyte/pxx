@@ -566,17 +566,49 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
   return dst;
 }
 
-/* No resolver in the libc-free runtime: gethostby* report not-found. Numeric
-   addresses go through inet_aton/inet_pton above (ENet tries those first). */
-struct hostent *gethostbyname(const char *name) { (void)name; return 0; }
+/* gethostbyname: a dotted quad, else /etc/hosts then DNS (__pxx_resolve4 in
+   src/netdb.c). IPv4 only; one static result, as POSIX allows. */
+extern int __pxx_resolve4(const char *name, unsigned int *out, int max, char *canon);
+#define PXX_MAXADDRS 8
+static struct hostent pxx_he;
+static char pxx_he_name[256];
+static unsigned int pxx_he_addr[PXX_MAXADDRS];
+static char *pxx_he_list[PXX_MAXADDRS + 1];
+static char *pxx_he_alias[1];
+struct hostent *gethostbyname(const char *name) {
+  struct in_addr a;
+  int n, i;
+  if (!name) { h_errno = HOST_NOT_FOUND; return 0; }
+  if (inet_pton(AF_INET, name, &a) == 1) {
+    pxx_he_addr[0] = a.s_addr;
+    n = 1;
+    strncpy(pxx_he_name, name, sizeof pxx_he_name - 1);
+    pxx_he_name[sizeof pxx_he_name - 1] = 0;
+  } else {
+    n = __pxx_resolve4(name, pxx_he_addr, PXX_MAXADDRS, pxx_he_name);
+    if (n <= 0) return 0;                       /* h_errno set by the resolver */
+    if (!pxx_he_name[0]) { strncpy(pxx_he_name, name, sizeof pxx_he_name - 1); pxx_he_name[sizeof pxx_he_name - 1] = 0; }
+  }
+  for (i = 0; i < n; i++) pxx_he_list[i] = (char *)&pxx_he_addr[i];
+  pxx_he_list[n] = 0;
+  pxx_he_alias[0] = 0;
+  pxx_he.h_name = pxx_he_name;
+  pxx_he.h_aliases = pxx_he_alias;
+  pxx_he.h_addrtype = AF_INET;
+  pxx_he.h_length = 4;
+  pxx_he.h_addr_list = pxx_he_list;
+  return &pxx_he;
+}
 struct hostent *gethostbyaddr(const void *addr, socklen_t len, int type) {
   (void)addr; (void)len; (void)type; return 0;
 }
 
 /* ---- getaddrinfo / getnameinfo -------------------------------------------
-   NUMERIC ONLY, AND THAT IS THE WHOLE CONTRACT. There is no DNS client in this
-   runtime and no NSS to load one from, so a hostname is EAI_NONAME here and a
-   reverse lookup never happens. What DOES work is everything busybox's
+   A NAME is looked up in /etc/hosts, then DNS (__pxx_resolve4, src/netdb.c);
+   AI_NUMERICHOST refuses one, as it should. Until 2026-11-26 this was
+   NUMERIC ONLY and every name was EAI_NONAME, though the stub resolver was in
+   the same runtime (bug-c-crtl-getaddrinfo-resolves-no-names). A reverse
+   lookup still never happens. What has always worked is everything busybox's
    libbb/xconnect.c needs to reach an address it was handed literally: a dotted
    quad, a NULL node under AI_PASSIVE, a numeric or /etc/services port name,
    and the sockaddr-to-string direction.
@@ -638,9 +670,12 @@ static int ai_port(const char *service, const struct addrinfo *hints,
 int getaddrinfo(const char *node, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {
   struct pxx_ai_block *b;
+  struct addrinfo **tail;
   struct in_addr addr;
   unsigned short port;
-  int fam, rc;
+  int fam, rc, n, k;
+  unsigned int addrs[PXX_MAXADDRS];
+  char canon[256];
 
   if (!res) return EAI_SYSTEM;
   *res = 0;
@@ -658,17 +693,27 @@ int getaddrinfo(const char *node, const char *service,
        loopback -- that asymmetry is getaddrinfo's, not ours. */
     addr.s_addr = (hints && (hints->ai_flags & AI_PASSIVE))
                     ? htonl(INADDR_ANY) : htonl(INADDR_LOOPBACK);
-  } else if (inet_pton(AF_INET, node, &addr) != 1) {
-    return EAI_NONAME;    /* a NAME, and there is no resolver -- see above */
+  }
+  canon[0] = 0;
+  n = 1;
+  addrs[0] = addr.s_addr;
+  if (node && inet_pton(AF_INET, node, &addr) == 1) {
+    addrs[0] = addr.s_addr;
+  } else if (node) {
+    if (hints && (hints->ai_flags & AI_NUMERICHOST)) return EAI_NONAME;
+    n = __pxx_resolve4(node, addrs, PXX_MAXADDRS, canon);
+    if (n <= 0) return EAI_NONAME;
   }
 
+  tail = res;
+  for (k = 0; k < n; k++) {
   b = (struct pxx_ai_block *)malloc(sizeof(*b));
-  if (!b) return EAI_MEMORY;
+  if (!b) { freeaddrinfo(*res); *res = 0; return EAI_MEMORY; }
   memset(b, 0, sizeof(*b));
 
   b->sa.sin_family = AF_INET;
   b->sa.sin_port = htons(port);
-  b->sa.sin_addr = addr;
+  b->sa.sin_addr.s_addr = addrs[k];
 
   b->ai.ai_family = AF_INET;
   b->ai.ai_socktype = hints ? hints->ai_socktype : 0;
@@ -677,14 +722,16 @@ int getaddrinfo(const char *node, const char *service,
   b->ai.ai_addrlen = (socklen_t)sizeof(b->sa);
   b->ai.ai_addr = (struct sockaddr *)&b->sa;
   b->ai.ai_next = 0;
-  if (hints && (hints->ai_flags & AI_CANONNAME) && node) {
-    /* The canonical name of a numeric address is the numeric address. Nothing
-       here can produce anything better, and leaving it NULL makes a caller
-       that prints it print nothing. */
-    strncpy(b->canon, node, sizeof(b->canon) - 1);
+  if (k == 0 && hints && (hints->ai_flags & AI_CANONNAME) && node) {
+    /* The canonical name: what the lookup answered for, else (a numeric
+       address) the node itself. Leaving it NULL makes a caller that prints
+       it print nothing. Only the first result carries it, as glibc does. */
+    strncpy(b->canon, canon[0] ? canon : node, sizeof(b->canon) - 1);
     b->ai.ai_canonname = b->canon;
   }
-  *res = &b->ai;
+  *tail = &b->ai;
+  tail = &b->ai.ai_next;
+  }
   return 0;
 }
 

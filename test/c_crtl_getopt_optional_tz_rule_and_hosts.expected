@@ -1,0 +1,17 @@
+argv: -i[null] op=s/x/y/ op=file
+argv: -i[.bak] -n[null] op=s/x/y/
+argv: -i[null]
+EET-2EEST,M3.5.0/3,M10.5.0/4 1288486799: 2010-10-31 03:59:59 EEST dst=1 timezone=-7200 daylight=1 EET/EEST
+EET-2EEST,M3.5.0/3,M10.5.0/4 1288486801: 2010-10-31 03:00:01 EET dst=0 timezone=-7200 daylight=1 EET/EEST
+EET-2EEST,M3.5.0/3,M10.5.0/4 1269737999: 2010-03-28 02:59:59 EET dst=0 timezone=-7200 daylight=1 EET/EEST
+EET-2EEST,M3.5.0/3,M10.5.0/4 1269738001: 2010-03-28 04:00:01 EEST dst=1 timezone=-7200 daylight=1 EET/EEST
+UTC-3 0: 1970-01-01 03:00:00 UTC dst=0 timezone=-10800 daylight=0 UTC/UTC
+<+0330>-3:30 1700000000: 2023-11-15 01:43:20 +0330 dst=0 timezone=-12600 daylight=0 +0330/+0330
+EST5EDT,M3.2.0,M11.1.0 1700000000: 2023-11-14 17:13:20 EST dst=0 timezone=18000 daylight=1 EST/EDT
+AEST-10AEDT,M10.1.0,M4.1.0/3 1700000000: 2023-11-15 09:13:20 AEDT dst=1 timezone=-36000 daylight=1 AEST/AEDT
+AEST-10AEDT,M10.1.0,M4.1.0/3 1690000000: 2023-07-22 14:26:40 AEST dst=0 timezone=-36000 daylight=1 AEST/AEDT
+CET-1CEST,J60/2,J300/3 951782400: 2000-02-29 01:00:00 CET dst=0 timezone=-3600 daylight=1 CET/CEST
+NZST-12NZDT-13,M9.5.0,M4.1.0/3 4102444800: 2100-01-01 13:00:00 NZDT dst=1 timezone=-43200 daylight=1 NZST/NZDT
+gethostbyname(localhost): 127.0.0.1
+getaddrinfo(localhost): rc=0 127.0.0.1:80
+getaddrinfo(localhost, AI_NUMERICHOST): EAI_NONAME

@@ -29860,6 +29860,10 @@ test-core: $(COMPILER)
 	# bug-c-crtl-getenv-ignores-an-assigned-environ
 	./$(COMPILER) test/c_crtl_stdout_write_errors_and_an_assigned_environ.c $(TESTTMP)/c_wrerrenv26
 	$(TESTTMP)/c_wrerrenv26 | diff -u test/c_crtl_stdout_write_errors_and_an_assigned_environ.expected -
+	# busybox's testsuite on a pxx busybox: getopt optional args, POSIX TZ
+	# rules, names through /etc/hosts. Expected output is glibc's.
+	./$(COMPILER) test/c_crtl_getopt_optional_tz_rule_and_hosts.c $(TESTTMP)/c_optzhost26
+	$(TESTTMP)/c_optzhost26 | diff -u test/c_crtl_getopt_optional_tz_rule_and_hosts.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
