@@ -603,6 +603,14 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
         case '+': plus = 1; i++; break;
         case ' ': space = 1; i++; break;
         case '#': alt = 1; i++; break;
+        /* POSIX `'`: group the integer digits with the locale's
+           thousands_sep. Every locale crtl has (C, and the UTF-8 ctype
+           ones) reports thousands_sep "" in localeconv, so the grouping is
+           by nothing -- glibc's output in those same locales. It was not a
+           flag at all: the directive printed literally WITHOUT consuming its
+           argument, so every later argument shifted (a `%'d` then `%s`
+           segfaulted), and xz's run-time probe of `%'u` read it as broken. */
+        case '\'': i++; break;
         default: flagging = 0; break;
       }
     }

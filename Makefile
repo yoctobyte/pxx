@@ -21106,6 +21106,20 @@ test-core: $(COMPILER)
 	# expected = glibc's converters.
 	./$(COMPILER) test/c_iconv_dos_codepages.c $(TESTTMP)/c_icdos26 > /dev/null
 	tools/expect_same.sh c_icdos26 "$$($(TESTTMP)/c_icdos26)" "$$(cat test/c_iconv_dos_codepages.expected)"
+	# x86-64 inline asm past the nine caller-saved registers takes rbx and
+	# r12-r15 under push/pop, and reads %b[name], %c[name] (a displacement) and
+	# a %q[name] base -- xz-utils' range decoder (Nodisx). Expected = gcc -O0's.
+	./$(COMPILER) test/c_asm_callee_saved_pool.c $(TESTTMP)/c_asmcsp26 > /dev/null
+	tools/expect_same.sh c_asmcsp26 "$$($(TESTTMP)/c_asmcsp26)" "$$(cat test/c_asm_callee_saved_pool.expected)"
+	# an array of pointers (member or plain) keeps its elements' pointee type:
+	# store/load width, sizeof, indexing and the ++ / +n stride (xz's range
+	# encoder wrote zeros; Nodisx). Expected = gcc's.
+	./$(COMPILER) test/c_array_of_pointers_member_pointee.c $(TESTTMP)/c_aopmp26 > /dev/null
+	tools/expect_same.sh c_aopmp26 "$$($(TESTTMP)/c_aopmp26)" "$$(cat test/c_array_of_pointers_member_pointee.expected)"
+	# printf's `'` (grouping) flag is a flag: it consumes its argument and, in
+	# crtl's locales, groups by nothing (xz probes `%'u`; Nodisx). glibc's, C locale.
+	./$(COMPILER) test/c_printf_grouping_flag.c $(TESTTMP)/c_pgrp26 > /dev/null
+	tools/expect_same.sh c_pgrp26 "$$($(TESTTMP)/c_pgrp26)" "$$(cat test/c_printf_grouping_flag.expected)"
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"

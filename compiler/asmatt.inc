@@ -630,8 +630,29 @@ function AttReadOperandNumber: Integer; forward;
 function AttReadNamedOperand: Integer; forward;
 
 procedure AttParseBaseOrOperand(slot: Integer);
-var n: Integer;
+var n: Integer; c3: Char;
 begin
+  { %q<n> / %q[name] (and %k): an operand as a base with its WIDTH named --
+    `(%q[prob])`, xz-utils' range decoder, where prob is a pointer and %q
+    is what it already is on x86-64. The width the modifier names is the
+    address size checked below, exactly as for a written register. }
+  if AttExtended and (AttPeek = '%') and ((AttPeek2 = 'q') or (AttPeek2 = 'k')) then
+  begin
+    if AttPos + 2 <= Length(AttSrc) then c3 := AttSrc[AttPos + 2] else c3 := Chr(0);
+    if AttIsDigit(c3) or (c3 = '[') then
+    begin
+      Inc(AttPos);
+      if AttPeek = 'q' then AsmOpSize[slot] := 8 else AsmOpSize[slot] := 4;
+      Inc(AttPos);
+      if AttPeek = '[' then n := AttReadNamedOperand else n := AttReadOperandNumber;
+      if AttBindKind[n] <> ATTBIND_REG then
+        Error('C: inline asm template uses the memory operand %' + AIntToStr(n)
+              + ' as an address register');
+      AsmOpKind[slot] := AOP_REG;
+      AsmOpReg[slot] := AttBindReg[n];
+      Exit;
+    end;
+  end;
   if AttExtended and (AttPeek = '%') and (AttIsDigit(AttPeek2) or (AttPeek2 = '[')) then
   begin
     Inc(AttPos);
@@ -917,10 +938,16 @@ begin
       begin
         modCh := AttPeek;
         Inc(AttPos);
-        if not AttIsDigit(AttPeek) then
-          Error('C: inline asm template has a size modifier %' + modCh
-                + ' that is not followed by an operand number');
-        n := AttReadOperandNumber;
+        { the operand by number (%b0) or by NAME (%b[code]) -- gcc takes
+          both; xz-utils' range decoder writes `mov (%[in_ptr]), %b[code]` }
+        if AttPeek = '[' then n := AttReadNamedOperand
+        else
+        begin
+          if not AttIsDigit(AttPeek) then
+            Error('C: inline asm template has a size modifier %' + modCh
+                  + ' that is not followed by an operand number or [name]');
+          n := AttReadOperandNumber;
+        end;
         if AttBindKind[n] <> ATTBIND_REG then
           Error('C: inline asm template applies the size modifier %' + modCh
                 + ' to operand %' + AIntToStr(n) + ', which is a memory operand'
@@ -954,10 +981,14 @@ begin
       if AttPeek = 'h' then
       begin
         Inc(AttPos);
-        if not AttIsDigit(AttPeek) then
-          Error('C: inline asm template has a size modifier %h that is not'
-                + ' followed by an operand number');
-        n := AttReadOperandNumber;
+        if AttPeek = '[' then n := AttReadNamedOperand
+        else
+        begin
+          if not AttIsDigit(AttPeek) then
+            Error('C: inline asm template has a size modifier %h that is not'
+                  + ' followed by an operand number or [name]');
+          n := AttReadOperandNumber;
+        end;
         if AttBindKind[n] <> ATTBIND_REG then
           Error('C: inline asm template applies %h to operand %'
                 + AIntToStr(n) + ', which is a memory operand — a high-byte'
@@ -1007,6 +1038,26 @@ begin
           AsmOpVal[slot] := AttBindOff[n];
           AsmOpSize[slot] := AttBindSize[n];
         end;
+        Exit;
+      end;
+      { %c<n> / %c[name]: an "i" operand printed as the BARE constant, without
+        AT&T's `$` -- which is how a constant becomes a DISPLACEMENT:
+        `lea %c[off](%q[p]), %[t]` (xz-utils' range decoder). Only that
+        shape is read; a bare constant standing alone would be an absolute
+        address and is refused as the plain-number spelling is below. }
+      if (AttPeek = 'c') and (AttIsDigit(AttPeek2) or (AttPeek2 = '[')) then
+      begin
+        Inc(AttPos);
+        if AttPeek = '[' then n := AttReadNamedOperand else n := AttReadOperandNumber;
+        if AttBindKind[n] <> ATTBIND_IMM then
+          Error('C: inline asm template applies %c to operand %' + AIntToStr(n)
+                + ', which is not a constant ("i"/"n") operand');
+        disp := AttBindImm[n];
+        AttSkipSpace;
+        if AttPeek <> '(' then
+          Error('C: inline asm template uses %c outside a displacement;'
+                + ' a bare constant operand is an absolute address, which is not supported');
+        AttParseMemory(slot, disp, True);
         Exit;
       end;
       Error('C: inline asm template has an unsupported % escape'

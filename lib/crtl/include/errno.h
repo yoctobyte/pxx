@@ -224,4 +224,10 @@ extern int errno;
 #define EFSBADCRC          EBADMSG
 #define EFSCORRUPTED       EUCLEAN
 
+/* GNU: argv[0] and its basename, set before main (src/unistd.c). glibc
+   declares them HERE (<errno.h>, _GNU_SOURCE); crtl's <unistd.h> also does.
+   xz-utils' tuklib_progname includes only this header for them (Nodisx). */
+extern char *program_invocation_name;
+extern char *program_invocation_short_name;
+
 #endif

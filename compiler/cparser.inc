@@ -2747,6 +2747,19 @@ begin
           Result := ASTLeft[argHead];
           Exit;
         end;
+        { gcc builtin `__builtin_assume_aligned(p, align[, misalign])`: an
+          optimisation hint that returns p (as void *). The alignment and
+          misalignment are constants with no side effects. The result keeps
+          p's own pointer type rather than void *, and no valid use can tell:
+          ISO C allows no arithmetic or dereference on a void * without first
+          converting it, and every conversion (assignment, cast, a void *
+          parameter such as memcpy's) lands on the target's type either way.
+          xz-utils' tuklib_memcpy_aligned (Nodisx). }
+        if (name = '__builtin_assume_aligned') and (argHead >= 0) then
+        begin
+          Result := ASTLeft[argHead];
+          Exit;
+        end;
         { gcc builtin `__builtin_constant_p(x)`: 1 when x folds to a compile-time
           constant, 0 otherwise. **We answer 0, always, and that is a REDUCTION
           rather than an implementation** -- said plainly here so nobody reads a
@@ -3372,17 +3385,32 @@ begin
   end
   else if ASTKind[node] = AN_FIELD then
   begin
-    { a pointer member: its recorded depth (the C struct builder stamps it) }
+    { a pointer member: its recorded depth (the C struct builder stamps it).
+      An ARRAY of pointers reports its ELEMENT's depth, the convention an array
+      identifier follows above (SymPtrDepth) -- the builder records the
+      element's shape for an array member exactly as for a scalar one. Refusing
+      arrays here made every element of `uint16_t *probs[N]` "a pointer to an
+      8-byte integer": `*s.probs[i] = v` stored 8 bytes over three neighbours,
+      `sizeof *s.probs[i]` was 8, a double read back garbage, and xz's range
+      encoder wrote 200 KB of zeros for every 41 KB stream (Nodisx).
+      bug-c-an-array-of-pointers-struct-member-loses-its-pointee-type }
     fi := CNodeFieldIdx(node);
-    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) then
+    if (fi >= 0) and (UFldTk[fi] = Ord(tyPointer)) then
       Result := UFldPtrDepth[fi];
   end
   else if ASTKind[node] = AN_INDEX then
   begin
     if IntToTypeKind(ASTTk[node]) = tyPointer then
     begin
+      fi := -1;
+      if ASTKind[ASTLeft[node]] = AN_FIELD then fi := CNodeFieldIdx(ASTLeft[node]);
       if (ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray then
         Result := SymPtrDepth[ASTIVal[ASTLeft[node]]]
+      else if (fi >= 0) and UFldIsArray[fi] and (UFldTk[fi] = Ord(tyPointer)) and
+              (UFldPtrDepth[fi] > 0) then
+        { an element of an array-of-pointers member: the element's own depth,
+          as for an array identifier just above }
+        Result := UFldPtrDepth[fi]
       else
       begin
         Result := CNodePtrDepth(ASTLeft[node]) - 1;
@@ -3436,9 +3464,9 @@ begin
     Result := SymPtrBaseTk[ASTIVal[node]]
   else if ASTKind[node] = AN_FIELD then
   begin
+    { an array of pointers too: its element's base, as for depth above }
     fi := CNodeFieldIdx(node);
-    if (fi >= 0) and (not UFldIsArray[fi]) and (UFldTk[fi] = Ord(tyPointer)) and
-       (UFldPtrDepth[fi] > 0) then
+    if (fi >= 0) and (UFldTk[fi] = Ord(tyPointer)) and (UFldPtrDepth[fi] > 0) then
       Result := UFldPtrBaseTk[fi];
   end
   else if ASTKind[node] = AN_INDEX then
@@ -11056,6 +11084,13 @@ const
     Five is not a comfortable number: busybox tls_pstm_mul_comba.c wants three
     outputs with %eax and %edx clobbered, which is exactly the three that are
     left, and it only fits because an "m" operand costs no register any more. }
+  { x86-64's second tier, used only once the pool above is exhausted: the
+    callee-saved registers, each pushed before the block and popped after it
+    (the save list the fixed "=b" constraint already uses). }
+  CASM_SPILLPOOL_COUNT = 5;
+  CAsmSpillPool: array[0..CASM_SPILLPOOL_COUNT-1] of Integer =
+    (3, 12, 13, 14, 15);             { rbx r12 r13 r14 r15 }
+
   CASM_POOL386_COUNT = 5;
   CAsmPool386: array[0..CASM_POOL386_COUNT-1] of Integer =
     (1, 6, 7, 0, 2);                 { ecx esi edi eax edx }
@@ -11621,12 +11656,36 @@ begin
     if memLead[i] >= 0 then Continue;
     if not (CAsmClassWantsReg(CAsmOps[i].Cons) or memReg[i]) then Continue;
     while (poolNext < CAsmPoolCount) and used[CAsmPoolReg(poolNext)] do Inc(poolNext);
-    if poolNext >= CAsmPoolCount then
+    if poolNext < CAsmPoolCount then
+    begin
+      opReg[i] := CAsmPoolReg(poolNext);
+      used[opReg[i]] := True;
+      Continue;
+    end;
+    { THE CALLER-SAVED POOL IS EXHAUSTED: on x86-64, go on to the callee-saved
+      registers, each under the same push/pop pair a fixed "=b" gets above --
+      which is what gcc does, it simply saves them in the prologue instead.
+      xz-utils' range decoder (LZMA_RANGE_DECODER_CONFIG 0x1F0, the x86-64
+      default) binds eleven register operands in one block; nine was a
+      refusal. rbp and rsp stay out: the frame and stack pointers. i386 keeps
+      its five -- its only spare callee-saved register is ebx, which the
+      restricted classes already reach. }
+    reg := -1;
+    if TargetArch = TARGET_X86_64 then
+      for j := 0 to CASM_SPILLPOOL_COUNT - 1 do
+        if not used[CAsmSpillPool[j]] then begin reg := CAsmSpillPool[j]; Break; end;
+    if reg < 0 then
       Error('C: inline asm needs more registers than this frontend can pin'
-            + ' — it uses a fixed caller-saved pool of ' + AIntToStr(CAsmPoolCount)
-            + ', not a register allocator');
-    opReg[i] := CAsmPoolReg(poolNext);
-    used[opReg[i]] := True;
+            + ' — it uses a fixed pool of ' + AIntToStr(CAsmPoolCount)
+            + ' caller-saved registers'
+            + ' (and, on x86-64, the five callee-saved ones rbx r12-r15),'
+            + ' not a register allocator');
+    if saveCount >= MAX_CASM_OPERANDS then
+      Error('C: inline asm saves too many callee-saved registers');
+    saveReg[saveCount] := reg;
+    Inc(saveCount);
+    opReg[i] := reg;
+    used[reg] := True;
   end;
   for i := 0 to CAsmOpCount - 1 do
     if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
