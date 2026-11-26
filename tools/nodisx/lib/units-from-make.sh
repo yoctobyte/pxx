@@ -12,6 +12,15 @@
 #       every object the program's link line names, archives (`ar cr`)
 #       expanded to their members, all relative to TOP
 #
+# TRACE=FILE: lines `<prog> (<archive>)<member>`, the archive members gcc's
+# ld LOADED for that program (`-Wl,-t,-t` on its link command). With it an
+# archive contributes only those members, in archive order, which is what
+# ld's archive search did; without it, every member. It matters when two
+# archives carry the same object -- util-linux builds lib/sha1.c into both
+# libcommon and libuuid, and ld takes one of them -- since pxx --link takes
+# objects only, never an archive, and the second copy is a multiple
+# definition.
+#
 # HOST SIDE (record.sh): needs awk. Each compile is taken from the line the
 # compiler actually ran -- a bare `gcc ... -c` (automake) or `libtool:
 # compile:` (libtool's own echo) -- never from libtool's wrapper line, which
@@ -20,7 +29,7 @@ set -eu
 TOP=$(cd "${1:?usage: units-from-make.sh TOP LOG PROG...}" && pwd)
 LOG=${2:?usage: units-from-make.sh TOP LOG PROG...}
 shift 2
-awk -v top="$TOP" -v progs="$*" '
+awk -v top="$TOP" -v progs="$*" -v trace="${TRACE:-}" '
 function rel(d, p,   parts, n, i, out, k, stack) {
   # normalise d/p and make it relative to top
   if (substr(p, 1, 1) == "/") s = p; else s = d "/" p
@@ -47,7 +56,46 @@ function byname(a,   b, k, hit, n) {
   for (k in members) { hit2 = k; sub(/.*\//, "", hit2); if (hit2 == b) { hit = k; n++ } }
   return n == 1 ? hit : a
 }
-BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir = top; nu = 0; sp = 0 }
+function member(m,   c, k, cw, base, arc, j) {
+  # an archive member that no compile made: a libtool convenience library
+  # unpacked into the archive being built (`ar x` into
+  # .libs/X.lax/libcommon.a/, then those files archived), or a renamed
+  # member (see ln). Map it back to the object the compiler wrote.
+  if (m in alias) return alias[m]
+  if (m ~ /\.lax\/[^\/]+\.a\/[^\/]+\.o$/) {
+    base = m; sub(/.*\//, "", base)
+    arc = m; sub(/\/[^\/]+$/, "", arc); sub(/.*\//, "", arc)
+    arc = byname(arc)
+    if (arc in members) {
+      c = split(members[arc], cw, " ")
+      for (j = 1; j <= c; j++) { k = cw[j]; sub(/.*\//, "", k); if (k == base) return cw[j] }
+    }
+    return "MISSING-MEMBER:" m
+  }
+  return m
+}
+function base(x) { sub(/.*\//, "", x); return x }
+function expand(p, a,   c, cw, rw, j, out) {
+  # the members of archive a that program p links (see TRACE)
+  if (!(p in traced_prog)) return members[a]
+  c = split(members[a], cw, " "); split(rawm[a], rw, " "); out = ""
+  for (j = 1; j <= c; j++) if ((p SUBSEP base(a) SUBSEP rw[j]) in traced) out = out " " cw[j]
+  return out
+}
+BEGIN {
+  np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir = top; nu = 0; sp = 0
+  if (trace != "") {
+    while ((getline tl < trace) > 0) {
+      # <prog> (<archive path>)<member>
+      tp = tl; sub(/ .*/, "", tp)
+      if (match(tl, /\([^)]*\)[^ ]+$/)) {
+        am = substr(tl, RSTART + 1); ap = am; sub(/\).*/, "", ap); mb = am; sub(/^[^)]*\)/, "", mb)
+        traced[tp SUBSEP base(ap) SUBSEP mb] = 1; traced_prog[tp] = 1
+      }
+    }
+    close(trace)
+  }
+}
 # a stack: after `Leaving directory` the commands belong to the parent make again
 # (dropbear links its programs at the top after the libtomcrypt and
 # libtommath sub-makes; without the pop they resolved inside libtommath/)
@@ -63,7 +111,7 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
   while (line ~ /\\$/ && (getline more) > 0) { sub(/\\$/, " ", line); line = line more }
   if (line ~ /^libtool: compile: +/) sub(/^libtool: compile: +/, "", line)
   else if (line ~ /^libtool: link: +/) sub(/^libtool: link: +/, "", line)
-  else if (line !~ /^(gcc|cc|ar) /) next
+  else if (line !~ /^(gcc|cc|ar|ln) /) next
   n = split(line, raw, /[ \t]+/)
   # rejoin a double-quoted word that held spaces (the dhcpcd rbtree unit:
   # "-D__predict_false(exp)=__builtin_expect((exp) ? 1 : 0, 0)"), quotes kept
@@ -76,10 +124,16 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
     w[++m] = t
   }
   n = m
+  if (w[1] == "ln") {
+    # libtool gives two archive members with one file name distinct names:
+    # `ln SRC .libs/X.lax/ltN-NAME.o || cp ...`. The member is SRC.
+    if (w[3] ~ /\.o$/) alias[rel(dir, w[3])] = rel(dir, w[2])
+    next
+  }
   if (w[1] == "ar") {
     # ar cr ARCHIVE member...
-    a = rel(dir, w[3]); members[a] = ""
-    for (i = 4; i <= n; i++) if (w[i] ~ /\.o$/) members[a] = members[a] " " rel(dir, w[i])
+    a = rel(dir, w[3]); members[a] = ""; rawm[a] = ""
+    for (i = 4; i <= n; i++) if (w[i] ~ /\.o$/) { members[a] = members[a] " " member(rel(dir, w[i])); rawm[a] = rawm[a] " " base(w[i]) }
     next
   }
   isc = 0; out = ""; src = ""; flags = ""
@@ -109,7 +163,7 @@ BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir
     objs = ""
     for (i = 2; i <= n; i++) {
       if (w[i] ~ /\.o$/) objs = objs " " rel(dir, w[i])
-      else if (w[i] ~ /\.a$/) { a = byname(rel(dir, w[i])); if (a in members) objs = objs members[a]; else objs = objs " MISSING-ARCHIVE:" a }
+      else if (w[i] ~ /\.a$/) { a = byname(rel(dir, w[i])); if (a in members) objs = objs expand(p, a); else objs = objs " MISSING-ARCHIVE:" a }
     }
     # an archive named twice (ld resolves a cycle between libraries that
     # way; e2fsprogs links libext2fs.a again after libblkid.a) is ONE set

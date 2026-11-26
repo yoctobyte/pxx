@@ -129,3 +129,31 @@ pxx needed only crtl gaps here, no compiler fixes:
   the allocator's exact counts in glibc's layout (test c_mallinfo_open64).
 units-from-make.sh learned continued commands, archives linked from another
 path, and archives named twice on one link line.
+
+## Item 2 done: sfdisk, fdisk, blkid (util-linux)
+
+util-linux 2.40.2 (`tools/nodisx/util-linux/`), 2026-11-26: sfdisk, fdisk and
+blkid, with libfdisk, libblkid, libsmartcols, libuuid and libcommon linked in.
+util-linux's own tests for them (tests/run.sh, 10 components) pass 50 of 50
+with the pxx programs, and the 299 sub-results match gcc's build one for one.
+Six sfdisk-made images are byte-identical to gcc's, and so are the sfdisk,
+fdisk and blkid reports on them. Text 1004/1028/567 KB.
+
+pxx needed:
+- one compiler fix: a function-TYPED parameter returning void (`void
+  free_data(struct path_cxt *)`) was taken for the `(void)` of an empty
+  list, and one with its name in parentheses (`int (name2id)(...)`) was not
+  declared at all (test c_function_typed_parameter_forms);
+- crtl: `fmemopen` (glibc's rules for each mode), `rpmatch`, `strtod_l`,
+  `<stdio_ext.h>` (`__fpending`, `__fsetlocking`, `_flushlbf`),
+  `<sys/sendfile.h>`, `<ttyent.h>`; and kernel UAPI shadows
+  `<linux/ioctl.h>`, `<linux/blkzoned.h>`, `<linux/blkpg.h>`,
+  `<linux/sed-opal.h>`, plus libblkid's optical-drive requests in
+  `<linux/cdrom.h>`. They are checked against glibc and the host headers by
+  c_crtl_util_linux_libc and c_crtl_util_linux_uapi (the UAPI at both
+  widths).
+units-from-make.sh learned libtool's unpacked and renamed archive members,
+and `TRACE=`, which keeps only the archive members gcc's ld loaded.
+
+With mkfs.fat and mke2fs this completes item 2.
+

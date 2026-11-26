@@ -375,3 +375,35 @@ tune2fs in place of gcc's (385 of 385, as gcc's build). It also builds ten
 mke2fs images (ext2/3/4, metadata_csum, 64bit, inline_data, 1 KiB blocks,
 explicit journal size) with the UUID, hash seed and clock fixed, and checks
 them byte-identical to gcc's, with the same stdout, stderr and exit status.
+
+## util-linux 2.40.2 (GPL-2.0; libblkid and libfdisk LGPL-2.1, libuuid BSD): sfdisk, fdisk, blkid
+
+Upstream `.tar.xz`, unpacked with the xz recipe's `xzcat`. Installs
+`sbin/{sfdisk,fdisk,blkid}`. The libraries they use (libfdisk, libblkid,
+libsmartcols, libuuid, libcommon) are built static and linked in. configure
+turns every program off except blkid and the fdisks, and uses none of the
+optional outside libraries (ncurses, readline, systemd, udev, libmagic...),
+so there is no cfdisk, which needs a curses.
+
+`configure` and one `make V=1` run on the host. `gen.tar` holds the 5
+generated sources (config.h and the libraries' public headers), and
+`lib/units-from-make.sh` reads 193 units from the log. libtool adds two
+shapes. A convenience library is unpacked into the archive being built
+(`ar x` into `.libs/X.lax/libcommon.a/`), and two members with one name are
+`ln`-ed to `ltN-NAME.o`; both are mapped back to the objects the compiler
+wrote. pxx links objects, never archives, and libcommon and libuuid both
+carry `lib/sha1.c` and `lib/md5.c`. So `record.sh` relinks each program
+once with `-Wl,-t,-t`, and `TRACE=` keeps exactly the members gcc's ld
+loaded. Units compile `--threadsafe`, as libuuid links `-lpthread` and keeps
+its clock state in `__thread` variables.
+
+`test.sh` runs util-linux's own test components for these programs
+(`tests/run.sh blkid fdisk sfdisk libfdisk libsmartcols lib md5 sha1 uuid
+partx`) on gcc's build and with the pxx sfdisk, fdisk and blkid in its place:
+50 of 50 on both, the same 299 sub-results OK and the same 29 skipped. `make
+check` itself will not start in this configuration: it wants
+`test_ttyutils`, which `--disable-all-programs` does not build. It also
+partitions six images from sfdisk scripts (GPT and DOS, the ids fixed, one
+script that sfdisk refuses). The images are byte-identical to gcc's, and so
+are `sfdisk -d/-l/-J/-V`, `fdisk -l` and `blkid -p` on them, with the same
+exit status.
