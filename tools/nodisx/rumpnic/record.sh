@@ -74,8 +74,40 @@ sort -u -o "$H/files" "$H/files"
 mkdir -p "$H/stage"
 ln -s "$TREE" "$H/stage/t"
 ln -s "$RD" "$H/stage/r"
-tar -C "$H/stage" -h --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -cf - -T "$H/files" \
-  | xz -9 -T1 > "$W/dl/rumpnic-src.tar.xz"
+tar -C "$H/stage" -h --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -cf "$H/src.tar" -T "$H/files"
+# A shipped file that #includes an ABSOLUTE path under TREE or RAINYDAY
+# (buildrump's tools/compat/include/sys/stdint.h does) would only build where
+# the host tree sits: on the target that path does not exist. Each gets a
+# copy with the path made relative, appended to the tar, so it replaces the
+# original on extract. Found by the first on-site build inside Rainyday.
+mkdir -p "$H/over"
+: > "$H/over.list"
+while read -r f; do
+  case $f in t/*) abs=$TREE/${f#t/} ;; r/*) abs=$RD/${f#r/} ;; *) continue ;; esac
+  grep -qE "^[[:space:]]*#[[:space:]]*include[[:space:]]+\"($TREE|$RD)/" "$abs" || continue
+  mkdir -p "$H/over/$(dirname "$f")"
+  python3 -I - "$abs" "$f" "$TREE" "$RD" > "$H/over/$f" <<'PY'
+import os, re, sys
+abs_, rel, tree, rd = sys.argv[1:]
+here = os.path.dirname(rel)
+def fix(m):
+    p = m.group(2)
+    for root, pre in ((tree, 't'), (rd, 'r')):
+        if p.startswith(root + '/'):
+            return m.group(1) + '"' + os.path.relpath(pre + p[len(root):], here) + '"'
+    return m.group(0)
+sys.stdout.write(re.sub(r'^(\s*#\s*include\s+)"([^"]+)"', fix, open(abs_).read(), flags=re.M))
+PY
+  echo "$f" >> "$H/over.list"
+done < "$H/files"
+if [ -s "$H/over.list" ]; then
+  tar -C "$H/over" --owner=0 --group=0 --numeric-owner --mtime=@0 -rf "$H/src.tar" -T "$H/over.list"
+  echo "record: $(wc -l < "$H/over.list") file(s) had an absolute #include, made relative: $(tr '\n' ' ' < "$H/over.list")"
+fi
+if grep -rqE "^[[:space:]]*#[[:space:]]*include[[:space:]]+\"($TREE|$RD)/" "$H/over" 2>/dev/null; then
+  echo "record: an absolute #include survived" >&2; exit 1
+fi
+xz -9 -T1 < "$H/src.tar" > "$W/dl/rumpnic-src.tar.xz"
 sum=$(sha256sum "$W/dl/rumpnic-src.tar.xz" | cut -d' ' -f1)
 echo "rumpnic-src.tar.xz $sum" > "$R/sources.list"
 cp "$T/onsite.sh" "$R/onsite.sh"
