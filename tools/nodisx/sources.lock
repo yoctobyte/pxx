@@ -5,3 +5,4 @@ mksh-R59c.tgz         77ae1665a337f1c48c61d6b961db3e52119b38e58884d1c89684af31f8
 dosfstools-4.2.tar.gz  64926eebf90092dca21b14259a5301b7b98e7b1943e8a201c7d726084809b527  https://github.com/dosfstools/dosfstools/releases/download/v4.2/dosfstools-4.2.tar.gz
 e2fsprogs-1.47.1.tar.xz  5a33dc047fd47284bca4bb10c13cfe7896377ae3d01cb81a05d406025d99e0d1  https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.1/e2fsprogs-1.47.1.tar.xz
 util-linux-2.40.2.tar.xz  d78b37a66f5922d70edf3bdfb01a6b33d34ed3c3cafd6628203b2a2b67c8e8b3  https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.40/util-linux-2.40.2.tar.xz
+xz-5.6.3.tar.gz  b1d45295d3f71f25a4c9101bd7c8d16cb56348bbef3bbc738da0351e17c73317  https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.gz

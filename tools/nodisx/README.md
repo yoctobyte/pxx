@@ -74,3 +74,27 @@ and Atari images, fsck repairs, labels) with the pxx binaries in place of the
 gcc ones, and formats eight images with both builds under `--invariant`:
 PASS is no suite failure and every image, and both programs' output,
 identical to gcc's. Note the licence: GPL-3.0, unlike the rest so far.
+
+## xz-utils 5.6.3 (0BSD; liblzma 0BSD): xz, unxz, xzcat
+
+Built before anything that ships as `.tar.xz` (e2fsprogs, util-linux): its
+own tarball is the upstream `.tar.gz`, so toybox's `zcat` unpacks it, and the
+`xzcat` it installs unpacks the rest. Upstream checksums only, no
+recompressed tarballs. Signed by Lasse Collin (the 5.6.0/5.6.1 backdoor
+releases are long behind it).
+
+`configure` and one `make V=1` run on the host; `lib/units-from-make.sh`
+turns the make log into `units` (each object's directory, source and
+`-D`/`-I` flags) and `link` (xz's objects, `liblzma.a` expanded), and
+`config.h` travels in `gen.tar`. The compiler questions configure asks gcc
+are answered as pxx's (`record.sh` says which: no `<immintrin.h>`,
+`<cpuid.h>`, CLMUL or hand-written asm). Units compile `--threadsafe`:
+liblzma's encoder threads are pthreads.
+
+`test.sh`: xz's own `make check` on the pxx binary, every pinned `.tar.xz`
+decompressed by both builds, and 14 compressions (presets 0-9e, `-T3`,
+LZMA1, SHA-256 check, the x86 BCJ filter, on a tarball and on random data)
+byte-identical to gcc's. Under `LC_ALL=C`: crtl has no `en_US` locale data,
+so `xz -l` under `LANG=en_US` prints no digit grouping where glibc's does.
+Speed: compressing is about 8x slower than gcc -O2's build (`-6` on 20 MB:
+111 s against 14 s); decompressing a 37 MB tarball takes 2.5 s.

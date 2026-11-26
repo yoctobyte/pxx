@@ -87,3 +87,28 @@ change `--link` kept linking the old runtime.
 Not fixed, and why the test compares stdout and stderr apart: crtl's stdout
 is unbuffered, so the two interleave differently from glibc's when they share
 a pipe (feature-c-crtl-stdio-buffering-and-setvbuf).
+
+## Item 5, pulled forward: xz-utils done (before mke2fs)
+
+Nodisx asked for xz ahead of mke2fs: xz-utils is in the bootstrap set (a
+pxx-built binary on the ISO), so recipes may use `xzcat` on the upstream
+`.tar.xz` tarballs, unchanged and with upstream checksums.
+
+xz-utils 5.6.3 (`tools/nodisx/xz/`), 2026-11-25: xz with liblzma linked in,
+plus the unxz/xzcat links. Its tarball is `.tar.gz`, which toybox's zcat
+unpacks. xz's own `make check` passes 18/18 on the pxx binary. Both pinned
+`.tar.xz` files decompress the same as with gcc's build, and 14 compressions
+(presets 0-9e, -T3, LZMA1, SHA-256, x86 BCJ) are byte-identical to gcc's.
+Text 541 KB; compression runs about 8x slower than the gcc -O2 build.
+`tools/nodisx/lib/units-from-make.sh` (make log to units/link) is shared
+with the next recipes.
+
+pxx fixes it needed:
+- silent wrong code: an element of an array of pointers lost its pointee
+  type (bug-c-an-array-of-pointers-struct-member-loses-its-pointee-type);
+- x86-64 inline asm with more than nine registers, `%b[name]`, `%c[name]`
+  and `%q[name]` as a base;
+- `__builtin_assume_aligned`;
+- crtl: `pthread_sigmask`, `program_invocation_name`, and printf's `'` flag.
+
+Next: mke2fs (e2fsprogs), then sfdisk/blkid (util-linux).
