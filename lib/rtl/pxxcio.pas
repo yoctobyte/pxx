@@ -65,6 +65,7 @@ function __pxx_getsockerror(fd: Integer): Integer;
   PXXAlloc returns zeroed memory, so calloc needs no extra clear. }
 function __pxx_malloc(n: NativeInt): Pointer;
 function __pxx_malloc_usable_size(p: Pointer): NativeInt;
+procedure __pxx_heap_status(used, mapped: PInt64);
 procedure __pxx_free(p: Pointer);
 function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 
@@ -475,6 +476,16 @@ begin
   if addr = 0 then Exit;
   sz := PMachineWord(addr - 8)^;
   if (sz >= 8) and ((sz and 7) = 0) then Result := NativeInt(sz);
+end;
+
+{ C's mallinfo2/mallinfo (crtl stdlib.c): the heap's live and mapped bytes,
+  from the allocator's own exact counters. }
+procedure __pxx_heap_status(used, mapped: PInt64);
+var h: TFPCHeapStatus;
+begin
+  h := GetFPCHeapStatus;
+  if used <> nil then used^ := Int64(h.CurrHeapUsed);
+  if mapped <> nil then mapped^ := Int64(h.CurrHeapSize);
 end;
 
 { THROUGH THE PAL, and the incident below is why the numbers no longer live here.

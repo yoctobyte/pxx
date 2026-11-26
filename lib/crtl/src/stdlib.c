@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <malloc.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 
@@ -26,6 +27,7 @@ extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
 extern void *__pxx_realloc(void *p, long n);
 extern long  __pxx_malloc_usable_size(void *p);
+extern void  __pxx_heap_status(long *used, long *mapped);
 extern void  __pxx_exit(int code);
 extern int   __pxx_atexit(void (*func)(void));
 extern void  __pxx_atexit_run(void);
@@ -76,6 +78,28 @@ size_t malloc_usable_size(void *ptr) {
     return (size_t)__pxx_malloc_usable_size(raw) - (size_t)((char *)ptr - raw);
   }
   return (size_t)__pxx_malloc_usable_size(ptr);
+}
+
+/* mallinfo2 / mallinfo (malloc.h says which fields mean what). */
+struct mallinfo2 mallinfo2(void) {
+  struct mallinfo2 m;
+  long used = 0, mapped = 0;
+  memset(&m, 0, sizeof m);
+  __pxx_heap_status(&used, &mapped);
+  m.arena = (size_t)mapped;
+  m.uordblks = (size_t)used;
+  m.fordblks = (size_t)(mapped - used);
+  return m;
+}
+
+struct mallinfo mallinfo(void) {
+  struct mallinfo2 w = mallinfo2();
+  struct mallinfo m;
+  memset(&m, 0, sizeof m);
+  m.arena = (int)w.arena;
+  m.uordblks = (int)w.uordblks;
+  m.fordblks = (int)w.fordblks;
+  return m;
 }
 
 /* An aligned block moves to an ordinary one, as glibc's realloc does. */

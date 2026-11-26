@@ -51,4 +51,21 @@ int mallopt(int param, int value);
 size_t malloc_usable_size(void *ptr);
 void *memalign(size_t align, size_t size);
 
+/* mallinfo2 / mallinfo: glibc's layout and field names, crtl's numbers. The
+   allocator keeps exact counts (GetFPCHeapStatus): arena is the bytes it has
+   mapped, uordblks the bytes handed out and live, fordblks the mapped
+   remainder. It has no separate mmap tier, no fastbins and no top chunk to
+   trim, so hblks, hblkhd, smblks, fsmblks and keepcost are 0, which is true.
+   ordblks (free chunks) is not counted: 0. usmblks is 0 as in glibc.
+   mallinfo is the same with int fields, wrapped as glibc wraps them past
+   2 GiB. e2fsck -t prints these ("Memory used: ..."). */
+struct mallinfo2 {
+  size_t arena, ordblks, smblks, hblks, hblkhd, usmblks, fsmblks, uordblks, fordblks, keepcost;
+};
+struct mallinfo {
+  int arena, ordblks, smblks, hblks, hblkhd, usmblks, fsmblks, uordblks, fordblks, keepcost;
+};
+struct mallinfo2 mallinfo2(void);
+struct mallinfo mallinfo(void);
+
 #endif

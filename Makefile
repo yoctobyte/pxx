@@ -21159,6 +21159,10 @@ test-core: $(COMPILER)
 	# crtl's locales, groups by nothing (xz probes `%'u`; Nodisx). glibc's, C locale.
 	./$(COMPILER) test/c_printf_grouping_flag.c $(TESTTMP)/c_pgrp26 > /dev/null
 	tools/expect_same.sh c_pgrp26 "$$($(TESTTMP)/c_pgrp26)" "$$(cat test/c_printf_grouping_flag.expected)"
+	# mallinfo2/mallinfo report the allocator's numbers in glibc's layout; open64
+	# is declared by <fcntl.h> (e2fsprogs; Nodisx). Expected = gcc's.
+	./$(COMPILER) test/c_mallinfo_open64.c $(TESTTMP)/c_mallinfo26 > /dev/null
+	tools/expect_same.sh c_mallinfo26 "$$($(TESTTMP)/c_mallinfo26)" "$$(cat test/c_mallinfo_open64.expected)"
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"

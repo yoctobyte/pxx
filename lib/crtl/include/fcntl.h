@@ -109,6 +109,11 @@ struct flock {
 extern int open(const char *path, int flags, ...);
 extern int openat(int dirfd, const char *path, int flags, ...);
 extern int creat(const char *path, mode_t mode);
+/* LFS: src/fcntl.c has had the body (O_LARGEFILE on ILP32) since sqlite's
+   os_unix.c, but nothing declared it, so a caller that does not declare it
+   itself -- e2fsprogs' unix_io.c under HAVE_OPEN64 -- was "call to undeclared
+   function". glibc declares it here, under _LARGEFILE64_SOURCE. */
+extern int open64(const char *path, int flags, ...);
 extern int fcntl(int fd, int cmd, ...);
 
 

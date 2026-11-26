@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  855 functions across 81 headers. }
+  858 functions across 81 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -124,18 +124,18 @@ begin
       ' lrand48:stdlib.h lremovexattr:sys/xattr.h lrint:math.h lround:math.h lseek:unistd.h ' +
       ' lseek64:unistd.h lsetxattr:sys/xattr.h lstat:sys/stat.h lstat64:sys/stat.h ';
     'm': Result :=
-      ' madvise:sys/mman.h malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h ' +
-      ' mblen:stdlib.h mbrlen:wchar.h mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h ' +
-      ' mbtowc:stdlib.h memalign:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
-      ' memcpy:string.h memfd_create:sys/mman.h memmem:string.h memmove:string.h ' +
-      ' mempcpy:string.h memrchr:string.h memset:string.h memset_explicit:string.h ' +
-      ' mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
-      ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
-      ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
-      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
-      ' mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h ' +
-      ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
-      ' munmap:sys/mman.h ';
+      ' madvise:sys/mman.h mallinfo:malloc.h mallinfo2:malloc.h malloc:stdlib.h ' +
+      ' malloc_usable_size:malloc.h mallopt:malloc.h mblen:stdlib.h mbrlen:wchar.h ' +
+      ' mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h mbtowc:stdlib.h memalign:malloc.h ' +
+      ' memccpy:string.h memchr:string.h memcmp:string.h memcpy:string.h memfd_create:sys/mman.h ' +
+      ' memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h memset:string.h ' +
+      ' memset_explicit:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h ' +
+      ' mkfifo:sys/stat.h mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h ' +
+      ' mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h ' +
+      ' mlockall:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h ' +
+      ' mprotect:sys/mman.h mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h ' +
+      ' msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h ' +
+      ' munlockall:sys/mman.h munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
       ' ngettext:libintl.h nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h ' +
@@ -147,8 +147,8 @@ begin
       ' ns_put32:arpa/nameser.h ns_skiprr:arpa/nameser.h ntohl:netinet/in.h ntohs:netinet/in.h ' +
       ' ntp_adjtime:sys/timex.h ntp_gettime:sys/timex.h ';
     'o': Result :=
-      ' open:fcntl.h open_memstream:stdio.h openat:fcntl.h opendir:dirent.h openlog:syslog.h ' +
-      ' openpty:pty.h ';
+      ' open:fcntl.h open64:fcntl.h open_memstream:stdio.h openat:fcntl.h opendir:dirent.h ' +
+      ' openlog:syslog.h openpty:pty.h ';
     'p': Result :=
       ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
       ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
@@ -271,7 +271,7 @@ begin
     'j': Result := 128;
     'k': Result := 208;
     'l': Result := 7928;
-    'm': Result := 300528;
+    'm': Result := 301040;
     'n': Result := 360376;
     'o': Result := 16592;
     'p': Result := 1737621496;

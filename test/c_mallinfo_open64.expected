@@ -1,0 +1,5 @@
+in use grew by >= 1 MiB: yes
+arena >= uordblks: yes
+fordblks = arena - uordblks: yes
+mallinfo agrees: yes
+open64: ok
