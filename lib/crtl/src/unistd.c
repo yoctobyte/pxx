@@ -2069,7 +2069,9 @@ void closefrom(int lowfd)
   long max, fd;
   struct rlimit rl;
   if (lowfd < 0) lowfd = 0;
+#ifdef SYS_close_range   /* wasm32 has no syscall numbers: the loop alone */
   if (syscall(SYS_close_range, (long)lowfd, (long)~0U, 0L, 0L, 0L, 0L) == 0) return;
+#endif
   max = 1024;                      /* sysconf(_SC_OPEN_MAX)'s fixed answer */
   if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
     max = (long)rl.rlim_cur;
