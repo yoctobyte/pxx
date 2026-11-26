@@ -79,6 +79,7 @@
 #include <sys/resource.h>
 #include <sys/select.h>
 #include <sys/sem.h>
+#include <sys/sendfile.h>
 #include <sys/shm.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -96,6 +97,7 @@
 #include <syslog.h>
 #include <termios.h>
 #include <time.h>
+#include <ttyent.h>
 #include <unistd.h>
 #include <utime.h>
 #include <utmpx.h>

@@ -711,6 +711,21 @@ static double __crtl_ldexp_ull(unsigned long long m, int e) {
   return v;
 }
 
+/* every crtl locale reads numbers as C (see <stdlib.h>) */
+double strtod_l(const char *s, char **end, struct __pxx_locale *loc) {
+  (void)loc;
+  return strtod(s, end);
+}
+
+/* glibc matches the answer against the locale's YESEXPR and NOEXPR, which
+   for C are ^[yY] and ^[nN] */
+int rpmatch(const char *response) {
+  if (!response) return -1;
+  if (response[0] == 'y' || response[0] == 'Y') return 1;
+  if (response[0] == 'n' || response[0] == 'N') return 0;
+  return -1;
+}
+
 double strtod(const char *s, char **end) {
   const char *p = s;
   double v, sign = 1.0;

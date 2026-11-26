@@ -20860,7 +20860,7 @@ var
   savedSC, savedFS, node, savedCurProc, pmi: Integer;
   pArrOfPtr2: Boolean;   { a `T **t` param over an array typedef of pointers }
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
-  parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
+  parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow, pFnVoid: Boolean;
   xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
   mangIdx, mangAny, mangBound: Integer;   { `<unit>_pas_<Name>` candidate scan; mangAny = any candidate (for the diagnostic), mangBound = the one the signature selected }
   defPeekPos: Integer; isDefinition: Boolean;   { does a body follow? (bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine) }
@@ -21045,7 +21045,14 @@ begin
       if IsCTypeTok then
       begin
         ptype := ParseCDeclType;
-        if CTypeIsVoid then
+        { `void name(params)` is a FUNCTION-typed parameter returning void
+          (C 6.7.6.3p8 makes it a pointer, the arm below), not the `(void)`
+          of an empty list: a name or a `(name)` follows. util-linux
+          lib/path.c: ul_path_set_dialect(..., void free_data(struct path_cxt *)).
+          bug-c-a-function-typed-parameter-returning-void-or-with-a-parenthesized-name-is-not-declared }
+        pFnVoid := CTypeIsVoid and ((CurTok.Kind = tkIdent) or (CurTok.Kind = tkLParen));
+        if pFnVoid then ptype := tyInteger;   { the return kind a void callback signature gets }
+        if CTypeIsVoid and not pFnVoid then
         begin
           { `(void)` empty parameter list — no actual parameter }
         end
@@ -21128,6 +21135,18 @@ begin
           begin
             pnames[nparams] := CurTok.SVal;
             Next;
+          end
+          else if (CurTok.Kind = tkLParen) and (TokPos + 1 < TokCount) and
+                  (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkRParen) then
+          begin
+            { `int (name)(params)`: the name in parentheses, the same
+              declarator as `int name(params)` (util-linux lib/strutils.c
+              string_to_idarray(..., int (name2id)(const char *, size_t))).
+              The function-type arm below then reads the parameter list. }
+            Next;                       { '(' }
+            pnames[nparams] := CurTok.SVal;
+            Next;                       { name }
+            Next;                       { ')' }
           end
           else
           begin

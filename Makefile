@@ -21174,6 +21174,29 @@ test-core: $(COMPILER)
 	# is declared by <fcntl.h> (e2fsprogs; Nodisx). Expected = gcc's.
 	./$(COMPILER) test/c_mallinfo_open64.c $(TESTTMP)/c_mallinfo26 > /dev/null
 	tools/expect_same.sh c_mallinfo26 "$$($(TESTTMP)/c_mallinfo26)" "$$(cat test/c_mallinfo_open64.expected)"
+	# A function-TYPED parameter returning void, or with its name in
+	# parentheses, is declared (util-linux lib/path.c, lib/strutils.c; Nodisx).
+	# Expected = gcc's.
+	./$(COMPILER) test/c_function_typed_parameter_forms.c $(TESTTMP)/c_ftpf26 > /dev/null
+	tools/expect_same.sh c_ftpf26 "$$($(TESTTMP)/c_ftpf26)" "$$(cat test/c_function_typed_parameter_forms.expected)"
+	# What util-linux needed from crtl, against glibc and the host's kernel
+	# headers (Nodisx): the zoned-device, BLKPG, OPAL and optical-drive UAPI
+	# (values and layouts, at both widths), and fmemopen, rpmatch, strtod_l,
+	# <stdio_ext.h>, sendfile and <ttyent.h> (behaviour, glibc's answers).
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_util_linux_uapi.c $(TESTTMP)/c_uluapi26 >/dev/null || { echo "c_uluapi compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_uluapi_gcc test/c_crtl_util_linux_uapi.c || { echo "c_uluapi gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_uluapi26 "$$($(TESTTMP)/c_uluapi26)" "$$($(TESTTMP)/c_uluapi_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_uluapi_gcc32 test/c_crtl_util_linux_uapi.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_util_linux_uapi.c $(TESTTMP)/c_uluapi32 >/dev/null || { echo "c_uluapi i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_uluapi26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_uluapi32)" "$$($(TESTTMP)/c_uluapi_gcc32)" || exit 1; \
+	  fi; \
+	  ./$(COMPILER) test/c_crtl_util_linux_libc.c $(TESTTMP)/c_ullibc26 >/dev/null || { echo "c_ullibc compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_ullibc_gcc test/c_crtl_util_linux_libc.c || { echo "c_ullibc gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_ullibc26 "$$($(TESTTMP)/c_ullibc26)" "$$($(TESTTMP)/c_ullibc_gcc)" || exit 1; \
+	else \
+	  echo "=== c_uluapi/c_ullibc: gcc absent, NOT verified ==="; \
+	fi
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"

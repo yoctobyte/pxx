@@ -126,6 +126,14 @@ struct PxxCrtlFile {
   char **mbufp;
   size_t *msizep;
   size_t mcap;
+  /* FIXED MEMORY STREAM (fmemopen): no fd. The caller's buffer IS the read
+     buffer -- rbuf, with rpos the stream position and rlen the end of the
+     contents -- so every read path above works on it unchanged; mcap is the
+     buffer's size, writes go in at rpos and never past mcap. fown: the
+     buffer was allocated here (a NULL buf) and fclose frees it. */
+  int fmem;
+  int fown;
+  int lockby; /* __fsetlocking's last answer: 0 internal, 1 by the caller */
 };
 typedef struct PxxCrtlFile FILE;
 
@@ -143,6 +151,7 @@ FILE *stderr = &__crtl_stderr;
 /* Give unread buffered bytes back: seek the fd back over them (a pipe cannot
    seek; there they are simply dropped, as glibc does) and empty the buffer. */
 static void __crtl_rdrop(FILE *s) {
+  if (s->fmem) return;   /* the buffer is the stream; nothing to give back */
   if (s->rlen > s->rpos)
     __pxx_seek(s->fd, -(long long)(s->rlen - s->rpos), SEEK_CUR);
   s->rpos = 0;
@@ -153,6 +162,7 @@ static void __crtl_rdrop(FILE *s) {
    No buffer memory: read nothing here and let the caller go unbuffered. */
 static long __crtl_rfill(FILE *s) {
   long r;
+  if (s->fmem) { s->eof = 1; return 0; }   /* past the contents: end of file */
   if (!s->rbuf) {
     s->rbuf = (unsigned char *)__pxx_malloc(PXX_RBUF_SIZE);
     if (!s->rbuf) { s->rbuffered = 0; return -2; }
@@ -192,6 +202,48 @@ FILE *open_memstream(char **bufp, size_t *sizep) {
   *bufp = 0; *sizep = 0;
   /* an empty stream still reads back as "" */
   if (__crtl_swrite(f, "", 0) < 0) { f->mem = 0; f->heap = 0; return 0; }
+  return f;
+}
+
+/* fmemopen (POSIX 2008): a stream over SIZE bytes of the caller's memory
+   (or of memory allocated here when buf is NULL, freed by fclose). glibc's
+   rules, which are the reference: "r" reads all SIZE bytes; "w" writes from
+   the start and leaves the buffer as it is until written (only "w+" empties
+   it); "a" starts at the first NUL. A `b' changes nothing. A write that does
+   not end in a NUL keeps room for one and puts it after the contents; a
+   write stops at SIZE and fails with ENOSPC when nothing fits.
+   libsmartcols parses a filter expression with a flex scanner reading one
+   (util-linux libsmartcols/src/filter.c). */
+FILE *fmemopen(void *buf, size_t size, const char *mode) {
+  FILE *f;
+  size_t i;
+  if (!mode || (mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a')) {
+    errno = EINVAL; return 0;
+  }
+  f = __crtl_alloc_file();
+  if (!f) { errno = EMFILE; return 0; }
+  f->fown = 0;
+  if (!buf) {
+    buf = __pxx_malloc((long)(size ? size : 1));
+    if (!buf) { f->heap = 0; errno = ENOMEM; return 0; }
+    ((char *)buf)[0] = 0;
+    f->fown = 1;
+  } else if (mode[0] == 'w' && mode[1] == '+' && size > 0) {
+    ((char *)buf)[0] = 0;
+  }
+  f->fd = -1; f->err = 0; f->eof = 0; f->ungetn = 0;
+  f->mem = 0; f->mbufp = 0; f->msizep = 0;
+  f->fmem = 1; f->mcap = size;
+  f->rbuffered = 1;
+  f->rbuf = (unsigned char *)buf;
+  f->rpos = 0;
+  f->rlen = 0;
+  if (mode[0] == 'r') f->rlen = (int)size;
+  else if (mode[0] == 'a') {             /* from the first NUL */
+    for (i = 0; i < size && ((char *)buf)[i]; i++) ;
+    f->rlen = (int)i;
+    f->rpos = (int)i;
+  }
   return f;
 }
 
@@ -925,6 +977,23 @@ static long __crtl_fdwrite(FILE *f, const void *p, unsigned long n) {
 /* Every FILE write goes here: a memory stream appends to its buffer, any
    other stream writes its fd. Returns the bytes taken, or -1. */
 static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
+  if (f->fmem) {
+    /* a NUL goes after the contents unless the data brings its own */
+    int addnul = n == 0 || ((const char *)p)[n - 1] != 0;
+    unsigned long k = n;
+    if ((size_t)f->rpos + n > f->mcap) {
+      if ((size_t)f->rpos + (size_t)addnul >= f->mcap) { f->err = 1; errno = ENOSPC; return -1; }
+      k = (unsigned long)(f->mcap - (size_t)f->rpos - (size_t)addnul);
+    }
+    memcpy(f->rbuf + f->rpos, p, k);
+    f->rpos += (int)k;
+    if (f->rpos > f->rlen) {
+      f->rlen = f->rpos;
+      if (addnul && (size_t)f->rlen < f->mcap) f->rbuf[f->rlen] = 0;
+    }
+    if (k < n) { f->err = 1; errno = ENOSPC; }
+    return (long)k;
+  }
   if (f->mem) {
     size_t len = *f->msizep;
     if (len + n + 1 > f->mcap) {
@@ -992,7 +1061,7 @@ static int __crtl_vmemprintf(FILE *stream, const char *fmt, va_list ap) {
 }
 
 int vfprintf(FILE *stream, const char *fmt, va_list ap) {
-  if (stream->mem) return __crtl_vmemprintf(stream, fmt, ap);
+  if (stream->mem || stream->fmem) return __crtl_vmemprintf(stream, fmt, ap);
   if (stream->rlen) __crtl_rdrop(stream);
   return __crtl_vfdprintf(stream, fmt, ap);
 }
@@ -1085,7 +1154,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     while (got < total) {
       unsigned long avail = (unsigned long)(stream->rlen - stream->rpos), k;
       if (avail == 0) {
-        if (total - got >= PXX_RBUF_SIZE) break;   /* the direct loop below */
+        if (total - got >= PXX_RBUF_SIZE && !stream->fmem) break;   /* the direct loop below */
         r = __crtl_rfill(stream);
         if (r == -2) break;                        /* no memory: unbuffered */
         if (r <= 0) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
@@ -1270,6 +1339,15 @@ FILE *freopen(const char *path, const char *mode, FILE *stream) {
 int fclose(FILE *stream) {
   int rc;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->fmem) {
+    if (stream->fown) __pxx_free(stream->rbuf);
+    stream->fmem = 0; stream->fown = 0; stream->mcap = 0;
+    stream->rbuf = 0; stream->rbuffered = 0; stream->rpos = 0; stream->rlen = 0;
+    stream->err = 0; stream->eof = 0; stream->ungetn = 0;
+    stream->fd = -1;
+    stream->heap = 0;
+    return 0;
+  }
   if (stream->mem) {
     /* the buffer is the caller's now; the FILE goes back to the pool */
     stream->mem = 0; stream->mbufp = 0; stream->msizep = 0; stream->mcap = 0;
@@ -1291,9 +1369,22 @@ int fclose(FILE *stream) {
   return 0;
 }
 
+/* fmemopen's seek: within 0..size; SEEK_END counts from the end of the
+   contents. Discards the pushback like any seek. */
+static int __crtl_fmemseek(FILE *s, long long off, int whence) {
+  long long base = whence == SEEK_SET ? 0 : whence == SEEK_CUR ? (long long)s->rpos - s->ungetn
+                 : whence == SEEK_END ? (long long)s->rlen : -1;
+  if (base < 0 || base + off < 0 || base + off > (long long)s->mcap) { errno = EINVAL; return -1; }
+  s->ungetn = 0;
+  s->rpos = (int)(base + off);
+  s->eof = 0;
+  return 0;
+}
+
 int fseek(FILE *stream, long off, int whence) {
   long r;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->fmem) return __crtl_fmemseek(stream, off, whence);
   /* A seek DISCARDS the pushback (C99 7.19.7.11p2) -- and a SEEK_CUR seek must
      do it before the syscall, since the fd is already past the pushed-back
      characters. Keeping them would deliver bytes from the old position after
@@ -1311,6 +1402,7 @@ int fseek(FILE *stream, long off, int whence) {
 long ftell(FILE *stream) {
   long r;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->fmem) return (long)stream->rpos - stream->ungetn;
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = -r; stream->err = 1; return -1; }
   /* The fd has already consumed whatever is pushed back, so the POSITION A
@@ -1328,6 +1420,7 @@ long ftell(FILE *stream) {
 int fseeko(FILE *stream, off_t off, int whence) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->fmem) return __crtl_fmemseek(stream, (long long)off, whence);
   stream->ungetn = 0;                 /* as fseek: a seek discards the pushback */
   if (whence == SEEK_CUR) off -= (off_t)(stream->rlen - stream->rpos);
   stream->rpos = 0;
@@ -1341,6 +1434,7 @@ int fseeko(FILE *stream, off_t off, int whence) {
 off_t ftello(FILE *stream) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
+  if (stream->fmem) return (off_t)stream->rpos - stream->ungetn;
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
   return (off_t)(r - (long long)stream->ungetn - (long long)(stream->rlen - stream->rpos));   /* as ftell */
@@ -1393,6 +1487,7 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
 }
 
 void rewind(FILE *stream) {
+  if (stream && stream->fmem) { __crtl_fmemseek(stream, 0, SEEK_SET); stream->err = 0; return; }
   if (stream) {
     stream->ungetn = 0;
     stream->rpos = 0;
@@ -2176,3 +2271,16 @@ int fsetpos(FILE *stream, const fpos_t *pos)
 {
   return fseeko(stream, pos->__pos, SEEK_SET);
 }
+
+/* ---- <stdio_ext.h> (see the header: output is unbuffered) ----------------- */
+
+size_t __fpending(FILE *fp) { (void)fp; return 0; }
+
+int __fsetlocking(FILE *fp, int type) {
+  int was = fp->lockby ? 2 : 1;   /* FSETLOCKING_BYCALLER : _INTERNAL */
+  if (type == 1) fp->lockby = 0;
+  else if (type == 2) fp->lockby = 1;
+  return was;
+}
+
+void _flushlbf(void) { }

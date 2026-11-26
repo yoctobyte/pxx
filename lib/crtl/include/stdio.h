@@ -37,6 +37,9 @@ int fprintf(FILE *stream, const char *fmt, ...);
 /* open_memstream: a write-only stream into a growing heap buffer; *bufp and
    *sizep follow every write, and the caller frees *bufp after fclose. */
 FILE *open_memstream(char **bufp, size_t *sizep);
+/* fmemopen: a stream over SIZE bytes of BUF (allocated, and freed by
+   fclose, when BUF is NULL); writes stop at SIZE. */
+FILE *fmemopen(void *buf, size_t size, const char *mode);
 int sprintf(char *s, const char *fmt, ...);
 int snprintf(char *s, size_t n, const char *fmt, ...);
 int vprintf(const char *fmt, va_list ap);

@@ -22,6 +22,15 @@ long atol(const char *s);
 long long atoll(const char *s);
 double atof(const char *s);
 double strtod(const char *s, char **end);
+/* strtod_l: strtod in locale LOC. crtl's locales differ only in LC_CTYPE
+   (see <locale.h>), so every one of them reads numbers as C does. The
+   parameter is spelled as the struct locale_t names, so this header does
+   not need <locale.h>. */
+struct __pxx_locale;
+double strtod_l(const char *s, char **end, struct __pxx_locale *loc);
+/* rpmatch: 1 for a yes answer, 0 for a no, -1 for neither -- in C's terms,
+   the only ones crtl has: a leading y/Y or n/N. */
+int rpmatch(const char *response);
 /* long double == double in pxx: strtold aliases strtod. */
 double strtold(const char *s, char **end);
 long strtol(const char *s, char **end, int base);
