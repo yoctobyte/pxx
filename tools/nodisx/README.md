@@ -215,12 +215,15 @@ TLS 1.3 servers often pick ChaCha20-Poly1305, which does not depend on it.
 
 `test.sh` runs a local server (`testserver.py`, stdlib: HTTP, and HTTPS with
 an EC and an RSA certificate from a throwaway CA). It compares the pxx curl
-with the gcc curl on 43 rows, and all must match:
+with the gcc curl on 46 rows, and all must match:
 - `-V`;
 - file://;
 - HTTP: GET, HEAD, ranges, chunked, redirects, POST, PUT and multipart
   uploads of a 3 MB random file, headers, cookies, auth, status codes,
-  connection reuse, parallel transfers;
+  connection reuse, parallel transfers, a host name only /etc/hosts knows
+  (curl answers `localhost` itself, so that one never reached the resolver:
+  pxx curl could not resolve names until crtl's getaddrinfo learned
+  /etc/hosts and DNS in b240f77f68), an unknown name (exit 6);
 - HTTPS over TLS 1.2 and 1.3 with each certificate, and the refusals
   (exit 60);
 - every one of the 118 certificates in the bundle, loaded by mbedTLS;

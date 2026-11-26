@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""testserver.py DIR PORTFILE CERTDIR: the server curl's test.sh talks to.
+"""testserver.py DIR PORTFILE CERTDIR [ADDR]: the server curl's test.sh talks to.
 
 Three listeners on 127.0.0.1, ports written to PORTFILE as `http N`,
-`https-ec N`, `https-rsa N`: plain HTTP, and HTTPS with the EC and the RSA
+`https-ec N`, `https-rsa N` (and `http-byname N` on ADDR, a loopback address
+/etc/hosts gives a name, so curl must resolve it): plain HTTP, and HTTPS with the EC and the RSA
 server certificate from CERTDIR (ec.crt/ec.key, rsa.crt/rsa.key, made by
 test.sh and signed by its throwaway CA). HTTP/1.1, so several URLs in one curl
 run reuse the connection. Stdlib only. Runs until killed.
@@ -24,6 +25,7 @@ import sys
 import threading
 
 ROOT, PORTFILE, CERTS = sys.argv[1], sys.argv[2], sys.argv[3]
+BYNAME = sys.argv[4] if len(sys.argv) > 4 else ""   # a loopback address /etc/hosts names
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -121,8 +123,8 @@ class H(http.server.BaseHTTPRequestHandler):
     do_PUT = do_POST
 
 
-def serve(name, ctx):
-    srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+def serve(name, ctx, addr='127.0.0.1'):
+    srv = http.server.ThreadingHTTPServer((addr, 0), H)
     if ctx is not None:
         srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
@@ -138,6 +140,8 @@ def tls(kind):
 
 
 lines = serve('http', None) + serve('https-ec', tls('ec')) + serve('https-rsa', tls('rsa'))
+if BYNAME:
+    lines += serve('http-byname', None, BYNAME)
 with open(PORTFILE + '.tmp', 'w') as f:
     f.write(lines)
 os.rename(PORTFILE + '.tmp', PORTFILE)

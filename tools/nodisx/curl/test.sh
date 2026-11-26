@@ -6,7 +6,8 @@
 #   1. curl -V (version, protocols, features)
 #   2. file://, HTTP GET/HEAD, ranges, chunked, redirects, POST/PUT uploads
 #      (a 3 MB random file: the bytes must come back identical), headers,
-#      cookies, basic auth, status codes, -w write-out, connection reuse
+#      cookies, basic auth, status codes, -w write-out, connection reuse,
+#      a host name resolved through /etc/hosts, an unknown name (exit 6)
 #   3. HTTPS over TLS 1.2 and 1.3, EC and RSA: a verified fetch with the test
 #      CA, the refusals (the compiled-in bundle path and the Mozilla bundle,
 #      neither of which holds the test CA; a wrong host name), -k, an upload
@@ -77,7 +78,11 @@ for k in ec rsa; do
   openssl x509 -req -in "$A/$k.csr" -CA "$A/ca.crt" -CAkey "$A/ca.key" -CAcreateserial \
     -days 2 -extfile "$A/ext" -out "$A/$k.crt" > /dev/null 2>&1
 done
-python3 -I "$T/testserver.py" "$D" "$O/ports" "$A" 2> "$O/server.log" &
+# a name only the resolver knows: the first /etc/hosts name for a 127/8
+# address other than localhost, which curl answers itself without asking libc
+set -- $(awk '$1 ~ /^127\./ && $2 != "localhost" { print $1, $2; exit }' /etc/hosts)
+NADDR=${1:-}; NAME=${2:-}
+python3 -I "$T/testserver.py" "$D" "$O/ports" "$A" $NADDR 2> "$O/server.log" &
 spid=$!
 trap 'kill $spid 2> /dev/null || :' EXIT
 i=0
@@ -115,6 +120,14 @@ expect http-fail 22 '"$C" -sS -f "$H/code/500"'
 compare http-reuse '"$C" -sS -w "%{num_connects}\n" "$H/f/small.txt" "$H/f/small.txt" "$H/f/small.txt"'
 compare http-parallel '"$C" -sS -Z -o "$O/p1.tmp" "$H/f/mid.bin" -o "$O/p2.tmp" "$H/f/big.bin" -o "$O/p3.tmp" "$H/f/small.txt" && cat "$O/p1.tmp" "$O/p2.tmp" "$O/p3.tmp" | sum'
 expect http-refused 7 '"$C" -sS "http://127.0.0.1:1/"'
+if [ -n "$NAME" ]; then
+  N=http://$NAME:$(port http-byname)
+  compare http-by-name '"$C" -sS -w "%{remote_ip} %{http_code}\n" "$N/f/small.txt"'
+  expect http-by-name-ok 0 '"$C" -sS -o /dev/null "$N/f/small.txt"'
+else
+  echo "skip    http-by-name: /etc/hosts names no 127/8 address but localhost"
+fi
+expect http-unknown-name 6 '"$C" -sS "http://no-such-host.invalid/"'
 
 # --- 3. HTTPS ---
 for k in ec rsa; do
