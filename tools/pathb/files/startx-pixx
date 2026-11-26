@@ -1,46 +1,142 @@
 #!/bin/sh
-# startx for pixx's pxx-built desktop (Path B): TinyX Xfbdev on /dev/fb0
-# and the JWM window manager, whose configuration (/etc/jwm/system.jwmrc)
-# opens one st terminal with a welcome. Run as root from a text console
-# (Xfbdev takes over the VT and reads the keyboard from it; TinyX has no
-# other keyboard driver).
+# startx for pixx's pxx-built desktop (Path B) and the JWM window manager,
+# whose configuration (/etc/jwm/system.jwmrc) opens one st terminal with a
+# welcome. Run as root from a text console.
 #   mouse: click the desktop (or Menu in the tray) for programs and Log out
 #   PIXX_WM=dwm  the earlier dwm + st session instead (Alt+Shift+q quits)
 #
-# Mouse: PIXX_MOUSE=/dev/... picks the device; otherwise the first of
-# /dev/input/mice and /dev/psaux that exists. With neither, the server gets a
-# path that cannot open, so it runs without a pointer instead of probing its
-# built-in list, which ends in /dev/ttyS0 (the serial console). TinyX reads
-# PS/2-style byte streams only (no evdev), and it validates the protocol on
-# the first few packets: the pointer starts moving after a short movement.
+# The X server:
+#   Xorg on DRM when /dev/dri/card0 exists: the modesetting driver (dumb
+#     buffers, no GL) and evdev for the input devices the kernel lists
+#     (/proc/bus/input/devices). No udev: this script writes the xorg.conf
+#     (/tmp/xorg-pixx.conf). Log:
+#     /tmp/Xorg.0.log. If Xorg does not come up, Xfbdev is tried next.
+#   Xfbdev (TinyX) on /dev/fb0 otherwise: keyboard from the VT, mouse from
+#     a PS/2-style stream (PIXX_MOUSE, else /dev/input/mice or /dev/psaux).
+#   PIXX_X=xorg|xfbdev  forces one; PIXX_KMSDEV picks another card.
 export DISPLAY=:0
 export HOME=${HOME:-/root}
 export FONTCONFIG_FILE=/etc/fonts/fonts.conf
-# Xlib's locale data. libX11 has the build host's prefix compiled in, which
-# does not exist here; without it XSupportsLocale() fails, and a window
+# Xlib's locale data; without it XSupportsLocale() fails, and a window
 # manager that converts titles through the locale (dwm) shows "broken".
 export XLOCALEDIR=/usr/share/X11/locale
 export LANG=${LANG:-C}
-[ -c /dev/fb0 ] || { echo "startx-pixx: no /dev/fb0 (no framebuffer)"; exit 1; }
 if ! grep -q ' /dev/pts ' /proc/mounts; then
   mkdir -p /dev/pts && mount -t devpts -o ptmxmode=0666 devpts /dev/pts
 fi
 mkdir -p /tmp && chmod 1777 /tmp
-MOUSE=$PIXX_MOUSE
-if [ -z "$MOUSE" ]; then
-  for m in /dev/input/mice /dev/psaux; do
-    [ -c $m ] && { MOUSE=$m; break; }
+FP=/usr/share/fonts/X11/misc/
+KMS=${PIXX_KMSDEV:-/dev/dri/card0}
+XPID=
+
+wait_x() {  # -> 0 when the server's socket is there
+  i=0
+  while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 15 ]; do
+    kill -0 $XPID 2>/dev/null || return 1
+    sleep 1; i=$((i + 1))
   done
-fi
-if [ -z "$MOUSE" ]; then
-  echo "startx-pixx: no mouse device; running without a pointer"
-  MOUSE=/dev/null/no-mouse
-fi
-Xfbdev :0 -nolisten tcp -fp /usr/share/fonts/X11/misc/ -mouse $MOUSE -fb /dev/fb0 &
-XPID=$!
-i=0
-while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); done
-[ -S /tmp/.X11-unix/X0 ] || { echo "startx-pixx: the X server did not start"; kill $XPID 2>/dev/null; exit 1; }
+  [ -S /tmp/.X11-unix/X0 ]
+}
+
+# Input devices for evdev, one per line, "CLASS /dev/input/eventN", sorted
+# by class: p pointers (relative or absolute axes, or a mouse handler),
+# k keyboards with LEDs, l other keyboards (a power button is one: with LEDs
+# first, a real keyboard becomes the core one). From /proc/bus/input/devices;
+# without it, every event device. (pixx's pixx-desktop, MIT.)
+input_devices() {
+  ins=
+  if [ -r /proc/bus/input/devices ]; then
+    ins=$(awk 'function flush() { if (ev != "") {
+               if (ptr) print "p " ev; else if (kbd) print (led ? "k " : "l ") ev }
+             ev = ""; ptr = kbd = led = 0 }
+           /^I:/ { flush() }
+           /^H: Handlers=/ { for (i = 2; i <= NF; i++) { h = $i; sub(/^Handlers=/, "", h)
+               if (h ~ /^event[0-9]+$/) ev = "/dev/input/" h
+               if (h == "kbd") kbd = 1
+               if (h == "leds") led = 1
+               if (h ~ /^mouse[0-9]+$/) ptr = 1 } }
+           /^B: (REL|ABS)=/ { ptr = 1 }
+           /^B: LED=/ { led = 1 }
+           END { flush() }' /proc/bus/input/devices | sort -s -k1,1)
+  fi
+  [ -n "$ins" ] || ins=$(for e in /dev/input/event*; do [ -c "$e" ] && echo "x $e"; done)
+  echo "$ins"
+}
+
+xorg_conf() {  # the card, and every input device through evdev
+  cat <<EOF
+Section "ServerFlags"
+    Option "AutoAddDevices" "false"
+    Option "AutoAddGPU" "false"
+    Option "AutoEnableDevices" "false"
+    Option "AllowEmptyInput" "true"
+EndSection
+Section "Files"
+    FontPath "$FP"
+EndSection
+Section "Device"
+    Identifier "card"
+    Driver "modesetting"
+    Option "kmsdev" "$KMS"
+    Option "AccelMethod" "none"
+EndSection
+Section "Screen"
+    Identifier "screen"
+    Device "card"
+EndSection
+EOF
+  # the first keyboard and the first pointer are the core devices
+  input_devices | awk -v lay="${PIXX_XKBLAYOUT:-us}" 'NF == 2 {
+      opt = "SendCoreEvents"
+      if ($1 != "p" && !k++) opt = "CoreKeyboard"
+      if ($1 == "p" && !p++) opt = "CorePointer"
+      printf "Section \"InputDevice\"\n    Identifier \"in%d\"\n    Driver \"evdev\"\n", n
+      printf "    Option \"Device\" \"%s\"\n    Option \"XkbRules\" \"evdev\"\n", $2
+      printf "    Option \"XkbLayout\" \"%s\"\nEndSection\n", lay
+      l = l sprintf("    InputDevice \"in%d\" \"%s\"\n", n, opt); n++ }
+    END { printf "Section \"ServerLayout\"\n    Identifier \"layout\"\n    Screen \"screen\"\n%sEndSection\n", l }'
+}
+
+start_xorg() {
+  [ -x /usr/bin/Xorg ] && [ -c "$KMS" ] || return 1
+  mkdir -p /var/lib/xkb /var/log
+  xorg_conf > /tmp/xorg-pixx.conf
+  Xorg :0 -nolisten tcp -config /tmp/xorg-pixx.conf -logfile /tmp/Xorg.0.log -fp $FP &
+  XPID=$!
+  wait_x && return 0
+  echo "startx-pixx: Xorg did not start; the end of /tmp/Xorg.0.log:"
+  tail -15 /tmp/Xorg.0.log 2>/dev/null
+  kill $XPID 2>/dev/null; wait $XPID 2>/dev/null
+  return 1
+}
+
+start_xfbdev() {
+  [ -c /dev/fb0 ] || { echo "startx-pixx: no /dev/fb0 (no framebuffer)"; return 1; }
+  MOUSE=$PIXX_MOUSE
+  if [ -z "$MOUSE" ]; then
+    for m in /dev/input/mice /dev/psaux; do
+      [ -c $m ] && { MOUSE=$m; break; }
+    done
+  fi
+  # With no mouse, a path that cannot open: TinyX would otherwise probe its
+  # built-in list, which ends in /dev/ttyS0 (the serial console).
+  if [ -z "$MOUSE" ]; then
+    echo "startx-pixx: no mouse device; running without a pointer"
+    MOUSE=/dev/null/no-mouse
+  fi
+  Xfbdev :0 -nolisten tcp -fp $FP -mouse $MOUSE -fb /dev/fb0 &
+  XPID=$!
+  wait_x && return 0
+  echo "startx-pixx: Xfbdev did not start"
+  kill $XPID 2>/dev/null
+  return 1
+}
+
+case ${PIXX_X:-auto} in
+  xorg)   start_xorg || exit 1 ;;
+  xfbdev) start_xfbdev || exit 1 ;;
+  *)      start_xorg || start_xfbdev || exit 1 ;;
+esac
 if [ "$PIXX_WM" = dwm ]; then
   st &
   dwm

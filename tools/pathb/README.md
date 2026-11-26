@@ -1,11 +1,13 @@
 # Path B: an X11 desktop compiled by pxx
 
-This builds pixx's own desktop: the TinyX Xfbdev framebuffer X server, the
-JWM window manager (dwm with `PIXX_WM=dwm`), the st terminal, xclock, xcalc,
-xeyes, xload, xedit and LVGL's framebuffer demo. Every C file, the X
-libraries included (Xlib, xcb, Xt, Xaw, Xmu, Xpm, Xft, fontconfig, freetype,
-expat, libXfont, zlib), is compiled and linked by pxx. The binaries are static
-and use pxx's crtl, not glibc.
+This builds pixx's own desktop: two X servers, Xorg on Linux DRM (the
+modesetting driver, evdev input) and the TinyX Xfbdev framebuffer server as
+the fallback; the JWM window manager (dwm with `PIXX_WM=dwm`), the st
+terminal, xclock, xcalc, xeyes, xload, xedit, xkbcomp and LVGL's framebuffer
+demo. Every C file, the libraries included (Xlib, xcb, Xt, Xaw, Xmu, Xpm,
+Xft, fontconfig, freetype, expat, libXfont, libXfont2, zlib, pixman,
+libdrm, libevdev, mtdev, libxkbfile, libmd, libxcvt), is compiled and linked
+by pxx. The binaries are static and use pxx's crtl, not glibc.
 
 It builds in two places from one recipe:
 
@@ -35,6 +37,9 @@ RECIPE=/x/recipe DL=/x/dl PXX=pxx sh /x/recipe/tools/onsite.sh /some/workdir
    installed with `DESTDIR` into `$PATHB_WORK/stage`, so every path compiled
    into a program is the target's. It applies `patches/NAME-*.patch` after
    unpacking. The make logs hold every compile with its directory and flags.
+   The meson packages (libdrm, pixman, libxcvt, xkeyboard-config) are built
+   with `ninja -v`, whose output is written as a make-style log. meson and
+   ninja must be on `PATH` (a venv will do).
 3. `prep.sh`: st's and dwm's `config.h`, and LVGL's `lv_conf.h` (its
    template with ten checked edits).
 4. `fonts.sh`: the core X fonts, PCF from the X.org BDF sources (bdftopcf,
@@ -55,10 +60,40 @@ RECIPE=/x/recipe DL=/x/dl PXX=pxx sh /x/recipe/tools/onsite.sh /some/workdir
    - `libobjs.py` maps a gcc archive's members to their pxx objects;
    - `xfb_objs.py` collects the objects on gcc's Xfbdev link line;
    - `prog_objs.py` does the same for one program's gcc link line;
+   - `arc_objs.py` maps the Xorg server's own archives (and the module
+     archives) to their objects;
    - `drop_dups.py` pulls library members by ld's archive rule.
    It stops if a member would need `objcopy --localize-symbol`, since the
    target has none.
 8. `onsite.sh WORK link bundle`: the target's last two stages.
+
+## Xorg on DRM
+
+- **Static, no dlopen.** pxx has no dynamic loader, so the modules Xorg
+  would load (modesetting, shadow, evdev) are linked in.
+  `patches/xorg-server-static-modules.patch` gives the loader a table of
+  built-in modules, a weak empty one by default.
+  `files/xorg-static-modules.c` is the strong table, compiled with
+  loader.c's flags. `LoadModule` finds a module there before it searches
+  the module path. fb, ddc, i2c, ramdac, dbe, record and extmod are already
+  built into the server.
+- **No udev, no PCI.** The server is configured without udev, HAL, logind,
+  libpciaccess, int10, VGA hw, DGA, GLX, DRI1/DRI3 and glamor. DRI2 stays
+  on, because modesetting needs it to build. Software rendering on dumb
+  buffers only. `patches/xorg-server-modesetting-no-pci.patch` lets
+  modesetting build without libpciaccess. It then probes through
+  `Option "kmsdev"`. `patches/xf86-input-evdev-no-udev.patch` lets evdev
+  configure without libudev.
+- **startx-pixx** runs Xorg when `/dev/dri/card0` exists, and falls back to
+  Xfbdev when Xorg does not start. `PIXX_X=xorg|xfbdev` forces one, and
+  `PIXX_KMSDEV` picks another card. With no udev to add input devices, it
+  writes `/tmp/xorg-pixx.conf`: one evdev InputDevice per keyboard, mouse
+  and touchpad in `/proc/bus/input/devices` (pixx-desktop's
+  classification), the layout `PIXX_XKBLAYOUT` (default `us`), and
+  AutoAddDevices off. The log is `/tmp/Xorg.0.log`.
+- **Keymaps:** the bundle ships xkbcomp and the xkeyboard-config data
+  (`/usr/share/X11/xkb`, a data package: not compiled, not replayed).
+  Compiled keymaps go to `/var/lib/xkb`.
 
 ## The on-site side
 
@@ -67,8 +102,11 @@ unpack the tarballs and lay `gen.tar.gz` over them, run `compile.list` with
 `JOBS` jobs, run `link.list`, then `make_bundle.sh`. Tools: sh, tar, xzcat,
 bzcat, zcat, gzip, sed, sort, grep, cut, find, stat, sha256sum, readlink,
 cp, mv, chmod, mkdir, and pxx (with `PXX_HOME`). No gcc, make, autoconf,
-python, patch, ar, nm or objcopy. Tested under busybox with nothing else on
-`PATH`.
+python, patch, ar, nm or objcopy. Tested with dash, toybox 0.8.12, xzcat and
+bzcat and nothing else on `PATH`. Most of the X.Org tarballs are old V7 tar
+with no `ustar` magic, which toybox and GNU tar read and a busybox tar built
+without its old-GNU compatibility option (Ubuntu's) refuses: "invalid tar
+magic".
 
 The recipe is tied to the pxx commit in `RECIPE`: `link.list` was computed
 from that pxx's objects. A different pxx needs a new recording.
@@ -77,13 +115,16 @@ from that pxx's objects. A different pxx needs a new recording.
 
 `qemu-test.sh KERNEL out.png` boots a Linux kernel (fbdev and devtmpfs
 required) with busybox and the bundle. Its `/init` runs `startx-pixx`; the
-script then types, moves the pointer and takes a screendump.
+script then types, moves the pointer and takes a screendump. QEMU's
+`-vga std` is bochs-drm: with that driver in the kernel, `/dev/dri/card0`
+exists and the test runs Xorg, and Xorg's log is copied to the serial log
+(`TAIL=N` shows its last N lines).
 
 ## Host requirements
 
 gcc, autoconf/automake/libtool, make, python3, patch, curl, binutils (nm,
-ar), bdftopcf, mkfontdir, ucs2any with font-util's `map-ISO8859-1`, and a
-pxx compiler. For the test, also qemu-system-x86_64, a static busybox and
+ar), bdftopcf, mkfontdir, ucs2any with font-util's `map-ISO8859-1`, meson
+and ninja, pkg-config, and a pxx compiler. For the test, also qemu-system-x86_64, a static busybox and
 python3-PIL.
 
 ## Notes

@@ -1,0 +1,12 @@
+diff -ru a/xf86-input-evdev-2.11.0/configure b/xf86-input-evdev-2.11.0/configure
+--- a/configure	2024-10-15 06:37:58.000000000 +0200
++++ b/configure	2026-11-25 20:13:39.979572947 +0100
+@@ -19386,7 +19386,7 @@
+         # Put the nasty error message in config.log where it belongs
+         echo "$UDEV_PKG_ERRORS" >&5
+ 
+-        as_fn_error $? "Package requirements (libudev) were not met:
++        : "pathb: no libudev, so no HAVE_LIBUDEV (evdev.c guards its udev code):
+ 
+ $UDEV_PKG_ERRORS
+ 

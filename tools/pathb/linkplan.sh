@@ -56,5 +56,38 @@ for p in jwm xclock xcalc xeyes xload xedit; do
 done
 # shellcheck disable=SC2086
 emit $B/bin/lvgl-demo $(ls $B/obj/lvgl/o/*.o | LC_ALL=C sort)
+# Xorg: every member of the server archives on gcc's Xorg link line (run in
+# hw/xfree86), sdksyms.o, the modules it would dlopen (modesetting, shadow,
+# evdev) and their table, plus the library members ld would pull. libxcvt is
+# one file, and its meson file builds it shared only: its object directly.
+if [ -f $B/logs/xorg-server.done ]; then
+  XA="../../dix/.libs/libmain.a ../../dix/.libs/libdix.a loader/.libs/libloader.a
+    common/.libs/libcommon.a os-support/.libs/libxorgos.a parser/.libs/libxf86config.a
+    dixmods/.libs/libdixmods.a modes/.libs/libxf86modes.a ramdac/.libs/libramdac.a
+    ddc/.libs/libddc.a i2c/.libs/libi2c.a ../../composite/.libs/libcomposite.a
+    ../../xfixes/.libs/libxfixes.a ../../Xext/.libs/libXext.a ../../dbe/.libs/libdbe.a
+    ../../record/.libs/librecord.a ../../randr/.libs/librandr.a ../../render/.libs/librender.a
+    ../../damageext/.libs/libdamageext.a ../../present/.libs/libpresent.a
+    ../../miext/damage/.libs/libdamage.a ../../Xi/.libs/libXi.a ../../xkb/.libs/libxkb.a
+    xkb/.libs/libxorgxkb.a dri2/.libs/libdri2.a ../../fb/.libs/libfb.a
+    ../../miext/sync/.libs/libsync.a ../../mi/.libs/libmi.a ../../os/.libs/libos.a
+    ../../Xext/.libs/libXvidmode.a dixmods/.libs/libshadow.a
+    drivers/modesetting/.libs/modesetting_drv.a"
+  # shellcheck disable=SC2086
+  OBJS="$B/replay/xorg-server/hw_xfree86_sdksyms.c.o $(python3 $T/arc_objs.py xorg-server hw/xfree86 $XA)
+    $(python3 $T/arc_objs.py xf86-input-evdev src .libs/evdev_drv.a) $B/obj/xorg/static-modules.o
+    $B/replay/libxcvt/lib_libxcvt.c.o"
+  LIBS=$(python3 $T/libobjs.py libmd:libmd pixman:libpixman-1 libXfont2:libXfont2 libfontenc:libfontenc \
+         freetype:libfreetype zlib:libz libXau:libXau libdrm:libdrm libevdev:libevdev mtdev:libmtdev 2>/dev/null)
+  LIBS=$(pulled $B/build/dd/xorg "$OBJS" "$LIBS")
+  # shellcheck disable=SC2086
+  emit $B/bin/Xorg $OBJS $LIBS
+  # xkbcomp: the server runs it to compile the keymap
+  P=$(python3 $T/prog_objs.py xkbcomp xkbcomp)
+  XK=$(python3 $T/libobjs.py libxkbfile:libxkbfile libX11:libX11 libxcb:libxcb libXau:libXau 2>/dev/null)
+  L=$(pulled $B/build/dd/xkbcomp "$P" "$XK" first)
+  # shellcheck disable=SC2086
+  emit $B/bin/xkbcomp $P $L
+fi
 mv $OUT.tmp $OUT
 echo "linkplan: $(grep -c . $OUT) programs -> $OUT"

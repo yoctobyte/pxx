@@ -1,0 +1,29 @@
+diff -ru a/xorg-server-21.1.16/hw/xfree86/drivers/modesetting/driver.c b/xorg-server-21.1.16/hw/xfree86/drivers/modesetting/driver.c
+--- a/hw/xfree86/drivers/modesetting/driver.c	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/drivers/modesetting/driver.c	2026-11-25 21:03:43.867776488 +0100
+@@ -121,8 +121,13 @@
+     NULL,
+     0,
+     ms_driver_func,
++#ifdef XSERVER_LIBPCIACCESS
+     ms_device_match,
+     ms_pci_probe,
++#else   /* pathb: both are defined only with libpciaccess */
++    NULL,
++    NULL,
++#endif
+ #ifdef XSERVER_PLATFORM_BUS
+     ms_platform_probe,
+ #endif
+--- a/hw/xfree86/common/xf86Bus.c	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/common/xf86Bus.c	2026-11-25 22:37:47.740060628 +0100
+@@ -566,7 +566,8 @@
+ #ifdef XSERVER_LIBPCIACCESS
+                              pciSlotClaimed
+ #else
+-                             TRUE
++                             FALSE /* pathb: no PCI or platform bus, so an fb slot
++                                      (modesetting's kmsdev probe) conflicts with nothing */
+ #endif
+         ))
+         FatalError("Cannot run in framebuffer mode. Please specify busIDs "

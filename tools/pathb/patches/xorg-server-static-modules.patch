@@ -1,0 +1,148 @@
+diff -ru a/xorg-server-21.1.16/hw/xfree86/common/xf86Module.h b/xorg-server-21.1.16/hw/xfree86/common/xf86Module.h
+--- a/hw/xfree86/common/xf86Module.h	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/common/xf86Module.h	2026-11-25 20:14:15.314120691 +0100
+@@ -173,4 +173,11 @@
+     ModuleTearDownProc teardown;
+ } XF86ModuleData;
+ 
++/* pathb: modules linked into the server (hw/xfree86/loader/loader.c) */
++typedef struct {
++    const char *name;
++    XF86ModuleData *data;
++} LoaderStaticModule;
++extern _X_EXPORT LoaderStaticModule LoaderStaticModules[];
++
+ #endif                          /* _XF86STR_H */
+diff -ru a/xorg-server-21.1.16/hw/xfree86/loader/loader.c b/xorg-server-21.1.16/hw/xfree86/loader/loader.c
+--- a/hw/xfree86/loader/loader.c	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/loader/loader.c	2026-11-25 20:13:58.645448747 +0100
+@@ -92,11 +92,61 @@
+ 
+ /* Public Interface to the loader. */
+ 
++/*
++ * pathb: modules linked into a static Xorg. A binary built by pxx has no
++ * dynamic loader, so the drivers are linked in and LoadModule finds them
++ * here before it searches ModulePath. The table is empty in the server
++ * itself (a weak definition); the Path B link adds a strong one naming the
++ * modules it linked (tools/pathb/files/xorg-static-modules.c).
++ */
++_X_EXPORT __attribute__((weak)) LoaderStaticModule LoaderStaticModules[] = { { NULL, NULL } };
++
++static const LoaderStaticModule *
++LoaderStaticFind(const char *module)
++{
++    const LoaderStaticModule *m;
++
++    for (m = LoaderStaticModules; m->name; m++)
++        if (!strcmp(m->name, module))
++            return m;
++    return NULL;
++}
++
++static Bool
++LoaderStaticIsHandle(void *handle)
++{
++    const LoaderStaticModule *m;
++
++    for (m = LoaderStaticModules; m->name; m++)
++        if (handle == (void *) m)
++            return TRUE;
++    return FALSE;
++}
++
++Bool
++LoaderStaticHas(const char *module)
++{
++    return LoaderStaticFind(module) != NULL;
++}
++
++#define LOADER_STATIC_PREFIX "static:"
++
+ void *
+ LoaderOpen(const char *module, int *errmaj)
+ {
+     void *ret;
+ 
++    if (!strncmp(module, LOADER_STATIC_PREFIX, strlen(LOADER_STATIC_PREFIX))) {
++        const LoaderStaticModule *m =
++            LoaderStaticFind(module + strlen(LOADER_STATIC_PREFIX));
++
++        LogMessage(X_INFO, "Using built-in module %s\n",
++                   module + strlen(LOADER_STATIC_PREFIX));
++        if (!m && errmaj)
++            *errmaj = LDR_NOENT;
++        return (void *) m;
++    }
++
+ #if defined(DEBUG)
+     ErrorF("LoaderOpen(%s)\n", module);
+ #endif
+@@ -119,6 +169,17 @@
+     static void *global_scope = NULL;
+     void *p;
+ 
++    {
++        const LoaderStaticModule *m;
++        size_t n = strlen(name);
++
++        /* a static module's <name>ModuleData (xf86Configure asks) */
++        for (m = LoaderStaticModules; m->name; m++)
++            if (n == strlen(m->name) + 10 && !strncmp(name, m->name, n - 10) &&
++                !strcmp(name + n - 10, "ModuleData"))
++                return m->data;
++    }
++
+     p = dlsym(RTLD_DEFAULT, name);
+     if (p != NULL)
+         return p;
+@@ -136,6 +197,17 @@
+ LoaderSymbolFromModule(void *handle, const char *name)
+ {
+     ModuleDescPtr mod = handle;
++    const LoaderStaticModule *m;
++
++    for (m = LoaderStaticModules; m->name; m++)
++        if (mod->handle == (void *) m) {
++            size_t n = strlen(name);
++
++            if (n == strlen(m->name) + 10 && !strncmp(name, m->name, n - 10) &&
++                !strcmp(name + n - 10, "ModuleData"))
++                return m->data;
++            return NULL;
++        }
+     return dlsym(mod->handle, name);
+ }
+ 
+@@ -143,7 +215,7 @@
+ LoaderUnload(const char *name, void *handle)
+ {
+     LogMessageVerbSigSafe(X_INFO, 1, "Unloading %s\n", name);
+-    if (handle)
++    if (handle && !LoaderStaticIsHandle(handle))
+         dlclose(handle);
+ }
+ 
+diff -ru a/xorg-server-21.1.16/hw/xfree86/loader/loaderProcs.h b/xorg-server-21.1.16/hw/xfree86/loader/loaderProcs.h
+--- a/hw/xfree86/loader/loaderProcs.h	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/loader/loaderProcs.h	2026-11-25 20:14:08.707176397 +0100
+@@ -74,6 +74,7 @@
+ ModuleDescPtr DuplicateModule(ModuleDescPtr mod, ModuleDescPtr parent);
+ void UnloadDriver(ModuleDescPtr);
+ void LoaderSetPath(const char *path);
++Bool LoaderStaticHas(const char *module);   /* pathb */
+ 
+ void LoaderUnload(const char *, void *);
+ unsigned long LoaderGetModuleVersion(ModuleDescPtr mod);
+diff -ru a/xorg-server-21.1.16/hw/xfree86/loader/loadmod.c b/xorg-server-21.1.16/hw/xfree86/loader/loadmod.c
+--- a/hw/xfree86/loader/loadmod.c	2025-02-25 19:56:05.000000000 +0100
++++ b/hw/xfree86/loader/loadmod.c	2026-11-25 20:14:08.707521702 +0100
+@@ -734,6 +734,8 @@
+      */
+     if (PathIsAbsolute(module))
+         found = xstrdup(module);
++    else if (LoaderStaticHas(m) && asprintf(&found, "static:%s", m) == -1)
++        found = NULL;
+     path_elem = pathlist;
+     while (!found && *path_elem != NULL) {
+         found = FindModule(m, *path_elem, patterns);

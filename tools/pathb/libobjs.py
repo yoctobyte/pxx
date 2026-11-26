@@ -21,7 +21,13 @@ for arg in sys.argv[1:]:
         # (libXaw7.a holds libXaw7_la-Actions.o, from Actions.c)
         if stem.startswith(lib + "_la-"):
             stem = stem[len(lib) + 4:]
-        hits = [o for o in objs if o == stem + ".c.o" or o.endswith("_" + stem + ".c.o")]
+        # meson keeps the source suffix in the member (libdrm: xf86drm.c.o),
+        # and replay names spell a path's `-` as `_` (pixman_pixman_access.c.o)
+        if stem.endswith(".c"):
+            stem = stem[:-2]
+        alt = stem.replace("-", "_")
+        hits = [o for o in objs if o in (stem + ".c.o", alt + ".c.o")
+                or o.endswith("_" + stem + ".c.o") or o.endswith("_" + alt + ".c.o")]
         if not hits:
             sys.stderr.write(f"{lib}: no replay object for {m}\n")
             continue

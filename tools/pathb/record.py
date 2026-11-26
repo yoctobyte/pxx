@@ -40,8 +40,14 @@ PKGS = [("xorgproto", "xorgproto-2024.1.tar.xz"), ("libXau", "libXau-1.0.12.tar.
         ("libXpm", "libXpm-3.5.17.tar.xz"), ("libXaw", "libXaw-1.0.16.tar.xz"),
         ("xclock", "xclock-1.1.1.tar.xz"), ("xcalc", "xcalc-1.1.2.tar.xz"),
         ("xeyes", "xeyes-1.1.2.tar.bz2"), ("xload", "xload-1.2.0.tar.xz"),
-        ("xedit", "xedit-1.2.4.tar.xz"), ("jwm", "jwm-2.4.6.tar.xz")]
-REPLAYED = [p for p, _ in PKGS if p not in ("xorgproto", "xtrans", "xcb-proto")]
+        ("xedit", "xedit-1.2.4.tar.xz"), ("jwm", "jwm-2.4.6.tar.xz"),
+        ("libdrm", "libdrm-2.4.124.tar.xz"), ("libxcvt", "libxcvt-0.1.3.tar.xz"),
+        ("pixman", "pixman-0.42.2.tar.xz"), ("libXfont2", "libXfont2-2.0.7.tar.xz"),
+        ("libxkbfile", "libxkbfile-1.1.3.tar.xz"), ("xkbcomp", "xkbcomp-1.4.7.tar.xz"),
+        ("xkeyboard-config", "xkeyboard-config-2.44.tar.xz"), ("libmd", "libmd-1.1.0.tar.xz"),
+        ("xorg-server", "xorg-server-21.1.16.tar.xz"), ("mtdev", "mtdev-1.1.7.tar.bz2"),
+        ("libevdev", "libevdev-1.13.3.tar.xz"), ("xf86-input-evdev", "xf86-input-evdev-2.11.0.tar.xz")]
+REPLAYED = [p for p, _ in PKGS if p not in ("xorgproto", "xtrans", "xcb-proto", "xkeyboard-config")]
 OTHER = [("st-0.9.2", "st-0.9.2.tar.gz"), ("dwm-6.5", "dwm-6.5.tar.gz"), ("lvgl", "lvgl-9.2.2.tar.gz")]
 
 def w(path):
@@ -98,9 +104,14 @@ for f in lfiles:
 lines.append(["lvgl", "@W@/src/lvgl", "@W@/obj/lvgl/o/main.o", "--emit-obj", "--shared-runtime", MAP] + LINC
              + ["pathb-main.c"])   # travels in gen.tar: RECIPE may live anywhere
 
+ld = [l for l in lines if l[0] == "xorg-server" and l[-1] == "loader.c"]
+if len(ld) != 1: sys.exit("record.py: no single compile of the Xorg loader.c")
+lines.append(ld[0][:2] + ["@W@/obj/xorg/static-modules.o"] + ld[0][3:-1] + ["pathb-static-modules.c"])
+
 for l in lines:
-    for a in l[4:]:
-        if "@W@" in a and not (a.startswith("-I") or a == MAP):
+    for i, a in enumerate(l[4:], 4):
+        # -I and -include name files whose __FILE__ the map rewrites
+        if "@W@" in a and not (a.startswith("-I") or a == MAP or l[i - 1] == "-include"):
             sys.exit(f"record.py: the work dir in {a!r} ({l[2]}): the objects would depend on it")
 
 os.makedirs(R, exist_ok=True)
@@ -121,9 +132,11 @@ for d in os.listdir(f"{B}/src"):
 # is not a build product. The pristine tree is the bare tarball, exactly what
 # onsite.sh lays gen.tar over: so the files our patches/ change travel in
 # gen.tar too, and the target needs no patch tool.
-SKIP_DIRS = {".libs", ".deps", "autom4te.cache", ".git"}
+SKIP_DIRS = {".libs", ".deps", "autom4te.cache", ".git",
+             "meson-private", "meson-info", "meson-logs"}   # meson's build-dir state
 SKIP_SUFFIX = (".o", ".lo", ".la", ".a", ".so", ".Po", ".Plo", ".log", ".trs", ".pyc")
-SKIP_NAMES = {"config.status", "libtool", "Makefile", "stamp-h1", "stamp-h", "config.cache"}
+SKIP_NAMES = {"config.status", "libtool", "Makefile", "stamp-h1", "stamp-h", "config.cache",
+              "build.ninja", ".ninja_log", ".ninja_deps", "compile_commands.json"}
 
 def is_elf(p):
     with open(p, "rb") as f: return f.read(4) == b"\x7fELF"
@@ -159,6 +172,8 @@ for top in ("stage/usr/include", "stage/usr/share/X11", "stage/usr/lib/X11"):
                 members.append((os.path.relpath(p, B), p))
 members.append(("obj/lvgl/lv_conf.h", f"{B}/obj/lvgl/lv_conf.h"))
 members.append(("src/lvgl/pathb-main.c", f"{T}/lvgl/main.c"))
+members.append(("src/xorg-server/hw/xfree86/loader/pathb-static-modules.c",
+                f"{T}/files/xorg-static-modules.c"))
 
 def add(tf, arc, path):
     ti = tarfile.TarInfo(arc)

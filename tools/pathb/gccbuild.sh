@@ -49,9 +49,10 @@ fresh() {  # name
 }
 # libtool archives name /usr/lib, which would be the HOST's: static
 # libraries link by -L/-l from pkg-config without them
+drop_la() { find $S -name '*.la' -exec rm -f {} +; }
 stage_install() {  # name
   make install DESTDIR=$S > $B/logs/$1.install.log 2>&1 \
-    && find $S -name '*.la' -exec rm -f {} +
+    && drop_la
 }
 pkg() {   # name tarball [configure args...]
   n=$1; t=$2; shift 2
@@ -61,6 +62,26 @@ pkg() {   # name tarball [configure args...]
   ( cd $B/src/$n && ./configure $CFG "$@" > $B/logs/$n.configure.log 2>&1 \
       && make -w V=1 -j1 > $B/logs/$n.make.log 2>&1 \
       && stage_install $n ) && ok $n || fail $n
+}
+# meson packages (libdrm, libxcvt, xkeyboard-config): `ninja -v` prints
+# every compile; written as a make log (Entering directory = the build dir,
+# no [n/m] prefix), record.py reads it like the others. meson is a host tool
+# like autoconf (MESON, default meson).
+MESON=${MESON:-meson}
+mpkg() {  # name tarball [meson -D options...]
+  n=$1; t=$2; shift 2
+  done_or $n && return 0
+  fresh $n
+  src $n $t || { fail $n; return 1; }
+  ( cd $B/src/$n && CC=gcc $MESON setup _b --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+        --libdir=lib --default-library=static --buildtype=plain -Dc_args=-O2 "$@" \
+        > $B/logs/$n.configure.log 2>&1 \
+      && { echo "make: Entering directory '$B/src/$n/_b'"
+           ninja -C _b -v -j1 2>&1 | sed 's|^\[[0-9]*/[0-9]*\] ||'
+           echo "make: Leaving directory '$B/src/$n/_b'"; } > $B/logs/$n.make.log \
+      && ninja -C _b -n 2>&1 | grep -q 'no work to do' \
+      && DESTDIR=$S $MESON install -C _b > $B/logs/$n.install.log 2>&1 \
+      && drop_la ) && ok $n || fail $n
 }
 pkg xorgproto  xorgproto-2024.1.tar.xz        || exit 1
 pkg libXau     libXau-1.0.12.tar.xz           || exit 1
@@ -136,4 +157,51 @@ pkg jwm        jwm-2.4.6.tar.xz --sysconfdir=/etc/jwm --disable-png --disable-ca
   --disable-pango --disable-xinerama --disable-nls --enable-xft --enable-xrender --enable-xpm \
   --enable-shape --enable-xmu CPPFLAGS="-I$U/include -I$U/include/freetype2" LDFLAGS="-L$U/lib $JWMLIBS" \
   LIBS="$JWMLIBS" || exit 1
+# --- Xorg on DRM: the modesetting driver (in the server tree) and evdev ---
+# No PCI, no udev, no GL (DRI2 stays: the server builds modesetting only
+# with it; it is server code, no Mesa). modesetting opens the card from xorg.conf's
+# Option "kmsdev" and draws into dumb buffers through the shadow module;
+# evdev reads the /dev/input/event* devices xorg.conf lists (startx-pixx
+# writes it). libdrm's GPU-specific parts are off: KMS needs only the core.
+mpkg libdrm    libdrm-2.4.124.tar.xz -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled \
+  -Dnouveau=disabled -Dvmwgfx=disabled -Domap=disabled -Dexynos=disabled -Dfreedreno=disabled \
+  -Dtegra=disabled -Dvc4=disabled -Detnaviv=disabled -Dcairo-tests=disabled -Dman-pages=disabled \
+  -Dvalgrind=disabled -Dtests=false -Dudev=false || exit 1
+mpkg libxcvt   libxcvt-0.1.3.tar.xz           || exit 1
+# pixman's SIMD paths are intrinsics and inline asm: the generic C only
+pkg pixman     pixman-0.42.2.tar.xz --disable-openmp --disable-loongson-mmi --disable-mmx \
+  --disable-sse2 --disable-ssse3 --disable-vmx --disable-arm-simd --disable-neon \
+  --disable-arm-iwmmxt --disable-mips-dspr2 --disable-gcc-inline-asm --disable-gtk --disable-libpng || exit 1
+# LIBS: its test utilities link libfontenc after -lz (a static link needs zlib last)
+pkg libXfont2  libXfont2-2.0.7.tar.xz --disable-devel-docs --without-xmlto --without-fop LIBS=-lz || exit 1
+pkg libxkbfile libxkbfile-1.1.3.tar.xz        || exit 1
+pkg xkbcomp    xkbcomp-1.4.7.tar.xz --with-xkb-config-root=/usr/share/X11/xkb || exit 1
+# xkeyboard-config is data (the keymaps xkbcomp compiles); python on the host
+mpkg xkeyboard-config xkeyboard-config-2.44.tar.xz -Dxorg-rules-symlinks=true || exit 1
+# SHA1 for the server's glyph cache
+pkg libmd      libmd-1.1.0.tar.xz             || exit 1
+# The server. patches/xorg-server-static-modules.patch: LoadModule finds a
+# module linked into the binary (pxx has no dlopen) before ModulePath.
+# CPPFLAGS/LDFLAGS: the libmd test is AC_CHECK_LIB, not pkg-config, and
+# libdrm's include dir and library reach XORG_CFLAGS/XORG_SYS_LIBS only in
+# the PCI branch. The xkb paths default to xkeyboard-config.pc's and
+# xkbcomp's, which pkg-config prefixes with the staging sysroot.
+pkg xorg-server xorg-server-21.1.16.tar.xz --with-sha1=libmd \
+  --disable-pciaccess --disable-int10-module --disable-vgahw --disable-vbe --disable-dga \
+  --disable-config-udev --disable-config-udev-kms --disable-config-hal \
+  --disable-systemd-logind --without-systemd-daemon --disable-suid-wrapper \
+  --disable-glamor --disable-glx --disable-dri --disable-dri3 \
+  --disable-xvfb --disable-xnest --disable-xephyr --disable-xwayland --disable-xquartz --disable-xwin \
+  --disable-kdrive --disable-xdmcp --disable-xdm-auth-1 --disable-secure-rpc --disable-xselinux \
+  --disable-libunwind --disable-docs --disable-devel-docs --without-xmlto --without-fop \
+  --disable-unit-tests --disable-xf86vidmode --disable-xinerama \
+  --with-fontrootdir=/usr/share/fonts/X11 --with-default-font-path=/usr/share/fonts/X11/misc/ \
+  --with-xkb-path=/usr/share/X11/xkb --with-xkb-bin-directory=/usr/bin \
+  --with-xkb-output=/var/lib/xkb --with-log-dir=/var/log \
+  CPPFLAGS="-I$U/include -I$U/include/libdrm" LDFLAGS="-L$U/lib" LIBS=-ldrm || exit 1
+pkg mtdev      mtdev-1.1.7.tar.bz2            || exit 1
+pkg libevdev   libevdev-1.13.3.tar.xz --disable-gcov || exit 1
+# xorg-server.pc names the module dir with the sysroot in front: the target's
+pkg xf86-input-evdev xf86-input-evdev-2.11.0.tar.xz --with-xorg-module-dir=/usr/lib/xorg/modules \
+  --with-xorg-conf-dir=/usr/share/X11/xorg.conf.d || exit 1
 echo "gcc reference build done"

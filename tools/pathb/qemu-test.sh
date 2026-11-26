@@ -1,7 +1,8 @@
 #!/bin/sh
 # Boot a Linux kernel (with fbdev, e.g. bochs DRM, and devtmpfs) with an
 # initramfs of busybox + the Path B bundle, run startx-pixx from a shell
-# /init, then drive it over QMP and take a screendump.
+# /init, then drive it over QMP and take a screendump. With /dev/dri/card0
+# startx-pixx runs Xorg, whose log is copied to the serial log.
 #   qemu-test.sh KERNEL OUT.png
 # Env: BUNDLE (default $PATHB_WORK/bundle/pixx-pathb-desktop-x86_64.tar.gz),
 #      BUSYBOX (a static busybox; default /usr/bin/busybox),
@@ -9,7 +10,13 @@
 #      COMBOS key chords, qcodes joined by + ("alt+shift+ret"),
 #      MOVES  relative pointer moves "dx,dy dx,dy ..." (TinyX validates the
 #             protocol on the first packets: send a dozen or more),
-#      SETTLE seconds to wait after the server is up (default 8).
+#      SETTLE seconds to wait after the server is up (default 8),
+#      HOLD   seconds to keep QEMU up after the screendump (default 1; 20 or
+#             more for the dmesg dump, 42 s after boot),
+#      EXTRA  host files copied into the image's /usr/bin (static programs),
+#      PROBE  a command run with DISPLAY=:0 once the server is up, its
+#             output to the serial log ("=== probe").
+#      SERIAL a file to copy the serial log to.
 set -e
 K=${1:?kernel}; OUT=${2:?out.png}
 BUNDLE=${BUNDLE:-${PATHB_WORK:?}/bundle/pixx-pathb-desktop-x86_64.tar.gz}
@@ -19,16 +26,25 @@ R=$D/root
 mkdir -p $R/bin $R/proc $R/sys $R/dev $R/root $R/etc
 tar -xzf $BUNDLE -C $R
 cp $BUSYBOX $R/bin/busybox
-for t in sh mount mkdir chmod grep sleep kill cat ls echo uname wait; do ln -sf busybox $R/bin/$t; done
+for f in ${EXTRA:-}; do cp "$f" $R/usr/bin/; done
+printf '%s\n' "${PROBE:-}" > $R/etc/qx-probe
+for t in sh mount mkdir chmod grep sleep kill cat ls echo uname wait dmesg tail od; do ln -sf busybox $R/bin/$t; done
 echo "root:x:0:0:root:/root:/bin/sh" > $R/etc/passwd
 echo "root:x:0:" > $R/etc/group
 cat > $R/init <<'EOF'
 #!/bin/sh
 mount -t proc proc /proc; mount -t sysfs sysfs /sys; mount -t devtmpfs devtmpfs /dev
 export PATH=/usr/bin:/bin
-i=0; while [ ! -c /dev/fb0 ] && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
+i=0; while [ ! -c /dev/fb0 ] && [ ! -c /dev/dri/card0 ] && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
 sleep 3   # psmouse registers late
+ls /dev/dri /dev/fb0 2>&1
 echo "QX ready"
+# Xorg logs to a file: copy it to the console once it has started
+# and, once the keys and moves have been sent, the kernel's log (a client's
+# segfault is there, not on its stderr)
+( sleep 12; [ -f /tmp/Xorg.0.log ] && { echo "=== Xorg.0.log"; cat /tmp/Xorg.0.log; }
+  if [ -n "$(cat /etc/qx-probe)" ]; then echo "=== probe"; DISPLAY=:0 sh /etc/qx-probe; fi
+  sleep 30; echo "=== dmesg"; dmesg | tail -25 ) > /dev/ttyS0 2>&1 &
 exec startx-pixx > /dev/ttyS0 2>&1
 EOF
 chmod +x $R/init
@@ -68,7 +84,8 @@ for mv in os.environ.get("MOVES", "").split():
 time.sleep(1.5)
 cmd({"execute": "screendump", "arguments": {"filename": sys.argv[2]}})
 PY
-sleep 1
+sleep ${HOLD:-1}   # HOLD: keep QEMU up for the late dmesg dump (42 s after boot)
 kill $QP 2>/dev/null; wait $QP 2>/dev/null || true
+[ -z "${SERIAL:-}" ] || cp $D/serial.log "$SERIAL"
 python3 -c "from PIL import Image; Image.open('$D/shot.ppm').save('$OUT')"
-grep -av '^\[' $D/serial.log | tail -5
+grep -av '^\[' $D/serial.log | tail -${TAIL:-5}

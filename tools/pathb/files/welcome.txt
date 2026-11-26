@@ -1,5 +1,5 @@
-pixix desktop: JWM, st, xedit, xcalc, xclock, xload, xeyes and the
-Xfbdev X server, every one compiled by pxx.
+pixix desktop: JWM, st, xedit, xcalc, xclock, xload, xeyes and the X
+server (Xorg on DRM, else Xfbdev), every one compiled by pxx.
 
   Programs:   click the desktop, or Menu at the bottom left
   Windows:    drag the title bar; the buttons at its right minimise,

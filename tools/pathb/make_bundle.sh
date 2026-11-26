@@ -39,6 +39,18 @@ cp $XL/locale.alias $XL/locale.dir $XL/compose.dir $R/usr/share/X11/locale/
 for l in C en_US.UTF-8 iso8859-1; do cp -R $XL/$l $R/usr/share/X11/locale/; done
 # LVGL's widgets demo, no X: straight on /dev/fb0
 if [ -x $W/bin/lvgl-demo ]; then cp $W/bin/lvgl-demo $R/usr/bin/lvgl-demo; fi
+# Xorg on DRM (startx-pixx prefers it when /dev/dri/card0 exists), with
+# xkbcomp, which it runs to compile the keymap, and the keymaps
+# (xkeyboard-config) where both look: /usr/share/X11/xkb. Regular files only:
+# the rules/xorg* aliases are symlinks the recipe does not carry (Xorg's
+# rules are evdev).
+if [ -x $W/bin/Xorg ]; then
+  cp $W/bin/Xorg $W/bin/xkbcomp $R/usr/bin/
+  ( cd $W/stage/usr/share/X11 && find xkb -type f ) | LC_ALL=C sort | while IFS= read -r f; do
+    mkdir -p "$R/usr/share/X11/${f%/*}"
+    cp "$W/stage/usr/share/X11/$f" "$R/usr/share/X11/$f"
+  done
+fi
 cp $F/startx-pixx $R/usr/bin/startx-pixx
 cp $F/fonts.conf $R/etc/fonts/fonts.conf
 # the server's core fonts (fonts.sh made them on the recording host)
@@ -77,12 +89,31 @@ for p in libICE libSM libXt libXmu libXpm libXaw xclock xcalc xeyes xload xedit;
   cp $W/src/$p/COPYING $L/$p.COPYING
 done
 if [ -f $W/src/lvgl/LICENCE.txt ]; then cp $W/src/lvgl/LICENCE.txt $L/lvgl.LICENCE.txt; fi
+if [ -x $W/bin/Xorg ]; then
+  for p in libdrm libxcvt pixman libXfont2 libxkbfile xkbcomp xkeyboard-config libmd xorg-server \
+           mtdev libevdev xf86-input-evdev; do
+    for f in COPYING LICENSE; do if [ -f $W/src/$p/$f ]; then cp $W/src/$p/$f $L/$p.$f; fi; done
+  done
+  # libdrm ships no licence file; its MIT notice heads each source file
+  sed -n '/Copyright 1999 Precision Insight/,/DEALINGS IN THE SOFTWARE/p' $W/src/libdrm/xf86drm.c > $L/libdrm.NOTICE
+fi
 cp $F/README.bundle $L/README
 cp $RECIPE/tools/patches/*.patch $L/
 # file modes do not depend on the umask or the tools that copied them
 find $R -type d -exec chmod 755 {} +
 find $R -type f -exec chmod 644 {} +
 for p in $R/usr/bin/*; do chmod 755 $p; done
+# no file may name the work dir: a build path compiled in (Xorg's xkb paths
+# once came from pkg-config with the staging sysroot in front) points
+# nowhere on the target, and differs from one build to the next
+# (not -F: busybox 1.37's grep -F misses a match in a large binary that the
+# regex form finds; a work dir's own `.` matching any character is harmless)
+leak=$(grep -rl "$W/" $R || true)
+if [ -n "$leak" ]; then
+  echo "make_bundle: these files name the work dir $W:" >&2
+  echo "$leak" >&2
+  exit 1
+fi
 # the manifest: the check that two builds agree
 ( cd $R && LC_ALL=C find . \( -type f -o -type l \) | LC_ALL=C sort | while IFS= read -r f; do
     if [ -L "$f" ]; then printf 'link %s %s -> %s\n' "$(stat -c %a "$f")" "$f" "$(readlink "$f")"
