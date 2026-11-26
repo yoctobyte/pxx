@@ -6,3 +6,5 @@ dosfstools-4.2.tar.gz  64926eebf90092dca21b14259a5301b7b98e7b1943e8a201c7d726084
 e2fsprogs-1.47.1.tar.xz  5a33dc047fd47284bca4bb10c13cfe7896377ae3d01cb81a05d406025d99e0d1  https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.1/e2fsprogs-1.47.1.tar.xz
 util-linux-2.40.2.tar.xz  d78b37a66f5922d70edf3bdfb01a6b33d34ed3c3cafd6628203b2a2b67c8e8b3  https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.40/util-linux-2.40.2.tar.xz
 xz-5.6.3.tar.gz  b1d45295d3f71f25a4c9101bd7c8d16cb56348bbef3bbc738da0351e17c73317  https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.gz
+bzip2-1.0.8.tar.gz  ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269  https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+zstd-1.5.6.tar.gz  8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1  https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz

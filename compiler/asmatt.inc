@@ -1357,6 +1357,28 @@ begin
     end;
     Exit;
   end;
+  { .p2align / .balign / .align N[, fill[, max]] inside a routine's template:
+    a LOOP-ALIGNMENT hint, no semantics. zstd's decompress loops say
+    `__asm__(".p2align 6")` under gcc on x86-64 (zstd_decompress_block.c),
+    and the routine was refused, so zstd did not build. It is read and
+    dropped: the block's offset in the final section is not known while it
+    is encoded (the routine moves under --function-sections), so pxx could
+    not honour it anyway, and padding the code changes only its speed. The
+    file-scope path (CFileScopeAsm) does pad, where the offset is known.
+    Anything but plain numbers is refused as before.
+    bug-c-an-alignment-directive-in-inline-asm-refuses-the-routine }
+  if CaseEqual(mn, '.p2align') or CaseEqual(mn, '.balign') or CaseEqual(mn, '.align') then
+  begin
+    AttSkipSpace;
+    while not AttAtSeparator do
+    begin
+      if not (AttPeek in ['0'..'9', 'x', 'X', 'a'..'f', 'A'..'F', ',']) then
+        Error('C: inline asm ' + mn + ' takes plain numbers here');
+      Inc(AttPos);
+      AttSkipSpace;
+    end;
+    Exit;
+  end;
   if CaseEqual(mn, 'lock') then
   begin
     if AttSinkText then

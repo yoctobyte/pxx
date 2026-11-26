@@ -8790,6 +8790,16 @@ var
     refuses on "this record has no such field" must consult this first, or it
     refuses valid C. }
   UClsBodySeen : array[0..MAX_UCLASS-1] of Boolean;
+  { A prototype parameter of a struct type whose body had NOT been seen yet
+    (`typedef struct S S; size_t f(S s);` and the body later, as zstd's
+    zstd.h / zstdmt_compress.h / zstd_compress_internal.h do). Its by-value
+    decision could not be made then: ABICRecordParamByValue refuses an
+    unsized record, so the signature said by-REFERENCE and every call passed a
+    pointer to a callee that reads the bytes. Each such (proc, param) is noted
+    here, and ParseCStructInto settles the notes for its record when the body
+    is laid out. bug-c-a-struct-parameter-declared-before-its-body-is-passed-as-a-pointer }
+  CPendRecParamProc, CPendRecParamIdx, CPendRecParamRec: array of Integer;
+  CPendRecParamCount: Integer;
   { ...and the body the frontend DECLINED to lay out, which is a third state
     and not a shade of the other two. `struct S { int a; int b; }
     __attribute__((aligned));' takes this arm: the tag is kept, the layout is

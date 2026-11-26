@@ -98,3 +98,18 @@ byte-identical to gcc's. Under `LC_ALL=C`: crtl has no `en_US` locale data,
 so `xz -l` under `LANG=en_US` prints no digit grouping where glibc's does.
 Speed: compressing is about 8x slower than gcc -O2's build (`-6` on 20 MB:
 111 s against 14 s); decompressing a 37 MB tarball takes 2.5 s.
+
+## bzip2 1.0.8 (bzip2 licence, BSD-style): bzip2, bunzip2, bzcat, bzip2recover
+
+A plain Makefile, no configure, nothing generated. `record.sh` runs it once
+with gcc and reads the 9 units and the two link lines from its log
+(`libbz2.a` expanded). The Makefile compiles with `-c x.c` and no `-o`,
+which `lib/units-from-make.sh` does not read, so `record.sh` has its own
+short awk. The tarball is `.tar.gz`.
+
+`test.sh`: bzip2's own `make test` on the pxx binary, then 12 compressions
+(a tarball, random data, an empty file and zeros, at -1, -5 and -9)
+byte-identical to gcc's and each read back by the other build. Also `-t`
+on a good and a corrupt file, two concatenated streams, `bzip2recover` on
+a truncated file, and every `.tar.bz2` download at hand, all compared with
+gcc's builds.

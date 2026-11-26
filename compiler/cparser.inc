@@ -21551,7 +21551,24 @@ begin
           PROTOTYPE, where no param sym is ever allocated -- which is why the
           fixup lives here and not next to AllocParam. }
         if ptypes[i] = tyRecord then
+        begin
           Procs[procIdx].Params[i].IsRef := not ABICRecordParamByValue(precid[i]);
+          { the body is not known yet: decide again when it is }
+          if (precid[i] >= REC_UCLASS_BASE) and (precid[i] - REC_UCLASS_BASE < UClsCount) and
+             not UClsBodySeen[precid[i] - REC_UCLASS_BASE] then
+          begin
+            if CPendRecParamCount >= Length(CPendRecParamProc) then
+            begin
+              SetLength(CPendRecParamProc, CPendRecParamCount * 2 + 64);
+              SetLength(CPendRecParamIdx, CPendRecParamCount * 2 + 64);
+              SetLength(CPendRecParamRec, CPendRecParamCount * 2 + 64);
+            end;
+            CPendRecParamProc[CPendRecParamCount] := procIdx;
+            CPendRecParamIdx[CPendRecParamCount] := i;
+            CPendRecParamRec[CPendRecParamCount] := precid[i];
+            Inc(CPendRecParamCount);
+          end;
+        end;
       end;
   end;
   { A `<unit>_pas_<Name>` prototype selected a Pascal routine by signature. The
@@ -24774,6 +24791,21 @@ begin
   if structAlign > maxAlign then maxAlign := structAlign;
   UClsSize_[ci] := AlignTo(curOff, maxAlign);
   UClsAlign[ci] := maxAlign;
+  { prototypes that named this struct as a by-value parameter before its body:
+    the by-value decision they could not make then (see CPendRecParamProc) }
+  k := 0;
+  while k < CPendRecParamCount do
+    if CPendRecParamRec[k] = REC_UCLASS_BASE + ci then
+    begin
+      Procs[CPendRecParamProc[k]].Params[CPendRecParamIdx[k]].IsRef :=
+        not ABICRecordParamByValue(REC_UCLASS_BASE + ci);
+      Dec(CPendRecParamCount);
+      CPendRecParamProc[k] := CPendRecParamProc[CPendRecParamCount];
+      CPendRecParamIdx[k] := CPendRecParamIdx[CPendRecParamCount];
+      CPendRecParamRec[k] := CPendRecParamRec[CPendRecParamCount];
+    end
+    else
+      Inc(k);
 end;
 
 { Parse a top-level `typedef ...;` and register the new type name.

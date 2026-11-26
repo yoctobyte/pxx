@@ -19792,6 +19792,13 @@ test-core: $(COMPILER)
 	# expected number.
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/c_asm_fixed_reg_tie.c $(TESTTMP)/c_asm_tie26
 	tools/expect_same.sh c_asm_tie26 "$$($(TESTTMP)/c_asm_tie26)" "asm fixed-reg tie: 4 rows OK"
+	# .p2align/.balign/.align in a routine's inline asm (zstd): read and dropped, not a refusal
+	./$(COMPILER) test/c_asm_align_directive.c $(TESTTMP)/c_asmalign26
+	tools/expect_same.sh c_asmalign26 "$$($(TESTTMP)/c_asmalign26)" "asm align: 21"
+	# a prototype naming a struct by value before the struct's body (zstd's MT init): the call must pass the bytes; against gcc
+	./$(COMPILER) test/c_struct_param_before_body.c $(TESTTMP)/c_spbb26
+	@gcc -w test/c_struct_param_before_body.c -o $(TESTTMP)/c_spbb26_gcc
+	tools/expect_same.sh c_spbb26 "$$(timeout 20 $(TESTTMP)/c_spbb26)" "$$(timeout 20 $(TESTTMP)/c_spbb26_gcc)"
 	# Kernel inline asm (Nilix): the user-mode-runnable half executed and checked
 	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
 	# segment register moves, named operands, "i"/"n" immediates through a
