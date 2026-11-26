@@ -5,6 +5,11 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+/* The POSIX edition this <unistd.h> answers to, as glibc's does. Programs
+   test it to pick their POSIX code over pre-POSIX fallbacks: GNU make without
+   it took the BSD sigblock()/sigsetmask() path, which crtl does not have. */
+#define _POSIX_VERSION 200809L
+
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
@@ -185,6 +190,10 @@ int unlinkat(int dirfd, const char *path, int flags);
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsz);
 int fchownat(int dirfd, const char *path, uid_t owner, gid_t group, int flags);
 int faccessat(int dirfd, const char *path, int mode, int flags);
+/* access() with the EFFECTIVE uid/gid (glibc and the BSDs; gnulib's
+   findprog, in GNU make, calls eaccess). */
+int eaccess(const char *path, int mode);
+int euidaccess(const char *path, int mode);
 int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags);
 int symlinkat(const char *target, int newdirfd, const char *linkpath);
 

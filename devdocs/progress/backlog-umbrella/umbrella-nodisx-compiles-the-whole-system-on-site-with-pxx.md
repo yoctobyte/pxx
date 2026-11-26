@@ -9,7 +9,7 @@ created: 2026-11-26
 found-by: owner (yoctobyte), asked of claude-dupwt
 owner: ""
 blocked-by: []
-summary: "GOAL, not a unit of work. The Nodisx installer ISO ships only the kernel, pxx, a boot loader and a small permissive bootstrap set (~/nodisx/docs/bootstrap.md); everything else, GPL included, is pinned source plus a recipe that pxx compiles ON THE TARGET with only pxx, a POSIX shell and toybox (tools/nodisx/README.md). DONE: the kernel builds with pxx; toybox (1604/1604), mksh, dosfstools (GPL-3, images byte-identical to gcc's), xz-utils, the Path B X desktop; 471 rump objects and the USB stack compile, all-pxx rumpnic boots. OPEN, in order: GNU make (gates the kernel on site), mke2fs + sfdisk/blkid, rumpnic/usbhid as on-site recipes, the rest of the bootstrap set (curl+mbedTLS, dhcpcd, dropbear, zstd, bzip2, Limine), pixix userland (busybox, sqlite), and LAST the Linux GPU drivers (owner 2026-11-21: gcc for now)."
+summary: "GOAL, not a unit of work. 2026-11-26: GNU make DONE (claude-dupwt); e2fsprogs/util-linux rd; zstd/bzip2 pxx2. The Nodisx installer ISO ships only the kernel, pxx, a boot loader and a small permissive bootstrap set (~/nodisx/docs/bootstrap.md); everything else, GPL included, is pinned source plus a recipe that pxx compiles ON THE TARGET with only pxx, a POSIX shell and toybox (tools/nodisx/README.md). DONE: the kernel builds with pxx; toybox (1604/1604), mksh, dosfstools (GPL-3, images byte-identical to gcc's), xz-utils, the Path B X desktop; 471 rump objects and the USB stack compile, all-pxx rumpnic boots. OPEN, in order: GNU make (gates the kernel on site), mke2fs + sfdisk/blkid, rumpnic/usbhid as on-site recipes, the rest of the bootstrap set (curl+mbedTLS, dhcpcd, dropbear, zstd, bzip2, Limine), pixix userland (busybox, sqlite), and LAST the Linux GPU drivers (owner 2026-11-21: gcc for now)."
 ---
 
 # Nodisx compiles the whole system on site with pxx
@@ -42,18 +42,19 @@ in Nodisx's `docs/needs.md`.
 | Path B desktop (Xorg, libdrm, pixman, JWM) | MIT-ish | c6be450156, 45e7e28a0f; bundle equal host vs. on site |
 | rump kernel, rumpnic | BSD | 471/471 objects; all-pxx rumpnic boots (meta-c-netbsd-rump-kernel-through-pxx) |
 | rump USB stack | BSD | 353/353 compile; host smoke attaches xhci0/usb0 |
+| GNU make 4.4.1 | GPL-3.0 | tools/nodisx/make; own suite 1422/1422; Rainyday kernel built with it byte-identical |
 
 ## Open, in the order to take them
 
-1. **GNU make** (GPL-3). The kernel's build uses GNU-only make features, so
-   no kernel on site without it. Asked by Rainyday 2026-11-24.
-2. **Disk tools:** mke2fs (e2fsprogs 1.47.1), sfdisk and blkid (util-linux
+1. ~~GNU make~~ DONE 2026-11-26 (claude-dupwt), see the table.
+2. **Disk tools** (rd, "pxx" session, 2026-11-26): mke2fs (e2fsprogs 1.47.1), sfdisk and blkid (util-linux
    2.40.2). Without them the installer cannot partition or format.
 3. **rumpnic and usbhid as on-site recipes.** pxx compiles every file, but
    the build is driven by gcc, binutils, buildrump.sh and NetBSD's make.
    Without these an installed Rainyday has no USB keyboard/mouse and no
    NetBSD NICs (its own e1000/virtio/igb remain).
-4. **The rest of the bootstrap set**, untried with pxx: curl + mbedTLS,
+4. **The rest of the bootstrap set.** zstd and bzip2: pxx2 session
+   (2026-11-26), dhcpcd possibly next. Untried with pxx: curl + mbedTLS,
    dhcpcd, dropbear, zstd, bzip2, Limine (its binary may ship if pxx cannot
    build it: BSD-2).
 5. **pixix userland:** busybox (GPL, on site), sqlite, and whatever else

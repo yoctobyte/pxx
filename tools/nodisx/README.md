@@ -175,3 +175,15 @@ pxx dbclient against a stock sshd.
 after its libtomcrypt/libtommath sub-makes, and the commands after `Leaving
 directory` used to resolve inside the last sub-directory (xz, dhcpcd and zstd
 output is byte-identical).
+## GNU make 4.4.1 (GPL-3.0)
+
+What the Rainyday kernel's build needs (GNU-only features), so it comes
+before the kernel on site. `configure` runs once on the host with gcc; four
+of its answers are given as pxx's (`record.sh` says why): no posix_spawn
+(make forks and execs), no `load`, no C23 bool, and make's own glob/fnmatch
+instead of crtl's POSIX glob. `config.h` and three generated gnulib headers
+are the recipe's `gen.tar`. `test.sh` runs make's own suite on the pxx build
+and the gcc build (1422 tests; pxx: no failures, gcc on this host: one,
+misc/fopen-fail) and builds the Rainyday kernel with the host's make and
+with the pxx make: the two `rainyday.elf` are byte-identical. PASS is no
+failure the gcc build does not have, and the identical kernel.

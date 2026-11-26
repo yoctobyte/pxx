@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  852 functions across 81 headers. }
+  854 functions across 81 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -45,16 +45,16 @@ begin
       ' dn_comp:resolv.h dn_expand:resolv.h dn_skipname:resolv.h dngettext:libintl.h ' +
       ' dprintf:stdio.h drand48:stdlib.h dup:unistd.h dup2:unistd.h duplocale:locale.h ';
     'e': Result :=
-      ' endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h endspent:shadow.h ' +
-      ' endusershell:unistd.h endutxent:utmpx.h epoll_create:sys/epoll.h ' +
+      ' eaccess:unistd.h endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h ' +
+      ' endspent:shadow.h endusershell:unistd.h endutxent:utmpx.h epoll_create:sys/epoll.h ' +
       ' epoll_create1:sys/epoll.h epoll_ctl:sys/epoll.h epoll_pwait:sys/epoll.h ' +
       ' epoll_wait:sys/epoll.h erand48:stdlib.h err:err.h errx:err.h ether_aton:netinet/ether.h ' +
       ' ether_aton_r:netinet/ether.h ether_hostton:netinet/ether.h ether_line:netinet/ether.h ' +
       ' ether_ntoa:netinet/ether.h ether_ntoa_r:netinet/ether.h ether_ntohost:netinet/ether.h ' +
-      ' eventfd:sys/eventfd.h eventfd_read:sys/eventfd.h eventfd_write:sys/eventfd.h ' +
-      ' execl:unistd.h execle:unistd.h execlp:unistd.h execv:unistd.h execve:unistd.h ' +
-      ' execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h expf:math.h explicit_bzero:string.h ' +
-      ' expm1:math.h ';
+      ' euidaccess:unistd.h eventfd:sys/eventfd.h eventfd_read:sys/eventfd.h ' +
+      ' eventfd_write:sys/eventfd.h execl:unistd.h execle:unistd.h execlp:unistd.h ' +
+      ' execv:unistd.h execve:unistd.h execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h ' +
+      ' expf:math.h explicit_bzero:string.h expm1:math.h ';
     'f': Result :=
       ' fabs:math.h fabsf:math.h faccessat:unistd.h fallocate:fcntl.h fchdir:unistd.h ' +
       ' fchmod:sys/stat.h fchmodat:sys/stat.h fchown:unistd.h fchownat:unistd.h fclose:stdio.h ' +

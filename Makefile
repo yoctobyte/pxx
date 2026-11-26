@@ -29841,6 +29841,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_sretregs26 | diff -u test/c_struct_ret_in_regs_stores_its_own_size.expected -
 	./$(COMPILER) -O2 test/c_struct_ret_in_regs_stores_its_own_size.c $(TESTTMP)/c_sretregs26o2
 	$(TESTTMP)/c_sretregs26o2 | diff -u test/c_struct_ret_in_regs_stores_its_own_size.expected -
+	# crtl gaps GNU make found (Nodisx): a failed stdout write is reported
+	# (printf/puts/putchar/fputs -1, ferror, errno), getenv reads an ASSIGNED
+	# environ, _POSIX_VERSION and eaccess exist.
+	# bug-c-crtl-printf-reports-success-when-the-write-fails,
+	# bug-c-crtl-getenv-ignores-an-assigned-environ
+	./$(COMPILER) test/c_crtl_stdout_write_errors_and_an_assigned_environ.c $(TESTTMP)/c_wrerrenv26
+	$(TESTTMP)/c_wrerrenv26 | diff -u test/c_crtl_stdout_write_errors_and_an_assigned_environ.expected -
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

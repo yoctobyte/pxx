@@ -305,14 +305,54 @@ static int pxx_env_truncated = 0;
    stance the header above takes for a failed open. */
 extern char **environ;
 
+/* The `environ` the buffer last agreed with: what it was at the load, or the
+   vector pxx_env_publish made. A program may ASSIGN environ itself -- GNU
+   make sets `environ = envp` in the child and then calls execvp, which reads
+   PATH through getenv -- and glibc's getenv reads environ, so it sees that.
+   This buffer did not: make searched the parent's PATH, not the makefile's
+   `PATH := .` (bug-c-crtl-getenv-ignores-an-assigned-environ). */
+static char **pxx_env_seen = 0;
+
+/* Refill the buffer from `environ` as it is now. */
+static void pxx_env_from_environ(void) {
+  char **e;
+  const char *r;
+  long n, got;
+  pxx_env_len = 0;
+  pxx_env_nloaded = 0;
+  pxx_env_truncated = 0;
+  pxx_env_startup = environ;
+  pxx_env_seen = environ;
+  e = environ;
+  if (!e) return;
+  while (*e) {
+    r = *e;
+    n = 0;
+    while (r[n]) n++;
+    if (pxx_env_len + n + 1 > PXX_ENV_BUFSZ) { pxx_env_truncated = 1; break; }
+    for (got = 0; got <= n; got++) pxx_env_buf[pxx_env_len + got] = r[got];
+    pxx_env_len += n + 1;
+    pxx_env_nloaded++;
+    e++;
+  }
+}
+
 static void pxx_env_load(void) {
   int fd;
   long got;
   char **e;
   const char *r;
   long n;
-  if (pxx_env_loaded) return;
+  if (pxx_env_loaded) {
+    if (environ != pxx_env_seen) pxx_env_from_environ();
+    return;
+  }
   pxx_env_loaded = 1;
+  /* `environ` when it is set, as glibc reads it: it may already be one the
+     program assigned. /proc only before the runtime has filled it (a getenv
+     from a file-scope initializer); the check above reloads once it is. */
+  if (environ) { pxx_env_from_environ(); return; }
+  pxx_env_seen = environ;
   fd = __pxx_open("/proc/self/environ", 0, 0);   /* O_RDONLY */
   pxx_env_startup = environ;
   if (fd >= 0) {
@@ -1322,6 +1362,7 @@ static void pxx_env_publish(void) {
   }
   v[n] = 0;
   environ = v;
+  pxx_env_seen = v;
 }
 
 static void pxx_env_hide(const char *name) {

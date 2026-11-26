@@ -1837,6 +1837,19 @@ int faccessat(int dirfd, const char *path, int mode, int flags)
 #endif
 }
 
+/* faccessat(AT_FDCWD, path, mode, AT_EACCESS); AT_FDCWD -100 and AT_EACCESS
+   0x200 are the Linux ABI's (<fcntl.h>). On a kernel without faccessat2 this
+   is access(), which differs only for a setuid program. */
+int eaccess(const char *path, int mode)
+{
+  return faccessat(-100, path, mode, 0x200);
+}
+
+int euidaccess(const char *path, int mode)
+{
+  return eaccess(path, mode);
+}
+
 int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags)
 {
 #ifdef SYS_linkat

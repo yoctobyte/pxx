@@ -1,0 +1,6 @@
+printf=-1 ferror=1 enospc=1 puts=-1 putchar=-1 fputs=-1
+assigned: A=one PATH=.
+restored: A=(null)
+setenv: B=two environ-has-B=1
+_POSIX_VERSION>=200112: 1
+eaccess(/,X_OK)=0 eaccess(missing)=-1

@@ -898,6 +898,30 @@ int asprintf(char **strp, const char *fmt, ...) {
 
 /* ---- stream output (rides __pxx_write) ------------------------------------ */
 
+/* Write all n bytes of a stream to its fd. A failed write sets the stream's
+   error flag and errno and returns -1, and a short write is continued. The
+   streams are unbuffered, so this is where an error has to be seen: printf
+   to a full disk returned the byte count with ferror() clear, and GNU make's
+   close_stdout (`make -v > /dev/full`) could not report the write error.
+   bug-c-crtl-printf-reports-success-when-the-write-fails */
+static long __crtl_fdwrite(FILE *f, const void *p, unsigned long n) {
+  const char *q = (const char *)p;
+  unsigned long left = n;
+  while (left) {
+    long r = __pxx_write(f->fd, q, left);
+    if (r < 0) {
+      if (r == -EINTR) continue;
+      f->err = 1;
+      errno = (int)-r;
+      return -1;
+    }
+    if (r == 0) { f->err = 1; errno = EIO; return -1; }
+    q += r;
+    left -= (unsigned long)r;
+  }
+  return (long)n;
+}
+
 /* Every FILE write goes here: a memory stream appends to its buffer, any
    other stream writes its fd. Returns the bytes taken, or -1. */
 static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
@@ -922,26 +946,26 @@ static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
     *f->msizep = len;
     return (long)n;
   }
-  return __pxx_write(f->fd, p, n);
+  return __crtl_fdwrite(f, p, n);
 }
 
 /* Render into a fixed stack buffer then push to the fd in one write; a line
    that does not fit re-renders into a heap buffer sized from the returned
    need (tcc dumps multi-KB preprocessed buffers through one printf). */
-static int __crtl_vfdprintf(int fd, const char *fmt, va_list ap) {
+static int __crtl_vfdprintf(FILE *f, const char *fmt, va_list ap) {
   char buf[1024];
   va_list ap2;
   int n;
   va_copy(ap2, ap);
   n = __crtl_vformat(buf, sizeof(buf), fmt, ap2);
   va_end(ap2);
-  if (n <= (int)sizeof(buf) - 1)
-    __pxx_write(fd, buf, (unsigned long)n);
-  else {
+  if (n <= (int)sizeof(buf) - 1) {
+    if (__crtl_fdwrite(f, buf, (unsigned long)n) < 0) return -1;
+  } else {
     char *p = (char *)__pxx_malloc((long)n + 1);
-    if (!p) { __pxx_write(fd, buf, sizeof(buf) - 1); return n; }
+    if (!p) { f->err = 1; errno = ENOMEM; return -1; }
     __crtl_vformat(p, (size_t)n + 1, fmt, ap);
-    __pxx_write(fd, p, (unsigned long)n);
+    if (__crtl_fdwrite(f, p, (unsigned long)n) < 0) n = -1;
     __pxx_free(p);
   }
   return n;
@@ -970,11 +994,11 @@ static int __crtl_vmemprintf(FILE *stream, const char *fmt, va_list ap) {
 int vfprintf(FILE *stream, const char *fmt, va_list ap) {
   if (stream->mem) return __crtl_vmemprintf(stream, fmt, ap);
   if (stream->rlen) __crtl_rdrop(stream);
-  return __crtl_vfdprintf(stream->fd, fmt, ap);
+  return __crtl_vfdprintf(stream, fmt, ap);
 }
 
 int vprintf(const char *fmt, va_list ap) {
-  return __crtl_vfdprintf(1, fmt, ap);
+  return __crtl_vfdprintf(stdout, fmt, ap);
 }
 
 int fprintf(FILE *stream, const char *fmt, ...) {
@@ -988,7 +1012,7 @@ int fprintf(FILE *stream, const char *fmt, ...) {
 int printf(const char *fmt, ...) {
   va_list ap; int r;
   va_start(ap, fmt);
-  r = __crtl_vfdprintf(1, fmt, ap);
+  r = __crtl_vfdprintf(stdout, fmt, ap);
   va_end(ap);
   return r;
 }
@@ -1017,8 +1041,8 @@ int fputs(const char *s, FILE *stream) {
 int puts(const char *s) {
   unsigned long n = 0;
   while (s[n]) n++;
-  if (__pxx_write(1, s, n) < 0) return -1;
-  if (__pxx_write(1, "\n", 1) < 0) return -1;
+  if (__crtl_fdwrite(stdout, s, n) < 0) return -1;
+  if (__crtl_fdwrite(stdout, "\n", 1) < 0) return -1;
   return (int)n + 1;
 }
 
@@ -1033,7 +1057,7 @@ int putc(int c, FILE *stream) { return fputc(c, stream); }
 
 int putchar(int c) {
   char ch = (char)c;
-  if (__pxx_write(1, &ch, 1) < 0) return -1;
+  if (__crtl_fdwrite(stdout, &ch, 1) < 0) return -1;
   return c & 0xFF;
 }
 
