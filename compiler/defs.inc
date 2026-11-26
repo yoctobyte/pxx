@@ -4192,6 +4192,15 @@ var
   FxSaveOn   : Boolean;  { -O3 x86-64 (pxx internal ABI §5b): this body reserved a 6-slot frame area for the xmm8..13 pool at ABI boundaries. The callee-saved discipline is invisible to SysV externs, indirect targets, coroutine switches and longjmp unwinds (skipped epilogues), so the pool is saved to these slots before each such boundary (extern call, IR_CALL_IND, IR_COSWITCH, try-entry) and restored right after (or on the IR_EXC_ENTER landing pad) — preserving residents that belong to ANY frame up-stack, not just this body's. Set per body by FloatPoolBoundaryAssign; False for -O0/-O2 / non-x86-64 / inline-asm bodies, so those stay byte-identical. }
   FxSaveBase : Integer;  { rbp offset of slot 0 (xmm8); slot k = FxSaveBase + 8*k }
   FunctionSections : Boolean;
+  { --rename-globals=PREFIX (--emit-obj): every GLOBAL or WEAK symbol of the
+    finished object, defined or undefined, whose name does not start with one
+    of --rename-globals-keep's comma-separated prefixes, is renamed
+    PREFIX+name. NetBSD's rump build does this to every kernel object with
+    nm and objcopy --redefine-syms (rumpns_, keeping rump/RUMP/__); pxx doing
+    it lets a rump kernel be built where there are no binutils (Nodisx).
+    ObjRenameGlobals in elfwriter.inc. }
+  RenameGlobalsPrefix : AnsiString;
+  RenameGlobalsKeep : AnsiString;
   { --shared-runtime (--emit-obj): the object carries ONLY its translation
     unit. crtl's implementations are not pulled in by its headers; they come
     from the runtime object, built once per target, which --link adds.

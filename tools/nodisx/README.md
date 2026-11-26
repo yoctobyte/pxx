@@ -187,3 +187,24 @@ and the gcc build (1422 tests; pxx: no failures, gcc on this host: one,
 misc/fopen-fail) and builds the Rainyday kernel with the host's make and
 with the pxx make: the two `rainyday.elf` are byte-identical. PASS is no
 failure the gcc build does not have, and the identical kernel.
+
+## rumpnic (NetBSD drivers: BSD; Rainyday's parts: MIT)
+
+Rainyday's driver for network cards through NetBSD's drivers (wm, igc, re,
+rge, pcn): a rump kernel plus Rainyday's hosted parts, 473 objects. On the
+host, buildrump.sh, NetBSD's make, gcc and binutils drive that build. On
+site there is only the recorded compile list. `record.sh` takes it from a
+gcc rump build (Rainyday's all-pxx method, tools/rump-pxx-build.sh
+ALLPXX=1, as data), compiles every unit once under strace, and ships
+exactly the files those compiles opened: 2012 files, 2.3 MB xz, with
+NOTICE.netbsd. NetBSD's rename of the kernel's globals to `rumpns_*`
+(nm + objcopy there) is pxx's `--rename-globals`, and `pxx --link` takes
+the objects directly, so no ar or objcopy is needed. On site: ~5 minutes
+at JOBS=6 on plexus. `test.sh` replays the recipe with only pxx, sh, tar,
+xzcat, sed and coreutils on PATH, then boots the result in Rainyday under
+QEMU with Rainyday's tools/rumpnictest.sh: DHCP, ping and a 300 KB fetch
+on an e1000, and on an rtl8139 behind an IOMMU as uid 150. PASS is both.
+
+usbhid (Rainyday's own USB stack, MIT) needs no recipe of its own: it is
+plain C in the Rainyday tree, and `make -C drivers PXX=pxx` with the
+on-site GNU make builds it (22 s).

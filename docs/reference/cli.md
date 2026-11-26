@@ -204,6 +204,8 @@ effect where one exists.
 | `--no-ro-data` | Keep all data in the one read-write segment, instead of putting literals in a read-only one. |
 | `--ro-rtti` / `--no-ro-rtti` | Class RTTI and VMTs go in the read-only segment by default; `--no-ro-rtti` puts them back in the writable one. |
 | `--function-sections` | With `--emit-obj` (x86-64): one `.text.<name>` section per routine, so a linker can drop what nothing reaches. |
+| `--rename-globals=PREFIX` | With `--emit-obj` (ELF64, C and `.S` sources): rename every GLOBAL/WEAK symbol of the object, defined or undefined, to `PREFIX<name>`; NetBSD's rump `rumpns_` rename without objcopy. |
+| `--rename-globals-keep=A,B,...` | Name prefixes `--rename-globals` leaves alone (NetBSD: `rump,RUMP,__,_GLOBAL_OFFSET_TABLE,.TOC.`). |
 | `--link [-o OUT] OBJ... [OUT]` | Link x86-64 objects that `pxx --emit-obj` wrote into a static executable, with no external linker and no libc. It supplies `_start` unless an object defines one, and drops sections the entry cannot reach (`--no-gc-sections` keeps them). Objects from gcc or FPC, archives and shared objects are refused by design. |
 | `--dce` / `--no-dce`, `--dce-report`, `--dce-why[=NAME]`, `--dce-cost=`, `--dce-reach-from=` | Drop routine bodies nothing can reach, and report on that pass: `--dce-report` prints what it kept and dropped, and the others explain why a body is live. |
 | `--gtk=2\|3\|4` | Which GTK's headers the C resolver searches and which library it links. It does not port the GTK 3 widget layer in `lib/pcl`. |

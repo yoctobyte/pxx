@@ -29848,6 +29848,16 @@ test-core: $(COMPILER)
 	# bug-c-crtl-getenv-ignores-an-assigned-environ
 	./$(COMPILER) test/c_crtl_stdout_write_errors_and_an_assigned_environ.c $(TESTTMP)/c_wrerrenv26
 	$(TESTTMP)/c_wrerrenv26 | diff -u test/c_crtl_stdout_write_errors_and_an_assigned_environ.expected -
+	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
+	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
+	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
+	# feature-a-rename-globals-for-a-rump-kernel-without-binutils
+	@d=$(TESTTMP)/c_rnglob26; mkdir -p $$d && \
+	  ./$(COMPILER) --emit-obj --function-sections --shared-runtime --rename-globals=rumpns_ --rename-globals-keep=rump,__ test/c_rename_globals_kernel.c $$d/k.o >/dev/null && \
+	  tools/expect_same.sh c_rnglob26_names "$$(nm $$d/k.o | awk '$$NF ~ /^(rumpns_)?(memcpy_user|rumpuser_thing|shared_counter|local_helper|weak_hook|kernel_entry|__keep_me)$$/ {print $$(NF-1), $$NF}' | sort)" "$$(printf '%s\n' 'T __keep_me' 'T rumpns_kernel_entry' 'U rumpns_memcpy_user' 'D rumpns_shared_counter' 'W rumpns_weak_hook' 'U rumpuser_thing' 't local_helper' | sort)" && \
+	  ./$(COMPILER) --emit-obj --function-sections --shared-runtime test/c_rename_globals_host.c $$d/h.o >/dev/null && \
+	  ./$(COMPILER) --link -o $$d/p $$d/h.o $$d/k.o >/dev/null && \
+	  tools/expect_same.sh c_rnglob26_run "$$($$d/p)" "118 7"
 	./$(COMPILER) test/c_crtl_read_buffer.c $(TESTTMP)/c_rdbuf26
 	@gcc -w -o $(TESTTMP)/c_rdbuf26_gcc test/c_crtl_read_buffer.c
 	tools/expect_same.sh c_rdbuf26 "$$(timeout 20 $(TESTTMP)/c_rdbuf26)" "$$(timeout 20 $(TESTTMP)/c_rdbuf26_gcc)"

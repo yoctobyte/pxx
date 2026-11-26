@@ -9810,6 +9810,124 @@ begin
   end;
 end;
 
+{ ---- --rename-globals: NetBSD's rump rename, done on the finished object ----
+  NetBSD renames every global of a rump kernel object to rumpns_<name>, both
+  the ones it defines and the ones it uses, except names starting rump, RUMP,
+  __ (and _GLOBAL_OFFSET_TABLE, .TOC.): `nm -go | awk` makes the list and
+  `objcopy --redefine-syms` applies it. This is the same rule, applied by pxx
+  to the object it just wrote, so a target with pxx and no binutils can build
+  a rump kernel (Nodisx, rumpnic). It works on the FILE, not on the writers'
+  tables, so every object shape (function sections, aliases, TLS, common) is
+  covered by one pass: the new names are appended to a copy of .strtab placed
+  at the end of the file, and each renamed symbol's st_name points there.
+  Relocations name symbols by index and are untouched. ELF64 little-endian
+  only (x86-64, aarch64), which is what pxx's hosted objects are. }
+function RgU(const s: AnsiString; off: Int64; n: Integer): Int64;
+var i: Integer; v: Int64;
+begin
+  v := 0;
+  for i := n - 1 downto 0 do
+    v := (v shl 8) or Ord(s[off + i + 1]);
+  RgU := v;
+end;
+
+procedure RgPut(var s: AnsiString; off: Int64; n: Integer; v: Int64);
+var i: Integer;
+begin
+  for i := 0 to n - 1 do
+  begin
+    s[off + i + 1] := Chr(v and 255);
+    v := v shr 8;
+  end;
+end;
+
+function RgKept(const name: AnsiString): Boolean;
+var list, item: AnsiString; i: Integer;
+begin
+  RgKept := False;
+  list := RenameGlobalsKeep + ',';
+  item := '';
+  for i := 1 to Length(list) do
+    if list[i] = ',' then
+    begin
+      if (Length(item) > 0) and (Copy(name, 1, Length(item)) = item) then
+      begin
+        RgKept := True;
+        Exit;
+      end;
+      item := '';
+    end
+    else
+      item := item + list[i];
+end;
+
+procedure ObjRenameGlobals(const path: AnsiString);
+var s, add, nm, strtab: AnsiString;
+    shoff, symoff, symsize, stroff, strsize, sh, p, q: Int64;
+    shentsize, shnum, i, k, symsec, strsec, nsyms, bind, typ, f: Integer;
+    info: Byte;
+    buf: array of Byte;
+begin
+  LoadFile(path, s);
+  if (Length(s) < 64) or (Ord(s[5]) <> 2) or (Ord(s[6]) <> 1) then
+    ErrorNoPos('--rename-globals: ' + path + ' is not a little-endian ELF64 object');
+  shoff := RgU(s, $28, 8);
+  shentsize := Integer(RgU(s, $3A, 2));
+  shnum := Integer(RgU(s, $3C, 2));
+  symsec := -1;
+  for i := 0 to shnum - 1 do
+    if RgU(s, shoff + Int64(i) * shentsize + 4, 4) = 2 then symsec := i;   { SHT_SYMTAB }
+  if symsec < 0 then Exit;
+  sh := shoff + Int64(symsec) * shentsize;
+  symoff := RgU(s, sh + 24, 8);
+  symsize := RgU(s, sh + 32, 8);
+  strsec := Integer(RgU(s, sh + 40, 4));
+  sh := shoff + Int64(strsec) * shentsize;
+  stroff := RgU(s, sh + 24, 8);
+  strsize := RgU(s, sh + 32, 8);
+  nsyms := Integer(symsize div 24);
+  add := '';
+  for k := 1 to nsyms - 1 do
+  begin
+    p := symoff + Int64(k) * 24;
+    info := Ord(s[p + 5]);
+    bind := info shr 4;
+    typ := info and 15;
+    { GLOBAL or WEAK, not a SECTION or FILE symbol, and named }
+    if ((bind = 1) or (bind = 2)) and (typ <> 3) and (typ <> 4) and (RgU(s, p, 4) <> 0) then
+    begin
+      nm := '';
+      q := stroff + RgU(s, p, 4);
+      while (q < Length(s)) and (s[q + 1] <> #0) do
+      begin
+        nm := nm + s[q + 1];
+        q := q + 1;
+      end;
+      if not RgKept(nm) then
+      begin
+        RgPut(s, p, 4, strsize + Length(add));
+        add := add + RenameGlobalsPrefix + nm + #0;
+      end;
+    end;
+  end;
+  if Length(add) = 0 then Exit;
+  strtab := Copy(s, stroff + 1, strsize);
+  RgPut(s, sh + 24, 8, Length(s));
+  RgPut(s, sh + 32, 8, strsize + Length(add));
+  s := s + strtab + add;
+  SetLength(buf, Length(s));
+  for i := 0 to Length(s) - 1 do buf[i] := Ord(s[i + 1]);
+  f := OutOpen(path);
+  if f < 0 then
+    ErrorNoPos('--rename-globals: cannot rewrite ' + path);
+  { OutWriteShort is NOT reset: it may already hold a short write of the
+    object itself, which the full-disk check after the writers reports }
+  OutWrite(f, buf, 0, Length(s));
+  sysclose(f);
+  if OutWriteShort then
+    ErrorNoPos('--rename-globals: short write to ' + path);
+end;
+
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
 var f, n, i, used: Integer;
 begin

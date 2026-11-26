@@ -1716,6 +1716,8 @@ begin
   OptLevelExplicit := False;
   SourceOneToOne := False;
   FunctionSections := False;
+  RenameGlobalsPrefix := '';
+  RenameGlobalsKeep := '';
   SharedRuntime := False;
   FreestandingMode := False;
   RcSuppressAssign := False;
@@ -1941,6 +1943,18 @@ begin
     else if option = '--function-sections' then
     begin
       FunctionSections := True;
+      Inc(i);
+    end
+    else if Copy(option, 1, 22) = '--rename-globals-keep=' then
+    begin
+      RenameGlobalsKeep := Copy(option, 23, Length(option) - 22);
+      Inc(i);
+    end
+    else if Copy(option, 1, 17) = '--rename-globals=' then
+    begin
+      RenameGlobalsPrefix := Copy(option, 18, Length(option) - 17);
+      if RenameGlobalsPrefix = '' then
+        ErrorNoPos('--rename-globals= needs a prefix');
       Inc(i);
     end
     else if option = '--shared-runtime' then
@@ -3937,6 +3951,10 @@ begin
     if TargetArch <> TARGET_X86_64 then
       ErrorNoPos('.S/.s sources are x86-64 only');
     GasAssemble(Source, inFile, outFile, SourceFileDir, inFile[Length(inFile)] = 'S');
+    { the rump rename applies to NetBSD's .S files too (atomics, string
+      routines); the C path calls it after its writers }
+    if RenameGlobalsPrefix <> '' then
+      ObjRenameGlobals(outFile);
     writeln('ok: ', outFile, '  [GNU as object]');
     Halt(0);
   end;
@@ -4716,6 +4734,8 @@ begin
       writeELFRel386General(outFile)
     else
       writeELF32Rel(outFile);
+    if RenameGlobalsPrefix <> '' then
+      ObjRenameGlobals(outFile);
   end
   else if TargetArch = TARGET_WASM32 then
     writeWasm(outFile)
