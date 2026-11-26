@@ -1022,12 +1022,14 @@ begin
     hardcoded versions they replaced had gone stale without anyone noticing.
     feature-dynamic-include-paths-config }
   BuildCSysIncludeDirs;
-  WriteLn('Host system <> fallback roots, searched LAST (native only, off under -nostdinc):');
+  WriteLn('Host system <> fallback roots, searched LAST (native only, off under -nostdinc or --no-host-include):');
   if (TargetArch <> TARGET_X86_64) or NoStdInc then
     { …and then say NOTHING else. Printing the note and the list together reads
       as a contradiction, and a reader chasing a missing header would take the
       list as the answer. }
     WriteLn('  (not searched: cross target, or -nostdinc)')
+  else if NoHostInc then
+    WriteLn('  (not searched: --no-host-include / PXX_NO_HOST_INCLUDE=1)')
   else
     for i := 0 to CSysIncludeCount - 1 do
       ShowWhereDir(CSysIncludeDirs[i], '');
@@ -1727,6 +1729,7 @@ begin
   DumpCpp := False;
   FrameIntrinsicUsed := False;
   NoStdInc := False;
+  NoHostInc := False;
   CUseSystemLibs := False;
   CSynthMissingCount := 0;
   CSystemLibCount := 0;
@@ -2036,6 +2039,15 @@ begin
     else if (option = '-nostdinc') or (option = '--nostdinc') then
     begin
       NoStdInc := True;
+      Inc(i);
+    end
+    else if option = '--no-host-include' then
+    begin
+      { crtl's headers and -I directories stay; only the host's /usr/include
+        fallback goes. A build that passes with it needs no host header,
+        as on a target that has none (Nodisx on Rainyday).
+        feature-c-no-host-include }
+      NoHostInc := True;
       Inc(i);
     end
     else if option = '-g' then

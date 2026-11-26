@@ -34,7 +34,17 @@ for b in gcc pxx; do
   case $b in gcc) m=$G ;; pxx) m=$Q ;; esac
   mkdir -p "$O/suite-$b"
   cp -a "$REF/tests/." "$O/suite-$b/"
-  ( cd "$O/suite-$b" && perl run_make_tests.pl -srcdir "$REF" -make "$m" ) > "$O/suite-$b.log" 2>&1 || true
+  # 40 minutes at most; afterwards whatever the suite left running is killed
+  # (the gcc build's misc/fopen-fail leaves a make spinning on this host after
+  # perl has given up on it). The suite puts each test in a process group of
+  # its own, so the leftovers are found by working directory, which is always
+  # inside this copy of tests/ (Linux /proc: this script runs on the host).
+  ( cd "$O/suite-$b" && timeout -k 30 2400 perl run_make_tests.pl -srcdir "$REF" -make "$m" ) > "$O/suite-$b.log" 2>&1 || true
+  for p in /proc/[0-9]*; do
+    case $(readlink "$p/cwd" 2>/dev/null) in
+      "$O/suite-$b"|"$O/suite-$b"/*) kill -KILL "${p#/proc/}" 2>/dev/null ;;
+    esac
+  done
   # a failing test is `name ..... FAILED (n/m passed)`, or a line naming
   # its script followed by a bare `FAILED (...)`
   awk '/FAILED/ { if ($0 ~ /^FAILED/) { if (match(p, /scripts\/[^:]*/)) print substr(p, RSTART + 8, RLENGTH - 8) } else print $1 } { p = $0 }' \

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  858 functions across 81 headers. }
+  860 functions across 83 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -72,8 +72,9 @@ begin
       ' freopen:stdio.h frexp:math.h fscanf:stdio.h fseek:stdio.h fseeko:stdio.h fsetpos:stdio.h ' +
       ' fsetxattr:sys/xattr.h fstat:sys/stat.h fstat64:sys/stat.h fstatat:sys/stat.h ' +
       ' fstatat64:sys/stat.h fstatfs:sys/statfs.h fstatvfs:sys/statvfs.h fsync:unistd.h ' +
-      ' ftell:stdio.h ftello:stdio.h ftok:sys/ipc.h ftruncate:unistd.h ftrylockfile:stdio.h ' +
-      ' funlockfile:stdio.h futimens:time.h fwrite:stdio.h fwrite_unlocked:stdio.h ';
+      ' ftell:stdio.h ftello:stdio.h ftime:sys/timeb.h ftok:sys/ipc.h ftruncate:unistd.h ' +
+      ' ftrylockfile:stdio.h funlockfile:stdio.h futimens:time.h fwrite:stdio.h ' +
+      ' fwrite_unlocked:stdio.h ';
     'g': Result :=
       ' gai_strerror:netdb.h getaddrinfo:netdb.h getc:stdio.h getc_unlocked:stdio.h ' +
       ' getchar:stdio.h getchar_unlocked:stdio.h getcwd:unistd.h getdelim:stdio.h ' +
@@ -229,10 +230,10 @@ begin
       ' tolower:ctype.h toupper:ctype.h towlower:wchar.h towupper:wchar.h trunc:math.h ' +
       ' truncate:unistd.h truncf:math.h ttyname:unistd.h ttyname_r:unistd.h tzset:time.h ';
     'u': Result :=
-      ' umask:sys/stat.h umount:sys/mount.h umount2:sys/mount.h uname:sys/utsname.h ' +
-      ' ungetc:stdio.h unlink:unistd.h unlinkat:unistd.h unlockpt:stdlib.h unsetenv:stdlib.h ' +
-      ' unshare:sched.h uselocale:locale.h usleep:unistd.h utime:utime.h utimensat:time.h ' +
-      ' utimes:sys/time.h utmpxname:utmpx.h ';
+      ' ulimit:ulimit.h umask:sys/stat.h umount:sys/mount.h umount2:sys/mount.h ' +
+      ' uname:sys/utsname.h ungetc:stdio.h unlink:unistd.h unlinkat:unistd.h unlockpt:stdlib.h ' +
+      ' unsetenv:stdlib.h unshare:sched.h uselocale:locale.h usleep:unistd.h utime:utime.h ' +
+      ' utimensat:time.h utimes:sys/time.h utmpxname:utmpx.h ';
     'v': Result :=
       ' valloc:stdlib.h vasprintf:stdio.h vdprintf:stdio.h verr:err.h verrx:err.h vfork:unistd.h ' +
       ' vfprintf:stdio.h vfscanf:stdio.h vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h ' +

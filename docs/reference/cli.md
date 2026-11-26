@@ -162,6 +162,7 @@ the optional rows; each `no` costs exactly the one capability its row names.
 | `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
 | `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
 | `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
+| `--no-host-include` | Keep crtl's headers and `-I`, but never fall back to the host's `/usr/include`: a header crtl lacks is an error, as on a target with no host headers. `PXX_NO_HOST_INCLUDE=1` in the environment does the same. |
 
 ## Strictness and dialect
 

@@ -19825,6 +19825,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_return_comma.c $(TESTTMP)/c_retcomma26
 	@gcc -w test/c_return_comma.c -o $(TESTTMP)/c_retcomma26_gcc
 	tools/expect_same.sh c_retcomma26 "$$(timeout 20 $(TESTTMP)/c_retcomma26)" "$$(timeout 20 $(TESTTMP)/c_retcomma26_gcc)"
+	# <ulimit.h>, <sys/timeb.h>, <linux/landlock.h> with --no-host-include (headers a hostless target lacked: mksh, make, xz); against gcc
+	./$(COMPILER) --no-host-include test/c_nohost_headers.c $(TESTTMP)/c_nohost26
+	@gcc -w test/c_nohost_headers.c -o $(TESTTMP)/c_nohost26_gcc
+	tools/expect_same.sh c_nohost26 "$$(timeout 20 $(TESTTMP)/c_nohost26)" "$$(timeout 20 $(TESTTMP)/c_nohost26_gcc)"
+	# <elf.h>/<link.h>: 247 constants and 18 struct sizes, crtl's against glibc's (rumpnic's rumpuser_dl.c)
+	./$(COMPILER) --no-host-include test/c_elf_h.c $(TESTTMP)/c_elfh26
+	@gcc -w test/c_elf_h.c -o $(TESTTMP)/c_elfh26_gcc
+	tools/expect_same.sh c_elfh26 "$$(timeout 20 $(TESTTMP)/c_elfh26)" "$$(timeout 20 $(TESTTMP)/c_elfh26_gcc)"
+	# --no-host-include refuses a header only the host has, and says so without listing <host system dirs>
+	@printf '#include <gnu/libc-version.h>\nint main(void){return 0;}\n' > $(TESTTMP)/c_nohostref26.c
+	tools/expect_same.sh c_nohostref26 "$$(./$(COMPILER) --no-host-include $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'include file not found' ; PXX_NO_HOST_INCLUDE=1 ./$(COMPILER) $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'host system dirs')" "$$(printf '1\n0')"
 	# Kernel inline asm (Nilix): the user-mode-runnable half executed and checked
 	# against gcc's answer -- a far return through `leaq 1f(%rip)` + lretq,
 	# segment register moves, named operands, "i"/"n" immediates through a

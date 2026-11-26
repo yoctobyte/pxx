@@ -25,6 +25,9 @@
 #include <errno.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <ulimit.h>
+#include <stdarg.h>
+#include <limits.h>
 
 extern int __pxx_prlimit(int resource, void *newLim, void *oldLim);
 extern int __pxx_getrusage(int who, void *usage);
@@ -94,6 +97,33 @@ int setrlimit(int resource, const struct rlimit *rlim) {
   rc = __pxx_prlimit(resource, &in, 0);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
+}
+
+/* ulimit(UL_GETFSIZE) / ulimit(UL_SETFSIZE, blocks): RLIMIT_FSIZE in 512-byte
+   blocks, as glibc. An unlimited limit reads as LONG_MAX; setting sets the
+   soft and the hard limit, and a block count too large to multiply becomes
+   unlimited. Returns the (new) limit, -1 with errno on failure. */
+long ulimit(int cmd, ...) {
+  struct rlimit rl;
+  if (cmd == UL_GETFSIZE) {
+    if (getrlimit(RLIMIT_FSIZE, &rl) < 0) return -1;
+    if (rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur / 512 > (rlim_t)LONG_MAX) return LONG_MAX;
+    return (long)(rl.rlim_cur / 512);
+  }
+  if (cmd == UL_SETFSIZE) {
+    va_list ap;
+    long n;
+    va_start(ap, cmd);
+    n = va_arg(ap, long);
+    va_end(ap);
+    if (n < 0) { errno = EINVAL; return -1; }
+    rl.rlim_cur = ((rlim_t)n > RLIM_INFINITY / 512) ? RLIM_INFINITY : (rlim_t)n * 512;
+    rl.rlim_max = rl.rlim_cur;
+    if (setrlimit(RLIMIT_FSIZE, &rl) < 0) return -1;
+    return n;
+  }
+  errno = EINVAL;
+  return -1;
 }
 
 /* ---- process scheduling priority ------------------------------------------

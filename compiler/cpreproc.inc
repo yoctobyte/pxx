@@ -3206,6 +3206,9 @@ end;
 procedure AddDefaultCIncludeDirs;
 var d, hdir: AnsiString; ci: Integer;
 begin
+  { the environment form of --no-host-include, so it reaches every pxx a
+    build runs (make's, a recipe's nested scripts) without editing them }
+  if PxxGetEnv('PXX_NO_HOST_INCLUDE') = '1' then NoHostInc := True;
   if NoStdInc then Exit;
   { Idempotent: a C source pulled as a UNIT calls this too (the main program may
     be Pascal or NilPy, in which case nothing registered these yet), and it may
@@ -3562,7 +3565,8 @@ begin
        list is also what the ticket asks for: a search order that can be
        EXTENDED from config rather than recompiled
        (feature-dynamic-include-paths-config). }
-  if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc) then
+  if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc)
+     and (not NoHostInc) then
   begin
     BuildCSysIncludeDirs;
     k := 0;
@@ -3694,7 +3698,7 @@ begin
         if searchList <> '' then searchList := searchList + ', ';
         searchList := searchList + CIncludeDirs[k];
       end;
-      if (TargetArch = TARGET_X86_64) and (not NoStdInc) then
+      if (TargetArch = TARGET_X86_64) and (not NoStdInc) and (not NoHostInc) then
       begin
         if searchList <> '' then searchList := searchList + ', ';
         searchList := searchList + '<host system dirs>';

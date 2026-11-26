@@ -14,6 +14,7 @@
 #include <time.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <sys/timeb.h>
 #include <stdlib.h>   /* getenv, for $TZ */
 #include <string.h>   /* memset, for the TZ rule state */
 
@@ -621,6 +622,18 @@ int clock_gettime(int clk_id, struct timespec *tp) {
   int r = __pxx_clock_gettime(clk_id, &sec, &nsec);
   if (r < 0) { errno = EINVAL; return -1; }
   if (tp) { tp->tv_sec = (long)sec; tp->tv_nsec = (long)nsec; }
+  return 0;
+}
+
+/* ftime (<sys/timeb.h>): the realtime clock to the millisecond. timezone and
+   dstflag are 0, as glibc gives them. */
+int ftime(struct timeb *tp) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_REALTIME, &ts) != 0) return -1;
+  tp->time = ts.tv_sec;
+  tp->millitm = (unsigned short)(ts.tv_nsec / 1000000);
+  tp->timezone = 0;
+  tp->dstflag = 0;
   return 0;
 }
 
