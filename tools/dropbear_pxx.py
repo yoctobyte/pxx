@@ -29,9 +29,12 @@ WHAT IT DOES
          with a handshake or MAC error, not a quiet wrong answer.
        - 1 MiB of random bytes up and down the channel, sha256 both ends.
        - an interactive pty session (ssh -tt): the remote sees a /dev/pts tty.
-       - scp in both directions (legacy protocol, -O). The server's `scp -t`
-         is the pxx scp: dropbear runs with -e and the work bin dir first on
-         PATH, and a row checks that the remote resolves scp to it.
+       - scp in both directions (legacy protocol, -O), stock scp client
+         against the pxx dropbear; then the pxx scp as the CLIENT, driving
+         OpenSSH's ssh (-S), in both directions. (The rows used to aim the
+         server's `scp -t` at the pxx scp through PATH, but dropbear resets
+         the child's PATH to /usr/bin:/bin even with -e -- glibc's putenv
+         replaces it -- so a gcc build failed that row too.)
        - the pxx dbclient logs in to a stock OpenSSH sshd (run as this user,
          its own config, host key and authorized_keys) and runs a command,
          once per cipher dbclient offers.
@@ -61,6 +64,8 @@ usage: tools/dropbear_pxx.py [--pinned] [--keep] [--jobs N] [--build-only]
   --self-contained  compile every unit with its own runtime (pxx's default
                 for a lone object) instead of --shared-runtime, which this
                 tool uses on x86-64: crtl compiled once, added by --link
+  --bindir DIR  skip both builds and run the proof on the four programs in
+                DIR (the Nodisx recipe's on-site build: tools/nodisx/dropbear/test.sh)
 """
 import argparse
 import hashlib
@@ -474,9 +479,6 @@ def tests(work, bindir, port0):
         row("interactive pty session (ssh -tt)", rc == 0 and "/dev/pts/" in text and "PTY-DONE" in text,
             (text + err.decode(errors="replace")).strip()[-200:])
 
-        rc, out, err = run(base + [dest, "command -v scp"], env=env, timeout=120)
-        row("the server's scp is the pxx scp", out.decode().strip() == os.path.join(bindir, "scp"),
-            out.decode().strip())
         scp = ["scp", "-O", "-F", "/dev/null", "-P", str(port), "-i", ckey, "-o", "IdentitiesOnly=yes",
                "-o", "BatchMode=yes", "-o", "UserKnownHostsFile=" + os.path.join(t, "known_hosts"),
                "-o", "GlobalKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=yes"]
@@ -489,6 +491,22 @@ def tests(work, bindir, port0):
         rc, out, err = run(scp + ["%s:%s" % (dest, upf), down], env=env, timeout=300)
         row("scp download", rc == 0 and os.path.exists(down) and
             hashlib.sha256(open(down, "rb").read()).hexdigest() == want,
+            err.decode(errors="replace").strip()[-200:])
+        # the pxx scp as the client: it runs OpenSSH's ssh (-S) to reach the
+        # server, where the system scp is the far end
+        pscp = [os.path.join(bindir, "scp"), "-S", shutil.which("ssh") or "ssh", "-F", "/dev/null",
+                "-P", str(port), "-i", ckey, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                "-o", "UserKnownHostsFile=" + os.path.join(t, "known_hosts"),
+                "-o", "GlobalKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=yes"]
+        up2 = os.path.join(t, "pscp_up.bin")
+        rc, out, err = run(pscp + [upf, "%s:%s" % (dest, up2)], env=env, timeout=300)
+        row("pxx scp upload (client)", rc == 0 and os.path.exists(up2) and
+            hashlib.sha256(open(up2, "rb").read()).hexdigest() == want,
+            err.decode(errors="replace").strip()[-200:])
+        down2 = os.path.join(t, "pscp_down.bin")
+        rc, out, err = run(pscp + ["%s:%s" % (dest, upf), down2], env=env, timeout=300)
+        row("pxx scp download (client)", rc == 0 and os.path.exists(down2) and
+            hashlib.sha256(open(down2, "rb").read()).hexdigest() == want,
             err.decode(errors="replace").strip()[-200:])
     finally:
         srv.terminate()
@@ -555,6 +573,29 @@ def dbclient_to_sshd(t, bindir, env, user, dbk):
 
 # ----------------------------------------------------------------- main ----
 
+def proof_only(bindir, port, keep):
+    """--bindir: the proof alone, on binaries built elsewhere."""
+    for p in PROGRAMS:
+        if not os.access(os.path.join(bindir, p), os.X_OK):
+            die("no %s in %s" % (p, bindir))
+    work = tempfile.mkdtemp(prefix="dropbear-pxx-")
+    try:
+        say("binaries %s" % bindir)
+        say("work %s" % work)
+        tests(work, bindir, port)
+    finally:
+        if keep:
+            say("kept %s" % work)
+        else:
+            shutil.rmtree(work, ignore_errors=True)
+        for d in AUTHDIRS:
+            shutil.rmtree(d, ignore_errors=True)
+    bad = [r for r in results if not r[1]]
+    say("%d rows, %d failed" % (len(results), len(bad)))
+    print("DROPBEAR-PXX-COMPLETE %s" % ("GREEN" if not bad else "RED"))
+    sys.exit(1 if bad else 0)
+
+
 def main():
     ap = argparse.ArgumentParser(description="build dropbear with pxx and log in to it")
     ap.add_argument("--pinned", action="store_true")
@@ -565,6 +606,7 @@ def main():
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--target", default="x86_64", choices=["x86_64", "aarch64"])
     ap.add_argument("--self-contained", action="store_true")
+    ap.add_argument("--bindir")
     a = ap.parse_args()
     global TARGET, SHARED_RT
     TARGET = a.target
@@ -574,6 +616,8 @@ def main():
         die("--target=%s needs qemu-%s registered with binfmt_misc (see /proc/sys/fs/binfmt_misc)"
             % (TARGET, TARGET))
 
+    if a.bindir:
+        return proof_only(os.path.abspath(a.bindir), a.port, a.keep)
     if not os.path.isfile(os.path.join(SRC, "configure")):
         die("no dropbear tree at %s -- run: tools/install_lib_candidates.sh dropbear" % SRC)
     if a.pinned:

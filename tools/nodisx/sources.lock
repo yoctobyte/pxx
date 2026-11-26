@@ -9,3 +9,4 @@ xz-5.6.3.tar.gz  b1d45295d3f71f25a4c9101bd7c8d16cb56348bbef3bbc738da0351e17c7331
 bzip2-1.0.8.tar.gz  ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269  https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
 zstd-1.5.6.tar.gz  8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1  https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz
 dhcpcd-10.5.2.tar.xz  3e476657fdb6eeb38b277da3a48d0ac0113ecce5858ebdcddff2b629faed52b4  https://github.com/NetworkConfiguration/dhcpcd/releases/download/v10.5.2/dhcpcd-10.5.2.tar.xz
+dropbear-2026.94.tar.bz2  e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81  https://matt.ucc.asn.au/dropbear/releases/dropbear-2026.94.tar.bz2

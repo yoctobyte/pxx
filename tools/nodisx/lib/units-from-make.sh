@@ -37,10 +37,14 @@ function rel(d, p,   parts, n, i, out, k, stack) {
   if (out == top) return "."
   return out
 }
-BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir = top; nu = 0 }
+BEGIN { np = split(progs, P, " "); for (i = 1; i <= np; i++) want[P[i]] = 1; dir = top; nu = 0; sp = 0 }
+# a stack: after `Leaving directory` the commands belong to the parent make again
+# (dropbear links its programs at the top after the libtomcrypt and
+# libtommath sub-makes; without the pop they resolved inside libtommath/)
 /Entering directory/ {
-  s = $0; sub(/.*Entering directory ./, "", s); sub(/.$/, "", s); dir = s; next
+  s = $0; sub(/.*Entering directory ./, "", s); sub(/.$/, "", s); stk[++sp] = dir; dir = s; next
 }
+/Leaving directory/ { if (sp > 0) dir = stk[sp--]; else dir = top; next }
 {
   line = $0
   if (line ~ /^libtool: compile: +/) sub(/^libtool: compile: +/, "", line)

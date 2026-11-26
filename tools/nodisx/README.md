@@ -151,3 +151,27 @@ alias's static target), posix_spawn, the IPv6 neighbour-discovery and
 generic-netlink headers, initstate/setstate, fgetpos/fsetpos, closefrom,
 memset_explicit. Tickets: bug-c-alignas-is-read-as-a-call,
 bug-c-the-alias-attribute-was-ignored, feature-crtl-the-libc-gaps-dhcpcd-found.
+
+## dropbear 2026.94 (MIT): dropbear, dbclient, dropbearkey, scp
+
+The configuration `tools/dropbear_pxx.py` proved under pxx: `--disable-zlib`
+and no login records (utmp/wtmp/lastlog off), `CFLAGS=-Os`. libtommath keeps
+its 64-bit digits with the `mode(TI)` 128-bit word. gen.tar holds config.h
+and `default_options_guard.h`. 647 units are recorded, but each program
+links only its own objects plus the libtomcrypt/libtommath members gcc's
+linker pulled, read from a `-Wl,-Map` link map (dropbear 213 objects,
+dbclient 209, dropbearkey 157, scp 6). `pxx --link` takes objects, and the
+two archives hold ~560 members. `-D_FORTIFY_SOURCE` is dropped from the
+flags. `.tar.bz2`: toybox's bzcat or the bzip2 recipe's.
+
+`test.sh` runs `tools/dropbear_pxx.py --bindir` on the on-site build AND on
+gcc's build (33 rows each, both must be GREEN). That covers host keys that
+ssh-keygen reads, OpenSSH logging in per cipher/MAC/kex/host-key type
+(sntrup761 and ML-KEM hybrids included), 1 MiB each way, a pty session, scp
+both ways with the stock client and with the pxx scp as the client, and the
+pxx dbclient against a stock sshd.
+
+`units-from-make.sh` keeps a directory stack now: dropbear links at the top
+after its libtomcrypt/libtommath sub-makes, and the commands after `Leaving
+directory` used to resolve inside the last sub-directory (xz, dhcpcd and zstd
+output is byte-identical).
