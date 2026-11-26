@@ -3,13 +3,15 @@ slug: feature-t-enrol-test-wasm32-in-a-tier-so-something-samples-the-backend
 track: T
 type: feature
 prio: 45
-status: backlog
+status: low-prio
 found: 2026-09-05
 found-by: frankwasm, filed by frank-coordinator
 owner: ""
 blocked-by: []
 summary: "`test-wasm32` exists (`a6d7bfc08`, 2026-09-02) and appears in NO tier: `grep -c wasm tools/testmgr.py` is 0, and `gate.sh` names wasm only in two comments. So wasm32 is sampled by nothing -- not the inner loop and not the watcher -- while being a real backend with a target number, a runner arm and 22 of 27 measured-green rows. The cost is not tidiness: frankD's wasm32 defect is a name scan that stops matching silently, producing a module that compiles `ok:`, links, and traps at run time on a host function it never imported, at byte-identical size to a program that never touches a file. A silent-wrong-answer class behind a green, in the one backend nothing samples. frankwasm landed two import-asserting rows in `test-quick` (no wasmtime needed) and stopped at enrollment because that is a Track T cost judgement, not its call -- and because the hook denies `make test*`, so it could not verify `test-wasm32` passes and declined to go around the guard. VERIFIED 2026-09-05 by frankD: `test-wasm32` is GREEN -- 53 rows, exit 0, at 4ef367091 / binary 25113fd3. AND ENROLLING IT TODAY IS STILL WRONG, for a reason this ticket did not have: the harness CANNOT TELL A HOST GAP FROM A REGRESSION. `run_target.sh` signals a missing runtime well (distinct RUNNER-ABSENT text on both streams, exit 2), the Makefile rows discard that exit code through command substitution, `expect_same.sh` compares the RUNNER-ABSENT TEXT against expected output and reports MISMATCH exit 1, and `grep -n RUNNER-ABSENT tools/testmgr.py` returns NOTHING. So a missing runtime auto-files as a compiler regression -- not wasm32-specific, every qemu arm reaches `runner_absent` the same way. Enrolling in `full` today reproduces the six-regressions-in-one-run incident on seven BY CONSTRUCTION. The blocker is SKIP ACCOUNTING, a Track T design call, not wiring. RE-MEASURED 2026-09-06 at d11b8a1a9: still green, 53 rows, MAKE_EXIT=0. AND THE JOB IS BIGGER THAN THIS TICKET SAID: `test/wasm/check_all.sh` is a SECOND suite, 42 checks, invoked from NOWHERE outside `test/wasm/` -- no Makefile target, no tier, no script -- so wiring `test-wasm32` alone still leaves the larger of the two unwired."
 ---
+
+> **LOW-PRIO, OWNER 2026-11-26:** *"wasm not important."* Kept, not rejected.
 
 # Enrol `test-wasm32` in a tier so something samples the backend
 
