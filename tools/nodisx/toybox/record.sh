@@ -8,7 +8,7 @@
 # host, and travel in the recipe as gen.tar; the target never runs make.sh.
 #
 # The configuration is `make defconfig` plus CONFIG_GZIP (defconfig leaves it
-# off; GUNZIP and ZCAT come with it): the applets Nodisx's on-site builds use
+# off; GUNZIP and ZCAT come with it), TR and XZCAT (below): the applets Nodisx's on-site builds use
 # are all in it -- tar, gzip/zcat, bzcat, sed, sort, grep, cut, find, stat,
 # sha256sum, readlink, cp, mv, chmod, mkdir, patch, mount, vi.
 #
@@ -33,9 +33,18 @@ mkdir -p "$REF" "$R"
 tar -xzf "$W/dl/$TARBALL" -C "$REF" --strip-components=1
 cd "$REF"
 make defconfig > "$W/toybox-defconfig.log" 2>&1
-sed -i 's/^# CONFIG_GZIP is not set$/CONFIG_GZIP=y/' .config
+# GZIP (defconfig leaves it off), and from pending/ TR and XZCAT: the
+# recipes' onsite.sh use tr, and xz's own source is a .tar.xz, so the
+# bootstrap toybox must unpack it before any xz exists. Found by the first
+# on-site build inside Rainyday (test-onsite-rainyday.sh), where the host's
+# tr and xzcat were not there to hide it.
+for c in GZIP TR XZCAT; do
+  sed -i "s/^# CONFIG_$c is not set\$/CONFIG_$c=y/" .config
+done
 make oldconfig < /dev/null > "$W/toybox-oldconfig.log" 2>&1
-grep -q '^CONFIG_GZIP=y' .config || { echo "record: CONFIG_GZIP did not stick" >&2; exit 1; }
+for c in GZIP TR XZCAT; do
+  grep -q "^CONFIG_$c=y" .config || { echo "record: CONFIG_$c did not stick" >&2; exit 1; }
+done
 # gcc reference build; its V=1 log holds every compile line
 CPUS=${JOBS:-3} make V=1 toybox > "$W/toybox-gccbuild.log" 2>&1
 [ -x toybox ] || { echo "record: the gcc build made no toybox" >&2; exit 1; }
