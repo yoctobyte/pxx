@@ -11764,6 +11764,12 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# compiler constants (__pxxTlsFsEntrySlotOff, ...) fold in a `const`
+	# declaration, and so every BSD's ABI translator compiles: a small program for
+	# each --os (9b65baca4d broke netbsd, openbsd and dragonfly; nothing here built one)
+	./$(COMPILER) test/test_compiler_constants_in_const_decls.pas $(TESTTMP)/p_ccconst26 > /dev/null
+	tools/expect_same.sh p_ccconst26 "$$($(TESTTMP)/p_ccconst26)" "compiler constants fold in const declarations: yes"
+	for os in freebsd netbsd openbsd dragonfly; do ./$(COMPILER) --os=$$os test/test_compiler_constants_in_const_decls.pas $(TESTTMP)/p_ccconst26_$$os > /dev/null || exit 1; done
 	# A DCE-cut BACKWARD call kept its recorded target, which after compaction was the
 	# caller itself: PXXClassFinalize called PXXClassFinalize on every Free of a class
 	# with a managed field on ESP (json.loads on an ESP32-C3, rfid project). Checked

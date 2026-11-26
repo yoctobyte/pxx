@@ -799,6 +799,27 @@ begin
   CurASTNode := n;
 end;
 
+{ The compiler constants a Pascal source may READ (__pxxTlsBlockSize and the
+  TLS slot offsets, __pxxSigAltStackSize): True, with the value, when name is
+  one. ONE table for both places that fold them -- an expression, and a
+  `const` declaration (ConstEvalFactor). The second was missing: the ABI
+  translators' `NB_TLS_SLOT_CTID = __pxxTlsFsEntrySlotOff div 8` (9b65baca4d)
+  was "not a constant", and only a --os=netbsd / openbsd / dragonfly build
+  compiles them, so nothing in the Linux suites saw it.
+  bug-p-a-compiler-tls-constant-is-not-a-constant-in-a-const-declaration }
+function PasCompilerConstBuiltin(const name: AnsiString; var v: Int64): Boolean;
+begin
+  Result := True;
+  if CaseEqual(name, '__pxxTlsBlockSize') then v := TlsBlockSize
+  else if CaseEqual(name, '__pxxTlsUserOff') then v := TLS_USER_FIRST_OFF
+  else if CaseEqual(name, '__pxxTlsUserBytes') then v := TlsUserBytes
+  else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then v := 8 * TLS_SLOT_INIT_IMAGE
+  else if CaseEqual(name, '__pxxTlsFsEntrySlotOff') then v := 8 * TLS_SLOT_FS_ENTRY
+  else if CaseEqual(name, '__pxxTlsOwnerFsSlotOff') then v := 8 * TLS_SLOT_OWNER_FS
+  else if CaseEqual(name, '__pxxSigAltStackSize') then v := SIG_ALTSTACK_SIZE
+  else Result := False;
+end;
+
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     soTmp, soAsn: Integer;   { SysOpen of an element path: the hidden AnsiString copy and its store }
@@ -4437,10 +4458,7 @@ begin
         Exit;
       end;
 
-      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize')
-         or CaseEqual(name, '__pxxTlsUserOff') or CaseEqual(name, '__pxxTlsUserBytes')
-         or CaseEqual(name, '__pxxTlsInitImageSlotOff') or CaseEqual(name, '__pxxTlsFsEntrySlotOff')
-         or CaseEqual(name, '__pxxTlsOwnerFsSlotOff') then
+      if PasCompilerConstBuiltin(name, i64v) then
       begin
         { The two sizes the clone stub carves off a child stack, as compile-time
           constants the RTL can READ instead of restating.
@@ -4458,13 +4476,7 @@ begin
           bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
         { The other three are what a trampoline needs to start a block from the
           init image (TLS_SLOT_INIT_IMAGE), for the same no-restating reason. }
-        if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TlsBlockSize
-        else if CaseEqual(name, '__pxxTlsUserOff') then i64v := TLS_USER_FIRST_OFF
-        else if CaseEqual(name, '__pxxTlsUserBytes') then i64v := TlsUserBytes
-        else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then i64v := 8 * TLS_SLOT_INIT_IMAGE
-        else if CaseEqual(name, '__pxxTlsFsEntrySlotOff') then i64v := 8 * TLS_SLOT_FS_ENTRY
-        else if CaseEqual(name, '__pxxTlsOwnerFsSlotOff') then i64v := 8 * TLS_SLOT_OWNER_FS
-        else i64v := SIG_ALTSTACK_SIZE;
+        { (the values: PasCompilerConstBuiltin, shared with ConstEvalFactor) }
         Next;
         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
         node := AllocNode(AN_INT_LIT);
@@ -13199,6 +13211,15 @@ begin
     r := Length(CurTok.SVal);
     Next;
     Expect(tkRParen, ')');
+  end
+  else if (CurTok.Kind = tkIdent) and PasCompilerConstBuiltin(CurTok.SVal, r) then
+  begin
+    { a compiler constant (__pxxTlsFsEntrySlotOff, ...), with or without the
+      `()` the expression form accepts, exactly as the expression form folds it }
+    Next;
+    if (CurTok.Kind = tkLParen) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkRParen) then begin Next; Next; end;
+    CEOrdTk := tyInteger; CEEnumId := -1;
   end
   else if CurTok.Kind = tkIdent then
   begin
