@@ -18,8 +18,12 @@ unit softfloat;
     - no `div`/`mod` operator (xtensa LX6 has no HW divide) — division is an
       explicit restoring shift-subtract loop, like __pxx_udivsi3 in builtinheap;
     - round-to-nearest-even; inf / NaN / signed-zero handled;
-    - subnormals flush to zero (documented follow-up — mul/div *rounding* of
-      normal results is still correct, which is what decimal output depends on).
+    - subnormals are IEEE gradual underflow, in and out (they were flushed to
+      zero until bug-a-riscv32-softfloat-has-no-subnormals: Exp(-745) was 0 and
+      (1e-320 * 0.5) * 2.0 lost the value). An input is unpacked with exponent 1
+      and no implicit bit (add) or normalised (mul/div); the round-and-pack step
+      shifts a result below the normal range right to exponent 0 and rounds it
+      there, so a carry out of that rounding is the smallest normal.
 
   Validate STANDALONE on x86-64: a test program calls these directly and diffs
   the result bit patterns against native arithmetic over a value grid. }
@@ -91,20 +95,42 @@ end;
   (leading significand bit nominally at position 26). The normalize loops make it
   robust to addition carry (m >= 2^27) and cancellation (m < 2^26). }
 function sRoundPack(sign: Integer; exp: Integer; m: Int64): LongWord;
-var roundBit, sticky, lsb: Int64;
+var roundBit, sticky, lsb: Int64; subn: Boolean;
 begin
   if m = 0 then begin Result := LongWord(sign) shl 31; Exit; end;  { signed zero }
   while m >= (Int64(1) shl 27) do begin m := sShiftRightSticky(m, 1); exp := exp + 1; end;
   while m < (Int64(1) shl 26) do begin m := m shl 1; exp := exp - 1; end;
+  subn := exp <= 0;
+  if subn then m := sShiftRightSticky(m, 1 - exp);   { to exponent 0, sticky kept }
   roundBit := (m shr 2) and 1;
   sticky := m and 3;
   m := m shr 3;                 { drop the 3 guard bits -> 24-bit significand }
   lsb := m and 1;
   if (roundBit = 1) and ((sticky <> 0) or (lsb = 1)) then m := m + 1;
+  if subn then
+  begin
+    { m < 2^24; m = 2^23 after a carry is the smallest normal, and the plain
+      OR below encodes exactly that (bit 23 is the exponent field's bit 0) }
+    Result := (LongWord(sign) shl 31) or LongWord(m);
+    Exit;
+  end;
   if m >= (Int64(1) shl 24) then begin m := m shr 1; exp := exp + 1; end;  { round carry }
   if exp >= 255 then begin Result := (LongWord(sign) shl 31) or S_INF; Exit; end;  { overflow }
-  if exp <= 0 then begin Result := LongWord(sign) shl 31; Exit; end;  { underflow -> signed 0 }
   Result := (LongWord(sign) shl 31) or (LongWord(exp) shl 23) or (LongWord(m) and $7FFFFF);
+end;
+
+{ Significand of a finite nonzero single with the leading bit at 23, and its
+  exponent (below 1 for a subnormal). }
+procedure sUnpack(a: LongWord; var e: Integer; var m: Int64);
+begin
+  e := (a shr 23) and $FF;
+  m := a and $7FFFFF;
+  if e = 0 then
+  begin
+    e := 1;
+    while m < (Int64(1) shl 23) do begin m := m shl 1; e := e - 1; end;
+  end
+  else m := m or (Int64(1) shl 23);
 end;
 
 function sIsNaN(a: LongWord): Boolean;
@@ -136,8 +162,8 @@ begin
   sb := (b shr 31) and 1;
   ea := (a shr 23) and $FF;
   eb := (b shr 23) and $FF;
-  if ea = 0 then begin ma := 0; ea := 1; end else ma := (Int64(1) shl 23) or (a and $7FFFFF);
-  if eb = 0 then begin mb := 0; eb := 1; end else mb := (Int64(1) shl 23) or (b and $7FFFFF);
+  if ea = 0 then begin ma := a and $7FFFFF; ea := 1; end else ma := (Int64(1) shl 23) or (a and $7FFFFF);
+  if eb = 0 then begin mb := b and $7FFFFF; eb := 1; end else mb := (Int64(1) shl 23) or (b and $7FFFFF);
 
   ma := ma shl 3;               { make room for guard/round/sticky }
   mb := mb shl 3;
@@ -184,11 +210,10 @@ begin
     else Result := (LongWord(resSign) shl 31) or S_INF;
     Exit;
   end;
-  ea := (a shr 23) and $FF;
-  eb := (b shr 23) and $FF;
-  if (ea = 0) or (eb = 0) then begin Result := LongWord(resSign) shl 31; Exit; end;  { 0/subn -> signed 0 }
-  ma := (Int64(1) shl 23) or (a and $7FFFFF);
-  mb := (Int64(1) shl 23) or (b and $7FFFFF);
+  if ((a and $7FFFFFFF) = 0) or ((b and $7FFFFFFF) = 0) then
+  begin Result := LongWord(resSign) shl 31; Exit; end;      { 0 -> signed 0 }
+  sUnpack(a, ea, ma);
+  sUnpack(b, eb, mb);
   prod := ma * mb;              { in [2^46, 2^48) }
   resExp := ea + eb - 127;
   if prod >= (Int64(1) shl 47) then begin resExp := resExp + 1; shift := 47 - 26; end
@@ -211,17 +236,15 @@ begin
     Exit;
   end;
   if sIsInf(b) then begin Result := LongWord(resSign) shl 31; Exit; end;  { finite/inf -> 0 }
-  ea := (a shr 23) and $FF;
-  eb := (b shr 23) and $FF;
-  if eb = 0 then               { divisor is +-0 (subnormal flushed) }
+  if (b and $7FFFFFFF) = 0 then  { divisor is +-0 }
   begin
-    if ea = 0 then Result := S_QNAN                           { 0 / 0 }
+    if (a and $7FFFFFFF) = 0 then Result := S_QNAN            { 0 / 0 }
     else Result := (LongWord(resSign) shl 31) or S_INF;       { x / 0 -> inf }
     Exit;
   end;
-  if ea = 0 then begin Result := LongWord(resSign) shl 31; Exit; end;     { 0 / x -> 0 }
-  ma := (Int64(1) shl 23) or (a and $7FFFFF);
-  mb := (Int64(1) shl 23) or (b and $7FFFFF);
+  if (a and $7FFFFFFF) = 0 then begin Result := LongWord(resSign) shl 31; Exit; end;  { 0 / x -> 0 }
+  sUnpack(a, ea, ma);
+  sUnpack(b, eb, mb);
   resExp := ea - eb + 126;
   { Restoring shift-subtract needs the partial remainder < divisor each step, so
     the dividend must start below the divisor. Both significands have their
@@ -322,6 +345,18 @@ begin
   Result := D_EXPF or (Int64(1) shl 51);
 end;
 
+procedure dUnpack(a: Int64; var e: Integer; var m: Int64);
+begin
+  e := (a shr 52) and $7FF;
+  m := a and D_MANT;
+  if e = 0 then
+  begin
+    e := 1;
+    while m < (Int64(1) shl 52) do begin m := m shl 1; e := e - 1; end;
+  end
+  else m := m or (Int64(1) shl 52);
+end;
+
 function dIsNaN(a: Int64): Boolean;
 begin
   Result := (((a shr 52) and $7FF) = $7FF) and ((a and D_MANT) <> 0);
@@ -335,19 +370,25 @@ end;
 { Normalize + round-to-nearest-even + repack a double result. m holds the 53-bit
   significand at bits 55..3 with 3 guard bits below; exp is its biased exponent. }
 function dRoundPack(sign: Integer; exp: Integer; m: Int64): Int64;
-var roundBit, sticky, lsb: Int64;
+var roundBit, sticky, lsb: Int64; subn: Boolean;
 begin
   if m = 0 then begin Result := Int64(sign) shl 63; Exit; end;
   while m >= (Int64(1) shl 56) do begin m := sShiftRightSticky(m, 1); exp := exp + 1; end;
   while m < (Int64(1) shl 55) do begin m := m shl 1; exp := exp - 1; end;
+  subn := exp <= 0;
+  if subn then m := sShiftRightSticky(m, 1 - exp);   { to exponent 0, sticky kept }
   roundBit := (m shr 2) and 1;
   sticky := m and 3;
   m := m shr 3;
   lsb := m and 1;
   if (roundBit = 1) and ((sticky <> 0) or (lsb = 1)) then m := m + 1;
+  if subn then
+  begin
+    Result := (Int64(sign) shl 63) or m;    { m = 2^52 is the smallest normal }
+    Exit;
+  end;
   if m >= (Int64(1) shl 53) then begin m := m shr 1; exp := exp + 1; end;
   if exp >= 2047 then begin Result := (Int64(sign) shl 63) or D_EXPF; Exit; end;
-  if exp <= 0 then begin Result := Int64(sign) shl 63; Exit; end;
   Result := (Int64(sign) shl 63) or (Int64(exp) shl 52) or (m and D_MANT);
 end;
 
@@ -369,8 +410,8 @@ begin
   sb := (b shr 63) and 1;
   ea := (a shr 52) and $7FF;
   eb := (b shr 52) and $7FF;
-  if ea = 0 then begin ma := 0; ea := 1; end else ma := (Int64(1) shl 52) or (a and D_MANT);
-  if eb = 0 then begin mb := 0; eb := 1; end else mb := (Int64(1) shl 52) or (b and D_MANT);
+  if ea = 0 then begin ma := a and D_MANT; ea := 1; end else ma := (Int64(1) shl 52) or (a and D_MANT);
+  if eb = 0 then begin mb := b and D_MANT; eb := 1; end else mb := (Int64(1) shl 52) or (b and D_MANT);
 
   ma := ma shl 3;
   mb := mb shl 3;
@@ -416,11 +457,10 @@ begin
     else Result := (Int64(resSign) shl 63) or D_EXPF;
     Exit;
   end;
-  ea := (a shr 52) and $7FF;
-  eb := (b shr 52) and $7FF;
-  if (ea = 0) or (eb = 0) then begin Result := Int64(resSign) shl 63; Exit; end;
-  ma := (Int64(1) shl 52) or (a and D_MANT);
-  mb := (Int64(1) shl 52) or (b and D_MANT);
+  if ((a and ((Int64(1) shl 63) - 1)) = 0) or ((b and ((Int64(1) shl 63) - 1)) = 0) then
+  begin Result := Int64(resSign) shl 63; Exit; end;         { 0 -> signed 0 }
+  dUnpack(a, ea, ma);
+  dUnpack(b, eb, mb);
   M26 := (Int64(1) shl 26) - 1;
   a1 := ma shr 26; a0 := ma and M26;
   b1 := mb shr 26; b0 := mb and M26;
@@ -455,17 +495,15 @@ begin
     Exit;
   end;
   if dIsInf(b) then begin Result := Int64(resSign) shl 63; Exit; end;
-  ea := (a shr 52) and $7FF;
-  eb := (b shr 52) and $7FF;
-  if eb = 0 then
+  if (b and ((Int64(1) shl 63) - 1)) = 0 then
   begin
-    if ea = 0 then Result := dQNAN
+    if (a and ((Int64(1) shl 63) - 1)) = 0 then Result := dQNAN
     else Result := (Int64(resSign) shl 63) or D_EXPF;
     Exit;
   end;
-  if ea = 0 then begin Result := Int64(resSign) shl 63; Exit; end;
-  ma := (Int64(1) shl 52) or (a and D_MANT);
-  mb := (Int64(1) shl 52) or (b and D_MANT);
+  if (a and ((Int64(1) shl 63) - 1)) = 0 then begin Result := Int64(resSign) shl 63; Exit; end;
+  dUnpack(a, ea, ma);
+  dUnpack(b, eb, mb);
   resExp := ea - eb + 1022;
   if ma >= mb then begin mb := mb shl 1; resExp := resExp + 1; end;
   { 56 quotient bits (53 significand + guard/round/sticky); no div operator }
@@ -642,7 +680,14 @@ begin
   sign := (a shr 31) and 1;
   exp := (a shr 23) and $FF;
   frac := a and $7FFFFF;
-  if exp = 0 then begin Result := Int64(sign) shl 63; Exit; end;   { zero / subnormal flush }
+  if (exp = 0) and (frac = 0) then begin Result := Int64(sign) shl 63; Exit; end;  { +-0 }
+  if exp = 0 then
+  begin
+    { a subnormal single is a normal double: normalise the fraction }
+    exp := 1;
+    while (frac and $800000) = 0 do begin frac := frac shl 1; exp := exp - 1; end;
+    frac := frac and $7FFFFF;
+  end;
   if exp = 255 then
   begin
     if frac <> 0 then Result := dQNAN                              { NaN }
@@ -658,7 +703,8 @@ var sign, exp, sExp: Integer; m: Int64;
 begin
   sign := (a shr 63) and 1;
   exp := (a shr 52) and $7FF;
-  if exp = 0 then begin Result := LongWord(sign) shl 31; Exit; end;   { zero / subnormal flush }
+  { zero, or a double subnormal: far below half the smallest single subnormal }
+  if exp = 0 then begin Result := LongWord(sign) shl 31; Exit; end;
   if exp = 2047 then
   begin
     if (a and D_MANT) <> 0 then Result := S_QNAN                      { NaN }

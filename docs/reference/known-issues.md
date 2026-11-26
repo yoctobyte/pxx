@@ -22,7 +22,7 @@ details, the measurements and the workarounds.
 
 - Pascal: `SetLength` past a `ShortString` or `string[N]`'s capacity, then filling it, writes over neighbouring variables and can crash (v441 to v451; fixed after v451): [row](#pascal-setlength-past-a-short-strings-capacity-overruns-it)
 - C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
-- riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
+- riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero (up to v455; fixed after v455): [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
 - Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
 - Nil Python: `hex`, `oct` and `bin` of a `**` result past 64 bits: [Nil Python](#nil-python)
 - Nil Python: `atexit.unregister(f)` with a def named directly leaves it registered: [Nil Python](#nil-python)
@@ -130,28 +130,19 @@ code or a file format shares.
 
 ### riscv32 and Xtensa: arithmetic flushes subnormal doubles to zero
 
-On riscv32 and Xtensa (both ABIs), double arithmetic runs in software
-(`compiler/builtin/softfloat.pas`), which flushes subnormal numbers, the
-values below about 2.2e-308, to zero. Every operation with a subnormal
-operand returns zero (`x * 1.0`, `x + x`, `x - 0.0`, `x / 1.0`), and so does
-every result that would be subnormal (`1e-300 * 1e-10`). Comparing, copying
-and storing a subnormal are exact. So `if x > 0.0 then y := x * 1.0` can give
-a zero `y` for an `x` the same program found to be above zero. Nil Python's
-`math.frexp(5e-324)` gives `(0.5, -1086)` there, where CPython gives
-`(0.5, -1073)`. This is the documented behaviour of that software arithmetic,
-stated in the unit's header, not a crash, and flush-to-zero is a common mode
-on small devices. x86-64, i386, arm32, aarch64 and wasm32 use the hardware or
-host arithmetic and keep subnormals. Measured on 2026-09-28 with v450
-(`c19cc2d531e4`) on x86-64 and under QEMU user mode for the others
-(`wasmtime` for wasm32), with a subnormal built from its bit pattern at run
-time; the same on riscv32 with v441 (`4ebfa2d047a2`) and with the compiler
-built at `fce510f98d` (`f545c8410b32`). The ESP32-C3 and ESP32-S3 use these
-two backends, and with v450 the same program gives the same answers as an
-ESP-IDF image under Espressif's QEMU on both chips (`tools/esp_run.sh`); it
-was not run on a board. **If it matters:**
-keep intermediate values above 2.2e-308, for example by working in scaled
-units. A value that is already subnormal cannot be scaled back up on these
-targets, because the scaling is itself arithmetic on it.
+**Fixed after v455** (`bug-a-riscv32-softfloat-has-no-subnormals`, 2026-11-26).
+Up to v455, on riscv32 and Xtensa (both ABIs) double arithmetic, and single
+arithmetic on riscv32, ran in software (`compiler/builtin/softfloat.pas`)
+that flushed subnormal numbers, the values below about 2.2e-308 (1.2e-38 for
+single), to zero: every operation with a subnormal operand, and every result
+that would be subnormal (`1e-300 * 1e-10`), returned zero. `Exp(-745)` gave
+0 and Nil Python's `math.frexp(5e-324)` gave `(0.5, -1086)` instead of
+`(0.5, -1073)`. The software arithmetic now does IEEE gradual underflow, bit
+for bit what x86-64's hardware gives over a sweep of a million operand pairs,
+so all eight targets agree. The cost is code, not RAM: about 0.9 KB of flash
+on the ESP32-C3 and 1.7 KB on the ESP32-S3 when a program uses every
+software float routine. **With v455 or older:** keep intermediate values
+above 2.2e-308, for example by working in scaled units.
 
 ## Stops at run time
 

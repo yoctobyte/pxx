@@ -16,28 +16,32 @@ type
   PSingle = ^Single;
 
 const
-  NGRID = 21;
+  NGRID = 26;
 
 var
   grid: array[0..NGRID-1] of Int64;
   failAdd, failSub, failMul, failDiv, failCmp: Integer;
   rngState: LongWord;
+  repackFails: Integer;
 
 function dIsNaNBits(w: Int64): Boolean;
 begin
   dIsNaNBits := (((w shr 52) and $7FF) = $7FF) and ((w and ((Int64(1) shl 52) - 1)) <> 0);
 end;
 
-{ subnormal double (exp field 0, non-zero mantissa) — kernel flushes these to 0 }
+{ subnormal double (exp field 0, non-zero mantissa) }
 function dIsSubnormal(w: Int64): Boolean;
 begin
   dIsSubnormal := (((w shr 52) and $7FF) = 0) and ((w and ((Int64(1) shl 52) - 1)) <> 0);
 end;
 
 { documented flush-to-zero: kernel returns signed 0 where native rounded subnormal }
+{ The kernels used to flush subnormals to zero and this forgave it. They are
+  gradual now (bug-a-riscv32-softfloat-has-no-subnormals), so nothing is
+  forgiven: a flush is a failure of the operation it came from. }
 function dFlushOK(soft: Int64; nat: Int64): Boolean;
 begin
-  dFlushOK := ((soft and ((Int64(1) shl 63) - 1)) = 0) and dIsSubnormal(nat);
+  dFlushOK := False;
 end;
 
 procedure InitGrid;
@@ -63,6 +67,11 @@ begin
   grid[18] := Int64($FFF0000000000000);   { -Inf }
   grid[19] := Int64($7FF8000000000000);   { NaN }
   grid[20] := $3FF8000000000000;   { 1.5 }
+  grid[21] := $0000000000000001;   { smallest subnormal, 5e-324 }
+  grid[22] := $000FFFFFFFFFFFFF;   { largest subnormal }
+  grid[23] := $0010000000000000;   { smallest normal }
+  grid[24] := Int64($8008000000000000);   { -subnormal, half the range }
+  grid[25] := $3CB0000000000000;   { 2^-52: scales normals into the subnormals }
 end;
 
 function NextRand: LongWord;
@@ -80,6 +89,29 @@ begin
   mant := ((Int64(NextRand) and $FFFFF) shl 32) or (Int64(NextRand) and $FFFFFFFF);
   sgn := NextRand and 1;
   RandNormalDouble := (sgn shl 63) or (e shl 52) or mant;
+end;
+
+{ A double near the bottom of the range: subnormal (exp field 0) or a normal
+  whose exponent is within 60 of it, so sums, differences and quotients land
+  in, and come out of, the subnormal range. }
+function RandTinyDouble: Int64;
+var e, sgn, mant: Int64;
+begin
+  e := NextRand mod 61;
+  mant := ((Int64(NextRand) and $FFFFF) shl 32) or (Int64(NextRand) and $FFFFFFFF);
+  if (e = 0) and (mant = 0) then mant := 1;
+  sgn := NextRand and 1;
+  RandTinyDouble := (sgn shl 63) or (e shl 52) or mant;
+end;
+
+{ A double within 2^60 of 1, for tiny * near-one and tiny / near-one. }
+function RandNearOneDouble: Int64;
+var e, sgn, mant: Int64;
+begin
+  e := 1023 - 60 + Int64(NextRand mod 121);
+  mant := ((Int64(NextRand) and $FFFFF) shl 32) or (Int64(NextRand) and $FFFFFFFF);
+  sgn := NextRand and 1;
+  RandNearOneDouble := (sgn shl 63) or (e shl 52) or mant;
 end;
 
 procedure CheckOne(ba: Int64; bb: Int64);
@@ -183,12 +215,31 @@ begin
     sv := dv;                       { native double -> single (rounds) }
     pl := PLongWord(@sv); d2sExp := pl^;
     sb := __pxx_d2s(db);
-    { tolerate subnormal flush (soft -> signed zero where native subnormal) }
-    if (sb <> d2sExp) and
-       not (((sb and $7FFFFFFF) = 0) and (((d2sExp and $7F800000) = 0) and ((d2sExp and $7FFFFF) <> 0))) then
+    if sb <> d2sExp then
     begin fails := fails + 1; if fails <= 12 then writeln('D2S db=', db, ' s=', sb, ' n=', d2sExp); end;
+
+    { d2s into the single subnormals: exponents around single's bottom }
+    db := ((Int64(NextRand) and 1) shl 63) or (Int64(1023 - 155 + Int64(NextRand mod 40)) shl 52) or
+          (((Int64(NextRand) and $FFFFF) shl 32) or (Int64(NextRand) and $FFFFFFFF));
+    pi := PInt64(@dv); pi^ := db;
+    sv := dv;
+    pl := PLongWord(@sv); d2sExp := pl^;
+    sb := __pxx_d2s(db);
+    if sb <> d2sExp then
+    begin fails := fails + 1; if fails <= 12 then writeln('D2Ssub db=', db, ' s=', sb, ' n=', d2sExp); end;
+
+    { s2d of a subnormal single }
+    sb := ((NextRand and 1) shl 31) or (NextRand and $7FFFFF);
+    if (sb and $7FFFFF) = 0 then sb := sb or 1;
+    pl := PLongWord(@sv); pl^ := sb;
+    dv := sv;
+    pi := PInt64(@dv); s2dExp := pi^;
+    db := __pxx_s2d(sb);
+    if db <> s2dExp then
+    begin fails := fails + 1; if fails <= 12 then writeln('S2Dsub sb=', sb, ' s=', db, ' n=', s2dExp); end;
   end;
   writeln('repack fails: ', fails);
+  repackFails := fails;
 end;
 
 procedure CheckRandom(n: Integer);
@@ -199,6 +250,9 @@ begin
     ba := RandNormalDouble;
     bb := RandNormalDouble;
     CheckOne(ba, bb);
+    CheckOne(RandTinyDouble, RandTinyDouble);
+    CheckOne(RandTinyDouble, RandNearOneDouble);
+    CheckOne(RandNearOneDouble, RandTinyDouble);
   end;
 end;
 
@@ -223,7 +277,7 @@ begin
   writeln('div fails : ', failDiv);
   writeln('cmp fails : ', failCmp);
   if (failAdd = 0) and (failSub = 0) and (failMul = 0) and
-     (failDiv = 0) and (failCmp = 0) then
+     (failDiv = 0) and (failCmp = 0) and (repackFails = 0) then
     writeln('RESULT: PASS')
   else
     writeln('RESULT: FAIL');

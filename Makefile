@@ -27705,6 +27705,11 @@ test-core: $(COMPILER)
 	# same subject from the other end -- what a Pascal program's `*`, `+`, `-` and
 	# `/` actually return on each backend.
 	#
+	# 2026-11-26: ALL SEVEN ARE GRADUAL NOW. The owner chose gradual underflow
+	# for softfloat (bug-a-riscv32-softfloat-has-no-subnormals); riscv32 and
+	# xtensa flipped from `flush` below, and the two sweeps above stopped
+	# forgiving a flush. What follows is the history of the flush.
+	#
 	# riscv32 and xtensa FLUSH: every operation with a subnormal operand, and
 	# every result underflowing into the subnormal range, returns zero. That is
 	# not news to compiler/builtin/softfloat.pas, whose header has said
@@ -27763,11 +27768,11 @@ test-core: $(COMPILER)
 	    wasm32)  want=gradual; \
 	             ./$(COMPILER) --target=wasm32 test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm.wasm >/dev/null || { echo "subnormal wasm32 compile FAIL"; exit 1; }; \
 	             bin=$(TESTTMP)/subnorm.wasm; run="tools/run_target.sh wasm32";; \
-	    xtensa)  want=flush; \
+	    xtensa)  want=gradual; \
 	             command -v qemu-xtensa >/dev/null 2>&1 || { echo "  subnormal: qemu-xtensa absent, xtensa NOT verified"; continue; }; \
 	             ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm_xt >/dev/null || { echo "subnormal xtensa compile FAIL"; exit 1; }; \
 	             bin=$(TESTTMP)/subnorm_xt; run="tools/run_target.sh xtensa";; \
-	    *)       case $$t in i386) q=qemu-i386; want=gradual;; arm32) q=qemu-arm; want=gradual;; aarch64) q=qemu-aarch64; want=gradual;; riscv32) q=qemu-riscv32; want=flush;; esac; \
+	    *)       case $$t in i386) q=qemu-i386; want=gradual;; arm32) q=qemu-arm; want=gradual;; aarch64) q=qemu-aarch64; want=gradual;; riscv32) q=qemu-riscv32; want=gradual;; esac; \
 	             command -v $$q >/dev/null 2>&1 || { echo "  subnormal: $$q absent, $$t NOT verified"; continue; }; \
 	             ./$(COMPILER) --target=$$t --platform=posix test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm_$$t >/dev/null || { echo "subnormal $$t compile FAIL"; exit 1; }; \
 	             bin=$(TESTTMP)/subnorm_$$t; run="tools/run_target.sh $$t";; \

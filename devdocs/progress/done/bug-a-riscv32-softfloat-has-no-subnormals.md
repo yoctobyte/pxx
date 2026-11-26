@@ -1,9 +1,11 @@
 ---
+status: done
+owner: claude-dupwt
 track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "RE-LANED OUT OF float/ 2026-09-10: the MECHANISM is a missing capability in the target soft-float runtime, not an accuracy gap, and CLAUDE.md already excludes this from F (`NOT F: a crash, hang, wrong signature ... Rank the mechanism, never the datatype'). `Exp(-745) returns 0 where every other target gives a subnormal' is a WRONG ANSWER on a working cross target, and float/ is never scanned by ready/next, so it was unrankable. Dropped the +F tag for the same reason. --- riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct."
+summary: "FIXED 2026-11-26 (owner: 'sounds like a small correctness fix. go ahead'): softfloat does IEEE gradual underflow, single and double; riscv32 AND xtensa (xtensa doubles used the same kernels). --- RE-LANED OUT OF float/ 2026-09-10: the MECHANISM is a missing capability in the target soft-float runtime, not an accuracy gap, and CLAUDE.md already excludes this from F (`NOT F: a crash, hang, wrong signature ... Rank the mechanism, never the datatype'). `Exp(-745) returns 0 where every other target gives a subnormal' is a WRONG ANSWER on a working cross target, and float/ is never scanned by ready/next, so it was unrankable. Dropped the +F tag for the same reason. --- riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct."
 ---
 
 # riscv32: soft-float drops subnormals
@@ -61,3 +63,30 @@ failing points at multiply/scale rather than at conversion.
 <!-- float category -->
 Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
 Collect, do not fix piecemeal; see the working rule there.
+
+
+## Fixed 2026-11-26 (claude-dupwt)
+
+Owner's call, asked 11-25: fix it if the flash cost is small. It is, and
+RAM is untouched.
+
+- `compiler/builtin/softfloat.pas`:
+  - add/sub unpack a subnormal operand with exponent 1 and no implicit bit;
+  - mul/div normalise it (`sUnpack`/`dUnpack`);
+  - `sRoundPack`/`dRoundPack` shift a result below the normal range right to
+    exponent 0 with sticky and round it there, so a rounding carry encodes the
+    smallest normal;
+  - `s2d` normalises a subnormal single.
+- Both kernel sweeps (`test_softfloat_double/single.pas`) stopped forgiving a
+  flush. Subnormal and smallest-normal operands were added to the grids, and
+  random sweeps at the bottom of the range (tiny op tiny, tiny op near-one,
+  d2s into single subnormals, s2d of subnormal singles). All pass bit for bit
+  against x86-64 hardware. Control: the old kernels fail the new sweeps by
+  thousands per operation (double mul 102,552, repack 80,312).
+- The per-target row in test-core now pins `gradual` for riscv32 and xtensa:
+  `SUBNORMAL-CHECK failures=0` on both under QEMU, and
+  `lib_math_fast_tolerance` reaches `MATHFAST OK` on riscv32.
+- Size, `test_esp_softfloat_probe.pas` bare (every kernel linked): C3 code
+  14,468 -> 15,372 B (+904), S3 29,107 -> 30,787 B (+1,680); data and bss
+  unchanged.
+- docs/reference/known-issues.md: the row says fixed after v455.

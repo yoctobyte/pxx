@@ -13,7 +13,7 @@ type
   PSingle = ^Single;
 
 const
-  NGRID = 21;
+  NGRID = 26;
 
 var
   grid: array[0..NGRID-1] of LongWord;
@@ -41,7 +41,7 @@ begin
   IsNaNBits := ((w and $7F800000) = $7F800000) and ((w and $7FFFFF) <> 0);
 end;
 
-{ subnormal (exp field 0, non-zero mantissa) — these the kernel flushes to 0 }
+{ subnormal (exp field 0, non-zero mantissa) }
 function IsSubnormal(w: LongWord): Boolean;
 begin
   IsSubnormal := ((w and $7F800000) = 0) and ((w and $7FFFFF) <> 0);
@@ -49,9 +49,12 @@ end;
 
 { documented flush-to-zero: kernel returns signed 0 where native rounded into the
   subnormal range }
+{ The kernels are gradual now (bug-a-riscv32-softfloat-has-no-subnormals):
+  a flush is COUNTED and is a failure of its operation, never forgiven. }
 function FlushOK(soft: LongWord; nat: LongWord): Boolean;
 begin
-  FlushOK := ((soft and $7FFFFFFF) = 0) and IsSubnormal(nat);
+  if ((soft and $7FFFFFFF) = 0) and IsSubnormal(nat) then flush := flush + 1;
+  FlushOK := False;
 end;
 
 { unsigned |x - y| on the encodings, for ulp distance of same-sign normals }
@@ -83,6 +86,11 @@ begin
   grid[18] := $FF800000;   { -Inf }
   grid[19] := $7FC00000;   { NaN }
   grid[20] := $42F6E979;   { ~123.456 }
+  grid[21] := $00000001;   { smallest subnormal }
+  grid[22] := $007FFFFF;   { largest subnormal }
+  grid[23] := $00800000;   { smallest normal }
+  grid[24] := $80400000;   { -subnormal, half the range }
+  grid[25] := $34000000;   { 2^-23: scales normals into the subnormals }
 end;
 
 procedure CheckPair(ia: Integer; ib: Integer);
@@ -213,6 +221,26 @@ begin
   RandNormalSingle := (sgn shl 31) or (e shl 23) or mant;
 end;
 
+{ Bottom of the range: subnormal or within 30 exponents of it }
+function RandTinySingle: LongWord;
+var e, mant, sgn: LongWord;
+begin
+  e := NextRand mod 31;
+  mant := NextRand and $7FFFFF;
+  if (e = 0) and (mant = 0) then mant := 1;
+  sgn := NextRand and 1;
+  RandTinySingle := (sgn shl 31) or (e shl 23) or mant;
+end;
+
+function RandNearOneSingle: LongWord;
+var e, mant, sgn: LongWord;
+begin
+  e := 127 - 30 + (NextRand mod 61);
+  mant := NextRand and $7FFFFF;
+  sgn := NextRand and 1;
+  RandNearOneSingle := (sgn shl 31) or (e shl 23) or mant;
+end;
+
 procedure CheckRandom(n: Integer);
 var
   t: Integer;
@@ -222,8 +250,12 @@ var
 begin
   for t := 1 to n do
   begin
-    ba := RandNormalSingle;
-    bb := RandNormalSingle;
+    case t mod 4 of
+      0: begin ba := RandNormalSingle; bb := RandNormalSingle; end;
+      1: begin ba := RandTinySingle; bb := RandTinySingle; end;
+      2: begin ba := RandTinySingle; bb := RandNearOneSingle; end;
+    else begin ba := RandNearOneSingle; bb := RandTinySingle; end;
+    end;
     pf := PLongWord(@fa); pf^ := ba;
     pf := PLongWord(@fb); pf^ := bb;
 
