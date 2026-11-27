@@ -2218,6 +2218,19 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { C23 `true` / `false` (6.4.4.6): keywords, constants of type bool --
+        `sizeof(true)` is 1 and _Generic sees _Bool, which a plain 1 would not
+        give. Being keywords they can name nothing else, so they are caught
+        here, as words, only in C23 mode. feature-c-std-c23 }
+      if CStdC23 and ((name = 'true') or (name = 'false')) then
+      begin
+        node := AllocNode(AN_INT_LIT);
+        if name = 'true' then ASTIVal[node] := 1 else ASTIVal[node] := 0;
+        ASTTk[node] := Ord(tyBool8);
+        Next;
+        Result := node;
+        Exit;
+      end;
       Next;
       { varargs builtins, desugared over stdarg.h's va_list struct + the pure-C
         __pxx_va_* helpers (so the only special codegen is the variadic prologue). }
@@ -23475,6 +23488,15 @@ begin
         if CPlainCharSigned and (Result > 127) then Result := Result - 256;
       end;
     end;
+  end
+  { C23 true/false in a constant expression (a file-scope initializer,
+    an enumerator, a case label): 1 and 0 -- a bool promotes to int, so the
+    value is all a constant needs; ParseCPrimary gives the bool type where it
+    shows. wlroots' util/log.c: `static bool colored = true;`. feature-c-std-c23 }
+  else if CStdC23 and (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'true') or (CurTok.SVal = 'false')) then
+  begin
+    if CurTok.SVal = 'true' then Result := 1 else Result := 0;
+    Next;
   end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin

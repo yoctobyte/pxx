@@ -19837,6 +19837,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_shm_open_dupfd.c $(TESTTMP)/c_shmdup26
 	@gcc -w test/c_shm_open_dupfd.c -o $(TESTTMP)/c_shmdup26_gcc
 	tools/expect_same.sh c_shmdup26 "$$(timeout 20 $(TESTTMP)/c_shmdup26)" "$$(timeout 20 $(TESTTMP)/c_shmdup26_gcc)"
+	# -std=c23 and gnu23 (wlroots): keywords, true/false of type bool, [[attributes]], __has_c_attribute, <stdbool.h>; against gcc -std=c23
+	./$(COMPILER) -std=c23 --no-host-include test/c_std_c23.c $(TESTTMP)/c_c23_26
+	@gcc -std=c23 -w test/c_std_c23.c -o $(TESTTMP)/c_c23_26_gcc
+	tools/expect_same.sh c_c23_26 "$$(timeout 20 $(TESTTMP)/c_c23_26)" "$$(timeout 20 $(TESTTMP)/c_c23_26_gcc)"
+	./$(COMPILER) -std=gnu23 --no-host-include test/c_std_c23.c $(TESTTMP)/c_gnu23_26
+	@gcc -std=gnu23 -w test/c_std_c23.c -o $(TESTTMP)/c_gnu23_26_gcc
+	tools/expect_same.sh c_gnu23_26 "$$(timeout 20 $(TESTTMP)/c_gnu23_26)" "$$(timeout 20 $(TESTTMP)/c_gnu23_26_gcc)"
+	# __VA_OPT__ (every C mode, as gcc): expansion text and wlroots' wlr_log shape, gnu17 and c23; against gcc
+	./$(COMPILER) -std=gnu17 --no-host-include test/c_va_opt.c $(TESTTMP)/c_vaopt26
+	@gcc -std=gnu17 -w test/c_va_opt.c -o $(TESTTMP)/c_vaopt26_gcc
+	tools/expect_same.sh c_vaopt26 "$$(timeout 20 $(TESTTMP)/c_vaopt26)" "$$(timeout 20 $(TESTTMP)/c_vaopt26_gcc)"
+	./$(COMPILER) -std=c23 --no-host-include test/c_va_opt.c $(TESTTMP)/c_vaopt23_26
+	tools/expect_same.sh c_vaopt23_26 "$$(timeout 20 $(TESTTMP)/c_vaopt23_26)" "$$(timeout 20 $(TESTTMP)/c_vaopt26_gcc)"
+	# C23 refusals: an attribute that changes code is named, not dropped; nullptr is not read as anything; c89 is still refused; gnu17 keeps true an int
+	@printf 'struct [[gnu::packed]] s { char c; int i; };\nint main(void){return 0;}\n' > $(TESTTMP)/c_c23ref26a.c
+	@printf 'int main(void){ void *p = nullptr; return p != 0; }\n' > $(TESTTMP)/c_c23ref26b.c
+	@printf '#include <stdbool.h>\n#include <stdio.h>\nint main(void){ printf("%%d\\n", (int)sizeof(true)); return 0; }\n' > $(TESTTMP)/c_c23ref26c.c
+	./$(COMPILER) -std=gnu17 $(TESTTMP)/c_c23ref26c.c $(TESTTMP)/c_c23ref26c
+	tools/expect_same.sh c_c23ref26 "$$(./$(COMPILER) -std=c23 $(TESTTMP)/c_c23ref26a.c $(TESTTMP)/c_c23ref26 2>&1 | grep -c 'gnu::packed]] is not implemented'; ./$(COMPILER) -std=c23 $(TESTTMP)/c_c23ref26b.c $(TESTTMP)/c_c23ref26 2>&1 | grep -c 'undeclared identifier .nullptr. used'; ./$(COMPILER) -std=c89 $(TESTTMP)/c_c23ref26b.c $(TESTTMP)/c_c23ref26 2>&1 | grep -c 'unsupported option: -std=c89'; timeout 20 $(TESTTMP)/c_c23ref26c)" "$$(printf '1\n1\n1\n4')"
 	# --no-host-include refuses a header only the host has, and says so without listing <host system dirs>
 	@printf '#include <gnu/libc-version.h>\nint main(void){return 0;}\n' > $(TESTTMP)/c_nohostref26.c
 	tools/expect_same.sh c_nohostref26 "$$(./$(COMPILER) --no-host-include $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'include file not found' ; PXX_NO_HOST_INCLUDE=1 ./$(COMPILER) $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'host system dirs')" "$$(printf '1\n0')"

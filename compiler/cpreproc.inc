@@ -349,7 +349,8 @@ begin
     `__has_include`: a registered macro would also be expanded in ordinary
     text and in the `#if` operand itself, where `(<endian.h>)` is not something
     macro expansion can survive. }
-  if CPRangeIsLiteral(src, a, b, '__has_include') then
+  if CPRangeIsLiteral(src, a, b, '__has_include') or
+     CPRangeIsLiteral(src, a, b, '__has_c_attribute') then
     Result := True
   else
     Result := CPFindMacro(src, a, b) >= 0;
@@ -1401,6 +1402,46 @@ begin
   CPrepPath := savedPath;
 end;
 
+{ C23 `__has_c_attribute(name)` / `(ns::name)` (6.10.1): what CLexSkipStdAttr
+  will accept -- the standard attributes answer 202311 (gcc 15's value: the
+  standard's, the year C23 was published, for each of them),
+  the gnu:: ones it drops answer 1, anything else 0, and every name 0 outside
+  -std=c23/gnu23, where `[[...]]` is not read at all. Answering yes to an
+  attribute the lexer then refuses would turn a probe into an error.
+  feature-c-std-c23 }
+function CPExprHasCAttribute: Int64;
+var depth: Integer; item, name: AnsiString; k: Integer;
+begin
+  Result := 0;
+  CPSkipExprSpace;
+  if (CPExprPos > CPExprEnd) or (CPExprText[CPExprPos] <> '(') then Exit;
+  Inc(CPExprPos);
+  depth := 1;
+  item := '';
+  while (CPExprPos <= CPExprEnd) and (depth > 0) do
+  begin
+    if CPExprText[CPExprPos] = '(' then Inc(depth)
+    else if CPExprText[CPExprPos] = ')' then Dec(depth)
+    else if CPExprText[CPExprPos] in ['a'..'z', 'A'..'Z', '0'..'9', '_', ':'] then
+      AppendChar(item, CPExprText[CPExprPos]);
+    Inc(CPExprPos);
+  end;
+  if not CStdC23 then Exit;
+  k := Pos('::', item);
+  if k > 0 then name := Copy(item, k + 2, Length(item)) else name := item;
+  if (Length(name) > 4) and (Copy(name, 1, 2) = '__') and (Copy(name, Length(name) - 1, 2) = '__') then
+    name := Copy(name, 3, Length(name) - 4);
+  if k = 0 then
+  begin
+    if (name = 'deprecated') or (name = 'fallthrough') or (name = 'maybe_unused') or
+       (name = 'nodiscard') or (name = 'noreturn') or (name = '_Noreturn') or
+       (name = 'unsequenced') or (name = 'reproducible') then
+      Result := 202311;
+  end
+  else if CStdAttrIgnorable(name) then
+    Result := 1;
+end;
+
 function CPExprAtom: Int64;
 { Sets CPExprUnsigned for the value it produces. Signed is the default: an
   undefined identifier is 0, and `defined(X)` is an int. }
@@ -1513,6 +1554,14 @@ begin
       Result := CPCurLine
     else if CPRangeIsLiteral(CPExprText, a, b, '__has_include') then
       Result := CPExprHasInclude
+    else if CPRangeIsLiteral(CPExprText, a, b, '__has_c_attribute') then
+      Result := CPExprHasCAttribute
+    { C23 6.10.1p11: in #if, `true` is 1 and `false` 0 (they are keywords,
+      not the undefined identifiers that would read as 0). feature-c-std-c23 }
+    else if CStdC23 and CPRangeIsLiteral(CPExprText, a, b, 'true') then
+      Result := 1
+    else if CStdC23 and CPRangeIsLiteral(CPExprText, a, b, 'false') then
+      Result := 0
     else
     begin
       mi := CPFindMacro(CPExprText, a, b);
@@ -1997,14 +2046,27 @@ begin
     if CPrepChars[a + i - 1] <> VA[i] then begin Result := False; Exit; end;
 end;
 
+function CPCharsAre(a: Integer; const w: AnsiString): Boolean;
+{ CPrepChars[a..] spells w }
+var i: Integer;
+begin
+  Result := a + Length(w) - 1 <= High(CPrepChars);
+  if not Result then Exit;
+  for i := 1 to Length(w) do
+    if CPrepChars[a + i - 1] <> w[i] then begin Result := False; Exit; end;
+end;
+
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
 var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
     pasteNext: Boolean;   { previous body token was `##` — next operand is pasted }
     vaEmpty: Boolean;     { `, ## __VA_ARGS__` with no variadic arguments }
     vaSp, vaAny: Boolean; { `#__VA_ARGS__`: white space seen since the last character }
+    vaOptClose, vaDepth: Integer; { `__VA_OPT__(`: where its `)` is, to drop it }
+    vaHas: Boolean;
 begin
   pasteNext := False;
+  vaOptClose := -1;
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * CPREP_ARGS_PER_LEVEL;
   p := CPMValueOff[mi];
@@ -2026,6 +2088,64 @@ begin
         AppendChar(dst, CPrepChars[p]); Inc(p);
       end;
       if p <= last then begin AppendChar(dst, CPrepChars[p]); Inc(p); end;
+      Continue;
+    end;
+    { `__VA_OPT__(content)` (C23 6.10.5.1; gcc reads it in every C mode):
+      the content, its parameters substituted as anywhere else in the body,
+      when the variadic arguments hold a token, and nothing when they are
+      omitted or blank. Present: step past `__VA_OPT__(` and drop the
+      matching `)` when the walk reaches it. Absent: skip the group. wlroots'
+      wlr_log is `fmt, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__`, so a
+      wrong answer either way is a stray or a missing comma.
+      feature-c-std-c23 }
+    if p = vaOptClose then
+    begin
+      vaOptClose := -1;
+      Inc(p);
+      Continue;
+    end;
+    if CPMVariadic[mi] and (CPrepChars[p] = '_') and (p + 9 <= last) and
+       ((p = CPMValueOff[mi]) or not CPIsIdentChar(CPrepChars[p - 1])) and
+       CPCharsAre(p, '__VA_OPT__') and
+       ((p + 10 > last) or not CPIsIdentChar(CPrepChars[p + 10])) then
+    begin
+      q := p + 10;
+      while (q <= last) and (CPrepChars[q] in [' ', #9]) do Inc(q);
+      if (q > last) or (CPrepChars[q] <> '(') then
+        Error('C preprocessor: __VA_OPT__ must be followed by (');
+      k := q;
+      vaDepth := 0;
+      while k <= last do
+      begin
+        if CPrepChars[k] = '(' then Inc(vaDepth)
+        else if CPrepChars[k] = ')' then
+        begin
+          Dec(vaDepth);
+          if vaDepth = 0 then Break;
+        end;
+        Inc(k);
+      end;
+      if k > last then Error('C preprocessor: __VA_OPT__( without its )');
+      vaHas := False;
+      if argCount > CPMParamCount[mi] then
+        for ai := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
+          if not (src[ai] in [' ', #9, #10, #13, #1]) then begin vaHas := True; Break; end;
+      if vaHas then
+      begin
+        vaOptClose := k;
+        p := q + 1;
+      end
+      else
+      begin
+        p := k + 1;
+        { the group was a placemarker: its neighbours must not glue (`+`
+          and `+` stay two tokens), so a space goes between them -- unless
+          either side already ends a token (a bracket, a comma, white space),
+          where a space would only show in a stringized result as gcc's does not }
+        if (Length(dst) > 0) and not (dst[Length(dst)] in [' ', #9, '(', '[', '{', ',']) and
+           (p <= last) and not (CPrepChars[p] in [' ', #9, ')', ']', '}', ',', ';']) then
+          AppendChar(dst, ' ');
+      end;
       Continue;
     end;
     { Token-paste operator `a ## b`: drop the `##` (and whitespace around it) so the

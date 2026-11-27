@@ -162,6 +162,7 @@ the optional rows; each `no` costs exactly the one capability its row names.
 | `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
 | `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
 | `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
+| `-std=c99` .. `-std=c23` | The C standard, as gcc spells it (`c99`, `c11`, `c17`/`c18`, `c23`/`c2x`, their `gnu` forms, `iso9899:YYYY`); sets `__STDC_VERSION__`, and the `c` forms `__STRICT_ANSI__`. Under `c23`/`gnu23`, `bool`, `true`, `false`, `alignas`, `alignof`, `static_assert`, `thread_local` and `typeof` are keywords, `[[...]]` attributes are read (those that change code are refused by name), and `<stdbool.h>` defines only its marker. Not yet implemented C23 (`nullptr`, `constexpr`, `auto`, `_BitInt`, `#embed`, `#elifdef`) is an error where used. `-std=c89`/`c90` is refused. |
 | `--no-host-include` | Keep crtl's headers and `-I`, but never fall back to the host's `/usr/include`: a header crtl lacks is an error, as on a target with no host headers. It also skips `/etc/ld.so.cache` when `--system-libs` resolves a library's soname, so the host and the target write the same objects. `PXX_NO_HOST_INCLUDE=1` in the environment does the same. |
 
 ## Strictness and dialect

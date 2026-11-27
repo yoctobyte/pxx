@@ -7924,6 +7924,7 @@ var
   CGccOutFile        : AnsiString;  { -o <file>; '' = positional output }
   CGccStdVersion     : AnsiString;  { -std=: __STDC_VERSION__ value, '' = pxx default }
   CGccStrictAnsi     : Boolean;     { -std=c..  (not gnu..): __STRICT_ANSI__ }
+  CStdC23            : Boolean;     { -std=c23/gnu23 (c2x, gnu2x, iso9899:2024): bool/true/false/alignas/alignof keywords, [[attributes]]; feature-c-std-c23 }
   CGccHostedZero     : Boolean;     { -ffreestanding: __STDC_HOSTED__ 0 }
   CGccNoRedZone      : Boolean;     { -mno-red-zone }
   CGccGeneralRegs    : Boolean;     { -mgeneral-regs-only }

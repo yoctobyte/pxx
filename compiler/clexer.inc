@@ -430,6 +430,94 @@ begin
     Result := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
 end;
 
+{ C23 attribute specifiers, `[[ attr, ns::attr(args), ... ]]` (6.7.13), read
+  at a token boundary in -std=c23 / gnu23 and dropped. Only attributes that
+  change no code are dropped: the standard ones (deprecated, fallthrough,
+  maybe_unused, nodiscard, noreturn, unsequenced, reproducible) and the gnu::
+  ones that only steer warnings or the optimiser. Any other (gnu::packed,
+  aligned, section, cleanup, visibility, ...) changes layout, linkage or
+  behaviour, and is refused by name rather than ignored -- wlroots and the
+  census have not needed one yet; spell it __attribute__((...)) meanwhile.
+  `[[` cannot begin anything else in C. feature-c-std-c23 }
+function CStdAttrIgnorable(const name: AnsiString): Boolean;
+var n: AnsiString;
+begin
+  n := name;
+  if (Length(n) > 4) and (Copy(n, 1, 2) = '__') and (Copy(n, Length(n) - 1, 2) = '__') then
+    n := Copy(n, 3, Length(n) - 4);
+  Result := (n = 'deprecated') or (n = 'fallthrough') or (n = 'maybe_unused') or
+            (n = 'nodiscard') or (n = 'noreturn') or (n = '_Noreturn') or
+            (n = 'unsequenced') or (n = 'reproducible') or
+            (n = 'unused') or (n = 'always_inline') or (n = 'noinline') or
+            (n = 'cold') or (n = 'hot') or (n = 'const') or (n = 'pure') or
+            (n = 'format') or (n = 'format_arg') or (n = 'nonnull') or
+            (n = 'returns_nonnull') or (n = 'warn_unused_result') or (n = 'malloc') or
+            (n = 'sentinel') or (n = 'nothrow') or (n = 'leaf') or (n = 'flatten') or
+            (n = 'access') or (n = 'alloc_size');
+end;
+
+var CStdAttrItem: AnsiString;
+    CStdAttrInName: Boolean;
+
+procedure CStdAttrFinishItem;
+var k: Integer; name: AnsiString;
+begin
+  { the item is `name` or `ns::name`, its argument list already cut off }
+  k := Pos('::', CStdAttrItem);
+  if k > 0 then name := Copy(CStdAttrItem, k + 2, Length(CStdAttrItem)) else name := CStdAttrItem;
+  if (name <> '') and not CStdAttrIgnorable(name) then
+    Error('C23 attribute [[' + CStdAttrItem + ']] is not implemented (only attributes that change no code '
+          + 'are read and dropped); write it as __attribute__((' + name + ')) (feature-c-std-c23)');
+  CStdAttrItem := '';
+  CStdAttrInName := True;
+end;
+
+procedure CLexSkipStdAttr;
+var depth: Integer; q: Char;
+begin
+  Inc(SrcPos, 2);
+  depth := 0;
+  CStdAttrItem := '';
+  CStdAttrInName := True;
+  while SrcPos <= Length(Source) do
+  begin
+    q := Source[SrcPos];
+    if q = #10 then Inc(SrcLine);
+    if (q = '"') or (q = '''') then
+    begin
+      { a string or character argument: skipped whole, `]]` inside it is text }
+      Inc(SrcPos);
+      while (SrcPos <= Length(Source)) and (Source[SrcPos] <> q) do
+      begin
+        if Source[SrcPos] = '\' then Inc(SrcPos);
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = #10) then Inc(SrcLine);
+        Inc(SrcPos);
+      end;
+      Inc(SrcPos);
+      Continue;
+    end;
+    if (depth = 0) and (q = ']') and (SrcPos < Length(Source)) and (Source[SrcPos + 1] = ']') then
+    begin
+      CStdAttrFinishItem;
+      Inc(SrcPos, 2);
+      Exit;
+    end;
+    if (q = '(') or (q = '[') then
+    begin
+      if depth = 0 then CStdAttrInName := False;
+      Inc(depth);
+    end
+    else if (q = ')') or (q = ']') then
+      Dec(depth)
+    else if (q = ',') and (depth = 0) then
+      CStdAttrFinishItem
+    else if CStdAttrInName and (q in ['a'..'z', 'A'..'Z', '0'..'9', '_', ':']) then
+      AppendChar(CStdAttrItem, q);
+    Inc(SrcPos);
+  end;
+  Error('C23 attribute: `[[` without its closing `]]`');
+end;
+
 procedure CSkipSpace;
 var done, idDone: Boolean;
     p, depth, nameLen, j, alignV, attrStart: Integer;
@@ -578,7 +666,7 @@ begin
         this cannot evaluate is refused: on a struct member a guessed
         alignment would move every later member.
         bug-c-alignas-is-read-as-a-call }
-      else if s = '_Alignas' then
+      else if (s = '_Alignas') or (CStdC23 and (s = 'alignas')) then
       begin
         SrcPos := p;
         while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9, #10, #13]) do
@@ -700,6 +788,11 @@ begin
         #1: Inc(SrcPos);   { preprocessor blue-paint marker — not a token }
         #10: begin Inc(SrcLine); Inc(SrcPos); end;
         '#': CLexLineMarker;   { -g origin marker, see below }
+        '[':
+          if CStdC23 and (SrcPos < Length(Source)) and (Source[SrcPos+1] = '[') then
+            CLexSkipStdAttr
+          else
+            done := True;
         '/':
         begin
           if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '/') then
@@ -1216,6 +1309,17 @@ begin
       __signed__` must stay false: renamed here, after preprocessing.
       bug-c-the-signed-keyword-spelling-dunder-signed-is-not-recognised }
     if (s = '__signed__') or (s = '__signed') then s := 'signed';
+    { C23 keywords that were C11 spellings with an underscore: the same
+      meaning, renamed here after preprocessing so `#ifdef bool` stays false
+      as it is in C23 (alignas is read in CSkipSpace, as _Alignas is;
+      static_assert and typeof the parser knows already).
+      true/false are ParseCPrimary's. feature-c-std-c23 }
+    if CStdC23 then
+    begin
+      if s = 'bool' then s := '_Bool'
+      else if s = 'alignof' then s := '_Alignof'
+      else if s = 'thread_local' then s := '_Thread_local';
+    end;
     CurTok.Kind := CKeyword(s);
     CurTok.SVal := s;
     Exit;

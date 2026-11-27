@@ -2982,6 +2982,8 @@ begin
     end
     else if Copy(option, 1, 5) = '-std=' then
     begin
+      CStdC23 := False;          { the last -std= wins, as in gcc }
+      CGccStrictAnsi := False;
       if (option = '-std=c99') or (option = '-std=c9x') or (option = '-std=iso9899:1999') then
         begin CGccStdVersion := '199901L'; CGccStrictAnsi := True; end
       else if (option = '-std=gnu99') or (option = '-std=gnu9x') then
@@ -2995,13 +2997,22 @@ begin
         begin CGccStdVersion := '201710L'; CGccStrictAnsi := True; end
       else if (option = '-std=gnu17') or (option = '-std=gnu18') then
         CGccStdVersion := '201710L'
+      { C23 (wlroots asks for it in every unit): bool/true/false, alignas,
+        alignof, static_assert, thread_local and typeof as keywords, [[...]]
+        attributes, __has_c_attribute, a <stdbool.h> that defines nothing.
+        What is not implemented (nullptr, constexpr, auto, _BitInt, #embed,
+        #elifdef) is an error where it is used, never another meaning.
+        feature-c-std-c23 }
+      else if (option = '-std=c23') or (option = '-std=c2x') or (option = '-std=iso9899:2024') then
+        begin CGccStdVersion := '202311L'; CGccStrictAnsi := True; CStdC23 := True; end
+      else if (option = '-std=gnu23') or (option = '-std=gnu2x') then
+        begin CGccStdVersion := '202311L'; CStdC23 := True; end
       else
       begin
-        { C89/C90 has no __STDC_VERSION__ and forbids what pxx's headers use;
-          C23 is not implemented. Refused rather than compiled as something
-          the flag did not ask for. }
+        { C89/C90 has no __STDC_VERSION__ and forbids what pxx's headers use.
+          Refused rather than compiled as something the flag did not ask for. }
         writeln(StdErr, 'unsupported option: ', option,
-                ' (pxx C is C99 with C11 features: -std=c99/c11/c17 and their gnu forms are accepted)');
+                ' (pxx C is C99 to C23: -std=c99/c11/c17/c23 and their gnu forms are accepted)');
         Halt(1);
       end;
       Inc(i);
