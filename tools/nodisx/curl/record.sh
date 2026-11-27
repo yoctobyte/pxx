@@ -8,7 +8,7 @@
 #             Built and staged (make install) so curl's configure finds it.
 #   curl/     curl's autoconf configure + libtool make, against that stage.
 # What they decided travels in the recipe, PRE-GENERATED:
-#   gen.tar   mbedtls_config.h (AES-NI off), curl/lib/curl_config.h,
+#   gen.tar   mbedtls_config.h (as shipped: AES-NI on), curl/lib/curl_config.h,
 #             curl/src/tool_ca_embed.c
 #   units     one line per object, paths relative to the recipe's tree root
 #             (../lib/units-from-make.sh); the stage's include directory is
@@ -39,14 +39,14 @@ rm -rf "$REF" "$R"
 mkdir -p "$REF/mbedtls" "$REF/curl" "$REF/stage" "$R"
 bzcat "$W/dl/$MBED" | tar -xf - -C "$REF/mbedtls" --strip-components=1
 xzcat "$W/dl/$CURL" | tar -xf - -C "$REF/curl" --strip-components=1
-# No AES-NI: aesni.c is SSE/AES-NI inline asm (movdqu, aesenc, ...), which
-# pxx's inline-asm encoder does not have. mbedTLS falls back to its software
-# AES -- table-based, so exposed to cache-timing attacks that AES-NI is not.
-# The gcc reference is built with the same config, so test.sh compares like
-# with like. The edited header travels in gen.tar.
+# AES-NI on, as mbedTLS ships: aesni.c's inline-asm path (gcc without -maes
+# takes it: movdqu, pxor, pshufd, the AES-NI and PCLMULQDQ instructions as
+# .byte, a `call` inside the template), which pxx encodes as gas does
+# (feature-c-inline-asm-sse-and-aes-ni). mbedTLS picks AES-NI at run time
+# when the CPU has it and its software AES otherwise. The header travels in
+# gen.tar unedited; the check keeps a future mbedTLS from dropping it.
 MCFG=$REF/mbedtls/include/mbedtls/mbedtls_config.h
 grep -q '^#define MBEDTLS_AESNI_C$' "$MCFG" || { echo "record: MBEDTLS_AESNI_C not where expected" >&2; exit 1; }
-sed -i 's|^#define MBEDTLS_AESNI_C$|/* #define MBEDTLS_AESNI_C   nodisx: pxx has no SSE inline asm */|' "$MCFG"
 
 # mbedTLS: the commands from a dry run, then the real build and the stage
 make -C "$REF/mbedtls/library" -n -B CC=gcc static > "$W/curl-mbedtls-dry.log" 2>&1

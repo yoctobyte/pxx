@@ -527,7 +527,34 @@ begin
   else if CaseEqual(mn,'unpckhpd') then begin pfx := $66; op := $15; end
   else if CaseEqual(mn,'movapd')   then begin pfx := $66; op := $28; end
   else if CaseEqual(mn,'movupd')   then begin pfx := $66; op := $10; end
+  { SSE2 INTEGER moves and logic (mbedTLS's aesni.c, its inline-asm path:
+    feature-c-inline-asm-sse-and-aes-ni). movdqu is F3, movdqa 66, the same
+    6F load / 7F store pair; the logic forms are 66-prefixed like pxor. }
+  else if CaseEqual(mn,'movdqu')   then begin pfx := $F3; op := $6F; end
+  else if CaseEqual(mn,'movdqa')   then begin pfx := $66; op := $6F; end
+  else if CaseEqual(mn,'por')      then begin pfx := $66; op := $EB; end
+  else if CaseEqual(mn,'pand')     then begin pfx := $66; op := $DB; end
+  else if CaseEqual(mn,'pandn')    then begin pfx := $66; op := $DF; end
   else begin op := 0; Result := False; end;
+end;
+
+{ The SSE2 shifts by an immediate: 66 0F 71/72/73 /ext ib, the register
+  in ModRM.rm and the operation in ModRM.reg (w = 71, d = 72, q and the
+  whole-register dq byte shifts = 73). }
+function AsmSseShiftImm(const mn: AnsiString; var op, ext: Integer): Boolean;
+begin
+  Result := True;
+  if      CaseEqual(mn,'psrlw')  then begin op := $71; ext := 2; end
+  else if CaseEqual(mn,'psraw')  then begin op := $71; ext := 4; end
+  else if CaseEqual(mn,'psllw')  then begin op := $71; ext := 6; end
+  else if CaseEqual(mn,'psrld')  then begin op := $72; ext := 2; end
+  else if CaseEqual(mn,'psrad')  then begin op := $72; ext := 4; end
+  else if CaseEqual(mn,'pslld')  then begin op := $72; ext := 6; end
+  else if CaseEqual(mn,'psrlq')  then begin op := $73; ext := 2; end
+  else if CaseEqual(mn,'psrldq') then begin op := $73; ext := 3; end
+  else if CaseEqual(mn,'psllq')  then begin op := $73; ext := 6; end
+  else if CaseEqual(mn,'pslldq') then begin op := $73; ext := 7; end
+  else begin op := 0; ext := 0; Result := False; end;
 end;
 
 { The MOVES are the only SSE forms with a store direction, and each has its own
@@ -541,6 +568,8 @@ begin
   else if CaseEqual(mn,'movss')  then op := $11
   else if CaseEqual(mn,'movupd') then op := $11
   else if CaseEqual(mn,'movapd') then op := $29
+  else if CaseEqual(mn,'movdqu') then op := $7F
+  else if CaseEqual(mn,'movdqa') then op := $7F
   else begin op := 0; Result := False; end;
 end;
 
@@ -1117,6 +1146,32 @@ begin
     Exit;
   end;
 
+  { SSE2 shift by an immediate, `psllq xmm, imm8`: the register is ModRM.rm
+    and ModRM.reg is the /ext that names the shift. }
+  if AsmSseShiftImm(mn, sseOp, sseSt) then
+  begin
+    if (nops <> 2) or (AsmOpKind[0] <> AOP_REG) or (AsmOpSize[0] <> 16) or
+       (AsmOpKind[1] <> AOP_IMM) then
+      Error('asm: ' + mn + ' needs an xmm register and an immediate');
+    AsmB($66);
+    AsmPrefixAndREX(4, sseSt, 0, 0);
+    AsmB($0F); AsmB(sseOp);
+    AsmModRM(sseSt, 0);
+    AsmB(Integer(AsmOpVal[1] and $FF));
+    Exit;
+  end;
+
+  { pshufd xmm, xmm/m128, imm8: 66 0F 70 /r ib. }
+  if CaseEqual(mn,'pshufd') then
+  begin
+    if (nops <> 3) or (AsmOpKind[0] <> AOP_REG) or (AsmOpSize[0] <> 16) or
+       (AsmOpKind[2] <> AOP_IMM) then
+      Error('asm: pshufd needs an xmm destination, an xmm or memory source and an immediate');
+    AsmSseEmit($66, $70, AsmOpReg[0], 1, 4);
+    AsmB(Integer(AsmOpVal[2] and $FF));
+    Exit;
+  end;
+
   { ---- AVX (VEX-encoded) ----
     Three operands and non-destructive: `vaddpd d, a, b` computes a+b into d
     and leaves both sources alone. The middle operand rides in the prefix's
@@ -1243,17 +1298,31 @@ begin
     Exit;
   end;
 
-  { movq between an xmm and a GP register / 64-bit memory — the bridge for
-    getting a Double into or out of the vector file without a memory round
-    trip. Both directions are REX.W $66 forms and they are DIFFERENT opcodes
-    ($6E in, $7E out), not one form with the operands reversed. }
+  { movq with an xmm: four forms, four encodings, each the one gas writes.
+    With a GP register it is the bridge for a Double into or out of the vector
+    file, REX.W $66 0F 6E in and 7E out. With memory or another xmm it is the
+    SSE2 64-bit move: F3 0F 7E loads xmm <- xmm/m64 (zeroing the high half),
+    66 0F D6 stores m64 <- xmm. Reading a memory or xmm source as the GP form
+    would name a GP register number where an xmm was written: the xmm <- xmm
+    case encoded `movq rN` before (mbedTLS's aesni.c,
+    feature-c-inline-asm-sse-and-aes-ni). }
   if CaseEqual(mn,'movq') then
   begin
     if nops <> 2 then Error('asm: movq needs two operands');
     if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] = 16) then
-      AsmSseEmit($66, $6E, AsmOpReg[0], 1, 8)        { xmm <- r/m64 }
+    begin
+      if (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] <> 16) then
+        AsmSseEmit($66, $6E, AsmOpReg[0], 1, 8)      { xmm <- r64 }
+      else
+        AsmSseEmit($F3, $7E, AsmOpReg[0], 1, 4);     { xmm <- xmm/m64 }
+    end
     else if (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] = 16) then
-      AsmSseEmit($66, $7E, AsmOpReg[1], 0, 8)        { r/m64 <- xmm }
+    begin
+      if AsmOpKind[0] = AOP_REG then
+        AsmSseEmit($66, $7E, AsmOpReg[1], 0, 8)      { r64 <- xmm }
+      else
+        AsmSseEmit($66, $D6, AsmOpReg[1], 0, 4);     { m64 <- xmm }
+    end
     else
       Error('asm: movq needs one xmm operand');
     Exit;

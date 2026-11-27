@@ -21255,6 +21255,23 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_sfpd: gcc absent, NOT verified ==="; \
 	fi
+	# SSE2 integer instructions, `.byte`, `call Nb` and xmm clobbers in GNU
+	# inline asm: mbedTLS's aesni.c shapes (AES-128 on the FIPS-197 vector,
+	# PCLMULQDQ, the SSE2 rows), against gcc's build on this CPU; and every
+	# form's encoding, high registers and displacements included, byte for
+	# byte against GNU as. feature-c-inline-asm-sse-and-aes-ni
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_inline_asm_sse_aesni.c $(TESTTMP)/c_sseaes26 >/dev/null || { echo "c_sseaes compile FAIL"; exit 1; }; \
+	  gcc -O2 -w -o $(TESTTMP)/c_sseaes_gcc test/c_inline_asm_sse_aesni.c || { echo "c_sseaes gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_sseaes26 "$$($(TESTTMP)/c_sseaes26)" "$$($(TESTTMP)/c_sseaes_gcc)" || exit 1; \
+	  ./$(COMPILER) --emit-obj test/gas_sse_integer.s $(TESTTMP)/gas_sse_p.o >/dev/null || { echo "gas_sse pxx FAIL"; exit 1; }; \
+	  as test/gas_sse_integer.s -o $(TESTTMP)/gas_sse_g.o || { echo "gas_sse as FAIL"; exit 1; }; \
+	  objcopy -O binary -j .text $(TESTTMP)/gas_sse_p.o $(TESTTMP)/gas_sse_p.bin; \
+	  objcopy -O binary -j .text $(TESTTMP)/gas_sse_g.o $(TESTTMP)/gas_sse_g.bin; \
+	  cmp $(TESTTMP)/gas_sse_p.bin $(TESTTMP)/gas_sse_g.bin || { echo "gas_sse: pxx's SSE encodings differ from gas's"; exit 1; }; \
+	else \
+	  echo "=== c_sseaes/gas_sse: gcc absent, NOT verified ==="; \
+	fi
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"

@@ -166,5 +166,5 @@ bundle; (5) xz, zstd, bzip2 and dhcpcd, now with privilege separation
 (ea88e9510e, 10464a0e64). Each has a recipe in tools/nodisx/, and all of
 them built ON Rainyday in umbrella-nodisx-compiles-the-whole-system-on-site-with-pxx
 (16 of 16 built; the 43 installed files match the host's). Left open
-elsewhere: software AES in curl's mbedTLS (feature-c-inline-asm-sse-and-aes-ni-for-mbedtls)
-and the GPU drivers (feature-nodisx-linux-gpu-drivers-built-by-pxx).
+elsewhere: the GPU drivers (feature-nodisx-linux-gpu-drivers-built-by-pxx).
+curl's mbedTLS has AES-NI again (feature-c-inline-asm-sse-and-aes-ni).

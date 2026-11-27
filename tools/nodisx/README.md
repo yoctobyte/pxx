@@ -214,21 +214,26 @@ the libtool log. curl's configure runs once, against a staged mbedTLS:
 - none of zlib, brotli, zstd, nghttp2/3, libidn2, libpsl, libssh;
 - the threaded resolver, so every unit is `--threadsafe`;
 - CA bundle `/etc/ssl/certs/ca-certificates.crt` and no CA directory.
-gen.tar holds `curl_config.h`, `tool_ca_embed.c` and mbedTLS's edited
-`mbedtls_config.h`. 590 units are recorded. curl links 246 objects: its
+gen.tar holds `curl_config.h`, `tool_ca_embed.c` and mbedTLS's
+`mbedtls_config.h`. 589 units are recorded. curl links 247 objects (aesni.o among them): its
 own, plus the libcurl and mbedTLS archive members a gcc `-Wl,-Map` link
 pulled. The bundle is `cacert-2026-11-05.pem` from curl.se (checked
 against its .sha256), installed at that path. `units-from-make.sh` now
 keeps `-isystem` directories, written as `-I`: curl names mbedTLS's headers
 that way, and without them the unit was compiled against the host's.
 
-**Owner decision: no AES-NI.** mbedTLS's `aesni.c` is SSE/AES-NI inline asm,
-which pxx's encoder does not have (feature-c-inline-asm-sse-and-aes-ni), so
-the recipe comments out `MBEDTLS_AESNI_C`, for the gcc reference as well.
-mbedTLS then uses its software AES. It is correct (the self-test passes) but
-table-based, so it is exposed to cache-timing side channels that AES-NI is
-not, which matters when another user on the machine can measure the cache.
-TLS 1.3 servers often pick ChaCha20-Poly1305, which does not depend on it.
+**AES-NI is on** (2026-11-27). mbedTLS's `aesni.c` is built from its
+inline-asm path, the one gcc takes without `-maes`: SSE2 moves, logic, shifts
+and shuffles, the AES-NI and PCLMULQDQ instructions written as `.byte`, and a
+`call` into a helper inside the template. pxx encodes all of it as gas does
+(feature-c-inline-asm-sse-and-aes-ni). mbedTLS checks cpuid at run time:
+with AES-NI the self-test says "using AESNI" under pxx as under gcc, and
+without it mbedTLS falls back to its table-based software AES, which is
+exposed to cache-timing side channels. mbedTLS's benchmark on plexus:
+AES-CBC-128 27 MB/s with AES-NI against 6 MB/s in software under pxx, and
+AES-GCM-128 8.9 against 0.76 MB/s. gcc's AES-NI build does 240 and 70 MB/s.
+The instructions are the same bytes, so the rest of the gap is pxx's code
+around them.
 
 `test.sh` runs a local server (`testserver.py`, stdlib: HTTP, and HTTPS with
 an EC and an RSA certificate from a throwaway CA). It compares the pxx curl

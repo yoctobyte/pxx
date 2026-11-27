@@ -11672,6 +11672,12 @@ begin
       if not AsmRegNum(nm, reg, dummySize) then
         Error('C: inline asm clobbers "' + nm + '", which is not a register'
               + ' this backend knows');
+      { an xmm clobber ("xmm0", mbedTLS's aesni.c) is not general register
+        `reg`: AsmRegNum numbers xmm0..15 like rax..r15, and marking rax
+        busy for it only took a register from the "r" operands. Nothing
+        needs saving for it: pxx keeps no value in an xmm register from one
+        statement to the next, and SysV makes every xmm caller-saved. }
+      if dummySize = 16 then Continue;
       used[reg] := True;
       usedBy[reg] := CASM_REG_CLOBBER;
     end;

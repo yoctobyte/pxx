@@ -1174,7 +1174,20 @@ begin
            The shared encoder has these too. `cmovl` is cmov-if-less, not
            cmov with an l suffix, which is gas's reading as well: the whole word
            is tried as a base before a suffix is split off. }
-         or (AsmStartsWith(b, 'cmov') and (Length(b) > 4) and (AsmCC(AsmTail(b, 4)) >= 0));
+         or (AsmStartsWith(b, 'cmov') and (Length(b) > 4) and (AsmCC(AsmTail(b, 4)) >= 0))
+         { SSE2 integer moves, logic, shifts and shuffles (mbedTLS's aesni.c,
+           whose AES-NI and PCLMULQDQ instructions come as `.byte`). None
+           takes a size suffix: the whole word is the base. movq with an xmm
+           is the SSE move, sorted out after the operands are read.
+           feature-c-inline-asm-sse-and-aes-ni }
+         or CaseEqual(b,'movdqu') or CaseEqual(b,'movdqa')
+         or CaseEqual(b,'pxor') or CaseEqual(b,'por')
+         or CaseEqual(b,'pand') or CaseEqual(b,'pandn')
+         or CaseEqual(b,'psllw') or CaseEqual(b,'psrlw') or CaseEqual(b,'psraw')
+         or CaseEqual(b,'pslld') or CaseEqual(b,'psrld') or CaseEqual(b,'psrad')
+         or CaseEqual(b,'psllq') or CaseEqual(b,'psrlq')
+         or CaseEqual(b,'pslldq') or CaseEqual(b,'psrldq')
+         or CaseEqual(b,'pshufd');
 end;
 
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.
@@ -1301,7 +1314,7 @@ procedure AttEncodeOne;
 var mn, base: AnsiString;
     size, nops, i, tmpKind, tmpReg, tmpIdx, tmpScale, tmpSize: Integer;
     movxSrc, movxDst: Integer; movxSigned: Boolean;
-    tmpVal: Int64;
+    tmpVal, v: Int64;
 begin
   AttSkipSpace;
   if AttAtSeparator then Exit;
@@ -1380,6 +1393,33 @@ begin
     end;
     Exit;
   end;
+  { .byte N[, N...]: the bytes themselves, as an instruction the reader has
+    no mnemonic for. mbedTLS's aesni.c writes every AES-NI and PCLMULQDQ
+    instruction so (`.byte 0x66,0x0F,0x38,0xDC,0xC1` is aesenc %xmm1,
+    %xmm0), for assemblers older than the instructions. It counts as an
+    instruction for the numeric labels' b/f order.
+    feature-c-inline-asm-sse-and-aes-ni }
+  if CaseEqual(mn, '.byte') then
+  begin
+    if AttSinkText then
+      Error('C: inline asm .byte is not supported on the i386 path');
+    Inc(AttInstrOrd);
+    AttSkipSpace;
+    if AttAtSeparator then Error('C: inline asm .byte needs a value');
+    repeat
+      AttSkipSpace;
+      v := AttParseAddExpr;
+      if (v < -128) or (v > 255) then
+        Error('C: inline asm .byte value ' + AIntToStr(v) + ' does not fit in a byte');
+      AsmB(Integer(v and $FF));
+      AttSkipSpace;
+      if AttPeek <> ',' then Break;
+      Inc(AttPos);
+    until False;
+    if not AttAtSeparator then
+      Error('C: inline asm .byte has trailing text');
+    Exit;
+  end;
   if CaseEqual(mn, 'lock') then
   begin
     if AttSinkText then
@@ -1437,7 +1477,9 @@ begin
   { jmp / jcc to a numeric local label: always the rel32 form (E9, 0F 8x),
     so no relaxation is needed and the displacement is patched like any
     other label reference -- relative to the end of the instruction. }
-  if (CaseEqual(mn, 'jmp') or
+  { `call Nb` too (E8 rel32): mbedTLS's key expansion calls a helper that
+    sits inside the same template and returns with `ret`. }
+  if (CaseEqual(mn, 'jmp') or CaseEqual(mn, 'call') or
       (AsmStartsWith(mn, 'j') and (AsmCC(AsmTail(mn, 1)) >= 0))) and
      AttIsDigit(AttPeek) then
   begin
@@ -1461,6 +1503,8 @@ begin
       Error('C: inline asm template has trailing text after ' + mn);
     if CaseEqual(mn, 'jmp') then
       AsmB($E9)
+    else if CaseEqual(mn, 'call') then
+      AsmB($E8)
     else
     begin
       AsmB($0F);
@@ -1530,6 +1574,17 @@ begin
   { in/out carry their width on the DATA register (al/ax/eax) and take the
     port in dx whatever the suffix says, so the suffix-vs-register check below
     would refuse `outb %al, %dx` for the dx it is required to name. }
+  { `movq` with an xmm operand is SSE2's 64-bit move, not mov + q: gas reads
+    it so (`movq 16(%1), %%xmm1`, `movq %%xmm1, (%0)` in mbedTLS's aesni.c),
+    and the suffix check below would refuse the 128-bit register. }
+  if CaseEqual(base, 'mov') and (size = 8) then
+    for i := 0 to nops - 1 do
+      if (AsmOpKind[i] = AOP_REG) and (AsmOpSize[i] = 16) then
+      begin
+        base := 'movq';
+        size := 0;
+        Break;
+      end;
   if movxSrc <> 0 then
   begin
     if (nops <> 2) or (AsmOpKind[0] <> AOP_REG) then
