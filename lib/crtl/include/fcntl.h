@@ -83,6 +83,14 @@
 /* Linux-specific commands (F_LINUX_SPECIFIC_BASE 1024), passed through like
    the rest. File seals: Xorg seals its memfd_create segments (Xext/shm.c). */
 #define F_LINUX_SPECIFIC_BASE 1024
+#define F_SETLEASE      (F_LINUX_SPECIFIC_BASE + 0)
+#define F_GETLEASE      (F_LINUX_SPECIFIC_BASE + 1)
+#define F_NOTIFY        (F_LINUX_SPECIFIC_BASE + 2)
+/* POSIX.1-2008: F_DUPFD with FD_CLOEXEC set on the copy, atomically.
+   wlroots duplicates every dmabuf and syncobj fd with it. */
+#define F_DUPFD_CLOEXEC (F_LINUX_SPECIFIC_BASE + 6)
+#define F_SETPIPE_SZ    (F_LINUX_SPECIFIC_BASE + 7)
+#define F_GETPIPE_SZ    (F_LINUX_SPECIFIC_BASE + 8)
 #define F_ADD_SEALS (F_LINUX_SPECIFIC_BASE + 9)
 #define F_GET_SEALS (F_LINUX_SPECIFIC_BASE + 10)
 #define F_SEAL_SEAL         0x0001

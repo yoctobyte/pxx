@@ -109,4 +109,12 @@ extern int   munlockall(void);
 #define MFD_EXEC          0x0010U
 extern int   memfd_create(const char *name, unsigned int flags);
 
+/* POSIX shared memory objects: on Linux, files in the tmpfs at /dev/shm.
+   shm_open opens /dev/shm/NAME (one leading '/' or more dropped) with
+   O_NOFOLLOW|O_CLOEXEC added; a name that is empty or holds another '/'
+   is EINVAL, a longer one than NAME_MAX ENAMETOOLONG (glibc's rules; "."
+   and ".." are passed to open, as glibc does). wlroots' util/shm.c makes its wl_shm pools with it. */
+extern int   shm_open(const char *name, int oflag, mode_t mode);
+extern int   shm_unlink(const char *name);
+
 #endif

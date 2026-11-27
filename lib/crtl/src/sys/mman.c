@@ -18,6 +18,9 @@
 #include <errno.h>
 #include <unistd.h>      /* syscall() */
 #include <sys/syscall.h>
+#include <fcntl.h>
+#include <string.h>
+#include <limits.h>
 #include <stdarg.h>
 
 extern void *__pxx_mmap_anon_prot(long length, int prot);
@@ -180,4 +183,37 @@ int memfd_create(const char *name, unsigned int flags)
   errno = ENOSYS;
   return -1;
 #endif
+}
+
+/* shm_open / shm_unlink: see <sys/mman.h>. */
+static int shm_path(const char *name, char *buf)
+{
+  size_t n;
+  while (*name == '/') name++;
+  n = strlen(name);
+  if (n == 0 || strchr(name, '/') != NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  if (n > NAME_MAX) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  memcpy(buf, "/dev/shm/", 9);
+  memcpy(buf + 9, name, n + 1);
+  return 0;
+}
+
+int shm_open(const char *name, int oflag, mode_t mode)
+{
+  char path[9 + NAME_MAX + 1];
+  if (shm_path(name, path) < 0) return -1;
+  return open(path, oflag | O_NOFOLLOW | O_CLOEXEC, mode);
+}
+
+int shm_unlink(const char *name)
+{
+  char path[9 + NAME_MAX + 1];
+  if (shm_path(name, path) < 0) return -1;
+  return unlink(path);
 }

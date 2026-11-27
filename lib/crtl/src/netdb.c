@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>   /* strcasecmp: <string.h> brings it only without a standard asked for (a unit with _POSIX_C_SOURCE compiles this too) */
 #include <stdlib.h>
 #include <netinet/in.h>
 

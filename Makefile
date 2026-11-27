@@ -19833,6 +19833,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_elf_h.c $(TESTTMP)/c_elfh26
 	@gcc -w test/c_elf_h.c -o $(TESTTMP)/c_elfh26_gcc
 	tools/expect_same.sh c_elfh26 "$$(timeout 20 $(TESTTMP)/c_elfh26)" "$$(timeout 20 $(TESTTMP)/c_elfh26_gcc)"
+	# shm_open/shm_unlink and F_DUPFD_CLOEXEC under _POSIX_C_SOURCE (wlroots' wl_shm pools and dmabuf fds); against gcc
+	./$(COMPILER) --no-host-include test/c_shm_open_dupfd.c $(TESTTMP)/c_shmdup26
+	@gcc -w test/c_shm_open_dupfd.c -o $(TESTTMP)/c_shmdup26_gcc
+	tools/expect_same.sh c_shmdup26 "$$(timeout 20 $(TESTTMP)/c_shmdup26)" "$$(timeout 20 $(TESTTMP)/c_shmdup26_gcc)"
 	# --no-host-include refuses a header only the host has, and says so without listing <host system dirs>
 	@printf '#include <gnu/libc-version.h>\nint main(void){return 0;}\n' > $(TESTTMP)/c_nohostref26.c
 	tools/expect_same.sh c_nohostref26 "$$(./$(COMPILER) --no-host-include $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'include file not found' ; PXX_NO_HOST_INCLUDE=1 ./$(COMPILER) $(TESTTMP)/c_nohostref26.c $(TESTTMP)/c_nohostref26 2>&1 | grep -c 'host system dirs')" "$$(printf '1\n0')"
