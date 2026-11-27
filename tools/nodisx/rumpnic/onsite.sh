@@ -42,6 +42,9 @@ unit() {
     h) set -- --threadsafe "$@" ;;
   esac
   if [ "$ren" = 1 ]; then set -- --rename-globals=rumpns_ --rename-globals-keep=$KEEP "$@"; fi
+  # the build directory must not reach the binary (__FILE__ in NetBSD's
+  # KASSERTs): with it, rumpnic built in two places differed in 436 strings
+  set -- -ffile-prefix-map="$S=/usr/src/rumpnic" "$@"
   ( cd "$dir" && "$PXX" --emit-obj "$@" "$src" "$o" ) > "$o.log" 2>&1 || : > "$o.fail"
 }
 

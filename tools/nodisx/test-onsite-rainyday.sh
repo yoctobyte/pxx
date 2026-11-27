@@ -44,7 +44,7 @@ mkdir -p /tmp/dest
 echo "e2e: start \$(date +%s)"
 PXX=/iso/pxx/compiler/pascal26 JOBS=$JOBS ONLY="\${ONLY:-${ONLY:-}}" sh /iso/onsite-all.sh /iso /tmp/dest /tmp/w
 echo "e2e: rc=\$? end \$(date +%s)"
-cd /tmp/dest && tar -cf /tmp/out.tar .
+cd /tmp/dest && tar -czf /tmp/out.tar .   # gzip: the export line runs ~20 KB/s
 EOF
 specs="tmp/ bin/sh=$E/boot/bin/mksh bin/toybox=$TB init.sh=$E/run.sh iso=$E/iso/"
 for a in $("$TB" --long | tr ' ' '\n' | sed 's|.*/||' | grep -v '^toybox$' | grep -v '^sh$'); do
@@ -62,10 +62,10 @@ timeout "${TIMEOUT:-14400}" qemu-system-x86_64 $accel -smp "$SMP" -m "$MEM" -ker
   -append "cwd=/ export=/tmp/out.tar -- /bin/sh /init.sh" || true
 grep 'onsite-all:\|e2e:' "$E/console.log" | tr -d '\r'
 mkdir -p "$E/guest"
-tar -xf "$E/out.tar" -C "$E/guest" 2>/dev/null || { echo "test: no tree came back"; tail -20 "$E/console.log"; exit 1; }
+tar -xzf "$E/out.tar" -C "$E/guest" 2>/dev/null || { echo "test: no tree came back"; tail -20 "$E/console.log"; exit 1; }
 
-# the host, same driver, same pxx
-PATH=$E/boot/bin:/usr/bin:/bin PXX=$PXX JOBS=$JOBS sh "$E/iso/onsite-all.sh" "$E/iso" "$E/host" "$E/hw" > "$E/host.log" 2>&1 || true
+# the host, same driver, same pxx, and like the guest no host headers
+PATH=$E/boot/bin:/usr/bin:/bin PXX_NO_HOST_INCLUDE=1 PXX=$PXX JOBS=$JOBS sh "$E/iso/onsite-all.sh" "$E/iso" "$E/host" "$E/hw" > "$E/host.log" 2>&1 || true
 fail=0
 grep -q 'onsite-all: [0-9]* built, 0 failed' "$E/console.log" || { echo "e2e: a recipe FAILED in the guest"; fail=1; }
 ( cd "$E/host" && find . -type f | sort ) > "$E/host.files"

@@ -4664,6 +4664,14 @@ begin
     kind of wrong answer that shows up as a runtime loader error on a different
     machine. Same rule the C include-path defaults follow. }
   if TargetArch <> TARGET_X86_64 then Exit;
+  { HOSTLESS TOO. --no-host-include says "compile as a target with nothing of
+    the host's would": the host's library set is exactly as foreign to it as the
+    host's headers. Without this, a --system-libs object (every rump unit) named
+    the soname the host's cache gave for its header's stem -- libacl.so.1 for
+    <sys/acl.h> here, nothing on Rainyday -- and rumpnic built on site differed
+    from the same build on the host in those bytes.
+    bug-c-no-host-include-still-reads-the-hosts-ld-so-cache }
+  if NoHostInc or (PxxGetEnv('PXX_NO_HOST_INCLUDE') = '1') then Exit;
   pth := '/etc/ld.so.cache';
   LoadInput(pth, LdCacheBody);
 end;

@@ -62,7 +62,16 @@ in Nodisx's `docs/needs.md`.
 5. **pixix userland:** busybox DONE 2026-11-26 (claude-dupwt, see the
    table; three crtl bugs its testsuite found are fixed); dropbear is in
    item 4; sqlite: pxx2, in progress.
-6. **Linux GPU drivers** (radeon, amdgpu, i915, nouveau; GPL). Owner
+6. **The whole on-site build, ON Rainyday** (claude-dupwt): the acceptance
+   check for 1-5. tools/nodisx/test-onsite-rainyday.sh boots Rainyday with
+   the ISO tree (pxx, every recipe, its tarballs; mkiso-tree.sh) and only
+   pxx-built toybox and mksh, runs onsite-all.sh in the guest, and compares
+   the installed tree file by file with the host's run. First full run
+   2026-11-26: 10 of 14 built in the guest; the 4 failures were crtl
+   headers the host had silently supplied (pxx2: --no-host-include and the
+   headers) and one absolute #include in rumpnic's sources (fixed
+   0b92506fc9).
+7. **Linux GPU drivers** (radeon, amdgpu, i915, nouveau; GPL). Owner
    2026-11-21: built with gcc for now, pxx "a question for another time".
    They also need `objcopy --redefine-syms`, ar, bash and awk. First step
    when it is time: a trial compile through Rainyday's
