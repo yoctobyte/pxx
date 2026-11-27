@@ -19858,6 +19858,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj --system-libs test/c_system_libs_host_names.c $(TESTTMP)/c_syshost26.o > /dev/null
 	gcc test/c_system_libs_host_names_main.c $(TESTTMP)/c_syshost26.o -o $(TESTTMP)/c_syshost26 -lm
 	tools/expect_same.sh c_syshost26 "$$(timeout 20 $(TESTTMP)/c_syshost26)" "$$(cat test/c_system_libs_host_names.expected)"
+	# <sys/signalfd.h>: struct signalfd_siginfo laid out as glibc's, and a SIGUSR1 round trip through the fd; against gcc (feature-crtl-sys-signalfd-h)
+	./$(COMPILER) --no-host-include test/c_signalfd.c $(TESTTMP)/c_signalfd26 > /dev/null
+	@gcc -w test/c_signalfd.c -o $(TESTTMP)/c_signalfd26_gcc
+	tools/expect_same.sh c_signalfd26 "$$(timeout 20 $(TESTTMP)/c_signalfd26)" "$$(timeout 20 $(TESTTMP)/c_signalfd26_gcc)"
 	# C23 refusals: an attribute that changes code is named, not dropped; nullptr is not read as anything; c89 is still refused; gnu17 keeps true an int
 	@printf 'struct [[gnu::packed]] s { char c; int i; };\nint main(void){return 0;}\n' > $(TESTTMP)/c_c23ref26a.c
 	@printf 'int main(void){ void *p = nullptr; return p != 0; }\n' > $(TESTTMP)/c_c23ref26b.c
