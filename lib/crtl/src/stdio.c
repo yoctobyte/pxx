@@ -126,6 +126,8 @@ struct PxxCrtlFile {
   char **mbufp;
   size_t *msizep;
   size_t mcap;
+  size_t mpos, mhi;     /* its position and high-water mark (rpos/rlen are the
+                           read buffer's, which generic code resets) */
   /* FIXED MEMORY STREAM (fmemopen): no fd. The caller's buffer IS the read
      buffer -- rbuf, with rpos the stream position and rlen the end of the
      contents -- so every read path above works on it unchanged; mcap is the
@@ -198,7 +200,7 @@ FILE *open_memstream(char **bufp, size_t *sizep) {
   if (!f) { errno = EMFILE; return 0; }
   f->fd = -1; f->err = 0; f->eof = 0; f->ungetn = 0;
   f->rbuffered = 0; f->rpos = 0; f->rlen = 0;
-  f->mem = 1; f->mbufp = bufp; f->msizep = sizep; f->mcap = 0;
+  f->mem = 1; f->mbufp = bufp; f->msizep = sizep; f->mcap = 0; f->mpos = 0; f->mhi = 0;
   *bufp = 0; *sizep = 0;
   /* an empty stream still reads back as "" */
   if (__crtl_swrite(f, "", 0) < 0) { f->mem = 0; f->heap = 0; return 0; }
@@ -976,6 +978,42 @@ static long __crtl_fdwrite(FILE *f, const void *p, unsigned long n) {
 
 /* Every FILE write goes here: a memory stream appends to its buffer, any
    other stream writes its fd. Returns the bytes taken, or -1. */
+/* open_memstream's buffer: room for `need' bytes and a NUL; new room (a seek
+   past the end) reads as zeros. */
+static int __crtl_memgrow(FILE *f, size_t need) {
+  if (need + 1 > f->mcap) {
+    size_t cap = f->mcap ? f->mcap : 64;
+    char *nb;
+    while (need + 1 > cap) cap *= 2;
+    nb = (char *)__pxx_malloc((long)cap);
+    if (!nb) { f->err = 1; errno = ENOMEM; return -1; }
+    memset(nb, 0, cap);
+    if (*f->mbufp) {
+      memcpy(nb, *f->mbufp, f->mhi + 1 <= f->mcap ? f->mhi + 1 : f->mcap);
+      __pxx_free(*f->mbufp);
+    }
+    *f->mbufp = nb;
+    f->mcap = cap;
+  }
+  return 0;
+}
+
+/* open_memstream's seek: anywhere from 0; SEEK_END counts from the current
+   size (which follows the position, as glibc's: a rewind and a shorter write
+   make the size shorter). Bytes past the size keep what was written there
+   before; never-written room is zeros. *sizep follows the position. */
+static int __crtl_memseek(FILE *s, long long off, int whence) {
+  long long base = whence == SEEK_SET ? 0 : whence == SEEK_CUR ? (long long)s->mpos
+                 : whence == SEEK_END ? (long long)*s->msizep : -1;
+  if (base < 0 || base + off < 0 || base + off > 0x7fffffffLL) { errno = EINVAL; return -1; }
+  if (__crtl_memgrow(s, (size_t)(base + off)) < 0) return -1;
+  s->mpos = (size_t)(base + off);
+  if (s->mpos >= s->mhi) { s->mhi = s->mpos; (*s->mbufp)[s->mpos] = 0; }
+  *s->msizep = s->mpos;
+  s->eof = 0;
+  return 0;
+}
+
 static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
   if (f->fmem) {
     /* a NUL goes after the contents unless the data brings its own */
@@ -995,24 +1033,21 @@ static long __crtl_swrite(FILE *f, const void *p, unsigned long n) {
     return (long)k;
   }
   if (f->mem) {
-    size_t len = *f->msizep;
-    if (len + n + 1 > f->mcap) {
-      size_t cap = f->mcap ? f->mcap : 64;
-      char *nb;
-      while (len + n + 1 > cap) cap *= 2;
-      nb = (char *)__pxx_malloc((long)cap);
-      if (!nb) { f->err = 1; errno = ENOMEM; return -1; }
-      if (*f->mbufp) {
-        memcpy(nb, *f->mbufp, len);
-        __pxx_free(*f->mbufp);
-      }
-      *f->mbufp = nb;
-      f->mcap = cap;
-    }
-    memcpy(*f->mbufp + len, p, n);
-    len += n;
-    (*f->mbufp)[len] = 0;
-    *f->msizep = len;
+    /* open_memstream HAS A POSITION (mpos; mhi is the high-water mark), as
+       glibc's does: a write lands there, *sizep follows it, and a NUL is kept
+       after it. It was append-only, so ftell fell through to lseek(-1) (EBADF)
+       and rewind() did nothing -- dhcpcd rewinds one stream to build every hook
+       script's environment, and its hooks never ran.
+       bug-c-crtl-open-memstream-has-no-position */
+    size_t pos = f->mpos;
+    if (__crtl_memgrow(f, pos + n) < 0) return -1;
+    memcpy(*f->mbufp + pos, p, n);
+    pos += n;
+    f->mpos = pos;
+    /* the NUL goes after the data only at its end: inside older contents (after
+       a rewind) the bytes there stay, as glibc's do */
+    if (f->mpos >= f->mhi) { f->mhi = f->mpos; (*f->mbufp)[pos] = 0; }
+    *f->msizep = pos;
     return (long)n;
   }
   return __crtl_fdwrite(f, p, n);
@@ -1385,6 +1420,7 @@ int fseek(FILE *stream, long off, int whence) {
   long r;
   if (!stream) { errno = EINVAL; return -1; }
   if (stream->fmem) return __crtl_fmemseek(stream, off, whence);
+  if (stream->mem) return __crtl_memseek(stream, off, whence);
   /* A seek DISCARDS the pushback (C99 7.19.7.11p2) -- and a SEEK_CUR seek must
      do it before the syscall, since the fd is already past the pushed-back
      characters. Keeping them would deliver bytes from the old position after
@@ -1403,6 +1439,7 @@ long ftell(FILE *stream) {
   long r;
   if (!stream) { errno = EINVAL; return -1; }
   if (stream->fmem) return (long)stream->rpos - stream->ungetn;
+  if (stream->mem) return (long)stream->mpos;
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = -r; stream->err = 1; return -1; }
   /* The fd has already consumed whatever is pushed back, so the POSITION A
@@ -1421,6 +1458,7 @@ int fseeko(FILE *stream, off_t off, int whence) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
   if (stream->fmem) return __crtl_fmemseek(stream, (long long)off, whence);
+  if (stream->mem) return __crtl_memseek(stream, (long long)off, whence);
   stream->ungetn = 0;                 /* as fseek: a seek discards the pushback */
   if (whence == SEEK_CUR) off -= (off_t)(stream->rlen - stream->rpos);
   stream->rpos = 0;
@@ -1435,6 +1473,7 @@ off_t ftello(FILE *stream) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
   if (stream->fmem) return (off_t)stream->rpos - stream->ungetn;
+  if (stream->mem) return (off_t)stream->mpos;
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
   return (off_t)(r - (long long)stream->ungetn - (long long)(stream->rlen - stream->rpos));   /* as ftell */
@@ -1488,6 +1527,7 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
 
 void rewind(FILE *stream) {
   if (stream && stream->fmem) { __crtl_fmemseek(stream, 0, SEEK_SET); stream->err = 0; return; }
+  if (stream && stream->mem) { __crtl_memseek(stream, 0, SEEK_SET); stream->err = 0; return; }
   if (stream) {
     stream->ungetn = 0;
     stream->rpos = 0;

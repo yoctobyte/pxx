@@ -29902,6 +29902,15 @@ test-core: $(COMPILER)
 	# rules, names through /etc/hosts. Expected output is glibc's.
 	./$(COMPILER) test/c_crtl_getopt_optional_tz_rule_and_hosts.c $(TESTTMP)/c_optzhost26
 	$(TESTTMP)/c_optzhost26 | diff -u test/c_crtl_getopt_optional_tz_rule_and_hosts.expected -
+	# crtl getifaddrs lists a link (AF_PACKET) with no address yet, from netlink;
+	# open_memstream has a position (ftell/rewind/fseek). dhcpcd found both on
+	# Rainyday. Expected output is glibc's.
+	./$(COMPILER) test/c_crtl_getifaddrs_unaddressed_and_memstream_position.c $(TESTTMP)/c_ifamem26
+	$(TESTTMP)/c_ifamem26 | diff -u test/c_crtl_getifaddrs_unaddressed_and_memstream_position.expected -
+	# an empty header is a header (#include, __has_include, -include): FreeBSD's
+	# LinuxKPI placeholders are 0-byte files
+	./$(COMPILER) -include test/c_include_an_empty_header.h test/c_include_an_empty_header.c $(TESTTMP)/c_emptyhdr26
+	$(TESTTMP)/c_emptyhdr26 | grep -qx 'empty header ok'
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

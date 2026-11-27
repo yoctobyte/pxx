@@ -135,13 +135,23 @@ once with the choices given explicitly, not probed from the build host:
 `--without-udev` (no udev on Nodisx), `--without-openssl` (dhcpcd's own
 md5/sha256/hmac), `--with-hooks= --with-eghooks=` (only 01-test,
 20-resolv.conf and 30-hostname; configure would otherwise add an NTP or NIS
-hook if the BUILD host has chronyd or ypbind), and `--disable-privsep`.
+hook if the BUILD host has chronyd or ypbind), and
+`--enable-privsep --privsepuser=_dhcpcd`.
 
-**`--disable-privsep` is a security trade-off, for the owner to revisit.**
-Privilege separation needs a dedicated user, a chroot directory and seccomp
-filters, none of which the install environment has. Without it dhcpcd runs
-entirely as root. Fine for an installer; the installed system may want it
-back.
+**Privilege separation is on** (owner 2026-11-27: the packet parsers must
+not run as root). Only a small root process keeps the privileged work:
+routes, addresses and raw sockets. The DHCP/ARP/BPF parsing and the control
+socket run as `_dhcpcd`, chrooted to its home, under dhcpcd's seccomp
+filter. The system needs that user (home `/var/db/dhcpcd`, with a `tmp/`
+inside) and `/var/run/dhcpcd`.
+`test-privsep-rainyday.sh DESTDIR BUSYBOX RUMPNIC [KERNEL]` boots Rainyday
+with the on-site busybox, rumpnic and dhcpcd. dhcpcd takes QEMU's lease
+itself, its hooks write resolv.conf, and the guest pings, fetches a file
+and stops dhcpcd. It checks /proc: four dhcpcd processes ran as uid 150 at
+seccomp mode 2 and one as root. PASS on 2026-11-27, with Rainyday 179dfaa
+or later (NETLINK_GENERIC). That run found two crtl bugs, both fixed:
+getifaddrs missed an interface that had no address yet, and open_memstream
+had no position, so the hooks never ran.
 
 gen.tar holds config.h, the option definitions configure generates
 (`src/dhcpcd-embedded.{c,h}`) and the two hook scripts made from `.in`
@@ -153,9 +163,8 @@ files. 34 units, one link. `.tar.xz`, so the xz recipe comes first.
 usage text and an unknown-option error; `-V`, the whole option-definition
 table, with an empty config, the shipped dhcpcd.conf and a config of
 `define`/`define6`/`vendopt`/`encap`/`embed` blocks; and dhcpcd's own crypto
-self-test (the RFC 2202 HMAC-MD5 and SHA-256 vectors) built by pxx. A live
-lease needs a network namespace (refused unprivileged on the build host) or
-a VM: the Path B QEMU image's user-mode network answers DHCP.
+self-test (the RFC 2202 HMAC-MD5 and SHA-256 vectors) built by pxx. The
+live lease is test-privsep-rainyday.sh's job, above.
 
 What dhcpcd needed from pxx and crtl (found by compiling every unit with
 `-nostdinc -I lib/crtl/include`, so nothing came from the host's headers):

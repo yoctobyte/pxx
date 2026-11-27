@@ -3009,8 +3009,27 @@ procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer); forward
   `normalise-dont-special-case.md`: a dispatch written out N times is a defect
   that stays hidden exactly as long as the copies happen to agree. }
 procedure CPLoadInclude(depth: Integer);
+var fd, n: Integer; one: array[0..0] of Byte;
 begin
   LoadInput(CPrepPath, CPrepInclude[depth]);
+  { AN EMPTY HEADER IS A HEADER. Every caller tests "found" as a non-empty
+    slot, so a 0-byte file read as "not found": FreeBSD's LinuxKPI ships its
+    placeholder headers (compat/linuxkpi/dummy/include/linux/kgdb.h and some
+    forty more) as empty files, and drm-kmod's DRM core failed on them. When
+    the load is empty, ask whether the file opens and reads 0 bytes (a
+    directory opens too, but its read fails: EISDIR); if so the slot holds one
+    newline, which means the same thing to the preprocessor.
+    bug-cpp-an-empty-include-file-is-reported-not-found }
+  if Length(CPrepInclude[depth]) = 0 then
+  begin
+    fd := sysopen(CPrepPath, 0);
+    if fd >= 0 then
+    begin
+      n := sysread(fd, one, 1);
+      sysclose(fd);
+      if n = 0 then CPrepInclude[depth] := #10;
+    end;
+  end;
 end;
 
 function CPIncludeLength(depth: Integer): Integer;

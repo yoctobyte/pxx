@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 35
+prio: 65
 type: bug
 status: open
 found: 2026-09-01
@@ -73,7 +73,13 @@ digits) and `0.100000000000000005` under gcc's x87 path. With
 `-DLONGDOUBLE_TYPE=double` on the gcc side the two builds are identical.
 `tools/nodisx/sqlite/test.sh` builds its reference that way.
 
-**Owner, 2026-11-27 (for Nodisx sqlite):** ignore it for sqlite. The 80-bit
-`long double` is an x86-only format, and sqlite's double-double path is what
-it uses on every platform where long double is double. Its database files
-are byte-identical to gcc's. Not a Nodisx blocker.
+**Owner, 2026-11-27 — DECIDED: C `long double` must be 16 bytes, like gcc.**
+"the C long double type should be 16 byte, like gcc does. this may be relevant
+for other code as well." This supersedes "Not proposed here: implementing x87
+80-bit" above. On x86-64 that means the psABI type: an 80-bit x87 value in a
+16-byte, 16-aligned slot; class X87/X87UP (passed in memory, returned in
+st(0)). crtl also needs printf/scanf %Lf/%Lg and the *l math family at that
+width. Starting point: the Pascal frontend's tyExtended already loads and
+stores 10-byte x87 values (ir.inc:11301), but its arithmetic narrows to
+double. Other targets follow their own psABI (aarch64/riscv64: IEEE binary128,
+16 bytes, soft-float). Prio raised. Queued after dhcpcd privsep (claude-dupwt).

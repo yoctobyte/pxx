@@ -1,0 +1,8 @@
+lo link entry 1, lo 127.0.0.1/255.0.0.0 1
+round 0: ftell 26 size 26 [PATH=/usr/bin:/bin|pid=42]
+round 1: ftell 17 size 17 [PATH=/bin|pid=43]
+round 2: ftell 17 size 17 [PATH=/bin|pid=44]
+fseek 4: ftell 6 size 6 [PATH|XY]
+SEEK_END: ftell 6
+past the end: ftell 10 size 10 gap 110 0 112 last i
+closed: size 10

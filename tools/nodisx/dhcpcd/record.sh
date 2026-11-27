@@ -14,10 +14,14 @@
 # The choices, given here rather than probed from this host:
 #   --without-udev     no udev on Nodisx: dhcpcd watches netlink itself
 #   --without-openssl  dhcpcd's own md5/sha256/hmac (compat/crypt), no libcrypto
-#   --disable-privsep  privilege separation needs a dedicated user, a chroot
-#                      directory and seccomp filters; the install environment
-#                      runs as root with none of them. A SECURITY TRADE-OFF,
-#                      to revisit for the installed system.
+#   --enable-privsep --privsepuser=_dhcpcd
+#                      privilege separation (owner 2026-11-27: the packet
+#                      parsers must not run as root). A root process keeps the
+#                      route/address/raw-socket work; the network-facing parts
+#                      run as _dhcpcd, chrooted to its home, under dhcpcd's
+#                      seccomp filter. The system must have the user (home
+#                      /var/db/dhcpcd, with a tmp/ inside) and /var/run/dhcpcd.
+#                      test-privsep-rainyday.sh takes a lease that way.
 #   --with-hooks= --with-eghooks=
 #                      only the three base hooks (01-test, 20-resolv.conf,
 #                      30-hostname). configure otherwise adds an NTP or NIS
@@ -39,7 +43,7 @@ rm -rf "$REF" "$R"
 mkdir -p "$REF" "$R"
 xzcat "$W/dl/$TARBALL" | tar -xf - -C "$REF" --strip-components=1
 cd "$REF"
-CC=gcc ./configure --without-udev --without-openssl --disable-privsep \
+CC=gcc ./configure --without-udev --without-openssl --enable-privsep --privsepuser=_dhcpcd \
   --with-hooks= --with-eghooks= > "$W/dhcpcd-configure.log" 2>&1
 make -j3 > "$W/dhcpcd-build.log" 2>&1
 [ -x src/dhcpcd ] || { echo "record: gcc build made no dhcpcd" >&2; exit 1; }
