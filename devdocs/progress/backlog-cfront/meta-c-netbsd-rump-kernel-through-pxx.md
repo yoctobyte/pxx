@@ -84,3 +84,13 @@ e1000, rtl8139 (behind the IOMMU, as uid 150 under seccomp) and pcnet. That
 covers DHCP, ping, and an HTTP fetch with the right md5. It is in Rainyday's
 regression suite. Nothing is open on the pxx side for this; the ticket stays
 as the umbrella until Rainyday reports the next gap.
+
+## Re-measured 2026-11-27 (pxx session), pxx 10464a0e64
+
+Rainyday's docs/rump-pxx/repros/run.sh, run from a copy outside both trees:
+all 54 repros compile. For each symbol gcc's object defines, the s* objects
+give the same nm type, except s08, where a zero-initialised `__thread` is
+`D` (.tdata, PROGBITS) where gcc has `B` (.tbss, NOBITS). That is by design
+(elfreader.inc: "pxx writes no .tbss"). It costs the zero bytes in the TLS
+template, and pxx --link refuses a foreign object's NOBITS TLS input. No
+regression since 11-19. Nothing is open on the pxx side.

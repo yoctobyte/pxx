@@ -3705,6 +3705,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nodisx-rumpnic-builds-reproducibly | A | 50 | feature |  | — |
 | feature-nodisx-rumpnic-built-on-site-by-pxx | A | 60 | feature | rumpnic on site | — |
 | feature-nodisx-the-whole-on-site-build-passes-on-rainyday | A | 70 | feature |  | — |
+| feature-nodisx-toybox-and-a-posix-shell-built-by-pxx | C | 70 | feature | Nodisx compiles the installed system on the target with the pxx on the ISO; nothing but a small bootstrap set ships prebuilt. Item 1 of its pxx list: the base userland instead of busybox -- toybox (0BSD), every defconfig applet plus gzip, and a POSIX shell (mksh, MirOS licence) -- each a pinned source plus a recipe that builds on the target with only pxx, a shell and toybox-level tools, and a pass/fail test. Then (2) sfdisk/blkid, mke2fs, mkfs.fat compiled on site, (3) GNU make via its build.sh, (4) curl + mbedTLS + the CA bundle, (5) xz, zstd, bzip2, dhcpcd. | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-opt-accumulator-value-tracker | A+O | 58 | feature | The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites. | — |

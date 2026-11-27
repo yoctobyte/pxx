@@ -3,7 +3,7 @@ slug: feature-nodisx-toybox-and-a-posix-shell-built-by-pxx
 track: C
 prio: 70
 type: feature
-status: backlog
+status: done
 created: 2026-11-25
 found-by: Nodisx (installer ISO), via claude session pixx-cc
 tags: [nodisx, rainyday, c-corpus, toybox, mksh, recipe]
@@ -157,3 +157,14 @@ and `TRACE=`, which keeps only the archive members gcc's ld loaded.
 
 With mkfs.fat and mke2fs this completes item 2.
 
+
+## Done 2026-11-27
+
+Every item on the list is done: (1) toybox and mksh; (2) mkfs.fat, mke2fs,
+sfdisk, fdisk and blkid; (3) GNU make; (4) curl with mbedTLS and the CA
+bundle; (5) xz, zstd, bzip2 and dhcpcd, now with privilege separation
+(ea88e9510e, 10464a0e64). Each has a recipe in tools/nodisx/, and all of
+them built ON Rainyday in umbrella-nodisx-compiles-the-whole-system-on-site-with-pxx
+(16 of 16 built; the 43 installed files match the host's). Left open
+elsewhere: software AES in curl's mbedTLS (feature-c-inline-asm-sse-and-aes-ni-for-mbedtls)
+and the GPU drivers (feature-nodisx-linux-gpu-drivers-built-by-pxx).
