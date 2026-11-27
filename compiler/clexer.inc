@@ -184,14 +184,33 @@ var f, k: Integer; w, ty: AnsiString; ptrSz, depth: Integer; isAlign: Boolean;
     Result := k;
   end;
 
-begin
-  Result := Factor;
-  SkipWs;
-  while (Result > 0) and (j <= Length(s)) and (s[j] = '*') do
+  { a product of factors }
+  function AlignTerm: Integer;
   begin
-    Inc(j);
-    f := Factor;
-    Result := Result * f;
+    Result := Factor;
+    SkipWs;
+    while (Result > 0) and (j <= Length(s)) and (s[j] = '*') do
+    begin
+      Inc(j);
+      f := Factor;
+      Result := Result * f;
+      SkipWs;
+    end;
+  end;
+
+begin
+  { and a left shift of products: FreeBSD's and Linux's CACHE_LINE_SIZE is
+    `(1 << CACHE_LINE_SHIFT)`, so `__aligned(CACHE_LINE_SIZE)` reads
+    `(1 << 6)`. Not reading it fell back to 16 where gcc lays out 64.
+    bug-c-aligned-with-a-shifted-argument-falls-back-to-16 }
+  Result := AlignTerm;
+  SkipWs;
+  while (Result > 0) and (j < Length(s)) and (s[j] = '<') and (s[j+1] = '<') do
+  begin
+    j := j + 2;
+    f := AlignTerm;
+    if (f < 0) or (f > 30) then begin Result := 0; Exit; end;
+    Result := Result shl f;
     SkipWs;
   end;
 end;

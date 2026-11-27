@@ -10973,6 +10973,11 @@ begin
       Linux's and FreeBSD's bitops pass the bit number as "Ir".
       feature-c-inline-asm-flag-outputs }
     if (Length(cls) >= 2) and (Pos('r', cls) > 0) and CAsmOnlyImmAndR(cls) then cls := 'r';
+    { "iq"/"qi": an immediate OR a byte register (Linux's and FreeBSD's
+      atomic_set_char / x86 bitops `orb %1,%0`). The register is allowed, so
+      it reads as "q". bug-c-inline-asm-constraint-iq-is-unsupported }
+    if (cls = 'iq') or (cls = 'qi') or (cls = 'nq') or (cls = 'qn') then cls := 'q';
+    if (cls = 'iQ') or (cls = 'Qi') or (cls = 'nQ') or (cls = 'Qn') then cls := 'Q';
     if (cls = 'qm') or (cls = 'mq') then cls := 'q';
     if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
     { "qQ": either byte class. Q (a register with an addressable high byte:

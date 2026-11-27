@@ -29919,6 +29919,10 @@ test-core: $(COMPILER)
 	# bitops through LinuxKPI). Expected output is gcc's.
 	./$(COMPILER) test/c_inline_asm_flag_outputs.c $(TESTTMP)/c_asmflag26
 	$(TESTTMP)/c_asmflag26 | diff -u test/c_inline_asm_flag_outputs.expected -
+	# aligned((1 << 6)) is 64 (FreeBSD CACHE_LINE_SIZE), and the "iq" asm
+	# constraint (atomic_set_char). Expected output is gcc's.
+	./$(COMPILER) test/c_aligned_shift_and_asm_iq.c $(TESTTMP)/c_alshiq26
+	$(TESTTMP)/c_alshiq26 | diff -u test/c_aligned_shift_and_asm_iq.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
