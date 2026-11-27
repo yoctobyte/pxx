@@ -5713,6 +5713,10 @@ var
   CFnSigPNames : array[0..MAX_PROC_PARAMS-1] of AnsiString;
   CFnSigPRecIds : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypePtrElemProcSig : Integer; { POINTER-to-fn-ptr (`ft *`): sig of the pointee fn-pointer, so `(*pf)()`/`(**(ft*)x)()` can find the callee sig CTypeProcSig drops. -1 = pointee not a fn-ptr }
+  CTypeTypedefVlaSym : Integer; { a block-scope VLA typedef (`typedef char T[n]`): the hidden Int64 local holding its extent, else -1 (feature-c-a-block-scope-vla-typedef) }
+  CInBlockTypedef    : Boolean; { ParseCTypedef was entered from a statement: a run-time extent is a VLA typedef }
+  CBlockTypedefStmt  : Integer; { ...and the statement that evaluates its extent, or -1 }
+  CVlaTypedefSeq     : Integer; { hidden-local counter for those extents }
   CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the FIRST dim of the last ParseCDeclType, else -1 }
   CTypeTypedefAlign : Integer; { __attribute__((aligned(N))) the typedef named in the last ParseCDeclType carries; 0 = none }
   CTypeTypedefNDims : Integer; { how many dims that typedef has; 0 = not an array typedef }
@@ -5850,6 +5854,7 @@ var
     C parser expands it back into `R yopen(args);` from these tokens
     (CExpandFnTypedefDecl). Valid only while CTypedefIsFnType is True. }
   CTypedefFnRetTok, CTypedefFnNameTok, CTypedefFnLParTok, CTypedefFnRParTok : array[0..MAX_CTYPEDEF-1] of Integer;
+  CTypedefVlaSym : array[0..MAX_CTYPEDEF-1] of Integer; { see CTypeTypedefVlaSym }
   CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length of the FIRST dim; -1 = not an array typedef. Read CTypedefNDims beside it -- this alone cannot tell `T[2]' from `T[2][3]', and answering as if it could is what corrupted neighbouring locals (bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals). }
   CTypedefAlign : array[0..MAX_CTYPEDEF-1] of Integer; { `typedef int T __attribute__((aligned(16)))`: the alignment the NAME carries beyond its type's own; 0 = none. bug-c-an-aligned-typedef-member-does-not-align-the-member }
   CTypedefNDims : array[0..MAX_CTYPEDEF-1] of Integer; { how many dimensions the array typedef has; 0 = not an array typedef. The count is the discriminator: CTypedefArrLen was ONE integer and the parser dropped every dimension after the first SILENTLY, so `typedef int T[2][3]' allocated 2 elements and indexed with a 2-wide row. }

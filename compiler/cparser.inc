@@ -4929,6 +4929,13 @@ begin
       if (CTypePtrDepth = 0) and (CTypeTypedefNDims >= 1) then
         for szTdI := 0 to CTypeTypedefNDims - 1 do
           sz := sz * CTypeTypedefDims[szTdI];
+      { a VLA typedef: its extent is the local it evaluated
+        (feature-c-a-block-scope-vla-typedef) }
+      if (CTypePtrDepth = 0) and (CTypeTypedefVlaSym >= 0) then
+      begin
+        vlaExt := AllocNode(AN_IDENT); ASTIVal[vlaExt] := CTypeTypedefVlaSym;
+        ASTTk[vlaExt] := Ord(tyInt64);
+      end;
       { Abstract array type-name `sizeof(int[N][M])`: ParseCDeclType stops at the
         '[', so multiply the element size by each extent here. Without this the
         extents were swallowed by the balanced-')' scan below and sizeof returned
@@ -5273,6 +5280,14 @@ begin
   begin
     si := CFindSymFromModule(CurTok.SVal);
     procIdx := FindProc(CurTok.SVal);
+    { `sizeof a` of a VLA, unparenthesised: its run-time byte count, as the
+      parenthesised arm already reads. It answered the POINTER size, 8, so
+      `sizeof a / sizeof a[0]` over `int a[n]` was 2 for any n.
+      bug-c-sizeof-of-a-vla-without-parentheses-is-the-pointer-size }
+    if (si >= 0) and (Syms[si].TypeKind = tyPointer) and
+       (Tokens[TokPos].Kind <> tkLBrack) and (Tokens[TokPos].Kind <> tkDot) and
+       (Tokens[TokPos].Kind <> tkLParen) then
+      vlaSz := FindSym('$vlasz$' + CurTok.SVal);
     Next;   { consume the base identifier }
     { Unparenthesized `sizeof ident <postfix...>` (C 6.5.3: the operand of the
       unary form is a unary-expression, which includes a whole postfix chain).
@@ -7557,6 +7572,7 @@ begin
     CTypedefPtrElemProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
+    CTypedefVlaSym[idx] := -1;
     CTypedefNDims[idx] := 0;
     CTypedefAlign[idx] := 0;
     CTypedefLongRank[idx] := newRank;
@@ -7583,6 +7599,7 @@ begin
   CTypedefPtrElemProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
+  CTypedefVlaSym[CTypedefCount] := -1;
   CTypedefNDims[CTypedefCount] := 0;
   CTypedefAlign[CTypedefCount] := 0;
   CTypedefLongRank[CTypedefCount] := newRank;
@@ -8057,6 +8074,7 @@ begin
   CTypeProcSig := -1;
   CTypePtrElemProcSig := -1;
   CTypeTypedefArrLen := -1;
+  CTypeTypedefVlaSym := -1;
   CTypeTypedefNDims := 0;
   CTypeTypedefAlign := 0;
   CTypeFnPtrName := '';
@@ -8253,6 +8271,7 @@ begin
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               CTypePtrElemProcSig := CTypedefPtrElemProcSig[tdIdx]; { ptr-to-fn-ptr typedef: the pointee's }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
+              CTypeTypedefVlaSym := CTypedefVlaSym[tdIdx];
               CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length of the first dim, else -1 }
               CTypeTypedefNDims := CTypedefNDims[tdIdx];  { and HOW MANY dims -- see the field's note in defs.inc }
               CTypeTypedefAlign := CTypedefAlign[tdIdx];  { an aligned(N) typedef: members, globals and _Alignof honour it }
@@ -9116,7 +9135,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     lclNoStar: Boolean;      { this declarator wrote no `*`: an array typedef stays an array }
     lclStars: Integer;       { the `*`s this declarator wrote, apart from a typedef's own }
     lclShapeD: Integer;      { the depth an array typedef's shape is stamped at }
-    CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry: Integer;
+    CTypeTypedefArrLenAtEntry, CTypeTypedefNDimsAtEntry, lclVlaTd: Integer;
     CTypeTypedefDimsAtEntry: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   cliOuterTop := CLIArrTop;
@@ -9134,6 +9153,7 @@ begin
   CTypeTypedefNDimsAtEntry := CTypeTypedefNDims;
   for di := 0 to MAX_ARR_DIMS - 1 do CTypeTypedefDimsAtEntry[di] := CTypeTypedefDims[di];
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
+  lclVlaTd := CTypeTypedefVlaSym;  { a VLA typedef's extent local, else -1 }
   lclStars := CTypeSpelledStars;
   lclNoStar := CTypeSpelledStars = 0;   { the first declarator wrote no `*` (bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array) }
   tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
@@ -9591,6 +9611,8 @@ begin
       alone called a pointer to the array (libXt's CacheHashTable: every
       cacheHashTable[i] strode the 72-byte record and read off the table).
       bug-c-an-array-typedef-of-pointers-is-read-as-a-pointer-to-the-array }
+    if (lclVlaTd >= 0) and not ((declPtrDepth = 0) or lclNoStar) then
+      Error('C: a pointer to a variable-length array typedef is not supported');
     if (CurTok.Kind = tkLBrack) or ((tdArrLen >= 1) and ((declPtrDepth = 0) or lclNoStar)) then
     begin
       { fixed array  T name[N][M]...  — dimensions are constant expressions.
@@ -10081,9 +10103,19 @@ begin
         the flat row-major layout the fixed path uses assumes constant dims;
         anything else keeps the old refusal rather than guessing a stride.
         feature-c-vla-via-alloca. }
+      { a variable of a VLA typedef is a VLA of the extent the typedef
+        evaluated (feature-c-a-block-scope-vla-typedef) }
+      if (lclVlaTd >= 0) and (vlaDim < 0) then
+      begin
+        if dimCount <> 1 then
+          Error('C: a multi-dimensional variable-length array is not supported'
+                + ' — only the first dimension may be a runtime value');
+        vlaDim := AllocNode(AN_IDENT); ASTIVal[vlaDim] := lclVlaTd;
+        ASTTk[vlaDim] := Ord(tyInt64);
+      end;
       if vlaDim >= 0 then
       begin
-        if (dimCount <> 1) or (tdArrLen >= 1) then
+        if (dimCount <> 1) or ((tdArrLen >= 1) and (lclVlaTd < 0)) then
           Error('C: a multi-dimensional variable-length array is not supported'
                 + ' — only the first dimension may be a runtime value');
         if CurTok.Kind = tkAssign then
@@ -12725,9 +12757,21 @@ begin
     the alias and emit an empty statement node. }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
   begin
+    { ...except a VLA typedef's extent, which is evaluated here, at the
+      typedef (feature-c-a-block-scope-vla-typedef). }
+    CInBlockTypedef := True;
+    CBlockTypedefStmt := -1;
     ParseCTypedef;
+    CInBlockTypedef := False;
     node := AllocNode(AN_BLOCK);
     ASTLeft[node] := -1;
+    if CBlockTypedefStmt >= 0 then
+    begin
+      ASTLeft[node] := AllocNode(AN_SEQ);
+      ASTLeft[ASTLeft[node]] := CBlockTypedefStmt;
+      ASTRight[ASTLeft[node]] := -1;
+      CBlockTypedefStmt := -1;
+    end;
     Result := node;
     Exit;
   end;
@@ -25307,7 +25351,7 @@ end;
   spelling `typedef P PA[3];` was already modelled.
   bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
 procedure CTypedefReadDims(const nm: AnsiString);
-var ci, tdNDim, tdDimV: Integer;
+var ci, tdNDim, tdDimV, vPos, vExpr, vSym, vId, vAsn: Integer;
 begin
   if (CurTok.Kind <> tkLBrack) or (Tokens[TokPos].Kind = tkRBrack) then Exit;
   ci := FindCTypedef(nm);
@@ -25315,8 +25359,40 @@ begin
   while (CurTok.Kind = tkLBrack) and (Tokens[TokPos].Kind <> tkRBrack) do
   begin
     Next;                            { consume '[' }
+    CConstExprSawNonConst := False;
+    vPos := TokPos;
+    CConstExprAllowCall := CInBlockTypedef;
     tdDimV := CEvalConstExpr;
-    CCheckArrayExtent(tdDimV);
+    CConstExprAllowCall := False;
+    if CInBlockTypedef and CConstExprSawNonConst then
+    begin
+      { A BLOCK-SCOPE VLA TYPEDEF, `typedef char T[n];`. C evaluates the
+        extent HERE, once (6.7.8p3), so it is read as an expression into a
+        hidden local, and a variable or sizeof of T reads that local. It was
+        folded with n as 0 before: `T x;` had no storage and sizeof(T) was 0,
+        silently. LinuxKPI's BUILD_BUG_ON is this shape inside `while (0)`
+        (i915_drv.h's __platform_mask_index: 222 GPU-driver compiles refused
+        its folded -1). 1-D only, as for VLA variables.
+        feature-c-a-block-scope-vla-typedef }
+      if tdNDim > 0 then
+        Error('C: a multi-dimensional variable-length array typedef is not supported'
+              + ' — only the first dimension may be a runtime value');
+      TokPos := vPos - 1; Next;
+      vExpr := ParseCExpr;
+      Inc(CVlaTypedefSeq);
+      vSym := CAllocDeclVar('$vlatd$' + nm + '$' + AIntToStr(CVlaTypedefSeq), tyInt64);
+      vId := AllocNode(AN_IDENT); ASTIVal[vId] := vSym; ASTTk[vId] := Ord(tyInt64);
+      vAsn := AllocNode(AN_ASSIGN); ASTLeft[vAsn] := vId; ASTRight[vAsn] := vExpr;
+      ASTTk[vAsn] := Ord(tyInt64);
+      CBlockTypedefStmt := vAsn;
+      if ci >= 0 then CTypedefVlaSym[ci] := vSym;
+      tdDimV := 1;
+      if Tokens[TokPos].Kind = tkLBrack then
+        Error('C: a multi-dimensional variable-length array typedef is not supported'
+              + ' — only the first dimension may be a runtime value');
+    end
+    else
+      CCheckArrayExtent(tdDimV);
     if tdNDim >= MAX_ARR_DIMS then Error('too many dimensions in an array typedef');
     if ci >= 0 then CTypedefDims[ci * MAX_ARR_DIMS + tdNDim] := tdDimV;
     Inc(tdNDim);

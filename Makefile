@@ -30028,6 +30028,10 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_qnest26 | diff -u test/c_qualified_nested_struct_member.expected -
 	./$(COMPILER) test/c_builtin_choose_expr.c $(TESTTMP)/c_choose26
 	$(TESTTMP)/c_choose26 | diff -u test/c_builtin_choose_expr.expected -
+	# a block-scope VLA typedef (LinuxKPI BUILD_BUG_ON); `sizeof a` of a VLA.
+	# Expected output is gcc's.
+	./$(COMPILER) test/c_block_scope_vla_typedef.c $(TESTTMP)/c_vlatd26
+	$(TESTTMP)/c_vlatd26 | diff -u test/c_block_scope_vla_typedef.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

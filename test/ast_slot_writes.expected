@@ -436,6 +436,7 @@ AN_ASSIGN Left slot
 AN_ASSIGN Left target
 AN_ASSIGN Left tmpIdent
 AN_ASSIGN Left tmpN
+AN_ASSIGN Left vId
 AN_ASSIGN Left vaIdent
 AN_ASSIGN Left valNode
 AN_ASSIGN Left vbLhs
@@ -568,6 +569,7 @@ AN_ASSIGN Right tagNode
 AN_ASSIGN Right tern
 AN_ASSIGN Right thenNode
 AN_ASSIGN Right trIdent
+AN_ASSIGN Right vExpr
 AN_ASSIGN Right vListNode
 AN_ASSIGN Right val
 AN_ASSIGN Right valLit
@@ -733,6 +735,7 @@ AN_BINOP Right vlaSzLit
 AN_BINOP Right zero
 AN_BINOP Right zeroNode
 AN_BLOCK Left -1
+AN_BLOCK Left AllocNode(AN_SEQ)
 AN_BLOCK Left WsStmtList
 AN_BLOCK Left bHead
 AN_BLOCK Left head
