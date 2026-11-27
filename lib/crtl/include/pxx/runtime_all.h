@@ -62,6 +62,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/signalfd.h>
 #include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/io.h>
