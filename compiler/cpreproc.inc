@@ -2373,10 +2373,12 @@ procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
 var
   p, a, b, mi, q, depth, argc, argBase, ai: Integer;
   q2, grpEnd, tailMi: Integer;
+  paintedOnly: Boolean;   { an active (painted) function-like name: resume after it }
   expanded, combined: AnsiString;
   quote: Char;
   quotedDone, dynMacroHit: Boolean;
 begin
+  paintedOnly := False;
   if level > 32 then Error('C macro recursion');
   p := first;
   while p <= last do
@@ -2568,8 +2570,16 @@ begin
 
           if CPMacroIsActive(mi) then
           begin
-            AppendChar(dst, #1);   { paint the name; args copy as-is }
-            CPAppendRange(dst, src, a, q);
+            { 6.10.3.4p2: only the NAME is painted. What follows is rescanned
+              as usual, so a macro in the arguments still expands. Copying the
+              arguments as-is left FreeBSD's self-referential
+              `#define malloc(size, type, flags) ({ ... malloc(_size, type,
+              (flags) &~ M_ZERO); ... })` with M_ZERO undeclared (1287 GPU-driver
+              compiles). bug-cpp-a-self-referential-macro-call-leaves-its-arguments-unexpanded }
+            AppendChar(dst, #1);
+            CPAppendRange(dst, src, a, b);
+            q := b + 1;
+            paintedOnly := True;
           end
           else
           begin
@@ -2618,7 +2628,9 @@ begin
               dst := dst + expanded;
           end;
           
-          if (q <= last) and (src[q] = ')') then Inc(q);
+          if paintedOnly then
+            paintedOnly := False   { resume right after the name }
+          else if (q <= last) and (src[q] = ')') then Inc(q);
           p := q;
         end;
       end;

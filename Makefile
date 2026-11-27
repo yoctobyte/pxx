@@ -29993,6 +29993,14 @@ test-core: $(COMPILER)
 	# Expected output is gcc's.
 	./$(COMPILER) test/c_inline_asm_constraint_literals_concatenate.c $(TESTTMP)/c_asmcat26
 	$(TESTTMP)/c_asmcat26 | diff -u test/c_inline_asm_constraint_literals_concatenate.expected -
+	# a self-referential macro's arguments still expand (FreeBSD malloc/M_ZERO);
+	# x86-64 "q" is any register; a dead ?: arm with _Generic; clz/ctz/popcount/
+	# ffs fold in constant expressions. Expected output is gcc's.
+	./$(COMPILER) test/c_painted_macro_args_q_any_reg_and_generic_dead_arm.c $(TESTTMP)/c_paintq26
+	$(TESTTMP)/c_paintq26 | diff -u test/c_painted_macro_args_q_any_reg_and_generic_dead_arm.expected -
+	# _Generic on a struct-valued expression (seqlock.h). Expected is gcc's.
+	./$(COMPILER) test/c_generic_on_a_struct_expression.c $(TESTTMP)/c_genstruct26
+	$(TESTTMP)/c_genstruct26 | diff -u test/c_generic_on_a_struct_expression.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

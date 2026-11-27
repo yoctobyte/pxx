@@ -1,0 +1,6 @@
+kalloc 64 flags 0x3
+wrapped 8 flags 0x1 twice 12
+cfg 1 LOG16 4 runtime 9 40
+fields 63 3
+cas 1 0 t=9
+folded 43 4 8 4 dims 4

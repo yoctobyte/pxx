@@ -1848,8 +1848,16 @@ begin
         since TTypeKind cannot distinguish `17L` from `17` on ILP32 nor `17LL` from
         `17L` on LP64 — and `i + 2L` is a long by the usual arithmetic conversions
         even though its TTypeKind on ILP32 is a plain 32-bit int. }
-      Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
-                                        CExprLongRank(node)));
+      begin
+        Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
+                                          CExprLongRank(node)));
+        { a struct-valued EXPRESSION (`*(s)`, `h.a`, `p->m`) carries its record,
+          as an identifier does above: without it no `struct X:` association
+          could match. LinuxKPI's seqlock.h dispatches write_seqcount_begin on
+          `_Generic(*(s), struct seqcount: ..., struct seqcount_mutex: ...)`.
+          bug-c-generic-on-a-struct-expression-matches-no-association }
+        if CGKindA[Result] = cgStruct then CGRecA[Result] := ResolveNodeRec(node);
+      end;
   end;
 end;
 
@@ -11002,6 +11010,13 @@ begin
       it is the one a template using %h needs. NetBSD's/rump's x86 atomic.h
       spells xchgb's result this way (rump repro g14a). }
     if (cls = 'qQ') or (cls = 'Qq') or (cls = 'qQm') or (cls = 'Qqm') then cls := 'Q';
+    { On x86-64 every general register has a byte form (sil, dil, r8b...), so
+      gcc's "q" is any of them, the same set as "r"; only i386 limits it to
+      a b c d. Pinning it to those four refused ck_pr.h's cmpxchg16b, whose
+      operands take b and c and whose clobbers take rax and rdx (601 GPU-driver
+      compiles). "Q" (%h, the high byte) is still a b c d everywhere.
+      bug-c-inline-asm-q-is-any-register-on-x86-64 }
+    if (cls = 'q') and (TargetArch = TARGET_X86_64) then cls := 'r';
     { A digit constraint names an earlier operand's location. It is only legal
       in the INPUT section -- an output tied to an output has no meaning -- and
       it must name an operand that already exists. }
@@ -23215,8 +23230,32 @@ begin
   wide := bits = 64;
 end;
 
+{ The bit-counting builtins the constant folder evaluates: 1 clz, 2 ctz,
+  3 popcount, 4 ffs, 0 for any other name; w is the operand width (32 for
+  the plain name, the C long width for the l form, 64 for ll). }
+function CBitBuiltinKind(const nm: AnsiString; var w: Integer): Integer;
+var base, sfx: AnsiString;
+begin
+  Result := 0;
+  w := 32;
+  if Copy(nm, 1, 10) <> '__builtin_' then Exit;
+  base := Copy(nm, 11, Length(nm) - 10);
+  sfx := '';
+  if (Length(base) > 2) and (Copy(base, Length(base) - 1, 2) = 'll') then
+  begin sfx := 'll'; base := Copy(base, 1, Length(base) - 2); end
+  else if (Length(base) > 1) and (base[Length(base)] = 'l') then
+  begin sfx := 'l'; base := Copy(base, 1, Length(base) - 1); end;
+  if base = 'clz' then Result := 1
+  else if base = 'ctz' then Result := 2
+  else if base = 'popcount' then Result := 3
+  else if base = 'ffs' then Result := 4;
+  if sfx = 'll' then w := 64
+  else if sfx = 'l' then w := TARGET_PTR_SIZE * 8;
+end;
+
 function CEvalConstPrimary: Int64;
-var idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst, addrObj: Boolean;
+var bitK, bitW: Integer; bitV: QWord;
+    idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst, addrObj: Boolean;
     strLitText: AnsiString; strLitIdx: Int64;
 begin
   wasCall := False;
@@ -23391,6 +23430,40 @@ begin
   end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
     Result := CParseTypesCompatible
+  else if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) and
+          (CBitBuiltinKind(CurTok.SVal, bitW) > 0) then
+  begin
+    { __builtin_clz/ctz/popcount/ffs (l, ll) of a constant fold here, as gcc
+      folds them. Read as an unknown `__` name they marked the expression
+      non-constant and read 0, so FreeBSD's ilog2_const, `63 -
+      __builtin_clzll(n)`, came out 63 -- and a bitfield width or enum built on
+      it was wrong, or refused. bug-c-a-dead-ternary-arm-with-generic-is-not-skipped }
+    bitK := CBitBuiltinKind(CurTok.SVal, bitW);
+    Next; Next;   { name, '(' }
+    bitV := QWord(CEvalConstExpr);
+    if CurTok.Kind = tkRParen then Next;
+    if bitW = 32 then bitV := bitV and $FFFFFFFF;
+    Result := 0;
+    case bitK of
+      1: { clz }
+        if bitV = 0 then Result := bitW
+        else
+          while (bitV and (QWord(1) shl (bitW - 1))) = 0 do begin Inc(Result); bitV := bitV shl 1; end;
+      2: { ctz }
+        if bitV = 0 then Result := bitW
+        else
+          while (bitV and 1) = 0 do begin Inc(Result); bitV := bitV shr 1; end;
+      3: { popcount }
+        while bitV <> 0 do begin Inc(Result, Integer(bitV and 1)); bitV := bitV shr 1; end;
+      4: { ffs }
+        if bitV <> 0 then
+        begin
+          Result := 1;
+          while (bitV and 1) = 0 do begin Inc(Result); bitV := bitV shr 1; end;
+        end;
+    end;
+    CConstUns := False; CConstWide := False;
+  end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_constant_p') and
           (Tokens[TokPos].Kind = tkLParen) then
   begin
@@ -23652,8 +23725,44 @@ end;
   expression cannot call one") or letting it mark the dimension run-time was
   wrong. rump-pxx g32. bug-c-a-dead-ternary-arm-is-held-to-constant-rules }
 function CEvalConstDeadArm: Int64;
-var savedAllow, savedNonConst: Boolean;
+var savedAllow, savedNonConst, hasGeneric: Boolean; i, depth, quest, armEnd: Integer;
 begin
+  { An arm holding _Generic -- FreeBSD's ilog2(n), `__builtin_constant_p(n) ?
+    <constant> : _Generic((n), ...)(n)`, as a bitfield width in i915's
+    intel_display_types.h -- is skipped by its tokens: the constant folder has
+    no _Generic, and the value of an arm not taken is never needed. The arm
+    ends at a `,` `;` or closing bracket at its own depth, or at a `:` that no
+    `?` inside it opened. bug-c-a-dead-ternary-arm-with-generic-is-not-skipped }
+  hasGeneric := False;
+  depth := 0; quest := 0; armEnd := -1;
+  i := TokPos - 1;   { CurTok }
+  while (i < TokCount) and (armEnd < 0) do
+  begin
+    case Tokens[i].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(depth);
+      tkRParen, tkRBrack, tkEnd:
+        if depth = 0 then armEnd := i else Dec(depth);
+      tkComma, tkSemicolon: if depth = 0 then armEnd := i;
+      tkQuestion: if depth = 0 then Inc(quest);
+      tkColon:
+        if depth = 0 then
+        begin
+          if quest > 0 then Dec(quest) else armEnd := i;
+        end;
+      tkEOF: armEnd := i;
+      tkIdent:
+        if GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = '_Generic' then
+          hasGeneric := True;
+    end;
+    if armEnd < 0 then Inc(i);
+  end;
+  if hasGeneric and (armEnd >= 0) then
+  begin
+    TokPos := armEnd; Next;   { CurTok = the arm's terminator }
+    CConstUns := False; CConstWide := False;
+    Result := 0;
+    Exit;
+  end;
   savedAllow := CConstExprAllowCall;
   savedNonConst := CConstExprSawNonConst;
   CConstExprAllowCall := True;
@@ -23663,18 +23772,23 @@ begin
 end;
 
 function CEvalConstTernary: Int64;
-var t, e: Int64; tu, tw: Boolean;
+var t, e: Int64; tu, tw, condNonConst: Boolean;
 begin
   Result := CEvalConstLogOr;
   if CurTok.Kind = tkQuestion then
   begin
     Next;
-    if CConstExprSawNonConst then t := CEvalConstExpr   { a run-time condition: both arms count }
+    { whether the CONDITION is a run-time value, read now: the then-arm can set
+      the flag too (a folded __builtin_clzll in a bitfield width does), and
+      that must not make the else-arm live. FreeBSD's ilog2(4) as i915's
+      bitfield width. bug-c-a-dead-ternary-arm-with-generic-is-not-skipped }
+    condNonConst := CConstExprSawNonConst;
+    if condNonConst then t := CEvalConstExpr   { a run-time condition: both arms count }
     else if Result <> 0 then t := CEvalConstExpr
     else t := CEvalConstDeadArm;    { then-branch is a full expression }
     tu := CConstUns; tw := CConstWide;
     if CurTok.Kind = tkColon then Next;
-    if CConstExprSawNonConst then e := CEvalConstExpr
+    if condNonConst then e := CEvalConstExpr
     else if Result = 0 then e := CEvalConstExpr
     else e := CEvalConstDeadArm;    { else-branch }
     CConstConv(tu, tw, CConstUns, CConstWide);
