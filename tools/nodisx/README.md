@@ -407,3 +407,24 @@ partitions six images from sfdisk scripts (GPT and DOS, the ids fixed, one
 script that sfdisk refuses). The images are byte-identical to gcc's, and so
 are `sfdisk -d/-l/-J/-V`, `fdisk -l` and `blkid -p` on them, with the same
 exit status.
+
+## The whole on-site build, on Rainyday
+
+`test-onsite-rainyday.sh` is the acceptance check. It boots the Rainyday
+kernel under QEMU with an initramfs that holds the ISO tree
+(`mkiso-tree.sh`: pxx with its compiler/ and lib/ sources, every recorded
+recipe, and the sha256-checked tarballs) and only two binaries, toybox and
+mksh, both built by pxx through their recipes. There is no gcc, binutils,
+make, python or busybox in the guest. The guest runs `onsite-all.sh` and
+exports the installed tree over the second serial line. The same driver
+then runs on the host with the same pxx and with PXX_NO_HOST_INCLUDE=1, so
+neither side sees the host's headers or /etc/ld.so.cache. PASS means every
+recipe built in the guest and every installed file is byte-identical to
+the host's.
+
+    NODISX_WORK=/data/tmp/nodisx tools/nodisx/test-onsite-rainyday.sh
+
+Result, 2026-11-27, on 398a2b6cf1: `onsite-all: 16 built, 0 failed` in the
+guest, 1079 s at -smp 4 -m 8G; `43 files installed, 0 differ between guest
+and host`. Each recipe must be recorded into NODISX_WORK first (its
+record.sh). Set ONLY="a b" to run a subset.

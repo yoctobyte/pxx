@@ -4,12 +4,12 @@ title: "Nodisx: everything an installed Rainyday + pixix system needs is compile
 track: C
 prio: 70
 type: umbrella
-status: backlog
+status: done
 created: 2026-11-26
 found-by: owner (yoctobyte), asked of claude-dupwt
-owner: ""
+owner: claude-dupwt
 blocked-by: []
-summary: "GOAL, not a unit of work. 2026-11-26: GNU make, rumpnic, busybox DONE (claude-dupwt); bootstrap set DONE (pxx2); disk tools DONE (claude-dupwt); OPEN: sqlite (pxx2), GPU drivers last. The Nodisx installer ISO ships only the kernel, pxx, a boot loader and a small permissive bootstrap set (~/nodisx/docs/bootstrap.md); everything else, GPL included, is pinned source plus a recipe that pxx compiles ON THE TARGET with only pxx, a POSIX shell and toybox (tools/nodisx/README.md). DONE: the kernel builds with pxx; toybox (1604/1604), mksh, dosfstools (GPL-3, images byte-identical to gcc's), xz-utils, the Path B X desktop; 471 rump objects and the USB stack compile, all-pxx rumpnic boots. OPEN, in order: GNU make (gates the kernel on site), mke2fs + sfdisk/blkid, rumpnic/usbhid as on-site recipes, the rest of the bootstrap set (curl+mbedTLS, dhcpcd, dropbear, zstd, bzip2, Limine), pixix userland (busybox, sqlite), and LAST the Linux GPU drivers (owner 2026-11-21: gcc for now)."
+summary: "DONE 2026-11-27. On Rainyday, pxx built all 16 Nodisx recipes (toybox, mksh, GNU make, xz, bzip2, zstd, dosfstools, e2fsprogs, util-linux, dhcpcd, dropbear, curl+mbedTLS, sqlite, busybox, Limine, rumpnic) in the guest with only pxx, mksh and toybox, in 18 min on 4 vCPUs. All 43 installed files are byte-identical to the same build on the host (tools/nodisx/test-onsite-rainyday.sh). The Linux GPU drivers stay out of scope: the owner said gcc for now (2026-11-21); follow-up feature-nodisx-linux-gpu-drivers-built-by-pxx."
 ---
 
 # Nodisx compiles the whole system on site with pxx
@@ -61,10 +61,10 @@ in Nodisx's `docs/needs.md`.
    Mozilla bundle (AES-NI off: software AES, flagged), Limine (the limine
    tool by pxx; the loaders ship as the signed release binaries, reasons in
    its recipe). See tools/nodisx/README.md.
-5. **pixix userland:** busybox DONE 2026-11-26 (claude-dupwt, see the
-   table; three crtl bugs its testsuite found are fixed); dropbear is in
-   item 4; sqlite: pxx2, in progress.
-6. **The whole on-site build, ON Rainyday** (claude-dupwt): the acceptance
+5. ~~pixix userland~~ DONE: busybox (claude-dupwt, see the table; its
+   testsuite found three crtl bugs, all fixed), dropbear (item 4), sqlite
+   (pxx2, 4847558ffe; every database file byte-identical to gcc's).
+6. ~~The whole on-site build, ON Rainyday~~ **PASS 2026-11-27** (claude-dupwt): the acceptance
    check for 1-5. tools/nodisx/test-onsite-rainyday.sh boots Rainyday with
    the ISO tree (pxx, every recipe, its tarballs; mkiso-tree.sh) and only
    pxx-built toybox and mksh, runs onsite-all.sh in the guest, and compares
@@ -72,8 +72,17 @@ in Nodisx's `docs/needs.md`.
    2026-11-26: 10 of 14 built in the guest; the 4 failures were crtl
    headers the host had silently supplied (pxx2: --no-host-include and the
    headers) and one absolute #include in rumpnic's sources (fixed
-   0b92506fc9).
-7. **Linux GPU drivers** (radeon, amdgpu, i915, nouveau; GPL). Owner
+   0b92506fc9). The runs after that found five more problems, all fixed:
+   two more headers e2fsprogs needed (<linux/unistd.h>, <linux/falloc.h>),
+   rumpnic's __FILE__ strings,
+   --no-host-include still reading the host's ld.so.cache (81ca69b3d3),
+   and wasm32 builds broken by closefrom (63e64b8c0a).
+   **Final run, tree 398a2b6cf1 + util-linux:** `onsite-all: 16 built, 0
+   failed` in the guest (1079 s, -smp 4, -m 8G). `43 files installed, 0
+   differ between guest and host`. Every recipe's own test.sh also passes
+   with PXX_NO_HOST_INCLUDE=1.
+7. **Linux GPU drivers**, DEFERRED by the owner and moved to
+   feature-nodisx-linux-gpu-drivers-built-by-pxx (radeon, amdgpu, i915, nouveau; GPL). Owner
    2026-11-21: built with gcc for now, pxx "a question for another time".
    They also need `objcopy --redefine-syms`, ar, bash and awk. First step
    when it is time: a trial compile through Rainyday's
