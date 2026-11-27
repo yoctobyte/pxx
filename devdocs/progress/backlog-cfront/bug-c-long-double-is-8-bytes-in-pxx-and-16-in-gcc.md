@@ -72,3 +72,8 @@ recipe's 6 SQL scripts found is past 17 significant digits:
 digits) and `0.100000000000000005` under gcc's x87 path. With
 `-DLONGDOUBLE_TYPE=double` on the gcc side the two builds are identical.
 `tools/nodisx/sqlite/test.sh` builds its reference that way.
+
+**Owner, 2026-11-27 (for Nodisx sqlite):** ignore it for sqlite. The 80-bit
+`long double` is an x86-only format, and sqlite's double-double path is what
+it uses on every platform where long double is double. Its database files
+are byte-identical to gcc's. Not a Nodisx blocker.
