@@ -6,9 +6,13 @@
 # answers) with a busybox root, the on-site rumpnic as the NIC driver and the
 # on-site dhcpcd. dhcpcd configures eth0 itself (no udhcpc), then the guest
 # pings the gateway, fetches a file from the host, and reports every dhcpcd
-# process's uid and seccomp mode from /proc.
-# PASS: the lease is bound, the ping and the fetch succeed, and at least one
-# dhcpcd process runs as the unprivileged user under a seccomp filter.
+# process's uid and seccomp mode from /proc. The _dhcpcd account and its home
+# (the chroot) are the ones onsite.sh installed into DHCPCD_DESTDIR's
+# etc/passwd and etc/group, not added here: a system installed from the
+# recipe must have them, or dhcpcd runs every process as root.
+# PASS: the lease is bound, the ping and the fetch succeed, at least one
+# dhcpcd process runs as _dhcpcd under a seccomp filter, and every other one
+# is the privileged proxy (root, by its process title).
 #
 #   tools/nodisx/dhcpcd/test-privsep-rainyday.sh DHCPCD_DESTDIR BUSYBOX RUMPNIC [KERNEL]
 # DHCPCD_DESTDIR is what onsite.sh installed (sbin/dhcpcd, libexec/, etc/).
@@ -20,6 +24,10 @@ dest=${1:?usage: test-privsep-rainyday.sh DHCPCD_DESTDIR BUSYBOX RUMPNIC [KERNEL
 bb=${2:?busybox} rn=${3:?rumpnic}
 RD=${RAINYDAY:-$HOME/rainyday}
 kernel=${4:-$RD/kernel/build/pxx/rainyday.elf}
+pw=$(grep '^_dhcpcd:' "$dest/etc/passwd" 2>/dev/null) && gr=$(grep '^_dhcpcd:' "$dest/etc/group" 2>/dev/null) \
+  || { echo "test-privsep: onsite.sh did not install the _dhcpcd user and group into $dest/etc"; exit 1; }
+uid=$(echo "$pw" | cut -d: -f3) home=$(echo "$pw" | cut -d: -f6)
+[[ $uid != 0 && -d $dest$home ]] || { echo "test-privsep: _dhcpcd is uid $uid, home $home (not installed)"; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/nodisx-dhcpcd-ps.XXXXXX")
 mkdir -p "$work/www"
 head -c 300000 /dev/urandom > "$work/www/blob"
@@ -35,9 +43,8 @@ mkdir -p /proc /sys /tmp /var/run/dhcpcd
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 ip link set lo up
-echo '_dhcpcd:x:150:150:dhcpcd:/var/db/dhcpcd:/bin/false' >> /etc/passwd
-echo '_dhcpcd:x:150:' >> /etc/group
-mkdir -p /var/db/dhcpcd/tmp
+echo '$pw' >> /etc/passwd
+echo '$gr' >> /etc/group
 /bin/rumpnic -v > /tmp/rn.log 2>&1 &
 i=0; while ! grep -q 'bridged to' /tmp/rn.log && [ \$i -lt 300 ]; do usleep 100000; i=\$((i+1)); done
 ifc=\$(sed -n 's/.* bridged to \([a-z0-9]*\).*/\1/p' /tmp/rn.log)
@@ -61,7 +68,7 @@ poweroff -f
 EOF
 chmod 755 "$work/run.sh"
 specs=("sbin/dhcpcd=$dest/sbin/dhcpcd" "etc/dhcpcd.conf=$dest/etc/dhcpcd.conf"
-       "libexec/dhcpcd-run-hooks=$dest/libexec/dhcpcd-run-hooks" "bin/rumpnic=$rn" "var/db/dhcpcd/")
+       "libexec/dhcpcd-run-hooks=$dest/libexec/dhcpcd-run-hooks" "bin/rumpnic=$rn" "var/db/dhcpcd/" "${home#/}/")
 for h in "$dest"/libexec/dhcpcd-hooks/*; do specs+=("libexec/dhcpcd-hooks/$(basename "$h")=$h"); done
 "$RD/tools/mkroot-busybox.sh" "$work/root.cpio" "$bb" "$work/run.sh" "${specs[@]}" > /dev/null
 timeout 240 qemu-system-x86_64 -enable-kvm -cpu host -machine q35 -m 512M -kernel "$kernel" \
@@ -75,7 +82,14 @@ need() { grep -aq "$1" "$c" || { echo "test-privsep: missing: $1"; ok=0; }; }
 need '^dps: dhcpcd rc=0$'
 need '^dps: got 10\.0\.2\.'
 need '^dps: default route$'
-need '^dps: proc .*| uid 150 seccomp 2$'
+need "^dps: proc .*| uid $uid seccomp 2\$"
+# dhcpcd's own errors: a directory the install should have made, a lease
+# file it could not write
+grep -a '^dps: log: .*\(No such file or directory\|Permission denied\)' "$c" && { echo "test-privsep: dhcpcd could not reach a file"; ok=0; }
+# the rest: root is the privileged proxy alone (Rainyday's /proc/N/cmdline
+# shows dhcpcd's setproctitle titles)
+other=$(grep -a '^dps: proc ' "$c" | grep -v "| uid $uid seccomp 2\$" | grep -v '\[privileged proxy\].*| uid 0 ' || true)
+[[ -z $other ]] || { echo "test-privsep: a dhcpcd process neither _dhcpcd under seccomp nor the privileged proxy:"; echo "$other"; ok=0; }
 need '^dps: hooks wrote resolv.conf$'
 need '^dps: ping ok$'
 need '^dps: stopped rc=0$'

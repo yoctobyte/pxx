@@ -2,10 +2,14 @@
 /*
  * C runtime: <ifaddrs.h> -- getifaddrs/freeifaddrs.
  *
- * IPv4 ONLY, from the SIOCGIFCONF ioctl. glibc builds the list from a netlink
- * dump, which also yields the IPv6 addresses and the AF_PACKET link entries;
- * a caller looking for an interface's IPv6 address finds none here. Found by
- * toybox's ping -I, which looks an interface name up in this list.
+ * As glibc builds the list, from two rtnetlink dumps: first one AF_PACKET
+ * entry per interface (a sockaddr_ll with its index, ARPHRD type and hardware
+ * address; the broadcast address; struct rtnl_link_stats in ifa_data), then
+ * one entry per IPv4 and IPv6 address (netmask from the prefix length;
+ * IFA_BROADCAST, or the peer on a point-to-point link; the scope id of a
+ * link-local IPv6 address), every entry with its interface's full flags.
+ * Until 2026-11-27 it was IPv4 only, from SIOCGIFCONF: dhcpcd, which builds
+ * its interface list from the AF_PACKET entries, found no interface at all.
  */
 #ifndef PXX_CRTL_IFADDRS_H
 #define PXX_CRTL_IFADDRS_H 1

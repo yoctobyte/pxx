@@ -230,6 +230,12 @@ static inline int __pxx_in6_zero(const unsigned char *b, int from, int to)
 #define IN6_IS_ADDR_MULTICAST(a) (__PXX_IN6_B(a, 0) == 0xff)
 #define IN6_IS_ADDR_LINKLOCAL(a) (__PXX_IN6_B(a, 0) == 0xfe && (__PXX_IN6_B(a, 1) & 0xc0) == 0x80)
 #define IN6_IS_ADDR_SITELOCAL(a) (__PXX_IN6_B(a, 0) == 0xfe && (__PXX_IN6_B(a, 1) & 0xc0) == 0xc0)
+/* a multicast address's scope, the low nibble of its second byte */
+#define IN6_IS_ADDR_MC_NODELOCAL(a) (IN6_IS_ADDR_MULTICAST(a) && (__PXX_IN6_B(a, 1) & 0xf) == 0x1)
+#define IN6_IS_ADDR_MC_LINKLOCAL(a) (IN6_IS_ADDR_MULTICAST(a) && (__PXX_IN6_B(a, 1) & 0xf) == 0x2)
+#define IN6_IS_ADDR_MC_SITELOCAL(a) (IN6_IS_ADDR_MULTICAST(a) && (__PXX_IN6_B(a, 1) & 0xf) == 0x5)
+#define IN6_IS_ADDR_MC_ORGLOCAL(a)  (IN6_IS_ADDR_MULTICAST(a) && (__PXX_IN6_B(a, 1) & 0xf) == 0x8)
+#define IN6_IS_ADDR_MC_GLOBAL(a)    (IN6_IS_ADDR_MULTICAST(a) && (__PXX_IN6_B(a, 1) & 0xf) == 0xe)
 static inline int __pxx_in6_eq(const unsigned char *x, const unsigned char *y)
 {
   int i;

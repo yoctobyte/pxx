@@ -21197,6 +21197,50 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_uluapi/c_ullibc: gcc absent, NOT verified ==="; \
 	fi
+	# The seccomp UAPI dhcpcd's privilege separation uses (Nodisx): <linux/seccomp.h>,
+	# <linux/audit.h>'s AUDIT_ARCH_*, <linux/net.h>'s socketcall numbers, values
+	# and layouts against gcc at both widths, and a filter of dhcpcd's shape
+	# installed for real (uname answered EPERM, the rest allowed).
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_seccomp_uapi.c $(TESTTMP)/c_scuapi26 >/dev/null || { echo "c_scuapi compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_scuapi_gcc test/c_crtl_seccomp_uapi.c || { echo "c_scuapi gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_scuapi26 "$$($(TESTTMP)/c_scuapi26)" "$$($(TESTTMP)/c_scuapi_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_scuapi_gcc32 test/c_crtl_seccomp_uapi.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_seccomp_uapi.c $(TESTTMP)/c_scuapi32 >/dev/null || { echo "c_scuapi i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_scuapi26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_scuapi32)" "$$($(TESTTMP)/c_scuapi_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_scuapi: gcc absent, NOT verified ==="; \
+	fi
+	# getifaddrs as glibc builds it, from rtnetlink: the AF_PACKET entry of each
+	# interface, then its IPv4 and IPv6 addresses, the same entries in the same
+	# order as glibc's on this host, at both widths (dhcpcd found no interface
+	# in the IPv4-only SIOCGIFCONF list).
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_getifaddrs.c $(TESTTMP)/c_gifa26 >/dev/null || { echo "c_gifa compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_gifa_gcc test/c_crtl_getifaddrs.c || { echo "c_gifa gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_gifa26 "$$($(TESTTMP)/c_gifa26)" "$$($(TESTTMP)/c_gifa_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_gifa_gcc32 test/c_crtl_getifaddrs.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_getifaddrs.c $(TESTTMP)/c_gifa32 >/dev/null || { echo "c_gifa i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_gifa26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_gifa32)" "$$($(TESTTMP)/c_gifa_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_gifa: gcc absent, NOT verified ==="; \
+	fi
+	# open_memstream with a position (fseek, rewind, ftell, the size after
+	# fflush and fclose), glibc's rules, and dhcpcd's rewind-and-refill of its
+	# hook environment; against gcc at both widths.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_memstream_seek.c $(TESTTMP)/c_msseek26 >/dev/null || { echo "c_msseek compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_msseek_gcc test/c_crtl_memstream_seek.c || { echo "c_msseek gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_msseek26 "$$($(TESTTMP)/c_msseek26)" "$$($(TESTTMP)/c_msseek_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_msseek_gcc32 test/c_crtl_memstream_seek.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_memstream_seek.c $(TESTTMP)/c_msseek32 >/dev/null || { echo "c_msseek i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_msseek26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_msseek32)" "$$($(TESTTMP)/c_msseek_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_msseek: gcc absent, NOT verified ==="; \
+	fi
 	# several function-pointer declarators in one struct/union member
 	# declaration (`void (*f)(void *), (*g)(void *);`): every name a member at
 	# gcc's offset, calls through each; against gcc at both widths.

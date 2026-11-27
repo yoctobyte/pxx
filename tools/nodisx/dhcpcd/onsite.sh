@@ -73,5 +73,22 @@ if [ -n "$DEST" ]; then
     cp "$S/hooks/$h" "$DEST/libexec/dhcpcd-hooks/$h"; chmod 644 "$DEST/libexec/dhcpcd-hooks/$h"
   done
   [ -e "$DEST/etc/dhcpcd.conf" ] || { cp "$S/src/dhcpcd.conf" "$DEST/etc/dhcpcd.conf"; chmod 644 "$DEST/etc/dhcpcd.conf"; }
+  # privilege separation: the _dhcpcd user and group, and its home, the empty
+  # directory the unprivileged processes chroot into. Without the user dhcpcd
+  # says "no such user _dhcpcd" and runs every process as root. Added only if
+  # absent, with the lowest id in 100..999 that neither file uses.
+  mkdir -p "$DEST/var/lib/dhcpcd"; chmod 755 "$DEST/var/lib/dhcpcd"
+  touch "$DEST/etc/passwd" "$DEST/etc/group"
+  if ! grep -q '^_dhcpcd:' "$DEST/etc/passwd"; then
+    id=100
+    while cut -d: -f3 "$DEST/etc/passwd" "$DEST/etc/group" | grep -qx "$id"; do id=$((id + 1)); done
+    [ "$id" -le 999 ] || { echo "onsite: no free system id for _dhcpcd" >&2; exit 1; }
+    grep -q '^_dhcpcd:' "$DEST/etc/group" || echo "_dhcpcd:x:$id:" >> "$DEST/etc/group"
+    gid=$(sed -n 's/^_dhcpcd:[^:]*:\([0-9]*\):.*/\1/p' "$DEST/etc/group")
+    echo "_dhcpcd:x:$id:$gid:dhcpcd privilege separation:/var/lib/dhcpcd:/bin/false" >> "$DEST/etc/passwd"
+    if [ -f "$DEST/etc/shadow" ] && ! grep -q '^_dhcpcd:' "$DEST/etc/shadow"; then
+      echo '_dhcpcd:!:1::::::' >> "$DEST/etc/shadow"
+    fi
+  fi
   echo "onsite: installed into $DEST"
 fi

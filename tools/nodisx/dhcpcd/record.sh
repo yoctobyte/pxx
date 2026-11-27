@@ -15,13 +15,14 @@
 #   --without-udev     no udev on Nodisx: dhcpcd watches netlink itself
 #   --without-openssl  dhcpcd's own md5/sha256/hmac (compat/crypt), no libcrypto
 #   --enable-privsep --privsepuser=_dhcpcd
-#                      privilege separation (owner 2026-11-27: the packet
-#                      parsers must not run as root). A root process keeps the
-#                      route/address/raw-socket work; the network-facing parts
-#                      run as _dhcpcd, chrooted to its home, under dhcpcd's
-#                      seccomp filter. The system must have the user (home
-#                      /var/db/dhcpcd, with a tmp/ inside) and /var/run/dhcpcd.
-#                      test-privsep-rainyday.sh takes a lease that way.
+#                      privilege separation: one root process does the
+#                      privileged work (addresses, routes, raw sockets) and
+#                      everything that parses packets runs as _dhcpcd,
+#                      chrooted to its home and under seccomp filters (Linux,
+#                      and Rainyday's kernel has them). onsite.sh's install
+#                      adds the user and /var/lib/dhcpcd; without the user
+#                      dhcpcd would run every process as root.
+#                      test-privsep-rainyday.sh checks it on a real lease.
 #   --with-hooks= --with-eghooks=
 #                      only the three base hooks (01-test, 20-resolv.conf,
 #                      30-hostname). configure otherwise adds an NTP or NIS

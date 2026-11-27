@@ -141,23 +141,31 @@ hook if the BUILD host has chronyd or ypbind), and
 **Privilege separation is on** (owner 2026-11-27: the packet parsers must
 not run as root). Only a small root process keeps the privileged work:
 routes, addresses and raw sockets. The DHCP/ARP/BPF parsing and the control
-socket run as `_dhcpcd`, chrooted to its home, under dhcpcd's seccomp
-filter. The system needs that user (home `/var/db/dhcpcd`, with a `tmp/`
-inside) and `/var/run/dhcpcd`.
+socket run as `_dhcpcd`, chrooted to its empty home `/var/lib/dhcpcd`,
+under dhcpcd's seccomp filter. onsite.sh's install adds that user: without
+it dhcpcd says "no such user" and runs every process as root. dhcpcd makes
+`/var/db/dhcpcd` and `/var/run/dhcpcd` itself.
 `test-privsep-rainyday.sh DESTDIR BUSYBOX RUMPNIC [KERNEL]` boots Rainyday
-with the on-site busybox, rumpnic and dhcpcd. dhcpcd takes QEMU's lease
-itself, its hooks write resolv.conf, and the guest pings, fetches a file
-and stops dhcpcd. It checks /proc: four dhcpcd processes ran as uid 150 at
-seccomp mode 2 and one as root. PASS on 2026-11-27, with Rainyday 179dfaa
-or later (NETLINK_GENERIC). That run found two crtl bugs, both fixed:
-getifaddrs missed an interface that had no address yet, and open_memstream
-had no position, so the hooks never ran.
+with the on-site busybox, rumpnic and dhcpcd, and the `_dhcpcd` account
+onsite.sh installed in DESTDIR (it fails if there is none). dhcpcd takes
+QEMU's lease itself, its hooks write resolv.conf, and the guest pings,
+fetches a file and stops dhcpcd. It checks /proc: the dhcpcd processes run
+as `_dhcpcd` at seccomp mode 2, except one root process titled
+"[privileged proxy]". PASS on 2026-11-27, with Rainyday 179dfaa or later
+(NETLINK_GENERIC). The work found these crtl gaps, now fixed: getifaddrs
+was IPv4 only (SIOCGIFCONF) and missed an interface with no address yet.
+It now reads rtnetlink as glibc does, AF_PACKET entries first, at both
+widths. open_memstream had no position, so the hooks never ran. And the
+seccomp UAPI headers were missing.
 
 gen.tar holds config.h, the option definitions configure generates
 (`src/dhcpcd-embedded.{c,h}`) and the two hook scripts made from `.in`
-files. 34 units, one link. `.tar.xz`, so the xz recipe comes first.
+files. 40 units, one link. `.tar.xz`, so the xz recipe comes first.
 `onsite.sh WORK [DESTDIR]` installs `sbin/dhcpcd`, `libexec/dhcpcd-run-hooks`,
-`libexec/dhcpcd-hooks/` and `etc/dhcpcd.conf` (kept if present).
+`libexec/dhcpcd-hooks/` and `etc/dhcpcd.conf` (kept if present), creates
+`var/lib/dhcpcd`, and adds `_dhcpcd` to `etc/passwd` and `etc/group` (and
+`etc/shadow` if there is one) unless it is there, with the lowest id in
+100..999 that neither file uses.
 
 `test.sh` compares with gcc's build what runs without root: `--version`, the
 usage text and an unknown-option error; `-V`, the whole option-definition

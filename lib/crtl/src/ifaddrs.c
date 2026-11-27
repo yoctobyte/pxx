@@ -1,15 +1,8 @@
 /* SPDX-License-Identifier: Zlib */
-/* C runtime: getifaddrs (see <ifaddrs.h>).
-
-   FROM NETLINK, as glibc and musl do: one RTM_GETLINK dump gives every
-   interface an AF_PACKET entry (its hardware address in a sockaddr_ll, its
-   flags, its rtnl_link_stats in ifa_data), up or down, addressed or not. Then
-   one RTM_GETADDR dump gives an AF_INET or AF_INET6 entry per address.
-   SIOCGIFCONF, which this used before, lists only interfaces that already
-   HAVE an IPv4 address. So a DHCP client looking for the fresh eth0 it is
-   about to configure did not find it: dhcpcd on Rainyday said "eth0:
-   interface not found" (bug-c-crtl-getifaddrs-misses-an-interface-without-an-address).
-   SIOCGIFCONF stays as the fallback when no netlink socket can be opened. */
+/* C runtime: getifaddrs over two rtnetlink dumps, as glibc builds it (see
+   <ifaddrs.h>): RTM_GETLINK first, one AF_PACKET entry per interface, then
+   RTM_GETADDR, one entry per IPv4 or IPv6 address, each in the kernel's dump
+   order. */
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -18,23 +11,142 @@
 #include <linux/rtnetlink.h>
 #include <linux/if_link.h>
 #include <linux/if_addr.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
-/* One block per entry: freeifaddrs frees it through its first member. */
-struct crtl_ifa {
-  struct ifaddrs ifa;
-  union { struct sockaddr sa; struct sockaddr_in in; struct sockaddr_in6 in6; struct sockaddr_ll ll; } addr, mask, brd;
-  char name[IFNAMSIZ + 1];
-  struct rtnl_link_stats stats;
+/* sockaddr_ll with room for a hardware address longer than Ethernet's (glibc
+   keeps up to 24 bytes, InfiniBand's 20 among them) */
+struct crtl_sockaddr_ll_max {
+  unsigned short sll_family;
+  unsigned short sll_protocol;
+  int sll_ifindex;
+  unsigned short sll_hatype;
+  unsigned char sll_pkttype;
+  unsigned char sll_halen;
+  unsigned char sll_addr[24];
 };
 
-/* ---- the SIOCGIFCONF fallback (IPv4 addresses only) ---- */
-static int crtl_ifaddrs_ioctl(struct ifaddrs **ifap)
+union crtl_ifa_sa {
+  struct sockaddr sa;
+  struct crtl_sockaddr_ll_max sl;
+  struct sockaddr_in s4;
+  struct sockaddr_in6 s6;
+};
+
+/* one block per entry: freeifaddrs frees it through its first member */
+struct crtl_ifa {
+  struct ifaddrs ifa;
+  union crtl_ifa_sa addr, mask, brd;
+  char name[IFNAMSIZ + 1];
+  int index;                    /* a link entry's ifi_index */
+  long long data[];             /* a link entry's IFLA_STATS */
+};
+
+/* one dump into *out (every message of it, concatenated) */
+static int crtl_nl_dump(int fd, int type, int family, unsigned seq, char **out, size_t *outlen)
+{
+  struct { struct nlmsghdr nh; struct rtgenmsg g; char pad[3]; } req;
+  char *all = 0, *buf;
+  size_t len = 0, cap = 0;
+  int bufsz = 65536;
+  pid_t me = 0;
+
+  memset(&req, 0, sizeof req);
+  req.nh.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtgenmsg));
+  req.nh.nlmsg_type = (unsigned short)type;
+  req.nh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+  req.nh.nlmsg_seq = seq;
+  req.g.rtgen_family = (unsigned char)family;
+  /* An unconnected netlink socket sends to the kernel: send(), not sendto()
+     with a sockaddr_nl, because crtl's i386 sockets take only AF_INET
+     addresses (netinet/in.c). On 64-bit the replies come through recvmsg,
+     which says who sent each and whether it was cut; on the 32-bit targets
+     through recv() (a dump message fits the 64 KiB buffer either way). */
+  if (send(fd, &req, req.nh.nlmsg_len, 0) < 0) return -1;
+#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+  {
+    struct sockaddr_nl self; socklen_t sl = sizeof self;
+    if (getsockname(fd, (struct sockaddr *)&self, &sl) == 0) me = (pid_t)self.nl_pid;
+  }
+#endif
+  buf = (char *)malloc((size_t)bufsz);
+  if (!buf) { errno = ENOMEM; return -1; }
+  for (;;) {
+    struct nlmsghdr *nh;
+    ssize_t n;
+    int done = 0;
+#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+    struct sockaddr_nl from;
+    struct iovec iov = { buf, (size_t)bufsz };
+    struct msghdr m;
+    memset(&m, 0, sizeof m);
+    memset(&from, 0, sizeof from);
+    m.msg_name = &from; m.msg_namelen = sizeof from;
+    m.msg_iov = &iov; m.msg_iovlen = 1;
+    n = recvmsg(fd, &m, 0);
+    if (n < 0) { if (errno == EINTR) continue; goto fail; }
+    if (m.msg_flags & MSG_TRUNC) { errno = ENOBUFS; goto fail; }
+    if (from.nl_pid != 0) continue;                   /* not the kernel */
+#else
+    n = recv(fd, buf, (size_t)bufsz, 0);
+    if (n < 0) { if (errno == EINTR) continue; goto fail; }
+#endif
+    for (nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, (unsigned)n); nh = NLMSG_NEXT(nh, n)) {
+      if (nh->nlmsg_seq != seq || (me && nh->nlmsg_pid != (unsigned)me)) continue;
+      if (nh->nlmsg_type == NLMSG_DONE) { done = 1; break; }
+      if (nh->nlmsg_type == NLMSG_ERROR) {
+        struct nlmsgerr *e = (struct nlmsgerr *)NLMSG_DATA(nh);
+        errno = nh->nlmsg_len >= NLMSG_LENGTH(sizeof *e) && e->error ? -e->error : EIO;
+        goto fail;
+      }
+      if (len + NLMSG_ALIGN(nh->nlmsg_len) > cap) {
+        size_t nc = cap ? cap * 2 : 65536;
+        char *na;
+        while (nc < len + NLMSG_ALIGN(nh->nlmsg_len)) nc *= 2;
+        na = (char *)realloc(all, nc);
+        if (!na) { errno = ENOMEM; goto fail; }
+        all = na; cap = nc;
+      }
+      memcpy(all + len, nh, nh->nlmsg_len);
+      len += NLMSG_ALIGN(nh->nlmsg_len);
+    }
+    if (done) break;
+  }
+  free(buf);
+  *out = all;
+  *outlen = len;
+  return 0;
+fail:
+  free(buf);
+  free(all);
+  return -1;
+}
+
+static void crtl_ifa_ip(union crtl_ifa_sa *sa, int family, const void *p, size_t n, int index)
+{
+  sa->sa.sa_family = (unsigned short)family;
+  if (family == AF_INET) {
+    if (n == 4) memcpy(&sa->s4.sin_addr, p, 4);
+  } else if (family == AF_INET6) {
+    if (n == 16) {
+      memcpy(&sa->s6.sin6_addr, p, 16);
+      if (IN6_IS_ADDR_LINKLOCAL(&sa->s6.sin6_addr) || IN6_IS_ADDR_MC_LINKLOCAL(&sa->s6.sin6_addr))
+        sa->s6.sin6_scope_id = (unsigned)index;
+    }
+  } else if (n <= sizeof *sa - sizeof sa->sa.sa_family) {
+    memcpy(sa->sa.sa_data, p, n);
+  }
+}
+
+/* Where the OS has no netlink (the BSD, Minix and NT translators): the IPv4
+   addresses from SIOCGIFCONF, with their flags, netmask and broadcast
+   address, which is what getifaddrs was before it used netlink. On Linux this
+   is never reached: AF_NETLINK always exists there. */
+static int crtl_getifaddrs_ioctl(struct ifaddrs **ifap)
 {
   struct ifconf ifc;
   struct ifreq *req;
@@ -61,17 +173,17 @@ static int crtl_ifaddrs_ioctl(struct ifaddrs **ifap)
     if (!e) { freeifaddrs(head); free(req); close(fd); errno = ENOMEM; return -1; }
     memcpy(e->name, req[i].ifr_name, IFNAMSIZ);
     e->ifa.ifa_name = e->name;
-    memcpy(&e->addr.in, &req[i].ifr_addr, sizeof e->addr.in);
+    memcpy(&e->addr.s4, &req[i].ifr_addr, sizeof e->addr.s4);
     e->ifa.ifa_addr = &e->addr.sa;
     memset(&r, 0, sizeof r);
     memcpy(r.ifr_name, req[i].ifr_name, IFNAMSIZ);
     if (ioctl(fd, SIOCGIFFLAGS, &r) == 0) e->ifa.ifa_flags = (unsigned short)r.ifr_flags;
     if (ioctl(fd, SIOCGIFNETMASK, &r) == 0) {
-      memcpy(&e->mask.in, &r.ifr_addr, sizeof e->mask.in);
+      memcpy(&e->mask.s4, &r.ifr_addr, sizeof e->mask.s4);
       e->ifa.ifa_netmask = &e->mask.sa;
     }
     if ((e->ifa.ifa_flags & IFF_BROADCAST) && ioctl(fd, SIOCGIFBRDADDR, &r) == 0) {
-      memcpy(&e->brd.in, &r.ifr_addr, sizeof e->brd.in);
+      memcpy(&e->brd.s4, &r.ifr_addr, sizeof e->brd.s4);
       e->ifa.ifa_broadaddr = &e->brd.sa;
     }
     *tail = &e->ifa;
@@ -83,236 +195,164 @@ static int crtl_ifaddrs_ioctl(struct ifaddrs **ifap)
   return 0;
 }
 
-/* ---- netlink ---- */
-
-/* the interfaces the link dump reported, so an address can name its interface */
-struct crtl_iflink { int index; unsigned int flags; char name[IFNAMSIZ + 1]; };
-
-struct crtl_ifa_state {
-  struct ifaddrs *head, **tail;
-  struct crtl_iflink *links;
-  int nlinks, caplinks;
-};
-
-static struct crtl_iflink *crtl_ifa_link(struct crtl_ifa_state *st, int index)
-{
-  int i;
-  for (i = 0; i < st->nlinks; i++)
-    if (st->links[i].index == index) return &st->links[i];
-  return 0;
-}
-
-static void crtl_ifa_append(struct crtl_ifa_state *st, struct crtl_ifa *e)
-{
-  *st->tail = &e->ifa;
-  st->tail = &e->ifa.ifa_next;
-}
-
-static int crtl_ifa_newlink(struct crtl_ifa_state *st, struct nlmsghdr *h)
-{
-  struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(h);
-  struct rtattr *rta = IFLA_RTA(ifi);
-  int len = (int)IFLA_PAYLOAD(h);
-  struct crtl_ifa *e = (struct crtl_ifa *)calloc(1, sizeof *e);
-  struct crtl_iflink *l;
-  if (!e) return -1;
-  e->ifa.ifa_name = e->name;
-  e->ifa.ifa_flags = ifi->ifi_flags;
-  e->addr.ll.sll_family = AF_PACKET;
-  e->addr.ll.sll_ifindex = ifi->ifi_index;
-  e->addr.ll.sll_hatype = ifi->ifi_type;
-  e->brd.ll = e->addr.ll;
-  for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-    unsigned int n = RTA_PAYLOAD(rta);
-    switch (rta->rta_type) {
-    case IFLA_IFNAME:
-      if (n > IFNAMSIZ) n = IFNAMSIZ;
-      memcpy(e->name, RTA_DATA(rta), n);
-      e->name[IFNAMSIZ] = 0;
-      break;
-    case IFLA_ADDRESS:
-      if (n > sizeof e->addr.ll.sll_addr) n = sizeof e->addr.ll.sll_addr;
-      memcpy(e->addr.ll.sll_addr, RTA_DATA(rta), n);
-      e->addr.ll.sll_halen = (unsigned char)n;
-      e->ifa.ifa_addr = &e->addr.sa;   /* none without one (a tun), as glibc */
-      break;
-    case IFLA_BROADCAST:
-      if (n > sizeof e->brd.ll.sll_addr) n = sizeof e->brd.ll.sll_addr;
-      memcpy(e->brd.ll.sll_addr, RTA_DATA(rta), n);
-      e->brd.ll.sll_halen = (unsigned char)n;
-      e->ifa.ifa_broadaddr = &e->brd.sa;
-      break;
-    case IFLA_STATS:
-      if (n > sizeof e->stats) n = sizeof e->stats;
-      memcpy(&e->stats, RTA_DATA(rta), n);
-      e->ifa.ifa_data = &e->stats;
-      break;
-    }
-  }
-  if (st->nlinks == st->caplinks) {
-    int cap = st->caplinks ? st->caplinks * 2 : 16;
-    struct crtl_iflink *nl = (struct crtl_iflink *)realloc(st->links, sizeof *nl * (size_t)cap);
-    if (!nl) { free(e); return -1; }
-    st->links = nl;
-    st->caplinks = cap;
-  }
-  l = &st->links[st->nlinks++];
-  l->index = ifi->ifi_index;
-  l->flags = ifi->ifi_flags;
-  memcpy(l->name, e->name, sizeof l->name);
-  crtl_ifa_append(st, e);
-  return 0;
-}
-
-/* a prefix length as a netmask in `sa', of `family' */
-static void crtl_ifa_mask(struct crtl_ifa *e, int family, unsigned int plen)
-{
-  unsigned char *p;
-  unsigned int i, max;
-  if (family == AF_INET) { e->mask.in.sin_family = AF_INET; p = (unsigned char *)&e->mask.in.sin_addr; max = 32; }
-  else { e->mask.in6.sin6_family = AF_INET6; p = (unsigned char *)&e->mask.in6.sin6_addr; max = 128; }
-  if (plen > max) plen = max;
-  for (i = 0; i < plen / 8; i++) p[i] = 0xff;
-  if (plen % 8) p[i] = (unsigned char)(0xff << (8 - plen % 8));
-  e->ifa.ifa_netmask = &e->mask.sa;
-}
-
-static void crtl_ifa_put(union { struct sockaddr sa; struct sockaddr_in in; struct sockaddr_in6 in6; struct sockaddr_ll ll; } *u,
-                         int family, const void *data, unsigned int n, int index)
-{
-  if (family == AF_INET && n >= 4) {
-    u->in.sin_family = AF_INET;
-    memcpy(&u->in.sin_addr, data, 4);
-  } else if (family == AF_INET6 && n >= 16) {
-    u->in6.sin6_family = AF_INET6;
-    memcpy(&u->in6.sin6_addr, data, 16);
-    /* a link-local or interface-local address is only meaningful with its scope */
-    if ((u->in6.sin6_addr.s6_addr[0] == 0xfe && (u->in6.sin6_addr.s6_addr[1] & 0xc0) == 0x80) ||
-        (u->in6.sin6_addr.s6_addr[0] == 0xff && (u->in6.sin6_addr.s6_addr[1] & 0x0f) <= 2))
-      u->in6.sin6_scope_id = (unsigned int)index;
-  }
-}
-
-static int crtl_ifa_newaddr(struct crtl_ifa_state *st, struct nlmsghdr *h)
-{
-  struct ifaddrmsg *ifa = (struct ifaddrmsg *)NLMSG_DATA(h);
-  struct rtattr *rta = IFA_RTA(ifa);
-  int len = (int)IFA_PAYLOAD(h);
-  struct crtl_iflink *l;
-  struct crtl_ifa *e;
-  const void *address = 0, *local = 0, *brd = 0;
-  unsigned int naddress = 0, nlocal = 0, nbrd = 0;
-  const char *label = 0;
-  unsigned int nlabel = 0;
-  if (ifa->ifa_family != AF_INET && ifa->ifa_family != AF_INET6) return 0;
-  for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-    switch (rta->rta_type) {
-    case IFA_ADDRESS:   address = RTA_DATA(rta); naddress = RTA_PAYLOAD(rta); break;
-    case IFA_LOCAL:     local = RTA_DATA(rta);   nlocal = RTA_PAYLOAD(rta);   break;
-    case IFA_BROADCAST: brd = RTA_DATA(rta);     nbrd = RTA_PAYLOAD(rta);     break;
-    case IFA_LABEL:     label = (const char *)RTA_DATA(rta); nlabel = RTA_PAYLOAD(rta); break;
-    }
-  }
-  if (!address && !local) return 0;
-  e = (struct crtl_ifa *)calloc(1, sizeof *e);
-  if (!e) return -1;
-  l = crtl_ifa_link(st, (int)ifa->ifa_index);
-  if (ifa->ifa_family == AF_INET && label && nlabel > 0) {
-    /* an IPv4 alias (eth0:1) is named by its label, as glibc does */
-    if (nlabel > IFNAMSIZ) nlabel = IFNAMSIZ;
-    memcpy(e->name, label, nlabel);
-  } else if (l) {
-    memcpy(e->name, l->name, sizeof e->name);
-  }
-  e->name[IFNAMSIZ] = 0;
-  e->ifa.ifa_name = e->name;
-  e->ifa.ifa_flags = l ? l->flags : 0;
-  /* IFA_LOCAL is the address; IFA_ADDRESS is the peer on a point-to-point link */
-  if (local) {
-    crtl_ifa_put(&e->addr, ifa->ifa_family, local, nlocal, (int)ifa->ifa_index);
-    if (address && (nlocal != naddress || memcmp(local, address, nlocal) != 0)) {
-      crtl_ifa_put(&e->brd, ifa->ifa_family, address, naddress, (int)ifa->ifa_index);
-      e->ifa.ifa_dstaddr = &e->brd.sa;
-    }
-  } else {
-    crtl_ifa_put(&e->addr, ifa->ifa_family, address, naddress, (int)ifa->ifa_index);
-  }
-  e->ifa.ifa_addr = &e->addr.sa;
-  if (brd && !e->ifa.ifa_dstaddr) {
-    crtl_ifa_put(&e->brd, ifa->ifa_family, brd, nbrd, (int)ifa->ifa_index);
-    e->ifa.ifa_broadaddr = &e->brd.sa;
-  }
-  crtl_ifa_mask(e, ifa->ifa_family, ifa->ifa_prefixlen);
-  crtl_ifa_append(st, e);
-  return 0;
-}
-
-/* one dump request; every reply message to `fn'. 0, or -1 with errno */
-static int crtl_ifa_dump(int fd, int type, unsigned int seq, struct crtl_ifa_state *st)
-{
-  struct { struct nlmsghdr nh; struct rtgenmsg g; } req;
-  struct sockaddr_nl to;
-  char *buf;
-  const int cap = 16384;
-  memset(&req, 0, sizeof req);
-  req.nh.nlmsg_len = NLMSG_LENGTH(sizeof req.g);
-  req.nh.nlmsg_type = (unsigned short)type;
-  req.nh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-  req.nh.nlmsg_seq = seq;
-  req.g.rtgen_family = AF_UNSPEC;
-  memset(&to, 0, sizeof to);
-  to.nl_family = AF_NETLINK;
-  if (sendto(fd, &req, req.nh.nlmsg_len, 0, (struct sockaddr *)&to, sizeof to) < 0) return -1;
-  buf = (char *)malloc((size_t)cap);
-  if (!buf) { errno = ENOMEM; return -1; }
-  for (;;) {
-    ssize_t n = recv(fd, buf, (size_t)cap, 0);
-    struct nlmsghdr *h;
-    int len;
-    if (n < 0) { if (errno == EINTR) continue; free(buf); return -1; }
-    if (n == 0) { free(buf); errno = EIO; return -1; }
-    len = (int)n;
-    for (h = (struct nlmsghdr *)buf; NLMSG_OK(h, len); h = NLMSG_NEXT(h, len)) {
-      if (h->nlmsg_seq != seq) continue;
-      if (h->nlmsg_type == NLMSG_DONE) { free(buf); return 0; }
-      if (h->nlmsg_type == NLMSG_ERROR) {
-        struct nlmsgerr *er = (struct nlmsgerr *)NLMSG_DATA(h);
-        free(buf);
-        errno = er->error ? -er->error : EIO;
-        return -1;
-      }
-      if (h->nlmsg_type == RTM_NEWLINK) { if (crtl_ifa_newlink(st, h) < 0) { free(buf); errno = ENOMEM; return -1; } }
-      else if (h->nlmsg_type == RTM_NEWADDR) { if (crtl_ifa_newaddr(st, h) < 0) { free(buf); errno = ENOMEM; return -1; } }
-    }
-  }
-}
-
 int getifaddrs(struct ifaddrs **ifap)
 {
-  struct crtl_ifa_state st;
-  struct sockaddr_nl me;
+  struct ifaddrs *head = 0, **tail = &head;
+  struct crtl_ifa **links = 0;
+  int nlinks = 0, caplinks = 0;
+  char *lbuf = 0, *abuf = 0;
+  size_t llen = 0, alen = 0, off;
   int fd, e;
 
   *ifap = 0;
   fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
-  if (fd < 0) return crtl_ifaddrs_ioctl(ifap);
-  memset(&me, 0, sizeof me);
-  me.nl_family = AF_NETLINK;
-  if (bind(fd, (struct sockaddr *)&me, sizeof me) < 0) { close(fd); return crtl_ifaddrs_ioctl(ifap); }
-  memset(&st, 0, sizeof st);
-  st.tail = &st.head;
-  if (crtl_ifa_dump(fd, RTM_GETLINK, 1, &st) < 0 || crtl_ifa_dump(fd, RTM_GETADDR, 2, &st) < 0) {
-    e = errno;
-    close(fd);
-    free(st.links);
-    freeifaddrs(st.head);
-    errno = e;
+  if (fd < 0) {
+    if (errno == EAFNOSUPPORT || errno == EPROTONOSUPPORT) return crtl_getifaddrs_ioctl(ifap);
     return -1;
   }
+  if (crtl_nl_dump(fd, RTM_GETLINK, AF_PACKET, 1, &lbuf, &llen) < 0 ||
+      crtl_nl_dump(fd, RTM_GETADDR, AF_UNSPEC, 2, &abuf, &alen) < 0)
+    goto fail;
+
+  /* the interfaces */
+  for (off = 0; off < llen; ) {
+    struct nlmsghdr *nh = (struct nlmsghdr *)(lbuf + off);
+    struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
+    struct rtattr *a;
+    int alen2;
+    size_t stats = 0;
+    struct crtl_ifa *x;
+    off += NLMSG_ALIGN(nh->nlmsg_len);
+    if (nh->nlmsg_type != RTM_NEWLINK) continue;
+    alen2 = (int)IFLA_PAYLOAD(nh);
+    for (a = IFLA_RTA(ifi); RTA_OK(a, alen2); a = RTA_NEXT(a, alen2))
+      if (a->rta_type == IFLA_STATS) stats = RTA_PAYLOAD(a);
+    x = (struct crtl_ifa *)calloc(1, sizeof *x + stats);
+    if (!x) { errno = ENOMEM; goto fail; }
+    x->ifa.ifa_flags = ifi->ifi_flags;
+    x->index = ifi->ifi_index;
+    alen2 = (int)IFLA_PAYLOAD(nh);
+    for (a = IFLA_RTA(ifi); RTA_OK(a, alen2); a = RTA_NEXT(a, alen2)) {
+      size_t n = RTA_PAYLOAD(a);
+      union crtl_ifa_sa *sa = 0;
+      if (a->rta_type == IFLA_ADDRESS) sa = &x->addr;
+      else if (a->rta_type == IFLA_BROADCAST) sa = &x->brd;
+      if (sa) {
+        if (n <= sizeof sa->sl.sll_addr) {
+          memcpy(sa->sl.sll_addr, RTA_DATA(a), n);
+          sa->sl.sll_halen = (unsigned char)n;
+          sa->sl.sll_ifindex = ifi->ifi_index;
+          sa->sl.sll_hatype = ifi->ifi_type;
+          sa->sl.sll_family = AF_PACKET;
+          if (sa == &x->addr) x->ifa.ifa_addr = &sa->sa;
+          else x->ifa.ifa_broadaddr = &sa->sa;
+        }
+      } else if (a->rta_type == IFLA_IFNAME) {
+        if (n > IFNAMSIZ + 1) n = IFNAMSIZ + 1;
+        memcpy(x->name, RTA_DATA(a), n);
+        x->name[IFNAMSIZ] = 0;
+        x->ifa.ifa_name = x->name;
+      } else if (a->rta_type == IFLA_STATS) {
+        memcpy(x->data, RTA_DATA(a), n);
+        x->ifa.ifa_data = x->data;
+      }
+    }
+    if (!x->ifa.ifa_name) x->ifa.ifa_name = x->name;
+    if (nlinks == caplinks) {
+      int nc = caplinks ? caplinks * 2 : 16;
+      struct crtl_ifa **nl = (struct crtl_ifa **)realloc(links, sizeof *links * (size_t)nc);
+      if (!nl) { free(x); errno = ENOMEM; goto fail; }
+      links = nl; caplinks = nc;
+    }
+    links[nlinks++] = x;
+    *tail = &x->ifa;
+    tail = &x->ifa.ifa_next;
+  }
+
+  /* the addresses */
+  for (off = 0; off < alen; ) {
+    struct nlmsghdr *nh = (struct nlmsghdr *)(abuf + off);
+    struct ifaddrmsg *ifam = (struct ifaddrmsg *)NLMSG_DATA(nh);
+    struct crtl_ifa *x, *link = 0;
+    struct rtattr *a;
+    int alen2, i;
+    off += NLMSG_ALIGN(nh->nlmsg_len);
+    if (nh->nlmsg_type != RTM_NEWADDR) continue;
+    for (i = 0; i < nlinks; i++)
+      if (links[i]->index == (int)ifam->ifa_index) { link = links[i]; break; }
+    if (!link) continue;          /* an address on a link the first dump did not list */
+    x = (struct crtl_ifa *)calloc(1, sizeof *x);
+    if (!x) { errno = ENOMEM; goto fail; }
+    x->ifa.ifa_flags = link->ifa.ifa_flags;
+    alen2 = (int)IFA_PAYLOAD(nh);
+    for (a = IFA_RTA(ifam); RTA_OK(a, alen2); a = RTA_NEXT(a, alen2)) {
+      size_t n = RTA_PAYLOAD(a);
+      switch (a->rta_type) {
+      case IFA_ADDRESS:
+        /* after IFA_LOCAL it is the peer of a point-to-point link */
+        if (x->ifa.ifa_addr) {
+          crtl_ifa_ip(&x->brd, ifam->ifa_family, RTA_DATA(a), n, (int)ifam->ifa_index);
+          x->ifa.ifa_broadaddr = &x->brd.sa;
+        } else {
+          crtl_ifa_ip(&x->addr, ifam->ifa_family, RTA_DATA(a), n, (int)ifam->ifa_index);
+          x->ifa.ifa_addr = &x->addr.sa;
+        }
+        break;
+      case IFA_LOCAL:
+        /* this end: what IFA_ADDRESS gave first was the peer */
+        if (x->ifa.ifa_addr) {
+          x->brd = x->addr;
+          x->ifa.ifa_broadaddr = &x->brd.sa;
+          memset(&x->addr, 0, sizeof x->addr);
+        }
+        crtl_ifa_ip(&x->addr, ifam->ifa_family, RTA_DATA(a), n, (int)ifam->ifa_index);
+        x->ifa.ifa_addr = &x->addr.sa;
+        break;
+      case IFA_BROADCAST:
+        if (x->ifa.ifa_broadaddr) memset(&x->brd, 0, sizeof x->brd);
+        crtl_ifa_ip(&x->brd, ifam->ifa_family, RTA_DATA(a), n, (int)ifam->ifa_index);
+        x->ifa.ifa_broadaddr = &x->brd.sa;
+        break;
+      case IFA_LABEL:
+        if (n + 1 <= sizeof x->name) {
+          memcpy(x->name, RTA_DATA(a), n);
+          x->name[n] = 0;
+          x->ifa.ifa_name = x->name;
+        }
+        break;
+      }
+    }
+    if (!x->ifa.ifa_name) x->ifa.ifa_name = link->ifa.ifa_name;
+    if (x->ifa.ifa_addr && x->ifa.ifa_addr->sa_family != AF_UNSPEC && x->ifa.ifa_addr->sa_family != AF_PACKET) {
+      unsigned max = ifam->ifa_family == AF_INET ? 32 : 128, plen = ifam->ifa_prefixlen, b;
+      unsigned char *m;
+      if (plen > max) plen = max;
+      x->mask.sa.sa_family = ifam->ifa_family;
+      m = ifam->ifa_family == AF_INET ? (unsigned char *)&x->mask.s4.sin_addr
+          : ifam->ifa_family == AF_INET6 ? (unsigned char *)&x->mask.s6.sin6_addr
+          : (unsigned char *)x->mask.sa.sa_data;
+      for (b = 0; b < plen / 8; b++) m[b] = 0xff;
+      if (plen % 8) m[b] = (unsigned char)(0xff << (8 - plen % 8));
+      x->ifa.ifa_netmask = &x->mask.sa;
+    }
+    *tail = &x->ifa;
+    tail = &x->ifa.ifa_next;
+  }
+  free(links);
+  free(lbuf);
+  free(abuf);
   close(fd);
-  free(st.links);
-  *ifap = st.head;
+  *ifap = head;
   return 0;
+fail:
+  e = errno;
+  free(links);
+  free(lbuf);
+  free(abuf);
+  freeifaddrs(head);
+  close(fd);
+  errno = e;
+  return -1;
 }
 
 void freeifaddrs(struct ifaddrs *ifa)
