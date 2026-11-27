@@ -4058,6 +4058,7 @@ begin
   SymHashReset;
   CurrentUnitIdx := -1;
   CTypedefCount := 0;
+  CEnumFixedCount := 0;
   CTypedefCharLen := 0;
   ExternalCount := 0; DynCallCount := 0; CurrentCLibrary := '';
   FrameSize := 0; CurProc := -1;

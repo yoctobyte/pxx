@@ -7890,6 +7890,90 @@ begin
   end;
 end;
 
+{ C23 6.7.2.2: `enum E : T { ... }` gives the enum the FIXED UNDERLYING TYPE T
+  (its size, alignment and signedness), and every later `enum E` names that
+  type too. FreeBSD's sys/types.h spells its 1-byte enums this way whenever
+  __GNUC__ >= 13 (`__enum_uint8_decl(vtype) { VNON, ... }`, used as
+  `__enum_uint8(vtype) v_type;`): drm-kmod's whole DRM core reaches it through
+  sys/vnode.h. feature-c-c23-enum-with-a-fixed-underlying-type }
+function CEnumFixedFind(const tag: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if tag = '' then Exit;
+  for i := CEnumFixedCount - 1 downto 0 do
+    if CEnumFixedTag[i] = tag then begin Result := i; Exit; end;
+end;
+
+procedure CEnumFixedNote(const tag: AnsiString; tk: TTypeKind);
+var i: Integer;
+begin
+  if tag = '' then Exit;
+  i := CEnumFixedFind(tag);
+  if i >= 0 then begin CEnumFixedTk[i] := tk; Exit; end;
+  if CEnumFixedCount >= MAX_C_ENUM_FIXED then Error('too many C enums with a fixed underlying type');
+  CEnumFixedTag[CEnumFixedCount] := tag;
+  CEnumFixedTk[CEnumFixedCount] := tk;
+  Inc(CEnumFixedCount);
+end;
+
+{ CurTok is the `:` after `enum [tag]`. True when what follows is a type (so
+  this is C23's fixed-type form, not an unnamed bitfield `enum E : 3`). }
+function CEnumColonIsFixedType: Boolean;
+begin
+  Result := False;
+  if (CurTok.Kind <> tkColon) or (TokPos >= TokCount) then Exit;
+  case Tokens[TokPos].Kind of
+    tkCUnsigned, tkCSigned, tkCShort, tkCLong, tkInteger_T, tkChar_T, tkCBool, tkConst:
+      Result := True;
+    tkIdent:
+      Result := FindCTypedef(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen)) >= 0;
+  end;
+end;
+
+{ Reads `: T` (CurTok is the colon) and returns T, an integer type. }
+function CEnumReadFixedType: TTypeKind;
+var isU, seen, loop, isChar: Boolean; sc, lc, td: Integer; base: TTypeKind;
+begin
+  Next; { ':' }
+  isU := False; seen := False; loop := True; isChar := False;
+  sc := 0; lc := 0; base := tyInt32;
+  while loop do
+    case CurTok.Kind of
+      tkCUnsigned: begin isU := True; seen := True; Next; end;
+      tkCSigned:   begin seen := True; Next; end;
+      tkCShort:    begin Inc(sc); seen := True; Next; end;
+      tkCLong:     begin Inc(lc); seen := True; Next; end;
+      tkInteger_T: begin seen := True; Next; end;
+      tkChar_T:    begin isChar := True; seen := True; Next; end;
+      tkCBool:     begin base := tyBool8; seen := True; Next; end;
+      tkConst:     Next;
+      tkIdent:
+        begin
+          if CurTok.SVal = 'volatile' then Next
+          else if not seen then
+          begin
+            td := FindCTypedef(CurTok.SVal);
+            if td < 0 then loop := False
+            else begin base := IntToTypeKind(CTypedefTk[td]); seen := True; Next; loop := False; end;
+          end
+          else loop := False;
+        end;
+    else loop := False;
+    end;
+  if isChar then
+  begin
+    if isU then base := tyUInt8 else base := tyInt8;
+  end
+  else if base = tyInt32 then
+  begin
+    if sc > 0 then base := tyInt16
+    else if lc > 0 then base := tyInt64;
+    if isU then base := CUnsignedOf(base);
+  end;
+  Result := base;
+end;
+
 function ParseCDeclType: TTypeKind;
 var
   leavePtrArr: Boolean;            { see CDeclLeaveParenPtrArr: read once, cleared for nested calls }
@@ -7903,6 +7987,9 @@ var
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
+  enumTag: AnsiString;   { `enum Tag`: its tag, for C23's fixed underlying type }
+  enumTk: TTypeKind;     { the enum's type: int or the fixed one }
+  enumFixed: Boolean;    { the base is a C23 fixed enum type: keep it as resolved }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
   fpStars: Integer;                { stars in the `(*..name)` group: 2 = pointer to a function pointer }
   fpNDims, fpDi: Integer;          { every dimension of `(*name[N][M]..)`, same reason }
@@ -7933,6 +8020,7 @@ begin
   CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
   tdLongRank := 0;
   CTypeBaseIsEnum := False;
+  enumFixed := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdPtrDepth := 0; tdPtrBaseTk := Ord(tyUnknown);
@@ -8102,14 +8190,26 @@ begin
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
             Next;
-            if CurTok.Kind = tkIdent then Next;   { tag — enum value is just an int }
+            enumTag := '';
+            if CurTok.Kind = tkIdent then begin enumTag := CurTok.SVal; Next; end;
+            { the enum's type: int, unless C23 gave it a fixed one (here, or at
+              the tag's definition) }
+            enumTk := tyInt32;
+            if CEnumColonIsFixedType then
+            begin
+              enumTk := CEnumReadFixedType;
+              CEnumFixedNote(enumTag, enumTk);
+            end
+            else if CEnumFixedFind(enumTag) >= 0 then
+              enumTk := CEnumFixedTk[CEnumFixedFind(enumTag)];
             { An inline enum body in type position (`enum [Tag] { A, B } x;`,
               e.g. a struct member or a typedef/global var) must be consumed here
               and its enumerators registered — otherwise the `{...}` is left for
               the declarator reader (stray-token error / desync) and A/B fold to
               0 as unknown idents. The enum type itself is just int. }
             if CurTok.Kind = tkBegin then ParseCEnumBody;
-            base := tyInt32; sawBase := True; CTypeBaseIsEnum := True;
+            base := enumTk; sawBase := True; CTypeBaseIsEnum := True;
+            enumFixed := enumTk <> tyInt32;
           end
           else
           begin
@@ -8174,6 +8274,8 @@ begin
     Result := tyRecord           { struct/union tag reference }
   else if isTypedef then
     Result := base               { typedef carries its own resolved kind }
+  else if enumFixed then
+    Result := base               { C23 `enum E : T`: T, already resolved }
   else if isFloatTy then
     Result := base
   else if base = tyInt128 then
@@ -10764,10 +10866,31 @@ begin
   end;
 end;
 
+{ True when cls is `r` plus immediate letters only (i n I J K L M N e Z). }
+function CAsmOnlyImmAndR(const cls: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  for i := 1 to Length(cls) do
+    if Pos(cls[i], 'rinIJKLMNeZ') = 0 then begin Result := False; Exit; end;
+end;
+
+{ The x86 condition names a flag output may use (gcc's set: every jCC
+  suffix). }
+function CAsmFlagCondOk(const c: AnsiString): Boolean;
+begin
+  Result := (c = 'a') or (c = 'ae') or (c = 'b') or (c = 'be') or (c = 'c') or
+            (c = 'e') or (c = 'g') or (c = 'ge') or (c = 'l') or (c = 'le') or
+            (c = 'na') or (c = 'nae') or (c = 'nb') or (c = 'nbe') or (c = 'nc') or
+            (c = 'ne') or (c = 'ng') or (c = 'nge') or (c = 'nl') or (c = 'nle') or
+            (c = 'no') or (c = 'np') or (c = 'ns') or (c = 'nz') or (c = 'o') or
+            (c = 'p') or (c = 's') or (c = 'z');
+end;
+
 { One `[sym] "constraint" ( expr )` list, comma-separated, up to the next colon
   or the closing paren. }
 procedure CAsmParseOperandSection(isOutSection: Boolean);
-var raw, cls, sym: AnsiString;
+var raw, cls, sym, flagCC: AnsiString;
     isOut, isInOut, early: Boolean;
     tied, immHi, addrN: Integer;
     wasN: Boolean;
@@ -10794,6 +10917,23 @@ begin
       Error('C: inline asm has more than ' + AIntToStr(MAX_CASM_OPERANDS)
             + ' operands');
     CAsmSplitConstraint(raw, cls, isOut, isInOut, early);
+    { x86 FLAG OUTPUT, "=@ccCOND" (gcc 6+): the operand is the condition COND
+      after the template, 1 or 0. FreeBSD's atomic_cmpset and bitops write
+      `sete %0` this way, and drm-kmod reaches them everywhere. It binds a
+      byte register (class q) that the template does not name, and the block
+      ends with setCOND into it, zero-extended. feature-c-inline-asm-flag-outputs }
+    flagCC := '';
+    if (Length(cls) > 3) and (Copy(cls, 1, 3) = '@cc') then
+    begin
+      if not (isOutSection or isOut) then
+        Error('C: inline asm flag constraint "' + raw + '" is an output-only constraint');
+      if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
+        Error('C: inline asm flag constraint "' + raw + '" is x86 only');
+      flagCC := Copy(cls, 4, Length(cls) - 3);
+      if not CAsmFlagCondOk(flagCC) then
+        Error('C: inline asm flag constraint "' + raw + '" names no x86 condition');
+      cls := 'q';
+    end;
     { "Nd" -- an 8-bit constant OR dx -- is how every port-I/O helper spells
       its port (Gibux's io.h, Linux's, glibc's sys/io.h). Taking dx is always
       one of the choices it allows, so the N is dropped, the same reading that
@@ -10828,6 +10968,11 @@ begin
     { "qm" / "Qm": a byte register OR memory, the usual spelling for a setcc
       result (`rdrand %0; setc %1`). The register is always one of the
       allowed choices, the same reading that honours "rm" as a register. }
+    { "Ir", "ri", "rn", "er"...: a register OR an immediate. The register is
+      always an allowed choice (as for "rm" and "g"), so they read as "r".
+      Linux's and FreeBSD's bitops pass the bit number as "Ir".
+      feature-c-inline-asm-flag-outputs }
+    if (Length(cls) >= 2) and (Pos('r', cls) > 0) and CAsmOnlyImmAndR(cls) then cls := 'r';
     if (cls = 'qm') or (cls = 'mq') then cls := 'q';
     if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
     { "qQ": either byte class. Q (a register with an addressable high byte:
@@ -10856,6 +11001,7 @@ begin
     CAsmOps[CAsmOpCount].SymName := sym;
     CAsmOps[CAsmOpCount].TiedTo := tied;
     CAsmOps[CAsmOpCount].FixReg := '';
+    CAsmOps[CAsmOpCount].FlagCC := flagCC;
     if cls = 'i' then
     begin
       { An immediate is a constant expression -- `FOUR * 10`, `KERNEL_CS`,
@@ -11810,6 +11956,12 @@ begin
     else if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
   AttEncodeTemplateInner(CAsmTemplate, isExt);
+  { flag outputs: the condition the template left, as 0 or 1 in the operand's
+    register, before the stores drain it (feature-c-inline-asm-flag-outputs) }
+  for i := 0 to CAsmOutCount - 1 do
+    if CAsmOps[i].FlagCC <> '' then
+      AttEncodeTemplateInner('set' + CAsmOps[i].FlagCC + ' %b' + AIntToStr(i) + #10 +
+                             'movzbl %b' + AIntToStr(i) + ', %k' + AIntToStr(i), True);
   for i := 0 to CAsmOutCount - 1 do
     if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, False);
@@ -12855,6 +13007,7 @@ begin
         CAsmOps[CAsmOpCount].SymName := '';
         CAsmOps[CAsmOpCount].TiedTo := asmI;
         CAsmOps[CAsmOpCount].FixReg := '';
+        CAsmOps[CAsmOpCount].FlagCC := '';
         CAsmOps[CAsmOpCount].Expr := CloneAST(CAsmOps[asmI].Expr);
         Inc(CAsmOpCount);
         CAsmOps[asmI].IsInOut := False;
@@ -12894,6 +13047,7 @@ begin
       CAsmOps[CAsmOpCount].SymName := '';
       CAsmOps[CAsmOpCount].TiedTo := -1;
       CAsmOps[CAsmOpCount].FixReg := '';
+      CAsmOps[CAsmOpCount].FlagCC := '';
       CAsmOps[CAsmOpCount].Expr := asmGotoIdn;
       Inc(CAsmOpCount);
       CAsmTemplate := CAsmGotoRewrite(CAsmTemplate, asmGotoIdx);
@@ -25561,6 +25715,7 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftRetElemTk, ftRetElemRec, ftRetRec: Integer;   { the result's record shape, before the params' parses overwrite it }
     tdFirstTok, ftNameTok, ftLParTok, ftRParTok: Integer;
     isEnumFn, tdEnumUnsigned: Boolean;
+    tdEnumTag: AnsiString; tdEnumTk: TTypeKind;   { C23 `typedef enum E : T` }
     k: Integer;
 begin
   CSplitDeclarators(True);
@@ -25713,7 +25868,16 @@ begin
   if (not isEnumFn) and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
   begin
     Next; { 'enum' }
-    if CurTok.Kind = tkIdent then Next;      { optional tag }
+    tdEnumTag := '';
+    if CurTok.Kind = tkIdent then begin tdEnumTag := CurTok.SVal; Next; end;   { optional tag }
+    tdEnumTk := tyInt32;
+    if CEnumColonIsFixedType then
+    begin
+      tdEnumTk := CEnumReadFixedType;     { C23 `typedef enum E : T {...} N;` }
+      CEnumFixedNote(tdEnumTag, tdEnumTk);
+    end
+    else if CEnumFixedFind(tdEnumTag) >= 0 then
+      tdEnumTk := CEnumFixedTk[CEnumFixedFind(tdEnumTag)];
     tdEnumUnsigned := False;
     if CurTok.Kind = tkBegin then
     begin
@@ -25732,10 +25896,10 @@ begin
     if CurTok.Kind = tkIdent then
     begin
       nm := CurTok.SVal; Next;
-      if ptrStars > 0 then AddCTypedefEx(nm, tyPointer, Ord(tyInt32), REC_NONE)
+      if ptrStars > 0 then AddCTypedefEx(nm, tyPointer, Ord(tdEnumTk), REC_NONE)
       else
       begin
-        AddCTypedef(nm, tyInt32);
+        AddCTypedef(nm, tdEnumTk);
         { a bitfield of this type is unsigned when no enumerator is negative,
           as in gcc. bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
         CTypedefIsUEnum[FindCTypedef(nm)] := tdEnumUnsigned;
@@ -25994,9 +26158,12 @@ end;
 { Bare top-level `enum [tag] body ;` — register the enumerators as
   constants (no new type name). }
 procedure ParseCEnumDecl;
+var tag: AnsiString;
 begin
   Next; { consume 'enum' }
-  if CurTok.Kind = tkIdent then Next;        { optional tag }
+  tag := '';
+  if CurTok.Kind = tkIdent then begin tag := CurTok.SVal; Next; end;   { optional tag }
+  if CEnumColonIsFixedType then CEnumFixedNote(tag, CEnumReadFixedType);   { C23 `enum E : T` }
   if CurTok.Kind = tkBegin then ParseCEnumBody;
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
   Eat(tkSemicolon);
@@ -26038,6 +26205,10 @@ var i, depth: Integer;
 begin
   i := TokPos;                      { token after 'enum' }
   if (i < TokCount) and (Tokens[i].Kind = tkIdent) then Inc(i);  { skip tag }
+  { C23 `enum Tag : T`: skip the fixed underlying type up to the body or `;` }
+  if (i < TokCount) and (Tokens[i].Kind = tkColon) then
+    while (i < TokCount) and (Tokens[i].Kind <> tkBegin) and (Tokens[i].Kind <> tkSemicolon) and
+          (Tokens[i].Kind <> tkLParen) and (Tokens[i].Kind <> tkComma) do Inc(i);
   if i >= TokCount then begin Result := False; Exit; end;
   if Tokens[i].Kind = tkSemicolon then begin Result := True; Exit; end;   { `enum Tag;` forward }
   if Tokens[i].Kind <> tkBegin then begin Result := False; Exit; end;     { `enum Tag x/g(...)` }

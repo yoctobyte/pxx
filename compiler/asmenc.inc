@@ -1380,6 +1380,41 @@ begin
     Exit;
   end;
 
+  { ---- bt / bts / btr / btc r/m, reg (0F A3/AB/B3/BB /r) and r/m, imm8
+    (0F BA /4../7 ib). Intel order: slot 0 is the bit base, slot 1 the bit
+    number. FreeBSD's atomic_testandset and Linux's bitops write
+    `lock; btsl %2, %0` with a "=@ccc" flag output (drm-kmod reaches them
+    through LinuxKPI). No 8-bit form exists. feature-c-inline-asm-flag-outputs }
+  if (CaseEqual(mn,'bt') or CaseEqual(mn,'bts') or CaseEqual(mn,'btr') or
+      CaseEqual(mn,'btc')) and (nops = 2) then
+  begin
+    if CaseEqual(mn,'bt') then r2 := 4
+    else if CaseEqual(mn,'bts') then r2 := 5
+    else if CaseEqual(mn,'btr') then r2 := 6
+    else r2 := 7;
+    if AsmOpKind[1] = AOP_REG then
+    begin
+      opSize := AsmOpSize[1];
+      if opSize = 1 then Error('asm: ' + mn + ' has no 8-bit form');
+      rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
+      AsmPrefixAndREX(opSize, rf, rh, 0);
+      AsmB($0F); AsmB($A3 + (r2 - 4) * 8);   { A3 AB B3 BB }
+      AsmModRM(rf, 0);
+      Exit;
+    end;
+    if AsmOpKind[1] = AOP_IMM then
+    begin
+      opSize := AsmOpSizeOf(1);
+      if opSize = 1 then Error('asm: ' + mn + ' has no 8-bit form');
+      AsmPrefixAndREX(opSize, r2, 0, 0);
+      AsmB($0F); AsmB($BA);
+      AsmModRM(r2, 0);
+      AsmB(Integer(AsmOpVal[1]) and $FF);
+      Exit;
+    end;
+    Error('asm: ' + mn + ' bit number must be a register or an immediate');
+  end;
+
   { lea reg, mem/global/memr }
   if CaseEqual(mn,'lea') then
   begin

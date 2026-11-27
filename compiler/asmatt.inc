@@ -1149,6 +1149,7 @@ begin
            never reaches this list (the zero-operand arm passes it on). }
          or CaseEqual(b,'cmpxchg') or CaseEqual(b,'xadd')
          or CaseEqual(b,'bsf') or CaseEqual(b,'bsr')
+         or CaseEqual(b,'bt') or CaseEqual(b,'bts') or CaseEqual(b,'btr') or CaseEqual(b,'btc')
          or CaseEqual(b,'shld') or CaseEqual(b,'shrd')
          or CaseEqual(b,'movabs')
          or CaseEqual(b,'str') or CaseEqual(b,'sldt')

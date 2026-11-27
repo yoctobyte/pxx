@@ -1,0 +1,4 @@
+cmpset 1 0 v=9
+testandset 0 1 bits=8
+below 1 0
+bitops m=0x8b r=0x10000000100 flags 1 0 1 1

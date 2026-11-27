@@ -306,8 +306,12 @@ const
   MAX_EXTERNAL = 16384;
   MAX_ASM_OBJ_CALLFIX = 4096;   { .asm frontend -c: extern calls needing an R_X86_64_PLT32 relocation }
   MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
-  MAX_CPREP_MACROS = 32768;
-  CPREP_MACRO_HASH_SIZE = 16384;   { power of two; ~half-full at MAX macros }
+  { 262144: amdgpu's register headers define >100k macros in ONE translation
+    unit (cik.c: 102079 under gcc -dM). 32768 failed 241 of the 2100 GPU-driver
+    compiles. BSS only: untouched pages cost nothing.
+    bug-cpp-too-many-c-macros-for-amdgpu-register-headers }
+  MAX_CPREP_MACROS = 262144;
+  CPREP_MACRO_HASH_SIZE = 131072;   { power of two; ~half-full at MAX macros }
   MAX_DECL_NAMES = 1024;  { comma-separated names in ONE var declaration group.
     Pascal has no such limit; this bound exists only because the two parsers
     collect the group into fixed-size local arrays. Cost of the bump: 12KB of
@@ -595,6 +599,7 @@ const
   MAX_ENUMVAL  = 4096;
   MAX_TYPEALIAS = 4096;
   MAX_CTYPEDEF  = 8192;
+  MAX_C_ENUM_FIXED = 2048;   { C23 enum tags with a fixed underlying type (CEnumFixedTag) }
   { C11 _Generic structural type descriptors (cgXxx). A type model richer than
     TTypeKind — distinguishes long/long long, char/signed char/unsigned char, and
     per-level const, which _Generic association matching needs and TTypeKind
@@ -2949,6 +2954,8 @@ type
     FixReg  : AnsiString;   { a register-class operand that is a local register
                               variable (`register long a2 __asm__("a2")`): the
                               register it is pinned to, else '' }
+    FlagCC  : AnsiString;   { x86 flag output `=@ccCOND`: COND (e, c, nz, ...),
+                              stored after the template by setCOND; else '' }
   end;
 
   TCallFix = record
@@ -5849,6 +5856,12 @@ var
   CTypedefDims : array[0..MAX_CTYPEDEF*MAX_ARR_DIMS-1] of Integer; { the dimensions themselves, flat: typedef i, dim d is at i*MAX_ARR_DIMS + d. Flat rather than 2-D because nothing else in this file is 2-D and the self-host subset is the thing that has to compile it. }
   CTypedefLongRank : array[0..MAX_CTYPEDEF-1] of Integer; { 0 = not a long-family base, 1 = `long`, 2 = `long long`. TTypeKind COLLAPSES these -- both are tyInt64 on a 64-bit target -- so the kind alone cannot tell `typedef long T` from `typedef long long T`, and gcc rejects that pair at BOTH widths. Same distinction SymCLongRank already keeps for _Generic. }
   CTypedefIsUEnum : array[0..MAX_CTYPEDEF-1] of Boolean; { the typedef names an ENUM (no pointer) whose body has no negative enumerator: a bitfield of it is UNSIGNED, as gcc lays it out (LVGL's `lv_draw_sw_mask_line_side_t side : 2` holding 2 read back -2). bug-c-a-typedef-enum-bitfield-reads-back-sign-extended }
+  { C23 6.7.2.2 `enum E : T`: the tags declared with a fixed underlying type, so a
+    later bare `enum E` (FreeBSD's __enum_uint8(name)) has T's size too.
+    feature-c-c23-enum-with-a-fixed-underlying-type }
+  CEnumFixedTag : array[0..MAX_C_ENUM_FIXED-1] of AnsiString;
+  CEnumFixedTk  : array[0..MAX_C_ENUM_FIXED-1] of TTypeKind;
+  CEnumFixedCount : Integer;
   CTypedefPtrDepth : array[0..MAX_CTYPEDEF-1] of Integer; { a POINTER typedef's own star count (`typedef struct D **PPD` = 2); 0 = not a pointer typedef or not recorded. CTypedefElemTk alone says only `pointer to pointer`, so every use of PPD lost the struct and `q[0]->w` read a stray word. bug-c-pointer-to-pointer-struct-member-reads-offset-0 }
   CTypedefPtrBaseTk : array[0..MAX_CTYPEDEF-1] of Integer; { with CTypedefPtrDepth >= 2: the kind under ALL the stars (tyRecord for PPD; its record is CTypedefRec) }
   CEnumBodyHasNeg : Boolean;  { the last ParseCEnumBody saw a negative enumerator }

@@ -29911,6 +29911,14 @@ test-core: $(COMPILER)
 	# LinuxKPI placeholders are 0-byte files
 	./$(COMPILER) -include test/c_include_an_empty_header.h test/c_include_an_empty_header.c $(TESTTMP)/c_emptyhdr26
 	$(TESTTMP)/c_emptyhdr26 | grep -qx 'empty header ok'
+	# C23 `enum E : T` has T's size, layout and signedness (FreeBSD's
+	# __enum_uint8_decl, all of drm-kmod). Expected output is gcc's.
+	./$(COMPILER) test/c_c23_enum_fixed_underlying_type.c $(TESTTMP)/c_c23enum26
+	$(TESTTMP)/c_c23enum26 | diff -u test/c_c23_enum_fixed_underlying_type.expected -
+	# x86 asm flag outputs "=@ccCOND" and bt/bts/btr/btc (FreeBSD atomics and
+	# bitops through LinuxKPI). Expected output is gcc's.
+	./$(COMPILER) test/c_inline_asm_flag_outputs.c $(TESTTMP)/c_asmflag26
+	$(TESTTMP)/c_asmflag26 | diff -u test/c_inline_asm_flag_outputs.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

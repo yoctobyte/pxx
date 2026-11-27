@@ -1,0 +1,4 @@
+sizeof vtype 1 small16 2 wide 8 plain 4
+struct vnode size 16 offsets 0 1 2 8
+t 200 (unsigned: 1) s -2 enum value VBAD 200
+wrapped 1, bitfield kind 1 after 9 sizeof withbf 8
