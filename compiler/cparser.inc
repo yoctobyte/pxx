@@ -24434,6 +24434,16 @@ begin
     end
     else if IsCTypeTok then
     begin
+      { `void (*f)(void *), (*g)(void *);` -- several function-pointer
+        declarators in one member declaration. The fn-pointer arm below
+        registers the one ParseCDeclType consumed and ends the member, so
+        every name after the first was dropped ("no member named 'g'":
+        Rainyday's kernel/dev/pci.c). Split it into one declaration per
+        declarator, as a file-scope one is; CSplitDeclarators touches only
+        the shapes that need it (a `(*name)` declarator or a fn-pointer
+        typedef as the type).
+        bug-c-a-second-function-pointer-declarator-in-a-struct-member-is-dropped }
+      CSplitDeclarators(False);
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
       fTk := CApplyAttrMode(fTk, CModeForDeclarators(fieldStartIdx, TokPos - 1));   { mode(..) on a member }

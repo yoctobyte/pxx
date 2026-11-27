@@ -21197,6 +21197,20 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_uluapi/c_ullibc: gcc absent, NOT verified ==="; \
 	fi
+	# several function-pointer declarators in one struct/union member
+	# declaration (`void (*f)(void *), (*g)(void *);`): every name a member at
+	# gcc's offset, calls through each; against gcc at both widths.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_struct_several_fnptr_declarators.c $(TESTTMP)/c_sfpd26 >/dev/null || { echo "c_sfpd compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_sfpd_gcc test/c_struct_several_fnptr_declarators.c || { echo "c_sfpd gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_sfpd26 "$$($(TESTTMP)/c_sfpd26)" "$$($(TESTTMP)/c_sfpd_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_sfpd_gcc32 test/c_struct_several_fnptr_declarators.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_struct_several_fnptr_declarators.c $(TESTTMP)/c_sfpd32 >/dev/null || { echo "c_sfpd i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_sfpd26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_sfpd32)" "$$($(TESTTMP)/c_sfpd_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_sfpd: gcc absent, NOT verified ==="; \
+	fi
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
