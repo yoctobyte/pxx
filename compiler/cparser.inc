@@ -2054,7 +2054,8 @@ begin
 end;
 
 function ParseCPrimary: Integer;
-var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
+var chooseCond: Int64; chooseA, chooseB: Integer;
+    node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
     vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
     genCtrl, genCtrlCG, genSel, genDefault, genVal, genAssocCG: Integer;
@@ -2253,6 +2254,24 @@ begin
         if genSel >= 0 then Result := genSel
         else if genDefault >= 0 then Result := genDefault
         else begin Error('_Generic: no matching association and no default'); Result := -1; end;
+        Exit;
+      end
+      else if (name = '__builtin_choose_expr') and (CurTok.Kind = tkLParen) then
+      begin
+        { gcc's `__builtin_choose_expr(const, e1, e2)`: e1 when the constant is
+          nonzero, else e2, and the result has the CHOSEN expression's type,
+          unlike ?:. Both arms are parsed; only the chosen one is kept, as
+          _Generic does. drm-kmod and LinuxKPI reach it through
+          __is_constexpr-style and typecheck macros (276 GPU-driver compiles).
+          feature-c-builtin-choose-expr }
+        Next;                                { consume '(' }
+        chooseCond := CEvalConstExpr;
+        Expect(tkComma, ',');
+        chooseA := ParseCExpr;
+        Expect(tkComma, ',');
+        chooseB := ParseCExpr;
+        Expect(tkRParen, ')');
+        if chooseCond <> 0 then Result := chooseA else Result := chooseB;
         Exit;
       end
       else if (name = '__builtin_va_arg') and (CurTok.Kind = tkLParen) then
@@ -24267,6 +24286,30 @@ begin
   end;
 end;
 
+{ From CurTok (a qualifier), past any further const/volatile: is the next
+  thing `struct`/`union` [tag] and an opening brace: a nested aggregate
+  member body? }
+function CNestedAggAfterQuals: Boolean;
+var i: Integer; w: AnsiString;
+begin
+  Result := False;
+  i := TokPos - 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkConst then Inc(i)
+    else if (Tokens[i].Kind = tkIdent) and
+            (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'volatile') then Inc(i)
+    else Break;
+  end;
+  if i >= TokCount then Exit;
+  w := '';
+  if Tokens[i].Kind = tkIdent then w := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+  if not ((Tokens[i].Kind = tkRecord) or (w = 'union')) then Exit;
+  Inc(i);
+  if (i < TokCount) and (Tokens[i].Kind = tkBegin) then begin Result := True; Exit; end;
+  Result := (i + 1 < TokCount) and (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkBegin);
+end;
+
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
 { THE BODY WAS SEEN -- marked here rather than at the four call sites, because
   this is the one place a braced body is actually laid out. See UClsBodySeen in
@@ -24385,7 +24428,18 @@ begin
       by member name(s). Lay the body out as a sub-record (recursively) and buffer
       the member(s) as record-typed fields, so outer.name.member resolves (lua
       CallInfo / GCUnion). Detected by an opening brace right after the keyword,
-      optionally past a tag. }
+      optionally past a tag. A qualifier in front (`const struct X <body> *func;`,
+      nouveau's nvif_parent) is stepped over first: it qualifies the member, not
+      the layout. Not skipping it sent the member down the plain path, which lost
+      it ("no member named 'func'": 97 GPU-driver compiles, and gsp.h's `rm`
+      another 249). bug-c-a-qualified-nested-struct-member-is-dropped }
+    while ((CurTok.Kind = tkConst) or
+           ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'volatile'))) and
+          ((Tokens[TokPos].Kind = tkRecord) or (Tokens[TokPos].Kind = tkConst) or
+           ((Tokens[TokPos].Kind = tkIdent) and ((GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen) = 'union') or
+                                                 (GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen) = 'volatile')))) and
+          CNestedAggAfterQuals do
+      Next;
     if ((CurTok.Kind = tkRecord) or ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
        ((Tokens[TokPos].Kind = tkBegin) or
         ((Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkBegin))) then

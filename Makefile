@@ -30001,6 +30001,12 @@ test-core: $(COMPILER)
 	# _Generic on a struct-valued expression (seqlock.h). Expected is gcc's.
 	./$(COMPILER) test/c_generic_on_a_struct_expression.c $(TESTTMP)/c_genstruct26
 	$(TESTTMP)/c_genstruct26 | diff -u test/c_generic_on_a_struct_expression.expected -
+	# a const-qualified nested struct member (nouveau); __builtin_choose_expr.
+	# Expected output is gcc's.
+	./$(COMPILER) test/c_qualified_nested_struct_member.c $(TESTTMP)/c_qnest26
+	$(TESTTMP)/c_qnest26 | diff -u test/c_qualified_nested_struct_member.expected -
+	./$(COMPILER) test/c_builtin_choose_expr.c $(TESTTMP)/c_choose26
+	$(TESTTMP)/c_choose26 | diff -u test/c_builtin_choose_expr.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
