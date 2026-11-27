@@ -82,3 +82,5 @@ no other.
 
 `tools/nodisx/test-onsite-rainyday.sh` sets PXX_NO_HOST_INCLUDE=1 for its
 host run, so the host and the guest see the same headers (frank-user).
+
+Two more, found by the on-Rainyday run of rd's e2fsprogs recipe, which landed after the hostless pass (claude-dupwt, 2026-11-27): <linux/unistd.h> (llseek.c, the __NR_* numbers through <sys/syscall.h>) and <linux/falloc.h> (unix_io.c: KEEP_SIZE, PUNCH_HOLE, ZERO_RANGE, the kernel's values). e2fsprogs test.sh with PXX_NO_HOST_INCLUDE=1: PASS.
