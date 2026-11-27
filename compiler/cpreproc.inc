@@ -4392,6 +4392,42 @@ end;
   and assembly (Gibux's layout.h) test to hide their C declarations. }
 { (CPAsmSource itself is declared above CPMaybePullBuiltinVaList, which reads it.) }
 
+
+{ gcc's type-generic checked arithmetic, __builtin_{add,sub,mul}_overflow(a, b,
+  &r): r gets the result wrapped to r's type, and the call is true when the
+  infinitely precise result does not fit. Every operand pxx has is at most 64
+  bits wide, so the exact result fits __int128, with one exception: an unsigned
+  64x64 product of 2^127 or more. That one wraps. It then differs from every
+  64-bit truncation, so it still reports overflow, and it is overflow, because
+  such a product fits no 64-bit type. drm-kmod's overflow.h (check_mul_overflow,
+  array_size, struct_size) calls these in 1260 of the 2100 GPU-driver compiles.
+  The operands and the pointer are each evaluated once.
+  feature-c-builtin-overflow-arithmetic }
+procedure CPDefineOverflowBuiltins;
+const
+  ops: array[0..2] of AnsiString = ('add', 'sub', 'mul');
+  syms: array[0..2] of AnsiString = ('+', '-', '*');
+  sfx: array[0..5] of AnsiString = ('', 'l', 'll', '', 'l', 'll');
+var k, v: Integer; body, d, nm: AnsiString;
+begin
+  for k := 0 to 2 do
+  begin
+    body := '({ __typeof__(*(p)) *__pxx_ovp = (p); __int128 __pxx_ovw = (__int128)(a) ' +
+            syms[k] + ' (__int128)(b); *__pxx_ovp = (__typeof__(*(p)))__pxx_ovw; ' +
+            '(__int128)*__pxx_ovp != __pxx_ovw; })';
+    d := '__builtin_' + ops[k] + '_overflow(a, b, p) ' + body;
+    CPDefine(d, 1, Length(d));
+    { the typed spellings (__builtin_umull_overflow, __builtin_sadd_overflow...) }
+    for v := 0 to 5 do
+    begin
+      if v < 3 then nm := '__builtin_u' else nm := '__builtin_s';
+      nm := nm + ops[k] + sfx[v] + '_overflow';
+      d := nm + '(a, b, p) ' + body;
+      CPDefine(d, 1, Length(d));
+    end;
+  end;
+end;
+
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
 var i: Integer; cmdInc: AnsiString;
 begin
@@ -4718,6 +4754,7 @@ begin
     protector is on (Rainyday's smashtest does) }
   if CSspStrong then CPAddLiteral('__SSP_STRONG__', '3');   { gcc: __SSP__ 1, _ALL__ 2, _STRONG__ 3 }
   CPAddLiteral('__GNUC_MINOR__', '7');
+  CPDefineOverflowBuiltins;
   CPAddLiteral('__GNUC_PATCHLEVEL__', '0');
   CPAddLiteral('__STDC__', '01');
   { -std= names the standard, as gcc reports it; pxx's own default stays C99

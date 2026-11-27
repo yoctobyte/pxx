@@ -29923,6 +29923,18 @@ test-core: $(COMPILER)
 	# constraint (atomic_set_char). Expected output is gcc's.
 	./$(COMPILER) test/c_aligned_shift_and_asm_iq.c $(TESTTMP)/c_alshiq26
 	$(TESTTMP)/c_alshiq26 | diff -u test/c_aligned_shift_and_asm_iq.expected -
+	# a global initialised to &(name) (FreeBSD SYSINIT) next to &(struct S){...}
+	# compound literals; it broke the next function's locals. Expected is gcc's.
+	./$(COMPILER) test/c_global_init_address_of_a_parenthesised_name.c $(TESTTMP)/c_gaddrpar26
+	$(TESTTMP)/c_gaddrpar26 | diff -u test/c_global_init_address_of_a_parenthesised_name.expected -
+	# __builtin_{add,sub,mul}_overflow and the typed spellings (drm overflow.h).
+	# Expected output is gcc's.
+	./$(COMPILER) test/c_builtin_overflow_arithmetic.c $(TESTTMP)/c_ovfarith26
+	$(TESTTMP)/c_ovfarith26 | diff -u test/c_builtin_overflow_arithmetic.expected -
+	# adjacent-literal asm constraints (`K "q"`, ck_pr.h) and "Zq"/"eq".
+	# Expected output is gcc's.
+	./$(COMPILER) test/c_inline_asm_constraint_literals_concatenate.c $(TESTTMP)/c_asmcat26
+	$(TESTTMP)/c_asmcat26 | diff -u test/c_inline_asm_constraint_literals_concatenate.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

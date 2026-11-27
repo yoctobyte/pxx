@@ -1,0 +1,14 @@
+mul size_t 1 0
+mul size_t wrap 1 0
+mul max 1 1
+mul int 1 -2
+mul neg 0 -21
+mul neg->unsigned 1 4294967275
+add u8 1 44
+add i64 1 -9223372036854775808
+sub u 1 4294967295
+sub i64 1 9223372036854775807
+umull 1 0
+saddl 0 9223372036854775807
+once 0 42 calls 2
+as condition ok

@@ -10866,13 +10866,19 @@ begin
   end;
 end;
 
-{ True when cls is `r` plus immediate letters only (i n I J K L M N e Z). }
-function CAsmOnlyImmAndR(const cls: AnsiString): Boolean;
+{ True when cls is the register letter reg plus immediate letters only
+  (i n I J K L M N e Z). }
+function CAsmOnlyImmAnd(const cls: AnsiString; reg: Char): Boolean;
 var i: Integer;
 begin
   Result := True;
   for i := 1 to Length(cls) do
-    if Pos(cls[i], 'rinIJKLMNeZ') = 0 then begin Result := False; Exit; end;
+    if (cls[i] <> reg) and (Pos(cls[i], 'inIJKLMNeZ') = 0) then begin Result := False; Exit; end;
+end;
+
+function CAsmOnlyImmAndR(const cls: AnsiString): Boolean;
+begin
+  Result := CAsmOnlyImmAnd(cls, 'r');
 end;
 
 { The x86 condition names a flag output may use (gcc's set: every jCC
@@ -10912,6 +10918,13 @@ begin
       Error('C: inline asm expects a quoted constraint for each operand');
     raw := CurTok.SVal;
     Next;
+    { adjacent literals are one constraint, as everywhere in C: FreeBSD's ck
+      writes `K "q" (v)` with K a macro for "Z" (feature-c-inline-asm-flag-outputs) }
+    while CurTok.Kind = tkString do
+    begin
+      raw := raw + CurTok.SVal;
+      Next;
+    end;
     Expect(tkLParen, '(');
     if CAsmOpCount >= MAX_CASM_OPERANDS then
       Error('C: inline asm has more than ' + AIntToStr(MAX_CASM_OPERANDS)
@@ -10976,8 +10989,12 @@ begin
     { "iq"/"qi": an immediate OR a byte register (Linux's and FreeBSD's
       atomic_set_char / x86 bitops `orb %1,%0`). The register is allowed, so
       it reads as "q". bug-c-inline-asm-constraint-iq-is-unsupported }
-    if (cls = 'iq') or (cls = 'qi') or (cls = 'nq') or (cls = 'qn') then cls := 'q';
-    if (cls = 'iQ') or (cls = 'Qi') or (cls = 'nQ') or (cls = 'Qn') then cls := 'Q';
+    { also "Zq"/"eq" (a 32-bit immediate or a byte register: ck_pr.h's stores) --
+      any mix of q and immediate letters }
+    if (Length(cls) >= 2) and (Pos('q', cls) > 0) and (Pos('Q', cls) = 0) and
+       CAsmOnlyImmAnd(cls, 'q') then cls := 'q';
+    if (Length(cls) >= 2) and (Pos('Q', cls) > 0) and (Pos('q', cls) = 0) and
+       CAsmOnlyImmAnd(cls, 'Q') then cls := 'Q';
     if (cls = 'qm') or (cls = 'mq') then cls := 'q';
     if (cls = 'Qm') or (cls = 'mQ') then cls := 'Q';
     { "qQ": either byte class. Q (a register with an addressable high byte:
@@ -15096,7 +15113,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gTdDi: Integer;  { walks an array typedef's inherent dims }
     gTdNDims, gPtrD: Integer; gTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
     initStr: AnsiString;
-    clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
+    clRecTk: TTypeKind; clRecId, anonIdx, clSavePos: Integer; anonName: AnsiString;
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
     clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -16625,8 +16642,22 @@ begin
           The anon name is keyed by the brace token position so both driver
           passes dedup to a single object, exactly like a named global's
           FindSym. A non-record literal / missing brace falls to the skip. }
+        clSavePos := TokPos;               { CurTok = '&' }
         Next;                              { consume '&' }
         Next;                              { consume '(' }
+        { `&(name)` -- a parenthesised VARIABLE, not a compound literal
+          (FreeBSD's DATA_WSET: `= &(sym)`). Reading `name` as a type left the
+          declarator state behind, and the next function's first local
+          declaration then parsed as top-level tokens ("stray token at top
+          level"). Rewind to the `&` and replay the whole expression at main.
+          bug-c-a-global-initialised-to-the-address-of-a-parenthesised-name-breaks-the-next-function }
+        if not IsCTypeTok then
+        begin
+          TokPos := clSavePos - 1; Next;   { CurTok = '&' again }
+          CDeferScalarPtrInitSkip(idx, initStartTok);
+        end
+        else
+        begin
         clRecTk := ParseCDeclType;         { the compound-literal type }
         clRecId := CTypeBaseRec;
         if CurTok.Kind = tkRParen then Next;
@@ -16666,6 +16697,7 @@ begin
         else
           { `&(...)` that is not a record compound literal: replay at main }
           CDeferScalarPtrInitSkip(idx, initStartTok);
+        end;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and

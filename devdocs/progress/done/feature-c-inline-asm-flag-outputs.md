@@ -28,3 +28,10 @@ Fix:
 Test row c_asmflag26 (test/c_inline_asm_flag_outputs.c): cmpxchg with =@cce,
 bts with =@ccc, cmp with =@ccb into a long, and the other bit ops in register
 and immediate forms. Its expected output is gcc's.
+
+Follow-up (third census): an asm constraint written as adjacent string literals
+is one constraint, as in any other C string context. FreeBSD's ck_pr.h writes
+`K "q" (v)` with K a macro for "Z", and pxx read only the first literal: 566
+GPU-driver compiles stopped at "expected '(' before 'q'". "Zq", "eq" and any
+other mix of q (or Q) with immediate letters now read as "q" (or "Q"). Test
+row c_asmcat26 (test/c_inline_asm_constraint_literals_concatenate.c).
