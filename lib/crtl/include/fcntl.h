@@ -69,6 +69,11 @@
    x86-64, and that difference is correct in both directions -- so
    test/c_crtl_header_constants.c asserts the kernel value and says why. */
 
+/* lseek's whence: POSIX.1-2008 has <fcntl.h> define them too */
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 /* fcntl commands */
 #define F_DUPFD   0
 #define F_GETFD   1

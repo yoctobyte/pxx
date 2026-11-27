@@ -14611,12 +14611,14 @@ end;
 
 procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean);
 var base, n, fldI, fi, fEnd, di: Integer;
+    named: Boolean;   { a `.name =` designator just picked this field }
 begin
   base := UClsFBase[ci];
   n := UClsFCount[ci];
   fldI := 0;
   while CurTok.Kind <> tkEOF do
   begin
+    named := False;
     if CurTok.Kind = tkEnd then Break;
     if (not braced) and (CurTok.Kind = tkSemicolon) then Break;
     if braced and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
@@ -14625,7 +14627,7 @@ begin
         continuation `.sub` / `[i]` is a NESTED designator into this field. }
       Next;
       di := FindUField(ci, CurTok.SVal);
-      if di >= 0 then fldI := di - base;
+      if di >= 0 then begin fldI := di - base; named := True; end;
       Next;
       if ((CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack)) and (fldI < n) then
       begin
@@ -14667,8 +14669,14 @@ begin
       initialises the whole anon member, not its first flattened field. Descend the
       source sub-record — its field names resolve against the parent's promoted
       fields, so the target offsets are correct — then advance past the whole group
-      (and any overlapping union siblings). Only fires at the FIRST field of a group. }
-    if (UFldAnonRec[fi] >= REC_UCLASS_BASE) and (CurTok.Kind = tkBegin) and
+      (and any overlapping union siblings). Only fires at the FIRST field of a group.
+      NOT after a designator that named this field: `.u = { .a = 1, .b = 2 }`
+      with u a member of an anonymous union is a brace for u itself. Taken as
+      the anon union's brace, `.a` and `.b` were looked up in the union, one
+      designator landed on u by luck (its first field) and two failed to
+      parse -- wlroots' backend/drm/atomic.c, `.hdmi_metadata_type1 = {...}`
+      of the kernel's struct hdr_output_metadata. bug-c-designated-init-of-an-anonymous-union-member }
+    if (not named) and (UFldAnonRec[fi] >= REC_UCLASS_BASE) and (CurTok.Kind = tkBegin) and
        ((fldI = 0) or (UFldAnonRec[base + fldI - 1] <> UFldAnonRec[fi])) then
     begin
       di := UFldAnonRec[fi];

@@ -126,6 +126,17 @@ extern int    finitef(float x);
 extern void   sincos(double x, double *s, double *c);
 extern void   sincosf(float x, float *s, float *c);
 extern int    signbit(double x);
+/* On the system-library path (an --emit-obj --system-libs object linked
+   against the host libc) the bodies above are libc's, and glibc has no
+   `isfinite` or `signbit` symbol -- both are macros there, over finite() and
+   __signbit(), which it does export. Spelled the same way here, so such an
+   object imports names that exist (wlroots' wlr_cursor.c). isnan and isinf
+   glibc exports as they are. bug-c-system-libs-objects-import-crtl-only-names */
+#ifdef __PXX_SYSTEM_MATH__
+extern int __signbit(double x);
+#define isfinite(x) finite(x)
+#define signbit(x) __signbit(x)
+#endif
 extern double nan(const char *tag);
 extern double remainder(double x, double y);    /* IEEE remainder */
 extern double expm1(double x);

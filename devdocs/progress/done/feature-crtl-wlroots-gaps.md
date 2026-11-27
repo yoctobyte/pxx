@@ -35,6 +35,12 @@ feature-c-std-c23): 210/216 compiled, the 6 failures three crtl gaps.
   pulls in with that macro too, and the call was undeclared. netdb.c now
   includes <strings.h>.
 
+Later (2026-11-28, wlroots' current options, 248 units, under
+`--shared-runtime`): **`SEEK_SET/CUR/END`** were only in <stdio.h>, while
+POSIX also puts them in <unistd.h> and <fcntl.h>. A unit that lseek()s with
+just those headers failed (`SEEK_END` undeclared). Both now define them,
+<unistd.h> also SEEK_DATA/SEEK_HOLE (Linux 3/4).
+
 Test c_shmdup26 (c_shm_open_dupfd.c, under _POSIX_C_SOURCE): the shm object
 created, sized, mapped, reopened without its slash, EEXIST/ENOENT, the
 name rules, close-on-exec on shm_open's fd and on F_DUPFD_CLOEXEC's copy and

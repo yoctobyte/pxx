@@ -99,8 +99,14 @@ struct timespec {
    Same cure as exp/Exp in math.h: the implementation lives under __crtl_time
    and C callers reach it through a FUNCTION-LIKE macro, so variables and
    struct fields named `time` are untouched. */
+#ifdef __PXX_SYSTEM_TIME__
+/* the system-library path: the host libc's time(), under its own name (no
+   libc exports __crtl_time; wlroots' xwayland/server.c). bug-c-system-libs-objects-import-crtl-only-names */
+extern time_t time(time_t *t);
+#else
 extern time_t __crtl_time(time_t *t);
 #define time(t) __crtl_time(t)
+#endif
 clock_t clock(void);
 int nanosleep(const struct timespec *req, struct timespec *rem);
 #ifndef __pxx_clockid_t_defined

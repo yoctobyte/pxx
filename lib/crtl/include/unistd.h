@@ -15,6 +15,16 @@
 #define STDERR_FILENO 2
 #include <sys/_confname.h>   /* _SC_*, _PC_*, _CS_* */
 
+/* lseek's whence (POSIX: <unistd.h>, and <stdio.h>/<fcntl.h> too; the same
+   spelling in each, so the repeats are harmless). It was only in <stdio.h>,
+   so wlroots' `lseek(fd, 0, SEEK_END)` under <unistd.h> alone failed.
+   SEEK_DATA/SEEK_HOLE: Linux 3.1. feature-crtl-wlroots-gaps */
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+#define SEEK_DATA 3
+#define SEEK_HOLE 4
+
 /* access(2) mode bits (POSIX <unistd.h>). Match the Linux kernel values so a
    real access() syscall interprets them; without these sqlite's access(path,
    F_OK) silently passed mode 0 (== F_OK, so it happened to work). */

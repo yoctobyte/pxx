@@ -1,0 +1,8 @@
+popcount 9 2
+clz 0 0 ctz 0 8
+ffs 1 0 parity 1
+bswap 3412 78563412
+time ok
+isfinite 1 0 signbit 1 0 isnan 1
+fstat 0 reg 1 size 13 nlink 0 blksize-positive 1
+canary intact

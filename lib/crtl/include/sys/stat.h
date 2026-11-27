@@ -16,6 +16,53 @@ typedef long          blksize_t;
    observed -- no file on this host is large enough to show it. */
 typedef long long     blkcnt_t;
 
+#if defined(__x86_64__)
+/* x86-64: the kernel's and glibc's layout exactly (asm/stat.h; 144 bytes:
+   nlink BEFORE mode, a pad after gid, three reserved longs at the end).
+   crtl fills it by field name from its own bridge record, so the order is
+   free for crtl's own programs -- but an --emit-obj --system-libs object
+   hands it to the HOST libc's fstat/stat/lstat, which write 144 bytes in
+   glibc's order: in crtl's former 120-byte order (mode at 16, nlink at 24)
+   that was a stack overrun and every field after st_ino wrong. Found linking
+   pxx-built wlroots against glibc. struct stat64 is the same struct there.
+   Other targets keep crtl's order until each is matched to its libc
+   (feature-crtl-struct-stat-is-the-host-libc-layout-on-every-target).
+   bug-crtl-struct-stat-is-not-glibc-s-layout-on-x86-64 */
+struct stat {
+  dev_t     st_dev;
+  ino_t     st_ino;
+  nlink_t   st_nlink;
+  mode_t    st_mode;
+  uid_t     st_uid;
+  gid_t     st_gid;
+  int       __pad0;
+  dev_t     st_rdev;
+  off_t     st_size;
+  blksize_t st_blksize;
+  blkcnt_t  st_blocks;
+  struct timespec st_atim;
+  struct timespec st_mtim;
+  struct timespec st_ctim;
+  long      __glibc_reserved[3];
+};
+struct stat64 {
+  dev_t     st_dev;
+  ino64_t   st_ino;
+  nlink_t   st_nlink;
+  mode_t    st_mode;
+  uid_t     st_uid;
+  gid_t     st_gid;
+  int       __pad0;
+  dev_t     st_rdev;
+  off64_t   st_size;
+  blksize_t st_blksize;
+  blkcnt64_t st_blocks;
+  struct timespec st_atim;
+  struct timespec st_mtim;
+  struct timespec st_ctim;
+  long      __glibc_reserved[3];
+};
+#else
 struct stat {
   dev_t     st_dev;
   ino_t     st_ino;
@@ -52,6 +99,7 @@ struct stat64 {
   struct timespec st_mtim;
   struct timespec st_ctim;
 };
+#endif
 extern int stat64(const char *path, struct stat64 *buf);
 extern int fstat64(int fd, struct stat64 *buf);
 extern int lstat64(const char *path, struct stat64 *buf);

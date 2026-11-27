@@ -4923,6 +4923,15 @@ begin
     bug-c-system-libs-atexit-is-not-in-libc-so }
   if CHeaderUsesSystemLib('stdlib') then
     CPAddLiteral('__PXX_SYSTEM_STDLIB__', '1');
+  { <time.h> and <math.h> likewise: crtl's names that are not the host libc's
+    -- __crtl_time behind time(), isfinite and signbit as functions -- are
+    spelled the host's way there (time, finite, __signbit), and <stdlib.h>
+    carries static copies of the bit-builtin bodies (pxx/bitbuiltins.h).
+    wlroots linked against glibc. bug-c-system-libs-objects-import-crtl-only-names }
+  if CHeaderUsesSystemLib('time') then
+    CPAddLiteral('__PXX_SYSTEM_TIME__', '1');
+  if CHeaderUsesSystemLib('math') then
+    CPAddLiteral('__PXX_SYSTEM_MATH__', '1');
   { Command-line `-D<name>[=<value>]` predefines, applied AFTER the built-ins so
     a `-D` overrides them (newest-wins lookup); then `-U<name>` removals last so
     an explicit undefine beats any define of the same name. `-D<name>` with no

@@ -206,6 +206,12 @@ int setstate_r(char *statebuf, struct random_data *buf);
  * clz/ctz/popcount are undefined for a zero argument, exactly like the gcc
  * builtins. ffs and parity are NOT -- gcc defines both at zero (0 and 0), so
  * they are written to answer it rather than routed through ctz/popcount. */
+#if defined(__PXX_SYSTEM_STDLIB__)
+/* the host libc is linked and stdlib.c is not: private copies of the bodies */
+#define __PXX_BI_SC static
+#include <pxx/bitbuiltins.h>
+#undef __PXX_BI_SC
+#else
 int __pxx_builtin_clz32(unsigned int x);
 int __pxx_builtin_clz64(unsigned long long x);
 int __pxx_builtin_ctz32(unsigned int x);
@@ -219,6 +225,7 @@ int __pxx_builtin_parity64(unsigned long long x);
 unsigned short __pxx_builtin_bswap16(unsigned short x);
 unsigned int __pxx_builtin_bswap32(unsigned int x);
 unsigned long long __pxx_builtin_bswap64(unsigned long long x);
+#endif
 
 /* ---- pseudo-terminals ------------------------------------------------------
  *
