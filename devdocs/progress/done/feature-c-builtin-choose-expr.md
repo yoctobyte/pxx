@@ -16,3 +16,9 @@ drm macros.
 Fix: ParseCPrimary folds the condition with the constant evaluator, parses
 both arms, and keeps the chosen one, as _Generic does. Test row c_choose26
 (the arms' sizeof, a struct-valued arm), whose expected output is gcc's.
+
+Follow-up: in a CONSTANT expression (a _Static_assert, an enum, the bitfield
+width inside BUILD_BUG_ON_ZERO, as in i915's REG_FIELD_PREP) the folder had no
+such builtin, which cost another 41 compiles. CEvalConstPrimary now folds it,
+and the arm not chosen is read as a dead ?: arm (CEvalConstDeadArm). Test row
+c_voidcond26.

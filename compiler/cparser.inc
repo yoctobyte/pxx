@@ -284,6 +284,7 @@ function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
+function CEvalConstDeadArm: Int64; forward;
 function CTryParseStaticAssert: Boolean; forward;
 function CEvalConstFloatExpr: Double; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
@@ -3577,6 +3578,30 @@ end;
 
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
+{ A NULL POINTER CONSTANT (C11 6.3.2.3p3): an integer constant expression
+  with the value 0, or one cast to `void *`. `(void *)((long)(x) * 0l)` is one
+  only when x is a constant, which is the whole of __is_constexpr. }
+function CNodeIsNullPtrConst(node: Integer): Boolean;
+var v: Int64;
+begin
+  Result := False;
+  while (node >= 0) and (ASTKind[node] = AN_PTR_CAST) do
+  begin
+    if ASTIVal[node] >= 0 then
+    begin
+      { a pointer cast: only to `void *` }
+      if (AliasPtrDepth[ASTIVal[node]] <> 1) or
+         (AliasElemTk[ASTIVal[node]] <> Ord(tyUnknown)) then Exit;
+    end
+    else if IntToTypeKind(ASTTk[node]) = tyPointer then Exit;
+    node := ASTLeft[node];
+  end;
+  if node < 0 then Exit;
+  if IntToTypeKind(ASTTk[node]) = tyPointer then Exit;
+  if not TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then Exit;
+  Result := CBakeIntValue(node, v) and (v = 0);
+end;
+
 function CNodePointeeTk(node: Integer): Integer;
 var recId, inner, depth, baseTk, elemSz, elemRec: Integer;
     fieldName: AnsiString; elemTk: TTypeKind;
@@ -3757,7 +3782,27 @@ begin
   end
   else if ASTKind[node] = AN_TERNARY then
   begin
-    if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) then
+    { C11 6.5.15p6: a null pointer constant arm takes the OTHER arm's type,
+      and otherwise a `void *` arm makes the result `void *` -- Linux's
+      __is_constexpr(x) is exactly `sizeof(*(8 ? (void *)((long)(x) * 0l)
+      : (int *)8))`, int-sized only when x is constant, and min()/max() pick
+      an arm by it. pxx took the then-arm's pointee always, so it answered
+      "constant" for every x. bug-c-a-conditional-with-a-void-pointer-arm-is-typed-by-its-first-arm }
+    if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) and
+       CNodeDecaysToPointer(ASTRight[ASTRight[node]]) then
+    begin
+      if CNodeIsNullPtrConst(ASTLeft[ASTRight[node]]) then
+        Result := CNodePointeeTk(ASTRight[ASTRight[node]])
+      else if CNodeIsNullPtrConst(ASTRight[ASTRight[node]]) then
+        Result := CNodePointeeTk(ASTLeft[ASTRight[node]])
+      else
+      begin
+        Result := CNodePointeeTk(ASTLeft[ASTRight[node]]);
+        if CNodePointeeTk(ASTRight[ASTRight[node]]) = Ord(tyUnknown) then
+          Result := Ord(tyUnknown);
+      end;
+    end
+    else if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) then
       Result := CNodePointeeTk(ASTLeft[ASTRight[node]])
     else if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTRight[ASTRight[node]]) then
       Result := CNodePointeeTk(ASTRight[ASTRight[node]]);
@@ -5104,6 +5149,8 @@ begin
         else if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         begin
           sz := TypeStorageSize(Syms[si].PtrElemTk, Syms[si].PtrElemRec);
+          { `sizeof(*vp)` of a `void *`: 1, as GNU C (see the general arm) }
+          if (Syms[si].PtrElemTk = tyUnknown) and (SymPtrDepth[si] <= 1) then sz := 1;
           { `int (*p)[4]`: the pointee is an ARRAY and this answered its ELEMENT
             size -- 4 where gcc says 16, `double (*q)[3]` 8 where gcc says 24,
             `char (*r)[7]` 1 where gcc says 7. Same shape as every other reader
@@ -5281,6 +5328,12 @@ begin
       begin
         tk := IntToTypeKind(ASTTk[node]);
         if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
+        { `sizeof(*e)` of a `void *` e: GNU C's 1, the stride pointer
+          arithmetic already uses (IRPointerStride's tyUnknown).
+          bug-c-a-conditional-with-a-void-pointer-arm-is-typed-by-its-first-arm }
+        else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+                (CNodePtrDepth(ASTLeft[node]) <= 1) and
+                (CNodePointeeTk(ASTLeft[node]) = Ord(tyUnknown)) then sz := 1
         else if tk = tyPointer then sz := TARGET_PTR_SIZE
         else if TypeIsFloat(tk) then sz := TypeSlotSize(tk)
         else if tk = tyBoolean then sz := 4   { C `!`/comparisons yield int }
@@ -23466,7 +23519,7 @@ begin
 end;
 
 function CEvalConstPrimary: Int64;
-var bitK, bitW: Integer; bitV: QWord;
+var bitK, bitW: Integer; bitV: QWord; tu, tw: Boolean;
     idx, callDepth, castBits, fl: Integer; wasCall, castKnown, castU, castW, savedNonConst, addrObj: Boolean;
     strLitText: AnsiString; strLitIdx: Int64;
 begin
@@ -23651,6 +23704,33 @@ begin
   end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_types_compatible_p') then
     Result := CParseTypesCompatible
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = '__builtin_choose_expr') and
+          (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { gcc's __builtin_choose_expr in a CONSTANT expression: i915's
+      REG_FIELD_PREP puts one inside BUILD_BUG_ON_ZERO, a bitfield width (41
+      GPU-driver compiles). The arm not chosen is read as a dead ?: arm is.
+      The expression form is ParseCPrimary's. feature-c-builtin-choose-expr }
+    Next; Next;   { name, '(' }
+    bitV := QWord(CEvalConstExpr);
+    if CurTok.Kind = tkComma then Next;
+    if bitV <> 0 then
+    begin
+      Result := CEvalConstExpr;
+      tu := CConstUns; tw := CConstWide;
+      if CurTok.Kind = tkComma then Next;
+      CEvalConstDeadArm;
+    end
+    else
+    begin
+      CEvalConstDeadArm;
+      if CurTok.Kind = tkComma then Next;
+      Result := CEvalConstExpr;
+      tu := CConstUns; tw := CConstWide;
+    end;
+    if CurTok.Kind = tkRParen then Next;
+    CConstUns := tu; CConstWide := tw;
+  end
   else if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) and
           (CBitBuiltinKind(CurTok.SVal, bitW) > 0) then
   begin

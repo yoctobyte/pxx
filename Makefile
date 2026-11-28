@@ -30085,6 +30085,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj --freestanding -msse2 test/c_freestanding_sse_float_on_request.c $(TESTTMP)/c_fssse.o > /dev/null
 	gcc -no-pie -o $(TESTTMP)/c_fssse test/c_freestanding_sse_float_on_request_main.c $(TESTTMP)/c_fssse.o
 	tools/expect_same.sh c_fssse "$$($(TESTTMP)/c_fssse)" "18.484375 3.250 3.500"
+	# ?: with a void * arm, sizeof of a void deref, __is_constexpr, and
+	# __builtin_choose_expr in constant expressions. Expected output is gcc's.
+	./$(COMPILER) test/c_void_pointer_conditional_and_choose_expr_const.c $(TESTTMP)/c_voidcond26
+	$(TESTTMP)/c_voidcond26 | diff -u test/c_void_pointer_conditional_and_choose_expr_const.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
