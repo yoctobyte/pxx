@@ -59,6 +59,9 @@ int scandir(const char *dirp, struct dirent ***namelist,
             int (*filter)(const struct dirent *),
             int (*compar)(const struct dirent **, const struct dirent **));
 int alphasort(const struct dirent **a, const struct dirent **b);
+/* GNU: alphasort by strverscmp, so "event10" sorts after "event9" (libinput's
+   path seat and quirks loader). feature-crtl-versionsort */
+int versionsort(const struct dirent **a, const struct dirent **b);
 int dirfd(DIR *d);
 
 #endif

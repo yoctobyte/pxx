@@ -160,6 +160,13 @@ int alphasort(const struct dirent **a, const struct dirent **b)
   return strcoll((*a)->d_name, (*b)->d_name);
 }
 
+/* versionsort: alphasort with digit runs compared as numbers (strverscmp).
+   feature-crtl-versionsort */
+int versionsort(const struct dirent **a, const struct dirent **b)
+{
+  return strverscmp((*a)->d_name, (*b)->d_name);
+}
+
 /* A MERGE SORT RATHER THAN qsort, and the reason is an interface mismatch
  * rather than a preference: scandir's comparator takes `const struct dirent **'
  * and qsort's takes `const void *'. Bridging them needs the caller's function

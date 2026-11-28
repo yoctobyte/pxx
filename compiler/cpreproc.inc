@@ -5130,6 +5130,11 @@ begin
     bug-c-system-libs-atexit-is-not-in-libc-so }
   if CHeaderUsesSystemLib('stdlib') then
     CPAddLiteral('__PXX_SYSTEM_STDLIB__', '1');
+  { <signal.h> likewise: SIGRTMIN/SIGRTMAX are glibc's run-time values
+    there (NPTL keeps 32 and 33, and its sigaction refuses them), crtl's
+    kernel ones otherwise. feature-crtl-sigrtmin-and-sigrtmax }
+  if CHeaderUsesSystemLib('signal') then
+    CPAddLiteral('__PXX_SYSTEM_SIGNAL__', '1');
   { <time.h> and <math.h> likewise: crtl's names that are not the host libc's
     -- __crtl_time behind time(), isfinite and signbit as functions -- are
     spelled the host's way there (time, finite, __signbit), and <stdlib.h>

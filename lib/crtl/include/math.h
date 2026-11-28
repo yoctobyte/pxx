@@ -121,6 +121,42 @@ extern double nextafter(double x, double y);
 extern int isnan(double x);
 extern int isinf(double x);
 
+/* fpclassify and isnormal (C99 7.12.3), by the bits. A float argument is
+   classified as a float -- promoting it would turn a float subnormal into a
+   normal double -- so the macros pick by sizeof. The helpers call nothing,
+   so an unused one leaves no undefined symbol (libinput's filter code:
+   isnormal). FP_* are glibc's values, so --system-libs objects agree.
+   feature-crtl-fpclassify-and-isnormal */
+#define FP_NAN       0
+#define FP_INFINITE  1
+#define FP_ZERO      2
+#define FP_SUBNORMAL 3
+#define FP_NORMAL    4
+static inline int __pxx_fpclassify(double x)
+{
+    union { double d; unsigned long long u; } v;
+    unsigned long long e, m;
+    v.d = x;
+    e = (v.u >> 52) & 0x7ffULL;
+    m = v.u & 0xfffffffffffffULL;
+    if (e == 0x7ff) return m ? FP_NAN : FP_INFINITE;
+    if (e == 0) return m ? FP_SUBNORMAL : FP_ZERO;
+    return FP_NORMAL;
+}
+static inline int __pxx_fpclassifyf(float x)
+{
+    union { float f; unsigned int u; } v;
+    unsigned int e, m;
+    v.f = x;
+    e = (v.u >> 23) & 0xffu;
+    m = v.u & 0x7fffffu;
+    if (e == 0xff) return m ? FP_NAN : FP_INFINITE;
+    if (e == 0) return m ? FP_SUBNORMAL : FP_ZERO;
+    return FP_NORMAL;
+}
+#define fpclassify(x) (sizeof(x) == sizeof(float) ? __pxx_fpclassifyf(x) : __pxx_fpclassify(x))
+#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+
 /* float (single) variants (C99) + fmin/fmax — see src/math.c */
 extern float fabsf(float x);
 extern float sqrtf(float x);
@@ -180,6 +216,10 @@ extern float modff(float x, float *ip);
 /* HUGE_VAL: positive double overflow value used by lua for range checks. */
 #define HUGE_VAL (1e308 * 10.0)
 #define INFINITY (1e308 * 10.0)
+/* the float and long double ones (C99 7.12p3); long double is double in pxx.
+   libinput. feature-crtl-fpclassify-and-isnormal */
+#define HUGE_VALF ((float)HUGE_VAL)
+#define HUGE_VALL HUGE_VAL
 /* A POSITIVE quiet NaN. `0.0 / 0.0` was the obvious spelling and it is the
    wrong one: on x86 that produces a NaN with the SIGN BIT SET, so printf
    rendered NAN as "-nan" where every other libc prints "nan" -- visible through

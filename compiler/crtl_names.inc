@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  872 functions across 87 headers. }
+  873 functions across 87 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -238,9 +238,10 @@ begin
       ' unsetenv:stdlib.h unshare:sched.h uselocale:locale.h usleep:unistd.h utime:utime.h ' +
       ' utimensat:time.h utimes:sys/time.h utmpxname:utmpx.h ';
     'v': Result :=
-      ' valloc:stdlib.h vasprintf:stdio.h vdprintf:stdio.h verr:err.h verrx:err.h vfork:unistd.h ' +
-      ' vfprintf:stdio.h vfscanf:stdio.h vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h ' +
-      ' vsprintf:stdio.h vsscanf:stdio.h vsyslog:syslog.h vwarn:err.h vwarnx:err.h ';
+      ' valloc:stdlib.h vasprintf:stdio.h vdprintf:stdio.h verr:err.h verrx:err.h ' +
+      ' versionsort:dirent.h vfork:unistd.h vfprintf:stdio.h vfscanf:stdio.h vprintf:stdio.h ' +
+      ' vscanf:stdio.h vsnprintf:stdio.h vsprintf:stdio.h vsscanf:stdio.h vsyslog:syslog.h ' +
+      ' vwarn:err.h vwarnx:err.h ';
     'w': Result :=
       ' wait:sys/wait.h wait3:sys/wait.h wait4:sys/wait.h waitpid:sys/wait.h warn:err.h ' +
       ' warnx:err.h wcrtomb:wchar.h wcscat:wchar.h wcschr:wchar.h wcscmp:wchar.h wcscpy:wchar.h ' +
@@ -284,7 +285,7 @@ begin
     's': Result := 4620280;
     't': Result := 8184;
     'u': Result := 992;
-    'v': Result := 1008;
+    'v': Result := 3056;
     'w': Result := 496;
   else Result := 0;
   end;

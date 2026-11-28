@@ -18247,8 +18247,16 @@ begin
     Next;
     if CurTok.Kind <> tkString then
       Error('_Static_assert: the second operand must be a string literal');
+    { adjacent literals concatenate (phase 6), here as anywhere: libinput's
+      ASSERT_INT_SIZE writes "sizeof(" #type_ ") must be sizeof(uint)".
+      bug-c-static-assert-message-of-adjacent-string-literals }
     msg := CurTok.SVal;
     Next;
+    while CurTok.Kind = tkString do
+    begin
+      msg := msg + CurTok.SVal;
+      Next;
+    end;
   end;
   Expect(tkRParen, ')');
   Expect(tkSemicolon, ';');

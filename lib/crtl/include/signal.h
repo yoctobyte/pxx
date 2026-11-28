@@ -57,6 +57,21 @@ typedef int sig_atomic_t;
 #define _NSIG 65
 #define NSIG _NSIG
 
+/* The realtime range. crtl reserves none of them (its threads use no
+   signals), so a crtl program gets the kernel's whole range, 32..64. On the
+   host-libc path glibc keeps 32 and 33 for NPTL and its sigaction refuses
+   them, so the values come from glibc at run time, as its own header does.
+   seatd's tests (poller.c). feature-crtl-sigrtmin-and-sigrtmax */
+#ifdef __PXX_SYSTEM_SIGNAL__
+extern int __libc_current_sigrtmin(void);
+extern int __libc_current_sigrtmax(void);
+#define SIGRTMIN (__libc_current_sigrtmin())
+#define SIGRTMAX (__libc_current_sigrtmax())
+#else
+#define SIGRTMIN 32
+#define SIGRTMAX 64
+#endif
+
 #define SIG_BLOCK   0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2

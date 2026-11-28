@@ -19870,6 +19870,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_xkb_preproc.c $(TESTTMP)/c_xkbpp26 > /dev/null
 	@gcc -w test/c_xkb_preproc.c -o $(TESTTMP)/c_xkbpp26_gcc -lm
 	tools/expect_same.sh c_xkbpp26 "$$(timeout 20 $(TESTTMP)/c_xkbpp26)" "$$(timeout 20 $(TESTTMP)/c_xkbpp26_gcc)"
+	# SIGRTMIN/SIGRTMAX: crtl's kernel range, glibc's run-time values on the --system-libs path; against gcc (feature-crtl-sigrtmin-and-sigrtmax)
+	./$(COMPILER) --no-host-include test/c_sigrtmin.c $(TESTTMP)/c_sigrt26 > /dev/null
+	@gcc -w test/c_sigrtmin.c -o $(TESTTMP)/c_sigrt26_gcc
+	tools/expect_same.sh c_sigrt26 "$$(timeout 20 $(TESTTMP)/c_sigrt26)" "$$(timeout 20 $(TESTTMP)/c_sigrt26_gcc)"
+	./$(COMPILER) --system-libs --emit-obj test/c_sigrtmin.c $(TESTTMP)/c_sigrt26_sys.o > /dev/null
+	@gcc $(TESTTMP)/c_sigrt26_sys.o -o $(TESTTMP)/c_sigrt26_sys
+	tools/expect_same.sh c_sigrt26/system-libs "$$(timeout 20 $(TESTTMP)/c_sigrt26_sys)" "$$(timeout 20 $(TESTTMP)/c_sigrt26_gcc)"
+	# fpclassify/isnormal on float and double edge values, as a crtl program and a --system-libs object, and a _Static_assert message of adjacent literals; against gcc (feature-crtl-fpclassify-and-isnormal, bug-c-static-assert-message-of-adjacent-string-literals)
+	./$(COMPILER) --no-host-include test/c_fpclassify_and_static_assert_concat.c $(TESTTMP)/c_fpcls26 > /dev/null
+	@gcc -w test/c_fpclassify_and_static_assert_concat.c -o $(TESTTMP)/c_fpcls26_gcc -lm
+	tools/expect_same.sh c_fpcls26 "$$(timeout 20 $(TESTTMP)/c_fpcls26)" "$$(timeout 20 $(TESTTMP)/c_fpcls26_gcc)"
+	./$(COMPILER) --system-libs --emit-obj test/c_fpclassify_and_static_assert_concat.c $(TESTTMP)/c_fpcls26_sys.o > /dev/null
+	@gcc $(TESTTMP)/c_fpcls26_sys.o -o $(TESTTMP)/c_fpcls26_sys -lm
+	tools/expect_same.sh c_fpcls26/system-libs "$$(timeout 20 $(TESTTMP)/c_fpcls26_sys)" "$$(timeout 20 $(TESTTMP)/c_fpcls26_gcc)"
+	# scandir + versionsort over event1/event9/event10/event100/mouse2; against gcc (feature-crtl-versionsort)
+	@mkdir -p $(TESTTMP)/c_vsort26_dir && cd $(TESTTMP)/c_vsort26_dir && touch event10 event9 event1 mouse2 event100
+	./$(COMPILER) --no-host-include test/c_versionsort.c $(TESTTMP)/c_vsort26 > /dev/null
+	@gcc -w test/c_versionsort.c -o $(TESTTMP)/c_vsort26_gcc
+	tools/expect_same.sh c_vsort26 "$$(timeout 20 $(TESTTMP)/c_vsort26 $(TESTTMP)/c_vsort26_dir)" "$$(timeout 20 $(TESTTMP)/c_vsort26_gcc $(TESTTMP)/c_vsort26_dir)"
 	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
 	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
 	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc
