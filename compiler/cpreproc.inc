@@ -5328,10 +5328,14 @@ begin
 end;
 
 procedure CAddLibBuiltinDecls(var src: AnsiString);
-const N = 17;
+const N = 21;
+  { abs/labs/llabs/imaxabs: systemd's ABS() is __builtin_imaxabs (gcc) or
+    __builtin_llabs (clang), in units that need not include <stdlib.h> or
+    <inttypes.h>. crtl's intmax_t is long long, so its prototype is spelled so. }
   nm: array[0..N - 1] of AnsiString = ('memcpy', 'memmove', 'memset', 'memcmp',
     'strlen', 'strcmp', 'strncmp', 'strcpy', 'strncpy', 'strchr', 'strrchr',
-    'strcat', 'abort', 'exit', 'malloc', 'calloc', 'free');
+    'strcat', 'abort', 'exit', 'malloc', 'calloc', 'free',
+    'abs', 'labs', 'llabs', 'imaxabs');
   pr: array[0..N - 1] of AnsiString = (
     'void *memcpy(void *, const void *, __typeof__(sizeof 0));',
     'void *memmove(void *, const void *, __typeof__(sizeof 0));',
@@ -5349,7 +5353,11 @@ const N = 17;
     'void exit(int);',
     'void *malloc(__typeof__(sizeof 0));',
     'void *calloc(__typeof__(sizeof 0), __typeof__(sizeof 0));',
-    'void free(void *);');
+    'void free(void *);',
+    'int abs(int);',
+    'long labs(long);',
+    'long long llabs(long long);',
+    'long long imaxabs(long long);');
 var k: Integer; protos: AnsiString;
 begin
   if Pos('__builtin_', src) = 0 then Exit;

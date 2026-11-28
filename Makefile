@@ -19896,6 +19896,30 @@ test-core: $(COMPILER)
 	./$(COMPILER) --shared-runtime --threadsafe --emit-obj test/c_crtl_round_trunc_log_modf_copysign.c $(TESTTMP)/c_rndlog26_sr.o > /dev/null
 	./$(COMPILER) --link -o $(TESTTMP)/c_rndlog26_linked $(TESTTMP)/c_rndlog26_sr.o > /dev/null
 	tools/expect_same.sh c_rndlog26/pxx-link "$$(timeout 20 $(TESTTMP)/c_rndlog26_linked)" "$$(timeout 20 $(TESTTMP)/c_rndlog26_gcc)"
+	# pipe2: O_CLOEXEC/O_NONBLOCK on both ends, flags 0, EINVAL on a bad flag; against gcc (feature-crtl-pipe2)
+	./$(COMPILER) --no-host-include test/c_pipe2.c $(TESTTMP)/c_pipe2_26 > /dev/null
+	@gcc -w test/c_pipe2.c -o $(TESTTMP)/c_pipe2_26_gcc
+	tools/expect_same.sh c_pipe2_26 "$$(timeout 20 $(TESTTMP)/c_pipe2_26)" "$$(timeout 20 $(TESTTMP)/c_pipe2_26_gcc)"
+	# <uchar.h>: mbrtoc16/32, c16rtomb/c32rtomb in the C locale, EILSEQ above ASCII and for a lone low surrogate; against gcc (feature-crtl-uchar-h)
+	./$(COMPILER) --no-host-include test/c_uchar.c $(TESTTMP)/c_uchar26 > /dev/null
+	@gcc -w test/c_uchar.c -o $(TESTTMP)/c_uchar26_gcc
+	tools/expect_same.sh c_uchar26 "$$(timeout 20 $(TESTTMP)/c_uchar26)" "$$(timeout 20 $(TESTTMP)/c_uchar26_gcc)"
+	# <printf.h>: parse_printf_format on 25 templates (lengths, positional, * width/precision), as glibc maps them on x86-64; the crtl binary must import nothing, or a fallback to glibc would pass unseen (feature-crtl-printf-h-parse-printf-format)
+	./$(COMPILER) --no-host-include test/c_printf_h.c $(TESTTMP)/c_prfh26 > /dev/null
+	tools/expect_same.sh c_prfh26/static "$$(readelf -d $(TESTTMP)/c_prfh26 | grep -c NEEDED)" "0"
+	@gcc -w test/c_printf_h.c -o $(TESTTMP)/c_prfh26_gcc
+	tools/expect_same.sh c_prfh26 "$$(timeout 20 $(TESTTMP)/c_prfh26)" "$$(timeout 20 $(TESTTMP)/c_prfh26_gcc)"
+	# __builtin_abs/labs/llabs/imaxabs with no header, and with <stdlib.h>/<inttypes.h> after the injected prototypes; against gcc (feature-c-builtin-abs-family)
+	./$(COMPILER) --no-host-include test/c_builtin_abs.c $(TESTTMP)/c_babs26 > /dev/null
+	@gcc -w test/c_builtin_abs.c -o $(TESTTMP)/c_babs26_gcc
+	tools/expect_same.sh c_babs26 "$$(timeout 20 $(TESTTMP)/c_babs26)" "$$(timeout 20 $(TESTTMP)/c_babs26_gcc)"
+	./$(COMPILER) --no-host-include -DWITH_HEADERS test/c_builtin_abs.c $(TESTTMP)/c_babs26h > /dev/null
+	@gcc -w -DWITH_HEADERS test/c_builtin_abs.c -o $(TESTTMP)/c_babs26h_gcc
+	tools/expect_same.sh c_babs26/hdr "$$(timeout 20 $(TESTTMP)/c_babs26h)" "$$(timeout 20 $(TESTTMP)/c_babs26h_gcc)"
+	# _Generic on pointer casts, ?: of pointers (C11 6.5.15p6: null arm, void * arm, merged qualifiers), &x and T ** (feature-c-generic-on-a-cast-or-conditional-pointer)
+	./$(COMPILER) --no-host-include test/c_generic_cast_conditional.c $(TESTTMP)/c_gencc26 > /dev/null
+	@gcc -w test/c_generic_cast_conditional.c -o $(TESTTMP)/c_gencc26_gcc
+	tools/expect_same.sh c_gencc26 "$$(timeout 20 $(TESTTMP)/c_gencc26)" "$$(timeout 20 $(TESTTMP)/c_gencc26_gcc)"
 	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
 	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
 	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc

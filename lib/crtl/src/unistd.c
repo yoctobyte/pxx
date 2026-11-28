@@ -709,6 +709,7 @@ int getegid(void) { return __pxx_getegid(); }
 int getppid(void) { return __pxx_getppid(); }
 
 int pipe(int fds[2]) { return sysret(__pxx_pipe2(fds, 0)); }
+int pipe2(int fds[2], int flags) { return sysret(__pxx_pipe2(fds, flags)); }
 
 /* sleep/usleep over nanosleep, which crtl already had. sleep() returns the
    number of seconds LEFT if interrupted, which is 0 on a completed sleep — not

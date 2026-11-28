@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  873 functions across 87 headers. }
+  879 functions across 89 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -29,15 +29,16 @@ begin
       ' basename:libgen.h bind:sys/socket.h bind_textdomain_codeset:libintl.h ' +
       ' bindtextdomain:libintl.h brk:unistd.h bsearch:stdlib.h btowc:wchar.h ';
     'c': Result :=
-      ' CPU_COUNT_S:sched.h CPU_ZERO_S:sched.h calloc:stdlib.h capget:linux/capability.h ' +
-      ' capset:linux/capability.h cbrt:math.h ceil:math.h ceilf:math.h cfgetispeed:termios.h ' +
-      ' cfgetospeed:termios.h cfmakeraw:termios.h cfsetispeed:termios.h cfsetospeed:termios.h ' +
-      ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chown:unistd.h chroot:unistd.h ' +
-      ' clearenv:stdlib.h clearerr:stdio.h clearerr_unlocked:stdio.h clock:time.h ' +
-      ' clock_getres:time.h clock_gettime:time.h clock_nanosleep:time.h clock_settime:time.h ' +
-      ' close:unistd.h closedir:dirent.h closefrom:unistd.h closelog:syslog.h confstr:unistd.h ' +
-      ' connect:sys/socket.h copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h ' +
-      ' crypt:crypt.h crypt_r:crypt.h ctime:time.h ctime_r:time.h ';
+      ' CPU_COUNT_S:sched.h CPU_ZERO_S:sched.h c16rtomb:uchar.h c32rtomb:uchar.h calloc:stdlib.h ' +
+      ' capget:linux/capability.h capset:linux/capability.h cbrt:math.h ceil:math.h ceilf:math.h ' +
+      ' cfgetispeed:termios.h cfgetospeed:termios.h cfmakeraw:termios.h cfsetispeed:termios.h ' +
+      ' cfsetospeed:termios.h cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h ' +
+      ' chown:unistd.h chroot:unistd.h clearenv:stdlib.h clearerr:stdio.h ' +
+      ' clearerr_unlocked:stdio.h clock:time.h clock_getres:time.h clock_gettime:time.h ' +
+      ' clock_nanosleep:time.h clock_settime:time.h close:unistd.h closedir:dirent.h ' +
+      ' closefrom:unistd.h closelog:syslog.h confstr:unistd.h connect:sys/socket.h ' +
+      ' copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h crypt:crypt.h ' +
+      ' crypt_r:crypt.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
       ' daemon:unistd.h dcgettext:libintl.h dcngettext:libintl.h dgettext:libintl.h ' +
       ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dladdr:dlfcn.h ' +
@@ -128,16 +129,17 @@ begin
     'm': Result :=
       ' madvise:sys/mman.h mallinfo:malloc.h mallinfo2:malloc.h malloc:stdlib.h ' +
       ' malloc_usable_size:malloc.h mallopt:malloc.h mblen:stdlib.h mbrlen:wchar.h ' +
-      ' mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h mbtowc:stdlib.h memalign:malloc.h ' +
-      ' memccpy:string.h memchr:string.h memcmp:string.h memcpy:string.h memfd_create:sys/mman.h ' +
-      ' memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h memset:string.h ' +
-      ' memset_explicit:string.h mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h ' +
-      ' mkfifo:sys/stat.h mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h ' +
-      ' mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h ' +
-      ' mlockall:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h ' +
-      ' mprotect:sys/mman.h mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h ' +
-      ' msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h ' +
-      ' munlockall:sys/mman.h munmap:sys/mman.h ';
+      ' mbrtoc16:uchar.h mbrtoc32:uchar.h mbrtowc:wchar.h mbsinit:wchar.h mbstowcs:stdlib.h ' +
+      ' mbtowc:stdlib.h memalign:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
+      ' memcpy:string.h memfd_create:sys/mman.h memmem:string.h memmove:string.h ' +
+      ' mempcpy:string.h memrchr:string.h memset:string.h memset_explicit:string.h ' +
+      ' mkdir:sys/stat.h mkdirat:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h ' +
+      ' mkfifoat:sys/stat.h mknod:sys/stat.h mknodat:sys/stat.h mkostemp:stdlib.h ' +
+      ' mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h mlockall:sys/mman.h ' +
+      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
+      ' mrand48:stdlib.h mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h ' +
+      ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
+      ' munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
       ' ngettext:libintl.h nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h ' +
@@ -152,10 +154,11 @@ begin
       ' open:fcntl.h open64:fcntl.h open_memstream:stdio.h openat:fcntl.h opendir:dirent.h ' +
       ' openlog:syslog.h openpty:pty.h ';
     'p': Result :=
-      ' pathconf:unistd.h pause:unistd.h pclose:stdio.h perror:stdio.h ' +
-      ' personality:sys/personality.h pipe:unistd.h pivot_root:sys/mount.h poll:poll.h ' +
-      ' popen:stdio.h posix_fadvise:fcntl.h posix_fallocate:fcntl.h posix_memalign:stdlib.h ' +
-      ' posix_openpt:stdlib.h posix_spawn:spawn.h posix_spawn_file_actions_addchdir_np:spawn.h ' +
+      ' parse_printf_format:printf.h pathconf:unistd.h pause:unistd.h pclose:stdio.h ' +
+      ' perror:stdio.h personality:sys/personality.h pipe:unistd.h pipe2:unistd.h ' +
+      ' pivot_root:sys/mount.h poll:poll.h popen:stdio.h posix_fadvise:fcntl.h ' +
+      ' posix_fallocate:fcntl.h posix_memalign:stdlib.h posix_openpt:stdlib.h ' +
+      ' posix_spawn:spawn.h posix_spawn_file_actions_addchdir_np:spawn.h ' +
       ' posix_spawn_file_actions_addclose:spawn.h posix_spawn_file_actions_adddup2:spawn.h ' +
       ' posix_spawn_file_actions_addfchdir_np:spawn.h posix_spawn_file_actions_addopen:spawn.h ' +
       ' posix_spawn_file_actions_destroy:spawn.h posix_spawn_file_actions_init:spawn.h ' +
@@ -279,7 +282,7 @@ begin
     'm': Result := 301040;
     'n': Result := 360376;
     'o': Result := 16592;
-    'p': Result := 1737621496;
+    'p': Result := 1738145784;
     'q': Result := 160;
     'r': Result := 8176;
     's': Result := 4620280;

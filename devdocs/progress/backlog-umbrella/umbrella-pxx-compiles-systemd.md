@@ -54,6 +54,18 @@ census was.
    come. Needs libcap compiled by pxx first (also on the dependency list
    above).
 
+   Census, systemd 259 (meson --auto-features=disabled, static-libsystemd,
+   static-libudev; 662 units = 209 libsystemd.a + 453 libudev.a, which
+   carries its own copies of basic/ and shared/):
+   - libcap 2.75 (plain make, ccrec): 7/7 after feature-crtl-pipe2.
+   - 2026-11-28 start: 150/662. First errors: 187 host <uchar.h>/<printf.h>
+     dragging glibc bits/floatn.h, 134 _Generic, 110 __builtin_imaxabs.
+   - after feature-crtl-uchar-h, feature-crtl-printf-h-parse-printf-format,
+     feature-c-builtin-abs-family, feature-c-generic-on-a-cast-or-conditional-pointer:
+     392/662. Next groups: incomplete struct statx (68) and other
+     incomplete-type sizeofs (49), pthread_mutex_t/pthread_t in a struct (39),
+     _Generic leftovers (18), LINE_MAX, gettid, struct iovec, typeof.
+
 ## Done when
 
 1. Every unit compiles with pxx (census at 0 failures).

@@ -103,6 +103,8 @@
 #include <utime.h>
 #include <utmpx.h>
 #include <wchar.h>
+#include <uchar.h>
+#include <printf.h>
 #include <wctype.h>
 
 /* the marker every --shared-runtime object references (see shared_runtime.h) */

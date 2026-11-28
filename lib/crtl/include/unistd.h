@@ -171,6 +171,9 @@ int getegid(void);
 int getppid(void);
 
 int pipe(int fds[2]);
+/* GNU/Linux pipe2(2): O_CLOEXEC / O_NONBLOCK / O_DIRECT set atomically at
+   creation (libcap's psx and cap_launch). feature-crtl-pipe2 */
+int pipe2(int fds[2], int flags);
 unsigned int sleep(unsigned int seconds);
 int usleep(unsigned int usec);
 int getpagesize(void);

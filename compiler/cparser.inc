@@ -1785,8 +1785,31 @@ end;
 
 { Descriptor of a controlling expression (unevaluated). Handles the shapes a
   _Generic controlling expr takes; anything else falls back to its ASTTk. }
+{ The pointee constness of a C cast's pointer type, by the cast's alias row
+  (AN_PTR_CAST's ASTIVal): `(const void *)p`. Read only by CExprCG, for
+  _Generic. False where unset. feature-c-generic-on-a-cast-or-conditional-pointer }
+var CCastPointeeConst: array of Boolean;
+function CGConvControlling(idx: Integer): Integer; forward;
+function CNodeIsNullPtrConst(node: Integer): Boolean; forward;
+
+{ A pointer of `depth` levels over a base type, the base carrying `baseConst`
+  (`const char **` is ptr -> ptr -> const char). }
+function CGPtrChain(depth, baseTk, baseRec: Integer; baseConst: Boolean): Integer;
+var lvl, sub: Integer;
+begin
+  Result := CGAlloc(CGScalarKindOfTk(baseTk));
+  if baseTk = Ord(tyRecord) then CGRecA[Result] := baseRec;
+  CGConstA[Result] := baseConst;
+  for lvl := 1 to depth do
+  begin
+    sub := Result;
+    Result := CGAlloc(cgPtr);
+    CGSubA[Result] := sub;
+  end;
+end;
+
 function CExprCG(node: Integer): Integer;
-var sym, sub, cgD, cgLvl: Integer;
+var sym, sub, cgD, cgLvl, cgL, cgR, nd, ai: Integer;
 begin
   Result := 0;
   if node < 0 then Exit;
@@ -1850,8 +1873,12 @@ begin
             Result := CGAlloc(cgPtr);
             if SymPtrDepth[sym] >= 2 then
             begin
-              sub := CGAlloc(cgPtr);
-              CGSubA[sub] := CGAlloc(CGScalarKindOfTk(Ord(Syms[sym].PtrElemTk)));
+              { the chain down to the BASE type: PtrElemTk of a `char **` is
+                the pointer `char *`, so building the inner level from it gave
+                ptr -> ptr -> (bare ptr) and `char **:` never matched }
+              Result := CGPtrChain(SymPtrDepth[sym], SymPtrBaseTk[sym], SymPtrBaseRec[sym],
+                                   SymPtrPointeeConst[sym]);
+              sub := CGSubA[Result];
             end
             else
             begin
@@ -1872,6 +1899,85 @@ begin
         end
         else
           Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
+      end;
+    AN_PTR_CAST:
+      begin
+        { A cast to a single-level pointer type: its pointee and that pointee's
+          const, as a declared pointer has them. systemd's const_generic()
+          dispatches on `_Generic(0 ? (ptr) : (void *) 1, const void *: ...,
+          void *: ...)`; the bare cgPtr this used to give matched neither
+          (297 libsystemd/libudev units). A numeric cast keeps the generic
+          answer below. }
+        ai := ASTIVal[node];
+        if (ai >= 0) and (ASTTk[node] = Ord(tyPointer)) and (AliasPtrDepth[ai] = 1) then
+          Result := CGPtrChain(1, AliasElemTk[ai], AliasElemRec[ai],
+                               (ai < Length(CCastPointeeConst)) and CCastPointeeConst[ai])
+        else if (ai >= 0) and (ASTTk[node] = Ord(tyPointer)) and (AliasPtrDepth[ai] >= 2) then
+          Result := CGPtrChain(AliasPtrDepth[ai], AliasPtrBaseTk[ai], AliasPtrBaseRec[ai],
+                               (ai < Length(CCastPointeeConst)) and CCastPointeeConst[ai])
+        else
+          Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
+                                            CExprLongRank(node)));
+      end;
+    AN_ADDR:
+      begin
+        { `&x`: a pointer to x's own type (`&sv` with `struct s sv` is a
+          `struct s *`). An address the descriptor cannot describe keeps the
+          generic answer. }
+        cgL := CExprCG(ASTLeft[node]);
+        if (cgL > 0) and (CGKindA[cgL] <> cgUnknown) then
+        begin
+          Result := CGAlloc(cgPtr);
+          CGSubA[Result] := cgL;
+        end
+        else
+          Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
+      end;
+    AN_TERNARY:
+      begin
+        { C11 6.5.15p6 for two pointer arms: a null pointer constant takes the
+          other arm's type; else a pointer to void on either side makes the
+          result a pointer to void; else the (compatible) first arm's type. In
+          every case the pointee carries the qualifiers of BOTH arms, so
+          `0 ? (const char *)s : (void *)1` is `const void *`. Non-pointer
+          arms keep the frontend's result type. }
+        nd := ASTRight[node];
+        cgL := 0; cgR := 0;
+        if (nd >= 0) and (ASTKind[nd] = AN_PAIR) then
+        begin
+          cgL := CGConvControlling(CExprCG(ASTLeft[nd]));
+          cgR := CGConvControlling(CExprCG(ASTRight[nd]));
+        end;
+        { a plain integer 0 arm (`b ? p : 0`) is a null pointer constant too }
+        if (cgL > 0) and (cgR > 0) and (CGKindA[cgL] = cgPtr) and (CGSubA[cgL] > 0) and
+           (CGKindA[cgR] <> cgPtr) and CNodeIsNullPtrConst(ASTRight[nd]) then
+          Result := cgL
+        else if (cgL > 0) and (cgR > 0) and (CGKindA[cgR] = cgPtr) and (CGSubA[cgR] > 0) and
+           (CGKindA[cgL] <> cgPtr) and CNodeIsNullPtrConst(ASTLeft[nd]) then
+          Result := cgR
+        else if (cgL > 0) and (cgR > 0) and (CGKindA[cgL] = cgPtr) and (CGKindA[cgR] = cgPtr) and
+           (CGSubA[cgL] > 0) and (CGSubA[cgR] > 0) then
+        begin
+          if CNodeIsNullPtrConst(ASTLeft[nd]) then Result := cgR
+          else if CNodeIsNullPtrConst(ASTRight[nd]) then Result := cgL
+          else
+          begin
+            Result := CGAlloc(cgPtr);
+            if (CGKindA[CGSubA[cgL]] = cgUnknown) or (CGKindA[CGSubA[cgR]] = cgUnknown) then
+              sub := CGAlloc(cgUnknown)
+            else
+            begin
+              sub := CGAlloc(CGKindA[CGSubA[cgL]]);
+              CGRecA[sub] := CGRecA[CGSubA[cgL]];
+              CGSubA[sub] := CGSubA[CGSubA[cgL]];
+            end;
+            CGConstA[sub] := CGConstA[CGSubA[cgL]] or CGConstA[CGSubA[cgR]];
+            CGSubA[Result] := sub;
+          end;
+        end
+        else
+          Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
+                                            CExprLongRank(node)));
       end;
     else
       { integer/char literals, arithmetic results, casts: the frontend already
@@ -3149,7 +3255,11 @@ begin
                 (name = '__builtin_strrchr') or (name = '__builtin_strcat') or
                 (name = '__builtin_abort') or (name = '__builtin_exit') or
                 (name = '__builtin_malloc') or (name = '__builtin_calloc') or
-                (name = '__builtin_free') then
+                (name = '__builtin_free') or
+                { systemd's ABS() is __builtin_imaxabs (gcc) or __builtin_llabs
+                  (clang); crtl defines all four. }
+                (name = '__builtin_abs') or (name = '__builtin_labs') or
+                (name = '__builtin_llabs') or (name = '__builtin_imaxabs') then
           name := Copy(name, 11, Length(name) - 10);
         { A FUNCTION-POINTER PARAMETER OR LOCAL OF THIS FUNCTION SHADOWS a
           file-scope function of the same name, and it must be asked about
@@ -5994,7 +6104,7 @@ function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
     frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP, labOff, labLen: Integer;
-    clDesig: Boolean;
+    clDesig, castBaseConst: Boolean;
     castPaLen, castPaNDims: Integer;
     castPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
     clDims: array[0..MAX_ARR_DIMS - 1] of Integer;
@@ -6042,6 +6152,7 @@ begin
   begin
     Next; { ( }
     castTk := ParseCDeclType;
+    castBaseConst := CTypeBaseConst;
     castDepth := CTypePtrDepth;
     castElemTk := CTypeElemTk;
     castElemRec := CTypeElemRec;
@@ -6333,6 +6444,8 @@ begin
     begin
       RegisterPtrAlias(0, 0, castElemTk, castElemRec, 0, 0);
       AliasPtrDepth[AliasCount-1] := castDepth;
+      if Length(CCastPointeeConst) < AliasCount then SetLength(CCastPointeeConst, AliasCount + 1024);
+      CCastPointeeConst[AliasCount-1] := castBaseConst;
       AliasPtrBaseTk[AliasCount-1] := castBaseTk;
       AliasPtrBaseRec[AliasCount-1] := castBaseRec;
       AliasProcSig[AliasCount-1] := castPtrElemProcSig;  { pointee fn-ptr sig for `(ft*)e` -> (*..)() call }
