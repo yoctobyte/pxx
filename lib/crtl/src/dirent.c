@@ -8,6 +8,7 @@
  * PAL before believing a scoping line that says an entry is missing.
  */
 
+#define _GNU_SOURCE 1   /* struct dirent64, getdents64 */
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -260,4 +261,17 @@ fail:
     errno = saved;   /* closedir/free must not overwrite why we failed */
     return -1;
   }
+}
+
+/* The LFS and GNU spellings. feature-crtl-dirent64-and-getdents64 */
+struct dirent64 *readdir64(DIR *d)
+{
+  return (struct dirent64 *)readdir(d);
+}
+
+ssize_t getdents64(int fd, void *buf, size_t len)
+{
+  long long got = __pxx_getdents64(fd, buf, (int)(len > 0x7fffffff ? 0x7fffffff : len));
+  if (got < 0) { errno = (int)-got; return -1; }
+  return (ssize_t)got;
 }

@@ -29,40 +29,22 @@
  * Measured with gcc against glibc on x86-64 and i386; the other targets keep
  * crtl's own sizes (no glibc to check against here).
  * bug-c-crtl-pthread-types-are-smaller-than-glibc-s */
-#if defined(__x86_64__)
-#define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
-#define __PXX_PT_COND_PAD    int __pxx_pad[8]; long long __pxx_align;
-#define __PXX_PT_ATTR_PAD    long __pxx_pad[5];
-#define __PXX_PT_RWLOCK_PAD  int __pxx_pad[7]; long long __pxx_align;
-#elif defined(__i386__)
-#define __PXX_PT_MUTEX_PAD   long __pxx_pad[2];
-#define __PXX_PT_COND_PAD    int __pxx_pad[10];
-#define __PXX_PT_ATTR_PAD    int __pxx_pad[6];
-#define __PXX_PT_RWLOCK_PAD  int __pxx_pad[3];
-#else
-#define __PXX_PT_MUTEX_PAD
-#define __PXX_PT_COND_PAD
-#define __PXX_PT_ATTR_PAD
-#define __PXX_PT_RWLOCK_PAD
-#endif
+/* the pad macros and every pthread_*_t: <pxx/pthreadtypes.h> */
+#include <pxx/pthreadtypes.h>
 
 /* Thread identity = the kernel tid; copyable by value, compared with ==. */
-typedef long pthread_t;
 
 /* pthread_mutex_t starts with the futex word, laid out to match palsync's
  * TMutex (record State: Integer), which is all the Pascal side ever touches.
  * The type, owner tid and depth after it are C-side only and make a RECURSIVE
  * mutex re-lockable by its owner. Zeroed == a free NORMAL mutex, so a {0}
  * static initialiser and MallocZero both yield a valid unlocked mutex. */
-typedef struct { int __state; int __type; long __owner; int __count; __PXX_PT_MUTEX_PAD } pthread_mutex_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0 }
 
 /* The type is honoured for RECURSIVE; ERRORCHECK locks like NORMAL. It used
  * to be accepted and ignored, so stock threadsafe SQLite (which re-locks a
  * recursive mutex) deadlocked on its first statement. */
-typedef struct { int __type; } pthread_mutexattr_t;
 /* crtl's fields first, then the pad to glibc's size (56 / 36). */
-typedef struct { int __detach; int __flags; unsigned long __stacksize; __PXX_PT_ATTR_PAD } pthread_attr_t;
 #define PTHREAD_CREATE_JOINABLE  0
 #define PTHREAD_CREATE_DETACHED  1
 #define PTHREAD_PROCESS_PRIVATE  0
@@ -82,14 +64,12 @@ int pthread_attr_setstacksize(pthread_attr_t *a, unsigned long size);
 int pthread_attr_getstacksize(const pthread_attr_t *a, unsigned long *size);
 
 /* glibc's: a plain int word */
-typedef volatile int pthread_spinlock_t;
 int pthread_spin_init(pthread_spinlock_t *l, int pshared);
 int pthread_spin_destroy(pthread_spinlock_t *l);
 int pthread_spin_lock(pthread_spinlock_t *l);
 int pthread_spin_trylock(pthread_spinlock_t *l);
 int pthread_spin_unlock(pthread_spinlock_t *l);
 
-typedef unsigned int pthread_key_t;
 #define PTHREAD_KEYS_MAX               128
 #define PTHREAD_DESTRUCTOR_ITERATIONS  4
 int   pthread_key_create(pthread_key_t *k, void (*destructor)(void *));
@@ -112,7 +92,6 @@ int  pthread_mutexattr_destroy(pthread_mutexattr_t *a);
 int  pthread_mutexattr_settype(pthread_mutexattr_t *a, int type);
 
 /* One-time initialisation (palsync RunOnce; glibc-compatible int guard). */
-typedef int pthread_once_t;
 #define PTHREAD_ONCE_INIT 0
 int pthread_once(pthread_once_t *guard, void (*init_routine)(void));
 /* Handlers around fork(): prepare in reverse registration order, parent and
@@ -126,9 +105,7 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(vo
  * CLOCK_REALTIME absolute deadlines are approximated the same way. */
 /* __clock: the clock pthread_cond_timedwait's deadline is on, from the attr;
    0 is CLOCK_REALTIME, POSIX's default, so the static initializer is right */
-typedef struct { int __seq; int __clock; __PXX_PT_COND_PAD } pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER { 0 }
-typedef struct { int __clock; } pthread_condattr_t;
 
 int pthread_condattr_init(pthread_condattr_t *a);
 int pthread_condattr_destroy(pthread_condattr_t *a);
@@ -147,19 +124,6 @@ int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
  * of readers or one writer; a waiting writer holds off new readers so a
  * stream of readers cannot starve it. Zeroed == unlocked. rumpuser's
  * locks (librumpuser) are built on it. glibc's size under --system-libs. */
-typedef struct {
-  int __lock;     /* futex mutex word guarding the fields below */
-  int __seq;      /* condvar word: state changed */
-  int __readers;  /* readers holding it */
-  int __writer;   /* 1 while a writer holds it */
-  int __wwait;    /* writers waiting */
-  __PXX_PT_RWLOCK_PAD
-} pthread_rwlock_t;
-#if defined(__x86_64__)
-typedef struct { long __kind; } pthread_rwlockattr_t;               /* glibc: 8, aligned 8 */
-#else
-typedef struct { int __kind; int __pxx_pad; } pthread_rwlockattr_t; /* 8, aligned 4 */
-#endif
 #define PTHREAD_RWLOCK_INITIALIZER { 0 }
 
 int pthread_rwlock_init(pthread_rwlock_t *rw, const pthread_rwlockattr_t *attr);

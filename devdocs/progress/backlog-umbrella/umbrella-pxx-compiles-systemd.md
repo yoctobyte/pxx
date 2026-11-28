@@ -65,6 +65,13 @@ census was.
      392/662. Next groups: incomplete struct statx (68) and other
      incomplete-type sizeofs (49), pthread_mutex_t/pthread_t in a struct (39),
      _Generic leftovers (18), LINE_MAX, gettid, struct iovec, typeof.
+   - after feature-crtl-statx-file-handle-open-how,
+     feature-crtl-pthread-types-in-sys-types-h, feature-crtl-dirent64-and-getdents64:
+     487/662. Next: _Generic over pointer expressions pxx cannot yet type
+     (49: struct members, call results, const arrays, p[i], p + n; pointee
+     const is tracked for variables only), then a tail of crtl names
+     (LINE_MAX 12, gettid 10, AT_NO_AUTOMOUNT, syncfs, exp10, close_range,
+     renameat2, AF_*, PR_*, ...) and typeof of an untyped expression (7).
 
 ## Done when
 

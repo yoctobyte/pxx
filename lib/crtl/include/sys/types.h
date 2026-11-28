@@ -130,5 +130,8 @@ typedef uint64_t u_int64_t;
 /* glibc's <sys/types.h> brings <endian.h> along, and code relies on it:
    toybox's lsusb calls le16toh having included neither. */
 #include <endian.h>
+/* POSIX: the pthread_*_t types are in <sys/types.h> too (types only; the
+   functions stay in <pthread.h>). feature-crtl-pthread-types-in-sys-types-h */
+#include <pxx/pthreadtypes.h>
 
 #endif

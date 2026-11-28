@@ -167,4 +167,11 @@ extern int mkdirat(int dirfd, const char *path, mode_t mode);
 extern int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev);
 extern int mkfifoat(int dirfd, const char *path, mode_t mode);
 
+/* statx(2), GNU: struct statx from <linux/stat.h>, as glibc's <sys/stat.h>
+   provides it under _GNU_SOURCE. feature-crtl-statx-file-handle-open-how */
+#ifdef _GNU_SOURCE
+#include <linux/stat.h>
+extern int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *buf);
+#endif
+
 #endif

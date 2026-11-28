@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  879 functions across 89 headers. }
+  884 functions across 89 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -79,9 +79,9 @@ begin
     'g': Result :=
       ' gai_strerror:netdb.h getaddrinfo:netdb.h getc:stdio.h getc_unlocked:stdio.h ' +
       ' getchar:stdio.h getchar_unlocked:stdio.h getcwd:unistd.h getdelim:stdio.h ' +
-      ' getdtablesize:unistd.h getegid:unistd.h getentropy:unistd.h getenv:stdlib.h ' +
-      ' geteuid:unistd.h getgid:unistd.h getgrent:grp.h getgrgid:grp.h getgrgid_r:grp.h ' +
-      ' getgrnam:grp.h getgrnam_r:grp.h getgrouplist:grp.h getgroups:unistd.h ' +
+      ' getdents64:dirent.h getdtablesize:unistd.h getegid:unistd.h getentropy:unistd.h ' +
+      ' getenv:stdlib.h geteuid:unistd.h getgid:unistd.h getgrent:grp.h getgrgid:grp.h ' +
+      ' getgrgid_r:grp.h getgrnam:grp.h getgrnam_r:grp.h getgrouplist:grp.h getgroups:unistd.h ' +
       ' gethostbyaddr:netdb.h gethostbyname:netdb.h gethostid:unistd.h gethostname:unistd.h ' +
       ' getifaddrs:ifaddrs.h getitimer:sys/time.h getline:stdio.h getloadavg:stdlib.h ' +
       ' getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h getmntent_r:mntent.h ' +
@@ -141,18 +141,18 @@ begin
       ' msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h munlockall:sys/mman.h ' +
       ' munmap:sys/mman.h ';
     'n': Result :=
-      ' nan:math.h nanosleep:time.h nearbyint:math.h newlocale:locale.h nextafter:math.h ' +
-      ' ngettext:libintl.h nice:unistd.h nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h ' +
-      ' nrand48:stdlib.h ns_get16:arpa/nameser.h ns_get32:arpa/nameser.h ' +
-      ' ns_initparse:arpa/nameser.h ns_msg_getflag:arpa/nameser.h ' +
+      ' name_to_handle_at:fcntl.h nan:math.h nanosleep:time.h nearbyint:math.h ' +
+      ' newlocale:locale.h nextafter:math.h ngettext:libintl.h nice:unistd.h ' +
+      ' nl_langinfo:langinfo.h nl_langinfo_l:langinfo.h nrand48:stdlib.h ns_get16:arpa/nameser.h ' +
+      ' ns_get32:arpa/nameser.h ns_initparse:arpa/nameser.h ns_msg_getflag:arpa/nameser.h ' +
       ' ns_name_compress:arpa/nameser.h ns_name_ntop:arpa/nameser.h ns_name_pack:arpa/nameser.h ' +
       ' ns_name_pton:arpa/nameser.h ns_name_uncompress:arpa/nameser.h ' +
       ' ns_name_unpack:arpa/nameser.h ns_parserr:arpa/nameser.h ns_put16:arpa/nameser.h ' +
       ' ns_put32:arpa/nameser.h ns_skiprr:arpa/nameser.h ntohl:netinet/in.h ntohs:netinet/in.h ' +
       ' ntp_adjtime:sys/timex.h ntp_gettime:sys/timex.h ';
     'o': Result :=
-      ' open:fcntl.h open64:fcntl.h open_memstream:stdio.h openat:fcntl.h opendir:dirent.h ' +
-      ' openlog:syslog.h openpty:pty.h ';
+      ' open:fcntl.h open64:fcntl.h open_by_handle_at:fcntl.h open_memstream:stdio.h ' +
+      ' openat:fcntl.h opendir:dirent.h openlog:syslog.h openpty:pty.h ';
     'p': Result :=
       ' parse_printf_format:printf.h pathconf:unistd.h pause:unistd.h pclose:stdio.h ' +
       ' perror:stdio.h personality:sys/personality.h pipe:unistd.h pipe2:unistd.h ' +
@@ -178,11 +178,11 @@ begin
       ' qsort:stdlib.h qsort_r:stdlib.h ';
     'r': Result :=
       ' raise:signal.h rand:stdlib.h rand_r:stdlib.h random:stdlib.h random_r:stdlib.h ' +
-      ' rawmemchr:string.h read:unistd.h readdir:dirent.h readlink:unistd.h readlinkat:unistd.h ' +
-      ' readv:sys/uio.h realloc:stdlib.h reallocarray:stdlib.h realpath:stdlib.h ' +
-      ' reboot:sys/reboot.h recv:sys/socket.h recvfrom:sys/socket.h recvmsg:sys/socket.h ' +
-      ' regcomp:regex.h regerror:regex.h regexec:regex.h regfree:regex.h remainder:math.h ' +
-      ' remove:stdio.h removexattr:sys/xattr.h rename:stdio.h renameat:stdio.h ' +
+      ' rawmemchr:string.h read:unistd.h readdir:dirent.h readdir64:dirent.h readlink:unistd.h ' +
+      ' readlinkat:unistd.h readv:sys/uio.h realloc:stdlib.h reallocarray:stdlib.h ' +
+      ' realpath:stdlib.h reboot:sys/reboot.h recv:sys/socket.h recvfrom:sys/socket.h ' +
+      ' recvmsg:sys/socket.h regcomp:regex.h regerror:regex.h regexec:regex.h regfree:regex.h ' +
+      ' remainder:math.h remove:stdio.h removexattr:sys/xattr.h rename:stdio.h renameat:stdio.h ' +
       ' res_close:resolv.h res_init:resolv.h res_mkquery:resolv.h res_nclose:resolv.h ' +
       ' res_ninit:resolv.h res_nmkquery:resolv.h res_nquery:resolv.h res_nsearch:resolv.h ' +
       ' res_nsend:resolv.h res_query:resolv.h res_randomid:resolv.h res_search:resolv.h ' +
@@ -217,17 +217,17 @@ begin
       ' socket:sys/socket.h socketpair:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h ' +
       ' srand:stdlib.h srand48:stdlib.h srandom:stdlib.h srandom_r:stdlib.h sscanf:stdio.h ' +
       ' stat:sys/stat.h stat64:sys/stat.h statfs:sys/statfs.h statvfs:sys/statvfs.h ' +
-      ' stpcpy:string.h stpncpy:string.h strcasestr:string.h strcat:string.h strchr:string.h ' +
-      ' strchrnul:string.h strcmp:string.h strcoll:string.h strcpy:string.h strcspn:string.h ' +
-      ' strdup:stdlib.h strerror:string.h strerror_r:string.h strftime:time.h strlcat:string.h ' +
-      ' strlcpy:string.h strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h ' +
-      ' strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h ' +
-      ' strsep:string.h strsignal:string.h strspn:string.h strstr:string.h strtod:stdlib.h ' +
-      ' strtod_l:stdlib.h strtof:stdlib.h strtoimax:inttypes.h strtok:string.h strtok_r:string.h ' +
-      ' strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h ' +
-      ' strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h swapoff:sys/swap.h ' +
-      ' swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h syscall:unistd.h ' +
-      ' sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
+      ' statx:sys/stat.h stpcpy:string.h stpncpy:string.h strcasestr:string.h strcat:string.h ' +
+      ' strchr:string.h strchrnul:string.h strcmp:string.h strcoll:string.h strcpy:string.h ' +
+      ' strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h strftime:time.h ' +
+      ' strlcat:string.h strlcpy:string.h strlen:string.h strncat:string.h strncmp:string.h ' +
+      ' strncpy:string.h strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h ' +
+      ' strrchr:string.h strsep:string.h strsignal:string.h strspn:string.h strstr:string.h ' +
+      ' strtod:stdlib.h strtod_l:stdlib.h strtof:stdlib.h strtoimax:inttypes.h strtok:string.h ' +
+      ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
+      ' strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h ' +
+      ' swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h ' +
+      ' syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +
@@ -280,8 +280,8 @@ begin
     'k': Result := 208;
     'l': Result := 7928;
     'm': Result := 301040;
-    'n': Result := 360376;
-    'o': Result := 16592;
+    'n': Result := 491448;
+    'o': Result := 147664;
     'p': Result := 1738145784;
     'q': Result := 160;
     'r': Result := 8176;

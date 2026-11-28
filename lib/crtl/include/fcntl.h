@@ -187,4 +187,31 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 extern int posix_fadvise(int fd, off_t offset, off_t len, int advice);
 extern int fallocate(int fd, int mode, off_t offset, off_t len);
 
+/* GNU, as glibc's <fcntl.h> under _GNU_SOURCE: struct iovec (glibc declares
+   vmsplice here; systemd's json-util.h relies on it), struct open_how, and
+   the file-handle calls of open_by_handle_at(2).
+   feature-crtl-statx-file-handle-open-how */
+#ifdef _GNU_SOURCE
+#include <sys/uio.h>
+#include <linux/openat2.h>
+#ifndef AT_STATX_SYNC_TYPE
+#define AT_STATX_SYNC_TYPE    0x6000
+#define AT_STATX_SYNC_AS_STAT 0x0000
+#define AT_STATX_FORCE_SYNC   0x2000
+#define AT_STATX_DONT_SYNC    0x4000
+#endif
+#ifndef AT_HANDLE_FID
+#define AT_HANDLE_FID         0x200
+#endif
+#define MAX_HANDLE_SZ 128
+struct file_handle {
+  unsigned int handle_bytes;
+  int handle_type;
+  unsigned char f_handle[];
+};
+extern int name_to_handle_at(int dirfd, const char *path, struct file_handle *handle,
+                             int *mount_id, int flags);
+extern int open_by_handle_at(int mount_fd, struct file_handle *handle, int flags);
+#endif
+
 #endif

@@ -64,4 +64,23 @@ int alphasort(const struct dirent **a, const struct dirent **b);
 int versionsort(const struct dirent **a, const struct dirent **b);
 int dirfd(DIR *d);
 
+/* LFS / GNU, as glibc: struct dirent64 is struct dirent here (both are the
+   kernel's linux_dirent64; d_ino and d_off are 64-bit already), readdir64 is
+   readdir, and getdents64(2) under _GNU_SOURCE (glibc's bits/dirent_ext.h).
+   systemd asserts the two structs interchangeable and reads getdents64 output
+   through either. feature-crtl-dirent64-and-getdents64 */
+#if defined(_GNU_SOURCE) || defined(_LARGEFILE64_SOURCE)
+struct dirent64 {
+  unsigned long long d_ino;
+  long long          d_off;
+  unsigned short     d_reclen;
+  unsigned char      d_type;
+  char               d_name[256];
+};
+struct dirent64 *readdir64(DIR *d);
+#endif
+#ifdef _GNU_SOURCE
+ssize_t getdents64(int fd, void *buf, size_t len);
+#endif
+
 #endif

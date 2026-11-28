@@ -7,6 +7,7 @@
  * lock manager on (st_dev, st_ino), so those come back real, not zeroed.
  */
 
+#define _GNU_SOURCE 1   /* statx, struct statx */
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/syscall.h>
@@ -328,5 +329,19 @@ int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags)
   if (fstatat(dirfd, path, &s, flags) != 0) return -1;
   crtl_stat_widen(buf, &s);
   return 0;
+#endif
+}
+
+/* statx(2) itself, for callers that want the fields struct stat lacks
+   (systemd: stx_mnt_id, btime, STATX_ATTR_MOUNT_ROOT).
+   feature-crtl-statx-file-handle-open-how */
+int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *buf)
+{
+#ifdef SYS_statx
+  return (int)syscall(SYS_statx, (long)dirfd, path, (long)flags, (long)mask, buf);
+#else
+  (void)dirfd; (void)path; (void)flags; (void)mask; (void)buf;
+  errno = ENOSYS;
+  return -1;
 #endif
 }

@@ -8,6 +8,7 @@
  * `long` (4 on ILP32, 8 on LP64), so no field translation is needed.
  */
 
+#define _GNU_SOURCE 1   /* name_to_handle_at, struct file_handle */
 #include <fcntl.h>
 #include <stdarg.h>
 #include <errno.h>
@@ -204,4 +205,29 @@ int posix_fadvise(int fd, off_t offset, off_t len, int advice)
 #endif
   if (r < 0) { r = errno; errno = e; return (int)r; }
   return 0;
+}
+
+/* open_by_handle_at(2) and name_to_handle_at(2): the raw calls.
+   feature-crtl-statx-file-handle-open-how */
+int name_to_handle_at(int dirfd, const char *path, struct file_handle *handle,
+                      int *mount_id, int flags)
+{
+#ifdef SYS_name_to_handle_at
+  return (int)syscall(SYS_name_to_handle_at, (long)dirfd, path, handle, mount_id, (long)flags);
+#else
+  (void)dirfd; (void)path; (void)handle; (void)mount_id; (void)flags;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+int open_by_handle_at(int mount_fd, struct file_handle *handle, int flags)
+{
+#ifdef SYS_open_by_handle_at
+  return (int)syscall(SYS_open_by_handle_at, (long)mount_fd, handle, (long)flags);
+#else
+  (void)mount_fd; (void)handle; (void)flags;
+  errno = ENOSYS;
+  return -1;
+#endif
 }

@@ -24446,10 +24446,26 @@ begin
 end;
 
 procedure CRefuseIncompleteSizeof(recId: Integer);
+{ The tag is named when it has one: a census groups first errors by message,
+  and "an INCOMPLETE struct" with no name sent every group back to the
+  sources to find out which (systemd, 49 units). }
+var ci, k: Integer; nm: AnsiString;
 begin
   if CRecMissingFieldKind(recId) = 1 then
+  begin
+    { a FORWARD-declared tag has no body, so its UCls row was never named;
+      the name is in the C tag table that binds it }
+    nm := '';
+    for ci := CTagCount - 1 downto 0 do
+      if CTagRec[ci] = recId then
+      begin
+        for k := 0 to CTagNameLen[ci] - 1 do nm := nm + CTagChars[CTagNameOff[ci] + k];
+        Break;
+      end;
+    if nm <> '' then nm := ' ''' + nm + '''';
     ErrorRecover('C: invalid application of ''sizeof'' to an INCOMPLETE'
-      + ' struct/union type -- it has no definition in scope');
+      + ' struct/union type' + nm + ' -- it has no definition in scope');
+  end;
 end;
 
 function CStructBodyIsSimple(startIdx: Integer): Boolean;

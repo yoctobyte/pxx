@@ -19920,6 +19920,21 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_generic_cast_conditional.c $(TESTTMP)/c_gencc26 > /dev/null
 	@gcc -w test/c_generic_cast_conditional.c -o $(TESTTMP)/c_gencc26_gcc
 	tools/expect_same.sh c_gencc26 "$$(timeout 20 $(TESTTMP)/c_gencc26)" "$$(timeout 20 $(TESTTMP)/c_gencc26_gcc)"
+	# struct statx/file_handle/open_how layouts field by field, statx() against stat(), name_to_handle_at; crtl and through pxx --link; against gcc+glibc (feature-crtl-statx-file-handle-open-how)
+	./$(COMPILER) --no-host-include test/c_statx_handle.c $(TESTTMP)/c_statx26 > /dev/null
+	@gcc -w test/c_statx_handle.c -o $(TESTTMP)/c_statx26_gcc
+	tools/expect_same.sh c_statx26 "$$(timeout 20 $(TESTTMP)/c_statx26 Makefile)" "$$(timeout 20 $(TESTTMP)/c_statx26_gcc Makefile)"
+	./$(COMPILER) --shared-runtime --threadsafe --emit-obj test/c_statx_handle.c $(TESTTMP)/c_statx26_sr.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_statx26_linked $(TESTTMP)/c_statx26_sr.o > /dev/null
+	tools/expect_same.sh c_statx26/pxx-link "$$(timeout 20 $(TESTTMP)/c_statx26_linked Makefile)" "$$(timeout 20 $(TESTTMP)/c_statx26_gcc Makefile)"
+	# the pthread_*_t types from <sys/types.h> alone (POSIX), sizes against gcc (feature-crtl-pthread-types-in-sys-types-h)
+	./$(COMPILER) --no-host-include test/c_pthread_types_in_sys_types.c $(TESTTMP)/c_ptty26 > /dev/null
+	@gcc -w test/c_pthread_types_in_sys_types.c -o $(TESTTMP)/c_ptty26_gcc
+	tools/expect_same.sh c_ptty26 "$$(timeout 20 $(TESTTMP)/c_ptty26)" "$$(timeout 20 $(TESTTMP)/c_ptty26_gcc)"
+	# struct dirent64, readdir64, getdents64 (layout, records by d_reclen, EBADF); against gcc (feature-crtl-dirent64-and-getdents64)
+	./$(COMPILER) --no-host-include test/c_dirent64.c $(TESTTMP)/c_dir64_26 > /dev/null
+	@gcc -w test/c_dirent64.c -o $(TESTTMP)/c_dir64_26_gcc
+	tools/expect_same.sh c_dir64_26 "$$(timeout 20 $(TESTTMP)/c_dir64_26 test)" "$$(timeout 20 $(TESTTMP)/c_dir64_26_gcc test)"
 	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
 	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
 	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc
