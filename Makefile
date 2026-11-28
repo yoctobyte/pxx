@@ -19866,6 +19866,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_line_multiline_call.c $(TESTTMP)/c_linemulti26 > /dev/null
 	@gcc -w test/c_line_multiline_call.c -o $(TESTTMP)/c_linemulti26_gcc
 	tools/expect_same.sh c_linemulti26 "$$(timeout 20 $(TESTTMP)/c_linemulti26)" "$$(timeout 20 $(TESTTMP)/c_linemulti26_gcc)"
+	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
+	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
+	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc
+	tools/expect_same.sh c_cxlayout26 "$$(timeout 20 $(TESTTMP)/c_cxlayout26)" "$$(timeout 20 $(TESTTMP)/c_cxlayout26_gcc)"
+	# a struct, union or _Complex value as the operand of a scalar operator, condition, cast or scalar assignment is refused by name (CASE 1-13); the legal neighbours still run as gcc (CASE 0) (bug-c-struct-operands-to-scalar-operators-compile-silently)
+	./$(COMPILER) --no-host-include -DCASE=0 test/c_struct_operand_refused.c $(TESTTMP)/c_structop26 > /dev/null
+	@gcc -w -DCASE=0 test/c_struct_operand_refused.c -o $(TESTTMP)/c_structop26_gcc
+	tools/expect_same.sh c_structop26 "$$(timeout 20 $(TESTTMP)/c_structop26)" "$$(timeout 20 $(TESTTMP)/c_structop26_gcc)"
+	tools/expect_same.sh c_structop26_ref "$$(for c in 1 2 3 4 5 6 7 8 9 10 11 12 13; do ./$(COMPILER) --no-host-include -DCASE=$$c test/c_struct_operand_refused.c $(TESTTMP)/c_structop26r 2>&1 | grep -c 'needs a scalar operand\|on a _Complex value\|a cast to a _Complex type'; done | tr -d '\n')" "1111111111111"
 	# C23 refusals: an attribute that changes code is named, not dropped; nullptr is not read as anything; c89 is still refused; gnu17 keeps true an int
 	@printf 'struct [[gnu::packed]] s { char c; int i; };\nint main(void){return 0;}\n' > $(TESTTMP)/c_c23ref26a.c
 	@printf 'int main(void){ void *p = nullptr; return p != 0; }\n' > $(TESTTMP)/c_c23ref26b.c

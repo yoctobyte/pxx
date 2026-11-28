@@ -4317,6 +4317,7 @@ end;
   its va_list `__builtin_va_list`. Once per unit, and never once <stdarg.h> is
   in (PXX_CRTL_STDARG_H). bug-c-builtin-va-list-needs-stdarg }
 var CPBuiltinVaDone: Boolean;
+    CPComplexDone: Boolean;   { pxx/complex_types.h pulled (feature-c-complex-types-as-layout) }
     CPAsmSource: Boolean;   { see its note above CPreprocess; set by gasfront.inc }
 
 function CPCrtlHeaderAbs(const name: AnsiString): AnsiString;
@@ -4362,6 +4363,30 @@ begin
     quoted include resolves a relative name against the SOURCE's directory.
     /proc/self/cwd names the working directory absolutely (the compiler runs
     on Linux hosts). }
+  if path[1] <> '/' then path := '/proc/self/cwd/' + path;
+  path := '"' + path + '"';
+  CPInclude(path, 1, Length(path), depth, baseDir);
+end;
+
+{ `_Complex T` is a struct of two T in cfront: its definitions come from
+  crtl's pxx/complex_types.h, pulled like stdarg.h above, the first time an
+  expanded line mentions _Complex or gcc's __complex__.
+  feature-c-complex-types-as-layout }
+function CPMentionsComplex(const s: AnsiString): Boolean;
+begin
+  Result := (Pos('_Complex', s) > 0) or (Pos('__complex', s) > 0);
+end;
+
+procedure CPMaybePullComplexTypes(const expanded, baseDir: AnsiString; depth: Integer);
+var guard, path: AnsiString;
+begin
+  if CPComplexDone or CPAsmSource then Exit;
+  if not CPMentionsComplex(expanded) then Exit;
+  CPComplexDone := True;
+  guard := 'PXX_CRTL_COMPLEX_TYPES_H';
+  if CPMacroDefined(guard, 1, Length(guard)) then Exit;
+  path := CPCrtlHeaderAbs('pxx/complex_types.h');
+  if path = '' then Exit;
   if path[1] <> '/' then path := '/proc/self/cwd/' + path;
   path := '"' + path + '"';
   CPInclude(path, 1, Length(path), depth, baseDir);
@@ -4542,6 +4567,12 @@ begin
           CPMaybePullBuiltinVaList(vaLine, baseDir, depth);
           CPrepLineExp := vaLine;
         end;
+        if (not CPComplexDone) and CPMentionsComplex(CPrepLineExp) then
+        begin
+          vaLine := CPrepLineExp;
+          CPMaybePullComplexTypes(vaLine, baseDir, depth);
+          CPrepLineExp := vaLine;
+        end;
         CPSyncLine;
         CPEmitExpanded(CPrepLineExp);
         CPrepOutAppendCh(#10);
@@ -4656,6 +4687,7 @@ begin
   CPPCount := 0;
   CPCondCount := 0;
   CPBuiltinVaDone := False;
+  CPComplexDone := False;
   CPActiveMacroCount := 0;
   CPPushCount := 0;
   CPAddLiteral('__linux__', '01');

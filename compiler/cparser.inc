@@ -681,8 +681,33 @@ end;
   were right because they already go through CMakeTruthy / a compare.
   Integers and pointers are left alone: their bits ARE their truth.
   bug-c-a-floating-condition-branches-on-its-bits }
+function CRecIsComplex(rec: Integer): Boolean; forward;
+
+{ A STRUCT OR UNION IS NOT AN OPERAND. Arithmetic, comparison, unary - + ~ !,
+  a condition, a cast to a scalar and assigning between a scalar and an
+  aggregate all need a scalar (C11 6.5), and gcc refuses each. pxx compiled
+  every one of them silently -- `struct S a, b; r = a + b;` built and ran
+  on whatever the IR made of two record addresses. It stayed hidden because
+  real code never writes it. It stopped being harmless when `_Complex T`
+  became a struct of two T (feature-c-complex-types-as-layout): complex
+  ARITHMETIC is real code, and it would have compiled to nonsense. Refused
+  here, at the operator, naming what pxx does not model.
+  bug-c-struct-operands-to-scalar-operators-compile-silently }
+procedure CRefuseRecordOperand(e: Integer; const what: AnsiString);
+begin
+  if (e < 0) or (IntToTypeKind(ASTTk[e]) <> tyRecord) then Exit;
+  if CRecIsComplex(ResolveNodeRec(e)) then
+    Error('C: ' + what + ' on a _Complex value: complex arithmetic is not supported ' +
+          '(pxx models _Complex as layout only -- size, alignment, copies and passing; ' +
+          'feature-c-complex-types-as-layout)')
+  else
+    Error('C: ' + what + ' needs a scalar operand, not a struct or union ' +
+          '(gcc: "invalid operands" / "used struct type value where scalar is required")');
+end;
+
 function CCondOf(e: Integer): Integer;
 begin
+  CRefuseRecordOperand(e, 'a condition');
   Result := e;
   if (e >= 0) and TypeIsFloat(IntToTypeKind(ASTTk[e])) then
     Result := CMakeTruthy(e);
@@ -1254,6 +1279,11 @@ end;
 function CMakeBinop(cTok, l, r: Integer): Integer;
 var node, ivalOp, bfPrec: Integer; bfSigned: Boolean; cv, cv2: Int64;
 begin
+  if cTok <> Ord(tkComma) then
+  begin
+    CRefuseRecordOperand(l, 'a binary operator');
+    CRefuseRecordOperand(r, 'a binary operator');
+  end;
   { Both operands undergo the integer promotions before the usual arithmetic
     conversions (6.3.1.8), so a plain char sign-extends HERE on a signed-char
     target — this is the chokepoint every C binary operator goes through, which
@@ -6079,6 +6109,10 @@ begin
       was expected — a by-value/assign copy then read garbage and SEGV'd. Yield the
       operand unchanged (composes with the whole-record-value init path). }
     if (castDepth = 0) and (castTk = tyRecord) and (ASTTk[operand] <> Ord(tyRecord)) and
+       CRecIsComplex(clRecId) then
+      Error('C: a cast to a _Complex type: complex conversion is not supported ' +
+            '(pxx models _Complex as layout only; feature-c-complex-types-as-layout)');
+    if (castDepth = 0) and (castTk = tyRecord) and (ASTTk[operand] <> Ord(tyRecord)) and
        (clRecId >= REC_UCLASS_BASE) then
     begin Result := ParseCPostfixTail(CUnionCastLiteral(clRecId, operand)); Exit; end;
     if (castDepth = 0) and (castTk = tyRecord) then
@@ -6089,6 +6123,7 @@ begin
       call and is not pruned as a dead retag node. A `void *` cast (depth > 0)
       is a real pointer cast and stays on the retag path below. }
     if isVoidCast then begin Result := operand; Exit; end;
+    CRefuseRecordOperand(operand, 'a cast to a scalar type');
     { A POINTER cast of a STRING LITERAL is an identity in C -- a string literal
       already IS a `char *`, so `(char*)"abc"` and `"abc"` denote the same
       address. Wrapping it in a retag node made them differ, and silently: a
@@ -6384,6 +6419,7 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      CRefuseRecordOperand(operand, 'unary -');
       operand := CPromoteChar(operand);   { promoted before negation, like `~` below }
       node := AllocNode(AN_NEG);
       ASTLeft[node] := operand;
@@ -6399,12 +6435,15 @@ begin
     tkPlus:
     begin
       Next;
-      Result := CPromoteChar(ParseCUnary());   { unary + promotes its operand too }
+      operand := ParseCUnary();
+      CRefuseRecordOperand(operand, 'unary +');
+      Result := CPromoteChar(operand);   { unary + promotes its operand too }
     end;
     tkNot:   { `~` bitwise NOT }
     begin
       Next;
       operand := ParseCUnary();
+      CRefuseRecordOperand(operand, 'unary ~');
       operand := CPromoteChar(operand);
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
@@ -6423,6 +6462,7 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      CRefuseRecordOperand(operand, 'unary !');
       { A literal answers its own negation. Needed for the same chain reason as
         CMakeTruthy's fold: `!BB_MMU` is the third term of busybox's
         `0 || 0 || !BB_MMU`, and left unfolded it stops that chain collapsing. }
@@ -7237,6 +7277,13 @@ begin
         else if cTok = Ord(tkShrEq) then baseOp := Ord(tkShr);
         rhs := CMakeBinop(baseOp, left, rhs);
       end;
+      if (IntToTypeKind(ASTTk[left]) = tyRecord) <> (IntToTypeKind(ASTTk[rhs]) = tyRecord) then
+      begin
+        if IntToTypeKind(ASTTk[left]) = tyRecord then
+          CRefuseRecordOperand(left, 'an assignment between a struct and a scalar')
+        else
+          CRefuseRecordOperand(rhs, 'an assignment between a struct and a scalar');
+      end;
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := left;
       ASTRight[node] := CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs);
@@ -7720,6 +7767,14 @@ begin
             (s = '__int128_t') or (s = '__uint128_t');
 end;
 
+{ C99 `_Complex` and gcc's `__complex__` / `__complex`: a type word, read as
+  a struct of two of its real type (pxx/complex_types.h).
+  feature-c-complex-types-as-layout }
+function CIsComplexWord(const s: AnsiString): Boolean;
+begin
+  Result := (s = '_Complex') or (s = '__complex__') or (s = '__complex');
+end;
+
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
@@ -7728,6 +7783,7 @@ begin
   if (not Result) and (CurTok.Kind = tkIdent) then
     Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
               CIsTypeofWord(CurTok.SVal) or CIsInt128Word(CurTok.SVal) or
+              CIsComplexWord(CurTok.SVal) or
               { typedef name is a type only if not shadowed by a variable of the
                 same exact name — zlib inftrees.h `typedef ... code;` vs trees.c
                 `int code;` loop var. }
@@ -8035,6 +8091,8 @@ function ParseCDeclType: TTypeKind;
 var
   leavePtrArr: Boolean;            { see CDeclLeaveParenPtrArr: read once, cleared for nested calls }
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
+  isComplex: Boolean;              { `_Complex` seen: the base becomes struct __pxx_complex_* }
+  cxName: AnsiString;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
   tdPtrDepth, tdPtrBaseTk: Integer;   { a `T **` typedef's own depth and the kind under its stars (CTypedefPtrDepth) }
@@ -8099,6 +8157,7 @@ begin
   CTypePtrElemNDims := 0;
   CTypeFnRetIsFunc := False;
   CTypeFnRetParamCount := 0;
+  isComplex := False;
   loop := True;
   while loop do
   begin
@@ -8143,6 +8202,13 @@ begin
              (CurTok.SVal = '__inline') or (CurTok.SVal = '__inline__') or
              (CurTok.SVal = '_Noreturn') then
             Next
+          else if CIsComplexWord(CurTok.SVal) then
+          begin
+            { either order: `_Complex double`, `double _Complex`,
+              `long double _Complex`; resolved after the loop }
+            isComplex := True;
+            Next;
+          end
           else if (not sawBase) and (CurTok.SVal = 'union') then
           begin
             Next;
@@ -8300,6 +8366,24 @@ begin
         end;
       else loop := False;
     end;
+  end;
+
+  { `_Complex T`: the struct of two T from pxx/complex_types.h. A bare
+    `_Complex` is gcc's `_Complex double`. gcc's integer complex types
+    (`_Complex int`) are an extension nothing here needs: refused by name. }
+  if isComplex then
+  begin
+    if isAggBase or isVoid or isTypedef or (sawBase and not isFloatTy) then
+      Error('C: _Complex is supported for float, double and long double only ' +
+            '(an integer or other complex type is a GNU extension pxx does not model; ' +
+            'feature-c-complex-types-as-layout)');
+    if (base = tySingle) and isFloatTy then cxName := '__pxx_complex_float'
+    else if longCount > 0 then cxName := '__pxx_complex_ldouble'
+    else cxName := '__pxx_complex_double';
+    baseRec := FindOrForwardCTag(cxName);
+    base := tyRecord;
+    isAggBase := True; isFloatTy := False; sawBase := True;
+    longCount := 0;
   end;
 
   CTypeIsVoid := isVoid;
@@ -14203,6 +14287,37 @@ end;
 { True when the next initializer element for a record-typed member/element is a
   single whole-record VALUE (to be copied wholesale) rather than a brace list or
   a scalar to brace-elide into the subaggregate. }
+{ Is `rec` one of the complex layouts of pxx/complex_types.h? A complex type is
+  a SCALAR in C's initialiser rules (C11 6.2.5p21 arithmetic types): `{ 7, 0,
+  1.0f }` gives the complex member the 0 whole and the next member the 1.0f.
+  As a plain struct it would brace-elide the 0 and 1.0f into the real and
+  imaginary parts. feature-c-complex-types-as-layout }
+function CRecIsComplex(rec: Integer): Boolean;
+var idx: Integer;
+  function TagIs(const tag: AnsiString): Boolean;
+  begin
+    idx := FindCTagIdx(tag);
+    TagIs := (idx >= 0) and (CTagRec[idx] = rec);
+  end;
+begin
+  Result := (rec >= REC_UCLASS_BASE) and
+            (TagIs('__pxx_complex_double') or TagIs('__pxx_complex_float') or TagIs('__pxx_complex_ldouble'));
+end;
+
+procedure CInitLeaf(tkOrd: Integer; emit: Boolean); forward;
+
+{ One unbraced initialiser for a complex object: a real value, converted as C
+  converts real to complex -- it is the real part, the imaginary part is 0
+  (the zero fill the walk already gives every member it does not reach). }
+procedure CInitComplexScalar(rec: Integer; emit: Boolean);
+var sfi: Integer;
+begin
+  sfi := UClsFBase[rec - REC_UCLASS_BASE];
+  CInitPathPush(1, sfi, UFldTk[sfi]);
+  CInitLeaf(UFldTk[sfi], emit);
+  Dec(CInitPathDepth);
+end;
+
 function CInitElemIsWholeRecord(recId: Integer): Boolean;
 begin
   Result := (recId >= REC_UCLASS_BASE) and
@@ -14437,6 +14552,8 @@ begin
       { whole-record value (compound literal, struct lvalue, *ptr, ->field,
         cast): copy the whole struct, do NOT descend into its subfields. }
       CInitLeaf(UFldTk[fi], emit)
+    else if CRecIsComplex(UFldRec_[fi]) then
+      CInitComplexScalar(UFldRec_[fi], emit)
     else
       CInitWalkRecord(ci2, False, emit);
     Dec(CInitPathDepth);
@@ -14824,6 +14941,8 @@ begin
       end
       else if CInitElemIsWholeRecord(elemRec) then
         CInitLeaf(elemTkOrd, emit)   { whole-record array element: copy wholesale }
+      else if CRecIsComplex(elemRec) then
+        CInitComplexScalar(elemRec, emit)
       else
         CInitWalkRecord(elemRec - REC_UCLASS_BASE, False, emit);
       Dec(CInitPathDepth);
