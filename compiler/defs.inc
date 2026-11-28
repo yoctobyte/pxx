@@ -597,7 +597,7 @@ const
   MAX_UPROP       = 4096;
   MAX_ENUMTYPE = 512;
   MAX_ENUMVAL  = 4096;
-  MAX_TYPEALIAS = 4096;
+  MAX_TYPEALIAS = 16384;
   MAX_CTYPEDEF  = 8192;
   MAX_C_ENUM_FIXED = 2048;   { C23 enum tags with a fixed underlying type (CEnumFixedTag) }
   { C11 _Generic structural type descriptors (cgXxx). A type model richer than
