@@ -1573,6 +1573,18 @@ begin
         Inc(CPExprPos);
       end;
     end
+    else if (CPExprText[CPExprPos] = '0') and (CPExprPos + 1 < CPExprEnd) and
+            (CPExprText[CPExprPos + 1] in ['b','B']) and
+            (CPExprText[CPExprPos + 2] in ['0','1']) then
+    begin
+      { binary `0b101` (GNU C, C23) -- bug-c-binary-integer-literals-are-not-lexed }
+      Inc(CPExprPos); Inc(CPExprPos);              { skip 0b }
+      while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['0','1']) do
+      begin
+        Result := (Result * 2) + Ord(CPExprText[CPExprPos]) - Ord('0');
+        Inc(CPExprPos);
+      end;
+    end
     else if (CPExprText[CPExprPos] = '0') and (CPExprPos < CPExprEnd) and
             (CPExprText[CPExprPos + 1] in ['0'..'7']) then
     begin

@@ -1404,6 +1404,18 @@ begin
         else if c in ['A'..'F'] then begin n := n*16 + (Ord(c)-55); Inc(SrcPos); end
         else done := True;
       end;
+    end
+    else if (SrcPos < Length(Source)) and (Source[SrcPos] in ['b','B']) and
+            (Source[SrcPos+1] in ['0','1']) then
+    begin
+      { a BINARY literal, 0b101 -- GNU C and C23. It lexed as `0` and an
+        identifier `b101`: amdgpu's `case 0b001:` and `0b11` arguments.
+        bug-c-binary-integer-literals-are-not-lexed }
+      Inc(SrcPos);
+      n := 0;
+      CLexHexOctal := True;   { like hex and octal: may be unsigned to fit (6.4.4.1p5) }
+      while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0','1']) do
+        begin n := n * 2 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end else begin
       { C octal: a leading 0 followed by digits is base 8 (e.g. 0100 = 64, as in
         the O_* fcntl flags). The leading 0 was already consumed above. }

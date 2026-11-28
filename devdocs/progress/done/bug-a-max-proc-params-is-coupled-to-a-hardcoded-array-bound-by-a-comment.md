@@ -3,8 +3,8 @@ slug: bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment
 track: A
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: claude-dupwt
 created: 2026-09-10
 found-by: frankH
 tags: [core, limits, cparser, sdl, lekkerzeilen]
@@ -12,6 +12,15 @@ blocked-by:
   - bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type
 summary: "CORRECTED 2026-09-10, and the correction is the finding: there is no const-expr gap, and there is also no coupling to fix. TProc.Params keeps 32 slots whatever its bound says -- `array[0..31]`, `array[0..255]` and `array[0..MAX_PROC_PARAMS-1]` all emit the same code/data/bss/procs with SizeOf(TProc)=1344 -- so writing the constant there only makes the two LOOK coupled. The real blocker is bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type: IsRecordType maps the NAME TProc to a builtin rec id before consulting any declaration, so defs.inc's TProc declaration is documentation and the bound never reaches the field offsets. What landed and stands: the thirteen cparser.inc staging locals and argUndecl now derive (locals DO fold), pptrdims had a genuine 6-element overflow, and the overflow diagnostic no longer says 16 when the limit is 32. MAX_PROC_PARAMS stays 32; raising it is a SIGSEGV at exactly 33 until the layout bug is fixed."
 ---
+
+# RESOLVED 2026-11-28 (claude-dupwt)
+
+The blocker (bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type)
+was fixed 2026-09-25, and the builtin TProc layout now sizes Params by
+MAX_PROC_PARAMS. defs.inc's bound is now the constant, and MAX_PROC_PARAMS is 72.
+It converges in 2 self-host rounds, with no SIGSEGV at 33.
+See bug-c-a-function-with-more-than-32-parameters-is-refused (test row
+c_manyparm26).
 
 # What was fixed
 

@@ -2287,7 +2287,7 @@ end;
 function WasmSigForProcSelf(p, nSelf: Integer): Integer;
 var
   i, nDecl, nParams, nRes: Integer;
-  ptypes: array[0..31] of Byte;
+  ptypes: array[0..MAX_PROC_PARAMS] of Byte;   { the params and a self }
   rtypes: array[0..0] of Byte;
 begin
   nParams := Procs[p].ParamCount + nSelf;

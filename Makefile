@@ -16838,11 +16838,11 @@ test-core: $(COMPILER)
 	# FPC 3.2.2 prints the same.
 	# bug-a-the-33rd-parameter-crashes-the-compiler
 	! ./$(COMPILER) test/test_param_cap_routine_fail.pas $(TESTTMP)/test_pcap_routine > $(TESTTMP)/test_pcap_routine.log 2>&1
-	tools/expect_same.sh test_param_cap_routine "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_routine.log)" "1"
+	tools/expect_same.sh test_param_cap_routine "$$(grep -c 'too many parameters (73, max 72' $(TESTTMP)/test_pcap_routine.log)" "1"
 	! ./$(COMPILER) test/test_param_cap_method_fail.pas $(TESTTMP)/test_pcap_method > $(TESTTMP)/test_pcap_method.log 2>&1
-	tools/expect_same.sh test_param_cap_method "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_method.log)" "1"
+	tools/expect_same.sh test_param_cap_method "$$(grep -c 'too many parameters (73, max 72' $(TESTTMP)/test_pcap_method.log)" "1"
 	! ./$(COMPILER) test/test_param_cap_proctype_fail.pas $(TESTTMP)/test_pcap_proctype > $(TESTTMP)/test_pcap_proctype.log 2>&1
-	tools/expect_same.sh test_param_cap_proctype "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_proctype.log)" "1"
+	tools/expect_same.sh test_param_cap_proctype "$$(grep -c 'too many parameters (73, max 72' $(TESTTMP)/test_pcap_proctype.log)" "1"
 	./$(COMPILER) test/test_param_cap_at_the_limit.pas $(TESTTMP)/test_pcap_ok26
 	tools/expect_same.sh test_pcap_ok26 "$$($(TESTTMP)/test_pcap_ok26)" "$$(cat test/test_param_cap_at_the_limit.expected)"
 	grep -q "cannot assign UCS4Char to AnsiString" $(TESTTMP)/test_asgbad.log
@@ -30154,6 +30154,14 @@ test-core: $(COMPILER)
 	# __builtin_choose_expr in constant expressions. Expected output is gcc's.
 	./$(COMPILER) test/c_void_pointer_conditional_and_choose_expr_const.c $(TESTTMP)/c_voidcond26
 	$(TESTTMP)/c_voidcond26 | diff -u test/c_void_pointer_conditional_and_choose_expr_const.expected -
+	# 0b binary literals (code, case, #if); a 64- and a 70-parameter function;
+	# an array-of-structs member decays. Expected output is gcc's.
+	./$(COMPILER) test/c_binary_integer_literals.c $(TESTTMP)/c_binlit26
+	$(TESTTMP)/c_binlit26 | diff -u test/c_binary_integer_literals.expected -
+	./$(COMPILER) test/c_more_than_32_parameters.c $(TESTTMP)/c_manyparm26
+	$(TESTTMP)/c_manyparm26 | diff -u test/c_more_than_32_parameters.expected -
+	./$(COMPILER) test/c_struct_array_member_decays.c $(TESTTMP)/c_sarrdec26
+	$(TESTTMP)/c_sarrdec26 | diff -u test/c_struct_array_member_decays.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
@@ -31581,7 +31589,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nested_capture_param_bound.pas $(TESTTMP)/test_nested_cap_bound26
 	tools/expect_same.sh test_nested_cap_bound26 "$$($(TESTTMP)/test_nested_cap_bound26)" "NESTED CAPTURE PARAM BOUND OK checked=2"
 	# The UPPER half of that bound, which was a claim in the sibling's header and
-	# nothing else: 40 captures must still be REFUSED. Raising MAX_PROC_PARAMS or
+	# nothing else: 60 captures plus 13 parameters (73, over the cap of 72; the
+	# captures alone stop at MAX_NEST_CAPS 64) must still be REFUSED. Raising MAX_PROC_PARAMS or
 	# dropping the guard would have gone unnoticed by every wired test.
 	# The grep demands the CAP AND THE COUNT, deliberately. While the bound was
 	# the literal 16 the message named a limit with no value in it, and a limit
@@ -31590,7 +31599,7 @@ test-core: $(COMPILER)
 	# found from this side afterwards. `pinned` refuses this file too but WITHOUT
 	# the numbers, so the grep is a control that can genuinely fail.
 	@./$(COMPILER) test/test_nested_capture_param_over_bound.pas $(TESTTMP)/test_nested_cap_over26 2>&1 \
-	  | grep -q 'too many params after capture (33, max 32)' \
+	  | grep -q 'too many parameters (73, max 72' \
 	  || { echo 'test_nested_capture_param_over_bound: FAIL - expected refusal naming the count and the cap'; exit 1; }
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
 	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"

@@ -183,7 +183,7 @@ const
   PY_ARG_KWSPREAD = 1000001;  { `**mapping` into a callee collecting *args AND **kwargs }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
-  MAX_PROC_PARAMS = 32;
+  MAX_PROC_PARAMS = 72;   { amdgpu's display_mode_vba_*: CalculatePrefetchSchedule takes 64 (bug-c-a-function-with-more-than-32-parameters-is-refused) }
   MAX_INLINE_LOCALS = 8;   { max callee locals in a slice-2b (-O3) inline body }
   MAX_INLINE_REC_FIELDS = 4; { max fields in an inlinable RECORD result. 4 covers the double-double kernels (2) with headroom; a wider record is more copying than the removed call saves, and the cap keeps the per-field definite vector a fixed array. }
   MAX_INLINE_DEPTH = 3;    { -O3 re-inline budget: how many nested splice levels a
@@ -3136,34 +3136,21 @@ type
     IsFunc     : Boolean;
     RetType    : TTypeKind;
     ParamCount : Integer;
-    Params     : array[0..31] of TParam;
-      { LITERAL 31, AND THIS DECLARATION IS NOT WHAT LAYS TProc OUT.
-        `IsRecordType` (symtab.inc) maps the NAME `TProc` to REC_TPROC by
-        string compare, and this declaration matches it field for field, so the
-        BUILTIN layout wins and these lines are documentation. Editing the
-        bound changes nothing measurable: `0..31`, `0..63` and `0..255` all
-        emit the same code=7565080 data=555780 bss=86531556 procs=4641 (three
-        DIFFERENT binaries, so the bound does reach bounds-check code -- it
-        just never reaches the field offsets), and SizeOf(TProc) stays 1344 at
-        MAX_PROC_PARAMS = 16, 32 and 64 alike.
-        The builtin wins HERE because this record has exactly the builtin's
-        field names in order (UserRecordIsBuiltinShape). A user program's
-        `type TProc = record ... end` with other fields got this layout too
-        until 2026-09-25; it now gets its own, as does a class or enum of any
-        of the fourteen names -- same family as the
-        project_tsymbol_field_landmine note on SymTR a few hundred lines below.
-        The literal stays because `MAX_PROC_PARAMS-1` here would make the two
-        LOOK coupled while changing nothing, which is worse than a literal
-        with this comment beside it.
-        CONSEQUENCE, MEASURED: the staging arrays DO widen (locals fold
-        normally), so raising MAX_PROC_PARAMS makes RegisterProc's guard admit
-        33+ params and then write Params[32] past a 32-slot record. That is
-        the SIGSEGV at exactly 33, from a bare `external` declaration with no
-        body and no call site, in both frontends. symtab.inc:3604 already
-        asserts the builtin's size as 288 + MAX_PROC_PARAMS * 296 + 32, so it
-        is MEANT to track the constant and measurably does not -- that gap is
-        the shortest thread. Raising MAX_PROC_PARAMS needs it fixed first:
-        bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment }
+    Params     : array[0..MAX_PROC_PARAMS-1] of TParam;
+      { THE BOUND IS THE CONSTANT, AND BOTH LAYOUTS FOLLOW IT. The compiler's
+        own build lays TProc out from the BUILTIN shape (IsRecordType maps the
+        name to REC_TPROC; UserRecordIsBuiltinShape keeps this declaration on
+        it), and that shape sizes Params by MAX_PROC_PARAMS (symtab.inc,
+        BuiltinRecFieldArrLen), with CheckBuiltinRecSize asserting
+        288 + MAX_PROC_PARAMS * 296 + 32. The FPC seed reads this declaration.
+        Until 2026-09-25 the builtin shape held 32 whatever this said, which is
+        why the bound was a literal with a warning beside it and why raising
+        the constant segfaulted at exactly 33 params
+        (bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment,
+        bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type).
+        A literal here now would be the drift: the seed would lay out fewer
+        slots than the self-hosted compiler.
+        bug-c-a-function-with-more-than-32-parameters-is-refused }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }

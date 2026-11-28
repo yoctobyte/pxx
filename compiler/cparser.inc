@@ -697,6 +697,12 @@ function CRecIsComplex(rec: Integer): Boolean; forward;
 procedure CRefuseRecordOperand(e: Integer; const what: AnsiString);
 begin
   if (e < 0) or (IntToTypeKind(ASTTk[e]) <> tyRecord) then Exit;
+  { an ARRAY of structs is not a struct operand: it decays to a pointer to its
+    first element (6.3.2.1p3). A struct-array member carries the element's
+    tyRecord, so `node = mgr->mm_nodes;` and `mgr->mm_nodes + 1` were
+    refused (amdgpu_res_cursor.h's flexible `mm_nodes[]`).
+    bug-c-an-array-of-structs-member-is-refused-as-a-struct-operand }
+  if CNodeDecaysToPointer(e) then Exit;
   if CRecIsComplex(ResolveNodeRec(e)) then
     Error('C: ' + what + ' on a _Complex value: complex arithmetic is not supported ' +
           '(pxx models _Complex as layout only -- size, alignment, copies and passing; ' +
