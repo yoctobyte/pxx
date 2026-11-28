@@ -1108,6 +1108,66 @@ end;
   are ignored. Handled at directive level (before macro expansion), so a user
   macro also named push_macro/pop_macro — c-testsuite 00206 defines both — does
   not interfere. }
+{ #pragma once. A file that says it is recorded by its path with `.`, `..`
+  and repeated slashes folded, and a later #include that resolves to the same
+  path is skipped. pxx had no #pragma once at all: a header guarded only by
+  it (libxkbcommon's utils.h, reached through test.h and keymap.h) was
+  spliced twice and its static inline functions defined twice. Symlinks are
+  not resolved (gcc compares the files themselves); two spellings through a
+  symlink still include twice. feature-c-pragma-once }
+var
+  CPOnceCount: Integer;
+  CPOncePath: array of AnsiString;
+
+function CPNormPath(const path: AnsiString): AnsiString;
+var parts: array of AnsiString; n, i, j: Integer; seg: AnsiString; abs: Boolean;
+begin
+  abs := (Length(path) > 0) and (path[1] = '/');
+  n := 0;
+  SetLength(parts, 0);
+  i := 1;
+  while i <= Length(path) + 1 do
+  begin
+    j := i;
+    while (j <= Length(path)) and (path[j] <> '/') do Inc(j);
+    seg := Copy(path, i, j - i);
+    if (seg = '') or (seg = '.') then
+    else if (seg = '..') and (n > 0) and (parts[n - 1] <> '..') then
+      Dec(n)
+    else if (seg = '..') and abs then
+    else
+    begin
+      if n >= Length(parts) then SetLength(parts, n + 16);
+      parts[n] := seg;
+      Inc(n);
+    end;
+    i := j + 1;
+  end;
+  if abs then Result := '/' else Result := '';
+  for i := 0 to n - 1 do
+  begin
+    if i > 0 then Result := Result + '/';
+    Result := Result + parts[i];
+  end;
+end;
+
+function CPOnceSeen(const path: AnsiString): Boolean;
+var k: Integer; np: AnsiString;
+begin
+  Result := False;
+  np := CPNormPath(path);
+  for k := 0 to CPOnceCount - 1 do
+    if CPOncePath[k] = np then begin Result := True; Exit; end;
+end;
+
+procedure CPOnceMark(const path: AnsiString);
+begin
+  if CPOnceSeen(path) then Exit;
+  if CPOnceCount >= Length(CPOncePath) then SetLength(CPOncePath, CPOnceCount + 64);
+  CPOncePath[CPOnceCount] := CPNormPath(path);
+  Inc(CPOnceCount);
+end;
+
 procedure CPPragma(const line: AnsiString; p, last: Integer);
 var a, b, nameA, nameB, mi, k, kk, packOp, packN: Integer; isPush, isPop: Boolean;
 begin
@@ -1115,6 +1175,12 @@ begin
   a := p;
   while (p <= last) and CPIsIdentChar(line[p]) do Inc(p);
   b := p - 1;
+  if CPRangeIsLiteral(line, a, b, 'once') then
+  begin
+    if (CPCurDepth >= 0) and (CPCurDepth <= MAX_CPREP_INCLUDES) then
+      CPOnceMark(CPPathAtDepth[CPCurDepth]);
+    Exit;
+  end;
   isPush := CPRangeIsLiteral(line, a, b, 'push_macro');
   isPop  := CPRangeIsLiteral(line, a, b, 'pop_macro');
   { #pragma pack(N) / pack() / pack(push[,N]) / pack(pop): layout happens at
@@ -1793,11 +1859,14 @@ begin
     v := CPExprAdd;
     { A shift takes its signedness from the LEFT operand only -- the right one
       is just a count and does not convert it. `shl` is the same bits either
-      way. The signed `shr` arm is left exactly as it was: C leaves a negative
-      right-shift implementation-defined, and changing it here would be an
-      unrelated behaviour change riding along with this fix. }
+      way. A signed `>>` of a negative value is implementation-defined in C
+      and gcc defines it as arithmetic (sign-extending), as pxx's own codegen
+      does; Pascal's `shr` is logical, so `#if (-8 >> 1) != -4` was true and
+      libxkbcommon's state.c hit its `#error` (INT32_MIN >> 2).
+      bug-c-if-right-shift-of-a-negative-value-is-logical }
     if op = '<' then Result := Result shl v
     else if u then Result := Int64(QWord(Result) shr v)
+    else if Result < 0 then Result := not ((not Result) shr v)
     else Result := Result shr v;
     CPSkipExprSpace;
   end;
@@ -3119,6 +3188,15 @@ begin
   end;
 end;
 
+{ The logical line read so far is a directive: `#` first, after blanks. }
+function CPLineIsDirective(const line: AnsiString): Boolean;
+var i: Integer;
+begin
+  i := 1;
+  while (i <= Length(line)) and ((line[i] = ' ') or (line[i] = #9)) do Inc(i);
+  Result := (i <= Length(line)) and (line[i] = '#');
+end;
+
 procedure CPReadLine(const src: AnsiString; var pos: Integer;
   var inComment: Boolean; var line: AnsiString);
 var inString, inChar, done: Boolean; c: Char; wln, wk: Integer;
@@ -3157,6 +3235,17 @@ begin
           macros). Splice without ending the line. }
         Inc(pos); Inc(pos);
         Inc(CPCurLine);   { -g: a PHYSICAL line vanished into this logical one }
+      end
+      else if (c = #10) and CPLineIsDirective(line) then
+      begin
+        { A comment is ONE space (phase 3) and directives end only at the
+          next newline AFTER it, so a block comment that spans lines inside
+          a `#define`, with no backslashes, keeps the directive going: what
+          follows the `*/` is still the body (libxkbcommon's keymap.h,
+          xkb_keys_foreach). Ordinary lines still end here, which keeps their
+          line numbers. bug-c-a-multi-line-comment-ends-a-define-early }
+        Inc(pos);
+        Inc(CPCurLine);
       end
       else
       begin
@@ -3939,6 +4028,7 @@ begin
       Error('C include file not found: "' + incName + '"');
     end;
     if DebugTrace then writeln('C preprocessor: include ', CPrepPath);
+    if (CPOnceCount > 0) and CPOnceSeen(CPrepPath) then Exit;   { #pragma once }
     CPFoundIdx[depth + 1] := CPLastFoundIdx;
     { an #include_next's start index is for ITS search only: the file it found
       is processed below, and a plain #include inside it (newlib's sys/cdefs.h
@@ -4688,6 +4778,7 @@ begin
   CPCondCount := 0;
   CPBuiltinVaDone := False;
   CPComplexDone := False;
+  CPOnceCount := 0;
   CPActiveMacroCount := 0;
   CPPushCount := 0;
   CPAddLiteral('__linux__', '01');

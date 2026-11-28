@@ -19866,6 +19866,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_line_multiline_call.c $(TESTTMP)/c_linemulti26 > /dev/null
 	@gcc -w test/c_line_multiline_call.c -o $(TESTTMP)/c_linemulti26_gcc
 	tools/expect_same.sh c_linemulti26 "$$(timeout 20 $(TESTTMP)/c_linemulti26)" "$$(timeout 20 $(TESTTMP)/c_linemulti26_gcc)"
+	# libxkbcommon's preprocessor/lexer shapes: #if >> of a negative is arithmetic, a multi-line comment inside a #define, u8 literals, #pragma once by three spellings, the long double math aliases; against gcc (bug-c-if-right-shift-of-a-negative-value-is-logical, bug-c-a-multi-line-comment-ends-a-define-early, feature-c-u8-string-literals, feature-c-pragma-once, feature-crtl-long-double-math-aliases)
+	./$(COMPILER) --no-host-include test/c_xkb_preproc.c $(TESTTMP)/c_xkbpp26 > /dev/null
+	@gcc -w test/c_xkb_preproc.c -o $(TESTTMP)/c_xkbpp26_gcc -lm
+	tools/expect_same.sh c_xkbpp26 "$$(timeout 20 $(TESTTMP)/c_xkbpp26)" "$$(timeout 20 $(TESTTMP)/c_xkbpp26_gcc)"
 	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
 	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
 	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc

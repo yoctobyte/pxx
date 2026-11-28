@@ -82,6 +82,37 @@ extern double frexp(double x, int *e);
 extern double ldexp(double x, int e);
 /* long double == double in pxx, so the `l` variants are thin aliases. */
 extern double ldexpl(double x, int e);
+/* The rest are function-like macros, not externs: under --system-libs
+   (__PXX_SYSTEM_MATH__) an extern sqrtl would bind glibc's 80-bit long
+   double sqrtl, whose ABI (x87 stack) is not pxx's 8-byte long double. Not
+   static inline either: pxx emits an unused inline body, so every <math.h>
+   user would reference round/llround/... that crtl does not define and be
+   warned about a host-libc import (csystem_libs_granular_math_b112). A macro
+   names the double function only where a program calls the l one.
+   libxkbcommon's bench.c: llroundl(sqrtl(...)).
+   feature-crtl-long-double-math-aliases */
+#define sqrtl(x) sqrt(x)
+#define fabsl(x) fabs(x)
+#define floorl(x) floor(x)
+#define ceill(x) ceil(x)
+#define roundl(x) round(x)
+#define lroundl(x) lround(x)
+#define llroundl(x) llround(x)
+#define truncl(x) trunc(x)
+#define fmodl(x, y) fmod(x, y)
+#define powl(x, y) pow(x, y)
+#define expl(x) exp(x)
+#define logl(x) log(x)
+#define log2l(x) log2(x)
+#define log10l(x) log10(x)
+#define frexpl(x, e) frexp(x, e)
+#define modfl(x, ip) modf(x, ip)
+#define sinl(x) sin(x)
+#define cosl(x) cos(x)
+#define tanl(x) tan(x)
+#define atanl(x) atan(x)
+#define atan2l(y, x) atan2(y, x)
+#define copysignl(x, y) copysign(x, y)
 extern double modf(double x, double *iptr);
 extern double hypot(double x, double y);
 extern double copysign(double x, double y);

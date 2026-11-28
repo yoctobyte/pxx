@@ -1294,6 +1294,17 @@ begin
     Inc(SrcPos);                { consume 'L' -> SrcPos at the quote }
     c := Source[SrcPos];
   end;
+  { `u8"..."` (C11) is an ordinary char string of UTF-8 bytes, which is what
+    pxx's narrow strings already hold; `u8'c'` (C23) likewise a char. Consume
+    the prefix and lex it narrow. libxkbcommon's scanner.c and tests.
+    u"..."/U"..." (char16_t/char32_t) are not this and stay unrecognised.
+    feature-c-u8-string-literals }
+  if (c = 'u') and (SrcPos + 2 <= Length(Source)) and (Source[SrcPos+1] = '8') and
+     ((Source[SrcPos+2] = '"') or (Source[SrcPos+2] = '''')) then
+  begin
+    Inc(SrcPos); Inc(SrcPos);   { consume 'u8' -> SrcPos at the quote }
+    c := Source[SrcPos];
+  end;
 
   if c in ['a'..'z','A'..'Z','_'] then
   begin
