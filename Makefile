@@ -19862,6 +19862,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_signalfd.c $(TESTTMP)/c_signalfd26 > /dev/null
 	@gcc -w test/c_signalfd.c -o $(TESTTMP)/c_signalfd26_gcc
 	tools/expect_same.sh c_signalfd26 "$$(timeout 20 $(TESTTMP)/c_signalfd26)" "$$(timeout 20 $(TESTTMP)/c_signalfd26_gcc)"
+	# __LINE__ in a macro call spread over lines: the macro name's line in the body, its own line in an argument, as gcc (bug-c-line-in-a-multi-line-macro-call-is-its-last-line)
+	./$(COMPILER) --no-host-include test/c_line_multiline_call.c $(TESTTMP)/c_linemulti26 > /dev/null
+	@gcc -w test/c_line_multiline_call.c -o $(TESTTMP)/c_linemulti26_gcc
+	tools/expect_same.sh c_linemulti26 "$$(timeout 20 $(TESTTMP)/c_linemulti26)" "$$(timeout 20 $(TESTTMP)/c_linemulti26_gcc)"
 	# C23 refusals: an attribute that changes code is named, not dropped; nullptr is not read as anything; c89 is still refused; gnu17 keeps true an int
 	@printf 'struct [[gnu::packed]] s { char c; int i; };\nint main(void){return 0;}\n' > $(TESTTMP)/c_c23ref26a.c
 	@printf 'int main(void){ void *p = nullptr; return p != 0; }\n' > $(TESTTMP)/c_c23ref26b.c

@@ -80,6 +80,30 @@ var
   CPCurFileId  : Integer;   { .debug_line id of the file being read }
   CPCurPath    : AnsiString;
   CPCurLine    : Integer;   { line within that file — the last one CONSUMED }
+  { WHICH PHYSICAL LINE EACH PART OF A JOINED LOGICAL LINE CAME FROM. A
+    function-like invocation spread over lines is collected into one CPrepLine
+    (the parenthesis join below), and CPCurLine is then its LAST line, so
+    `__LINE__` in it -- every multi-line log macro -- said the closing
+    parenthesis's line where gcc and clang say the macro name's. CPJoinOff[i]
+    is the CPrepLine offset where physical line CPJoinLn[i] starts; while the
+    top-level expansion of CPrepLine runs (CPLineMapOn), each identifier it
+    reaches sets CPTokLine from the table and __LINE__ reads that, nested
+    expansions included. bug-c-line-in-a-multi-line-macro-call-is-its-last-line }
+  CPJoinOff    : array[0..1023] of Integer;
+  CPJoinLn     : array[0..1023] of Integer;
+  CPJoinCount  : Integer;
+  CPLineMapOn  : Boolean;
+  CPTokLine    : Integer;
+  { gcc's rule, which the line map follows: __LINE__ in a macro BODY is the
+    line of the macro's NAME (also when its `(` is on a later line); one
+    written in an ARGUMENT keeps its own
+    line (clang differs: the closing parenthesis, which is what pxx said).
+    So the map applies to the text that IS CPrepLine: the top-level pass and
+    the pre-expansion of arguments taken from it. CPCurMapped says whether
+    the CPExpandRange running now reads such text; CPNextMapped hands that to
+    the next call; an argument's pre-expansion puts CPTokLine back after. }
+  CPCurMapped  : Boolean;
+  CPNextMapped : Boolean;
   CPStmtLine   : Integer;   { line the logical line being emitted STARTED on;
                               a 3-line macro invocation is labelled with its
                               first line, as gcc does, not its last }
@@ -2488,6 +2512,45 @@ begin
   Result := True;
 end;
 
+procedure CPJoinReset;
+begin
+  CPJoinOff[0] := 1;
+  CPJoinLn[0] := CPCurLine;
+  CPJoinCount := 1;
+end;
+
+{ CPrepLine := CPrepLine + ' ' + cont, remembering that cont is CPCurLine }
+procedure CPJoinAppend(const cont: AnsiString);
+begin
+  if CPJoinCount <= High(CPJoinOff) then
+  begin
+    CPJoinOff[CPJoinCount] := Length(CPrepLine) + 2;
+    CPJoinLn[CPJoinCount] := CPCurLine;
+    Inc(CPJoinCount);
+  end;
+  CPrepLine := CPrepLine + ' ' + cont;
+end;
+
+function CPJoinLineAt(pos: Integer): Integer;
+var i: Integer;
+begin
+  Result := CPCurLine;
+  if CPJoinCount = 0 then Exit;
+  Result := CPJoinLn[0];
+  for i := 1 to CPJoinCount - 1 do
+    if CPJoinOff[i] <= pos then Result := CPJoinLn[i] else Exit;
+end;
+
+{ the top-level expansion of the collected line, with the line map on }
+procedure CPExpandPrepLine;
+begin
+  CPLineMapOn := True;
+  CPNextMapped := True;
+  CPTokLine := CPJoinLineAt(1);
+  CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+  CPLineMapOn := False;
+end;
+
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
@@ -2497,7 +2560,11 @@ var
   expanded, combined: AnsiString;
   quote: Char;
   quotedDone, dynMacroHit: Boolean;
+  savedMapped: Boolean;
 begin
+  savedMapped := CPCurMapped;
+  CPCurMapped := CPNextMapped;
+  CPNextMapped := False;
   paintedOnly := False;
   if level > 32 then Error('C macro recursion');
   p := first;
@@ -2543,6 +2610,7 @@ begin
     else if CPIsIdentStart(src[p]) then
     begin
       a := p;
+      if CPCurMapped then CPTokLine := CPJoinLineAt(a);
       while (p <= last) and CPIsIdentChar(src[p]) do Inc(p);
       b := p - 1;
       mi := CPFindMacro(src, a, b);
@@ -2559,7 +2627,10 @@ begin
         macro table entry would have. }
       dynMacroHit := True;
       if (mi < 0) and CPRangeIsLit(src, a, b, '__LINE__') then
-        dst := dst + AIntToStr(CPCurLine)
+      begin
+        if CPLineMapOn then dst := dst + AIntToStr(CPTokLine)
+        else dst := dst + AIntToStr(CPCurLine);
+      end
       else if (mi < 0) and CPRangeIsLit(src, a, b, '__FILE__') then
         dst := dst + '"' + CPMapPrefix(CPCurPath) + '"'
       else
@@ -2762,6 +2833,7 @@ begin
       Inc(p);
     end;
   end;
+  CPCurMapped := savedMapped;
 end;
 
 procedure CPSetTempStrLength(level: Integer; len: Integer);
@@ -2960,7 +3032,14 @@ begin
 end;
 
 procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer);
+var savedTok: Integer;
+    mapArg: Boolean;
 begin
+  { an argument read from CPrepLine: its tokens keep their own lines, and the
+    body's __LINE__ goes back to the invocation's afterwards }
+  mapArg := CPCurMapped;
+  savedTok := CPTokLine;
+  CPNextMapped := mapArg;
   case level of
     0: CPExpandRange(src, first, last, level + 1, CPExpandedArg0);
     1: CPExpandRange(src, first, last, level + 1, CPExpandedArg1);
@@ -2996,6 +3075,8 @@ begin
     31: CPExpandRange(src, first, last, level + 1, CPExpandedArg31);
     32: CPExpandRange(src, first, last, level + 1, CPExpandedArg32);
   end;
+  CPNextMapped := False;
+  if mapArg then CPTokLine := savedTok;
 end;
 
 procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString);
@@ -4317,6 +4398,7 @@ begin
   begin
     CPReadLine(src, pos, inComment, CPrepLine);
     Inc(CPCurLine);
+    CPJoinReset;
     CPStmtLine := CPCurLine;   { before any continuation join extends CPCurLine }
     p := 1;
     while p <= Length(CPrepLine) do
@@ -4389,12 +4471,13 @@ begin
           if CPActive and CPDirectiveIsInclude(cont, q) then
           begin
             SetLength(CPrepLineExp, 0);
-            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+            CPExpandPrepLine;
             CPSyncLine;
             CPEmitExpanded(CPrepLineExp);
             CPrepOutAppendCh(#10);
             CPDirective(cont, q, Length(cont), depth, baseDir);
             CPrepLine := '';
+            CPJoinReset;
           end
           else if CPActive and not CPOpenParenIsMacroCall(CPrepLine) then
           begin
@@ -4402,18 +4485,19 @@ begin
               directive with the macros as they stand now, then obey it
               (CPOpenParenIsMacroCall) }
             SetLength(CPrepLineExp, 0);
-            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+            CPExpandPrepLine;
             CPSyncLine;
             CPEmitExpanded(CPrepLineExp);
             CPrepOutAppendCh(#10);
             CPDirective(cont, q, Length(cont), depth, baseDir);
             CPrepLine := '';
+            CPJoinReset;
           end
           else
             CPDirective(cont, q, Length(cont), depth, baseDir);
         end
         else if CPActive then
-          CPrepLine := CPrepLine + ' ' + cont;
+          CPJoinAppend(cont);
       end;
     { A FUNCTION-LIKE MACRO'S NAME ENDING THE LINE, ITS `(` ON THE NEXT. The
       arguments of an invocation may start on a later line (C 6.10.3p10: the
@@ -4439,7 +4523,7 @@ begin
       begin
         pos := peekPos; inComment := peekComment;
         Inc(CPCurLine);        { -g: the join swallowed a physical line }
-        CPrepLine := CPrepLine + ' ' + cont;
+        CPJoinAppend(cont);
         joinedCall := True;
       end;
     end;
@@ -4451,7 +4535,7 @@ begin
       else if CPActive then
       begin
         SetLength(CPrepLineExp, 0);
-        CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+        CPExpandPrepLine;
         if (not CPBuiltinVaDone) and CPMentionsBuiltinVaList(CPrepLineExp) then
         begin
           vaLine := CPrepLineExp;   { the include below reuses the global line buffers }
@@ -4466,7 +4550,7 @@ begin
     else if CPActive then
     begin
       SetLength(CPrepLineExp, 0);
-      CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+      CPExpandPrepLine;
       CPSyncLine;
       CPEmitExpanded(CPrepLineExp);
       CPrepOutAppendCh(#10);
