@@ -214,4 +214,13 @@ extern int name_to_handle_at(int dirfd, const char *path, struct file_handle *ha
 extern int open_by_handle_at(int mount_fd, struct file_handle *handle, int flags);
 #endif
 
+/* sync_file_range(2): write out and/or wait on a byte range (glibc, GNU).
+   The flags are the kernel's. off64_t: 64 bits on every target, as glibc's
+   __off64_t. */
+#define SYNC_FILE_RANGE_WAIT_BEFORE     1
+#define SYNC_FILE_RANGE_WRITE           2
+#define SYNC_FILE_RANGE_WAIT_AFTER      4
+#define SYNC_FILE_RANGE_WRITE_AND_WAIT  (SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WAIT_AFTER)
+extern int sync_file_range(int fd, off64_t offset, off64_t nbytes, unsigned int flags);
+
 #endif

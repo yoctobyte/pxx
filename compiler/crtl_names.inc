@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  884 functions across 89 headers. }
+  885 functions across 90 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -85,7 +85,7 @@ begin
       ' gethostbyaddr:netdb.h gethostbyname:netdb.h gethostid:unistd.h gethostname:unistd.h ' +
       ' getifaddrs:ifaddrs.h getitimer:sys/time.h getline:stdio.h getloadavg:stdlib.h ' +
       ' getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h getmntent_r:mntent.h ' +
-      ' getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h getopt_long_only:unistd.h ' +
+      ' getnameinfo:netdb.h getopt:unistd.h getopt_long:getopt.h getopt_long_only:getopt.h ' +
       ' getpagesize:unistd.h getpass:unistd.h getpeername:sys/socket.h getpgid:unistd.h ' +
       ' getpgrp:unistd.h getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h ' +
       ' getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h getpwuid_r:pwd.h ' +
@@ -227,7 +227,8 @@ begin
       ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
       ' strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h ' +
       ' swapoff:sys/swap.h swapon:sys/swap.h symlink:unistd.h symlinkat:unistd.h sync:unistd.h ' +
-      ' syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h syslog:syslog.h system:stdlib.h ';
+      ' sync_file_range:fcntl.h syscall:unistd.h sysconf:unistd.h sysinfo:sys/sysinfo.h ' +
+      ' syslog:syslog.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcgetpgrp:termios.h tcgetsid:termios.h tcsendbreak:termios.h ' +
@@ -285,7 +286,7 @@ begin
     'p': Result := 1738145784;
     'q': Result := 160;
     'r': Result := 8176;
-    's': Result := 4620280;
+    's': Result := 4653048;
     't': Result := 8184;
     'u': Result := 992;
     'v': Result := 3056;

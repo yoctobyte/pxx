@@ -21389,6 +21389,59 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_sseaes/gas_sse: gcc absent, NOT verified ==="; \
 	fi
+	# a comma or an assignment in a constant-expression arm (git's
+	# MOVE_ARRAY/BARF_UNLESS_COPYABLE), a live one as a VLA bound, and sizeof
+	# of a VLA with and without parentheses; against gcc at both widths.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_const_comma_assign_and_vla_sizeof.c $(TESTTMP)/c_ccav26 >/dev/null || { echo "c_ccav compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_ccav_gcc test/c_const_comma_assign_and_vla_sizeof.c || { echo "c_ccav gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_ccav26 "$$($(TESTTMP)/c_ccav26)" "$$($(TESTTMP)/c_ccav_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_ccav_gcc32 test/c_const_comma_assign_and_vla_sizeof.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_const_comma_assign_and_vla_sizeof.c $(TESTTMP)/c_ccav32 >/dev/null || { echo "c_ccav i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_ccav26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_ccav32)" "$$($(TESTTMP)/c_ccav_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_ccav: gcc absent, NOT verified ==="; \
+	fi
+	# a program's own `struct option` beside <unistd.h> (git's parse-options.h):
+	# getopt's table is <getopt.h>'s only, as in glibc. Built as Nodisx builds,
+	# the runtime its own object (one compile with the crtl sources still shares
+	# their tags: bug-c-crtl-sources-share-their-header-tags-with-the-program).
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) --emit-obj --shared-runtime test/c_crtl_unistd_own_struct_option.c $(TESTTMP)/c_uopt26.o >/dev/null || { echo "c_uopt compile FAIL"; exit 1; }; \
+	  ./$(COMPILER) --link -o $(TESTTMP)/c_uopt26 $(TESTTMP)/c_uopt26.o >/dev/null || { echo "c_uopt link FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_uopt_gcc test/c_crtl_unistd_own_struct_option.c || { echo "c_uopt gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_uopt26 "$$($(TESTTMP)/c_uopt26)" "$$($(TESTTMP)/c_uopt_gcc)" || exit 1; \
+	else \
+	  echo "=== c_uopt: gcc absent, NOT verified ==="; \
+	fi
+	# a parenthesised function parameter declarator, `R (fn (void *, T *))`
+	# (glibc regcomp.c's preorder/postorder, git's compat/regex), and the
+	# other spellings of that parameter; against gcc at both widths.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_param_parenthesised_function_declarator.c $(TESTTMP)/c_ppfd26 >/dev/null || { echo "c_ppfd compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_ppfd_gcc test/c_param_parenthesised_function_declarator.c || { echo "c_ppfd gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_ppfd26 "$$($(TESTTMP)/c_ppfd26)" "$$($(TESTTMP)/c_ppfd_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_ppfd_gcc32 test/c_param_parenthesised_function_declarator.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_param_parenthesised_function_declarator.c $(TESTTMP)/c_ppfd32 >/dev/null || { echo "c_ppfd i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_ppfd26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_ppfd32)" "$$($(TESTTMP)/c_ppfd_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_ppfd: gcc absent, NOT verified ==="; \
+	fi
+	# sync_file_range(2) and its flags (git's wrapper.c), results and errnos
+	# against glibc at both widths, an offset past 4 GiB and a negative one
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_sync_file_range.c $(TESTTMP)/c_sfr26 >/dev/null || { echo "c_sfr compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_sfr_gcc test/c_crtl_sync_file_range.c || { echo "c_sfr gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_sfr26 "$$($(TESTTMP)/c_sfr26)" "$$($(TESTTMP)/c_sfr_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_sfr_gcc32 test/c_crtl_sync_file_range.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_crtl_sync_file_range.c $(TESTTMP)/c_sfr32 >/dev/null || { echo "c_sfr i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_sfr26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_sfr32)" "$$($(TESTTMP)/c_sfr_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_sfr: gcc absent, NOT verified ==="; \
+	fi
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"

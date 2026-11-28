@@ -5348,8 +5348,12 @@ begin
         the declaration parked that byte count in a `$vlasz$` companion local
         precisely so this can read it. Without this the symbol is an ordinary
         pointer local and answers the POINTER size — 8 where gcc says 20 — with
-        no diagnostic. feature-c-vla-via-alloca. }
-      if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
+        no diagnostic. feature-c-vla-via-alloca. Only for the array named
+        alone: `sizeof(a[1])` is one element, and took the whole array's
+        count (36 for three 12-byte structs, gcc 12).
+        bug-c-sizeof-of-a-vla-without-parentheses-is-the-pointer-size }
+      if (si >= 0) and (Syms[si].TypeKind = tyPointer)
+         and (Tokens[TokPos].Kind <> tkLBrack) and (Tokens[TokPos].Kind <> tkDot) then
         vlaSz := FindSym('$vlasz$' + CurTok.SVal);
       if si >= 0 then
       begin
@@ -21417,6 +21421,7 @@ var
   name, extLib, hdrLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
+  fnWrap, fnWrapJ: Integer; { `R (fn (params))`: the parentheses around a function parameter }
   mainInitIdx: Integer;     { CEmitMainInitProc's proc, for `main` only }
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   procSawWeak: Boolean;
@@ -21717,6 +21722,7 @@ begin
             else
               pptrarrlen[nparams] := CTypeTypedefArrLen;
           end;
+          fnWrap := 0;
           if CTypeFnPtrName <> '' then
           begin
             { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
@@ -21726,7 +21732,33 @@ begin
               ParseCDeclType folds the fn-ptr into tyPointer with CTypeProcSig set. }
             pnames[nparams] := CTypeFnPtrName;
           end
-          else if CurTok.Kind = tkIdent then
+          else
+          begin
+          { `R (fn (params))` and `R ((fn) (params))`: a FUNCTION declarator in
+            parentheses, the same parameter as `R fn (params)` (C 6.7.6: a
+            declarator may be parenthesised whole). glibc's regcomp.c, which git
+            bundles as compat/regex, declares
+              preorder (bin_tree_t *root, reg_errcode_t (fn (void *, bin_tree_t *)), void *extra)
+            Unread, the list stopped there and `fn` and `extra` were undeclared
+            in the body. The opening parentheses are taken here and closed after
+            the function-type arm below reads the list.
+            bug-c-a-parenthesised-function-parameter-declarator-is-not-read }
+          fnWrap := 0;
+          while CurTok.Kind = tkLParen do
+          begin
+            { past this `(` and any more: the name, then `(` (a function
+              declarator), or `)` `(` when the name is itself parenthesised
+              and at least one more `(` was skipped }
+            fnWrapJ := TokPos;
+            while (fnWrapJ < TokCount) and (Tokens[fnWrapJ].Kind = tkLParen) do Inc(fnWrapJ);
+            if not ((fnWrapJ + 2 < TokCount) and (Tokens[fnWrapJ].Kind = tkIdent) and
+                    ((Tokens[fnWrapJ + 1].Kind = tkLParen) or
+                     ((fnWrapJ > TokPos) and (Tokens[fnWrapJ + 1].Kind = tkRParen) and
+                      (Tokens[fnWrapJ + 2].Kind = tkLParen)))) then Break;
+            Inc(fnWrap);
+            Next;
+          end;
+          if CurTok.Kind = tkIdent then
           begin
             pnames[nparams] := CurTok.SVal;
             Next;
@@ -21747,6 +21779,7 @@ begin
           begin
             pnames[nparams] := 'arg0';
             pnames[nparams][4] := Chr(Ord('0') + nparams);
+          end;
           end;
           { C FUNCTION parameter `RET name(params)` is adjusted to
             POINTER-to-function (C 6.7.5.3p8) -- the same adjustment the array
@@ -21776,6 +21809,9 @@ begin
             pptrarrlen[nparams] := 0;
             pptrndims[nparams] := 0;
           end;
+          while (fnWrap > 0) and (CurTok.Kind = tkRParen) do begin Next; Dec(fnWrap); end;
+          if fnWrap > 0 then
+            Error('C: expected '')'' closing a parenthesised function parameter');
           { An ARRAY-TYPEDEF parameter is an array parameter too: `vec4 v` is
             `float v[4]` and `mat4 m` (typedef vec4 mat4[4]) is `float m[4][4]`,
             and `vec4 m[]` is `float m[][4]` -- the typedef's dims follow the
@@ -23689,6 +23725,25 @@ begin
     else
     begin
       Result := CEvalConstExpr;
+      { An assignment or a comma inside the parentheses: git's
+        BARF_UNLESS_COPYABLE, `0 ? ((*(dst) = *(src)), 0) : sizeof(*(dst)) ==
+        sizeof(*(src))` as an array size (MOVE_ARRAY, apply.c). Neither is
+        allowed in a constant expression, so the whole is a run-time value
+        (a live one makes the dimension a VLA bound, as with gcc) whose value
+        is the last operand's; in the arm a constant condition did not take,
+        CEvalConstDeadArm forgets the run-time mark and the dimension folds,
+        as gcc folds it. Before, the folder stopped at the `=` or `,`, the arm
+        read as 0 and the assertion failed (or `expected ']'` when the arm
+        was the else).
+        bug-c-a-comma-or-assignment-in-a-constant-expression-arm-is-not-read }
+      while CurTok.Kind in [tkComma, tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
+                            tkSlashEq, tkModEq, tkAmpEq, tkPipeEq, tkXorEq,
+                            tkShlEq, tkShrEq] do
+      begin
+        Next;
+        Result := CEvalConstExpr;
+        CConstExprSawNonConst := True;
+      end;
       if CurTok.Kind = tkRParen then Next;
     end;
   end
@@ -23718,6 +23773,17 @@ begin
     Next;
     if CEvalConstPrimary() = 0 then Result := 1 else Result := 0;
     CConstUns := False; CConstWide := False;
+  end
+  else if CurTok.Kind = tkStar then
+  begin
+    { `*p`: what an object holds is never a constant expression; read the
+      operand so the folder stays on the tokens (git's MOVE_ARRAY check,
+      `*(dst) = *(src)` in an arm not taken), and say run-time.
+      bug-c-a-comma-or-assignment-in-a-constant-expression-arm-is-not-read }
+    Next;
+    CEvalConstPrimary();
+    CConstExprSawNonConst := True;
+    Result := 0; CConstUns := False; CConstWide := False;
   end
   else if CurTok.Kind = tkAmp then
   begin
@@ -23988,6 +24054,23 @@ begin
         Next;
       until (callDepth = 0) or (CurTok.Kind = tkEOF);
     end;
+    { a run-time object's selectors: `img->line`, `s.f`, `a[i]` (`.` and `->`
+      both lex as tkDot). The value is run-time already; reading the chain
+      keeps the folder in step with the tokens, where it stopped at the
+      selector and the arm around it read as 0 (git's BARF_UNLESS_COPYABLE,
+      `(*(img->line) = *(img->line + 1))`).
+      bug-c-a-comma-or-assignment-in-a-constant-expression-arm-is-not-read }
+    if (idx >= 0) and (Syms[idx].Kind <> skConst) then
+      while ((CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent)) or (CurTok.Kind = tkLBrack) do
+      begin
+        if CurTok.Kind = tkDot then begin Next; Next; end
+        else
+        begin
+          Next; CEvalConstExpr;
+          if CurTok.Kind = tkRBrack then Next;
+        end;
+        Result := 0; CConstUns := False; CConstWide := False;
+      end;
   end;
 end;
 

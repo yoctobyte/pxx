@@ -301,30 +301,9 @@ extern char *optarg;
 extern int optind, opterr, optopt, optreset;
 int getopt(int argc, char *const argv[], const char *optstring);
 
-/* getopt_long(3) and its table. glibc declares these in <getopt.h>; this file
-   is the ONE declaration site and <getopt.h> forwards here, because two
-   declarations of one function is how they drift (that header says so itself).
-
-   `flag' NULL means "return val"; non-NULL means "store val there and return
-   0", which is how a table sets a variable without the caller writing a case.
-
-   DIVERGENCE, and it is in the message and not the decision: an ambiguous
-   prefix is rejected exactly as glibc rejects it, but the diagnostic stops at
-   "is ambiguous" instead of going on to list the candidates. */
-#define no_argument        0
-#define required_argument  1
-#define optional_argument  2
-
-struct option {
-  const char *name;
-  int has_arg;
-  int *flag;
-  int val;
-};
-
-int getopt_long(int argc, char *const argv[], const char *optstring,
-                const struct option *longopts, int *longindex);
-int getopt_long_only(int argc, char *const argv[], const char *optstring,
-                     const struct option *longopts, int *longindex);
+/* getopt_long(3) and `struct option` are declared in <getopt.h> only, as
+   glibc declares them: a program that includes <unistd.h> and has its own
+   `struct option` (git's parse-options.h) is valid C with glibc.
+   bug-crtl-unistd-h-declares-getopts-struct-option */
 
 #endif

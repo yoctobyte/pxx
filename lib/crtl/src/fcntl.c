@@ -231,3 +231,32 @@ int open_by_handle_at(int mount_fd, struct file_handle *handle, int flags)
   return -1;
 #endif
 }
+
+/* sync_file_range(2), glibc's GNU extension in <fcntl.h>: write out (and/or
+   wait on) a byte range of a file. git uses it to batch fsyncs
+   (HAVE_SYNC_FILE_RANGE, set for Linux by its config.mak.uname). Three
+   syscall shapes, as for posix_fadvise: the 64-bit ABIs take (fd, off, n,
+   flags); i386 passes each 64-bit value as a lo/hi register pair; arm32 has
+   only sync_file_range2, with flags SECOND so the pairs land in aligned
+   register pairs. off64_t is 64 bits on every target, so the high words are
+   real here, not a sign extension. Elsewhere (riscv32, wasm, xtensa) ENOSYS
+   until something there needs it. -1 with errno, as glibc. */
+int sync_file_range(int fd, off64_t offset, off64_t nbytes, unsigned int flags)
+{
+#if defined(__x86_64__) || defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)
+  return syscall(SYS_sync_file_range, (long)fd, (long)offset, (long)nbytes, (long)flags) < 0 ? -1 : 0;
+#elif defined(__i386__)
+  return syscall(SYS_sync_file_range, (long)fd,
+                 (long)(offset & 0xFFFFFFFFLL), (long)(offset >> 32),
+                 (long)(nbytes & 0xFFFFFFFFLL), (long)(nbytes >> 32),
+                 (long)flags) < 0 ? -1 : 0;
+#elif defined(__arm__) && defined(SYS_sync_file_range2)
+  return syscall(SYS_sync_file_range2, (long)fd, (long)flags,
+                 (long)(offset & 0xFFFFFFFFLL), (long)(offset >> 32),
+                 (long)(nbytes & 0xFFFFFFFFLL), (long)(nbytes >> 32)) < 0 ? -1 : 0;
+#else
+  (void)fd; (void)offset; (void)nbytes; (void)flags;
+  errno = ENOSYS;
+  return -1;
+#endif
+}

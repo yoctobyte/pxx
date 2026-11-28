@@ -6,6 +6,7 @@
  */
 
 #include <unistd.h>
+#include <getopt.h>   /* getopt_long's table, declared there as glibc does */
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
