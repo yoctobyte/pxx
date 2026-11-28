@@ -21442,6 +21442,19 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_sfr: gcc absent, NOT verified ==="; \
 	fi
+	# pointer arithmetic on an array of structs (it decays; not a struct
+	# operand): locals, globals, a struct's array field; against gcc at both widths
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_struct_array_pointer_arith.c $(TESTTMP)/c_sapa26 >/dev/null || { echo "c_sapa compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_sapa_gcc test/c_struct_array_pointer_arith.c || { echo "c_sapa gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_sapa26 "$$($(TESTTMP)/c_sapa26)" "$$($(TESTTMP)/c_sapa_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_sapa_gcc32 test/c_struct_array_pointer_arith.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_struct_array_pointer_arith.c $(TESTTMP)/c_sapa32 >/dev/null || { echo "c_sapa i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_sapa26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_sapa32)" "$$($(TESTTMP)/c_sapa_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_sapa: gcc absent, NOT verified ==="; \
+	fi
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
