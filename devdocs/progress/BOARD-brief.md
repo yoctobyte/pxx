@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:51 blocked:8 backlog:2 backlog_new:2 backlog-umbrella:16 backlog-core:120 backlog-nilpy:92 backlog-tools:71 backlog-pascal:7 backlog-decide:48 backlog-libs:27 backlog-cfront:17 backlog-web:9 backlog-windows:2 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:51 low-prio:79 known-incompat:6 float:23 done-followup:3 decided:154 done:4786 rejected:90`
+`working:3 unfinished:51 blocked:8 backlog:2 backlog_new:2 backlog-umbrella:16 backlog-core:120 backlog-nilpy:92 backlog-tools:71 backlog-pascal:7 backlog-decide:48 backlog-libs:27 backlog-cfront:21 backlog-web:9 backlog-windows:2 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:51 low-prio:79 known-incompat:6 float:23 done-followup:3 decided:154 done:4813 rejected:90`
 
 ## Held now (working/ — do not touch these files)
 
@@ -78,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 433, ranked
+## Ready — top 30 of 437, ranked
 
 - `[p 95] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones (unblocks 1)
 - `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
@@ -111,4 +111,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [U]` decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 5)
 - `[p 65] [A]` bug-a-a-hand-built-com-interface-cannot-be-called (unblocks 1)
 
-_403 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_407 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

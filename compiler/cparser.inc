@@ -164,6 +164,21 @@ var i, mine, myMod: Integer;
 begin
   Result := FindSym(name);
   if Result < 0 then Exit;
+  { C NAMES ARE CASE-SENSITIVE; FindSym folds case, as Pascal needs. Inside a
+    Pascal program, C's `stdout` found textfile.pas's `StdOut: Text`, so
+    `fp = stdout` stored the Text record (a segfault at the first fprintf;
+    refused since e17b4497b4) while `fprintf(stdout, ...)` went elsewhere.
+    A row spelled differently yields to one spelled exactly, if any.
+    bug-c-stdout-inside-a-pascal-program-binds-to-pascals-stdout-text }
+  if Syms[Result].Name <> name then
+  begin
+    i := SymHashHead[SymNameFoldHash(name)];
+    while i >= 0 do
+    begin
+      if Syms[i].Name = name then begin Result := i; Break; end;
+      i := SymHashPrev[i];
+    end;
+  end;
   if not CProgramMode then Exit;
   if not SymCStaticLink[Result] then Exit;
   myMod := CModuleOfTok(TokPos - 1);
@@ -15891,6 +15906,10 @@ begin
     end;
     idx := FindSym(name);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    { nor to a Pascal VARIABLE spelled differently: C `stdout` found
+      textfile.pas's `StdOut: Text` and became that record.
+      bug-c-stdout-inside-a-pascal-program-binds-to-pascals-stdout-text }
+    if (idx >= 0) and (Syms[idx].Name <> name) then idx := -1;
     { RUNG S, DATA SIDE -- A FILE-SCOPE `static` DOES NOT SHARE A ROW ACROSS
       C MODULES. The exact mirror of RUNG S in ParseCSubroutine, and the
       variable arm is the worse one: a function's call sites keep a
@@ -16410,6 +16429,12 @@ begin
       names are case-sensitive anyway. Shadow it with a fresh exact-case global
       (the exact-case FindSym pass then resolves uses to the variable). }
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    { The same for a Pascal VARIABLE spelled differently: C's `extern FILE
+      *stdout` found textfile.pas's `StdOut: Text`, was merged into it, and
+      `fp = stdout` stored the Text record (a segfault at the first fprintf;
+      refused since e17b4497b4). C names are case-sensitive.
+      bug-c-stdout-inside-a-pascal-program-binds-to-pascals-stdout-text }
+    if (idx >= 0) and (Syms[idx].Name <> name) then idx := -1;
     { RUNG S, DATA SIDE -- A FILE-SCOPE `static` DOES NOT SHARE A ROW ACROSS
       C MODULES. The exact mirror of RUNG S in ParseCSubroutine, and the
       variable arm is the worse one: a function's call sites keep a

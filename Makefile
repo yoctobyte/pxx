@@ -21455,6 +21455,13 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_sapa: gcc absent, NOT verified ==="; \
 	fi
+	# C's stdout/stderr inside a Pascal program are C's FILE *, not Pascal's
+	# StdOut/StdErr Text records (case-folded lookup); both widths
+	./$(COMPILER) test/c_in_pascal_stdout_is_c_stdout.pas $(TESTTMP)/c_cso26 >/dev/null
+	tools/expect_same.sh c_cso26 "$$($(TESTTMP)/c_cso26 2>/dev/null)" "$$(printf 'via fp: 1\nsame pointers: 11')"
+	tools/expect_same.sh c_cso26/stderr "$$($(TESTTMP)/c_cso26 2>&1 >/dev/null)" "to stderr"
+	./$(COMPILER) --target=i386 test/c_in_pascal_stdout_is_c_stdout.pas $(TESTTMP)/c_cso32 >/dev/null
+	tools/expect_same.sh c_cso26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_cso32 2>/dev/null)" "$$(printf 'via fp: 1\nsame pointers: 11')"
 	# GNU \e / \E is ESC in char constants and strings (toybox echo -e / printf)
 	./$(COMPILER) test/c_gnu_escape_e.c $(TESTTMP)/c_gnuesc26 > /dev/null
 	tools/expect_same.sh c_gnuesc26 "$$($(TESTTMP)/c_gnuesc26)" "$$(cat test/c_gnu_escape_e.expected)"
