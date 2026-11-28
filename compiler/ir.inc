@@ -4940,6 +4940,13 @@ begin
         off := off + UFldOff_[fi];
         Result := True;
       end;
+    AN_DEREF:
+      { `*&x` is x: FreeBSD's SYSCTL_CHILDREN(&sysctl___hw) is
+        `&(&sysctl___hw)->oid_children`, the parent of every static sysctl node
+        (drm-kmod's radeon, ttm and LinuxKPI parameters).
+        bug-c-a-global-initialised-to-the-address-of-a-member-through-an-address-is-not-constant }
+      if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_ADDR) then
+        Result := CBakeAddrOf(ASTLeft[ASTLeft[node]], sym, off);
   end;
 end;
 

@@ -4775,6 +4775,18 @@ begin
       CPDefine(d, 1, Length(d));
     end;
   end;
+  { __builtin_object_size(p, type): the bytes from p to the end of its
+    object, or gcc's "unknown" answer, (size_t)-1 for types 0 and 1 and 0 for
+    2 and 3. pxx tracks no object sizes, so it gives the unknown answer that
+    gcc gives at -O0. That turns every _FORTIFY_SOURCE and LinuxKPI
+    check_copy_size check it guards into its no-check path, so it is safe and
+    never refuses a copy. p is not evaluated, as with gcc.
+    __builtin_dynamic_object_size is the same. drm_connector.c (GPU-driver
+    census). feature-c-builtin-object-size }
+  d := '__builtin_object_size(p, t) ((__SIZE_TYPE__)(((t) & 2) ? 0 : -1))';
+  CPDefine(d, 1, Length(d));
+  d := '__builtin_dynamic_object_size(p, t) ((__SIZE_TYPE__)(((t) & 2) ? 0 : -1))';
+  CPDefine(d, 1, Length(d));
 end;
 
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);

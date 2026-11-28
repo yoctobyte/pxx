@@ -527,6 +527,10 @@ begin
   else if CaseEqual(mn,'unpckhpd') then begin pfx := $66; op := $15; end
   else if CaseEqual(mn,'movapd')   then begin pfx := $66; op := $28; end
   else if CaseEqual(mn,'movupd')   then begin pfx := $66; op := $10; end
+  { the packed-single moves, no prefix: drm's __memcpy_ntdqa stores with
+    movaps. feature-asm-movntdqa-and-movaps }
+  else if CaseEqual(mn,'movaps')   then begin pfx := 0; op := $28; end
+  else if CaseEqual(mn,'movups')   then begin pfx := 0; op := $10; end
   { SSE2 INTEGER moves and logic (mbedTLS's aesni.c, its inline-asm path:
     feature-c-inline-asm-sse-and-aes-ni). movdqu is F3, movdqa 66, the same
     6F load / 7F store pair; the logic forms are 66-prefixed like pxor. }
@@ -568,6 +572,8 @@ begin
   else if CaseEqual(mn,'movss')  then op := $11
   else if CaseEqual(mn,'movupd') then op := $11
   else if CaseEqual(mn,'movapd') then op := $29
+  else if CaseEqual(mn,'movaps') then op := $29
+  else if CaseEqual(mn,'movups') then op := $11
   else if CaseEqual(mn,'movdqu') then op := $7F
   else if CaseEqual(mn,'movdqa') then op := $7F
   else begin op := 0; Result := False; end;
@@ -1130,6 +1136,23 @@ begin
   begin
     if (nops <> 1) or (AsmOpKind[0] <> AOP_IMM) then Error('asm: int needs imm8');
     AsmB($CD); AsmB(Integer(AsmOpVal[0] and $FF)); Exit;
+  end;
+
+  { movntdqa xmm, m128: SSE4.1's non-temporal load, 66 0F 38 2A /r -- a
+    three-byte opcode, so not AsmSseEmit's 0F <op>. Load only; the operand
+    must be memory. drm_cache.c / i915_memcpy.c read write-combined memory
+    with it. feature-asm-movntdqa-and-movaps }
+  if CaseEqual(mn,'movntdqa') then
+  begin
+    if (nops <> 2) or (AsmOpKind[0] <> AOP_REG) or (AsmOpSize[0] <> 16) or
+       (AsmOpKind[1] = AOP_REG) or (AsmOpKind[1] = AOP_IMM) then
+      Error('asm: movntdqa needs an xmm register and a memory operand');
+    AsmB($66);
+    sseSt := 0; if AsmOpReg[0] >= 8 then sseSt := 1;
+    AsmPrefixAndREX(4, AsmOpReg[0] and 7, sseSt, 1);
+    AsmB($0F); AsmB($38); AsmB($2A);
+    AsmModRM(AsmOpReg[0] and 7, 1);
+    Exit;
   end;
 
   { ---- scalar SSE ---- }

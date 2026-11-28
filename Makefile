@@ -30162,6 +30162,14 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_manyparm26 | diff -u test/c_more_than_32_parameters.expected -
 	./$(COMPILER) test/c_struct_array_member_decays.c $(TESTTMP)/c_sarrdec26
 	$(TESTTMP)/c_sarrdec26 | diff -u test/c_struct_array_member_decays.expected -
+	# &(&global)->member as a static initialiser (FreeBSD SYSCTL_CHILDREN),
+	# hosted and as a --freestanding object; movntdqa/movaps/movups in inline
+	# asm (drm_cache.c) and __builtin_object_size. Expected output is gcc's.
+	./$(COMPILER) test/c_static_init_address_of_member_through_address.c $(TESTTMP)/c_sinitaddr26
+	$(TESTTMP)/c_sinitaddr26 | diff -u test/c_static_init_address_of_member_through_address.expected -
+	./$(COMPILER) --emit-obj --freestanding test/c_static_init_address_of_member_through_address.c $(TESTTMP)/c_sinitaddr26.o > /dev/null
+	./$(COMPILER) test/c_inline_asm_movntdqa_movaps_and_object_size.c $(TESTTMP)/c_movnt26
+	$(TESTTMP)/c_movnt26 | diff -u test/c_inline_asm_movntdqa_movaps_and_object_size.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

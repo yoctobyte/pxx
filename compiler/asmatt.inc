@@ -1186,6 +1186,7 @@ begin
            is the SSE move, sorted out after the operands are read.
            feature-c-inline-asm-sse-and-aes-ni }
          or CaseEqual(b,'movdqu') or CaseEqual(b,'movdqa')
+         or CaseEqual(b,'movntdqa') or CaseEqual(b,'movaps') or CaseEqual(b,'movups')
          { movd: xmm <-> r/m32 (libffi's x86/unix64.S); asmenc has it.
            feature-gas-what-libffi-x86-assembly-needs }
          or CaseEqual(b,'movd')
