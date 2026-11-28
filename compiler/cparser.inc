@@ -1789,6 +1789,17 @@ end;
   (AN_PTR_CAST's ASTIVal): `(const void *)p`. Read only by CExprCG, for
   _Generic. False where unset. feature-c-generic-on-a-cast-or-conditional-pointer }
 var CCastPointeeConst: array of Boolean;
+{ The same fact for a struct MEMBER (by UFld row) and a function RESULT (by
+  Procs index): `const char *name;` / `const char *f(void)`. Written by the C
+  struct builder and ParseCSubroutine, read only by CExprCG. }
+    CFldBaseConst: array of Boolean;
+    CProcRetBaseConst: array of Boolean;
+{ ...and for every C VARIABLE, by symbol: its declaration's base type is
+  const. What an ARRAY decays to needs it (`const char b[2]` is `const char *`,
+  `const char *a[2]` an array of `const char *`); SymCConstObj is set for
+  globals only and SymPtrPointeeConst for scalar pointers only. }
+    CSymBaseConst: array of Boolean;
+function CNodeFieldIdx(node: Integer): Integer; forward;
 function CGConvControlling(idx: Integer): Integer; forward;
 function CNodeIsNullPtrConst(node: Integer): Boolean; forward;
 
@@ -1805,6 +1816,84 @@ begin
     sub := Result;
     Result := CGAlloc(cgPtr);
     CGSubA[Result] := sub;
+  end;
+end;
+
+function CExprCG(node: Integer): Integer; forward;
+
+{ The pointer shape of a pointer-VALUED expression that is not a variable, a
+  cast or a ?: (those have their own arms): a struct member, a call result,
+  an element or dereference that is itself a pointer, and pointer
+  arithmetic. 0 when the expression is not one of these, or its shape is not
+  known; the caller then gives the generic answer. systemd's const_generic()
+  is applied to all of them (`strstr(p->path, ...)`, `strchr(f(), ...)`).
+  feature-c-generic-on-a-cast-or-conditional-pointer }
+function CExprPtrCG(node: Integer): Integer;
+var fi, pr, b, c: Integer; cst: Boolean;
+begin
+  Result := 0;
+  case ASTKind[node] of
+    AN_FIELD:
+      begin
+        fi := CNodeFieldIdx(node);
+        if fi < 0 then Exit;
+        cst := (fi < Length(CFldBaseConst)) and CFldBaseConst[fi];
+        if UFldIsArray[fi] then
+        begin
+          { an array member: the array, which _Generic's lvalue conversion
+            decays; its element const is the member's base const }
+          if UFldTk[fi] = Ord(tyPointer) then
+          begin
+            if UFldPtrDepth[fi] >= 2 then
+              b := CGPtrChain(UFldPtrDepth[fi], UFldPtrBaseTk[fi], UFldPtrBaseRec[fi], cst)
+            else
+              b := CGPtrChain(1, UFldPtrElemTk[fi], UFldPtrElemRec[fi], cst);
+          end
+          else if UFldTk[fi] = Ord(tyRecord) then Exit
+          else
+          begin
+            b := CGAlloc(CGScalarKindOfTk(UFldTk[fi]));
+            CGConstA[b] := cst;
+          end;
+          Result := CGAlloc(cgArray);
+          CGSubA[Result] := b;
+        end
+        else if UFldTk[fi] = Ord(tyPointer) then
+        begin
+          if UFldPtrDepth[fi] >= 2 then
+            Result := CGPtrChain(UFldPtrDepth[fi], UFldPtrBaseTk[fi], UFldPtrBaseRec[fi], cst)
+          else
+            Result := CGPtrChain(1, UFldPtrElemTk[fi], UFldPtrElemRec[fi], cst);
+        end;
+      end;
+    AN_CALL:
+      begin
+        pr := ASTIVal[node];
+        if (pr < 0) or (Procs[pr].RetType <> tyPointer) then Exit;
+        cst := (pr < Length(CProcRetBaseConst)) and CProcRetBaseConst[pr];
+        if ProcRetPtrDepth[pr] >= 2 then
+          Result := CGPtrChain(ProcRetPtrDepth[pr], ProcRetPtrBaseTk[pr], ProcRetPtrBaseRec[pr], cst)
+        else
+          Result := CGPtrChain(1, ProcRetPtrElemTk[pr], ProcRetPtrElemRec[pr], cst);
+      end;
+    AN_INDEX, AN_DEREF:
+      begin
+        { `pa[i]` / `*pp`: the element, when the element is itself a pointer }
+        b := CGConvControlling(CExprCG(ASTLeft[node]));
+        if (b > 0) and (CGKindA[b] = cgPtr) and (CGSubA[b] > 0) and
+           (CGKindA[CGSubA[b]] = cgPtr) and (CGSubA[CGSubA[b]] > 0) then
+          Result := CGSubA[b];
+      end;
+    AN_BINOP:
+      begin
+        { `p + n`, `n + p`, `p - n`: the pointer operand's type }
+        if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
+        if (ASTIVal[node] <> Ord(tkPlus)) and (ASTIVal[node] <> Ord(tkMinus)) then Exit;
+        b := CGConvControlling(CExprCG(ASTLeft[node]));
+        c := CGConvControlling(CExprCG(ASTRight[node]));
+        if (b > 0) and (CGKindA[b] = cgPtr) and (CGSubA[b] > 0) then Result := b
+        else if (c > 0) and (CGKindA[c] = cgPtr) and (CGSubA[c] > 0) then Result := c;
+      end;
   end;
 end;
 
@@ -1843,9 +1932,20 @@ begin
               sub := CGAlloc(cgStruct);
               CGRecA[sub] := Syms[sym].ElemRecName;
             end
+            else if (Syms[sym].ElemType = tyPointer) and (SymPtrDepth[sym] >= 1) then
+              { an array OF POINTERS: the element's full pointer shape, whose
+                depth SymPtrDepth holds for an array (`const char *a[2]`) }
+              sub := CGPtrChain(SymPtrDepth[sym], SymPtrBaseTk[sym], SymPtrBaseRec[sym],
+                                SymPtrPointeeConst[sym] or
+                                ((sym < Length(CSymBaseConst)) and CSymBaseConst[sym]))
             else
               sub := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(Ord(Syms[sym].ElemType)),
                                              SymCLongRank[sym]));
+            { `const char b[4]` decays to `const char *`: the const is the
+              element's (SymCConstObj, the declaration's base type) }
+            if Syms[sym].ElemType <> tyPointer then
+              CGConstA[sub] := SymCConstObj[sym] or
+                               ((sym < Length(CSymBaseConst)) and CSymBaseConst[sym]);
             { MULTI-DIM inside out: `int m[2][3]` is an array OF `int[3]`, so the
               inner dimensions become nested cgArray levels and the decay below
               yields `int (*)[3]` -- which matches neither `int*` nor `int` and
@@ -1986,6 +2086,8 @@ begin
         `17L` on LP64 — and `i + 2L` is a long by the usual arithmetic conversions
         even though its TTypeKind on ILP32 is a plain 32-bit int. }
       begin
+        Result := CExprPtrCG(node);
+        if Result > 0 then Exit;
         Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
                                           CExprLongRank(node)));
         { a struct-valued EXPRESSION (`*(s)`, `h.a`, `p->m`) carries its record,
@@ -9165,6 +9267,11 @@ begin
     type of the ParseCDeclType that just produced `tk`. }
   if (Result >= 0) and (tk = tyPointer) then
     SymPtrPointeeConst[Result] := CTypeBaseConst;
+  if Result >= 0 then
+  begin
+    if Length(CSymBaseConst) <= Result then SetLength(CSymBaseConst, Result + 4096);
+    CSymBaseConst[Result] := CTypeBaseConst;
+  end;
   { ...and the long RANK, which TTypeKind cannot carry: on ILP32 `long` is the same
     tyInt32 as `int`, so without this _Generic silently picks the `int` association
     (bug-c-generic-long-vs-int-ilp32). }
@@ -9184,6 +9291,11 @@ begin
   Result := AllocArray(name, elemType, lo, hi);
   CurProc := savedCurProc;
   if CLocalStaticDecl and CLocalThreadDecl then CNoteLocalThreadSym(Result);
+  if Result >= 0 then
+  begin
+    if Length(CSymBaseConst) <= Result then SetLength(CSymBaseConst, Result + 4096);
+    CSymBaseConst[Result] := CTypeBaseConst;   { see CSymBaseConst }
+  end;
 end;
 
 { `extern T name[];` in a header, then `T name[] = { ... };` in the .c. The
@@ -16456,6 +16568,12 @@ begin
       leaves b unmarked: conservative) -- SymCConstObj }
     if (idx >= 0) and gBaseConst and (gStars = 0) and (gFirstTk <> tyPointer) then
       SymCConstObj[idx] := True;
+    { the declaration's base const, for what an array decays to (CSymBaseConst) }
+    if idx >= 0 then
+    begin
+      if Length(CSymBaseConst) <= idx then SetLength(CSymBaseConst, idx + 4096);
+      CSymBaseConst[idx] := gBaseConst;
+    end;
     { An initialised C global goes to .data now, before any code can capture
       its .bss offset; its initialiser is baked there when it is replayed.
       See CStaticDataMode. }
@@ -21430,6 +21548,7 @@ var
   byValRec: Boolean;                        { step 2: register-classified struct param }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
+  retBaseConst: Boolean;                             { `const char *f()` }
   retPaLen, retPaNDims, retPaK: Integer;             { pointer-to-array result shape }
   retPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   ptypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -21516,6 +21635,7 @@ begin
   retPtrElemTk := Ord(tyUnknown);
   retPtrElemRec := REC_NONE;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
+  retBaseConst := CTypeBaseConst;
   if (retType = tyPointer) and
      ((CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown))) then
   begin
@@ -22248,6 +22368,8 @@ begin
     ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  if Length(CProcRetBaseConst) <= procIdx then SetLength(CProcRetBaseConst, procIdx + 4096);
+  CProcRetBaseConst[procIdx] := retBaseConst and (retType = tyPointer);
   ProcRetPtrDepth[procIdx] := retPtrDepth;
   ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
   ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
@@ -24765,6 +24887,8 @@ var
     (`sizeof(T)`), which resets the globals. }
   fldTdArrLen, fldTdNDims, fldTdK: Integer;
   fldTdAlign: Integer;   { the member type's typedef aligned(N), 0 = none }
+  fldBaseConst: Boolean; { the member type's base is const (CTypeBaseConst) }
+  bfBaseConst: array of Boolean;
   fldTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
@@ -24822,7 +24946,8 @@ begin
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   SetLength(bfPtrElemArrLen, bfCap);
   SetLength(bfPtrElemNDims, bfCap);
-  SetLength(bfPtrDepth, bfCap); SetLength(bfPtrBaseTk, bfCap); SetLength(bfPtrBaseRec, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
+  SetLength(bfPtrDepth, bfCap); SetLength(bfPtrBaseTk, bfCap); SetLength(bfPtrBaseRec, bfCap);
+  SetLength(bfBaseConst, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   bitPos := 0;
@@ -24937,6 +25062,8 @@ begin
                 bfPtrDepth[bfCount] := UFldPtrDepth[UClsFBase[subci] + k];
                 bfPtrBaseTk[bfCount] := UFldPtrBaseTk[UClsFBase[subci] + k];
                 bfPtrBaseRec[bfCount] := UFldPtrBaseRec[UClsFBase[subci] + k];
+                bfBaseConst[bfCount] := (UClsFBase[subci] + k < Length(CFldBaseConst)) and
+                                        CFldBaseConst[UClsFBase[subci] + k];
                 Inc(bfCount);
               end;
             if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
@@ -25033,6 +25160,7 @@ begin
       CSplitDeclarators(False);
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
+      fldBaseConst := CTypeBaseConst;
       fTk := CApplyAttrMode(fTk, CModeForDeclarators(fieldStartIdx, TokPos - 1));   { mode(..) on a member }
       fldTdArrLen := CTypeTypedefArrLen;
       fldTdNDims := CTypeTypedefNDims;
@@ -25520,6 +25648,7 @@ begin
             scalar (unrecorded when that base is itself a pointer typedef).
             bug-c-indexing-a-pointer-to-pointer-struct-member-loses-a-level }
           bfPtrDepth[bfCount] := 0; bfPtrBaseTk[bfCount] := Ord(tyUnknown); bfPtrBaseRec[bfCount] := REC_NONE;
+          bfBaseConst[bfCount] := fldBaseConst;
           if (declStars > 0) and firstDecl and (CTypePtrDepth = declStars) then
           begin
             bfPtrDepth[bfCount] := CTypePtrDepth;
@@ -25623,6 +25752,8 @@ begin
     UFldPtrElemArrLen[UFldCount-1] := bfPtrElemArrLen[k];
     UFldPtrElemNDims[UFldCount-1] := bfPtrElemNDims[k];
     UFldPtrDepth[UFldCount-1] := bfPtrDepth[k];
+    if Length(CFldBaseConst) < UFldCount then SetLength(CFldBaseConst, UFldCount + 4096);
+    CFldBaseConst[UFldCount-1] := bfBaseConst[k];
     UFldPtrBaseTk[UFldCount-1] := bfPtrBaseTk[k];
     UFldPtrBaseRec[UFldCount-1] := bfPtrBaseRec[k];
     for ndi := 0 to MAX_ARR_DIMS - 1 do

@@ -13,3 +13,17 @@ summary: "_Generic described a pointer only when the controlling expression was 
 ---
 
 # _Generic on a cast or a conditional of pointers
+
+## Part 2 (2026-11-28): every pointer-valued expression
+
+The census still had 49 _Generic failures after part 1: const_generic() is
+applied to struct members, call results and the like. CExprPtrCG now gives
+CExprCG the pointer shape of a member (pointer or array, by its UFld row),
+a call result, an element or dereference that is a pointer, and p + n.
+Pointee const was recorded for pointer VARIABLES only, so three facts are
+now kept beside it: CFldBaseConst (a member, set by the struct builder),
+CProcRetBaseConst (a function result, ParseCSubroutine) and CSymBaseConst (any
+variable's declaration base, so `const char b[2]` decays to `const char *`
+and `const char *a[2]` holds `const char *`; locals, globals and statics,
+which take three different allocation paths). Test c_genpx26: 30 selections
+against gcc. Census: 487 -> 525 of 662.

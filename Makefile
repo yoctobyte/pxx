@@ -19920,6 +19920,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_generic_cast_conditional.c $(TESTTMP)/c_gencc26 > /dev/null
 	@gcc -w test/c_generic_cast_conditional.c -o $(TESTTMP)/c_gencc26_gcc
 	tools/expect_same.sh c_gencc26 "$$(timeout 20 $(TESTTMP)/c_gencc26)" "$$(timeout 20 $(TESTTMP)/c_gencc26_gcc)"
+	# _Generic over pointer-valued members, call results, elements, arithmetic, and const arrays (local/global/static, of pointers) (feature-c-generic-on-a-cast-or-conditional-pointer)
+	./$(COMPILER) --no-host-include test/c_generic_pointer_exprs.c $(TESTTMP)/c_genpx26 > /dev/null
+	@gcc -w test/c_generic_pointer_exprs.c -o $(TESTTMP)/c_genpx26_gcc
+	tools/expect_same.sh c_genpx26 "$$(timeout 20 $(TESTTMP)/c_genpx26)" "$$(timeout 20 $(TESTTMP)/c_genpx26_gcc)"
 	# struct statx/file_handle/open_how layouts field by field, statx() against stat(), name_to_handle_at; crtl and through pxx --link; against gcc+glibc (feature-crtl-statx-file-handle-open-how)
 	./$(COMPILER) --no-host-include test/c_statx_handle.c $(TESTTMP)/c_statx26 > /dev/null
 	@gcc -w test/c_statx_handle.c -o $(TESTTMP)/c_statx26_gcc
