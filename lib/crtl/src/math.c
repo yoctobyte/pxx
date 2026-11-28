@@ -366,10 +366,13 @@ double log2(double x) {
 }
 
 double log10(double x) {
-  crtl_dd r, c;
+  crtl_dd r, c, n;
   if (x != x) return x;
   if (x == 0.0) return -1.0 / (x * x);
-  if (x < 0.0)  return (x - x) / (x - x);
+  /* a POSITIVE NaN, as glibc's log10 (its log and log2 give -nan): the
+     sign shows through printf as "nan" vs "-nan". The division still
+     raises FE_INVALID. bug-crtl-declares-round-trunc-log2-and-others-it-does-not-define */
+  if (x < 0.0)  { n.hi = (x - x) / (x - x); return n.hi != n.hi ? crtl_bits2d(0x7FF8000000000000ull) : n.hi; }
   if (isinf(x)) return x;
   c.hi = crtl_bits2d(0x3FDBCB7B1526E50Eull);       /* 1/ln10 */
   c.lo = crtl_bits2d(0x3C695355BAAAFAD3ull);

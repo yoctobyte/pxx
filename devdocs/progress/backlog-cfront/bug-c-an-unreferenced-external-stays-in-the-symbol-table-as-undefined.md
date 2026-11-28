@@ -30,6 +30,7 @@ symbol is still written as UND. The fix is to emit an UND symbol only when a
 relocation or a C initializer refers to it, in the same place that decides
 the slots.
 
-To check before closing: does `pxx --link` refuse an unreferenced UND today?
-If it does, this blocks the Panorama all-pxx link wherever crtl lacks the
-named function (see backlog-crtl/bug-crtl-declares-round-trunc-log2-and-others-it-does-not-define).
+Not a link blocker for round and friends: crtl defines them, and `pxx --link`
+resolves them from the runtime (done/bug-crtl-declares-round-trunc-log2-and-
+others-it-does-not-define, which was a misread). Still to check: does
+`pxx --link` refuse an unreferenced UND for a name crtl really lacks?

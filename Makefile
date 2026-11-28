@@ -19889,6 +19889,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) --no-host-include test/c_versionsort.c $(TESTTMP)/c_vsort26 > /dev/null
 	@gcc -w test/c_versionsort.c -o $(TESTTMP)/c_vsort26_gcc
 	tools/expect_same.sh c_vsort26 "$$(timeout 20 $(TESTTMP)/c_vsort26 $(TESTTMP)/c_vsort26_dir)" "$$(timeout 20 $(TESTTMP)/c_vsort26_gcc $(TESTTMP)/c_vsort26_dir)"
+	# crtl's round/lround/llround/trunc/log2/log10/modf/copysign on edge values, bit for bit, as a crtl program and as a --shared-runtime object through pxx --link (no libc); against gcc+glibc (bug-crtl-declares-round-trunc-log2-and-others-it-does-not-define)
+	./$(COMPILER) --no-host-include test/c_crtl_round_trunc_log_modf_copysign.c $(TESTTMP)/c_rndlog26 > /dev/null
+	@gcc -w test/c_crtl_round_trunc_log_modf_copysign.c -o $(TESTTMP)/c_rndlog26_gcc -lm
+	tools/expect_same.sh c_rndlog26 "$$(timeout 20 $(TESTTMP)/c_rndlog26)" "$$(timeout 20 $(TESTTMP)/c_rndlog26_gcc)"
+	./$(COMPILER) --shared-runtime --threadsafe --emit-obj test/c_crtl_round_trunc_log_modf_copysign.c $(TESTTMP)/c_rndlog26_sr.o > /dev/null
+	./$(COMPILER) --link -o $(TESTTMP)/c_rndlog26_linked $(TESTTMP)/c_rndlog26_sr.o > /dev/null
+	tools/expect_same.sh c_rndlog26/pxx-link "$$(timeout 20 $(TESTTMP)/c_rndlog26_linked)" "$$(timeout 20 $(TESTTMP)/c_rndlog26_gcc)"
 	# _Complex as layout: sizes, offsets, both word orders and __complex__, by-value passing and returning, and initialisers that treat it as one scalar; against gcc (feature-c-complex-types-as-layout)
 	./$(COMPILER) --no-host-include test/c_complex_layout.c $(TESTTMP)/c_cxlayout26 > /dev/null
 	@gcc -w test/c_complex_layout.c -o $(TESTTMP)/c_cxlayout26_gcc

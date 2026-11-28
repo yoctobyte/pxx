@@ -7,7 +7,7 @@ type: umbrella
 status: open
 created: 2026-11-27
 found-by: owner (yoctobyte), via pixx-cc
-owner: ""
+owner: pxx2
 blocked-by: []
 summary: "Toss systemd at pxx: a large, modern, all-C code base (GNU C everywhere: cleanup attributes, typeof, statement expressions, _Generic, a lot of Linux UAPI). Done when systemd's own test suite passes on the pxx build as on gcc's, and the pxx-built systemd boots a userland to multi-user in QEMU on Linux (later on Rainyday, whose side is its own ticket there). Not for today; meant as a long-running stress source."
 ---
@@ -43,6 +43,16 @@ census was.
   optionally openssl, acl, xz/zstd/lz4 (xz and zstd done).
 - Start with a census as claude-dupwt did for the GPU drivers: every
   compile command, replayed, first errors grouped. Fix and re-run.
+
+## Slices
+
+1. **libsystemd + libudev for Panorama** (pxx2, started 2026-11-28): sd-bus,
+   sd-event and libudev, static, compiled by pxx (`--shared-runtime
+   --threadsafe`) for the all-pxx Panorama link. Method: meson setup with
+   most features off, `ninja` only the two static libraries, then replay the
+   units those targets built. Census and first-error groups go here as they
+   come. Needs libcap compiled by pxx first (also on the dependency list
+   above).
 
 ## Done when
 
