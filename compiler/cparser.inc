@@ -23653,6 +23653,24 @@ begin
   wasCall := False;
   Result := 0;
   CConstUns := False; CConstWide := False;
+  if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkBegin) then
+  begin
+    { A gcc STATEMENT EXPRESSION, `({ ... })`, is never an integer constant
+      expression: read it as a run-time value and skip it balanced, without
+      looking inside. Its locals are not declared here, and reading them as
+      names was the "undeclared identifier '_n'" in LinuxKPI's
+      `BUILD_BUG_ON(!is_power_of_2(N))` (is_power_of_2 is `({ __typeof(n) _n
+      = (n); ... })`). The array-dimension and VLA-typedef callers then re-read
+      it as an expression. bug-c-a-statement-expression-in-a-constant-expression-reads-its-locals }
+    callDepth := 0;
+    repeat
+      if CurTok.Kind = tkLParen then Inc(callDepth)
+      else if CurTok.Kind = tkRParen then Dec(callDepth);
+      Next;
+    until (callDepth = 0) or (CurTok.Kind = tkEOF);
+    CConstExprSawNonConst := True;
+    Exit;
+  end;
   if CurTok.Kind = tkLParen then
   begin
     Next;

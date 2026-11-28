@@ -30170,6 +30170,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) --emit-obj --freestanding test/c_static_init_address_of_member_through_address.c $(TESTTMP)/c_sinitaddr26.o > /dev/null
 	./$(COMPILER) test/c_inline_asm_movntdqa_movaps_and_object_size.c $(TESTTMP)/c_movnt26
 	$(TESTTMP)/c_movnt26 | diff -u test/c_inline_asm_movntdqa_movaps_and_object_size.expected -
+	./$(COMPILER) test/c_statement_expression_in_constant_context.c $(TESTTMP)/c_stmtcx26
+	$(TESTTMP)/c_stmtcx26 | diff -u test/c_statement_expression_in_constant_context.expected -
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.
