@@ -43,8 +43,8 @@ for obj in $objs; do
     dir=$2; src=$3; shift 3
     cd "$WORK/src/$dir"
     flags=$(echo "$line" | cut -d' ' -f4-)
-    eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/dhcpcd\" $flags \"\$src\" \"\$o\"" \
-      > "$o.log" 2>&1 || : > "$o.fail"
+    ( eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/dhcpcd\" $flags \"\$src\" \"\$o\"" \
+      ) > "$o.log" 2>&1 || : > "$o.fail"
   ) &
   i=$((i + 1))
   if [ "$i" -ge "$JOBS" ]; then wait; i=0; fi

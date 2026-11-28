@@ -34,8 +34,8 @@ while read -r prog units; do
     o=$WORK/obj/$(echo "$u" | tr / _ | sed 's/\.c$/.o/')
     if [ ! -f "$o" ]; then
       # shellcheck disable=SC2086 -- flags are words by design (configure's DEFS, quoted for sh)
-      eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/dosfstools\" $flags -I. -I./blkdev \"\$u\" \"\$o\"" \
-        > "$o.log" 2>&1 || { echo "onsite: FAILED $u: $(grep -m1 error "$o.log")" >&2; exit 1; }
+      ( eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/dosfstools\" $flags -I. -I./blkdev \"\$u\" \"\$o\"" \
+        ) > "$o.log" 2>&1 || { echo "onsite: FAILED $u: $(grep -m1 error "$o.log")" >&2; exit 1; }
     fi
     objs="$objs $o"
   done

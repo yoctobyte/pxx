@@ -75,6 +75,20 @@ function member(m,   c, k, cw, base, arc, j) {
   return m
 }
 function base(x) { sub(/.*\//, "", x); return x }
+# 1 when the shell quoting in x is still open at its end: inside single
+# quotes nothing is special; outside them a backslash escapes the next
+# character (\" in "\"x86_64\"")
+function unbalanced(x,   i, c, sq, dq) {
+  sq = 0; dq = 0
+  for (i = 1; i <= length(x); i++) {
+    c = substr(x, i, 1)
+    if (sq) { if (c == "\047") sq = 0 }
+    else if (c == "\\") i++
+    else if (c == "\047" && !dq) sq = 1
+    else if (c == "\"") dq = !dq
+  }
+  return sq || dq
+}
 function expand(p, a,   c, cw, rw, j, out) {
   # the members of archive a that program p links (see TRACE)
   if (!(p in traced_prog)) return members[a]
@@ -111,16 +125,24 @@ BEGIN {
   while (line ~ /\\$/ && (getline more) > 0) { sub(/\\$/, " ", line); line = line more }
   if (line ~ /^libtool: compile: +/) sub(/^libtool: compile: +/, "", line)
   else if (line ~ /^libtool: link: +/) sub(/^libtool: link: +/, "", line)
-  else if (line !~ /^(gcc|cc|ar|ln) /) next
+  # git makes an archive with `rm -f libgit.a && ar rcs libgit.a ...`, and
+  # libtool names ar by its path (`/usr/bin/ar cr .libs/libcurl.a ...`)
+  sub(/^rm -f [^ ;&|]+ && /, "", line)
+  sub(/^\/[^ ]*\/ar /, "ar ", line)
+  if (line !~ /^(gcc|cc|ar|ln) /) next
   n = split(line, raw, /[ \t]+/)
   # rejoin a double-quoted word that held spaces (the dhcpcd rbtree unit:
   # "-D__predict_false(exp)=__builtin_expect((exp) ? 1 : 0, 0)"), quotes kept
   # for the eval in onsite.sh; split alone dropped it with no error
+  # A word whose quotes do not balance goes on with the next ones until they
+  # do: git single-quotes a define holding a space,
+  # -DPAGER_ENV=\047"LESS=FRX LV=-c"\047 (\047 = the single quote), and
+  # only a leading double quote used to be rejoined, so it came apart and
+  # the eval in onsite.sh failed. Escaped double quotes (\") do not count.
   m = 0
   for (i = 1; i <= n; i++) {
     t = raw[i]
-    if (substr(t, 1, 1) == "\"" && (length(t) == 1 || substr(t, length(t)) != "\""))
-      while (i < n) { i++; t = t " " raw[i]; if (substr(raw[i], length(raw[i])) == "\"") break }
+    while (i < n && unbalanced(t)) { i++; t = t " " raw[i] }
     w[++m] = t
   }
   n = m
@@ -140,7 +162,12 @@ BEGIN {
   for (i = 2; i <= n; i++) {
     if (w[i] == "-c") isc = 1
     else if (w[i] == "-o") { out = w[++i] }
-    else if (w[i] ~ /^-[DUI]./ || w[i] ~ /^"-[DUI]./) flags = flags " " w[i]
+    # a flag quoted whole: "-D..." or, as git writes its paths,
+    # \047-DGIT_MAN_PATH="share/man"\047 (\047 is the single quote, which
+    # this single-quoted program cannot hold). The quotes stay, for the eval
+    # in onsite.sh. Unmatched, the flag was dropped with no error, and
+    # builtin/help.c then failed on an undeclared GIT_MAN_PATH
+    else if (w[i] ~ /^-[DUI]./ || w[i] ~ /^"-[DUI]./ || w[i] ~ "^\047-[DUI].") flags = flags " " w[i]
     else if (w[i] == "-include") { flags = flags " -include " w[i + 1]; i++ }
     # -isystem DIR: curl names its dependencies (mbedTLS) so; dropped, the
     # unit compiled against whatever headers pxx found instead. Written as

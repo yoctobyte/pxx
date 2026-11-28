@@ -18,7 +18,7 @@ WORK=${3:-/tmp/nodisx-onsite}
 export PXX=${PXX:-pxx} JOBS=${JOBS:-2} DL=$ISO/dl
 # the order: the shell and tools first, GNU make before what may want it,
 # the compressors before what unpacks with them, the userland, the drivers
-ORDER="toybox mksh make xz bzip2 zstd dosfstools e2fsprogs util-linux dhcpcd dropbear curl sqlite busybox limine rumpnic"
+ORDER="toybox mksh make xz bzip2 zstd dosfstools e2fsprogs util-linux dhcpcd dropbear curl git sqlite busybox limine rumpnic"
 mkdir -p "$DEST/bin" "$WORK"
 PATH=$DEST/bin:$PATH
 export PATH

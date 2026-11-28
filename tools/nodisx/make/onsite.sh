@@ -38,8 +38,8 @@ for obj in $objs; do
     set -- $line
     dir=$2; src=$3; shift 3
     cd "$WORK/src/$dir"
-    eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/make\" $* \"\$src\" \"\$o\"" \
-      > "$o.log" 2>&1 || : > "$o.fail"
+    ( eval "\"\$PXX\" --emit-obj --function-sections --shared-runtime -ffile-prefix-map=\"\$WORK/src=/usr/src/make\" $* \"\$src\" \"\$o\"" \
+      ) > "$o.log" 2>&1 || : > "$o.fail"
   ) &
   i=$((i + 1))
   if [ "$i" -ge "$JOBS" ]; then wait; i=0; fi

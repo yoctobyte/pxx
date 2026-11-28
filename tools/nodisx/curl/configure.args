@@ -1,0 +1,8 @@
+--disable-shared --enable-static
+--without-libpsl --without-zlib --without-brotli --without-zstd
+--without-nghttp2 --without-nghttp3 --without-ngtcp2 --without-libidn2
+--without-libssh2 --without-libssh --without-librtmp --without-libgsasl
+--disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet
+--disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp
+--disable-gopher --disable-mqtt --disable-manual --without-ca-path
+--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt

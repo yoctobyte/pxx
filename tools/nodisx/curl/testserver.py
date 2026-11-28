@@ -9,6 +9,8 @@ test.sh and signed by its throwaway CA). HTTP/1.1, so several URLs in one curl
 run reuse the connection. Stdlib only. Runs until killed.
 
   GET/HEAD /f/NAME    DIR/NAME with Content-Length (Range honoured)
+  GET/HEAD /tree/PATH DIR/PATH, a path with directories (git's test.sh
+                      serves a repository so, for git's dumb HTTP); no `..`
   GET /chunked/NAME   the same bytes, chunked transfer encoding
   POST|PUT /echo      "len SHA256" of the request body
   GET /redir/N        302 chain N long, ending at /f/small.txt
@@ -54,8 +56,23 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def tree(self, rel):
+        parts = [x for x in rel.split('?')[0].split('/') if x not in ('', '.')]
+        if '..' in parts:
+            return None
+        p = os.path.join(ROOT, *parts) if parts else ROOT
+        if not os.path.isfile(p):
+            return None
+        with open(p, 'rb') as f:
+            return f.read()
+
     def do_GET(self):
         p = self.path
+        if p.startswith('/tree/'):
+            data = self.tree(p[6:])
+            if data is None:
+                return self.send(404, b'no such file\n')
+            return self.send(200, data, 'application/octet-stream')
         if p.startswith('/f/'):
             data = self.file(p[3:])
             if data is None:

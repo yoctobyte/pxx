@@ -55,14 +55,10 @@ make -C "$REF/mbedtls" install DESTDIR="$REF/stage" > /dev/null 2>&1
 S=$REF/stage
 
 cd "$REF/curl"
-CC=gcc ./configure --with-mbedtls="$S" --disable-shared --enable-static \
-  --without-libpsl --without-zlib --without-brotli --without-zstd \
-  --without-nghttp2 --without-nghttp3 --without-ngtcp2 --without-libidn2 \
-  --without-libssh2 --without-libssh --without-librtmp --without-libgsasl \
-  --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet \
-  --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp \
-  --disable-gopher --disable-mqtt --disable-manual --without-ca-path \
-  --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt > "$W/curl-configure.log" 2>&1
+# configure.args: the choices, one file shared with git's recipe (its
+# git-remote-http links the same libcurl)
+# shellcheck disable=SC2046
+CC=gcc ./configure --with-mbedtls="$S" $(cat "$T/configure.args") > "$W/curl-configure.log" 2>&1
 make -j1 V=1 > "$W/curl-build.log" 2>&1
 [ -x src/curl ] || { echo "record: gcc build made no curl" >&2; exit 1; }
 # relink with a map: which archive members curl pulls

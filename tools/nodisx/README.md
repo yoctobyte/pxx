@@ -262,6 +262,64 @@ Fixed in pxx for this recipe:
   numbers. Without TCP_FASTOPEN_CONNECT, curl's Fast Open was silently
   compiled out; the strict `-nostdinc` header check found it.
 
+## git 2.56.1 (GPL-2.0) with zlib 1.4 (zlib licence), libcurl and mbedTLS: git, git-remote-http(s)
+
+One recipe holds four trees: `zlib/`, `mbedtls/`, `curl/` and `git/`.
+- libcurl is configured with the curl recipe's own arguments
+  (`curl/configure.args`, shared by both recipes), so `https://` remotes go
+  through the same TLS as curl.
+- git has no configure; its choices are make variables in record.sh:
+  - the Nodisx layout: prefix /, gitexecdir /libexec/git-core, templates in
+    /share/git-core/templates;
+  - NO_RUST, NO_PERL, NO_PYTHON, NO_TCLTK, NO_GETTEXT and NO_EXPAT;
+  - NO_OPENSSL (sha1dc and git's own SHA-256), NO_ICONV and NO_REGEX (git's
+    bundled glibc regex).
+- The four builds' logs are joined into one. lib/units-from-make.sh reads
+  it, and a `-Wl,-t,-t` relink of each program gives the archive members ld
+  loaded (TRACE). zlib comes in as `-lz`, and its members are taken from
+  the same trace.
+- A libgit.a member that gcc built with no symbols because its source saw
+  glibc is linked too. That is `compat/obstack.c`, which elides itself when
+  libc has obstack, as glibc does and crtl does not.
+
+762 units are recorded. git links 441 objects, git-remote-http 481.
+gen.tar holds zlib's `zconf.h`, `curl_config.h`, git's `command-list.h`,
+`config-list.h`, `hook-list.h` and `version-def.h`, and the built templates.
+
+test.sh builds git with onsite.sh and runs scenario.sh once with each git.
+Names, dates and time zone are fixed, so object ids must match; the outputs,
+exit status included, must be identical. The sections:
+- history, branches (merge, tag, describe, rebase, cherry-pick) and the
+  worktree (status, stash, restore, grep, blame, mv/rm);
+- objects: a 3 MB file and a one-line change, `gc --aggressive`,
+  verify-pack, `fsck --strict`, tar and zip archives, a bundle;
+- a SHA-256 repository;
+- clones over file:// (full, shallow, bare) and a push;
+- clone, fetch and ls-remote over dumb HTTP and over HTTPS, with an EC and
+  an RSA certificate from a throwaway CA (served by ../curl/testserver.py,
+  which gained a `/tree/` route for a repository's paths);
+- the Mozilla bundle in place of the test CA, which both gits refuse.
+
+Result 2026-11-28: all 12 rows the same, `git recipe: PASS`. git is 7.1 MB
+of text. The recipe is in onsite-all.sh's ORDER after curl, but has not
+yet been run in the Rainyday guest (test-onsite-rainyday.sh).
+
+Git 3.0 will require Rust, and neither pxx nor gcc compiles it, so a 3.x
+recipe needs rustc on the build host and a Rust answer on the target.
+
+Fixed in pxx for this recipe:
+- a comma or assignment in a constant-expression arm (git's MOVE_ARRAY
+  check);
+- `sizeof a` of a VLA;
+- a parenthesised function parameter `R (fn (P))` (glibc's regcomp.c);
+- crtl: getopt's `struct option` moved to <getopt.h>, as glibc has it;
+- crtl: `sync_file_range`.
+
+Fixed in the recipe tools: units-from-make.sh reads `rm -f X && ar ...`,
+`/usr/bin/ar`, and whole-quoted flags (`'-DPAGER_ENV="LESS=FRX LV=-c"'`).
+Every onsite.sh now marks a unit failed when its quoting breaks the eval.
+Before, such a failure only showed at link time.
+
 ## sqlite 3.46.0 (public domain): sqlite3
 
 pixix's build, unchanged:
