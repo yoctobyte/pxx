@@ -7928,6 +7928,7 @@ var
   CGccHostedZero     : Boolean;     { -ffreestanding: __STDC_HOSTED__ 0 }
   CGccNoRedZone      : Boolean;     { -mno-red-zone }
   CGccGeneralRegs    : Boolean;     { -mgeneral-regs-only }
+  CGccHardFloat      : Boolean;     { -msse/-msse2/-mhard-float: --freestanding code may use SSE float (Linux's CC_FLAGS_FPU) }
   CGccCmodelKernel   : Boolean;     { -mcmodel=kernel }
   CGccCmodelSet      : Boolean;     { any accepted -mcmodel= }
   CSspProc        : Integer;

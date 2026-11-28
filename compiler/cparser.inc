@@ -22383,8 +22383,11 @@ begin
         -mgeneral-regs-only does: user FPU state is live in them on every
         syscall and interrupt, and the kernel saves it only on a process
         switch (Gibux). So the XMM half of the save area is left unwritten,
-        and a double in a kernel's variadic tail is not a thing it reads. }
-      if not FreestandingMode then
+        and a double in a kernel's variadic tail is not a thing it reads.
+        Unless the unit asked for SSE float (-msse2): then a double can be
+        passed variadically, and the save is gcc's.
+        feature-c-freestanding-sse-float-on-request }
+      if (not FreestandingMode) or CGccHardFloat then
       begin
       EmitAsmX64(['movsd [rbp+%], xmm0', Syms[vaSaveSym].Offset + 48]);
       EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }

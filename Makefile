@@ -30067,6 +30067,11 @@ test-core: $(COMPILER)
 	# Expected output is gcc's.
 	./$(COMPILER) test/c_block_scope_vla_typedef.c $(TESTTMP)/c_vlatd26
 	$(TESTTMP)/c_vlatd26 | diff -u test/c_block_scope_vla_typedef.expected -
+	# --freestanding -msse2: SSE float on request, read back by a gcc main
+	# (a variadic double too). The values are gcc's own for the same source.
+	./$(COMPILER) --emit-obj --freestanding -msse2 test/c_freestanding_sse_float_on_request.c $(TESTTMP)/c_fssse.o > /dev/null
+	gcc -no-pie -o $(TESTTMP)/c_fssse test/c_freestanding_sse_float_on_request_main.c $(TESTTMP)/c_fssse.o
+	tools/expect_same.sh c_fssse "$$($(TESTTMP)/c_fssse)" "18.484375 3.250 3.500"
 	# --rename-globals: NetBSD's rumpns_ rename done by pxx on its own object
 	# (Nodisx builds rumpnic with no objcopy). The names, then a link with an
 	# unrenamed object that supplies them: a wrong symbol index is a wrong sum.

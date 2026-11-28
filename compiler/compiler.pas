@@ -205,7 +205,8 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
   drops when unused. feature-c-freestanding-vla-frame-slots-and-sse-refusal }
 function AsmFreestandingRefusesSSE: Boolean;
 begin
-  Result := FreestandingMode and not PathIsAppendedBuiltin(PasSrcOfTok(TokPos - 1));
+  Result := FreestandingMode and not CGccHardFloat and
+            not PathIsAppendedBuiltin(PasSrcOfTok(TokPos - 1));
 end;
 {$include asmtext.inc}
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
@@ -3061,6 +3062,23 @@ begin
       CGccGeneralRegs := True;   { checked against --freestanding below }
       Inc(i);
     end
+    else if (option = '-msse') or (option = '-msse2') or (option = '-mhard-float') then
+    begin
+      { SSE float in --freestanding code, which otherwise refuses it: Linux
+        builds its FPU units (amdgpu's display core) with CC_FLAGS_FPU, the
+        kernel bracketing them with kernel_fpu_begin/end, and a driver run as
+        a process (Rainyday's drivers/gpu) owns its FPU state anyway. Hosted
+        code uses SSE already, so there it changes nothing. The last of these
+        and -mno-sse/-mno-sse2/-msoft-float wins, as with gcc.
+        feature-c-freestanding-sse-float-on-request }
+      CGccHardFloat := True;
+      Inc(i);
+    end
+    else if (option = '-mno-sse') or (option = '-mno-sse2') or (option = '-msoft-float') then
+    begin
+      CGccHardFloat := False;
+      Inc(i);
+    end
     else if Copy(option, 1, 9) = '-mcmodel=' then
     begin
       { pxx's x86-64 code reaches data and code PC-relative (R_X86_64_PC32)
@@ -4273,6 +4291,16 @@ begin
        (TargetArch <> TARGET_X86_64) then
     begin
       writeln(StdErr, '-mno-red-zone, -mgeneral-regs-only and -mcmodel= are x86-64 options');
+      Halt(1);
+    end;
+    if CGccHardFloat and CGccGeneralRegs then
+    begin
+      writeln(StdErr, '-mgeneral-regs-only and -msse/-msse2/-mhard-float contradict each other');
+      Halt(1);
+    end;
+    if CGccHardFloat and (TargetArch <> TARGET_X86_64) then
+    begin
+      writeln(StdErr, '-msse, -msse2 and -mhard-float are x86-64 options here');
       Halt(1);
     end;
     if (CGccNoRedZone or CGccGeneralRegs) and not FreestandingMode then
