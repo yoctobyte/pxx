@@ -19944,6 +19944,19 @@ test-core: $(COMPILER)
 	@gcc -w -DCASE=0 test/c_struct_operand_refused.c -o $(TESTTMP)/c_structop26_gcc
 	tools/expect_same.sh c_structop26 "$$(timeout 20 $(TESTTMP)/c_structop26)" "$$(timeout 20 $(TESTTMP)/c_structop26_gcc)"
 	tools/expect_same.sh c_structop26_ref "$$(for c in 1 2 3 4 5 6 7 8 9 10 11 12 13; do ./$(COMPILER) --no-host-include -DCASE=$$c test/c_struct_operand_refused.c $(TESTTMP)/c_structop26r 2>&1 | grep -c 'needs a scalar operand\|on a _Complex value\|a cast to a _Complex type'; done | tr -d '\n')" "1111111111111"
+	# pointer arithmetic on an array of structs (it decays; not a struct
+	# operand): locals, globals, a struct's array field; against gcc at both widths
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_struct_array_pointer_arith.c $(TESTTMP)/c_sapa26 >/dev/null || { echo "c_sapa compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_sapa_gcc test/c_struct_array_pointer_arith.c || { echo "c_sapa gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_sapa26 "$$($(TESTTMP)/c_sapa26)" "$$($(TESTTMP)/c_sapa_gcc)" || exit 1; \
+	  if gcc -m32 -w -o $(TESTTMP)/c_sapa_gcc32 test/c_struct_array_pointer_arith.c 2>/dev/null; then \
+	    ./$(COMPILER) --target=i386 test/c_struct_array_pointer_arith.c $(TESTTMP)/c_sapa32 >/dev/null || { echo "c_sapa i386 compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh c_sapa26/i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_sapa32)" "$$($(TESTTMP)/c_sapa_gcc32)" || exit 1; \
+	  fi; \
+	else \
+	  echo "=== c_sapa: gcc absent, NOT verified ==="; \
+	fi
 	# C23 refusals: an attribute that changes code is named, not dropped; nullptr is not read as anything; c89 is still refused; gnu17 keeps true an int
 	@printf 'struct [[gnu::packed]] s { char c; int i; };\nint main(void){return 0;}\n' > $(TESTTMP)/c_c23ref26a.c
 	@printf 'int main(void){ void *p = nullptr; return p != 0; }\n' > $(TESTTMP)/c_c23ref26b.c

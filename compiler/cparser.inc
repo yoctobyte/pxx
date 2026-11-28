@@ -703,6 +703,14 @@ begin
     refused (amdgpu_res_cursor.h's flexible `mm_nodes[]`).
     bug-c-an-array-of-structs-member-is-refused-as-a-struct-operand }
   if CNodeDecaysToPointer(e) then Exit;
+  { CNodeDecaysToPointer declines an array of unknown size (ArrLen -1:
+    `struct kv a[] = {...}`, an extern `T x[]`) and a dynamic field, but those
+    decay too: `q = a + 1` over `struct kv a[]`, cpyext's
+    `tp_slots = g_type_type_slots`. Any array identifier or array field is a
+    pointer operand here.
+    bug-c-pointer-arithmetic-on-a-struct-array-is-refused-as-a-struct-operand }
+  if (ASTKind[e] = AN_IDENT) and (ASTIVal[e] >= 0) and Syms[ASTIVal[e]].IsArray then Exit;
+  if (ASTKind[e] = AN_FIELD) and RecFieldIsArray(ResolveNodeRec(ASTLeft[e]), GetASTIdentName(e)) then Exit;
   if CRecIsComplex(ResolveNodeRec(e)) then
     Error('C: ' + what + ' on a _Complex value: complex arithmetic is not supported ' +
           '(pxx models _Complex as layout only -- size, alignment, copies and passing; ' +
