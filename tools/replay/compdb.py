@@ -35,8 +35,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PXX = os.environ.get("PXX", os.path.join(HERE, "../../compiler/pascal26"))
 JOBS = int(os.environ.get("JOBS", "4"))
 EXTRA = shlex.split(os.environ.get("PXXFLAGS", ""))
-C_EXT = (".c",)
-SKIP_EXT = (".cc", ".cpp", ".cxx", ".C", ".S", ".s", ".m")
+# .S is preprocessed GNU assembly, which pxx --emit-obj takes (docs/reference/cli.md)
+C_EXT = (".c", ".S")
+SKIP_EXT = (".cc", ".cpp", ".cxx", ".C", ".s", ".m")
 LAUNCHERS = {"ccache", "sccache", "distcc", "icecc"}
 # flags that take the next word as their argument
 TAKES = {"-o", "-MF", "-MT", "-MQ", "-include", "-isystem", "-iquote", "-idirafter",

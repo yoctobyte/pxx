@@ -497,6 +497,11 @@ begin
   else if CaseEqual(b, 'lods') then op := $AC
   else if CaseEqual(b, 'scas') then op := $AE
   else Exit;
+  { movsd/cmpsd WITHOUT operands are the dword string ops (gas: "assuming
+    movsl was meant"); with operands they are SSE's scalar double move and
+    compare, which the operand check below leaves to the SSE path.
+    feature-gas-what-libffi-x86-assembly-needs }
+  if (sz = 'd') and (CaseEqual(b, 'movs') or CaseEqual(b, 'cmps')) then sz := 'l';
   if not ((sz = 'b') or (sz = 'w') or (sz = 'l') or (sz = 'q')) then Exit;
   AttSkipSpace;
   if not AttAtSeparator then Exit;     { an explicit-operand form: not handled here }
@@ -1181,6 +1186,16 @@ begin
            is the SSE move, sorted out after the operands are read.
            feature-c-inline-asm-sse-and-aes-ni }
          or CaseEqual(b,'movdqu') or CaseEqual(b,'movdqa')
+         { movd: xmm <-> r/m32 (libffi's x86/unix64.S); asmenc has it.
+           feature-gas-what-libffi-x86-assembly-needs }
+         or CaseEqual(b,'movd')
+         { fldt/fstpt: the 80-bit x87 load and store, whole words (gas reads
+           the t as part of the name, there is no fld+t); movss and movsd with
+           OPERANDS are SSE's scalar moves -- the operandless movsd is the
+           string move, which the encoder sorts out by operand count.
+           feature-gas-what-libffi-x86-assembly-needs }
+         or CaseEqual(b,'fldt') or CaseEqual(b,'fstpt')
+         or CaseEqual(b,'movss') or CaseEqual(b,'movsd')
          or CaseEqual(b,'pxor') or CaseEqual(b,'por')
          or CaseEqual(b,'pand') or CaseEqual(b,'pandn')
          or CaseEqual(b,'psllw') or CaseEqual(b,'psrlw') or CaseEqual(b,'psraw')

@@ -5067,8 +5067,14 @@ begin
     number in the translation unit and the compiler would then report each
     diagnostic one line late per forced include. Here the primary source still
     starts at line 1 of itself. }
+  { --shared-runtime forces pxx/shared_runtime.h, which is C declarations: in a
+    .S source (CPAsmSource) it is not assembly and crtl's include directory is
+    not searched there, so the unit failed ("not found"). Assembly has no
+    runtime to share. libffi's unix64.S under the all-pxx replay.
+    bug-gas-the-shared-runtime-header-is-forced-into-assembly }
   for i := 0 to CCmdIncludeCount - 1 do
-    if CCmdIncludeFile[i] <> '' then
+    if (CCmdIncludeFile[i] <> '') and
+       not (CPAsmSource and (CCmdIncludeFile[i] = 'pxx/shared_runtime.h')) then
     begin
       cmdInc := '#include "' + CCmdIncludeFile[i] + '"' + #10;
       { baseDir is EMPTY here, not the primary source's directory, because gcc

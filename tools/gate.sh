@@ -355,7 +355,7 @@ head_rtl_canary() {
   fi
 
   rtl_probe_script "$work/one.sh"
-  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$(readlink -f compiler/pascal26)" head \
+  xargs -P "${GATE_JOBS:-8}" -I{} "$work/one.sh" {} "$work" "$(readlink -f compiler/pascal26)" head \
     < "$roots" | LC_ALL=C sort > "$fails"
   [ -s "$fails" ] || return 0
 
@@ -448,7 +448,7 @@ pinned_rtl_canary() {
   # an exclusion list is the part that silently stops covering anything. The
   # runner itself is rtl_probe_script, shared with head_rtl_canary below.
   rtl_probe_script "$work/one.sh"
-  xargs -P 8 -I{} "$work/one.sh" {} "$work" "$pinabs" pin < "$roots" |
+  xargs -P "${GATE_JOBS:-8}" -I{} "$work/one.sh" {} "$work" "$pinabs" pin < "$roots" |
     LC_ALL=C sort > "$fails"
 
   # A unit that fails under BOTH compilers is not this seam and never was: it

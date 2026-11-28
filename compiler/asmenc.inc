@@ -770,7 +770,12 @@ begin
   else if CaseEqual(mn,'fldenv') then begin rm := $D9; ext := 4; end
   else if CaseEqual(mn,'fnstsw') or CaseEqual(mn,'fstsw') then begin rm := $DD; ext := 7; end
   else if CaseEqual(mn,'fnsave') or CaseEqual(mn,'fsave') then begin rm := $DD; ext := 6; end
-  else if CaseEqual(mn,'frstor') then begin rm := $DD; ext := 4; end;
+  else if CaseEqual(mn,'frstor') then begin rm := $DD; ext := 4; end
+  { the 80-bit loads and stores: fldt = fld m80 (DB /5), fstpt = fstp m80
+    (DB /7). libffi's x86/unix64.S returns and receives long double through
+    them. feature-gas-what-libffi-x86-assembly-needs }
+  else if CaseEqual(mn,'fldt') then begin rm := $DB; ext := 5; end
+  else if CaseEqual(mn,'fstpt') then begin rm := $DB; ext := 7; end;
   if (ext >= 0) and (nops = 1) then
   begin
     if not ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_MEMR) or
@@ -1325,6 +1330,24 @@ begin
     end
     else
       Error('asm: movq needs one xmm operand');
+    Exit;
+  end;
+
+  { movd: the 32-bit sibling of movq's GP forms -- the same opcodes without
+    REX.W. 66 0F 6E loads xmm <- r/m32 (zeroing the rest), 66 0F 7E stores
+    r/m32 <- xmm. libffi's x86/unix64.S returns a float struct with
+    `movd %xmm0, (%rdi)`. asmtext.inc has carried movd; this is the asmenc
+    side of "a mnemonic lands in BOTH encoders".
+    feature-gas-what-libffi-x86-assembly-needs }
+  if CaseEqual(mn,'movd') then
+  begin
+    if nops <> 2 then Error('asm: movd needs two operands');
+    if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] = 16) then
+      AsmSseEmit($66, $6E, AsmOpReg[0], 1, 4)        { xmm <- r/m32 }
+    else if (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] = 16) then
+      AsmSseEmit($66, $7E, AsmOpReg[1], 0, 4)        { r/m32 <- xmm }
+    else
+      Error('asm: movd needs one xmm operand');
     Exit;
   end;
 

@@ -31,8 +31,13 @@
   GasCode16Fix rewrites the operand size (66), the address size (absolute ->
   disp16, a 32-bit register -> 67) and a few short forms, in gas's byte order.
 
-  Branches (jmp/call/jcc/loop) are encoded here: rel32 always (no relaxation
-  to rel8 -- correct, a few bytes bigger than gas), loop/jecxz rel8 and local
+  Branches (jmp/call/jcc/loop) are encoded here. jmp and jcc relax the way
+  gas does: every one starts as rel8 (EB, 7x), and a pass whose resolution
+  finds a short one out of range, or not resolvable in its own section, marks
+  it long and assembles the text again; branches only grow, so it ends.
+  libffi's x86/unix64.S needs it: a 16-byte jump-table entry holds
+  `endbr64; movq; jmp` only with the short jmp, and `.org` checks it
+  (feature-gas-what-libffi-x86-assembly-needs). call stays rel32, loop/jecxz rel8 and local
   only. A target in the same section is resolved here; anything else becomes
   R_X86_64_PLT32 (call, jmp, jcc) the way current binutils writes it.
 
@@ -63,7 +68,10 @@ var
   GasCode16: Boolean;     { .code16: GasCode32 is set too (see GasCode16Fix) }
 
   GasSymName: array of AnsiString;
-  GasSymSec: array of Integer;       { -1 undefined, -2 an equate's constant }
+  GasSymSec: array of Integer;       { -1 undefined, -2 an equate's constant,
+                                       -3 a deferred equate: GasSymVal +
+                                       GasSymEqP - GasSymEqM, folded at resolve }
+  GasSymEqP, GasSymEqM: array of Integer;
   GasSymVal: array of Int64;
   GasSymGlobal, GasSymWeak, GasSymHidden, GasSymUsed: array of Boolean;
   GasSymType: array of Integer;      { 0 notype, 1 object, 2 func }
@@ -79,6 +87,12 @@ var
   GasFixSec, GasFixSize, GasFixKind, GasFixP, GasFixM, GasFixLine: array of Integer;
   GasFixPos, GasFixEnd, GasFixC: array of Int64;
   GasFixCount: Integer;
+  GasFixBr: array of Integer;      { the relaxable branch a fix is, or -1 }
+
+  { relaxation: branch n of the pass is long when GasBrLong[n] }
+  GasBrN: Integer;
+  GasBrLong: array of Boolean;
+  GasBrGrew: Boolean;
 
   GasMacName, GasMacParams, GasMacBody: array of AnsiString;
   GasMacCount: Integer;
@@ -280,6 +294,9 @@ begin
       else if typStr = 'note' then typ := 7
       else if typStr = 'init_array' then typ := 14
       else if typStr = 'fini_array' then typ := 15
+      { SHT_X86_64_UNWIND, what gas gives .eh_frame on x86-64 (libffi's
+        unix64.S writes its own). feature-gas-what-libffi-x86-assembly-needs }
+      else if typStr = 'unwind' then typ := $70000001
       else GasError('section type @' + typStr + ' is not supported');
     end;
     k := GasAddSec(nm, typ, flags);
@@ -373,6 +390,9 @@ begin
   SetLength(GasSymName, GasSymCount);
   SetLength(GasSymSec, GasSymCount);
   SetLength(GasSymVal, GasSymCount);
+  SetLength(GasSymEqP, GasSymCount);
+  SetLength(GasSymEqM, GasSymCount);
+  GasSymEqP[k] := -1; GasSymEqM[k] := -1;
   SetLength(GasSymGlobal, GasSymCount);
   SetLength(GasSymWeak, GasSymCount);
   SetLength(GasSymHidden, GasSymCount);
@@ -779,6 +799,8 @@ begin
   SetLength(GasFixPos, GasFixCount);
   SetLength(GasFixEnd, GasFixCount);
   SetLength(GasFixC, GasFixCount);
+  SetLength(GasFixBr, GasFixCount);
+  GasFixBr[k] := -1;
   GasFixSec[k] := sec;
   GasFixPos[k] := pos;
   GasFixSize[k] := size;
@@ -1245,6 +1267,15 @@ begin
 end;
 
 { A branch target: an expression, or `*operand` for an indirect one. }
+procedure GasBrEnsure(n: Integer);
+var k, old: Integer;
+begin
+  if n < Length(GasBrLong) then Exit;
+  old := Length(GasBrLong);
+  SetLength(GasBrLong, n + 64);
+  for k := old to n + 63 do GasBrLong[k] := False;
+end;
+
 procedure GasBranch(const mn, ops: AnsiString);
 var op: AnsiString; c: Int64; p, m, r, cc, kind: Integer; pos0: Int64; isCall, isJmp: Boolean;
 begin
@@ -1257,7 +1288,24 @@ begin
     if not (isCall or isJmp) then GasError(mn + ' cannot be indirect');
     op := GasTrim(Copy(op, 2, Length(op) - 1));
     if GasCode32 then GasError('.code32: an indirect ' + mn + ' is not supported');
-    if not GasRegNum64(op, r) then GasError('an indirect ' + mn + ' through memory is not supported: ' + ops);
+    if not GasRegNum64(op, r) then
+    begin
+      { call/jmp *mem are FF /2 and FF /4 on r/m64: byte for byte push's
+        FF /6 (no REX.W, 64-bit by default) except the ModRM reg field. The
+        shared encoder writes the push; only that field changes, so lengths
+        and any rip fixup stay right. libffi's x86/win64.S:
+        `call *16(%rbp)`. feature-gas-what-libffi-x86-assembly-needs }
+      pos0 := GasCurOff;
+      GasEncodeGeneric('pushq', op);
+      p := pos0;
+      while (p < GasCurOff) and (Ord(GasSecData[GasCur][p + 1]) >= $40) and (Ord(GasSecData[GasCur][p + 1]) <= $4F) do Inc(p);
+      if (p + 1 >= GasCurOff) or (Ord(GasSecData[GasCur][p + 1]) <> $FF) then
+        GasError('an indirect ' + mn + ' through memory: unexpected encoding');
+      m := Ord(GasSecData[GasCur][p + 2]) and $C7;
+      if isCall then m := m or (2 shl 3) else m := m or (4 shl 3);
+      GasSecData[GasCur][p + 2] := Chr(m);
+      Exit;
+    end;
     if r >= 8 then GasEmitByte($41);
     GasEmitByte($FF);
     if isCall then GasEmitByte($D0 or (r and 7)) else GasEmitByte($E0 or (r and 7));
@@ -1293,6 +1341,27 @@ begin
     Exit;
   end;
   kind := GFK_PLT;
+  if not isCall and not GasCode16 then
+  begin
+    cc := -1;
+    if not isJmp then
+    begin
+      cc := GasJccCode(mn);
+      if cc < 0 then GasError('unknown branch ' + mn);
+    end;
+    r := GasBrN;
+    Inc(GasBrN);
+    GasBrEnsure(r);
+    if not GasBrLong[r] then
+    begin
+      if isJmp then GasEmitByte($EB) else GasEmitByte($70 or cc);
+      pos0 := GasCurOff;
+      GasEmitByte(0);
+      GasAddFix(GasCur, pos0, 1, GFK_PC8, c, p, m, pos0 + 1);
+      GasFixBr[GasFixCount - 1] := r;
+      Exit;
+    end;
+  end;
   { .code16: E8/E9/0F 8x take a rel16; `calll`/`jmpl` keep rel32 behind 0x66 }
   if GasCode16 and ((mn = 'calll') or (mn = 'jmpl')) then GasEmitByte($66);
   if isCall then GasEmitByte($E8)
@@ -1728,7 +1797,18 @@ begin
   end;
   if dir = '.org' then
   begin
-    v := GasEvalConst(GasSplitItem(rest, 0));
+    { `.org label + N`, label already defined in THIS section, is an offset in
+      the section like a constant one (GNU as). libffi's x86/unix64.S lays
+      out its jump tables with `E(BASE, X)` = `.balign 8; .org BASE + X * 8`,
+      which checks every entry starts where it should.
+      feature-gas-what-libffi-x86-assembly-needs }
+    GasEval(GasSplitItem(rest, 0), v, i, k);
+    if (k < 0) and (i >= 0) and (GasSymSec[i] = -2) then
+    begin v := v + GasSymVal[i]; i := -1; end;
+    if (k < 0) and (i >= 0) and (GasSymSec[i] = GasCur) then
+    begin v := v + GasSymVal[i]; i := -1; end;
+    if (i >= 0) or (k >= 0) then
+      GasError('.org needs a constant, or a label already defined in this section plus a constant: ' + rest);
     if v < GasCurOff then GasError('.org moves backwards');
     GasEmitFill(v - GasCurOff, 0);
     Exit;
@@ -1856,7 +1936,20 @@ begin
       GasSymSec[k] := GasSymSec[p];
       GasSymVal[k] := GasSymVal[p] + c;
     end
-    else GasError('an equate of an undefined or relocatable value: ' + s);
+    else if GasSymSec[k] = -3 then
+      GasError('redefining an equate whose value is not known yet: ' + s)
+    else
+    begin
+      { a label not defined yet, or a difference of labels: gas keeps the
+        expression and works it out where it is used. libffi's unix64.S
+        writes its .eh_frame lengths as `.set .Lset0, .LECIE-.LSCIE` before
+        .LECIE exists. Only a fixup (data) may use it; GasResolve folds it.
+        feature-gas-what-libffi-x86-assembly-needs }
+      GasSymSec[k] := -3;
+      GasSymVal[k] := c;
+      GasSymEqP[k] := p;
+      GasSymEqM[k] := m;
+    end;
     Exit;
   end;
   if w = '' then GasError('cannot read: ' + s);
@@ -1970,6 +2063,19 @@ begin
   begin
     GasLineNo := GasFixLine[i];
     c := GasFixC[i]; p := GasFixP[i]; m := GasFixM[i];
+    sym := 0;
+    while (p >= 0) and (GasSymSec[p] = -3) do
+    begin
+      if (m >= 0) and (GasSymEqM[p] >= 0) then
+        GasError('''' + GasSymName[p] + ''' (a difference) used in another difference');
+      Inc(sym);
+      if sym > 16 then GasError('equates refer to each other: ' + GasSymName[p]);
+      c := c + GasSymVal[p];
+      if GasSymEqM[p] >= 0 then m := GasSymEqM[p];
+      p := GasSymEqP[p];
+    end;
+    if (m >= 0) and (GasSymSec[m] = -3) then
+      GasError('subtracting ''' + GasSymName[m] + ''', an equate not known where it is defined');
     if (p >= 0) and (GasSymSec[p] = -2) then begin c := c + GasSymVal[p]; p := -1; end;
     if (m >= 0) and (GasSymSec[m] = -2) then begin c := c - GasSymVal[m]; m := -1; end;
     if m >= 0 then
@@ -1982,6 +2088,20 @@ begin
       end
       else if (p < 0) and ((GasFixKind[i] = GFK_PC) or (GasFixKind[i] = GFK_PLT)) and (GasSymSec[m] = GasFixSec[i]) then
         GasError('a pc-relative value minus a symbol is not supported')
+      else if (p >= 0) and (GasFixKind[i] = GFK_ABS) and (GasSymSec[m] = GasFixSec[i]) and
+              ((GasFixSize[i] = 4) or (GasFixSize[i] = 8)) then
+      begin
+        { `.long X - .`, X elsewhere: the subtrahend is in the section the
+          value is written to, so it is pc-relative, R_X86_64_PC32 / PC64
+          (S + A - P) with A = c + P - m, as gas writes it. libffi's
+          unix64.S hand-written .eh_frame: PCREL(X) = X - .
+          feature-gas-what-libffi-x86-assembly-needs }
+        add := c + GasFixPos[i] - GasSymVal[m];
+        GasRelTarget(p, sym, add);
+        if GasFixSize[i] = 8 then typ := 24 else typ := 2;
+        GasAddRel(GasFixSec[i], GasFixPos[i], typ, sym, add);
+        Continue;
+      end
       else
         GasError('a difference of symbols in different sections cannot be relocated');
     end;
@@ -1998,6 +2118,21 @@ begin
               Continue;
             end;
             GasError('a branch to an absolute address');
+          end;
+          if GasFixBr[i] >= 0 then
+          begin
+            if (GasSymSec[p] = GasFixSec[i]) and not GasSymWeak[p] then
+              d := GasSymVal[p] + c - GasFixEnd[i]
+            else
+              d := 1000;
+            if (d < -128) or (d > 127) then
+            begin
+              GasBrLong[GasFixBr[i]] := True;
+              GasBrGrew := True;
+            end
+            else
+              GasPatch(GasFixSec[i], GasFixPos[i], d, 1);
+            Continue;
           end;
           if (GasSymSec[p] = GasFixSec[i]) and not GasSymWeak[p] then
           begin
@@ -2113,7 +2248,7 @@ begin
   for i := 0 to GasSymCount - 1 do
   begin
     GasSymOut[i] := -1;
-    if GasSymHidden[i] or (GasSymSec[i] = -2) then Continue;
+    if GasSymHidden[i] or (GasSymSec[i] <= -2) then Continue;
     if (GasSymSec[i] >= 0) and not GasSymGlobal[i] then
     begin
       GasSymOut[i] := nSyms;
@@ -2123,7 +2258,7 @@ begin
   firstGlobal := nSyms;
   for i := 0 to GasSymCount - 1 do
   begin
-    if GasSymHidden[i] or (GasSymSec[i] = -2) then Continue;
+    if GasSymHidden[i] or (GasSymSec[i] <= -2) then Continue;
     if GasSymGlobal[i] or ((GasSymSec[i] = -1) and GasSymUsed[i]) then
     begin
       GasSymOut[i] := nSyms;
@@ -2259,13 +2394,13 @@ end;
 
 { ---- the entry point ---- }
 
-procedure GasAssemble(var src: AnsiString; const inPath, outPath, baseDir: AnsiString; useCpp: Boolean);
+procedure GasResetPass;
 var i: Integer;
 begin
-  GasFile := inPath;
   GasSecCount := 0; GasSymCount := 0; GasNumCount := 0; GasFixCount := 0;
   GasMacCount := 0; GasMacCounter := 0; GasDepth := 0; GasCollect := 0;
   GasRelCount := 0; GasTmpCount := 0;
+  GasBrN := 0; GasBrGrew := False;
   for i := 0 to GAS_SYM_HASH - 1 do GasSymHead[i] := -1;
   GasCode32 := False;
   GasCode16 := False;
@@ -2273,6 +2408,13 @@ begin
   GasAddSec('.data', 1, 3);
   GasAddSec('.bss', 8, 3);
   GasCur := 0; GasPrev := 0;
+end;
+
+procedure GasAssemble(var src: AnsiString; const inPath, outPath, baseDir: AnsiString; useCpp: Boolean);
+var i, j: Integer;
+begin
+  GasFile := inPath;
+  SetLength(GasBrLong, 0);
   if useCpp then
   begin
 {$ifdef PXX_NO_CFRONT}
@@ -2281,9 +2423,26 @@ begin
     CPAsmSource := True;
     CPreprocess(src, baseDir);
     CPAsmSource := False;
+    { The preprocessor's blue paint (#1 before an identifier its own macro
+      produced, C 6.10.3.4) is for the C lexer, which skips it. In assembly
+      it split the token: `#define cfi_startproc .cfi_startproc` gave `.`,
+      #1, `cfi_startproc`, read as a directive named `.` (libffi's win64.S
+      through ffi_cfi.h). Not text: drop it before the assembler reads.
+      bug-gas-the-preprocessor-paint-byte-splits-an-asm-token }
+    j := 0;
+    for i := 1 to Length(src) do
+      if src[i] <> #1 then
+      begin
+        Inc(j);
+        if j <> i then src[j] := src[i];
+      end;
+    SetLength(src, j);
 {$endif}
   end;
-  GasProcessText(src);
-  GasResolve;
+  repeat
+    GasResetPass;
+    GasProcessText(src);
+    GasResolve;
+  until not GasBrGrew;
   GasWriteObject(outPath);
 end;

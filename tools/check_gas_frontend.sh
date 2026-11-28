@@ -94,4 +94,24 @@ exrel() { readelf -rW "$1" | sed -n '/__ex_table/,/^$/p' | awk '/R_X86_64/ {prin
 [ "$(exrel "$W"_exg.o | wc -l)" -eq 2 ] || fail "gas's __ex_table has not 2 relocations"
 diff <(exrel "$W"_exp.o) <(exrel "$W"_exg.o) || fail "__ex_table relocations differ from gas"
 readelf -SW "$W"_exp.o | grep -q ' __ex_table .* A ' || fail "__ex_table is not an allocated section"
+# 7. test/gas_frontend_libffi_shapes.S: what libffi's x86 .S files need --
+#    branch relaxation, `.org label + N` jump tables, movd/fldt/fstpt/movss/
+#    movsd, call/jmp through memory, @unwind, forward equates, `X - .` data,
+#    a self-named macro -- byte-identical .text and .eh_frame, the same
+#    relocations; and the same under --shared-runtime, whose C header is not
+#    forced into assembly. feature-gas-what-libffi-x86-assembly-needs
+"$PXX" --emit-obj test/gas_frontend_libffi_shapes.S "$W"_ffp.o > "$W"_ffp.log 2>&1 || { cat "$W"_ffp.log; fail "pxx could not assemble test/gas_frontend_libffi_shapes.S"; }
+"$PXX" --shared-runtime --emit-obj test/gas_frontend_libffi_shapes.S "$W"_ffs.o > "$W"_ffs.log 2>&1 || { cat "$W"_ffs.log; fail "pxx --shared-runtime could not assemble test/gas_frontend_libffi_shapes.S"; }
+gcc -c test/gas_frontend_libffi_shapes.S -o "$W"_ffg.o 2>/dev/null || fail "gas could not assemble test/gas_frontend_libffi_shapes.S"
+for t in p s g; do
+  objcopy -O binary -j .text "$W"_ff$t.o "$W"_ff$t.text
+  objcopy -O binary -j .eh_frame "$W"_ff$t.o "$W"_ff$t.eh
+done
+cmp "$W"_ffp.text "$W"_ffg.text || fail "test/gas_frontend_libffi_shapes.S: .text differs from gas"
+cmp "$W"_ffp.eh "$W"_ffg.eh || fail "test/gas_frontend_libffi_shapes.S: .eh_frame differs from gas"
+cmp "$W"_ffs.text "$W"_ffp.text || fail "test/gas_frontend_libffi_shapes.S: --shared-runtime changed .text"
+ffrel() { readelf -rW "$1" | awk '/R_X86_64/ {print $1, $3, $5, $6, $7}' | sort; }
+[ "$(ffrel "$W"_ffg.o | wc -l)" -eq 5 ] || fail "gas's libffi-shapes object has not 5 relocations"
+diff <(ffrel "$W"_ffp.o) <(ffrel "$W"_ffg.o) || fail "test/gas_frontend_libffi_shapes.S: relocations differ from gas"
+readelf -SW "$W"_ffp.o | grep -q ' .eh_frame *X86_64_UNWIND ' || fail ".eh_frame is not SHT_X86_64_UNWIND"
 echo "check_gas_frontend: OK"
